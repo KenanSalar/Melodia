@@ -1,6 +1,6 @@
 use super::{
-    FIELDS, LIMIT_ORDERS, LimitOrder, MATCH_MODES, MatchMode, Rule, RuleField, RuleOp, RuleValue,
-    SMART_CRITERIA_VERSION, SmartCriteria, SmartLimit, ValueType, ops_for,
+    FIELDS, InputKind, LIMIT_ORDERS, LimitOrder, MATCH_MODES, MatchMode, Rule, RuleField, RuleOp,
+    RuleValue, SMART_CRITERIA_VERSION, SmartCriteria, SmartLimit, ValueType, ops_for,
 };
 
 fn sample() -> SmartCriteria {
@@ -258,4 +258,134 @@ fn match_mode_and_limit_order_index_round_trip() {
     assert_eq!(MatchMode::from_index(99), MatchMode::default());
     assert_eq!(LimitOrder::from_index(-1), LimitOrder::default());
     assert_eq!(LimitOrder::from_index(99), LimitOrder::default());
+}
+
+/// The `RuleValue` variant an operator produces, reduced to something a table can state.
+/// Deriving it from `input_kind` would restate the code under test and pass against every
+/// way that code can be wrong.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Shape {
+    NoValue,
+    Text,
+    Number,
+    Days,
+}
+
+/// Every `(value type, operator)` pair the rule editor can present, against the shape
+/// `melodia-store`'s renderability gate demands for it.
+const OFFERED_SHAPES: &[(ValueType, RuleOp, Shape)] = &[
+    (ValueType::Text, RuleOp::Contains, Shape::Text),
+    (ValueType::Text, RuleOp::NotContains, Shape::Text),
+    (ValueType::Text, RuleOp::Is, Shape::Text),
+    (ValueType::Text, RuleOp::IsNot, Shape::Text),
+    (ValueType::Text, RuleOp::StartsWith, Shape::Text),
+    (ValueType::Text, RuleOp::EndsWith, Shape::Text),
+    (ValueType::Text, RuleOp::IsSet, Shape::NoValue),
+    (ValueType::Text, RuleOp::IsNotSet, Shape::NoValue),
+    (ValueType::Number, RuleOp::Eq, Shape::Number),
+    (ValueType::Number, RuleOp::Ne, Shape::Number),
+    (ValueType::Number, RuleOp::Gt, Shape::Number),
+    (ValueType::Number, RuleOp::Gte, Shape::Number),
+    (ValueType::Number, RuleOp::Lt, Shape::Number),
+    (ValueType::Number, RuleOp::Lte, Shape::Number),
+    (ValueType::Number, RuleOp::IsSet, Shape::NoValue),
+    (ValueType::Number, RuleOp::IsNotSet, Shape::NoValue),
+    (ValueType::Bool, RuleOp::IsTrue, Shape::NoValue),
+    (ValueType::Bool, RuleOp::IsFalse, Shape::NoValue),
+    (ValueType::Date, RuleOp::InLast, Shape::Days),
+    (ValueType::Date, RuleOp::NotInLast, Shape::Days),
+    (ValueType::Date, RuleOp::IsSet, Shape::NoValue),
+    (ValueType::Date, RuleOp::IsNotSet, Shape::NoValue),
+];
+
+fn shape_of(value: Option<&RuleValue>) -> Shape {
+    match value {
+        None => Shape::NoValue,
+        Some(RuleValue::Text(_)) => Shape::Text,
+        Some(RuleValue::Number(_)) => Shape::Number,
+        Some(RuleValue::Days(_)) => Shape::Days,
+    }
+}
+
+/// An operator with no row here is an operator the sweep below stops covering, which is
+/// the way this pair of tests would go quiet rather than fail.
+#[test]
+fn the_shape_table_covers_exactly_the_operators_the_editor_offers() {
+    for vt in [
+        ValueType::Text,
+        ValueType::Number,
+        ValueType::Bool,
+        ValueType::Date,
+    ] {
+        let declared: Vec<RuleOp> =
+            OFFERED_SHAPES.iter().filter(|(v, ..)| *v == vt).map(|&(_, op, _)| op).collect();
+        assert_eq!(
+            declared.as_slice(),
+            ops_for(vt),
+            "a new operator owes OFFERED_SHAPES a row saying what value it takes"
+        );
+    }
+}
+
+/// The dropdown, the value box and the evaluator's renderability gate agree on a rule's
+/// value shape only by construction: `ops_for` picks the operator, `input_kind` sizes the
+/// input, and `rule_is_renderable` one crate over demands a specific `RuleValue` variant.
+/// A disagreement raises nothing and drops the rule, and `push_where` turns a rule set
+/// that is entirely dropped into no `WHERE` at all, so a playlist asking for one artist
+/// comes back holding the whole library.
+///
+/// `input_kind`'s text arm is a catch-all over the value type, so the pair that breaks
+/// this is a text operator offered for a field that is not text.
+#[test]
+fn every_offered_operator_builds_the_value_shape_it_declares() {
+    for &(vt, op, shape) in OFFERED_SHAPES {
+        let built = RuleValue::from_input(vt, op, "5");
+        assert_eq!(
+            shape_of(built.as_ref()),
+            shape,
+            "{vt:?} + {op:?} is skipped by the evaluator, not rendered"
+        );
+    }
+}
+
+/// The *intended* skip, which answers identically to the accidental one above and is why
+/// the sweep is written against a value that parses: an empty or unparseable box means
+/// the user has not finished the rule, and an incomplete rule is dropped rather than
+/// guessed at.
+#[test]
+fn a_numeric_operator_given_something_that_is_not_a_number_builds_no_value() {
+    assert_eq!(RuleValue::from_input(ValueType::Number, RuleOp::Gte, "four"), None);
+    assert_eq!(RuleValue::from_input(ValueType::Number, RuleOp::Eq, ""), None);
+    assert_eq!(RuleValue::from_input(ValueType::Date, RuleOp::InLast, "thirty"), None);
+    // Days are whole, so a fractional one is not a smaller day.
+    assert_eq!(RuleValue::from_input(ValueType::Date, RuleOp::InLast, "1.5"), None);
+}
+
+/// Surrounding space comes free with a paste, and an untrimmed value reaches SQL as a
+/// `LIKE` nothing matches.
+#[test]
+fn a_pasted_value_is_trimmed_before_it_becomes_a_rule() {
+    assert_eq!(
+        RuleValue::from_input(ValueType::Text, RuleOp::Is, "  Jazz  "),
+        Some(RuleValue::Text("Jazz".to_owned()))
+    );
+    assert_eq!(
+        RuleValue::from_input(ValueType::Number, RuleOp::Gte, "  4  "),
+        Some(RuleValue::Number(4.0))
+    );
+    assert_eq!(
+        RuleValue::from_input(ValueType::Date, RuleOp::InLast, "  30  "),
+        Some(RuleValue::Days(30))
+    );
+}
+
+/// `SmartRuleRow.input-kind` picks which value widget the editor mounts and the `.slint`
+/// branches on the bare numbers, the days suffix reading `field-kind` beside it. A code
+/// that moves here mounts the wrong input, or none, with nothing failing.
+#[test]
+fn the_editor_widget_codes_are_the_ones_the_slint_branches_on() {
+    assert_eq!(InputKind::None.as_index(), 0);
+    assert_eq!(InputKind::Text.as_index(), 1);
+    assert_eq!(InputKind::Number.as_index(), 2);
+    assert_eq!(ValueType::Date.as_index(), 3);
 }

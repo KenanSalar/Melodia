@@ -1,10 +1,13 @@
 use std::collections::HashSet;
 
+use sqlx::{QueryBuilder, Sqlite};
+
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::fixtures::insert_test_track;
 use melodia_core::entities::smart_criteria::{
-    LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria, SmartLimit,
+    FIELDS, LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria, SmartLimit,
+    ops_for,
 };
 use melodia_core::entities::track::TrackListRow;
 use melodia_core::error::AppError;
@@ -497,4 +500,61 @@ async fn an_incoherent_rule_is_dropped_rather_than_matching_nothing() -> Result<
 
     assert_eq!(ids(&resolve(&s.db, &c).await?), HashSet::from([s.t1, s.t2]));
     Ok(())
+}
+
+/// One rule's predicate with no `WHERE` around it. [`super::push_false`] pushes exactly
+/// `"0"`, so a degraded rule is an equality rather than a search through real SQL.
+fn rendered_predicate(rule: &Rule) -> String {
+    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new("");
+    super::push_rule(&mut qb, rule);
+    qb.sql().as_str().to_owned()
+}
+
+/// The evaluator's half of the invariant `melodia-core`'s `smart_criteria_tests` holds
+/// from the editor's end: a rule the rule-builder can produce has to survive
+/// [`super::rule_is_renderable`] and render a real predicate.
+///
+/// Both halves are needed because the failure is silent in a way that looks like the
+/// opposite of a bug. `push_where` drops the rules that fail the gate, and a criteria
+/// whose rules are *all* dropped emits no `WHERE` at all, so the smart playlist the user
+/// built to hold one artist comes back holding the entire library.
+#[test]
+fn every_rule_the_editor_can_build_renders_a_real_predicate() {
+    for &field in FIELDS {
+        let value_type = field.value_type();
+        for &op in ops_for(value_type) {
+            let rule = Rule {
+                field,
+                op,
+                value: RuleValue::from_input(value_type, op, "5"),
+            };
+            assert!(
+                super::rule_is_renderable(&rule),
+                "{field:?} {op:?} is dropped by the gate, and a criteria of only dropped \
+                 rules matches the whole library"
+            );
+            assert_ne!(
+                rendered_predicate(&rule),
+                "0",
+                "{field:?} {op:?} passed the gate and rendered the always-false term"
+            );
+        }
+    }
+}
+
+/// The degradation [`super::push_false`] exists for, which is reachable only by handing
+/// `push_rule` a rule the gate would have refused. It matches nothing; matching
+/// everything would turn an internal inconsistency into a playlist holding the library.
+#[test]
+fn a_rule_whose_value_shape_is_wrong_renders_as_matching_nothing() {
+    let text_field_holding_a_number = Rule {
+        field: RuleField::Genre,
+        op: RuleOp::Is,
+        value: Some(RuleValue::Number(5.0)),
+    };
+    assert!(
+        !super::rule_is_renderable(&text_field_holding_a_number),
+        "the gate is what keeps the fallback below unreachable"
+    );
+    assert_eq!(rendered_predicate(&text_field_holding_a_number), "0");
 }

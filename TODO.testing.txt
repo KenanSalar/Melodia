@@ -1,0 +1,510 @@
+TODO: TEST COVERAGE, ROUND FIVE
+===============================
+
+Working doc. Delete when the backlog below is spent.
+
+Created: 2026-09-06, against `test/coverage` at f97d1bbe.
+
+Supersedes round four's `TODO.testing.txt`, spent and deleted by that commit, which
+superseded round three, which superseded round two, which superseded
+`docs/plans/TODO.test-coverage.txt`. Everything the four of them argued *out* is carried
+into DELIBERATELY NOT ON THIS LIST below, so nothing they settled gets re-proposed here.
+
+
+THE MEASUREMENT
+---------------
+
+One instrumented run on 2026-09-06:
+
+    cargo llvm-cov --locked --workspace --summary-only
+    cargo llvm-cov report --summary-only \
+      --ignore-filename-regex '.*/build/melodia-ui-[^/]*/out/.*'
+    cargo llvm-cov report --json --ignore-filename-regex '...' --output-path cov.json
+
+cargo-llvm-cov 0.8.7, rustc 1.97.0, exit 0, no failures and no flakes on the run the rows
+come from. The regex changed nothing this time: the generated `app-window.rs` does not
+appear in the report either way, so the totals are the same with and without it.
+
+**This run departs from `deploy-coverage.yml`'s protocol in one respect and the figures
+should be read knowing it:** it did not set `CARGO_PROFILE_DEV_DEBUG=0` /
+`CARGO_PROFILE_TEST_DEBUG=0`. The covered column below is 19785, where f97d1bbe's own
+message reports 20008 at the same commit. The two do not reconcile and this document does
+not guess at why. What it does reproduce exactly is round four's *denominator* table,
+subsystem for subsystem, off by the 8 lines f97d1bbe removed from `library/search.rs`.
+Read the entries, not a trend line across documents; three rounds running have had their
+totals decided by where code is instantiated rather than by what the round did.
+
+Every "never executed" claim below is from that run's function table with the per-binary
+and per-monomorphization instances of one source function summed back together by source
+position, and with closures separated from the functions containing them by their v0
+mangling. Every absence claim was checked by reading the file.
+
+
+WHERE IT STANDS
+---------------
+
+    TOTAL   function 48.4% (2900/5992)   line 46.3% (19785/42693)   region 43.0%
+
+    subsystem                                    line cov          uncovered
+    --------------------------------------------------------------------------
+    UI (melodia-views)                  13.9% ( 2701/19475)           16774
+    library API (melodia-app/library)   56.5% ( 2024/ 3583)            1559
+    background tasks (melodia-app/tasks) 51.0% (  975/ 1912)            937
+    binary (main/boot/shutdown)          2.3% (   19/  834)             815
+    integrations (scrobble/discord/mpris) 64.5% ( 1216/ 1884)          668
+    platform (tray, theme, logging)     48.2% (  579/ 1200)            621
+    app services (settings, updater)    71.5% ( 1011/ 1414)            403
+    audio (sources, decode)             84.6% ( 1428/ 1688)            260
+    engine (player state machine)       87.1% ( 1562/ 1794)            232
+    store (db queries, ingest, scanner) 93.7% ( 3299/ 3522)             223
+    net (radio dir, blocklist, fetch)   88.7% (  968/ 1091)             123
+    playback (dsp, decks, output)       95.3% ( 1786/ 1874)              88
+    core (entities, utils, themes)      88.3% (  648/  734)              86
+    artwork (image, covers)             92.9% (  870/  936)              66
+    app state                           86.5% (  225/  260)              35
+    testkit                             96.3% (  474/  492)              18
+
+The UI is 16774 of the 22908 uncovered lines and the binary 815, both declined since the
+first backlog. Most of the rest is the pass-through doors four documents have now
+declined. The percentage has not been a map since round two and this document does not
+rank by it.
+
+Two checks worth recording because they came back clean.
+
+**No `#[test]` or `#[tokio::test]` function in any crate has an execution count of zero.**
+Round four's same check, re-run: 167 never-executed entries sit inside test files and 161
+of them are closures on paths that succeed. The six that are real functions are
+`json_err` in three suites, `missing` in `tag_writer_tests.rs`, `voice_tests.rs`'
+`check<T: Send>` (the compile-time trait assertion `CLAUDE.md` prescribes) and
+`helpers.rs`' `total_duration` on a fake that does not need it. Nothing to delete.
+
+**The suite ran clean.** Round four's phase 1.1 fixed an ETXTBSY flake in
+`verify_tests.rs` with a lock spanning write and exec; this run did not reproduce it.
+One clean run is not evidence the lock works, only that nothing new is obviously broken.
+
+
+THE SHAPE OF WHAT IS LEFT
+-------------------------
+
+Round four retired "a well-tested primitive called by an untested decision" as a thesis.
+It was right about the files it had read. This run finds the shape alive in two places it
+had not looked, and the reason it survived is worth stating because it will hide the next
+one too.
+
+  1. **The UI decline is hiding pure functions that are not in the UI.** `melodia-views`
+     is 13.9% and declined, so anything whose *only* caller is a view reads as never
+     executed no matter which crate it lives in. `RuleValue::from_input` and
+     `RuleOp::input_kind` are pure, live in `melodia-core`, are called once each from
+     `ui/playlists/callbacks/smart.rs`, and are at zero. The decline is on testing the
+     view, not on testing what the view calls. Phase 1 is the whole of what that turned
+     up; the next round should re-run the same filter rather than trusting this one to
+     have found all of it.
+
+  2. **Two primitives can each be well tested and their composition untested.**
+     `deduplicate_events` has nine cases and `suppress_self_writes` has four, both
+     against `file_event_processor`. The order the loop applies them in is load-bearing,
+     is argued in two comments, and has nothing on it.
+
+  3. **A test whose name claims the property, asserting a floor under it.**
+     `field_value_types_and_operator_lists_are_coherent` is the coherence test for the
+     rule editor's types and it asserts four spot-checks and `!ops_for(vt).is_empty()`.
+     A name that good is why nobody looked, and the floor is what
+     `.claude/rules/testing.md` says to prefer an equality to. Coverage cannot see this
+     shape at all, since the lines execute.
+
+  4. Doors whose narrowed worker is already tested, and OS, IPC, session bus and sound
+     card. Unchanged from round four, and larger again: `queue.rs`' 28 never-run
+     functions and `settings/view.rs`' 25 are all `&AppState` transport.
+
+
+================================================================================
+PHASE 1: THE RULE THE EDITOR CAN BUILD AND THE EVALUATOR WILL NOT RENDER   [SPENT]
+================================================================================
+
+Eight cases across the two crates, no production change, and one piece of this entry's own
+advice refused after reading the file it was about.
+
+  melodia-core   `the_shape_table_covers_exactly_the_operators_the_editor_offers`
+                 `every_offered_operator_builds_the_value_shape_it_declares`
+                 `a_numeric_operator_given_something_that_is_not_a_number_builds_no_value`
+                 `a_pasted_value_is_trimmed_before_it_becomes_a_rule`
+                 `the_editor_widget_codes_are_the_ones_the_slint_branches_on`
+  melodia-store  `every_rule_the_editor_can_build_renders_a_real_predicate`
+                 `a_rule_whose_value_shape_is_wrong_renders_as_matching_nothing`
+
+**The refusal: "take the floor up to an equality while there" was wrong and the entry should
+not have said it.** `!ops_for(vt).is_empty()` is a floor, but the file already pins each
+list's *length* against the Slint array it mirrors and each list's *first* element by name,
+so the content is not unheld. Asserting the exact op lists on top of that buys nothing and
+costs a failure on every legitimate operator addition, which is a change detector. The
+shape table is an equality over the same set and is not one, because a new operator failing
+it is a new operator that has not said what value it takes. `field_value_types_and_operator_lists_are_coherent`
+is left exactly as it was.
+
+**The sweep is a loop, deliberately, and the table is what keeps it honest.** Writing the
+expected shape per row and asserting `from_input` against it is the table `.claude/rules/testing.md`
+asks for; deriving the expectation from `input_kind` would have restated the code under
+test and passed against every mutation below. The loop is over the table, not in place of it.
+
+**Every pin was broken on purpose, one at a time, with the tree restored between.** Six
+mutations, and the two-layer defence confirmed end to end: adding `RuleOp::Is` to `DATE_OPS`
+fails the shape table with "a new operator owes OFFERED_SHAPES a row saying what value it
+takes", and *then* declaring that row as `Shape::Text` (the fix the message asks for) fails
+the sweep with "Date + Is is skipped by the evaluator, not rendered". Making a text operator
+fall through to the always-false term fails the store sweep naming the pair; swapping the
+widget codes fails only the widget test; dropping the text trim fails only the trim test.
+
+**Two mutations fail more than one test and the entry says which.** Building `Days` as a
+`Number` fails the sweep plus the trim and unparseable cases, both of which carry `Days`
+assertions of their own. Breaking a text operator's arm fails the store sweep plus the
+pre-existing `the_album_artist_rule_reads_its_own_column`, which uses `Is`. Honest rather
+than ideal, and neither is the primary pin going quiet.
+
+**`a_rule_whose_value_shape_is_wrong_renders_as_matching_nothing` is not a duplicate of
+the pre-existing `an_incoherent_rule_is_dropped_rather_than_matching_nothing`**, which was
+checked before it was written. That one proves the gate filters an incoherent rule out so
+its siblings still apply; it can never see `push_false`, because the rule never reaches it.
+The new one calls `push_rule` directly and pins that the fallback is `0` and not `1`. Change
+`push_false` to push `"1"` and the old test still passes.
+
+    melodia-core/src/entities/smart_criteria.rs         71.3% of 101    4 of 22 fns never run
+    melodia-store/.../queries/smart_playlist.rs         84.9% of 225    1 of 19 fns never run
+
+Three functions on one path are at zero, and they are the two ends and the symptom of a
+single invariant that nothing states in code:
+
+    RuleOp::input_kind         smart_criteria.rs:416   never executed
+    RuleValue::from_input      smart_criteria.rs:433   never executed
+    push_false                 smart_playlist.rs:142   never executed, 12 call sites
+
+`from_input(value_type, op, raw)` is what turns what the user typed in the rule editor
+into a `RuleValue`. `rule_is_renderable` is what decides whether that rule reaches SQL,
+and it demands a specific value *shape* per operator: `Text` for the six text operators,
+`Number` for the six numeric ones, `Days` for the two relative-date ones, `None` for the
+four presence and boolean ones. Nothing checks that the two agree.
+
+**The failure is silent and it is not "the rule is ignored".** `push_where` filters to
+renderable rules first, and its own doc says the rest: "an all-skipped rule set yields no
+`WHERE` (matches the whole library)". So a disagreement between the editor's value shape
+and the evaluator's expectation does not produce an error, a log line, or an empty
+playlist. It produces a smart playlist containing **every track in the library**.
+
+The invariant holds today. Traced by hand across all four `ops_for` lists:
+
+    ValueType   ops offered                          from_input gives   renderable wants
+    ---------------------------------------------------------------------------------
+    Text        Contains NotContains Is IsNot        Text               Text        ok
+                StartsWith EndsWith
+    Text        IsSet IsNotSet                       None               None        ok
+    Number      Eq Ne Gt Gte Lt Lte                  Number             Number      ok
+    Number      IsSet IsNotSet                       None               None        ok
+    Bool        IsTrue IsFalse                       None               None        ok
+    Date        InLast NotInLast                     Days               Days        ok
+    Date        IsSet IsNotSet                       None               None        ok
+
+So this is a pin, not a bug report, and the case is worth writing precisely because of
+how the table above is held together: `input_kind`'s text branch is a catch-all
+(`_ => match value_type { Text => Text, _ => Number }`). Add `RuleOp::Is` to `DATE_OPS`,
+which is what "date is exactly" would be, and the editor offers it, `from_input` returns
+`Number` because the field is not text, `rule_is_renderable` wants `Text`, the rule is
+skipped, and if it was the only rule the playlist becomes the library. Nothing in the
+tree fails.
+
+The case is the sweep, not one row: for every `RuleField` (16) and every op in
+`ops_for(field.value_type())`, a rule built through `from_input` from a representative
+raw string must satisfy `rule_is_renderable`. That is 288 combinations screened down to
+the offered ones, it is pure, and it needs no pool.
+
+**On the loop.** `.claude/rules/testing.md` bans logic around an assertion and prescribes
+a table with the expected value written out. The expected value here is uniform across
+every row, so there is nothing per-row to write down and the honest shape is the
+exhaustive sweep with the failing `(field, op)` pair in the message. That is the same
+argument the corpus walks in `crates/melodia/tests/` already make. It stays beside the
+file rather than moving there, because it is a question about two named modules and not
+about the tree.
+
+Two homes, because the invariant has two halves and neither crate can see both:
+
+  1.1  `melodia-core`, in `entities/tests/smart_criteria_tests.rs`: every op `ops_for`
+       offers for a value type produces the `RuleValue` shape that op's `input_kind`
+       promises, and the four presence/boolean operators produce `None` rather than an
+       empty `Text`. This is the half a future `DATE_OPS` edit breaks first.
+
+       **That suite already has `field_value_types_and_operator_lists_are_coherent`, and
+       reading it is what this entry turns on.** It spot-checks four of the sixteen
+       fields' value types and then asserts `!ops_for(vt).is_empty()` for each of the
+       four categories. Neither `from_input` nor `input_kind` is named anywhere in the
+       file. So the coherence the name promises is not the coherence that matters here.
+
+       [The `is_empty` half was called a floor worth raising, and that was wrong: the
+       list's length is already pinned against the Slint array and its first element by
+       name, so an equality on top would only fail on legitimate additions. Left as it
+       was. See the SPENT note above.]
+
+  1.2  `melodia-store`, in `queries/tests/smart_playlist_tests.rs`: the same sweep
+       carried through to the evaluator, asserting the rendered predicate is not the
+       always-false term. `push_false` going from 0 to non-zero executions is not the
+       goal and should not be used as the check; the goal is that it stays at zero for
+       every rule the editor can build. The one case that should *reach* it is a rule
+       hand-built with a deliberately mismatched value shape, which is the internal
+       break its doc comment describes.
+
+Check both by breaking the code: add `RuleOp::Is` to `DATE_OPS` and watch 1.1 fail, then
+put it back and flip one arm of `rule_is_renderable` and watch 1.2 fail. If 1.2 passes
+against the `DATE_OPS` edit, it is asserting the wrong thing.
+
+
+================================================================================
+PHASE 2: THE THREE MUTATIONS ONE PREDICATE IS SUPPOSED TO GATE
+================================================================================
+
+    melodia-app/src/tasks/mbid_backfill.rs   24.5% of 184   11 of 19 fns never run
+
+`BatchStep` is thoroughly tested. `retires_chunk`, `wait_before_next` and `for_outcome`
+have four cases between them, including the one that matters most, named for its own
+consequence: `only_a_rate_limit_keeps_the_chunk_it_was_refused_over`. The decision table
+is not the gap.
+
+`backfill` is, at 0% of lines 199 to 297, and what is uncovered is the *use* of that
+table. The loop gates three separate mutations on one call:
+
+    if step.retires_chunk() {
+        for (id, ..) in chunk { attempted.insert(*id); }
+        looked_up += chunk.len();
+        idx = end;
+    }
+
+Each of the three has its own failure and no test can see any of them:
+
+  - `attempted.insert` outside the guard: a 429'd chunk joins the persisted skip list.
+    Those tracks are then unreachable by every later sweep and every later launch until
+    the user finds the manual re-sweep button, which is the exact cost the `Throttled`
+    variant's doc comment says it exists to avoid.
+  - `idx = end` outside the guard: a 429'd chunk is stepped past within this sweep.
+    Milder, since the ids stay out of `attempted` and the next sweep retries.
+  - `looked_up` outside the guard: the count drives `run_sweep`'s persist decision
+    (`if outcome.looked_up > 0`) and the user-facing toast, so a throttled sweep that
+    resolved nothing reports that it looked tracks up and writes the set to disk.
+
+`retires_chunk` being correct in isolation is what makes this invisible. Its own test
+passes against every one of the three mutations above.
+
+**Read this before pricing the seam, because round four ended on exactly this trap.** The
+argument list is not the obstacle and never was: `backfill` takes `&AppState` for
+`state.db`, `state.http_client()` and `mbid::write_resolved_mbids`, and the base URL is
+`listenbrainz::LB_API_BASE` spelled at the call site rather than passed in. The question
+to answer first is what a passing test would *assert*. Driving the whole loop means a
+pool, a client, a server the lookup can be pointed at, and a token, and the assertion at
+the end of all of it is still about three integers.
+
+So the shape to argue for is the structural one, not the seam: the advance step is a pure
+function of `(step, idx, end, chunk_ids)` returning the new index, the ids to retire and
+the count to add, and the loop applies what it returns. That makes all three mutations
+testable together with no pool, no server and no `AppState`, and it removes a three-thing
+`if` from a loop body that is already doing five things. Write the extraction first,
+argue it at the function, then the cases are a small table.
+
+Do not extend this to `run_sweep`. Its two decisions (persist when `looked_up > 0`,
+toast only when `announce`) are worth a case each once the above exists and it takes the
+same `&AppState`; they are not worth a fixture on their own.
+
+
+================================================================================
+PHASE 3: THE ORDER TWO WELL-TESTED FILTERS ARE APPLIED IN
+================================================================================
+
+    melodia-app/src/tasks/file_event_processor/mod.rs   13.5% of 52   4 of 6 fns never run
+
+`deduplicate_events` has nine cases in `file_event_processor_tests.rs`, including
+`dedup_rescan_supersedes_everything_in_batch`. `suppress_self_writes` has four, including
+`suppress_can_empty_the_batch`. Both are correct in isolation and neither is the subject.
+
+The subject is the loop in `spawn`, uncovered end to end, which applies them in an order
+two comments argue for at length:
+
+    dedup -> RescanNeeded short-circuit -> suppress_self_writes -> process_batch
+
+The comments say why, and both halves are reversible without breaking a compile or a
+test. Putting suppression before the rescan check means a `RescanNeeded` arriving in the
+same batch as our own tag write can be filtered away, and the comment calls that out:
+"a rescan must never be filtered away". Putting `process_batch` before suppression means
+every file we wrote a tag to is re-hashed, re-parsed and re-extracted, which is a
+performance property with a correctness edge, since a re-ingest is the path
+`CLAUDE.md` says drops ratings, play counts and favourites when the move-detection halves
+lose to each other.
+
+This is the composition gap, and it is the one shape round four's thesis retirement did
+not cover: two primitives fully pinned, their sequencing pinned nowhere.
+
+**Price the fixture before promising the case.** The loop reads `state.self_writes`,
+`state.rescan_notice`, `state.library_changed` and calls `reconcile_watched_folders`, so
+driving it whole needs a booted `AppState`, which four documents have now declined to
+build. The cheaper answer is the same one phase 2 wants: the ordering is a pure
+classification of a batch. Given a batch and the `SelfWrites` set, decide between
+"reconcile everything", "process this reduced batch" and "nothing to do". That function
+takes `(Vec<FileEvent>, &SelfWrites)`, returns an enum, has no `AppState` in it, and the
+loop becomes a match over its answer. The three arms are then a table.
+
+If that extraction is rejected, this entry is declined rather than done halfway. A test
+that drives the loop through a real `AppState` to assert an ordering is the end-to-end
+answer to a question a unit test can hold, which `.claude/rules/testing.md` names
+directly.
+
+
+================================================================================
+PHASE 4: THE TWO SMALL ONES WITH NO SEAM QUESTION AT ALL
+================================================================================
+
+4.1  `SearchHistoryState`, whose whole disk half is undriven
+------------------------------------------------------------
+
+    melodia-app/src/services/search_history.rs   31.8% of 63   11 of 15 fns never run
+
+The existing suite is five cases and all five are on `add_query`, the pure cap-and-dedup
+helper. `SearchHistoryState::init`, `add`, `remove`, `clear` and `flush` are all at zero,
+so nothing holds that any of them reaches the disk.
+
+`init` takes `&Paths`, not `&AppState`, which is the fixture `library/settings/tests` and
+`mbid_backfill_tests.rs` already build over a tempdir. There is no seam to design. The
+property is the one the mbid attempted-set case is named for and for the same reason: a
+search history that only mutates memory looks identical in the session that wrote it and
+is empty on the next launch. The cases are a write-then-`init` round trip, `remove`
+persisting rather than only mutating, and `clear` emptying the file rather than deleting
+it.
+
+Round four's declined list says the four `library/search.rs` doors onto this module are
+pass-throughs and "the history cap of ten is that module's property, not this one's".
+That is true and this is that module.
+
+4.2  `RadioNowPlaying::from(&RadioStation)`
+--------------------------------------------
+
+    melodia-engine/src/player/engine/types.rs   65.1% of 63   3 of 13 fns never run
+
+Thirteen field assignments across a crate boundary, never executed. It is the conversion
+every station playback goes through, and it carries two small decisions rather than being
+a memcpy: an empty `codec` becomes `None` rather than `Some("")`, and `country`, `tags`
+and `homepage` come from `country_name()`, `genre()` and `website()` rather than from
+same-named fields. Three accessors feeding three differently-named slots is the shape
+that gets transposed, and a transposition here paints the homepage in the genre row on
+the Now-Playing surface with nothing failing anywhere.
+
+One case, one constructed `RadioStation`, no pool. Assert the fields, not `Debug`.
+
+
+================================================================================
+DELIBERATELY NOT ON THIS LIST
+================================================================================
+
+Carried forward from all four spent backlogs, unchanged and not re-argued:
+
+  - The UI (melodia-views, 16774 uncovered, 13.9%). Issue #38; there is no
+    `slint::testing` call anywhere on purpose, and what pins the `.slint` tree is the
+    corpus walks in `crates/melodia/tests/`, which show up as no percentage. **Phase 1
+    is not an exception to this** and the distinction matters: it tests two pure
+    functions in `melodia-core` and `melodia-store` that a view happens to be the only
+    caller of.
+  - The binary, `melodia/src` (815 uncovered). The three things worth taking were taken.
+  - Tray, always-on-top, desktop integration, DWM caption, `platform/logging.rs`,
+    `system_theme`'s portal half. FFI, D-Bus and a `OnceLock`ed process-global.
+  - Discord IPC past the frame encoding, and `tasks/discord_presence.rs`.
+  - Anything already above 90%: playback, artwork, testkit, store.
+  - `library/playback.rs`'s eight EQ and ReplayGain forwarders.
+  - Every Last.fm path past its readiness gate, for the `option_env!` reason.
+  - The updater's UI layer, `asset_cache.rs`, the three elevated installers,
+    `verify_swapped_binary`'s 5 s timeout, `fetch_latest_manifest`'s happy path.
+  - The one-line settings toggles, `library/settings/crossfade.rs`, `library/window.rs`.
+  - `deezer`'s host refusal past a seam, and `artist_images` whole.
+  - `radio_browser`'s `endpoint`, `mirror` and `url_for`.
+  - The pass-through doors: the `queue_*` transport wrappers (28 never-run functions this
+    run, all of them `with_state_emit` or `emit_and_execute` over a tested body), thirteen
+    `playlists.rs` doors, five `smart_playlists.rs` doors, `settings/view.rs`' fifteen
+    `set_*` writers, `library/favorites.rs`' doors, `library/ratings.rs`' three, and
+    `tracks.rs`' projections. Check the shape before extending the decline to a new door.
+  - `output/device.rs`'s config ladder. Testing it means abstracting cpal.
+  - `tasks/updater_daily.rs`. What is left holds a `Weak<AppWindow>`.
+  - `stream_source`'s feed thread, declined in writing by bf79e967.
+  - `library/radio/authoring.rs`' network doors and `library/radio/mod.rs`' off-switch
+    table, the latter until something else needs a booted `AppState`.
+  - `library/radio/logos.rs`. Round four read this file after its percentage promised an
+    untested subject and found thirteen cases already on the decision table. What the
+    46% counts is `&AppState` doors over bodies that have cases.
+
+New to this list, each checked by reading the file rather than inferred from its row:
+
+  - `library/settings/folders.rs` (65.1% of 281, 18 of 34 never executed). Reads like the
+    largest library-API gap and is not one. `validate_folder_path` and
+    `insert_replacing_children` are covered, which is the half that deletes a superseded
+    folder's tracks. What is left is `remove_folder`, `get_folders` and
+    `set_folder_watching_enabled` (doors), `toggle_folder_watching` (needs a real
+    `FolderWatcher`), and `reconcile_watched_folders` plus its `ReconcileGuard::drop`.
+    That last pair is the only real mechanism and it is gated on a `static AtomicBool`,
+    which `.claude/rules/testing.md` names as the enemy of a suite: a test for it is
+    order-dependent within its binary and unresettable. Revisit only with a design that
+    moves the flag off the process.
+  - `tasks/first_launch.rs` (14.5% of 55, 4 of 7 never executed). `already_watched`, the
+    one pure decision and the one with a documented cost (a symlinked home indexing the
+    library twice), is covered. `run` is the rest, and it wants `dirs::audio_dir()`, a
+    watcher, a pool and a scan.
+  - `tasks/material_you.rs` (53.9% of 180, 7 of 17 never executed). `react` is covered.
+    `run` is a coordinator loop whose only decision is that a kick wake re-reads the
+    appearance snapshot and a view-model wake reuses it, keeping the old snapshot on a
+    failed read. That is a real property with a real cost (a settings file read per
+    playback emit) but it needs an `AppState` and a `watch` pair to observe, and the
+    payoff is one boolean.
+  - `store/media/ingest/metadata.rs` (93.5% of 245, 15 of 57 never executed). The count
+    is misleading: the never-run entries are `.map`/`.filter` closures on tag fields the
+    fixtures happen not to set. This is the well-covered-primitive class.
+  - `queries/smart_playlist.rs`' `push_false` as a coverage target in its own right. What
+    phase 1.2 pins is that no rule the *editor* can build reaches it, plus one direct call
+    proving the fallback matches nothing rather than everything. A case written to raise
+    its execution count for the percentage would invert the first half of that.
+  - `media_controls/mod.rs`' `sync` (48.8% of 170). Its `volume_changed` short-circuit is
+    a real decision, but the type it hangs off needs a session bus and the MPRIS handle.
+  - Test-file never-run entries. All 167 are accounted for above; six are error
+    constructors and helpers on paths that succeed. Nothing to delete, and re-running this
+    check each round is cheap and worth keeping.
+
+
+================================================================================
+SUGGESTED ORDER
+================================================================================
+
+  1. [DONE] Phase 1. Eight cases, two crates, no production change.
+
+     Left behind for whoever takes the next one: **an entry can be wrong about the test it
+     is asking for, not only about where the value is.** This one asked for a floor to be
+     raised to an equality, and reading the file showed the content was already held two
+     other ways and that the equality would have been a change detector. The entry was
+     written from a coverage row and a function name; the refusal came from the file. And
+     **check the neighbours before adding a case that sounds like one of them.** The store
+     half sits next to a test whose name claims nearly the same property and pins the
+     opposite half of it.
+
+  2. Phase 4, both. Neither has a seam question and 4.1's fixture already exists in two
+     other suites.
+
+  3. Phase 2, extraction first and argued at the function before any case is written.
+
+  4. Phase 3, only if the classification extraction is accepted. Otherwise decline it in
+     writing and say so here, the way bf79e967 declined the feed thread.
+
+Three things to carry into every entry, all of them findings the last three documents
+ended on rather than predictions:
+
+  **The mutation is what reviews the test.** Round three shipped a pin that passed against
+  the code it was written to catch, and round four shipped one that passed because a
+  process-wide `OnceLock` filter swallowed the arm it was testing. Break the function on
+  purpose, watch that test and only that test fail, and do it even when the test looks
+  obviously right.
+
+  **A seam and an observation are different questions.** Round four's phase 1 refused two
+  of six cases after checking only the argument list. Ask what a passing test would
+  *assert* before writing "the seam is already there", and price the arming as carefully
+  as the parameters. Phase 2 here is the same trap and is written to be read that way.
+
+  **Read the file before writing against it.** Five of round two's seven entries were
+  wrong about where their own value sat, and round four's phase 5 was written against a
+  file whose decision table was already the best-covered thing in it. In this document
+  `folders.rs` was the candidate that did not survive the read, and `smart_criteria.rs`,
+  at 71% and never a suspect, is phase 1.
