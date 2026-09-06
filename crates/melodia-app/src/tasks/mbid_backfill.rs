@@ -36,6 +36,57 @@ use melodia_store::database::queries;
 /// pace lookups rather than sprint into a 429.
 const BATCH_PAUSE: Duration = Duration::from_millis(300);
 
+/// What one batch's answer tells the sweep to do with the chunk it asked about.
+///
+/// The whole of what a failed batch costs is [`Self::retires_chunk`]: a retired id is not looked
+/// up again until the user asks for a full re-sweep, so the interesting rows are the two refusals
+/// that disagree about it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum BatchStep {
+    /// Answered. Retire the chunk, then pace, `ListenBrainz` being load-sensitive.
+    Answered,
+    /// Refused for a reason the next chunk may not hit. Retire it and move straight on: the sweep
+    /// has one pass per launch and spinning on one bad batch spends it, where the tracks it gives
+    /// up on are reachable again through the manual kick.
+    Skipped,
+    /// Rate limited, so the lookup never happened. Keep the chunk and ask again after the wait
+    /// the server named: retiring ids nobody looked at would cost them every later sweep for the
+    /// price of one 429.
+    Throttled(Duration),
+    /// The token was rejected, so nothing later in this sweep can succeed either.
+    Abandoned,
+}
+
+impl BatchStep {
+    fn for_outcome(
+        outcome: &Result<Vec<Option<listenbrainz::MbidMatch>>, ListenBrainzError>,
+    ) -> Self {
+        match outcome {
+            Ok(_) => Self::Answered,
+            Err(ListenBrainzError::RateLimited { reset_in_secs }) => {
+                Self::Throttled(listenbrainz::rate_limit_backoff(*reset_in_secs))
+            }
+            Err(ListenBrainzError::InvalidToken) => Self::Abandoned,
+            Err(_) => Self::Skipped,
+        }
+    }
+
+    /// Whether the chunk's ids join the attempted set and the sweep moves past them.
+    fn retires_chunk(self) -> bool {
+        matches!(self, Self::Answered | Self::Skipped)
+    }
+
+    /// How long to wait before the next request, or `None` to end the sweep.
+    fn wait_before_next(self) -> Option<Duration> {
+        match self {
+            Self::Answered => Some(BATCH_PAUSE),
+            Self::Skipped => Some(Duration::ZERO),
+            Self::Throttled(wait) => Some(wait),
+            Self::Abandoned => None,
+        }
+    }
+}
+
 /// What one sweep accomplished, for logging + the user-facing toast.
 struct SweepOutcome {
     /// Tracks whose lookup completed this sweep (matched or not).
@@ -193,56 +244,49 @@ async fn backfill(
             break; // cancelled mid-request
         };
 
-        match result {
-            Ok(matches) => {
-                let resolved: Vec<mbid::ResolvedMbid> = chunk
-                    .iter()
-                    .zip(matches)
-                    .filter_map(|((id, path, ..), matched)| {
-                        matched.map(|m| (*id, path.clone(), m.recording_mbid))
-                    })
-                    .collect();
-                log::debug!(
-                    "MBID backfill batch: {} looked up, {} matched",
-                    chunk.len(),
-                    resolved.len()
-                );
-                for (id, ..) in chunk {
-                    attempted.insert(*id);
-                }
-                if !resolved.is_empty() {
-                    match mbid::write_resolved_mbids(state, &resolved).await {
-                        Ok(n) => written += n,
-                        Err(e) => log::warn!("MBID backfill write failed: {e}"),
-                    }
-                }
-                looked_up += chunk.len();
-                idx = end;
-                if shutdown.run_until_cancelled(tokio::time::sleep(BATCH_PAUSE)).await.is_none() {
-                    break;
+        let step = BatchStep::for_outcome(&result);
+        if let Err(e) = &result {
+            log::warn!("MBID backfill lookup error: {e}");
+        }
+
+        if let Ok(matches) = result {
+            let resolved: Vec<mbid::ResolvedMbid> = chunk
+                .iter()
+                .zip(matches)
+                .filter_map(|((id, path, ..), matched)| {
+                    matched.map(|m| (*id, path.clone(), m.recording_mbid))
+                })
+                .collect();
+            log::debug!(
+                "MBID backfill batch: {} looked up, {} matched",
+                chunk.len(),
+                resolved.len()
+            );
+            if !resolved.is_empty() {
+                match mbid::write_resolved_mbids(state, &resolved).await {
+                    Ok(n) => written += n,
+                    Err(e) => log::warn!("MBID backfill write failed: {e}"),
                 }
             }
-            Err(ListenBrainzError::RateLimited { reset_in_secs }) => {
-                let backoff = listenbrainz::rate_limit_backoff(reset_in_secs);
-                log::info!("MBID backfill rate-limited; waiting {}s", backoff.as_secs());
-                if shutdown.run_until_cancelled(tokio::time::sleep(backoff)).await.is_none() {
-                    break;
-                }
-                // Retry the same chunk (idx unchanged).
+        }
+
+        if step.retires_chunk() {
+            for (id, ..) in chunk {
+                attempted.insert(*id);
             }
-            Err(ListenBrainzError::InvalidToken) => {
-                log::warn!("MBID backfill: ListenBrainz token rejected; stopping sweep");
-                break;
-            }
-            Err(e) => {
-                // Transient/server error: skip this batch rather than spin on it.
-                log::warn!("MBID backfill lookup error: {e}");
-                for (id, ..) in chunk {
-                    attempted.insert(*id);
-                }
-                looked_up += chunk.len();
-                idx = end;
-            }
+            looked_up += chunk.len();
+            idx = end;
+        }
+
+        let Some(wait) = step.wait_before_next() else {
+            log::warn!("MBID backfill: ListenBrainz token rejected; stopping sweep");
+            break;
+        };
+        if let BatchStep::Throttled(wait) = step {
+            log::info!("MBID backfill rate-limited; waiting {}s", wait.as_secs());
+        }
+        if shutdown.run_until_cancelled(tokio::time::sleep(wait)).await.is_none() {
+            break;
         }
     }
 

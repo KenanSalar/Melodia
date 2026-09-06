@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use serde::Serialize;
 
-use crate::state::AppState;
 use melodia_artwork::media::image::artwork::CoverCache;
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
@@ -114,15 +113,6 @@ async fn import_files(
         failed_paths,
         summaries: Vec::new(),
     })
-}
-
-/// The library door onto a drop, for a caller holding an `&AppState`: it is the one place the
-/// three fields below are spelled out of one, rather than at each queue entry point.
-pub(crate) async fn import_files_with_summaries(
-    state: &AppState,
-    file_paths: &[String],
-) -> Result<ImportFilesResult, AppError> {
-    import_and_summarize(&state.db, &state.paths.artwork_dir, &state.cover_cache, file_paths).await
 }
 
 /// Like [`import_files`] but additionally fetches `TrackSummary` rows for every imported id

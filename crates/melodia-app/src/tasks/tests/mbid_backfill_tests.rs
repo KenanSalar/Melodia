@@ -137,3 +137,78 @@ fn the_backfill_never_bumps_the_channel_it_subscribes_to() {
         );
     }
 }
+
+// --- What a refused batch costs ---------------------------------------------
+//
+// The skip-list above is what the sweep reads; this is what writes it. Four outcomes, and the two
+// that decide anything are the refusals that disagree about retiring the chunk: a 429 has to keep
+// its ids, because the lookup it was refused never happened, and a 500 has to give them up,
+// because the alternative is a sweep that spends its one pass per launch on the same bad batch.
+// They sit one `matches!` arm apart.
+
+/// The transient arm, standing in for anything the endpoint answers that is neither a 401 nor a
+/// 429. `Transport` is the other member of the same partition and takes the same row.
+fn server_error() -> Result<Vec<Option<listenbrainz::MbidMatch>>, ListenBrainzError> {
+    Err(ListenBrainzError::Server {
+        status: 503,
+        message: "unavailable".to_owned(),
+    })
+}
+
+/// A rate limit is the one refusal that must not retire its chunk: those tracks were never asked
+/// about, and an id in the attempted set is out of reach of every later sweep until the user
+/// finds the manual button.
+#[test]
+fn only_a_rate_limit_keeps_the_chunk_it_was_refused_over() {
+    let rows: Vec<(&str, bool)> = vec![
+        ("answered", BatchStep::for_outcome(&Ok(vec![None])).retires_chunk()),
+        (
+            "rate limited",
+            BatchStep::for_outcome(&Err(ListenBrainzError::RateLimited {
+                reset_in_secs: Some(9),
+            }))
+            .retires_chunk(),
+        ),
+        ("server error", BatchStep::for_outcome(&server_error()).retires_chunk()),
+    ];
+
+    assert_eq!(
+        rows,
+        vec![
+            ("answered", true),
+            ("rate limited", false),
+            ("server error", true)
+        ]
+    );
+}
+
+/// A rejected token ends the sweep. Answering it like a server error would ask the endpoint for
+/// every remaining chunk with a credential it has already refused.
+#[test]
+fn a_rejected_token_ends_the_sweep_where_a_server_error_does_not() {
+    let rejected = BatchStep::for_outcome(&Err(ListenBrainzError::InvalidToken));
+
+    assert_eq!(rejected.wait_before_next(), None);
+    assert!(BatchStep::for_outcome(&server_error()).wait_before_next().is_some());
+}
+
+/// The wait comes from the header the server sent rather than from a constant of ours, and
+/// `rate_limit_backoff` is what bounds it. A fixed sleep here would either hammer a server that
+/// asked for a minute or park for a minute over one that asked for a second.
+#[test]
+fn the_throttled_wait_is_the_one_the_server_asked_for() {
+    let step = BatchStep::for_outcome(&Err(ListenBrainzError::RateLimited {
+        reset_in_secs: Some(7),
+    }));
+
+    assert_eq!(step, BatchStep::Throttled(std::time::Duration::from_secs(7)));
+    assert_eq!(step.wait_before_next(), Some(listenbrainz::rate_limit_backoff(Some(7))));
+}
+
+/// An answered batch pauses and a skipped one does not, because the pause is there for a server
+/// that answered: a refusal already cost whatever the server spent refusing it.
+#[test]
+fn only_an_answered_batch_pays_the_pacing_pause() {
+    assert_eq!(BatchStep::for_outcome(&Ok(vec![])).wait_before_next(), Some(BATCH_PAUSE));
+    assert_eq!(BatchStep::for_outcome(&server_error()).wait_before_next(), Some(Duration::ZERO));
+}

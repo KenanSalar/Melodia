@@ -26,9 +26,12 @@ pub async fn get_track_meta(
 /// Resolves the track's `file_path` from the DB, then hands its parent
 /// directory to the platform default handler via the `open` crate
 /// (`xdg-open` on Linux, `open` on macOS, PowerShell `Start-Process` with
-/// an `explorer.exe` fallback on Windows). The directory-existence check
-/// and the launcher call both run on the blocking pool — `is_dir` is a
-/// `stat` syscall and `open::that` spawns and waits on a child process.
+/// an `explorer.exe` fallback on Windows). The existence check runs on the
+/// blocking pool because `is_dir` is a `stat` syscall.
+///
+/// **Detached, never `open::that`**, for the reason `ui::launcher` gives: `that`
+/// `waitpid`s the launcher, and a file manager that does not daemonise holds a
+/// blocking-pool slot for as long as the user leaves its window open.
 pub async fn reveal_in_file_manager(state: &AppState, track_id: i64) -> Result<(), AppError> {
     let file_path = queries::track::get_track_file_path(&state.db, track_id)
         .await?
@@ -46,7 +49,7 @@ pub async fn reveal_in_file_manager(state: &AppState, track_id: i64) -> Result<(
                 folder.display()
             )));
         }
-        open::that(&folder)?;
+        open::that_detached(&folder)?;
         Ok(())
     })
     .await

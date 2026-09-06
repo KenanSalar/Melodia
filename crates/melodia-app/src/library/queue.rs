@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use crate::services::settings::{mutate_settings, mutate_settings_with};
-use crate::state::AppState;
+use crate::state::{AppState, PlaybackContext};
+use melodia_artwork::media::image::artwork::CoverCache;
 use melodia_core::config::Paths;
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::{AppError, AppResult};
@@ -14,7 +15,7 @@ use melodia_engine::player::engine::state::{
 use melodia_engine::player::engine::types::{PersistedPlayback, RadioNowPlaying, RepeatMode};
 use melodia_store::database::{DbPool, queries};
 
-use super::import::{ImportFilesResult, import_files_with_summaries};
+use super::import::{ImportFilesResult, import_and_summarize};
 use super::playback::player_play_tracks;
 
 /// Order a freshly-imported batch the way the rest of the app orders a list.
@@ -31,14 +32,24 @@ pub async fn queue_import_files(
     state: &AppState,
     file_paths: Vec<String>,
 ) -> Result<ImportFilesResult, AppError> {
-    let mut result = import_files_with_summaries(state, &file_paths).await?;
+    append_imported(&state.playback_ctx(), &state.cover_cache, &file_paths).await
+}
+
+/// Import `file_paths` and append them to whatever is already queued.
+async fn append_imported(
+    ctx: &PlaybackContext,
+    cover_cache: &CoverCache,
+    file_paths: &[String],
+) -> Result<ImportFilesResult, AppError> {
+    let mut result =
+        import_and_summarize(&ctx.db, &ctx.paths.artwork_dir, cover_cache, file_paths).await?;
 
     if !result.summaries.is_empty() {
         // Moved rather than cloned: the drag-drop caller discards the success
         // result, so an emptied `summaries` on it costs nothing.
         let mut summaries = std::mem::take(&mut result.summaries);
         sort_for_queue(&mut summaries);
-        with_state_emit(&state.player_state, &state.sinks, |s| {
+        with_state_emit(&ctx.player_state, &ctx.sinks, |s| {
             s.queue.add_tracks(summaries);
         });
     }
@@ -56,7 +67,22 @@ pub async fn queue_import_files(
 /// Ids come off the sorted summaries, not `ImportFilesResult::track_ids`, which
 /// arrive partly out of a `HashMap` and would pick the first track by hash order.
 pub async fn open_files(state: &AppState, file_paths: Vec<String>) -> AppResult<()> {
-    let mut result = import_files_with_summaries(state, &file_paths).await?;
+    open_as_queue(&state.playback_ctx(), &state.cover_cache, &file_paths).await?;
+
+    // An opened file is usually new to the library, so every view re-fetches —
+    // the same bump the drag-and-drop import does.
+    state.library_changed.bump();
+    Ok(())
+}
+
+/// Import `file_paths`, make them the queue, and play from the top.
+async fn open_as_queue(
+    ctx: &PlaybackContext,
+    cover_cache: &CoverCache,
+    file_paths: &[String],
+) -> AppResult<()> {
+    let mut result =
+        import_and_summarize(&ctx.db, &ctx.paths.artwork_dir, cover_cache, file_paths).await?;
 
     if result.summaries.is_empty() {
         return Err(AppError::Queue(format!(
@@ -69,12 +95,7 @@ pub async fn open_files(state: &AppState, file_paths: Vec<String>) -> AppResult<
     let track_ids: Vec<i64> = result.summaries.iter().map(|summary| summary.id).collect();
 
     log::debug!("queue: open {} track(s) from the command line", track_ids.len());
-    player_play_tracks(&state.playback_ctx(), track_ids, Some(0)).await?;
-
-    // An opened file is usually new to the library, so every view re-fetches —
-    // the same bump the drag-and-drop import does.
-    state.library_changed.bump();
-    Ok(())
+    player_play_tracks(ctx, track_ids, Some(0)).await
 }
 
 pub async fn queue_add_tracks(state: &AppState, track_ids: Vec<i64>) -> Result<(), AppError> {
@@ -184,7 +205,31 @@ pub fn queue_skip_to_index(state: &AppState, index: usize) -> Result<(), AppErro
 /// read-then-`queue_toggle_shuffle`. The toggle is the transport's own path,
 /// where flipping whatever is current *is* the intent.
 pub fn queue_set_shuffle(state: &AppState, enabled: bool) -> Result<(), AppError> {
-    let new_shuffle = with_state_emit(&state.player_state, &state.sinks, |s| {
+    let new_shuffle = set_shuffle(&state.player_state, &state.sinks, enabled);
+    log::debug!("queue: shuffle {new_shuffle}");
+    persist_shuffle(state, new_shuffle);
+    Ok(())
+}
+
+pub fn queue_toggle_shuffle(state: &AppState) -> Result<(), AppError> {
+    let new_shuffle = toggle_shuffle(&state.player_state, &state.sinks);
+    log::debug!("queue: shuffle {new_shuffle}");
+    persist_shuffle(state, new_shuffle);
+    Ok(())
+}
+
+pub fn queue_cycle_repeat(state: &AppState) -> Result<(), AppError> {
+    let new_mode = cycle_repeat(&state.player_state, &state.sinks);
+    log::debug!("queue: repeat → {new_mode:?}");
+    persist_repeat(state, new_mode);
+    Ok(())
+}
+
+/// Answers with the shuffle state it settled in, which is *not* the request: an empty queue
+/// refuses to shuffle, so a caller persisting `enabled` writes a shuffle the next launch
+/// restores over a queue that was never reordered.
+fn set_shuffle(player_state: &PlayerStateHandle, sinks: &PlayerSinks, enabled: bool) -> bool {
+    with_state_emit(player_state, sinks, |s| {
         if s.queue.shuffle_enabled == enabled {
             return s.queue.shuffle_enabled;
         }
@@ -195,36 +240,27 @@ pub fn queue_set_shuffle(state: &AppState, enabled: bool) -> Result<(), AppError
             s.queue.unshuffle();
         }
         s.queue.shuffle_enabled
-    });
-    // The resulting state rather than the request: this is the idempotent form,
-    // so a Shuffle pill pressed twice asks for `true` twice and only moves once.
-    log::debug!("queue: shuffle {new_shuffle}");
-    persist_shuffle(state, new_shuffle);
-    Ok(())
+    })
 }
 
-pub fn queue_toggle_shuffle(state: &AppState) -> Result<(), AppError> {
-    let new_shuffle = with_state_emit(&state.player_state, &state.sinks, |s| {
+/// Flip shuffle, answering with what it became.
+fn toggle_shuffle(player_state: &PlayerStateHandle, sinks: &PlayerSinks) -> bool {
+    with_state_emit(player_state, sinks, |s| {
         if s.queue.shuffle_enabled {
             s.queue.unshuffle();
         } else {
             shuffle_inline(s);
         }
         s.queue.shuffle_enabled
-    });
-    log::debug!("queue: shuffle {new_shuffle}");
-    persist_shuffle(state, new_shuffle);
-    Ok(())
+    })
 }
 
-pub fn queue_cycle_repeat(state: &AppState) -> Result<(), AppError> {
-    let new_mode = with_state_emit(&state.player_state, &state.sinks, |s| {
+/// Advance the repeat mode, answering with the one it landed on rather than the one it left.
+fn cycle_repeat(player_state: &PlayerStateHandle, sinks: &PlayerSinks) -> RepeatMode {
+    with_state_emit(player_state, sinks, |s| {
         s.queue.cycle_repeat_mode();
         s.queue.repeat_mode
-    });
-    log::debug!("queue: repeat → {new_mode:?}");
-    persist_repeat(state, new_mode);
-    Ok(())
+    })
 }
 
 /// Fire-and-forget settings.json write for shuffle, on the blocking pool so the

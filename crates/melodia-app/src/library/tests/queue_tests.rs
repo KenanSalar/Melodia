@@ -111,55 +111,99 @@ fn shuffle_unshuffle_roundtrip() {
     assert_eq!(restored, original_ids);
 }
 
+// --- The three transport doors ---------------------------------------------
+//
+// Driven through the workers under `queue_{set_shuffle,toggle_shuffle,cycle_repeat}` rather than
+// by rebuilding their bodies over a bare `PlayerState`, which is what the tests these replaced
+// did: none of the three ever called the door it was named after, so an instrumented run reported
+// all three doors never executed while all three tests passed. What the doors add over the queue
+// methods `melodia-engine` already pins is the branch they pick and the value they hand
+// `persist_{shuffle,repeat}`, so that is what these assert.
+
+fn seated_queue(count: i64) -> (PlayerStateHandle, PlayerSinks) {
+    let player_state = PlayerStateHandle::default();
+    let sinks = test_sinks();
+    with_state_emit(&player_state, &sinks, |s| {
+        s.queue.add_tracks((1..=count).map(make_summary).collect());
+        s.queue.current_index = Some(0);
+    });
+    (player_state, sinks)
+}
+
+fn queue_version(player_state: &PlayerStateHandle) -> u64 {
+    lock_state(player_state).queue.version
+}
+
+/// `queue.version` is the witness rather than the play order: re-shuffling five tracks lands on
+/// the same permutation often enough that an order comparison would pass at random, and the
+/// version is what `with_state_emit` gates the queue re-emit on anyway.
 #[test]
-fn queue_set_shuffle_noop_when_already_enabled() {
-    let mut state = PlayerState::default();
-    let tracks: Vec<_> = (1..=5).map(make_summary).collect();
-    state.queue.add_tracks(tracks);
-    state.queue.current_index = Some(0);
+fn a_shuffle_asked_for_twice_reorders_once() {
+    let (player_state, sinks) = seated_queue(5);
+    set_shuffle(&player_state, &sinks, true);
+    let after_first = queue_version(&player_state);
 
-    shuffle_inline(&mut state);
-    assert!(state.queue.shuffle_enabled);
+    set_shuffle(&player_state, &sinks, true);
 
-    let already_enabled = state.queue.shuffle_enabled;
-    assert!(already_enabled);
+    assert_eq!(
+        queue_version(&player_state),
+        after_first,
+        "the Shuffle pill is pressed twice by a caller that already asked for it, and a second \
+         reorder throws away the position the listener was at"
+    );
+}
+
+/// The one input where the request and the outcome disagree, and the reason the door answers with
+/// the state: `persist_shuffle` takes this value, so a version returning `enabled` writes a
+/// shuffle into `settings.json` that the next launch restores over a queue nothing reordered.
+#[test]
+fn shuffling_an_empty_queue_answers_that_nothing_was_shuffled() {
+    let (player_state, sinks) = seated_queue(0);
+
+    let settled = set_shuffle(&player_state, &sinks, true);
+
+    assert!(!settled, "an empty queue has no order to shuffle, so the request cannot be granted");
+}
+
+/// Pins the door's `false` arm. The shuffled order is arranged by hand rather than by asking for
+/// one, so nothing here depends on the RNG having moved anything: a version clearing the flag
+/// without calling `unshuffle` leaves the queue reversed, and gets caught every run instead of
+/// once in a hundred and twenty.
+#[test]
+fn turning_shuffle_off_puts_the_queue_back_in_the_order_it_was_added() {
+    let (player_state, sinks) = seated_queue(5);
+    with_state_emit(&player_state, &sinks, |s| {
+        s.queue.play_order.reverse();
+        s.queue.shuffle_enabled = true;
+    });
+
+    set_shuffle(&player_state, &sinks, false);
+
+    let state = lock_state(&player_state);
+    assert!(!state.queue.shuffle_enabled, "the request was `false`");
+    let restored: Vec<i64> = state.queue.tracks_in_play_order().iter().map(|t| t.id).collect();
+    assert_eq!(restored, (1..=5).collect::<Vec<i64>>());
 }
 
 #[test]
-fn queue_toggle_shuffle_enables_then_disables() {
-    let mut state = PlayerState::default();
-    let tracks: Vec<_> = (1..=5).map(make_summary).collect();
-    state.queue.add_tracks(tracks);
-    state.queue.current_index = Some(0);
+fn the_toggle_flips_whichever_way_shuffle_is_currently_pointing() {
+    let (player_state, sinks) = seated_queue(5);
 
-    if state.queue.shuffle_enabled {
-        state.queue.unshuffle();
-    } else {
-        shuffle_inline(&mut state);
-    }
-    assert!(state.queue.shuffle_enabled);
-
-    if state.queue.shuffle_enabled {
-        state.queue.unshuffle();
-    } else {
-        shuffle_inline(&mut state);
-    }
-    assert!(!state.queue.shuffle_enabled);
+    assert!(toggle_shuffle(&player_state, &sinks), "a queue in order shuffles");
+    assert!(!toggle_shuffle(&player_state, &sinks), "a shuffled queue goes back in order");
 }
 
+/// The answer is what `persist_repeat` writes, so reporting the mode it left rather than the one
+/// it landed on brings the next launch back one press behind. `cycle_repeat_mode`'s own sequence
+/// is `melodia-engine`'s claim and is pinned there.
 #[test]
-fn queue_cycle_repeat_cycles_correctly() {
-    let mut state = PlayerState::default();
-    assert_eq!(state.queue.repeat_mode, RepeatMode::Off);
+fn a_repeat_press_answers_with_the_mode_it_landed_on() {
+    let (player_state, sinks) = seated_queue(3);
 
-    state.queue.cycle_repeat_mode();
-    assert_eq!(state.queue.repeat_mode, RepeatMode::All);
+    let announced = cycle_repeat(&player_state, &sinks);
 
-    state.queue.cycle_repeat_mode();
-    assert_eq!(state.queue.repeat_mode, RepeatMode::One);
-
-    state.queue.cycle_repeat_mode();
-    assert_eq!(state.queue.repeat_mode, RepeatMode::Off);
+    assert_eq!(announced, RepeatMode::All, "one press off `Off` lands on `All`");
+    assert_eq!(announced, lock_state(&player_state).queue.repeat_mode);
 }
 
 // --- The restart -----------------------------------------------------------
@@ -447,5 +491,122 @@ async fn play_next_with_nothing_picked_does_not_reach_the_queue() -> Result<(), 
 
     assert!(!published.has_changed().unwrap_or(true), "nothing was picked, so nothing changed");
     assert!(lock_state(&player_state).queue.tracks.is_empty());
+    Ok(())
+}
+
+// --- Opening a file from outside the app ------------------------------------
+//
+// The Rust end of the file-association handoff, and the only half of it nothing pinned. `%F` on
+// the four `.desktop` sources, `wix/main.wxs`'s `FileAssociations`, the single-instance claim and
+// `boot::tasks::serve_file_opens`' backlog are all held somewhere; what they hand to was not.
+//
+// The queue order survives the round trip because `get_track_summaries_by_ids` re-orders its rows
+// to match the ids it was given, so what `open_as_queue` sorts is what ends up on screen.
+
+use melodia_artwork::media::image::artwork::new_cover_cache;
+use melodia_core::entities::tags::{FieldEdit, TagEdit};
+
+use crate::state::fixtures::TestPlayback;
+
+/// Stage the silence fixture under `file_name` carrying `title`, and spell its path the way a
+/// file manager would. The title has to go in the file: this path imports rather than inserting,
+/// so the tag is the only place the sort can read a name from.
+fn opened_file(dir: &std::path::Path, file_name: &str, title: &str) -> Result<String, AppError> {
+    let dest = dir.join(file_name);
+    std::fs::copy(
+        std::path::PathBuf::from(melodia_testkit::ASSETS_DIR).join("silence.mp3"),
+        &dest,
+    )?;
+    let edit = TagEdit {
+        title: FieldEdit::Set(title.to_owned()),
+        ..TagEdit::default()
+    };
+    melodia_store::media::ingest::tag_writer::apply_to_file(&dest, &edit, None)?;
+    Ok(dest.to_string_lossy().into_owned())
+}
+
+fn queued_titles(player_state: &PlayerStateHandle) -> Vec<String> {
+    lock_state(player_state)
+        .queue
+        .tracks_in_play_order()
+        .iter()
+        .map(|track| track.title.clone())
+        .collect()
+}
+
+/// The order the user sees is the sorted one, not the order the file manager handed over and not
+/// the order the ids came back in. `natord` is what makes the three distinguishable: dropped in
+/// reverse, "Track 10" sorts after "Track 2" where a plain string compare puts it first.
+#[tokio::test]
+async fn opened_files_reach_the_queue_in_natural_title_order() -> Result<(), AppError> {
+    let fx = TestPlayback::empty().await?;
+    let dir = fx.tmp.path();
+    let opened = vec![
+        opened_file(dir, "c.mp3", "Track 10")?,
+        opened_file(dir, "b.mp3", "Track 2")?,
+        opened_file(dir, "a.mp3", "Track 1")?,
+    ];
+
+    open_as_queue(&fx.ctx, &new_cover_cache(), &opened).await?;
+
+    assert_eq!(queued_titles(&fx.ctx.player_state), ["Track 1", "Track 2", "Track 10"]);
+    Ok(())
+}
+
+/// The sibling above pins the list; this pins which of it plays. A queue in the right order with
+/// `current_index` somewhere else in it is the same bug from the listener's side, and only this
+/// notices. (`Some(0)` and `None` are the same call here, `resolve_start_slot` falling back to
+/// the head, so that is not what this is about.)
+#[tokio::test]
+async fn opening_a_batch_starts_at_the_first_track_in_order() -> Result<(), AppError> {
+    let fx = TestPlayback::empty().await?;
+    let dir = fx.tmp.path();
+    let opened = vec![
+        opened_file(dir, "b.mp3", "Second")?,
+        opened_file(dir, "a.mp3", "First")?,
+    ];
+
+    open_as_queue(&fx.ctx, &new_cover_cache(), &opened).await?;
+
+    assert_eq!(
+        lock_state(&fx.ctx.player_state).queue.get_current().map(|track| track.title.clone()),
+        Some("First".to_owned())
+    );
+    Ok(())
+}
+
+/// Opening replaces; importing appends. The two differ in nothing else, and collapsing them
+/// costs the listener the queue they were already playing.
+#[tokio::test]
+async fn opening_replaces_the_queue_where_importing_appends_to_it() -> Result<(), AppError> {
+    let fx = TestPlayback::empty().await?;
+    let dir = fx.tmp.path();
+    let seated = vec![opened_file(dir, "seated.mp3", "Already Playing")?];
+    let arriving = vec![opened_file(dir, "arriving.mp3", "Just Opened")?];
+
+    append_imported(&fx.ctx, &new_cover_cache(), &seated).await?;
+    append_imported(&fx.ctx, &new_cover_cache(), &arriving).await?;
+    let appended = queued_titles(&fx.ctx.player_state);
+
+    open_as_queue(&fx.ctx, &new_cover_cache(), &arriving).await?;
+
+    assert_eq!(appended, ["Already Playing", "Just Opened"], "the import kept what was there");
+    assert_eq!(queued_titles(&fx.ctx.player_state), ["Just Opened"], "the open did not");
+    Ok(())
+}
+
+/// A batch where nothing could be read is an error rather than an empty queue: the user
+/// double-clicked something and is owed an answer, and the caller has no other way to tell that
+/// the queue they were listening to is still the right one.
+#[tokio::test]
+async fn opening_files_that_cannot_be_read_is_an_error_rather_than_an_empty_queue()
+-> Result<(), AppError> {
+    let fx = TestPlayback::empty().await?;
+    let missing = fx.tmp.path().join("never-existed.mp3").to_string_lossy().into_owned();
+
+    let refused = open_as_queue(&fx.ctx, &new_cover_cache(), &[missing]).await;
+
+    assert!(matches!(refused, Err(AppError::Queue(_))), "got {refused:?}");
+    assert!(lock_state(&fx.ctx.player_state).queue.tracks.is_empty());
     Ok(())
 }

@@ -1,0 +1,752 @@
+TODO: TEST COVERAGE, ROUND THREE
+================================
+
+Working doc. Delete when the backlog below is spent.
+
+Created: 2026-09-06, against `test/coverage` at 68711736.
+
+Supersedes `TODO.testing.txt` (round two), spent and deleted by that commit, which
+itself superseded `docs/plans/TODO.test-coverage.txt`. Everything either of them
+argued *out* is carried into DELIBERATELY NOT ON THIS LIST below, so nothing they
+settled gets re-proposed here.
+
+Current numbers are one instrumented run on 2026-09-06 of
+
+    cargo llvm-cov --locked --workspace --no-report
+    cargo llvm-cov report --summary-only --ignore-filename-regex '.*/build/melodia-ui-[^/]*/out/.*'
+
+with `CARGO_PROFILE_{DEV,TEST}_DEBUG=0`, which is `deploy-coverage.yml`'s protocol
+so the rows below are comparable with the published report. Exit 0, no failures.
+Every absence claim was checked by reading the file rather than inferred from a
+percentage, and every "never executed" claim comes from the run's own function
+table with the monomorphized instances of one source function summed back
+together, not from a missing test file.
+
+
+WHERE IT STANDS
+---------------
+
+  round two's close (2026-09-06, before 68711736)
+  TOTAL   function 47.0% (2812/5979)   line 45.0% (19172/42647)   region 42.0%
+
+  round three's start (2026-09-06, after 68711736)
+  TOTAL   function 47.2% (2823/5979)   line 45.2% (19289/42647)   region 42.2%
+
+  after step 1 below (2026-09-06)
+  TOTAL   function 47.2% (2836/6004)   line 45.3% (19385/42790)   region 42.2%
+
+  after step 2 below (2026-09-06)
+  TOTAL   function 47.3% (2853/6036)   line 45.3% (19477/43030)   region 42.2%
+
+  now, after steps 3 and 4 below (2026-09-06)
+  TOTAL   function 47.2% (2872/6082)   line 45.3% (19633/43297)   region 42.2%
+
+  Step 7 is 117 lines, which is inside the noise band the last two documents both
+  recorded, and its own commit message says where its value was instead: the
+  `push_where` parentheses, which every test standing there could not see because
+  each used a single rule.
+
+  **Steps 1 and 2 are the reason a percentage cannot be diffed across a refactor,
+  and it is worth knowing before reading any row below.** llvm-cov's per-file line
+  count is not the physical line count: `library/queue.rs` reports 407 lines for a
+  395-line file, so a line reached by more than one instantiation is counted more
+  than once, and splitting a body into private workers moves the denominator by far
+  more than the edit adds. What the two steps did to their own files:
+
+    library/queue.rs        34.8% -> 45.6%   covered  92 -> 253   of 264 -> 555
+    library/import.rs       90.9% -> 94.2%   covered  90 -> 180   of  99 -> 191
+    tasks/rating_import.rs  23.1% -> 53.7%   covered  12 ->  58   of  52 -> 108
+    tasks/mbid_backfill.rs  15.0% -> 19.9%   covered  25 ->  70   of 167 -> 351
+
+  Read the covered column. `queue.rs`'s *uncovered* count went up, from 172 to 302,
+  and step 2 moved the workspace line percentage **down** by four hundredths while
+  adding 92 covered lines and nine cases, because its two files brought 240 lines of
+  denominator with them. Steps 3 and 4 then moved the *function* percentage down and
+  the line percentage up on the same run. Every one of those readings is true and
+  none of them is the result. The result is that seven doors, one decision table and
+  one prohibition went from never executed to pinned against a mutation.
+
+  subsystem                                    line cov          uncovered
+  --------------------------------------------------------------------------
+  UI (melodia-views)                  13.9% ( 2701/19475)           16774
+  library API (melodia-app/library)   53.9% ( 1926/ 3571)            1645
+  background tasks (melodia-app/tasks) 45.8% (  863/ 1884)           1021
+  binary (main/boot/shutdown)          2.3% (   19/  834)             815
+  integrations (scrobble/discord/mpris) 57.6% ( 1085/ 1884)          799
+  platform (tray, theme, logging)     48.2% (  579/ 1200)            621
+  app services (settings, state)      71.4% ( 1010/ 1414)            404
+  store (db queries, ingest, scanner) 91.2% ( 3213/ 3522)             309
+  audio (sources, decode)             82.7% ( 1391/ 1682)            291
+  engine (player state machine)       85.3% ( 1531/ 1794)            263
+  net (radio dir, blocklist, fetch)   88.7% (  968/ 1091)            123
+  playback (dsp, decks, output)       95.3% ( 1786/ 1874)              88
+  core (entities, utils, themes)      88.3% (  648/  734)              86
+  artwork (image, covers)             92.9% (  870/  936)              66
+  app state                           86.5% (  225/  260)              35
+  testkit                             96.3% (  474/  492)              18
+
+  **Three quarters of the remaining number is already argued out.** 23358 lines
+  are uncovered; the UI is 16774 of them and the binary 815, and both have sat on
+  the DELIBERATELY NOT list since the first backlog. Another few hundred are the
+  pass-through doors round two declined and this run says there are more of than it
+  counted. So the percentage has stopped being a map of anything, and this document
+  is ranked by cost of failure with the number carried only to say how big the file
+  is.
+
+
+THE SHAPE OF WHAT IS LEFT
+-------------------------
+
+Round two's three tiers are spent. What remains sorts into four kinds, and the
+second one is the whole reason this document is not just a tail.
+
+  1. A loop nobody drives, over a seam that is already there. `rating_import::
+     import`, `mbid_backfill::backfill`'s four error arms, `hls::Scheduler::drain`,
+     `watcher::start`. Each is one function, each has its callee tested underneath
+     it, and each decides something a user notices. This is where the cost of
+     failure is.
+
+  2. The second level, which is one test. `crates/melodia/tests/headless.rs` holds
+     exactly one `#[tokio::test]`, and nothing else in the tree ever builds an
+     `AppState`. Both spent backlogs declined items onto that level by name and
+     neither added anything to it, so the declines have been accumulating against a
+     fixture nobody built. Round two says it five times: "a narrowed door stays
+     uncovered unless something at `headless.rs`'s level drives it". Building it
+     once is worth more than the six narrowings it replaces.
+
+  3. Doors whose narrowed worker is already tested. Eleven `queue_*` transport
+     wrappers, thirteen `playlists.rs` doors, five `smart_playlists.rs` doors,
+     `favorites`' four getters, `tracks.rs`'s two projections. Round two declined
+     the first two groups; this run says the set is larger and the argument is
+     unchanged. Together they are most of what `melodia-app/library`'s 1645 still
+     counts, and narrowing them would move the number and test nothing.
+
+  4. OS, IPC, session bus and sound card. Unchanged.
+
+And one entry that is not a coverage gap at all, because the run found it by the
+other route: three tests that name a door and never call it, and one prohibition
+with a violator and no walk.
+
+Read the priority order against what a wrong answer costs. `melodia/src` at 2.3%
+is 815 uncovered lines and gets one paragraph, at the bottom, saying to leave it.
+
+
+================================================================================
+P0: THE PINS THAT READ AS COVERAGE AND HOLD NOTHING
+================================================================================
+
+P0.1  three tests in `queue_tests.rs` named after doors they never call  [SPENT]
+-----------------------------------------------------------------------
+
+Not a gap. A pin that cannot fail, which `.claude/rules/testing.md` calls worse
+than no pin, and it is first because it is the one thing here that is actively
+misleading rather than merely absent. The instrumented run is what surfaced it:
+`queue_set_shuffle`, `queue_toggle_shuffle` and `queue_cycle_repeat` are all three
+never executed, while three tests bearing their names pass.
+
+  `queue_set_shuffle_noop_when_already_enabled` calls `shuffle_inline` and then
+  asserts `state.queue.shuffle_enabled` twice, the second time through a local
+  bound from the first. The idempotent no-op it names is a branch inside
+  `queue_set_shuffle` that the test never reaches, and the door could be deleted
+  outright with the suite green.
+
+  `queue_toggle_shuffle_enables_then_disables` reimplements the door's body inline,
+  twice, as an `if/else` over `shuffle_enabled`. It holds that the copy in the test
+  file behaves as expected. It also carries conditionals around its assertions,
+  which the rule names outright.
+
+  `queue_cycle_repeat_cycles_correctly` calls `state.queue.cycle_repeat_mode()`,
+  which is `melodia-engine`'s method and is already pinned by that crate's own
+  `queue_tests.rs` and `state_tests.rs`. Same mistake round two's step 6 recorded
+  and corrected in the net tier: a case pinning a sibling suite's claim a second
+  time.
+
+What the doors actually decide, and what the replacements are for:
+
+  the idempotent form. `queue_set_shuffle` returns the *resulting* state rather
+  than the request, so a Shuffle pill pressed twice asks for `true` twice and
+  reorders once. Its own comment says so. The case is two calls with the same
+  argument and one reordering, and deleting the early return has to fail it.
+
+  the persist kick. All three doors call `persist_shuffle` or `persist_repeat` with
+  the value the state came back with, not the one that went in. A version writing
+  the request persists a shuffle that never happened, and the next launch restores
+  a reordered queue that is not reordered.
+
+  the toggle over an empty queue, which is the partition neither door's test has:
+  `shuffle_inline` on no tracks against `unshuffle` on no tracks.
+
+Reach: all three take `&AppState` for `player_state`, `sinks` and `runtime`. The
+narrowing is round two's, seven times over, and the seam under it already exists:
+`with_state_emit(&state.player_state, &state.sinks, …)` is what the body does, and
+`state::fixtures::test_sinks()` hands out the publish half. Take the persist kick
+as a separate function over `&Paths` so the door keeps its signature.
+
+Check the rewrite by breaking each door on purpose. All three current tests survive
+deleting the function they name, which is how they got here.
+
+Five cases in place of the three, and three private workers under doors whose
+signatures did not move: `set_shuffle`, `toggle_shuffle` and `cycle_repeat`, each
+over `(&PlayerStateHandle, &PlayerSinks)`. No call site moved and `melodia-views`
+learned nothing.
+
+**Two of this entry's own claims were wrong, in the same direction as every entry
+in the last two documents.**
+
+  The persist kick was not worth narrowing. `persist_{shuffle,repeat}` is a
+  fire-and-forget `spawn_blocking` a test cannot await, and the property the entry
+  was reaching for is not in it: what could be persisted wrongly is the *value*,
+  and that value is the worker's return. Asserting the return is the same claim one
+  layer down with no runtime, no temp root and no timing. `&Paths` would have bought
+  a test of `mutate_settings`, which has its own suite.
+
+  "The toggle over an empty queue" is not a partition either door distinguishes.
+  What does is `set_shuffle`'s *answer*: `shuffle_play_order_in_place` returns
+  before setting the flag when `play_order` is empty, so the request is `true` and
+  the outcome is `false`, and that is the one input where returning `enabled`
+  differs from returning the state. It is now the case the entry meant to be
+  asking for.
+
+**One of the five was a pin that could not fail, caught by the mutation and not by
+review.** `turning_shuffle_off_puts_the_queue_back_in_the_order_it_was_added` first
+asked for a shuffle and then asked for it off, and with `set_shuffle`'s two arms
+swapped it passed: the `true` call unshuffles an already-ordered queue, the `false`
+call takes the equality early return, and the order is untouched at both ends. It
+arranges the shuffled order by hand now, which also takes the RNG out of the
+assertion. The old shape would have missed a flag-clear-without-`unshuffle` once in
+every hundred and twenty runs.
+
+Every pin was checked by breaking the code: the equality guard, the returned state,
+both arm swaps and the pre-cycle read. Each failed its own test. The arm swap fails
+two, which is honest rather than ideal, and the entry says which.
+
+
+P0.2  `rating_import::import`, the page loop nothing walks           [SPENT]
+------------------------------------------------------------
+
+`import` and `spawn` are never executed. `read_each` has its two cases and
+`rating_tags` underneath it is at 100%, so what is missing is exactly the loop
+between them.
+
+This is the only pass that reads the stars sitting in a user's files into their
+rows, it runs once per install, and it is `one_shot::OnFailure::Retry` precisely
+because a marker recorded wrongly puts every one of those stars out of reach for
+the life of the install. Its own doc comment argues that. Nothing holds it.
+
+Four cases:
+
+  the keyset advance. `after_id` takes the last row's id, and `set_rating` removes
+  those rows from the predicate the next page asks with, so `id > after_id` is what
+  stops a rewritten window skipping rows. An `OFFSET` rewrite passes a one-page
+  test and skips half a library on the second page. Reaching a second page means
+  `PAGE_ROWS` arriving as a parameter with the door spelling the constant, which is
+  the seam-as-a-parameter shape the rule endorses rather than production API with
+  only a test for a caller.
+
+  the two ways a page ends. An empty page breaks; a page whose files carry no
+  rating `continue`s. Those are different arms and only one of them advances, so a
+  library where the first page happens to be unrated must not stop the pass.
+
+  the group-by-rating write. Five values at most, one UPDATE each. A map keyed
+  wrongly stamps one file's stars onto another's rows, and the loss is silent
+  because a star is exactly the thing the user cannot check against a reference.
+
+  `library_changed` bumps once, at the end, and only when something landed. Per
+  page it costs the mounted section a re-query per page; on zero it repaints for
+  nothing. `Signal` is observable from a test, so this is an assertion rather than
+  a source-text pin.
+
+Narrowing: `import(&AppState)` reaches `state.db` and `state.library_changed`.
+`import_into(db, page_rows) -> AppResult<usize>` with the door bumping on a
+non-zero count is B2's narrowing for the eighth time, and no call site moves.
+
+Five cases, and the entry was right about all four of its claims, which is the
+first time that has happened in three documents. The narrowing went exactly as
+written: `import(&DbPool, &Signal)` over `import_into(&DbPool, i64)`, the one-shot
+closure spelling `&state.db` and `&state.library_changed`, and nothing else moved.
+
+Two things worth knowing before writing the next fixture over a pool:
+
+  **`insert_test_track` hard-codes `folder_id: 1`**, so a suite that seeds tracks
+  without a folder row fails on a bare `FOREIGN KEY constraint failed` naming
+  neither. `queries::folder::insert_folder` first, as `setup_seeded_db` does.
+
+  **The mutation for a keyset walk is the off-by-one, not the rewrite.**
+  `after_id = last_id + 1` skips every other row at a page size of one and is a
+  single character; standing up an `OFFSET` version to break turned out to be a
+  worse test of the same thing, and the first attempt at it terminated correctly
+  and proved nothing.
+
+`Signal` is observable from a test through `subscribe()` plus `has_changed()`,
+which is what made the two bump cases assertions rather than source-text pins.
+
+
+P0.3  `mbid_backfill`'s four error arms, which decide what is never looked
+      up again                                                       [SPENT]
+------------------------------------------------------------------------------------
+
+`backfill`, `run_sweep` and `spawn` are never executed. Six cases exist and all six
+are on `load_attempted` / `persist_attempted` / `summarize`, which is the file
+around the loop rather than the loop.
+
+First among the reachable ones because defects have already clustered here:
+CLAUDE.md names this file as the one where a rule and its doc comment came to
+disagree about whether the attempted set was persisted, each correct on the day it
+was written. The set is still the thing the file is about.
+
+The decision is a four-row table over two outputs, whether the chunk joins
+`attempted` and whether `idx` advances:
+
+    Ok                -> mark, advance
+    RateLimited       -> neither; back off and retry the same chunk
+    InvalidToken      -> neither; break
+    any other Err     -> mark, advance
+
+The fourth row is the case worth writing. A 500 from ListenBrainz permanently skips
+those tracks until the user finds the manual button, and it sits one `matches!`
+away from the row that deliberately does not. The comment on it says "skip this
+batch rather than spin on it", which is a decision and not an accident, so the test
+is what stops someone tidying the two arms into one.
+
+Beside it: cancellation mid-request. `run_until_cancelled` answering `None` breaks
+*without* marking, which is the difference between a shutdown costing nothing and a
+shutdown costing a chunk that never gets looked at again.
+
+Take the cheap split first. The `match result` block is a pure decision over the
+outcome and the chunk, with no I/O in it. Lift it to a free function answering what
+to do and the four rows are a table with no server at all. Only then argue the
+wider narrowing, which buys the HTTP path: `lookup_recording_mbids_bulk(client,
+base_url, token, queries)` already takes the base URL, `melodia_testkit::http::
+TestServer` is what the net suites drive, and `mbid::write_mbids(db, artwork_dir,
+cover_cache, self_writes, resolved)` is the narrowed twin of the writer the loop
+calls. Everything the wider version needs exists; the table is where the defect is.
+
+Four cases over a `BatchStep` enum, and the wider narrowing was **not** taken and
+should not be until something needs it: every row of the table is answerable with
+no server, no pool and no runtime.
+
+**The split paid for itself in the production code before any test ran, which is
+not what the entry expected.** The mark-and-advance triple (`attempted.insert`,
+`looked_up +=`, `idx = end`) was written out in two of the four arms and had to
+stay in step between them; it is written once now, behind `retires_chunk()`. The
+loop reads as classify, write what came back, retire or not, wait or stop.
+
+**The entry's "cancellation mid-request" case was not taken.** It is real, and it
+is already structural rather than conditional: `run_until_cancelled` answering
+`None` breaks out of the loop above the classifier, so there is no arm that could
+mark and no branch to get wrong. A test there would pin `tokio_util`.
+
+Two things the shape decided that the entry did not name, both now pinned:
+
+  the pacing asymmetry. `BATCH_PAUSE`'s own doc says "between successful batches",
+  so a skipped batch moves straight on and an answered one waits. Folding them
+  would have been invisible and is now a case.
+
+  the throttle's wait comes from `rate_limit_backoff(reset_in_secs)`, so the
+  server's own `Retry-After` reaches the sleep. A constant there either hammers a
+  server asking for a minute or parks for one over a server asking for a second.
+
+`Skipped` waits `Duration::ZERO` rather than not sleeping at all, which is the one
+behaviour that moved: a yield and a cancellation point where there was neither.
+
+
+P0.4  `open_files`, the file-association entry point                 [SPENT]
+------------------------------------------------------
+
+`open_files` and `queue_import_files` are two of the fifteen functions in this file
+never executed. The other thirteen are P0.1's three plus round two's declined
+transport wrappers, and those stay declined.
+
+This is the Rust end of the handoff CLAUDE.md spends a whole paragraph on: `%F` on
+four `.desktop` sources plus the `sed` that must not eat it, `wix/main.wxs`'s
+`FileAssociations`, the single-instance claim, `serve_file_opens`' backlog. Every
+one of those halves is pinned somewhere. The function they all hand to is not.
+
+Three documented claims, none held:
+
+  ids come off the sorted summaries rather than `ImportFilesResult::track_ids`,
+  which arrive partly out of a `HashMap`. The doc comment says this in as many
+  words. Swap them and the track that plays is whichever the hash order put first:
+  stable within a build, different across builds, and impossible to read as a bug
+  from the outside. This is the one to write first and the one to break on purpose.
+
+  a set where nothing could be read is an `AppError::Queue`, not a silent empty
+  queue. Double-clicking a corrupt file has to say something.
+
+  the sibling difference. `open_files` replaces the queue, `queue_import_files`
+  appends to it, and the doc comment says they differ in nothing else. Collapsing
+  them is a one-word edit and costs the user the queue they were listening to.
+
+Reach: `import_files_with_summaries(state, …)` is already a two-line door over
+`import_and_summarize(db, artwork_dir, cover_cache, paths)`, and `player_play_
+tracks` takes a `PlaybackContext`, which `state::fixtures::TestPlayback` hands out
+with real files under it through `stage_playable`. So this is a narrowing onto
+pieces that already exist, not a new seam.
+
+Four cases over `open_as_queue` and `append_imported`, both
+`(&PlaybackContext, &CoverCache, &[String])`. **`import_files_with_summaries` is
+gone rather than narrowed**: it existed to spell three fields out of an
+`&AppState` for two call sites, `playlists.rs` was already spelling them itself,
+and with both queue workers taking a context there was no caller left. That is the
+last `&AppState` reach out of `library/import.rs`.
+
+**One of the four cases claimed something false and the mutation is what said so.**
+Its `///` had `Some(0)` as the start slot buying something over `None`, and
+`resolve_start_slot` falls back to the head either way, so the two calls are
+identical. The case is still live and still distinct from the one above it, for a
+different reason the comment now gives: the sibling pins the list, this pins which
+of it plays, and a queue in the right order with `current_index` elsewhere is the
+same bug from the listener's side.
+
+The ordering pins are deterministic because titles are written into the fixtures
+through `tag_writer::apply_to_file` and `natord` disagrees with a plain string
+compare on "Track 2" against "Track 10", so input order, lexicographic order and
+the right answer are three different sequences. `get_track_summaries_by_ids`
+re-orders its rows to the ids it was handed, which is what carries the sort
+through `player_play_tracks` to the screen; without that the sort would be
+discarded one call later and none of this would be observable.
+
+
+================================================================================
+P1: THE SECOND LEVEL, WHICH IS ONE TEST
+================================================================================
+
+  tasks/one_shot.rs                 0.0% of  28    28 uncovered
+  tasks/first_launch.rs             0.0% of  53    53
+  tasks/radio_logo_cache.rs         0.0% of  17    17
+  library/settings/folders.rs      65.1% of 281    98
+  library/radio/* (the off switch)  see round two's P0.2 table
+
+`crates/melodia/tests/headless.rs` holds one `#[tokio::test]`. It roots `Paths` in
+a tempdir, calls `AppState::init`, adds a folder, scans it and asserts one row.
+That is the entire second level of this test suite.
+
+Both spent backlogs declined onto it by name and neither extended it:
+
+  round two, on `one_shot`: "Its `OnFailure` arms and the `label`/`marker` split
+  want `headless.rs`."
+
+  on the folder writers: "`reconcile_watched_folders`, `scan_folder_internal`,
+  `toggle_folder_watching` and `set_folder_watching_enabled` each reach
+  `TaskSpawner::from_state` or `state.watcher`, so the honest level for them is
+  `headless.rs`, not a narrowed body."
+
+  on the Radio table: "'With the flag off every door answers `AppError::Settings`'
+  needs an `AppState`, and `AppState::init` opens the card."
+
+  and the general form, in P1's own summary: "a narrowed door stays uncovered
+  unless something at `headless.rs`'s level drives it, so roughly half of each file
+  is out of reach by construction."
+
+So the work here is not another narrowing. It is a fixture, and the argument to
+have before writing one is what a boot costs: `AppState::init` opens the card,
+which under CI is `.github/actions/headless-audio` pointing ALSA's default PCM at
+the userspace null device, plus a migration run and a backup per boot. That is the
+whole reason this is one entry rather than five. Build it once in
+`crates/melodia/tests/common/`, alongside the mixer helpers already there, and put
+every declined item through it. Whether one booted state is shared across cases or
+each case boots its own is the first thing to settle, and the rule's answer is
+independence unless the measurement says otherwise.
+
+What it unlocks, in the order their cost falls:
+
+  one_shot.rs. Both `OnFailure` arms, which is the only knob in the file: whether a
+  pass that failed part way still records its marker. `rating_import` is the
+  `Retry` consumer and `artwork_renormalize` the `Mark` one, so the arms are
+  drivable through the real sweeps rather than a synthetic one. Plus `Sweep`'s
+  `label`/`marker` split, whose failure mode is a bug report reading "ratings_
+  imported_from_tags failed" instead of "Rating import failed", invisible until
+  someone reads one.
+
+  library/settings/folders.rs. `reconcile_watched_folders`' CAS gate,
+  `toggle_folder_watching`, `set_folder_watching_enabled`. Round two called a
+  source-text assertion on the CAS gate "weaker than no assertion reading as
+  coverage" and left them. At this level they are drivable for real, and the
+  cascade underneath `add_folder` already has its three cases from step 4.
+
+  the Radio off switch as a table. With the flag off every door answers
+  `AppError::Settings`. `radio_facade.rs` walks every file under `library/radio`
+  for the `.http_client()` reach and structurally cannot see a door added past
+  `ensure_enabled`; the walk and the table together can. This is the claim round
+  two wanted and could not write.
+
+  first_launch.rs. Auto-adds `dirs::audio_dir()` once and its duplicate check
+  canonicalizes both sides. It reads `dirs::audio_dir()` directly, so the honest
+  case is the *second* launch: with `music_folder_auto_added` already set it must
+  touch neither the folder table nor the watcher. The first-launch arm needs the
+  home directory pointed somewhere, which is the env lock, so take the second-
+  launch half and say why the first is not there.
+
+  radio_logo_cache.rs. Prune then sweep, in that order, because reversed the sweep
+  sees every dropped row's file still referenced and the store never shrinks. Its
+  `//!` argues the ordering and nothing holds it. This one is also narrowable to
+  `(&DbPool, &Paths)` like `artwork_sweep::run` beside it, which would move it to
+  P2 and cost no boot at all. Argue which before writing it; the narrowing is
+  probably right, and if it is, this entry shrinks to four items.
+
+Deliberately not in this entry: the binary's own boot wiring. `headless.rs` builds
+the backend, and `main.rs` past that point is `slint::run_event_loop_until_quit`
+and the wiring around it, which needs an `AppWindow`. Still declined, below.
+
+
+================================================================================
+P2: THE LOOPS WITH A SEAM ALREADY UNDER THEM
+================================================================================
+
+  audio/source/hls/reader.rs      62.5% of 200    75 uncovered
+  store/media/ingest/watcher.rs   51.7% of  87    42
+  engine/backend/mod.rs           79.3% of 323    67
+  audio/source/stream_source.rs   51.8% of 332   160
+
+`hls::Scheduler::drain` is the single function in `reader.rs` never executed, and
+`reader_tests.rs` already drives `open` against a `TestServer` with a playlist
+builder, segment bodies and an init header. The server, the fixtures and the shape
+are all written; the loop just has nothing calling it. Four decisions:
+
+  the fell-behind skip. Segments below `next_sequence` are dropped rather than
+  caught up on, and `next_sequence` advances past a segment whose *fetch failed* as
+  well as one that landed. A version advancing only on success re-fetches the same
+  dead URL on every reload for the rest of the session.
+
+  the two refresh rates. A reload that brought audio takes `target_duration`; one
+  that did not takes half of it, which the comment attributes to what the spec asks
+  of a client that has caught up. They are one `/ 2` apart and neither is pinned.
+
+  the stall count, which resets to zero on audio and otherwise climbs to
+  `SEGMENT_STALL_BUDGET`. Boundary analysis against the real constant, both sides,
+  the way round two's `RECONNECT_MAX_DELAY` case had to be rewritten to do.
+
+  a closed channel answers `false`, which is the listener going away rather than
+  the stream ending, and the two have different consequences upstairs.
+
+`Scheduler::run`'s `PLAYLIST_FAILURE_BUDGET` ladder is the sibling and a state
+transition: failures reset on the first good reload and return at the budget. The
+reset is the interesting half, because a version that never resets gives up on a
+station that hiccupped twice in an hour.
+
+`watcher::start` and `stop` are the only two functions in `watcher.rs` never
+executed; everything under them (`classify_event`, `is_audio_file`) has 28 cases.
+What `start` decides is not classification: it stops the previous debouncer first,
+it skips a path that does not exist rather than failing the call, and the
+`need_rescan` short circuit sends one `RescanNeeded` and classifies nothing. The
+first two need a temp dir and no waiting at all. An end-to-end case costs the 2 s
+debounce, so it is one test at roughly 2.5 s that awaits the channel rather than
+sleeping on a guess, and it is worth exactly one.
+
+`engine/backend/mod.rs` has `stage_stream`, `discard_staged_stream`,
+`stream_shared` and `play_stream` uncovered, and the one worth a case is
+`discard_staged_stream`'s generation match: a stage belonging to some other session
+belongs to a *newer* one, so taking it in order to refuse it would close the
+connection that session is waiting on. That is a documented claim with nothing on
+it. Blocked on one thing only, a `PreparedStream` a test can build without a
+socket, which is a smaller fixture question than `stream_source`'s and should be
+settled first.
+
+`stream_source`'s `connect`, `reopen`, `open_segments`, `feed_loop` and
+`spawn_feed` are unchanged from round two and still want a way to step a blocking
+thread deterministically. `TestServer` is half of it. Argue the other half before
+writing it; this is the last entry in the tree that genuinely needs a seam nobody
+has built.
+
+
+================================================================================
+P3: THE PROHIBITION WITH ONE VIOLATOR AND NO WALK                    [SPENT]
+================================================================================
+
+Not a coverage entry. Found on the way, and it belongs here because the fix has a
+test-shaped half.
+
+`crates/melodia-app/src/library/tracks.rs:49` calls `open::that`. It is the only
+one in the tree; every other launch goes through `ui::launcher`.
+
+CLAUDE.md and `ui/launcher.rs`'s own `//!` both say the launcher is
+`open::that_detached` and never `open::that`, because `that` `waitpid`s the child.
+`reveal_in_file_manager` runs on the blocking pool rather than the UI thread, so
+what it costs is a pool thread held for as long as the file manager lives, which is
+why it has gone unnoticed: nothing freezes, the pool just gets narrower every time
+someone opens a containing folder. The argument is the same argument and the
+production fix is one word.
+
+The shape is exactly what `file_dialog.rs`'s walk holds for `rfd`: a prohibition
+violable from any file, correct-looking on the platform it is reviewed on. So the
+entry is a corpus walk beside that one in `crates/melodia/tests/`, and it fails
+today. Decide the production half first, either detach it or exempt it at the call
+site with the reason written down, because the walk has to name the exemption set.
+
+Detached, and there is no exemption set. `crates/melodia/tests/launcher.rs` is the
+walk; CLAUDE.md's bullet moved off `launcher.rs` and onto the tree, since the rule
+was never about that file.
+
+**The one thing the entry got wrong is the shape of the pin.** `file_dialog.rs`
+funnels five call sites through one helper and exempts the helper, and that cannot
+be copied here: `melodia-app` may not name `melodia-views`, so `ui::launcher` is
+unreachable from the library door and there are two launch sites by construction.
+The spelling is the rule rather than a stand-in for one, which makes the walk
+simpler than its neighbour and its floor a count of launch sites rather than of
+callers of a helper.
+
+Three arms, each broken on purpose and each failing: the call coming back, the
+`use open::that;` that would hide a bare `that(…)` from the first needle, and a
+launch site that stops launching. `open::that_detached(` does not match
+`open::that(`, which is what lets one needle be a literal.
+
+
+================================================================================
+DELIBERATELY NOT ON THIS LIST
+================================================================================
+
+Carried forward from both spent backlogs, unchanged:
+
+  - The UI (melodia-views, 16774 uncovered, 13.9%). Issue #38 says UI coverage is
+    intentionally light and there is no `slint::testing` call anywhere on purpose.
+    What pins the `.slint` tree is the corpus walks in `crates/melodia/tests/`,
+    which catch the drift that actually happens and show up as no percentage.
+
+  - The binary, `melodia/src` (815 uncovered). The three things worth taking there
+    were taken: the `--version` and `--logs` literal branches, `shutdown.rs`'s
+    respawn marking, and `single_instance`'s two name spellings. What is left is
+    `slint::run_event_loop_until_quit` and the wiring around it.
+
+  - Tray, always-on-top, desktop integration, DWM caption. FFI and D-Bus against a
+    session bus CI does not have.
+
+  - Discord IPC beyond the pure frame encoding, and `tasks/discord_presence.rs`
+    (107 lines, 0.0%): a detector loop around a named-pipe client CI does not run.
+    `now_ts` and the payload shaping are covered from `discord/payload.rs`.
+
+  - Anything already above 90%: melodia-playback, melodia-artwork, testkit, and now
+    melodia-store. The remaining lines there are error formatting.
+
+  - `library/playback.rs`'s eight EQ and ReplayGain forwarders. One store each into
+    a lock-free cell the engine publishes no reader for. The clamps underneath are
+    pinned by melodia-playback's own suites.
+
+  - Every Last.fm path past its readiness gate. `is_configured()` reads
+    `option_env!` keys baked in at compile time, so one test exercises a real POST
+    on a keyed build and skips on a keyless CI one while reporting identically.
+
+  - The updater's UI layer, `asset_cache.rs`, `install_via_msiexec` /
+    `install_via_package_manager` / `elevate_swap_via_pkexec`,
+    `verify_swapped_binary`'s 5 s timeout, and `fetch_latest_manifest`'s happy path.
+
+  - The one-line settings toggles. A test that a field assignment assigns a field.
+    They account for most of `services/settings/io.rs`'s never-executed function
+    count, which is the generic `mutate_settings` monomorphized once per toggle.
+
+  - `deezer`'s host refusal past a seam, and `artist_images` whole. Admitting a
+    loopback listener to the download means relaxing the allowlist under test, and
+    both refusals fire ahead of the request anyway.
+
+  - `radio_browser`'s `endpoint`, `mirror` and `url_for`. Reaching them means
+    resolving `MIRROR`, one process-global fetch per test binary and a real
+    outbound request the first time.
+
+New to this list:
+
+  - The pass-through doors, which this run says are a larger group than round two
+    counted. Eleven `queue_*` transport wrappers, thirteen `playlists.rs` doors,
+    five `smart_playlists.rs` doors, `favorites`' four getters and `tracks.rs`'s two
+    projections are all never executed, and all are one delegation onto a layer with
+    its own suite. Together they are most of what `melodia-app/library`'s 1645
+    uncovered lines still count. The exemption is what P0.1 is about: three of the
+    `queue_*` doors turned out *not* to be delegations, and the tests that made them
+    look tested are the entry. Check the shape before extending the decline to a new
+    door.
+
+  - `output/device.rs`'s `open`, `attempt`, `build_stream`, `direct_stream` and
+    `output_stream` (47 of 181). Round two never named it, and the reason it is here
+    rather than in P2 is that the generic parameters are the *mixer builder* and the
+    error callback, not the device: `open` calls `cpal::default_host()` inline. The
+    config ladder is real, load-bearing and what CI depends on, and testing it means
+    abstracting cpal, which is a seam on a dependency boundary rather than on a
+    hostname. `ladder` and the ordering helpers underneath it are covered.
+
+  - `platform/logging.rs`'s `install`, `start_to_file`, `set_verbose` and `flush`
+    (58 of 74). One `flexi_logger` handle per process behind a `OnceLock`, which is
+    the process-global state the rule names as the enemy of a test suite. Its pure
+    halves have five cases.
+
+  - `desktop_integration::refresh_user_install` and `refresh_caches` (76 of 109).
+    `$XDG_DATA_HOME` under the env lock plus `update-desktop-database`.
+    `render_desktop`, `quote_exec` and `write_if_changed` have thirteen cases
+    between them.
+
+  - `tasks/updater_daily.rs` (156 of 197). Every pure decision in it has a case:
+    `needs_check`'s four partitions, the backoff ladder and its cap, and all five
+    skip-version arms. What is left holds a `Weak<AppWindow>` and writes
+    `MelodiaUpdater` globals directly, which CLAUDE.md names as the one edge of its
+    kind in the command layer.
+
+  - `library/settings/view.rs`'s remaining lines, `backup.rs`'s retention refusal
+    and `ingest/watcher.rs`'s classification. Round two listed the first two as
+    unfinished and both are done: `view.rs`'s column-width writer lives in
+    `melodia-views`, and `prune_never_touches_a_name_it_did_not_write` already
+    exists. Watcher classification has 28 cases; only `start`/`stop` are open, and
+    those are P2's.
+
+
+================================================================================
+SUGGESTED ORDER
+================================================================================
+
+  1. [DONE] P0.1, the three queue tests. Five cases in their place, three private
+     workers under doors that did not move, and no production behaviour changed.
+     Two of the entry's claims were wrong and its table now says which.
+
+     Left behind for whoever takes the next one: **the mutation is what reviews the
+     test, and it caught one of these five.** The replacement for
+     `queue_toggle_shuffle_enables_then_disables` was written, read, and passed
+     against a `set_shuffle` with its two arms swapped, because a shuffle asked for
+     on an ordered queue and an unshuffle asked for on one are the same no-op from
+     the outside. Arranging the shuffled order by hand rather than asking the RNG
+     for one fixed it and took the last coin flip out of the file. Do not skip the
+     break-it pass on a test that looks obviously right; that is the one this
+     happened to.
+
+  2. [DONE] P0.2 and P0.3's decision table. Nine cases, two narrowings, and P0.3's
+     wider HTTP narrowing was left where the entry put it: every row of that table
+     answers with no server, no pool and no runtime. Both entries were right about
+     what they were for, which had not happened in either of the last two
+     documents.
+
+     Left behind for whoever takes the next one: **a split can pay for itself in
+     the production code before a test runs.** `mbid_backfill`'s mark-and-advance
+     triple was written out in two of four arms and had to stay in step between
+     them; it is written once now. Neither narrowing was a shape invented for a
+     test, which is the bar to hold the rest of this document to.
+
+  3. [DONE] P0.4, `open_files`. Four cases, both queue-entry doors narrowed onto
+     `(&PlaybackContext, &CoverCache)`, and `import_files_with_summaries` deleted
+     for want of a caller.
+
+     Left behind for whoever takes the next one: **a `///` is a claim and the
+     mutation checks it too.** One case here was written against `Some(0)` versus
+     `None` as the start slot; they are the same call, `resolve_start_slot`
+     falling back to the head. The test was right and its reason was not, which a
+     green run cannot tell you and a review did not.
+
+  4. [DONE] P3, the walk plus the one-word production fix. No exemption set: the
+     two launch sites are in two crates and the detached spelling is the rule
+     itself, which `file_dialog.rs`' helper-and-exemption shape could not have
+     expressed.
+
+  5. P1, the fixture, and everything that has been waiting on it. Settle
+     `radio_logo_cache`'s narrowing first; if it lands, this step is four items
+     instead of five.
+
+  6. P2's `Scheduler::drain` and `watcher::start`, both of which have their server
+     or their temp dir already written.
+
+  7. P2's `discard_staged_stream` and `stream_source`, each after its own fixture
+     argument. These are the last two entries in the tree that need a seam nobody
+     has built, and both should be argued in writing before either is written.
+
+One thing to carry into every entry above, because it is the finding both spent
+backlogs ended on and neither predicted: **five of round two's seven entries were
+wrong about where their own value was, always in the same direction.** The
+percentage pointed at the lines nothing ran, and the defect sat in the lines that
+ran with nothing asserted over them. P0.1 is that failure mode in its purest form
+and it was invisible to six months of green runs. So read each entry's table as a
+map of where nothing runs, read the file before writing against it, and check every
+pin by breaking the code on purpose. A pin that survives the mutation it was written
+for is the thing this document exists to stop shipping.
