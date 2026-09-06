@@ -11,6 +11,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
+/// The one helper here that is a fixture rather than a walker, kept in its own file because it is
+/// a protocol rather than a few functions over the corpus.
+pub mod http;
+
 // `MELODIA_REPO_ROOT` (`.cargo/config.toml`) already ends in a separator, so the suffixes
 // below spell none of their own.
 

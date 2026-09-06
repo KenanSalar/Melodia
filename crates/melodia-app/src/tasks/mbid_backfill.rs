@@ -24,7 +24,7 @@ use tokio_util::sync::CancellationToken;
 use crate::library::mbid;
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
-use melodia_core::error::AppResult;
+use melodia_core::error::{AppResult, describe};
 use melodia_core::utils::toast::{self, ToastKind};
 use melodia_integrations::services::integrations::scrobble::ScrobbleService;
 use melodia_integrations::services::integrations::scrobble::providers::listenbrainz::{
@@ -35,6 +35,92 @@ use melodia_store::database::queries;
 /// Gentle pause between successful batches — `ListenBrainz` is load-sensitive, so
 /// pace lookups rather than sprint into a 429.
 const BATCH_PAUSE: Duration = Duration::from_millis(300);
+
+/// What one batch's answer tells the sweep to do with the chunk it asked about.
+///
+/// The whole of what a failed batch costs is [`Self::retires_chunk`]: a retired id is not looked
+/// up again until the user asks for a full re-sweep, so the interesting rows are the two refusals
+/// that disagree about it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum BatchStep {
+    /// Answered. Retire the chunk, then pace, `ListenBrainz` being load-sensitive.
+    Answered,
+    /// Refused for a reason the next chunk may not hit. Retire it and move straight on: the sweep
+    /// has one pass per launch and spinning on one bad batch spends it, where the tracks it gives
+    /// up on are reachable again through the manual kick.
+    Skipped,
+    /// Rate limited, so the lookup never happened. Keep the chunk and ask again after the wait
+    /// the server named: retiring ids nobody looked at would cost them every later sweep for the
+    /// price of one 429.
+    Throttled(Duration),
+    /// The token was rejected, so nothing later in this sweep can succeed either.
+    Abandoned,
+}
+
+impl BatchStep {
+    fn for_outcome(
+        outcome: &Result<Vec<Option<listenbrainz::MbidMatch>>, ListenBrainzError>,
+    ) -> Self {
+        match outcome {
+            Ok(_) => Self::Answered,
+            Err(ListenBrainzError::RateLimited { reset_in_secs }) => {
+                Self::Throttled(listenbrainz::rate_limit_backoff(*reset_in_secs))
+            }
+            Err(ListenBrainzError::InvalidToken) => Self::Abandoned,
+            Err(_) => Self::Skipped,
+        }
+    }
+
+    /// Whether the chunk's ids join the attempted set and the sweep moves past them.
+    fn retires_chunk(self) -> bool {
+        matches!(self, Self::Answered | Self::Skipped)
+    }
+
+    /// How long to wait before the next request, or `None` to end the sweep.
+    fn wait_before_next(self) -> Option<Duration> {
+        match self {
+            Self::Answered => Some(BATCH_PAUSE),
+            Self::Skipped => Some(Duration::ZERO),
+            Self::Throttled(wait) => Some(wait),
+            Self::Abandoned => None,
+        }
+    }
+}
+
+/// How far into `pending` the sweep has got, and how much of it it can claim to have asked
+/// about.
+///
+/// Both move only through [`Self::advance_past`], with the attempted set, because retiring a
+/// chunk is one decision with three effects and every half-application is its own bug: ids in
+/// the set with the index behind them are asked about twice, an index past ids that never
+/// joined it gives those tracks up for the sweep, and a `looked_up` counting a chunk nobody
+/// answered persists the set and reports those tracks as done.
+/// [`BatchStep::retires_chunk`] is correct against all three on its own.
+#[derive(Default)]
+struct SweepProgress {
+    /// Index in `pending` the next chunk starts at.
+    idx: usize,
+    /// Tracks whose lookup completed, matched or not.
+    looked_up: usize,
+}
+
+impl SweepProgress {
+    /// Retire `chunk_ids` and step past them, or leave the sweep exactly where it stands.
+    fn advance_past(
+        &mut self,
+        step: BatchStep,
+        chunk_ids: impl ExactSizeIterator<Item = i64>,
+        attempted: &mut HashSet<i64>,
+    ) {
+        if !step.retires_chunk() {
+            return;
+        }
+        let len = chunk_ids.len();
+        attempted.extend(chunk_ids);
+        self.looked_up += len;
+        self.idx += len;
+    }
+}
 
 /// What one sweep accomplished, for logging + the user-facing toast.
 struct SweepOutcome {
@@ -165,13 +251,12 @@ async fn backfill(
     log::info!("MBID backfill: {} track(s) to look up", pending.len());
 
     let client = state.http_client().clone();
-    let mut idx = 0;
-    let mut looked_up = 0usize;
+    let mut progress = SweepProgress::default();
     let mut written = 0usize;
 
-    while idx < pending.len() && !shutdown.is_cancelled() {
-        let end = (idx + MAX_LOOKUPS_PER_POST).min(pending.len());
-        let chunk = &pending[idx..end];
+    while progress.idx < pending.len() && !shutdown.is_cancelled() {
+        let end = (progress.idx + MAX_LOOKUPS_PER_POST).min(pending.len());
+        let chunk = &pending[progress.idx..end];
         let lookups: Vec<LookupQuery> = chunk
             .iter()
             .map(|(_id, _path, artist, title, album)| LookupQuery {
@@ -183,68 +268,68 @@ async fn backfill(
 
         let Some(result) = shutdown
             .run_until_cancelled(listenbrainz::lookup_recording_mbids_bulk(
-                &client, token, &lookups,
+                &client,
+                listenbrainz::LB_API_BASE,
+                token,
+                &lookups,
             ))
             .await
         else {
             break; // cancelled mid-request
         };
 
-        match result {
-            Ok(matches) => {
-                let resolved: Vec<mbid::ResolvedMbid> = chunk
-                    .iter()
-                    .zip(matches)
-                    .filter_map(|((id, path, ..), matched)| {
-                        matched.map(|m| (*id, path.clone(), m.recording_mbid))
-                    })
-                    .collect();
-                log::debug!(
-                    "MBID backfill batch: {} looked up, {} matched",
-                    chunk.len(),
-                    resolved.len()
-                );
-                for (id, ..) in chunk {
-                    attempted.insert(*id);
-                }
-                if !resolved.is_empty() {
-                    match mbid::write_resolved_mbids(state, &resolved).await {
-                        Ok(n) => written += n,
-                        Err(e) => log::warn!("MBID backfill write failed: {e}"),
-                    }
-                }
-                looked_up += chunk.len();
-                idx = end;
-                if shutdown.run_until_cancelled(tokio::time::sleep(BATCH_PAUSE)).await.is_none() {
-                    break;
+        let step = BatchStep::for_outcome(&result);
+        // One line per outcome, in one place, so a new variant has to say what it reports rather
+        // than inheriting a neighbour's. A rate limit is what the pacing above exists to absorb,
+        // so it is not a warning; the tail of this log ships inside bug reports.
+        match step {
+            BatchStep::Answered => {}
+            BatchStep::Skipped => {
+                if let Err(e) = &result {
+                    log::warn!("MBID backfill lookup error: {}", describe(e));
                 }
             }
-            Err(ListenBrainzError::RateLimited { reset_in_secs }) => {
-                let backoff = listenbrainz::rate_limit_backoff(reset_in_secs);
-                log::info!("MBID backfill rate-limited; waiting {}s", backoff.as_secs());
-                if shutdown.run_until_cancelled(tokio::time::sleep(backoff)).await.is_none() {
-                    break;
-                }
-                // Retry the same chunk (idx unchanged).
+            BatchStep::Throttled(wait) => {
+                log::info!("MBID backfill rate-limited; waiting {}s", wait.as_secs());
             }
-            Err(ListenBrainzError::InvalidToken) => {
+            BatchStep::Abandoned => {
                 log::warn!("MBID backfill: ListenBrainz token rejected; stopping sweep");
-                break;
             }
-            Err(e) => {
-                // Transient/server error: skip this batch rather than spin on it.
-                log::warn!("MBID backfill lookup error: {e}");
-                for (id, ..) in chunk {
-                    attempted.insert(*id);
+        }
+
+        if let Ok(matches) = result {
+            let resolved: Vec<mbid::ResolvedMbid> = chunk
+                .iter()
+                .zip(matches)
+                .filter_map(|((id, path, ..), matched)| {
+                    matched.map(|m| (*id, path.clone(), m.recording_mbid))
+                })
+                .collect();
+            log::debug!(
+                "MBID backfill batch: {} looked up, {} matched",
+                chunk.len(),
+                resolved.len()
+            );
+            if !resolved.is_empty() {
+                match mbid::write_resolved_mbids(state, &resolved).await {
+                    Ok(n) => written += n,
+                    Err(e) => log::warn!("MBID backfill write failed: {e}"),
                 }
-                looked_up += chunk.len();
-                idx = end;
             }
+        }
+
+        progress.advance_past(step, chunk.iter().map(|(id, ..)| *id), attempted);
+
+        let Some(wait) = step.wait_before_next() else {
+            break;
+        };
+        if shutdown.run_until_cancelled(tokio::time::sleep(wait)).await.is_none() {
+            break;
         }
     }
 
     Ok(SweepOutcome {
-        looked_up,
+        looked_up: progress.looked_up,
         tagged: written,
     })
 }
@@ -274,3 +359,7 @@ async fn persist_attempted(path: &Path, attempted: &HashSet<i64>) {
         Err(e) => log::warn!("MBID backfill: attempted-set persist task panicked: {e}"),
     }
 }
+
+#[cfg(test)]
+#[path = "tests/mbid_backfill_tests.rs"]
+mod tests;

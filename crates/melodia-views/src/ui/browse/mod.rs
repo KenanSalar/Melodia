@@ -379,3 +379,7 @@ const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<BrowseUi>();
 };
+
+#[cfg(test)]
+#[path = "tests/browse_tests.rs"]
+mod tests;

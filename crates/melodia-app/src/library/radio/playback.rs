@@ -12,11 +12,9 @@ use melodia_core::entities::radio;
 use melodia_core::error::AppError;
 use melodia_engine::player::engine::types::RadioNowPlaying;
 use melodia_net::services::net::radio_browser;
-use melodia_store::database::queries;
+use melodia_store::database::{DbPool, queries};
 
-use super::{
-    directory_client, ensure_enabled, get_station, save_station, set_artwork, set_favorite,
-};
+use super::{directory_client, ensure_enabled, get_station};
 
 /// Count a play against a station, which is what orders the recents list.
 pub async fn mark_played(state: &AppState, id: i64) -> Result<(), AppError> {
@@ -53,9 +51,7 @@ pub async fn play_station(state: &AppState, id: i64) -> Result<(), AppError> {
 /// Nothing has been asked for at this point in the boot, so there is nothing to report to
 /// somebody who may not have been thinking about the station at all.
 pub async fn station_to_restore(state: &AppState, id: i64) -> Option<Arc<RadioNowPlaying>> {
-    if !state.radio_enabled.get() {
-        return None;
-    }
+    ensure_enabled(state).ok()?;
     match get_station(state, id).await {
         Ok(station) => Some(Arc::new(RadioNowPlaying::from(&station))),
         Err(e) => {
@@ -76,13 +72,13 @@ pub async fn station_to_restore(state: &AppState, id: i64) -> Option<Arc<RadioNo
 /// `favicon_url` in hand, so pointing the row at what that returned is what stops a moved logo
 /// showing the old one forever.
 async fn keep_station(
-    state: &AppState,
+    db: &DbPool,
     station: &radio::DirectoryStation,
     logo: Option<&str>,
 ) -> Result<i64, AppError> {
-    let id = save_station(state, &station.to_new_station()).await?;
+    let id = queries::radio::save_station(db, &station.to_new_station()).await?;
     if logo.is_some() {
-        set_artwork(state, id, logo).await?;
+        queries::radio::set_artwork(db, id, logo).await?;
     }
     Ok(id)
 }
@@ -97,8 +93,19 @@ pub async fn set_directory_favorite(
     favorite: bool,
     logo: Option<&str>,
 ) -> Result<i64, AppError> {
-    let id = keep_station(state, station, logo).await?;
-    set_favorite(state, id, favorite).await?;
+    keep_directory_station(&state.db, station, favorite, logo).await
+}
+
+/// [`set_directory_favorite`]'s body, narrowed to the pool it reaches so what the crossing writes
+/// can be read back off the row.
+async fn keep_directory_station(
+    db: &DbPool,
+    station: &radio::DirectoryStation,
+    favorite: bool,
+    logo: Option<&str>,
+) -> Result<i64, AppError> {
+    let id = keep_station(db, station, logo).await?;
+    queries::radio::set_favorite(db, id, favorite).await?;
     Ok(id)
 }
 
@@ -109,7 +116,7 @@ pub async fn play_directory_station(
     logo: Option<&str>,
 ) -> Result<(), AppError> {
     ensure_enabled(state)?;
-    let id = keep_station(state, station, logo).await?;
+    let id = keep_station(&state.db, station, logo).await?;
     play_station(state, id).await
 }
 
@@ -120,10 +127,7 @@ pub async fn play_directory_station(
 /// line — there is nothing for a user to do about one, and the call is deduplicated server-side
 /// so a repeat is not an error either.
 fn spawn_click(state: &AppState, station_uuid: Option<&str>) {
-    if !state.radio_send_clicks.get() {
-        return;
-    }
-    let Some(uuid) = station_uuid.filter(|uuid| !uuid.is_empty()) else {
+    let Some(uuid) = click_uuid(state.radio_send_clicks.get(), station_uuid) else {
         return;
     };
     let (s, uuid) = (state.clone(), uuid.to_owned());
@@ -136,3 +140,18 @@ fn spawn_click(state: &AppState, station_uuid: Option<&str>) {
         }
     });
 }
+
+/// The uuid a play reports to the directory, or `None` where nothing is reported.
+///
+/// Both refusals matter: the setting is the user's, and a station with no uuid — hand-typed, or a
+/// row carrying the empty string — names nothing the directory could count.
+fn click_uuid(send_clicks: bool, station_uuid: Option<&str>) -> Option<&str> {
+    if !send_clicks {
+        return None;
+    }
+    station_uuid.filter(|uuid| !uuid.is_empty())
+}
+
+#[cfg(test)]
+#[path = "../tests/radio_playback_tests.rs"]
+mod tests;

@@ -9,6 +9,7 @@
 use std::sync::Arc;
 
 use super::*;
+use crate::player::engine::state::PlayerViewModelLight;
 use melodia_core::entities::track::TrackSummary;
 use melodia_playback::player::playback::crossfade::CrossfadeSettings;
 
@@ -269,10 +270,15 @@ fn the_last_track_neither_crossfades_nor_preloads() {
 /// decisions below are per-*track* transitions, so a queue with somewhere to go is exactly what
 /// makes the assertions mean something.
 fn playing_a_station() -> PlayerState {
+    playing_station_named("Example FM")
+}
+
+/// [`playing_a_station`] with the station's name chosen, for the one case that has to pick its
+/// own toast out of a process-wide queue.
+fn playing_station_named(name: &str) -> PlayerState {
     let mut state = playing_state();
-    let (generation, _actions) = state.build_station_connecting_actions(
-        crate::player::engine::fixtures::test_station("Example FM"),
-    );
+    let (generation, _actions) =
+        state.build_station_connecting_actions(crate::player::engine::fixtures::test_station(name));
     let _started = state.build_station_connected_actions(generation);
     state
 }
@@ -305,4 +311,193 @@ fn a_live_source_still_publishes_its_elapsed_time() {
     assert_eq!(state.position_ms, 12_345);
     // Elapsed listening time, not a fraction of anything: a live stream has no length.
     assert_eq!(out.as_ref().map(|t| t.tick.duration_ms), Some(0));
+}
+
+// --- The live-stream reconcile ---------------------------------------------
+
+/// A handle seated on a state, plus a receiver on the view-model sink, which is the only way to
+/// see whether a tick published anything.
+fn seated(
+    state: PlayerState,
+) -> (PlayerStateHandle, PlayerSinks, watch::Receiver<Option<PlayerViewModelLight>>) {
+    let handle = PlayerStateHandle::default();
+    *lock_state(&handle) = state;
+    let (view_model, published) = watch::channel(None);
+    let (queue, _) = watch::channel(None);
+    let sinks = PlayerSinks {
+        view_model,
+        queue,
+        media_controls: None,
+    };
+    (handle, sinks, published)
+}
+
+/// The whole reason the change checks exist. A station that is playing happily changes neither
+/// its buffering flag nor its title, and the monitor runs twice a second: republishing the view
+/// model on every one of those ticks rebuilds it for nothing.
+#[test]
+fn a_station_with_nothing_to_report_publishes_nothing() {
+    let stream = StreamShared::new();
+    let (handle, sinks, published) = seated(playing_a_station());
+    let mut last_generation = stream.title_generation();
+
+    reconcile_live_stream(&stream, &handle, &sinks, &mut last_generation);
+
+    assert_eq!(published.has_changed().ok(), Some(false));
+}
+
+/// A new title is the one thing a station changes on its own that the user can see, and it
+/// arrives on the feed thread with no way to reach the state lock from there. The generation is
+/// how this tick learns of it.
+#[test]
+fn a_moved_title_generation_publishes_the_station_again() {
+    let stream = StreamShared::new();
+    let (handle, sinks, published) = seated(playing_a_station());
+    // A generation the stream has never held, standing in for a title that landed since the last
+    // tick read one.
+    let mut last_generation = stream.title_generation().wrapping_sub(1);
+
+    reconcile_live_stream(&stream, &handle, &sinks, &mut last_generation);
+
+    assert_eq!(published.has_changed().ok(), Some(true));
+    assert_eq!(last_generation, stream.title_generation(), "the tick has to record what it saw");
+}
+
+/// The buffering flag is the other half, and it moves in both directions: a station that has
+/// recovered has to have the indicator taken off it, not just put on.
+#[test]
+fn a_station_that_stopped_buffering_has_the_flag_cleared() {
+    let stream = StreamShared::new();
+    let mut state = playing_a_station();
+    if let Some(station) = state.station_mut() {
+        Arc::make_mut(station).buffering = true;
+    }
+    let (handle, sinks, published) = seated(state);
+    let mut last_generation = stream.title_generation();
+
+    reconcile_live_stream(&stream, &handle, &sinks, &mut last_generation);
+
+    assert_eq!(published.has_changed().ok(), Some(true));
+    assert_eq!(
+        lock_state(&handle).station().map(|s| s.buffering),
+        Some(false),
+        "the stream is not buffering, so neither is the station the UI paints",
+    );
+}
+
+/// The generation is only how this tick learns that a title landed; the text is what the user
+/// reads. Its sibling above pins the publish and the generation it recorded, so dropping the
+/// assignment leaves every case here green while the station goes on announcing whatever it was
+/// called when it started.
+#[test]
+fn a_new_title_reaches_the_station_the_ui_paints() {
+    let stream = StreamShared::new();
+    let (handle, sinks, _published) = seated(playing_a_station());
+    let mut last_generation = stream.title_generation();
+    stream.set_title(Some("Night Bus".to_owned()));
+
+    reconcile_live_stream(&stream, &handle, &sinks, &mut last_generation);
+
+    assert_eq!(
+        lock_state(&handle).station().and_then(|s| s.live_title.clone()).as_deref(),
+        Some("Night Bus"),
+    );
+}
+
+/// A cleared title is a title change, and the feed thread reports one the same way it reports a
+/// new song. The narrowing this reads as an invitation to — asking `stream.title()` for a `Some`
+/// and assigning only that — leaves the last song on screen for the rest of the session, which
+/// looks like a station that never changes track rather than one that stopped saying.
+#[test]
+fn a_station_that_stops_announcing_has_its_title_cleared() {
+    let stream = StreamShared::new();
+    let mut state = playing_a_station();
+    if let Some(station) = state.station_mut() {
+        Arc::make_mut(station).live_title = Some("Night Bus".to_owned());
+    }
+    let (handle, sinks, _published) = seated(state);
+    let mut last_generation = stream.title_generation();
+    stream.set_title(None);
+
+    reconcile_live_stream(&stream, &handle, &sinks, &mut last_generation);
+
+    assert_eq!(lock_state(&handle).station().and_then(|s| s.live_title.clone()), None);
+}
+
+// --- The station that gave up ----------------------------------------------
+
+/// A station that stops broadcasting is otherwise silence with no explanation, and the toast names
+/// the station rather than describing the failure: the name is what the user chose, and by the
+/// time this fires the state is about to forget it. Nothing tuned means nothing to name, so that
+/// arm has to stay quiet rather than raise an empty toast.
+///
+/// One test over both arms because the bridge is a process-wide `OnceLock` and the first `init` in
+/// a binary owns delivery.
+///
+/// It asserts the **whole** drain rather than filtering to its own sentinel, which is where it
+/// parts company with `utils::toast`'s suite one crate down. A filter cannot see the arm this test
+/// is half about: a version that toasts unconditionally raises an empty detail for the state with
+/// no station, the filter drops it, and the case passes against the mutation it exists for.
+/// Nothing else in this binary raises a toast, so the exact assertion is the stronger one; the day
+/// something does, it fails here, which is the right place to decide how the two coexist.
+#[test]
+fn a_station_that_gave_up_is_named_in_the_toast_and_nothing_else_raises_one()
+-> Result<(), Box<dyn std::error::Error>> {
+    const SENTINEL: &str = "Sentinel Sender FM";
+
+    let Some(mut toasts) = melodia_core::utils::toast::init() else {
+        return Err("the toast bridge was already claimed: this must be the only test in the \
+                    binary that installs it"
+            .into());
+    };
+
+    let handle = PlayerStateHandle::default();
+    *lock_state(&handle) = playing_station_named(SENTINEL);
+    notify_station_ended(&handle);
+
+    *lock_state(&handle) = playing_state();
+    notify_station_ended(&handle);
+
+    let raised: Vec<(melodia_core::utils::toast::ToastKind, String)> =
+        std::iter::from_fn(|| toasts.try_recv().ok())
+            .map(|request| (request.kind, request.detail))
+            .collect();
+    assert_eq!(
+        raised,
+        [(melodia_core::utils::toast::ToastKind::PlaybackFailed, SENTINEL.to_owned())],
+        "one toast, naming the station, and none at all for the state with no station in it"
+    );
+    Ok(())
+}
+
+/// The seed is the half of the rate limiter worth holding, and it is only assertable because
+/// `SecondGate` carries it: a bare counter starting at `0` reads position 0 as already
+/// published, and the now-playing bar shows nothing until the track crosses one second.
+#[test]
+fn the_first_tick_of_a_track_publishes_before_any_second_boundary() {
+    assert!(SecondGate::default().admits(0));
+}
+
+#[test]
+fn two_ticks_inside_one_second_publish_once() {
+    let mut gate = SecondGate::default();
+    assert!(gate.admits(4_000));
+    assert!(!gate.admits(4_500), "the poll rate is twice what the UI can render");
+}
+
+#[test]
+fn crossing_a_second_boundary_publishes_again() {
+    let mut gate = SecondGate::default();
+    assert!(gate.admits(4_500));
+    assert!(gate.admits(5_000));
+}
+
+/// A seek lands wherever the user dropped the thumb, so the gate has to answer on the second
+/// having *moved* rather than advanced. Comparing with `>` leaves the labels stale until
+/// playback catches back up to where it was.
+#[test]
+fn a_seek_backwards_publishes_rather_than_waiting_for_the_old_second() {
+    let mut gate = SecondGate::default();
+    assert!(gate.admits(90_000));
+    assert!(gate.admits(10_000));
 }

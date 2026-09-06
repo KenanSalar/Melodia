@@ -2,6 +2,7 @@
 //! `AppState`, no player) against a `test_pool` and real fixtures copied out of
 //! `test-assets/` into a `TempDir`. Never write to the checked-in asset.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -9,12 +10,15 @@ use tempfile::TempDir;
 
 use super::write_tag_edit;
 use melodia_artwork::media::image::artwork;
+use melodia_core::entities::scan::ExistingTrackSummary;
 use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
 use melodia_core::error::AppError;
 use melodia_core::utils::self_writes::SelfWrites;
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
 use melodia_store::database::queries::fixtures::insert_test_track;
+use melodia_store::media::ingest::metadata::{compute_file_hash, date_modified_from_metadata};
+use melodia_store::media::ingest::scanner::track_is_current;
 use melodia_testkit::ASSETS_DIR;
 
 fn assets_dir() -> PathBuf {
@@ -366,5 +370,257 @@ async fn replace_artwork_lands_on_every_track_and_the_shared_album() -> Result<(
         .await?;
     assert_eq!(album_art, art_a, "the album card gets the replaced cover too");
 
+    Ok(())
+}
+
+/// The module doc's warning, executed. A tag write rewrites the file, so the row owes a fresh
+/// hash, size and mtime *together*. Refresh the mtime and leave the hash behind and
+/// `track_is_current` reads the row as current forever, so no later scan repairs it: the stale
+/// hash is then what a cross-device move would be matched on, and the match that carries a
+/// rating and a play count across a delete fails.
+#[tokio::test]
+async fn a_tag_edit_leaves_the_row_describing_the_file_it_wrote() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let tmp = TempDir::new()?;
+    let folder = tmp.path().to_string_lossy().into_owned();
+    queries::folder::insert_folder(&db, &folder, true).await?;
+
+    let path = stage(&tmp, "silence.mp3")?;
+    let path_str = path.to_string_lossy().into_owned();
+    let id = seed_track(&db, &path_str).await?;
+
+    let artwork_dir = tmp.path().join("artwork");
+    std::fs::create_dir(&artwork_dir)?;
+    let edit = TagEdit {
+        title: FieldEdit::Set("Rewritten".to_owned()),
+        ..TagEdit::default()
+    };
+    write_tag_edit(
+        &db,
+        &artwork_dir,
+        &artwork::new_cover_cache(),
+        &Arc::new(SelfWrites::default()),
+        &[id],
+        &edit,
+        None,
+    )
+    .await?;
+
+    let (hash, size, mtime): (String, i64, String) =
+        sqlx::query_as("SELECT file_hash, file_size, date_modified FROM tracks WHERE id = ?")
+            .bind(id)
+            .fetch_one(db.read())
+            .await?;
+
+    let on_disk = std::fs::metadata(&path)?;
+    assert_eq!(hash, compute_file_hash(&path)?, "the row's hash is the file's, or a move is lost");
+    assert_eq!(u64::try_from(size).ok(), Some(on_disk.len()));
+    assert_eq!(Some(mtime.as_str()), date_modified_from_metadata(&on_disk).as_deref());
+
+    // And so the incremental filter agrees the row is current, which is exactly what makes any
+    // one of the three being stale permanent rather than self-correcting.
+    let existing = HashMap::from([(
+        path_str,
+        ExistingTrackSummary {
+            file_size: Some(size),
+            date_modified: Some(mtime),
+        },
+    )]);
+    assert!(track_is_current(&path, &existing), "the next scan must have nothing left to do");
+    Ok(())
+}
+
+/// The batched half of an artwork `Remove`: no external cover beside the file, so the
+/// re-extract finds nothing and the row's path is nulled. The metadata UPDATE's `COALESCE`
+/// cannot express that, which is why the removal is a second statement at all.
+#[tokio::test]
+async fn removing_a_cover_with_no_fallback_nulls_the_row() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let tmp = TempDir::new()?;
+    let folder = tmp.path().to_string_lossy().into_owned();
+    queries::folder::insert_folder(&db, &folder, true).await?;
+
+    let path = stage(&tmp, "silence-cover.flac")?;
+    let id = seed_track(&db, &path.to_string_lossy()).await?;
+    sqlx::query("UPDATE tracks SET artwork_path = '/cached/old.jpg' WHERE id = ?")
+        .bind(id)
+        .execute(db.write())
+        .await?;
+
+    let artwork_dir = tmp.path().join("artwork");
+    std::fs::create_dir(&artwork_dir)?;
+    let edit = TagEdit {
+        artwork: ArtworkEdit::Remove,
+        ..TagEdit::default()
+    };
+    let (report, _) = write_tag_edit(
+        &db,
+        &artwork_dir,
+        &artwork::new_cover_cache(),
+        &Arc::new(SelfWrites::default()),
+        &[id],
+        &edit,
+        None,
+    )
+    .await?;
+    assert_eq!(report.updated, 1);
+
+    let art: Option<String> = sqlx::query_scalar("SELECT artwork_path FROM tracks WHERE id = ?")
+        .bind(id)
+        .fetch_one(db.read())
+        .await?;
+    assert_eq!(art, None, "nothing is left pointing at the removed cover");
+    Ok(())
+}
+
+/// The per-track half of the same `Remove`: a `cover.jpg` beside the file outlives the embedded
+/// art, so the row keeps a cover rather than being nulled with its neighbours.
+#[tokio::test]
+async fn removing_a_cover_falls_back_to_the_one_beside_the_file() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let tmp = TempDir::new()?;
+    let folder = tmp.path().to_string_lossy().into_owned();
+    queries::folder::insert_folder(&db, &folder, true).await?;
+
+    let path = stage(&tmp, "silence-cover.flac")?;
+    stage(&tmp, "cover.jpg")?;
+    let id = seed_track(&db, &path.to_string_lossy()).await?;
+
+    let artwork_dir = tmp.path().join("artwork");
+    std::fs::create_dir(&artwork_dir)?;
+    let edit = TagEdit {
+        artwork: ArtworkEdit::Remove,
+        ..TagEdit::default()
+    };
+    write_tag_edit(
+        &db,
+        &artwork_dir,
+        &artwork::new_cover_cache(),
+        &Arc::new(SelfWrites::default()),
+        &[id],
+        &edit,
+        None,
+    )
+    .await?;
+
+    let art: String = sqlx::query_scalar("SELECT artwork_path FROM tracks WHERE id = ?")
+        .bind(id)
+        .fetch_one(db.read())
+        .await?;
+    assert!(
+        art.starts_with(&*artwork_dir.to_string_lossy()),
+        "the external cover is cached and kept, not nulled: {art}"
+    );
+    Ok(())
+}
+
+/// A `Replace` whose picked image never arrived fails the whole edit, and it fails before the
+/// write pass rather than partway through it. Every file in the batch is still the one the user
+/// had.
+#[tokio::test]
+async fn a_replace_with_no_source_touches_no_file() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let tmp = TempDir::new()?;
+    let folder = tmp.path().to_string_lossy().into_owned();
+    queries::folder::insert_folder(&db, &folder, true).await?;
+
+    let path = stage(&tmp, "silence.mp3")?;
+    let id = seed_track(&db, &path.to_string_lossy()).await?;
+    let before = compute_file_hash(&path)?;
+
+    let artwork_dir = tmp.path().join("artwork");
+    std::fs::create_dir(&artwork_dir)?;
+    let edit = TagEdit {
+        artwork: ArtworkEdit::Replace,
+        ..TagEdit::default()
+    };
+    let result = write_tag_edit(
+        &db,
+        &artwork_dir,
+        &artwork::new_cover_cache(),
+        &Arc::new(SelfWrites::default()),
+        &[id],
+        &edit,
+        None,
+    )
+    .await;
+
+    assert!(matches!(result, Err(AppError::Metadata { .. })));
+    assert_eq!(compute_file_hash(&path)?, before, "the file was rewritten by a failed edit");
+    Ok(())
+}
+
+/// A file under no enabled library folder has no folder id to resolve against, so it is reported
+/// rather than committed. The row would otherwise be updated to describe a file the library does
+/// not claim, and nothing would ever re-scan it back.
+#[tokio::test]
+async fn a_track_outside_every_library_folder_is_reported() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let tmp = TempDir::new()?;
+    // The library folder is a sibling of where the file actually sits.
+    let elsewhere = tmp.path().join("elsewhere");
+    std::fs::create_dir(&elsewhere)?;
+    queries::folder::insert_folder(&db, &elsewhere.to_string_lossy(), true).await?;
+
+    let path = stage(&tmp, "silence.mp3")?;
+    let id = seed_track(&db, &path.to_string_lossy()).await?;
+
+    let artwork_dir = tmp.path().join("artwork");
+    std::fs::create_dir(&artwork_dir)?;
+    let edit = TagEdit {
+        title: FieldEdit::Set("Nowhere".to_owned()),
+        ..TagEdit::default()
+    };
+    let (report, updated) = write_tag_edit(
+        &db,
+        &artwork_dir,
+        &artwork::new_cover_cache(),
+        &Arc::new(SelfWrites::default()),
+        &[id],
+        &edit,
+        None,
+    )
+    .await?;
+
+    assert_eq!(report.updated, 0);
+    assert!(updated.is_empty());
+    assert_eq!(
+        report.failures.first().map(|(_, why)| why.as_str()),
+        Some("not in a library folder"),
+    );
+    Ok(())
+}
+
+/// Opening the dialog and pressing Save without changing anything must reach no file. lofty
+/// rewrites the tag whether or not anything differs, so without the guard a reflexive Save
+/// rewrites every file in the selection, moves every mtime, and hands the watcher a batch of
+/// changes the user never made.
+#[tokio::test]
+async fn an_edit_that_changes_nothing_rewrites_no_file() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let tmp = TempDir::new()?;
+    let folder = tmp.path().to_string_lossy().into_owned();
+    queries::folder::insert_folder(&db, &folder, true).await?;
+
+    let path = stage(&tmp, "silence.mp3")?;
+    let id = seed_track(&db, &path.to_string_lossy()).await?;
+    let before = compute_file_hash(&path)?;
+
+    let artwork_dir = tmp.path().join("artwork");
+    std::fs::create_dir(&artwork_dir)?;
+    let (report, updated) = write_tag_edit(
+        &db,
+        &artwork_dir,
+        &artwork::new_cover_cache(),
+        &Arc::new(SelfWrites::default()),
+        &[id],
+        &TagEdit::default(),
+        None,
+    )
+    .await?;
+
+    assert_eq!(compute_file_hash(&path)?, before, "a Save that changed nothing rewrote the file");
+    assert_eq!(report.updated, 0);
+    assert!(updated.is_empty(), "and left the caller nothing to resync or repaint");
     Ok(())
 }

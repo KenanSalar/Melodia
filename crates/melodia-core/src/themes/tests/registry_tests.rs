@@ -161,6 +161,35 @@ fn theme_slint_ink_on_picks_the_same_inks_as_on_accent_hex() {
     );
 }
 
+/// `accent_hex` has cases and this ladder over it had none, which is the wrong way round:
+/// `ui::appearance::theme_apply` calls the resolver twice and the raw lookup never. A first
+/// rung that fell through would repaint every theme in its default accent, and every existing
+/// case here would still pass.
+#[test]
+fn a_listed_accent_resolves_to_its_own_hex_and_not_the_defaults() {
+    let m3 = get("material3");
+    assert_ne!(m3.default_accent, "red", "the fixture needs an accent that is not the default");
+    assert_eq!(m3.resolved_accent_hex("red", "dark"), 0xffb4ab);
+}
+
+/// `MATERIAL_YOU_ACCENT_ID` is deliberately in no theme's `accents` list, so this rung is not
+/// a defensive arm: it is what paints while the accent is set to Material You and no dynamic
+/// palette exists yet, which is every launch before the first track's artwork lands.
+///
+/// Both variants, because the fallback has to pick the default accent **in the variant it was
+/// asked about** — one that answered out of `default_variant` instead would paint a dark
+/// accent onto a light theme and read as a theming bug rather than a resolver one.
+#[test]
+fn an_accent_no_theme_lists_falls_back_to_the_default_in_the_same_variant() {
+    let m3 = get("material3");
+    assert!(
+        m3.accent(MATERIAL_YOU_ACCENT_ID).is_none(),
+        "the dynamic accent is resolved at paint time and must stay out of the static list"
+    );
+    assert_eq!(m3.resolved_accent_hex(MATERIAL_YOU_ACCENT_ID, "dark"), 0xd0bcff);
+    assert_eq!(m3.resolved_accent_hex(MATERIAL_YOU_ACCENT_ID, "light"), 0x6750a4);
+}
+
 #[test]
 fn resolve_system_variant_picks_dark_or_light_pair() {
     // Catppuccin maps System → Mocha (dark) / Latte (light).

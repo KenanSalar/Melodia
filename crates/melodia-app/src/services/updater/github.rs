@@ -24,10 +24,12 @@ use melodia_core::error::{AppError, AppResult};
 use super::manifest::LatestManifest;
 use super::minisign;
 
-const LATEST_JSON_URL: &str =
-    "https://github.com/KenanSalar/Melodia/releases/latest/download/latest.json";
-const LATEST_JSON_SIG_URL: &str =
-    "https://github.com/KenanSalar/Melodia/releases/latest/download/latest.json.minisig";
+/// Where the manifest and its signature are published, threaded through the fetch rather than
+/// read from a const so a test can point it at a local server. Parameterised the way
+/// `current_version` already is, and deliberately not an environment override: the fetch is the
+/// updater's trust boundary, and a second configuration surface on it is one more thing that has
+/// to be argued about.
+pub const RELEASES_BASE: &str = "https://github.com/KenanSalar/Melodia/releases/latest/download";
 
 /// Ceiling on the manifest body. Room for many times the release
 /// matrix it describes, and still a bound: the signature is checked
@@ -49,10 +51,14 @@ pub enum FetchOutcome {
 
 pub async fn fetch_latest_manifest(
     http: &reqwest::Client,
+    base_url: &str,
     cached_etag: Option<&str>,
     force_refresh: bool,
 ) -> AppResult<FetchOutcome> {
-    let mut req = http.get(LATEST_JSON_URL);
+    let manifest_url = format!("{base_url}/latest.json");
+    let signature_url = format!("{manifest_url}.minisig");
+
+    let mut req = http.get(&manifest_url);
     // `force_refresh` skips the `If-None-Match` header so the server
     // returns the full manifest body even when our cached ETag is
     // current. Used by the UI "Check for updates" button to clear a
@@ -95,7 +101,7 @@ pub async fn fetch_latest_manifest(
     // gap where a signed-manifest server would serve a pre-signing
     // client (or vice versa) — see the rollout note in the plan.
     let sig_resp = http
-        .get(LATEST_JSON_SIG_URL)
+        .get(&signature_url)
         .send()
         .await
         .map_err(|e| AppError::network("fetch latest.json.minisig failed", e))?;
@@ -134,3 +140,7 @@ pub async fn fetch_latest_manifest(
 
     Ok(FetchOutcome::Fresh { manifest, etag })
 }
+
+#[cfg(test)]
+#[path = "tests/github_tests.rs"]
+mod tests;

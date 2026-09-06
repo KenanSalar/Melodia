@@ -79,3 +79,7 @@ async fn hash_unhashed_tracks(db: &DbPool) -> AppResult<()> {
     log::info!("Retroactive hash database update complete");
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "tests/retroactive_hash_tests.rs"]
+mod tests;

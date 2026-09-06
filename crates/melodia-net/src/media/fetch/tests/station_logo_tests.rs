@@ -1,7 +1,14 @@
-//! The three guards a station logo passes before it reaches the store, none of which needs a
-//! socket: what may be fetched, what a response is filed as, and what is too small to draw.
+//! The guards a station logo passes on its way into the store, and the two answers a caller has to
+//! tell apart.
+//!
+//! The first band needs no socket: what may be fetched, what a response is filed as, and what is
+//! too small to draw. The second drives `fetch` against a loopback server, where the distinction
+//! that matters is `Ok(None)` against `Err`: `library::radio::ask_logo_url` earns the URL a
+//! day-long backoff on the first and deliberately not on the second.
 
 use std::io::Cursor;
+
+use melodia_testkit::http::{TestResponse, TestServer};
 
 use super::*;
 
@@ -140,4 +147,141 @@ fn the_slint_tile_that_skips_native_size_still_agrees_with_the_floor() {
         "the argument stands or the binding does — if the tile now sets `native-size`, this pin \
          and the comment above it are both stale"
     );
+}
+
+// ---- over a socket ----
+
+/// A wide opaque source, which is the shape `logo_tile` composes rather than keeping. JPEG so the
+/// container the tile replaces is not the one it is stored under.
+fn wordmark_jpeg(width: u32, height: u32) -> Result<Vec<u8>, image::ImageError> {
+    let mut bytes = Vec::new();
+    image::RgbImage::from_pixel(width, height, image::Rgb([20, 60, 120]))
+        .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Jpeg)?;
+    Ok(bytes)
+}
+
+/// A server answering every request with `body` under `content_type`.
+fn logo_server(content_type: &'static str, body: Vec<u8>) -> std::io::Result<TestServer> {
+    TestServer::start(move |_| TestResponse::ok(body.clone()).header("content-type", content_type))
+}
+
+/// One logo off `server` into `dir`.
+async fn fetch_from(server: &TestServer, dir: &Path) -> Result<Option<StoredLogo>, AppError> {
+    fetch(&reqwest::Client::new(), &format!("{}/logo.png", server.base_url()), dir).await
+}
+
+/// **A usable answer with no logo in it, which is not the same as a failure.** The content-type
+/// bail sits ahead of every other check for that reason: a host that served a page has answered,
+/// and the caller records the backoff that stops it being asked again tomorrow.
+#[tokio::test]
+async fn a_response_that_is_not_an_image_is_an_answer_with_no_logo() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let server = logo_server("text/html; charset=utf-8", b"<html></html>".to_vec())?;
+
+    let answered = fetch_from(&server, dir.path()).await?;
+
+    assert!(answered.is_none(), "an HTML page is an answer, and the answer is no logo");
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_response_that_says_nothing_about_its_type_is_the_same_answer() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let server = TestServer::start(|_| TestResponse::ok(vec![0u8; 64]))?;
+
+    let answered = fetch_from(&server, dir.path()).await?;
+
+    assert!(answered.is_none(), "nothing says what it is, so nothing says the store can hold it");
+    Ok(())
+}
+
+/// The other side of that pair: a host that refused has not answered, and recording a backoff
+/// against it would suppress a perfectly good logo over an afternoon of downtime.
+#[tokio::test]
+async fn a_status_that_is_not_success_is_a_failure_worth_retrying() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let server = TestServer::start(|_| TestResponse::status(503))?;
+
+    let refused = fetch_from(&server, dir.path()).await;
+
+    assert!(
+        matches!(&refused, Err(AppError::Network { msg, .. }) if msg.contains("503")),
+        "a host that is down must not be filed as a host with no logo: {refused:?}"
+    );
+    Ok(())
+}
+
+/// The header is checked ahead of the body so an oversized host costs a header rather than a
+/// transfer. A body that would comfortably have fit is what says the claim is what refused.
+#[tokio::test]
+async fn a_declared_length_over_the_cap_costs_a_header_rather_than_a_transfer() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let drawable = png(MIN_LOGO_DIM * 2)?;
+    let server = TestServer::start(move |_| {
+        TestResponse::ok(drawable.clone())
+            .header("content-type", "image/png")
+            .claiming_length(MAX_LOGO_BYTES + 1)
+    })?;
+
+    let refused = fetch_from(&server, dir.path()).await;
+
+    assert!(
+        matches!(&refused, Err(AppError::Network { msg, .. }) if msg.contains("too large")),
+        "a claim over the cap is refused whatever the body turns out to be: {refused:?}"
+    );
+    Ok(())
+}
+
+/// One gate at the writer rather than one per surface, so a source too small to draw leaves nothing
+/// behind for a later tier to reject.
+#[tokio::test]
+async fn a_source_under_the_floor_never_reaches_the_store() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let server = logo_server("image/png", png(MIN_LOGO_DIM - 1)?)?;
+
+    let answered = fetch_from(&server, dir.path()).await?;
+
+    assert!(answered.is_none(), "a source under the floor is an answer with no logo in it");
+    assert_eq!(std::fs::read_dir(dir.path())?.count(), 0, "and it wrote nothing");
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_logo_that_clears_the_floor_lands_in_the_store() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let server = logo_server("image/png", png(MIN_LOGO_DIM * 2)?)?;
+
+    let stored = fetch_from(&server, dir.path()).await?;
+
+    let Some(stored) = stored else {
+        return Err("a source well clear of the floor has to reach the store".into());
+    };
+    assert!(Path::new(&stored.path).exists(), "the answer names a file that is actually there");
+    assert!(
+        stored.bytes > 0,
+        "and reports what it cost, or the cache has no size to hold itself to"
+    );
+    Ok(())
+}
+
+/// A tile is flat ground behind a hard-edged mark, which is what JPEG rings around and what PNG
+/// holds in a few kilobytes. So the source's own container stops having a say the moment a tile
+/// replaces it.
+#[tokio::test]
+async fn a_composed_tile_is_stored_as_png_whatever_the_source_was() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let server = logo_server("image/jpeg", wordmark_jpeg(MIN_LOGO_DIM * 4, MIN_LOGO_DIM * 2)?)?;
+
+    let stored = fetch_from(&server, dir.path()).await?;
+
+    let Some(stored) = stored else {
+        return Err("a wide opaque source is composed, not refused".into());
+    };
+    assert_eq!(
+        Path::new(&stored.path).extension().and_then(std::ffi::OsStr::to_str),
+        Some("png"),
+        "a wordmark is stored as the tile it became, not the JPEG it arrived as: {}",
+        stored.path
+    );
+    Ok(())
 }

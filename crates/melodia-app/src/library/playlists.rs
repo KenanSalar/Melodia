@@ -1,13 +1,14 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use super::import::import_files_with_summaries;
+use super::import::import_and_summarize;
 use crate::state::AppState;
+use melodia_artwork::media::image::artwork::CoverCache;
 use melodia_core::entities::{playlist, track};
 use melodia_core::error::AppError;
-use melodia_store::database::queries;
+use melodia_store::database::{DbPool, queries};
 
 pub async fn create_playlist(
     state: &AppState,
@@ -114,18 +115,27 @@ pub async fn set_playlist_thumbnail(
     playlist_id: i64,
     image_paths: Vec<String>,
 ) -> Result<playlist::Playlist, AppError> {
+    compose_thumbnail(&state.db, &state.paths.artwork_dir, playlist_id, &image_paths).await
+}
+
+/// [`set_playlist_thumbnail`]'s body, narrowed to what it reaches so the tests can drive the
+/// 1-to-4 bound off a bare pool.
+async fn compose_thumbnail(
+    db: &DbPool,
+    artwork_dir: &Path,
+    playlist_id: i64,
+    image_paths: &[String],
+) -> Result<playlist::Playlist, AppError> {
     if image_paths.is_empty() || image_paths.len() > 4 {
         return Err(AppError::Validation("Must provide 1-4 image paths".to_owned()));
     }
 
-    let artwork_dir = state.paths.artwork_dir.clone();
-
     let source_paths: Vec<PathBuf> = image_paths.iter().map(PathBuf::from).collect();
     let composite_path =
-        melodia_artwork::media::image::artwork::compose_artwork(&source_paths, &artwork_dir)
+        melodia_artwork::media::image::artwork::compose_artwork(&source_paths, artwork_dir)
             .ok_or_else(|| AppError::io_other("Failed to compose artwork"))?;
 
-    queries::playlist::set_playlist_custom_thumbnail(&state.db, playlist_id, &composite_path).await
+    queries::playlist::set_playlist_custom_thumbnail(db, playlist_id, &composite_path).await
 }
 
 #[derive(Clone, Serialize)]
@@ -140,13 +150,31 @@ pub async fn import_files_to_playlist(
     playlist_id: i64,
     file_paths: Vec<String>,
 ) -> Result<ImportToPlaylistResult, AppError> {
-    // `import_files_with_summaries` gives us title metadata in the
-    // same round-trip, so we can sort the dropped batch alphabetically
+    import_into_playlist(
+        &state.db,
+        &state.paths.artwork_dir,
+        &state.cover_cache,
+        playlist_id,
+        &file_paths,
+    )
+    .await
+}
+
+/// [`import_files_to_playlist`]'s body, narrowed the same way [`compose_thumbnail`] is.
+async fn import_into_playlist(
+    db: &DbPool,
+    artwork_dir: &Path,
+    cover_cache: &CoverCache,
+    playlist_id: i64,
+    file_paths: &[String],
+) -> Result<ImportToPlaylistResult, AppError> {
+    // `import_and_summarize` gives us title metadata in the same
+    // round-trip, so we can sort the dropped batch alphabetically
     // (natord-aware) before persisting playlist positions — matches
     // `queue_import_files`'s ordering so a drop of "9.mp3, 10.mp3,
     // foo.mp3" always lands as "9, 10, foo" inside the playlist
     // instead of whatever order the filesystem / DB returned.
-    let mut result = import_files_with_summaries(state, &file_paths).await?;
+    let mut result = import_and_summarize(db, artwork_dir, cover_cache, file_paths).await?;
 
     let added_count = if result.summaries.is_empty() {
         0
@@ -154,7 +182,7 @@ pub async fn import_files_to_playlist(
         let mut summaries = std::mem::take(&mut result.summaries);
         summaries.sort_by(|a, b| natord::compare(&a.title, &b.title));
         let sorted_ids: Vec<i64> = summaries.iter().map(|s| s.id).collect();
-        queries::playlist::add_tracks_to_playlist(&state.db, playlist_id, &sorted_ids).await?;
+        queries::playlist::add_tracks_to_playlist(db, playlist_id, &sorted_ids).await?;
         sorted_ids.len()
     };
 
@@ -164,3 +192,7 @@ pub async fn import_files_to_playlist(
         failed_paths: result.failed_paths,
     })
 }
+
+#[cfg(test)]
+#[path = "tests/playlists_tests.rs"]
+mod tests;

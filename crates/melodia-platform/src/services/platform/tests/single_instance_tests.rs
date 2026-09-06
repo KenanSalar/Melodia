@@ -6,10 +6,10 @@ use interprocess::local_socket::{Stream, prelude::*};
 use tempfile::tempdir;
 
 use super::{
-    Claim, LENGTH_PREFIX_LEN, MAX_PAYLOAD_LEN, allow_missing_timeout, claim, decode_paths,
-    encode_frame, name_is_taken_on, serve, socket_name,
+    Claim, LENGTH_PREFIX_LEN, MAX_PAYLOAD_LEN, RESPAWN_ENV, allow_missing_timeout, claim,
+    decode_paths, encode_frame, name_is_taken_on, serve, socket_name,
 };
-use melodia_testkit::reading_env;
+use melodia_testkit::{reading_env, with_env_set};
 
 /// Split a frame the way `read_payload` does.
 fn split_frame(frame: &[u8]) -> (u32, &[u8]) {
@@ -130,14 +130,20 @@ fn two_data_directories_get_two_names() {
     let two = socket_name(Path::new("/home/bo/.local/share/Melodia")).ok();
 
     assert!(one.is_some());
-    assert_ne!(format!("{one:?}"), format!("{two:?}"));
+    assert_ne!(one, two);
 }
 
 #[test]
 fn the_same_data_directory_gets_the_same_name() {
     let path = Path::new("/home/alice/.local/share/Melodia");
 
-    assert_eq!(format!("{:?}", socket_name(path).ok()), format!("{:?}", socket_name(path).ok()));
+    let first = socket_name(path).ok();
+    let second = socket_name(path).ok();
+
+    // Without this the equality below holds just as well for a `socket_name` that derives
+    // nothing, both sides being `None`.
+    assert!(first.is_some(), "the name has to derive before sameness means anything");
+    assert_eq!(first, second);
 }
 
 /// Why a real socket earns its setup: the two halves can each be right and
@@ -221,5 +227,35 @@ fn a_silent_peer_does_not_cost_the_launch_behind_it() {
             Some(vec![opened.to_string_lossy().into_owned()]),
             "a peer that said nothing parked the accept loop and the launch behind it was lost"
         );
+    });
+}
+
+/// The detached restart arm, from the child's side. `shutdown::spawn_detached` leaves parent and
+/// child alive together and marks the child with [`RESPAWN_ENV`]; a marked child that forwarded
+/// instead of waiting would hand its launch to a parent already on its way out and exit behind
+/// it, leaving the user with no window at all.
+///
+/// The parent's exit is a thread that drops the listener, which is the whole of what frees the
+/// name. Well inside `RESPAWN_WAIT`, so a slow runner still lands on the same answer.
+#[test]
+fn a_restarting_child_waits_for_the_name_rather_than_forwarding() {
+    let Ok(data_dir) = tempdir() else {
+        unreachable!("no writable temp directory")
+    };
+
+    with_env_set(&[RESPAWN_ENV], &[(RESPAWN_ENV, "1")], || {
+        let Claim::Primary(held) = claim(data_dir.path(), &[]) else {
+            unreachable!("an unused data directory must be claimable")
+        };
+        let parent_exits = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(150));
+            drop(held);
+        });
+
+        assert!(
+            matches!(claim(data_dir.path(), &[]), Claim::Primary(_)),
+            "a restart must come back up on the name the parent released, not forward into it",
+        );
+        assert!(parent_exits.join().is_ok());
     });
 }

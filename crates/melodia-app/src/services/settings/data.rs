@@ -456,6 +456,34 @@ pub struct UpdateFlags {
     pub consecutive_failures: u8,
 }
 
+impl UpdateFlags {
+    /// A manifest fetch that came back. `latest_version` is `None` on a `304`, where the cached
+    /// value is still the most recent thing seen and overwriting it would lose it.
+    pub fn record_success(
+        &mut self,
+        now_unix: i64,
+        latest_version: Option<String>,
+        etag: Option<String>,
+    ) {
+        self.last_check_unix = now_unix;
+        self.consecutive_failures = 0;
+        if let Some(version) = latest_version {
+            self.last_known_release = version;
+        }
+        if let Some(tag) = etag {
+            self.last_manifest_etag = tag;
+        }
+    }
+
+    /// A fetch that didn't. Advancing `last_check_unix` is what the counter depends on: the daily
+    /// loop's 24h gate reads it, and a failure that left it alone would re-fire every iteration
+    /// rather than backing off.
+    pub fn record_failure(&mut self, now_unix: i64) {
+        self.last_check_unix = now_unix;
+        self.consecutive_failures = self.consecutive_failures.saturating_add(1);
+    }
+}
+
 impl Default for UpdateFlags {
     fn default() -> Self {
         Self {

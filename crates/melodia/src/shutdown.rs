@@ -184,6 +184,11 @@ pub fn respawn_if_requested() {
 /// so a signal to the parent's after `process::exit` can't take it down;
 /// Windows has no such handoff problem and `Command::spawn` suffices.
 fn spawn_detached(exe: &std::path::Path) -> std::io::Result<std::process::Child> {
+    detached_command(exe).spawn()
+}
+
+/// [`spawn_detached`]'s command, built rather than spawned so the mark below can be asserted.
+fn detached_command(exe: &std::path::Path) -> std::process::Command {
     let mut cmd = std::process::Command::new(exe);
     // Marks the child a restart, so it waits for the single-instance name
     // rather than forwarding to a parent that is about to exit — both being
@@ -198,5 +203,9 @@ fn spawn_detached(exe: &std::path::Path) -> std::io::Result<std::process::Child>
         use std::os::unix::process::CommandExt;
         cmd.process_group(0);
     }
-    cmd.spawn()
+    cmd
 }
+
+#[cfg(test)]
+#[path = "tests/shutdown_tests.rs"]
+mod tests;

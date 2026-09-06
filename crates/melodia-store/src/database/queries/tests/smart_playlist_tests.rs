@@ -1,10 +1,13 @@
 use std::collections::HashSet;
 
+use sqlx::{QueryBuilder, Sqlite};
+
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::fixtures::insert_test_track;
 use melodia_core::entities::smart_criteria::{
-    LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria, SmartLimit,
+    FIELDS, LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria, SmartLimit,
+    ops_for,
 };
 use melodia_core::entities::track::TrackListRow;
 use melodia_core::error::AppError;
@@ -290,4 +293,268 @@ async fn duration_rule_value_is_seconds() -> Result<(), AppError> {
     // 150 s == 150_000 ms → only t3 (240 s) and t4 (360 s) exceed it.
     assert_eq!(ids(&resolve(&s.db, &c).await?), HashSet::from([s.t3, s.t4]));
     Ok(())
+}
+
+/// Stage a title, for the cases whose subject is a `LIKE` metacharacter in one.
+async fn set_title(db: &DbPool, id: i64, title: &str) -> Result<(), AppError> {
+    sqlx::query("UPDATE tracks SET title = ? WHERE id = ?")
+        .bind(title)
+        .bind(id)
+        .execute(db.write())
+        .await?;
+    Ok(())
+}
+
+/// Stage an album artist, which the scan helper always leaves null.
+async fn set_album_artist(db: &DbPool, id: i64, album_artist: &str) -> Result<(), AppError> {
+    sqlx::query("UPDATE tracks SET album_artist = ? WHERE id = ?")
+        .bind(album_artist)
+        .bind(id)
+        .execute(db.write())
+        .await?;
+    Ok(())
+}
+
+/// Leave a row with no genre at all, which the seed has no other way to produce.
+async fn clear_genre(db: &DbPool, id: i64) -> Result<(), AppError> {
+    sqlx::query("UPDATE tracks SET genre = NULL WHERE id = ?")
+        .bind(id)
+        .execute(db.write())
+        .await?;
+    Ok(())
+}
+
+// ---- what `push_where`'s parentheses are for ----
+
+/// **Four predicates emit a bare `OR`, and only the wrapping parens keep them one rule.**
+/// `NotContains`, `IsNot`, text `IsNotSet` and `NotInLast` all render `col IS NULL OR …`, so
+/// under `MatchMode::All` an unwrapped one binds as `IS NULL OR (rest AND next-rule)` — `AND`
+/// binding tighter — and every row with a null column joins the playlist whatever the other
+/// rules say.
+///
+/// Every existing test of those forms uses a *single* rule, which is exactly the shape the
+/// parens cannot matter in. Needs a null column to see, hence the staging.
+#[tokio::test]
+async fn a_null_tolerant_rule_does_not_widen_the_rules_beside_it() -> Result<(), AppError> {
+    let s = seed().await?;
+    clear_genre(&s.db, s.t4).await?;
+
+    let c = SmartCriteria {
+        rules: vec![
+            Rule {
+                field: RuleField::Genre,
+                op: RuleOp::NotContains,
+                value: Some(RuleValue::Text("Rock".to_owned())),
+            },
+            Rule {
+                field: RuleField::Rating,
+                op: RuleOp::Gte,
+                value: Some(RuleValue::Number(4.0)),
+            },
+        ],
+        ..SmartCriteria::default()
+    };
+
+    // t3 is the only row that is both not-Rock and rated 4+. t4 has a null genre and rating 0,
+    // so it satisfies the first rule and fails the second — and joins the set anyway the moment
+    // the parens go.
+    assert_eq!(ids(&resolve(&s.db, &c).await?), HashSet::from([s.t3]));
+    Ok(())
+}
+
+// ---- the LIKE metacharacters, which a user types without meaning them ----
+
+/// An underscore is `LIKE`'s single-character wildcard, so an unescaped one in a rule value
+/// quietly matches every neighbouring title too — a filter that looks like it works.
+#[tokio::test]
+async fn an_underscore_in_a_rule_value_matches_only_an_underscore() -> Result<(), AppError> {
+    let s = seed().await?;
+    set_title(&s.db, s.t1, "Track_04").await?;
+    set_title(&s.db, s.t2, "TrackX04").await?;
+
+    let c = one(RuleField::Title, RuleOp::Contains, Some(RuleValue::Text("Track_0".to_owned())));
+
+    assert_eq!(ids(&resolve(&s.db, &c).await?), HashSet::from([s.t1]));
+    Ok(())
+}
+
+/// The other metacharacter, and the worse one: an unescaped `%` matches any run of characters,
+/// so a rule for a title containing one takes most of the library.
+#[tokio::test]
+async fn a_percent_in_a_rule_value_matches_only_a_percent() -> Result<(), AppError> {
+    let s = seed().await?;
+    set_title(&s.db, s.t1, "100% Pure").await?;
+    set_title(&s.db, s.t2, "100 Proof").await?;
+
+    let c = one(RuleField::Title, RuleOp::Contains, Some(RuleValue::Text("100%".to_owned())));
+
+    assert_eq!(ids(&resolve(&s.db, &c).await?), HashSet::from([s.t1]));
+    Ok(())
+}
+
+// ---- the column each field filters on ----
+
+/// **`AlbumArtist` and `Artist` are the swap `column_for` exists to get right**, and the one a
+/// reader cannot catch: both compile, both return rows, and the playlist is merely a different
+/// set than the user asked for. Ten of the sixteen arms had no case at all; these two are the
+/// pair that can be told apart by a query rather than by reading the match.
+#[tokio::test]
+async fn the_album_artist_rule_reads_its_own_column() -> Result<(), AppError> {
+    let s = seed().await?;
+    // The scan helper leaves `album_artist` null, so one row carrying a *different* album artist
+    // from its own artist is what separates the two columns.
+    set_album_artist(&s.db, s.t2, "Artist A").await?;
+
+    let by_artist =
+        one(RuleField::Artist, RuleOp::Is, Some(RuleValue::Text("Artist A".to_owned())));
+    let by_album_artist =
+        one(RuleField::AlbumArtist, RuleOp::Is, Some(RuleValue::Text("Artist A".to_owned())));
+
+    assert_eq!(ids(&resolve(&s.db, &by_artist).await?), HashSet::from([s.t1]));
+    assert_eq!(ids(&resolve(&s.db, &by_album_artist).await?), HashSet::from([s.t2]));
+    Ok(())
+}
+
+// ---- what a null column counts as ----
+
+/// "Is not X" has to include the rows that are nothing at all, or a rule over a column most
+/// tracks leave empty answers with almost none of the library. `album_artist` is exactly such a
+/// column: the scan writes it only where a file carries one.
+#[tokio::test]
+async fn a_row_with_no_value_is_not_the_value() -> Result<(), AppError> {
+    let s = seed().await?;
+    set_album_artist(&s.db, s.t2, "Artist A").await?;
+
+    let c =
+        one(RuleField::AlbumArtist, RuleOp::IsNot, Some(RuleValue::Text("Artist A".to_owned())));
+
+    assert_eq!(ids(&resolve(&s.db, &c).await?), HashSet::from([s.t1, s.t3, s.t4]));
+    Ok(())
+}
+
+/// A text column counts an empty string as unset, which is what a tag editor leaves behind when
+/// a field is cleared. Both directions, since the two arms spell the empty-string half
+/// separately and losing either one strands those rows outside both answers.
+#[tokio::test]
+async fn a_blank_text_column_counts_as_unset_in_both_directions() -> Result<(), AppError> {
+    let s = seed().await?;
+    set_album_artist(&s.db, s.t1, "Artist A").await?;
+    set_album_artist(&s.db, s.t2, "").await?;
+
+    let set = one(RuleField::AlbumArtist, RuleOp::IsSet, None);
+    let unset = one(RuleField::AlbumArtist, RuleOp::IsNotSet, None);
+
+    assert_eq!(ids(&resolve(&s.db, &set).await?), HashSet::from([s.t1]));
+    assert_eq!(ids(&resolve(&s.db, &unset).await?), HashSet::from([s.t2, s.t3, s.t4]));
+    Ok(())
+}
+
+/// The remaining boolean arm, so the whole match is pinned rather than half of it.
+#[tokio::test]
+async fn a_favorite_rule_can_ask_for_the_ones_that_are_not() -> Result<(), AppError> {
+    let s = seed().await?;
+    let c = one(RuleField::Favorite, RuleOp::IsFalse, None);
+
+    assert_eq!(ids(&resolve(&s.db, &c).await?), HashSet::from([s.t2, s.t4]));
+    Ok(())
+}
+
+// ---- the two edges of a relative-date rule ----
+
+/// The clamp is what stops `TimeDelta::try_days` overflowing, and its failure mode is the
+/// opposite of a crash: the `unwrap_or` behind it falls back to a zero delta, so the cutoff
+/// becomes *now* and a rule asking for everything ever played answers with nothing.
+#[tokio::test]
+async fn an_absurd_day_count_still_asks_about_the_whole_past() -> Result<(), AppError> {
+    let s = seed().await?;
+    let c = one(RuleField::LastPlayed, RuleOp::InLast, Some(RuleValue::Days(i64::MAX)));
+
+    assert_eq!(ids(&resolve(&s.db, &c).await?), HashSet::from([s.t1, s.t2]));
+    Ok(())
+}
+
+// ---- a rule the editor should not have been able to build ----
+
+/// An operator the field's type does not offer is dropped, **not rendered as always-false**.
+/// Under `MatchMode::All` a `0` term would empty the playlist instead, so a criteria file
+/// written by an older build — or hand-edited — would silently resolve to nothing rather than
+/// to the rules it still understands.
+#[tokio::test]
+async fn an_incoherent_rule_is_dropped_rather_than_matching_nothing() -> Result<(), AppError> {
+    let s = seed().await?;
+    let c = SmartCriteria {
+        rules: vec![
+            Rule {
+                field: RuleField::Rating,
+                op: RuleOp::Contains,
+                value: Some(RuleValue::Text("4".to_owned())),
+            },
+            Rule {
+                field: RuleField::Genre,
+                op: RuleOp::Contains,
+                value: Some(RuleValue::Text("Rock".to_owned())),
+            },
+        ],
+        ..SmartCriteria::default()
+    };
+
+    assert_eq!(ids(&resolve(&s.db, &c).await?), HashSet::from([s.t1, s.t2]));
+    Ok(())
+}
+
+/// One rule's predicate with no `WHERE` around it. [`super::push_false`] pushes exactly
+/// `"0"`, so a degraded rule is an equality rather than a search through real SQL.
+fn rendered_predicate(rule: &Rule) -> String {
+    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new("");
+    super::push_rule(&mut qb, rule);
+    qb.sql().as_str().to_owned()
+}
+
+/// The evaluator's half of the invariant `melodia-core`'s `smart_criteria_tests` holds
+/// from the editor's end: a rule the rule-builder can produce has to survive
+/// [`super::rule_is_renderable`] and render a real predicate.
+///
+/// Both halves are needed because the failure is silent in a way that looks like the
+/// opposite of a bug. `push_where` drops the rules that fail the gate, and a criteria
+/// whose rules are *all* dropped emits no `WHERE` at all, so the smart playlist the user
+/// built to hold one artist comes back holding the entire library.
+#[test]
+fn every_rule_the_editor_can_build_renders_a_real_predicate() {
+    for &field in FIELDS {
+        let value_type = field.value_type();
+        for &op in ops_for(value_type) {
+            let rule = Rule {
+                field,
+                op,
+                value: RuleValue::from_input(value_type, op, "5"),
+            };
+            assert!(
+                super::rule_is_renderable(&rule),
+                "{field:?} {op:?} is dropped by the gate, and a criteria of only dropped \
+                 rules matches the whole library"
+            );
+            assert_ne!(
+                rendered_predicate(&rule),
+                "0",
+                "{field:?} {op:?} passed the gate and rendered the always-false term"
+            );
+        }
+    }
+}
+
+/// The degradation [`super::push_false`] exists for, which is reachable only by handing
+/// `push_rule` a rule the gate would have refused. It matches nothing; matching
+/// everything would turn an internal inconsistency into a playlist holding the library.
+#[test]
+fn a_rule_whose_value_shape_is_wrong_renders_as_matching_nothing() {
+    let text_field_holding_a_number = Rule {
+        field: RuleField::Genre,
+        op: RuleOp::Is,
+        value: Some(RuleValue::Number(5.0)),
+    };
+    assert!(
+        !super::rule_is_renderable(&text_field_holding_a_number),
+        "the gate is what keeps the fallback below unreachable"
+    );
+    assert_eq!(rendered_predicate(&text_field_holding_a_number), "0");
 }

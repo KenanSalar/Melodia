@@ -99,6 +99,13 @@ fn classify<T: serde::de::DeserializeOwned>(
 /// only ever reads the first entry, so the cap is slack rather than a budget.
 const MAX_SEARCH_BYTES: u64 = 512 * 1024;
 
+/// Root of the Deezer API. Named so each search below can take its URL as an argument and a test
+/// can point one at a local server, the doors spelling this.
+///
+/// The image download does **not** go through it: what it validates is a URL the API handed back,
+/// against the host allowlist in [`download_and_cache_artist_image`].
+const API_BASE: &str = "https://api.deezer.com";
+
 /// Read and classify a search response.
 async fn decode_search<T: serde::de::DeserializeOwned>(
     response: reqwest::Response,
@@ -119,8 +126,16 @@ pub async fn search_artist_image_url(
     client: &reqwest::Client,
     artist_name: &str,
 ) -> Result<DeezerAnswer<String>, AppError> {
+    search_artist_image_url_at(client, &format!("{API_BASE}/search/artist"), artist_name).await
+}
+
+async fn search_artist_image_url_at(
+    client: &reqwest::Client,
+    url: &str,
+    artist_name: &str,
+) -> Result<DeezerAnswer<String>, AppError> {
     let response = client
-        .get("https://api.deezer.com/search/artist")
+        .get(url)
         .query(&[("q", artist_name), ("limit", "1")])
         .send()
         .await
@@ -149,10 +164,19 @@ pub async fn search_album_cover(
     artist: &str,
     album: &str,
 ) -> Result<Option<String>, AppError> {
+    search_album_cover_at(client, &format!("{API_BASE}/search/album"), artist, album).await
+}
+
+async fn search_album_cover_at(
+    client: &reqwest::Client,
+    url: &str,
+    artist: &str,
+    album: &str,
+) -> Result<Option<String>, AppError> {
     // Deezer advanced-search syntax pins both fields, tighter than title alone.
     let query = format!("artist:\"{}\" album:\"{}\"", quotable(artist), quotable(album));
     let response = client
-        .get("https://api.deezer.com/search/album")
+        .get(url)
         .query(&[("q", query.as_str()), ("limit", "1")])
         .send()
         .await

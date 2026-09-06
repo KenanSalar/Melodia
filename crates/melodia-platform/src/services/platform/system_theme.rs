@@ -219,9 +219,14 @@ pub(crate) fn blend(a: (u8, u8, u8), b: (u8, u8, u8), factor: f32) -> (u8, u8, u
 }
 
 fn read_kdeglobals() -> Option<HashMap<String, HashMap<String, String>>> {
-    let path = kdeglobals_path();
-    let content = std::fs::read_to_string(&path).ok()?;
+    let content = std::fs::read_to_string(kdeglobals_path()).ok()?;
+    Some(parse_kdeglobals(&content))
+}
 
+/// Split from the read for the same reason [`kde_palette_from_sections`] is split from it: the
+/// mapping's suites hand-build the section tree, so nothing otherwise says the parser produces the
+/// shape they assume.
+fn parse_kdeglobals(content: &str) -> HashMap<String, HashMap<String, String>> {
     let mut sections: HashMap<String, HashMap<String, String>> = HashMap::new();
     let mut current_section = String::new();
 
@@ -242,7 +247,7 @@ fn read_kdeglobals() -> Option<HashMap<String, HashMap<String, String>>> {
         }
     }
 
-    Some(sections)
+    sections
 }
 
 fn get_color(

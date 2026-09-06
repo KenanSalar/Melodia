@@ -44,8 +44,8 @@ is the copy to delete.
 ## The off switch
 
 - **The switch itself is argued on `library::radio`'s own items** — why it sits at the facade,
-  what the getters are exempt from, and why the logo download is not. What spans is the pair of
-  walks holding it, one per direction and neither covering the other's half:
+  what the getters are exempt from, and why the logo download is not. What spans is the walks
+  holding it: four now, and no one of them covers another's half. Two are per direction —
   `crates/melodia/tests/radio_facade.rs`'s `every_outbound_call_takes_its_client_from_behind_the_switch` counts the
   reaches inside the facade, `crates/melodia/tests/radio_facade.rs`'s `only_the_radio_facade_reaches_the_directory_client`
   counts them outside it. So **`http_client()` may be named exactly once across all of
@@ -53,6 +53,13 @@ is the copy to delete.
   facade off its **directory** rather than off a file list, so a sixth submodule is covered the day
   it is added — the facade was one file once, and re-anchoring them onto `mod.rs` alone would have
   left four fifths of it unmeasured while still passing.
+- **The other two hold the guard rather than the reach, which no count of clients can see.**
+  `the_switch_is_read_in_one_place` makes **`radio_enabled` a name spelled exactly once**, inside
+  `ensure_enabled`; an equality there fails on a deleted guard as readily as on a second hand-rolled
+  one, which `station_to_restore` carried for a while.
+  `a_station_reaches_the_deck_only_from_behind_the_switch` covers the door the pair above
+  structurally cannot: a station opens through `PlaybackContext.http`, so `play_station` reaches
+  the network naming no client at all.
 - **`station_to_restore` is the one getter guarded like a play**, what it does being to put a
   station back on the deck rather than to answer a question about one.
 - **Turning it off has four consequences beyond the row, and three are findable only from here.**

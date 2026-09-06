@@ -94,7 +94,7 @@ pub(super) async fn process_batch(
     db: &DbPool,
     paths: &Paths,
     cover_cache: &CoverCache,
-    events: Vec<FileEvent>,
+    mut events: Vec<FileEvent>,
 ) -> AppResult<()> {
     let metadata_map = extract_metadata_batch(paths, cover_cache, &events).await;
 
@@ -152,6 +152,14 @@ pub(super) async fn process_batch(
         .await
         .unwrap_or_default()
     };
+
+    // Deletes last: `moved_candidates` was resolved before this transaction, so a `Removed`
+    // applied first hard-deletes the very row the matching `Created` needs to re-point, and
+    // the move lands as a fresh insert that drops the user's rating, play count and
+    // favourite. inotify reports a cross-device move as exactly that pair rather than a
+    // rename, and dedup emits from a `HashMap`, so without this the two orders are a coin
+    // flip. Stable, so nothing else in the batch is reordered.
+    events.sort_by_key(|event| matches!(event, FileEvent::Removed(_)));
 
     let is_bulk = events.len() > BULK_THRESHOLD;
     let mut tx = db.write().begin().await?;
@@ -284,12 +292,10 @@ async fn handle_created(
             log::info!("Detected moved file: {old_path} -> {path_str}");
             return Ok(true);
         }
-        // 0 rows: the candidate row was deleted earlier in this same
-        // transaction (dedup emits batch events in arbitrary order, so a
-        // Removed for the old path can precede this Created). The pre-tx
-        // candidate map can't see in-tx deletes — drop the dead entry and
-        // fall through to a fresh insert, matching the old inside-tx
-        // `find_track_by_hash` behavior.
+        // 0 rows: the candidate is gone. `process_batch` applies this batch's deletes
+        // last, so it wasn't one of them; what's left is a scan committing a delete
+        // between the pre-transaction candidate read and this write. Drop the dead entry
+        // and fall through to a fresh insert.
         moved_candidates.remove(&meta.file_hash);
     }
 

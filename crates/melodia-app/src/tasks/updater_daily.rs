@@ -12,10 +12,10 @@
 //!   `settings.updates.last_check_unix`; if less than a day has passed
 //!   the tick logs "skipped" and re-sleeps. Lets the loop survive a
 //!   suspend/resume mid-cycle without spurious double-checks.
-//! - **Failure backoff**: after 3 consecutive failed checks, swap the
-//!   6 h cadence for 7 d. Resets to 6 h on the next successful check
-//!   (mitigates flaky-network / firewall thrash that would otherwise
-//!   re-fire every 6 h).
+//! - **Failure backoff**: repeated failures lengthen the cadence along
+//!   [`BACKOFF_LADDER`], which argues its own steps, and the next
+//!   successful check resets it. Mitigates flaky-network / firewall
+//!   thrash that would otherwise re-fire every 6 h.
 //!
 //! Per-iteration responsibilities:
 //!
@@ -40,7 +40,7 @@ use tokio::sync::watch;
 use crate::library;
 use crate::services::settings;
 use crate::services::updater::{
-    CheckOutcome, UpdaterEvent, asset_cache, check_for_update, version::is_upgrade,
+    CheckOutcome, RELEASES_BASE, UpdaterEvent, asset_cache, check_for_update, version::is_upgrade,
 };
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
@@ -133,8 +133,14 @@ async fn run_one_iteration(
     // `force_refresh = false`: daily checks honour the ETag so a no-op
     // 304 round-trips zero bytes and zero JSON parses. The "Check for
     // updates" button bypasses the etag — see check_for_update's doc.
-    let result =
-        check_for_update(state.http_client(), etag, env!("CARGO_PKG_VERSION"), false).await;
+    let result = check_for_update(
+        state.http_client(),
+        RELEASES_BASE,
+        etag,
+        env!("CARGO_PKG_VERSION"),
+        false,
+    )
+    .await;
     set_is_checking(weak, false);
 
     let now = Utc::now();
@@ -202,52 +208,67 @@ fn handle_outcome(
             // `verify_stream`'s trusted-comment cross-check.
             asset_cache::store(version.clone(), asset);
 
-            // Clear any stale skip that's now older than the live
-            // manifest's version. After this, the toast/notification
-            // path uses the (possibly-cleared) skip slot to gate the
-            // notify push.
-            let skip_still_active = if skipped_release.is_empty() {
-                false
-            } else {
-                match is_upgrade(skipped_release, &version) {
-                    Ok(true) => {
-                        // Live version is strictly newer than the
-                        // skipped one — clear and re-notify.
-                        if let Err(e) = library::settings::updates::reset_skipped_release(state) {
-                            log::warn!("updater_daily: reset_skipped_release: {e}");
-                        }
-                        false
-                    }
-                    Ok(false) => true,
-                    Err(e) => {
-                        // Malformed stored skip version — clear so we
-                        // don't permanently mute notifications.
-                        log::warn!(
-                            "updater_daily: stored skipped_release {skipped_release:?} \
-                             not valid semver ({e}); clearing"
-                        );
-                        if let Err(e) = library::settings::updates::reset_skipped_release(state) {
-                            log::warn!("updater_daily: reset_skipped_release: {e}");
-                        }
-                        false
-                    }
-                }
-            };
+            let verdict = skip_verdict(skipped_release, &version, critical);
+            if verdict.clear_skip
+                && let Err(e) = library::settings::updates::reset_skipped_release(state)
+            {
+                log::warn!("updater_daily: reset_skipped_release: {e}");
+            }
 
             set_update_available(weak, version.clone(), notes_short.clone(), critical);
             persist_success(state, now, Some(version.clone()), etag);
 
-            // Critical releases bypass the skip filter — the user
-            // shouldn't be able to permanently mute a release the
-            // publisher flagged as not-skippable. They can still
-            // dismiss the toast for the current session; it returns
-            // at the next daily check.
-            if critical || !skip_still_active {
+            if verdict.notify {
                 let _ = event_tx.send(Some(UpdaterEvent::Available {
                     version,
                     notes_short,
                     critical,
                 }));
+            }
+        }
+    }
+}
+
+/// What the stored "skip this version" means once a manifest names a version.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SkipVerdict {
+    /// Raise the "update available" event.
+    notify: bool,
+    /// Drop the stored skip — it names a version the manifest has moved past, or one semver
+    /// cannot read at all.
+    clear_skip: bool,
+}
+
+/// The only genuinely conditional logic in this file, and the one with a security consequence:
+/// a release the publisher flagged critical must surface even where the user has muted it. Split
+/// from [`handle_outcome`], which takes an `AppState` and a live window a test cannot hand it.
+fn skip_verdict(skipped_release: &str, version: &str, critical: bool) -> SkipVerdict {
+    let unmuted = SkipVerdict {
+        notify: true,
+        clear_skip: false,
+    };
+    if skipped_release.is_empty() {
+        return unmuted;
+    }
+
+    match is_upgrade(skipped_release, version) {
+        // Strictly newer than what was skipped, so the skip is spent.
+        Ok(true) => SkipVerdict {
+            notify: true,
+            clear_skip: true,
+        },
+        Ok(false) => SkipVerdict {
+            notify: critical,
+            clear_skip: false,
+        },
+        Err(e) => {
+            log::warn!(
+                "updater_daily: stored skipped_release {skipped_release:?} not valid semver \
+                 ({e}); clearing rather than muting every future notification"
+            );
+            SkipVerdict {
+                notify: true,
+                clear_skip: true,
             }
         }
     }
@@ -337,72 +358,5 @@ fn set_update_available(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    // These tests cover the pure-logic helpers — anything async or
-    // anything that requires the Slint event loop is left for
-    // integration testing (the full flow goes through
-    // `services::updater::*` which has its own tests).
-
-    #[test]
-    fn needs_check_returns_true_when_never_checked() {
-        assert!(needs_check(0));
-        assert!(needs_check(-1));
-    }
-
-    #[test]
-    fn needs_check_returns_true_after_24h() {
-        let now = Utc::now().timestamp();
-        assert!(needs_check(now - ONE_DAY_SECS));
-        assert!(needs_check(now - (ONE_DAY_SECS + 1)));
-    }
-
-    #[test]
-    fn needs_check_returns_false_inside_24h() {
-        let now = Utc::now().timestamp();
-        // 1 minute ago.
-        assert!(!needs_check(now - 60));
-        // 23h59m ago.
-        assert!(!needs_check(now - (ONE_DAY_SECS - 60)));
-    }
-
-    #[test]
-    fn needs_check_returns_false_for_future_timestamp() {
-        // A `last_check_unix` ahead of `now` (clock skew, NTP step)
-        // produces a negative elapsed time. `needs_check` compares
-        // against `ONE_DAY_SECS` and so returns false — we skip the
-        // check rather than re-firing, which is the safe behavior
-        // (a check from "the future" suggests an unreliable clock).
-        let future = Utc::now().timestamp() + 3600;
-        assert!(!needs_check(future));
-    }
-
-    #[test]
-    fn backoff_delay_for_zero_failures_is_normal_cadence() {
-        assert_eq!(backoff_delay_for(0), NORMAL_CADENCE);
-    }
-
-    #[test]
-    fn backoff_delay_for_one_failure_is_normal_cadence() {
-        // Single hiccup shouldn't extend the cadence — only repeated
-        // failures back off.
-        assert_eq!(backoff_delay_for(1), NORMAL_CADENCE);
-    }
-
-    #[test]
-    fn backoff_delay_for_climbs_the_ladder() {
-        assert_eq!(backoff_delay_for(2), Duration::from_hours(12));
-        assert_eq!(backoff_delay_for(3), Duration::from_hours(24));
-        assert_eq!(backoff_delay_for(4), Duration::from_hours(7 * 24));
-    }
-
-    #[test]
-    fn backoff_delay_for_caps_at_seven_days() {
-        // Years of consecutive failures shouldn't blow past the
-        // ladder; the saturating add on the counter + ladder index
-        // clamp keep us at the 7d ceiling forever.
-        assert_eq!(backoff_delay_for(u8::MAX), Duration::from_hours(7 * 24));
-        assert_eq!(backoff_delay_for(100), Duration::from_hours(7 * 24));
-    }
-}
+#[path = "tests/updater_daily_tests.rs"]
+mod tests;

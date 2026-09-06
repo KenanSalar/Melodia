@@ -60,3 +60,7 @@ async fn persist(db: &DbPool, queue_path: &Path, snapshot: PlaybackSnapshot) {
         Err(e) => log::warn!("periodic save: spawn_blocking: {e}"),
     }
 }
+
+#[cfg(test)]
+#[path = "tests/playback_monitor_tests.rs"]
+mod tests;

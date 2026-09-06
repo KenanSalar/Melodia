@@ -11,7 +11,7 @@ use melodia_audio::player::source::stream_source::{self, StationFacts};
 use melodia_core::entities::radio;
 use melodia_core::error::AppError;
 use melodia_net::services::net::radio_blocklist;
-use melodia_store::database::queries;
+use melodia_store::database::{DbPool, queries};
 
 use super::logos::{AnswerSeed, adopted, ask_logo_url};
 use super::{directory_client, get_station, save_station, set_favorite};
@@ -85,8 +85,7 @@ pub async fn add_custom_station(
         return Err(AppError::Validation("This station can't be added".to_owned()));
     }
 
-    if let Some(id) = queries::radio::station_id_with_url(&state.db, stream_url).await? {
-        set_favorite(state, id, true).await?;
+    if let Some(id) = merged_onto_existing(&state.db, stream_url).await? {
         return Ok(id);
     }
 
@@ -116,6 +115,16 @@ pub async fn add_custom_station(
         adopt_logo(state, id, logo_url).await;
     }
     Ok(id)
+}
+
+/// [`add_custom_station`]'s merge, narrowed to the pool it reaches — the half that settles a URL
+/// already in hand, before anything opens a socket.
+async fn merged_onto_existing(db: &DbPool, stream_url: &str) -> Result<Option<i64>, AppError> {
+    let Some(id) = queries::radio::station_id_with_url(db, stream_url).await? else {
+        return Ok(None);
+    };
+    queries::radio::set_favorite(db, id, true).await?;
+    Ok(Some(id))
 }
 
 /// Record what the user says about a station, and fetch a logo where they named one.
@@ -257,3 +266,7 @@ async fn adopt_logo(state: &AppState, id: i64, logo_url: &str) {
         adopted(state, id, path).await;
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/radio_authoring_tests.rs"]
+mod tests;

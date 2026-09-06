@@ -7,7 +7,7 @@ use melodia_core::entities::folder::Folder;
 use melodia_core::entities::track::TrackListRow;
 use melodia_core::error::AppError;
 use melodia_core::utils::audio_ext::is_audio_extension;
-use melodia_store::database::queries;
+use melodia_store::database::{DbPool, queries};
 
 /// Result of the blocking filesystem scan, returned from `spawn_blocking`.
 struct DirScanResult {
@@ -19,10 +19,6 @@ struct DirScanResult {
 /// Classify one directory's entries into its visible sub-folders (name-sorted)
 /// and its audio files. Dot-entries and anything whose type can't be read are
 /// skipped; audio is decided by the one shared [`is_audio_extension`] predicate.
-///
-/// Split out of [`browse_directory`]'s blocking closure so the tests exercise
-/// the shipped walk instead of a copy of it — they can't drive the closure
-/// itself, which needs an `AppState` and the library-folder guard.
 fn classify_dir_entries(
     dir: &std::path::Path,
 ) -> Result<(Vec<BrowseFolder>, Vec<PathBuf>), AppError> {
@@ -71,6 +67,16 @@ pub async fn browse_directory(
     path: String,
     library_folders: &[Folder],
 ) -> Result<BrowseResult, AppError> {
+    list_directory(&state.db, path, library_folders).await
+}
+
+/// [`browse_directory`]'s body, narrowed to what it reaches so the tests drive the shipped guard
+/// ladder instead of a copy of it.
+async fn list_directory(
+    db: &DbPool,
+    path: String,
+    library_folders: &[Folder],
+) -> Result<BrowseResult, AppError> {
     let enabled_canonical: Vec<PathBuf> = library_folders
         .iter()
         .filter(|f| f.is_enabled)
@@ -104,7 +110,7 @@ pub async fn browse_directory(
     .map_err(AppError::io_source)??;
 
     let dir_str = scan.canonical.to_string_lossy();
-    let tracks = queries::track::get_tracks_in_directory(&state.db, &dir_str).await?;
+    let tracks = queries::track::get_tracks_in_directory(db, &dir_str).await?;
     // Move the DB rows into a path-keyed map (rather than borrow): the
     // `remove` below hands ownership straight to `BrowseFile`, so an
     // in-library file never deep-clones its ~18-field `TrackListRow` — the

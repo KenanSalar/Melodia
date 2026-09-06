@@ -80,6 +80,7 @@ pub(super) fn spawn_install(
         // the cached asset, which already passed verification.
         let outcome = check_for_update(
             state.http_client(),
+            updater::RELEASES_BASE,
             etag.as_deref(),
             env!("CARGO_PKG_VERSION"),
             false,

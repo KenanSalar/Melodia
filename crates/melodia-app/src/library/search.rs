@@ -3,15 +3,10 @@ use melodia_core::entities::search::SearchResults;
 use melodia_core::error::AppError;
 use melodia_store::database::queries;
 
+/// A blank query answers four empty lists, and the guard for that is
+/// `queries::search::search_all`'s own: it trims and returns before it builds a MATCH, so a copy
+/// here would be a second statement of one argument rather than a second layer of safety.
 pub async fn search_all(state: &AppState, query: String) -> Result<SearchResults, AppError> {
-    if query.trim().is_empty() {
-        return Ok(SearchResults {
-            tracks: vec![],
-            albums: vec![],
-            artists: vec![],
-            genres: vec![],
-        });
-    }
     queries::search::search_all(&state.db, &query).await
 }
 

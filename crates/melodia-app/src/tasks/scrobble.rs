@@ -171,8 +171,8 @@ async fn run_submitter(shutdown: CancellationToken, service: Arc<ScrobbleService
     let mut backoff = BASE_BACKOFF;
     loop {
         let wait = if let Some(min) = service.submit_pending().await {
-            let this_wait = min.max(backoff);
-            backoff = (backoff * 2).min(MAX_BACKOFF);
+            let (this_wait, next) = defer(min, backoff);
+            backoff = next;
             Some(this_wait)
         } else {
             backoff = BASE_BACKOFF;
@@ -194,6 +194,16 @@ async fn run_submitter(shutdown: CancellationToken, service: Arc<ScrobbleService
     }
 }
 
+/// What a deferral earns: the wait to honor now, and the backoff to carry into the next one.
+///
+/// The provider's own request wins when it named a longer one, since a 429's window is a fact
+/// about the server and the local ladder is only a guess. The ladder doubles regardless, so a
+/// provider that keeps deferring without naming a wait is backed away from rather than polled
+/// at a fixed rate.
+fn defer(requested: Duration, backoff: Duration) -> (Duration, Duration) {
+    (requested.max(backoff), (backoff * 2).min(MAX_BACKOFF))
+}
+
 /// Sleep for `delay` when set, else park indefinitely (only a shutdown or a new
 /// scrobble wakes the submitter).
 async fn wait_for(delay: Option<Duration>) {
@@ -202,3 +212,7 @@ async fn wait_for(delay: Option<Duration>) {
         None => std::future::pending::<()>().await,
     }
 }
+
+#[cfg(test)]
+#[path = "tests/scrobble_tests.rs"]
+mod tests;

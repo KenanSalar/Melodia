@@ -7,6 +7,8 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
 pub mod contexts;
+#[cfg(test)]
+pub(crate) mod fixtures;
 pub mod signal;
 pub use contexts::PlaybackContext;
 pub use signal::{SharedFlag, Signal};

@@ -1,12 +1,16 @@
+use std::path::Path;
 use std::sync::Arc;
 
 use crate::state::AppState;
 use crate::tasks::rating_writeback;
+use melodia_artwork::media::image::artwork::CoverCache;
 use melodia_core::entities::tags::{FieldEdit, TagEdit};
 use melodia_core::error::AppError;
+use melodia_core::utils::self_writes::SelfWrites;
 use melodia_engine::player::engine::state::{
     PlayerAction, lock_state, sync_current_track_if_in, with_state_emit,
 };
+use melodia_store::database::DbPool;
 use melodia_store::database::queries;
 use melodia_store::media::ingest::rating_tags;
 
@@ -93,7 +97,10 @@ pub async fn set_current_rating(
 /// Failures are the caller's to log: a file can be read-only, or a container can have no tag to
 /// hold a rating, and neither is a reason to undo a star the user set.
 pub(crate) async fn write_rating_to_files(
-    state: &AppState,
+    db: &DbPool,
+    artwork_dir: &Path,
+    cover_cache: &CoverCache,
+    self_writes: &Arc<SelfWrites>,
     ids: &[i64],
     rating: i32,
 ) -> Result<usize, AppError> {
@@ -101,16 +108,9 @@ pub(crate) async fn write_rating_to_files(
         rating: FieldEdit::Set(clamp_rating(rating)),
         ..TagEdit::default()
     };
-    let (report, _) = super::tags::write_tag_edit(
-        &state.db,
-        &state.paths.artwork_dir,
-        &state.cover_cache,
-        &state.self_writes,
-        ids,
-        &edit,
-        None,
-    )
-    .await?;
+    let (report, _) =
+        super::tags::write_tag_edit(db, artwork_dir, cover_cache, self_writes, ids, &edit, None)
+            .await?;
 
     for (file, err) in &report.failures {
         log::warn!("rating: {file} kept its row but not its tag: {err}");

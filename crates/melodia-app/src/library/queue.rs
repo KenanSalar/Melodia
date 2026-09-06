@@ -1,18 +1,21 @@
 use std::sync::Arc;
 
 use crate::services::settings::{mutate_settings, mutate_settings_with};
-use crate::state::AppState;
+use crate::state::{AppState, PlaybackContext};
+use melodia_artwork::media::image::artwork::CoverCache;
 use melodia_core::config::Paths;
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::{AppError, AppResult};
 use melodia_engine::player::engine::actions::emit_and_execute;
+use melodia_engine::player::engine::event_sink::PlayerSinks;
 use melodia_engine::player::engine::state::{
-    play_track_inner, restore_queue, restore_station, with_state_emit,
+    PlayerAction, PlayerState, PlayerStateHandle, play_track_inner, restore_queue, restore_station,
+    with_state_emit,
 };
-use melodia_engine::player::engine::types::{PersistedPlayback, RepeatMode};
-use melodia_store::database::queries;
+use melodia_engine::player::engine::types::{PersistedPlayback, RadioNowPlaying, RepeatMode};
+use melodia_store::database::{DbPool, queries};
 
-use super::import::{ImportFilesResult, import_files_with_summaries};
+use super::import::{ImportFilesResult, import_and_summarize};
 use super::playback::player_play_tracks;
 
 /// Order a freshly-imported batch the way the rest of the app orders a list.
@@ -29,14 +32,24 @@ pub async fn queue_import_files(
     state: &AppState,
     file_paths: Vec<String>,
 ) -> Result<ImportFilesResult, AppError> {
-    let mut result = import_files_with_summaries(state, &file_paths).await?;
+    append_imported(&state.playback_ctx(), &state.cover_cache, &file_paths).await
+}
+
+/// Import `file_paths` and append them to whatever is already queued.
+async fn append_imported(
+    ctx: &PlaybackContext,
+    cover_cache: &CoverCache,
+    file_paths: &[String],
+) -> Result<ImportFilesResult, AppError> {
+    let mut result =
+        import_and_summarize(&ctx.db, &ctx.paths.artwork_dir, cover_cache, file_paths).await?;
 
     if !result.summaries.is_empty() {
         // Moved rather than cloned: the drag-drop caller discards the success
         // result, so an emptied `summaries` on it costs nothing.
         let mut summaries = std::mem::take(&mut result.summaries);
         sort_for_queue(&mut summaries);
-        with_state_emit(&state.player_state, &state.sinks, |s| {
+        with_state_emit(&ctx.player_state, &ctx.sinks, |s| {
             s.queue.add_tracks(summaries);
         });
     }
@@ -54,7 +67,22 @@ pub async fn queue_import_files(
 /// Ids come off the sorted summaries, not `ImportFilesResult::track_ids`, which
 /// arrive partly out of a `HashMap` and would pick the first track by hash order.
 pub async fn open_files(state: &AppState, file_paths: Vec<String>) -> AppResult<()> {
-    let mut result = import_files_with_summaries(state, &file_paths).await?;
+    open_as_queue(&state.playback_ctx(), &state.cover_cache, &file_paths).await?;
+
+    // An opened file is usually new to the library, so every view re-fetches —
+    // the same bump the drag-and-drop import does.
+    state.library_changed.bump();
+    Ok(())
+}
+
+/// Import `file_paths`, make them the queue, and play from the top.
+async fn open_as_queue(
+    ctx: &PlaybackContext,
+    cover_cache: &CoverCache,
+    file_paths: &[String],
+) -> AppResult<()> {
+    let mut result =
+        import_and_summarize(&ctx.db, &ctx.paths.artwork_dir, cover_cache, file_paths).await?;
 
     if result.summaries.is_empty() {
         return Err(AppError::Queue(format!(
@@ -67,12 +95,7 @@ pub async fn open_files(state: &AppState, file_paths: Vec<String>) -> AppResult<
     let track_ids: Vec<i64> = result.summaries.iter().map(|summary| summary.id).collect();
 
     log::debug!("queue: open {} track(s) from the command line", track_ids.len());
-    player_play_tracks(&state.playback_ctx(), track_ids, Some(0)).await?;
-
-    // An opened file is usually new to the library, so every view re-fetches —
-    // the same bump the drag-and-drop import does.
-    state.library_changed.bump();
-    Ok(())
+    player_play_tracks(ctx, track_ids, Some(0)).await
 }
 
 pub async fn queue_add_tracks(state: &AppState, track_ids: Vec<i64>) -> Result<(), AppError> {
@@ -94,18 +117,29 @@ pub async fn queue_add_tracks(state: &AppState, track_ids: Vec<i64>) -> Result<(
 /// so the queue reads `[current, id_0, …, id_n, …]`. One DB round-trip and one
 /// `with_state_emit` for the batch.
 pub async fn queue_play_next_many(state: &AppState, track_ids: Vec<i64>) -> Result<(), AppError> {
+    play_next_many(&state.db, &state.player_state, &state.sinks, &track_ids).await
+}
+
+/// [`queue_play_next_many`]'s body, narrowed to what it reaches so the batch's ordering can be
+/// driven off a bare pool.
+async fn play_next_many(
+    db: &DbPool,
+    player_state: &PlayerStateHandle,
+    sinks: &PlayerSinks,
+    track_ids: &[i64],
+) -> Result<(), AppError> {
     if track_ids.is_empty() {
         return Ok(());
     }
     let summaries: Vec<Arc<TrackSummary>> =
-        queries::track::get_track_summaries_by_ids(&state.db, &track_ids)
+        queries::track::get_track_summaries_by_ids(db, track_ids)
             .await?
             .into_iter()
             .map(Arc::new)
             .collect();
 
     log::debug!("queue: play next, {} track(s)", summaries.len());
-    with_state_emit(&state.player_state, &state.sinks, |s| {
+    with_state_emit(player_state, sinks, |s| {
         // `insert_next` always lands at `current_index + 1`, so walking the
         // input backwards is what produces forward order.
         for summary in summaries.into_iter().rev() {
@@ -171,7 +205,31 @@ pub fn queue_skip_to_index(state: &AppState, index: usize) -> Result<(), AppErro
 /// read-then-`queue_toggle_shuffle`. The toggle is the transport's own path,
 /// where flipping whatever is current *is* the intent.
 pub fn queue_set_shuffle(state: &AppState, enabled: bool) -> Result<(), AppError> {
-    let new_shuffle = with_state_emit(&state.player_state, &state.sinks, |s| {
+    let new_shuffle = set_shuffle(&state.player_state, &state.sinks, enabled);
+    log::debug!("queue: shuffle {new_shuffle}");
+    persist_shuffle(state, new_shuffle);
+    Ok(())
+}
+
+pub fn queue_toggle_shuffle(state: &AppState) -> Result<(), AppError> {
+    let new_shuffle = toggle_shuffle(&state.player_state, &state.sinks);
+    log::debug!("queue: shuffle {new_shuffle}");
+    persist_shuffle(state, new_shuffle);
+    Ok(())
+}
+
+pub fn queue_cycle_repeat(state: &AppState) -> Result<(), AppError> {
+    let new_mode = cycle_repeat(&state.player_state, &state.sinks);
+    log::debug!("queue: repeat → {new_mode:?}");
+    persist_repeat(state, new_mode);
+    Ok(())
+}
+
+/// Answers with the shuffle state it settled in, which is *not* the request: an empty queue
+/// refuses to shuffle, so a caller persisting `enabled` writes a shuffle the next launch
+/// restores over a queue that was never reordered.
+fn set_shuffle(player_state: &PlayerStateHandle, sinks: &PlayerSinks, enabled: bool) -> bool {
+    with_state_emit(player_state, sinks, |s| {
         if s.queue.shuffle_enabled == enabled {
             return s.queue.shuffle_enabled;
         }
@@ -182,36 +240,27 @@ pub fn queue_set_shuffle(state: &AppState, enabled: bool) -> Result<(), AppError
             s.queue.unshuffle();
         }
         s.queue.shuffle_enabled
-    });
-    // The resulting state rather than the request: this is the idempotent form,
-    // so a Shuffle pill pressed twice asks for `true` twice and only moves once.
-    log::debug!("queue: shuffle {new_shuffle}");
-    persist_shuffle(state, new_shuffle);
-    Ok(())
+    })
 }
 
-pub fn queue_toggle_shuffle(state: &AppState) -> Result<(), AppError> {
-    let new_shuffle = with_state_emit(&state.player_state, &state.sinks, |s| {
+/// Flip shuffle, answering with what it became.
+fn toggle_shuffle(player_state: &PlayerStateHandle, sinks: &PlayerSinks) -> bool {
+    with_state_emit(player_state, sinks, |s| {
         if s.queue.shuffle_enabled {
             s.queue.unshuffle();
         } else {
             shuffle_inline(s);
         }
         s.queue.shuffle_enabled
-    });
-    log::debug!("queue: shuffle {new_shuffle}");
-    persist_shuffle(state, new_shuffle);
-    Ok(())
+    })
 }
 
-pub fn queue_cycle_repeat(state: &AppState) -> Result<(), AppError> {
-    let new_mode = with_state_emit(&state.player_state, &state.sinks, |s| {
+/// Advance the repeat mode, answering with the one it landed on rather than the one it left.
+fn cycle_repeat(player_state: &PlayerStateHandle, sinks: &PlayerSinks) -> RepeatMode {
+    with_state_emit(player_state, sinks, |s| {
         s.queue.cycle_repeat_mode();
         s.queue.repeat_mode
-    });
-    log::debug!("queue: repeat → {new_mode:?}");
-    persist_repeat(state, new_mode);
-    Ok(())
+    })
 }
 
 /// Fire-and-forget settings.json write for shuffle, on the blocking pool so the
@@ -255,74 +304,109 @@ fn load_persisted_playback(paths: &Paths) -> Option<PersistedPlayback> {
 /// clears the `current_track` the queue restore just set, and the queue underneath is what a stop
 /// hands back (D9).
 ///
-/// `repeat_mode` and `shuffle_enabled` come from `settings.json`, not
-/// `queue.json`. A restored non-empty queue forces shuffle off (and syncs
-/// `settings.json` to match) because `original_order` isn't persisted — left on,
-/// "unshuffle" would be a no-op against an unknown original sequence.
+/// Gather then apply, because the two halves are testable at different costs: [`plan_restore`]
+/// needs a pool and a data directory, the apply needs a `PlaybackEngine` and therefore an audio
+/// device. The station is resolved here rather than in the plan, being the one part that goes
+/// through the radio facade and its off switch.
 pub async fn restore_persisted_playback(state: &AppState) -> AppResult<()> {
     let persisted = load_persisted_playback(&state.paths);
-    let (summaries, persisted) = match persisted {
-        Some(p) => {
-            let summaries: Vec<Arc<TrackSummary>> =
-                queries::track::get_track_summaries_by_ids(&state.db, &p.queue.track_ids)
-                    .await?
-                    .into_iter()
-                    .map(Arc::new)
-                    .collect();
-            (summaries, Some(p))
-        }
-        None => (Vec::new(), None),
-    };
-
     let station = match persisted.as_ref().and_then(|p| p.station_id) {
         Some(id) => super::radio::station_to_restore(state, id).await,
         None => None,
+    };
+    let plan = plan_restore(&state.db, &state.paths, persisted, station).await?;
+
+    // `emit_and_execute` rather than a bare emit because a seated station may owe the deck a speed
+    // reset: `settings.json` hydrates the speed ahead of this and a station is pinned at 1.0.
+    emit_and_execute(&*state.engine, &state.player_state, &state.sinks, |s| apply_restore(s, plan));
+
+    Ok(())
+}
+
+/// Everything a restart puts back, resolved before anything touches `PlayerState`.
+struct RestorePlan {
+    persisted: Option<PersistedPlayback>,
+    /// The rows that still exist. Shorter than `persisted.queue.track_ids` when a folder went
+    /// away between sessions, which is the ordinary case rather than the corrupt one.
+    summaries: Vec<Arc<TrackSummary>>,
+    station: Option<Arc<RadioNowPlaying>>,
+    repeat_mode: RepeatMode,
+    shuffle_enabled: bool,
+}
+
+/// Resolve `queue.json`'s ids against the library and settle shuffle and repeat against
+/// `settings.json`.
+///
+/// `repeat_mode` and `shuffle_enabled` come from `settings.json`, not `queue.json`. A restored
+/// non-empty queue forces shuffle off because `original_order` isn't persisted — left on,
+/// "unshuffle" would be a no-op against an unknown original sequence. The file is rewritten to
+/// match in the same closure, so the value the state takes and the value on disk cannot disagree.
+async fn plan_restore(
+    db: &DbPool,
+    paths: &Arc<Paths>,
+    persisted: Option<PersistedPlayback>,
+    station: Option<Arc<RadioNowPlaying>>,
+) -> AppResult<RestorePlan> {
+    let summaries: Vec<Arc<TrackSummary>> = match persisted.as_ref() {
+        Some(p) => queries::track::get_track_summaries_by_ids(db, &p.queue.track_ids)
+            .await?
+            .into_iter()
+            .map(Arc::new)
+            .collect(),
+        None => Vec::new(),
     };
 
     // One FS round-trip, all under the same `MUTATE_LOCK` so no writer
     // interleaves between the read and the conditional rewrite.
     let restored_non_empty = !summaries.is_empty();
-    let paths = state.paths.clone();
-    let (settings_repeat, settings_shuffle) =
-        tokio::task::spawn_blocking(move || -> AppResult<_> {
-            mutate_settings_with(&paths, |s| {
-                let prior_repeat = s.queue.repeat_mode;
-                let prior_shuffle = s.queue.shuffle_enabled;
-                if restored_non_empty && prior_shuffle {
-                    s.queue.shuffle_enabled = false;
-                }
-                (prior_repeat, prior_shuffle)
-            })
+    let paths = Arc::clone(paths);
+    let (repeat_mode, shuffle_enabled) = tokio::task::spawn_blocking(move || -> AppResult<_> {
+        mutate_settings_with(&paths, |s| {
+            if restored_non_empty {
+                s.queue.shuffle_enabled = false;
+            }
+            (s.queue.repeat_mode, s.queue.shuffle_enabled)
         })
-        .await
-        .map_err(|e| AppError::Settings(format!("restore_persisted_playback join: {e}")))??;
+    })
+    .await
+    .map_err(|e| AppError::Settings(format!("restore_persisted_playback join: {e}")))??;
 
-    // `emit_and_execute` rather than a bare emit because a seated station may owe the deck a speed
-    // reset: `settings.json` hydrates the speed ahead of this and a station is pinned at 1.0.
-    emit_and_execute(&*state.engine, &state.player_state, &state.sinks, |s| {
-        if let Some(p) = persisted.as_ref() {
-            restore_queue(s, summaries, &p.queue);
-        }
-        s.queue.repeat_mode = settings_repeat;
-        // Force shuffle off when a non-empty queue is restored — see doc.
-        s.queue.shuffle_enabled = if restored_non_empty {
-            false
-        } else {
-            settings_shuffle
-        };
-        match station {
-            Some(station) => restore_station(s, station),
-            None => vec![],
-        }
-    });
+    Ok(RestorePlan {
+        persisted,
+        summaries,
+        station,
+        repeat_mode,
+        shuffle_enabled,
+    })
+}
 
-    Ok(())
+/// Seat a [`RestorePlan`]. The queue first and the station over it, which is the order the two
+/// halves of `queue.json` owe each other.
+fn apply_restore(state: &mut PlayerState, plan: RestorePlan) -> Vec<PlayerAction> {
+    let RestorePlan {
+        persisted,
+        summaries,
+        station,
+        repeat_mode,
+        shuffle_enabled,
+    } = plan;
+
+    if let Some(p) = persisted {
+        restore_queue(state, summaries, &p.queue);
+    }
+    state.queue.repeat_mode = repeat_mode;
+    state.queue.shuffle_enabled = shuffle_enabled;
+
+    match station {
+        Some(station) => restore_station(state, station),
+        None => vec![],
+    }
 }
 
 /// Shuffle the queue's `play_order` in place using a thread-local RNG,
 /// pinning the currently-playing track to position 0 so playback stays
 /// continuous. Allocation-free — no intermediate index Vec.
-fn shuffle_inline(state: &mut melodia_engine::player::engine::state::PlayerState) {
+fn shuffle_inline(state: &mut PlayerState) {
     let mut rng = rand::rng();
     state.queue.shuffle_play_order_in_place(&mut rng, /* anchor_to_current */ true);
 }

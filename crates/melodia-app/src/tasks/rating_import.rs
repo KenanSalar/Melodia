@@ -19,9 +19,10 @@ use std::path::Path;
 
 use lofty::file::TaggedFileExt;
 
-use crate::state::AppState;
+use crate::state::{AppState, Signal};
 use crate::tasks::{TaskSpawner, one_shot};
 use melodia_core::error::{AppError, AppResult};
+use melodia_store::database::DbPool;
 use melodia_store::database::queries;
 use melodia_store::media::ingest::{metadata, rating_tags};
 
@@ -54,17 +55,37 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
             mark: |flags| flags.ratings_imported_from_tags = true,
             on_failure: one_shot::OnFailure::Retry,
         },
-        |state| async move { import(&state).await },
+        |state| async move { import(&state.db, &state.library_changed).await },
     );
 }
 
-async fn import(state: &AppState) -> AppResult<()> {
+async fn import(db: &DbPool, library_changed: &Signal) -> AppResult<()> {
+    let imported = import_into(db, PAGE_ROWS).await?;
+    if imported == 0 {
+        return Ok(());
+    }
+
+    // Nothing else will say so. This lands minutes into a session on a real library, by which
+    // time every mounted list is painting the zero these rows carried at fetch time, and the two
+    // views that retain their rows keep it until something unrelated refetches. Once at the end
+    // rather than per page: each bump costs the mounted section a whole re-query.
+    library_changed.bump();
+
+    log::info!("Imported {imported} rating(s) from file tags");
+    Ok(())
+}
+
+/// Walk the unrated rows a page at a time, answering with how many took a rating out of a file.
+///
+/// Keyset rather than offset because each page's write takes its own rows out of the predicate:
+/// a window counted from the start would step over as many rows as it had just rated. `page_rows`
+/// is a parameter so a test can reach a second page at all; the caller spells [`PAGE_ROWS`].
+async fn import_into(db: &DbPool, page_rows: i64) -> AppResult<usize> {
     let mut after_id = 0;
     let mut imported = 0;
 
     loop {
-        let page =
-            queries::track::get_unrated_track_paths_after(&state.db, after_id, PAGE_ROWS).await?;
+        let page = queries::track::get_unrated_track_paths_after(db, after_id, page_rows).await?;
         let Some(last_id) = page.last().map(|(id, _)| *id) else {
             break;
         };
@@ -84,23 +105,12 @@ async fn import(state: &AppState) -> AppResult<()> {
             by_rating.entry(*rating).or_default().push(*id);
         }
         for (rating, ids) in &by_rating {
-            queries::track::set_rating(&state.db, ids, *rating).await?;
+            queries::track::set_rating(db, ids, *rating).await?;
         }
         imported += found.len();
     }
 
-    if imported == 0 {
-        return Ok(());
-    }
-
-    // Nothing else will say so. This lands minutes into a session on a real library, by which
-    // time every mounted list is painting the zero these rows carried at fetch time, and the two
-    // views that retain their rows keep it until something unrelated refetches. Once at the end
-    // rather than per page: each bump costs the mounted section a whole re-query.
-    state.library_changed.bump();
-
-    log::info!("Imported {imported} rating(s) from file tags");
-    Ok(())
+    Ok(imported)
 }
 
 /// **Blocking** — one tag parse per row, fanned out the way `retroactive_hash` fans out its
@@ -119,3 +129,7 @@ fn read_each(unrated: &[(i64, String)]) -> Vec<(i64, i32)> {
         })
         .collect()
 }
+
+#[cfg(test)]
+#[path = "tests/rating_import_tests.rs"]
+mod tests;

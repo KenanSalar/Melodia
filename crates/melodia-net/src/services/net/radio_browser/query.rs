@@ -115,6 +115,15 @@ pub(super) fn facet_limit(kind: FacetKind) -> u32 {
     }
 }
 
+/// Whether a facet list came back sitting on its ceiling, and so is likely cut short.
+///
+/// Its own function because the alternative is a comparison inside `fetch_facets` whose only
+/// report is a log line: nothing downstream can be asserted against, and driving the real fetch
+/// to a ceiling means serving [`TAG_FACET_LIMIT`] rows to watch a `>=`.
+pub(super) fn facet_list_is_capped(kind: FacetKind, received: usize) -> bool {
+    received >= facet_limit(kind) as usize
+}
+
 /// The caller's page size, or the default where they left it unset.
 ///
 /// Reachable from the sending half because it is also what a full page *is*:

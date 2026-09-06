@@ -93,12 +93,6 @@ pub async fn apply_tag_edit(
     edit: TagEdit,
     artwork_source: Option<PathBuf>,
 ) -> Result<TagEditReport, AppError> {
-    // lofty rewrites the tag whether or not anything differs, so a reflexive
-    // open-then-Save must not touch disk.
-    if ids.is_empty() || edit.is_noop() {
-        return Ok(TagEditReport::default());
-    }
-
     let (report, updated_ids) = write_tag_edit(
         &state.db,
         &state.paths.artwork_dir,
@@ -151,6 +145,14 @@ pub(crate) async fn write_tag_edit(
     artwork_source: Option<&Path>,
 ) -> Result<(TagEditReport, Vec<i64>), AppError> {
     let mut report = TagEditReport::default();
+
+    // lofty rewrites the tag whether or not anything differs, so an edit carrying no change must
+    // stop short of the write pass: a reflexive Save on a 200-track album would otherwise rewrite
+    // all 200 and hand the watcher every one of them back. Here rather than at the door because
+    // `library::ratings` reaches this function directly.
+    if edit.is_noop() {
+        return Ok((report, Vec::new()));
+    }
 
     let rows = queries::track::get_track_paths_by_ids(db, ids).await?;
     if rows.is_empty() {
@@ -321,11 +323,9 @@ async fn run_commit(
     // `INSERT … ON CONFLICT … RETURNING` upserts per track. Function-scoped, so
     // it drops at batch end (no persistent cache).
     let mut resolve_cache: HashMap<ResolveKey, queries::scan::ResolvedIds> = HashMap::new();
-    // Batched artwork-Remove ids: the common `None` (cover removed, no external
-    // fallback) case flushes as one `IN (…)` UPDATE after the loop; the rare
-    // external-cover survivors keep their per-track value.
+    // Artwork-Remove ids with nothing left to point at, flushed as one `IN (…)` UPDATE after
+    // the loop.
     let mut remove_null_ids: Vec<i64> = Vec::new();
-    let mut remove_ext_ids: Vec<(i64, String)> = Vec::new();
 
     for f in files {
         let (meta, unsupported) = match &f.outcome {
@@ -380,14 +380,12 @@ async fn run_commit(
                 }
             }
             ArtworkEdit::Remove => {
-                // The re-extracted value: an external `cover.jpg` if one exists,
-                // else NULL. Album artwork is left alone — blanking a whole album
-                // because one track's embedded art was removed would be wrong.
-                // Collected here, flushed after the loop: the `None` majority
-                // becomes one batched UPDATE instead of one per track.
-                match meta.artwork_path.as_deref() {
-                    Some(p) => remove_ext_ids.push((f.id, p.to_owned())),
-                    None => remove_null_ids.push(f.id),
+                // Album artwork is left alone: blanking a whole album because one track's
+                // embedded art was removed would be wrong. A track whose re-extract found an
+                // external `cover.jpg` already carries it, the metadata UPDATE's COALESCE
+                // having just written it, so only the nulls need a statement of their own.
+                if meta.artwork_path.is_none() {
+                    remove_null_ids.push(f.id);
                 }
             }
             ArtworkEdit::Keep => {}
@@ -401,9 +399,6 @@ async fn run_commit(
         ArtworkEdit::Remove => {
             if !remove_null_ids.is_empty() {
                 queries::track::set_track_artwork(&mut tx, &remove_null_ids, None).await?;
-            }
-            for (id, p) in &remove_ext_ids {
-                queries::track::set_track_artwork(&mut tx, &[*id], Some(p)).await?;
             }
         }
         ArtworkEdit::Keep => {}

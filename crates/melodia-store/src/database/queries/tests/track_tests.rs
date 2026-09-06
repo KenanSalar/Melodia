@@ -2,6 +2,7 @@ use crate::database::DbPool;
 use crate::database::queries;
 #[allow(clippy::wildcard_imports)]
 use crate::database::queries::fixtures::*;
+use melodia_core::entities::track::TrackMeta;
 use melodia_core::error::AppError;
 
 async fn seed_db() -> Result<DbPool, AppError> {
@@ -123,6 +124,82 @@ async fn get_tracks_by_ids_skips_missing() -> Result<(), AppError> {
     let result = queries::track::get_tracks_by_ids(&db, &ids).await?;
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].id, all[0].id);
+    Ok(())
+}
+
+/// `TrackMeta` is the one of `entities::track`'s five hand-maintained `SELECT` lists that no
+/// test selects, and a list that has drifted from its `FromRow` struct fails at fetch time
+/// with nothing at compile time to catch it. The whole struct is compared rather than the
+/// call: `Ok` says the columns exist, not that the fields received them.
+#[tokio::test]
+async fn the_chip_row_projection_reads_every_column_it_declares() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let id: i64 = sqlx::query_scalar("SELECT id FROM tracks WHERE title = 'Alpha'")
+        .fetch_one(db.read())
+        .await?;
+
+    let meta = queries::track::get_track_meta(&db, id).await?;
+
+    assert_eq!(
+        meta,
+        Some(TrackMeta {
+            id,
+            codec: Some("Mpeg".to_owned()),
+            bitrate: Some(320),
+            sample_rate: Some(44_100),
+            bit_depth: Some(16),
+            channels: Some(2),
+            year: Some(2024),
+            genre: Some("Pop".to_owned()),
+        })
+    );
+    Ok(())
+}
+
+/// A miss is `None` and not an error, which is what lets the chip row paint empty where its
+/// `get_track_by_id` neighbour raises for the same input. The return type holds that much on
+/// its own; what this adds is that the predicate selects by the id it was handed, since a
+/// broken one hands back the first row in the table and reads as a hit.
+#[tokio::test]
+async fn a_missing_id_has_no_chip_row() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    assert_eq!(queries::track::get_track_meta(&db, 99999).await?, None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn get_track_file_path_happy_path() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let id: i64 = sqlx::query_scalar("SELECT id FROM tracks WHERE title = 'Beta'")
+        .fetch_one(db.read())
+        .await?;
+    assert_eq!(
+        queries::track::get_track_file_path(&db, id).await?.as_deref(),
+        Some("/music/beta.mp3")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn get_track_file_path_not_found() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    assert_eq!(queries::track::get_track_file_path(&db, 99999).await?, None);
+    Ok(())
+}
+
+/// The diagnostics bundle reports this as library shape, so a reader treats it as fact about
+/// the user's install. Both partitions: an empty library reads zero rather than failing.
+#[tokio::test]
+async fn count_tracks_counts_the_whole_table() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    assert_eq!(queries::track::count_tracks(&db).await?, 3);
+    Ok(())
+}
+
+#[tokio::test]
+async fn count_tracks_on_an_empty_library_is_zero() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    assert_eq!(queries::track::count_tracks(&db).await?, 0);
     Ok(())
 }
 
@@ -397,7 +474,7 @@ async fn set_rating_updates_value() -> Result<(), AppError> {
 async fn set_rating_targets_only_given_ids() -> Result<(), AppError> {
     let db = seed_db().await?;
     let all = queries::track::get_all_tracks(&db).await?;
-    assert!(all.len() >= 2);
+    assert_eq!(all.len(), 3, "test setup: the seed's three tracks");
 
     queries::track::set_rating(&db, &[all[0].id], 5).await?;
 
@@ -847,5 +924,225 @@ async fn get_tracks_missing_mbid_filters_tagged_and_metadata_less_rows() -> Resu
     assert!(path.ends_with("gamma.mp3"));
     assert_eq!(artist, "Alpha Artist");
     assert_eq!(title, "Gamma");
+    Ok(())
+}
+
+/// **The keyset page is strictly past `after_id`, and the strictness is the whole of it.** The
+/// rating import writes ratings back between pages, so a row leaves `rating = 0` as it is
+/// handled; an `id >= ?` would re-serve the last row of every page, and one that stayed unrated
+/// (a file with no rating tag) would be handed back forever.
+#[tokio::test]
+async fn an_unrated_page_starts_past_the_id_it_was_given() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let ids: Vec<i64> =
+        queries::track::get_all_tracks(&db).await?.into_iter().map(|t| t.id).collect();
+    let mut ordered = ids.clone();
+    ordered.sort_unstable();
+
+    let whole = queries::track::get_unrated_track_paths_after(&db, 0, 10).await?;
+    assert_eq!(whole.len(), 3, "every seeded row is unrated");
+
+    let after_first = queries::track::get_unrated_track_paths_after(&db, ordered[0], 10).await?;
+
+    assert_eq!(
+        after_first.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+        [ordered[1], ordered[2]],
+        "the row named must not come back in the page after it"
+    );
+    Ok(())
+}
+
+/// The other half of that work-list: a row that has been rated leaves it. `rating = 0` is the
+/// only marker there is, so a filter reading anything else hands the import the whole library on
+/// every page.
+#[tokio::test]
+async fn a_rated_track_is_off_the_import_work_list() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let ids: Vec<i64> =
+        queries::track::get_all_tracks(&db).await?.into_iter().map(|t| t.id).collect();
+    queries::track::set_rating(&db, &ids[..1], 4).await?;
+
+    let unrated = queries::track::get_unrated_track_paths_after(&db, 0, 10).await?;
+
+    assert_eq!(unrated.len(), 2);
+    assert!(!unrated.iter().any(|(id, _)| *id == ids[0]), "the rated row is not work");
+    Ok(())
+}
+
+/// A folder is named by the user and `_` is `LIKE`'s single-character wildcard, so an unescaped
+/// one reaches into the siblings either side of it. Built from [`MAIN_SEPARATOR_STR`] rather than
+/// a spelled `/`, since the pattern this query builds is the native separator and a hand-written
+/// one only ever fails on the platform nobody ran it on.
+#[tokio::test]
+async fn a_folder_named_with_an_underscore_does_not_reach_its_siblings() -> Result<(), AppError> {
+    use std::path::MAIN_SEPARATOR_STR as SEP;
+
+    let db = DbPool::test_pool().await?;
+    let root = format!("{SEP}music");
+    queries::folder::insert_folder(&db, &root, true).await?;
+    let asked = format!("{root}{SEP}my_music");
+    let sibling = format!("{root}{SEP}myXmusic");
+    insert_test_track(&db, &format!("{asked}{SEP}a.mp3"), "A", "Artist", "Album", "Rock").await?;
+    insert_test_track(&db, &format!("{sibling}{SEP}b.mp3"), "B", "Artist", "Album", "Rock").await?;
+
+    let rows = queries::track::get_tracks_in_directory(&db, &asked).await?;
+
+    assert_eq!(rows.iter().map(|r| r.title.as_str()).collect::<Vec<_>>(), ["A"]);
+    Ok(())
+}
+
+/// The same for `%`, which matches any run at all — a folder carrying one would answer with most
+/// of the library.
+#[tokio::test]
+async fn a_folder_named_with_a_percent_does_not_reach_its_siblings() -> Result<(), AppError> {
+    use std::path::MAIN_SEPARATOR_STR as SEP;
+
+    let db = DbPool::test_pool().await?;
+    let root = format!("{SEP}music");
+    queries::folder::insert_folder(&db, &root, true).await?;
+    let asked = format!("{root}{SEP}100% Live");
+    let sibling = format!("{root}{SEP}100 Proof Live");
+    insert_test_track(&db, &format!("{asked}{SEP}a.mp3"), "A", "Artist", "Album", "Rock").await?;
+    insert_test_track(&db, &format!("{sibling}{SEP}b.mp3"), "B", "Artist", "Album", "Rock").await?;
+
+    let rows = queries::track::get_tracks_in_directory(&db, &asked).await?;
+
+    assert_eq!(rows.iter().map(|r| r.title.as_str()).collect::<Vec<_>>(), ["A"]);
+    Ok(())
+}
+
+/// **The backfill correlates each row to its own id, and one row cannot show that.** The single
+/// UPDATE joins a `VALUES` list back onto `tracks` through two subqueries, so a mis-correlated
+/// one — reading the first row of the list for every track — writes one file's hash onto all of
+/// them. What that costs is the moved-file path: `file_hash` is what a cross-device move is
+/// matched on, and matching the wrong row re-imports the file and drops its rating and play
+/// count. Both columns, because the two subqueries can be crossed as easily as flattened.
+#[tokio::test]
+async fn a_hash_backfill_gives_each_row_its_own_values() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let mut ids: Vec<i64> =
+        queries::track::get_all_tracks(&db).await?.into_iter().map(|t| t.id).collect();
+    ids.sort_unstable();
+
+    let updates = vec![
+        (ids[0], "hash-first".to_owned(), Some("2021-01-01T00:00:00+00:00".to_owned())),
+        (ids[1], "hash-second".to_owned(), Some("2022-02-02T00:00:00+00:00".to_owned())),
+    ];
+    queries::track::batch_update_hashes(&db, &updates).await?;
+
+    let rows: Vec<(i64, Option<String>, Option<String>)> =
+        sqlx::query_as("SELECT id, file_hash, date_modified FROM tracks ORDER BY id")
+            .fetch_all(db.read())
+            .await?;
+
+    assert_eq!(rows[0].1.as_deref(), Some("hash-first"));
+    assert_eq!(rows[0].2.as_deref(), Some("2021-01-01T00:00:00+00:00"));
+    assert_eq!(rows[1].1.as_deref(), Some("hash-second"));
+    assert_eq!(rows[1].2.as_deref(), Some("2022-02-02T00:00:00+00:00"));
+    Ok(())
+}
+
+/// A row the batch did not name keeps what it had. The `WHERE id IN (SELECT id FROM v)` is what
+/// holds that: without it the correlated subqueries answer `NULL` for every other track and the
+/// UPDATE erases the hashes it was not asked about — which reads, later, as a library that needs
+/// rehashing rather than as a bug here.
+#[tokio::test]
+async fn a_hash_backfill_leaves_the_rows_it_did_not_name_alone() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let mut ids: Vec<i64> =
+        queries::track::get_all_tracks(&db).await?.into_iter().map(|t| t.id).collect();
+    ids.sort_unstable();
+    let untouched: Option<String> = sqlx::query_scalar("SELECT file_hash FROM tracks WHERE id = ?")
+        .bind(ids[2])
+        .fetch_one(db.read())
+        .await?;
+
+    queries::track::batch_update_hashes(&db, &[(ids[0], "hash-first".to_owned(), None)]).await?;
+
+    let after: Option<String> = sqlx::query_scalar("SELECT file_hash FROM tracks WHERE id = ?")
+        .bind(ids[2])
+        .fetch_one(db.read())
+        .await?;
+    assert_eq!(after, untouched, "a row outside the batch keeps the hash it had");
+    Ok(())
+}
+
+// --- Detail-page list projections ---
+
+/// One album whose disc and track numbers agree with neither the row order nor the titles, plus a
+/// track in a second album, artist and genre.
+///
+/// The disagreement is the whole fixture: seeded in the order they come back, a missing `ORDER BY`
+/// is satisfied by a bare table scan, which is the trap [`seed_db_inserted_backwards`] was written
+/// for one section up. `make_test_metadata` gives every row disc 1 / track 1, so the numbers are
+/// patched after the insert rather than carried in.
+async fn seed_two_albums() -> Result<DbPool, AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    insert_test_track(&db, "/music/beta.mp3", "Beta", "Artist One", "Album A", "Rock").await?;
+    insert_test_track(&db, "/music/alpha.mp3", "Alpha", "Artist One", "Album A", "Rock").await?;
+    insert_test_track(&db, "/music/gamma.mp3", "Gamma", "Artist One", "Album A", "Rock").await?;
+    insert_test_track(&db, "/music/delta.mp3", "Delta", "Artist Two", "Album B", "Jazz").await?;
+
+    for (title, disc, track) in [("Beta", 1, 1), ("Gamma", 1, 2), ("Alpha", 2, 1)] {
+        sqlx::query("UPDATE tracks SET disc_number = ?, track_number = ? WHERE title = ?")
+            .bind(disc)
+            .bind(track)
+            .bind(title)
+            .execute(db.write())
+            .await?;
+    }
+    Ok(db)
+}
+
+async fn parent_id(db: &DbPool, table: &str, name: &str) -> Result<i64, AppError> {
+    let sql = format!("SELECT id FROM {table} WHERE name = ?");
+    let id = sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(sql))
+        .bind(name)
+        .fetch_one(db.read())
+        .await?;
+    Ok(id)
+}
+
+fn titles(rows: &[melodia_core::entities::track::TrackListRow]) -> Vec<&str> {
+    rows.iter().map(|row| row.title.as_str()).collect()
+}
+
+/// An album reads in the order it was pressed: disc first, track second. Ordering on the track
+/// number alone files disc two's opener among disc one's, and ordering on `sort_key`, which is what
+/// every other track list uses, scrambles the album outright.
+#[tokio::test]
+async fn an_album_lists_by_disc_then_track() -> Result<(), AppError> {
+    let db = seed_two_albums().await?;
+    let album_id = parent_id(&db, "albums", "Album A").await?;
+
+    let rows = queries::track::get_tracks_by_album_for_list(&db, album_id).await?;
+
+    assert_eq!(titles(&rows), ["Beta", "Gamma", "Alpha"]);
+    Ok(())
+}
+
+/// An artist page is one flat list, so it takes the natural order every other track list takes,
+/// and it holds that artist's tracks alone.
+#[tokio::test]
+async fn an_artists_tracks_are_its_own_in_natural_order() -> Result<(), AppError> {
+    let db = seed_two_albums().await?;
+    let artist_id = parent_id(&db, "artists", "Artist One").await?;
+
+    let rows = queries::track::get_tracks_by_artist_for_list(&db, artist_id).await?;
+
+    assert_eq!(titles(&rows), ["Alpha", "Beta", "Gamma"]);
+    Ok(())
+}
+
+/// And a genre page the same, over the column one join away from the artist's.
+#[tokio::test]
+async fn a_genres_tracks_are_its_own_in_natural_order() -> Result<(), AppError> {
+    let db = seed_two_albums().await?;
+    let genre_id = parent_id(&db, "genres", "Rock").await?;
+
+    let rows = queries::track::get_tracks_by_genre_for_list(&db, genre_id).await?;
+
+    assert_eq!(titles(&rows), ["Alpha", "Beta", "Gamma"]);
     Ok(())
 }

@@ -149,3 +149,7 @@ fn restore_one(path: &Path) -> Step {
         saved,
     }
 }
+
+#[cfg(test)]
+#[path = "tests/artwork_renormalize_tests.rs"]
+mod tests;

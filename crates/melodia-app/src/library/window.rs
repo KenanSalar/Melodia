@@ -1,9 +1,13 @@
+use std::sync::Arc;
+
 use crate::services::{
     self,
     settings::{TitlebarButtonSide, TitlebarButtonStyle},
 };
 use crate::state::AppState;
+use melodia_core::config::Paths;
 use melodia_core::error::AppError;
+use melodia_platform::services::platform::always_on_top::AlwaysOnTopMethod;
 
 /// Apply the user's pinned choice and persist it. On Linux this drops
 /// into the `KWin` / GNOME D-Bus backends via
@@ -13,13 +17,19 @@ use melodia_core::error::AppError;
 /// has no supported method — callers use that to revert the optimistic
 /// toggle they performed on the UI thread.
 pub async fn set_always_on_top(state: &AppState, pinned: bool) -> Result<(), AppError> {
-    melodia_platform::services::platform::always_on_top::apply(
-        state.always_on_top.method,
-        &state.paths.data_dir,
-        pinned,
-    )
-    .await?;
-    let paths = state.paths.clone();
+    apply_then_persist(&state.paths, state.always_on_top.method, pinned).await
+}
+
+/// [`set_always_on_top`]'s body, narrowed to the paths and the method it reaches so the ordering
+/// can be driven against a desktop that supports nothing.
+async fn apply_then_persist(
+    paths: &Arc<Paths>,
+    method: AlwaysOnTopMethod,
+    pinned: bool,
+) -> Result<(), AppError> {
+    melodia_platform::services::platform::always_on_top::apply(method, &paths.data_dir, pinned)
+        .await?;
+    let paths = Arc::clone(paths);
     tokio::task::spawn_blocking(move || {
         services::settings::mutate_settings(&paths, |s| {
             s.window.always_on_top = pinned;
@@ -47,8 +57,15 @@ pub async fn set_always_on_top(state: &AppState, pinned: bool) -> Result<(), App
 /// in custom-titlebar mode while the persisted value survives for the
 /// next time the native titlebar is enabled.
 pub fn set_use_native_titlebar(state: &AppState, on: bool) -> Result<(), AppError> {
-    let enable_match_unfocused = on && services::settings::is_kde_desktop();
-    services::settings::mutate_settings(&state.paths, move |s| {
+    write_use_native_titlebar(&state.paths, on, services::settings::is_kde_desktop())
+}
+
+/// [`set_use_native_titlebar`]'s body, with the desktop probe passed in rather than read: the
+/// second write is the whole decision, and a test that steered it through `XDG_CURRENT_DESKTOP`
+/// would be testing the environment as well.
+fn write_use_native_titlebar(paths: &Paths, on: bool, is_kde: bool) -> Result<(), AppError> {
+    let enable_match_unfocused = on && is_kde;
+    services::settings::mutate_settings(paths, move |s| {
         s.window.use_native_titlebar = on;
         if enable_match_unfocused {
             s.layout.match_unfocused_to_system_bg = true;
@@ -118,3 +135,7 @@ pub fn set_titlebar_button_side(
         s.window.titlebar_button_side = side;
     })
 }
+
+#[cfg(test)]
+#[path = "tests/window_tests.rs"]
+mod tests;

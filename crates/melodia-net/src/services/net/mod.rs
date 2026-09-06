@@ -161,3 +161,7 @@ pub async fn read_capped(
     }
     Ok(body)
 }
+
+#[cfg(test)]
+#[path = "tests/mod_tests.rs"]
+mod tests;

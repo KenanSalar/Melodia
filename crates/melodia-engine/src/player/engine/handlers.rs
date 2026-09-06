@@ -40,6 +40,68 @@ const _: () = assert!(
 /// have a chance to influence what gets preloaded.
 const PRELOAD_LEAD_MS: u64 = 1500;
 
+/// How much playback a `SIGKILL` may cost: the queue-and-position snapshot lands this often
+/// while something is playing, and `main.rs`'s shutdown hook writes the authoritative one on
+/// a clean exit.
+///
+/// Measured in playback rather than wall time, the counter below sitting past every arm of the
+/// loop that skips a tick.
+const SAVE_INTERVAL_MS: u64 = 30_000;
+
+/// Polls spanning [`SAVE_INTERVAL_MS`]. Derived rather than spelled, so the interval its own
+/// comment argues cannot drift from the count the loop actually applies.
+const SAVE_EVERY_N_TICKS: u64 = SAVE_INTERVAL_MS / POLL_INTERVAL_MS;
+
+const _: () = assert!(
+    SAVE_EVERY_N_TICKS > 0,
+    "the save cadence must span at least one poll, or its modulus is zero"
+);
+
+/// How often the OS media controls are handed a position. Their widgets advance on their own
+/// between updates, so this only has to keep the two from visibly diverging.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+const MEDIA_POSITION_INTERVAL_MS: u64 = 5_000;
+
+/// Polls spanning [`MEDIA_POSITION_INTERVAL_MS`], for [`SAVE_EVERY_N_TICKS`]' reason.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+const MEDIA_POSITION_EVERY_N_TICKS: u64 = MEDIA_POSITION_INTERVAL_MS / POLL_INTERVAL_MS;
+
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+const _: () = assert!(
+    MEDIA_POSITION_EVERY_N_TICKS > 0,
+    "the media-controls cadence must span at least one poll, or its modulus is zero"
+);
+
+/// Rate limiter on the position publish, admitting one tick per whole second.
+///
+/// The monitor wakes at [`POLL_INTERVAL_MS`] so the crossfade and gapless windows stay tight,
+/// but the now-playing bar renders seconds and a slider thumb on a long track moves invisibly
+/// between two 500 ms samples. Publishing at the poll rate makes the UI rebuild text content
+/// twice per visible change, so the tick nobody can see is the one worth dropping.
+///
+/// A type rather than a local, because the seed is the half worth holding and a bare `&mut u64`
+/// leaves it at whichever call site constructs one.
+struct SecondGate(u64);
+
+impl Default for SecondGate {
+    /// Past any real position, so the first tick of a freshly started track publishes instead
+    /// of waiting for its first second boundary.
+    fn default() -> Self {
+        Self(u64::MAX)
+    }
+}
+
+impl SecondGate {
+    /// Whether `position_ms` lands in a second the UI has not been shown, recording it either
+    /// way. A seek backwards admits: what matters is that the second moved, not which way.
+    fn admits(&mut self, position_ms: u64) -> bool {
+        let second = position_ms / 1000;
+        let moved = second != self.0;
+        self.0 = second;
+        moved
+    }
+}
+
 /// What the monitor read off the audio backend before taking the `PlayerState`
 /// lock. Gathered first, deliberately: querying the backend under the state lock
 /// would nest the decks mutex inside it.
@@ -269,27 +331,11 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
     tracker.spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_millis(POLL_INTERVAL_MS));
 
-        // Tick counter for OS media controls periodic position updates (~5s = every 10th tick)
         #[cfg(any(target_os = "windows", target_os = "macos"))]
-        let mut media_tick_counter: u32 = 0;
+        let mut media_tick_counter: u64 = 0;
 
-        // Periodic queue+position save: every 60 *playing* ticks (~30s).
-        // Survives SIGKILL/crash; the authoritative final snapshot still
-        // happens in main.rs's shutdown hook on clean exit.
-        let mut save_tick_counter: u32 = 0;
-
-        // Last whole-second value sent to the UI. The playback monitor wakes
-        // every 500 ms (so gapless preload triggers and EOS detection stay
-        // tight), but the now-playing bar's time labels render seconds and
-        // the slider thumb on a 1 h+ track moves invisibly between 500 ms
-        // ticks — publishing at 2 Hz forces the UI to repaint with new text
-        // content twice per visible change. Rate-limiting to 1 Hz here
-        // halves both the renderer's per-tick cache churn and the
-        // property-binding dirty-mark traffic. Initialised to `u64::MAX` so
-        // the first publish after playback starts always fires (no
-        // `if last_published_second == position_seconds` skip on the first
-        // sample of a freshly-started track).
-        let mut last_published_second: u64 = u64::MAX;
+        let mut save_tick_counter: u64 = 0;
+        let mut publish = SecondGate::default();
 
         // Last ICY title generation reconciled into `PlayerState`. Generations are process-wide
         // tickets starting at 1, so this holds across stations and `0` means nothing seen yet.
@@ -390,15 +436,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                         continue;
                     };
 
-                    // Publish to the UI only when the whole-second has changed
-                    // (1 Hz effective rate). The 500 ms loop cadence is kept
-                    // for gapless / EOS detection and the late-preload check
-                    // above; the UI side reads `Player.position-ms` which only
-                    // drives second-resolution displays. See the comment on
-                    // `last_published_second` above.
-                    let position_seconds = tick.position_ms / 1000;
-                    if position_seconds != last_published_second {
-                        last_published_second = position_seconds;
+                    if publish.admits(tick.position_ms) {
                         let _ = position_tx.send(Some(tick.clone()));
                     }
 
@@ -425,10 +463,10 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                         engine.preload_gapless(Some(&path), rg);
                     }
 
-                    // OS media controls: update position every ~5 seconds
                     #[cfg(any(target_os = "windows", target_os = "macos"))]
                     {
-                        media_tick_counter = (media_tick_counter + 1) % 10;
+                        media_tick_counter =
+                            (media_tick_counter + 1) % MEDIA_POSITION_EVERY_N_TICKS;
                         if media_tick_counter == 0
                             && let Some(mc) = sinks.media_controls.as_ref()
                         {
@@ -438,10 +476,11 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                 }
             }
 
-            // Periodic save (every 60 playing ticks ~= 30s). Snapshots under the state lock and
-            // awaits the sink inline — the monitor task itself is tracked by `tracker`, so an
-            // in-flight save completes before shutdown wins on the next select.
-            save_tick_counter = (save_tick_counter + 1) % 60;
+            // Below every arm that skips a tick, so the cadence counts playback rather than wall
+            // time. Snapshots under the state lock and awaits the sink inline — the monitor task
+            // itself is tracked by `tracker`, so an in-flight save completes before shutdown
+            // wins on the next select.
+            save_tick_counter = (save_tick_counter + 1) % SAVE_EVERY_N_TICKS;
             if save_tick_counter == 0 {
                 let snapshot = {
                     let state = lock_state(&player_state);

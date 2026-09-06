@@ -32,3 +32,7 @@ pub fn try_send(event: PlayCountEvent) -> bool {
 pub fn install() -> Option<UnboundedReceiver<PlayCountEvent>> {
     BRIDGE.install()
 }
+
+#[cfg(test)]
+#[path = "tests/play_counts_tests.rs"]
+mod tests;

@@ -10,10 +10,11 @@
 //! ended up in `melodia-app` and `melodia-net`, each seeing half: the first passes with a second
 //! module fetching on its own, the second passes with every call in the facade on a raw client.
 //!
-//! Source walks because the alternative is asserting a network call did *not* happen, and the
-//! tree has no network tests. The play-count ordering below rides along on the same corpus:
-//! it needs an `AppState`, a socket and a station that is reliably down, where the ordering is
-//! the whole invariant and is legible from the text.
+//! Source walks because the property is about every call site at once. `TestServer::requests()`
+//! can now say a particular call did not happen, which is one call site per test and exactly the
+//! coverage a new one added off the facade would sit outside. The play-count ordering below rides
+//! along on the same corpus: driving it needs an `AppState` and a station that is reliably down,
+//! where the ordering is the whole invariant and is legible from the text.
 
 use melodia_testkit::{rust_sources, stripped_sources};
 
@@ -53,8 +54,8 @@ fn facade_source() -> String {
 /// covers the other's half: that one would pass with every call here on a raw client, and this one
 /// would pass with a second module fetching on its own.
 ///
-/// A source walk because the alternative is asserting a network call did *not* happen, and the
-/// tree has no network tests.
+/// A source walk because a per-call-site assertion is exactly what a new call added off the
+/// facade would not be covered by.
 #[test]
 fn every_outbound_call_takes_its_client_from_behind_the_switch() {
     let src = facade_source();
@@ -169,5 +170,71 @@ fn a_station_that_cannot_be_reached_is_still_counted_as_played() {
         ),
         "`play_station` must count the play before it opens the stream, or a station that is down \
          today never reaches the recents list that would let the user find it again"
+    );
+}
+
+/// **The third route, and the last one.** The two reaches above are equalities pinned at one
+/// apiece, so a door wanting traffic past the switch cannot ask for a client; what is left is
+/// building one. It costs a line and it reads like plumbing rather than like a hole in a setting,
+/// which is exactly why nothing else would notice.
+///
+/// Together with the two counts this is what makes "off means no traffic" a property of the
+/// directory rather than of the doors in it: a submodule nobody has written yet has no way to
+/// reach the network that these three do not already name.
+#[test]
+fn the_facade_builds_no_client_of_its_own() {
+    const CONSTRUCTORS: [&str; 3] = ["Client::new", "Client::builder", "ClientBuilder"];
+    let src = facade_source();
+
+    let built: Vec<&str> = CONSTRUCTORS.into_iter().filter(|needle| src.contains(needle)).collect();
+    assert!(
+        built.is_empty(),
+        "`library::radio` names {built:?}, so it can reach the network without asking \
+         `directory_client` — take the client from the seam, which is where the switch is"
+    );
+}
+
+/// **One switch, one reading of it.** `ensure_enabled` is where "off means no traffic" is decided,
+/// and a second door reading `state.radio_enabled` for itself is a copy that can be got wrong
+/// separately — `station_to_restore` spelled one by hand until this walk was written.
+///
+/// Fails in both directions, which is the point of an equality: a second reader takes the count to
+/// two, and deleting the one that enforces it takes the count to zero.
+#[test]
+fn the_switch_is_read_in_one_place() {
+    let src = facade_source();
+
+    assert_eq!(
+        src.matches("radio_enabled").count(),
+        1,
+        "`radio_enabled` may be named exactly once in `library::radio`, inside `ensure_enabled` — \
+         a door that reads it for itself is a guard nothing else can hold"
+    );
+}
+
+/// **The stream is the reach the client count cannot see.** A station opens through
+/// `PlaybackContext.http` rather than through [`super::directory_client`], so
+/// [`every_outbound_call_takes_its_client_from_behind_the_switch`] passes with `play_station`'s
+/// guard deleted and a user who switched Radio off still streaming — from a restored queue, a
+/// media key, or the Now-Playing bar.
+#[test]
+fn a_station_reaches_the_deck_only_from_behind_the_switch() {
+    let src = facade_source();
+
+    assert_eq!(
+        src.matches("playback_ctx()").count(),
+        1,
+        "the transport is reached from one place in the facade, or this pin covers only one of them"
+    );
+
+    let body = src
+        .split_once("pub async fn play_station")
+        .and_then(|(_, rest)| rest.split_once("\n}\n"))
+        .map_or("", |(body, _)| body);
+    assert!(!body.is_empty(), "`play_station` moved or changed shape, so this pin reads nothing");
+    assert!(
+        body.contains("ensure_enabled(state)?"),
+        "the one door that seats a station has to ask the switch itself — its client comes off \
+         `PlaybackContext`, which no count of `http_client()` reaches"
     );
 }

@@ -6,7 +6,8 @@ use tokio::sync::watch;
 
 use melodia_app::library;
 use melodia_app::services::updater::{
-    CheckOutcome, FailureKind, UpdaterEvent, asset_cache, check_for_update, version::is_upgrade,
+    CheckOutcome, FailureKind, RELEASES_BASE, UpdaterEvent, asset_cache, check_for_update,
+    version::is_upgrade,
 };
 use melodia_app::state::AppState;
 use melodia_ui::AppWindow;
@@ -29,9 +30,14 @@ pub(super) fn spawn_manual_check(
         // mis-bumped `manifest_schema_version` — without this, the 304
         // short-circuit would keep returning the cached "schema too new"
         // outcome until the next manifest publish bumped the ETag.
-        let result =
-            check_for_update(state.http_client(), etag.as_deref(), env!("CARGO_PKG_VERSION"), true)
-                .await;
+        let result = check_for_update(
+            state.http_client(),
+            RELEASES_BASE,
+            etag.as_deref(),
+            env!("CARGO_PKG_VERSION"),
+            true,
+        )
+        .await;
         set_is_checking(&weak, false);
 
         let now = Utc::now();

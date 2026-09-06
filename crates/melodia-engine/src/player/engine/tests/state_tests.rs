@@ -266,20 +266,6 @@ fn test_resume_from_stopped_not_stopped() {
 }
 
 #[test]
-fn test_pause_and_resume() {
-    let mut state = PlayerState {
-        status: PlaybackStatus::Playing,
-        ..Default::default()
-    };
-
-    state.status = PlaybackStatus::Paused;
-    assert_eq!(state.status, PlaybackStatus::Paused);
-
-    state.status = PlaybackStatus::Playing;
-    assert_eq!(state.status, PlaybackStatus::Playing);
-}
-
-#[test]
 fn test_stop_preserves_track_for_resume() {
     let mut state = PlayerState {
         status: PlaybackStatus::Playing,
@@ -289,8 +275,7 @@ fn test_stop_preserves_track_for_resume() {
         ..Default::default()
     };
 
-    // Simulate player_stop: sets Stopped but preserves current_track for resume
-    state.status = PlaybackStatus::Stopped;
+    state.build_stop_actions(0);
 
     assert_eq!(state.status, PlaybackStatus::Stopped);
     assert_eq!(state.current_track().map(|t| t.id), Some(1));
@@ -329,88 +314,6 @@ fn test_stop_at_end_of_queue_preserves_track() -> Result<(), AppError> {
     assert_eq!(state.current_track().map(|t| t.id), Some(2));
     assert_eq!(state.position_ms, 0);
     Ok(())
-}
-
-#[test]
-fn test_set_volume_clamps() {
-    let mut state = PlayerState::default();
-    // A request above the ceiling clamps down to MAX_VOLUME.
-    state.build_set_volume_actions(999);
-    assert_eq!(state.volume, MAX_VOLUME);
-
-    // A valid level passes through untouched.
-    state.build_set_volume_actions(75);
-    assert_eq!(state.volume, 75);
-}
-
-#[test]
-fn test_toggle_mute() {
-    let mut state = PlayerState {
-        volume: 80,
-        ..Default::default()
-    };
-
-    // Mute
-    state.pre_mute_volume = state.volume;
-    state.is_muted = true;
-    assert!(state.is_muted);
-    assert_eq!(state.pre_mute_volume, 80);
-
-    // Unmute
-    state.is_muted = false;
-    assert!(!state.is_muted);
-}
-
-#[test]
-fn test_set_playback_speed_clamps() {
-    let mut state = PlayerState {
-        playback_speed: 0.1f64.clamp(0.25, 2.0),
-        ..Default::default()
-    };
-    assert!((state.playback_speed - 0.25).abs() < f64::EPSILON);
-
-    state.playback_speed = 5.0f64.clamp(0.25, 2.0);
-    assert!((state.playback_speed - 2.0).abs() < f64::EPSILON);
-
-    state.playback_speed = 1.5f64.clamp(0.25, 2.0);
-    assert!((state.playback_speed - 1.5).abs() < f64::EPSILON);
-}
-
-#[test]
-fn test_next_skips_when_under_50_percent() {
-    let mut state = PlayerState::default();
-
-    let track1 = make_summary(1, "Song 1", 100_000);
-    let track2 = make_summary(2, "Song 2", 100_000);
-
-    state.queue.add_tracks(vec![track1.clone(), track2]);
-    state.queue.current_index = Some(0);
-    state.source = Some(PlaybackSource::Track(track1));
-    state.status = PlaybackStatus::Playing;
-    state.duration_ms = 100_000;
-    state.position_ms = 20_000; // 20% - should count as skip
-
-    // Simulate Next: check skip condition then advance
-    let should_skip = state.duration_ms > 0 && state.position_ms < state.duration_ms / 2;
-    assert!(should_skip);
-
-    let next_track = state.queue.advance().cloned();
-    assert!(next_track.is_some());
-    assert_eq!(state.queue.current_index, Some(1));
-}
-
-#[test]
-fn test_previous_restarts_after_3_seconds() {
-    let mut state = PlayerState::default();
-
-    let track = make_summary(1, "Song", 100_000);
-    state.queue.add_tracks(vec![track.clone()]);
-    state.queue.current_index = Some(0);
-    state.source = Some(PlaybackSource::Track(track));
-    state.position_ms = 5000;
-
-    // When position > 3000, Previous should seek to 0 instead of going back
-    assert!(state.position_ms > 3000);
 }
 
 #[test]
@@ -1196,6 +1099,264 @@ fn every_player_action_names_what_it_did() {
     }
 }
 
+// --- The transport builders ------------------------------------------------
+//
+// These came from `melodia-app`'s `library/tests/playback_tests.rs`, where they had grown up
+// beside the doors that call them. The doors are worth a test of their own and now have one; the
+// builders belong here, next to the machine they are part of. Several arrived over weaker
+// namesakes that assigned a field and asserted it back, and those went.
+
+/// A queue of `count` tracks sitting at the top, with nothing on the deck yet.
+fn queued(count: i64) -> PlayerState {
+    let mut state = PlayerState::default();
+    let tracks: Vec<_> =
+        (1..=count).map(|i| make_summary(i, &format!("Track {i}"), 180_000)).collect();
+    state.queue.add_tracks(tracks);
+    state.queue.current_index = Some(0);
+    state
+}
+
+#[test]
+fn play_from_paused_resumes() {
+    let mut state = queued(1);
+    state.status = PlaybackStatus::Paused;
+
+    let actions = state.build_play_actions();
+
+    assert_eq!(state.status, PlaybackStatus::Playing);
+    assert_eq!(actions, vec![PlayerAction::Resume]);
+}
+
+#[test]
+fn play_from_stopped_resumes_from_stopped() {
+    let mut state = queued(1);
+    play_track_inner(&mut state, make_summary(1, "Track 1", 180_000), None);
+    state.status = PlaybackStatus::Stopped;
+    state.position_ms = 60_000;
+
+    let actions = resume_from_stopped(&mut state);
+
+    assert_eq!(state.status, PlaybackStatus::Playing);
+    assert!(!actions.is_empty());
+}
+
+#[test]
+fn pause_when_playing_pauses() {
+    let mut state = queued(1);
+    state.status = PlaybackStatus::Playing;
+
+    // A user pause carries the ramp length when fade-on-pause is on; `library::playback` resolves
+    // the setting and hands it in, exactly as it does for `build_stop_actions`.
+    let actions = state.build_pause_actions(250);
+
+    assert_eq!(state.status, PlaybackStatus::Paused);
+    assert_eq!(actions, vec![PlayerAction::Pause { fade_ms: 250 }]);
+}
+
+#[test]
+fn pause_when_not_playing_noop() {
+    let mut state = queued(1);
+    state.status = PlaybackStatus::Stopped;
+
+    let actions = state.build_pause_actions(250);
+
+    assert_eq!(state.status, PlaybackStatus::Stopped);
+    assert!(actions.is_empty());
+}
+
+#[test]
+fn stop_forwards_the_pause_fade_length() {
+    let mut state = queued(1);
+    state.status = PlaybackStatus::Playing;
+
+    assert_eq!(state.build_stop_actions(0), vec![PlayerAction::Stop { fade_ms: 0 }]);
+
+    state.status = PlaybackStatus::Playing;
+    assert_eq!(state.build_stop_actions(250), vec![PlayerAction::Stop { fade_ms: 250 }]);
+}
+
+#[test]
+fn seek_updates_position() {
+    let mut state = queued(1);
+    // Seated, because the action carries the file the backend rebuilds to seek it.
+    play_track_inner(&mut state, make_summary(1, "Track 1", 180_000), None);
+    state.position_ms = 0;
+
+    let actions = state.build_seek_actions(45_000);
+
+    assert_eq!(state.position_ms, 45_000);
+    assert_eq!(
+        actions,
+        vec![PlayerAction::Seek {
+            position_ms: 45_000,
+            file_path: "/music/1.mp3".to_owned(),
+            replaygain: TrackReplayGain::default(),
+        }]
+    );
+}
+
+#[test]
+fn next_advances_queue() {
+    let mut state = queued(3);
+    play_track_inner(&mut state, make_summary(1, "Track 1", 180_000), None);
+    state.position_ms = 100_000; // > 50%
+
+    let actions = state.build_next_actions();
+
+    assert_eq!(state.current_track().map(|t| t.id), Some(2));
+    assert!(actions.iter().any(|a| matches!(a, PlayerAction::PlayMedia { .. })));
+}
+
+/// Half the track is the line between a listen and a skip, and the skip count feeds Recently
+/// Played and the stat-dependent smart playlists.
+#[test]
+fn next_counts_a_skip_only_under_half_the_track() {
+    let mut under = queued(3);
+    play_track_inner(&mut under, make_summary(1, "Track 1", 180_000), None);
+    under.position_ms = 10_000;
+    let actions = under.build_next_actions();
+    assert!(actions.iter().any(|a| matches!(a, PlayerAction::UpdateSkipCount(1))));
+
+    let mut over = queued(3);
+    play_track_inner(&mut over, make_summary(1, "Track 1", 180_000), None);
+    over.position_ms = 100_000;
+    let actions = over.build_next_actions();
+    assert!(!actions.iter().any(|a| matches!(a, PlayerAction::UpdateSkipCount(_))));
+}
+
+#[test]
+fn next_at_end_stops() {
+    let mut state = queued(1);
+    play_track_inner(&mut state, make_summary(1, "Track 1", 180_000), None);
+
+    let actions = state.build_next_actions();
+
+    assert_eq!(state.status, PlaybackStatus::Stopped);
+    assert!(actions.iter().any(|a| matches!(a, PlayerAction::Stop { .. })));
+}
+
+#[test]
+fn next_while_paused_stays_paused_without_fading() {
+    let mut state = queued(3);
+    play_track_inner(&mut state, make_summary(1, "Track 1", 180_000), None);
+    state.status = PlaybackStatus::Paused;
+
+    let actions = state.build_next_actions();
+
+    assert_eq!(state.status, PlaybackStatus::Paused);
+    // `fade_ms` MUST be 0. The `PlayMedia` ahead of this starts the deck, so a
+    // fade here would ramp the incoming track down from full volume instead of
+    // pausing it — its first quarter-second would be audible.
+    assert!(
+        actions.iter().any(|a| matches!(a, PlayerAction::Pause { fade_ms: 0 })),
+        "next-while-paused must restore the pause without a fade, got {actions:?}"
+    );
+}
+
+#[test]
+fn previous_restarts_after_threshold() {
+    let mut state = queued(3);
+    play_track_inner(&mut state, make_summary(1, "Track 1", 180_000), None);
+    state.position_ms = RESTART_THRESHOLD_MS + 1;
+
+    let actions = state.build_previous_actions();
+
+    assert_eq!(state.position_ms, 0);
+    assert_eq!(
+        actions,
+        vec![PlayerAction::Seek {
+            position_ms: 0,
+            file_path: "/music/1.mp3".to_owned(),
+            replaygain: TrackReplayGain::default(),
+        }]
+    );
+}
+
+#[test]
+fn previous_goes_back_under_threshold() {
+    let mut state = queued(3);
+    play_track_inner(&mut state, make_summary(1, "Track 1", 180_000), None);
+    state.queue.advance();
+    play_track_inner(&mut state, make_summary(2, "Track 2", 180_000), None);
+    state.position_ms = 1_000;
+
+    let actions = state.build_previous_actions();
+
+    assert_eq!(state.current_track().map(|t| t.id), Some(1), "under the threshold it steps back");
+    assert!(actions.iter().any(|a| matches!(a, PlayerAction::PlayMedia { .. })));
+}
+
+#[test]
+fn set_volume_clamps_and_unmutes() {
+    let mut state = PlayerState {
+        is_muted: true,
+        ..Default::default()
+    };
+
+    let actions = state.build_set_volume_actions(999);
+
+    assert_eq!(state.volume, MAX_VOLUME);
+    assert!(!state.is_muted, "moving the slider is how the user unmutes");
+    assert_eq!(actions, vec![PlayerAction::SetVolume(state.effective_volume())]);
+
+    state.build_set_volume_actions(75);
+    assert_eq!(state.volume, 75, "a level inside the band passes through untouched");
+}
+
+/// The unmute reads `pre_mute_volume`, so the mute edge has to save it and the unmute must
+/// not overwrite it — a toggle-off that re-stamped it would pin the volume at zero.
+#[test]
+fn toggle_mute_roundtrip() {
+    let mut state = PlayerState {
+        volume: 80,
+        ..Default::default()
+    };
+
+    let actions = state.build_toggle_mute_actions();
+    assert!(state.is_muted);
+    assert_eq!(state.pre_mute_volume, 80);
+    assert!((state.effective_volume() - 0.0).abs() < f64::EPSILON);
+    assert_eq!(actions, vec![PlayerAction::SetVolume(0.0)]);
+
+    let actions = state.build_toggle_mute_actions();
+    assert!(!state.is_muted);
+    assert_eq!(state.pre_mute_volume, 80);
+    let vol = state.effective_volume();
+    assert!(vol > 0.0);
+    assert_eq!(actions, vec![PlayerAction::SetVolume(vol)]);
+}
+
+#[test]
+fn set_playback_speed_clamps_to_its_band() {
+    let mut state = PlayerState::default();
+
+    let actions = state.build_set_speed_actions(0.1);
+    assert!((state.playback_speed - 0.25).abs() < f64::EPSILON);
+    assert_eq!(actions, vec![PlayerAction::SetSpeed(0.25)]);
+
+    let actions = state.build_set_speed_actions(10.0);
+    assert!((state.playback_speed - 2.0).abs() < f64::EPSILON);
+    assert_eq!(actions, vec![PlayerAction::SetSpeed(2.0)]);
+
+    let actions = state.build_set_speed_actions(1.5);
+    assert!((state.playback_speed - 1.5).abs() < f64::EPSILON);
+    assert_eq!(actions, vec![PlayerAction::SetSpeed(1.5)]);
+}
+
+#[test]
+fn next_at_end_with_repeat_all_wraps() {
+    let mut state = queued(3);
+    // One cycle off the default is repeat-all, which is how the transport reaches it.
+    state.queue.cycle_repeat_mode();
+    assert_eq!(state.queue.repeat_mode, RepeatMode::All);
+    play_track_inner(&mut state, make_summary(1, "Track 1", 180_000), None);
+
+    state.queue.advance_skip();
+    state.queue.advance_skip();
+
+    assert_eq!(state.queue.advance_skip().map(|t| t.id), Some(1));
+}
+
 // --- The radio arm ---------------------------------------------------------
 //
 // A live stream is the one source with no track behind it, so every transport builder above has a
@@ -1492,4 +1653,105 @@ fn the_transport_is_a_tracks_again_once_one_replaces_the_station() {
     );
     assert_eq!(state.build_pause_actions(250), vec![PlayerAction::Pause { fade_ms: 250 }]);
     assert_eq!(state.status, PlaybackStatus::Paused, "pausing a track is not a stop");
+}
+
+// --- The restart -----------------------------------------------------------
+//
+// `queue.json` is one file rather than two because a station leaves the queue seated underneath
+// it, so a restart owes both back. The round trip below is the whole of that claim: everything
+// above pins one side of it in memory, and nothing pinned it across the file.
+
+/// A player mid-album with a station tuned over it, which is the state the two-halves claim is
+/// about.
+fn tuned_over_a_queue() -> PlayerState {
+    let mut state = playing_a_queue();
+    let (generation, _actions) = state.build_station_connecting_actions(station("Example FM"));
+    let _started = state.build_station_connected_actions(generation);
+    state
+}
+
+#[test]
+fn a_station_over_a_queue_writes_both_halves_down() {
+    let state = tuned_over_a_queue();
+
+    let persisted = state.to_persisted();
+
+    assert_eq!(persisted.queue.track_ids, vec![1, 2], "the queue underneath is still owed");
+    assert_eq!(persisted.station_id, Some(42));
+}
+
+/// A station the user typed in but never saved has `station_id == 0`, and nothing could be looked
+/// back up with it. Writing it down would restore a station with no row on the next boot.
+#[test]
+fn a_station_with_no_row_of_its_own_is_not_written_down() {
+    let mut state = playing_a_queue();
+    let unsaved = Arc::new(RadioNowPlaying {
+        station_id: 0,
+        ..(*station("Unsaved FM")).clone()
+    });
+    let (generation, _actions) = state.build_station_connecting_actions(unsaved);
+    let _started = state.build_station_connected_actions(generation);
+
+    assert!(state.station().is_some(), "the station is on the deck either way");
+    assert_eq!(state.to_persisted().station_id, None);
+}
+
+/// Seating the station is what evicts whatever the queue restore just put on the deck, the two
+/// being one field — but the queue itself has to survive that, or a stop hands back nothing.
+#[test]
+fn the_station_replaces_the_restored_track_and_not_the_queue_under_it() {
+    let mut state = PlayerState::default();
+    let persistable = PersistableQueue {
+        track_ids: vec![1, 2],
+        current_index: 0,
+    };
+    restore_queue(
+        &mut state,
+        vec![
+            make_summary(1, "One", 180_000),
+            make_summary(2, "Two", 180_000),
+        ],
+        &persistable,
+    );
+    assert!(state.current_track().is_some(), "the queue restore seats a track first");
+
+    let _actions = restore_station(&mut state, station("Example FM"));
+
+    assert!(state.current_track().is_none(), "a station is not a track");
+    assert_eq!(state.station().map(|s| s.name.as_str()), Some("Example FM"));
+    assert_eq!(state.queue.to_persistable(), persistable, "the queue must survive verbatim");
+    assert_eq!(state.status, PlaybackStatus::Paused);
+    assert_eq!(state.duration_ms, 0);
+    assert_eq!(state.position_ms, 0);
+}
+
+/// The full trip through the file: what a session writes down is what the next one puts back,
+/// both halves of it.
+#[test]
+fn a_restart_puts_the_queue_back_under_the_station() -> Result<(), AppError> {
+    let before = tuned_over_a_queue();
+    let written = serde_json::to_string(&before.to_persisted())
+        .map_err(|e| AppError::Validation(format!("serialize queue.json: {e}")))?;
+
+    let read: PersistedPlayback = serde_json::from_str(&written)
+        .map_err(|e| AppError::Validation(format!("parse queue.json: {e}")))?;
+    let mut after = PlayerState::default();
+    restore_queue(
+        &mut after,
+        vec![
+            make_summary(1, "One", 180_000),
+            make_summary(2, "Two", 180_000),
+        ],
+        &read.queue,
+    );
+    let _actions = restore_station(&mut after, station("Example FM"));
+
+    assert_eq!(
+        after.queue.to_persistable(),
+        before.queue.to_persistable(),
+        "the queue came back as it went down"
+    );
+    assert_eq!(after.station().map(|s| s.name.as_str()), Some("Example FM"));
+    assert_eq!(read.station_id, Some(42), "and the id that found it survived the file");
+    Ok(())
 }

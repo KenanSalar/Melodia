@@ -144,10 +144,10 @@ fn both_ends_of_the_nav_bound_take_it_from_one_const() {
     ));
 
     let clamp = melodia_testkit::strip_line_comments(WRITE)
-        .split_once("pub fn set_last_nav_index")
+        .split_once("fn write_last_nav_index")
         .and_then(|(_, rest)| rest.split_once("\n}\n"))
         .map_or(String::new(), |(body, _)| body.to_owned());
-    assert!(!clamp.is_empty(), "`set_last_nav_index` moved, so this pin reads nothing");
+    assert!(!clamp.is_empty(), "`write_last_nav_index` moved, so this pin reads nothing");
     assert!(
         clamp.contains("view_state::MAX_NAV_INDEX"),
         "the write clamp must bound against `MAX_NAV_INDEX`, never a literal"

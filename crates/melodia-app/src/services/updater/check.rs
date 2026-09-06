@@ -45,8 +45,9 @@ pub enum CheckOutcome {
 /// Fetch `latest.json`, semver-gate against the running binary's
 /// version, and resolve the platform-specific asset.
 ///
-/// `current_version` is normally `env!("CARGO_PKG_VERSION")`; the parameter
-/// exists for testability.
+/// `current_version` is normally `env!("CARGO_PKG_VERSION")` and `base_url`
+/// [`RELEASES_BASE`](super::github::RELEASES_BASE); both are parameters for the
+/// same reason, which is that a caller can be a test.
 ///
 /// `force_refresh` controls whether the inner [`fetch_latest_manifest`]
 /// sends `If-None-Match`. Daily-task checks pass `false` (cache-friendly,
@@ -57,16 +58,29 @@ pub enum CheckOutcome {
 /// the next manifest publish bumps the `ETag`.
 pub async fn check_for_update(
     http: &reqwest::Client,
+    base_url: &str,
     cached_etag: Option<&str>,
     current_version: &str,
     force_refresh: bool,
 ) -> AppResult<CheckOutcome> {
-    let outcome = fetch_latest_manifest(http, cached_etag, force_refresh).await?;
+    let outcome = fetch_latest_manifest(http, base_url, cached_etag, force_refresh).await?;
     let (manifest, etag) = match outcome {
         FetchOutcome::NotModified => return Ok(CheckOutcome::NotModified),
         FetchOutcome::Fresh { manifest, etag } => (manifest, etag),
     };
 
+    classify_manifest(manifest, etag, current_version, current_target_key())
+}
+
+/// The ladder itself, split from the fetch so every outcome is reachable without a network or a
+/// signature — the host answers `current_target_key` with one value, which left the `None` arm and
+/// five of the six package keys unexercised wherever the suite runs.
+fn classify_manifest(
+    manifest: LatestManifest,
+    etag: Option<String>,
+    current_version: &str,
+    target_key: Option<&str>,
+) -> AppResult<CheckOutcome> {
     // Forward-compat gate: a future schema revision (renamed platform
     // keys, restructured PlatformAsset, etc.) bumps the manifest's
     // `manifest_schema_version` past our compiled-in `SUPPORTED_*` value.
@@ -93,7 +107,7 @@ pub async fn check_for_update(
         return Ok(CheckOutcome::UpToDate);
     }
 
-    let Some(key) = current_target_key() else {
+    let Some(key) = target_key else {
         return Ok(CheckOutcome::NoAssetForTarget { etag });
     };
     let Some(asset) = manifest.platforms.get(key).cloned() else {
@@ -109,3 +123,7 @@ pub async fn check_for_update(
         etag,
     })
 }
+
+#[cfg(test)]
+#[path = "tests/check_tests.rs"]
+mod tests;

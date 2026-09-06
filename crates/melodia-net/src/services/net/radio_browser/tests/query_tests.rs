@@ -4,7 +4,10 @@
 
 use std::collections::BTreeMap;
 
-use super::{FACET_LIMIT, TAG_FACET_LIMIT, facet_params, facet_path, order_params, search_params};
+use super::{
+    FACET_LIMIT, TAG_FACET_LIMIT, facet_list_is_capped, facet_params, facet_path, order_params,
+    search_params,
+};
 use melodia_core::entities::radio::{DEFAULT_PAGE_LIMIT, FacetKind, SearchOrder, StationSearch};
 
 const EVERY_FACET: [FacetKind; 4] = [
@@ -232,4 +235,29 @@ fn facet_paths_are_bare_segments() {
     assert_eq!(facet_path(FacetKind::Languages), "languages");
     assert_eq!(facet_path(FacetKind::Tags), "tags");
     assert_eq!(facet_path(FacetKind::Codecs), "codecs");
+}
+
+/// The ceiling is reported at the value, not past it: a list arriving at exactly its limit is
+/// already the cut one, the row that would have been next never having been sent.
+///
+/// Each kind is measured against its **own** ceiling, which is the half a single-number check
+/// would lose — 2000 tags is a quarter of a healthy list and saying so every session trains the
+/// reader to ignore the line.
+#[test]
+fn a_facet_list_is_called_cut_short_from_its_own_ceiling_up() {
+    let curated = FACET_LIMIT as usize;
+    for kind in [
+        FacetKind::Countries,
+        FacetKind::Languages,
+        FacetKind::Codecs,
+    ] {
+        assert!(!facet_list_is_capped(kind, curated - 1), "{kind:?} one short of its ceiling");
+        assert!(facet_list_is_capped(kind, curated), "{kind:?} sitting on its ceiling");
+        assert!(facet_list_is_capped(kind, curated + 1), "{kind:?} past its ceiling");
+    }
+
+    let tags = TAG_FACET_LIMIT as usize;
+    assert!(!facet_list_is_capped(FacetKind::Tags, curated), "tags stop at the looser ceiling");
+    assert!(!facet_list_is_capped(FacetKind::Tags, tags - 1));
+    assert!(facet_list_is_capped(FacetKind::Tags, tags));
 }

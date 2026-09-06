@@ -3,6 +3,7 @@
 
 use crate::services;
 use crate::state::AppState;
+use melodia_core::config::Paths;
 use melodia_core::entities::locale::SUPPORTED_LOCALES;
 use melodia_core::error::AppError;
 
@@ -12,10 +13,16 @@ use melodia_core::error::AppError;
 /// `ui::settings::locale::wire_language_changed` *before* this async persist — the UI re-renders
 /// immediately, and this write only carries the choice across the next boot.
 pub fn set_locale(state: &AppState, code: String) -> Result<(), AppError> {
+    write_locale(&state.paths, code)
+}
+
+/// [`set_locale`]'s body, narrowed to the one field of `AppState` it reaches so the guard above
+/// the write can be driven without one.
+fn write_locale(paths: &Paths, code: String) -> Result<(), AppError> {
     if !SUPPORTED_LOCALES.contains(&code.as_str()) {
         return Err(AppError::Validation(format!("Unsupported locale: {code}")));
     }
-    services::settings::mutate_settings(&state.paths, move |settings| {
+    services::settings::mutate_settings(paths, move |settings| {
         settings.locale = code;
     })
 }
@@ -28,7 +35,12 @@ pub fn set_overflow_button(
     id: String,
     overflow_on: bool,
 ) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |s| {
+    write_overflow_button(&state.paths, id, overflow_on)
+}
+
+/// [`set_overflow_button`]'s body, narrowed so the dedupe can be driven.
+fn write_overflow_button(paths: &Paths, id: String, overflow_on: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |s| {
         s.overflow_buttons.retain(|x| x != &id);
         if overflow_on {
             s.overflow_buttons.push(id);
@@ -77,8 +89,13 @@ pub fn set_browse_view_mode(state: &AppState, mode: i32) -> Result<(), AppError>
 /// `crates/melodia-ui/ui/globals/nav.slint`. Out-of-range writes are clamped so a corrupt file can't pin
 /// the app to an unselectable tab.
 pub fn set_last_nav_index(state: &AppState, idx: i32) -> Result<(), AppError> {
+    write_last_nav_index(&state.paths, idx)
+}
+
+/// [`set_last_nav_index`]'s body, narrowed so the clamp can be driven rather than read.
+fn write_last_nav_index(paths: &Paths, idx: i32) -> Result<(), AppError> {
     let clamped = idx.clamp(0, services::view_state::MAX_NAV_INDEX);
-    services::view_state::mutate_view_state(&state.paths, move |s| {
+    services::view_state::mutate_view_state(paths, move |s| {
         s.last_nav_index = clamped;
     })
 }
@@ -92,8 +109,13 @@ pub fn set_last_detail_id(
     view_id: &str,
     id: Option<i64>,
 ) -> Result<(), AppError> {
+    write_last_detail_id(&state.paths, view_id, id)
+}
+
+/// [`set_last_detail_id`]'s body, narrowed so the insert and the removal can be told apart.
+fn write_last_detail_id(paths: &Paths, view_id: &str, id: Option<i64>) -> Result<(), AppError> {
     let key = view_id.to_owned();
-    services::view_state::mutate_view_state(&state.paths, move |s| match id {
+    services::view_state::mutate_view_state(paths, move |s| match id {
         Some(v) => {
             s.last_detail_ids.insert(key, v);
         }
@@ -183,7 +205,12 @@ pub fn set_view_sort(
 /// when `views.json` fails to load — the caller's default keeps the view usable either way.
 #[must_use]
 pub fn get_view_sort(state: &AppState, view_id: &str) -> Option<services::settings::ViewSort> {
-    services::view_state::read_view_state(&state.paths)
+    read_view_sort(&state.paths, view_id)
+}
+
+/// [`get_view_sort`]'s body, narrowed so both ways of answering `None` can be driven.
+fn read_view_sort(paths: &Paths, view_id: &str) -> Option<services::settings::ViewSort> {
+    services::view_state::read_view_state(paths)
         .ok()
         .and_then(|s| s.view_sort.get(view_id).cloned())
 }
@@ -191,3 +218,7 @@ pub fn get_view_sort(state: &AppState, view_id: &str) -> Option<services::settin
 #[cfg(test)]
 #[path = "tests/view_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tests/view_writers_tests.rs"]
+mod writer_tests;

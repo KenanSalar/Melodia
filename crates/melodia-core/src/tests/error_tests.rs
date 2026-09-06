@@ -117,3 +117,43 @@ fn io_other_helper_wraps_message() {
     assert!(msg.contains("disk full"), "got: {msg}");
     assert!(matches!(err, AppError::Io(_)));
 }
+
+/// The four struct variants exist so a context message and a typed cause both survive, and
+/// `describe` is what puts them back together. Only `network` had a case for it, so
+/// `AppError::scanner` and `AppError::watcher` had never been built with a source at all: a
+/// constructor that dropped one satisfies every other test in this file, and the failure it
+/// hides is a permissions error and a full disk reading identically in a bug report.
+///
+/// Expectations written out rather than composed from the parts, so the table cannot restate
+/// `describe`'s own append rule back at it.
+#[test]
+fn every_io_boundary_variant_keeps_its_context_and_its_cause() {
+    let cause = || std::io::Error::other("no space left on device");
+
+    let cases: [(AppError, &str); 4] = [
+        (
+            AppError::metadata("Failed to read tags", cause()),
+            "Metadata error: Failed to read tags: no space left on device",
+        ),
+        (
+            AppError::scanner("Failed to join the scan pool", cause()),
+            "Scanner error: Failed to join the scan pool: no space left on device",
+        ),
+        (
+            AppError::watcher("Failed to watch the folder", cause()),
+            "Watcher error: Failed to watch the folder: no space left on device",
+        ),
+        (
+            AppError::network("Failed to reach the directory", cause()),
+            "Network error: Failed to reach the directory: no space left on device",
+        ),
+    ];
+
+    for (error, expected) in cases {
+        assert_eq!(
+            describe(&error),
+            expected,
+            "a constructor that drops its source reports the operation and never the reason"
+        );
+    }
+}

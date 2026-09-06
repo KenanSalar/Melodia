@@ -127,3 +127,7 @@ async fn reconcile_once(
     });
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "tests/queue_prune_tests.rs"]
+mod tests;

@@ -352,3 +352,7 @@ fn wide_with_nul(path: &Path) -> Vec<u16> {
     use std::os::windows::ffi::OsStrExt;
     path.as_os_str().encode_wide().chain(std::iter::once(0)).collect()
 }
+
+#[cfg(test)]
+#[path = "../tests/swap_tests.rs"]
+mod tests;

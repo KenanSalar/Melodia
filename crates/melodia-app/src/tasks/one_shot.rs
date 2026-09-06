@@ -40,6 +40,17 @@ pub struct Sweep {
     pub on_failure: OnFailure,
 }
 
+impl Sweep {
+    /// Whether a pass that ended `passed` records its marker.
+    ///
+    /// The only asymmetry in this module, and the only one that costs anything: a marker recorded
+    /// over a failure puts whatever the pass was after out of reach for the life of the install,
+    /// and one withheld over a success spends the pass again on every launch.
+    fn records_marker(self, passed: bool) -> bool {
+        passed || matches!(self.on_failure, OnFailure::Mark)
+    }
+}
+
 /// Run `pass` unless this install has already had one, then record that it has.
 ///
 /// The marker goes down through `mutate_settings` rather than a write-back of the snapshot read
@@ -61,11 +72,15 @@ where
             }
         }
 
-        if let Err(e) = pass(state.clone()).await {
-            log::warn!("{} failed: {}", sweep.label, describe(&e));
-            if matches!(sweep.on_failure, OnFailure::Retry) {
-                return;
+        let passed = match pass(state.clone()).await {
+            Ok(()) => true,
+            Err(e) => {
+                log::warn!("{} failed: {}", sweep.label, describe(&e));
+                false
             }
+        };
+        if !sweep.records_marker(passed) {
+            return;
         }
 
         state.persist_blocking(sweep.marker, move |state| {
@@ -75,3 +90,7 @@ where
         });
     });
 }
+
+#[cfg(test)]
+#[path = "tests/one_shot_tests.rs"]
+mod tests;

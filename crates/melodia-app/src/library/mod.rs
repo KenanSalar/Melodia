@@ -4,6 +4,13 @@
 //! `pub async fn` (or `pub fn`) that take `&AppState` (or specific `Arc<T>`s when
 //! `&AppState` would over-couple) and return `Result<T, AppError>`.
 //!
+//! Where a function decides something of its own rather than forwarding one query, the door
+//! keeps the `&AppState` and the work moves to a body taking only what it reaches — `browse`,
+//! `import`, `playlist_files`, `playlists`, `queue` and `radio_files` all read that way. The
+//! call sites stay uniform, `melodia-views` never holds a database handle, and the decision
+//! becomes reachable from a `test_pool`. `playback` is the older form of the same split, against
+//! `PlaybackContext`, which `state::fixtures` builds without an audio device under it.
+//!
 //! State propagation to the UI happens via the watch channels on `AppState::sinks`
 //! (driven by `with_state_emit` in `player::engine::state`) — never `app.emit(...)`.
 

@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use crate::library;
 use crate::services;
 use crate::state::AppState;
+use melodia_core::entities::folder::Folder;
 use melodia_core::error::AppResult;
 use melodia_store::database::queries;
 
@@ -27,11 +28,7 @@ pub async fn run(state: &AppState) -> AppResult<()> {
         {
             let path = canonical.to_string_lossy().into_owned();
             let existing = queries::folder::get_all_folders(&state.db).await.unwrap_or_default();
-            let dup = existing.iter().any(|f| {
-                melodia_core::utils::canonicalize_path(Path::new(&f.path))
-                    .is_ok_and(|p| p == canonical)
-            });
-            if !dup {
+            if !already_watched(&existing, &canonical) {
                 match queries::folder::insert_folder(&state.db, &path, true).await {
                     Ok(folder) => {
                         log::info!("Auto-added Music folder: {path}");
@@ -83,3 +80,24 @@ pub async fn run(state: &AppState) -> AppResult<()> {
 
     Ok(())
 }
+
+/// Whether `candidate` is one of the folders already in the library.
+///
+/// Both sides are canonicalized, because the two spellings arrive from different places and are
+/// only ever equal by accident: `dirs::audio_dir()` builds one from `$HOME`, and the stored side
+/// is whatever the user picked in a file dialog. A trailing separator, a symlinked home, or a
+/// case difference on a case-insensitive volume each make the same directory read as new, and the
+/// cost is the whole music library indexed and listed twice.
+///
+/// A row whose path no longer resolves cannot be the candidate, which does: the auto-add runs
+/// behind a `music_dir.exists()`.
+fn already_watched(existing: &[Folder], candidate: &Path) -> bool {
+    existing.iter().any(|folder| {
+        melodia_core::utils::canonicalize_path(Path::new(&folder.path))
+            .is_ok_and(|resolved| resolved == candidate)
+    })
+}
+
+#[cfg(test)]
+#[path = "tests/first_launch_tests.rs"]
+mod tests;

@@ -55,9 +55,10 @@ pub struct TagEdit {
 }
 
 impl TagEdit {
-    /// True when the user changed nothing at all; the caller short-circuits on it. lofty rewrites
-    /// the tag whether or not anything differs, so a reflexive open-then-Save on a 200-track album
-    /// would otherwise rewrite 200 files — and, through the watcher, risk re-ingesting them.
+    /// True when the user changed nothing at all; `library::tags`' writer short-circuits on it.
+    /// lofty rewrites the tag whether or not anything differs, so a reflexive open-then-Save on a
+    /// 200-track album would otherwise rewrite 200 files, and through the watcher risk
+    /// re-ingesting them.
     pub fn is_noop(&self) -> bool {
         self.rating == FieldEdit::Keep && self.no_field_but_rating()
     }

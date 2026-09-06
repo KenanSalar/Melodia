@@ -179,3 +179,230 @@ fn unique_filename_avoids_existing_files() -> Result<(), AppError> {
     assert_eq!(unique_filename(dir.path(), "Mix", &mut used), "Mix (2).m3u8");
     Ok(())
 }
+
+/// A pool whose three rows live under `dir`, joined rather than spelled.
+///
+/// [`seed`] above spells `/music/a.mp3`, which is fine while both sides of the comparison spell
+/// it the same way. The door tests below cannot: they resolve entry paths against the playlist
+/// file's own directory, and `/music/a.mp3` is not an absolute path on Windows.
+async fn seed_under(dir: &Path) -> Result<(DbPool, Vec<i64>), AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, &dir.to_string_lossy(), true).await?;
+
+    let mut ids = Vec::new();
+    for (file, title) in [
+        ("a.mp3", "Alpha Song"),
+        ("b.mp3", "Beta Song"),
+        ("c.mp3", "Gamma Song"),
+    ] {
+        let path = dir.join(file);
+        ids.push(
+            insert_test_track(&db, &path.to_string_lossy(), title, "Artist A", "Album", "Rock")
+                .await?,
+        );
+    }
+    Ok((db, ids))
+}
+
+async fn playlist_with_tracks(db: &DbPool, name: &str, ids: &[i64]) -> Result<i64, AppError> {
+    let playlist = queries::playlist::create_playlist(db, name, None).await?;
+    queries::playlist::add_tracks_to_playlist(db, playlist.id, ids).await?;
+    Ok(playlist.id)
+}
+
+async fn titles_in(db: &DbPool, playlist_id: i64) -> Result<Vec<String>, AppError> {
+    Ok(queries::playlist::get_playlist_tracks_for_list(db, playlist_id)
+        .await?
+        .into_iter()
+        .map(|t| t.title)
+        .collect())
+}
+
+#[tokio::test]
+async fn an_exported_playlist_lands_under_a_sanitized_name() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (db, ids) = seed_under(tmp.path()).await?;
+    let playlist_id = playlist_with_tracks(&db, "Rock/Roll: Best?", &ids).await?;
+
+    let out = tmp.path().join("exported");
+    std::fs::create_dir(&out)?;
+    let result = write_playlists(&db, &[playlist_id], &out).await?;
+
+    assert_eq!(result.exported, 1);
+    assert!(result.failed.is_empty(), "got: {:?}", result.failed);
+    let written = out.join("Rock_Roll_ Best_.m3u8");
+    assert!(written.exists(), "expected {}", written.display());
+
+    let text = std::fs::read_to_string(&written)?;
+    assert!(text.starts_with("#EXTM3U\n"));
+    assert!(
+        text.contains("#PLAYLIST:Rock/Roll: Best?"),
+        "the name is sanitized for the filename, never for the file's own contents"
+    );
+    Ok(())
+}
+
+/// The batch de-duplicates against itself, not just against what is already on disk, so two
+/// playlists the user named differently cannot end up as one file that only holds the second.
+#[tokio::test]
+async fn two_playlists_that_sanitize_alike_get_separate_files() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (db, ids) = seed_under(tmp.path()).await?;
+    let first = playlist_with_tracks(&db, "A/B", &ids).await?;
+    let second = playlist_with_tracks(&db, "A:B", &ids).await?;
+
+    let out = tmp.path().join("exported");
+    std::fs::create_dir(&out)?;
+    let result = write_playlists(&db, &[first, second], &out).await?;
+
+    assert_eq!(result.exported, 2);
+    assert!(out.join("A_B.m3u8").exists());
+    assert!(out.join("A_B (2).m3u8").exists());
+    Ok(())
+}
+
+/// Export is a batch over a multi-select, so one bad id is a line in the report rather than a
+/// reason to lose the playlists beside it.
+#[tokio::test]
+async fn a_playlist_that_cannot_be_read_is_reported_without_stopping_the_batch()
+-> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (db, ids) = seed_under(tmp.path()).await?;
+    let playlist_id = playlist_with_tracks(&db, "Kept", &ids).await?;
+
+    let out = tmp.path().join("exported");
+    std::fs::create_dir(&out)?;
+    let result = write_playlists(&db, &[playlist_id, 9_999], &out).await?;
+
+    assert_eq!(result.exported, 1, "the readable playlist still writes");
+    assert_eq!(result.failed.len(), 1);
+    assert!(
+        result.failed[0].0.contains("9999"),
+        "the report has to name which one failed: {:?}",
+        result.failed
+    );
+    assert!(out.join("Kept.m3u8").exists());
+    Ok(())
+}
+
+/// The three match categories over one file, which is the only place their sum is checkable. A
+/// category that silently swallowed an entry would leave the user a shorter playlist and a
+/// completion toast claiming otherwise.
+#[tokio::test]
+async fn every_entry_is_counted_as_matched_by_path_by_hash_or_missing() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (db, _) = seed_under(tmp.path()).await?;
+
+    let src = tmp.path().join("Mixed.m3u8");
+    let text = format!(
+        "#EXTM3U\n#PLAYLIST:Mixed\n\
+         #EXTINF:-1,Alpha Song\n{here}\n\
+         #EXTINF:-1,Beta Song\n#MELODIA-HASH:{hash}\n{moved}\n\
+         #EXTINF:-1,Nowhere\n{gone}\n",
+        here = tmp.path().join("a.mp3").to_string_lossy(),
+        hash = hash_of("Beta Song"),
+        moved = tmp.path().join("moved-b.mp3").to_string_lossy(),
+        gone = tmp.path().join("nope.mp3").to_string_lossy(),
+    );
+    std::fs::write(&src, text)?;
+
+    let result = read_playlist_file(&db, &src).await?;
+
+    assert_eq!(result.total_entries, 3);
+    assert_eq!(result.matched_by_path, 1);
+    assert_eq!(result.matched_by_hash, 1, "a moved file is still found by its hash");
+    assert_eq!(result.missing, 1);
+    assert_eq!(
+        result.matched_by_path + result.matched_by_hash + result.missing,
+        result.total_entries,
+        "every entry owes exactly one category"
+    );
+    assert_eq!(
+        titles_in(&db, result.playlist_id).await?,
+        ["Alpha Song", "Beta Song"],
+        "the miss drops out and file order survives the two passes"
+    );
+    Ok(())
+}
+
+/// Playlist names are not unique, so an import cannot merge into one that happens to share a
+/// name: the user would silently lose whichever tracks the two did not have in common.
+#[tokio::test]
+async fn importing_the_same_file_twice_creates_two_playlists() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (db, _) = seed_under(tmp.path()).await?;
+
+    let src = tmp.path().join("Twice.m3u8");
+    let text = format!(
+        "#EXTM3U\n#PLAYLIST:Twice\n#EXTINF:-1,Alpha Song\n{}\n",
+        tmp.path().join("a.mp3").to_string_lossy()
+    );
+    std::fs::write(&src, text)?;
+
+    let first = read_playlist_file(&db, &src).await?;
+    let second = read_playlist_file(&db, &src).await?;
+
+    assert_ne!(first.playlist_id, second.playlist_id);
+    assert_eq!(first.playlist_name, second.playlist_name);
+    assert_eq!(queries::playlist::get_all_playlists(&db).await?.len(), 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_import_without_a_name_tag_takes_the_file_stem() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (db, _) = seed_under(tmp.path()).await?;
+
+    let src = tmp.path().join("My Mix.m3u8");
+    let text =
+        format!("#EXTM3U\n#EXTINF:-1,Alpha Song\n{}\n", tmp.path().join("a.mp3").to_string_lossy());
+    std::fs::write(&src, text)?;
+
+    let result = read_playlist_file(&db, &src).await?;
+    assert_eq!(result.playlist_name, "My Mix");
+    Ok(())
+}
+
+/// A file with nothing in it is the one import that errors, so a mis-picked text file does not
+/// leave an empty playlist behind for the user to find and delete.
+#[tokio::test]
+async fn a_file_with_no_entries_creates_no_playlist() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (db, _) = seed_under(tmp.path()).await?;
+
+    let src = tmp.path().join("Empty.m3u8");
+    std::fs::write(&src, "#EXTM3U\n#PLAYLIST:Empty\n")?;
+
+    let refused = read_playlist_file(&db, &src).await;
+    assert!(matches!(refused, Err(AppError::Validation(_))));
+    assert!(queries::playlist::get_all_playlists(&db).await?.is_empty());
+    Ok(())
+}
+
+/// The pair's whole point: what export writes is what import reads back. Either side drifting
+/// alone is the failure this file exists to survive an OS reinstall against.
+#[tokio::test]
+async fn an_exported_playlist_imports_back_with_the_same_tracks() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (db, ids) = seed_under(tmp.path()).await?;
+    let playlist_id = playlist_with_tracks(&db, "Round Trip", &ids).await?;
+
+    let out = tmp.path().join("exported");
+    std::fs::create_dir(&out)?;
+    assert_eq!(write_playlists(&db, &[playlist_id], &out).await?.exported, 1);
+
+    let result = read_playlist_file(&db, &out.join("Round Trip.m3u8")).await?;
+
+    assert_eq!(result.playlist_name, "Round Trip");
+    assert_eq!(result.matched_by_path, 3);
+    assert_eq!(result.missing, 0);
+
+    let restored: Vec<i64> =
+        queries::playlist::get_playlist_tracks_for_list(&db, result.playlist_id)
+            .await?
+            .into_iter()
+            .map(|t| t.id)
+            .collect();
+    assert_eq!(restored, ids);
+    Ok(())
+}

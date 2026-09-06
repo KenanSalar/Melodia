@@ -1,7 +1,7 @@
-//! Pure tests for the auto-updater flags persistence layer. Each setter
-//! in `super::updates::*` is a one-line `mutate_settings` closure over
-//! `UpdateFlags`; the substantive behaviour worth pinning is on the
-//! struct itself — defaults, serde round-trip, failure-counter saturation.
+//! The auto-updater flags. Each setter in `super::updates::*` is a `mutate_settings` closure
+//! over `UpdateFlags`, and what the two substantive ones do to the struct is the struct's own
+//! method — so that is what these drive, rather than a temp `Paths` and a settings file per
+//! assertion.
 
 use crate::services::settings::UpdateFlags;
 
@@ -22,17 +22,74 @@ fn defaults_are_safe_for_new_install() {
     assert_eq!(flags.consecutive_failures, 0);
 }
 
+/// At the cap the counter must stay put rather than wrapping to 0 and re-arming the 6h cadence
+/// after years of failed checks.
 #[test]
 fn failure_counter_saturates_at_u8_max() {
-    // `record_check_failure` uses `saturating_add(1)` — at the cap the
-    // value must stay at `u8::MAX` rather than wrapping to 0 and
-    // re-arming the 6h cadence after years of failed checks.
     let mut flags = UpdateFlags {
         consecutive_failures: u8::MAX,
         ..UpdateFlags::default()
     };
-    flags.consecutive_failures = flags.consecutive_failures.saturating_add(1);
+    flags.record_failure(1_717_243_200);
     assert_eq!(flags.consecutive_failures, u8::MAX);
+}
+
+/// Without the timestamp moving, the daily loop's 24h gate never opens again and every iteration
+/// re-fires the failing check instead of backing off.
+#[test]
+fn a_failure_advances_the_clock_as_well_as_the_counter() {
+    let mut flags = UpdateFlags::default();
+    flags.record_failure(1_717_243_200);
+    assert_eq!(flags.consecutive_failures, 1);
+    assert_eq!(flags.last_check_unix, 1_717_243_200);
+}
+
+/// The 304 path: the body wasn't re-sent, so the cached version is still the most recent thing
+/// seen and overwriting it with nothing would lose what the UI shows.
+#[test]
+fn a_success_with_no_version_leaves_the_last_known_release_alone() {
+    let mut flags = UpdateFlags {
+        last_known_release: "0.3.0".to_owned(),
+        last_manifest_etag: "\"m1\"".to_owned(),
+        consecutive_failures: 4,
+        ..UpdateFlags::default()
+    };
+
+    flags.record_success(1_717_243_200, None, None);
+
+    assert_eq!(flags.last_known_release, "0.3.0");
+    assert_eq!(flags.last_manifest_etag, "\"m1\"");
+    assert_eq!(flags.consecutive_failures, 0, "a reachable server clears the backoff");
+    assert_eq!(flags.last_check_unix, 1_717_243_200);
+}
+
+#[test]
+fn a_success_carrying_a_version_and_etag_stores_both() {
+    let mut flags = UpdateFlags {
+        last_known_release: "0.3.0".to_owned(),
+        last_manifest_etag: "\"m1\"".to_owned(),
+        ..UpdateFlags::default()
+    };
+
+    flags.record_success(1_717_243_200, Some("0.4.0".to_owned()), Some("\"m2\"".to_owned()));
+
+    assert_eq!(flags.last_known_release, "0.4.0");
+    assert_eq!(flags.last_manifest_etag, "\"m2\"");
+}
+
+/// A skip is never cleared by a check succeeding — only by a strictly newer release, which is the
+/// daily task's call and not this layer's.
+#[test]
+fn recording_a_check_never_touches_the_skipped_release() {
+    let mut flags = UpdateFlags {
+        skipped_release: "0.3.0".to_owned(),
+        ..UpdateFlags::default()
+    };
+
+    flags.record_success(1, Some("0.4.0".to_owned()), None);
+    flags.record_failure(2);
+
+    assert_eq!(flags.skipped_release, "0.3.0");
 }
 
 #[test]
