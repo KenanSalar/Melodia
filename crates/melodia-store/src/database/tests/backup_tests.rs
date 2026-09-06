@@ -82,6 +82,39 @@ async fn a_backup_round_trips_as_an_openable_database() -> Result<(), AppError> 
     Ok(())
 }
 
+/// `VACUUM INTO` takes no bind parameter, so the staging path is interpolated and every `'` in
+/// it has to be doubled. Undoubled, the first one closes the literal early and `SQLite` refuses
+/// the statement — which `main` treats as fatal, so the user cannot launch at all once a
+/// migration is pending.
+///
+/// Not a hypothetical directory: `MELODIA_DATA_DIR` makes the root the user's choice, and an
+/// apostrophe in a home folder name is ordinary on Windows and macOS. Every other test here
+/// roots in a bare `tempdir`, which never produces one.
+#[tokio::test]
+async fn a_backup_survives_an_apostrophe_in_its_own_path() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let root = tmp.path().join("someone's music");
+    std::fs::create_dir_all(&root)?;
+
+    let (paths, db) = open_db(&root).await?;
+    queries::folder::insert_folder(&db, "/test", true).await?;
+    insert_test_track(&db, "/test/song.mp3", "Song", "Art", "Alb", "Pop").await?;
+
+    let path = create(db.write(), &paths.backups_dir, 20_260_906_000_000).await?;
+    db.close().await;
+
+    // Opening it is what separates a statement the engine ran from one it merely accepted.
+    let opts =
+        SqliteConnectOptions::from_str(&format!("sqlite:{}", path.display()))?.read_only(true);
+    let restored = SqlitePoolOptions::new().max_connections(1).connect_with(opts).await?;
+    let (tracks,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM tracks").fetch_one(&restored).await?;
+    restored.close().await;
+
+    assert_eq!(tracks, 1);
+    Ok(())
+}
+
 /// The write pool's `create_if_missing` makes the database file exist before the
 /// backup is reached, so the existence check has to happen earlier than the
 /// backup itself. Get that wrong and every first launch leaves a snapshot of an

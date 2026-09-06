@@ -238,8 +238,51 @@ only the walk fail. Add a fifth arm to the card and watch the equality fail.
 
 
 ================================================================================
-PHASE 2: THE READS NOTHING IN A 94% CRATE EVER EXECUTES
+PHASE 2: THE READS NOTHING IN A 94% CRATE EVER EXECUTES   [SPENT]
 ================================================================================
+
+Nine cases, no production change, across three existing suites. Suite 2728 -> 2737, clean
+under fmt, clippy and test.
+
+  track_tests.rs   `the_chip_row_projection_reads_every_column_it_declares`
+                   `a_missing_id_has_no_chip_row`
+                   `get_track_file_path_happy_path`
+                   `get_track_file_path_not_found`
+                   `count_tracks_counts_the_whole_table`
+                   `count_tracks_on_an_empty_library_is_zero`
+  artist_tests.rs  `a_favorited_artist_carries_the_count_of_its_favorited_tracks`
+                   `a_library_with_no_favorites_has_no_favorite_artists`
+  backup_tests.rs  `a_backup_survives_an_apostrophe_in_its_own_path`
+
+**The entry's premise held exactly.** Dropping `"bit_depth"` from `TRACK_META_COLUMNS`
+compiles clean and fails at fetch time with `Database(ColumnNotFound("bit_depth"))`, and one
+test in the workspace sees it. The whole struct is compared rather than the call, which is
+what separates "the schema has these columns" from "the fields received them".
+
+**The apostrophe case failed exactly as predicted**, with `near "s": syntax error` out of
+`VACUUM INTO`, and every one of the seven existing backup tests passed through it: they all
+root in a bare `tempdir`, which never produces the character. `.claude/rules/sqlx.md` already
+documents the doubling as a rule; this is the first thing that would notice it going.
+
+**A mutation refused the doc comment it was written against, which is round five's lesson
+arriving from the other direction.** `a_missing_id_has_no_chip_row` was written claiming the
+`None`-rather-than-error contract, and the mutation for it does not compile: `get_track_meta`
+returns `Result<Option<TrackMeta>, _>`, so swapping `fetch_optional` for `fetch_one` is a type
+error rather than a test failure. The compiler holds that half. What the test *does* hold came
+out of finding a mutation that reaches it: flipping the predicate to `WHERE id != ?` hands back
+the first row in the table for a missing id, which reads as a hit. The comment says that now.
+A pin whose stated reason is compiler-held is the shape `.claude/rules/testing.md` calls worse
+than no pin, and only trying to break it showed which half was which.
+
+**Six mutations, each alone with the tree restored between.** Dropping a column from
+`TRACK_META_COLUMNS` fails the projection case. Flipping `get_track_meta`'s predicate fails
+both chip-row cases. Selecting `file_name` where `get_track_file_path` selects `file_path`
+fails only its happy path. Counting `albums` where `count_tracks` counts `tracks` fails only
+the seeded case, the empty one reading zero either way, which is the isolation that partition
+was written for. Dropping `AND t.is_favorite = TRUE` from the favorite-artists join fails both
+of its cases. Removing `backup.rs`' `replace('\'', "''")` fails only the apostrophe case.
+
+--- the entry as written, kept for the next round's reading ---
 
 `melodia-store` is the best-covered subsystem in the tree and four of its reads have never
 run. Three are one-liners worth a case each; the fourth is the whole reason this phase
@@ -481,8 +524,14 @@ SUGGESTED ORDER
      printed on the way showed the walk had been missing two of its own producers the whole
      time. A pin that fails for the right reason can still be measuring less than it claims.
 
-  2. Phase 2. No production change, both fixtures already exist, and 2.3 is a launch-fatal
-     path with a one-line escape and no test.
+  2. [DONE] Phase 2. Nine cases, no production change, all three fixtures already existed.
+
+     Left behind for whoever takes the next one: **a mutation that will not compile is an
+     answer, not an obstacle.** One case here was written against a contract the return type
+     already enforces, and finding that out meant looking for a mutation that reaches the
+     test rather than settling for the first one that came to mind. The comment was wrong
+     about why the test earns its place; the test was still worth keeping, for a different
+     reason.
   3. Phase 3. No production change, and it is round five's phase-1 shape found one layer up.
   4. Phase 4, only after reading the loop and pricing the extraction. It is the one entry
      here that can honestly be refused after the read, and refusing it in writing is a

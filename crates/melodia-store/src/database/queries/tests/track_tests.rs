@@ -2,6 +2,7 @@ use crate::database::DbPool;
 use crate::database::queries;
 #[allow(clippy::wildcard_imports)]
 use crate::database::queries::fixtures::*;
+use melodia_core::entities::track::TrackMeta;
 use melodia_core::error::AppError;
 
 async fn seed_db() -> Result<DbPool, AppError> {
@@ -123,6 +124,82 @@ async fn get_tracks_by_ids_skips_missing() -> Result<(), AppError> {
     let result = queries::track::get_tracks_by_ids(&db, &ids).await?;
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].id, all[0].id);
+    Ok(())
+}
+
+/// `TrackMeta` is the one of `entities::track`'s five hand-maintained `SELECT` lists that no
+/// test selects, and a list that has drifted from its `FromRow` struct fails at fetch time
+/// with nothing at compile time to catch it. The whole struct is compared rather than the
+/// call: `Ok` says the columns exist, not that the fields received them.
+#[tokio::test]
+async fn the_chip_row_projection_reads_every_column_it_declares() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let id: i64 = sqlx::query_scalar("SELECT id FROM tracks WHERE title = 'Alpha'")
+        .fetch_one(db.read())
+        .await?;
+
+    let meta = queries::track::get_track_meta(&db, id).await?;
+
+    assert_eq!(
+        meta,
+        Some(TrackMeta {
+            id,
+            codec: Some("Mpeg".to_owned()),
+            bitrate: Some(320),
+            sample_rate: Some(44_100),
+            bit_depth: Some(16),
+            channels: Some(2),
+            year: Some(2024),
+            genre: Some("Pop".to_owned()),
+        })
+    );
+    Ok(())
+}
+
+/// A miss is `None` and not an error, which is what lets the chip row paint empty where its
+/// `get_track_by_id` neighbour raises for the same input. The return type holds that much on
+/// its own; what this adds is that the predicate selects by the id it was handed, since a
+/// broken one hands back the first row in the table and reads as a hit.
+#[tokio::test]
+async fn a_missing_id_has_no_chip_row() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    assert_eq!(queries::track::get_track_meta(&db, 99999).await?, None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn get_track_file_path_happy_path() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let id: i64 = sqlx::query_scalar("SELECT id FROM tracks WHERE title = 'Beta'")
+        .fetch_one(db.read())
+        .await?;
+    assert_eq!(
+        queries::track::get_track_file_path(&db, id).await?.as_deref(),
+        Some("/music/beta.mp3")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn get_track_file_path_not_found() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    assert_eq!(queries::track::get_track_file_path(&db, 99999).await?, None);
+    Ok(())
+}
+
+/// The diagnostics bundle reports this as library shape, so a reader treats it as fact about
+/// the user's install. Both partitions: an empty library reads zero rather than failing.
+#[tokio::test]
+async fn count_tracks_counts_the_whole_table() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    assert_eq!(queries::track::count_tracks(&db).await?, 3);
+    Ok(())
+}
+
+#[tokio::test]
+async fn count_tracks_on_an_empty_library_is_zero() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    assert_eq!(queries::track::count_tracks(&db).await?, 0);
     Ok(())
 }
 
