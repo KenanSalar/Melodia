@@ -29,12 +29,11 @@ use verify::{attempt_post_swap_rollback, verify_staged, verify_swapped_binary};
 pub use staging::prune_stale_staging;
 pub use swap::swap_in_place;
 
-// Re-exported for two reasons: `super::install_target_old` needs the swap's own
-// derivation to reap a stale `.old` at startup, and the Windows swap tests need
-// it to assert the sibling. Windows *production* never produces one — installs
-// flow through msiexec — so gating it behind `cfg(test)` there keeps the lib
-// build's unused-import lint clean without losing the coverage.
-#[cfg(any(target_os = "linux", all(test, target_os = "windows")))]
+// Re-exported so `super::install_target_old` reaps a stale `.old` at startup through the swap's
+// own derivation. Linux-only because that is the only install producing one: Windows flows
+// through msiexec, and the one suite asserting the sibling there mounts under `swap`, so it
+// reaches `swap::old_path` rather than this.
+#[cfg(target_os = "linux")]
 pub(crate) use swap::old_path;
 
 /// Stream-download `asset.url`, stream-verify it against `asset.signature`,

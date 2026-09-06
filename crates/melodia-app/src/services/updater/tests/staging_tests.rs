@@ -18,10 +18,10 @@ use super::{resolve_install_method, staged_msi_path};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-/// Backdates a path so the retention boundary can be driven from both sides. A directory can't
-/// be opened for writing, so the read-only handle is the fallback rather than the exception.
+/// Backdates a file so the retention boundary can be driven from both sides. Files only: Windows
+/// hands out no directory handle without `FILE_FLAG_BACKUP_SEMANTICS`, and nothing here wants one.
 fn set_mtime(path: &Path, at: SystemTime) -> std::io::Result<()> {
-    let handle = fs::File::options().write(true).open(path).or_else(|_| fs::File::open(path))?;
+    let handle = fs::File::options().write(true).open(path)?;
     handle.set_times(fs::FileTimes::new().set_modified(at))
 }
 
@@ -347,17 +347,26 @@ fn the_pruner_takes_what_is_past_the_cutoff_and_nothing_else() -> TestResult {
 /// The staging dir is under the user's cache root, which is not exclusively ours. A directory
 /// there belongs to whoever made it, and recursing would put its contents in reach of a sweep
 /// that only understands flat artifacts.
+///
+/// Driven from inside the directory rather than on the directory itself, which is what makes it
+/// an assertion: the entry is skipped by `is_file`, but a sweep that fell through to `remove_file`
+/// on it would fail there anyway and swallow the error, so the directory surviving says nothing.
+/// A stale file under it is only kept by the walk stopping.
 #[test]
-fn the_pruner_leaves_directories_alone_however_old() -> TestResult {
+fn the_pruner_does_not_descend_into_a_directory_it_finds() -> TestResult {
     let dir = tempdir()?;
     let cutoff = SystemTime::now();
     let nested = dir.path().join("someone-elses-cache");
     fs::create_dir(&nested)?;
-    set_mtime(&nested, SystemTime::UNIX_EPOCH)?;
+
+    let buried = nested.join("melodia-0.1.0.rpm");
+    fs::write(&buried, b"artifact")?;
+    set_mtime(&buried, cutoff - Duration::from_secs(1))?;
 
     prune_dir(dir.path(), cutoff);
 
-    assert!(nested.is_dir());
+    assert!(nested.is_dir(), "the directory is not the sweep's to remove");
+    assert!(buried.exists(), "and neither is anything under it, however far past the cutoff");
     Ok(())
 }
 
