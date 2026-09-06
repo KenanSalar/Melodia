@@ -8,7 +8,11 @@
 //! the feature loads anyway. The grouping exists to keep each struct under
 //! clippy's `struct_excessive_bools` budget; the flatten is what keeps that
 //! free of on-disk consequences. Per the shipped-app rule, anything with new
-//! visible behavior defaults off.
+//! visible behavior defaults off; [`TrayFlags`] is the one deliberate exception.
+//! Flipping a default costs no existing install either way — nothing here is
+//! `skip_serializing_if`, so a file written by any previous build already spells
+//! every key and keeps its own value, and the new default reaches fresh installs
+//! alone.
 
 use std::collections::HashMap;
 
@@ -303,18 +307,28 @@ impl Default for WindowFlags {
     }
 }
 
-/// System-tray toggles, both opt-in.
+/// System-tray toggles. The icon ships on; hiding the window into it is opt-in.
 ///
 /// With `tray_enabled` off, `ui::shell::tray_bridge::install` is skipped
 /// entirely — no D-Bus connection, no service thread, no action tasks — so
-/// toggling it needs a restart (the `restart-tray` `Dialog` flow).
-/// `close_to_tray` only hides the window when a tray icon is actually active;
-/// quit is then reached through the tray menu.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// toggling it needs a restart (the `restart-tray` `Dialog` flow). A session
+/// with no tray host still pays that install and leaves `Settings.tray-active`
+/// false, which is what greys `close_to_tray` out: with no icon the close
+/// handlers quit regardless, so it can never strand the window.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TrayFlags {
     pub tray_enabled: bool,
     pub close_to_tray: bool,
+}
+
+impl Default for TrayFlags {
+    fn default() -> Self {
+        Self {
+            tray_enabled: true,
+            close_to_tray: false,
+        }
+    }
 }
 
 /// The Radio section's master switch, off by default. An upgrade has to be silent
@@ -435,6 +449,28 @@ pub struct DiagnosticsFlags {
 pub struct SupportFlags {
     pub launch_count: u32,
     pub support_prompt_seen: bool,
+}
+
+/// The onboarding revision this install has been shown, `0` meaning never.
+///
+/// A revision rather than a bool so a later feature that belongs in the welcome card can bump
+/// [`ONBOARDING_VERSION`] and reach installs that already ran the flow, instead of owing a
+/// separate what's-new surface. While the constant never moves this behaves exactly as a bool
+/// would have.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OnboardingFlags {
+    pub onboarding_version: u32,
+}
+
+/// The revision [`OnboardingFlags::onboarding_version`] lands on once the card has been seen.
+pub const ONBOARDING_VERSION: u32 = 1;
+
+impl OnboardingFlags {
+    /// Whether the welcome card is owed on this launch.
+    pub fn needs_onboarding(&self) -> bool {
+        self.onboarding_version < ONBOARDING_VERSION
+    }
 }
 
 /// Auto-updater state persisted between launches.
@@ -668,6 +704,8 @@ pub struct SettingsData {
     pub diagnostics: DiagnosticsFlags,
     #[serde(flatten)]
     pub support: SupportFlags,
+    #[serde(flatten)]
+    pub onboarding: OnboardingFlags,
 }
 
 impl Default for SettingsData {
@@ -708,6 +746,7 @@ impl Default for SettingsData {
             updates: UpdateFlags::default(),
             diagnostics: DiagnosticsFlags::default(),
             support: SupportFlags::default(),
+            onboarding: OnboardingFlags::default(),
         }
     }
 }

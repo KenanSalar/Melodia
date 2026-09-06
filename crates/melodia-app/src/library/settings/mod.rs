@@ -14,6 +14,7 @@
 //! - [`diagnostics`]: the Verbose Logging switch.
 //! - [`motion`]: the Skip Startup Animation switch.
 //! - [`support`]: the launch counter behind the one-time Ko-fi prompt.
+//! - [`onboarding`]: the revision the welcome card has been shown at.
 //!
 //! `settings.json` setters funnel through
 //! [`crate::services::settings::mutate_settings`]; the per-view-state
@@ -29,6 +30,7 @@ pub mod discord;
 pub mod equalizer;
 pub mod folders;
 pub mod motion;
+pub mod onboarding;
 pub mod playback;
 pub mod radio;
 pub mod ratings;
@@ -57,6 +59,7 @@ pub use folders::{
     scan_folder_internal, set_folder_watching_enabled, toggle_folder_watching,
 };
 pub use motion::set_skip_startup_animation;
+pub use onboarding::set_onboarding_seen;
 pub use playback::{
     set_gapless_playback, set_play_button_animation, set_playback_speed, set_resume_on_startup,
 };

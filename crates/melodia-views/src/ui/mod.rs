@@ -33,6 +33,7 @@ pub mod nav_history;
 pub mod nav_transition;
 pub mod now_playing;
 pub mod now_playing_artwork;
+pub mod onboarding;
 pub mod playlists;
 pub mod queue_sheet;
 pub mod radio;

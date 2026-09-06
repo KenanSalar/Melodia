@@ -1,0 +1,82 @@
+import { Theme } from "../../theme.slint";
+import { Settings } from "../../settings.slint";
+import { Onboarding } from "../../globals/onboarding.slint";
+import { MelodiaUpdater } from "../../globals/updater.slint";
+import { SectionButton } from "../settings/section-button.slint";
+import { SectionDivider } from "../settings/section-divider.slint";
+import { ToggleSwitch } from "../settings/toggle-switch.slint";
+import { OnboardingFeatureRow } from "onboarding-feature-row.slint";
+
+// Step 3. One row per feature that leaves the machine, each carrying its own live state and each
+// flipping the same `Settings` callback its Settings row does, so nothing here needs a restart.
+export component OnboardingFeaturesPanel inherits VerticalLayout {
+    in property <length> content-w;
+
+    min-width: 0px;
+    spacing: Theme.pad-sm;
+
+    Text {
+        text: @tr("What Melodia can reach");
+        font-size: Theme.font-size-lg;
+        font-weight: 700;
+        color: Theme.text;
+        overflow: elide;
+    }
+    Text {
+        text: @tr("Melodia works offline. These are the parts that reach out.");
+        font-size: Theme.font-size-sm;
+        color: Theme.text-muted;
+        wrap: word-wrap;
+    }
+
+    // Same labels as the Services tab's own rows, so the two never describe one feature differently.
+    OnboardingFeatureRow {
+        icon: "radio";
+        label: @tr("Internet radio");
+        description: @tr("Browse and play live stations from radio-browser.info");
+        ToggleSwitch {
+            checked <=> Settings.radio-enabled;
+            toggled(v) => { Settings.radio-enabled-changed(v); }
+        }
+    }
+    SectionDivider {}
+
+    OnboardingFeatureRow {
+        icon: "chat";
+        label: "Discord Rich Presence";
+        description: @tr("Show the track you're playing on your Discord profile");
+        ToggleSwitch {
+            checked <=> Settings.discord-rpc-enabled;
+            toggled(v) => { Settings.discord-rpc-enabled-changed(v); }
+        }
+    }
+    SectionDivider {}
+
+    // A button rather than a switch: both services need a login, which has no business inside a
+    // welcome card. It closes onto the tab that already does it properly.
+    OnboardingFeatureRow {
+        icon: "graphic_eq";
+        label: @tr("Scrobbling");
+        description: @tr("Send what you play to Last.fm or ListenBrainz");
+        SectionButton {
+            label: @tr("Set Up");
+            icon: "";
+            primary: false;
+            button-enabled: Onboarding.open;
+            clicked => { Onboarding.open-services(); }
+        }
+    }
+
+    // The one row here that ships *on*, which is the whole reason it earns a place: nothing else
+    // announces the daily check. Hidden where the package manager already suppresses the task.
+    if MelodiaUpdater.updates-supported && !MelodiaUpdater.system-managed: SectionDivider {}
+    if MelodiaUpdater.updates-supported && !MelodiaUpdater.system-managed: OnboardingFeatureRow {
+        icon: "update";
+        label: @tr("Check for updates automatically");
+        description: @tr("Once a day, Melodia asks GitHub whether a newer version is out.");
+        ToggleSwitch {
+            checked <=> MelodiaUpdater.auto-check-enabled;
+            toggled(v) => { MelodiaUpdater.auto-check-changed(v); }
+        }
+    }
+}

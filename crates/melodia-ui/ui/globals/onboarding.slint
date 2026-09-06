@@ -1,0 +1,31 @@
+// The first-run welcome card. Owned by `crates/melodia-views/src/ui/onboarding/`, which decides at
+// boot whether the card is owed, drives `mounted`/`open`, and answers `dismiss`.
+//
+// **`mounted` and `open` are two properties because the card is `if`-mounted.** `open` drives the
+// fade and `mounted` gates the branch, so a close clears the first and Rust clears the second a
+// beat later, once the card is gone. Rust owns both timers rather than a `changed t` handler in
+// the overlay: a change tracker inside a dropped `if` branch outlives it and panics the next time
+// its property moves, which re-running the card from Settings does directly.
+export global Onboarding {
+    // The branch gate. Nothing under `components/onboarding/` exists outside the launch it runs on.
+    in-out property <bool> mounted;
+    // The fade. Raised a frame after `mounted` so `animate` has an edge to run on.
+    in-out property <bool> open;
+
+    in-out property <int> step;
+    // **The sole definition of how many panels there are** — the footer, the step dots and Rust's
+    // clamp all read it, so a fourth panel is one number and one branch.
+    out property <int> step-count: 3;
+
+    public function advance(delta: int) {
+        root.step = clamp(root.step + delta, 0, root.step-count - 1);
+    }
+
+    // Every way out means the same thing: mark it seen and close. A card that returns because it
+    // was closed early is a nag, so the X, the backdrop, Escape and Skip all land here.
+    callback dismiss();
+
+    // Close onto Settings ▸ Services. Both scrobbling services need a login, which has no business
+    // inside a welcome card.
+    callback open-services();
+}

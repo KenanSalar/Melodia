@@ -1,0 +1,55 @@
+import { Theme } from "../../theme.slint";
+import { MaterialIcon } from "../material-icon.slint";
+
+// One feature on the welcome card's third panel: glyph, label, a line of copy, and whatever
+// control the caller puts in the slot.
+//
+// This is as far as "make the rows a table" goes in Slint, and it is the useful half. The copy has
+// to be an inline `@tr` literal at the mount — `@tr()` only translates at codegen, so a model of
+// strings would render English whatever the locale — and a callback invocation can't be data
+// either. So what a new row costs is one mount carrying a label, a description and its control,
+// which is the thing worth not writing four times.
+export component OnboardingFeatureRow inherits HorizontalLayout {
+    in property <string> icon;
+    in property <string> label;
+    in property <string> description;
+
+    spacing: Theme.pad-md;
+    padding-top: Theme.pad-sm;
+    padding-bottom: Theme.pad-sm;
+
+    VerticalLayout {
+        alignment: start;
+        // Lines the glyph up with the label rather than the row's top edge.
+        padding-top: 2px;
+        MaterialIcon {
+            name: root.icon;
+            icon-size: 22px;
+            icon-color: Theme.text;
+        }
+    }
+
+    VerticalLayout {
+        spacing: 2px;
+        horizontal-stretch: 1;
+        // Wrapped, not elided: a no-wrap `Text` reports its full width as its layout minimum, which
+        // no narrowing can negotiate, and the catalogues run about a third longer than English.
+        Text {
+            text: root.label;
+            font-size: Theme.font-size-md;
+            color: Theme.text;
+            wrap: word-wrap;
+        }
+        Text {
+            text: root.description;
+            font-size: Theme.font-size-sm;
+            color: Theme.text-muted;
+            wrap: word-wrap;
+        }
+    }
+
+    VerticalLayout {
+        alignment: center;
+        @children
+    }
+}

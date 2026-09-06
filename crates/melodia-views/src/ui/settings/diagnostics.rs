@@ -37,7 +37,6 @@ pub fn install(ui: &AppWindow, state: &AppState, notifications: &Rc<Notification
     wire_open_log_folder(ui, state);
     wire_save_report(ui, state, notifications);
     wire_verbose_logging(ui, state);
-    notify_previous_crash(ui, state, notifications);
 }
 
 /// Hand the logs directory to the desktop's file manager. The same callback the
@@ -144,7 +143,11 @@ fn wire_verbose_logging(ui: &AppWindow, state: &AppState) {
 /// for is a crash notice that did nothing. Runs synchronously here because it is
 /// one `read_dir` over a directory holding at most a handful of entries, and a
 /// marker write only when there is actually something to report.
-fn notify_previous_crash(ui: &AppWindow, state: &AppState, notifications: &NotificationsUi) {
+///
+/// Called by `main` rather than from [`install`], so a launch that opens the welcome card can hold
+/// it until the card closes. It must be **deferred and never skipped**: `take_unseen` consumes the
+/// marker, so a suppressed notice is a report the user never hears about.
+pub fn notify_previous_crash(ui: &AppWindow, state: &AppState, notifications: &NotificationsUi) {
     let Some(report) = platform::crash_report::take_unseen(&state.paths.logs_dir) else {
         return;
     };

@@ -6,6 +6,7 @@ import { SectionDivider } from "../../components/settings/section-divider.slint"
 import { SettingRow } from "../../components/settings/setting-row.slint";
 import { SectionButton } from "../../components/settings/section-button.slint";
 import { ProgressBar } from "../../components/settings/progress-bar.slint";
+import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 
 // The Software Updates row is always drawn; the rest — up-to-date, installed,
 // available, error — stack under it on their own mutually exclusive conditions.
@@ -40,8 +41,14 @@ export component UpdateSection inherits Rectangle {
     property <string> restart-desc: @tr("Restart Melodia to apply the update");
     property <string> available-label: @tr("Version {} Available", MelodiaUpdater.available-version);
     property <string> managed-label: @tr("Updates managed by your package manager");
+    property <string> auto-check-label: @tr("Check for updates automatically");
+    property <string> auto-check-desc: @tr("Once a day, Melodia asks GitHub whether a newer version is out.");
 
     property <bool> show-software: row-visible(software-label, software-desc);
+    // The daily task is already suppressed on a package-managed install, so the switch there would
+    // describe nothing.
+    property <bool> show-auto-check: !MelodiaUpdater.system-managed
+        && row-visible(auto-check-label, auto-check-desc);
     property <bool> show-up-to-date:
         MelodiaUpdater.up-to-date && !MelodiaUpdater.update-available && !MelodiaUpdater.restart-needed
         && row-visible(up-to-date-label, up-to-date-desc);
@@ -67,7 +74,7 @@ export component UpdateSection inherits Rectangle {
     // routing it through `has-matches` is also what keeps a search for "update" from landing on
     // an empty one.
     out property <bool> has-matches: MelodiaUpdater.updates-supported
-        && (show-software || show-up-to-date || show-restart
+        && (show-software || show-auto-check || show-up-to-date || show-restart
             || show-update-available || show-error || show-package-managed);
 
     // Wrapper so the root's preferred-height tracks the card's natural height —
@@ -86,6 +93,19 @@ export component UpdateSection inherits Rectangle {
                 primary: false;
                 button-enabled: !MelodiaUpdater.is-checking;
                 clicked => { MelodiaUpdater.check(); }
+            }
+        }
+
+        // The one control for a task that otherwise runs unannounced from the first launch. The
+        // welcome card discloses it too, but a setting needs a permanent home.
+        if root.show-software && root.show-auto-check: SectionDivider {}
+        if root.show-auto-check: SettingRow {
+            icon: "update";
+            label: root.auto-check-label;
+            description: root.auto-check-desc;
+            ToggleSwitch {
+                checked <=> MelodiaUpdater.auto-check-enabled;
+                toggled(v) => { MelodiaUpdater.auto-check-changed(v); }
             }
         }
 
