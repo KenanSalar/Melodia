@@ -469,3 +469,35 @@ fn a_station_that_gave_up_is_named_in_the_toast_and_nothing_else_raises_one()
     );
     Ok(())
 }
+
+/// The seed is the half of the rate limiter worth holding, and it is only assertable because
+/// `SecondGate` carries it: a bare counter starting at `0` reads position 0 as already
+/// published, and the now-playing bar shows nothing until the track crosses one second.
+#[test]
+fn the_first_tick_of_a_track_publishes_before_any_second_boundary() {
+    assert!(SecondGate::default().admits(0));
+}
+
+#[test]
+fn two_ticks_inside_one_second_publish_once() {
+    let mut gate = SecondGate::default();
+    assert!(gate.admits(4_000));
+    assert!(!gate.admits(4_500), "the poll rate is twice what the UI can render");
+}
+
+#[test]
+fn crossing_a_second_boundary_publishes_again() {
+    let mut gate = SecondGate::default();
+    assert!(gate.admits(4_500));
+    assert!(gate.admits(5_000));
+}
+
+/// A seek lands wherever the user dropped the thumb, so the gate has to answer on the second
+/// having *moved* rather than advanced. Comparing with `>` leaves the labels stale until
+/// playback catches back up to where it was.
+#[test]
+fn a_seek_backwards_publishes_rather_than_waiting_for_the_old_second() {
+    let mut gate = SecondGate::default();
+    assert!(gate.admits(90_000));
+    assert!(gate.admits(10_000));
+}
