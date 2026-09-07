@@ -44,24 +44,46 @@ export component LyricsPanel inherits Rectangle {
             alignment: start;
 
             for row[i] in Lyrics.rows: Rectangle {
-                // Rust chose this height and keeps the offset table that matches it. Reading the
-                // drawn height back instead is the thing a `for` loop cannot do.
-                height: row.line_count * Lyrics.line-height;
+                // Rust chose both heights and keeps the offset table that matches them. Reading
+                // the drawn height back instead is the thing a `for` loop cannot do.
+                property <length> sung-h: row.line_count * Lyrics.line-height;
+                height: self.sung-h
+                    + row.translation_line_count * Lyrics.translation-line-height;
 
-                line := Text {
+                // On a plain sheet `active-index` stays -1, so every row takes the quiet tier and
+                // the panel reads as a page rather than as a list with nothing selected.
+                property <bool> is-sung: i == Lyrics.active-index;
+
+                Text {
                     width: parent.width;
+                    height: parent.sung-h;
                     text: row.text;
                     wrap: word-wrap;
                     overflow: elide;
                     vertical-alignment: center;
-                    font-size: Theme.font-size-md;
-                    // The sung line at full weight, everything else stepped back. On a plain
-                    // sheet `active-index` stays -1, so every line takes the quiet tier and the
-                    // panel reads as a page rather than as a list with nothing selected.
-                    font-weight: i == Lyrics.active-index ? 700 : 400;
-                    color: i == Lyrics.active-index
+                    font-size: Lyrics.font-size;
+                    font-weight: parent.is-sung ? 700 : 400;
+                    color: parent.is-sung
                         ? Player.np-on-backdrop
                         : Player.np-on-backdrop-muted.transparentize(0.2);
+                }
+
+                // Empty where the sheet carries no gloss, and `translation_line_count` is 0 with
+                // it, so this collapses to nothing rather than needing a branch of its own.
+                Text {
+                    y: parent.sung-h;
+                    width: parent.width;
+                    height: parent.height - parent.sung-h;
+                    text: row.translation;
+                    wrap: word-wrap;
+                    overflow: elide;
+                    vertical-alignment: center;
+                    font-size: Lyrics.translation-font-size;
+                    // A gloss, so it follows the sung line without ever competing with it: no
+                    // weight of its own, and a step further back while the line is not sung.
+                    color: parent.is-sung
+                        ? Player.np-on-backdrop-muted
+                        : Player.np-on-backdrop-muted.transparentize(0.45);
                 }
 
                 // Click a line to seek, on a timed sheet only: an untimed one has nowhere to send

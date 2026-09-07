@@ -6,6 +6,7 @@ fn line(at_ms: Option<i64>, text: &str) -> LyricLine {
     LyricLine {
         at_ms,
         text: text.to_owned(),
+        translation: None,
     }
 }
 

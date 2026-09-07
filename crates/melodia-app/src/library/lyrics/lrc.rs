@@ -20,6 +20,13 @@ use melodia_core::entities::lyrics::{LyricLine, Lyrics, LyricsSource};
 /// them on the page.
 const ID_TAG_KEYS: [&str; 9] = ["al", "ar", "au", "by", "length", "offset", "re", "ti", "ve"];
 
+/// What a bilingual sheet puts between a line and its translation.
+///
+/// No part of the format, but the directories carry sheets written this way and left in the string
+/// the gloss is drawn as the tail of the line it is glossing, which is the one thing it must not
+/// look like. Only a caret with text either side is a separator; a bare one is a character.
+const TRANSLATION_MARK: char = '^';
+
 /// Parses a sheet, or `None` where there is nothing to show.
 ///
 /// Tolerant the way the M3U reader is: anything that does not parse as a timestamp is either
@@ -39,18 +46,21 @@ pub fn parse(text: &str, source: LyricsSource) -> Option<Lyrics> {
         let (stamps, rest) = split_stamps(line);
         if stamps.is_empty() {
             if !is_id_tag(line) {
+                let (sung, gloss) = split_translation(line.trim_end());
                 plain.push(LyricLine {
                     at_ms: None,
-                    text: line.trim_end().to_owned(),
+                    text: sung,
+                    translation: gloss,
                 });
             }
             continue;
         }
-        let sung = strip_word_stamps(rest);
-        let sung = sung.trim();
+        let stripped = strip_word_stamps(rest);
+        let (sung, gloss) = split_translation(stripped.trim());
         timed.extend(stamps.into_iter().map(|at| LyricLine {
             at_ms: Some(at.saturating_sub(offset).max(0)),
-            text: sung.to_owned(),
+            text: sung.clone(),
+            translation: gloss.clone(),
         }));
     }
 
@@ -60,6 +70,21 @@ pub fn parse(text: &str, source: LyricsSource) -> Option<Lyrics> {
     // Stable, so a line written twice against one stamp keeps the order its author chose.
     timed.sort_by_key(|line| line.at_ms);
     Lyrics::new(timed, source)
+}
+
+/// Splits a line into the words and the gloss under them, where the sheet carries one.
+///
+/// Falls back to the whole line wherever the caret is not acting as a separator, so a sheet that
+/// simply contains one keeps it.
+fn split_translation(line: &str) -> (String, Option<String>) {
+    let Some((sung, gloss)) = line.split_once(TRANSLATION_MARK) else {
+        return (line.to_owned(), None);
+    };
+    let (sung, gloss) = (sung.trim_end(), gloss.trim());
+    if sung.is_empty() || gloss.is_empty() {
+        return (line.to_owned(), None);
+    }
+    (sung.to_owned(), Some(gloss.to_owned()))
 }
 
 /// The `[offset:±ms]` tag, or zero.

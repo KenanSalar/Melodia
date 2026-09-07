@@ -29,13 +29,13 @@ use melodia_ui::{AppWindow, LyricRow, Lyrics, LyricsState, Player};
 /// draw is close rather than merely defined.
 const ASSUMED_WIDTH: f32 = 340.0;
 
-/// Rendered width of one character at the panel's font size.
+/// How wide one proportional character is drawn, in ems.
 ///
 /// The wrap estimator's only fuzzy term, and it is the trade `ui::chips::estimated_chip_width`
 /// makes: a little over half an em, where Vazirmatn's digits sit near 0.55. **The two error
 /// directions are not symmetric.** Over-shooting wraps early and costs a blank half-row;
 /// under-shooting elides the tail of a line, which loses words. So it is generous on purpose.
-const CHAR_WIDTH: f32 = 7.5;
+const CHAR_EMS: f32 = 0.54;
 
 /// Where a lyric line stops being a line and starts being a paragraph. Past this the panel would
 /// scroll more than it shows.
@@ -52,8 +52,30 @@ struct Row {
     /// `None` on an untimed sheet, the two never mixing within one sheet.
     at_ms: Option<i32>,
     text: String,
+    /// The gloss a bilingual sheet carries under the words, drawn at its own size beneath them.
+    translation: Option<String>,
     /// Wrapped line count, and so this row's height in `Lyrics.line-height` units.
     lines: u8,
+    /// The same for the gloss, in `Lyrics.translation-line-height` units. Zero without one.
+    translation_lines: u8,
+}
+
+/// The type scale the panel draws by, taken from the `Lyrics` global so both halves lay a sheet
+/// out against one set of numbers.
+#[derive(Clone, Copy)]
+struct Metrics {
+    font_size: f32,
+    line_height: f32,
+    translation_font_size: f32,
+    translation_line_height: f32,
+}
+
+impl Metrics {
+    /// How tall a row is drawn, which is also the step its offset table takes.
+    fn row_height(self, row: &Row) -> f32 {
+        self.line_height * f32::from(row.lines)
+            + self.translation_line_height * f32::from(row.translation_lines)
+    }
 }
 
 /// What the panel is showing, and what is needed to follow it.
@@ -61,8 +83,8 @@ pub(crate) struct LyricsUi {
     rows: RefCell<Vec<Row>>,
     /// Cumulative top edge of each row in logical pixels, one entry per row.
     offsets: RefCell<Vec<f32>>,
-    /// Height of one wrapped line, read from the global the panel also lays out by.
-    line_height: Cell<f32>,
+    /// The sizes and line heights the panel draws by.
+    metrics: Cell<Metrics>,
     /// Panel width last reported, in logical pixels.
     width: Cell<f32>,
     /// The last position the bridge published, and when it was seen. Together they interpolate a
@@ -75,20 +97,46 @@ pub(crate) struct LyricsUi {
     model: Rc<VecModel<LyricRow>>,
 }
 
-/// How many wrapped lines a row takes at the current width.
+/// Whether a character is drawn on a square em rather than a proportional one.
+///
+/// Unicode's East Asian Wide and Fullwidth ranges, trimmed to what a lyric sheet reaches. Worth
+/// the ranges rather than one averaged width: Hangul and CJK are half of what this panel is for,
+/// and counting them proportionally under-estimates a Korean line by nearly half, which is enough
+/// to elide words the panel had the room for.
+fn is_full_width(ch: char) -> bool {
+    matches!(u32::from(ch),
+        0x1100..=0x115F         // Hangul jamo
+        | 0x2E80..=0x303E       // CJK radicals and punctuation
+        | 0x3041..=0x33FF       // kana, Hangul compatibility jamo, CJK compatibility
+        | 0x3400..=0x4DBF       // CJK extension A
+        | 0x4E00..=0x9FFF       // CJK unified ideographs
+        | 0xA960..=0xA97F       // Hangul jamo extended-A
+        | 0xAC00..=0xD7A3       // Hangul syllables
+        | 0xF900..=0xFAFF       // CJK compatibility ideographs
+        | 0xFE30..=0xFE6F       // CJK compatibility and small forms
+        | 0xFF01..=0xFF60       // fullwidth forms
+        | 0xFFE0..=0xFFE6
+        | 0x1F300..=0x1F64F     // emoji, drawn square
+        | 0x20000..=0x3FFFD     // CJK extensions B and beyond
+    )
+}
+
+/// How wide a line is set, in ems.
+fn em_width(text: &str) -> f32 {
+    text.chars().map(|ch| if is_full_width(ch) { 1.0 } else { CHAR_EMS }).sum()
+}
+
+/// How many wrapped lines a run of text takes at the current width and size.
 ///
 /// An estimate, and deliberately so: measuring would mean asking the layout, which is the thing
 /// that cannot answer. Being wrong costs nothing structural, because the panel draws whatever comes
 /// back and the offset table is built from the same number.
-fn wrapped_lines(text: &str, width: f32) -> u8 {
-    if text.trim().is_empty() || width <= 0.0 {
+fn wrapped_lines(text: &str, width: f32, font_size: f32) -> u8 {
+    if text.trim().is_empty() || width <= 0.0 || font_size <= 0.0 {
         return 1;
     }
-    // Saturating at `u16` is ample for a lyric line, and `f32::from` on it avoids the precision
-    // lint a direct cast would earn.
-    let chars = f32::from(u16::try_from(text.chars().count()).unwrap_or(u16::MAX));
-    let per_line = (width / CHAR_WIDTH).max(1.0);
-    let needed = chars / per_line;
+    let per_line = (width / font_size).max(1.0);
+    let needed = em_width(text) / per_line;
 
     // Bucketed rather than rounded, so the count comes out of comparisons and never a cast.
     if needed <= 1.0 {
@@ -109,7 +157,12 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
     let ly = Rc::new(LyricsUi {
         rows: RefCell::new(Vec::new()),
         offsets: RefCell::new(Vec::new()),
-        line_height: Cell::new(global.get_line_height()),
+        metrics: Cell::new(Metrics {
+            font_size: global.get_font_size(),
+            line_height: global.get_line_height(),
+            translation_font_size: global.get_translation_font_size(),
+            translation_line_height: global.get_translation_line_height(),
+        }),
         width: Cell::new(ASSUMED_WIDTH),
         anchor_ms: Cell::new(0),
         anchor_at: Cell::new(Instant::now()),
@@ -241,7 +294,9 @@ fn take_sheet(ly: &Rc<LyricsUi>, sheet: &Sheet) {
         .map(|line| Row {
             at_ms: line.at_ms.map(|at| i32::try_from(at).unwrap_or(i32::MAX)),
             text: line.text.clone(),
+            translation: line.translation.clone(),
             lines: 1,
+            translation_lines: 0,
         })
         .collect();
 }
@@ -249,7 +304,7 @@ fn take_sheet(ly: &Rc<LyricsUi>, sheet: &Sheet) {
 /// Re-measure every row against the current width, rebuilding the model and the offset table.
 fn republish(ly: &Rc<LyricsUi>) {
     let width = ly.width.get();
-    let line_height = ly.line_height.get();
+    let metrics = ly.metrics.get();
 
     let mut rows = ly.rows.borrow_mut();
     let mut offsets = Vec::with_capacity(rows.len());
@@ -257,13 +312,22 @@ fn republish(ly: &Rc<LyricsUi>) {
     let mut top = 0.0_f32;
 
     for row in rows.iter_mut() {
-        row.lines = wrapped_lines(&row.text, width);
+        row.lines = wrapped_lines(&row.text, width, metrics.font_size);
+        // Not through `wrapped_lines`, whose floor of one is for a blank line a plain sheet spaces
+        // its verses with. A row with no gloss has no second slot at all.
+        row.translation_lines = row
+            .translation
+            .as_deref()
+            .map_or(0, |gloss| wrapped_lines(gloss, width, metrics.translation_font_size));
+
         offsets.push(top);
-        top += line_height * f32::from(row.lines);
+        top += metrics.row_height(row);
         published.push(LyricRow {
             text: SharedString::from(row.text.as_str()),
+            translation: row.translation.as_deref().map(SharedString::from).unwrap_or_default(),
             at_ms: row.at_ms.unwrap_or(-1),
             line_count: i32::from(row.lines),
+            translation_line_count: i32::from(row.translation_lines),
         });
     }
     drop(rows);
@@ -327,7 +391,8 @@ fn write_active(ui: &AppWindow, ly: &Rc<LyricsUi>, index: Option<usize>) {
 
     global.set_active_index(i32::try_from(index).unwrap_or(i32::MAX));
     global.set_active_offset(*top);
-    global.set_active_height(ly.line_height.get() * f32::from(row.lines));
+    // The whole row, gloss included, so the pair is centred together rather than the words alone.
+    global.set_active_height(ly.metrics.get().row_height(row));
 }
 
 #[cfg(test)]

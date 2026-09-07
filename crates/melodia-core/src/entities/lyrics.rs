@@ -10,10 +10,15 @@
 /// one: the parser keeps a sheet whole, so a mix never reaches here. Non-negative, since an
 /// `[offset:]` that would push an early stamp below zero clamps instead; there is nowhere before
 /// the start to seek to.
+///
+/// `translation` is the gloss a bilingual sheet carries under the words. Two fields rather than
+/// one string with a separator in it: the panel draws them at different sizes and the parser is
+/// the half that knows how the sheet spelled the break.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LyricLine {
     pub at_ms: Option<i64>,
     pub text: String,
+    pub translation: Option<String>,
 }
 
 /// Which arm of the resolver answered.

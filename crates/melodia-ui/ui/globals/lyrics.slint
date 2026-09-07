@@ -23,12 +23,22 @@ export enum LyricsState {
 }
 
 export global Lyrics {
-    // **The one definition of how tall a wrapped line is drawn, and Rust reads it from here.**
-    // The panel multiplies it by each row's `line_count` and Rust multiplies it by the same to
-    // build the offset table it follows the song with, so the two cannot disagree about where a
-    // line sits. Spelled once rather than twice because a drift here is a scroll that is subtly,
-    // increasingly wrong down a long sheet.
-    out property <length> line-height: 26px;
+    // **The sheet's own type scale, and Rust reads every one of these from here.** The panel
+    // multiplies each height by the row's line count and Rust multiplies it by the same to build
+    // the offset table it follows the song with, so the two cannot disagree about where a line
+    // sits; the sizes are what its wrap estimate measures against. Spelled once rather than twice
+    // because a drift here is a scroll that is subtly, increasingly wrong down a long sheet.
+    //
+    // A step above the rest of the column on purpose. This is the one panel a reader looks *at*
+    // rather than glances over, and it has the column to itself.
+    out property <length> font-size: 16px;
+    out property <length> line-height: 30px;
+
+    // The gloss a bilingual sheet carries under a line. Stepped down and set tight against the
+    // line above, so the pair reads as one line and its translation rather than as two lines of
+    // the song.
+    out property <length> translation-font-size: 13px;
+    out property <length> translation-line-height: 19px;
 
     in property <[LyricRow]> rows;
     in property <LyricsState> state: LyricsState.idle;

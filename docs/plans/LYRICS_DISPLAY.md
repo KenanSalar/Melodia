@@ -120,13 +120,21 @@ is a vocabulary two layers share, not a persisted row, so it follows `entities/t
 the `FromRow` projections.
 
 ```rust
-pub struct LyricLine { pub at_ms: Option<i64>, pub text: String }
+pub struct LyricLine {
+    pub at_ms: Option<i64>,
+    pub text: String,
+    pub translation: Option<String>,
+}
 pub struct Lyrics { pub lines: Vec<LyricLine>, pub source: LyricsSource }
 pub enum LyricsSource { Sidecar, Tag, Online }
 ```
 
 `at_ms: Option` rather than two structs: a plain sheet is the synced one with no stamps, and the
 panel renders both from one model.
+
+`translation` is the gloss a bilingual sheet carries under the words. Two fields rather than one
+string with a separator still in it: the panel draws the two at different sizes, and the parser is
+the half that knows how the sheet spelled the break.
 
 Two things landed differently from the sketch above, both narrowing what can be stated wrongly:
 
@@ -157,6 +165,10 @@ would be carried forever against a parser that never needs to change.
   no separate branch.
 - **Enhanced word tags `<mm:ss.xx>` parsed out of the text and discarded.** A non-timestamp `<3`
   stays literal.
+- **A `^` between words and their translation splits the line into two fields.** No part of the
+  format, but the directories carry sheets written this way, and left in the string the gloss is
+  drawn as the tail of the line it is glossing — the one thing it must not look like. Only a caret
+  with text either side is a separator, so a sheet that simply contains one keeps it.
 - Sorted by stamp — a stable sort, so duplicate stamps keep file order.
 - No stamps anywhere means an untimed sheet, lines in file order.
 
@@ -375,19 +387,26 @@ and the pass belongs beside it rather than written now with nothing to call it.
 ### Phase 7 — the panel · **done**
 
 **`crates/melodia-ui/ui/globals/lyrics.slint`**: the `Lyrics` global — `rows`, `state`, `synced`,
-`active-index`, `active-offset`, `active-height`, `line-height`, `shown`, `set-shown(bool)`,
-`seek-to(int)`, `tick()`. Imported **and** added to `app-window.slint`'s flat `export { }` block,
-or Slint prunes it from the Rust API; `LyricRow` joins the model list the same way.
+`active-index`, `active-offset`, `active-height`, the four type-scale properties below, `shown`,
+`set-shown(bool)`, `seek-to(int)`, `tick()`. Imported **and** added to `app-window.slint`'s flat
+`export { }` block, or Slint prunes it from the Rust API; `LyricRow` joins the model list the same
+way.
 
 **`state` is a Slint `enum`, not the int the plan asked for.** The reason for refusing a set of
 bools was that the states are mutually exclusive and flags can spell combinations none of them
 means, and an enum says that in the type instead of in a comment. `NavEnterFrom` is the precedent,
 including that an enum reaches Rust off the *import* line without an export entry.
 
-**`Lyrics.line-height` is the one definition of how tall a row is drawn.** The panel multiplies it
-by each row's `line_count`; Rust multiplies it by the same to build the offset table it follows the
-song with. Spelled once and read from there rather than twice, because a drift is a scroll that is
-subtly and then increasingly wrong down a long sheet.
+**The `Lyrics` global holds the sheet's whole type scale, and Rust reads all of it from there** —
+`font-size` / `line-height` for the words and `translation-font-size` / `translation-line-height`
+for the gloss under them. The panel multiplies each height by the row's line count; Rust multiplies
+it by the same to build the offset table it follows the song with, and measures its wrap estimate
+against the sizes. Spelled once and read from there rather than twice, because a drift is a scroll
+that is subtly and then increasingly wrong down a long sheet.
+
+A step above the rest of the column: this is the one panel a reader looks *at* rather than glances
+over, and it has the column to itself. The gloss is stepped down and set tight against the line
+above, so the pair reads as one line and its translation rather than as two lines of the song.
 
 **`crates/melodia-ui/ui/components/now-playing/lyrics-panel.slint`** (new), built by copying the
 station panel block: a `ScrollView` with both scrollbar policies `always-off`,
@@ -483,6 +502,10 @@ Four things worth knowing before reading it:
   comes back and the offset table is built from the same number, so the table and the layout agree
   however bad the guess. Only wrap quality is at stake, which is why the width can be polled
   loosely rather than measured.
+- **The estimate is in ems, and a character is measured against the script it is in.** Hangul and
+  CJK are drawn on a square em where Latin sits near half of one, so a single averaged width
+  under-estimates a Korean line by nearly half — enough to elide words the panel had the room for,
+  which is the one error direction this estimator is written to avoid.
 
 `apply` takes `online_enabled` from its caller rather than reading it, because the flag decides
 only which of two sentences an empty panel shows and the caller is the half holding `AppState`.
