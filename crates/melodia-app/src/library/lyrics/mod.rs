@@ -84,3 +84,11 @@ fn read_local(
 fn online_lookup_enabled(state: &AppState) -> bool {
     state.lyrics_online_enabled.get()
 }
+
+/// Hold the on-disk store to its bounds.
+///
+/// Through the door like everything else here, so `tasks::lyrics_cache` names no submodule and the
+/// naming scheme stays this module's business. Blocking; the task owns the `spawn_blocking`.
+pub fn prune_store(paths: &melodia_core::config::Paths) -> Result<u32, AppError> {
+    store::prune(&paths.lyrics_dir)
+}

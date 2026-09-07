@@ -53,4 +53,14 @@ export global Lyrics {
     // Drives the sung line between position ticks, which arrive about once a second. Fired by the
     // panel's own `Timer` so it dies with the panel.
     callback tick();
+
+    // How wide the panel draws, in logical pixels, so Rust can estimate how many lines each row
+    // wraps to.
+    //
+    // **Polled from that same `Timer` rather than watched.** A `changed` handler on a layout
+    // property is the tracker this panel must not carry, and the width has to survive a window
+    // resize, so the timer reports it on both its cadences and Rust ignores a repeat. Being wrong
+    // costs wrap quality and nothing else: the panel draws whatever `line_count` Rust decided, so
+    // the offset table cannot disagree with the layout however bad the guess.
+    callback report-width(length);
 }

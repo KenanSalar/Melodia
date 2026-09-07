@@ -103,13 +103,22 @@ export component LyricsPanel inherits Rectangle {
         scroll-to(o) => { sv.viewport-y = -o; }
     }
 
-    // One timer for the sung line and the follow both. **Its `running` gate is what keeps this off
-    // every other view**: it exists only while this branch is mounted, and stops the moment the
-    // sheet has no timings or the player is not playing.
+    // Whether there is a sung line to keep up with.
+    property <bool> following: root.has-rows && Lyrics.synced && Player.vm.is_playing;
+
+    // **One timer on two cadences**, the visualizer strip's `dormant ? 500ms : 33ms` shape. It
+    // exists only while this branch is mounted, which is what keeps all of it off every other
+    // view, and it drops to a crawl the moment there is no sung line to follow. The slow cadence
+    // still runs because the width has to reach Rust and has to survive a window resize, and a
+    // `changed` handler on a layout property is the one thing this component may not carry.
     Timer {
-        interval: 33ms;
-        running: root.has-rows && Lyrics.synced && Player.vm.is_playing;
+        interval: root.following ? 33ms : 1s;
+        running: true;
         triggered => {
+            Lyrics.report-width(sv.visible-width - Theme.scrollbar-slot);
+            if (!root.following) {
+                return;
+            }
             Lyrics.tick();
 
             // The bar is polled rather than watched, a `changed dragging` being the tracker this

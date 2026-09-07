@@ -13,7 +13,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use super::lrc;
 use melodia_core::entities::lyrics::{LyricsOutcome, LyricsSource};
@@ -100,4 +100,71 @@ fn entry(dir: &Path, stem: &str, extension: &str) -> PathBuf {
 
 fn key(track_path: &str) -> String {
     blake3::hash(track_path.as_bytes()).to_hex()[..HASH_HEX_LEN].to_owned()
+}
+
+/// Total bytes the store may hold before the oldest sheets are retired.
+///
+/// A sheet is a couple of kilobytes, so this is thousands of tracks: past that it is a cache of
+/// songs nobody has played in a long time, and the oldest are the ones least likely to be wanted.
+/// Only `.lrc` files can reach it, the two markers being empty.
+const MAX_BYTES: u64 = 8 * 1024 * 1024;
+
+/// Retire what the store no longer needs: expired misses first, then the oldest sheets until it
+/// fits.
+///
+/// **Only names this module writes are touched**, which is the artwork sweep's rule and it applies
+/// here for the same reason: this directory is under the user's data root, and a sweep that
+/// deleted whatever it found would be a sweep that deleted whatever someone else put there.
+pub(super) fn prune(dir: &Path) -> Result<u32, AppError> {
+    let mut sheets: Vec<(SystemTime, u64, PathBuf)> = Vec::new();
+    let mut retired = 0;
+    let mut total = 0;
+
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        let Some(extension) = stored_extension(&path) else {
+            continue;
+        };
+        let Ok(meta) = entry.metadata() else { continue };
+
+        if extension == ABSENT_EXT && !still_stands(&path) {
+            // Deleting it *is* the retry: `read` already treats a stale marker as no answer, so
+            // this only stops the directory keeping one per track forever.
+            if fs::remove_file(&path).is_ok() {
+                retired += 1;
+            }
+            continue;
+        }
+
+        total += meta.len();
+        sheets.push((meta.modified().unwrap_or(SystemTime::UNIX_EPOCH), meta.len(), path));
+    }
+
+    if total <= MAX_BYTES {
+        return Ok(retired);
+    }
+
+    // Oldest first, which for a cache of answers is least-recently-written rather than
+    // least-recently-read: nothing here is touched on a hit, so a write time is all there is.
+    sheets.sort_by_key(|(modified, _, _)| *modified);
+    for (_, len, path) in sheets {
+        if total <= MAX_BYTES {
+            break;
+        }
+        if fs::remove_file(&path).is_ok() {
+            total = total.saturating_sub(len);
+            retired += 1;
+        }
+    }
+    Ok(retired)
+}
+
+/// The extension, if this is a name the store wrote.
+fn stored_extension(path: &Path) -> Option<&str> {
+    let stem = path.file_stem()?.to_str()?;
+    let extension = path.extension()?.to_str()?;
+    let named_here = stem.len() == HASH_HEX_LEN && stem.bytes().all(|b| b.is_ascii_hexdigit());
+    let known = [SHEET_EXT, INSTRUMENTAL_EXT, ABSENT_EXT].contains(&extension);
+    (named_here && known).then_some(extension)
 }

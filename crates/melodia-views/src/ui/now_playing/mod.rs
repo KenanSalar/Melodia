@@ -13,6 +13,7 @@
 //! 3. **"Up Next" list.** A `sinks.queue` subscriber rebuilds `NowPlaying.up-next-rows`
 //!    and resets `slide-phase` only when the current track actually changed.
 
+mod lyrics;
 mod metadata;
 mod source_change;
 mod up_next;
@@ -159,6 +160,10 @@ pub struct NowPlayingState {
     /// square miniplayer becomes visible so the sharp tile replaces the row-tier fallback
     /// without waiting for the next source change.
     artwork_seeder: RefCell<Option<Seeder>>,
+    /// The lyrics panel's rows, offset table and sung index. Lives here rather than beside the
+    /// panel because the panel is `if`-mounted and this outlives it, and because the source-change
+    /// subscriber is what fills it.
+    pub(super) lyrics: Rc<lyrics::LyricsUi>,
 }
 
 impl NowPlayingState {
@@ -230,6 +235,7 @@ pub fn install(
         chip_last_shape: RefCell::new(Vec::new()),
         up_next_seeder: RefCell::new(None),
         artwork_seeder: RefCell::new(None),
+        lyrics: lyrics::install(ui, state),
     });
 
     spawn_source_change_subscriber(ui, state, np_artwork.clone(), np_state.clone(), initial_key)?;

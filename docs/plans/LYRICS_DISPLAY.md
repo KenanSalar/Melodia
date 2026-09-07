@@ -460,9 +460,32 @@ checking on a re-read is *"Turn it on under Settings ▸ Services"*, which names
 catalogue's copy uses that catalogue's own translations of the Settings and Services labels rather
 than the English ones, or the copy sends a reader somewhere they cannot find.
 
-### Phase 8 — the Rust wiring · **not started**
+### Phase 8 — the Rust wiring · **done**
 
-**`crates/melodia-views/src/ui/now_playing/lyrics.rs`** (new).
+**`crates/melodia-views/src/ui/now_playing/lyrics.rs`**, plus `tasks::lyrics_cache` and the two
+hooks in the existing subscriber and teardown.
+
+Four things worth knowing before reading it:
+
+- **The fetch is gated on `Lyrics.shown`.** A hidden panel would otherwise cost a file read on
+  every track change and, with the switch on, a request on every track change for something nobody
+  is looking at. The gate sits at the top of `apply_source_change`, beside the existing one for the
+  view being open at all.
+- **Every position is milliseconds in an `i32`**, which is what the `Player` global already
+  publishes and what a row carries. Clippy's cast lints are what forced the question, and the
+  answer is better than what the plan sketched: an `i32` reaches past three weeks of one track and
+  converts into `f64` without losing a bit, so the interpolation needs no cast anywhere. The wrap
+  count is a `u8` for the same reason.
+- **The wrap estimate is bucketed rather than rounded**, so the line count comes out of two
+  comparisons instead of a float-to-int cast. It is capped at three lines: past that a lyric line
+  has stopped being a line, and the panel would scroll more than it shows.
+- **Being wrong about the wrap costs nothing structural.** The panel draws whatever `line_count`
+  comes back and the offset table is built from the same number, so the table and the layout agree
+  however bad the guess. Only wrap quality is at stake, which is why the width can be polled
+  loosely rather than measured.
+
+`apply` takes `online_enabled` from its caller rather than reading it, because the flag decides
+only which of two sentences an empty panel shows and the caller is the half holding `AppState`.
 
 - **The fetch hooks into `apply_source_change`** (`now_playing/source_change.rs:108-179`), beside
   `fetch_track_meta`, which is the exact template — including its two staleness guards: the Rust
@@ -494,6 +517,11 @@ than the English ones, or the copy sends a reader somewhere they cannot find.
   directory by total bytes, oldest-mtime-first, and sweeps expired `.none` markers; `.lrc` and
   `.instrumental` are permanent answers and only the byte cap reaches them. Detached and tracked,
   so a shutdown mid-pass waits for the unlinks.
+  **It touches only names the store itself wrote**, which is the artwork sweep's rule and applies
+  for its reason: this directory sits under the user's data root, and a pass that deleted whatever
+  it found would delete whatever someone else put there. It reaches the store through
+  `library::lyrics::prune_store` rather than naming a submodule, so the naming scheme stays behind
+  the door.
 
 ### Phase 9 — Settings row and onboarding · **not started**
 

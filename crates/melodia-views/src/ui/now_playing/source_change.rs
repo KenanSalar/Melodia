@@ -15,6 +15,7 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::{ComponentHandle, Image, Weak};
 
+use super::lyrics;
 use super::metadata::to_slint_track_meta;
 use super::write_crossfade_slot;
 use super::{NowPlayingSource, NowPlayingState, SourceKey};
@@ -25,6 +26,7 @@ use crate::ui::chips;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::entities::lyrics::LyricsOutcome;
 use melodia_core::entities::track::TrackSummary;
 use melodia_ui::{AppWindow, Player, TrackMetaRow};
 
@@ -118,7 +120,22 @@ pub(super) async fn apply_source_change(
     let artwork_path = source.as_ref().and_then(|s| s.artwork_path.clone());
     let is_station = matches!(key, Some(SourceKey::Station(_)));
 
+    // **Only fetched while the panel is up.** A hidden panel would still cost a file read per
+    // track change and, with the switch on, a request per track change for something nobody is
+    // looking at.
+    let wants_lyrics = weak
+        .upgrade()
+        .is_some_and(|ui| ui.global::<melodia_ui::Lyrics>().get_shown() && track.is_some());
+    if wants_lyrics && let Some(ui) = weak.upgrade() {
+        lyrics::mark_loading(&ui, &np_state.lyrics);
+    }
+
     let meta = fetch_track_meta(state, track.as_ref()).await;
+    let sheet = if wants_lyrics {
+        fetch_lyrics(state, track.as_ref()).await
+    } else {
+        None
+    };
     let (cover, blurred, sample) = decode_artwork_for(state, np_artwork, artwork_path).await;
 
     // --- Write to Slint (UI thread) ---
@@ -134,6 +151,11 @@ pub(super) async fn apply_source_change(
     let player = ui.global::<Player>();
     publish_chips(&player, np_state, meta);
     write_backdrop_tiers(&ui, sample);
+
+    // Past the same guard the chips are, so a slow lookup cannot paint under a newer song.
+    if let Some(outcome) = sheet {
+        lyrics::apply(&ui, &np_state.lyrics, &outcome, state.lyrics_online_enabled.get());
+    }
 
     // The blur is the backdrop for both kinds, so it takes the same cross-fade either way.
     write_crossfade_slot(
@@ -183,6 +205,28 @@ pub(super) async fn apply_source_change(
 fn native_size_of(image: &Image) -> i32 {
     let size = image.size();
     i32::try_from(size.width.min(size.height)).unwrap_or(i32::MAX)
+}
+
+/// The sheet for `track`, or `None` where the panel should be left as it is.
+///
+/// A failure is logged and reads as "nothing found": a sidecar in some old codepage or a directory
+/// that is down are both, to a reader, a panel with no words in it, and neither is worth a toast.
+async fn fetch_lyrics(
+    state: &AppState,
+    track: Option<&Arc<TrackSummary>>,
+) -> Option<LyricsOutcome> {
+    let track = track?;
+    match library::lyrics::for_track(state, track).await {
+        Ok(outcome) => Some(outcome),
+        Err(e) => {
+            log::debug!(
+                "ui::now_playing lyrics for {}: {}",
+                track.id,
+                melodia_core::error::describe(&e)
+            );
+            Some(LyricsOutcome::Absent)
+        }
+    }
 }
 
 /// The eight chip columns for `track`, awaited inline — sqlx has a reactor here. Every failure arm
