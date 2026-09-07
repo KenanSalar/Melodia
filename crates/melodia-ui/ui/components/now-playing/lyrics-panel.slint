@@ -41,14 +41,19 @@ export component LyricsPanel inherits Rectangle {
 
         VerticalLayout {
             padding-right: Theme.scrollbar-slot;
+            // The air *between* lines, so each row's own box only has to hold the text it draws.
+            // Rust adds the same term per row to the offset table it follows the song with.
+            spacing: Lyrics.row-gap;
             alignment: start;
 
             for row[i] in Lyrics.rows: Rectangle {
                 // Rust chose both heights and keeps the offset table that matches them. Reading
                 // the drawn height back instead is the thing a `for` loop cannot do.
                 property <length> sung-h: row.line_count * Lyrics.line-height;
+                property <length> gloss-h: row.translation_line_count
+                    * Lyrics.translation-line-height;
                 height: self.sung-h
-                    + row.translation_line_count * Lyrics.translation-line-height;
+                    + (self.gloss-h > 0px ? Lyrics.translation-gap + self.gloss-h : 0px);
 
                 // On a plain sheet `active-index` stays -1, so every row takes the quiet tier and
                 // the panel reads as a page rather than as a list with nothing selected.
@@ -70,10 +75,11 @@ export component LyricsPanel inherits Rectangle {
 
                 // Empty where the sheet carries no gloss, and `translation_line_count` is 0 with
                 // it, so this collapses to nothing rather than needing a branch of its own.
+                // Bottom-anchored, which is what keeps the gap spelled in one place.
                 Text {
-                    y: parent.sung-h;
+                    y: parent.height - parent.gloss-h;
                     width: parent.width;
-                    height: parent.height - parent.sung-h;
+                    height: parent.gloss-h;
                     text: row.translation;
                     wrap: word-wrap;
                     overflow: elide;
@@ -85,27 +91,31 @@ export component LyricsPanel inherits Rectangle {
                         ? Player.np-on-backdrop-muted
                         : Player.np-on-backdrop-muted.transparentize(0.45);
                 }
-
-                // Click a line to seek, on a timed sheet only: an untimed one has nowhere to send
-                // the player, and a row that looked clickable and did nothing would be worse than
-                // one that never did.
-                TouchArea {
-                    enabled: Lyrics.synced;
-                    mouse-cursor: pointer;
-                    clicked => { Lyrics.seek-to(row.at_ms); }
-                }
             }
         }
     }
 
-    // Any wheel over the panel hands it to the reader for a while. Rejected so the scroller still
-    // gets the event: this only notices, it does not handle.
-    TouchArea {
+    // **One area for the whole sheet, doing both jobs.** It sits over the scroller either way, so
+    // a per-row area could never have received the click anyway — the reason clicking a line did
+    // nothing at all. Which row a point lands in is arithmetic over the offset table Rust already
+    // keeps, so asking it is cheaper than N areas *and* cannot disagree with the highlight.
+    //
+    // The wheel is rejected so the scroller still gets it: that half only notices.
+    touch := TouchArea {
         width: 100%;
         height: 100%;
+        // The whole sheet is a seek target on a timed one; an untimed sheet has nowhere to send
+        // the player, so it must not look like it does.
+        mouse-cursor: Lyrics.synced ? MouseCursor.pointer : MouseCursor.default;
         scroll-event(event) => {
             root.suspend-ticks = root.suspend-ticks-total;
             return reject;
+        }
+        clicked => {
+            if (Lyrics.synced) {
+                // Into the scrolled content's own coordinates; `viewport-y` runs negative.
+                Lyrics.seek-at(self.mouse-y - sv.viewport-y);
+            }
         }
     }
 

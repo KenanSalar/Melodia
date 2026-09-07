@@ -2,14 +2,24 @@
 //!
 //! **The panel owns no state of its own beyond its scroll position.** Rows, the sung index and the
 //! offset that index sits at are all written from here, because following the song needs a
-//! cumulative offset table and Slint cannot hand one back: its own `ListView` assumes uniform rows
-//! and a `for` loop exposes no per-item element whose `y` could be read. So this decides how tall
-//! each row is drawn and the panel obeys, which is what makes the table and the layout agree by
-//! construction rather than by luck.
+//! cumulative offset table and Slint cannot hand one back: a `for` loop exposes no per-item
+//! element whose `y` could be read. So this decides how tall each row is drawn and the panel
+//! obeys, which is what makes the table and the layout agree by construction rather than by luck.
 //!
 //! **Every position here is milliseconds in an `i32`**, which is what the `Player` global already
 //! publishes and what the panel's rows carry. It reaches past three weeks of one track, and it is
 //! what lets the interpolation below convert into `f64` without losing a bit.
+//!
+//! **The panel does not virtualize, and a `ListView` is what it cannot use rather than what it has
+//! not got around to.** Slint's listview repeater does measure real per-row heights, so uneven
+//! rows are not the objection they read as — but it *owns* the scroller's geometry: it writes
+//! `viewport-y` itself on every layout pass, and publishes `viewport-height` as an average row
+//! height times the row count, re-derived from whichever rows happen to be mounted. This panel's
+//! whole design is the opposite of that: it centres the sung line by writing `viewport-y` from an
+//! exact offset table, and the overlay scrollbar gauges extent off `viewport-height`. Under a
+//! `ListView` the first would be overwritten every frame and the second would drift as the sheet
+//! scrolled through rows a gloss makes nearly twice as tall. What makes the plain `for` right
+//! instead is that a sheet is small and, via [`MAX_ROWS`], bounded.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -41,6 +51,15 @@ const CHAR_EMS: f32 = 0.54;
 /// scroll more than it shows.
 const MAX_WRAPPED_LINES: u8 = 3;
 
+/// The most lines the panel will draw from one sheet.
+///
+/// **This is what makes the un-virtualized `for` in the panel affordable, so it is a bound rather
+/// than a guard against anything.** Nothing about a `.lrc` file or a lyrics tag is length-limited
+/// and both come from outside, so without a cap the row count is whatever a malformed file says.
+/// Far past any song — the longest sung lyrics run a few hundred lines — so a sheet reaching it is
+/// not one, and losing its tail costs nothing a reader wanted.
+const MAX_ROWS: usize = 600;
+
 /// How long a clicked line keeps the highlight before the clock is assumed to have gone elsewhere.
 ///
 /// The position channel reports about once a second, so for up to that long after a seek it still
@@ -68,12 +87,22 @@ struct Metrics {
     line_height: f32,
     translation_font_size: f32,
     translation_line_height: f32,
+    translation_gap: f32,
+    row_gap: f32,
 }
 
 impl Metrics {
-    /// How tall a row is drawn, which is also the step its offset table takes.
+    /// How tall a row's own box is: the words, and the gloss under them where there is one.
+    ///
+    /// The gap *between* rows is not in here — that is the layout's `spacing`, and it belongs to
+    /// neither of the rows it separates.
     fn row_height(self, row: &Row) -> f32 {
-        self.line_height * f32::from(row.lines)
+        let words = self.line_height * f32::from(row.lines);
+        if row.translation_lines == 0 {
+            return words;
+        }
+        words
+            + self.translation_gap
             + self.translation_line_height * f32::from(row.translation_lines)
     }
 }
@@ -162,6 +191,8 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
             line_height: global.get_line_height(),
             translation_font_size: global.get_translation_font_size(),
             translation_line_height: global.get_translation_line_height(),
+            translation_gap: global.get_translation_gap(),
+            row_gap: global.get_row_gap(),
         }),
         width: Cell::new(ASSUMED_WIDTH),
         anchor_ms: Cell::new(0),
@@ -208,17 +239,9 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
     {
         let weak = ui.as_weak();
         let ly = ly.clone();
-        global.on_seek_to(move |at_ms| {
+        global.on_seek_at(move |y| {
             let Some(ui) = weak.upgrade() else { return };
-            // Pinned before the seek: the clock reports the old line for up to a tick, and the
-            // panel would otherwise glide back to it and then return.
-            let found = ly.rows.borrow().iter().position(|row| row.at_ms == Some(at_ms));
-            if let Some(index) = found {
-                ly.pinned.set(Some(index));
-                ly.pinned_at_ms.set(at_ms);
-                write_active(&ui, &ly, Some(index));
-            }
-            ui.global::<Player>().invoke_seek(at_ms);
+            seek_at(&ui, &ly, y);
         });
     }
 
@@ -288,9 +311,13 @@ fn clear(ui: &AppWindow, ly: &Rc<LyricsUi>) {
 
 /// Keep the sheet's text and stamps. Heights are not kept, following the width instead.
 fn take_sheet(ly: &Rc<LyricsUi>, sheet: &Sheet) {
+    if sheet.lines.len() > MAX_ROWS {
+        log::debug!("lyrics: sheet of {} lines truncated to {MAX_ROWS}", sheet.lines.len());
+    }
     *ly.rows.borrow_mut() = sheet
         .lines
         .iter()
+        .take(MAX_ROWS)
         .map(|line| Row {
             at_ms: line.at_ms.map(|at| i32::try_from(at).unwrap_or(i32::MAX)),
             text: line.text.clone(),
@@ -321,7 +348,8 @@ fn republish(ly: &Rc<LyricsUi>) {
             .map_or(0, |gloss| wrapped_lines(gloss, width, metrics.translation_font_size));
 
         offsets.push(top);
-        top += metrics.row_height(row);
+        // The layout's own `spacing`, which sits between rows rather than inside one.
+        top += metrics.row_height(row) + metrics.row_gap;
         published.push(LyricRow {
             text: SharedString::from(row.text.as_str()),
             translation: row.translation.as_deref().map(SharedString::from).unwrap_or_default(),
@@ -363,6 +391,49 @@ fn follow(ui: &AppWindow, ly: &Rc<LyricsUi>) {
     }
 
     write_active(ui, ly, sung);
+}
+
+/// Seek to the line drawn at a point down the sheet.
+///
+/// The panel hands over a coordinate rather than a stamp, so the pin below can be set against the
+/// *row* that was clicked: a stamp repeated by a chorus names two of them, and pinning the first
+/// leaves the panel gliding back up the sheet from a seek into the second.
+fn seek_at(ui: &AppWindow, ly: &Rc<LyricsUi>, y: f32) {
+    let rows = ly.rows.borrow();
+    let Some(index) = row_at(&ly.offsets.borrow(), &rows, ly.metrics.get(), y) else {
+        return;
+    };
+    let Some(at_ms) = rows.get(index).and_then(|row| row.at_ms) else {
+        return;
+    };
+    drop(rows);
+
+    // Pinned before the seek: the clock reports the old line for up to a tick, and the panel would
+    // otherwise glide back to it and then return.
+    ly.pinned.set(Some(index));
+    ly.pinned_at_ms.set(at_ms);
+    write_active(ui, ly, Some(index));
+    ui.global::<Player>().invoke_seek(at_ms);
+}
+
+/// The row drawn at a point down the sheet.
+///
+/// Binary search over the same offsets the follow uses, so a click and the highlight cannot
+/// disagree about where a line sits.
+fn row_at(offsets: &[f32], rows: &[Row], metrics: Metrics, y: f32) -> Option<usize> {
+    if y < 0.0 {
+        return None;
+    }
+    let index = offsets.partition_point(|top| *top <= y).checked_sub(1)?;
+    let row = rows.get(index)?;
+
+    // **The gap between two rows belongs to the one above**, so a click landing a few pixels wide
+    // of a line still seeks it — the gaps are wide enough to be missed into. Below the *last* row
+    // there is no line to have meant, and the panel's trailing whitespace is most of what gets
+    // clicked by accident.
+    let past_the_sheet =
+        index + 1 == rows.len() && y > offsets.get(index)? + metrics.row_height(row);
+    (!past_the_sheet).then_some(index)
 }
 
 /// The last row whose stamp has passed, by binary search over the stamped rows.

@@ -426,11 +426,11 @@ export struct RadioSuggestionRow {
 // One line of a lyric sheet. Mirror of `entities::lyrics::LyricLine`, plus the heights the panel
 // draws its two halves at.
 //
-// **Both counts are Rust's answer, not the layout's.** Slint's own `ListView` assumes uniform rows
-// and a `for` loop exposes no per-item element whose `y` could be read back, so following the song
-// means Rust owning a cumulative offset table. It can only do that if it also decides how tall each
-// row is, which it does by estimating the wrap the way `ui::chips` estimates a chip's width. Over
-// by one costs a blank line; under by one elides.
+// **Both counts are Rust's answer, not the layout's.** A `for` loop exposes no per-item element
+// whose `y` could be read back, so following the song means Rust owning a cumulative offset table.
+// It can only do that if it also decides how tall each row is, which it does by estimating the
+// wrap the way `ui::chips` estimates a chip's width. Over by one costs a blank line; under by one
+// elides.
 //
 // `at_ms` is `-1` on an untimed sheet, the two never mixing within one sheet.
 export struct LyricRow {

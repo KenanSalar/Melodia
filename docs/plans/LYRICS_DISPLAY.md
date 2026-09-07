@@ -388,7 +388,7 @@ and the pass belongs beside it rather than written now with nothing to call it.
 
 **`crates/melodia-ui/ui/globals/lyrics.slint`**: the `Lyrics` global — `rows`, `state`, `synced`,
 `active-index`, `active-offset`, `active-height`, the four type-scale properties below, `shown`,
-`set-shown(bool)`, `seek-to(int)`, `tick()`. Imported **and** added to `app-window.slint`'s flat
+`set-shown(bool)`, `seek-at(length)`, `tick()`. Imported **and** added to `app-window.slint`'s flat
 `export { }` block, or Slint prunes it from the Rust API; `LyricRow` joins the model list the same
 way.
 
@@ -405,8 +405,13 @@ against the sizes. Spelled once and read from there rather than twice, because a
 that is subtly and then increasingly wrong down a long sheet.
 
 A step above the rest of the column: this is the one panel a reader looks *at* rather than glances
-over, and it has the column to itself. The gloss is stepped down and set tight against the line
-above, so the pair reads as one line and its translation rather than as two lines of the song.
+over, and it has the column to itself.
+
+**Two gaps, and the first has to stay clearly under half the second.** `translation-gap` separates
+a line from its own gloss; `row-gap` is the layout's `spacing` between one line and the next.
+Proximity is what groups the pair, not the size step — a reader pairs by distance before they pair
+by weight — so setting the two anywhere near each other leaves one evenly-spaced column with no
+telling which line belongs to which.
 
 **`crates/melodia-ui/ui/components/now-playing/lyrics-panel.slint`** (new), built by copying the
 station panel block: a `ScrollView` with both scrollbar policies `always-off`,
@@ -415,17 +420,29 @@ station panel block: a `ScrollView` with both scrollbar policies `always-off`,
 bindings. Copying the block satisfies `crates/melodia/tests/scrollbars.rs` rather than working
 around it.
 
-A plain `ScrollView` with a `for`, **not** a `ListView`: a sheet is capped, so there is nothing to
-virtualize, and it avoids the nested-`ListView` wheel-swallowing trap and the drag-pan question
-entirely.
+**A plain `ScrollView` with a `for`, not a `ListView`, and the reason is not the one it looks
+like.** Read `i-slint-core`'s `update_visible_instances` rather than the widget: the listview
+repeater *does* measure each mounted row's real height, so uneven rows are no objection. What it
+also does is **own the scroller's geometry** — it writes `viewport-y` itself on every layout pass
+(unless the property carries a binding, which this one deliberately does not), and it publishes
+`viewport-height` as `cached_item_height * row_count`, the cache being an average over whichever
+rows happen to be mounted. Both are fatal here: the panel centres the sung line by *writing*
+`viewport-y` off an exact offset table, and the `OverlayScrollbar` gauges extent off
+`viewport-height`, which under an average would drift as the sheet scrolled through rows a gloss
+makes nearly twice as tall. It also sidesteps the nested-`ListView` wheel-swallowing trap and the
+drag-pan question.
 
-**Row height is Rust's, and that is what makes auto-scroll exact.** Slint's own `ListView` assumes
-uniform rows (`item-height: viewport-height / model.length`), and a `for` loop exposes no per-item
-element whose `y` could be read back — the wall the `TabBar` underline hit. So each row carries a
-`line-count` estimated in Rust and is a box of `line-count * Theme.lyrics-line-h` with a wrapping,
-eliding `Text` inside. Rust chose the height, so Rust's cumulative offset table cannot disagree
-with the layout. `ui::chips::estimated_chip_width` is the precedent, including which way to bias:
-over-estimating costs whitespace, under-estimating elides, so bias generous.
+What makes the un-virtualized `for` right instead is that a sheet is *small* and, via
+`MAX_ROWS`, *bounded* — three elements a row over at most a few hundred rows, mounted only while
+the panel is open. Nothing about a `.lrc` file or a lyrics tag is length-limited and both come from
+outside, so the cap is what turns "small" from an assumption into a property.
+
+**Row height is Rust's, and that is what makes auto-scroll exact.** A `for` loop exposes no
+per-item element whose `y` could be read back — the wall the `TabBar` underline hit. So each row
+carries a `line_count` estimated in Rust and is a box sized from it. Rust chose the height, so
+Rust's cumulative offset table cannot disagree with the layout.
+`ui::chips::estimated_chip_width` is the precedent, including which way to bias: over-estimating
+costs whitespace, under-estimating elides, so bias generous.
 
 **Nothing in the panel carries a `changed` handler, and the plan's follow design had to go.** It
 proposed an animated `follow-y` with `changed follow-y => { sv.viewport-y = … }`, which is the
@@ -447,6 +464,14 @@ target *in the same frame* the branch goes when the user hits the toggle mid-gli
 - Click a line to seek, gated on `Lyrics.synced`: an untimed sheet has nowhere to send the player,
   and a row that looked clickable and did nothing would be worse than one that never did. **The
   pin on the clicked row is Phase 8's**, since the thing being pinned against is Rust's tick.
+  **This shipped broken and the fix moved the click off the rows.** A per-row `TouchArea` could
+  never have received it: the wheel-notice area covers the whole panel and is declared *after* the
+  scroller, so it was over every row and swallowing every press. One area does both jobs now, and
+  it reports the *point* — which row that is comes out of the offset table Rust already keeps, so
+  it is arithmetic rather than a second answer, and a sheet is three elements a row rather than
+  four. The gap between two rows belongs to the one above, the gaps being wide enough to be missed
+  into; below the last row nothing is seeked, that whitespace being most of what gets clicked by
+  accident.
 
 **Empty / loading / missing / off states** reuse the hand-rolled centred block at
 `up-next-list.slint:212-236` — glyph plus one line of copy on `Player.np-on-backdrop-muted` — not

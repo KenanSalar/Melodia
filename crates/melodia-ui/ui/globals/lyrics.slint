@@ -32,13 +32,18 @@ export global Lyrics {
     // A step above the rest of the column on purpose. This is the one panel a reader looks *at*
     // rather than glances over, and it has the column to itself.
     out property <length> font-size: 16px;
-    out property <length> line-height: 30px;
+    out property <length> line-height: 28px;
 
-    // The gloss a bilingual sheet carries under a line. Stepped down and set tight against the
-    // line above, so the pair reads as one line and its translation rather than as two lines of
-    // the song.
+    // The gloss a bilingual sheet carries under a line.
     out property <length> translation-font-size: 13px;
-    out property <length> translation-line-height: 19px;
+    out property <length> translation-line-height: 20px;
+
+    // **The two gaps are the whole of what groups a line with its own translation**, and the
+    // first has to stay clearly under half the second or the sheet reads as one column of
+    // evenly-spaced lines with no telling which belongs to which. Proximity is doing the work
+    // here, not the size step: a reader pairs by distance before they pair by weight.
+    out property <length> translation-gap: 4px;
+    out property <length> row-gap: 14px;
 
     in property <[LyricRow]> rows;
     in property <LyricsState> state: LyricsState.idle;
@@ -57,8 +62,13 @@ export global Lyrics {
     in-out property <bool> shown;
     callback set-shown(bool);
 
-    // A row was clicked. Milliseconds, and only ever sent for a timed sheet.
-    callback seek-to(int);
+    // Somewhere in the sheet was clicked, in logical pixels down the scrolled content.
+    //
+    // **A point rather than a row index, because the panel draws one `TouchArea` for the whole
+    // sheet rather than one per line.** Which row that lands in is a question the offset table
+    // Rust already keeps answers exactly, so a per-row area would be a second answer to it — and
+    // three elements a row rather than four, over a sheet nothing virtualizes.
+    callback seek-at(length);
 
     // Drives the sung line between position ticks, which arrive about once a second. Fired by the
     // panel's own `Timer` so it dies with the panel.
