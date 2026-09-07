@@ -5,7 +5,7 @@ name: Release
 # can drift. A published tag short-circuits; a still-draft one is rebuilt in
 # place (`--clobber`). The flip to published stays manual, drafts not being
 # served by `/releases/latest/download/`, so the updater only sees a release once
-# you have taken that QA step. Procedure: `docs/RELEASING.md`.
+# you have taken that QA step.
 #
 # The phases live in `release-*.yml`, which carry `workflow_call` and nothing
 # else, so they cannot be dispatched by mistake. This file is the shape of a

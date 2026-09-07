@@ -18,8 +18,8 @@ paths:
 
 # CI and packaging
 
-The release matrix itself is `.claude/rules/updater.md` and the procedure that fires it is
-`docs/RELEASING.md`; this is the gate around both and the obligations every artifact carries.
+The release matrix itself is `.claude/rules/updater.md`; this is the gate around it and the
+obligations every artifact carries.
 `release.yml` holds the shape of a release and calls `release-{prepare,build,publish}.yml`, each of
 which argues itself; a filename below names whichever of the four owns the thing under discussion.
 

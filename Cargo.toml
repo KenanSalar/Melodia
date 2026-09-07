@@ -19,7 +19,7 @@ exclude = ["winit"]
 # `build-{rpm,appimage,tarball}.sh`) anchor on this table by name and take the
 # first `version = ` inside it, so that entry stays first.
 [workspace.package]
-version = "0.12.0"
+version = "0.13.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 # Lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.

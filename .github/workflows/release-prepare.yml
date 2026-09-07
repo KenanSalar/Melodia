@@ -46,10 +46,10 @@ jobs:
           # The tag triggers, but Cargo.toml is what the binary, all five package
           # formats and latest.json carry, so a mismatch would ship artifacts
           # naming the previous version; caught here, not an hour into the matrix.
-          # A dispatch on a tag is checked like a push, per docs/RELEASING.md.
+          # A dispatch on a tag is checked like a push.
           if [[ "$REF_TYPE" == "tag" && "$REF_NAME" != "v$VERSION" ]]; then
             echo "::error::Tag $REF_NAME does not match Cargo.toml's v$VERSION."
-            echo "::error::Fix the version on main and re-point the tag; see docs/RELEASING.md."
+            echo "::error::Fix the version on main and re-point the tag."
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
