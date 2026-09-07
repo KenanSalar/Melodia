@@ -180,6 +180,12 @@ pub(super) fn wire_now_playing_open(
                 log::warn!("ui::now_playing open-seed task spawn_local: {e}");
             }
         }
+
+        // **Outside that guard, and that is the whole point of it being here.** The close above
+        // hands the sheet back, so a re-open on the same track needs one again — but the artwork
+        // is still applied, so the branch that would have fetched it returns early. It dedupes on
+        // its own claim, so on the open that *did* re-decode this costs nothing.
+        np_state.lyrics.kick();
     });
 }
 

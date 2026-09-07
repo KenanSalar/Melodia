@@ -555,9 +555,31 @@ only which of two sentences an empty panel shows and the caller is the half hold
   compounds an error the chain already has. The buffer is far too small to matter at line
   granularity, so the honest answer is zero.
 - **Teardown.** The parsed sheet is released in the existing `!is_open` arm of
-  `wire_now_playing_open` (`up_next.rs:133`), beside `np_artwork.clear()`. **No second handler on
+  `wire_now_playing_open`, beside `np_artwork.clear()`. **No second handler on
   `on_now_playing_open_changed`** — it has one slot and that function owns it. Only the current
   track's sheet is ever resident, so there is no in-memory LRU to size: the disk store is the cache.
+- **Releasing on close is what obliges three fetch edges, and shipping with one of them was the
+  "sometimes I have to restart" bug.** A player that keeps its sheet resident for the life of the
+  process needs only a track change: the pane renders whatever the state holds, so opening it can
+  never find nothing. This hands the rows back on every close, so the close is a fourth thing that
+  can empty the panel and *nothing was putting them back*. Two edges were missing:
+  - **A re-open on the same track.** The open arm's fetch sits behind `current_key !=
+    applied_source`, which asks about the artwork — still applied, so the branch returns early and
+    the released sheet is never looked up again. Restarting cleared `applied_source`, which is
+    exactly why a restart "fixed" it.
+  - **The 3-dot toggle**, which only ever persisted. Switching the panel on mid-song showed an
+    empty panel until the next track.
+
+  Both now go through `LyricsUi::kick`, wired after `install` returns for the `Weak<NowPlayingState>`
+  reason the other two seeders carry. The door dedupes on `holding` — the track path the resident
+  sheet belongs to, claimed *before* the first `.await` and given up by `release` — so the three
+  edges may overlap freely and cost one lookup between them. That claim is also the staleness
+  guard the spawned lookup re-checks, so a song that moved under it paints nothing.
+- **Hover feedback comes off the same offset table the click does.** One `TouchArea` for the sheet
+  means no per-row `has-hover`, so `PointerEventKind.move` reports the pointer and Rust writes
+  `Lyrics.hover-index`. `Property::set` is value-compared, so rows are dirtied on a crossing rather
+  than per motion event. The fill is the Up Next list's own `Player.np-accent-pill`, flat rather
+  than eased for that list's stated reason: a fade reads as lag when crossing rows.
 - **`tasks::lyrics_cache`, handed over by Phase 6**, spawns from that same `!is_open` arm. The
   store only grows while something is rendering this view, since nothing else calls `for_track`, so
   the close is exactly when it stops: `library::radio`'s argument for pruning on a section leave

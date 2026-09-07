@@ -59,8 +59,17 @@ export component LyricsPanel inherits Rectangle {
                 // the panel reads as a page rather than as a list with nothing selected.
                 property <bool> is-sung: i == Lyrics.active-index;
 
+                // The Up Next list's own hover brush, and flat like its rows: an eased fade reads
+                // as lag when the pointer crosses rows. `has-hover` is what clears it — the index
+                // is only rewritten on a crossing, so nothing reports the pointer leaving.
+                background: touch.has-hover && i == Lyrics.hover-index
+                    ? Player.np-accent-pill
+                    : transparent;
+                border-radius: Theme.radius-md;
+
                 Text {
-                    width: parent.width;
+                    x: Lyrics.row-pad;
+                    width: parent.width - 2 * Lyrics.row-pad;
                     height: parent.sung-h;
                     text: row.text;
                     wrap: word-wrap;
@@ -77,8 +86,9 @@ export component LyricsPanel inherits Rectangle {
                 // it, so this collapses to nothing rather than needing a branch of its own.
                 // Bottom-anchored, which is what keeps the gap spelled in one place.
                 Text {
+                    x: Lyrics.row-pad;
                     y: parent.height - parent.gloss-h;
-                    width: parent.width;
+                    width: parent.width - 2 * Lyrics.row-pad;
                     height: parent.gloss-h;
                     text: row.translation;
                     wrap: word-wrap;
@@ -110,6 +120,13 @@ export component LyricsPanel inherits Rectangle {
         scroll-event(event) => {
             root.suspend-ticks = root.suspend-ticks-total;
             return reject;
+        }
+        // `moved` fires only while pressed, so hover tracking goes through the pointer stream —
+        // the same arm Slint's own menu uses to follow a pointer across its entries.
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.move) {
+                Lyrics.hover-at(self.mouse-y - sv.viewport-y);
+            }
         }
         clicked => {
             if (Lyrics.synced) {
@@ -147,7 +164,8 @@ export component LyricsPanel inherits Rectangle {
         interval: root.following ? 33ms : 1s;
         running: true;
         triggered => {
-            Lyrics.report-width(sv.visible-width - Theme.scrollbar-slot);
+            Lyrics.report-width(
+                sv.visible-width - Theme.scrollbar-slot - 2 * Lyrics.row-pad);
             if (!root.following) {
                 return;
             }

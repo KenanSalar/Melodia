@@ -25,11 +25,14 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Instant;
 
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use async_compat::Compat;
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 
+use super::NowPlayingState;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::lyrics::{Lyrics as Sheet, LyricsOutcome};
+use melodia_core::entities::track::TrackSummary;
 use melodia_ui::{AppWindow, LyricRow, Lyrics, LyricsState, Player};
 
 /// Width to estimate against before the panel has reported its own.
@@ -123,7 +126,30 @@ pub(crate) struct LyricsUi {
     /// A clicked row, held until the clock catches up with it.
     pinned: Cell<Option<usize>>,
     pinned_at_ms: Cell<i32>,
+    /// The track path the resident sheet belongs to, and `None` whenever the rows have been
+    /// handed back. **This is what makes the reseed idempotent**, so the three unrelated edges
+    /// that reach it cost one lookup between them rather than one each.
+    holding: RefCell<Option<String>>,
+    /// Filled after [`install`] returns, because looking a sheet up needs the `NowPlayingState`
+    /// this is a field of. `NowPlayingState`'s own two seeders, one layer down.
+    reseed: RefCell<Option<Box<dyn Fn()>>>,
     model: Rc<VecModel<LyricRow>>,
+}
+
+impl LyricsUi {
+    /// Look a sheet up for whatever is playing, unless the panel already holds it.
+    ///
+    /// A no-op before [`install`]'s caller has wired the hook.
+    pub(super) fn kick(&self) {
+        if let Some(reseed) = self.reseed.borrow().as_ref() {
+            reseed();
+        }
+    }
+
+    /// Whether the resident sheet is already this track's.
+    fn holds(&self, path: &str) -> bool {
+        self.holding.borrow().as_deref() == Some(path)
+    }
 }
 
 /// Whether a character is drawn on a square em rather than a proportional one.
@@ -199,19 +225,27 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
         anchor_at: Cell::new(Instant::now()),
         pinned: Cell::new(None),
         pinned_at_ms: Cell::new(0),
+        holding: RefCell::new(None),
+        reseed: RefCell::new(None),
         model,
     });
 
     // Seeded off `settings.json` the way the visualizer's own toggle is. The menu row has already
-    // flipped the property by the time the callback runs, so this only persists.
+    // flipped the property by the time the callback runs, so the property half is done.
     let flags = crate::ui::settings_bind::read_or_default(state, "lyrics").lyrics;
     global.set_shown(flags.lyrics_panel_shown);
     {
         let state = state.clone();
+        let ly_toggle = ly.clone();
         global.on_set_shown(move |shown| {
             state.persist_blocking("set_lyrics_panel_shown", move |s| {
                 library::settings::set_lyrics_panel_shown(s, shown)
             });
+            // **Switching the panel on is a reason to look a sheet up**, and until this line it
+            // was not one: the fetch hung off a track change alone, so turning it on mid-song
+            // showed an empty panel until the next track — or until a restart, which is the
+            // *seed* path and does run.
+            ly_toggle.kick();
         });
     }
 
@@ -224,6 +258,19 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
             }
             ly.width.set(width);
             republish(&ly);
+        });
+    }
+
+    {
+        let weak = ui.as_weak();
+        let ly = ly.clone();
+        global.on_hover_at(move |y| {
+            let Some(ui) = weak.upgrade() else { return };
+            let found = row_at(&ly.offsets.borrow(), &ly.rows.borrow(), ly.metrics.get(), y);
+            let index = found.and_then(|i| i32::try_from(i).ok()).unwrap_or(-1);
+            // `Property::set` is value-compared, so the rows are only dirtied when the pointer
+            // crosses from one line to the next rather than on every motion event.
+            ui.global::<Lyrics>().set_hover_index(index);
         });
     }
 
@@ -248,6 +295,85 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
     ly
 }
 
+/// The sheet for `track`, or `None` where the panel should be left as it is.
+///
+/// A failure is logged and reads as "nothing found": a sidecar in some old codepage or a directory
+/// that is down are both, to a reader, a panel with no words in it, and neither is worth a toast.
+pub(super) async fn fetch(state: &AppState, track: &TrackSummary) -> LyricsOutcome {
+    match library::lyrics::for_track(state, track).await {
+        Ok(outcome) => outcome,
+        Err(e) => {
+            log::debug!(
+                "ui::now_playing lyrics for {}: {}",
+                track.id,
+                melodia_core::error::describe(&e)
+            );
+            LyricsOutcome::Absent
+        }
+    }
+}
+
+/// Bring the panel in line with whatever is playing, looking a sheet up if it has to.
+///
+/// **Three unrelated edges reach this, and dropping any one of them shows an empty panel.** The
+/// sheet is handed back on every close, which is the trade this feature makes against holding a
+/// resident copy for the life of the process — so a re-open of the *same* track has nothing to
+/// paint, and the artwork's already-applied guard has no way to know that. A track change is
+/// `apply_source_change`'s; the other two are the view re-opening and the 3-dot toggle, and both
+/// arrive here.
+///
+/// Idempotent by [`LyricsUi::holds`], so the edges may overlap freely: whichever gets there first
+/// pays, and the claim is taken before the first `.await` rather than after the last.
+fn reseed(weak: &Weak<AppWindow>, state: &AppState, np_state: &Rc<NowPlayingState>) {
+    let Some(ui) = weak.upgrade() else { return };
+    let ly = &np_state.lyrics;
+
+    let track = np_state.current_source.borrow().as_ref().and_then(|s| s.track.clone());
+    let shown = ui.global::<Lyrics>().get_shown();
+    let Some(track) = track.filter(|_| shown) else {
+        // Switched off, or a station, which has no words to look up. Either way the previous
+        // song's sheet must not sit under it.
+        if ly.holding.borrow().is_some() {
+            release(&ui, ly);
+        }
+        return;
+    };
+    if ly.holds(&track.file_path) {
+        return;
+    }
+
+    mark_loading(&ui, ly, &track.file_path);
+    let weak = weak.clone();
+    let state = state.clone();
+    let np_state = np_state.clone();
+    let res = slint::spawn_local(Compat::new(async move {
+        let outcome = fetch(&state, &track).await;
+        let Some(ui) = weak.upgrade() else { return };
+        // The song may have moved under the lookup; the claim taken above is what says so, and it
+        // is the same test the two other edges dedupe on.
+        if !np_state.lyrics.holds(&track.file_path) {
+            return;
+        }
+        apply(&ui, &np_state.lyrics, &track.file_path, &outcome, state.lyrics_online_enabled.get());
+    }));
+    if let Err(e) = res {
+        log::warn!("ui::now_playing lyrics reseed task spawn_local: {e}");
+    }
+}
+
+/// Wire the reseed hook, once the `NowPlayingState` this panel's state is a field of exists.
+pub(super) fn wire_reseed(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPlayingState>) {
+    let weak_ui = ui.as_weak();
+    let state = state.clone();
+    let weak_np = Rc::downgrade(np_state);
+    *np_state.lyrics.reseed.borrow_mut() = Some(Box::new(move || {
+        let Some(np_state) = weak_np.upgrade() else {
+            return;
+        };
+        reseed(&weak_ui, &state, &np_state);
+    }));
+}
+
 /// Write an outcome into the panel.
 ///
 /// `online_enabled` comes from the caller rather than being read here, because it decides only
@@ -255,11 +381,17 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
 pub(super) fn apply(
     ui: &AppWindow,
     ly: &Rc<LyricsUi>,
+    track_path: &str,
     outcome: &LyricsOutcome,
     online_enabled: bool,
 ) {
     ly.pinned.set(None);
     let global = ui.global::<Lyrics>();
+
+    // Recorded whichever of the three this came to, so a re-open that finds the same track already
+    // answered does not pay for a second lookup — including the two that draw no rows, which are
+    // answers rather than absences.
+    *ly.holding.borrow_mut() = Some(track_path.to_owned());
 
     match outcome {
         LyricsOutcome::Sheet(sheet) => {
@@ -285,13 +417,22 @@ pub(super) fn apply(
 }
 
 /// Say a lookup is out, so the panel is not claiming "not found" while it is still looking.
-pub(super) fn mark_loading(ui: &AppWindow, ly: &Rc<LyricsUi>) {
+///
+/// **Claims the track before the `.await`, not after it.** The lookup can reach a file and then a
+/// socket, and a reseed landing in that window would otherwise see a sheet for the *previous*
+/// track and start a second one for the same song.
+pub(super) fn mark_loading(ui: &AppWindow, ly: &Rc<LyricsUi>, track_path: &str) {
     clear(ui, ly);
+    *ly.holding.borrow_mut() = Some(track_path.to_owned());
     ui.global::<Lyrics>().set_state(LyricsState::Loading);
 }
 
 /// Hand back the rows and the table, on the view's own teardown.
+///
+/// Gives up the claim with them, so the next open looks the sheet up again rather than believing
+/// it is still on screen. That belief is what left a re-opened view blank until a restart.
 pub(super) fn release(ui: &AppWindow, ly: &Rc<LyricsUi>) {
+    ly.holding.borrow_mut().take();
     clear(ui, ly);
     ui.global::<Lyrics>().set_state(LyricsState::Idle);
 }

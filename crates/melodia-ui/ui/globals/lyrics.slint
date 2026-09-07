@@ -45,6 +45,11 @@ export global Lyrics {
     out property <length> translation-gap: 4px;
     out property <length> row-gap: 14px;
 
+    // Breathing room inside a row, so the hover fill is a band around the words rather than a box
+    // flush against them. Comes off the width the panel reports, so Rust's wrap estimate measures
+    // the room the text actually has.
+    out property <length> row-pad: 8px;
+
     in property <[LyricRow]> rows;
     in property <LyricsState> state: LyricsState.idle;
     // Whether `rows` carries timings, so the panel knows to follow rather than only print.
@@ -61,6 +66,11 @@ export global Lyrics {
     // persisted by Rust, the `Visualizer.enabled` shape.
     in-out property <bool> shown;
     callback set-shown(bool);
+
+    // Which row the pointer is over, or `-1`. Rust's, off the same offset table the click below
+    // resolves against, so the row that lights up is the row a click would seek.
+    in property <int> hover-index: -1;
+    callback hover-at(length);
 
     // Somewhere in the sheet was clicked, in logical pixels down the scrolled content.
     //
