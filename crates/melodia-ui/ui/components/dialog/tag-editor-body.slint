@@ -210,11 +210,32 @@ export component TagEditorBody inherits HorizontalLayout {
                 }
             }
 
-            if TagEditor.active-tab == 1 && TagEditor.track-count == 1: MultilineInput {
+            if TagEditor.active-tab == 1 && TagEditor.track-count == 1: Rectangle {
                 width: 100%;
                 height: 100%;
-                placeholder: TagEditor.lyrics-placeholder;
-                text <=> TagEditor.lyrics;
+
+                VerticalLayout {
+                    spacing: Theme.pad-sm;
+
+                    // **Above the field rather than beside Save**, which commits the whole dialog:
+                    // this one fills the box and leaves the reader to check it, so it belongs to
+                    // the tab and not to the footer.
+                    if TagEditor.has-resident-lyrics: HorizontalLayout {
+                        alignment: start;
+                        vertical-stretch: 0;
+                        PillButton {
+                            text: @tr("Insert found lyrics");
+                            icon: "lyrics";
+                            clicked => { TagEditor.insert-resident-lyrics(); }
+                        }
+                    }
+
+                    MultilineInput {
+                        vertical-stretch: 1;
+                        placeholder: TagEditor.lyrics-placeholder;
+                        text <=> TagEditor.lyrics;
+                    }
+                }
             }
 
             if TagEditor.active-tab == 2 && TagEditor.track-count == 1: Rectangle {

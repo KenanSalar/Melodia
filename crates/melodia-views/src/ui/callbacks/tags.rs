@@ -34,7 +34,7 @@ use melodia_artwork::media::image::image_decode::{
 };
 use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
 use melodia_core::entities::track::TagEditRow;
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 use melodia_ui::{AppWindow, Dialog, Settings, TagEditor};
 
 /// Canonical field order, shared by the three positional lists that must stay
@@ -75,6 +75,9 @@ struct TagSession {
     /// The picked cover path — set only while `artwork == Replace`. Rides to the
     /// orchestrator as `apply_tag_edit`'s separate `artwork_source` arg.
     picked: Option<PathBuf>,
+    /// The sheet this track already has somewhere other than its own tag, held from the open so
+    /// the Insert button costs no read of its own. `None` where there is nothing to offer.
+    resident_lyrics: Option<String>,
 }
 
 /// Wire the four `TagEditor` callbacks. Needs `Rc<NotificationsUi>` for the
@@ -85,6 +88,7 @@ pub fn wire_tags(ui: &AppWindow, state: &AppState, notifications: &Rc<Notificati
     let te = ui.global::<TagEditor>();
 
     wire_request_edit(&te, ui, state, &session);
+    wire_insert_resident_lyrics(&te, ui, &session);
     wire_pick_artwork(&te, ui, state, &session);
     wire_remove_artwork(&te, ui, &session);
     wire_commit(&te, ui, state, &session, notifications);
@@ -132,6 +136,21 @@ fn wire_request_edit(
                 String::new()
             };
 
+            // What the Now Playing panel would show for this track, which is the tag only when
+            // nothing better exists. Offered rather than applied: writing it is a tag edit like
+            // any other, so it goes through this dialog's own Save.
+            let resident = if single {
+                library::lyrics::resident_text(&s, &rows[0].file_path)
+                    .await
+                    .unwrap_or_else(|e| {
+                        log::debug!("tag edit: no resident sheet: {}", describe(&e));
+                        None
+                    })
+                    .filter(|text| text.trim() != lyrics.trim())
+            } else {
+                None
+            };
+
             // Cover preview from the first row that has one (decode off the
             // UI thread — a full-res source could jank it).
             let cover_path = rows.iter().find_map(|r| {
@@ -145,9 +164,26 @@ fn wire_request_edit(
             };
 
             let Some(ui) = weak.upgrade() else { return };
-            populate(&ui, &session, &rows, lyrics, cover);
+            populate(&ui, &session, &rows, lyrics, resident, cover);
             ui.global::<Dialog>().set_open(true);
         }));
+    });
+}
+
+/// `insert-resident-lyrics`: fill the field with the sheet this track already has.
+///
+/// **Fills the box and stops there.** The write is the dialog's own Save, so the inserted sheet is
+/// a diff against the populate-time baseline like every other field — which is what makes it
+/// reviewable, cancellable, and undoable by the same Cancel that covers a mistyped title.
+fn wire_insert_resident_lyrics(te: &TagEditor, ui: &AppWindow, session: &Rc<RefCell<TagSession>>) {
+    let weak = ui.as_weak();
+    let session = session.clone();
+    te.on_insert_resident_lyrics(move || {
+        let Some(ui) = weak.upgrade() else { return };
+        let Some(text) = session.borrow().resident_lyrics.clone() else {
+            return;
+        };
+        ui.global::<TagEditor>().set_lyrics(SharedString::from(text));
     });
 }
 
@@ -279,6 +315,7 @@ fn populate(
     session: &Rc<RefCell<TagSession>>,
     rows: &[TagEditRow],
     lyrics: String,
+    resident: Option<String>,
     cover: Option<SharedPixelBuffer<Rgb8Pixel>>,
 ) {
     let te = ui.global::<TagEditor>();
@@ -359,7 +396,7 @@ fn populate(
     te.set_lyrics_placeholder(SharedString::default());
     originals.push(lyrics);
 
-    finalize_populate(&te, session, rows, originals, cover);
+    finalize_populate(&te, session, rows, originals, resident, cover);
 }
 
 /// Finish a `populate`: scalar flags, cover, Summary, and the session snapshot.
@@ -368,12 +405,14 @@ fn finalize_populate(
     session: &Rc<RefCell<TagSession>>,
     rows: &[TagEditRow],
     originals: Vec<String>,
+    resident: Option<String>,
     cover: Option<SharedPixelBuffer<Rgb8Pixel>>,
 ) {
     let single = rows.len() == 1;
     te.set_track_count(clamp_i32(rows.len()));
     te.set_active_tab(0);
     te.set_lyrics_enabled(single);
+    te.set_has_resident_lyrics(resident.is_some());
 
     if let Some(buf) = cover {
         te.set_cover(Image::from_rgb8(buf));
@@ -391,6 +430,7 @@ fn finalize_populate(
         originals,
         artwork: ArtworkEdit::Keep,
         picked: None,
+        resident_lyrics: resident,
     };
 }
 

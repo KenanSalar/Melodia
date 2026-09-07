@@ -94,6 +94,16 @@ fn still_stands(marker: &Path) -> bool {
     modified.elapsed().is_ok_and(|age| age < MISS_STANDS_FOR)
 }
 
+/// The stored sheet's text, verbatim as the directory sent it.
+///
+/// The two markers have no text and are not answers to this question: a caller asking for a sheet
+/// to write somewhere has nothing to do with "nobody has one".
+pub(super) fn read_text(dir: &Path, track_path: &str) -> Option<String> {
+    fs::read_to_string(entry(dir, &key(track_path), SHEET_EXT))
+        .ok()
+        .filter(|text| !text.trim().is_empty())
+}
+
 fn entry(dir: &Path, stem: &str, extension: &str) -> PathBuf {
     dir.join(format!("{stem}.{extension}"))
 }

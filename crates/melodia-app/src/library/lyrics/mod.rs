@@ -77,6 +77,53 @@ pub async fn for_track(state: &AppState, track: &TrackSummary) -> Result<LyricsO
     Ok(timed_first(fetched, own))
 }
 
+/// The sheet this track already has, as its author wrote it, or `None`.
+///
+/// **Local only, and that is the point.** The tag editor's Lyrics tab offers to write this into
+/// the file, so what it hands over has to be text that exists rather than an answer a lookup might
+/// give — and a dialog opening on a selection must not spend a request per track.
+///
+/// Raw rather than the parsed sheet: a promotion writes the sheet on, so re-serializing
+/// [`LyricsOutcome`] back to LRC would drop the `[offset:]` tag and the gloss separator that made
+/// it worth keeping.
+pub async fn resident_text(state: &AppState, track_path: &str) -> Result<Option<String>, AppError> {
+    let path = PathBuf::from(track_path);
+    let lyrics_dir = state.paths.lyrics_dir.clone();
+    let track_path = track_path.to_owned();
+
+    state
+        .runtime
+        .spawn_blocking(move || read_local_text(&path, &lyrics_dir, &track_path))
+        .await
+        .map_err(AppError::io_source)?
+}
+
+/// [`read_local`]'s three homes, answering with text instead of a sheet. Blocking.
+///
+/// **The same order, and it has to stay the same order**: a sidecar is the user's own, then
+/// whichever of the tag and the store is timed, then the file's own tag over a copy of somebody
+/// else's upload. What a reader sees and what a promotion writes are one answer, so a track whose
+/// panel shows the directory's timed sheet does not hand the tag's plain one to the editor.
+fn read_local_text(
+    path: &Path,
+    lyrics_dir: &Path,
+    track_path: &str,
+) -> Result<Option<String>, AppError> {
+    if let Some(text) = sidecar::read_text(path)? {
+        return Ok(Some(text));
+    }
+    let own = crate::library::tags::read_lyrics(path)?;
+    let stored = store::read_text(lyrics_dir, track_path);
+
+    if own.as_deref().is_some_and(lrc::is_timed) {
+        return Ok(own);
+    }
+    if stored.as_deref().is_some_and(lrc::is_timed) {
+        return Ok(stored);
+    }
+    Ok(own.or(stored))
+}
+
 /// What the local sources had.
 ///
 /// Three answers rather than the first of three, because which one spoke decides whether the

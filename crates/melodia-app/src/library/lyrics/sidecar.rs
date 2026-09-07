@@ -13,13 +13,19 @@ use melodia_core::error::AppError;
 /// went wrong is reported, including a sheet in an encoding that is not UTF-8, which
 /// [`std::fs::read_to_string`] refuses. The caller decides what a report is worth.
 pub(super) fn read(path: &Path) -> Result<Option<Lyrics>, AppError> {
+    Ok(read_text(path)?.and_then(|text| lrc::parse(&text, LyricsSource::Sidecar)))
+}
+
+/// The sheet as its author wrote it, for a caller that has to write it somewhere else.
+///
+/// **Blank counts as absent, and that is what keeps this and [`read`] one walk.** An empty file
+/// beside a track parses to no sheet, so stopping the walk on one would answer `None` for a track
+/// whose *second* candidate has the words.
+pub(super) fn read_text(path: &Path) -> Result<Option<String>, AppError> {
     for candidate in candidates(path) {
         match std::fs::read_to_string(&candidate) {
-            Ok(text) => {
-                if let Some(lyrics) = lrc::parse(&text, LyricsSource::Sidecar) {
-                    return Ok(Some(lyrics));
-                }
-            }
+            Ok(text) if !text.trim().is_empty() => return Ok(Some(text)),
+            Ok(_) => {}
             Err(e) if e.kind() == ErrorKind::NotFound => {}
             Err(e) => return Err(AppError::io_source(e)),
         }

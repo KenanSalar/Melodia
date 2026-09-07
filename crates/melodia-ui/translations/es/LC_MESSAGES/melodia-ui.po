@@ -2060,3 +2060,8 @@ msgstr "Vuelve a mostrar la configuración inicial."
 # Button on the About row above. Short by design — it sits in a narrow control slot.
 msgid "Show"
 msgstr "Mostrar"
+
+# Tag editor, Lyrics tab: fills the box with the sheet the track already has elsewhere —
+# a `.lrc` beside it, or one the lyrics directory answered with. Saving is the dialog's own.
+msgid "Insert found lyrics"
+msgstr "Insertar letra encontrada"

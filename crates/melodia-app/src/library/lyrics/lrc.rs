@@ -72,6 +72,16 @@ pub fn parse(text: &str, source: LyricsSource) -> Option<Lyrics> {
     Lyrics::new(timed, source)
 }
 
+/// Whether `text` carries timings, without building the sheet to find out.
+///
+/// The same reading [`parse`] takes, stopping at the first stamped line: a caller choosing where
+/// to write a sheet, or which of two homes to believe, is asking only this and would otherwise
+/// allocate every line to learn it.
+#[must_use]
+pub(super) fn is_timed(text: &str) -> bool {
+    text.lines().any(|line| !split_stamps(line).0.is_empty())
+}
+
 /// Splits a line into the words and the gloss under them, where the sheet carries one.
 ///
 /// Falls back to the whole line wherever the caret is not acting as a separator, so a sheet that

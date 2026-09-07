@@ -74,6 +74,12 @@ export global TagEditor {
     in property <string> comment-placeholder;
     in property <string> bpm-placeholder;
     in property <string> lyrics-placeholder;
+    // Whether this track already has a sheet somewhere other than its own tag — a `.lrc` beside
+    // it, or one the directory answered with — so the tab can offer to write that into the file.
+    // False where the tag is already what would be inserted, an offer to copy a field onto itself
+    // reading as a broken button rather than as a no-op.
+    in property <bool> has-resident-lyrics;
+    callback insert-resident-lyrics();
 
     // 1 = single selection (Lyrics + Summary available), >1 = batch.
     in property <int> track-count;
