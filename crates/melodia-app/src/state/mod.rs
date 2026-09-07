@@ -130,6 +130,11 @@ pub struct AppState {
     /// Whether playing a station reports a click back to the directory. Read on
     /// the play path, which is already on a worker.
     pub radio_send_clicks: SharedFlag,
+    /// Whether the lyrics panel may look a sheet up online, on the same terms as
+    /// [`Self::radio_enabled`]: `library::lyrics`'s guard runs on a worker once per
+    /// track change, where a `settings.json` read would be a file read on the path a
+    /// track change already pays for.
+    pub lyrics_online_enabled: SharedFlag,
     /// Whether a star rating is also written into the file's own tag, on the same
     /// terms as [`Self::radio_enabled`]: `tasks::rating_writeback` asks once per
     /// coalesced burst, and a `settings.json` read there would be a file read on
@@ -267,6 +272,7 @@ impl AppState {
             radio_enabled: SharedFlag::new(settings.radio.radio_enabled),
             radio_hide_segmented: SharedFlag::new(settings.radio.radio_hide_segmented),
             radio_send_clicks: SharedFlag::new(settings.radio.radio_send_clicks),
+            lyrics_online_enabled: SharedFlag::new(settings.lyrics.lyrics_online_enabled),
             write_ratings_to_tags: SharedFlag::new(settings.library.write_ratings_to_tags),
             media_controls: Some(mc_handle),
             http_client,

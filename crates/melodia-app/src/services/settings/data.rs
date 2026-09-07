@@ -377,6 +377,27 @@ impl Default for RadioFlags {
     }
 }
 
+/// The Now Playing lyrics panel, and whether it may look a sheet up online.
+///
+/// Both off, and the derive is the honest `Default` here rather than a hand-written one: a panel
+/// nobody asked for should not take the Up Next column on upgrade, and the shipped package
+/// description promises that every online feature is a setting the user controls.
+///
+/// **Two switches because they sell different things.** The panel is a view preference and reads
+/// whatever is already on disk or in the file; the lookup is traffic. Turning the lookup off
+/// leaves a sheet already in the store perfectly readable, which is what "no traffic" means and
+/// what "no lyrics" would not.
+///
+/// `settings.json` rather than `views.json` for the panel too, for `VisualizerFlags::viz_enabled`'s
+/// reason: it is the other Now Playing preference flipped from that view's own overflow menu, and
+/// a `views.json` flag may not be a bool.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LyricsFlags {
+    pub lyrics_panel_shown: bool,
+    pub lyrics_online_enabled: bool,
+}
+
 /// Library-management toggles.
 ///
 /// Two default-on switches, both because the off state is the surprising one.
@@ -691,6 +712,8 @@ pub struct SettingsData {
     #[serde(flatten)]
     pub radio: RadioFlags,
     #[serde(flatten)]
+    pub lyrics: LyricsFlags,
+    #[serde(flatten)]
     pub library: LibraryFlags,
     #[serde(flatten)]
     pub layout: LayoutFlags,
@@ -739,6 +762,7 @@ impl Default for SettingsData {
             scrobble: ScrobbleFlags::default(),
             discord: DiscordFlags::default(),
             radio: RadioFlags::default(),
+            lyrics: LyricsFlags::default(),
             library: LibraryFlags::default(),
             layout: LayoutFlags::default(),
             motion: MotionFlags::default(),

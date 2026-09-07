@@ -218,11 +218,11 @@ for the great majority of MP3s, which open with one. `sniff_file_type` is theref
 correct where `read_tags` asks it once the extension resolved to nothing, and silently wrong as a
 primary gate. Its doc comment now says so.
 
-### Phase 4 — the resolver and its off switch · **not started**
+### Phase 4 — the resolver and its off switch · **done**
 
-**`crates/melodia-app/src/library/lyrics/mod.rs`** (new) is the one door, shaped like
-`library/radio/mod.rs`: the module holds the switch and the client seam, and the arms are private
-files re-exported so no caller learns which one answered.
+**`crates/melodia-app/src/library/lyrics/mod.rs`** is the one door, shaped like
+`library/radio/mod.rs`: the module holds the switch, and the arms are private files, so no caller
+learns which one answered.
 
 ```rust
 pub async fn for_track(state: &AppState, track: &TrackSummary) -> Result<Option<Lyrics>, AppError>
@@ -230,39 +230,56 @@ pub async fn for_track(state: &AppState, track: &TrackSummary) -> Result<Option<
 
 Order — **sidecar → embedded → online**:
 
-1. **`sidecar.rs`** — `<stem>.lrc` *and* `<file-name-with-extension>.lrc` beside the track. Both
-   shapes are in circulation (`song.lrc` and `song.mp3.lrc`), and which one a user has depends on
-   whatever wrote it, so checking one name is a coin flip. Case-insensitive extension through the
-   `eq_ignore_ascii_case` idiom, not `to_lowercase()`.
-2. **`embedded.rs`** — the existing `read_lyrics` through `lrc::parse`, which is the whole of it.
-   The tag holds LRC text or it holds plain text, and the parser answers either without being
-   told which. Phase 3 says why there is no `SYLT` arm.
-3. **`online.rs`** — LRCLIB, behind the guard.
+1. **`sidecar.rs`** — `<stem>.lrc` *and* `<file-name-with-extension>.lrc`, in that order. Both are
+   in circulation and which one a user has depends on whatever produced it, so checking a single
+   name is a coin flip. A missing sidecar is not a failure; anything else that went wrong is
+   reported, a non-UTF-8 sheet included, since `read_to_string` refuses those.
+   **Spelled rather than searched**: matching a `.LRC` on a case-sensitive filesystem would mean
+   listing the directory on every track change, which is a real cost on a large folder against a
+   spelling almost nothing writes. (The plan's `eq_ignore_ascii_case` note did not apply; the names
+   are constructed, not compared.)
+2. **`embedded.rs`** — `tags::read_lyrics` through `lrc::parse`, which is the whole of it. The tag
+   holds LRC text or plain prose and declares neither, and the parser answers both. Phase 3 says
+   why there is no `SYLT` arm.
+3. **The lookup** — deferred to Phase 5, where the request is.
 
-All three are blocking file work and **the door owns the `spawn_blocking`**, unlike
-`library::tags::read_lyrics` whose caller does. Its doc comment says so, because the two now differ.
+**`mod lrc` is private now**, as Phase 2 promised, since its three sibling arms are its callers.
+
+Four things landed differently:
+
+- **There is no `online.rs`.** A module whose only content was a guard and a placeholder drew two
+  lints in a row — `unused_async`, then `unnecessary_wraps` — each correctly saying the function
+  did nothing. Both would have wanted a suppression that Phase 5 immediately deletes. The guard
+  went into `for_track` instead, where it is genuinely in the path, and Phase 5 replaces the
+  trailing `Ok(None)` with the call. Nothing is stubbed and nothing is suppressed.
+- **The guard answers `bool`, not `Result`.** Radio's `ensure_enabled` refuses because radio
+  unmounts its section when off, so a call arriving there is a bug. Here the switch being off is
+  the ordinary state of most libraries, and the honest answer is "no sheet" rather than an error.
+  `online_lookup_enabled` is still the only place `lyrics_online_enabled` is named.
+- **A file-source error propagates today.** Whether a tag this could not read should still reach
+  the lookup is a real question, and the answer only pays for itself once there is a lookup to
+  reach, so Phase 5 settles it. Noted at the call site rather than decided early.
+- **The shipped descriptions are Phase 5's**, not this one's. Nothing here opens a socket, so the
+  sentence they carry is not false yet. It becomes load-bearing the moment a request can happen.
 
 **The switch:**
 
-- **`LyricsFlags { lyrics_panel_shown: bool, lyrics_online_enabled: bool }`** — a new
-  `#[serde(flatten)]` group in `SettingsData`, not two more bools in `LibraryFlags`, which already
-  carries an `#[expect(clippy::struct_excessive_bools)]` at the cap. Both default `false`.
-  `settings.json` rather than `views.json` for the panel toggle too: a `views.json` flag may not be
-  a bool, and `VisualizerFlags.viz_enabled` is the exact precedent — a Now Playing view preference
-  flipped from this same 3-dot menu, living in settings.
-- A `SharedFlag` shadow on `AppState`, written **synchronously before** the persist is spawned.
-- **One early return, in an `ensure_online_enabled` the flag is named inside and nowhere else.**
-  Radio's `the_switch_is_read_in_one_place` is an *equality*, not a floor, precisely so it fails on
-  a deleted guard as readily as on a second hand-rolled one — `station_to_restore` carried a
-  hand-rolled copy for a while.
+- **`LyricsFlags { lyrics_panel_shown: bool, lyrics_online_enabled: bool }`**, a new
+  `#[serde(flatten)]` group rather than two more bools in `LibraryFlags`, which already carries an
+  `#[expect(clippy::struct_excessive_bools)]` at the cap. Both default `false`, so the derive is
+  the honest `Default` and no hand-written impl is owed.
+- **`AppState::lyrics_online_enabled`**, a `SharedFlag` seeded at boot. Only the online flag gets
+  a shadow: the panel flag is read once at boot by the Slint seeding, exactly as
+  `VisualizerFlags::viz_enabled` is, and never on a worker.
+- `library::settings::{set_lyrics_panel_shown, set_lyrics_online_enabled}` persist through
+  `mutate_settings`; the UI callback writes the shadow **synchronously before** spawning the
+  persist (Phase 9).
 - **Reading a `.lrc` already in the store is not traffic**, so a cached sheet keeps working with
-  the switch off. That is the honest reading of what the toggle sells ("no traffic"), not
-  "no lyrics".
-- Both shipped descriptions gain lyrics in their enumeration, plus `README.md`.
+  the switch off. That is what the toggle sells ("no traffic"), not "no lyrics".
 
 Unlike radio's, this switch has no nav section, no playing source and no persisted index to fold,
-so `ui::radio::disable`'s four consequences have no analogue here. Turning it off stops the fetch
-and nothing else.
+so `ui::radio::disable`'s four consequences have no analogue. Turning it off stops the fetch and
+nothing else.
 
 ### Phase 5 — LRCLIB · **not started**
 
@@ -290,6 +307,12 @@ job would be to reconstruct the certainty `/api/get` starts with.
 - One request per track change at most, ~256 KiB cap, timeout in line with `station_logo`'s.
 
 No new dependency: `melodia-net` already carries `reqwest` and `serde_json`.
+
+**This is also where the shipped descriptions gain their fourth item**, handed over by Phase 4:
+`packaging/com.github.kenansalar.melodia.metainfo.xml` and `crates/melodia/Cargo.toml`'s
+`extended-description` both enumerate the online features that ship switched off, and this is the
+commit that makes a fourth one true. `README.md` gains its *Off until you switch it on* line
+alongside them.
 
 ### Phase 6 — the store · **not started**
 

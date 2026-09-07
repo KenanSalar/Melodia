@@ -71,11 +71,15 @@ pub async fn get_tag_edit_rows(state: &AppState, ids: &[i64]) -> Result<Vec<TagE
     queries::track::get_tag_edit_rows_by_ids(&state.db, ids).await
 }
 
-/// The dialog's Lyrics tab, which reads off the file rather than the database.
+/// A file's lyrics tag, read off the file rather than the database.
 ///
 /// Here for [`get_tag_edit_rows`]' reason: it is the read half of the same dialog, and the one
 /// piece of it the UI would otherwise have to reach into `media::ingest::tag_writer` for. Blocking —
 /// the caller owns the `spawn_blocking`, having a runtime handle in hand where this does not.
+///
+/// Two callers now: the dialog's Lyrics tab, and `library::lyrics`, which hands what comes back to
+/// an LRC parser because this tag is routinely filled with a timed sheet. The string is whatever
+/// the tag held; nothing here judges what is in it.
 pub fn read_lyrics(path: &Path) -> Result<Option<String>, AppError> {
     tag_writer::read_lyrics(path)
 }
