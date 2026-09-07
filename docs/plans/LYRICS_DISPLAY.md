@@ -139,7 +139,7 @@ Two things landed differently from the sketch above, both narrowing what can be 
   containing only newlines is one a tagger created and nobody filled in. Blank lines *inside* a
   sheet are kept, being how a plain one spaces its verses.
 
-### Phase 2 — the LRC parser · **not started**
+### Phase 2 — the LRC parser · **done**
 
 **`crates/melodia-app/src/library/lyrics/lrc.rs`** (new), pure, no I/O. The precedent is
 `library/playlist_files/m3u.rs`: hand-rolled, no crate. The `lrc` crate pulls `regex` + `educe` +
@@ -158,10 +158,26 @@ would be carried forever against a parser that never needs to change.
 - **Enhanced word tags `<mm:ss.xx>` parsed out of the text and discarded.** A non-timestamp `<3`
   stays literal.
 - Sorted by stamp — a stable sort, so duplicate stamps keep file order.
-- No stamps anywhere means `synced: false`, lines in file order.
+- No stamps anywhere means an untimed sheet, lines in file order.
 
-`is_probably_lrc(text)` lives here too: the embedded arm needs it, because Vorbis `LYRICS` is
-overloaded and lofty's own `ItemKey::Lyrics` docs say to try parsing it as LRC.
+Three notes from building it:
+
+- **`is_probably_lrc` is not there, and no caller wants it.** `parse` is total: it takes a sidecar,
+  a lyrics tag or an API field without being told which, and answers with a timed sheet, a plain
+  one, or nothing. lofty's advice to "try parsing it as LRC" is discharged by calling `parse` and
+  reading `Lyrics::is_synced`, so a predicate beside it would be a second way to ask one question,
+  which is the same thing the derived `is_synced` avoids.
+- **A timed sheet keeps only its timed lines.** That is what makes "a sheet is timed or it is not"
+  true downstream rather than merely hoped for, and it is why the mixed case never reaches the
+  panel. A sheet with no stamps at all keeps everything, including its `[Chorus]` markers and its
+  blank lines, which is how a plain sheet spaces its verses.
+- **`pub mod lrc` for now, `mod lrc` in Phase 4.** `playlist_files` keeps its `m3u` private
+  because the facade is the door, and this owes the same. It cannot be private yet: nothing calls
+  it until Phase 4, and a private module with no callers is `dead_code` under the workspace lints.
+
+The offset direction was verified rather than assumed: a **positive** `[offset:]` means the sheet
+runs early, so it comes off the stamps. Getting the sign backwards would double the error on
+exactly the sheets that carry the tag.
 
 ### Phase 3 — reading the file · **not started**
 
