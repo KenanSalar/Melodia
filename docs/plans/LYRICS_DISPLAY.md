@@ -281,7 +281,7 @@ Unlike radio's, this switch has no nav section, no playing source and no persist
 so `ui::radio::disable`'s four consequences have no analogue. Turning it off stops the fetch and
 nothing else.
 
-### Phase 5 — LRCLIB · **not started**
+### Phase 5 — LRCLIB · **done**
 
 **`crates/melodia-net/src/services/net/lrclib.rs`** (new), beside `radio_browser`.
 
@@ -292,27 +292,45 @@ doesn't, and there is no candidate list to score. A search endpoint would hand b
 and put the burden of deciding which one is this track onto us — a whole scoring pass whose only
 job would be to reconstruct the certainty `/api/get` starts with.
 
-- Through `services::net::get_capped_text`, then `serde_json::from_str`. The rule is that a body is
-  streamed under a cap, never `bytes()`-ed or `.json()`-ed and measured after the allocation, and
-  `crates/melodia/tests/net_primitives.rs` walks the corpus for it.
+- The status is checked here and the body goes through `services::net::read_capped`, which is
+  `radio_browser::get_json`'s shape. **Not `get_capped`**, which treats every non-success as an
+  error: a `404` is this endpoint's ordinary answer and folding it into a failure would report an
+  outage for every track nobody has written lyrics for.
 - URL built with `reqwest::Url` + `query_pairs_mut`, never string-formatted.
-- `User-Agent: Melodia/<version> (https://github.com/KenanSalar/Melodia)` — LRCLIB asks clients to
-  identify themselves by name, version and project URL. The shared client's UA is already
-  `Melodia/<version>`; this adds the URL per request.
-- Response fields, read live: `id`, `name`, `trackName`, `artistName`, `albumName`, `duration`,
-  `instrumental`, `plainLyrics`, `syncedLyrics`. A `404` is a miss, not an error.
-- **`instrumental: true` is a positive answer** — "this track has no words" — and is stored as one
-  rather than as a miss. The distinction earns its keep in the panel: an instrumental gets copy
-  that says so and never retries, where a miss says nothing was found and expires.
-- One request per track change at most, ~256 KiB cap, timeout in line with `station_logo`'s.
+- `User-Agent: Melodia/<version> (https://github.com/KenanSalar/Melodia)`, which is the shape the
+  service asks for. The shared client already sends `Melodia/<version>`; this adds the project URL
+  and only on requests to this host.
+- **The request is skipped where it could only miss.** The directory identifies a recording by
+  artist, title and duration together, so a track with no artist tag, or one whose duration never
+  made it out of the scan, is not asked about at all: it is traffic spent to learn nothing.
+- ~256 KiB cap, timeout in line with `station_logo`'s.
+
+**`LyricsAnswer` is the boundary type and lives in `melodia-core`.** The service's own response
+shape stays private to `melodia-net`, exactly as `ApiStation` does, and what crosses is a domain
+answer. It carries three outcomes rather than two, since a track the directory *knows* has no words
+deserves different copy and a different retry from one it simply has not got.
+
+Two things the phase turned up:
+
+- **An empty `syncedLyrics` shadowed a real `plainLyrics`.** `text()` picked the timed field and
+  tested it afterwards, so a directory answering with `""` beside real plain lyrics produced
+  nothing. Each field is judged before it is preferred now. Found by writing the assertion, not by
+  reading the code: the test passed against the wrong expectation and the message contradicting it
+  is what showed the bug.
+- **An instrumental still collapses to "no sheet".** The answer carries the flag and the fetch
+  reads it, but `for_track` returns `Option<Lyrics>` and a `Lyrics` is a sheet, so nothing can
+  express "this track has no words" yet. The outcome type that tells that apart from "nothing
+  found" belongs with the panel that draws the difference (Phase 7), and the store that must not
+  re-ask (Phase 6).
 
 No new dependency: `melodia-net` already carries `reqwest` and `serde_json`.
 
-**This is also where the shipped descriptions gain their fourth item**, handed over by Phase 4:
+**The shipped descriptions gained their fourth item here**, handed over by Phase 4:
 `packaging/com.github.kenansalar.melodia.metainfo.xml` and `crates/melodia/Cargo.toml`'s
-`extended-description` both enumerate the online features that ship switched off, and this is the
-commit that makes a fourth one true. `README.md` gains its *Off until you switch it on* line
-alongside them.
+`extended-description` now read "scrobbling, Discord presence, internet radio and online lyrics all
+ship switched off", which this is the commit that makes true. **`README.md` waits for Phase 10**:
+its bullet would describe a panel that does not exist yet, where those two are a promise about
+network behaviour that just became load-bearing.
 
 ### Phase 6 — the store · **not started**
 

@@ -62,3 +62,41 @@ impl Lyrics {
         self.lines.iter().any(|line| line.at_ms.is_some())
     }
 }
+
+/// What a lyrics directory said about one track.
+///
+/// The boundary between the crate that makes the request and the crate that decides what to do
+/// with it, so the service's own response shape stays private to the former, as the radio
+/// directory's does.
+///
+/// **Three outcomes, not two.** A sheet, nothing, or a track the directory knows has no words at
+/// all. The last is a *positive* answer: it deserves copy that says so and it should never be
+/// asked again, where "nothing found" is a different sentence and a different retry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LyricsAnswer {
+    /// LRC text, where the directory has a timed sheet.
+    pub synced: Option<String>,
+    /// Plain text, where it has only that.
+    pub plain: Option<String>,
+    pub instrumental: bool,
+}
+
+impl LyricsAnswer {
+    /// The text worth keeping, timed in preference to plain.
+    ///
+    /// One place decides that preference, so the copy written to the store and the copy handed to
+    /// the parser cannot disagree about which sheet arrived.
+    ///
+    /// **Each field is judged before it is preferred.** A directory that answers with an empty
+    /// `syncedLyrics` beside a real `plainLyrics` is answering with the plain one, and picking the
+    /// timed field first and testing it afterwards would throw that away.
+    #[must_use]
+    pub fn text(&self) -> Option<&str> {
+        filled(self.synced.as_deref()).or_else(|| filled(self.plain.as_deref()))
+    }
+}
+
+/// A field that is there rather than present and blank.
+fn filled(field: Option<&str>) -> Option<&str> {
+    field.map(str::trim).filter(|text| !text.is_empty())
+}

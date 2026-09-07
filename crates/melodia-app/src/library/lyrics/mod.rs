@@ -15,6 +15,7 @@
 
 mod embedded;
 mod lrc;
+mod online;
 mod sidecar;
 
 use std::path::{Path, PathBuf};
@@ -44,11 +45,7 @@ pub async fn for_track(state: &AppState, track: &TrackSummary) -> Result<Option<
         return Ok(None);
     }
 
-    // The lookup lands here. What it will also have to settle is whether a file source that
-    // *failed* should still reach it: a tag this could not read says nothing about whether the
-    // directory has the song, but that trade is only worth making once there is a directory to
-    // reach, so today the error above propagates.
-    Ok(None)
+    online::look_up(state, track).await
 }
 
 /// The two sources that need no network, in the order a user's own file wins. Blocking.

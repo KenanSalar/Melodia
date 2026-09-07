@@ -9,6 +9,7 @@
 //! HTTP consumer that is not a fetcher, and its blocklist leads it: `radio_blocklist` names
 //! `entities::radio` and nothing else.
 
+pub mod lrclib;
 pub mod radio_blocklist;
 pub mod radio_browser;
 
