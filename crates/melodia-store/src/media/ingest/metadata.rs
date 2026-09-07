@@ -57,6 +57,11 @@ pub fn extract_date_modified(path: &Path) -> Option<String> {
 /// of somebody's audio. A header matching nothing has to stay unidentified.
 ///
 /// Reads what lofty's own sniffer reads: its longest check reaches byte 36.
+///
+/// **A fallback, never an identifier.** `from_buffer` makes no attempt to search past a leading
+/// `ID3v2` tag, so it answers `None` for the great majority of MP3s, which open with one. That is
+/// harmless where [`read_tags`] asks it, once the extension has resolved to nothing. Reached for
+/// as a primary gate it silently refuses nearly every MP3 there is.
 fn sniff_file_type(path: &Path) -> Option<FileType> {
     const SNIFF_BYTES: usize = 36;
 

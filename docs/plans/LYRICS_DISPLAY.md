@@ -179,22 +179,44 @@ The offset direction was verified rather than assumed: a **positive** `[offset:]
 runs early, so it comes off the stamps. Getting the sign backwards would double the error on
 exactly the sheets that carry the tag.
 
-### Phase 3 — reading the file · **not started**
+### Phase 3 — reading the file · **closed, nothing to build**
 
-**`crates/melodia-store/src/media/ingest/tag_writer.rs`** gains one sibling to `read_lyrics`, which
-stays exactly as it is — the tag dialog owns it:
+**Don't re-propose a `SYLT` reader.** It was written, tested against a real frame, and then
+deleted, and the reasons are worth keeping so the next reader does not spend the day again.
 
-```rust
-/// The ID3v2 `SYLT` frame, the only *specified* synchronized-lyrics container.
-/// Lofty surfaces it as `Frame::Binary`; `SynchronizedTextFrame::parse` decodes it.
-pub fn read_synced_lyrics(path: &Path) -> Result<Option<Vec<(u32, String)>>, AppError>
-```
+The phase existed to reach `SYLT`, the only *specified* container for timed lyrics. Building it
+turned up four things:
 
-Both go through the existing `metadata::read_tags(path, TagScope::TagsOnly)` — no picture decode,
-no VBR frame scan, which is the cheapest read in the tree.
+- **A binary frame cannot reach a generic `Tag`.** `Id3v2Tag`'s `split_tag` returns
+  `FRAME_RETAINED` for `Frame::Binary`, keeping it in the `ID3v2` remainder instead of lowering it
+  to a `TagItem`. So a `TaggedFile` cannot carry a `SYLT` however `read_tags` is asked. Reaching
+  one means parsing the concrete file, which is a second lofty opener.
+- **`crates/melodia/tests/lofty_open.rs` forbids exactly that**, and names `tag_writer.rs` as the
+  file that broke it before. `metadata.rs` is the sanctioned opener and the reader did work there,
+  but it turns "the single place a path is handed to lofty" into "the single module", which is a
+  weaker sentence bought for one rare frame.
+- **The cost is per track change, not one-off.** In the resolution order below, `SYLT` is only
+  reached when the text tag did not already yield timed lyrics, which for most libraries is every
+  track. Keeping it meant a full second `MpegFile` parse on every MP3 track change, hunting a frame
+  that is almost never there. `ParseOptions::read_cover_art` also defaults **on**, so the first
+  draft decoded embedded album art on every one of those parses.
+- **Nothing can produce a file it would read.** Melodia's own tag editor writes
+  `ItemKey::Lyrics` / `UnsyncLyrics` as text, and so does every tagger and lyrics tool worth
+  naming. The universal carrier of timed lyrics in a tag is LRC *text* in `USLT` or `LYRICS`, which
+  `read_lyrics` already returns and Phase 2's parser already reads, timed case included. That is
+  the whole reason `SYLT` looked necessary and the reason it is not.
 
-`SYLT` timestamps can be MPEG frames rather than milliseconds (`TimestampFormat`). A frame-based
-frame is refused rather than mis-timed.
+So the embedded arm is `read_lyrics` + `lrc::parse`, both of which already exist. The reader was
+never committed and is in no history; if a genuine `SYLT` file ever turns up, the four points above
+are the whole recipe: `MpegFile::read_from` inside `metadata.rs`, gated on the extension rather
+than the header, refusing frame-unit timestamps and every content type but `Lyrics` and
+`TextTranscription`, with `read_cover_art(false)` beside `read_properties(false)`.
+
+**One thing was kept**, because it stands on its own and cost a debugging round to find:
+`FileType::from_buffer` makes no attempt to search past a leading `ID3v2` tag, so it answers `None`
+for the great majority of MP3s, which open with one. `sniff_file_type` is therefore a **fallback**,
+correct where `read_tags` asks it once the extension resolved to nothing, and silently wrong as a
+primary gate. Its doc comment now says so.
 
 ### Phase 4 — the resolver and its off switch · **not started**
 
@@ -212,8 +234,9 @@ Order — **sidecar → embedded → online**:
    shapes are in circulation (`song.lrc` and `song.mp3.lrc`), and which one a user has depends on
    whatever wrote it, so checking one name is a coin flip. Case-insensitive extension through the
    `eq_ignore_ascii_case` idiom, not `to_lowercase()`.
-2. **`embedded.rs`** — `read_synced_lyrics` (SYLT) first, then the existing `read_lyrics` text run
-   through `is_probably_lrc`.
+2. **`embedded.rs`** — the existing `read_lyrics` through `lrc::parse`, which is the whole of it.
+   The tag holds LRC text or it holds plain text, and the parser answers either without being
+   told which. Phase 3 says why there is no `SYLT` arm.
 3. **`online.rs`** — LRCLIB, behind the guard.
 
 All three are blocking file work and **the door owns the `spawn_blocking`**, unlike
