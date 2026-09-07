@@ -3740,6 +3740,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.19",
  "tokio",
+ "unicode-normalization",
 ]
 
 [[package]]
@@ -3908,7 +3909,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-util",
- "unicode-normalization",
 ]
 
 [[package]]

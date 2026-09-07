@@ -15,10 +15,13 @@
 
 use std::cell::RefCell;
 
-use unicode_normalization::UnicodeNormalization;
-use unicode_normalization::char::is_combining_mark;
-
 use melodia_core::entities::track::{MostPlayedFavorite, TrackListRow};
+// **The shared fold has to be at least as loose as `tracks_fts`'s `unicode61
+// remove_diacritics 2`** — mode 2 rather than `SQLite`'s legacy 1 is what reaches the
+// two-mark characters of scripts like Vietnamese. It is looser still, dropping marks
+// `SQLite`'s Latin-scoped table keeps: in a substring filter that only widens a match, and
+// under-folding is the half that would show.
+use melodia_core::utils::fold::{fold, fold_ascii_byte, push_folded};
 
 /// The searchable text of a track row, in the order `tracks_fts` lists its columns. `year`
 /// joins through [`any_field_matches`], being an integer.
@@ -214,49 +217,6 @@ impl Needle {
         let mut buf = [0u8; MAX_I32_DIGITS];
         matches(write_decimal(&mut buf, value))
     }
-}
-
-/// The ASCII half of [`push_folded`]'s rule, so the byte walk above and the packed key
-/// below can't answer a NUL differently.
-const fn fold_ascii_byte(b: u8) -> u8 {
-    if b == 0 { b' ' } else { b.to_ascii_lowercase() }
-}
-
-/// Append `s` to `out`, case- and accent-folded: NFD, combining marks dropped, lowercased.
-/// Covers everything `tracks_fts`'s `unicode61 remove_diacritics 2` tokenizer folds — mode
-/// 2 rather than `SQLite`'s legacy 1 is what reaches the two-mark characters of scripts
-/// like Vietnamese.
-///
-/// Deliberately the *looser* of the two: `is_combining_mark` is `General_Category=Mark`, so
-/// this also drops Indic spacing marks and the kana voicing marks where `SQLite`'s table is
-/// Latin-scoped. In a substring filter that only widens a match, and under-folding is the
-/// half that would show.
-///
-/// An embedded NUL becomes a space — not only for the packed `\0`-separated key, but
-/// because ID3v2.4 joins a multi-value text frame that way. A needle typed into a text
-/// input never carries one.
-pub fn push_folded(out: &mut String, s: &str) {
-    if s.is_ascii() {
-        out.reserve(s.len());
-        for &b in s.as_bytes() {
-            out.push(fold_ascii_byte(b) as char);
-        }
-        return;
-    }
-    for ch in s.nfd().filter(|c| !is_combining_mark(*c)) {
-        if ch == '\0' {
-            out.push(' ');
-        } else {
-            out.extend(ch.to_lowercase());
-        }
-    }
-}
-
-/// [`push_folded`] into a fresh `String`.
-fn fold(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    push_folded(&mut out, s);
-    out
 }
 
 thread_local! {

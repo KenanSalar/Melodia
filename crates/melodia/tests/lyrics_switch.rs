@@ -69,7 +69,7 @@ fn the_one_reading_of_the_switch_is_the_seam_itself() {
 
 /// Where the client module is declared.
 const CLIENT_DECL: &str = "services/net/mod.rs";
-/// The client's own file.
+/// The client's own module: the requests, and the matcher that judges what comes back.
 const CLIENT_TREE: &str = "services/net/lrclib";
 /// The one facade allowed to call it.
 const CALLER_TREE: &str = "library/lyrics/";
