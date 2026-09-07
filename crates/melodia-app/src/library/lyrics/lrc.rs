@@ -50,6 +50,7 @@ pub fn parse(text: &str, source: LyricsSource) -> Option<Lyrics> {
                 plain.push(LyricLine {
                     at_ms: None,
                     text: sung,
+                    romanization: None,
                     translation: gloss,
                 });
             }
@@ -60,6 +61,7 @@ pub fn parse(text: &str, source: LyricsSource) -> Option<Lyrics> {
         timed.extend(stamps.into_iter().map(|at| LyricLine {
             at_ms: Some(at.saturating_sub(offset).max(0)),
             text: sung.clone(),
+            romanization: None,
             translation: gloss.clone(),
         }));
     }

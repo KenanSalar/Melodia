@@ -1783,6 +1783,14 @@ msgstr "Αναζήτηση στίχων στο διαδίκτυο"
 msgid "When a track carries no words of its own, ask lrclib.net for them"
 msgstr "Όταν ένα κομμάτι δεν έχει δικούς του στίχους, ζητούνται από το lrclib.net"
 
+# The romanization switch. Named on the Services card and again in the Now Playing lyrics menu,
+# so both read from this one label.
+msgid "Show romanization"
+msgstr "Εμφάνιση λατινικής μεταγραφής"
+
+msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
+msgstr "Εμφάνιση της προφοράς κάθε στίχου με λατινικούς χαρακτήρες κάτω από τα λόγια, για γραφές που δεν τους χρησιμοποιούν"
+
 # The Settings sub-rows, shown only while the master switch is on.
 msgid "Hide segmented stations"
 msgstr "Απόκρυψη τμηματοποιημένων σταθμών"

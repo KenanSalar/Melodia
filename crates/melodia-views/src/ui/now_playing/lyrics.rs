@@ -76,10 +76,15 @@ struct Row {
     /// `None` on an untimed sheet, the two never mixing within one sheet.
     at_ms: Option<i32>,
     text: String,
+    /// How the words sound, for a script that does not spell it. `None` for a Latin line.
+    romanization: Option<String>,
     /// The gloss a bilingual sheet carries under the words, drawn at its own size beneath them.
     translation: Option<String>,
     /// Wrapped line count, and so this row's height in `Lyrics.line-height` units.
     lines: u8,
+    /// The same for the romanization, in `Lyrics.romanization-line-height` units. Zero without
+    /// one, and zero for every row while the toggle is off.
+    romanization_lines: u8,
     /// The same for the gloss, in `Lyrics.translation-line-height` units. Zero without one.
     translation_lines: u8,
 }
@@ -90,6 +95,9 @@ struct Row {
 struct Metrics {
     font_size: f32,
     line_height: f32,
+    romanization_font_size: f32,
+    romanization_line_height: f32,
+    romanization_gap: f32,
     translation_font_size: f32,
     translation_line_height: f32,
     translation_gap: f32,
@@ -97,18 +105,22 @@ struct Metrics {
 }
 
 impl Metrics {
-    /// How tall a row's own box is: the words, and the gloss under them where there is one.
+    /// How tall a row's own box is: the words, and whichever of the two lines under them it has.
     ///
-    /// The gap *between* rows is not in here — that is the layout's `spacing`, and it belongs to
-    /// neither of the rows it separates.
+    /// Each part carries the gap above it, so a row of one, two or three comes out right with no
+    /// branch per shape. The gap *between* rows is not in here — that is the layout's `spacing`,
+    /// and it belongs to neither of the rows it separates.
     fn row_height(self, row: &Row) -> f32 {
-        let words = self.line_height * f32::from(row.lines);
-        if row.translation_lines == 0 {
-            return words;
+        let mut height = self.line_height * f32::from(row.lines);
+        if row.romanization_lines > 0 {
+            height += self.romanization_gap
+                + self.romanization_line_height * f32::from(row.romanization_lines);
         }
-        words
-            + self.translation_gap
-            + self.translation_line_height * f32::from(row.translation_lines)
+        if row.translation_lines > 0 {
+            height += self.translation_gap
+                + self.translation_line_height * f32::from(row.translation_lines);
+        }
+        height
     }
 }
 
@@ -217,6 +229,9 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
         metrics: Cell::new(Metrics {
             font_size: global.get_font_size(),
             line_height: global.get_line_height(),
+            romanization_font_size: global.get_romanization_font_size(),
+            romanization_line_height: global.get_romanization_line_height(),
+            romanization_gap: global.get_romanization_gap(),
             translation_font_size: global.get_translation_font_size(),
             translation_line_height: global.get_translation_line_height(),
             translation_gap: global.get_translation_gap(),
@@ -248,6 +263,28 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
             // showed an empty panel until the next track — or until a restart, which is the
             // *seed* path and does run.
             ly_toggle.kick();
+        });
+    }
+
+    // Off the shadow rather than off `flags`, because the Settings card writes the same field and
+    // may have moved it since this view last mounted.
+    global.set_romanization_shown(state.lyrics_romanization_shown.get());
+    {
+        let state = state.clone();
+        let weak = ui.as_weak();
+        let ly_republish = ly.clone();
+        global.on_set_romanization_shown(move |shown| {
+            // Synchronously, before the write is spawned: the Settings card reads this cell to
+            // seed its own row, and a disk write is not ordered against a sibling reading it.
+            state.lyrics_romanization_shown.set(shown);
+            state.persist_blocking("set_lyrics_romanization_shown", move |s| {
+                library::settings::set_lyrics_romanization_shown(s, shown)
+            });
+            // Nothing is resolved again: the rows already carry the romanization, so the flip is a
+            // re-measure of the sheet on screen against the heights it is now drawn at.
+            if let Some(ui) = weak.upgrade() {
+                republish(&ui, &ly_republish);
+            }
         });
     }
 
@@ -573,8 +610,10 @@ fn take_sheet(ly: &Rc<LyricsUi>, sheet: &Sheet) {
         .map(|line| Row {
             at_ms: line.at_ms.map(|at| i32::try_from(at).unwrap_or(i32::MAX)),
             text: line.text.clone(),
+            romanization: line.romanization.clone(),
             translation: line.translation.clone(),
             lines: 1,
+            romanization_lines: 0,
             translation_lines: 0,
         })
         .collect();
@@ -589,6 +628,10 @@ fn take_sheet(ly: &Rc<LyricsUi>, sheet: &Sheet) {
 fn republish(ui: &AppWindow, ly: &Rc<LyricsUi>) {
     let width = ly.width.get();
     let metrics = ly.metrics.get();
+    // **Read here rather than filtered at the source**, so the toggle and the offset table are one
+    // answer: a row whose romanization is suppressed has to be shorter by exactly what the panel
+    // stops drawing, and both halves read this same pass's decision.
+    let romanization_shown = ui.global::<Lyrics>().get_romanization_shown();
 
     let mut rows = ly.rows.borrow_mut();
     let mut offsets = Vec::with_capacity(rows.len());
@@ -597,8 +640,13 @@ fn republish(ui: &AppWindow, ly: &Rc<LyricsUi>) {
 
     for row in rows.iter_mut() {
         row.lines = wrapped_lines(&row.text, width, metrics.font_size);
-        // Not through `wrapped_lines`, whose floor of one is for a blank line a plain sheet spaces
-        // its verses with. A row with no gloss has no second slot at all.
+        // Neither of these goes through `wrapped_lines`' floor of one, which is for a blank line a
+        // plain sheet spaces its verses with. A row without one has no slot for it at all.
+        row.romanization_lines = row
+            .romanization
+            .as_deref()
+            .filter(|_| romanization_shown)
+            .map_or(0, |sound| wrapped_lines(sound, width, metrics.romanization_font_size));
         row.translation_lines = row
             .translation
             .as_deref()
@@ -609,9 +657,16 @@ fn republish(ui: &AppWindow, ly: &Rc<LyricsUi>) {
         top += metrics.row_height(row) + metrics.row_gap;
         published.push(LyricRow {
             text: SharedString::from(row.text.as_str()),
+            romanization: row
+                .romanization
+                .as_deref()
+                .filter(|_| romanization_shown)
+                .map(SharedString::from)
+                .unwrap_or_default(),
             translation: row.translation.as_deref().map(SharedString::from).unwrap_or_default(),
             at_ms: row.at_ms.unwrap_or(-1),
             line_count: i32::from(row.lines),
+            romanization_line_count: i32::from(row.romanization_lines),
             translation_line_count: i32::from(row.translation_lines),
         });
     }

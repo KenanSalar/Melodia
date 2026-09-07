@@ -377,25 +377,43 @@ impl Default for RadioFlags {
     }
 }
 
-/// The Now Playing lyrics panel, and whether it may look a sheet up online.
+/// The Now Playing lyrics panel, whether it may look a sheet up online, and how it draws a line.
 ///
-/// Both off, and the derive is the honest `Default` here rather than a hand-written one: a panel
-/// nobody asked for should not take the Up Next column on upgrade, and the shipped package
-/// description promises that every online feature is a setting the user controls.
-///
-/// **Two switches because they sell different things.** The panel is a view preference and reads
+/// **Three switches because they sell different things.** The panel is a view preference and reads
 /// whatever is already on disk or in the file; the lookup is traffic. Turning the lookup off
 /// leaves a sheet already in the store perfectly readable, which is what "no traffic" means and
-/// what "no lyrics" would not.
+/// what "no lyrics" would not. Romanization is neither: it is how a line the panel already has is
+/// drawn, so it costs nothing and reaches nothing.
+///
+/// **The first two are off and the third is on**, which is why the `Default` is written out rather
+/// than derived. A panel nobody asked for should not take the Up Next column on upgrade, and the
+/// shipped package description promises that every online feature is a setting the user controls;
+/// but a reader who has turned the panel on and is looking at a script they cannot sound out
+/// wanted this before they knew to ask. It draws nothing at all for a Latin sheet, so "on" costs
+/// the other libraries nothing.
+///
+/// **The three are independent, and the third one especially.** Turning the panel off and on again
+/// says nothing about romanization, so a reader who switched it off gets it back off.
 ///
 /// `settings.json` rather than `views.json` for the panel too, for `VisualizerFlags::viz_enabled`'s
 /// reason: it is the other Now Playing preference flipped from that view's own overflow menu, and
 /// a `views.json` flag may not be a bool.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LyricsFlags {
     pub lyrics_panel_shown: bool,
     pub lyrics_online_enabled: bool,
+    pub lyrics_romanization_shown: bool,
+}
+
+impl Default for LyricsFlags {
+    fn default() -> Self {
+        Self {
+            lyrics_panel_shown: false,
+            lyrics_online_enabled: false,
+            lyrics_romanization_shown: true,
+        }
+    }
 }
 
 /// Library-management toggles.

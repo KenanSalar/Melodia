@@ -47,13 +47,22 @@ export component LyricsPanel inherits Rectangle {
             alignment: start;
 
             for row[i] in Lyrics.rows: Rectangle {
-                // Rust chose both heights and keeps the offset table that matches them. Reading
-                // the drawn height back instead is the thing a `for` loop cannot do.
+                // Rust chose all three heights and keeps the offset table that matches them.
+                // Reading the drawn height back instead is the thing a `for` loop cannot do.
                 property <length> sung-h: row.line_count * Lyrics.line-height;
+                property <length> roman-h: row.romanization_line_count
+                    * Lyrics.romanization-line-height;
                 property <length> gloss-h: row.translation_line_count
                     * Lyrics.translation-line-height;
-                height: self.sung-h
-                    + (self.gloss-h > 0px ? Lyrics.translation-gap + self.gloss-h : 0px);
+                // Each part carries the gap above it or contributes nothing at all, which is what
+                // lets a row of one, two or three come out right with no branch per shape.
+                property <length> roman-block: self.roman-h > 0px
+                    ? Lyrics.romanization-gap + self.roman-h
+                    : 0px;
+                property <length> gloss-block: self.gloss-h > 0px
+                    ? Lyrics.translation-gap + self.gloss-h
+                    : 0px;
+                height: self.sung-h + self.roman-block + self.gloss-block;
 
                 // On a plain sheet `active-index` stays -1, so every row takes the quiet tier and
                 // the panel reads as a page rather than as a list with nothing selected.
@@ -67,8 +76,13 @@ export component LyricsPanel inherits Rectangle {
                     : transparent;
                 border-radius: Theme.radius-md;
 
+                // **Every part of a row spells its own `y`, this one included.** A child that
+                // sets none is *centred* in its parent by `default_geometry`, not put at the top,
+                // so leaving it off puts the words in the middle of a box sized for three lines
+                // and draws them over whichever part is really there.
                 Text {
                     x: Lyrics.row-pad;
+                    y: 0px;
                     width: parent.width - 2 * Lyrics.row-pad;
                     height: parent.sung-h;
                     text: row.text;
@@ -80,6 +94,27 @@ export component LyricsPanel inherits Rectangle {
                     color: parent.is-sung
                         ? Player.np-on-backdrop
                         : Player.np-on-backdrop-muted.transparentize(0.2);
+                }
+
+                // Empty for a Latin line and while the toggle is off, `romanization_line_count`
+                // being 0 with it, so this collapses to nothing rather than needing a branch of
+                // its own. Anchored under the words rather than off the bottom: it is the middle
+                // part now, and only the last of the three can measure back from the far edge.
+                Text {
+                    x: Lyrics.row-pad;
+                    y: parent.sung-h + Lyrics.romanization-gap;
+                    width: parent.width - 2 * Lyrics.row-pad;
+                    height: parent.roman-h;
+                    text: row.romanization;
+                    wrap: word-wrap;
+                    overflow: elide;
+                    vertical-alignment: center;
+                    font-size: Lyrics.romanization-font-size;
+                    // Sung along to rather than read, so it keeps the sung line's own colour and
+                    // sits one step back from it while the line is not being sung.
+                    color: parent.is-sung
+                        ? Player.np-on-backdrop.transparentize(0.15)
+                        : Player.np-on-backdrop-muted.transparentize(0.3);
                 }
 
                 // Empty where the sheet carries no gloss, and `translation_line_count` is 0 with

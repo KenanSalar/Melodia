@@ -1785,6 +1785,14 @@ msgstr "Şarkı sözlerini çevrimiçi ara"
 msgid "When a track carries no words of its own, ask lrclib.net for them"
 msgstr "Bir parça kendi sözlerini içermiyorsa lrclib.net'ten iste"
 
+# The romanization switch. Named on the Services card and again in the Now Playing lyrics menu,
+# so both read from this one label.
+msgid "Show romanization"
+msgstr "Latin harfli okunuşu göster"
+
+msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
+msgstr "Latin alfabesini kullanmayan yazılar için her satırın okunuşunu sözlerin altında Latin harfleriyle yaz"
+
 # The Settings sub-rows, shown only while the master switch is on.
 msgid "Hide segmented stations"
 msgstr "Parçalı istasyonları gizle"

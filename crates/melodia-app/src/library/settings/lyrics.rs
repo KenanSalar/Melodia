@@ -1,6 +1,6 @@
-//! The lyrics panel's two switches. Persist to `settings.json`; the shadow on [`AppState`] for
-//! the online one is written synchronously by the UI callback *before* the persist is spawned, so
-//! a track change racing the disk write reads the new answer rather than the old file.
+//! The lyrics panel's three switches. Persist to `settings.json`; the shadows on [`AppState`] are
+//! written synchronously by the UI callback *before* the persist is spawned, so a reader racing the
+//! disk write sees the new answer rather than the old file.
 
 use crate::services;
 use crate::state::AppState;
@@ -18,5 +18,16 @@ pub fn set_lyrics_panel_shown(state: &AppState, shown: bool) -> Result<(), AppEr
 pub fn set_lyrics_online_enabled(state: &AppState, enabled: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(&state.paths, move |settings| {
         settings.lyrics.lyrics_online_enabled = enabled;
+    })
+}
+
+/// Persist whether the panel draws the romanization under each line.
+///
+/// **The one writer, and it has two callers**: the Settings card and the Now Playing menu. A
+/// second `mutate_settings` beside it is how the two would come to disagree about the field's
+/// name, which is the same argument `set_lyrics_panel_shown` makes for having only one.
+pub fn set_lyrics_romanization_shown(state: &AppState, shown: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(&state.paths, move |settings| {
+        settings.lyrics.lyrics_romanization_shown = shown;
     })
 }

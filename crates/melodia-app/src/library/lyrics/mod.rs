@@ -27,6 +27,7 @@
 mod embedded;
 mod lrc;
 mod online;
+mod romanize;
 mod sidecar;
 mod store;
 
@@ -38,12 +39,48 @@ use melodia_core::entities::tags::{FieldEdit, TagEdit};
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
 
-/// What this track has, from whichever source has it.
+/// What this track has, from whichever source has it, ready to draw.
 ///
 /// **This owns its `spawn_blocking`**, unlike [`crate::library::tags::read_lyrics`], whose caller
-/// does. The two differ because this one is a chain rather than a single read: all three local
-/// sources go onto the pool together, so a track change costs one hop rather than one per source.
+/// does. Two hops at most and neither is per source: [`resolve`] puts all three local reads on the
+/// pool together, and [`romanized`] goes back only for a sheet that has something to romanize.
 pub async fn for_track(state: &AppState, track: &TrackSummary) -> Result<LyricsOutcome, AppError> {
+    romanized(state, resolve(state, track).await?).await
+}
+
+/// The romanization drawn under each line, filled in off the UI thread.
+///
+/// **Here rather than in [`resolve`] because four arms answer it and one of them is the network's,
+/// so romanizing where a sheet is chosen would be four call sites for one question.** Filled
+/// whatever the panel's toggle says: the toggle is a display filter, and doing this lazily would
+/// put the pass on the thread that draws.
+///
+/// The `is_ascii` walk pays for the hop rather than the other way round. Most libraries are Latin
+/// throughout, and a sheet with nothing to romanize should not cost a trip to the blocking pool.
+async fn romanized(state: &AppState, outcome: LyricsOutcome) -> Result<LyricsOutcome, AppError> {
+    let LyricsOutcome::Sheet(mut sheet) = outcome else {
+        return Ok(outcome);
+    };
+    if sheet.lines.iter().all(|line| line.text.is_ascii()) {
+        return Ok(LyricsOutcome::Sheet(sheet));
+    }
+
+    let sheet = state
+        .runtime
+        .spawn_blocking(move || {
+            romanize::apply(&mut sheet.lines);
+            sheet
+        })
+        .await
+        .map_err(AppError::io_source)?;
+    Ok(LyricsOutcome::Sheet(sheet))
+}
+
+/// Which of the four sources answers for this track.
+///
+/// The three local ones share one trip to the blocking pool, so a track change costs one hop
+/// rather than one per source.
+async fn resolve(state: &AppState, track: &TrackSummary) -> Result<LyricsOutcome, AppError> {
     let path = PathBuf::from(&track.file_path);
     let lyrics_dir = state.paths.lyrics_dir.clone();
     let track_path = track.file_path.clone();

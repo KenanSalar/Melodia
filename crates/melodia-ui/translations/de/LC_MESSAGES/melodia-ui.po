@@ -1785,6 +1785,14 @@ msgstr "Songtexte online suchen"
 msgid "When a track carries no words of its own, ask lrclib.net for them"
 msgstr "Wenn ein Titel keinen eigenen Songtext enthält, bei lrclib.net nachfragen"
 
+# The romanization switch. Named on the Services card and again in the Now Playing lyrics menu,
+# so both read from this one label.
+msgid "Show romanization"
+msgstr "Umschrift anzeigen"
+
+msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
+msgstr "Unter den Worten anzeigen, wie eine Zeile klingt, in lateinischen Buchstaben, für Schriften, die sie nicht verwenden"
+
 # The Settings sub-rows, shown only while the master switch is on.
 msgid "Hide segmented stations"
 msgstr "Segmentierte Sender ausblenden"

@@ -141,6 +141,19 @@ natord = "1.0.9"
 # `remove_diacritics 2` tokenizer does.
 unicode-normalization = "0.1.25"
 
+# Lyrics romanization
+# The universal romanizer. Its dictionaries compile to a zero-copy `rkyv` archive read in
+# place out of `.rodata`, so they cost binary size rather than heap and nothing is parsed
+# at startup.
+uroman = "0.7.0"
+# In front of it for Japanese, which uroman reads as Mandarin: kanji and hanzi are the
+# same codepoints and uroman carries no Japanese readings at all. GPL-3.0, which an
+# AGPL-3.0-or-later binary may link (GPLv3 §13); the combination stays AGPL.
+kakasi = "0.1.0"
+# Whether a line is worth romanizing at all is the Unicode `Script` property, which moves
+# every Unicode release. A hand-rolled range table is the copy that goes stale.
+unicode-script = "0.5.8"
+
 # Images and colour
 # The superset of what a lofty picture's MIME type can name and what the cover
 # pickers accept, which `media::image::artwork`'s `STORED_EXTENSIONS` is written

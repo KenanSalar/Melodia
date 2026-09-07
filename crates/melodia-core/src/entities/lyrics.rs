@@ -14,10 +14,16 @@
 /// `translation` is the gloss a bilingual sheet carries under the words. Two fields rather than
 /// one string with a separator in it: the panel draws them at different sizes and the parser is
 /// the half that knows how the sheet spelled the break.
+///
+/// `romanization` is the same words in Latin letters, and unlike the gloss it is derived rather
+/// than read: `library::lyrics::romanize` fills it for a line written in a script it can sound
+/// out, and leaves it `None` for every Latin one. The panel draws the three in the order they are
+/// declared.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LyricLine {
     pub at_ms: Option<i64>,
     pub text: String,
+    pub romanization: Option<String>,
     pub translation: Option<String>,
 }
 

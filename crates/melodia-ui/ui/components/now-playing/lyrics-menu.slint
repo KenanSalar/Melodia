@@ -11,17 +11,18 @@ import { FlyoutMetrics } from "./flyout-presets.slint";
 // a menu column where that one has a flyout: one popup, one surface, and the rows in the host
 // because the popup sizes itself off their layout.
 //
-// **Three rows, one of which is the toggle the glyph used to be.** Turning the column back to Up
-// Next costs a click more than it did, and buys the two the panel has no other home for: a sheet
-// matched off tags that were wrong has to be re-askable, and a sheet worth keeping has to be
-// writable into the file that will outlive this cache.
+// **Four rows, one of which is the toggle the glyph used to be.** Turning the column back to Up
+// Next costs a click more than it did, and buys the three the panel has no other home for: a sheet
+// matched off tags that were wrong has to be re-askable, a sheet worth keeping has to be writable
+// into the file that will outlive this cache, and a sheet in a script the reader cannot sound out
+// has to be able to say how it sounds.
 export component LyricsMenu inherits Rectangle {
     width: btn.width;
     height: btn.height;
 
     // Every row is drawn whether or not it can act, so the popup's reserve below is a constant and
     // the rows do not move under the pointer between one open and the next.
-    property <length> menu-h: FlyoutMetrics.menu-row-h * 3 + FlyoutMetrics.chrome-h;
+    property <length> menu-h: FlyoutMetrics.menu-row-h * 4 + FlyoutMetrics.chrome-h;
 
     function dismiss() {
         pop.close();
@@ -80,6 +81,22 @@ export component LyricsMenu inherits Rectangle {
                     clicked => {
                         Lyrics.shown = !Lyrics.shown;
                         Lyrics.set-shown(Lyrics.shown);
+                        root.dismiss();
+                    }
+                }
+
+                // The same two halves as the toggle above. Enabled only where there is a sheet to
+                // re-lay: on every other state the row would say it had done something and the
+                // panel would look identical, which is worse than a row that is plainly inert.
+                OverflowRow {
+                    icon: "translate";
+                    label: @tr("Show romanization");
+                    active: Lyrics.romanization-shown;
+                    filled: Lyrics.romanization-shown;
+                    button-enabled: Lyrics.state == LyricsState.ready;
+                    clicked => {
+                        Lyrics.romanization-shown = !Lyrics.romanization-shown;
+                        Lyrics.set-romanization-shown(Lyrics.romanization-shown);
                         root.dismiss();
                     }
                 }

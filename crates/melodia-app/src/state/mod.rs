@@ -136,6 +136,11 @@ pub struct AppState {
     /// track change, where a `settings.json` read would be a file read on the path a
     /// track change already pays for.
     pub lyrics_online_enabled: SharedFlag,
+    /// Whether the panel draws the romanization it already holds. Here for a different
+    /// reason from its neighbours: no worker reads it, but the Settings card and the
+    /// Now Playing menu both write it, and two callbacks reaching one field through
+    /// disk is the race the mirror exists to close.
+    pub lyrics_romanization_shown: SharedFlag,
     /// How often the lyrics directory may be asked, and the stop it can impose.
     ///
     /// Owned here rather than kept as a `static` beside the client, so it is one instance a test
@@ -280,6 +285,7 @@ impl AppState {
             radio_hide_segmented: SharedFlag::new(settings.radio.radio_hide_segmented),
             radio_send_clicks: SharedFlag::new(settings.radio.radio_send_clicks),
             lyrics_online_enabled: SharedFlag::new(settings.lyrics.lyrics_online_enabled),
+            lyrics_romanization_shown: SharedFlag::new(settings.lyrics.lyrics_romanization_shown),
             lyrics_pacer: Arc::new(crate::library::lyrics::pacer()),
             write_ratings_to_tags: SharedFlag::new(settings.library.write_ratings_to_tags),
             media_controls: Some(mc_handle),

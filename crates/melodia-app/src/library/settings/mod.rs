@@ -59,7 +59,9 @@ pub use folders::{
     add_folder, get_folders, reconcile_watched_folders, remove_folder, scan_folder,
     scan_folder_internal, set_folder_watching_enabled, toggle_folder_watching,
 };
-pub use lyrics::{set_lyrics_online_enabled, set_lyrics_panel_shown};
+pub use lyrics::{
+    set_lyrics_online_enabled, set_lyrics_panel_shown, set_lyrics_romanization_shown,
+};
 pub use motion::set_skip_startup_animation;
 pub use onboarding::set_onboarding_seen;
 pub use playback::{

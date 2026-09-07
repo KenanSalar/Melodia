@@ -4,12 +4,15 @@ import { SectionCard } from "../../components/settings/section-card.slint";
 import { SettingRow } from "../../components/settings/setting-row.slint";
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 
-// The one switch that lets the lyrics panel reach the network. The description names lrclib.net
-// for the radio master row's reason: a user deciding to stay local is entitled to know who would
-// be contacted. Search visibility follows `radio-section.slint`.
+// The switch that lets the lyrics panel reach the network, and the one that decides how it draws a
+// line. The first description names lrclib.net for the radio master row's reason: a user deciding
+// to stay local is entitled to know who would be contacted. Search visibility follows
+// `radio-section.slint`.
 //
 // **The panel itself is not configured here.** Whether the column shows lyrics or Up Next is a
-// view preference, flipped from that view's own overflow menu; this card is only about traffic.
+// view preference, flipped from that view's own overflow menu. Romanization is on this card *and*
+// in that menu, because it is both: a default worth finding in Settings, and the thing you want to
+// reach for the moment a song in another script starts.
 export component LyricsSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -30,9 +33,13 @@ export component LyricsSection inherits Rectangle {
     property <string> online-label: @tr("Look up lyrics online");
     property <string> online-desc: @tr("When a track carries no words of its own, ask lrclib.net for them");
 
-    property <bool> show-online: row-visible(online-label, online-desc);
+    property <string> romanization-label: @tr("Show romanization");
+    property <string> romanization-desc: @tr("Print how a line sounds in Latin letters under the words, for a script that does not use them");
 
-    out property <bool> has-matches: show-online;
+    property <bool> show-online: row-visible(online-label, online-desc);
+    property <bool> show-romanization: row-visible(romanization-label, romanization-desc);
+
+    out property <bool> has-matches: show-online || show-romanization;
 
     VerticalLayout {
         if has-matches: SectionCard {
@@ -45,6 +52,16 @@ export component LyricsSection inherits Rectangle {
                 ToggleSwitch {
                     checked <=> Settings.lyrics-online-enabled;
                     toggled(v) => { Settings.lyrics-online-enabled-changed(v); }
+                }
+            }
+
+            if root.show-romanization: SettingRow {
+                icon: "translate";
+                label: root.romanization-label;
+                description: root.romanization-desc;
+                ToggleSwitch {
+                    checked <=> Settings.lyrics-romanization-shown;
+                    toggled(v) => { Settings.lyrics-romanization-shown-changed(v); }
                 }
             }
         }

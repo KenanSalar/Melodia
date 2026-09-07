@@ -37,16 +37,24 @@ export global Lyrics {
     out property <length> font-size: 16px;
     out property <length> line-height: 28px;
 
+    // How the line sounds, for a script the reader cannot sound out. A step under the words and a
+    // step over the gloss, which is the order the three are read in: this one is sung along to
+    // while the line plays, where a translation is glanced at.
+    out property <length> romanization-font-size: 14px;
+    out property <length> romanization-line-height: 22px;
+
     // The gloss a bilingual sheet carries under a line.
     out property <length> translation-font-size: 13px;
     out property <length> translation-line-height: 20px;
 
-    // **The two gaps are the whole of what groups a line with its own translation**, and the
-    // first has to stay clearly under half the second or the sheet reads as one column of
-    // evenly-spaced lines with no telling which belongs to which. Proximity is doing the work
-    // here, not the size step: a reader pairs by distance before they pair by weight.
+    // **The gaps are the whole of what groups a line with the two under it**, and both inner ones
+    // have to stay clearly under half the last or the sheet reads as one column of evenly-spaced
+    // lines with no telling which belongs to which. Proximity is doing the work here, not the size
+    // step: a reader pairs by distance before they pair by weight, and a row of three needs that
+    // more than a row of two did.
+    out property <length> romanization-gap: 4px;
     out property <length> translation-gap: 4px;
-    out property <length> row-gap: 14px;
+    out property <length> row-gap: 16px;
 
     // Breathing room inside a row, so the hover fill is a band around the words rather than a box
     // flush against them. Comes off the width the panel reports, so Rust's wrap estimate measures
@@ -69,6 +77,14 @@ export global Lyrics {
     // menu and persisted by Rust, the `Visualizer.enabled` shape.
     in-out property <bool> shown;
     callback set-shown(bool);
+
+    // Whether the romanization line is drawn. **A display filter and nothing more**: Rust fills it
+    // whatever this says, so a flip re-lays the sheet it already holds rather than resolving one.
+    //
+    // Two writers, this menu and the Settings card, which is why the answer lives in one
+    // `SharedFlag` on `AppState` rather than in whichever of them wrote last.
+    in-out property <bool> romanization-shown;
+    callback set-romanization-shown(bool);
 
     // Forget what the directory said about this track and resolve it again, for a sheet matched
     // off tags the user has since corrected. Rust's, and it touches only the cache: a sidecar and

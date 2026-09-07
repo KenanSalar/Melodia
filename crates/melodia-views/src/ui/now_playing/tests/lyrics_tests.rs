@@ -11,8 +11,10 @@ fn timed(stamps: &[i32]) -> Vec<Row> {
         .map(|at| Row {
             at_ms: Some(*at),
             text: "x".to_owned(),
+            romanization: None,
             translation: None,
             lines: 1,
+            romanization_lines: 0,
             translation_lines: 0,
         })
         .collect()
@@ -63,8 +65,10 @@ fn an_untimed_sheet_sings_nothing() {
     let rows = vec![Row {
         at_ms: None,
         text: "a".to_owned(),
+        romanization: None,
         translation: None,
         lines: 1,
+        romanization_lines: 0,
         translation_lines: 0,
     }];
     assert_eq!(sung_at(&rows, 5_000.0), None);
