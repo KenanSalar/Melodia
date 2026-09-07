@@ -171,3 +171,7 @@ fn strip_word_stamps(line: &str) -> Cow<'_, str> {
     out.push_str(rest);
     Cow::Owned(out)
 }
+
+#[cfg(test)]
+#[path = "tests/lrc_tests.rs"]
+mod tests;

@@ -329,3 +329,7 @@ fn write_active(ui: &AppWindow, ly: &Rc<LyricsUi>, index: Option<usize>) {
     global.set_active_offset(*top);
     global.set_active_height(ly.line_height.get() * f32::from(row.lines));
 }
+
+#[cfg(test)]
+#[path = "tests/lyrics_tests.rs"]
+mod tests;

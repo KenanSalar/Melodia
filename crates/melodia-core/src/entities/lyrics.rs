@@ -115,3 +115,7 @@ impl LyricsAnswer {
 fn filled(field: Option<&str>) -> Option<&str> {
     field.map(str::trim).filter(|text| !text.is_empty())
 }
+
+#[cfg(test)]
+#[path = "tests/lyrics_tests.rs"]
+mod tests;

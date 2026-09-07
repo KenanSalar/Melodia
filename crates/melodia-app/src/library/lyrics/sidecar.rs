@@ -43,3 +43,7 @@ fn candidates(path: &Path) -> impl Iterator<Item = PathBuf> {
     });
     std::iter::once(path.with_extension("lrc")).chain(appended)
 }
+
+#[cfg(test)]
+#[path = "tests/sidecar_tests.rs"]
+mod tests;

@@ -168,3 +168,7 @@ fn stored_extension(path: &Path) -> Option<&str> {
     let known = [SHEET_EXT, INSTRUMENTAL_EXT, ABSENT_EXT].contains(&extension);
     (named_here && known).then_some(extension)
 }
+
+#[cfg(test)]
+#[path = "tests/store_tests.rs"]
+mod tests;

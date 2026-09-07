@@ -581,23 +581,38 @@ existing install, which is a heavy greeting for one new switch. The alternatives
 and accept that, to wait for a release carrying more than one card-worthy change, or to give the
 card a way to open on a later step. New installs see the row either way.
 
-### Phase 10 — tests, then docs · **blocked on a manual pass**
-
-Held back deliberately. Implementation stops at the static gates below; these land once the feature
-has been run by hand and given the go.
+### Phase 10 — tests · **done** · docs · **not started**
 
 **Tests**
 
-- `lrc.rs` unit tests (`#[path = "tests/lrc_tests.rs"] mod tests;`), boundary-first: the empty file,
-  a stamp with no text, 60-second and negative seconds, an offset larger than the first stamp, a
-  `<` that isn't a tag, a duplicate stamp, a file with no stamps at all.
-- The `ensure_online_enabled` walk — an **equality** on where `lyrics_online_enabled` is named, for
-  the reason radio's carries one.
-- `store.rs`: the name round-trip and its inverse, and that a `.none` outranks nothing else.
-- The `.slint` pins: the view-menu row count against `menu-h`, and the panel's scroller against the
-  scrollbar contract.
-- Fixtures: an `.lrc` sidecar, an MP3 with `USLT`, a FLAC with a `LYRICS` comment holding LRC.
-  `ffmpeg` generates the audio; paths in fixtures are `Path::join`ed, never spelled with `/`.
+| suite | cases |
+|---|---|
+| `library/lyrics/tests/lrc_tests.rs` | 22 |
+| `library/lyrics/tests/store_tests.rs` | 14 |
+| `now_playing/tests/lyrics_tests.rs` | 12 |
+| `entities/tests/lyrics_tests.rs` | 9 |
+| `library/lyrics/tests/sidecar_tests.rs` | 7 |
+| `crates/melodia/tests/lyrics_switch.rs` | 5 |
+
+Designed by partition and boundary rather than by walking the code: the timestamp field's four
+precisions and its two invalid signs, the offset in both directions and past the first stamp, the
+expiry window on the step either side, and the empty / blank / metadata-only partitions of "no
+sheet". Each case has one reason to fail, and the custom messages argue rather than restate.
+
+**Every pin in `lyrics_switch.rs` was checked by breaking the code**, which is the only way to know
+a pin is not decoration. Five mutations — reverting `menu-h` to one row, adding a second reader of
+the setting, reaching the directory from `library::tracks`, rewording the welcome card's label, and
+renaming the seam — each failed **exactly one** test, and the right one.
+
+Two notes on coverage rather than a number:
+
+- **The embedded arm's glue is not pinned end to end**, and deliberately. It is three lines,
+  `tags::read_lyrics` into `lrc::parse`; the tag read is already pinned by
+  `tag_writer_tests::read_lyrics_round_trips_on_flac_and_mp3` and the parse by the 22 above, so a
+  fixture test here would be a system-level answer to a question two unit levels already answer.
+  The plan's `USLT` and `LYRICS` fixtures were dropped for that reason, not forgotten.
+- **The scrollbar contract needed no new pin.** `crates/melodia/tests/scrollbars.rs` walks the tree
+  and already covers the panel's scroller, which is what copying the station-panel block bought.
 
 **Docs**
 
