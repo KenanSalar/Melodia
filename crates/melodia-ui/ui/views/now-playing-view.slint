@@ -16,6 +16,7 @@ import { Lyrics } from "../globals/lyrics.slint";
 import { StationFacts, StationHistory } from "../components/station-facts.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { TooltipSide } from "../components/tooltip.slint";
+import { LyricsMenu } from "../components/now-playing/lyrics-menu.slint";
 import { VisualizerPicker } from "../components/now-playing/visualizer-picker.slint";
 import { VisualizerStrip } from "../components/now-playing/visualizer-strip.slint";
 import { AuroraBackdrop } from "../components/aurora-backdrop.slint";
@@ -191,22 +192,7 @@ export component NowPlayingView inherits Rectangle {
             // sheet up for, so here it could only ever swap nothing for nothing.
             if !Player.vm.has_station: VerticalLayout {
                 alignment: center;
-                AccentGlyphButton {
-                    icon: "lyrics";
-                    filled: Lyrics.shown;
-                    active: Lyrics.shown;
-                    tooltip-text: @tr("Lyrics");
-                    // Below and right-aligned: this row is the panel's top edge *and* its right
-                    // one, so a centred pill on the last button in it is cut off by the second.
-                    tooltip-side: TooltipSide.below;
-                    tooltip-align-end: true;
-                    // Both halves: the property so the column swaps on the click, the callback so
-                    // it is still swapped next launch.
-                    clicked => {
-                        Lyrics.shown = !Lyrics.shown;
-                        Lyrics.set-shown(Lyrics.shown);
-                    }
-                }
+                LyricsMenu { }
             }
         }
 

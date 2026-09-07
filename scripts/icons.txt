@@ -74,6 +74,7 @@ repeat
 repeat_one
 restart_alt
 rounded_corner
+save
 search
 search_off
 settings

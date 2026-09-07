@@ -23,6 +23,7 @@
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Instant;
 
 use async_compat::Compat;
@@ -31,8 +32,9 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 use super::NowPlayingState;
 use melodia_app::library;
 use melodia_app::state::AppState;
-use melodia_core::entities::lyrics::{Lyrics as Sheet, LyricsOutcome};
+use melodia_core::entities::lyrics::{Lyrics as Sheet, LyricsOutcome, LyricsSource};
 use melodia_core::entities::track::TrackSummary;
+use melodia_core::utils::toast::{self, ToastKind};
 use melodia_ui::{AppWindow, LyricRow, Lyrics, LyricsState, Player};
 
 /// Width to estimate against before the panel has reported its own.
@@ -363,6 +365,102 @@ fn reseed(weak: &Weak<AppWindow>, state: &AppState, np_state: &Rc<NowPlayingStat
     }
 }
 
+/// Wire the menu's two actions, which need the same `NowPlayingState` the reseed hook does.
+///
+/// **Both act on whatever is playing, read at click time rather than captured.** The menu is a
+/// popup over a view that outlives any one track, so a handle taken at wire time names the wrong
+/// song by the second verse.
+pub(super) fn wire_menu(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPlayingState>) {
+    let global = ui.global::<Lyrics>();
+
+    {
+        let weak = ui.as_weak();
+        let state = state.clone();
+        let np_state = np_state.clone();
+        global.on_refresh(move || {
+            let Some(track) = playing_track(&np_state) else {
+                return;
+            };
+            let Some(ui) = weak.upgrade() else { return };
+
+            // Given up before the lookup, not after: the claim is what stops the reseed below
+            // deduping this against the sheet it is meant to replace.
+            release(&ui, &np_state.lyrics);
+
+            let weak = weak.clone();
+            let state = state.clone();
+            let np_state = np_state.clone();
+            let res = slint::spawn_local(Compat::new(async move {
+                if let Err(e) = library::lyrics::forget(&state, &track.file_path).await {
+                    log::warn!("lyrics refresh: {}", melodia_core::error::describe(&e));
+                }
+                if weak.upgrade().is_some() {
+                    np_state.lyrics.kick();
+                }
+            }));
+            if let Err(e) = res {
+                log::warn!("ui::now_playing lyrics refresh spawn_local: {e}");
+            }
+        });
+    }
+
+    {
+        let weak = ui.as_weak();
+        let state = state.clone();
+        let np_state = np_state.clone();
+        global.on_save_to_tag(move || {
+            let Some(track) = playing_track(&np_state) else {
+                return;
+            };
+            let state = state.clone();
+            let weak = weak.clone();
+            let np_state = np_state.clone();
+            let res = slint::spawn_local(Compat::new(async move {
+                let found = library::lyrics::resident_text(&state, &track.file_path).await;
+                let text = match found {
+                    Ok(Some(text)) => text,
+                    // The row is only offered against a sheet on screen, so nothing here is the
+                    // store having lost the copy it was resolved from.
+                    Ok(None) => {
+                        log::debug!("lyrics save: nothing resident for {}", track.id);
+                        return;
+                    }
+                    Err(e) => return report_save_failure(&e),
+                };
+                if let Err(e) = library::lyrics::write_to_tag(&state, track.id, &text).await {
+                    return report_save_failure(&e);
+                }
+                toast::notify(ToastKind::LyricsSaved, track.title.clone());
+                // The tag now holds what the panel is showing, so the row that offered this has
+                // nothing left to do — and the sheet is the file's own from here.
+                let Some(ui) = weak.upgrade() else { return };
+                ui.global::<Lyrics>().set_can_save_to_tag(false);
+                np_state.lyrics.holding.borrow_mut().take();
+                np_state.lyrics.kick();
+            }));
+            if let Err(e) = res {
+                log::warn!("ui::now_playing lyrics save spawn_local: {e}");
+            }
+        });
+    }
+}
+
+/// Say a save did not happen, where it was asked for by name.
+///
+/// **A toast rather than a log line**, the radio vote's rule: this runs only because somebody
+/// pressed a control that says it writes to their file, and a control that quietly does nothing is
+/// worse than one that says why.
+fn report_save_failure(e: &melodia_core::error::AppError) {
+    let reason = melodia_core::error::describe(e);
+    log::warn!("lyrics save: {reason}");
+    toast::notify(ToastKind::OperationFailed, reason);
+}
+
+/// The track on the deck, or `None` on a station or an empty queue.
+fn playing_track(np_state: &Rc<NowPlayingState>) -> Option<Arc<TrackSummary>> {
+    np_state.current_source.borrow().as_ref().and_then(|s| s.track.clone())
+}
+
 /// Wire the reseed hook, once the `NowPlayingState` this panel's state is a field of exists.
 pub(super) fn wire_reseed(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPlayingState>) {
     let weak_ui = ui.as_weak();
@@ -400,6 +498,9 @@ pub(super) fn apply(
             take_sheet(ly, sheet);
             republish(ui, ly);
             global.set_synced(sheet.is_synced());
+            // Every source but the file's own tag is worth offering to write into it. A sidecar
+            // counts: it is the user's file, but it is not the one that travels with the track.
+            global.set_can_save_to_tag(sheet.source != LyricsSource::Tag);
             global.set_state(LyricsState::Ready);
         }
         LyricsOutcome::Instrumental => {
@@ -447,6 +548,7 @@ fn clear(ui: &AppWindow, ly: &Rc<LyricsUi>) {
 
     let global = ui.global::<Lyrics>();
     global.set_synced(false);
+    global.set_can_save_to_tag(false);
     global.set_active_index(-1);
     global.set_active_offset(0.0);
     global.set_active_height(0.0);

@@ -2069,3 +2069,23 @@ msgstr "Εμφάνιση"
 # a `.lrc` beside it, or one the lyrics directory answered with. Saving is the dialog's own.
 msgid "Insert found lyrics"
 msgstr "Εισαγωγή στίχων που βρέθηκαν"
+
+# The Now Playing lyrics menu. "Look up again" forgets what the directory said about this
+# track and asks once more, for a sheet matched off tags that have since been corrected;
+# "Save to file" writes the sheet on screen into the track's own lyrics tag.
+msgid "Hide lyrics"
+msgstr "Απόκρυψη στίχων"
+
+msgid "Show lyrics"
+msgstr "Εμφάνιση στίχων"
+
+msgid "Look up again"
+msgstr "Νέα αναζήτηση"
+
+msgid "Save to file"
+msgstr "Αποθήκευση στο αρχείο"
+
+# Toast title after the Now Playing menu writes the sheet on screen into the track's own
+# lyrics tag. The detail line beside it is the track's title.
+msgid "Lyrics saved"
+msgstr "Οι στίχοι αποθηκεύτηκαν"

@@ -35,6 +35,10 @@ pub enum ToastKind {
     /// than logged because a vote happens only when somebody presses a button that says
     /// so, and a control that quietly does nothing is worse than one that says why.
     RadioVote,
+    /// A sheet the panel resolved was written into the track's own lyrics tag. Informational and
+    /// auto-dismissing, and surfaced rather than logged for the reason the radio vote is: it
+    /// happens only when somebody presses a control that says so, and this one rewrites a file.
+    LyricsSaved,
     /// The retroactive loved-tracks backfill queued existing favorites after a love
     /// toggle or a connect. Informational, auto-dismissing.
     LoveSync,

@@ -34,6 +34,7 @@ use std::path::{Path, PathBuf};
 
 use crate::state::AppState;
 use melodia_core::entities::lyrics::{Lyrics, LyricsOutcome};
+use melodia_core::entities::tags::{FieldEdit, TagEdit};
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
 
@@ -187,6 +188,50 @@ fn read_local(path: &Path, lyrics_dir: &Path, track_path: &str) -> Result<Local,
 /// ordinary state of most libraries, and a panel saying so would be right.
 fn online_lookup_enabled(state: &AppState) -> bool {
     state.lyrics_online_enabled.get()
+}
+
+/// Forget what the directory said about this track, so the next lookup asks again.
+///
+/// **The whole of what a refresh is.** A sheet the directory matched off wrong tags is right about
+/// nothing except the tags it was asked with, and correcting those leaves the wrong answer sitting
+/// in the store until it ages out. Touches only the store: a sidecar and a lyrics tag are the
+/// user's own files, and a refresh that deleted either would be a delete nobody asked for.
+pub async fn forget(state: &AppState, track_path: &str) -> Result<(), AppError> {
+    let lyrics_dir = state.paths.lyrics_dir.clone();
+    let track_path = track_path.to_owned();
+
+    state
+        .runtime
+        .spawn_blocking(move || store::forget(&lyrics_dir, &track_path))
+        .await
+        .map_err(AppError::io_source)?
+}
+
+/// Write `text` into the track's own lyrics tag.
+///
+/// A tag edit like any other — through the same writer, the same self-write mark and the same
+/// `library_changed` bump — so the file is rewritten once and the scan pipeline re-reads it rather
+/// than a hand-built `UPDATE` leaving a fresh mtime beside a stale hash.
+///
+/// **Here rather than at the call site** because the two surfaces that offer it, the Edit Tags
+/// dialog and the Now Playing menu, must not each build their own idea of a lyrics-only edit.
+pub async fn write_to_tag(state: &AppState, track_id: i64, text: &str) -> Result<(), AppError> {
+    let edit = TagEdit {
+        lyrics: FieldEdit::Set(text.to_owned()),
+        ..TagEdit::default()
+    };
+    let report = crate::library::tags::apply_tag_edit(state, vec![track_id], edit, None).await?;
+
+    // **The writer reports per file rather than failing the batch**, so one track's refusal — a
+    // read-only file, a container with no key for it — comes back as an `Ok` carrying a failure,
+    // and a caller that only checked the `Result` would report a save that did not happen.
+    if let Some((_, reason)) = report.failures.first() {
+        return Err(AppError::io_other(reason.clone()));
+    }
+    if report.updated == 0 {
+        return Err(AppError::io_other("The lyrics could not be written to the file"));
+    }
+    Ok(())
 }
 
 /// Hold the on-disk store to its bounds.

@@ -1,0 +1,112 @@
+import { Theme } from "../../theme.slint";
+import { Lyrics, LyricsState } from "../../globals/lyrics.slint";
+import { PopupHighlight } from "../../globals/shell.slint";
+import { TooltipSide } from "../tooltip.slint";
+import { AccentGlyphButton } from "./accent-glyph-button.slint";
+import { MenuSurface } from "./menu-surface.slint";
+import { OverflowRow } from "./overflow-row.slint";
+import { FlyoutMetrics } from "./flyout-presets.slint";
+
+// The lyrics column's own menu, top right of the Now-Playing view. `VisualizerPicker`'s shape with
+// a menu column where that one has a flyout: one popup, one surface, and the rows in the host
+// because the popup sizes itself off their layout.
+//
+// **Three rows, one of which is the toggle the glyph used to be.** Turning the column back to Up
+// Next costs a click more than it did, and buys the two the panel has no other home for: a sheet
+// matched off tags that were wrong has to be re-askable, and a sheet worth keeping has to be
+// writable into the file that will outlive this cache.
+export component LyricsMenu inherits Rectangle {
+    width: btn.width;
+    height: btn.height;
+
+    // Every row is drawn whether or not it can act, so the popup's reserve below is a constant and
+    // the rows do not move under the pointer between one open and the next.
+    property <length> menu-h: FlyoutMetrics.menu-row-h * 3 + FlyoutMetrics.chrome-h;
+
+    function dismiss() {
+        pop.close();
+        PopupHighlight.id = "";
+    }
+
+    btn := AccentGlyphButton {
+        icon: "lyrics";
+        filled: Lyrics.shown;
+        // Lit while the column is showing lyrics, and while the menu that says so is open: a bare
+        // glyph has no disc for `force-bg` to light.
+        active: Lyrics.shown || PopupHighlight.id == "np-lyrics";
+        tooltip-text: @tr("Lyrics");
+        // This row is the panel's top edge and its right one, so a pill is cut off above it and
+        // clipped beside it.
+        tooltip-side: TooltipSide.below;
+        tooltip-align-end: true;
+        clicked => {
+            PopupHighlight.id = "np-lyrics";
+            pop.show();
+        }
+    }
+
+    pop := PopupWindow {
+        // Here rather than up top, so it can read its own descendant's `preferred-width`: the
+        // rows' content sets the floor, over a minimum that preserves the English look.
+        property <length> menu-w: max(200px, menu-vl.preferred-width + 2px);
+
+        // Downward and right-aligned on the trigger, which is the last control in the row: a
+        // left-aligned popup would hang off the panel.
+        x: btn.width - self.width;
+        y: btn.height + 8px;
+        width: self.menu-w;
+        height: root.menu-h;
+        close-policy: close-on-click-outside;
+
+        MenuSurface {
+            popup-id: "np-lyrics";
+            width: 100%;
+            height: 100%;
+            close-requested => {
+                root.dismiss();
+            }
+
+            menu-vl := VerticalLayout {
+                padding: Theme.pad-xs;
+                spacing: 0;
+
+                // Both halves, the visualizer picker's shape: the property so the column swaps on
+                // the click, the callback so it is still swapped next launch.
+                OverflowRow {
+                    icon: "lyrics";
+                    label: Lyrics.shown ? @tr("Hide lyrics") : @tr("Show lyrics");
+                    active: Lyrics.shown;
+                    filled: Lyrics.shown;
+                    clicked => {
+                        Lyrics.shown = !Lyrics.shown;
+                        Lyrics.set-shown(Lyrics.shown);
+                        root.dismiss();
+                    }
+                }
+
+                OverflowRow {
+                    icon: "refresh";
+                    label: @tr("Look up again");
+                    // Anything but `idle` means a track is up, which is the whole of what a
+                    // re-ask needs — including the two states that found nothing, where it is the
+                    // most useful.
+                    button-enabled: Lyrics.state != LyricsState.idle;
+                    clicked => {
+                        Lyrics.refresh();
+                        root.dismiss();
+                    }
+                }
+
+                OverflowRow {
+                    icon: "save";
+                    label: @tr("Save to file");
+                    button-enabled: Lyrics.can-save-to-tag;
+                    clicked => {
+                        Lyrics.save-to-tag();
+                        root.dismiss();
+                    }
+                }
+            }
+        }
+    }
+}

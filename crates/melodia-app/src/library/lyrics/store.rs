@@ -94,6 +94,23 @@ fn still_stands(marker: &Path) -> bool {
     modified.elapsed().is_ok_and(|age| age < MISS_STANDS_FOR)
 }
 
+/// Drop every answer the store holds for one track: the sheet and both markers.
+///
+/// **The one thing that makes a re-ask possible.** Every other answer here expires or is
+/// overwritten on its own schedule, so without this a track the directory answered wrongly — off
+/// tags since corrected — keeps that answer until the store outgrows its budget.
+pub(super) fn forget(dir: &Path, track_path: &str) -> Result<(), AppError> {
+    let stem = key(track_path);
+    for extension in [SHEET_EXT, INSTRUMENTAL_EXT, ABSENT_EXT] {
+        match fs::remove_file(entry(dir, &stem, extension)) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(AppError::io_source(e)),
+        }
+    }
+    Ok(())
+}
+
 /// The stored sheet's text, verbatim as the directory sent it.
 ///
 /// The two markers have no text and are not answers to this question: a caller asking for a sheet

@@ -2065,3 +2065,23 @@ msgstr "Afficher"
 # a `.lrc` beside it, or one the lyrics directory answered with. Saving is the dialog's own.
 msgid "Insert found lyrics"
 msgstr "Insérer les paroles trouvées"
+
+# The Now Playing lyrics menu. "Look up again" forgets what the directory said about this
+# track and asks once more, for a sheet matched off tags that have since been corrected;
+# "Save to file" writes the sheet on screen into the track's own lyrics tag.
+msgid "Hide lyrics"
+msgstr "Masquer les paroles"
+
+msgid "Show lyrics"
+msgstr "Afficher les paroles"
+
+msgid "Look up again"
+msgstr "Rechercher à nouveau"
+
+msgid "Save to file"
+msgstr "Enregistrer dans le fichier"
+
+# Toast title after the Now Playing menu writes the sheet on screen into the track's own
+# lyrics tag. The detail line beside it is the track's title.
+msgid "Lyrics saved"
+msgstr "Paroles enregistrées"

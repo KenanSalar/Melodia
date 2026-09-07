@@ -150,6 +150,20 @@ pub fn install_toast_bridge(
                         6000,
                     );
                 }
+                // A file the user asked to have written. Auto-dismissing: the sheet is the one
+                // they were already looking at, so the toast confirms rather than reports.
+                ToastKind::LyricsSaved => {
+                    notifications.show_auto_dismiss(
+                        NotificationParams {
+                            variant: "info".into(),
+                            title: g.invoke_toast_lyrics_saved_title(),
+                            message: detail.into(),
+                            action_label: slint::SharedString::default(),
+                            action_kind: "info".into(),
+                        },
+                        4000,
+                    );
+                }
                 // A vote the directory would not take. Auto-dismissing: nothing is broken
                 // and there is nothing for the user to do about it.
                 ToastKind::RadioVote => {

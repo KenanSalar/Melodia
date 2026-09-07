@@ -62,10 +62,23 @@ export global Lyrics {
     in property <length> active-offset;
     in property <length> active-height;
 
-    // Whether the Now Playing column shows this instead of Up Next. Written from the view menu and
-    // persisted by Rust, the `Visualizer.enabled` shape.
+    // Whether the Now Playing column shows this instead of Up Next. Written from the column's own
+    // menu and persisted by Rust, the `Visualizer.enabled` shape.
     in-out property <bool> shown;
     callback set-shown(bool);
+
+    // Forget what the directory said about this track and resolve it again, for a sheet matched
+    // off tags the user has since corrected. Rust's, and it touches only the cache: a sidecar and
+    // a lyrics tag are the user's own files.
+    callback refresh();
+    // Write the sheet on screen into the track's own lyrics tag.
+    callback save-to-tag();
+
+    // Whether the sheet on screen is worth writing into the file, which is true of every source
+    // but the file's own tag. **Rust's, off the sheet it resolved**: nothing the menu can read
+    // tells it where a sheet came from, and `state` is the same `ready` either way. There is no
+    // sibling for the refresh row, which asks only whether a track is up — `state` answers that.
+    in property <bool> can-save-to-tag;
 
     // Which row the pointer is over, or `-1`. Rust's, off the same offset table the click below
     // resolves against, so the row that lights up is the row a click would seek.

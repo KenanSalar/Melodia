@@ -323,6 +323,7 @@ pub fn install(
     // Same `Weak<NowPlayingState>` reason, one layer down: the lyrics panel's own state is a
     // field of the thing its reseed has to read.
     lyrics::wire_reseed(ui, state, &np_state);
+    lyrics::wire_menu(ui, state, &np_state);
 
     // No artwork seed here: backdrop, cover and chips are decoded on demand by
     // `wire_now_playing_open` on first open, or by `kick_artwork` when the square
