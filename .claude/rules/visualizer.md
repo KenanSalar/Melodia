@@ -7,7 +7,7 @@ paths:
   - crates/melodia-ui/ui/components/now-playing/visualizer-flyout.slint
   - crates/melodia-ui/ui/components/now-playing/spectrum-bars.slint
   - crates/melodia-ui/ui/components/now-playing/waveform-trace.slint
-  - crates/melodia-ui/ui/components/now-playing/view-menu.slint
+  - crates/melodia-ui/ui/components/now-playing/visualizer-picker.slint
   - crates/melodia-ui/ui/components/now-playing/overflow-menu.slint
   - crates/melodia-ui/ui/components/now-playing/menu-surface.slint
   - crates/melodia-ui/ui/components/now-playing/flyout-presets.slint
@@ -121,27 +121,30 @@ counter, both worth reading before changing a gate.
 
 ## The two style pickers
 
-- **Settings → Playback chips and the Now-Playing view menu render the same list**, so the
+- **Settings → Playback chips and the Now-Playing picker render the same list**, so the
   translated names live once as the `viz-style-names` `@tr` literal array in
   `flyout-presets.slint`, and the flyout's style rows take their picker index off the `for name[i]`
   loop so its leading "Off" row can't shift them.
 
-- **The view menu is the bar's overflow popup mirrored on the vertical axis** (trigger at the *top*
-  ⇒ opens downward, columns anchored `y: 0`). The two share everything but geometry and rows:
-  `OverflowRow`, `MenuSurface` (chrome + the `popup-id`-gated `FocusLossWatcher`),
-  `PopupDismissCatcher`, `FlyoutMetrics.{menu-row-h,chrome-h}` for the column-height maths. **Not
-  the trigger** — the bar's stays a plain `IconButton` (tooltip + bar-relative sizing, both
-  hardcoded by `AccentDiscButton`), which is instead shared by the view's two accent discs, its
-  back button and this menu's trigger.
+- **`VisualizerFlyout` is the whole of the picker's popup, not a column in a menu**, which is what
+  `visualizer-picker.slint` bought by replacing the Now-Playing view menu: no second column, so no
+  fixed reserve to keep in step, no `PopupDismissCatcher` over gaps that no longer exist, and no
+  collapse flag — the geometry is the flyout's own height off `FlyoutMetrics` and the preset count.
+  The `FocusLossWatcher` is mounted directly and gated on `PopupHighlight.id`, the volume popup's
+  shape, where the bar's overflow menu takes `MenuSurface` and its `popup-id`. That menu keeps the
+  Speed and Sleep flyouts and the whole two-column apparatus; it is the reference for what a *menu*
+  costs, not a second host of this list.
 
-- **Each host keeps one `public function dismiss()`** holding the close-triple (`pop.close()` +
-  collapse the flyouts + clear `PopupHighlight.id`) that every row calls — a `public function`, not
-  a callback, for the same single-handler-slot reason the Dialog teardown is one. What can't move
+- **Each host keeps one `dismiss()` function** holding its close set — `pop.close()`, whatever
+  flyout flags it has, and `PopupHighlight.id = ""` — that every closing path calls; a function, not a
+  callback, for the same single-handler-slot reason the Dialog teardown is one. What can't move
   into `MenuSurface` is the rows' `VerticalLayout`: the popup sizes itself off that layout's
   `preferred-width` and only the host can name a descendant, so it stays in the host and passes
   through `@children`.
 
-- **The menu needs no Rust.** Its "Off" row writes **both** halves of `Visualizer.enabled` (the
-  two-way binding, so the Settings toggle and `watched-viz-active` follow, plus `set-enabled` to
-  persist); a style row re-enables before `set-style`, which already resolves the index, publishes
-  `style` + `style-idx` and persists.
+- **The picker needs no Rust.** "Off" writes **both** halves of `Visualizer.enabled` (the two-way
+  binding, so the Settings toggle and `watched-viz-active` follow, plus `set-enabled` to persist);
+  a style row re-enables before `set-style`, which already resolves the index, publishes `style` +
+  `style-idx` and persists. **The picker's trigger carries the state the popup used to** — a bare
+  glyph has no disc for `force-bg`, so `filled` reads `enabled` and `active` covers both drawing
+  and picking.

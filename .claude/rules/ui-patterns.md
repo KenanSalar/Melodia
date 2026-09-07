@@ -28,6 +28,11 @@ silently miss the other.
   half of a side**: the `x`/`y` ternaries fall through to the *centred* arm, so a new `side`
   without its own arm puts the pill on the host and looks deliberate.
 
+- **A host at the panel's own edge aligns its pill rather than centring it** — `align-end`, reached
+  through `IconButton.tooltip-align-end`, pins the pill's trailing edge to the host's, the centred
+  arm's overhang having nothing to hang over there. Both Now-Playing view toggles take it, and what
+  decides is a translated label: the English one fits and says nothing about the six that follow.
+
 - **Two mount shapes.** In-tree is the default. **Top-layer** is for hosts whose pill lands where
   Slint paints later (bands, header strips): `components/tooltip-frame.slint`'s `TooltipFrame`,
   declared *after* the occluder, tracking the host via `absolute-position` deltas the host spells

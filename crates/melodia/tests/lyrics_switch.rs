@@ -101,22 +101,6 @@ fn only_the_lyrics_facade_reaches_the_directory_client() {
     );
 }
 
-const VIEW_MENU: &str = include_str!("../../melodia-ui/ui/components/now-playing/view-menu.slint");
-
-/// **The popup reserves its height rather than measuring it**, so a row added without moving
-/// `menu-h` is drawn outside the surface. Nothing about that fails to build and nothing about it
-/// looks wrong in the file: the popup is simply one row short on screen.
-#[test]
-fn the_view_menu_reserves_a_row_for_every_row_it_draws() {
-    let rows = VIEW_MENU.matches("OverflowRow {").count();
-    let reserved = format!("FlyoutMetrics.menu-row-h * {rows}");
-
-    assert!(
-        VIEW_MENU.contains(&reserved),
-        "the view menu draws {rows} row(s) but `menu-h` does not reserve `{reserved}`"
-    );
-}
-
 const SETTINGS_CARD: &str = include_str!("../../melodia-ui/ui/views/settings/lyrics-section.slint");
 const WELCOME_CARD: &str =
     include_str!("../../melodia-ui/ui/components/onboarding/features-panel.slint");

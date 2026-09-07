@@ -27,6 +27,9 @@ export component IconButton inherits Rectangle {
     // For a button sitting against the edge of something that clips: the pill is centred on the
     // host and runs well past it either way, so a scroller's own viewport cuts it.
     in property <TooltipSide> tooltip-side: TooltipSide.above;
+    // Falls through to `Tooltip.align-end` — for a button at the panel's own right edge, where a
+    // centred pill is cut off by it.
+    in property <bool> tooltip-align-end: false;
     // Falls through to `Tooltip.force-shown` — a keyboard volume change uses it.
     in property <bool> force-tooltip: false;
     // Scales the inner disc while held, snapping back on the play button's overshoot
@@ -114,6 +117,7 @@ export component IconButton inherits Rectangle {
         // the only one reachable from here.
         host-height: root.height;
         side: root.tooltip-side;
+        align-end: root.tooltip-align-end;
         force-shown: root.force-tooltip;
     }
 

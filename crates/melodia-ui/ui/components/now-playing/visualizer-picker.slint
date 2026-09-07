@@ -1,0 +1,86 @@
+import { Visualizer } from "../../globals/audio.slint";
+import { PopupHighlight } from "../../globals/shell.slint";
+import { FocusLossWatcher } from "../focus-loss-watcher.slint";
+import { TooltipSide } from "../tooltip.slint";
+import { AccentGlyphButton } from "./accent-glyph-button.slint";
+import { VisualizerFlyout } from "./visualizer-flyout.slint";
+import { FlyoutMetrics, VizStylePresets } from "./flyout-presets.slint";
+
+// The style list on its own trigger, top right of the Now-Playing view. The bar's overflow menu
+// still reaches the same flyout through a row; here it is the whole popup, so the button opens
+// what that row had to expand to.
+//
+// One surface rather than the menu's two columns, so the geometry is the flyout's own: no reserve
+// to keep in step, and the popup's only unclaimed pixels are the surface's padding ring.
+export component VisualizerPicker inherits Rectangle {
+    width: btn.width;
+    height: btn.height;
+
+    // Derived from the shared style list plus the leading "Off" row, so adding a style can't clip
+    // the popup.
+    property <length> flyout-h:
+        FlyoutMetrics.option-row-h * (VizStylePresets.viz-style-names.length + 1)
+        + FlyoutMetrics.chrome-h;
+
+    function dismiss() {
+        pop.close();
+        PopupHighlight.id = "";
+    }
+
+    btn := AccentGlyphButton {
+        icon: "bar_chart";
+        filled: Visualizer.enabled;
+        // **The open state has nowhere else to go**: a bare glyph has no disc for `force-bg` to
+        // light, so being lit covers both "drawing" and "picking".
+        active: Visualizer.enabled || PopupHighlight.id == "np-visualizer";
+        // The words the menu row spelled, this row having space for a glyph and no more.
+        tooltip-text: @tr("Visualizer");
+        // This row is the panel's top edge, so an above-pill is cut off by it, and near enough its
+        // right edge that a centred one is too — the label is the longer of the pair and every
+        // translation of it is longer still.
+        tooltip-side: TooltipSide.below;
+        tooltip-align-end: true;
+        clicked => {
+            PopupHighlight.id = "np-visualizer";
+            pop.show();
+        }
+    }
+
+    pop := PopupWindow {
+        // Downward and right-aligned on the trigger, the view menu's own anchoring: the row runs
+        // to the panel's right edge, so a left-aligned popup would hang off it.
+        x: btn.width - self.width;
+        y: btn.height + 8px;
+        width: 140px;
+        height: root.flyout-h;
+        close-policy: close-on-click-outside;
+
+        if PopupHighlight.id == "np-visualizer": FocusLossWatcher {
+            close => {
+                root.dismiss();
+            }
+        }
+
+        VisualizerFlyout {
+            width: 100%;
+            height: 100%;
+            viz-enabled: Visualizer.enabled;
+            current-index: Visualizer.style-idx;
+            pick(i) => {
+                if (i < 0) {
+                    // Both halves — the binding lands the value for the Settings toggle and for
+                    // the mirror that disarms the tap, the callback persists it.
+                    Visualizer.enabled = false;
+                    Visualizer.set-enabled(false);
+                } else {
+                    if (!Visualizer.enabled) {
+                        Visualizer.enabled = true;
+                        Visualizer.set-enabled(true);
+                    }
+                    Visualizer.set-style(i);
+                }
+                root.dismiss();
+            }
+        }
+    }
+}

@@ -20,7 +20,7 @@ writes them keyed by tag type — but nothing reads them back anywhere else. A u
 with a perfectly good `USLT` frame, or a `.lrc` sitting beside it, has no way to read it while the
 song plays.
 
-The panel goes in the Now Playing view, behind a toggle in that view's 3-dot menu.
+The panel goes in the Now Playing view, behind a toggle in that view's own header.
 
 ### ADR 21 is not overturned
 
@@ -47,7 +47,7 @@ The Now Playing body is two columns: the artwork / title / chips / visualizer co
 (`up-next-width: clamp(root.width * 0.35, 280px, 420px)`) that already swaps its body between
 `UpNextList` and the station panel on `Player.vm.has_station`.
 
-**Lyrics become a third arm of that same swap.** The 3-dot toggle decides whether the column shows
+**Lyrics become a third arm of that same swap.** The header toggle decides whether the column shows
 Up Next or Lyrics. A station keeps the station panel whatever the toggle says, having nothing to
 look up.
 
@@ -489,11 +489,12 @@ edit verbatim: `crates/melodia/tests/backdrop_mounts.rs` (one `property <bool> a
 mount per stack, each line *starting with* its gate) and `visualizer_tests`' exact
 `strip-height: root.strip-h;`.
 
-**`view-menu.slint`** gets the toggle row: an
-`OverflowRow { icon: "lyrics"; label: @tr("Lyrics"); active: Lyrics.shown; }` writing both halves
-the way the Visualizer row does — the `in-out` property so the panel swaps immediately, and the
-callback to persist. **`menu-h` moved from `menu-row-h` to `menu-row-h * 2` in the same edit**;
-forgetting it clips the popup.
+**The toggle is a button in that header**, an `AccentGlyphButton { icon: "lyrics"; }` writing both
+halves the way the Visualizer row did — the `in-out` property so the panel swaps immediately, and
+the callback to persist. It shipped as a row in `view-menu.slint` first, and that menu is gone:
+those two rows were the whole of it, so each cost a popup and a read to reach something a glyph
+states. The Visualizer row took its flyout with it into `visualizer-picker.slint`, whose trigger
+opens the style list directly.
 
 `"lyrics"` went into `scripts/icons.txt` and both faces were re-subset. `scripts/check-icons.py`
 caught the drift, which is exactly the value of it: the name was in the list and resolved in
@@ -567,8 +568,8 @@ only which of two sentences an empty panel shows and the caller is the half hold
     applied_source`, which asks about the artwork — still applied, so the branch returns early and
     the released sheet is never looked up again. Restarting cleared `applied_source`, which is
     exactly why a restart "fixed" it.
-  - **The 3-dot toggle**, which only ever persisted. Switching the panel on mid-song showed an
-    empty panel until the next track.
+  - **The toggle**, which only ever persisted. Switching the panel on mid-song showed an empty
+    panel until the next track.
 
   Both now go through `LyricsUi::kick`, wired after `install` returns for the `Weak<NowPlayingState>`
   reason the other two seeders carry. The door dedupes on `holding` — the track path the resident
@@ -605,8 +606,8 @@ once means the two cannot drift, and it is also what keeps the search predicate 
 fed `label + " " + desc`.
 
 **The card configures traffic and nothing else.** Whether the column shows lyrics or Up Next is a
-view preference flipped from that view's own overflow menu, so it is deliberately not a second row
-here: a setting that duplicated the menu toggle would be two controls for one answer.
+view preference flipped from that view's own header, so it is deliberately not a second row here:
+a setting that duplicated the header toggle would be two controls for one answer.
 
 New `crates/melodia-ui/ui/views/settings/lyrics-section.slint`, copying `radio-section.slint` line
 for line: `in property <string> tab-name`, a `card-title`, the local `row-visible(label, desc)`
@@ -727,7 +728,7 @@ By hand, after that:
 4. Turn the switch on in Settings; the same track fetches, and `<data>/lyrics/` gains a `.lrc`.
 5. A track LRCLIB doesn't have — a `.none` lands, and the second play makes no request.
 6. Tune to a radio station — the column stays the station panel with the toggle on.
-7. Toggle off and on from the 3-dot menu, close and reopen Now Playing, restart — the choice sticks.
+7. Toggle off and on from the header button, close and reopen Now Playing, restart — the choice sticks.
 8. `/usr/bin/time -v target/release/Melodia` once at the end, against the ~200 MB ceiling.
 
 ---
