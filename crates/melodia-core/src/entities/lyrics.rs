@@ -1,0 +1,64 @@
+//! What a lyric sheet is, independent of where it came from.
+//!
+//! `library::lyrics` resolves one of these out of a sidecar, a tag or the network, and the Now
+//! Playing panel renders it. Neither end owns the vocabulary, and the panel's crate can name
+//! neither of the other two, so it sits here.
+
+/// One line, timed or not.
+///
+/// `at_ms` is `None` for a sheet carrying no timing at all, not for an odd line inside a timed
+/// one: the parser keeps a sheet whole, so a mix never reaches here. Non-negative, since an
+/// `[offset:]` that would push an early stamp below zero clamps instead; there is nowhere before
+/// the start to seek to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LyricLine {
+    pub at_ms: Option<i64>,
+    pub text: String,
+}
+
+/// Which arm of the resolver answered.
+///
+/// Kept for two questions the resolver cannot answer from the lines alone: whether a sheet is a
+/// candidate for the on-disk store, which only [`LyricsSource::Online`] is, and where an
+/// unexpected one came from when it reaches a log line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LyricsSource {
+    /// A `.lrc` beside the audio file.
+    Sidecar,
+    /// The file's own lyrics tag.
+    Tag,
+    /// Looked up over the network.
+    Online,
+}
+
+/// A whole sheet, guaranteed to have something to draw.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Lyrics {
+    pub lines: Vec<LyricLine>,
+    pub source: LyricsSource,
+}
+
+impl Lyrics {
+    /// Builds a sheet, or `None` where there is nothing to show.
+    ///
+    /// Every resolver arm ends here, so "blank means no answer" is settled once rather than three
+    /// times. Blank rather than empty: a tag holding only newlines is one a tagger created and
+    /// nobody filled in, and drawing it hands the user a bare panel that claims to have found
+    /// something. Blank lines *inside* a sheet are kept, being how a plain one spaces its verses.
+    #[must_use]
+    pub fn new(lines: Vec<LyricLine>, source: LyricsSource) -> Option<Self> {
+        if lines.iter().all(|line| line.text.trim().is_empty()) {
+            return None;
+        }
+        Some(Self { lines, source })
+    }
+
+    /// Whether the panel can follow the song rather than only print it.
+    ///
+    /// Derived rather than stored: a `synced` field is a second answer to a question the lines
+    /// already settle, and two answers can drift apart.
+    #[must_use]
+    pub fn is_synced(&self) -> bool {
+        self.lines.iter().any(|line| line.at_ms.is_some())
+    }
+}

@@ -110,21 +110,34 @@ the onboarding row is the answer to it.
 
 `feat/lyrics-display`, pushed.
 
-### Phase 1 — the vocabulary · **not started**
+### Phase 1 — the vocabulary · **done**
 
 `melodia-views` can name neither `melodia-store` nor `melodia-net` (cargo enforces it, and there
 are no cross-crate re-exports), so the type the panel consumes lives in core.
 
-**`crates/melodia-core/src/entities/lyrics.rs`** (new):
+**`crates/melodia-core/src/entities/lyrics.rs`**, registered in `entities/mod.rs`. No serde: this
+is a vocabulary two layers share, not a persisted row, so it follows `entities/tags.rs` rather than
+the `FromRow` projections.
 
 ```rust
 pub struct LyricLine { pub at_ms: Option<i64>, pub text: String }
-pub struct Lyrics { pub lines: Vec<LyricLine>, pub synced: bool, pub source: LyricsSource }
+pub struct Lyrics { pub lines: Vec<LyricLine>, pub source: LyricsSource }
 pub enum LyricsSource { Sidecar, Tag, Online }
 ```
 
 `at_ms: Option` rather than two structs: a plain sheet is the synced one with no stamps, and the
-panel renders both from one model. Registered in `entities/mod.rs`.
+panel renders both from one model.
+
+Two things landed differently from the sketch above, both narrowing what can be stated wrongly:
+
+- **`synced` is a derived `is_synced()`, not a field.** A stored bool is a second answer to a
+  question the lines already settle, and the two can drift. Called once per track change, so the
+  walk costs nothing, and it short-circuits on the first line of a timed sheet.
+- **`Lyrics::new` returns `Option<Self>`** and refuses a sheet whose lines are all blank. All three
+  resolver arms end there, so "blank means no answer" is settled once instead of three times, and
+  a caller holding a `Lyrics` has something to draw. Blank rather than empty, because a lyrics tag
+  containing only newlines is one a tagger created and nobody filled in. Blank lines *inside* a
+  sheet are kept, being how a plain one spaces its verses.
 
 ### Phase 2 — the LRC parser · **not started**
 
