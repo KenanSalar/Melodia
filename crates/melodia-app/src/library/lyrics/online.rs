@@ -29,7 +29,7 @@ pub(super) async fn look_up(
         &track.title,
         artist,
         filled(track.album.as_deref()).unwrap_or_default(),
-        track.duration_ms / 1000,
+        track.duration_ms,
     )
     .await?;
 
