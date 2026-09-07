@@ -3,8 +3,12 @@
 //! At most two requests per track change, and only from behind `library::lyrics`' switch. The
 //! service's own response shape stays private here and what crosses out is
 //! [`LyricsAnswer`], the same way the radio directory keeps its `ApiStation` to itself.
-
-mod recording;
+//!
+//! **Every request goes through the pacer, and a refusal arms it.** The service documents both
+//! halves as requirements rather than advice: a delay between requests, and a `429` whose
+//! `Retry-After` a client *must* honour on pain of being blocked by `User-Agent`. Sending again
+//! into a window we have been told is closed is the specific behaviour its maintainer has named
+//! as what turns a busy hour into an outage.
 
 use std::time::Duration;
 
@@ -13,7 +17,9 @@ use serde::Deserialize;
 use melodia_core::entities::lyrics::LyricsAnswer;
 use melodia_core::error::AppError;
 
-use recording::{Recording, query_artist, query_title};
+use super::LookupError;
+use super::recording::{Recording, query_artist, query_title};
+use crate::services::net::pacer::{RequestPacer, Turn};
 
 /// The exact-signature endpoint: four fields that together name one recording, so it answers or it
 /// does not, and nothing here has to decide which of several rows is this track.
@@ -48,6 +54,18 @@ const DURATION_TOLERANCE_MS: f64 = 2_000.0;
 
 /// In line with the station logo's, the other fetch that must not hold a view open waiting.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// How long to stand down after a refusal that named no period.
+///
+/// A refusal with no usable header still has to cost something, or the next track change walks
+/// straight back into the closed window.
+const DEFAULT_BACKOFF: Duration = Duration::from_mins(1);
+
+/// The longest a single refusal may hold the lookup off.
+///
+/// A header claiming an implausible window would otherwise park the feature for the rest of the
+/// session; capping it costs one extra refusal where the window really was that long.
+const MAX_BACKOFF: Duration = Duration::from_mins(15);
 
 /// The response, spelled as the service spells it.
 #[derive(Deserialize)]
@@ -110,26 +128,31 @@ impl ApiLyrics {
 /// `Ok(None)` is a miss rather than a failure, which is what a `404` means here and the majority
 /// of what this function returns for an ordinary library. Every other non-success status is an
 /// error, so an outage reads as one instead of as a library nobody has written lyrics for.
-pub async fn fetch(
+pub(super) async fn fetch(
     client: &reqwest::Client,
+    pacer: &RequestPacer,
     title: &str,
     artist: &str,
     album: &str,
     duration_ms: i64,
-) -> Result<Option<LyricsAnswer>, AppError> {
-    let exact = get_exact(client, title, artist, album, duration_ms).await?;
+) -> Result<Option<LyricsAnswer>, LookupError> {
+    let exact = get_exact(client, pacer, title, artist, album, duration_ms).await?;
     if exact.as_ref().is_some_and(|answer| answer.synced.is_some() || answer.instrumental) {
         return Ok(exact);
     }
 
-    match search_timed(client, title, artist, album, duration_ms).await {
+    match search_timed(client, pacer, title, artist, album, duration_ms).await {
         Ok(Some(timed)) => Ok(Some(timed)),
         Ok(None) => Ok(exact),
-        // **Only fatal where it was the only source left.** With a sheet already in hand the
-        // failure costs its timings; with none, reporting a miss would have the caller record
+        // **A refusal ends the lookup whatever the signature found.** The index request would be
+        // one more knock on a door we have just been told is shut, and the pacer would refuse it
+        // anyway; reporting it is what lets the caller say so rather than claim a miss.
+        Err(e @ LookupError::RateLimited { .. }) => Err(e),
+        // **Otherwise only fatal where it was the only source left.** With a sheet already in hand
+        // the failure costs its timings; with none, reporting a miss would have the caller record
         // "nobody has this" for a month on the strength of an outage.
         Err(e) if exact.is_some() => {
-            log::debug!("lyrics: index unreachable: {}", melodia_core::error::describe(&e));
+            log::debug!("lyrics: index unreachable: {e}");
             Ok(exact)
         }
         Err(e) => Err(e),
@@ -139,13 +162,14 @@ pub async fn fetch(
 /// The row whose four fields are this recording's, or `None` where the directory has no such row.
 async fn get_exact(
     client: &reqwest::Client,
+    pacer: &RequestPacer,
     title: &str,
     artist: &str,
     album: &str,
     duration_ms: i64,
-) -> Result<Option<LyricsAnswer>, AppError> {
+) -> Result<Option<LyricsAnswer>, LookupError> {
     let mut url = reqwest::Url::parse(GET_ENDPOINT)
-        .map_err(|e| AppError::network("Lyrics directory endpoint is not a URL", e))?;
+        .map_err(|e| failed("Lyrics directory endpoint is not a URL", e))?;
     url.query_pairs_mut()
         .append_pair("track_name", title)
         .append_pair("artist_name", artist)
@@ -154,11 +178,11 @@ async fn get_exact(
         // reported a second short spends half of it before the request is even made.
         .append_pair("duration", &((duration_ms + 500) / 1000).to_string());
 
-    let Some(body) = send(client, url, "Lyrics sheet", MAX_BYTES).await? else {
+    let Some(body) = send(client, pacer, url, "Lyrics sheet", MAX_BYTES).await? else {
         return Ok(None);
     };
     let answer: ApiLyrics = serde_json::from_slice(&body)
-        .map_err(|e| AppError::network("Failed to parse the lyrics response", e))?;
+        .map_err(|e| failed("Failed to parse the lyrics response", e))?;
 
     Ok(Some(answer.into_answer()))
 }
@@ -179,22 +203,23 @@ async fn get_exact(
 /// separates rows the duration already called equally close.
 async fn search_timed(
     client: &reqwest::Client,
+    pacer: &RequestPacer,
     title: &str,
     artist: &str,
     album: &str,
     duration_ms: i64,
-) -> Result<Option<LyricsAnswer>, AppError> {
+) -> Result<Option<LyricsAnswer>, LookupError> {
     let mut url = reqwest::Url::parse(SEARCH_ENDPOINT)
-        .map_err(|e| AppError::network("Lyrics directory endpoint is not a URL", e))?;
+        .map_err(|e| failed("Lyrics directory endpoint is not a URL", e))?;
     url.query_pairs_mut()
         .append_pair("track_name", query_title(title))
         .append_pair("artist_name", query_artist(artist));
 
-    let Some(body) = send(client, url, "Lyrics search", MAX_SEARCH_BYTES).await? else {
+    let Some(body) = send(client, pacer, url, "Lyrics search", MAX_SEARCH_BYTES).await? else {
         return Ok(None);
     };
     let rows: Vec<ApiLyrics> = serde_json::from_slice(&body)
-        .map_err(|e| AppError::network("Failed to parse the lyrics search response", e))?;
+        .map_err(|e| failed("Failed to parse the lyrics search response", e))?;
 
     let ours = Recording::new(title, artist);
     let album = melodia_core::utils::fold::fold(album);
@@ -221,31 +246,89 @@ fn album_rank(row: &ApiLyrics, album: &str) -> u8 {
     u8::from(album.is_empty() || melodia_core::utils::fold::fold(&row.album_name) != *album)
 }
 
-/// One GET under a cap, with `None` for the `404` both endpoints spell a miss as.
+/// One GET under a cap and behind the pacer, with `None` for the `404` both endpoints spell a miss
+/// as.
+///
+/// **The single choke point, which is why the classification is here.** Both endpoints reach the
+/// network through this one function, so the floor, the stop and the reading of a refusal are each
+/// written once and cannot be half-applied by a new call site.
 async fn send(
     client: &reqwest::Client,
+    pacer: &RequestPacer,
     url: reqwest::Url,
     what: &str,
     cap: u64,
-) -> Result<Option<Vec<u8>>, AppError> {
+) -> Result<Option<Vec<u8>>, LookupError> {
+    if let Turn::Stopped(left) = pacer.acquire().await {
+        return Err(LookupError::RateLimited {
+            retry_after: Some(left),
+        });
+    }
+
     let response = client
         .get(url)
         .header(reqwest::header::USER_AGENT, AGENT)
         .timeout(REQUEST_TIMEOUT)
         .send()
         .await
-        .map_err(|e| AppError::network("Lyrics lookup failed", e))?;
+        .map_err(|e| failed("Lyrics lookup failed", e))?;
 
     let status = response.status();
     if status == reqwest::StatusCode::NOT_FOUND {
         return Ok(None);
     }
+    // **Both refusals, and read off the status rather than the body.** The service's own
+    // documentation of the `429` payload does not match what it sends, and the `503` it sheds load
+    // with is documented nowhere at all; both carry a `Retry-After` and both mean the same thing to
+    // a client, which is to come back later.
+    if matches!(
+        status,
+        reqwest::StatusCode::TOO_MANY_REQUESTS | reqwest::StatusCode::SERVICE_UNAVAILABLE
+    ) {
+        let retry_after = retry_after(response.headers());
+        pacer.stop_for(retry_after.unwrap_or(DEFAULT_BACKOFF)).await;
+        return Err(LookupError::RateLimited { retry_after });
+    }
     if !status.is_success() {
-        return Err(AppError::network_msg(format!(
+        // A `520` is Cloudflare's, not the directory's, and it is the shape a blocked `User-Agent`
+        // gets back. Named here because nothing else in the tree would explain it and the answer
+        // is not something a retry reaches.
+        if status.as_u16() == 520 {
+            log::warn!(
+                "lyrics: the directory's edge refused us outright (HTTP 520), which is what a \
+                 blocked client sees"
+            );
+        }
+        return Err(LookupError::Failed(AppError::network_msg(format!(
             "Lyrics lookup returned HTTP {}",
             status.as_u16()
-        )));
+        ))));
     }
 
-    Ok(Some(crate::services::net::read_capped(response, what, cap).await?))
+    crate::services::net::read_capped(response, what, cap)
+        .await
+        .map(Some)
+        .map_err(LookupError::Failed)
+}
+
+/// The `Retry-After` a refusal carried, clamped to something a session can sit out.
+///
+/// **Delta-seconds only.** The header's other spelling is an HTTP-date, and parsing one would buy
+/// a date crate for this crate to read a form rate limiters do not send; an unreadable value falls
+/// through to the caller's default, which is the same answer as an absent one.
+fn retry_after(headers: &reqwest::header::HeaderMap) -> Option<Duration> {
+    let secs: u64 = headers
+        .get(reqwest::header::RETRY_AFTER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.trim().parse().ok())?;
+
+    Some(Duration::from_secs(secs).min(MAX_BACKOFF))
+}
+
+/// An I/O-boundary failure, which is every arm of this module that is not a refusal.
+fn failed(
+    msg: &'static str,
+    source: impl std::error::Error + Send + Sync + 'static,
+) -> LookupError {
+    LookupError::Failed(AppError::network(msg, source))
 }

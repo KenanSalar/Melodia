@@ -19,6 +19,7 @@ chevron_left
 chevron_right
 clear_all
 close
+cloud_off
 colorize
 content_copy
 create_new_folder

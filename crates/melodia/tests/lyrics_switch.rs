@@ -69,8 +69,12 @@ fn the_one_reading_of_the_switch_is_the_seam_itself() {
 
 /// Where the client module is declared.
 const CLIENT_DECL: &str = "services/net/mod.rs";
-/// The client's own module: the requests, and the matcher that judges what comes back.
-const CLIENT_TREE: &str = "services/net/lrclib";
+/// The client's own module: the requests, the providers behind them, and the matcher that judges
+/// what comes back.
+///
+/// **The directory rather than a file list**, so a provider added beside the first is covered the
+/// day it lands rather than the day someone remembers this constant.
+const CLIENT_TREE: &str = "services/net/lyrics_directory";
 /// The one facade allowed to call it.
 const CALLER_TREE: &str = "library/lyrics/";
 
@@ -79,9 +83,14 @@ const CALLER_TREE: &str = "library/lyrics/";
 /// The switch guards one door, so a second caller anywhere in the tree is traffic a user who
 /// turned the lookup off still pays. A walk rather than a review note, because the reach costs one
 /// `use` line and looks entirely reasonable at the site that adds it.
+///
+/// The needle is the module's own name rather than any provider's: the providers are private to
+/// it, so naming the module is the only way in, and no import grouping or `as` alias can spell
+/// that segment differently. That is why the module is not simply called `lyrics`, which every
+/// file on both sides of the seam contains already.
 #[test]
 fn only_the_lyrics_facade_reaches_the_directory_client() {
-    const NEEDLE: &str = "lrclib";
+    const NEEDLE: &str = "lyrics_directory";
 
     let strays: Vec<String> = rust_sources()
         .into_iter()

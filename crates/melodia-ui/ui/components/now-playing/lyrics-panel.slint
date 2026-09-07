@@ -230,7 +230,9 @@ export component LyricsPanel inherits Rectangle {
                 HorizontalLayout {
                     alignment: center;
                     MaterialIcon {
-                        name: Lyrics.state == LyricsState.instrumental ? "music_note" : "lyrics";
+                        name: Lyrics.state == LyricsState.instrumental ? "music_note"
+                            : Lyrics.state == LyricsState.unavailable ? "cloud_off"
+                            : "lyrics";
                         icon-size: 40px;
                         icon-color: Player.np-on-backdrop-muted.transparentize(0.5);
                     }
@@ -239,6 +241,7 @@ export component LyricsPanel inherits Rectangle {
                     text: Lyrics.state == LyricsState.loading ? @tr("Looking for lyrics…")
                         : Lyrics.state == LyricsState.instrumental ? @tr("This track has no words")
                         : Lyrics.state == LyricsState.missing ? @tr("No lyrics found")
+                        : Lyrics.state == LyricsState.unavailable ? @tr("Couldn't reach the lyrics service")
                         : Lyrics.state == LyricsState.off ? @tr("Lyrics lookup is off")
                         : @tr("Play something to see its lyrics");
                     color: Player.np-on-backdrop-muted;
@@ -246,9 +249,16 @@ export component LyricsPanel inherits Rectangle {
                     horizontal-alignment: center;
                     wrap: word-wrap;
                 }
-                // Only the off state can be acted on from here, so only it says where to go.
+                // The two states a reader can act on from here, and each says how.
                 if Lyrics.state == LyricsState.off: Text {
                     text: @tr("Turn it on under Settings ▸ Services");
+                    color: Player.np-on-backdrop-muted.transparentize(0.35);
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+                if Lyrics.state == LyricsState.unavailable: Text {
+                    text: @tr("Try again from the ⋮ menu");
                     color: Player.np-on-backdrop-muted.transparentize(0.35);
                     font-size: Theme.font-size-sm;
                     horizontal-alignment: center;

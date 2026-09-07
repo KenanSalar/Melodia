@@ -516,6 +516,13 @@ pub(super) fn apply(
                 LyricsState::Off
             });
         }
+        // **The claim above is still recorded, deliberately.** Nothing retries on its own, so
+        // without it every tick that reaches `reseed` would start another lookup against a service
+        // that has just told us to stop. Refresh is the retry, and it drops the claim itself.
+        LyricsOutcome::Unavailable => {
+            clear(ui, ly);
+            global.set_state(LyricsState::Unavailable);
+        }
     }
 }
 

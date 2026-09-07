@@ -179,6 +179,12 @@ msgstr "Songtextsuche ist deaktiviert"
 msgid "Turn it on under Settings ▸ Services"
 msgstr "Unter Einstellungen ▸ Dienste aktivieren"
 
+msgid "Couldn't reach the lyrics service"
+msgstr "Songtextdienst nicht erreichbar"
+
+msgid "Try again from the ⋮ menu"
+msgstr "Über das Menü ⋮ erneut versuchen"
+
 # ---- Queue sheet ------------------------------------------------------------
 
 msgid "No tracks"

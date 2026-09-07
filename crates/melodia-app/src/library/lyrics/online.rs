@@ -6,7 +6,7 @@ use crate::state::AppState;
 use melodia_core::entities::lyrics::{LyricsOutcome, LyricsSource};
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
-use melodia_net::services::net::lrclib;
+use melodia_net::services::net::lyrics_directory as directory;
 
 /// Looks a sheet up for a track that carries none of its own, and records what came back.
 ///
@@ -24,14 +24,25 @@ pub(super) async fn look_up(
         return Ok(LyricsOutcome::Absent);
     }
 
-    let answer = lrclib::fetch(
+    let answer = match directory::fetch(
         state.http_client(),
+        &state.lyrics_pacer,
         &track.title,
         artist,
         filled(track.album.as_deref()).unwrap_or_default(),
         track.duration_ms,
     )
-    .await?;
+    .await
+    {
+        Ok(answer) => answer,
+        // **Nothing is recorded and nothing is claimed.** A refusal and an outage are both the
+        // absence of an answer rather than one, so the store stays untouched and the panel is told
+        // we could not ask, which is the only honest thing left to say.
+        Err(e) => {
+            log::debug!("lyrics: {e}");
+            return Ok(LyricsOutcome::Unavailable);
+        }
+    };
 
     let text = answer.as_ref().and_then(|answer| answer.text());
     let instrumental = answer.as_ref().is_some_and(|answer| answer.instrumental);

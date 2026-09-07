@@ -179,6 +179,12 @@ msgstr "Η αναζήτηση στίχων είναι ανενεργή"
 msgid "Turn it on under Settings ▸ Services"
 msgstr "Ενεργοποιήστε την στις Ρυθμίσεις ▸ Υπηρεσίες"
 
+msgid "Couldn't reach the lyrics service"
+msgstr "Δεν ήταν δυνατή η σύνδεση με την υπηρεσία στίχων"
+
+msgid "Try again from the ⋮ menu"
+msgstr "Δοκιμάστε ξανά από το μενού ⋮"
+
 # ---- Queue sheet ------------------------------------------------------------
 
 msgid "No tracks"

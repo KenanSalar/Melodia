@@ -179,6 +179,12 @@ msgstr "Şarkı sözü araması kapalı"
 msgid "Turn it on under Settings ▸ Services"
 msgstr "Ayarlar ▸ Hizmetler bölümünden açın"
 
+msgid "Couldn't reach the lyrics service"
+msgstr "Şarkı sözü hizmetine ulaşılamadı"
+
+msgid "Try again from the ⋮ menu"
+msgstr "⋮ menüsünden tekrar deneyin"
+
 # ---- Queue sheet ------------------------------------------------------------
 
 msgid "No tracks"

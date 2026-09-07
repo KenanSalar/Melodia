@@ -234,6 +234,16 @@ pub async fn write_to_tag(state: &AppState, track_id: i64, text: &str) -> Result
     Ok(())
 }
 
+/// A fresh pacer for the directory, for `AppState` to hold.
+///
+/// **Here rather than at the construction site**, so the directory client is named only from
+/// behind this door: `state` holds the pacer without being able to reach what it paces, which is
+/// the property `crates/melodia/tests/lyrics_switch.rs` walks the tree for.
+#[must_use]
+pub fn pacer() -> melodia_net::services::net::pacer::RequestPacer {
+    melodia_net::services::net::lyrics_directory::pacer()
+}
+
 /// Hold the on-disk store to its bounds.
 ///
 /// Through the door like everything else here, so `tasks::lyrics_cache` names no submodule and the

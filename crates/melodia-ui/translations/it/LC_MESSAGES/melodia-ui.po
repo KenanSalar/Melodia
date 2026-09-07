@@ -179,6 +179,12 @@ msgstr "La ricerca dei testi è disattivata"
 msgid "Turn it on under Settings ▸ Services"
 msgstr "Attivala in Impostazioni ▸ Servizi"
 
+msgid "Couldn't reach the lyrics service"
+msgstr "Servizio testi non raggiungibile"
+
+msgid "Try again from the ⋮ menu"
+msgstr "Riprova dal menu ⋮"
+
 # ---- Queue sheet ------------------------------------------------------------
 
 msgid "No tracks"

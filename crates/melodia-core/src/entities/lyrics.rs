@@ -81,6 +81,13 @@ pub enum LyricsOutcome {
     Instrumental,
     /// Nobody has a sheet for it.
     Absent,
+    /// The directory could not be asked, or refused to answer.
+    ///
+    /// **Not a fact about the recording**, which is the whole reason it is not [`Self::Absent`].
+    /// The other three are answers and this is the absence of one, so nothing may record it: a
+    /// refusal written down as "nobody has this" would suppress the track for as long as a real
+    /// miss stands, on the strength of a bad minute.
+    Unavailable,
 }
 
 /// What a lyrics directory said about one track.

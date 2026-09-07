@@ -20,6 +20,9 @@ export enum LyricsState {
     // The directory says this recording has no words. A different sentence from `missing`, and it
     // is never retried.
     instrumental,
+    // The directory could not be asked, or refused. Not a fact about the track, so nothing is
+    // cached and the menu's Refresh is what tries again.
+    unavailable,
 }
 
 export global Lyrics {

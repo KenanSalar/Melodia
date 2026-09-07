@@ -27,6 +27,7 @@ use melodia_engine::player::engine::state::{
 use melodia_integrations::services::integrations::discord::DiscordPresenceService;
 use melodia_integrations::services::integrations::media_controls::{self, MediaControlsHandle};
 use melodia_integrations::services::integrations::scrobble::ScrobbleService;
+use melodia_net::services::net::pacer::RequestPacer;
 use melodia_platform::services::platform::always_on_top::{self, AlwaysOnTopCapability};
 use melodia_playback::player::playback::decks::DECK_COUNT;
 use melodia_playback::player::playback::output::AudioOutput;
@@ -135,6 +136,12 @@ pub struct AppState {
     /// track change, where a `settings.json` read would be a file read on the path a
     /// track change already pays for.
     pub lyrics_online_enabled: SharedFlag,
+    /// How often the lyrics directory may be asked, and the stop it can impose.
+    ///
+    /// Owned here rather than kept as a `static` beside the client, so it is one instance a test
+    /// can construct fresh and the pacing is state rather than process-global. Shared by every
+    /// clone of `AppState`, which is the point: the floor is per host, not per caller.
+    pub lyrics_pacer: Arc<RequestPacer>,
     /// Whether a star rating is also written into the file's own tag, on the same
     /// terms as [`Self::radio_enabled`]: `tasks::rating_writeback` asks once per
     /// coalesced burst, and a `settings.json` read there would be a file read on
@@ -273,6 +280,7 @@ impl AppState {
             radio_hide_segmented: SharedFlag::new(settings.radio.radio_hide_segmented),
             radio_send_clicks: SharedFlag::new(settings.radio.radio_send_clicks),
             lyrics_online_enabled: SharedFlag::new(settings.lyrics.lyrics_online_enabled),
+            lyrics_pacer: Arc::new(crate::library::lyrics::pacer()),
             write_ratings_to_tags: SharedFlag::new(settings.library.write_ratings_to_tags),
             media_controls: Some(mc_handle),
             http_client,
