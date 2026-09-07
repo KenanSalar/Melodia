@@ -119,6 +119,8 @@ export component LyricsPanel inherits Rectangle {
         mouse-cursor: Lyrics.synced ? MouseCursor.pointer : MouseCursor.default;
         scroll-event(event) => {
             root.suspend-ticks = root.suspend-ticks-total;
+            // The reader just moved one end of the distance the tick's cadence is gauged on.
+            root.settled = false;
             return reject;
         }
         // `moved` fires only while pressed, so hover tracking goes through the pointer stream —
@@ -132,6 +134,8 @@ export component LyricsPanel inherits Rectangle {
             if (Lyrics.synced) {
                 // Into the scrolled content's own coordinates; `viewport-y` runs negative.
                 Lyrics.seek-at(self.mouse-y - sv.viewport-y);
+                // And the seek moves the other end of it.
+                root.settled = false;
             }
         }
     }
@@ -152,24 +156,50 @@ export component LyricsPanel inherits Rectangle {
         scroll-to(o) => { sv.viewport-y = -o; }
     }
 
-    // Whether there is a sung line to keep up with.
+    // Whether the song is moving under the sheet, so the sung line has to be re-asked for often.
     property <bool> following: root.has-rows && Lyrics.synced && Player.vm.is_playing;
+
+    // Whether the glide has reached the sung line, so the panel has nothing left to do between
+    // position ticks. **Written by the tick below, never bound to the distance**, and that is not
+    // a style choice: a `Timer`'s `interval` is evaluated through a change tracker Slint
+    // initialises while this branch is *mounted*, which is inside the parent's layout pass, so a
+    // binding reaching a layout property from there — `target-y` reads the scroller's height —
+    // recurses into the very layout doing the mounting and panics. The handler may read the same
+    // property freely, running nowhere near that pass.
+    //
+    // Starts false: the panel mounts at the top of a sheet it has not caught up with.
+    property <bool> settled;
 
     // **One timer on two cadences**, the visualizer strip's `dormant ? 500ms : 33ms` shape. It
     // exists only while this branch is mounted, which is what keeps all of it off every other
-    // view, and it drops to a crawl the moment there is no sung line to follow. The slow cadence
+    // view, and it drops to a crawl once the song and the scroll are both still. The slow cadence
     // still runs because the width has to reach Rust and has to survive a window resize, and a
     // `changed` handler on a layout property is the one thing this component may not carry.
+    //
+    // **The catch-up half earns the fast cadence as much as the transport does**: a paused song
+    // never moves the target, but a panel that has just mounted, or that a reader has scrolled
+    // away from, is nowhere near it, and a quarter of the distance per *second* is a crawl. The
+    // `has-rows` term is what keeps a panel with nothing to draw on the slow one.
     Timer {
-        interval: root.following ? 33ms : 1s;
+        interval: root.following || (root.has-rows && !root.settled) ? 33ms : 1s;
         running: true;
         triggered => {
             Lyrics.report-width(
                 sv.visible-width - Theme.scrollbar-slot - 2 * Lyrics.row-pad);
-            if (!root.following) {
+            if (!root.has-rows) {
                 return;
             }
+            // **Not gated on the transport.** A paused song still has a line it is holding at, and
+            // this branch is rebuilt, sheet and all, every time the column swaps back to it — so
+            // without a tick of its own a paused panel draws a page with nothing marked on it
+            // until playback resumes.
             Lyrics.tick();
+            // A plain sheet, or the run-in before the first stamp: nothing to centre on, and the
+            // reader owns the scroll in both.
+            if (Lyrics.active-index < 0) {
+                root.settled = true;
+                return;
+            }
 
             // The bar is polled rather than watched, a `changed dragging` being the tracker this
             // component must not carry.
@@ -185,6 +215,7 @@ export component LyricsPanel inherits Rectangle {
                 root.scroll-y += (root.target-y - root.scroll-y) * root.follow-step;
                 sv.viewport-y = -root.scroll-y;
             }
+            root.settled = abs(root.target-y - root.scroll-y) <= 1px;
         }
     }
 

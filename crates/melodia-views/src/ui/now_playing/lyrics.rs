@@ -250,14 +250,16 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
     }
 
     {
+        let weak = ui.as_weak();
         let ly = ly.clone();
         global.on_report_width(move |width| {
             // A pixel either way changes no wrap, and this arrives on every tick.
             if (ly.width.get() - width).abs() < 1.0 {
                 return;
             }
+            let Some(ui) = weak.upgrade() else { return };
             ly.width.set(width);
-            republish(&ly);
+            republish(&ui, &ly);
         });
     }
 
@@ -396,7 +398,7 @@ pub(super) fn apply(
     match outcome {
         LyricsOutcome::Sheet(sheet) => {
             take_sheet(ly, sheet);
-            republish(ly);
+            republish(ui, ly);
             global.set_synced(sheet.is_synced());
             global.set_state(LyricsState::Ready);
         }
@@ -470,7 +472,12 @@ fn take_sheet(ly: &Rc<LyricsUi>, sheet: &Sheet) {
 }
 
 /// Re-measure every row against the current width, rebuilding the model and the offset table.
-fn republish(ly: &Rc<LyricsUi>) {
+///
+/// **Ends by restating the sung line**, which is an offset into the table this just moved, and
+/// which on a fresh sheet has not been answered at all. The panel's tick is the other caller of
+/// [`follow`] and it cannot cover either case: a sheet is fetched again on every mount of that
+/// branch, so a paused panel would sit on a `-1` until the transport moved.
+fn republish(ui: &AppWindow, ly: &Rc<LyricsUi>) {
     let width = ly.width.get();
     let metrics = ly.metrics.get();
 
@@ -503,19 +510,24 @@ fn republish(ly: &Rc<LyricsUi>) {
 
     *ly.offsets.borrow_mut() = offsets;
     ly.model.set_vec(published);
+    follow(ui, ly);
 }
 
 /// Move the sung line on, interpolating between the position channel's roughly one-second ticks.
 fn follow(ui: &AppWindow, ly: &Rc<LyricsUi>) {
     let player = ui.global::<Player>();
     let reported = player.get_position_ms();
+    let vm = player.get_vm();
 
     // A changed reading re-anchors the clock; an unchanged one is interpolated from the last.
-    if reported != ly.anchor_ms.get() {
+    // **A paused player re-anchors on every pass**, so the interpolation cannot run on past the
+    // position it is holding at: the clock is the only thing that says the song stopped, the
+    // reported position simply stops changing.
+    if reported != ly.anchor_ms.get() || !vm.is_playing {
         ly.anchor_ms.set(reported);
         ly.anchor_at.set(Instant::now());
     }
-    let speed = f64::from(player.get_vm().playback_speed).max(0.0);
+    let speed = f64::from(vm.playback_speed).max(0.0);
     let advanced = ly.anchor_at.get().elapsed().as_secs_f64() * 1000.0 * speed;
     let position = f64::from(ly.anchor_ms.get()) + advanced;
 
@@ -526,6 +538,8 @@ fn follow(ui: &AppWindow, ly: &Rc<LyricsUi>) {
     if let Some(pinned) = ly.pinned.get() {
         let stale = (position - f64::from(ly.pinned_at_ms.get())).abs() > PIN_HOLDS_FOR_MS;
         if sung != Some(pinned) && !stale {
+            // Restated rather than left alone, so a table rebuilt under the pin still centres it.
+            write_active(ui, ly, Some(pinned));
             return;
         }
         ly.pinned.set(None);

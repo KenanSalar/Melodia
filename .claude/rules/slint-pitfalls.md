@@ -548,6 +548,18 @@ this file is what builds, looks right, and is wrong.
   `ui::library_tab_band_tests::the_chip_strip_outlives_every_morph_it_is_painted_in` (a brace
   walk, not an indent walk — the band has `if`-gated *siblings* at shallower depths).
 
+- **A `Timer`'s `interval` may not reach a layout property, even transitively.** Slint evaluates it
+  through a `ChangeTracker` initialised in the component's `user_init`, and for a timer inside an
+  `if` that runs from `Conditional::ensure_updated` — *inside the parent's layout pass*. So a
+  cadence gated on anything that reads a scroller's height re-enters the layout cache being
+  computed and panics `Recursion detected` (`properties.rs::access`) on the frame the branch
+  mounts. The same expression is fine in any ordinary binding, and the backtrace names layout
+  closures either side of the property you wrote, so it reads as a layout bug. Cure: keep the
+  interval's inputs to plain properties and let the timer's **handler** compute the
+  layout-dependent half into one of them — `lyrics-panel.slint` decides `settled` (has the glide
+  reached the sung line) at the end of each tick, where reading `target-y` is free, the handler
+  running nowhere near the pass.
+
 - **`init` runs *after* bindings resolve to final values — useless for entry animations.** Setting
   `shown: true` in `init` makes `true` the *initial* value, so `animate opacity` never runs. Fix:
   single-shot 1 ms `Timer` flips `shown` once at mount.
