@@ -11,6 +11,8 @@ import { MetaChipStrip } from "../components/meta-chip-strip.slint";
 import { StarRating } from "../components/star-rating.slint";
 import { NowPlayingCover } from "../components/now-playing/now-playing-cover.slint";
 import { UpNextList } from "../components/now-playing/up-next-list.slint";
+import { LyricsPanel } from "../components/now-playing/lyrics-panel.slint";
+import { Lyrics } from "../globals/lyrics.slint";
 import { StationFacts, StationHistory } from "../components/station-facts.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { TooltipSide } from "../components/tooltip.slint";
@@ -333,8 +335,12 @@ export component NowPlayingView inherits Rectangle {
 
                 Text {
                     // A station's queue is untouched underneath it but is not what comes next,
-                    // so this column states what the station *is* instead.
-                    text: Player.vm.has_station ? @tr("Station") : @tr("Up Next");
+                    // so this column states what the station *is* instead. Lyrics take the same
+                    // slot on a track, the column being one column with three arms rather than a
+                    // place two things share.
+                    text: Player.vm.has_station ? @tr("Station")
+                        : Lyrics.shown ? @tr("Lyrics")
+                        : @tr("Up Next");
                     // Accent-tinted like the divider under it but solid: a heading carries it at
                     // full alpha where a hairline can't. The rows below keep the list palette.
                     color: Player.np-accent-bright;
@@ -349,9 +355,16 @@ export component NowPlayingView inherits Rectangle {
                 }
 
                 // The mini-player mounts the same component with `compact: true`.
-                if !Player.vm.has_station: UpNextList {
+                if !Player.vm.has_station && !Lyrics.shown: UpNextList {
                     vertical-stretch: 1;
                     compact: false;
+                }
+
+                // **A station keeps its panel whatever the toggle says.** A stream has no track to
+                // look a sheet up for, so the switch would be offering something that could only
+                // ever be empty; what a station has instead is the description below.
+                if !Player.vm.has_station && Lyrics.shown: LyricsPanel {
+                    vertical-stretch: 1;
                 }
                 // **The station page's own body, on this view's palette.** What a stream has
                 // instead of a queue is a description of itself, so the two surfaces state the

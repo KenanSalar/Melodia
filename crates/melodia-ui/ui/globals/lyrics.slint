@@ -1,0 +1,56 @@
+import { LyricRow } from "../models.slint";
+
+// What the lyrics panel is showing, and why.
+//
+// Six states rather than a handful of bools: they are mutually exclusive, and a set of flags can
+// spell combinations none of them means. Rust owns every one of them except `shown`, which the
+// view menu writes directly so the column swaps on the click rather than after a round trip.
+export enum LyricsState {
+    // The online lookup is off and nothing local answered. The one state whose copy names a
+    // setting, since it is the only one the user can do something about from here.
+    off,
+    // Nothing is playing.
+    idle,
+    // A lookup is out.
+    loading,
+    // `rows` is worth drawing.
+    ready,
+    // Asked, and nobody has a sheet.
+    missing,
+    // The directory says this recording has no words. A different sentence from `missing`, and it
+    // is never retried.
+    instrumental,
+}
+
+export global Lyrics {
+    // **The one definition of how tall a wrapped line is drawn, and Rust reads it from here.**
+    // The panel multiplies it by each row's `line_count` and Rust multiplies it by the same to
+    // build the offset table it follows the song with, so the two cannot disagree about where a
+    // line sits. Spelled once rather than twice because a drift here is a scroll that is subtly,
+    // increasingly wrong down a long sheet.
+    out property <length> line-height: 26px;
+
+    in property <[LyricRow]> rows;
+    in property <LyricsState> state: LyricsState.idle;
+    // Whether `rows` carries timings, so the panel knows to follow rather than only print.
+    in property <bool> synced;
+
+    // Which row is being sung, and where it sits. **All three are Rust's**, computed off one
+    // cumulative offset table it can only keep because it also chose each row's `line_count`.
+    // `-1` is "no line yet", which is every plain sheet and the run-in before the first stamp.
+    in property <int> active-index: -1;
+    in property <length> active-offset;
+    in property <length> active-height;
+
+    // Whether the Now Playing column shows this instead of Up Next. Written from the view menu and
+    // persisted by Rust, the `Visualizer.enabled` shape.
+    in-out property <bool> shown;
+    callback set-shown(bool);
+
+    // A row was clicked. Milliseconds, and only ever sent for a timed sheet.
+    callback seek-to(int);
+
+    // Drives the sung line between position ticks, which arrive about once a second. Fired by the
+    // panel's own `Timer` so it dies with the panel.
+    callback tick();
+}

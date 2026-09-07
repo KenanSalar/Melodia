@@ -49,6 +49,7 @@ info
 library_add
 library_music
 link
+lyrics
 minimize
 more_vert
 move_to_inbox

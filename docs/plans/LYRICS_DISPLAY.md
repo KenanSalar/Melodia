@@ -372,13 +372,22 @@ is that view closing: `library::radio`'s exact argument for pruning on a section
 after a scan. Phase 8 already opens `wire_now_playing_open`'s `!is_open` arm to release the sheet,
 and the pass belongs beside it rather than written now with nothing to call it.
 
-### Phase 7 — the panel · **not started**
+### Phase 7 — the panel · **done**
 
-**`crates/melodia-ui/ui/globals/lyrics.slint`** (new): the `Lyrics` global — `lines` model, `state`
-(an int: off / idle / loading / ready / missing / instrumental, never a set of bools), `synced`,
-`active-index`, `active-offset`, `active-height`, `shown`, `set-shown(bool)`, `seek-to(int)`,
-`tick()`. Imported **and** added to `app-window.slint`'s flat `export { }` block, or Slint prunes
-it from the Rust API.
+**`crates/melodia-ui/ui/globals/lyrics.slint`**: the `Lyrics` global — `rows`, `state`, `synced`,
+`active-index`, `active-offset`, `active-height`, `line-height`, `shown`, `set-shown(bool)`,
+`seek-to(int)`, `tick()`. Imported **and** added to `app-window.slint`'s flat `export { }` block,
+or Slint prunes it from the Rust API; `LyricRow` joins the model list the same way.
+
+**`state` is a Slint `enum`, not the int the plan asked for.** The reason for refusing a set of
+bools was that the states are mutually exclusive and flags can spell combinations none of them
+means, and an enum says that in the type instead of in a comment. `NavEnterFrom` is the precedent,
+including that an enum reaches Rust off the *import* line without an export entry.
+
+**`Lyrics.line-height` is the one definition of how tall a row is drawn.** The panel multiplies it
+by each row's `line_count`; Rust multiplies it by the same to build the offset table it follows the
+song with. Spelled once and read from there rather than twice, because a drift is a scroll that is
+subtly and then increasingly wrong down a long sheet.
 
 **`crates/melodia-ui/ui/components/now-playing/lyrics-panel.slint`** (new), built by copying the
 station panel block: a `ScrollView` with both scrollbar policies `always-off`,
@@ -399,20 +408,26 @@ eliding `Text` inside. Rust chose the height, so Rust's cumulative offset table 
 with the layout. `ui::chips::estimated_chip_width` is the precedent, including which way to bias:
 over-estimating costs whitespace, under-estimating elides, so bias generous.
 
-Following the song:
+**Nothing in the panel carries a `changed` handler, and the plan's follow design had to go.** It
+proposed an animated `follow-y` with `changed follow-y => { sv.viewport-y = … }`, which is the
+tracker shape `slint-pitfalls.md` calls fatal: this component is mounted behind an `if`, a tracker
+in a dropped branch stays registered against whatever it watched, and an `animate` re-dirties its
+target *in the same frame* the branch goes when the user hits the toggle mid-glide. So:
 
-- `follow-y: max(0px, Lyrics.active-offset + Lyrics.active-height / 2 - sv.visible-height / 2)`,
-  with `animate follow-y { duration: root.suspended ? 0ms : Theme.dur-spatial; }` — a duration
-  gated on a bool is the documented cure for an animation that would otherwise ease a drag.
-- `changed follow-y => { sv.viewport-y = -self.follow-y; }` — written, not bound, so the wheel and
-  the scrollbar can write `viewport-y` freely and the next auto-scroll takes over.
-- A wheel or a bar drag raises `suspended` and arms a `Timer` to clear it — the `held`-latch idiom
-  the sidebar rail tooltip uses. **The timer restarts on the *last* scroll, not the first**, or a
-  reader scrolling back through a verse gets yanked forward mid-gesture. Four seconds; long enough
-  to read a line, short enough that the panel doesn't feel stuck. No "resume" pill in v1.
-- Click a line to seek, gated on `Lyrics.synced`. **The clicked row is pinned until the clock
-  catches up** — the position channel reports a second later at worst, and until it does the line
-  being sung is still the old one, which is exactly where the follow would fly back to.
+- The follow is driven imperatively from the panel's own `Timer`, which dies with the branch, and
+  the easing is arithmetic: `scroll-y += (target-y - scroll-y) * follow-step` at 33 ms, settling
+  inside a third of a second. That reads as a glide and needs no `animate` block at all.
+- **The scrollbar is polled, not watched.** `if (bar.dragging)` inside the tick is what a
+  `changed dragging` would have been, minus the tracker.
+- A wheel is noticed by a full-panel `TouchArea` whose `scroll-event` returns `reject`, so the
+  scroller still gets it. Handling an *event* is not a tracker, so this half is safe as written.
+- **Suspension is a tick countdown, restarted on the *last* scroll rather than the first**, or a
+  reader paging back through a verse gets yanked forward mid-gesture. While suspended the eased
+  position is kept with the reader, so resuming glides from where they left the panel rather than
+  from where the song is. Four seconds. No "resume" pill in v1.
+- Click a line to seek, gated on `Lyrics.synced`: an untimed sheet has nowhere to send the player,
+  and a row that looked clickable and did nothing would be worse than one that never did. **The
+  pin on the clicked row is Phase 8's**, since the thing being pinned against is Rust's tick.
 
 **Empty / loading / missing / off states** reuse the hand-rolled centred block at
 `up-next-list.slint:212-236` — glyph plus one line of copy on `Player.np-on-backdrop-muted` — not
@@ -433,9 +448,17 @@ mount per stack, each line *starting with* its gate) and `visualizer_tests`' exa
 **`view-menu.slint`** gets the toggle row: an
 `OverflowRow { icon: "lyrics"; label: @tr("Lyrics"); active: Lyrics.shown; }` writing both halves
 the way the Visualizer row does — the `in-out` property so the panel swaps immediately, and the
-callback to persist. **`menu-h` moves from `menu-row-h` to `menu-row-h * 2` in the same edit**;
-forgetting it clips the popup. `"lyrics"` goes into `scripts/icons.txt` and the fonts get
-re-subset — `scripts/check-icons.py` fails on drift, and a missing glyph renders as tofu.
+callback to persist. **`menu-h` moved from `menu-row-h` to `menu-row-h * 2` in the same edit**;
+forgetting it clips the popup.
+
+`"lyrics"` went into `scripts/icons.txt` and both faces were re-subset. `scripts/check-icons.py`
+caught the drift, which is exactly the value of it: the name was in the list and resolved in
+neither face, so the row would have drawn a tofu box and nothing else would have said so.
+
+**Six new `@tr` literals, so six new msgids in each of the six catalogues.** The one worth
+checking on a re-read is *"Turn it on under Settings ▸ Services"*, which names a place: each
+catalogue's copy uses that catalogue's own translations of the Settings and Services labels rather
+than the English ones, or the copy sends a reader somewhere they cannot find.
 
 ### Phase 8 — the Rust wiring · **not started**
 

@@ -159,6 +159,26 @@ msgstr "Επόμενα"
 msgid "No tracks up next"
 msgstr "Δεν υπάρχουν επόμενα κομμάτια"
 
+# The lyrics panel's five states. "Turn it on…" names the Settings tab, so it has to match the
+# tab label above.
+msgid "Play something to see its lyrics"
+msgstr "Αναπαράγετε κάτι για να δείτε τους στίχους"
+
+msgid "Looking for lyrics…"
+msgstr "Αναζήτηση στίχων…"
+
+msgid "No lyrics found"
+msgstr "Δεν βρέθηκαν στίχοι"
+
+msgid "This track has no words"
+msgstr "Αυτό το κομμάτι δεν έχει στίχους"
+
+msgid "Lyrics lookup is off"
+msgstr "Η αναζήτηση στίχων είναι ανενεργή"
+
+msgid "Turn it on under Settings ▸ Services"
+msgstr "Ενεργοποιήστε την στις Ρυθμίσεις ▸ Υπηρεσίες"
+
 # ---- Queue sheet ------------------------------------------------------------
 
 msgid "No tracks"

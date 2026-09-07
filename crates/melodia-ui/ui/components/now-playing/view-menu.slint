@@ -1,5 +1,6 @@
 import { Theme } from "../../theme.slint";
 import { Visualizer } from "../../globals/audio.slint";
+import { Lyrics } from "../../globals/lyrics.slint";
 import { PopupHighlight } from "../../globals/shell.slint";
 import { AccentDiscButton } from "./accent-disc-button.slint";
 import { MenuSurface } from "./menu-surface.slint";
@@ -33,7 +34,7 @@ export component NowPlayingViewMenu inherits Rectangle {
 
     // The width lives on the PopupWindow instead — an enclosing component may
     // not read a property declared *inside* one.
-    property <length> menu-h: FlyoutMetrics.menu-row-h + FlyoutMetrics.chrome-h;
+    property <length> menu-h: FlyoutMetrics.menu-row-h * 2 + FlyoutMetrics.chrome-h;
 
     // Derived from the shared style list plus the leading "Off" row, so adding
     // a style can't clip the popup.
@@ -141,6 +142,21 @@ export component NowPlayingViewMenu inherits Rectangle {
                     clicked => {
                         root.viz-flyout-open = !root.viz-flyout-open;
                         PopupHighlight.id = "np-view-menu";
+                    }
+                }
+
+                // Both halves, the Visualizer row's shape: the property so the column swaps on the
+                // click, the callback so it is still swapped next launch. Closes the menu, having
+                // nothing further to configure.
+                OverflowRow {
+                    icon: "lyrics";
+                    label: @tr("Lyrics");
+                    active: Lyrics.shown;
+                    filled: Lyrics.shown;
+                    clicked => {
+                        Lyrics.shown = !Lyrics.shown;
+                        Lyrics.set-shown(Lyrics.shown);
+                        root.dismiss();
                     }
                 }
             }

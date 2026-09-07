@@ -159,6 +159,26 @@ msgstr "À suivre"
 msgid "No tracks up next"
 msgstr "Aucun titre à suivre"
 
+# The lyrics panel's five states. "Turn it on…" names the Settings tab, so it has to match the
+# tab label above.
+msgid "Play something to see its lyrics"
+msgstr "Lancez un titre pour voir ses paroles"
+
+msgid "Looking for lyrics…"
+msgstr "Recherche des paroles…"
+
+msgid "No lyrics found"
+msgstr "Aucune parole trouvée"
+
+msgid "This track has no words"
+msgstr "Ce titre n'a pas de paroles"
+
+msgid "Lyrics lookup is off"
+msgstr "La recherche de paroles est désactivée"
+
+msgid "Turn it on under Settings ▸ Services"
+msgstr "Activez-la dans Paramètres ▸ Services"
+
 # ---- Queue sheet ------------------------------------------------------------
 
 msgid "No tracks"

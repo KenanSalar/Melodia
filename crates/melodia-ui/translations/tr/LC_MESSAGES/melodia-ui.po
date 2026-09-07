@@ -159,6 +159,26 @@ msgstr "Sıradaki"
 msgid "No tracks up next"
 msgstr "Sırada başka parça yok"
 
+# The lyrics panel's five states. "Turn it on…" names the Settings tab, so it has to match the
+# tab label above.
+msgid "Play something to see its lyrics"
+msgstr "Şarkı sözlerini görmek için bir şey çalın"
+
+msgid "Looking for lyrics…"
+msgstr "Şarkı sözleri aranıyor…"
+
+msgid "No lyrics found"
+msgstr "Şarkı sözü bulunamadı"
+
+msgid "This track has no words"
+msgstr "Bu parçada söz yok"
+
+msgid "Lyrics lookup is off"
+msgstr "Şarkı sözü araması kapalı"
+
+msgid "Turn it on under Settings ▸ Services"
+msgstr "Ayarlar ▸ Hizmetler bölümünden açın"
+
 # ---- Queue sheet ------------------------------------------------------------
 
 msgid "No tracks"

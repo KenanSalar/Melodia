@@ -159,6 +159,26 @@ msgstr "In coda"
 msgid "No tracks up next"
 msgstr "Nessun brano in coda"
 
+# The lyrics panel's five states. "Turn it on…" names the Settings tab, so it has to match the
+# tab label above.
+msgid "Play something to see its lyrics"
+msgstr "Riproduci qualcosa per vederne il testo"
+
+msgid "Looking for lyrics…"
+msgstr "Ricerca del testo…"
+
+msgid "No lyrics found"
+msgstr "Nessun testo trovato"
+
+msgid "This track has no words"
+msgstr "Questo brano non ha testo"
+
+msgid "Lyrics lookup is off"
+msgstr "La ricerca dei testi è disattivata"
+
+msgid "Turn it on under Settings ▸ Services"
+msgstr "Attivala in Impostazioni ▸ Servizi"
+
 # ---- Queue sheet ------------------------------------------------------------
 
 msgid "No tracks"
