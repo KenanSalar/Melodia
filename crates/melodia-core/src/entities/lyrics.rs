@@ -63,6 +63,21 @@ impl Lyrics {
     }
 }
 
+/// What asking "does this track have lyrics" came to.
+///
+/// Three states rather than an `Option<Lyrics>`, because the store has to tell the last two apart:
+/// a recording the directory *knows* has no words should never be asked about again, where one it
+/// simply has not got deserves another try once its contributors have caught up. The panel draws
+/// them differently too, one saying the song is instrumental and the other that nothing was found.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LyricsOutcome {
+    Sheet(Lyrics),
+    /// The directory says this recording has no words.
+    Instrumental,
+    /// Nobody has a sheet for it.
+    Absent,
+}
+
 /// What a lyrics directory said about one track.
 ///
 /// The boundary between the crate that makes the request and the crate that decides what to do

@@ -332,22 +332,45 @@ ship switched off", which this is the commit that makes true. **`README.md` wait
 its bullet would describe a panel that does not exist yet, where those two are a promise about
 network behaviour that just became load-bearing.
 
-### Phase 6 — the store · **not started**
+### Phase 6 — the store · **done, bar the prune**
 
-**`crates/melodia-app/src/library/lyrics/store.rs`** (new).
+**`crates/melodia-app/src/library/lyrics/store.rs`**, plus `Paths::lyrics_dir` and its line in
+`create_dirs`.
 
-- `Paths` gains `lyrics_dir: data_dir.join("lyrics")` plus one line in `create_dirs`.
-- Name: `<blake3(file_path)[..16]>.lrc`, and an empty `.none` for a miss.
-- **The hash is of the path, not the contents.** The artwork store hashes contents on purpose;
-  this deliberately does not, so a tag edit — which rewrites the file and moves `file_hash` —
-  keeps its lyrics. The doc comment has to say so, because the two schemes otherwise look
-  identical and the 16-hex shape is borrowed from `artwork::compute_hash`.
-- Written through `utils::atomic_file::write_text_sync`.
-- **Pruning is `tasks::lyrics_cache`**, and it needs none of the artwork sweep's machinery: nothing
-  else in the tree names these files, so there is no reference set and no grace window — the
-  filesystem is the whole index. Hits are permanent up to a byte cap, evicted oldest-mtime-first;
-  `.none` markers expire on an age cap, because a miss deserves a retry once LRCLIB's contributors
-  have caught up. Both consts argued at their definitions, `library/radio/logos.rs` being the shape.
+- **Three names, not two.** `<hash>.lrc` for a sheet, `<hash>.instrumental` and `<hash>.none` for
+  the two empty answers. The markers are what the phase turned out to need a type for (below).
+- **The hash is of the path, not the contents.** The artwork store hashes contents on purpose and
+  this deliberately does not: a tag edit rewrites the file and moves its content hash, so a sheet
+  keyed that way would be orphaned by the user correcting a typo in the title. Both schemes wear
+  the same 16 hex characters, which is exactly why the module says which one it is.
+- Written through `utils::atomic_file::write_text_sync`, and **the sheet is stored as text** rather
+  than as a parsed `Lyrics`: what goes on disk is what the directory sent, so re-reading it later
+  cannot differ from reading it now, and a round trip through a serializer would quietly lose
+  whatever the parser drops.
+- **A file that will not read is a miss, not an error.** That is the honest semantics rather than a
+  swallowed failure: every answer this gives is an optimisation, and the caller's next move for
+  "unreadable" and for "absent" is the same one.
+
+**`LyricsOutcome` came forward from Phase 7, because the store forced it.** With only
+`Option<Lyrics>` an instrumental is indistinguishable from a miss, so it would be written as a miss
+and re-fetched forever on the expiry below. Three states settle it: a sheet, a recording the
+directory *knows* has no words, and one nobody has. `for_track` returns that now.
+
+**Expiry is checked on read, not left to the prune.** A `.none` older than the window reads as
+"not cached" and the track is asked about again, so the retry happens whether or not any
+maintenance pass has run. `.instrumental` and `.lrc` never expire: the first is a permanent fact
+about the recording, the second is the answer itself.
+
+**The store sits on the local side of the switch.** Turning the lookup off buys no traffic, not no
+lyrics, so a sheet already fetched keeps being read. In the chain it sits *after* the sidecar and
+the tag and before the network, since it is only ever a copy of the last answer while those two are
+the user's own files.
+
+**The prune is Phase 8's**, and it is deferred rather than dropped. The store only grows while
+something is rendering Now Playing, which is the only thing that calls `for_track`, so the trigger
+is that view closing: `library::radio`'s exact argument for pruning on a section leave rather than
+after a scan. Phase 8 already opens `wire_now_playing_open`'s `!is_open` arm to release the sheet,
+and the pass belongs beside it rather than written now with nothing to call it.
 
 ### Phase 7 — the panel · **not started**
 
@@ -441,6 +464,13 @@ re-subset — `scripts/check-icons.py` fails on drift, and a missing glyph rende
   `wire_now_playing_open` (`up_next.rs:133`), beside `np_artwork.clear()`. **No second handler on
   `on_now_playing_open_changed`** — it has one slot and that function owns it. Only the current
   track's sheet is ever resident, so there is no in-memory LRU to size: the disk store is the cache.
+- **`tasks::lyrics_cache`, handed over by Phase 6**, spawns from that same `!is_open` arm. The
+  store only grows while something is rendering this view, since nothing else calls `for_track`, so
+  the close is exactly when it stops: `library::radio`'s argument for pruning on a section leave
+  rather than after a scan, and `tasks::radio_logo_cache::spawn` is the shape. It caps the
+  directory by total bytes, oldest-mtime-first, and sweeps expired `.none` markers; `.lrc` and
+  `.instrumental` are permanent answers and only the byte cap reaches them. Detached and tracked,
+  so a shutdown mid-pass waits for the unlinks.
 
 ### Phase 9 — Settings row and onboarding · **not started**
 
