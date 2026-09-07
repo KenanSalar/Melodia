@@ -1771,6 +1771,14 @@ msgstr "İnternet radyosu"
 msgid "Browse and play live stations from radio-browser.info"
 msgstr "radio-browser.info üzerindeki canlı istasyonlara göz at ve dinle"
 
+# The online-lyrics switch. Named in the Services card and again on the welcome card, so both
+# read from this one pair.
+msgid "Look up lyrics online"
+msgstr "Şarkı sözlerini çevrimiçi ara"
+
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Bir parça kendi sözlerini içermiyorsa lrclib.net'ten iste"
+
 # The Settings sub-rows, shown only while the master switch is on.
 msgid "Hide segmented stations"
 msgstr "Parçalı istasyonları gizle"

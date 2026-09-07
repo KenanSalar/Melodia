@@ -1765,6 +1765,14 @@ msgstr "Radio por internet"
 msgid "Browse and play live stations from radio-browser.info"
 msgstr "Explora y reproduce emisoras en directo de radio-browser.info"
 
+# The online-lyrics switch. Named in the Services card and again on the welcome card, so both
+# read from this one pair.
+msgid "Look up lyrics online"
+msgstr "Buscar letras en línea"
+
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Cuando una pista no incluye su propia letra, se pide a lrclib.net"
+
 # The Settings sub-rows, shown only while the master switch is on.
 msgid "Hide segmented stations"
 msgstr "Ocultar emisoras segmentadas"

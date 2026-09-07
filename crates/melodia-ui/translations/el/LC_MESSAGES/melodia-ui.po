@@ -1769,6 +1769,14 @@ msgstr "Διαδικτυακό ραδιόφωνο"
 msgid "Browse and play live stations from radio-browser.info"
 msgstr "Περιήγηση και αναπαραγωγή ζωντανών σταθμών από το radio-browser.info"
 
+# The online-lyrics switch. Named in the Services card and again on the welcome card, so both
+# read from this one pair.
+msgid "Look up lyrics online"
+msgstr "Αναζήτηση στίχων στο διαδίκτυο"
+
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Όταν ένα κομμάτι δεν έχει δικούς του στίχους, ζητούνται από το lrclib.net"
+
 # The Settings sub-rows, shown only while the master switch is on.
 msgid "Hide segmented stations"
 msgstr "Απόκρυψη τμηματοποιημένων σταθμών"

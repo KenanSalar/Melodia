@@ -161,6 +161,14 @@ export global Settings {
     in-out property <bool> radio-send-clicks: true;
     callback radio-send-clicks-changed(bool);
 
+    // Whether a track carrying no words of its own may be looked up online. Declared false so a
+    // settings read that fails leaves a local-only install local-only, which is the radio switch's
+    // reason. **Nothing in Slint gates on it either**: `library::lyrics` refuses on the Rust
+    // shadow, and this is the control surface rather than the answer. The panel reads it once, to
+    // choose between "nothing found" and "the lookup is off".
+    in-out property <bool> lyrics-online-enabled: false;
+    callback lyrics-online-enabled-changed(bool);
+
     // Persists, then flips the `FolderWatcher` on the tokio runtime rather than the
     // blocking pool — the start needs an async DB query before it can take the
     // parking_lot lock. **On by default**: consumer players auto-watch with no toggle

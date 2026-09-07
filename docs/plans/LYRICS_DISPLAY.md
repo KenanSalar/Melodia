@@ -523,10 +523,20 @@ only which of two sentences an empty panel shows and the caller is the half hold
   `library::lyrics::prune_store` rather than naming a submodule, so the naming scheme stays behind
   the door.
 
-### Phase 9 — Settings row and onboarding · **not started**
+### Phase 9 — Settings row and onboarding · **done, bar the version bump**
 
 **Settings ▸ Services**, not Library. That page holds Radio, Scrobbling and Discord — precisely
 the three the shipped description enumerates — so a fourth online feature belongs beside them.
+
+**The label and description are two msgids, read by both surfaces.** The Settings card and the
+welcome card name the same switch, and the panel's own comment already asked for that ("Same labels
+as the Services tab's own rows, so the two never describe one feature differently"). Declaring them
+once means the two cannot drift, and it is also what keeps the search predicate honest, since it is
+fed `label + " " + desc`.
+
+**The card configures traffic and nothing else.** Whether the column shows lyrics or Up Next is a
+view preference flipped from that view's own overflow menu, so it is deliberately not a second row
+here: a setting that duplicated the menu toggle would be two controls for one answer.
 
 New `crates/melodia-ui/ui/views/settings/lyrics-section.slint`, copying `radio-section.slint` line
 for line: `in property <string> tab-name`, a `card-title`, the local `row-visible(label, desc)`
@@ -557,15 +567,19 @@ Two things not to break in that file: `crates/melodia/tests/onboarding.rs` asser
 `features-panel.slint` still contains both `auto-check-enabled` and `!MelodiaUpdater.system-managed`,
 and the whole directory still greps clean for `changed `.
 
-**Bump `ONBOARDING_VERSION` to `2`.** `OnboardingFlags::needs_onboarding` is
-`onboarding_version < ONBOARDING_VERSION`, so an install that has already run the card carries `1`
-and would never see the new row — which defeats the entire reason for putting it there. The
-constant's own doc comment says this is what it is for: *"A revision rather than a bool so a later
-feature that belongs in the welcome card can bump `ONBOARDING_VERSION` and reach installs that
-already ran the flow, instead of owing a separate what's-new surface."* This is the first use of
-that affordance, so it is worth a second look at whether re-showing the whole three-step card is
-the right greeting for an existing install, or whether the bump should wait for a release that
-earns it.
+**`ONBOARDING_VERSION` is deliberately NOT bumped, and that is the one thing this phase left
+open.** `OnboardingFlags::needs_onboarding` is `onboarding_version < ONBOARDING_VERSION`, so an
+install that has already run the card carries `1` and **will never see the new row** — which is
+most of why the row was put there. The constant's own doc comment says a bump is exactly the
+affordance for this: *"A revision rather than a bool so a later feature that belongs in the welcome
+card can bump `ONBOARDING_VERSION` and reach installs that already ran the flow, instead of owing a
+separate what's-new surface."*
+
+It is left alone because it is a product call rather than a wiring one, and because this would be
+its first use: bumping re-shows the **whole three-step card**, folder picker and all, to every
+existing install, which is a heavy greeting for one new switch. The alternatives are to bump anyway
+and accept that, to wait for a release carrying more than one card-worthy change, or to give the
+card a way to open on a later step. New installs see the row either way.
 
 ### Phase 10 — tests, then docs · **blocked on a manual pass**
 

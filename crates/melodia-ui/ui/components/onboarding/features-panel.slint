@@ -50,6 +50,17 @@ export component OnboardingFeaturesPanel inherits VerticalLayout {
     }
     SectionDivider {}
 
+    OnboardingFeatureRow {
+        icon: "lyrics";
+        label: @tr("Look up lyrics online");
+        description: @tr("When a track carries no words of its own, ask lrclib.net for them");
+        ToggleSwitch {
+            checked <=> Settings.lyrics-online-enabled;
+            toggled(v) => { Settings.lyrics-online-enabled-changed(v); }
+        }
+    }
+    SectionDivider {}
+
     // A button rather than a switch: both services need a login, which has no business inside a
     // welcome card. It closes onto the tab that already does it properly.
     OnboardingFeatureRow {
