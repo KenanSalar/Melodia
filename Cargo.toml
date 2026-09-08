@@ -344,6 +344,23 @@ panic = "abort"
 # backtraces as raw hex, useless in the crash reports users attach.
 strip = "debuginfo"
 
+# The generated Slint unit is about half of `.text`, and almost none of it is arithmetic:
+# it is component construction, item trees and property wiring, where the cost is the
+# pages a mount has to fault in rather than the instructions retired. Optimized for size
+# rather than speed for that reason, and named rather than globbed because the decoders
+# and the DSP are the opposite case and share this profile.
+#
+# **A per-package `opt-level` survives `lto = "fat"`**, which is the half worth knowing: the
+# whole-program pass re-optimizes everything together, but the `optsize` attribute rustc
+# stamps per function is carried into it, and the generated unit came out close to half the
+# size it was. What it does not buy is proportionally less *resident* code, residency being
+# a question about which pages are touched rather than how many exist.
+#
+# The cost to re-check if this ever moves is frame time, not throughput: some of what this
+# sizes down is property-binding evaluation, which runs per frame rather than at mount.
+[profile.release.package.melodia-ui]
+opt-level = "s"
+
 # The `"*"` glob excludes workspace members, so this never reaches `melodia-ui`,
 # which is also the build-memory peak the CI `CARGO_BUILD_JOBS` cap holds down.
 [profile.dev.package."*"]
