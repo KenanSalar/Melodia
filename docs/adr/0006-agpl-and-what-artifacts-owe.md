@@ -36,11 +36,11 @@ that walk the packaging inputs rather than by review, for exactly that reason, a
 **Amendment, 2026-09-08:** the constraint named above has bound. `kakasi`, the Japanese
 romanization engine [ADR 39](0039-romanization-runs-three-engines.md) chose, is GPL-3.0 with no
 permissive arm, which an AGPL-3.0-or-later work may link under GPLv3 section 13 with the combination
-staying AGPL. `licenses/` carries the GPL-3.0 text as of this amendment, which also covers Slint,
-tri-licensed and taken here under its own GPL-3.0 arm. Two things this exposed rather than caused:
-the paragraph in `licenses/ATTRIBUTION.txt` excusing unmodified crates from enumeration was written
-as though all of them were permissive, and Symphonia's MPL-2.0, which has its own notice
-requirement, has no text in `licenses/` either.
+staying AGPL. Auditing that claim showed it was not the first: Slint is tri-licensed and an AGPL
+project takes its GPL-3.0 arm, and Symphonia's sixteen decoder crates are MPL-2.0. So the
+obligation had been outstanding for longer than the dependency that surfaced it. `licenses/` now
+carries both texts, `ATTRIBUTION.txt` names the four crates they cover, and the rule it states has
+moved from "what this repository modifies or carries" to that plus "what it links under copyleft".
 
 This ADR was written in September 2026. The licence was chosen before the repository's first commit
 and no argument for it exists in the tree; the obligations half is reconstructed from

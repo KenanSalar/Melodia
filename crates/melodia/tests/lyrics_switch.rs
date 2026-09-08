@@ -9,7 +9,7 @@
 //! the second passes with every arm inside the facade reading the setting for itself and getting
 //! one of them wrong.
 
-use melodia_testkit::{rust_sources, stripped_sources};
+use melodia_testkit::{rust_sources, strip_line_comments, stripped_sources};
 
 /// The facade's own tree, from the repo root.
 const FACADE_DIR: &str =
@@ -128,4 +128,47 @@ fn the_lyrics_switch_reads_the_same_on_both_cards() {
     assert!(WELCOME_CARD.contains(LABEL), "the welcome card no longer spells the label");
     assert!(SETTINGS_CARD.contains(DESCRIPTION), "the Settings card reworded its description");
     assert!(WELCOME_CARD.contains(DESCRIPTION), "the welcome card reworded its description");
+}
+
+const LYRICS_MENU: &str =
+    include_str!("../../melodia-ui/ui/components/now-playing/lyrics-menu.slint");
+
+/// **The popup reserves its height by hand, so the rows it draws have to be counted right.**
+/// `menu-h` multiplies `FlyoutMetrics.menu-row-h` by a literal that nothing derives, and a fifth
+/// row added without touching it is clipped off the bottom of a popup that still looks deliberate.
+///
+/// The menu this one replaced carried the same pin and took it along when that file was deleted.
+/// The menu came back a few commits later and the pin did not, which is the shape to watch for:
+/// a pin keyed on one file's name dies with the file, and nothing says so.
+#[test]
+fn the_lyrics_menu_reserves_a_row_for_every_row_it_draws() {
+    let source = strip_line_comments(LYRICS_MENU);
+    let rows = source.matches("OverflowRow {").count();
+    let reserved = format!("FlyoutMetrics.menu-row-h * {rows}");
+
+    assert!(
+        rows > 0,
+        "no `OverflowRow` left in the lyrics menu — the count below would pass against nothing"
+    );
+    assert!(
+        source.contains(&reserved),
+        "the lyrics menu draws {rows} row(s) but `menu-h` does not reserve `{reserved}`"
+    );
+}
+
+/// **Every row is drawn whether or not it can act.** That is what lets the reserve above be a
+/// constant, and it keeps a row from moving under the pointer between one open and the next.
+///
+/// A row mounted behind an `if` leaves the count above correct and breaks both, so what is checked
+/// is the spelling of a conditional mount: `button-enabled` gates the action, never the mount.
+#[test]
+fn no_lyrics_menu_row_is_mounted_behind_a_condition() {
+    let source = strip_line_comments(LYRICS_MENU);
+
+    assert!(
+        !source.contains(": OverflowRow {"),
+        "a lyrics menu row is mounted conditionally, so the popup's fixed reserve is now wrong \
+         for one of its two states. Gate the action with `button-enabled` and draw the row either \
+         way"
+    );
 }

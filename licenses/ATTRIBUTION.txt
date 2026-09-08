@@ -116,6 +116,46 @@ it remain Ko-fi's, and Melodia claims no affiliation with or endorsement by
 them.
 
 
+The entries below are crates rather than files in this tree. They are named here,
+where the hundreds of other crates.io dependencies are not, because each carries
+a copyleft license: the license text is something recipients of the binary are
+owed, and an artifact we ship is not a published crate. Each is unmodified, and
+the corresponding source for each is the crate as published at the version
+Cargo.lock pins.
+
+
+Slint
+-----
+Version 1.16.1, by the Slint Developers.
+https://github.com/slint-ui/slint
+
+Licensed under the GNU General Public License, Version 3 -- full text in
+GPL-3.0.txt. Slint is offered under GPL-3.0-only or one of two Slint-specific
+licenses, and an AGPL project takes the GPL arm.
+
+The UI toolkit. The .slint markup in this repository is compiled against it and
+the generated code is linked into the executable.
+
+Files: none in this repository -- linked from crates.io at build time.
+
+
+Symphonia
+---------
+Version 0.6.1, by Philip Deljanov.
+https://github.com/pdeljanov/Symphonia
+
+Licensed under the Mozilla Public License, Version 2.0 -- full text in
+MPL-2.0.txt.
+
+Sixteen crates from one project: the core, the container readers and the
+decoders. They decode every audio file Melodia plays. MPL-2.0 section 3.2 asks
+that recipients of the executable be told the covered source is available under
+that license and be given a copy of it, which is what this entry and MPL-2.0.txt
+are.
+
+Files: none in this repository -- linked from crates.io at build time.
+
+
 kakasi
 ------
 Version 0.1.0, by Theta-Dev, after the KAKASI project.
@@ -124,19 +164,24 @@ https://github.com/Theta-Dev/kakasi
 Licensed under the GNU General Public License, Version 3 -- full text in
 GPL-3.0.txt.
 
-UNMODIFIED. Resolved from crates.io like every other dependency and pinned in
-Cargo.lock; it romanizes Japanese lyrics. It is named here, where the other
-crates.io dependencies are not, because it is the only one whose sole offer is
-copyleft: GPLv3 section 4 wants recipients of the binary to get a copy of the
-license, and an artifact we ship is not a published crate. The corresponding
-source is the crate as published at the version Cargo.lock pins.
+It romanizes Japanese lyrics. Melodia is AGPL-3.0-or-later, and GPLv3 section 13
+is what permits the combination. The combined work is conveyed under the AGPL;
+this component remains under the GPL.
 
-Melodia is AGPL-3.0-or-later, and GPLv3 section 13 is what permits the
-combination. The combined work is conveyed under the AGPL; this component
-remains under the GPL.
+Files: none in this repository -- linked from crates.io at build time.
 
-GPL-3.0.txt covers Slint as well. Slint is offered under GPL-3.0-only or one of
-two Slint-specific licenses, and an AGPL project takes the GPL arm.
+
+option-ext
+----------
+Version 0.2.0, by Simon Ochsenreither.
+https://github.com/soc/option-ext
+
+Licensed under the Mozilla Public License, Version 2.0 -- full text in
+MPL-2.0.txt, the same copy Symphonia above is under.
+
+A three-function extension trait, reached transitively through `dirs`, which is
+how Melodia finds the user's home and data directories. Listed for its license
+rather than its size.
 
 Files: none in this repository -- linked from crates.io at build time.
 
@@ -144,9 +189,9 @@ Files: none in this repository -- linked from crates.io at build time.
 Rust dependencies
 -----------------
 Everything else Melodia links is an unmodified crate resolved from crates.io and
-pinned in Cargo.lock, predominantly under MIT and Apache-2.0, with Symphonia and
-its codec crates under MPL-2.0. Those are not listed here individually: they are
-redistributed unmodified and their own license files travel in the published
-crates, where `cargo license` or a vendored checkout reproduces the set for any
-given release. Only the software this repository *modifies*, *carries a copy of*,
-or links under a license offering nothing but copyleft is listed individually.
+pinned in Cargo.lock, under permissive terms and predominantly MIT and
+Apache-2.0. Those are not listed here individually: they are redistributed
+unmodified and their own license files travel in the published crates, where
+`cargo license` or a vendored checkout reproduces the set for any given release.
+Only the software this repository *modifies*, *carries a copy of*, or links under
+a *copyleft* license is listed individually.

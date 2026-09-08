@@ -288,9 +288,10 @@ Copyright (C) 2026 Kenan Salar. Melodia is free software under the
 [GNU Affero General Public License](LICENSE), version 3 or, at your option, any later version, and is
 distributed without any warranty.
 
-The AGPL covers Melodia itself. Two fonts, a patched winit fork and one GPL-3.0 crate (the Japanese
-romanization engine) are compiled into the binary under their own terms; every one of those licenses
-ships in [`licenses/`](licenses/), which every package carries alongside this file.
+The AGPL covers Melodia itself. Two fonts, a patched winit fork and several crates on copyleft terms
+(the UI toolkit, the audio decoders and the Japanese romanization engine) are compiled into the
+binary under their own terms; every one of those licenses ships in [`licenses/`](licenses/), which
+every package carries alongside this file.
 
 ## Acknowledgments
 

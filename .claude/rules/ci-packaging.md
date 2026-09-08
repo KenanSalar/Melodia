@@ -238,7 +238,7 @@ packager files it, so the pins are named rather than reviewed.
 the word. Named because the set of formats is closed; the *font* set is open, so its sibling pin
 walks the directory instead.
 
-- **Four of the five glob the directory and WiX does not**, so a fourth licence file is free
+- **Four of the five glob the directory and WiX does not**, so a new licence file is free
   everywhere except `main.wxs`. `the_msi_names_every_licence_file` **walks `licenses/`** and fails
   on any file the wxs doesn't name. The two aren't redundant: the named list catches the MSI
   dropping the directory (a deliberate act), the walk catches a file going missing from it (an
@@ -253,12 +253,13 @@ walks the directory instead.
 - **`packaging/debian-copyright` is copied verbatim only because it opens with a DEP-5 key** —
   cargo-deb's `has_copyright_metadata` scans the first ten lines, and without one it *generates* a
   copyright from `license` + `authors`, declaring the whole package AGPL by one author, which the
-  fonts and winit falsify. **Hence `release-build.yml` pins cargo-deb to an exact version**: that
-  check and the bare-string `license-file` spelling both live in its `config.rs`, not its README,
-  so a bump can narrow either with nothing to say so, and no test can see it — bumping means
-  re-reading `has_copyright_metadata`, not editing a number. Policy 12.5 lets a package reference
-  `/usr/share/common-licenses` only for what ships there, so the AGPL and OFL bodies are
-  **quoted**, and `the_debian_copyright_quotes_the_licences_it_ships` re-derives both from their
+  fonts, winit and the four copyleft crates falsify. **Hence `release-build.yml` pins cargo-deb to
+  an exact version**: that check and the bare-string `license-file` spelling both live in its
+  `config.rs`, not its README, so a bump can narrow either with nothing to say so, and no test can
+  see it — bumping means re-reading `has_copyright_metadata`, not editing a number. Policy 12.5
+  lets a package reference `/usr/share/common-licenses` only for what ships there, so the AGPL, OFL
+  and MPL bodies are **quoted** while Apache-2.0 and GPL-3 are referenced, and
+  `the_debian_copyright_quotes_the_licences_it_ships` re-derives all three quoted ones from their
   sources rather than trusting the copy.
 
 - **`LICENSE` is an input to those tests** — hence its absence from the skip denylist above:

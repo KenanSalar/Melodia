@@ -488,6 +488,7 @@ fn the_debian_copyright_quotes_the_licences_it_ships() {
     for (source, licence) in [
         ("LICENSE", "AGPL-3.0-or-later"),
         ("licenses/Vazirmatn-OFL-1.1.txt", "OFL-1.1"),
+        ("licenses/MPL-2.0.txt", "MPL-2.0"),
     ] {
         let text = std::fs::read_to_string(root.join(source)).unwrap_or_default();
         assert!(!text.is_empty(), "{source} won't read");
@@ -516,6 +517,7 @@ fn the_bundled_licence_texts_are_the_real_ones() {
         ("licenses/Vazirmatn-OFL-1.1.txt", "SIL OPEN FONT LICENSE Version 1.1"),
         ("licenses/Apache-2.0.txt", "TERMS AND CONDITIONS FOR USE"),
         ("licenses/GPL-3.0.txt", "Automatic Licensing of Downstream Recipients"),
+        ("licenses/MPL-2.0.txt", "3.3. Distribution of a Larger Work"),
     ] {
         let src = std::fs::read_to_string(root.join(file)).unwrap_or_default();
         assert!(
