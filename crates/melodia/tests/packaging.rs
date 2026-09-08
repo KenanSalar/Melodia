@@ -623,16 +623,13 @@ fn the_bundled_licence_texts_are_the_real_ones() {
     ];
 
     let dir = Path::new(REPO_ROOT).join("licenses");
-    let (mut shipped, mut unreadable) = (Vec::new(), Vec::new());
+    let (mut shipped, mut unreadable, mut nested) = (Vec::new(), Vec::new(), Vec::new());
     match std::fs::read_dir(&dir) {
         Ok(entries) => {
             for entry in entries {
                 match entry {
-                    // A nested directory is reported rather than skipped: `build-appimage.sh`
-                    // ships this tree with `cp -r`, so a text one level down reaches users while
-                    // a walk that steps over it goes on passing.
                     Ok(entry) if !entry.path().is_file() => {
-                        unreadable.push(format!("{} is not a file", entry.path().display()));
+                        nested.push(entry.file_name().to_string_lossy().into_owned());
                     }
                     Ok(entry) => shipped.push(entry.file_name().to_string_lossy().into_owned()),
                     Err(e) => unreadable.push(e.to_string()),
@@ -645,6 +642,15 @@ fn the_bundled_licence_texts_are_the_real_ones() {
     // Collected rather than skipped: a path that will not read is indistinguishable from a
     // directory holding nothing, and one of those passes every assertion below.
     assert!(unreadable.is_empty(), "licenses/ would not list: {unreadable:?}");
+    // Its own answer rather than an unreadable path, being a layout rule and not a failure:
+    // `build-appimage.sh` and `build-tarball.sh` both ship this tree with `cp -r`, so a text one
+    // level down reaches users while this walk and the MSI's read one level and go on passing.
+    assert!(
+        nested.is_empty(),
+        "{nested:?} sit under licenses/ without being files, so their contents reach users \
+         through the formats that copy the tree recursively and are checked by neither walk \
+         over it. Flatten them, or teach both walks to recurse"
+    );
     assert!(
         !shipped.is_empty(),
         "licenses/ listed no files — a walk that finds nothing satisfies every check below \
