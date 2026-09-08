@@ -76,12 +76,23 @@ const MAX_ROWS: usize = 600;
 /// says the *old* line is being sung; without a pin the panel would glide back to it and return.
 const PIN_HOLDS_FOR_MS: f64 = 2_000.0;
 
-/// How long a sheet has to leave the singer quiet before the panel draws the break.
+/// How long a sheet has to leave the singer quiet *between two lines* before the panel draws the
+/// break.
 ///
-/// **A floor rather than a preference.** Anything shorter is the room between two lines of one
-/// verse, and a row drawn for it would be scrolled onto and off again inside a breath, which reads
-/// as the panel losing its place rather than as the song resting.
+/// **A floor rather than a preference, and what it holds off is scroll churn**: the panel glides
+/// off the line above onto the notes and off them onto the line below, so a shorter break is three
+/// targets inside a breath and reads as the panel losing its place rather than as the song resting.
 const INTERLUDE_MS: i32 = 5_000;
+
+/// The same for the run-in, which is lower because neither half of [`INTERLUDE_MS`]' argument
+/// reaches it.
+///
+/// A gap with no line above it costs no scrolling: the panel mounts on it and leaves it once, which
+/// is the one move it would have made anyway. And under its floor the run-in is the only gap that
+/// leaves *nothing* lit, where a short break between two lines still leaves the line above it sung.
+/// So all that is left to ask is whether the row stands long enough to read as deliberate rather
+/// than as a flicker on mount.
+const INTRO_MS: i32 = 3_000;
 
 /// What a row is.
 ///
@@ -716,10 +727,11 @@ fn take_sheet(ly: &Rc<LyricsUi>, sheet: &Sheet) {
 
 /// The rows a sheet draws, with the notes wherever it leaves a gap worth naming.
 ///
-/// **The run-in falls out of the same test as every other gap**, `sung_until` starting at the track
-/// rather than at the first line: a sheet whose first stamp is a minute in is a minute of quiet
-/// with nothing above it, which is what an interlude is. It is also the only gap that needs no
-/// blank stamp to be found, so it is the one every sheet gets.
+/// **The run-in falls out of the same walk**, `sung_until` starting at the track rather than at the
+/// first line: a sheet whose first stamp is a minute in is a minute of quiet with nothing above it,
+/// which is what an interlude is. It is also the only gap that needs no blank stamp to be found, so
+/// it is the one every sheet gets, and it answers to its own floor for the reasons [`INTRO_MS`]
+/// argues.
 ///
 /// **A line the sheet gave no end to closes nothing**, and the run to the next line reads as a long
 /// line rather than a rest. That is the honest reading: only a blank stamp says the singing
@@ -731,10 +743,13 @@ fn rows_for(sheet: &Sheet) -> Vec<Row> {
     let mut rows: Vec<Row> = Vec::with_capacity(sheet.lines.len());
     let mut sung_until = Some(0);
 
-    for line in &sheet.lines {
+    for (index, line) in sheet.lines.iter().enumerate() {
         let at_ms = line.at_ms.map(millis);
+        // The run-in is the one gap with no line above it, so it is the one that answers to
+        // `INTRO_MS`.
+        let floor = if index == 0 { INTRO_MS } else { INTERLUDE_MS };
         if let (Some(from), Some(at)) = (sung_until, at_ms)
-            && at - from >= INTERLUDE_MS
+            && at - from >= floor
         {
             rows.push(Row::interlude(from, at));
         }
