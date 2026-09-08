@@ -568,3 +568,17 @@ this file is what builds, looks right, and is wrong.
   arrows or any glyph the bundled font lacks pulls a fallback font; its taller `typoAsc/Desc`
   defines the line-box, so patched glyphs drift down. Fix: render the foreign glyph as a sibling
   `MaterialIcon` (collapsed em-box).
+
+- **Slint 1.16 draws a Hangul syllable with no final consonant as two loose jamo, and the trigger
+  is the generic family it appends to every font stack.** `sharedparley.rs`'s `ranged_builder`
+  pushes `[<default-font-family>, Generic(SansSerif), Generic(SystemUi)]`, and that list is what
+  breaks composition: the same line through *any single* named family shapes correctly, Vazirmatn
+  included, which covers no Hangul at all. Reproducible against parley 0.8 with no Slint in the
+  picture, so there is nothing to reach from a `.slint` file. A syllable that carries a final
+  consonant is unaffected, which is why half a Korean line looks blocky and half looks spaced out.
+  **The cost is width, not only looks.** Swept across the whole syllables block, an open syllable
+  measures 2 em against a closed one's 0.92, so a Korean line lays out up to 1.6× wider than its
+  syllable count says. Anything sizing a box from a character count under-measures it, and an
+  elided `Text` **drops** the line that overflows its box rather than clipping it, so words go
+  missing rather than looking cramped. `ui::now_playing::lyrics`'s `OPEN_HANGUL_EMS` is the one
+  place that pays for it; delete it when a Slint release composes the block, and not before.

@@ -34,6 +34,11 @@ export global Lyrics {
     //
     // A step above the rest of the column on purpose. This is the one panel a reader looks *at*
     // rather than glances over, and it has the column to itself.
+    //
+    // **Every line height below is a floor rather than a preference.** An elided line past its
+    // box is dropped rather than clipped, so a part whose box is shorter than the line the
+    // renderer actually sets draws *nothing*. Each has to clear the tallest face a lyric can
+    // reach it with, which is CJK at about 1.45× its size.
     out property <length> font-size: 16px;
     out property <length> line-height: 28px;
 
@@ -52,14 +57,23 @@ export global Lyrics {
     // lines with no telling which belongs to which. Proximity is doing the work here, not the size
     // step: a reader pairs by distance before they pair by weight, and a row of three needs that
     // more than a row of two did.
-    out property <length> romanization-gap: 4px;
-    out property <length> translation-gap: 4px;
-    out property <length> row-gap: 16px;
+    //
+    // **They are the *drawn* gap's smaller half.** Each part is centred in a box tall enough for
+    // the tallest face, so the leading either side of the words already separates them by several
+    // pixels before these are added, and reading them as the whole distance sets all three too
+    // far apart.
+    out property <length> romanization-gap: 2px;
+    out property <length> translation-gap: 2px;
+    out property <length> row-gap: 12px;
 
     // Breathing room inside a row, so the hover fill is a band around the words rather than a box
-    // flush against them. Comes off the width the panel reports, so Rust's wrap estimate measures
-    // the room the text actually has.
-    out property <length> row-pad: 8px;
+    // flush against them. The horizontal half comes off the width the panel reports, so Rust's
+    // wrap estimate measures the room the text actually has.
+    //
+    // **The vertical half is not decoration**: CJK sets its ink close under the line-box top, so
+    // without it the words touch the fill's own edge on exactly the sheets this panel exists for.
+    out property <length> row-pad-x: 8px;
+    out property <length> row-pad-y: 6px;
 
     in property <[LyricRow]> rows;
     in property <LyricsState> state: LyricsState.idle;

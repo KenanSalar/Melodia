@@ -44,13 +44,18 @@ use melodia_ui::{AppWindow, LyricRow, Lyrics, LyricsState, Player};
 /// draw is close rather than merely defined.
 const ASSUMED_WIDTH: f32 = 340.0;
 
-/// How wide one proportional character is drawn, in ems.
-///
-/// The wrap estimator's only fuzzy term, and it is the trade `ui::chips::estimated_chip_width`
-/// makes: a little over half an em, where Vazirmatn's digits sit near 0.55. **The two error
-/// directions are not symmetric.** Over-shooting wraps early and costs a blank half-row;
-/// under-shooting elides the tail of a line, which loses words. So it is generous on purpose.
-const CHAR_EMS: f32 = 0.54;
+/// The space, the `i l t r f` family and the thin punctuation, which are around half of what a
+/// Latin line is made of. See [`char_ems`] for what the four buckets are measured against.
+const NARROW_EMS: f32 = 0.32;
+
+/// `m w M W @ %`, the only characters Vazirmatn sets near an em.
+const WIDE_EMS: f32 = 0.90;
+
+/// A capital, which runs a fifth wider than the lowercase it sits in.
+const UPPERCASE_EMS: f32 = 0.68;
+
+/// Everything else drawn on a proportional em, letters of any script included.
+const PROPORTIONAL_EMS: f32 = 0.57;
 
 /// Where a lyric line stops being a line and starts being a paragraph. Past this the panel would
 /// scroll more than it shows.
@@ -102,6 +107,7 @@ struct Metrics {
     translation_line_height: f32,
     translation_gap: f32,
     row_gap: f32,
+    row_pad_y: f32,
 }
 
 impl Metrics {
@@ -109,9 +115,10 @@ impl Metrics {
     ///
     /// Each part carries the gap above it, so a row of one, two or three comes out right with no
     /// branch per shape. The gap *between* rows is not in here — that is the layout's `spacing`,
-    /// and it belongs to neither of the rows it separates.
+    /// and it belongs to neither of the rows it separates. The vertical padding is, being what
+    /// the hover fill covers.
     fn row_height(self, row: &Row) -> f32 {
-        let mut height = self.line_height * f32::from(row.lines);
+        let mut height = 2.0 * self.row_pad_y + self.line_height * f32::from(row.lines);
         if row.romanization_lines > 0 {
             height += self.romanization_gap
                 + self.romanization_line_height * f32::from(row.romanization_lines);
@@ -190,9 +197,55 @@ fn is_full_width(ch: char) -> bool {
     )
 }
 
+/// How wide a Hangul syllable that carries no final consonant is drawn: two ems, not one.
+///
+/// **Slint 1.16 sets those as two loose jamo rather than one block**, so `안` comes out square and
+/// `아` comes out twice as wide as it is written. Charging both a square em under-measured a
+/// Korean line by half, which is a wrap the panel never allowed room for: the words rode up over
+/// the row above and the tail of the line was dropped. Retires when a Slint release shapes Hangul
+/// through the composed glyph, and costs an early wrap in the meantime.
+const OPEN_HANGUL_EMS: f32 = 2.0;
+
+/// Whether the character is a Hangul syllable written without a final consonant.
+///
+/// The block is laid out initial-major, so a syllable's own index is a multiple of the number of
+/// finals exactly when it has none.
+fn is_open_hangul_syllable(ch: char) -> bool {
+    /// The Hangul syllables block.
+    const SYLLABLES: core::ops::RangeInclusive<u32> = 0xAC00..=0xD7A3;
+    /// How many syllables share one initial and vowel, the final being what separates them.
+    const FINALS: u32 = 28;
+
+    let cp = u32::from(ch);
+    SYLLABLES.contains(&cp) && (cp - SYLLABLES.start()).is_multiple_of(FINALS)
+}
+
+/// How wide one character is set, in ems.
+///
+/// **The two error directions are not symmetric.** Over-shooting wraps early and costs a blank
+/// half-row; under-shooting elides the tail of a line, which loses words, so each bucket sits a
+/// few percent above the widest character in it. What a bucket may not do is sit above the whole
+/// alphabet, which the single averaged width it replaced did: set at the digit width, ordinary
+/// prose measured a sixth wide and got a second row's worth of blank space under it.
+fn char_ems(ch: char) -> f32 {
+    if is_open_hangul_syllable(ch) {
+        return OPEN_HANGUL_EMS;
+    }
+    if is_full_width(ch) {
+        return 1.0;
+    }
+    match ch {
+        'm' | 'w' | 'M' | 'W' | '@' | '%' => WIDE_EMS,
+        ' ' | '!' | '"' | '\'' | '(' | ')' | ',' | '.' | ':' | ';' | 'I' | '[' | ']' | '`'
+        | 'f' | 'i' | 'j' | 'l' | 'r' | 't' | '{' | '|' | '}' => NARROW_EMS,
+        _ if ch.is_ascii_uppercase() => UPPERCASE_EMS,
+        _ => PROPORTIONAL_EMS,
+    }
+}
+
 /// How wide a line is set, in ems.
 fn em_width(text: &str) -> f32 {
-    text.chars().map(|ch| if is_full_width(ch) { 1.0 } else { CHAR_EMS }).sum()
+    text.chars().map(char_ems).sum()
 }
 
 /// How many wrapped lines a run of text takes at the current width and size.
@@ -236,6 +289,7 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
             translation_line_height: global.get_translation_line_height(),
             translation_gap: global.get_translation_gap(),
             row_gap: global.get_row_gap(),
+            row_pad_y: global.get_row_pad_y(),
         }),
         width: Cell::new(ASSUMED_WIDTH),
         anchor_ms: Cell::new(0),

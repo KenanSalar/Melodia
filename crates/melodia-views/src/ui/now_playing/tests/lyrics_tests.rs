@@ -108,3 +108,24 @@ fn a_width_nobody_has_reported_yet_is_survivable() {
     assert_eq!(wrapped_lines("anything", 0.0, TYPICAL_SIZE), 1);
     assert_eq!(wrapped_lines("anything", -5.0, TYPICAL_SIZE), 1);
 }
+
+/// A run long enough that the three width classes land on three different row counts, so
+/// merging any two of them is a failure rather than a coincidence.
+const CLASS_RUN: usize = 55;
+
+#[test]
+fn a_line_is_measured_by_its_letters_rather_than_by_its_length() {
+    // One averaged width put all three of these on the same row count, which is what over-charged
+    // ordinary prose by a sixth and under-charged a line of `m`s by as much again.
+    assert_eq!(wrapped_lines(&"l".repeat(CLASS_RUN), TYPICAL_WIDTH, TYPICAL_SIZE), 1, "narrow");
+    assert_eq!(wrapped_lines(&"o".repeat(CLASS_RUN), TYPICAL_WIDTH, TYPICAL_SIZE), 2, "ordinary");
+    assert_eq!(wrapped_lines(&"m".repeat(CLASS_RUN), TYPICAL_WIDTH, TYPICAL_SIZE), 3, "wide");
+}
+
+#[test]
+fn a_hangul_syllable_with_no_final_consonant_is_charged_the_two_ems_it_is_drawn_at() {
+    // Slint sets those as two loose jamo, so a line of them is twice as wide as its syllable
+    // count says; charging both kinds a square em wrapped a Korean line the panel had no row for.
+    assert_eq!(wrapped_lines(&"안".repeat(12), TYPICAL_WIDTH, TYPICAL_SIZE), 1, "final consonant");
+    assert_eq!(wrapped_lines(&"아".repeat(12), TYPICAL_WIDTH, TYPICAL_SIZE), 2, "open syllable");
+}

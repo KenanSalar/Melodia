@@ -62,7 +62,7 @@ export component LyricsPanel inherits Rectangle {
                 property <length> gloss-block: self.gloss-h > 0px
                     ? Lyrics.translation-gap + self.gloss-h
                     : 0px;
-                height: self.sung-h + self.roman-block + self.gloss-block;
+                height: 2 * Lyrics.row-pad-y + self.sung-h + self.roman-block + self.gloss-block;
 
                 // On a plain sheet `active-index` stays -1, so every row takes the quiet tier and
                 // the panel reads as a page rather than as a list with nothing selected.
@@ -81,9 +81,9 @@ export component LyricsPanel inherits Rectangle {
                 // so leaving it off puts the words in the middle of a box sized for three lines
                 // and draws them over whichever part is really there.
                 Text {
-                    x: Lyrics.row-pad;
-                    y: 0px;
-                    width: parent.width - 2 * Lyrics.row-pad;
+                    x: Lyrics.row-pad-x;
+                    y: Lyrics.row-pad-y;
+                    width: parent.width - 2 * Lyrics.row-pad-x;
                     height: parent.sung-h;
                     text: row.text;
                     wrap: word-wrap;
@@ -101,9 +101,9 @@ export component LyricsPanel inherits Rectangle {
                 // its own. Anchored under the words rather than off the bottom: it is the middle
                 // part now, and only the last of the three can measure back from the far edge.
                 Text {
-                    x: Lyrics.row-pad;
-                    y: parent.sung-h + Lyrics.romanization-gap;
-                    width: parent.width - 2 * Lyrics.row-pad;
+                    x: Lyrics.row-pad-x;
+                    y: Lyrics.row-pad-y + parent.sung-h + Lyrics.romanization-gap;
+                    width: parent.width - 2 * Lyrics.row-pad-x;
                     height: parent.roman-h;
                     text: row.romanization;
                     wrap: word-wrap;
@@ -121,9 +121,9 @@ export component LyricsPanel inherits Rectangle {
                 // it, so this collapses to nothing rather than needing a branch of its own.
                 // Bottom-anchored, which is what keeps the gap spelled in one place.
                 Text {
-                    x: Lyrics.row-pad;
-                    y: parent.height - parent.gloss-h;
-                    width: parent.width - 2 * Lyrics.row-pad;
+                    x: Lyrics.row-pad-x;
+                    y: parent.height - Lyrics.row-pad-y - parent.gloss-h;
+                    width: parent.width - 2 * Lyrics.row-pad-x;
                     height: parent.gloss-h;
                     text: row.translation;
                     wrap: word-wrap;
@@ -220,7 +220,7 @@ export component LyricsPanel inherits Rectangle {
         running: true;
         triggered => {
             Lyrics.report-width(
-                sv.visible-width - Theme.scrollbar-slot - 2 * Lyrics.row-pad);
+                sv.visible-width - Theme.scrollbar-slot - 2 * Lyrics.row-pad-x);
             if (!root.has-rows) {
                 return;
             }
