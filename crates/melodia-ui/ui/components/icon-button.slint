@@ -35,6 +35,12 @@ export component IconButton inherits Rectangle {
     // Scales the inner disc while held, snapping back on the play button's overshoot
     // curve. Off by default; the now-playing bar enables it on every control.
     in property <bool> press-shrink: false;
+    // Lets a lit button still answer the pointer. `active` beats hover below, so a glyph whose
+    // active and hover colours are the same brush reads identically toggled and hovered, and a
+    // button with no disc has nothing else to say it with. Resting the lit state at
+    // `Theme.lit-rest` is what gives the lift somewhere to come from. Off by default: a button
+    // that lights a disc already answers, and dimming its glyph would fight the fill.
+    in property <bool> hover-lift: false;
     // Lets a host gate its own visuals on *either* hover: a higher-z TouchArea captures
     // the pointer and flips the outer one's `has-hover` false — see `EntityCard`.
     out property <bool> has-hover: touch.has-hover;
@@ -58,6 +64,15 @@ export component IconButton inherits Rectangle {
         duration: touch.pressed ? 100ms : Theme.dur-med;
         easing: cubic-bezier(0.34, 1.56, 0.64, 1);
     }
+
+    // **A float rather than a fourth `*-fg` brush.** The glyph's colour binding below is animated
+    // and reads brushes the host owns, where this depends on nothing a host can dirty, so the two
+    // eases never restart one another. It reaches the glyph through `MaterialIcon`'s own `fade`
+    // for the reason `fade` exists at all: an `opacity` here would layer and crop the ink.
+    property <float> lit-level: root.hover-lift && root.active && !touch.has-hover
+        ? Theme.lit-rest
+        : 1.0;
+    animate lit-level { duration: Theme.dur-fast; easing: ease-in-out; }
 
     // The root keeps a fixed layout slot so siblings never reflow; the disc scales. **The glyph is
     // a sibling rather than a child, and that is what keeps `fade` free** — `need_layer` bails on a
@@ -105,7 +120,7 @@ export component IconButton inherits Rectangle {
                 : (touch.has-hover ? root.hover-fg : root.idle-fg));
         // The disabled dim rides the same float rather than a second `opacity`: this root wraps a
         // `Text`, so an `opacity` here layered and cropped the glyph to its line box.
-        fade: root.fade * (root.button-enabled ? 1.0 : 0.5);
+        fade: root.fade * (root.button-enabled ? 1.0 : 0.5) * root.lit-level;
         animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
     }
 

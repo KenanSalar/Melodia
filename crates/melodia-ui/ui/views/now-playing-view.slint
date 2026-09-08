@@ -135,6 +135,9 @@ export component NowPlayingView inherits Rectangle {
                     // which the rest of the row is, says why the group shares one colour.
                     filled-color: Player.np-accent-bright;
                     empty-color: Player.np-accent-dim;
+                    // The glyph family to the right answers the pointer; a star row that did not
+                    // would be the one dead control in the header.
+                    hover-lift: true;
                     rated(n) => { Player.set-current-rating(n); }
                 }
             }

@@ -16,6 +16,10 @@ export component StarRating {
     // star / heart group with the per-artwork accent.
     in property <brush> filled-color: Theme.yellow;
     in property <brush> empty-color: Theme.subtext0;
+    // Answers the pointer per star, the way the heart beside it does in Now Playing: a lit star
+    // rests at `Theme.lit-rest` and comes up to full, an unlit one crosses to the lit colour.
+    // Off in a track row, where the stars already sit inside the row's own hover treatment.
+    in property <bool> hover-lift: false;
 
     callback rated(int /*new_rating*/);
 
@@ -25,17 +29,37 @@ export component StarRating {
 
         for i in 5: Rectangle {
             property <int> idx: i + 1;
+            property <bool> lit: self.idx <= root.rating;
+            // Only where the star can be clicked: a lift under a dead pointer invites one.
+            property <bool> lifting: root.hover-lift && root.enabled;
             width: root.star-size;
             height: root.star-size;
 
+            // A float rather than a third brush, so nothing the host hands over can dirty it and
+            // restart the colour ease below.
+            property <float> level: self.lifting && self.lit && !touch.has-hover
+                ? Theme.lit-rest
+                : 1.0;
+            animate level { duration: Theme.dur-fast; easing: ease-in-out; }
+
             MaterialIcon {
-                name: parent.idx <= root.rating ? "star" : "star_border";
+                name: parent.lit ? "star" : "star_border";
                 icon-size: root.star-size;
-                icon-color: parent.idx <= root.rating ? root.filled-color : root.empty-color;
-                filled: parent.idx <= root.rating;
+                // The lit colour under the pointer whether or not the star is lit, which is the
+                // heart's own hover. **The face stays keyed on the rating**, so a hovered empty
+                // star previews the colour without claiming to be filled.
+                icon-color: parent.lifting && touch.has-hover
+                    ? root.filled-color
+                    : (parent.lit ? root.filled-color : root.empty-color);
+                filled: parent.lit;
+                fade: parent.level;
+                // Animating a brush a host hands over is safe here for `IconButton`'s reason:
+                // neither host eases the pair, writing both discretely on a theme or artwork
+                // change. Read `slint-pitfalls.md` before giving one of them a crossfade.
+                animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
             }
 
-            TouchArea {
+            touch := TouchArea {
                 mouse-cursor: root.enabled ? pointer : default;
                 clicked => {
                     if (root.enabled) {
