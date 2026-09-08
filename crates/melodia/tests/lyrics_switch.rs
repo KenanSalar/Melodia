@@ -15,20 +15,42 @@ use melodia_testkit::{rust_sources, strip_line_comments, stripped_sources};
 const FACADE_DIR: &str =
     concat!(env!("MELODIA_REPO_ROOT"), "crates/melodia-app/src/library/lyrics");
 
-/// Vacuity floor for [`facade_source`], loose enough that folding two arms together does not trip
-/// it and tight enough that a walk reading nothing cannot pass the pins standing on it.
-const MIN_FACADE_FILES: usize = 4;
+/// Vacuity floor for [`facade_source`], counted over the **production** files alone, loose enough
+/// that folding two arms together does not trip it and tight enough that a walk reading nothing
+/// cannot pass the pins standing on it.
+const MIN_FACADE_FILES: usize = 5;
 
-/// Every file the facade is made of, concatenated, with line comments stripped.
+/// The facade's unit tests, which live under it and are not part of what these pins read.
+const FACADE_TESTS: &str = "tests/";
+
+/// Every production file the facade is made of, concatenated, with line comments stripped.
 ///
 /// Read off the directory rather than named, so an arm nobody has written yet is covered the day
 /// it lands. Comments go because prose about the rule reads exactly like a violation of it.
+///
+/// **`tests/` is dropped, and both pins below need it dropped.** Unlike `library::radio`, whose
+/// floor this was copied from, this facade holds its unit tests inside itself: counted, four test
+/// files satisfy a floor written for the seven production ones, so the whole of what the pins read
+/// could be deleted under it. It also decides what the count below is a count *of* — a test naming
+/// the setting is not a second reader of it.
 fn facade_source() -> String {
     let mut source = String::new();
-    for (_, text) in stripped_sources(FACADE_DIR, "rs", MIN_FACADE_FILES) {
+    let mut files = 0usize;
+
+    for (path, text) in stripped_sources(FACADE_DIR, "rs", MIN_FACADE_FILES) {
+        if path.starts_with(FACADE_TESTS) {
+            continue;
+        }
+        files += 1;
         source.push_str(&text);
         source.push('\n');
     }
+
+    assert!(
+        files >= MIN_FACADE_FILES,
+        "only {files} production files under `library::lyrics` — the pins below are reading a \
+         facade that has mostly stopped existing"
+    );
     source
 }
 
@@ -55,10 +77,14 @@ fn the_lyrics_switch_is_read_in_one_place() {
 #[test]
 fn the_one_reading_of_the_switch_is_the_seam_itself() {
     let source = facade_source();
+    // `"\n}\n"` and `map_or("")`, `library::radio`'s spelling: a bare `"\n}"` closes on `\n})` and
+    // `\n};` too, and falling back to the rest of the corpus would let any naming downstream of the
+    // seam satisfy the assertion below. Both make this fail open, which is the one direction a pin
+    // may not fail.
     let seam = source
         .split_once("fn online_lookup_enabled")
-        .map(|(_, rest)| rest.split_once("\n}").map_or(rest, |(body, _)| body).to_owned())
-        .unwrap_or_default();
+        .and_then(|(_, rest)| rest.split_once("\n}\n"))
+        .map_or("", |(body, _)| body);
 
     assert!(!seam.is_empty(), "`online_lookup_enabled` moved or changed shape");
     assert!(
@@ -73,8 +99,9 @@ const CLIENT_DECL: &str = "services/net/mod.rs";
 /// what comes back.
 ///
 /// **The directory rather than a file list**, so a provider added beside the first is covered the
-/// day it lands rather than the day someone remembers this constant.
-const CLIENT_TREE: &str = "services/net/lyrics_directory";
+/// day it lands rather than the day someone remembers this constant. Trailing separator included,
+/// or a future `lyrics_directory_v2/` exempts itself by sharing a prefix.
+const CLIENT_TREE: &str = "services/net/lyrics_directory/";
 /// The one facade allowed to call it.
 const CALLER_TREE: &str = "library/lyrics/";
 
@@ -86,27 +113,50 @@ const CALLER_TREE: &str = "library/lyrics/";
 ///
 /// The needle is the module's own name rather than any provider's: the providers are private to
 /// it, so naming the module is the only way in, and no import grouping or `as` alias can spell
-/// that segment differently. That is why the module is not simply called `lyrics`, which every
-/// file on both sides of the seam contains already.
+/// that segment differently. The one reach it cannot see is the facade re-exporting its own
+/// import, which would hand the client out under a name this never reads; those imports are
+/// private today. That is why the module is not simply called `lyrics`, which every file on both
+/// sides of the seam contains already.
+///
+/// **Each of the two exemptions is asserted to still match**, `library::radio`'s shape: an
+/// exemption that has stopped matching is not a spent one, it is a hole that reads as coverage —
+/// a moved declaration pre-authorises whatever takes its path next, and a facade that has stopped
+/// naming the client leaves this walking an empty set and passing.
 #[test]
 fn only_the_lyrics_facade_reaches_the_directory_client() {
     const NEEDLE: &str = "lyrics_directory";
 
-    let strays: Vec<String> = rust_sources()
-        .into_iter()
-        .filter(|(path, src)| {
-            src.contains(NEEDLE)
-                && !path.starts_with(CALLER_TREE)
-                && !path.starts_with(CLIENT_TREE)
-                && path != CLIENT_DECL
-        })
-        .map(|(path, _)| path)
-        .collect();
+    let mut strays = Vec::new();
+    let mut declaration_seen = false;
+    let mut facade_files = 0usize;
+
+    for (path, src) in rust_sources() {
+        if path.starts_with(CLIENT_TREE) || !src.contains(NEEDLE) {
+            continue;
+        }
+        if path == CLIENT_DECL {
+            declaration_seen = true;
+        } else if path.starts_with(CALLER_TREE) {
+            facade_files += 1;
+        } else {
+            strays.push(path);
+        }
+    }
 
     assert!(
         strays.is_empty(),
         "{strays:?} name the lyrics directory — every lookup goes through `library::lyrics`, \
          which is the only place the switch can stop one"
+    );
+    assert!(
+        declaration_seen,
+        "`{CLIENT_DECL}` no longer names `{NEEDLE}`, so a moved declaration has pre-authorised \
+         whatever takes its path next"
+    );
+    assert!(
+        facade_files > 0,
+        "no file under `{CALLER_TREE}` names `{NEEDLE}`, so the facade has stopped being the door \
+         and this walk is passing over an empty set"
     );
 }
 

@@ -62,26 +62,31 @@ impl RequestPacer {
 
     /// Wait out the floor, or refuse where a stop is still open.
     ///
-    /// **The lock spans the wait, so callers queue rather than all waking together.** That is what
-    /// makes the requests sequential, which is the shape a paced service asks for; releasing it
-    /// around the sleep would have every waiter compute the same deadline and then contend for a
-    /// floor only one of them can satisfy.
+    /// **The lock is dropped around the sleep, which is what makes the re-read below mean
+    /// anything.** [`Self::stop_for`] wants the same lock, so a waiter that held it across the
+    /// wait could not be reached by the response arming the stop: it would wake, re-read state
+    /// only it could have changed, and send into a window the host had just closed. Releasing it
+    /// wakes every waiter instead, and each asks again rather than trusting the deadline it
+    /// computed, so one of them sends per floor.
     ///
-    /// It is released before the caller sends, so the response path can arm a stop without waiting
-    /// on the request that is about to earn one.
+    /// It is released before the caller sends, too, so the response path can arm a stop without
+    /// waiting on the request that is about to earn one.
     pub async fn acquire(&self) -> Turn {
-        let mut state = self.state.lock().await;
         loop {
             // Re-read after each sleep: a sibling's response can arm a stop while this caller is
             // still waiting out the floor, and sending anyway is the one thing a stop forbids.
-            match verdict(&state, self.floor, Instant::now()) {
-                Verdict::Stopped(left) => return Turn::Stopped(left),
-                Verdict::Wait(wait) => tokio::time::sleep(wait).await,
-                Verdict::Send => {
-                    state.last_sent = Some(Instant::now());
-                    return Turn::Ready;
+            let wait = {
+                let mut state = self.state.lock().await;
+                match verdict(&state, self.floor, Instant::now()) {
+                    Verdict::Stopped(left) => return Turn::Stopped(left),
+                    Verdict::Send => {
+                        state.last_sent = Some(Instant::now());
+                        return Turn::Ready;
+                    }
+                    Verdict::Wait(wait) => wait,
                 }
-            }
+            };
+            tokio::time::sleep(wait).await;
         }
     }
 

@@ -40,7 +40,9 @@ const HOMOGLYPHS: [char; 32] = [
 /// question about the sheet: kana is the only evidence, and the line carrying it need not be the
 /// line being romanized.
 pub(super) fn apply(lines: &mut [LyricLine]) {
-    // The common case, and the whole of what it costs.
+    // The resolver asks this too, to decide whether the sheet is worth the trip to the blocking
+    // pool, so in production it is answered before the hop. Kept for a direct caller: past it
+    // every line walks kakasi's sniffer.
     if lines.iter().all(|line| line.text.is_ascii()) {
         return;
     }

@@ -12,6 +12,13 @@ name: Release
 # release: what runs, in what order, and the table of what ships.
 
 on:
+  # **A re-run is dispatched on the tag, never on a branch**, and this takes no input, so
+  # the ref picked in the dropdown (or `gh workflow run release.yml --ref <the tag>`) is
+  # the whole of that decision. The tag rebuilds the commit its draft was signed from; a
+  # branch is for a build nobody has tagged yet, and from `main` after the next bump has
+  # landed it resolves *that* version's tag and opens a different draft, which is not a
+  # re-run of anything. Neither reaches a published tag, `prepare` short-circuiting on
+  # one, so the recovery window is the draft.
   workflow_dispatch:
   push:
     tags:

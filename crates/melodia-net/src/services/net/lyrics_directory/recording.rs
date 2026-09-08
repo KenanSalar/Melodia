@@ -107,7 +107,11 @@ impl Recording {
 /// is a request spent to learn nothing. Brackets stay too: the index tolerates them, and dropping
 /// them is what would need proving rather than assuming.
 pub(super) fn query_title(title: &str) -> &str {
-    let lower = title.to_lowercase();
+    // **ASCII-folded, so the index it yields is a byte index into `title` as well.** Every marker
+    // below is ASCII, while `to_lowercase` is the full Unicode mapping and expands `İ` from two
+    // bytes to three: past one of those, the cut lands to the right of where it was found, taking
+    // the marker with it and eventually landing inside a character.
+    let lower = title.to_ascii_lowercase();
     let cut = [
         " feat ", " feat. ", " ft ", " ft. ", "(feat", "[feat", "(ft", "[ft",
     ]
@@ -123,7 +127,9 @@ pub(super) fn query_title(title: &str) -> &str {
 
 /// The first credited artist, which is how a row is filed when the file credits several.
 pub(super) fn query_artist(artist: &str) -> &str {
-    let lower = artist.to_lowercase();
+    // ASCII-folded for [`query_title`]'s reason, and it bites sooner here: a one-byte marker like
+    // `,` leaves nothing for the drift to land harmlessly inside.
+    let lower = artist.to_ascii_lowercase();
     let cut =
         ARTIST_SPLITS.into_iter().chain(["/", "\0"]).filter_map(|split| lower.find(split)).min();
 

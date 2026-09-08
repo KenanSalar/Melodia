@@ -35,8 +35,12 @@ fn every_multi_caller_dialog_opens_through_its_own_function() {
         "edit-tags",
     ];
 
-    let offenders: Vec<String> = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES)
-        .into_iter()
+    let sources = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES);
+    let owner =
+        sources.iter().find(|(path, _)| path.ends_with(OWNER)).map_or("", |(_, src)| src.as_str());
+
+    let offenders: Vec<String> = sources
+        .iter()
         .filter(|(path, _)| !path.ends_with(OWNER))
         .flat_map(|(path, src)| {
             FOLDED_KINDS
@@ -46,6 +50,21 @@ fn every_multi_caller_dialog_opens_through_its_own_function() {
                 .collect::<Vec<_>>()
         })
         .collect();
+
+    // **Every needle held to still matching the owner.** A prohibition walk finds nothing when it
+    // is holding and nothing when its needle has gone stale, and the two read identically from
+    // here: rename a kind in `dialog.slint` and the four searches above go on finding no offenders
+    // while a re-inlined populate block under the new name is free to drift.
+    let unowned: Vec<&str> = FOLDED_KINDS
+        .iter()
+        .copied()
+        .filter(|kind| !owner.contains(&format!("kind = \"{kind}\"")))
+        .collect();
+    assert!(
+        unowned.is_empty(),
+        "{unowned:?} are no longer spelled in `{OWNER}`, so the walk below is searching for a \
+         kind nothing raises. Follow the rename here, or drop the entry if the dialog is gone."
+    );
 
     assert!(
         offenders.is_empty(),

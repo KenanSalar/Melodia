@@ -146,7 +146,7 @@ coverage on this path.
   1 s `recv_timeout`s, tighter for standing up a real transport, and the first place to read if
   `test-windows` reddens.
 
-- **`test` and `test-windows` cap build time as well as memory.** `cargo test` links 42 test
+- **`test` and `test-windows` cap build time as well as memory.** `cargo test` links 48 test
   binaries and full debuginfo is most of that tail, worst on MSVC where it is PDBs. Cold on both
   sides, cargo's own build phase reads 18m29s → 12m39s on Linux and 31m13s → 17m54s on Windows, so
   the MSVC half is where it pays. Both set `CARGO_PROFILE_{DEV,TEST}_DEBUG` to `line-tables-only`,
@@ -261,6 +261,25 @@ walks the directory instead.
   and MPL bodies are **quoted** while Apache-2.0 and GPL-3 are referenced, and
   `the_debian_copyright_quotes_the_licences_it_ships` re-derives all three quoted ones from their
   sources rather than trusting the copy.
+
+- **`MPL-2.0` and `GPL-3.0` are standalone `License:` paragraphs no `Files:` stanza names, and
+  lintian's `unused-license-paragraph-in-dep5-copyright` on those two is expected.** DEP-5
+  describes a *source tree* and those terms reach the package through crates that have none here,
+  so the only way to silence the tag is a `Files:` stanza pointing at source that does not exist,
+  which is a lie in the one file whose whole job is not telling them. Nothing in this repo runs
+  lintian, so the tag is a downstream packager's view rather than a gate; if it ever becomes one,
+  the answer is a `usr/share/lintian/overrides/melodia` asset, never deleting the paragraphs. The
+  half a deletion *would* break silently is the reference, so both are pinned.
+
+- **`licenses/` may not fall through to `Files: *`.** Those texts are the FSF's, the ASF's,
+  Mozilla's, SIL's and the Vazirmatn authors', reproduced because their own licences require it,
+  and the catch-all stanza declares whatever it reaches AGPL by one author. It is the Ko-fi
+  stanza's argument over five more files and it looks like nothing in a diff, since no byte of
+  `GPL-3.0.txt` changes when the package starts claiming it. One globbed stanza covers them under
+  a `verbatim-licence-text` short name, with `licenses/ATTRIBUTION.txt` carved back out *below* it,
+  DEP-5 applying the last stanza that matches. Pinned three ways in
+  `the_debian_copyright_quotes_the_licences_it_ships`: the glob, the carve-back, and that every
+  short name a stanza uses has a paragraph defining it.
 
 - **`LICENSE` is an input to those tests** — hence its absence from the skip denylist above:
   compiling nothing is not the same as being unexercised. The other four needles live in
