@@ -209,9 +209,10 @@ const HANGUL_VOWELS: [&str; 21] = [
 /// A final consonant is unreleased, so these are not the initials' spellings: 한국 ends `k` rather
 /// than the `g` that opens 국.
 ///
-/// **A two-consonant final need not sound the half [`HANGUL_LINKED`] leaves behind**, so the two
-/// agree at ㄼ ㄽ ㄾ ㅀ and differ at ㄺ ㄻ ㄿ, where the ㄹ is what goes: 닭 is `dak` beside 읽어's
-/// `ilgeo`. Neither table is derivable from the other.
+/// **A ㄹ compound need not sound the half [`HANGUL_LINKED`] leaves behind.** The two tables agree
+/// at ㄼ ㄽ ㄾ and differ at ㄺ ㄻ ㄿ, where the ㄹ is what goes: 닭 is `dak` beside 읽어's
+/// `ilgeo`. ㅀ is neither, the ㄹ surviving as the half that *moves* and nothing staying behind
+/// it: 싫어 is `sireo`. Neither table is derivable from the other.
 const HANGUL_FINALS: [&str; 28] = [
     "", "k", "k", "k", "n", "n", "n", "t", "l", "k", "m", "l", "l", "l", "p", "l", "m", "p", "p",
     "t", "t", "ng", "t", "t", "k", "t", "p", "t",
