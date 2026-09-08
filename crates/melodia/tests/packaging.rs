@@ -462,11 +462,11 @@ fn as_dep5_field_body(text: &str) -> String {
 /// that.
 ///
 /// Debian Policy 12.5 lets a package *reference* `/usr/share/common-licenses` only for the
-/// licences shipped there. Apache-2.0 and GPL-3 are; AGPL-3, OFL-1.1 and MPL-2.0 are not, so those
-/// three are quoted in full — and a quoted licence is a second copy that can drift from the one the
-/// package actually ships. This re-derives all three from their sources rather than trusting the
-/// copy, and holds **both** references: a deleted one leaves the file silent about terms the
-/// binary carries, which is the same failure as a missing quote and looks like nothing at all.
+/// licences shipped there. Apache-2.0, GPL-3 and MPL-2.0 are; AGPL-3 and OFL-1.1 are not, so those
+/// two are quoted in full — and a quoted licence is a second copy that can drift from the one the
+/// package actually ships. This re-derives both from their sources rather than trusting the copy,
+/// and holds all three references: a deleted one leaves the file silent about terms the binary
+/// carries, which is the same failure as a missing quote and looks like nothing at all.
 ///
 /// Two structural checks ride along, because the file's failures are all of one kind — it keeps
 /// saying something, just not the true thing, so nothing looks broken.
@@ -505,7 +505,6 @@ fn the_debian_copyright_quotes_the_licences_it_ships() {
     for (source, licence) in [
         ("LICENSE", "AGPL-3.0-or-later"),
         ("licenses/Vazirmatn-OFL-1.1.txt", "OFL-1.1"),
-        ("licenses/MPL-2.0.txt", "MPL-2.0"),
     ] {
         let text = std::fs::read_to_string(root.join(source)).unwrap_or_default();
         assert!(!text.is_empty(), "{source} won't read");
@@ -520,6 +519,7 @@ fn the_debian_copyright_quotes_the_licences_it_ships() {
     for (licence, reference) in [
         ("Apache-2.0", "/usr/share/common-licenses/Apache-2.0"),
         ("GPL-3", "/usr/share/common-licenses/GPL-3"),
+        ("MPL-2.0", "/usr/share/common-licenses/MPL-2.0"),
     ] {
         assert!(
             copyright.contains(reference),
@@ -529,27 +529,30 @@ fn the_debian_copyright_quotes_the_licences_it_ships() {
         );
     }
 
-    // The glob and the one file inside it that really is ours, which has to stay carved back out:
-    // DEP-5 applies the *last* matching stanza, so an ATTRIBUTION entry above the glob is a line
-    // that reads as a carve-out and does nothing.
+    // The glob and the one file inside it that really is ours, which has to stay carved back out.
     let patterns = dep5_file_patterns(&copyright);
-    for (pattern, consequence) in [
-        (
-            "licenses/*",
-            "the reproduced texts fall through to `Files: *`, so the package declares other \
-             organisations' licences AGPL by its own author",
-        ),
-        (
-            "licenses/ATTRIBUTION.txt",
-            "our own attribution file is taken by the glob above it and declared somebody else's \
-             verbatim text, which is the carve-out inverted rather than merely absent",
-        ),
-    ] {
-        assert!(
-            patterns.contains(&pattern),
-            "no `Files:` stanza names `{pattern}`, so {consequence}. Patterns found: {patterns:?}"
-        );
-    }
+    let glob_at = patterns.iter().position(|found| *found == "licenses/*");
+    let carve_out_at = patterns.iter().position(|found| *found == "licenses/ATTRIBUTION.txt");
+
+    assert!(
+        glob_at.is_some(),
+        "no `Files:` stanza names `licenses/*`, so the reproduced texts fall through to \
+         `Files: *` and the package declares other organisations' licences AGPL by its own \
+         author. Patterns found: {patterns:?}"
+    );
+    assert!(
+        carve_out_at.is_some(),
+        "no `Files:` stanza names `licenses/ATTRIBUTION.txt`, so our own attribution file is \
+         taken by the glob above it and declared somebody else's verbatim text, which is the \
+         carve-out inverted rather than merely absent. Patterns found: {patterns:?}"
+    );
+    // DEP-5 applies the *last* matching stanza, so the order is the whole of what makes the
+    // carve-out one: above the glob it is a line that reads as an exception and does nothing.
+    assert!(
+        glob_at < carve_out_at,
+        "`licenses/ATTRIBUTION.txt` is named above `licenses/*`, so the glob below it wins and \
+         the carve-out is dead. Move its stanza back under the globbed one"
+    );
 
     let mut named: Vec<&str> = copyright
         .lines()
@@ -625,10 +628,13 @@ fn the_bundled_licence_texts_are_the_real_ones() {
         Ok(entries) => {
             for entry in entries {
                 match entry {
-                    Ok(entry) if entry.path().is_file() => {
-                        shipped.push(entry.file_name().to_string_lossy().into_owned());
+                    // A nested directory is reported rather than skipped: `build-appimage.sh`
+                    // ships this tree with `cp -r`, so a text one level down reaches users while
+                    // a walk that steps over it goes on passing.
+                    Ok(entry) if !entry.path().is_file() => {
+                        unreadable.push(format!("{} is not a file", entry.path().display()));
                     }
-                    Ok(_) => {}
+                    Ok(entry) => shipped.push(entry.file_name().to_string_lossy().into_owned()),
                     Err(e) => unreadable.push(e.to_string()),
                 }
             }

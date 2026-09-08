@@ -257,10 +257,13 @@ walks the directory instead.
   an exact version**: that check and the bare-string `license-file` spelling both live in its
   `config.rs`, not its README, so a bump can narrow either with nothing to say so, and no test can
   see it — bumping means re-reading `has_copyright_metadata`, not editing a number. Policy 12.5
-  lets a package reference `/usr/share/common-licenses` only for what ships there, so the AGPL, OFL
-  and MPL bodies are **quoted** while Apache-2.0 and GPL-3 are referenced, and
-  `the_debian_copyright_quotes_the_licences_it_ships` re-derives all three quoted ones from their
-  sources rather than trusting the copy.
+  lets a package reference `/usr/share/common-licenses` only for what ships there, so the AGPL and
+  OFL bodies are **quoted** while Apache-2.0, GPL-3 and MPL-2.0 are referenced, and
+  `the_debian_copyright_quotes_the_licences_it_ships` re-derives both quoted ones from their
+  sources rather than trusting the copy. **MPL-2.0 sits on the referenced side and is the one to
+  check before moving**: Policy 12.5's own footnote names its path and base-files ships it, so a
+  quoted body there is one the file was asked not to carry. Nothing catches that either way, since
+  lintian's `copyright-file-contains-full-*` tags reach GPL, LGPL, GFDL and Apache-2.0 only.
 
 - **`MPL-2.0` and `GPL-3.0` are standalone `License:` paragraphs no `Files:` stanza names, and
   lintian's `unused-license-paragraph-in-dep5-copyright` on those two is expected.** DEP-5
