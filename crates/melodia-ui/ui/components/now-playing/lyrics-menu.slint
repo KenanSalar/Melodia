@@ -1,5 +1,8 @@
 import { Theme } from "../../theme.slint";
 import { Lyrics, LyricsState } from "../../globals/lyrics.slint";
+import { Player } from "../../globals/player.slint";
+import { Dialog } from "../../globals/dialog.slint";
+import { TagEditor } from "../../globals/dialog-forms.slint";
 import { PopupHighlight } from "../../globals/shell.slint";
 import { TooltipSide } from "../tooltip.slint";
 import { AccentGlyphButton } from "./accent-glyph-button.slint";
@@ -22,7 +25,7 @@ export component LyricsMenu inherits Rectangle {
 
     // Every row is drawn whether or not it can act, so the popup's reserve below is a constant and
     // the rows do not move under the pointer between one open and the next.
-    property <length> menu-h: FlyoutMetrics.menu-row-h * 4 + FlyoutMetrics.chrome-h;
+    property <length> menu-h: FlyoutMetrics.menu-row-h * 5 + FlyoutMetrics.chrome-h;
 
     function dismiss() {
         pop.close();
@@ -120,6 +123,25 @@ export component LyricsMenu inherits Rectangle {
                     button-enabled: Lyrics.can-save-to-tag;
                     clicked => {
                         Lyrics.save-to-tag();
+                        root.dismiss();
+                    }
+                }
+
+                // The tag editor's own Lyrics tab, on the playing track. "Save to file" above
+                // writes what the panel found and asks nothing; this is for the sheet that is
+                // nearly right, where a stamp is half a second out and the fix is to type it.
+                //
+                // **The playing track is read here rather than at wire time**, this popup
+                // outliving any one song.
+                OverflowRow {
+                    icon: "edit";
+                    label: @tr("Edit lyrics…");
+                    button-enabled: Player.vm.has_track;
+                    clicked => {
+                        Dialog.open-tag-editor(
+                            @tr("Edit Track Information"),
+                            [Player.vm.track.id],
+                            TagEditor.tab-lyrics);
                         root.dismiss();
                     }
                 }

@@ -2100,6 +2100,9 @@ msgstr "Şarkı sözlerini göster"
 msgid "Look up again"
 msgstr "Yeniden ara"
 
+msgid "Edit lyrics…"
+msgstr "Şarkı sözlerini düzenle…"
+
 msgid "Save to file"
 msgstr "Dosyaya kaydet"
 

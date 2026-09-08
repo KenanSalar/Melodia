@@ -2096,6 +2096,9 @@ msgstr "Εμφάνιση στίχων"
 msgid "Look up again"
 msgstr "Νέα αναζήτηση"
 
+msgid "Edit lyrics…"
+msgstr "Επεξεργασία στίχων…"
+
 msgid "Save to file"
 msgstr "Αποθήκευση στο αρχείο"
 

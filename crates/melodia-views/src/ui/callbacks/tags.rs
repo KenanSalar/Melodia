@@ -105,7 +105,7 @@ fn wire_request_edit(
     let weak = ui.as_weak();
     let state = state.clone();
     let session = session.clone();
-    te.on_request_edit(move |ids_model| {
+    te.on_request_edit(move |ids_model, tab| {
         let ids: Vec<i64> = ids_model.iter().map(i64::from).collect();
         if ids.is_empty() {
             return;
@@ -165,6 +165,14 @@ fn wire_request_edit(
 
             let Some(ui) = weak.upgrade() else { return };
             populate(&ui, &session, &rows, lyrics, resident, cover);
+            // After `populate`, which resets to Tags: the request's tab is the last word. Only a
+            // single selection can honour it, Lyrics and Summary being unmounted in batch mode, so
+            // a request for one over many rows would open on a tab that draws nothing. The bounds
+            // are the global's own, so nothing here restates a position the body owns.
+            if single {
+                let te = ui.global::<TagEditor>();
+                te.set_active_tab(tab.clamp(te.get_tab_tags(), te.get_tab_summary()));
+            }
             ui.global::<Dialog>().set_open(true);
         }));
     });

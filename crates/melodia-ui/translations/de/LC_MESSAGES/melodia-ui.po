@@ -2098,6 +2098,9 @@ msgstr "Songtext anzeigen"
 msgid "Look up again"
 msgstr "Erneut suchen"
 
+msgid "Edit lyrics…"
+msgstr "Songtext bearbeiten…"
+
 msgid "Save to file"
 msgstr "In Datei speichern"
 

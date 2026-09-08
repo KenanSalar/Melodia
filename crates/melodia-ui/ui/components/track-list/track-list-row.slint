@@ -658,15 +658,12 @@ export component TrackListRowItem inherits Rectangle {
                             : @tr("Edit Tags…");
                         icon: "edit";
                         clicked => {
-                            Dialog.title = root.multi-active
-                                ? @tr("Edit {} Tracks", root.multi-count)
-                                : @tr("Edit Track Information");
-                            Dialog.message = "";
-                            Dialog.confirm-label = @tr("Save");
-                            Dialog.cancel-label = @tr("Cancel");
-                            Dialog.destructive = false;
-                            Dialog.kind = "edit-tags";
-                            TagEditor.request-edit(ctx-popup.effective-ids);
+                            Dialog.open-tag-editor(
+                                root.multi-active
+                                    ? @tr("Edit {} Tracks", root.multi-count)
+                                    : @tr("Edit Track Information"),
+                                ctx-popup.effective-ids,
+                                TagEditor.tab-tags);
                         }
                     }
 

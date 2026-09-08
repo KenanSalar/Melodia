@@ -113,7 +113,7 @@ export component TagEditorBody inherits HorizontalLayout {
         Rectangle {
             height: root.body-h;
 
-            if TagEditor.active-tab == 0: Rectangle {
+            if TagEditor.active-tab == TagEditor.tab-tags: Rectangle {
                 width: 100%;
                 height: 100%;
 
@@ -210,7 +210,7 @@ export component TagEditorBody inherits HorizontalLayout {
                 }
             }
 
-            if TagEditor.active-tab == 1 && TagEditor.track-count == 1: Rectangle {
+            if TagEditor.active-tab == TagEditor.tab-lyrics && TagEditor.track-count == 1: Rectangle {
                 width: 100%;
                 height: 100%;
 
@@ -238,7 +238,7 @@ export component TagEditorBody inherits HorizontalLayout {
                 }
             }
 
-            if TagEditor.active-tab == 2 && TagEditor.track-count == 1: Rectangle {
+            if TagEditor.active-tab == TagEditor.tab-summary && TagEditor.track-count == 1: Rectangle {
                 width: 100%;
                 height: 100%;
 

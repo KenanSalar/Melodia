@@ -83,8 +83,16 @@ export global TagEditor {
 
     // 1 = single selection (Lyrics + Summary available), >1 = batch.
     in property <int> track-count;
-    // Rust resets this to 0 (Tags) on every populate.
+    // Rust resets this to `tab-tags` on every populate, then applies whatever the request asked
+    // for. Only reachable over a single selection: the other two tabs are unmounted in batch mode.
     in-out property <int> active-tab;
+
+    // The positions `tag-editor-body.slint` mounts the tabs in. Named because an opener that wants
+    // one has to agree with the body about which is which, and two spellings of the same position
+    // are what drift: a fourth tab inserted anywhere but the end moves both.
+    out property <int> tab-tags: 0;
+    out property <int> tab-lyrics: 1;
+    out property <int> tab-summary: 2;
     // Preview of the current or picked cover; `has-cover` gates Remove.
     in-out property <image> cover;
     in property <bool> has-cover;
@@ -102,7 +110,10 @@ export global TagEditor {
     in property <string> summary-modified;
     in property <string> summary-hash;
 
-    callback request-edit([int] /*track ids*/);
+    // The tab is the request's rather than the dialog's own: Rust populates asynchronously and
+    // resets `active-tab` when it lands, so an opener setting the property beside this call would
+    // have it overwritten a tick later. Reach it through `Dialog.open-tag-editor`.
+    callback request-edit([int] /*track ids*/, int /*tab*/);
     // rfd on the UI thread.
     callback pick-artwork();
     callback remove-artwork();

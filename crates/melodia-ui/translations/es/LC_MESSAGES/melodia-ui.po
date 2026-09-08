@@ -2092,6 +2092,9 @@ msgstr "Mostrar la letra"
 msgid "Look up again"
 msgstr "Buscar de nuevo"
 
+msgid "Edit lyrics…"
+msgstr "Editar la letra…"
+
 msgid "Save to file"
 msgstr "Guardar en el archivo"
 
