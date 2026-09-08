@@ -49,6 +49,7 @@ pub fn parse(text: &str, source: LyricsSource) -> Option<Lyrics> {
                 let (sung, gloss) = split_translation(line.trim_end());
                 plain.push(LyricLine {
                     at_ms: None,
+                    end_ms: None,
                     text: sung,
                     romanization: None,
                     translation: gloss,
@@ -60,6 +61,7 @@ pub fn parse(text: &str, source: LyricsSource) -> Option<Lyrics> {
         let (sung, gloss) = split_translation(stripped.trim());
         timed.extend(stamps.into_iter().map(|at| LyricLine {
             at_ms: Some(at.saturating_sub(offset).max(0)),
+            end_ms: None,
             text: sung.clone(),
             romanization: None,
             translation: gloss.clone(),
@@ -71,7 +73,32 @@ pub fn parse(text: &str, source: LyricsSource) -> Option<Lyrics> {
     }
     // Stable, so a line written twice against one stamp keeps the order its author chose.
     timed.sort_by_key(|line| line.at_ms);
-    Lyrics::new(timed, source)
+    Lyrics::new(close_at_blanks(timed), source)
+}
+
+/// Turns each blank stamp into the end of the line above it.
+///
+/// **A stamp with no words is how the format spells "stop showing the last line", so it is a line
+/// ending rather than a line.** Drawn as one it is a row with nothing in it, which is what a panel
+/// following the song then centres on for the length of the solo; folded in, the same stamp is the
+/// only thing on a timed sheet that says a pause happened at all.
+///
+/// The first blank of a run wins, the ones after it re-closing a line that has already ended, and a
+/// blank before any words is dropped, having nothing above it to end.
+fn close_at_blanks(lines: Vec<LyricLine>) -> Vec<LyricLine> {
+    let mut sung: Vec<LyricLine> = Vec::with_capacity(lines.len());
+    for line in lines {
+        if !line.text.trim().is_empty() {
+            sung.push(line);
+            continue;
+        }
+        if let Some(previous) = sung.last_mut()
+            && previous.end_ms.is_none()
+        {
+            previous.end_ms = line.at_ms;
+        }
+    }
+    sung
 }
 
 /// Whether `text` carries timings, without building the sheet to find out.

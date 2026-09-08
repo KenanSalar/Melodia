@@ -32,7 +32,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 use super::NowPlayingState;
 use melodia_app::library;
 use melodia_app::state::AppState;
-use melodia_core::entities::lyrics::{Lyrics as Sheet, LyricsOutcome, LyricsSource};
+use melodia_core::entities::lyrics::{LyricLine, Lyrics as Sheet, LyricsOutcome, LyricsSource};
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::utils::toast::{self, ToastKind};
 use melodia_ui::{AppWindow, LyricRow, Lyrics, LyricsState, Player};
@@ -76,8 +76,31 @@ const MAX_ROWS: usize = 600;
 /// says the *old* line is being sung; without a pin the panel would glide back to it and return.
 const PIN_HOLDS_FOR_MS: f64 = 2_000.0;
 
-/// One row as the panel draws it.
+/// How long a sheet has to leave the singer quiet before the panel draws the break.
+///
+/// **A floor rather than a preference.** Anything shorter is the room between two lines of one
+/// verse, and a row drawn for it would be scrolled onto and off again inside a breath, which reads
+/// as the panel losing its place rather than as the song resting.
+const INTERLUDE_MS: i32 = 5_000;
+
+/// What a row is.
+///
+/// A gap is a row of the panel's own making rather than anything the sheet holds, which is why it
+/// is spelled here and not in the sheet: how long a rest has to be before it is worth drawing is a
+/// question about the panel, and the sheet has already answered the only one it can.
+#[derive(Clone, Copy)]
+enum RowKind {
+    Words,
+    /// Carries where the gap ends, the row's own `at_ms` being where it starts, so the notes have
+    /// both ends of the span they fill across.
+    Interlude {
+        until_ms: i32,
+    },
+}
+
+/// One row as the panel draws it. An interlude carries no text and none of the two lines under it.
 struct Row {
+    kind: RowKind,
     /// `None` on an untimed sheet, the two never mixing within one sheet.
     at_ms: Option<i32>,
     text: String,
@@ -92,6 +115,40 @@ struct Row {
     romanization_lines: u8,
     /// The same for the gloss, in `Lyrics.translation-line-height` units. Zero without one.
     translation_lines: u8,
+}
+
+impl Row {
+    /// A line of the sheet. The three counts are [`republish`]'s to fill against the live width.
+    fn words(line: &LyricLine, at_ms: Option<i32>) -> Self {
+        Self {
+            kind: RowKind::Words,
+            at_ms,
+            text: line.text.clone(),
+            romanization: line.romanization.clone(),
+            translation: line.translation.clone(),
+            lines: 1,
+            romanization_lines: 0,
+            translation_lines: 0,
+        }
+    }
+
+    /// The quiet between two lines, drawn as the notes.
+    ///
+    /// Blank text is what makes this cost no arithmetic anywhere else: `wrapped_lines` floors a
+    /// blank run at one line, so the row comes out exactly as tall as a one-line verse and
+    /// [`Metrics::row_height`] needs no arm for it.
+    fn interlude(from_ms: i32, until_ms: i32) -> Self {
+        Self {
+            kind: RowKind::Interlude { until_ms },
+            at_ms: Some(from_ms),
+            text: String::new(),
+            romanization: None,
+            translation: None,
+            lines: 1,
+            romanization_lines: 0,
+            translation_lines: 0,
+        }
+    }
 }
 
 /// The type scale the panel draws by, taken from the `Lyrics` global so both halves lay a sheet
@@ -654,23 +711,51 @@ fn clear(ui: &AppWindow, ly: &Rc<LyricsUi>) {
 
 /// Keep the sheet's text and stamps. Heights are not kept, following the width instead.
 fn take_sheet(ly: &Rc<LyricsUi>, sheet: &Sheet) {
-    if sheet.lines.len() > MAX_ROWS {
-        log::debug!("lyrics: sheet of {} lines truncated to {MAX_ROWS}", sheet.lines.len());
+    *ly.rows.borrow_mut() = rows_for(sheet);
+}
+
+/// The rows a sheet draws, with the notes wherever it leaves a gap worth naming.
+///
+/// **The run-in falls out of the same test as every other gap**, `sung_until` starting at the track
+/// rather than at the first line: a sheet whose first stamp is a minute in is a minute of quiet
+/// with nothing above it, which is what an interlude is. It is also the only gap that needs no
+/// blank stamp to be found, so it is the one every sheet gets.
+///
+/// **A line the sheet gave no end to closes nothing**, and the run to the next line reads as a long
+/// line rather than a rest. That is the honest reading: only a blank stamp says the singing
+/// stopped, and a sheet without one is not describing a pause it left out.
+///
+/// No trailing gap, deliberately. It would need the *last* line's end, which almost no sheet
+/// states, so it would appear on a minority of tracks and paint notes over the singing on the rest.
+fn rows_for(sheet: &Sheet) -> Vec<Row> {
+    let mut rows: Vec<Row> = Vec::with_capacity(sheet.lines.len());
+    let mut sung_until = Some(0);
+
+    for line in &sheet.lines {
+        let at_ms = line.at_ms.map(millis);
+        if let (Some(from), Some(at)) = (sung_until, at_ms)
+            && at - from >= INTERLUDE_MS
+        {
+            rows.push(Row::interlude(from, at));
+        }
+        rows.push(Row::words(line, at_ms));
+        sung_until = line.end_ms.map(millis);
+
+        if rows.len() >= MAX_ROWS {
+            log::debug!(
+                "lyrics: sheet of {} lines truncated at {MAX_ROWS} rows",
+                sheet.lines.len()
+            );
+            rows.truncate(MAX_ROWS);
+            break;
+        }
     }
-    *ly.rows.borrow_mut() = sheet
-        .lines
-        .iter()
-        .take(MAX_ROWS)
-        .map(|line| Row {
-            at_ms: line.at_ms.map(|at| i32::try_from(at).unwrap_or(i32::MAX)),
-            text: line.text.clone(),
-            romanization: line.romanization.clone(),
-            translation: line.translation.clone(),
-            lines: 1,
-            romanization_lines: 0,
-            translation_lines: 0,
-        })
-        .collect();
+    rows
+}
+
+/// A stamp as the panel carries it, saturating at the reach of an `i32`.
+fn millis(at_ms: i64) -> i32 {
+    i32::try_from(at_ms).unwrap_or(i32::MAX)
 }
 
 /// Re-measure every row against the current width, rebuilding the model and the offset table.
@@ -719,6 +804,7 @@ fn republish(ui: &AppWindow, ly: &Rc<LyricsUi>) {
                 .unwrap_or_default(),
             translation: row.translation.as_deref().map(SharedString::from).unwrap_or_default(),
             at_ms: row.at_ms.unwrap_or(-1),
+            is_interlude: matches!(row.kind, RowKind::Interlude { .. }),
             line_count: i32::from(row.lines),
             romanization_line_count: i32::from(row.romanization_lines),
             translation_line_count: i32::from(row.translation_lines),
@@ -757,13 +843,13 @@ fn follow(ui: &AppWindow, ly: &Rc<LyricsUi>) {
         let stale = (position - f64::from(ly.pinned_at_ms.get())).abs() > PIN_HOLDS_FOR_MS;
         if sung != Some(pinned) && !stale {
             // Restated rather than left alone, so a table rebuilt under the pin still centres it.
-            write_active(ui, ly, Some(pinned));
+            write_active(ui, ly, Some(pinned), position);
             return;
         }
         ly.pinned.set(None);
     }
 
-    write_active(ui, ly, sung);
+    write_active(ui, ly, sung, position);
 }
 
 /// Seek to the line drawn at a point down the sheet.
@@ -785,7 +871,9 @@ fn seek_at(ui: &AppWindow, ly: &Rc<LyricsUi>, y: f32) {
     // otherwise glide back to it and then return.
     ly.pinned.set(Some(index));
     ly.pinned_at_ms.set(at_ms);
-    write_active(ui, ly, Some(index));
+    // The seek's own instant, so a click landing on a gap starts its notes empty rather than
+    // wherever the song happened to be when the pointer went down.
+    write_active(ui, ly, Some(index), f64::from(at_ms));
     ui.global::<Player>().invoke_seek(at_ms);
 }
 
@@ -821,7 +909,7 @@ fn sung_at(rows: &[Row], position_ms: f64) -> Option<usize> {
 }
 
 /// Publish which row is sung and where it sits, so the panel can centre it.
-fn write_active(ui: &AppWindow, ly: &Rc<LyricsUi>, index: Option<usize>) {
+fn write_active(ui: &AppWindow, ly: &Rc<LyricsUi>, index: Option<usize>, position_ms: f64) {
     let global = ui.global::<Lyrics>();
     let Some(index) = index else {
         global.set_active_index(-1);
@@ -837,6 +925,29 @@ fn write_active(ui: &AppWindow, ly: &Rc<LyricsUi>, index: Option<usize>) {
     global.set_active_offset(*top);
     // The whole row, gloss included, so the pair is centred together rather than the words alone.
     global.set_active_height(ly.metrics.get().row_height(row));
+    global.set_interlude_progress(interlude_progress(row, position_ms));
+}
+
+/// How far through a gap the song is, for the notes to fill against. Zero on a row of words, which
+/// have nothing to fill.
+fn interlude_progress(row: &Row, position_ms: f64) -> f32 {
+    let RowKind::Interlude { until_ms } = row.kind else {
+        return 0.0;
+    };
+    let from = f64::from(row.at_ms.unwrap_or(0));
+    let span = f64::from(until_ms) - from;
+    // A gap that ends where it starts is one the stamps disagree about; full is the answer that
+    // leaves nothing filling on screen.
+    if span <= 0.0 {
+        return 1.0;
+    }
+
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "the clamp puts the ratio inside f32's range"
+    )]
+    let progress = ((position_ms - from) / span).clamp(0.0, 1.0) as f32;
+    progress
 }
 
 #[cfg(test)]

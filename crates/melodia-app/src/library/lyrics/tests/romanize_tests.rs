@@ -13,6 +13,7 @@ fn sheet(texts: &[&str]) -> Vec<LyricLine> {
         .iter()
         .map(|text| LyricLine {
             at_ms: None,
+            end_ms: None,
             text: (*text).to_owned(),
             romanization: None,
             translation: None,

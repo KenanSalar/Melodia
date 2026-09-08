@@ -16,6 +16,13 @@ fn stamps(text: &str) -> Vec<Option<i64>> {
     drawn(text).into_iter().map(|(at, _)| at).collect()
 }
 
+/// Each line with the end a blank stamp closed it at, which the two are only distinguishable by.
+fn folded(text: &str) -> Vec<(Option<i64>, Option<i64>, String)> {
+    parse(text, LyricsSource::Sidecar).map_or_else(Vec::new, |sheet| {
+        sheet.lines.into_iter().map(|line| (line.at_ms, line.end_ms, line.text)).collect()
+    })
+}
+
 #[test]
 fn a_stamp_with_no_fraction_is_whole_seconds() {
     assert_eq!(stamps("[01:00]a"), vec![Some(60_000)]);
@@ -127,13 +134,11 @@ fn a_timed_sheet_keeps_only_its_timed_lines() {
 }
 
 #[test]
-fn a_timed_line_with_no_words_survives_as_an_instrumental_gap() {
+fn a_timed_line_with_no_words_ends_the_line_above_it() {
+    // Drawn as a row of its own it is the blank the panel centres on for the length of a solo.
     assert_eq!(
-        drawn("[00:01.00]words\n[00:20.00]"),
-        vec![
-            (Some(1_000), "words".to_owned()),
-            (Some(20_000), String::new())
-        ]
+        folded("[00:01.00]words\n[00:20.00]"),
+        vec![(Some(1_000), Some(20_000), "words".to_owned())]
     );
 }
 

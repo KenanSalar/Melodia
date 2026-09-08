@@ -9,6 +9,7 @@ fn timed(stamps: &[i32]) -> Vec<Row> {
     stamps
         .iter()
         .map(|at| Row {
+            kind: RowKind::Words,
             at_ms: Some(*at),
             text: "x".to_owned(),
             romanization: None,
@@ -63,6 +64,7 @@ fn a_repeated_stamp_sings_the_later_of_the_two_lines() {
 #[test]
 fn an_untimed_sheet_sings_nothing() {
     let rows = vec![Row {
+        kind: RowKind::Words,
         at_ms: None,
         text: "a".to_owned(),
         romanization: None,
@@ -87,6 +89,7 @@ fn a_short_line_takes_one_row() {
 #[test]
 fn a_blank_line_still_takes_a_row() {
     // A plain sheet spaces its verses with them, so collapsing one to nothing loses the spacing.
+    // An interlude row is blank by construction too, so this floor is what gives it its height.
     assert_eq!(wrapped_lines("", TYPICAL_WIDTH, TYPICAL_SIZE), 1);
     assert_eq!(wrapped_lines("   ", TYPICAL_WIDTH, TYPICAL_SIZE), 1);
 }

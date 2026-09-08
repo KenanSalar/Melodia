@@ -87,6 +87,12 @@ export global Lyrics {
     in property <length> active-offset;
     in property <length> active-height;
 
+    // How far through the active row's gap the song is, for its notes to fill against. **One
+    // property rather than a field on every row**: only one gap can be running, and a per-row float
+    // would rewrite the whole model on every tick of a solo. Zero on a row of words, which have
+    // nothing to fill, so the rows ahead and behind read it off `active-index` instead.
+    in property <float> interlude-progress;
+
     // Whether the Now Playing column shows this instead of Up Next. Written from the column's own
     // menu and persisted by Rust, the `Visualizer.enabled` shape.
     in-out property <bool> shown;

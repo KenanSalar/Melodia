@@ -11,6 +11,11 @@
 /// `[offset:]` that would push an early stamp below zero clamps instead; there is nowhere before
 /// the start to seek to.
 ///
+/// `end_ms` is where the sheet says the singing stops, which is a different question from where
+/// the next line starts and is answered far less often: `None` means the sheet did not say, not
+/// that the line runs to its successor. Only a sheet that spells it can tell a pause apart from a
+/// long line, which is what the panel draws its instrumental breaks from.
+///
 /// `translation` is the gloss a bilingual sheet carries under the words. Two fields rather than
 /// one string with a separator in it: the panel draws them at different sizes and the parser is
 /// the half that knows how the sheet spelled the break.
@@ -22,6 +27,7 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LyricLine {
     pub at_ms: Option<i64>,
+    pub end_ms: Option<i64>,
     pub text: String,
     pub romanization: Option<String>,
     pub translation: Option<String>,
@@ -55,7 +61,8 @@ impl Lyrics {
     /// Every resolver arm ends here, so "blank means no answer" is settled once rather than three
     /// times. Blank rather than empty: a tag holding only newlines is one a tagger created and
     /// nobody filled in, and drawing it hands the user a bare panel that claims to have found
-    /// something. Blank lines *inside* a sheet are kept, being how a plain one spaces its verses.
+    /// something. Blank lines *inside* a plain sheet are kept, being how one spaces its verses; a
+    /// timed sheet reaches here with none, its blank stamps having closed the lines they end.
     #[must_use]
     pub fn new(lines: Vec<LyricLine>, source: LyricsSource) -> Option<Self> {
         if lines.iter().all(|line| line.text.trim().is_empty()) {

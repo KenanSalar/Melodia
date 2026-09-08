@@ -32,6 +32,13 @@ export component LyricsPanel inherits Rectangle {
 
     property <bool> has-rows: Lyrics.rows.length > 0 && Lyrics.state == LyricsState.ready;
 
+    // The three notes drawn where the sheet leaves a gap. Under the words rather than at their
+    // size, so a break reads as a beat in the sheet and not as a control the reader is meant to
+    // press. Panel-local: an interlude row is one line tall like any other, so Rust needs neither
+    // number to build the offset table and neither belongs in the `Lyrics` type scale.
+    property <length> note-size: 15px;
+    property <length> note-gap: 5px;
+
     sv := ScrollView {
         width: 100%;
         height: 100%;
@@ -135,6 +142,43 @@ export component LyricsPanel inherits Rectangle {
                     color: parent.is-sung
                         ? Player.np-on-backdrop-muted
                         : Player.np-on-backdrop-muted.transparentize(0.45);
+                }
+
+                // The gap the sheet leaves between two lines. `row.text` is empty on these, so the
+                // three parts above collapse on their own and this is the whole row.
+                if row.is_interlude: HorizontalLayout {
+                    x: Lyrics.row-pad-x;
+                    y: Lyrics.row-pad-y;
+                    width: 3 * root.note-size + 2 * root.note-gap;
+                    height: Lyrics.line-height;
+                    spacing: root.note-gap;
+
+                    for k in [0, 1, 2]: Rectangle {
+                        width: root.note-size;
+                        // A third of the gap each, so the row fills left to right as it runs. Only
+                        // the gap being played fills at all: a break the song has left is back to
+                        // the weight of an unsung line, which is how the words above read too. That
+                        // is also what lets `interlude-progress` be one global rather than a field
+                        // per row, no other row having a use for it.
+                        property <float> lit: i == Lyrics.active-index
+                            ? clamp(Lyrics.interlude-progress * 3 - k, 0.0, 1.0)
+                            : 0.0;
+
+                        // Two layers rather than one mixed brush, `mix()` having no brush overload:
+                        // the lit colour rides the float over a base painted at full alpha. Same
+                        // pair the words above are drawn in, so a filled note reads as sung.
+                        MaterialIcon {
+                            name: "music_note";
+                            icon-size: root.note-size;
+                            icon-color: Player.np-on-backdrop-muted.transparentize(0.2);
+                        }
+                        MaterialIcon {
+                            name: "music_note";
+                            icon-size: root.note-size;
+                            icon-color: Player.np-on-backdrop;
+                            fade: parent.lit;
+                        }
+                    }
                 }
             }
         }
