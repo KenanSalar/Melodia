@@ -2,7 +2,7 @@ import { LyricRow } from "../models.slint";
 
 // What the lyrics panel is showing, and why.
 //
-// Six states rather than a handful of bools: they are mutually exclusive, and a set of flags can
+// A state rather than a handful of bools: they are mutually exclusive, and a set of flags can
 // spell combinations none of them means. Rust owns every one of them except `shown`, which the
 // view menu writes directly so the column swaps on the click rather than after a round trip.
 export enum LyricsState {

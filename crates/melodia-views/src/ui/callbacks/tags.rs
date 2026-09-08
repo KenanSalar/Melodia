@@ -418,7 +418,7 @@ fn finalize_populate(
 ) {
     let single = rows.len() == 1;
     te.set_track_count(clamp_i32(rows.len()));
-    te.set_active_tab(0);
+    te.set_active_tab(te.get_tab_tags());
     te.set_lyrics_enabled(single);
     te.set_has_resident_lyrics(resident.is_some());
 

@@ -133,7 +133,8 @@ fn key(track_path: &str) -> String {
 ///
 /// A sheet is a couple of kilobytes, so this is thousands of tracks: past that it is a cache of
 /// songs nobody has played in a long time, and the oldest are the ones least likely to be wanted.
-/// Only `.lrc` files can reach it, the two markers being empty.
+/// Only `.lrc` files count toward it, and only `.lrc` files are retired against it. A marker is
+/// empty, so evicting one frees nothing and costs the request it was written to save.
 const MAX_BYTES: u64 = 8 * 1024 * 1024;
 
 /// Retire what the store no longer needs: expired misses first, then the oldest sheets until it
@@ -161,6 +162,13 @@ pub(super) fn prune(dir: &Path) -> Result<u32, AppError> {
             if fs::remove_file(&path).is_ok() {
                 retired += 1;
             }
+            continue;
+        }
+        // **Sheets only, and the markers are not merely uninteresting here.** Both are empty, so
+        // one in this list is retired for no bytes at all and the loop below walks straight on to
+        // the next. Past the budget that wipes every instrumental in the store, a permanent answer
+        // traded for nothing.
+        if extension != SHEET_EXT {
             continue;
         }
 

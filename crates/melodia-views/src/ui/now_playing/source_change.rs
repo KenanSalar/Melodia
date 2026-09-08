@@ -15,7 +15,6 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::{ComponentHandle, Image, Weak};
 
-use super::lyrics;
 use super::metadata::to_slint_track_meta;
 use super::write_crossfade_slot;
 use super::{NowPlayingSource, NowPlayingState, SourceKey};
@@ -119,22 +118,15 @@ pub(super) async fn apply_source_change(
     let artwork_path = source.as_ref().and_then(|s| s.artwork_path.clone());
     let is_station = matches!(key, Some(SourceKey::Station(_)));
 
-    // **Only fetched while the panel is up.** A hidden panel would still cost a file read per
-    // track change and, with the switch on, a request per track change for something nobody is
-    // looking at. The panel's other two edges — a re-open and the toggle — go through
-    // `lyrics::wire_reseed`'s hook instead, and dedupe against the claim taken here.
-    let wanted = track
-        .as_ref()
-        .filter(|_| weak.upgrade().is_some_and(|ui| ui.global::<melodia_ui::Lyrics>().get_shown()));
-    if let (Some(track), Some(ui)) = (wanted.as_ref(), weak.upgrade()) {
-        lyrics::mark_loading(&ui, &np_state.lyrics, &track.file_path);
-    }
+    // **Kicked rather than awaited, and ahead of both reads rather than past the guard below.**
+    // The lookup reaches a file and then a socket, so awaited here it put the cover, the title and
+    // the backdrop behind a request that can time out, leaving this view painting the previous
+    // track for as long as the directory takes to refuse. The hook reads the source cell every
+    // caller here has already written, takes its own claim before its first `.await` and drops its
+    // result if a newer song took that claim, which is the guard below one layer in.
+    np_state.lyrics.kick();
 
     let meta = fetch_track_meta(state, track.as_ref()).await;
-    let sheet = match wanted {
-        Some(track) => Some((track.file_path.clone(), lyrics::fetch(state, track).await)),
-        None => None,
-    };
     let (cover, blurred, sample) = decode_artwork_for(state, np_artwork, artwork_path).await;
 
     // --- Write to Slint (UI thread) ---
@@ -150,11 +142,6 @@ pub(super) async fn apply_source_change(
     let player = ui.global::<Player>();
     publish_chips(&player, np_state, meta);
     write_backdrop_tiers(&ui, sample);
-
-    // Past the same guard the chips are, so a slow lookup cannot paint under a newer song.
-    if let Some((path, outcome)) = sheet {
-        lyrics::apply(&ui, &np_state.lyrics, &path, &outcome, state.lyrics_online_enabled.get());
-    }
 
     // The blur is the backdrop for both kinds, so it takes the same cross-fade either way.
     write_crossfade_slot(

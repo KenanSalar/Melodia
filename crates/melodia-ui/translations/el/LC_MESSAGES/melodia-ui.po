@@ -176,14 +176,14 @@ msgstr "Αυτό το κομμάτι δεν έχει στίχους"
 msgid "Lyrics lookup is off"
 msgstr "Η αναζήτηση στίχων είναι ανενεργή"
 
-msgid "Turn it on under Settings ▸ Services"
-msgstr "Ενεργοποιήστε την στις Ρυθμίσεις ▸ Υπηρεσίες"
+msgid "Turn it on in Settings, under Services"
+msgstr "Ενεργοποιήστε την στις Ρυθμίσεις, στην ενότητα Υπηρεσίες"
 
 msgid "Couldn't reach the lyrics service"
 msgstr "Δεν ήταν δυνατή η σύνδεση με την υπηρεσία στίχων"
 
-msgid "Try again from the ⋮ menu"
-msgstr "Δοκιμάστε ξανά από το μενού ⋮"
+msgid "Try again from the Lyrics menu"
+msgstr "Δοκιμάστε ξανά από το μενού Στίχοι"
 
 # ---- Queue sheet ------------------------------------------------------------
 

@@ -176,14 +176,14 @@ msgstr "Questo brano non ha testo"
 msgid "Lyrics lookup is off"
 msgstr "La ricerca dei testi è disattivata"
 
-msgid "Turn it on under Settings ▸ Services"
-msgstr "Attivala in Impostazioni ▸ Servizi"
+msgid "Turn it on in Settings, under Services"
+msgstr "Attivala in Impostazioni, nella sezione Servizi"
 
 msgid "Couldn't reach the lyrics service"
 msgstr "Servizio testi non raggiungibile"
 
-msgid "Try again from the ⋮ menu"
-msgstr "Riprova dal menu ⋮"
+msgid "Try again from the Lyrics menu"
+msgstr "Riprova dal menu Testo"
 
 # ---- Queue sheet ------------------------------------------------------------
 

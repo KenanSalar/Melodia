@@ -298,8 +298,8 @@ export component LyricsPanel inherits Rectangle {
         }
     }
 
-    // The five states with nothing to draw. The centred block is the Up Next list's, not
-    // `GridEmptyState`, whose opaque `Theme.base` would punch a hole in the backdrop.
+    // Every state but `ready`, none of which has rows to draw. The centred block is the Up Next
+    // list's, not `GridEmptyState`, whose opaque `Theme.base` would punch a hole in the backdrop.
     if !root.has-rows: VerticalLayout {
         alignment: center;
         HorizontalLayout {
@@ -328,16 +328,21 @@ export component LyricsPanel inherits Rectangle {
                     horizontal-alignment: center;
                     wrap: word-wrap;
                 }
-                // The two states a reader can act on from here, and each says how.
+                // The two states a reader can act on from here, and each says how. **Both name
+                // their control in words rather than drawing its glyph**: neither Vazirmatn nor
+                // the icon faces carry `▸` or `⋮`, so a run holding one pulls a fallback whose
+                // taller metrics own the line box, and where nothing on the system covers it the
+                // line draws as tofu. A Material Symbols sibling is the other way out and buys
+                // nothing in a sentence that wraps.
                 if Lyrics.state == LyricsState.off: Text {
-                    text: @tr("Turn it on under Settings ▸ Services");
+                    text: @tr("Turn it on in Settings, under Services");
                     color: Player.np-on-backdrop-muted.transparentize(0.35);
                     font-size: Theme.font-size-sm;
                     horizontal-alignment: center;
                     wrap: word-wrap;
                 }
                 if Lyrics.state == LyricsState.unavailable: Text {
-                    text: @tr("Try again from the ⋮ menu");
+                    text: @tr("Try again from the Lyrics menu");
                     color: Player.np-on-backdrop-muted.transparentize(0.35);
                     font-size: Theme.font-size-sm;
                     horizontal-alignment: center;

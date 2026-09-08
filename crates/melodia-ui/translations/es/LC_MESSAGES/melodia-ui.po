@@ -176,14 +176,14 @@ msgstr "Esta pista no tiene letra"
 msgid "Lyrics lookup is off"
 msgstr "La búsqueda de letras está desactivada"
 
-msgid "Turn it on under Settings ▸ Services"
-msgstr "Actívala en Ajustes ▸ Servicios"
+msgid "Turn it on in Settings, under Services"
+msgstr "Actívala en Ajustes, en la sección Servicios"
 
 msgid "Couldn't reach the lyrics service"
 msgstr "No se pudo conectar con el servicio de letras"
 
-msgid "Try again from the ⋮ menu"
-msgstr "Vuelve a intentarlo desde el menú ⋮"
+msgid "Try again from the Lyrics menu"
+msgstr "Vuelve a intentarlo desde el menú Letra"
 
 # ---- Queue sheet ------------------------------------------------------------
 

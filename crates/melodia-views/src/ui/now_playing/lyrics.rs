@@ -462,7 +462,7 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
 ///
 /// A failure is logged and reads as "nothing found": a sidecar in some old codepage or a directory
 /// that is down are both, to a reader, a panel with no words in it, and neither is worth a toast.
-pub(super) async fn fetch(state: &AppState, track: &TrackSummary) -> LyricsOutcome {
+async fn fetch(state: &AppState, track: &TrackSummary) -> LyricsOutcome {
     match library::lyrics::for_track(state, track).await {
         Ok(outcome) => outcome,
         Err(e) => {
@@ -481,9 +481,8 @@ pub(super) async fn fetch(state: &AppState, track: &TrackSummary) -> LyricsOutco
 /// **Three unrelated edges reach this, and dropping any one of them shows an empty panel.** The
 /// sheet is handed back on every close, which is the trade this feature makes against holding a
 /// resident copy for the life of the process — so a re-open of the *same* track has nothing to
-/// paint, and the artwork's already-applied guard has no way to know that. A track change is
-/// `apply_source_change`'s; the other two are the view re-opening and the 3-dot toggle, and both
-/// arrive here.
+/// paint, and the artwork's already-applied guard has no way to know that. The three are a track
+/// change, the view re-opening and the 3-dot toggle.
 ///
 /// Idempotent by [`LyricsUi::holds`], so the edges may overlap freely: whichever gets there first
 /// pays, and the claim is taken before the first `.await` rather than after the last.
@@ -492,10 +491,14 @@ fn reseed(weak: &Weak<AppWindow>, state: &AppState, np_state: &Rc<NowPlayingStat
     let ly = &np_state.lyrics;
 
     let track = np_state.current_source.borrow().as_ref().and_then(|s| s.track.clone());
-    let shown = ui.global::<Lyrics>().get_shown();
-    let Some(track) = track.filter(|_| shown) else {
-        // Switched off, or a station, which has no words to look up. Either way the previous
-        // song's sheet must not sit under it.
+    // **Both terms, and `open` is the one that is not obvious.** `shown` is the persisted panel
+    // preference rather than "the panel is mounted", so on its own it answers `true` for a closed
+    // view, and the square miniplayer keeps the source-change path running behind one. That would
+    // spend a request per track on a panel nobody can see.
+    let wanted = np_state.open.get() && ui.global::<Lyrics>().get_shown();
+    let Some(track) = track.filter(|_| wanted) else {
+        // Closed, switched off, or a station, which has no words to look up. Either way the
+        // previous song's sheet must not sit under it.
         if ly.holding.borrow().is_some() {
             release(&ui, ly);
         }
@@ -637,7 +640,7 @@ pub(super) fn wire_reseed(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPla
 ///
 /// `online_enabled` comes from the caller rather than being read here, because it decides only
 /// which of two sentences an empty panel shows and the caller is the half holding `AppState`.
-pub(super) fn apply(
+fn apply(
     ui: &AppWindow,
     ly: &Rc<LyricsUi>,
     track_path: &str,
@@ -690,7 +693,7 @@ pub(super) fn apply(
 /// **Claims the track before the `.await`, not after it.** The lookup can reach a file and then a
 /// socket, and a reseed landing in that window would otherwise see a sheet for the *previous*
 /// track and start a second one for the same song.
-pub(super) fn mark_loading(ui: &AppWindow, ly: &Rc<LyricsUi>, track_path: &str) {
+fn mark_loading(ui: &AppWindow, ly: &Rc<LyricsUi>, track_path: &str) {
     clear(ui, ly);
     *ly.holding.borrow_mut() = Some(track_path.to_owned());
     ui.global::<Lyrics>().set_state(LyricsState::Loading);
@@ -912,15 +915,19 @@ fn row_at(offsets: &[f32], rows: &[Row], metrics: Metrics, y: f32) -> Option<usi
     (!past_the_sheet).then_some(index)
 }
 
-/// The last row whose stamp has passed, by binary search over the stamped rows.
+/// The last row whose stamp has passed, by binary search over the rows.
 ///
-/// A sheet is timed or it is not, so on a timed one every row is stamped and the search is over
-/// the whole slice; the filter is what keeps it correct if that ever stops being true.
+/// **A sheet is timed or it is not**, which the parser guarantees and the first row is enough to
+/// ask: on a timed one every row carries a stamp, so the search is the whole slice and needs no
+/// index of the stamped ones to walk. Worth the ask rather than the allocation, the panel calling
+/// this on a 33 ms tick.
 fn sung_at(rows: &[Row], position_ms: f64) -> Option<usize> {
-    let stamped: Vec<usize> =
-        rows.iter().enumerate().filter(|(_, row)| row.at_ms.is_some()).map(|(i, _)| i).collect();
-    let passed = stamped.partition_point(|&i| f64::from(rows[i].at_ms.unwrap_or(0)) <= position_ms);
-    passed.checked_sub(1).map(|slot| stamped[slot])
+    if rows.first().is_none_or(|row| row.at_ms.is_none()) {
+        return None;
+    }
+    let passed =
+        rows.partition_point(|row| row.at_ms.is_some_and(|at| f64::from(at) <= position_ms));
+    passed.checked_sub(1)
 }
 
 /// Publish which row is sung and where it sits, so the panel can centre it.

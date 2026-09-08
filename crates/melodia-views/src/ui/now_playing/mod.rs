@@ -1,6 +1,6 @@
 //! Full-screen Now Playing view wiring.
 //!
-//! Three pieces of Rust→Slint glue, all installed by [`install`] on the event-loop
+//! Four pieces of Rust→Slint glue, all installed by [`install`] on the event-loop
 //! thread:
 //!
 //! 1. **Dual-slot blurred background + sharp cover.** A `sinks.view_model` subscriber
@@ -12,6 +12,9 @@
 //! 2. **Technical-metadata chips**, off the same subscriber's `TrackMeta` fetch.
 //! 3. **"Up Next" list.** A `sinks.queue` subscriber rebuilds `NowPlaying.up-next-rows`
 //!    and resets `slide-phase` only when the current track actually changed.
+//! 4. **The lyrics panel**, which takes that same column when it is switched on. No
+//!    subscriber of its own: three edges kick [`lyrics`]'s hook and it dedupes on the
+//!    track it is holding.
 
 mod lyrics;
 mod metadata;
@@ -161,8 +164,8 @@ pub struct NowPlayingState {
     /// without waiting for the next source change.
     artwork_seeder: RefCell<Option<Seeder>>,
     /// The lyrics panel's rows, offset table and sung index. Lives here rather than beside the
-    /// panel because the panel is `if`-mounted and this outlives it, and because the source-change
-    /// subscriber is what fills it.
+    /// panel because the panel is `if`-mounted and this outlives it, and because the three edges
+    /// that refill it are all out here.
     pub(super) lyrics: Rc<lyrics::LyricsUi>,
 }
 
