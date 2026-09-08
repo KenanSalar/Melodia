@@ -440,6 +440,18 @@ silently miss the other.
   second time as a term in that cap's content-fit arm, which hand-sums rows + header + spacing.
   Search's songs section is the one opt-out, its bar being a layout sibling with a slot already.
 
+- **The Now Playing right column is one column with three arms, not a place two things share.**
+  Up Next, the lyrics panel and the station panel, swapped on `Player.vm.has_station` and
+  `Lyrics.shown`; a station keeps its panel whatever the toggle says, and the toggle's own control
+  is gone rather than disabled there, a stream having no track to look a sheet up for.
+  **Don't answer a fourth thing with a fourth column.** `content-width` is what the chip wrap, the
+  strip width and the cover slot all derive from, so another region reflows the artwork column
+  every time a track without lyrics comes on, which is the worst property a panel can have when
+  availability is data rather than intent. The lyrics arm sizes its rows in Rust and reads its
+  whole type scale off the `Lyrics` global, both halves argued at those two anchors: neither number
+  is one to redefine at a call site. One `TouchArea` covers that sheet, so there is no per-row
+  `has-hover` to reach for.
+
 ### Dialogs, pickers, toasts
 
 - **Selectable-picker dialogs share one toolkit** (`components/dialog/selectable-picker.slint`).

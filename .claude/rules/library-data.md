@@ -156,11 +156,13 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   (`crates/melodia-app/src/library/tags.rs::apply_tag_edit`, `crates/melodia-store/src/media/ingest/tag_writer.rs`). Right-click rows → **Edit
   Tags…** (`Dialog.kind == "edit-tags"`); **batch is the point** — **touched-tracking is a
   Rust-side diff against a populate-time snapshot** (Keep/Clear/Set), so only changed fields write.
-  **Lyrics live in the file, not the DB** (single-track tab only). The writer always targets the
-  **primary tag type** (never `first_tag_mut()` — an ID3v1-only MP3 would drop
-  album-artist/composer/BPM/lyrics); BPM writes `IntegerBpm` **and** `Bpm`; **M4A `Ilst` flattens
-  every `pic_type` to `Other`**, so `clear_front_cover` must remove *both* `CoverFront` and `Other`
-  or Replace/Remove silently revert. Cover picks decode-validate up front, so a corrupt pick fails
+  **Lyrics live in the file, not the DB** (single-track tab only), though the tab is no longer their
+  only reader: `library::lyrics` resolves a sidecar, this tag and a fetched-sheet store for the Now
+  Playing panel, and hands the tab that same reading as an *Insert found lyrics* offer above the
+  field. The writer always targets the **primary tag type** (never `first_tag_mut()` — an ID3v1-only
+  MP3 would drop album-artist/composer/BPM/lyrics); BPM writes `IntegerBpm` **and** `Bpm`; **M4A
+  `Ilst` flattens every `pic_type` to `Other`**, so `clear_front_cover` must remove *both*
+  `CoverFront` and `Other` or Replace/Remove silently revert. Cover picks decode-validate up front, so a corrupt pick fails
   the batch before any file is touched. After the write it's the scan pipeline: re-extract via
   `extract_metadata` (**never hand-build the UPDATE** — a fresh mtime beside a stale hash is the
   one state `track_is_current` can't repair) → `update_track_metadata`. Own writes stay out of the

@@ -6,6 +6,12 @@ Comment: Melodia's Slint build compiles its fonts and one third-party logo into
  itself. Each is listed below with its own copyright holder and licence. Their
  full texts, and a note of what was modified in each, also ship in
  /usr/share/doc/melodia/licenses/.
+ .
+ The executable also links two crates on copyleft rather than permissive terms:
+ kakasi, which romanizes Japanese and is GPL-3.0 with no other arm, and the Slint
+ toolkit, taken under the GPL-3.0 arm of its own tri-licence. Neither is in this
+ source tree, so neither has a Files stanza; GPL-3.0 is referenced below and its
+ text ships in /usr/share/doc/melodia/licenses/GPL-3.0.txt.
 
 Files: *
 Copyright: 2026 Kenan Salar <kenansalar@users.noreply.github.com>
@@ -801,6 +807,10 @@ License: OFL-1.1
 License: Apache-2.0
  On Debian systems the complete text of the Apache License, Version 2.0
  can be found in /usr/share/common-licenses/Apache-2.0.
+
+License: GPL-3.0
+ On Debian systems the complete text of the GNU General Public License,
+ Version 3 can be found in /usr/share/common-licenses/GPL-3.
 
 License: Ko-fi-brand-asset
  Ko-fi's trade mark rather than licensed software, so there is no licence text

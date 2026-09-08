@@ -2,18 +2,19 @@ Third-party software bundled with Melodia
 =========================================
 
 Melodia links the work below into its executable -- the fonts and the Ko-fi mark
-are compiled in rather than loaded from disk, and the winit fork is built from
-this tree rather than fetched from crates.io -- so every artifact we ship
-(tarball, AppImage, RPM, DEB and MSI) is a distribution of it. The full license
-text for each sits beside this file, except where an entry says there is none to
-ship.
+are compiled in rather than loaded from disk, the winit fork is built from this
+tree rather than fetched from crates.io, and one crate is fetched from crates.io
+but carries a copyleft license -- so every artifact we ship (tarball, AppImage,
+RPM, DEB and MSI) is a distribution of it. The full license text for each sits
+beside this file, except where an entry says there is none to ship.
 
 Melodia's own license (AGPL-3.0-or-later) ships with this package as LICENSE
 and covers none of the software below.
 
 The "Files" lists give each component's path in the source repository, which is
 what identifies it -- the fonts, the mark and the fork are inside the binary,
-not installed.
+not installed. A crate has no such path; the entry names its version instead,
+and Cargo.lock is what pins it.
 
 Debian packages carry a fuller machine-readable version of this at
 /usr/share/doc/melodia/copyright; the two are kept in step by
@@ -115,11 +116,37 @@ it remain Ko-fi's, and Melodia claims no affiliation with or endorsement by
 them.
 
 
+kakasi
+------
+Version 0.1.0, by Theta-Dev, after the KAKASI project.
+https://github.com/Theta-Dev/kakasi
+
+Licensed under the GNU General Public License, Version 3 -- full text in
+GPL-3.0.txt.
+
+UNMODIFIED. Resolved from crates.io like every other dependency and pinned in
+Cargo.lock; it romanizes Japanese lyrics. It is named here, where the other
+crates.io dependencies are not, because it is the only one whose sole offer is
+copyleft: GPLv3 section 4 wants recipients of the binary to get a copy of the
+license, and an artifact we ship is not a published crate. The corresponding
+source is the crate as published at the version Cargo.lock pins.
+
+Melodia is AGPL-3.0-or-later, and GPLv3 section 13 is what permits the
+combination. The combined work is conveyed under the AGPL; this component
+remains under the GPL.
+
+GPL-3.0.txt covers Slint as well. Slint is offered under GPL-3.0-only or one of
+two Slint-specific licenses, and an AGPL project takes the GPL arm.
+
+Files: none in this repository -- linked from crates.io at build time.
+
+
 Rust dependencies
 -----------------
 Everything else Melodia links is an unmodified crate resolved from crates.io and
-pinned in Cargo.lock, predominantly under MIT and Apache-2.0. Those are not
-listed here individually: they are redistributed unmodified and their own
-license files travel in the published crates, where `cargo license` or a
-vendored checkout reproduces the set for any given release. Only the software
-this repository *modifies* or *carries a copy of* is enumerated above.
+pinned in Cargo.lock, predominantly under MIT and Apache-2.0, with Symphonia and
+its codec crates under MPL-2.0. Those are not listed here individually: they are
+redistributed unmodified and their own license files travel in the published
+crates, where `cargo license` or a vendored checkout reproduces the set for any
+given release. Only the software this repository *modifies*, *carries a copy of*,
+or links under a license offering nothing but copyleft is listed individually.

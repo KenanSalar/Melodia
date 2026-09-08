@@ -220,11 +220,12 @@
                         <File Id="AgplLicense" Name="LICENSE" KeyPath="yes" DiskId="1" Source="$(var.RepoRoot)\LICENSE" />
                     </Component>
                     <!--
-                      The bundled fonts and the vendored winit fork are all
-                      compiled into Melodia.exe, so this MSI redistributes them
-                      and owes their licence text — Apache-2.0 §4(a) outright.
+                      The bundled fonts, the vendored winit fork and one GPL-3.0
+                      crate are all compiled into Melodia.exe, so this MSI
+                      redistributes them and owes their licence text —
+                      Apache-2.0 §4(a) and GPLv3 §4 outright.
                       Every other format globs the directory; WiX needs each file
-                      named, so this is the one place a fourth entry in
+                      named, so this is the one place a fifth entry in
                       `licenses/` costs an edit. Two pins hold that, and they
                       answer different questions:
                       `every_package_format_ships_the_licenses_dir` catches this
@@ -243,6 +244,7 @@
                             <File Id="Attribution" Name="ATTRIBUTION.txt" KeyPath="yes" DiskId="1" Source="$(var.RepoRoot)\licenses\ATTRIBUTION.txt" />
                             <File Id="VazirmatnOfl" Name="Vazirmatn-OFL-1.1.txt" DiskId="1" Source="$(var.RepoRoot)\licenses\Vazirmatn-OFL-1.1.txt" />
                             <File Id="Apache20" Name="Apache-2.0.txt" DiskId="1" Source="$(var.RepoRoot)\licenses\Apache-2.0.txt" />
+                            <File Id="Gpl30" Name="GPL-3.0.txt" DiskId="1" Source="$(var.RepoRoot)\licenses\GPL-3.0.txt" />
                         </Component>
                     </Directory>
                     <Directory Id="Bin" Name="bin">

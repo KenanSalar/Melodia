@@ -33,6 +33,15 @@ that quietly stops shipping the text fails nowhere until a packager files a bug.
 that walk the packaging inputs rather than by review, for exactly that reason, and
 `crates/melodia/tests/packaging.rs` is where they live.
 
+**Amendment, 2026-09-08:** the constraint named above has bound. `kakasi`, the Japanese
+romanization engine [ADR 39](0039-romanization-runs-three-engines.md) chose, is GPL-3.0 with no
+permissive arm, which an AGPL-3.0-or-later work may link under GPLv3 section 13 with the combination
+staying AGPL. `licenses/` carries the GPL-3.0 text as of this amendment, which also covers Slint,
+tri-licensed and taken here under its own GPL-3.0 arm. Two things this exposed rather than caused:
+the paragraph in `licenses/ATTRIBUTION.txt` excusing unmodified crates from enumeration was written
+as though all of them were permissive, and Symphonia's MPL-2.0, which has its own notice
+requirement, has no text in `licenses/` either.
+
 This ADR was written in September 2026. The licence was chosen before the repository's first commit
 and no argument for it exists in the tree; the obligations half is reconstructed from
 `.claude/rules/ci-packaging.md` and the packaging tests, and the choice itself from the maintainer's

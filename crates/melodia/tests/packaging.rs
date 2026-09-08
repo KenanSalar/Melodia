@@ -515,6 +515,7 @@ fn the_bundled_licence_texts_are_the_real_ones() {
     for (file, phrase) in [
         ("licenses/Vazirmatn-OFL-1.1.txt", "SIL OPEN FONT LICENSE Version 1.1"),
         ("licenses/Apache-2.0.txt", "TERMS AND CONDITIONS FOR USE"),
+        ("licenses/GPL-3.0.txt", "Automatic Licensing of Downstream Recipients"),
     ] {
         let src = std::fs::read_to_string(root.join(file)).unwrap_or_default();
         assert!(

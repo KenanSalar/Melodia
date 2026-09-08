@@ -85,6 +85,14 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Playback speed 0.25×–2.0×, a playback-linked sleep timer, resume on startup, media keys
 - Responsive mini-player: shrink the window and the UI collapses to a strip or a square widget
 
+### Lyrics
+- A panel in the Now Playing column, switched on from the lyrics menu in that view's header. A timed sheet follows the song line by line, and clicking a line seeks to it
+- Read from a `.lrc` beside the track or from the file's own lyrics tag, so a library that already carries them needs nothing switched on
+- **Online lookup is off until you switch it on**, under Settings ▸ Services ▸ Lyrics. Nothing contacts **lrclib.net** until you do, and what it answers is cached under your data folder rather than written into your files
+- Romanization printed under a line written in a script you don't read. Korean and Japanese each get an engine matched to them; around a hundred scripts are covered in all, Chinese, Cyrillic and Arabic among them. On by default, and it draws nothing for a sheet already in Latin letters
+- A bilingual sheet's translation is drawn under the words it glosses
+- **Look up again** when a sheet matched the wrong recording, and **Save to file** to write the one on screen into the track's own tag. The Edit Tags dialog offers the same sheet above its Lyrics field
+
 ### Internet Radio
 - **Off until you switch it on**, under Settings ▸ Services ▸ Radio. Nothing contacts the directory until you do
 - A worldwide directory (**radio-browser.info**, no account and no API key) narrowed by country, language, genre, codec, or bitrate
@@ -244,6 +252,7 @@ Everything lives under the OS application-data directory, `~/.local/share/Melodi
 | `settings.json`, `views.json`, `queue.json` | Preferences, per-view UI state, and the queue with the station tuned over it |
 | `scrobble_*.json` | Last.fm session key and ListenBrainz token (`0600` on Unix), plus the offline queue |
 | `artwork/`, `artists/`, `radio-logos/` | Cached album, artist, and station images |
+| `lyrics/` | Sheets the online lookup found, and a marker for the tracks it found none for |
 | `backups/` | Database copies taken before each schema migration |
 | `logs/` | Rolling logs and crash reports |
 
@@ -279,9 +288,9 @@ Copyright (C) 2026 Kenan Salar. Melodia is free software under the
 [GNU Affero General Public License](LICENSE), version 3 or, at your option, any later version, and is
 distributed without any warranty.
 
-The AGPL covers Melodia itself. Two fonts and a patched winit fork are compiled into the binary under
-their own terms; every one of those licenses ships in [`licenses/`](licenses/), which every package
-carries alongside this file.
+The AGPL covers Melodia itself. Two fonts, a patched winit fork and one GPL-3.0 crate (the Japanese
+romanization engine) are compiled into the binary under their own terms; every one of those licenses
+ships in [`licenses/`](licenses/), which every package carries alongside this file.
 
 ## Acknowledgments
 
@@ -292,7 +301,9 @@ Built on the work of the [Slint](https://slint.dev/),
 [Catppuccin](https://catppuccin.com/) palette, and
 [Material Foundation](https://m3.material.io/)'s color utilities, along with the many other crates
 listed in `Cargo.toml`. The station directory is [radio-browser.info](https://www.radio-browser.info)
-(CC0 data, no account).
+(CC0 data, no account), and the lyrics directory is [LRCLIB](https://lrclib.net) (also no account).
+Romanization is [uroman-rs](https://github.com/stellanomia/uroman-rs) for most scripts and
+[kakasi](https://github.com/Theta-Dev/kakasi) for Japanese.
 
 Melodia's interface is set in [Vazirmatn](https://github.com/rastikerdar/vazirmatn) (SIL Open Font
 License 1.1) and draws its icons from
