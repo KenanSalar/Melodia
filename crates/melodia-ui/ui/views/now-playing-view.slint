@@ -50,10 +50,11 @@ export component NowPlayingView inherits Rectangle {
     // inter-column gap and the Up Next column. `Player.recompute-chip-rows` chunks against it.
     property <length> content-width: root.width - Theme.pad-lg - Theme.pad-md - root.up-next-width;
 
-    // **A band no wider than a quarter of the strip is tall.** The band count is fixed, so a strip
-    // that widens without getting taller turns a row of beads into a row of slabs. Reading the
-    // model's length beats restating `spectrum::NUM_BANDS`; the `max` covers boot.
-    property <length> strip-w-max: root.strip-h / 4 * max(1, Visualizer.bars.length);
+    // **A band's column pitch is the ceiling, not the strip's.** The band count is fixed, so a
+    // strip that keeps widening divides the same bars into ever-fatter columns whatever height it
+    // is drawn at. Ten pixels, the 2px gap included, is where a resting dot stops reading as a bead.
+    // Reading the model's length beats restating `spectrum::NUM_BANDS`; the `max` covers boot.
+    property <length> strip-w-max: 10px * max(1, Visualizer.bars.length);
 
     // Three quarters of that column, so the strip reads as the base of the whole cover → title →
     // chips group. **The floor is not cosmetic**: at the window's own minimum `content-width` goes

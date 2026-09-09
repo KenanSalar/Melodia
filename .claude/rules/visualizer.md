@@ -69,7 +69,7 @@ counter, both worth reading before changing a gate.
 
 ## The strip and its styles
 
-- **Both dimensions are the *view's*, not the strip's, and they are tied to each other.** Width is
+- **Both dimensions are the *view's*, not the strip's.** Width is
   `max(cover-size, min(content-width * 0.75, strip-w-max))` — three quarters of the column the
   metadata chips wrap against, derived arithmetically from view-root properties rather than read
   off the `MetaChipStrip` (inside `if Player.vm.has_track`, and a binding-loop risk); the `max` is
@@ -77,13 +77,10 @@ counter, both worth reading before changing a gate.
   `clamp(root.height * 0.12, 56px, 128px)`, handed down as `VisualizerStrip.strip-height` since a
   component root cannot reach `parent` — 56 px is the old pinned height and stays both the floor
   and the component's fallback, so a call site that forgets still gets a strip. **The width ceiling
-  exists because the band count doesn't move**: `spectrum::NUM_BANDS` is fixed, so a strip that
-  widens without getting taller divides the same bars into ever-fatter columns, and a resting band
-  drawn as a dot of its own column's width turns the row of beads into a row of slabs.
-  `strip-w-max` is `strip-h / 4 * Visualizer.bars.length` — a band no wider than a quarter of the
-  strip's height, read off the model rather than restating the constant. A 16:9 window never
-  reaches it; a wide-and-short one does. `.length` lowers to `track_row_count_changes()`, which
-  `set_row_data` doesn't dirty, so the per-band tick doesn't re-evaluate it.
+  is a per-band column pitch times `Visualizer.bars.length`, argued at `strip-w-max`**, and a
+  maximized window on an ordinary desktop is what reaches it. `.length` lowers to
+  `track_row_count_changes()`, which `set_row_data` doesn't dirty, so the per-band tick doesn't
+  re-evaluate it.
 
 - **What keeps the strip inside the panel is the *cover slot*, not anything the strip does.**
   Slint's shrink pass (`solve_box_layout` falls through to `layout_items` the moment the column's
