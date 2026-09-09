@@ -25,6 +25,9 @@ export component QueueSheet inherits Rectangle {
     init => {
         Queue.drag-source = -1;
         Queue.drop-slot = -1;
+        // Same reason the resets above are here: a remount with the sheet already open gets
+        // no `changed watched-open`, so nothing else would seat the list.
+        seat-timer.running = Queue.open && Queue.current-index >= 0;
     }
 
     // 0 = fully closed; 1 = fully open.
@@ -42,8 +45,12 @@ export component QueueSheet inherits Rectangle {
         // delivers the pointer-up that would have cleared these itself.
         Queue.drag-source = -1;
         Queue.drop-slot = -1;
-        // `open-changed` fills the rows and the playing index before it returns. Assigned
-        // rather than armed, so a sheet closed before the tick disarms it.
+        // `open-changed` fills the rows and the playing index before it returns, so the index
+        // read here is the fresh one. Assigned rather than bound, and not only so a close
+        // disarms it: `self.running = false` in the handler would orphan a binding on the
+        // first fire, leaving the sheet seating once per process. A binding reaching the
+        // list's height fails earlier still, evaluated by a change tracker in the pass that
+        // mounts the branch, the sheet sitting inside the miniplayer `if`.
         seat-timer.running = self.watched-open && Queue.current-index >= 0;
     }
 
@@ -88,12 +95,13 @@ export component QueueSheet inherits Rectangle {
         );
     }
 
-    // Where the viewport sits with the playing row centred. Every row is the same height,
-    // so a row's top is its index times that and the sheet needs no offset table.
-    private property <length> centred-viewport-y:
-        inner-list.visible-height / 2
-            - Queue.current-index * root.row-height
-            - root.row-height / 2;
+    // Where the viewport sits with `index` centred, pinned inside the travel. Every row is
+    // the same height, so a row's top is its index times that and the sheet needs no offset
+    // table.
+    pure function centred-on(index: int) -> length {
+        return root.in-travel(
+            inner-list.visible-height / 2 - index * root.row-height - root.row-height / 2);
+    }
 
     // Seats the list on the playing row once per open and then leaves it alone — a queue
     // is read *past* the current track, so a sheet that kept following would fight every
@@ -111,7 +119,7 @@ export component QueueSheet inherits Rectangle {
                 return;
             }
             self.running = false;
-            inner-list.viewport-y = root.in-travel(root.centred-viewport-y);
+            inner-list.viewport-y = root.centred-on(Queue.current-index);
         }
     }
 

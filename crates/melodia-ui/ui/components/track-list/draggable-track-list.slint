@@ -89,6 +89,19 @@ export component DraggableTrackList inherits Rectangle {
         ),
     );
 
+    // Pins an offset inside the list's own travel. **Not `clamp()`**: a list shorter
+    // than its viewport puts its lower bound *above* its upper one, and `clamp`
+    // expands to `max(lo, min(v, hi))`, which then hands back the positive lower
+    // bound and shoves every row down the screen. Capping both arguments at 0
+    // resolves that case to 0 instead, which is also what leaves a list with nothing
+    // to scroll where it is. `queue-sheet.slint` has the same shape.
+    pure function in-travel(y: length) -> length {
+        return max(
+            min(0px, inner-list.visible-height - inner-list.viewport-height),
+            min(0px, y),
+        );
+    }
+
     callback request-sort(string /*field*/);
     callback play-row(int /*track_id*/, int /*index*/);
     // Batch-shaped — see TrackList for the contract.
@@ -234,12 +247,8 @@ export component DraggableTrackList inherits Rectangle {
                         if (root.drag-source >= 0
                             && (root.drag-src-screen-y - dy) > -root.row-height
                             && (root.drag-src-screen-y - dy) < inner-list.visible-height) {
-                            // Both capped at 0, so a list shorter than its
-                            // viewport lands on 0px rather than over-scrolled.
-                            inner-list.viewport-y = max(
-                                min(0px, inner-list.visible-height - inner-list.viewport-height),
-                                min(0px, inner-list.viewport-y - dy),
-                            );
+                            inner-list.viewport-y =
+                                root.in-travel(inner-list.viewport-y - dy);
                         }
                     }
                 }
