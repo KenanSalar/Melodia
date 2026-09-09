@@ -4,6 +4,8 @@
 //! Playing panel renders it. Neither end owns the vocabulary, and the panel's crate can name
 //! neither of the other two, so it sits here.
 
+use crate::utils::text::filled;
+
 /// One line, timed or not.
 ///
 /// `at_ms` is `None` for a sheet carrying no timing at all, not for an odd line inside a timed
@@ -145,11 +147,6 @@ impl LyricsAnswer {
     pub fn is_synced(&self) -> bool {
         filled(self.synced.as_deref()).is_some()
     }
-}
-
-/// A field that is there rather than present and blank.
-fn filled(field: Option<&str>) -> Option<&str> {
-    field.map(str::trim).filter(|text| !text.is_empty())
 }
 
 #[cfg(test)]

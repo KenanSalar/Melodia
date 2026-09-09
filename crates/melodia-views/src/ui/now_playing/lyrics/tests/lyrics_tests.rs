@@ -3,7 +3,11 @@
 //! Both are silent when wrong: an off-by-one in the search highlights the wrong line for the whole
 //! song, and a row height that disagrees with the layout drifts the scroll further down a sheet.
 
+use super::follow::{interlude_progress, row_at, sung_at};
+use super::measure::{MAX_WRAPPED_LINES, UPPERCASE_EMS, char_ems, wrapped_lines};
+use super::rows::{INTERLUDE_MS, INTRO_MS, MAX_ROWS, millis, rows_for};
 use super::*;
+use melodia_core::entities::lyrics::{Lyrics as Sheet, LyricsSource};
 
 /// One line of words at `at_ms`, with nothing drawn under it.
 fn plain_row(at_ms: i32) -> Row {

@@ -14,7 +14,7 @@ import { UpNextList } from "../components/now-playing/up-next-list.slint";
 import { LyricsPanel } from "../components/now-playing/lyrics-panel.slint";
 import { Lyrics } from "../globals/lyrics.slint";
 import { StationFacts, StationHistory } from "../components/station-facts.slint";
-import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { NpOverlayScrollbar } from "../components/now-playing/np-overlay-scrollbar.slint";
 import { TooltipSide } from "../components/tooltip.slint";
 import { LyricsMenu } from "../components/now-playing/lyrics-menu.slint";
 import { VisualizerPicker } from "../components/now-playing/visualizer-picker.slint";
@@ -419,7 +419,7 @@ export component NowPlayingView inherits Rectangle {
                         }
                     }
 
-                    OverlayScrollbar {
+                    NpOverlayScrollbar {
                         x: parent.width - self.width;
                         y: 0;
                         width: Theme.scrollbar-slot;
@@ -427,13 +427,6 @@ export component NowPlayingView inherits Rectangle {
                         visible-size: station-sv.visible-height;
                         content-size: station-sv.viewport-height;
                         offset: -station-sv.viewport-y;
-                        // The Up Next list's weights, so the two columns sit into the backdrop
-                        // the same way.
-                        track-color: Player.np-accent-bright;
-                        track-opacity: 0.25;
-                        track-opacity-active: 0.4;
-                        thumb-color: Player.np-accent-dim;
-                        thumb-active-color: Player.np-accent-bright.transparentize(0.2);
                         scroll-to(o) => { station-sv.viewport-y = -o; }
                     }
                 }

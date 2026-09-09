@@ -1,4 +1,5 @@
 import { Theme } from "../../theme.slint";
+import { OnboardingPanelHeader } from "onboarding-panel-header.slint";
 import { Settings } from "../../settings.slint";
 import { ChipGroup } from "../settings/chip-group.slint";
 import { ColorDotGrid } from "../settings/color-dot-grid.slint";
@@ -18,18 +19,9 @@ export component OnboardingAppearancePanel inherits VerticalLayout {
     min-width: 0px;
     spacing: Theme.pad-sm;
 
-    Text {
-        text: @tr("Appearance");
-        font-size: Theme.font-size-lg;
-        font-weight: 700;
-        color: Theme.text;
-        overflow: elide;
-    }
-    Text {
-        text: @tr("Pick how Melodia looks. Every change applies as you make it.");
-        font-size: Theme.font-size-sm;
-        color: Theme.text-muted;
-        wrap: word-wrap;
+    OnboardingPanelHeader {
+        title: @tr("Appearance");
+        summary: @tr("Pick how Melodia looks. Every change applies as you make it.");
     }
 
     // Chips rather than the Language card's `Dropdown`: a popup inside a branch this card drops on

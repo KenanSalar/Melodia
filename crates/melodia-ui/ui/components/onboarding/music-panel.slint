@@ -1,4 +1,5 @@
 import { Theme } from "../../theme.slint";
+import { OnboardingPanelHeader } from "onboarding-panel-header.slint";
 import { LibrarySettings } from "../../globals/library-settings.slint";
 import { ProgressBar } from "../settings/progress-bar.slint";
 import { SectionButton } from "../settings/section-button.slint";
@@ -10,18 +11,9 @@ export component OnboardingMusicPanel inherits VerticalLayout {
     min-width: 0px;
     spacing: Theme.pad-sm;
 
-    Text {
-        text: @tr("Your music");
-        font-size: Theme.font-size-lg;
-        font-weight: 700;
-        color: Theme.text;
-        overflow: elide;
-    }
-    Text {
-        text: @tr("Melodia watches your Music folder and picks up changes on its own.");
-        font-size: Theme.font-size-sm;
-        color: Theme.text-muted;
-        wrap: word-wrap;
+    OnboardingPanelHeader {
+        title: @tr("Your music");
+        summary: @tr("Melodia watches your Music folder and picks up changes on its own.");
     }
 
     // Three states, and the scan wins: it is the only one that is still moving.

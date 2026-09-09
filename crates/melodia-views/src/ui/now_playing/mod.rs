@@ -42,11 +42,14 @@ pub(crate) use source_change::republish_for_palette;
 use source_change::{apply_source_change, spawn_source_change_subscriber};
 use up_next::{rebuild_up_next, spawn_up_next_subscriber, wire_now_playing_open};
 
-/// Re-seed a `NowPlayingState`-shadowed surface — the Up Next list or the high-res cover
-/// slot — from the stashed snapshot. Set once by [`install`], called by
-/// [`crate::ui::shell::mini_player::install`] when the miniplayer becomes visible: the
-/// subscribers stash while no surface renders the model, so without these kicks a
-/// never-opened session followed by a direct shrink-to-mini shows empty or stale content.
+/// Re-fill a `NowPlayingState`-shadowed surface: the Up Next list, the high-res cover slot, or
+/// the lyrics panel's sheet.
+///
+/// Set once, after [`install`] has built the state each one reads. The first two are called by
+/// [`crate::ui::shell::mini_player::install`] when the miniplayer becomes visible — the
+/// subscribers stash while no surface renders the model, so without those kicks a never-opened
+/// session followed by a direct shrink-to-mini shows empty or stale content. The lyrics one has
+/// three callers of its own and dedupes on the sheet it holds.
 type Seeder = Box<dyn Fn()>;
 
 /// The list scrolls, so this is a soft cap — large enough to feel complete, small enough

@@ -6,6 +6,7 @@ use crate::state::AppState;
 use melodia_core::entities::lyrics::{LyricsOutcome, LyricsSource};
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
+use melodia_core::utils::text::filled;
 use melodia_net::services::net::lyrics_directory as directory;
 
 /// Looks a sheet up for a track that carries none of its own, and records what came back.
@@ -60,17 +61,14 @@ pub(super) async fn look_up(
         log::debug!("lyrics: not stored: {}", melodia_core::error::describe(&e));
     }
 
-    Ok(match (text, instrumental) {
-        (Some(text), _) => lrc::parse(text, LyricsSource::Online)
+    // Read off what was stored rather than classified a second time, so the panel cannot end up
+    // showing something other than what the next replay will read back.
+    Ok(match fetched {
+        Fetched::Sheet(text) => lrc::parse(text, LyricsSource::Online)
             .map_or(LyricsOutcome::Absent, LyricsOutcome::Sheet),
-        (None, true) => LyricsOutcome::Instrumental,
-        (None, false) => LyricsOutcome::Absent,
+        Fetched::Instrumental => LyricsOutcome::Instrumental,
+        Fetched::Nothing => LyricsOutcome::Absent,
     })
-}
-
-/// A tag field that is actually there, rather than present and empty.
-fn filled(field: Option<&str>) -> Option<&str> {
-    field.map(str::trim).filter(|value| !value.is_empty())
 }
 
 #[cfg(test)]

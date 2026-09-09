@@ -1,0 +1,56 @@
+import { Theme } from "../../theme.slint";
+import { Player } from "../../globals/player.slint";
+import { MaterialIcon } from "../material-icon.slint";
+
+// The centred glyph-and-copy block the Now-Playing column shows when an arm has nothing to draw.
+//
+// **Not `GridEmptyState`**, whose opaque `Theme.base` would punch a hole in the backdrop. This is
+// the same block against the `np-*` tiers instead, shared so the column's arms cannot drift into
+// stating their emptiness in different weights.
+//
+// `compact` is the miniplayer, which sits on no backdrop and takes the page's own ink.
+export component NpEmptyState inherits VerticalLayout {
+    in property <string> glyph;
+    in property <string> heading;
+    // A second line naming the control that would fill the panel. Empty where there is nothing the
+    // reader can do from here, which is most states.
+    in property <string> hint;
+    in property <bool> compact: false;
+
+    alignment: center;
+
+    HorizontalLayout {
+        alignment: center;
+
+        VerticalLayout {
+            spacing: Theme.pad-sm;
+
+            HorizontalLayout {
+                alignment: center;
+                MaterialIcon {
+                    name: root.glyph;
+                    icon-size: root.compact ? 28px : 40px;
+                    icon-color: root.compact
+                        ? Theme.surface2
+                        : Player.np-on-backdrop-muted.transparentize(0.5);
+                }
+            }
+
+            Text {
+                text: root.heading;
+                color: root.compact ? Theme.subtext0 : Player.np-on-backdrop-muted;
+                font-size: root.compact ? Theme.font-size-sm : Theme.font-size-md;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+
+            if root.hint != "": Text {
+                text: root.hint;
+                color: Player.np-on-backdrop-muted.transparentize(0.35);
+                font-size: Theme.font-size-sm;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+        }
+    }
+}

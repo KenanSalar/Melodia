@@ -174,8 +174,7 @@ async fn get_exact(
     album: &str,
     duration_ms: i64,
 ) -> Result<Option<LyricsAnswer>, LookupError> {
-    let mut url = reqwest::Url::parse(GET_ENDPOINT)
-        .map_err(|e| failed("Lyrics directory endpoint is not a URL", e))?;
+    let mut url = endpoint(GET_ENDPOINT)?;
     url.query_pairs_mut()
         .append_pair("track_name", title)
         .append_pair("artist_name", artist)
@@ -235,8 +234,7 @@ async fn search_timed(
         cut => cut,
     };
 
-    let mut url = reqwest::Url::parse(SEARCH_ENDPOINT)
-        .map_err(|e| failed("Lyrics directory endpoint is not a URL", e))?;
+    let mut url = endpoint(SEARCH_ENDPOINT)?;
     url.query_pairs_mut()
         .append_pair("track_name", track_query)
         .append_pair("artist_name", artist_query);
@@ -365,6 +363,14 @@ fn retry_after(headers: &reqwest::header::HeaderMap) -> Option<Duration> {
 }
 
 /// An I/O-boundary failure, which is every arm of this module that is not a refusal.
+/// One of the two endpoint constants above, ready for its query pairs.
+///
+/// Both are literals that parse, so the error arm is unreachable rather than merely unlikely —
+/// which is why it costs one spelling between them rather than one each.
+fn endpoint(url: &'static str) -> Result<reqwest::Url, LookupError> {
+    reqwest::Url::parse(url).map_err(|e| failed("Lyrics directory endpoint is not a URL", e))
+}
+
 fn failed(
     msg: &'static str,
     source: impl std::error::Error + Send + Sync + 'static,

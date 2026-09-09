@@ -6,6 +6,7 @@ pub mod fold;
 pub mod play_counts;
 pub mod redact;
 pub mod self_writes;
+pub mod text;
 pub mod toast;
 
 use std::io;

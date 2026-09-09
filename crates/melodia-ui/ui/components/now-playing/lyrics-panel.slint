@@ -2,7 +2,8 @@ import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../../theme.slint";
 import { Player } from "../../globals/player.slint";
 import { Lyrics, LyricsState } from "../../globals/lyrics.slint";
-import { OverlayScrollbar } from "../overlay-scrollbar.slint";
+import { NpOverlayScrollbar } from "np-overlay-scrollbar.slint";
+import { NpEmptyState } from "np-empty-state.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
 // The Now Playing column's lyrics arm, mounted where Up Next otherwise is. The scroller,
@@ -219,7 +220,7 @@ export component LyricsPanel inherits Rectangle {
         }
     }
 
-    bar := OverlayScrollbar {
+    bar := NpOverlayScrollbar {
         x: parent.width - self.width;
         y: 0;
         width: Theme.scrollbar-slot;
@@ -227,11 +228,6 @@ export component LyricsPanel inherits Rectangle {
         visible-size: sv.visible-height;
         content-size: sv.viewport-height;
         offset: -sv.viewport-y;
-        track-color: Player.np-accent-bright;
-        track-opacity: 0.25;
-        track-opacity-active: 0.4;
-        thumb-color: Player.np-accent-dim;
-        thumb-active-color: Player.np-accent-bright.transparentize(0.2);
         scroll-to(o) => { sv.viewport-y = -o; }
     }
 
@@ -298,57 +294,25 @@ export component LyricsPanel inherits Rectangle {
         }
     }
 
-    // Every state but `ready`, none of which has rows to draw. The centred block is the Up Next
-    // list's, not `GridEmptyState`, whose opaque `Theme.base` would punch a hole in the backdrop.
-    if !root.has-rows: VerticalLayout {
-        alignment: center;
-        HorizontalLayout {
-            alignment: center;
-            VerticalLayout {
-                spacing: Theme.pad-sm;
-                HorizontalLayout {
-                    alignment: center;
-                    MaterialIcon {
-                        name: Lyrics.state == LyricsState.instrumental ? "music_note"
-                            : Lyrics.state == LyricsState.unavailable ? "cloud_off"
-                            : "lyrics";
-                        icon-size: 40px;
-                        icon-color: Player.np-on-backdrop-muted.transparentize(0.5);
-                    }
-                }
-                Text {
-                    text: Lyrics.state == LyricsState.loading ? @tr("Looking for lyrics…")
-                        : Lyrics.state == LyricsState.instrumental ? @tr("This track has no words")
-                        : Lyrics.state == LyricsState.missing ? @tr("No lyrics found")
-                        : Lyrics.state == LyricsState.unavailable ? @tr("Couldn't reach the lyrics service")
-                        : Lyrics.state == LyricsState.off ? @tr("Lyrics lookup is off")
-                        : @tr("Play something to see its lyrics");
-                    color: Player.np-on-backdrop-muted;
-                    font-size: Theme.font-size-md;
-                    horizontal-alignment: center;
-                    wrap: word-wrap;
-                }
-                // The two states a reader can act on from here, and each says how. **Both name
-                // their control in words rather than drawing its glyph**: neither Vazirmatn nor
-                // the icon faces carry `▸` or `⋮`, so a run holding one pulls a fallback whose
-                // taller metrics own the line box, and where nothing on the system covers it the
-                // line draws as tofu. A Material Symbols sibling is the other way out and buys
-                // nothing in a sentence that wraps.
-                if Lyrics.state == LyricsState.off: Text {
-                    text: @tr("Turn it on in the Lyrics menu");
-                    color: Player.np-on-backdrop-muted.transparentize(0.35);
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    wrap: word-wrap;
-                }
-                if Lyrics.state == LyricsState.unavailable: Text {
-                    text: @tr("Try again from the Lyrics menu");
-                    color: Player.np-on-backdrop-muted.transparentize(0.35);
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    wrap: word-wrap;
-                }
-            }
-        }
+    // Every state but `ready`, none of which has rows to draw.
+    //
+    // The hint covers the two states a reader can act on from here, and each says how. **Both name
+    // their control in words rather than drawing its glyph**: neither Vazirmatn nor the icon faces
+    // carry `▸` or `⋮`, so a run holding one pulls a fallback whose taller metrics own the line
+    // box, and where nothing on the system covers it the line draws as tofu. A Material Symbols
+    // sibling is the other way out and buys nothing in a sentence that wraps.
+    if !root.has-rows: NpEmptyState {
+        glyph: Lyrics.state == LyricsState.instrumental ? "music_note"
+            : Lyrics.state == LyricsState.unavailable ? "cloud_off"
+            : "lyrics";
+        heading: Lyrics.state == LyricsState.loading ? @tr("Looking for lyrics…")
+            : Lyrics.state == LyricsState.instrumental ? @tr("This track has no words")
+            : Lyrics.state == LyricsState.missing ? @tr("No lyrics found")
+            : Lyrics.state == LyricsState.unavailable ? @tr("Couldn't reach the lyrics service")
+            : Lyrics.state == LyricsState.off ? @tr("Lyrics lookup is off")
+            : @tr("Play something to see its lyrics");
+        hint: Lyrics.state == LyricsState.off ? @tr("Turn it on in the Lyrics menu")
+            : Lyrics.state == LyricsState.unavailable ? @tr("Try again from the Lyrics menu")
+            : "";
     }
 }

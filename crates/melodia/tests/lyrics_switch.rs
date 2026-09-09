@@ -227,6 +227,21 @@ fn no_lyrics_menu_row_is_mounted_behind_a_condition() {
 const LYRICS_PANEL: &str =
     include_str!("../../melodia-ui/ui/components/now-playing/lyrics-panel.slint");
 
+/// The leaves the panel mounts inside that same branch, which inherit its prohibition.
+///
+/// Named rather than walked: the panel's own imports are the list, and a leaf that stops being
+/// mounted here is a change to the panel this pin already reads.
+const PANEL_LEAVES: [(&str, &str); 2] = [
+    (
+        "np-empty-state.slint",
+        include_str!("../../melodia-ui/ui/components/now-playing/np-empty-state.slint"),
+    ),
+    (
+        "np-overlay-scrollbar.slint",
+        include_str!("../../melodia-ui/ui/components/now-playing/np-overlay-scrollbar.slint"),
+    ),
+];
+
 /// The view that decides which of three things the right-hand column is.
 const NOW_PLAYING_VIEW: &str = include_str!("../../melodia-ui/ui/views/now-playing-view.slint");
 
@@ -236,9 +251,18 @@ const NOW_PLAYING_VIEW: &str = include_str!("../../melodia-ui/ui/views/now-playi
 /// panics is one re-dirtied on the frame the branch goes. The follow is driven from a `Timer`
 /// instead and the glide is arithmetic, so the file's own header states this as a rule. Nothing
 /// enforced it, and the two spellings that would put it back both read as ordinary Slint.
+///
+/// **The leaves it mounts are read too**, the branch dropping them with it: markup lifted out of
+/// this file to be shared is markup that would otherwise leave the prohibition behind.
 #[test]
 fn nothing_in_the_lyrics_panel_watches_a_property() {
     let source = strip_line_comments(LYRICS_PANEL);
+
+    for (name, leaf) in PANEL_LEAVES {
+        let leaf = strip_line_comments(leaf);
+        assert!(!leaf.contains("changed "), "`{name}` holds a tracker the panel may not mount");
+        assert!(!leaf.contains("animate "), "`{name}` holds an animation the panel may not mount");
+    }
 
     assert!(!source.contains("changed "), "a `changed` handler is a tracker this may not hold");
     assert!(
