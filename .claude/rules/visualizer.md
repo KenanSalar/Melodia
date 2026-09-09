@@ -74,24 +74,27 @@ counter, both worth reading before changing a gate.
   metadata chips wrap against, derived arithmetically from view-root properties rather than read
   off the `MetaChipStrip` (inside `if Player.vm.has_track`, and a binding-loop risk); the `max` is
   load-bearing at the window's 350 px floor, where `content-width` goes negative. Height is
-  `clamp(root.height * 0.12, 56px, 128px)`, handed down as `VisualizerStrip.strip-height` since a
-  component root cannot reach `parent` — 56 px is the old pinned height and stays both the floor
-  and the component's fallback, so a call site that forgets still gets a strip. **The width ceiling
-  is a per-band column pitch times `Visualizer.bars.length`, argued at `strip-w-max`**, and a
-  maximized window on an ordinary desktop is what reaches it. `.length` lowers to
-  `track_row_count_changes()`, which `set_row_data` doesn't dirty, so the per-band tick doesn't
-  re-evaluate it.
+  `clamp(root.height * 0.12, 28px, 128px)`, handed down as `VisualizerStrip.strip-height` since a
+  component root cannot reach `parent`. The floor is low because the strip is what a short panel
+  buys the cover's floor back with; 56 px stays the *component's* fallback, so a call site that
+  forgets still gets a strip at the height it used to pin. **The width ceiling is a per-band column
+  pitch times `Visualizer.bars.length`, argued at `strip-w-max`**, and a maximized window on an
+  ordinary desktop is what reaches it. `.length` lowers to `track_row_count_changes()`, which
+  `set_row_data` doesn't dirty, so the per-band tick doesn't re-evaluate it.
 
-- **What keeps the strip inside the panel is the *cover slot*, not anything the strip does.**
-  Slint's shrink pass (`solve_box_layout` falls through to `layout_items` the moment the column's
-  preferred sizes stop fitting) can only take height off a cell with room between `min` and
-  `preferred`, and positions from the top — so the last child, the strip, overflows. Every child of
-  the artwork column has `min == preferred` except the cover, in a plain `Rectangle` slot carrying
-  `preferred-height`/`max-height: cover-size` and no min. The tile inside spells out `x` and `y`,
-  so it contributes nothing to the slot's constraints (`gen_layout_info_prop`, argued in
-  `slint-pitfalls.md`). Wrap it in a centring layout again and the slot's min returns to
-  `cover-size`, the column loses its only slack, and a short — or merely wide, the tile growing
-  with the width — window pushes the strip out of the panel.
+- **What keeps the strip inside the panel is the column's scroller; what the column spends before
+  reaching for it is the *cover slot*.** Slint's shrink pass (`solve_box_layout` falls through to
+  `layout_items` the moment the column's preferred sizes stop fitting) can only take height off a
+  cell with room between `min` and `preferred`, and positions from the top, so the last child is
+  the one that leaves the box. Every child of the artwork column has `min == preferred` except the
+  cover, in a plain `Rectangle` slot carrying `preferred-height`/`max-height: cover-h` over a
+  `cover-min` floor. The tile inside spells out `x` and `y`, so it contributes nothing to the
+  slot's constraints (`gen_layout_info_prop`, argued in `slint-pitfalls.md`). Wrap it in a centring
+  layout again and the slot's min returns to its preferred, the column loses its only slack, and
+  every panel too short for the group at full size scrolls rather than resizing the artwork.
+  Past that floor the scroller is what answers: the `ScrollView` is handed
+  `max(visible-height, group.min-height)`, so the column's own minimum decides when a bar appears
+  and nothing is drawn in half.
 
 - **A style needn't be its own component.** "Mirrored" is the same bars under a different anchor:
   `SpectrumBars` takes an `in property <bool> centred` the strip sets from the key on the
