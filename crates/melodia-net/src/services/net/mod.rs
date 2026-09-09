@@ -5,9 +5,10 @@
 //! **parsed** rather than prefix-tested, and a body is **streamed under a cap** rather than
 //! collected and measured afterwards.
 //!
-//! The two radio modules sit here because the directory client is the tree's only other outbound
-//! HTTP consumer that is not a fetcher, and its blocklist leads it: `radio_blocklist` names
-//! `entities::radio` and nothing else.
+//! The radio and lyrics modules sit here because their directory clients are the tree's outbound
+//! HTTP consumers that are not fetchers, and radio's blocklist leads it: `radio_blocklist` names
+//! `entities::radio` and nothing else. `pacer` is beside them rather than inside either, a request
+//! floor being about a host rather than about what is asked of it.
 
 pub mod lyrics_directory;
 pub mod pacer;

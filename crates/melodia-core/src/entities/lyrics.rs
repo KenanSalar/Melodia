@@ -134,6 +134,17 @@ impl LyricsAnswer {
     pub fn text(&self) -> Option<&str> {
         filled(self.synced.as_deref()).or_else(|| filled(self.plain.as_deref()))
     }
+
+    /// Whether the answer carries a sheet the panel can follow.
+    ///
+    /// Here beside [`Self::text`] because it is the same judgement one step earlier: a client
+    /// deciding whether to keep looking for a timed sheet has to read the field the way the
+    /// caller that consumes it will. A present-but-blank `synced` tested for presence alone ends
+    /// the search on a sheet [`Self::text`] then declines to hand over.
+    #[must_use]
+    pub fn is_timed(&self) -> bool {
+        filled(self.synced.as_deref()).is_some()
+    }
 }
 
 /// A field that is there rather than present and blank.

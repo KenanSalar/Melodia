@@ -15,6 +15,12 @@ Comment: Melodia's Slint build compiles its fonts and one third-party logo into
  MPL-2.0 be referenced, so both are; only the AGPL and the OFL are quoted below,
  common-licenses carrying neither. Both texts also ship in
  /usr/share/doc/melodia/licenses/.
+ .
+ One further crate is named for a reason that is not its licence: uroman, which
+ romanizes a lyric line, is Apache-2.0 but ships a NOTICE, and section 4(d) asks
+ that its attribution notices travel with any redistribution. That NOTICE, which
+ carries the acknowledgement the upstream USC ISI project asks for by name, is
+ reproduced in /usr/share/doc/melodia/licenses/ATTRIBUTION.txt.
 
 Files: *
 Copyright: 2026 Kenan Salar <kenansalar@users.noreply.github.com>

@@ -3,10 +3,11 @@ Third-party software bundled with Melodia
 
 Melodia links the work below into its executable -- the fonts and the Ko-fi mark
 are compiled in rather than loaded from disk, the winit fork is built from this
-tree rather than fetched from crates.io, and one crate is fetched from crates.io
-but carries a copyleft license -- so every artifact we ship (tarball, AppImage,
-RPM, DEB and MSI) is a distribution of it. The full license text for each sits
-beside this file, except where an entry says there is none to ship.
+tree rather than fetched from crates.io, and some crates are fetched from
+crates.io but ask for more than a permissive license does -- so every artifact
+we ship (tarball, AppImage, RPM, DEB and MSI) is a distribution of it. The full
+license text for each sits beside this file, except where an entry says there is
+none to ship.
 
 Melodia's own license (AGPL-3.0-or-later) ships with this package as LICENSE
 and covers none of the software below.
@@ -117,11 +118,13 @@ them.
 
 
 The entries below are crates rather than files in this tree. They are named here,
-where the hundreds of other crates.io dependencies are not, because each carries
-a copyleft license: the license text is something recipients of the binary are
-owed, and an artifact we ship is not a published crate. Each is unmodified, and
-the corresponding source for each is the crate as published at the version
-Cargo.lock pins.
+where the hundreds of other crates.io dependencies are not, because each asks
+something of whoever ships a binary containing it: four carry a copyleft license,
+whose text recipients of the binary are owed, and the fifth ships a NOTICE its
+own license asks be reproduced. An artifact we ship is not a published crate, so
+neither obligation is met by the crate's own files travelling on crates.io. Each
+is unmodified, and the corresponding source for each is the crate as published at
+the version Cargo.lock pins.
 
 
 Slint
@@ -186,6 +189,58 @@ rather than its size.
 Files: none in this repository -- linked from crates.io at build time.
 
 
+uroman
+------
+Version 0.7.0, by fulm-o, after the uroman project.
+https://github.com/fulm-o/uroman-rs
+
+Licensed under the Apache License, Version 2.0 -- full text in Apache-2.0.txt,
+the same copy the winit fork above is under.
+
+It romanizes a lyric line written in a script the reader cannot sound out. The
+crate ships a NOTICE file, which section 4(d) asks be reproduced wherever the
+work is redistributed; this entry is that copy. It is the only entry here on
+permissive terms, and it is here for the NOTICE rather than for the license.
+
+  uroman-rs
+  Copyright 2025 fulm-o
+
+  This product is a Rust implementation of the 'uroman' universal romanizer.
+  It is licensed under the Apache License, Version 2.0.
+
+  This product contains code derived from the 'uroman' software, which is
+  subject to the following license:
+
+  Copyright (C) 2015-2024 Ulf Hermjakob, USC Information Sciences Institute
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  Any publication of projects using uroman shall acknowledge its use: "This
+  project uses the universal romanizer software 'uroman' written by Ulf
+  Hermjakob, USC Information Sciences Institute (2015-2020)".
+  Bibliography: Ulf Hermjakob, Jonathan May, and Kevin Knight. 2018.
+  Out-of-the-box universal romanization tool uroman. In Proceedings of the 56th
+  Annual Meeting of Association for Computational Linguistics, Demo Track.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+Files: none in this repository -- linked from crates.io at build time.
+
+
 Rust dependencies
 -----------------
 Everything else Melodia links is an unmodified crate resolved from crates.io and
@@ -193,5 +248,6 @@ pinned in Cargo.lock, under permissive terms and predominantly MIT and
 Apache-2.0. Those are not listed here individually: they are redistributed
 unmodified and their own license files travel in the published crates, where
 `cargo license` or a vendored checkout reproduces the set for any given release.
-Only the software this repository *modifies*, *carries a copy of*, or links under
-a *copyleft* license is listed individually.
+Only the software this repository *modifies*, *carries a copy of*, links under a
+*copyleft* license, or ships a *NOTICE* its license asks us to reproduce is
+listed individually.

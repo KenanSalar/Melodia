@@ -137,7 +137,10 @@ pub(super) async fn fetch(
     duration_ms: i64,
 ) -> Result<Option<LyricsAnswer>, LookupError> {
     let exact = get_exact(client, pacer, title, artist, album, duration_ms).await?;
-    if exact.as_ref().is_some_and(|answer| answer.synced.is_some() || answer.instrumental) {
+    // Through `is_timed` rather than a presence test: the directory answers a plain-only row with
+    // an empty `syncedLyrics` as readily as with a null one, and a search skipped on that leaves
+    // the panel a page it cannot follow with a timed sheet one request away.
+    if exact.as_ref().is_some_and(|answer| answer.is_timed() || answer.instrumental) {
         return Ok(exact);
     }
 
@@ -209,11 +212,19 @@ async fn search_timed(
     album: &str,
     duration_ms: i64,
 ) -> Result<Option<LyricsAnswer>, LookupError> {
+    // **A field the query trim empties is a request that cannot match.** A title that is nothing
+    // but a credit reduces to the empty string here, and `Recording::matches` refuses every row
+    // against an empty core title, so the request could only spend its cap to be told nothing.
+    let (query_title, query_artist) = (query_title(title), query_artist(artist));
+    if query_title.is_empty() || query_artist.is_empty() {
+        return Ok(None);
+    }
+
     let mut url = reqwest::Url::parse(SEARCH_ENDPOINT)
         .map_err(|e| failed("Lyrics directory endpoint is not a URL", e))?;
     url.query_pairs_mut()
-        .append_pair("track_name", query_title(title))
-        .append_pair("artist_name", query_artist(artist));
+        .append_pair("track_name", query_title)
+        .append_pair("artist_name", query_artist);
 
     let Some(body) = send(client, pacer, url, "Lyrics search", MAX_SEARCH_BYTES).await? else {
         return Ok(None);

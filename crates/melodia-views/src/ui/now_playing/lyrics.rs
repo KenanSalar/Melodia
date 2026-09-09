@@ -35,7 +35,7 @@ use melodia_app::state::AppState;
 use melodia_core::entities::lyrics::{LyricLine, Lyrics as Sheet, LyricsOutcome, LyricsSource};
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::utils::toast::{self, ToastKind};
-use melodia_ui::{AppWindow, LyricRow, Lyrics, LyricsState, Player};
+use melodia_ui::{AppWindow, LyricRow, Lyrics, LyricsState, Player, Settings};
 
 /// Width to estimate against before the panel has reported its own.
 ///
@@ -406,6 +406,10 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
             // re-measure of the sheet on screen against the heights it is now drawn at.
             if let Some(ui) = weak.upgrade() {
                 republish(&ui, &ly_republish);
+                // **The Settings row is seeded once at boot and nothing re-reads it**, there being
+                // no section gate on that page, so without this the card spends the rest of the
+                // session showing what the flag was at launch.
+                ui.global::<Settings>().set_lyrics_romanization_shown(shown);
             }
         });
     }
