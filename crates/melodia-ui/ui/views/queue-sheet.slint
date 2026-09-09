@@ -27,7 +27,7 @@ export component QueueSheet inherits Rectangle {
         Queue.drop-slot = -1;
         // Same reason the resets above are here: a remount with the sheet already open gets
         // no `changed watched-open`, so nothing else would seat the list.
-        seat-timer.running = Queue.open && Queue.current-index >= 0;
+        root.arm-seat();
     }
 
     // 0 = fully closed; 1 = fully open.
@@ -45,13 +45,9 @@ export component QueueSheet inherits Rectangle {
         // delivers the pointer-up that would have cleared these itself.
         Queue.drag-source = -1;
         Queue.drop-slot = -1;
-        // `open-changed` fills the rows and the playing index before it returns, so the index
-        // read here is the fresh one. Assigned rather than bound, and not only so a close
-        // disarms it: `self.running = false` in the handler would orphan a binding on the
-        // first fire, leaving the sheet seating once per process. A binding reaching the
-        // list's height fails earlier still, evaluated by a change tracker in the pass that
-        // mounts the branch, the sheet sitting inside the miniplayer `if`.
-        seat-timer.running = self.watched-open && Queue.current-index >= 0;
+        // `open-changed` fills the rows and the playing index before it returns, so the arm
+        // below reads the fresh index.
+        root.arm-seat();
     }
 
     private property <bool> has-rows: Queue.rows.length > 0;
@@ -103,23 +99,53 @@ export component QueueSheet inherits Rectangle {
             inner-list.visible-height / 2 - index * root.row-height - root.row-height / 2);
     }
 
-    // Seats the list on the playing row once per open and then leaves it alone — a queue
-    // is read *past* the current track, so a sheet that kept following would fight every
-    // scroll. **Deferred rather than written from `changed watched-open`**: a `ListView`
-    // publishes `viewport-height` from its own layout pass, and the flickable's in-bounds
-    // correction pulls a scroll written against the stale one back to the top. The close
-    // teardown is what makes it stale, so an inline write works on a fast reopen and
-    // fails on every other. The wait is on that pass rather than on the interval, a slow
-    // `open-changed` being enough to land the first tick ahead of it.
+    // The offset the seat converges on. A property because a Slint callback carries no
+    // locals and the tick both compares against this and writes it.
+    private property <length> seat-y: root.centred-on(Queue.current-index);
+
+    // Ticks the seat gets before it gives up, so a list that never finishes measuring
+    // cannot leave the timer running for the rest of the session.
+    private property <int> seat-ticks-total: 40;
+    private property <int> seat-ticks-left;
+
+    // Arms the one-shot seat: the open transition, and a remount that finds the sheet
+    // already open. Reading `Queue.open` is what makes a close disarm it. **Assigned rather
+    // than bound**, because `self.running = false` in the handler would orphan a binding on
+    // the first fire, leaving the sheet seating once per process; and a binding reaching the
+    // list's height fails earlier still, evaluated by a change tracker in the pass that
+    // mounts the branch, the sheet sitting inside the miniplayer `if`.
+    function arm-seat() {
+        root.seat-ticks-left = root.seat-ticks-total;
+        seat-timer.running = Queue.open && Queue.current-index >= 0;
+    }
+
+    // Seats the list on the playing row once per open and then leaves it alone — a queue is
+    // read *past* the current track, so a sheet that kept following would fight every
+    // scroll. **It converges rather than writing once**: a `ListView` settles its layout
+    // over several passes from state it keeps per mount, which a close preserves and the
+    // miniplayer swap throws away. A single write committed to whatever happened to be final
+    // on its one tick, so the open after a remount pinned against a height the list had not
+    // published and landed at the top, while the second open was reliably right. Re-reading
+    // the target each tick costs one tick where it already agreed and is right in both.
     seat-timer := Timer {
-        interval: 1ms;
+        interval: 16ms;
         running: false;
         triggered => {
-            if (inner-list.viewport-height <= 0px) {
+            root.seat-ticks-left -= 1;
+            if (root.seat-ticks-left <= 0) {
+                self.running = false;
                 return;
             }
-            self.running = false;
-            inner-list.viewport-y = root.centred-on(Queue.current-index);
+            // Short of its own rows the list is still measuring, and `in-travel` would
+            // collapse to the top against a height that is about to grow.
+            if (inner-list.viewport-height < Queue.rows.length * root.row-height) {
+                return;
+            }
+            if (abs(inner-list.viewport-y - root.seat-y) <= 1px) {
+                self.running = false;
+                return;
+            }
+            inner-list.viewport-y = root.seat-y;
         }
     }
 
