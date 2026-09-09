@@ -199,6 +199,12 @@ msgstr "Suelta para añadir a la cola"
 msgid "Remove selected"
 msgstr "Quitar selección"
 
+msgid "Remove from Queue"
+msgstr "Quitar de la cola"
+
+msgid "Remove {} from Queue"
+msgstr "Quitar {} de la cola"
+
 msgid "Clear queue"
 msgstr "Vaciar cola"
 

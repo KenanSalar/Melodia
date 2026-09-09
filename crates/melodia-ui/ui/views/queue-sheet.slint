@@ -169,11 +169,7 @@ export component QueueSheet inherits Rectangle {
         height: 100%;
         enabled: Queue.open && root.t > 0.05;
         mouse-cursor: pointer;
-        clicked => {
-            Queue.close();
-            Queue.open = false;
-            Queue.clear-selection();
-        }
+        clicked => { Queue.dismiss(); }
     }
 
     // At t=0 the card sits entirely off the bottom edge; at t=1 it is bottom-aligned
@@ -305,11 +301,7 @@ export component QueueSheet inherits Rectangle {
                             icon: "close";
                             diameter: 32px;
                             icon-size: 18px;
-                            clicked => {
-                                Queue.close();
-                                Queue.open = false;
-                                Queue.clear-selection();
-                            }
+                            clicked => { Queue.dismiss(); }
                         }
                     }
                 }

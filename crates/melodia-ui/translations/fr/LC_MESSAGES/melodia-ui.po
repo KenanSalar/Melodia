@@ -199,6 +199,12 @@ msgstr "Déposez pour ajouter à la file d'attente"
 msgid "Remove selected"
 msgstr "Retirer la sélection"
 
+msgid "Remove from Queue"
+msgstr "Retirer de la file d'attente"
+
+msgid "Remove {} from Queue"
+msgstr "Retirer {} de la file d'attente"
+
 msgid "Clear queue"
 msgstr "Vider la file d'attente"
 

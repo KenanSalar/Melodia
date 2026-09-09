@@ -143,8 +143,7 @@ export component ShortcutScope inherits FocusScope {
                 if (Queue.selected-count > 0) {
                     Queue.clear-selection();
                 } else {
-                    Queue.close();
-                    Queue.open = false;
+                    Queue.dismiss();
                 }
                 return accept;
             }

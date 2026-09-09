@@ -5,8 +5,10 @@
 //! `library::queue::queue_import_files`.
 
 mod callbacks;
+mod links;
 mod rows;
 
+use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -49,7 +51,13 @@ pub fn install(
     let queue_model: Rc<VecModel<QueueRow>> = Rc::new(VecModel::default());
     ui.global::<Queue>().set_rows(ModelRc::from(queue_model.clone()));
 
+    // Persistent, so every later write mutates in place rather than swapping a
+    // model out from under the rows reading it — the track lists' idiom.
+    let selected_ids: Rc<VecModel<i32>> = Rc::new(VecModel::default());
+    ui.global::<Queue>().set_selected_ids(ModelRc::from(selected_ids));
+
     let shadow: Arc<Mutex<Vec<ShadowEntry>>> = Arc::new(Mutex::new(Vec::new()));
+    let link_cache: links::LinkCache = Arc::new(Mutex::new(std::collections::HashMap::new()));
     let anchor: Arc<Mutex<Option<usize>>> = Arc::new(Mutex::new(None));
     let is_open = Arc::new(AtomicBool::new(false));
     // The queue sheet's *own* row-tier cover cache — deliberately NOT the
@@ -96,8 +104,17 @@ pub fn install(
         });
     }
 
-    callbacks::wire_callbacks(ui, state, &queue_model, &queue_covers, &shadow, &anchor, &is_open);
-    rows::spawn_queue_rows_subscriber(ui, state, queue_model, shadow, is_open.clone())?;
+    callbacks::wire_callbacks(
+        ui,
+        state,
+        &queue_model,
+        &queue_covers,
+        &shadow,
+        &link_cache,
+        &anchor,
+        &is_open,
+    );
+    rows::spawn_queue_rows_subscriber(ui, state, queue_model, shadow, link_cache, is_open.clone())?;
 
     // No install-time seed: the sheet is closed at startup, so the
     // subscriber is gated and the model stays empty (no covers decoded
@@ -107,12 +124,36 @@ pub fn install(
     Ok(QueueSheetHandles { is_open })
 }
 
-/// Push the current selected-count from the shadow into the Slint
-/// `Queue` global so the header's "Remove selected (N)" vs "Clear
-/// queue" swap reacts. Cheap: a single iteration over the shadow.
-pub(super) fn push_selected_count(weak: &Weak<AppWindow>, shadow: &[ShadowEntry]) {
-    let count = i32::try_from(shadow.iter().filter(|e| e.selected).count()).unwrap_or(i32::MAX);
+/// Push the selection from the shadow into the Slint `Queue` global: the
+/// count the header's "{n} selected" pill reads, and the id list the row
+/// context menu hands to a batch action.
+///
+/// **The count is rows and the ids are deduped**, which is the same number
+/// everywhere except a queue holding one track twice. Selection is preserved
+/// by track id across a rebuild, so ticking either instance marks both — and
+/// an undeduped list would then add that track to a playlist twice. The menu's
+/// multi-mode gate reads the count, so the labels still say what the pill says.
+pub(super) fn push_selection(weak: &Weak<AppWindow>, shadow: &[ShadowEntry]) {
     if let Some(ui) = weak.upgrade() {
-        ui.global::<Queue>().set_selected_count(count);
+        write_selection(&ui, shadow);
     }
+}
+
+/// [`push_selection`] against a live handle, for the rebuild path that already
+/// holds one.
+pub(super) fn write_selection(ui: &AppWindow, shadow: &[ShadowEntry]) {
+    let selected = shadow.iter().filter(|e| e.selected);
+    let count = i32::try_from(selected.clone().count()).unwrap_or(i32::MAX);
+
+    let mut seen: HashSet<i64> = HashSet::new();
+    let ids: Vec<i32> = selected
+        .filter(|e| seen.insert(e.id))
+        .map(|e| i32::try_from(e.id).unwrap_or(i32::MAX))
+        .collect();
+
+    let queue = ui.global::<Queue>();
+    queue.set_selected_count(count);
+    crate::ui::list_selection::write_selection_ids(&queue.get_selected_ids(), ids, |m| {
+        queue.set_selected_ids(m);
+    });
 }

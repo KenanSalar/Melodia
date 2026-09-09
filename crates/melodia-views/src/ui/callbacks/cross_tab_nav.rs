@@ -34,7 +34,7 @@ use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_ui::{
     AlbumDetail, AppWindow, ArtistDetail, Browse, Favorites, GenreDetail, MyLibrary, Nav,
-    NavEnterFrom, PlaylistDetail, RecentlyPlayed, Search, Tracks,
+    NavEnterFrom, PlaylistDetail, Queue, RecentlyPlayed, Search, Tracks,
 };
 
 /// Where the user is standing when a "Go to …" fires: the nav index, plus the My Library
@@ -100,57 +100,38 @@ pub fn wire_cross_tab_nav(
 ) {
     let weak = ui.as_weak();
 
-    // --- Tracks ------------------------------------------------------
-    let g = ui.global::<Tracks>();
-    g.on_go_to_album(make_go_to_album(state, albums_ui, weak.clone()));
-    g.on_go_to_artist(make_go_to_artist(state, artists_ui, weak.clone()));
-    g.on_go_to_genre(make_go_to_genre(state, genres_ui, weak.clone()));
+    // One trio per global, spelled once. A `macro_rules!` rather than a helper fn because
+    // the generated globals are unrelated types sharing only their accessor *names* —
+    // there is no trait to be generic over, which is why `impl_row_selection_view!` next
+    // door has the same shape.
+    macro_rules! wire_go_to {
+        ($($global:ident),+ $(,)?) => {
+            $({
+                let g = ui.global::<$global>();
+                g.on_go_to_album(make_go_to_album(state, albums_ui, weak.clone()));
+                g.on_go_to_artist(make_go_to_artist(state, artists_ui, weak.clone()));
+                g.on_go_to_genre(make_go_to_genre(state, genres_ui, weak.clone()));
+            })+
+        };
+    }
 
-    // --- Browse ------------------------------------------------------
-    let g = ui.global::<Browse>();
-    g.on_go_to_album(make_go_to_album(state, albums_ui, weak.clone()));
-    g.on_go_to_artist(make_go_to_artist(state, artists_ui, weak.clone()));
-    g.on_go_to_genre(make_go_to_genre(state, genres_ui, weak.clone()));
+    // The row menu hides the entry naming the surface you are already on, so the detail
+    // globals still wire all three. `Queue` is the queue sheet's row menu, which dismisses
+    // the sheet before invoking.
+    wire_go_to!(
+        Tracks,
+        Browse,
+        Favorites,
+        PlaylistDetail,
+        AlbumDetail,
+        ArtistDetail,
+        GenreDetail,
+        RecentlyPlayed,
+        Queue,
+    );
 
-    // --- Favorites ---------------------------------------------------
-    let g = ui.global::<Favorites>();
-    g.on_go_to_album(make_go_to_album(state, albums_ui, weak.clone()));
-    g.on_go_to_artist(make_go_to_artist(state, artists_ui, weak.clone()));
-    g.on_go_to_genre(make_go_to_genre(state, genres_ui, weak.clone()));
-
-    // --- PlaylistDetail ----------------------------------------------
-    let g = ui.global::<PlaylistDetail>();
-    g.on_go_to_album(make_go_to_album(state, albums_ui, weak.clone()));
-    g.on_go_to_artist(make_go_to_artist(state, artists_ui, weak.clone()));
-    g.on_go_to_genre(make_go_to_genre(state, genres_ui, weak.clone()));
-
-    // --- AlbumDetail -------------------------------------------------
-    // The row menu hides "Go to Album" here; the other two stay live.
-    let g = ui.global::<AlbumDetail>();
-    g.on_go_to_album(make_go_to_album(state, albums_ui, weak.clone()));
-    g.on_go_to_artist(make_go_to_artist(state, artists_ui, weak.clone()));
-    g.on_go_to_genre(make_go_to_genre(state, genres_ui, weak.clone()));
-
-    // --- ArtistDetail ------------------------------------------------
-    let g = ui.global::<ArtistDetail>();
-    g.on_go_to_album(make_go_to_album(state, albums_ui, weak.clone()));
-    g.on_go_to_artist(make_go_to_artist(state, artists_ui, weak.clone()));
-    g.on_go_to_genre(make_go_to_genre(state, genres_ui, weak.clone()));
-
-    // --- GenreDetail -------------------------------------------------
-    let g = ui.global::<GenreDetail>();
-    g.on_go_to_album(make_go_to_album(state, albums_ui, weak.clone()));
-    g.on_go_to_artist(make_go_to_artist(state, artists_ui, weak.clone()));
-    g.on_go_to_genre(make_go_to_genre(state, genres_ui, weak.clone()));
-
-    // --- RecentlyPlayed ----------------------------------------------
-    let g = ui.global::<RecentlyPlayed>();
-    g.on_go_to_album(make_go_to_album(state, albums_ui, weak.clone()));
-    g.on_go_to_artist(make_go_to_artist(state, artists_ui, weak.clone()));
-    g.on_go_to_genre(make_go_to_genre(state, genres_ui, weak.clone()));
-
-    // --- Search ------------------------------------------------------
-    // Album and Artist reuse `Search.open-album` / `open-artist`, wired elsewhere.
+    // Search is the exception: album and artist reuse `Search.open-album` / `open-artist`,
+    // wired elsewhere.
     let g = ui.global::<Search>();
     g.on_go_to_genre(make_go_to_genre(state, genres_ui, weak));
 }

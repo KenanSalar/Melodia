@@ -261,6 +261,12 @@ export struct QueueRow {
     display_duration: string,
     selected: bool,
     is_favorite: bool,
+    // FK targets for the context menu's "Go to …" entries; 0 means no linkage and hides the
+    // entry. `TrackSummary` carries no foreign keys, so unlike `TrackListRow`'s these arrive a
+    // beat after the row does — `ui::queue_sheet::links` fetches and patches them in.
+    album_id: int,
+    artist_id: int,
+    genre_id: int,
 }
 
 // The Now Playing chip row's technical metadata, async-fetched on track change through

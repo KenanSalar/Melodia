@@ -199,6 +199,12 @@ msgstr "Αφήστε για προσθήκη στην ουρά"
 msgid "Remove selected"
 msgstr "Κατάργηση επιλεγμένων"
 
+msgid "Remove from Queue"
+msgstr "Κατάργηση από την ουρά"
+
+msgid "Remove {} from Queue"
+msgstr "Κατάργηση {} από την ουρά"
+
 msgid "Clear queue"
 msgstr "Εκκαθάριση ουράς"
 

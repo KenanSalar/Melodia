@@ -1,26 +1,22 @@
 import { Theme } from "../../theme.slint";
 import { TrackListRow } from "../../models.slint";
-import { TagEditor } from "../../globals/dialog-forms.slint";
-import { Dialog } from "../../globals/dialog.slint";
-import { Nav } from "../../globals/nav.slint";
-import { Playlists } from "../../globals/playlists.slint";
 import { PopupHighlight } from "../../globals/shell.slint";
 import { RowCovers } from "../../globals/tracks.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { StarRating } from "../star-rating.slint";
 import { ArtworkImage } from "../artwork-image.slint";
-import { MenuItem, MenuSeparator } from "context-menu.slint";
+import { TrackContextMenu } from "track-context-menu.slint";
 import { DataCell } from "track-list-cell.slint";
 import { Checkbox } from "../checkbox.slint";
-import { PopupSurface } from "../popup-surface.slint";
-import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 
 // One body row in a track table. The outer Rectangle is the virtualizer slot the ListView measures
 // — `Theme.row-h` plus `Theme.row-gap` of transparent space, so a row leaves a gap under itself
 // without painting over the next one. **Anything deriving a row pitch has to sum both.** The inner
 // `chrome` Rectangle is the visible pill and owns the TouchArea, cell layout and context popup.
 //
-// Globals-free: column widths, visibility and the playing track id arrive as `in` properties.
+// Column widths, visibility and the playing track id arrive as `in` properties; the one global
+// left is `PopupHighlight`, which the right-click arm writes. The menu's own four went with it
+// into `TrackContextMenu`.
 export component TrackListRowItem inherits Rectangle {
     in property <TrackListRow> row-data;
     in property <int> row-index;
@@ -87,24 +83,6 @@ export component TrackListRowItem inherits Rectangle {
     // right-clicked row and the whole selection. Multi-mode needs this row selected *and* more
     // than one entry — right-clicking an unselected row falls back to that row alone.
     in property <[int]> view-selected-ids;
-    property <bool> multi-active:
-        root.row-data.selected && root.view-selected-ids.length > 1;
-    property <int> multi-count: root.view-selected-ids.length;
-
-    // One source of truth for the "Go to …" entries, read by each entry's own `if` and
-    // by the preceding separator's `any-cross-tab-visible` — so the divider tracks
-    // *any* entry being visible rather than just the album one.
-    property <bool> show-go-to-album:
-        !root.multi-active && root.row-data.album_id != 0
-            && root.view-context != "album-detail";
-    property <bool> show-go-to-artist:
-        !root.multi-active && root.row-data.artist_id != 0
-            && root.view-context != "artist-detail";
-    property <bool> show-go-to-genre:
-        !root.multi-active && root.row-data.genre_id != 0
-            && root.view-context != "genre-detail";
-    property <bool> any-cross-tab-visible:
-        show-go-to-album || show-go-to-artist || show-go-to-genre;
 
     // Drag-reorder, opt-in via `enable-drag`; `TrackList` and every other consumer leave it off and
     // pay nothing. On, the row's own `touch` also tracks press → move → release — a wrapping or
@@ -254,7 +232,7 @@ export component TrackListRowItem inherits Rectangle {
                     // the watcher would mount.
                     root.right-click-row-id = root.row-data.id;
                     PopupHighlight.row-ctx-id = root.row-data.id;
-                    ctx-popup.show();
+                    ctx-menu.show();
                     root.request-blur-search();
                 }
                 // Drag-reorder tracking — opt-in via `enable-drag`.
@@ -531,184 +509,36 @@ export component TrackListRowItem inherits Rectangle {
         }
         }
 
-        // One PopupWindow per row instance — the ListView only instantiates visible rows, so this
-        // stays a screenful of popups whatever the library size. Height is content-driven;
-        // Add-to-Playlist hands off to a picker dialog rather than scrolling inline.
-        ctx-popup := PopupWindow {
-            x: touch.mouse-x;
-            y: touch.mouse-y;
-            width: 220px;
-            close-policy: close-on-click;
+        // The menu itself is `TrackContextMenu`, shared with the queue sheet's row. What stays
+        // here is what the menu deliberately doesn't own: the pointer position, the right-click
+        // snapshot and the highlight key it gates on.
+        ctx-menu := TrackContextMenu {
+            row-id: root.row-data.id;
+            row-is-favorite: root.row-data.is_favorite;
+            row-selected: root.row-data.selected;
+            album-id: root.row-data.album_id;
+            artist-id: root.row-data.artist_id;
+            genre-id: root.row-data.genre_id;
+            view-context: root.view-context;
+            current-playlist-id: root.current-playlist-id;
+            effective-selection: root.view-selected-ids;
+            selection-count: root.view-selected-ids.length;
+            at-x: touch.mouse-x;
+            at-y: touch.mouse-y;
+            ctx-key: root.right-click-row-id;
+            live-ctx-key: PopupHighlight.row-ctx-id;
 
-            // This row alone in single mode, the whole view selection in multi. Computed once so
-            // every `clicked` handler reads the same list.
-            property <[int]> effective-ids:
-                root.multi-active ? root.view-selected-ids : [root.row-data.id];
-            // Gates the Add-to-Playlist entry. On Playlist Detail the current playlist is filtered
-            // out, adding to itself being a no-op; assumed to be in `Playlists.rows`, and if it
-            // isn't this overcounts by one, harmlessly.
-            property <int> visible-playlist-count:
-                root.current-playlist-id > 0
-                    ? max(0, Playlists.rows.length - 1)
-                    : Playlists.rows.length;
-
-            // Live only on the row whose menu is open. The gate keys off the right-click *snapshot*
-            // rather than the live `row-data.id`, so a row recycle behind an open popup can't
-            // unmount the watcher mid-popup — one watcher per focus-loss event, however many rows.
-            if root.right-click-row-id != -1
-                && root.right-click-row-id == PopupHighlight.row-ctx-id: FocusLossWatcher {
-                close => {
-                    ctx-popup.close();
-                    PopupHighlight.row-ctx-id = -1;
-                    root.right-click-row-id = -1;
-                }
-            }
-
-            PopupSurface {
-                VerticalLayout {
-                    padding: Theme.pad-xs;
-                    spacing: 0;
-
-                    // Single-row mode keeps "Play", matching double-click. Over a selection the
-                    // verb is ambiguous — queue it, or replace the queue with it — so it's
-                    // dropped; Play Next and Add to Queue read the same either way and stay.
-                    if !root.multi-active: MenuItem {
-                        label: @tr("Play");
-                        icon: "play_arrow";
-                        clicked => { root.play-row(root.row-data.id, root.row-index); }
-                    }
-                    MenuItem {
-                        label: root.multi-active
-                            ? @tr("Play {} Next", root.multi-count)
-                            : @tr("Play Next");
-                        icon: "queue_play_next";
-                        clicked => { root.play-next(ctx-popup.effective-ids); }
-                    }
-                    MenuItem {
-                        label: root.multi-active
-                            ? @tr("Add {} to Queue", root.multi-count)
-                            : @tr("Add to Queue");
-                        icon: "queue_music";
-                        clicked => { root.add-to-queue(ctx-popup.effective-ids); }
-                    }
-                    MenuSeparator {}
-
-                    // Unconditional — creating a playlist is useful with none.
-                    MenuItem {
-                        label: @tr("New Playlist…");
-                        icon: "add";
-                        clicked => {
-                            // Stash the ids and open the Create dialog, no Rust
-                            // round-trip. The dispatcher's create-playlist branch
-                            // reads `pending-track-ids` once the row exists and adds
-                            // the tracks in the same call.
-                            Dialog.open-create-playlist(ctx-popup.effective-ids);
-                        }
-                    }
-                    // Hidden when there is nothing to add to. The chrome is set here so the `@tr`
-                    // literals sit at the call site and a locale switch re-resolves them.
-                    if ctx-popup.visible-playlist-count > 0: MenuItem {
-                        label: root.multi-active
-                            ? @tr("Add {} to Playlist", root.multi-count)
-                            : @tr("Add to Playlist");
-                        icon: "playlist_add";
-                        clicked => {
-                            Dialog.title = root.multi-active
-                                ? @tr("Add {} to Playlist", root.multi-count)
-                                : @tr("Add to Playlist");
-                            Dialog.message = "";
-                            Dialog.confirm-label = @tr("Add");
-                            Dialog.cancel-label = @tr("Cancel");
-                            Dialog.destructive = false;
-                            Dialog.kind = "add-to-playlist";
-                            Dialog.pending-track-ids = ctx-popup.effective-ids;
-                            Dialog.pick-total-tracks = ctx-popup.effective-ids.length;
-                            Playlists.request-add-to-playlist(
-                                ctx-popup.effective-ids,
-                                root.current-playlist-id,
-                            );
-                        }
-                    }
-
-                    MenuSeparator {}
-                    MenuItem {
-                        label: root.multi-active
-                            ? (root.row-data.is_favorite
-                                ? @tr("Remove {} from Favorites", root.multi-count)
-                                : @tr("Add {} to Favorites", root.multi-count))
-                            : (root.row-data.is_favorite
-                                ? @tr("Remove from Favorites")
-                                : @tr("Add to Favorites"));
-                        icon: root.row-data.is_favorite ? "heart_minus" : "favorite";
-                        clicked => {
-                            root.toggle-row-favorite(
-                                ctx-popup.effective-ids,
-                                !root.row-data.is_favorite,
-                            );
-                        }
-                    }
-
-                    // Opens the tag editor over the right-clicked row or the whole selection —
-                    // batch editing is the point. **Don't set `Dialog.open` here**: `request-edit`
-                    // fetches the rows, fills `TagEditor` and flips it on a fresh tick, the
-                    // recursion-guard hop `SmartEditor.request-edit` also takes.
-                    MenuItem {
-                        label: root.multi-active
-                            ? @tr("Edit Tags for {}", root.multi-count)
-                            : @tr("Edit Tags…");
-                        icon: "edit";
-                        clicked => {
-                            Dialog.open-tag-editor(
-                                root.multi-active
-                                    ? @tr("Edit {} Tracks", root.multi-count)
-                                    : @tr("Edit Track Information"),
-                                ctx-popup.effective-ids,
-                                TagEditor.tab-tags);
-                        }
-                    }
-
-                    // Single-target by nature, so hidden over a selection like the cross-tab entries
-                    // below. Straight to `Nav`, with the separator on the same gate.
-                    if !root.multi-active: MenuSeparator {}
-                    if !root.multi-active: MenuItem {
-                        label: @tr("Open Containing Folder");
-                        icon: "folder_open";
-                        clicked => { Nav.reveal-in-folder(root.row-data.id); }
-                    }
-
-                    // Hidden over a selection, which may span several albums, and on the detail view
-                    // already showing the target. The separator tracks `any-cross-tab-visible`
-                    // rather than the album entry alone, so it neither appears by itself nor
-                    // vanishes when a row is merely missing its album linkage.
-                    if root.any-cross-tab-visible: MenuSeparator {}
-                    if root.show-go-to-album: MenuItem {
-                        label: @tr("Go to Album");
-                        icon: "album";
-                        clicked => { root.go-to-album(root.row-data.album_id); }
-                    }
-                    if root.show-go-to-artist: MenuItem {
-                        label: @tr("Go to Artist");
-                        icon: "person";
-                        clicked => { root.go-to-artist(root.row-data.artist_id); }
-                    }
-                    if root.show-go-to-genre: MenuItem {
-                        label: @tr("Go to Genre");
-                        icon: "music_note";
-                        clicked => { root.go-to-genre(root.row-data.genre_id); }
-                    }
-
-                    // Removes the row, or the whole selection, from the open playlist.
-                    if root.view-context == "playlist-detail": MenuSeparator {}
-                    if root.view-context == "playlist-detail": MenuItem {
-                        label: root.multi-active
-                            ? @tr("Remove {} from Playlist", root.multi-count)
-                            : @tr("Remove from Playlist");
-                        icon: "playlist_remove";
-                        clicked => {
-                            root.request-remove-from-playlist(ctx-popup.effective-ids);
-                        }
-                    }
-                }
+            play-single => { root.play-row(root.row-data.id, root.row-index); }
+            play-next(ids) => { root.play-next(ids); }
+            add-to-queue(ids) => { root.add-to-queue(ids); }
+            toggle-favorite(ids, on) => { root.toggle-row-favorite(ids, on); }
+            request-remove(ids) => { root.request-remove-from-playlist(ids); }
+            go-to-album(aid) => { root.go-to-album(aid); }
+            go-to-artist(aid) => { root.go-to-artist(aid); }
+            go-to-genre(gid) => { root.go-to-genre(gid); }
+            released => {
+                PopupHighlight.row-ctx-id = -1;
+                root.right-click-row-id = -1;
             }
         }
     }

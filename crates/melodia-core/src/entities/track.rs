@@ -15,11 +15,12 @@
 //! | [`TagEditRow`] | the Edit-Track-Information dialog |
 //! | [`ScrobbleRow`] | a scrobble or love submission |
 //! | [`PlaylistExportRow`] | one M3U8 line |
+//! | [`TrackLinks`] | the three FK ids a "Go to …" menu entry navigates by |
 //!
-//! A new caller takes the closest existing projection rather than adding an
-//! eighth. Where the problem is instead a list held *resident* carrying columns
-//! it never draws, the answer is `ui::track_list_cache`, which converts at fetch
-//! and frees the rest.
+//! A new caller takes the closest existing projection rather than adding a
+//! near-duplicate of one. Where the problem is instead a list held *resident*
+//! carrying columns it never draws, the answer is `ui::track_list_cache`, which
+//! converts at fetch and frees the rest.
 
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -463,6 +464,30 @@ pub fn scrobble_row_columns() -> &'static str {
     use std::sync::OnceLock;
     static CACHED: OnceLock<String> = OnceLock::new();
     CACHED.get_or_init(|| SCROBBLE_ROW_COLUMNS.join(", "))
+}
+
+/// A track's album/artist/genre linkage and nothing else, for a surface that
+/// renders from [`TrackSummary`] and so has no FK ids of its own — the queue
+/// sheet's context menu. A struct rather than the 4-tuple
+/// `get_track_paths_by_ids` gets away with: three same-typed `Option<i64>` in
+/// positional form let a swapped album and artist compile.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, FromRow, Serialize, Deserialize)]
+pub struct TrackLinks {
+    pub id: i64,
+    pub album_id: Option<i64>,
+    pub artist_id: Option<i64>,
+    pub genre_id: Option<i64>,
+}
+
+/// Explicit SELECT columns for `TrackLinks` queries.
+pub const TRACK_LINKS_COLUMNS: &[&str] = &["id", "album_id", "artist_id", "genre_id"];
+
+/// Comma-separated form of `TRACK_LINKS_COLUMNS` for direct `SELECT` usage,
+/// built once and reused (same `OnceLock` pattern as `track_summary_columns`).
+pub fn track_links_columns() -> &'static str {
+    use std::sync::OnceLock;
+    static CACHED: OnceLock<String> = OnceLock::new();
+    CACHED.get_or_init(|| TRACK_LINKS_COLUMNS.join(", "))
 }
 
 /// Full database entity: every column on the `tracks` table including

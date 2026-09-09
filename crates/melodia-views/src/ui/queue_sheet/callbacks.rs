@@ -1,5 +1,6 @@
 //! `Queue.*` callback wiring + click-with-modifier selection helper.
 
+use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -8,8 +9,9 @@ use std::time::Duration;
 use parking_lot::Mutex;
 use slint::{ComponentHandle, Model, VecModel};
 
+use super::links::{self, LinkCache};
 use super::rows::rebuild_rows;
-use super::{ShadowEntry, push_selected_count};
+use super::{ShadowEntry, push_selection};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
@@ -30,6 +32,7 @@ pub(super) fn wire_callbacks(
     queue_model: &Rc<VecModel<QueueRow>>,
     queue_covers: &Arc<CoverThumbs>,
     shadow: &Arc<Mutex<Vec<ShadowEntry>>>,
+    link_cache: &LinkCache,
     anchor: &Arc<Mutex<Option<usize>>>,
     is_open: &Arc<AtomicBool>,
 ) {
@@ -135,29 +138,34 @@ pub(super) fn wire_callbacks(
     {
         let s = state.clone();
         let weak = weak.clone();
-        queue.on_toggle_row_favorite(move |id, fav| {
-            let id = i64::from(id);
+        queue.on_toggle_row_favorite(move |ids, fav| {
+            let ids: Vec<i64> = ids.iter().map(i64::from).collect();
+            if ids.is_empty() {
+                return;
+            }
             let s_inner = s.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
-                if let Err(e) = library::favorites::set_favorite(&s_inner, vec![id], fav).await {
-                    log::warn!("queue toggle_row_favorite({id}, {fav}): {e}");
+                let count = ids.len();
+                if let Err(e) = library::favorites::set_favorite(&s_inner, ids.clone(), fav).await {
+                    log::warn!("queue toggle_row_favorite({count} tracks, {fav}): {e}");
                     return;
                 }
+                let marked: HashSet<i64> = ids.iter().copied().collect();
                 with_state_emit(&s_inner.player_state, &s_inner.sinks, |st| {
                     for t in &mut st.queue.tracks {
-                        if t.id == id {
+                        if marked.contains(&t.id) {
                             Arc::make_mut(t).is_favorite = fav;
                         }
                     }
                     if let Some(ct) = st.current_track_mut()
-                        && ct.id == id
+                        && marked.contains(&ct.id)
                     {
                         Arc::make_mut(ct).is_favorite = fav;
                     }
                     Vec::<PlayerAction>::new()
                 });
-                super::rows::apply_row_favorite(&weak, id, fav);
+                super::rows::apply_row_favorite(&weak, &ids, fav);
             });
         });
     }
@@ -178,7 +186,7 @@ pub(super) fn wire_callbacks(
                 return;
             };
             apply_select(&queue_model, &shadow, &anchor, idx, ctrl, shift);
-            push_selected_count(&weak, &shadow.lock());
+            push_selection(&weak, &shadow.lock());
         });
     }
 
@@ -204,7 +212,7 @@ pub(super) fn wire_callbacks(
                 }
             }
             *anchor.lock() = None;
-            push_selected_count(&weak, &sh);
+            push_selection(&weak, &sh);
         });
     }
 
@@ -225,7 +233,7 @@ pub(super) fn wire_callbacks(
                     queue_model.set_row_data(i, row);
                 }
             }
-            push_selected_count(&weak, &sh);
+            push_selection(&weak, &sh);
         });
     }
 
@@ -247,6 +255,7 @@ pub(super) fn wire_callbacks(
         let queue_model = queue_model.clone();
         let queue_covers = queue_covers.clone();
         let shadow = shadow.clone();
+        let link_cache = link_cache.clone();
         queue.on_open_changed(move |open| {
             log::debug!("queue sheet: {}", if open { "open" } else { "closed" });
             is_open.store(open, Ordering::Relaxed);
@@ -276,8 +285,12 @@ pub(super) fn wire_callbacks(
                     let s = lock_state(&state.player_state);
                     s.to_queue_view_model()
                 };
-                rebuild_rows(&ui, &queue_model, &shadow, &qvm);
+                let missing = rebuild_rows(&ui, &queue_model, &shadow, &link_cache, &qvm);
                 drop(ui);
+                // The menu's "Go to …" entries. Off-thread and patched in when
+                // it lands: a right-click is several frames away, and the rows
+                // owe the slide-up their text on frame one.
+                links::fetch_missing(&state, &weak, &link_cache, &is_open, missing);
                 let paths = crate::ui::grid_prewarm::unique_artwork_paths(
                     qvm.queue_tracks.iter().map(|t| t.artwork_path.as_deref()),
                     QUEUE_PREWARM_AHEAD,
@@ -313,6 +326,7 @@ pub(super) fn wire_callbacks(
                 let is_open = is_open.clone();
                 let weak = weak.clone();
                 let queue_covers = queue_covers.clone();
+                let link_cache = link_cache.clone();
                 let close_epoch = close_epoch.clone();
                 let runtime = state.runtime.clone();
                 runtime.clone().spawn(async move {
@@ -348,6 +362,10 @@ pub(super) fn wire_callbacks(
                         // cache-only first frame.
                         queue.set_covers_generation(0);
                         queue_covers.clear();
+                        // The FK trio the row menu navigates by, on the same
+                        // terms as the covers: a closed sheet holds nothing,
+                        // and the next open re-resolves what it shows.
+                        link_cache.lock().clear();
                         runtime
                             .spawn_blocking(melodia_platform::services::platform::allocator::trim);
                     });

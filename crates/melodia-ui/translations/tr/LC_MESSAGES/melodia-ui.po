@@ -199,6 +199,12 @@ msgstr "Sıraya eklemek için bırak"
 msgid "Remove selected"
 msgstr "Seçimi kaldır"
 
+msgid "Remove from Queue"
+msgstr "Sıradan çıkar"
+
+msgid "Remove {} from Queue"
+msgstr "{} Sıradan Çıkar"
+
 msgid "Clear queue"
 msgstr "Sırayı temizle"
 

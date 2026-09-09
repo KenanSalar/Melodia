@@ -236,6 +236,25 @@ pub async fn get_track_paths_by_ids(
     Ok(ids.iter().filter_map(|id| map.remove(id).map(|path| (*id, path))).collect())
 }
 
+/// Fetch `TrackLinks` projections by IDs, preserving the input order. The queue sheet renders from
+/// `TrackSummary`, which carries no foreign keys, so its context menu resolves them here rather
+/// than widening the projection the player and `queue.json` share.
+pub async fn get_track_links_by_ids(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<Vec<track::TrackLinks>, AppError> {
+    let cols = track::track_links_columns();
+    let links: Vec<track::TrackLinks> = chunked_in_query(db.read(), ids, |placeholders| {
+        format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})")
+    })
+    .await?;
+
+    let mut map: HashMap<i64, track::TrackLinks> = HashMap::with_capacity(links.len());
+    map.extend(links.into_iter().map(|l| (l.id, l)));
+
+    Ok(ids.iter().filter_map(|id| map.remove(id)).collect())
+}
+
 /// Lightweight version of `get_all_tracks` returning only list-view columns.
 ///
 /// The display order is the caller's: this hands back [`TRACK_LIST_ORDER`] and

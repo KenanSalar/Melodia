@@ -199,6 +199,12 @@ msgstr "Zum Hinzufügen zur Warteschlange ablegen"
 msgid "Remove selected"
 msgstr "Auswahl entfernen"
 
+msgid "Remove from Queue"
+msgstr "Aus Warteschlange entfernen"
+
+msgid "Remove {} from Queue"
+msgstr "{} aus Warteschlange entfernen"
+
 msgid "Clear queue"
 msgstr "Warteschlange leeren"
 

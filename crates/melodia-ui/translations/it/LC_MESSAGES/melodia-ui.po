@@ -199,6 +199,12 @@ msgstr "Rilascia per aggiungere alla coda"
 msgid "Remove selected"
 msgstr "Rimuovi selezionati"
 
+msgid "Remove from Queue"
+msgstr "Rimuovi dalla coda"
+
+msgid "Remove {} from Queue"
+msgstr "Rimuovi {} dalla coda"
+
 msgid "Clear queue"
 msgstr "Svuota coda"
 
