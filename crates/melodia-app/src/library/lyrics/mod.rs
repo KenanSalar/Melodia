@@ -288,3 +288,7 @@ pub fn pacer() -> melodia_net::services::net::pacer::RequestPacer {
 pub fn prune_store(paths: &melodia_core::config::Paths) -> Result<u32, AppError> {
     store::prune(&paths.lyrics_dir)
 }
+
+#[cfg(test)]
+#[path = "tests/mod_tests.rs"]
+mod tests;

@@ -50,3 +50,7 @@ pub fn fold(s: &str) -> String {
     push_folded(&mut out, s);
     out
 }
+
+#[cfg(test)]
+#[path = "tests/fold_tests.rs"]
+mod tests;

@@ -11,7 +11,7 @@
 //! over this one, where a false reject falls back to the signature's own answer and costs only the
 //! timings.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use melodia_core::utils::fold::fold;
 
@@ -53,8 +53,13 @@ const ARTIST_SPLITS: [&str; 9] = [
 pub(super) struct Recording {
     /// The title with every bracketed aside removed, folded to letters and digits.
     core_title: String,
-    /// Which version markers the title carried, whatever brackets they sat in.
-    markers: BTreeSet<&'static str>,
+    /// How many times each version marker occurs in the title, whatever brackets it sat in.
+    ///
+    /// **A count rather than a set, because a marker is also an ordinary word.** A title carrying
+    /// one of its own and that title's live take reduce to the same core, so a set holds `live` on
+    /// both and the two read as one recording. Counting separates them without giving up the
+    /// unbracketed suffix, which is how half of these are spelled.
+    markers: BTreeMap<&'static str, usize>,
     /// Every credited artist, folded and split apart.
     artists: BTreeSet<String>,
 }
@@ -65,7 +70,8 @@ impl Recording {
         Self {
             markers: VERSION_MARKERS
                 .into_iter()
-                .filter(|marker| contains_word(&folded_title, marker))
+                .map(|marker| (marker, word_count(&folded_title, marker)))
+                .filter(|(_, count)| *count > 0)
                 .collect(),
             core_title: squeeze(&strip_brackets(&folded_title)),
             // **Split before folding, for the NUL.** The fold turns one into a space so it reads
@@ -158,10 +164,10 @@ fn split_credits(text: &str) -> Vec<String> {
     parts
 }
 
-/// Whether `haystack` carries `word` as a word rather than inside a longer one, so "cover" does
+/// How often `haystack` carries `word` as a word rather than inside a longer one, so "cover" does
 /// not fire on "Undercover".
-fn contains_word(haystack: &str, word: &str) -> bool {
-    haystack.split(|c: char| !c.is_alphanumeric()).any(|part| part == word)
+fn word_count(haystack: &str, word: &str) -> usize {
+    haystack.split(|c: char| !c.is_alphanumeric()).filter(|part| *part == word).count()
 }
 
 /// Everything outside `()`, `[]` and `{}`. Nesting is counted rather than matched, an unclosed

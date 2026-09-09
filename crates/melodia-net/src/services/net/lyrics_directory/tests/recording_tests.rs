@@ -106,6 +106,50 @@ fn undercover_is_not_a_cover() {
 }
 
 #[test]
+fn a_marker_word_in_the_title_proper_is_not_a_version_marker() {
+    // The marker is looked for across the whole title, and the core title has its brackets taken
+    // off, so a title whose own words include one used to reduce to exactly its live take. The
+    // count is what separates them: one occurrence against two.
+    assert!(
+        !same(("Live Echo", "Artist"), ("Live Echo (Live)", "Artist")),
+        "a live recording is not the studio cut, whatever the title happens to be called"
+    );
+    assert!(
+        same(("Live Echo", "Artist"), ("Live Echo", "Artist")),
+        "and the song still matches itself"
+    );
+}
+
+#[test]
+fn a_marked_take_matches_the_same_take() {
+    // Counting must not make two spellings of one live version unequal, which is the direction
+    // that would cost sheets rather than mismatch them.
+    assert!(same(("Believer (Live)", "Artist"), ("Believer (Live)", "Artist")));
+}
+
+#[test]
+fn a_slash_separates_two_credited_artists() {
+    // It is split before the fold rather than after, alongside the NUL, so it never reaches the
+    // comparison as a character inside one long credit.
+    assert!(same(("Song", "Alpha"), ("Song", "Alpha/Beta")));
+}
+
+#[test]
+fn a_typographic_apostrophe_is_the_same_word_as_a_typed_one() {
+    // The one a phone keyboard and Apple Music both write, where a tagger types the ASCII form.
+    // Spaced rather than dropped it would split the word and never match again.
+    assert!(same(("Don't Stop", "Artist"), ("Don\u{2019}t Stop", "Artist")));
+}
+
+#[test]
+fn a_credit_that_is_nothing_but_separators_can_match_nothing() {
+    // Asked before a request is spent rather than after the answer is read, so a tag like this
+    // costs no traffic at all.
+    assert!(!Recording::new("Song", " , ; ").can_match());
+    assert!(Recording::new("Song", "Artist").can_match());
+}
+
+#[test]
 fn the_query_drops_the_feat_credit_and_the_guests_after_the_first() {
     assert_eq!(query_title("Eclipse (feat. Dr Disrespect)"), "Eclipse");
     assert_eq!(query_title("Let Me Go ft. Hailee Steinfeld"), "Let Me Go");

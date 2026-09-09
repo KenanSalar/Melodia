@@ -186,3 +186,72 @@ fn a_sheet_knows_whether_it_can_be_followed() {
     assert_eq!(timed.map(|s| s.is_synced()), Some(true));
     assert_eq!(plain.map(|s| s.is_synced()), Some(false));
 }
+
+/// Each line with the gloss drawn under it, the pair being what a bilingual sheet carries.
+fn glossed(text: &str) -> Vec<(String, Option<String>)> {
+    parse(text, LyricsSource::Sidecar).map_or_else(Vec::new, |sheet| {
+        sheet.lines.into_iter().map(|line| (line.text, line.translation)).collect()
+    })
+}
+
+#[test]
+fn a_caret_separates_the_words_from_the_gloss_under_them() {
+    assert_eq!(
+        glossed("[00:01.00]sung line^translated line"),
+        vec![("sung line".to_owned(), Some("translated line".to_owned()))]
+    );
+}
+
+#[test]
+fn a_caret_with_nothing_on_one_side_is_a_caret_rather_than_a_separator() {
+    // A sheet that simply contains one keeps it. Split anyway, a line opening on a caret would
+    // lose its words and a line ending on one would gain an empty second row.
+    assert_eq!(glossed("[00:01.00]^only a gloss"), vec![("^only a gloss".to_owned(), None)]);
+    assert_eq!(glossed("[00:01.00]only the words^"), vec![("only the words^".to_owned(), None)]);
+    assert_eq!(glossed("[00:01.00]words^   "), vec![("words^".to_owned(), None)], "whitespace");
+}
+
+#[test]
+fn the_first_caret_is_the_separator_and_the_rest_ride_in_the_gloss() {
+    assert_eq!(
+        glossed("[00:01.00]words^gloss^more"),
+        vec![("words".to_owned(), Some("gloss^more".to_owned()))]
+    );
+}
+
+#[test]
+fn the_two_halves_are_trimmed_apart() {
+    assert_eq!(
+        glossed("[00:01.00]words  ^  gloss"),
+        vec![("words".to_owned(), Some("gloss".to_owned()))]
+    );
+}
+
+#[test]
+fn a_gloss_is_repeated_with_the_line_a_second_stamp_repeats() {
+    // The chorus case. Carried on the first copy alone, the second time round the panel draws the
+    // words with nothing under them.
+    assert_eq!(
+        glossed("[00:45.10][00:21.10]words^gloss"),
+        vec![
+            ("words".to_owned(), Some("gloss".to_owned())),
+            ("words".to_owned(), Some("gloss".to_owned())),
+        ]
+    );
+}
+
+#[test]
+fn an_untimed_sheet_carries_its_glosses_too() {
+    assert_eq!(glossed("words^gloss"), vec![("words".to_owned(), Some("gloss".to_owned()))]);
+}
+
+#[test]
+fn a_sheet_is_timed_when_any_line_carries_a_stamp() {
+    // The text side of the resolution order asks this of raw text, where the sheet side asks a
+    // parsed `Lyrics`. They are different questions and this is the one a promotion is decided on.
+    assert!(is_timed("[00:01.00]a"));
+    assert!(is_timed("stray words\n[00:01.00]a"), "one stamped line is enough");
+    assert!(!is_timed("just words\nand more"));
+    assert!(!is_timed(""));
+    assert!(!is_timed("[ti:Song]"), "an identification tag is not a stamp");
+}

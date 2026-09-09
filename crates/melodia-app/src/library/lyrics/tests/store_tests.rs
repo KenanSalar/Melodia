@@ -170,3 +170,104 @@ fn the_prune_leaves_alone_what_it_did_not_write() -> Result<(), AppError> {
     assert!(wrong_stem.exists(), "the extension is ours but the stem is not a key");
     Ok(())
 }
+
+#[test]
+fn a_refresh_drops_every_name_the_track_had() -> Result<(), AppError> {
+    // The whole of what a refresh is. Leaving any one of the three behind lets the answer the user
+    // asked to be rid of go on standing in for the lookup.
+    let tmp = tempfile::TempDir::new()?;
+    write(tmp.path(), TRACK, Fetched::Sheet("[00:01.00]a\n"))?;
+    write(tmp.path(), TRACK, Fetched::Instrumental)?;
+    write(tmp.path(), TRACK, Fetched::Nothing)?;
+
+    forget(tmp.path(), TRACK)?;
+
+    assert!(read(tmp.path(), TRACK).is_none());
+    for extension in [SHEET_EXT, INSTRUMENTAL_EXT, ABSENT_EXT] {
+        assert!(!entry(tmp.path(), &key(TRACK), extension).exists(), "{extension} survived");
+    }
+    Ok(())
+}
+
+#[test]
+fn a_refresh_for_a_track_the_store_never_answered_is_not_a_failure() -> Result<(), AppError> {
+    // The menu row is offered whatever the panel is showing, so it is routinely pressed on a
+    // sheet that came off the file itself.
+    let tmp = tempfile::TempDir::new()?;
+    forget(tmp.path(), TRACK)?;
+    Ok(())
+}
+
+#[test]
+fn a_refresh_leaves_every_other_track_alone() -> Result<(), AppError> {
+    let tmp = tempfile::TempDir::new()?;
+    let neighbour = "/music/Artist/Album/02 Other.mp3";
+    write(tmp.path(), TRACK, Fetched::Sheet("[00:01.00]a\n"))?;
+    write(tmp.path(), neighbour, Fetched::Sheet("[00:01.00]b\n"))?;
+
+    forget(tmp.path(), TRACK)?;
+
+    assert!(read(tmp.path(), neighbour).is_some());
+    Ok(())
+}
+
+#[test]
+fn the_text_side_answers_with_the_sheet_as_it_was_stored() -> Result<(), AppError> {
+    // Raw rather than re-serialized, so an offset tag and a gloss separator survive a promotion
+    // into the file's own tag.
+    let tmp = tempfile::TempDir::new()?;
+    let sheet = "[offset:+500]\n[00:01.00]a^gloss\n";
+    write(tmp.path(), TRACK, Fetched::Sheet(sheet))?;
+
+    assert_eq!(read_text(tmp.path(), TRACK).as_deref(), Some(sheet));
+    Ok(())
+}
+
+#[test]
+fn the_text_side_is_never_answered_by_a_marker() -> Result<(), AppError> {
+    // Both markers are written as empty files, so a text reader that only checked for existence
+    // would offer the editor an empty sheet to overwrite the file's own tag with.
+    let tmp = tempfile::TempDir::new()?;
+    write(tmp.path(), TRACK, Fetched::Instrumental)?;
+    assert_eq!(read_text(tmp.path(), TRACK), None, "an instrumental");
+
+    write(tmp.path(), TRACK, Fetched::Nothing)?;
+    assert_eq!(read_text(tmp.path(), TRACK), None, "a miss");
+    Ok(())
+}
+
+#[test]
+fn the_text_side_answers_nothing_for_a_track_the_store_has_not_seen() -> Result<(), AppError> {
+    let tmp = tempfile::TempDir::new()?;
+    assert_eq!(read_text(tmp.path(), TRACK), None);
+    Ok(())
+}
+
+#[test]
+fn a_sheet_that_parses_to_nothing_falls_through_to_the_marker_beside_it() -> Result<(), AppError> {
+    // A stored file is read and parsed rather than merely found, so a sheet that has become
+    // unreadable is a miss the next lookup can correct rather than a permanent empty panel.
+    let tmp = tempfile::TempDir::new()?;
+    write(tmp.path(), TRACK, Fetched::Instrumental)?;
+    std::fs::write(entry(tmp.path(), &key(TRACK), SHEET_EXT), "[ti:Song]\n")?;
+
+    assert_eq!(read(tmp.path(), TRACK), Some(LyricsOutcome::Instrumental));
+    Ok(())
+}
+
+#[test]
+fn a_miss_stamped_in_the_future_is_treated_as_spent() -> Result<(), AppError> {
+    // A clock that moved backwards, or a file copied off a machine whose clock was ahead. The
+    // window is measured with `elapsed`, which refuses a future instant, and the safe reading of
+    // a refusal is to ask the directory again rather than to suppress the track forever.
+    let tmp = tempfile::TempDir::new()?;
+    write(tmp.path(), TRACK, Fetched::Nothing)?;
+    let marker = entry(tmp.path(), &key(TRACK), ABSENT_EXT);
+    let ahead = SystemTime::now()
+        .checked_add(Duration::from_hours(24))
+        .ok_or_else(|| AppError::Validation("clock cannot reach forward".into()))?;
+    std::fs::File::options().write(true).open(&marker)?.set_modified(ahead)?;
+
+    assert!(read(tmp.path(), TRACK).is_none());
+    Ok(())
+}

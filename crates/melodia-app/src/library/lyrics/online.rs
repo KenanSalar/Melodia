@@ -72,3 +72,7 @@ pub(super) async fn look_up(
 fn filled(field: Option<&str>) -> Option<&str> {
     field.map(str::trim).filter(|value| !value.is_empty())
 }
+
+#[cfg(test)]
+#[path = "tests/online_tests.rs"]
+mod tests;

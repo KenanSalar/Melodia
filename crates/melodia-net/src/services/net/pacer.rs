@@ -121,3 +121,7 @@ fn verdict(state: &Inner, floor: Duration, now: Instant) -> Verdict {
         _ => Verdict::Send,
     }
 }
+
+#[cfg(test)]
+#[path = "tests/pacer_tests.rs"]
+mod tests;

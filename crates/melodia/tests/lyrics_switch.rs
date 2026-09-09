@@ -222,3 +222,80 @@ fn no_lyrics_menu_row_is_mounted_behind_a_condition() {
          way"
     );
 }
+
+/// The panel itself, whose contract is mostly what it refuses to declare.
+const LYRICS_PANEL: &str =
+    include_str!("../../melodia-ui/ui/components/now-playing/lyrics-panel.slint");
+
+/// The view that decides which of three things the right-hand column is.
+const NOW_PLAYING_VIEW: &str = include_str!("../../melodia-ui/ui/views/now-playing-view.slint");
+
+/// **The panel is mounted behind an `if`, so it may declare no change tracker.**
+///
+/// A tracker in a dropped branch stays registered against whatever it watched, and the shape that
+/// panics is one re-dirtied on the frame the branch goes. The follow is driven from a `Timer`
+/// instead and the glide is arithmetic, so the file's own header states this as a rule. Nothing
+/// enforced it, and the two spellings that would put it back both read as ordinary Slint.
+#[test]
+fn nothing_in_the_lyrics_panel_watches_a_property() {
+    let source = strip_line_comments(LYRICS_PANEL);
+
+    assert!(!source.contains("changed "), "a `changed` handler is a tracker this may not hold");
+    assert!(
+        !source.contains("animate "),
+        "an `animate` on the scroll target is a tracker too, and the one re-dirtied every frame"
+    );
+    assert!(
+        source.contains("Timer {"),
+        "the timer is what the prohibition exists to leave in place, so its absence means this \
+         pin is guarding a file that no longer follows anything"
+    );
+}
+
+/// The three arms are each other's negations, and the heading is a fourth spelling of the same
+/// decision. A pair that stops agreeing mounts two panels into one slot or none at all.
+#[test]
+fn the_now_playing_column_mounts_exactly_one_arm() {
+    let source = melodia_testkit::normalize_ws(&strip_line_comments(NOW_PLAYING_VIEW));
+
+    let arms = [
+        "if !Player.vm.has_station && !Lyrics.shown: UpNextList {",
+        "if !Player.vm.has_station && Lyrics.shown: LyricsPanel {",
+        "if Player.vm.has_station: Rectangle {",
+    ];
+    for arm in arms {
+        assert_eq!(
+            source.matches(arm).count(),
+            1,
+            "the column's arms have to stay one apiece, and `{arm}` is not"
+        );
+    }
+
+    // The heading names whichever arm is up, so it has to branch on the same two properties in
+    // the same order. Read the other way round it labels a station panel "Lyrics".
+    let station_at = source.find("Player.vm.has_station ? @tr(\"Station\")");
+    let lyrics_at = source.find("Lyrics.shown ? @tr(\"Lyrics\")");
+    assert!(
+        matches!((station_at, lyrics_at), (Some(station), Some(lyrics)) if station < lyrics),
+        "the column heading must test the station before the lyrics toggle, as the mounts do"
+    );
+}
+
+/// **The bar's lane is one number and the panel spells it three times.**
+///
+/// The column pads itself by it, the bar is drawn at it, and the width handed to Rust has it
+/// subtracted. Drop the last and every line is measured against a width the panel does not have,
+/// so the wrap estimate and the drawn text disagree by exactly a scrollbar down a whole sheet.
+#[test]
+fn the_lyrics_panel_reserves_its_scrollbar_lane_everywhere_it_matters() {
+    let source = melodia_testkit::normalize_ws(&strip_line_comments(LYRICS_PANEL));
+
+    let roles = [
+        ("the column's own padding", "padding-right: Theme.scrollbar-slot;"),
+        ("the bar drawn in it", "width: Theme.scrollbar-slot;"),
+        ("the width reported to Rust", "sv.visible-width - Theme.scrollbar-slot"),
+    ];
+    for (role, spelling) in roles {
+        assert!(source.contains(spelling), "{role} no longer reads the shared lane");
+    }
+}

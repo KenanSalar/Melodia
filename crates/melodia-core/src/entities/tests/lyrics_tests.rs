@@ -88,3 +88,26 @@ fn an_instrumental_carries_no_text_of_its_own() {
     assert_eq!(answer.text(), None);
     assert!(answer.instrumental);
 }
+
+#[test]
+fn a_blank_timed_field_does_not_call_an_answer_timed() {
+    // This is the branch a lookup decides a second request on, and it has to read the field the
+    // way `text` will: tested for presence alone, a `""` here ends the search on an answer that
+    // then hands over nothing.
+    let answer = LyricsAnswer {
+        synced: Some("   ".to_owned()),
+        plain: None,
+        instrumental: false,
+    };
+    assert!(!answer.is_synced());
+}
+
+#[test]
+fn a_filled_timed_field_does() {
+    let answer = LyricsAnswer {
+        synced: Some("[00:01.00]timed".to_owned()),
+        plain: None,
+        instrumental: false,
+    };
+    assert!(answer.is_synced());
+}

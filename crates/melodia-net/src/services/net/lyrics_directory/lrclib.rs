@@ -247,10 +247,25 @@ async fn search_timed(
     let rows: Vec<ApiLyrics> = serde_json::from_slice(&body)
         .map_err(|e| failed("Failed to parse the lyrics search response", e))?;
 
+    Ok(pick_timed(rows, &ours, album, duration_ms).map(ApiLyrics::into_answer))
+}
+
+/// The row the index returned that is this recording, or nothing it can stand behind.
+///
+/// Split out so the tolerance and the tie-break are table-testable: everything either side of it
+/// needs a socket, and this is where the answer is actually decided.
+///
+/// The filter runs cheapest predicate first, and `min_by` keeps the first of equal rows, so a full
+/// tie falls back to the order the index sent.
+fn pick_timed(
+    rows: Vec<ApiLyrics>,
+    ours: &Recording,
+    album: &str,
+    duration_ms: i64,
+) -> Option<ApiLyrics> {
     let album = melodia_core::utils::fold::fold(album);
 
-    Ok(rows
-        .into_iter()
+    rows.into_iter()
         .filter(|row| {
             row.is_timed()
                 && row.distance_ms(duration_ms) <= DURATION_TOLERANCE_MS
@@ -261,7 +276,6 @@ async fn search_timed(
                 .total_cmp(&b.distance_ms(duration_ms))
                 .then_with(|| album_rank(a, &album).cmp(&album_rank(b, &album)))
         })
-        .map(ApiLyrics::into_answer))
 }
 
 /// `0` where the row is filed under the album in hand, `1` otherwise. A tie-break and never more
@@ -357,3 +371,7 @@ fn failed(
 ) -> LookupError {
     LookupError::Failed(AppError::network(msg, source))
 }
+
+#[cfg(test)]
+#[path = "tests/lrclib_tests.rs"]
+mod tests;
