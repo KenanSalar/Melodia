@@ -176,8 +176,8 @@ msgstr "Ce titre n'a pas de paroles"
 msgid "Lyrics lookup is off"
 msgstr "La recherche de paroles est désactivée"
 
-msgid "Turn it on in Settings, under Services"
-msgstr "Activez-la dans Paramètres, sous Services"
+msgid "Turn it on in the Lyrics menu"
+msgstr "Activez-la depuis le menu Paroles"
 
 msgid "Couldn't reach the lyrics service"
 msgstr "Service de paroles injoignable"

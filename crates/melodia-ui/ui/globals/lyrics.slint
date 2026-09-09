@@ -107,6 +107,12 @@ export global Lyrics {
     in-out property <bool> romanization-shown;
     callback set-romanization-shown(bool);
 
+    // Whether the panel may ask the directory. The Settings card's switch, mirrored here for the
+    // romanization one's reason and one of its own: `LyricsState.off` is the panel telling the
+    // reader a setting is why it is empty, and the row this feeds is that sentence's button.
+    in-out property <bool> online-enabled;
+    callback set-online-enabled(bool);
+
     // Forget what the directory said about this track and resolve it again, for a sheet matched
     // off tags the user has since corrected. Rust's, and it touches only the cache: a sidecar and
     // a lyrics tag are the user's own files.

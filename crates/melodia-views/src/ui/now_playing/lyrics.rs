@@ -414,6 +414,33 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
         });
     }
 
+    // Off the shadow for the romanization row's reason, the Settings card owning the same field.
+    global.set_online_enabled(state.lyrics_online_enabled.get());
+    {
+        let state = state.clone();
+        let weak = ui.as_weak();
+        let ly_online = ly.clone();
+        global.on_set_online_enabled(move |on| {
+            // Synchronously, ahead of the write: the lookup kicked below reads this cell on a
+            // worker, and a disk write is not ordered against it.
+            state.lyrics_online_enabled.set(on);
+            state.persist_blocking("set_lyrics_online_enabled", move |s| {
+                library::settings::set_lyrics_online_enabled(s, on)
+            });
+            let Some(ui) = weak.upgrade() else { return };
+            ui.global::<Settings>().set_lyrics_online_enabled(on);
+            // **Switching it on is a reason to look this track up, and the claim has to go with
+            // it**: `reseed` dedupes on the sheet it holds, which here is the empty answer the
+            // switch just invalidated. Switching it off re-runs only where there is nothing to
+            // lose, so an empty panel stops naming a lookup that can no longer run while a sheet
+            // on screen is kept: the switch buys traffic rather than silence.
+            if on || ly_online.rows.borrow().is_empty() {
+                release(&ui, &ly_online);
+                ly_online.kick();
+            }
+        });
+    }
+
     {
         let weak = ui.as_weak();
         let ly = ly.clone();

@@ -176,8 +176,8 @@ msgstr "Bu parçada söz yok"
 msgid "Lyrics lookup is off"
 msgstr "Şarkı sözü araması kapalı"
 
-msgid "Turn it on in Settings, under Services"
-msgstr "Ayarlar'daki Hizmetler bölümünden açın"
+msgid "Turn it on in the Lyrics menu"
+msgstr "Şarkı Sözleri menüsünden açın"
 
 msgid "Couldn't reach the lyrics service"
 msgstr "Şarkı sözü hizmetine ulaşılamadı"

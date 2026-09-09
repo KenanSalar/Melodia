@@ -176,8 +176,8 @@ msgstr "Questo brano non ha testo"
 msgid "Lyrics lookup is off"
 msgstr "La ricerca dei testi è disattivata"
 
-msgid "Turn it on in Settings, under Services"
-msgstr "Attivala in Impostazioni, nella sezione Servizi"
+msgid "Turn it on in the Lyrics menu"
+msgstr "Attivala dal menu Testo"
 
 msgid "Couldn't reach the lyrics service"
 msgstr "Servizio testi non raggiungibile"

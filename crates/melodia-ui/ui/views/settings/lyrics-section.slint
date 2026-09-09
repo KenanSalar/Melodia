@@ -10,9 +10,10 @@ import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 // `radio-section.slint`.
 //
 // **The panel itself is not configured here.** Whether the column shows lyrics or Up Next is a
-// view preference, flipped from that view's own overflow menu. Romanization is on this card *and*
-// in that menu, because it is both: a default worth finding in Settings, and the thing you want to
-// reach for the moment a song in another script starts.
+// view preference, flipped from that view's own overflow menu. Both switches below are on this card
+// *and* in that menu, each being two things: a default worth finding in Settings, and the one you
+// reach for the moment it is wanted — a song in another script starts, or the panel says a setting
+// is why it has nothing to show.
 export component LyricsSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;

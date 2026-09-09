@@ -176,8 +176,8 @@ msgstr "Dieser Titel hat keinen Gesang"
 msgid "Lyrics lookup is off"
 msgstr "Songtextsuche ist deaktiviert"
 
-msgid "Turn it on in Settings, under Services"
-msgstr "In den Einstellungen unter Dienste aktivieren"
+msgid "Turn it on in the Lyrics menu"
+msgstr "Im Liedtext-Menü aktivieren"
 
 msgid "Couldn't reach the lyrics service"
 msgstr "Songtextdienst nicht erreichbar"

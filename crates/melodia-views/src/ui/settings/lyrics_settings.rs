@@ -2,9 +2,8 @@
 //!
 //! Each seeds its Slint property off the shadow and registers the change callback. The shadow
 //! moves **first** and synchronously: `library::lyrics` reads the online one on a worker on every
-//! track change, and the Now Playing menu reads the romanization one to seed its own row, so a
-//! change landing between the click and the disk write has to see the new answer rather than the
-//! file's old one.
+//! track change, and the Now Playing menu carries both switches itself, so a change landing between
+//! the click and the disk write has to see the new answer rather than the file's old one.
 //!
 //! The lookup is off by default, which is what the shipped package description promises of every
 //! online feature. Romanization is on: it reaches nothing, and it draws nothing at all unless the
@@ -23,11 +22,17 @@ pub fn install(ui: &AppWindow, state: &AppState) {
 
     {
         let state = state.clone();
+        let weak = ui.as_weak();
         ui.global::<Settings>().on_lyrics_online_enabled_changed(move |on| {
             state.lyrics_online_enabled.set(on);
             state.persist_blocking("set_lyrics_online_enabled", move |st| {
                 library::settings::set_lyrics_online_enabled(st, on)
             });
+            // The Now Playing menu carries the same switch and reads the `Lyrics` global, seeded
+            // once at boot. Without this it spends the session showing what the flag was at launch.
+            if let Some(ui) = weak.upgrade() {
+                ui.global::<Lyrics>().set_online_enabled(on);
+            }
         });
     }
 

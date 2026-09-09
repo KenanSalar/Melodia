@@ -435,8 +435,8 @@ export component TrackListRowItem inherits Rectangle {
                     }
                     // Revealed on hover to the right of the title, which elides to make room rather
                     // than being swapped out the way the Length cell's duration is. Gated on
-                    // `enabled` so disk-only Browse rows can't be rated. The per-star TouchAreas
-                    // descend from `touch`, so hovering a star keeps this strip mounted.
+                    // `enabled` so disk-only Browse rows can't be rated. The strip's TouchArea
+                    // descends from `touch`, so hovering a star keeps this strip mounted.
                     if touch.has-hover && root.enabled: VerticalLayout {
                         alignment: center;
                         StarRating {

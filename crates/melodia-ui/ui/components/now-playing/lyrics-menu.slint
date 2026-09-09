@@ -15,17 +15,18 @@ import { FlyoutMetrics } from "./flyout-presets.slint";
 // because the popup sizes itself off their layout.
 //
 // **The first row is the toggle the glyph used to be.** Turning the column back to Up Next costs a
-// click more than it did, and buys the four the panel has no other home for: a sheet matched off
-// tags that were wrong has to be re-askable, a sheet worth keeping has to be writable into the
-// file that will outlive this cache, a sheet that is nearly right has to be editable, and a sheet
-// in a script the reader cannot sound out has to be able to say how it sounds.
+// click more than it did, and buys the five the panel can reach from nowhere else: a sheet matched
+// off tags that were wrong has to be re-askable, a sheet worth keeping has to be writable into the
+// file that will outlive this cache, a sheet that is nearly right has to be editable, a sheet in a
+// script the reader cannot sound out has to be able to say how it sounds, and a panel whose whole
+// copy is that a setting turned the lookup off has to be able to turn it back on.
 export component LyricsMenu inherits Rectangle {
     width: btn.width;
     height: btn.height;
 
     // Every row is drawn whether or not it can act, so the popup's reserve below is a constant and
     // the rows do not move under the pointer between one open and the next.
-    property <length> menu-h: FlyoutMetrics.menu-row-h * 5 + FlyoutMetrics.chrome-h;
+    property <length> menu-h: FlyoutMetrics.menu-row-h * 6 + FlyoutMetrics.chrome-h;
 
     function dismiss() {
         pop.close();
@@ -104,13 +105,30 @@ export component LyricsMenu inherits Rectangle {
                     }
                 }
 
+                // The Settings switch, where the panel's own "lookup is off" copy sends the reader.
+                // Same two halves again, and the same argument as romanization for being in both
+                // places: a default worth finding in Settings, and the thing you reach for the
+                // moment a panel tells you a setting is why it is empty.
+                OverflowRow {
+                    icon: "travel_explore";
+                    label: @tr("Look up lyrics online");
+                    active: Lyrics.online-enabled;
+                    filled: Lyrics.online-enabled;
+                    clicked => {
+                        Lyrics.online-enabled = !Lyrics.online-enabled;
+                        Lyrics.set-online-enabled(Lyrics.online-enabled);
+                        root.dismiss();
+                    }
+                }
+
                 OverflowRow {
                     icon: "refresh";
                     label: @tr("Look up again");
-                    // Anything but `idle` means a track is up, which is the whole of what a
-                    // re-ask needs — including the two states that found nothing, where it is the
-                    // most useful.
-                    button-enabled: Lyrics.state != LyricsState.idle;
+                    // A track has to be up, which is anything but `idle`, including the two states
+                    // that found nothing where a re-ask is most useful. And the row above has to be
+                    // on: forgetting what the directory said *is* the re-ask, so with the lookup
+                    // off this could only delete the sheet the panel is showing.
+                    button-enabled: Lyrics.state != LyricsState.idle && Lyrics.online-enabled;
                     clicked => {
                         Lyrics.refresh();
                         root.dismiss();
