@@ -30,6 +30,9 @@ pub fn install(ui: &AppWindow, state: &AppState) {
             });
             // The Now Playing menu carries the same switch and reads the `Lyrics` global, seeded
             // once at boot. Without this it spends the session showing what the flag was at launch.
+            //
+            // **And no re-ask, unlike that menu's own half**: reaching this page closed Now
+            // Playing, which hands the sheet and its claim back, so the re-open looks up again.
             if let Some(ui) = weak.upgrade() {
                 ui.global::<Lyrics>().set_online_enabled(on);
             }

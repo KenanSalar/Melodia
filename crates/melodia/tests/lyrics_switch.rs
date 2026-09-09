@@ -184,7 +184,7 @@ const LYRICS_MENU: &str =
     include_str!("../../melodia-ui/ui/components/now-playing/lyrics-menu.slint");
 
 /// **The popup reserves its height by hand, so the rows it draws have to be counted right.**
-/// `menu-h` multiplies `FlyoutMetrics.menu-row-h` by a literal that nothing derives, and a fifth
+/// `menu-h` multiplies `FlyoutMetrics.menu-row-h` by a literal that nothing derives, and another
 /// row added without touching it is clipped off the bottom of a popup that still looks deliberate.
 ///
 /// The menu this one replaced carried the same pin and took it along when that file was deleted.

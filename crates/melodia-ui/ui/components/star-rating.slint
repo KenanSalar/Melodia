@@ -6,9 +6,9 @@ import { MaterialIcon } from "material-icon.slint";
 // affordance.
 //
 // **One area rather than one per star, because a click sets the whole run below the pointer.**
-// Five areas would have to agree on which of them is hovered through a property none of them owns,
-// and `has-hover` is cleared from under an element the pointer never left (`slint-pitfalls.md`), so
-// a run assembled from five flags blinks where one area's `mouse-x` does not.
+// A run is a question about one coordinate, where five areas could only answer it by agreeing
+// through a property none of them owns. A press-drag across the strip is one gesture besides,
+// which the star that took the grab would own alone while the rest never saw the pointer move.
 //
 // Inside a track row this must stay a *descendant* of the row's own `touch`, so hovering a star
 // keeps `has-hover` true and the strip stays mounted — the reason the favorite and checkbox
