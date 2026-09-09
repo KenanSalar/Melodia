@@ -20,8 +20,9 @@ const FACADE_DIR: &str =
 /// cannot pass the pins standing on it.
 const MIN_FACADE_FILES: usize = 5;
 
-/// The facade's unit tests, which live under it and are not part of what these pins read.
-const FACADE_TESTS: &str = "tests/";
+/// The directory each of the facade's unit-test files sits in. Matched as a whole segment at any
+/// depth, an arm that grows into a directory taking its `tests/` down with it.
+const FACADE_TESTS: &str = "tests";
 
 /// Every production file the facade is made of, concatenated, with line comments stripped.
 ///
@@ -29,16 +30,16 @@ const FACADE_TESTS: &str = "tests/";
 /// it lands. Comments go because prose about the rule reads exactly like a violation of it.
 ///
 /// **`tests/` is dropped, and both pins below need it dropped.** Unlike `library::radio`, whose
-/// floor this was copied from, this facade holds its unit tests inside itself: counted, four test
-/// files satisfy a floor written for the seven production ones, so the whole of what the pins read
-/// could be deleted under it. It also decides what the count below is a count *of* — a test naming
-/// the setting is not a second reader of it.
+/// floor this was copied from, this facade holds its unit tests inside itself, and there are
+/// enough of them to clear the floor on their own, so the whole of what the pins read could be
+/// deleted under it. It also decides what the count below is a count *of*, a test naming the
+/// setting not being a second reader of it.
 fn facade_source() -> String {
     let mut source = String::new();
     let mut files = 0usize;
 
     for (path, text) in stripped_sources(FACADE_DIR, "rs", MIN_FACADE_FILES) {
-        if path.starts_with(FACADE_TESTS) {
+        if path.split('/').any(|segment| segment == FACADE_TESTS) {
             continue;
         }
         files += 1;

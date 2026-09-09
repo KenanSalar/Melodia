@@ -48,8 +48,8 @@ use up_next::{rebuild_up_next, spawn_up_next_subscriber, wire_now_playing_open};
 /// Set once, after [`install`] has built the state each one reads. The first two are called by
 /// [`crate::ui::shell::mini_player::install`] when the miniplayer becomes visible — the
 /// subscribers stash while no surface renders the model, so without those kicks a never-opened
-/// session followed by a direct shrink-to-mini shows empty or stale content. The lyrics one has
-/// three callers of its own and dedupes on the sheet it holds.
+/// session followed by a direct shrink-to-mini shows empty or stale content. The lyrics one is
+/// called from wherever a sheet could have gone stale, and dedupes on the one it holds.
 type Seeder = Box<dyn Fn()>;
 
 /// The list scrolls, so this is a soft cap — large enough to feel complete, small enough

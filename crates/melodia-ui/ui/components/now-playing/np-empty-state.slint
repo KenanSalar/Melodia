@@ -16,6 +16,9 @@ export component NpEmptyState inherits VerticalLayout {
     // reader can do from here, which is most states.
     in property <string> hint;
     in property <bool> compact: false;
+    // Per caller rather than per tier: the lyrics arm writes a sentence and owes the break, where
+    // Up Next writes three words and clipping is what keeps the miniplayer's column one line tall.
+    in property <TextWrap> wrap: word-wrap;
 
     alignment: center;
 
@@ -41,15 +44,17 @@ export component NpEmptyState inherits VerticalLayout {
                 color: root.compact ? Theme.subtext0 : Player.np-on-backdrop-muted;
                 font-size: root.compact ? Theme.font-size-sm : Theme.font-size-md;
                 horizontal-alignment: center;
-                wrap: word-wrap;
+                wrap: root.wrap;
             }
 
             if root.hint != "": Text {
                 text: root.hint;
-                color: Player.np-on-backdrop-muted.transparentize(0.35);
+                color: root.compact
+                    ? Theme.subtext0.transparentize(0.35)
+                    : Player.np-on-backdrop-muted.transparentize(0.35);
                 font-size: Theme.font-size-sm;
                 horizontal-alignment: center;
-                wrap: word-wrap;
+                wrap: root.wrap;
             }
         }
     }

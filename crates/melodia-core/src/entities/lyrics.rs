@@ -190,7 +190,8 @@ pub fn split_gloss(line: &str) -> (&str, Option<&str>) {
 /// Whether any line of `text` carries a gloss.
 ///
 /// Asked of raw LRC, stamps and all: [`split_gloss`] reads the tail of a line and cares nothing
-/// for what precedes the caret, so this answers before a sheet is parsed.
+/// for what precedes the caret, so this answers before a sheet is parsed. An `[ar:A^B]` counts
+/// where the parser would drop the line, which is worth less than a second reading of the sheet.
 #[must_use]
 pub fn carries_gloss(text: &str) -> bool {
     text.lines().any(|line| split_gloss(line).1.is_some())

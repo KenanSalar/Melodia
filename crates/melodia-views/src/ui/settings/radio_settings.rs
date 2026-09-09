@@ -12,6 +12,7 @@
 
 use slint::ComponentHandle;
 
+use crate::ui::settings_bind::shadow_toggle;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Settings};
@@ -58,13 +59,11 @@ pub fn install_radio(ui: &AppWindow, state: &AppState) {
         });
     }
 
-    {
-        let s = state.clone();
-        g.on_radio_send_clicks_changed(move |send| {
-            s.radio_send_clicks.set(send);
-            s.persist_blocking("set_radio_send_clicks", move |st| {
-                library::settings::set_radio_send_clicks(st, send)
-            });
-        });
-    }
+    // The one of the three with nothing to run between the two steps, so it takes the helper.
+    g.on_radio_send_clicks_changed(shadow_toggle(
+        state,
+        &state.radio_send_clicks,
+        "set_radio_send_clicks",
+        library::settings::set_radio_send_clicks,
+    ));
 }

@@ -109,8 +109,9 @@ impl ApiLyrics {
 
     /// How far this row's recording sits from the one playing, in milliseconds.
     ///
-    /// Kept in `f64` rather than rounded to whole seconds either side: the field is fractional,
-    /// and two rows a fifth of a second apart are the ones this has to choose between.
+    /// Fractional because [`DURATION_TOLERANCE_MS`] is measured against it, and because it is the
+    /// last separator the ranking has left once [`Self::second_off`] and the two ranks under it
+    /// have all tied.
     fn distance_ms(&self, duration_ms: i64) -> f64 {
         let track_ms = f64::from(i32::try_from(duration_ms).unwrap_or(i32::MAX));
         (self.duration.max(0.0) * 1000.0 - track_ms).abs()
@@ -158,10 +159,16 @@ pub(super) async fn fetch(
     if exact.as_ref().is_some_and(|answer| answer.instrumental || settles_it(answer)) {
         return Ok(exact);
     }
+    // Past `settles_it`, an answer already timed leaves the index one errand: the gloss.
+    let gloss_errand = exact.as_ref().is_some_and(LyricsAnswer::is_synced);
 
     match search_timed(client, pacer, title, artist, album, duration_ms).await {
         Ok(Some(timed)) if worth_taking(exact.as_ref(), &timed) => Ok(Some(timed)),
         Ok(Some(_) | None) => Ok(exact),
+        // **A failed errand for a gloss may not cost the sheet it was run for.** Reported as a
+        // failure it reaches the panel as "could not ask", which clears a sheet the reader could
+        // already follow and stores nothing, so the next play pays for both requests again.
+        Err(_) if gloss_errand => Ok(exact),
         // **A refusal ends the lookup whatever the signature found.** The index request would be
         // one more knock on a door we have just been told is shut, and the pacer would refuse it
         // anyway; reporting it is what lets the caller say so rather than claim a miss.
@@ -185,10 +192,11 @@ pub(super) async fn fetch(
 /// a second either side of a boundary gets a different upload, and the plain one is as likely as
 /// not. Asking the index costs a request and buys the gloss back.
 ///
-/// **Gated on the words not being Latin**, which is what keeps that request off most of a library:
-/// a gloss is a translation *out of* the language sung, and the directories carry them for the
-/// scripts a reader cannot follow. `is_ascii` is the same cheap question the resolver already asks
-/// before it romanizes, and it fails toward the extra request rather than away from it.
+/// **Gated on `is_ascii`**, the same cheap question the resolver asks before it romanizes, and
+/// deliberately the loose one: a gloss is a translation *out of* the language sung, so an English
+/// sheet wants none, but an accented Latin one is not ASCII and pays for a request it will usually
+/// spend for nothing. That is the direction to fail in. The precise predicate is
+/// `romanize::needs_romanization`, which is a crate away and cannot be reached from here.
 fn settles_it(answer: &LyricsAnswer) -> bool {
     // An untimed sheet leaves the index its original errand, whatever else it carries.
     if !answer.is_synced() {
@@ -249,8 +257,8 @@ async fn get_exact(
 ///
 /// Three filters, in the order that makes each cheap: a row without timings is nothing this call
 /// was made for, a row outside the duration window is a different recording, and a row naming a
-/// different song is what [`Recording::matches`] is for. Ties go to the album, which only ever
-/// separates rows the duration already called equally close.
+/// different song is what [`Recording::matches`] is for. What survives ranks by the whole second
+/// it is out by, then by whether it glosses its lines, then by the album.
 async fn search_timed(
     client: &reqwest::Client,
     pacer: &RequestPacer,
@@ -420,7 +428,6 @@ fn retry_after(headers: &reqwest::header::HeaderMap) -> Option<Duration> {
     Some(Duration::from_secs(secs).min(MAX_BACKOFF))
 }
 
-/// An I/O-boundary failure, which is every arm of this module that is not a refusal.
 /// One of the two endpoint constants above, ready for its query pairs.
 ///
 /// Both are literals that parse, so the error arm is unreachable rather than merely unlikely —
@@ -429,6 +436,7 @@ fn endpoint(url: &'static str) -> Result<reqwest::Url, LookupError> {
     reqwest::Url::parse(url).map_err(|e| failed("Lyrics directory endpoint is not a URL", e))
 }
 
+/// An I/O-boundary failure, which is every arm of this module that is not a refusal.
 fn failed(
     msg: &'static str,
     source: impl std::error::Error + Send + Sync + 'static,

@@ -1,10 +1,11 @@
-//! Shared wiring for the audio settings: the seed each installer reads at boot,
-//! and the change-handler each toggle installs.
+//! Shared wiring for the settings toggles: the seed each installer reads at boot, and the
+//! change-handler each toggle installs.
 //!
-//! Every audio toggle in Settings and in the Now-Playing dialogs is two-phase: apply to
-//! the live playback engine *synchronously*, so the sound changes before the callback
-//! returns, then persist on the blocking pool. A failed disk write must not undo the
-//! applied value — the warn from [`AppState::persist_blocking`] is the only report.
+//! **Every toggle here is two-phase, and the first phase is synchronous.** [`toggle_binding`]
+//! applies to the live playback engine, so the sound changes before the callback returns;
+//! [`shadow_toggle`] moves a [`SharedFlag`], so a worker reading it mid-write sees the new answer.
+//! Both then persist on the blocking pool, and a failed disk write must not undo what was already
+//! applied: the warn from [`AppState::persist_blocking`] is the only report.
 
 use melodia_app::services::settings::{self, SettingsData};
 use melodia_app::state::{AppState, PlaybackContext, SharedFlag};

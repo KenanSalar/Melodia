@@ -42,7 +42,7 @@ const ASSUMED_WIDTH: f32 = 340.0;
 /// is spelled here and not in the sheet: how long a rest has to be before it is worth drawing is a
 /// question about the panel, and the sheet has already answered the only one it can.
 #[derive(Clone, Copy)]
-pub(super) enum RowKind {
+enum RowKind {
     Words,
     /// Carries where the gap ends, the row's own `at_ms` being where it starts, so the notes have
     /// both ends of the span they fill across.
