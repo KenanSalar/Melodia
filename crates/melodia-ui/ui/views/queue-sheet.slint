@@ -2,6 +2,7 @@ import { ListView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { Dialog } from "../globals/dialog.slint";
 import { Queue } from "../globals/queue.slint";
+import { ListTravel } from "../globals/list-travel.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { ActionPill, PillButton, PillLabel, PillDivider } from "../components/action-pill.slint";
@@ -78,17 +79,9 @@ export component QueueSheet inherits Rectangle {
         ),
     );
 
-    // Pins an offset inside the list's own travel. **Not `clamp()`**: a queue shorter
-    // than the list body puts its lower bound *above* its upper one, and `clamp` expands
-    // to `max(lo, min(v, hi))`, which then hands back the positive lower bound and shoves
-    // every row down the screen. Capping both arguments at 0 resolves that case to 0
-    // instead, which is also what leaves a queue with nothing to scroll where it is.
-    // `draggable-track-list.slint` has the same shape.
+    // Pins an offset inside the list's own travel.
     pure function in-travel(y: length) -> length {
-        return max(
-            min(0px, inner-list.visible-height - inner-list.viewport-height),
-            min(0px, y),
-        );
+        return ListTravel.pin(y, inner-list.visible-height, inner-list.viewport-height);
     }
 
     // Where the viewport sits with `index` centred, pinned inside the travel. Every row is

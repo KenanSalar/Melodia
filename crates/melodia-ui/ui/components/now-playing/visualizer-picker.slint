@@ -1,3 +1,4 @@
+import { Theme } from "../../theme.slint";
 import { Visualizer } from "../../globals/audio.slint";
 import { PopupHighlight } from "../../globals/shell.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
@@ -50,7 +51,7 @@ export component VisualizerPicker inherits Rectangle {
         // Downward and right-aligned on the trigger, the view menu's own anchoring: the row runs
         // to the panel's right edge, so a left-aligned popup would hang off it.
         x: btn.width - self.width;
-        y: btn.height + 8px;
+        y: btn.height + Theme.popup-gap;
         width: 140px;
         height: root.flyout-h;
         close-policy: close-on-click-outside;

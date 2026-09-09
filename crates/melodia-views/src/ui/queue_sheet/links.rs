@@ -4,16 +4,16 @@
 //! `QueueRow` is built from a `TrackSummary`, which carries playback identity
 //! and no foreign keys — widening it would put three columns into every
 //! published view model and into `queue.json`. So the ids are fetched beside
-//! the rows and patched in, the shape [`super::rows::apply_row_favorite`]
-//! already uses for a favourite toggle.
+//! the rows and patched in through `ui::model_patch`, as a favourite toggle is.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use parking_lot::Mutex;
-use slint::{ComponentHandle, Model, VecModel, Weak};
+use slint::{ComponentHandle, Weak};
 
+use crate::ui::model_patch::patch_rows_where;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::track::TrackLinks;
@@ -133,24 +133,12 @@ pub(super) fn fetch_missing(
 /// in flight still lands on the right rows — and a track sitting in the queue
 /// twice gets both.
 fn patch_rows(ui: &AppWindow, links: &[TrackLinks]) {
-    let rows = ui.global::<Queue>().get_rows();
-    let Some(vm) = rows.as_any().downcast_ref::<VecModel<QueueRow>>() else {
-        return;
-    };
     let by_id: HashMap<i32, RowLinks> = links
         .iter()
         .filter_map(|l| i32::try_from(l.id).ok().map(|id| (id, RowLinks::from(*l))))
         .collect();
 
-    for i in 0..vm.row_count() {
-        let Some(mut row) = vm.row_data(i) else {
-            continue;
-        };
-        let Some(resolved) = by_id.get(&row.id) else {
-            continue;
-        };
-        if resolved.stamp(&mut row) {
-            vm.set_row_data(i, row);
-        }
-    }
+    patch_rows_where(&ui.global::<Queue>().get_rows(), "queue link patch", |row| {
+        by_id.get(&row.id).is_some_and(|resolved| resolved.stamp(row))
+    });
 }

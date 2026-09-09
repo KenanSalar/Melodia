@@ -105,7 +105,7 @@ export component ColumnTogglePopup inherits Rectangle {
         x: btn.width - self.width;
         // Off the outer's bottom, not the button's, so the gap holds whatever
         // the inner positioning does.
-        y: root.height + 8px;
+        y: root.height + Theme.popup-gap;
         close-policy: close-on-click-outside;
 
         // Live only while this is the open popup — the trigger claims

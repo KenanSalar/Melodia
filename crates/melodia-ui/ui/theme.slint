@@ -130,6 +130,12 @@ export global Theme {
     // and every hand-mounted bar takes its width from here rather than restating the number.
     out property <length> scrollbar-slot: 10px;
 
+    // The air a `PopupWindow` leaves between itself and the control that opened it, on whichever
+    // side it hangs. Seven popups across four directories anchor on it, so it is here rather than
+    // beside any one family of them: a gap differing by a pixel or two between two of them reads
+    // as one being misplaced, and nothing about the source says which is the odd one.
+    out property <length> popup-gap: 8px;
+
     // The one ink drawn on a name-hashed tile — the station monogram and the glyph beside it, on
     // the four surfaces that paint one. Theme-independent on purpose: it is legible because
     // `ui::radio::identity` keeps the generated stops deep, not because of anything the palette

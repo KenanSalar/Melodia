@@ -35,10 +35,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::state::AppState;
+use melodia_core::config::Paths;
 use melodia_core::entities::lyrics::{Lyrics, LyricsOutcome};
 use melodia_core::entities::tags::{FieldEdit, TagEdit};
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
+use melodia_net::services::net::pacer::RequestPacer;
 
 /// What this track has, from whichever source has it, ready to draw.
 ///
@@ -278,7 +280,7 @@ pub async fn write_to_tag(state: &AppState, track_id: i64, text: &str) -> Result
 /// behind this door: `state` holds the pacer without being able to reach what it paces, which is
 /// the property `crates/melodia/tests/lyrics_switch.rs` walks the tree for.
 #[must_use]
-pub fn pacer() -> melodia_net::services::net::pacer::RequestPacer {
+pub fn pacer() -> RequestPacer {
     melodia_net::services::net::lyrics_directory::pacer()
 }
 
@@ -286,7 +288,7 @@ pub fn pacer() -> melodia_net::services::net::pacer::RequestPacer {
 ///
 /// Through the door like everything else here, so `tasks::lyrics_cache` names no submodule and the
 /// naming scheme stays this module's business. Blocking; the task owns the `spawn_blocking`.
-pub fn prune_store(paths: &melodia_core::config::Paths) -> Result<u32, AppError> {
+pub fn prune_store(paths: &Paths) -> Result<u32, AppError> {
     store::prune(&paths.lyrics_dir)
 }
 

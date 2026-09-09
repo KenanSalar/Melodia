@@ -21,11 +21,12 @@ use std::time::Instant;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use super::NowPlayingState;
+use crate::ui::settings::lyrics_settings;
 use crate::ui::settings_bind;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::lyrics::LyricLine;
-use melodia_ui::{AppWindow, LyricRow, Lyrics, Settings};
+use melodia_ui::{AppWindow, LyricRow, Lyrics};
 
 pub(super) use sheet::{release, wire_menu, wire_reseed};
 
@@ -211,7 +212,7 @@ impl LyricsUi {
     }
 }
 
-/// Install the panel's callbacks and seed the toggle.
+/// Install the panel's callbacks and seed the toggles.
 pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
     let model: Rc<VecModel<LyricRow>> = Rc::new(VecModel::default());
     let global = ui.global::<Lyrics>();
@@ -231,6 +232,17 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
         reseed: RefCell::new(None),
         model,
     });
+
+    wire_toggles(ui, state, &ly);
+    wire_panel_input(ui, &ly);
+
+    ly
+}
+
+/// The three rows of the panel's own menu: which column is shown, and the two the Settings card
+/// carries as well.
+fn wire_toggles(ui: &AppWindow, state: &AppState, ly: &Rc<LyricsUi>) {
+    let global = ui.global::<Lyrics>();
 
     // Seeded off `settings.json` the way the visualizer's own toggle is. The menu row has already
     // flipped the property by the time the callback runs, so the property half is done.
@@ -252,15 +264,12 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
     }
 
     // Off the shadow rather than off `flags`, because the Settings card writes the same field and
-    // may have moved it since this view last mounted.
+    // may have moved it since this view last mounted. Both handlers are the card's, which is what
+    // keeps the two rows of each switch from drifting; what is left here is the extra each row
+    // owes the panel standing behind it.
     global.set_romanization_shown(state.lyrics_romanization_shown.get());
     {
-        let persist = settings_bind::shadow_toggle(
-            state,
-            &state.lyrics_romanization_shown,
-            "set_lyrics_romanization_shown",
-            library::settings::set_lyrics_romanization_shown,
-        );
+        let persist = lyrics_settings::romanization_handler(ui, state);
         let weak = ui.as_weak();
         let ly_republish = ly.clone();
         global.on_set_romanization_shown(move |shown| {
@@ -269,29 +278,18 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
             // re-measure of the sheet on screen against the heights it is now drawn at.
             if let Some(ui) = weak.upgrade() {
                 follow::republish(&ui, &ly_republish);
-                // **The Settings row is seeded once at boot and nothing re-reads it**, there being
-                // no section gate on that page, so without this the card spends the rest of the
-                // session showing what the flag was at launch.
-                ui.global::<Settings>().set_lyrics_romanization_shown(shown);
             }
         });
     }
 
-    // Off the shadow for the romanization row's reason, the Settings card owning the same field.
     global.set_online_enabled(state.lyrics_online_enabled.get());
     {
-        let persist = settings_bind::shadow_toggle(
-            state,
-            &state.lyrics_online_enabled,
-            "set_lyrics_online_enabled",
-            library::settings::set_lyrics_online_enabled,
-        );
+        let persist = lyrics_settings::online_handler(ui, state);
         let weak = ui.as_weak();
         let ly_online = ly.clone();
         global.on_set_online_enabled(move |on| {
             persist(on);
             let Some(ui) = weak.upgrade() else { return };
-            ui.global::<Settings>().set_lyrics_online_enabled(on);
             // **Switching it on is a reason to look this track up, and the claim has to go with
             // it**: `reseed` dedupes on the sheet it holds, which here is the empty answer the
             // switch just invalidated. Switching it off re-runs only where there is nothing to
@@ -303,6 +301,12 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
             }
         });
     }
+}
+
+/// What the sheet reports back: the width it was laid out at, the pointer over it, the follow
+/// tick, and a click asking to be taken to a line.
+fn wire_panel_input(ui: &AppWindow, ly: &Rc<LyricsUi>) {
+    let global = ui.global::<Lyrics>();
 
     {
         let weak = ui.as_weak();
@@ -348,8 +352,6 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
             follow::seek_at(&ui, &ly, y);
         });
     }
-
-    ly
 }
 
 #[cfg(test)]

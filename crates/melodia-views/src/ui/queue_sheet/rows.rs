@@ -8,10 +8,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use async_compat::Compat;
 use parking_lot::Mutex;
-use slint::{ComponentHandle, Model, VecModel, Weak};
+use slint::{ComponentHandle, VecModel, Weak};
 
 use super::ShadowEntry;
 use super::links::{self, LinkCache, RowLinks};
+use crate::ui::model_patch::patch_rows_where;
 use crate::ui::tracks::format_duration_ms;
 use melodia_app::state::AppState;
 use melodia_core::entities::track::TrackSummary;
@@ -134,27 +135,20 @@ pub(super) fn rebuild_rows(
 }
 
 /// Surgically flip `is_favorite` on every visible queue row whose `id` is in
-/// `ids`. Mirrors `crate::ui::tracks::fetch::apply_row_favorite`. We do this
-/// rather than emitting via `sinks.queue` because `with_state_emit` only
-/// publishes the queue VM when `queue.version` changed — a favorite toggle
-/// isn't a queue mutation, so bumping the version would trigger a full row
-/// rebuild for a single-bit change.
+/// `ids`. We do this rather than emitting via `sinks.queue` because
+/// `with_state_emit` only publishes the queue VM when `queue.version` changed —
+/// a favorite toggle isn't a queue mutation, so bumping the version would
+/// trigger a full row rebuild for a single-bit change.
 pub(crate) fn apply_row_favorite(weak: &Weak<AppWindow>, ids: &[i64], fav: bool) {
     let ids: HashSet<i64> = ids.iter().copied().collect();
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        let rows = ui.global::<Queue>().get_rows();
-        let Some(vm) = rows.as_any().downcast_ref::<VecModel<QueueRow>>() else {
-            return;
-        };
-        for i in 0..vm.row_count() {
-            let Some(mut r) = vm.row_data(i) else {
-                continue;
-            };
-            if ids.contains(&i64::from(r.id)) && r.is_favorite != fav {
-                r.is_favorite = fav;
-                vm.set_row_data(i, r);
+        patch_rows_where(&ui.global::<Queue>().get_rows(), "queue favorite patch", |row| {
+            let moved = ids.contains(&i64::from(row.id)) && row.is_favorite != fav;
+            if moved {
+                row.is_favorite = fav;
             }
-        }
+            moved
+        });
     });
 }
 

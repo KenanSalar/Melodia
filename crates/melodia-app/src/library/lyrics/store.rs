@@ -145,8 +145,8 @@ const MAX_BYTES: u64 = 8 * 1024 * 1024;
 /// deleted whatever it found would be a sweep that deleted whatever someone else put there.
 pub(super) fn prune(dir: &Path) -> Result<u32, AppError> {
     let mut sheets: Vec<(SystemTime, u64, PathBuf)> = Vec::new();
-    let mut retired = 0;
-    let mut total = 0;
+    let mut expired = 0;
+    let mut bytes = 0;
 
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
@@ -156,43 +156,55 @@ pub(super) fn prune(dir: &Path) -> Result<u32, AppError> {
         };
         let Ok(meta) = entry.metadata() else { continue };
 
-        if extension == ABSENT_EXT && !still_stands(&path) {
-            // Deleting it *is* the retry: `read` already treats a stale marker as no answer, so
-            // this only stops the directory keeping one per track forever.
-            if fs::remove_file(&path).is_ok() {
-                retired += 1;
-            }
+        if extension == ABSENT_EXT {
+            expired += u32::from(expire_stale_marker(&path));
             continue;
         }
         // **Sheets only, and the markers are not merely uninteresting here.** Both are empty, so
-        // one in this list is retired for no bytes at all and the loop below walks straight on to
-        // the next. Past the budget that wipes every instrumental in the store, a permanent answer
-        // traded for nothing.
+        // one in this list would be retired for no bytes at all and the eviction would walk
+        // straight on to the next. Past the budget that wipes every instrumental in the store, a
+        // permanent answer traded for nothing.
         if extension != SHEET_EXT {
             continue;
         }
 
-        total += meta.len();
+        bytes += meta.len();
         sheets.push((meta.modified().unwrap_or(SystemTime::UNIX_EPOCH), meta.len(), path));
     }
 
-    if total <= MAX_BYTES {
-        return Ok(retired);
-    }
+    Ok(expired + evict_oldest_over_budget(sheets, bytes))
+}
 
-    // Oldest first, which for a cache of answers is least-recently-written rather than
-    // least-recently-read: nothing here is touched on a hit, so a write time is all there is.
+/// Delete a miss marker whose retry window has closed, and say whether it went.
+///
+/// Deleting it *is* the retry: `read` already treats a stale marker as no answer, so this only
+/// stops the directory keeping one per track for good.
+fn expire_stale_marker(path: &Path) -> bool {
+    !still_stands(path) && fs::remove_file(path).is_ok()
+}
+
+/// Delete sheets oldest-first until the store is back inside [`MAX_BYTES`], answering with how
+/// many went. A store already inside its budget is a no-op.
+///
+/// Oldest is least-recently-*written* rather than least-recently-read: nothing here is touched on
+/// a hit, so a write time is all there is.
+fn evict_oldest_over_budget(mut sheets: Vec<(SystemTime, u64, PathBuf)>, mut bytes: u64) -> u32 {
+    if bytes <= MAX_BYTES {
+        return 0;
+    }
     sheets.sort_by_key(|(modified, _, _)| *modified);
+
+    let mut evicted = 0;
     for (_, len, path) in sheets {
-        if total <= MAX_BYTES {
+        if bytes <= MAX_BYTES {
             break;
         }
         if fs::remove_file(&path).is_ok() {
-            total = total.saturating_sub(len);
-            retired += 1;
+            bytes = bytes.saturating_sub(len);
+            evicted += 1;
         }
     }
-    Ok(retired)
+    evicted
 }
 
 /// The extension, if this is a name the store wrote.

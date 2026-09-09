@@ -16,6 +16,7 @@ use serde::Deserialize;
 
 use melodia_core::entities::lyrics::{LyricsAnswer, carries_gloss};
 use melodia_core::error::AppError;
+use melodia_core::utils::fold::fold;
 
 use super::LookupError;
 use super::recording::{Recording, query_artist, query_title};
@@ -314,7 +315,7 @@ fn pick_timed(
     album: &str,
     duration_ms: i64,
 ) -> Option<ApiLyrics> {
-    let album = melodia_core::utils::fold::fold(album);
+    let album = fold(album);
 
     rows.into_iter()
         .filter(|row| {
@@ -346,7 +347,7 @@ fn gloss_rank(row: &ApiLyrics) -> u8 {
 /// than that: two rows the same distance from the track's duration are the same recording twice,
 /// and the release it was ripped from is the only thing left to prefer.
 fn album_rank(row: &ApiLyrics, album: &str) -> u8 {
-    u8::from(album.is_empty() || melodia_core::utils::fold::fold(&row.album_name) != *album)
+    u8::from(album.is_empty() || fold(&row.album_name) != *album)
 }
 
 /// One GET under a cap and behind the pacer, with `None` for the `404` both endpoints spell a miss

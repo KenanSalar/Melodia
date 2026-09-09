@@ -66,7 +66,7 @@ export component VolumePopupHorizontal inherits Rectangle {
         // The popup's right edge sits just left of the disc and centres on it,
         // which puts the slider chrome along the bottom at the disc's own Y and
         // leaves the badge floating above.
-        x: -self.width - 8px;
+        x: -self.width - Theme.popup-gap;
         y: (btn.height - self.height) / 2;
         width: 220px;
         height: 72px;
