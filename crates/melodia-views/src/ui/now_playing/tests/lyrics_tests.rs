@@ -5,20 +5,22 @@
 
 use super::*;
 
+/// One line of words at `at_ms`, with nothing drawn under it.
+fn plain_row(at_ms: i32) -> Row {
+    Row {
+        kind: RowKind::Words,
+        at_ms: Some(at_ms),
+        text: "x".to_owned(),
+        romanization: None,
+        translation: None,
+        lines: 1,
+        romanization_lines: 0,
+        translation_lines: 0,
+    }
+}
+
 fn timed(stamps: &[i32]) -> Vec<Row> {
-    stamps
-        .iter()
-        .map(|at| Row {
-            kind: RowKind::Words,
-            at_ms: Some(*at),
-            text: "x".to_owned(),
-            romanization: None,
-            translation: None,
-            lines: 1,
-            romanization_lines: 0,
-            translation_lines: 0,
-        })
-        .collect()
+    stamps.iter().map(|at| plain_row(*at)).collect()
 }
 
 /// The width the panel reports at its clamp's midpoint, less the scrollbar lane.
@@ -298,25 +300,15 @@ const TOLERANCE: f32 = 0.001;
 fn a_row_with_nothing_under_it_is_its_words_and_its_padding() {
     // The gap between rows is the layout's spacing and belongs to neither of the two it separates,
     // so counting it here would drift the offset table a row further down every line.
-    let rows = timed(&[0]);
-    let Some(row) = rows.first() else {
-        return;
-    };
-    assert!((metrics().row_height(row) - PLAIN_ROW_H).abs() < TOLERANCE);
+    assert!((metrics().row_height(&plain_row(0)) - PLAIN_ROW_H).abs() < TOLERANCE);
 }
 
 #[test]
 fn each_block_under_the_words_charges_the_gap_above_it() {
-    let mut row = Row {
-        kind: RowKind::Words,
-        at_ms: Some(0),
-        text: "x".to_owned(),
-        romanization: Some("x".to_owned()),
-        translation: None,
-        lines: 1,
-        romanization_lines: 1,
-        translation_lines: 0,
-    };
+    let mut row = plain_row(0);
+    row.romanization = Some("x".to_owned());
+    row.romanization_lines = 1;
+
     let romanized = PLAIN_ROW_H + 3.0 + 14.0;
     assert!((metrics().row_height(&row) - romanized).abs() < TOLERANCE, "the romanization");
 
@@ -327,14 +319,16 @@ fn each_block_under_the_words_charges_the_gap_above_it() {
 }
 
 #[test]
-fn a_block_a_row_does_not_have_charges_nothing() {
-    // Zero rows of gloss must cost zero, gap included. Charging the gap regardless puts every row
-    // in an unglossed sheet out by it.
-    let plain = timed(&[0]);
-    let Some(plain) = plain.first() else {
-        return;
-    };
-    assert!((metrics().row_height(plain) - PLAIN_ROW_H).abs() < TOLERANCE);
+fn a_block_a_row_does_not_have_charges_nothing_though_a_later_one_does() {
+    // The absent block is the *middle* one, which is what tells "each part carries the gap above
+    // it" apart from a running sum: charged in order, the missing romanization's gap rides in on
+    // the gloss below it and every bilingual line without a sounding sits out by that much.
+    let mut row = plain_row(0);
+    row.translation = Some("x".to_owned());
+    row.translation_lines = 2;
+
+    let gloss_only = PLAIN_ROW_H + 5.0 + 15.0 * 2.0;
+    assert!((metrics().row_height(&row) - gloss_only).abs() < TOLERANCE);
 }
 
 #[test]
@@ -382,11 +376,7 @@ fn an_empty_sheet_has_no_row_to_click() {
 
 #[test]
 fn a_row_of_words_has_nothing_to_fill() {
-    let rows = timed(&[0]);
-    let Some(row) = rows.first() else {
-        return;
-    };
-    assert!((interlude_progress(row, 500.0) - 0.0).abs() < TOLERANCE);
+    assert!((interlude_progress(&plain_row(0), 500.0) - 0.0).abs() < TOLERANCE);
 }
 
 #[test]

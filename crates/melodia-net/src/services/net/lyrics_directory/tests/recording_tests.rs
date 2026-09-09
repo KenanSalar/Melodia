@@ -107,9 +107,7 @@ fn undercover_is_not_a_cover() {
 
 #[test]
 fn a_marker_word_in_the_title_proper_is_not_a_version_marker() {
-    // The marker is looked for across the whole title, and the core title has its brackets taken
-    // off, so a title whose own words include one used to reduce to exactly its live take. The
-    // count is what separates them: one occurrence against two.
+    // One occurrence against two, the core title being the same either way.
     assert!(
         !same(("Live Echo", "Artist"), ("Live Echo (Live)", "Artist")),
         "a live recording is not the studio cut, whatever the title happens to be called"

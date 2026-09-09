@@ -73,11 +73,13 @@ fn every_popup_that_claims_the_highlight_dismisses_on_focus_loss() {
 #[test]
 fn a_popup_that_delegates_its_guard_forwards_the_id_it_claims() {
     let mut mismatched = Vec::new();
+    let mut delegating = 0usize;
 
     for (path, source) in stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES) {
         if !source.contains(SURFACE_KEY) {
             continue;
         }
+        delegating += 1;
         for id in claimed_ids(&source) {
             if !source.contains(&format!("{SURFACE_KEY}{id}\"")) {
                 mismatched.push(format!("{path}: claims {id:?}"));
@@ -89,5 +91,10 @@ fn a_popup_that_delegates_its_guard_forwards_the_id_it_claims() {
         mismatched.is_empty(),
         "{mismatched:?} hand a `MenuSurface` an id other than the one they claim, so the watcher \
          it mounts can never fire"
+    );
+    assert!(
+        delegating > 0,
+        "no popup delegates its guard any more, so this walk reads nothing — retire it, or fix \
+         the needle it has stopped finding"
     );
 }

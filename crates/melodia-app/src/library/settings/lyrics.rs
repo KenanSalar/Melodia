@@ -2,9 +2,8 @@
 //! written synchronously by the UI callback *before* the persist is spawned, so a reader racing the
 //! disk write sees the new answer rather than the old file.
 //!
-//! **Each setter is one line over a narrowed writer**, as `settings::view` does it. Three functions
-//! that differ only in which field of one struct they assign is exactly the shape a copy lands the
-//! wrong field in, and the narrowed half is what lets a test say so.
+//! **Each setter is one line over a narrowed writer**, as `settings::view` does it, so which field
+//! a switch assigns can be driven without an `AppState`.
 
 use crate::services;
 use crate::state::AppState;

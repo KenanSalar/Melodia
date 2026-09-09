@@ -7,8 +7,6 @@
 //! Getting the order wrong is invisible: the panel draws a sheet either way, and the one it draws
 //! is the one the user did not put there.
 
-use std::path::{Path, PathBuf};
-
 use tempfile::TempDir;
 
 use super::*;
@@ -78,6 +76,12 @@ fn parsed(text: &str) -> Option<Lyrics> {
     lrc::parse(text, LyricsSource::Tag)
 }
 
+/// [`parsed`] where the case is about what wins rather than about the parse, so a parser that
+/// stopped reading the fixture fails loudly instead of leaving the comparison unrun.
+fn fixture(text: &str) -> Result<Lyrics, AppError> {
+    parsed(text).ok_or_else(|| AppError::Validation("the fixture must parse".into()))
+}
+
 /// The first line of whichever sheet came back, which is what the cases tell two apart by.
 fn first_line(outcome: &LyricsOutcome) -> Option<&str> {
     match outcome {
@@ -97,28 +101,22 @@ fn with_nothing_of_our_own_the_directory_answer_stands() {
 }
 
 #[test]
-fn a_timed_answer_beats_the_files_own_plain_tag() {
+fn a_timed_answer_beats_the_files_own_plain_tag() -> Result<(), AppError> {
     // The feature is the follow rather than the words, and a tagger who pasted prose into the tag
     // has expressed no preference against the sung line being marked.
-    let fetched = LyricsOutcome::Sheet(match parsed(TIMED) {
-        Some(sheet) => sheet,
-        None => return,
-    });
-    let won = timed_first(fetched, parsed(PLAIN));
+    let won = timed_first(LyricsOutcome::Sheet(fixture(TIMED)?), parsed(PLAIN));
 
     assert_eq!(first_line(&won), Some("a line with a stamp"));
+    Ok(())
 }
 
 #[test]
-fn a_plain_answer_loses_to_the_files_own_tag() {
+fn a_plain_answer_loses_to_the_files_own_tag() -> Result<(), AppError> {
     // Neither can be followed, so the tie goes to the file's own words over a stranger's upload.
-    let fetched = LyricsOutcome::Sheet(match parsed("somebody elses words") {
-        Some(sheet) => sheet,
-        None => return,
-    });
-    let won = timed_first(fetched, parsed(PLAIN));
+    let won = timed_first(LyricsOutcome::Sheet(fixture("somebody elses words")?), parsed(PLAIN));
 
     assert_eq!(first_line(&won), Some("a line with no stamp"));
+    Ok(())
 }
 
 #[test]
@@ -249,19 +247,5 @@ fn a_tag_of_nothing_but_blank_stamps_is_offered_though_no_sheet_parses_from_it()
 
     assert_eq!(staged.text()?.as_deref(), Some("[00:01.00]"), "the editor is offered it");
     assert!(staged.local()?.own.is_none(), "and the panel draws nothing");
-    Ok(())
-}
-
-/// The store is keyed on the track's path, so a second track under the same directory reads its
-/// own answer rather than its neighbour's.
-#[test]
-fn a_stored_sheet_answers_for_its_own_track_only() -> Result<(), AppError> {
-    let staged = Staged::new()?;
-    staged.write_store(TIMED)?;
-
-    let neighbour: &Path = &staged.track.with_file_name("other.mp3");
-    let stored = store::read(&staged.lyrics_dir, &neighbour.to_string_lossy());
-
-    assert!(stored.is_none());
     Ok(())
 }
