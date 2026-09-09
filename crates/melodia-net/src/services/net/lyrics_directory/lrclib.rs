@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-use melodia_core::entities::lyrics::LyricsAnswer;
+use melodia_core::entities::lyrics::{LyricsAnswer, carries_gloss};
 use melodia_core::error::AppError;
 
 use super::LookupError;
@@ -116,6 +116,21 @@ impl ApiLyrics {
         (self.duration.max(0.0) * 1000.0 - track_ms).abs()
     }
 
+    /// [`Self::distance_ms`] in whole seconds, which is the resolution the choice is made at.
+    ///
+    /// The directory files a length per upload and a tag carries one per file, and neither is
+    /// measured against the other; below a second the difference between two rows says nothing
+    /// about which is the better sheet. Saturates rather than wrapping, and the filter has already
+    /// bounded what reaches it.
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "non-negative by `abs`, and bounded by `DURATION_TOLERANCE_MS` before it is read"
+    )]
+    fn second_off(&self, duration_ms: i64) -> u32 {
+        (self.distance_ms(duration_ms) / 1000.0) as u32
+    }
+
     /// What this row claims to be, for [`Recording::matches`] to check.
     fn recording(&self) -> Recording {
         Recording::new(&self.track_name, &self.artist_name)
@@ -124,9 +139,9 @@ impl ApiLyrics {
 
 /// Asks the directory about one track.
 ///
-/// The signature first, and the index only for what it could not answer: a timed sheet. So an
-/// ordinary hit still costs one request, and the second is spent exactly where the first left the
-/// panel with words it cannot follow.
+/// The signature first, and the index only for what it could not answer: a timed sheet, or a
+/// glossed one. So an ordinary hit still costs one request, and the second is spent exactly where
+/// the first left the panel something a reader cannot use.
 ///
 /// `Ok(None)` is a miss rather than a failure, which is what a `404` means here and the majority
 /// of what this function returns for an ordinary library. Every other non-success status is an
@@ -140,16 +155,13 @@ pub(super) async fn fetch(
     duration_ms: i64,
 ) -> Result<Option<LyricsAnswer>, LookupError> {
     let exact = get_exact(client, pacer, title, artist, album, duration_ms).await?;
-    // Through `is_synced` rather than a presence test: the directory answers a plain-only row with
-    // an empty `syncedLyrics` as readily as with a null one, and a search skipped on that leaves
-    // the panel a page it cannot follow with a timed sheet one request away.
-    if exact.as_ref().is_some_and(|answer| answer.is_synced() || answer.instrumental) {
+    if exact.as_ref().is_some_and(|answer| answer.instrumental || settles_it(answer)) {
         return Ok(exact);
     }
 
     match search_timed(client, pacer, title, artist, album, duration_ms).await {
-        Ok(Some(timed)) => Ok(Some(timed)),
-        Ok(None) => Ok(exact),
+        Ok(Some(timed)) if worth_taking(exact.as_ref(), &timed) => Ok(Some(timed)),
+        Ok(Some(_) | None) => Ok(exact),
         // **A refusal ends the lookup whatever the signature found.** The index request would be
         // one more knock on a door we have just been told is shut, and the pacer would refuse it
         // anyway; reporting it is what lets the caller say so rather than claim a miss.
@@ -162,6 +174,39 @@ pub(super) async fn fetch(
             Ok(exact)
         }
         Err(e) => Err(e),
+    }
+}
+
+/// Whether the signature's answer leaves the index nothing to add.
+///
+/// **A timed sheet used to settle it on its own, and the duration is why that was not enough.**
+/// The directory files several uploads per recording and only some gloss their lines, so which one
+/// the signature returns comes down to how the track's length rounded to the second — a track half
+/// a second either side of a boundary gets a different upload, and the plain one is as likely as
+/// not. Asking the index costs a request and buys the gloss back.
+///
+/// **Gated on the words not being Latin**, which is what keeps that request off most of a library:
+/// a gloss is a translation *out of* the language sung, and the directories carry them for the
+/// scripts a reader cannot follow. `is_ascii` is the same cheap question the resolver already asks
+/// before it romanizes, and it fails toward the extra request rather than away from it.
+fn settles_it(answer: &LyricsAnswer) -> bool {
+    // An untimed sheet leaves the index its original errand, whatever else it carries.
+    if !answer.is_synced() {
+        return false;
+    }
+    answer.has_gloss() || answer.text().is_some_and(str::is_ascii)
+}
+
+/// Whether the index's row is worth taking over what the signature answered.
+///
+/// **A timed sheet beats no sheet and an untimed one**, which is what the index was added for.
+/// Against a sheet that is *already* timed the bar is the gloss: both are followable, and swapping
+/// one for the other on anything less would trade a length the signature matched for one merely
+/// inside the window.
+fn worth_taking(exact: Option<&LyricsAnswer>, found: &LyricsAnswer) -> bool {
+    match exact {
+        Some(answer) if answer.is_synced() => found.has_gloss(),
+        _ => true,
     }
 }
 
@@ -270,10 +315,23 @@ fn pick_timed(
                 && ours.matches(&row.recording())
         })
         .min_by(|a, b| {
-            a.distance_ms(duration_ms)
-                .total_cmp(&b.distance_ms(duration_ms))
+            a.second_off(duration_ms)
+                .cmp(&b.second_off(duration_ms))
+                .then_with(|| gloss_rank(a).cmp(&gloss_rank(b)))
                 .then_with(|| album_rank(a, &album).cmp(&album_rank(b, &album)))
+                .then_with(|| a.distance_ms(duration_ms).total_cmp(&b.distance_ms(duration_ms)))
         })
+}
+
+/// `0` where the row glosses its lines, `1` otherwise.
+///
+/// **Ranked above the album and under the second**, which is the order the three answer in. Two
+/// uploads whose lengths agree to the second are the same recording twice and the choice between
+/// them is what they carry, so a fifth of a second must not decide it — that is noise, and it is
+/// exactly what handed a reader the one upload of six with no translation in it. A row a whole
+/// second further out is a different matter and still loses.
+fn gloss_rank(row: &ApiLyrics) -> u8 {
+    u8::from(!row.synced_lyrics.as_deref().is_some_and(carries_gloss))
 }
 
 /// `0` where the row is filed under the album in hand, `1` otherwise. A tie-break and never more

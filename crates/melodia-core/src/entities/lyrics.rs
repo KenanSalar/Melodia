@@ -147,6 +147,53 @@ impl LyricsAnswer {
     pub fn is_synced(&self) -> bool {
         filled(self.synced.as_deref()).is_some()
     }
+
+    /// Whether the sheet it carries glosses its lines.
+    ///
+    /// Read off the text rather than a field of its own: the directories carry no such column, and
+    /// a bilingual upload is one that put the gloss in the string.
+    #[must_use]
+    pub fn has_gloss(&self) -> bool {
+        self.text().is_some_and(carries_gloss)
+    }
+}
+
+/// What a bilingual sheet puts between a line and its translation.
+///
+/// No part of the format, but the directories carry sheets written this way and left in the string
+/// the gloss is drawn as the tail of the line it is glossing, which is the one thing it must not
+/// look like.
+///
+/// **Here rather than beside the parser** because the client that picks a row has to read a gloss
+/// the same way the parser that splits one will: the directory files several uploads per recording
+/// and only some carry a translation, so choosing between them means asking this question of raw
+/// text, one crate before anything is parsed.
+pub const TRANSLATION_MARK: char = '^';
+
+/// Splits one line into the words and the gloss under them.
+///
+/// **Only a caret with text either side is a separator; a bare one is a character.** Falls back to
+/// the whole line wherever it is not acting as one, so a sheet that simply contains a caret keeps
+/// it.
+#[must_use]
+pub fn split_gloss(line: &str) -> (&str, Option<&str>) {
+    let Some((sung, gloss)) = line.split_once(TRANSLATION_MARK) else {
+        return (line, None);
+    };
+    let (sung, gloss) = (sung.trim_end(), gloss.trim());
+    if sung.is_empty() || gloss.is_empty() {
+        return (line, None);
+    }
+    (sung, Some(gloss))
+}
+
+/// Whether any line of `text` carries a gloss.
+///
+/// Asked of raw LRC, stamps and all: [`split_gloss`] reads the tail of a line and cares nothing
+/// for what precedes the caret, so this answers before a sheet is parsed.
+#[must_use]
+pub fn carries_gloss(text: &str) -> bool {
+    text.lines().any(|line| split_gloss(line).1.is_some())
 }
 
 #[cfg(test)]

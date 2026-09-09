@@ -10,7 +10,7 @@
 
 use std::borrow::Cow;
 
-use melodia_core::entities::lyrics::{LyricLine, Lyrics, LyricsSource};
+use melodia_core::entities::lyrics::{LyricLine, Lyrics, LyricsSource, split_gloss};
 
 /// The identification tags the format defines. A line that is nothing but one of these is
 /// metadata, and is dropped rather than sung.
@@ -19,13 +19,6 @@ use melodia_core::entities::lyrics::{LyricLine, Lyrics, LyricsSource};
 /// `[Chorus]` and `[Verse 2]` markers: those carry no colon and no known key, and a reader wants
 /// them on the page.
 const ID_TAG_KEYS: [&str; 9] = ["al", "ar", "au", "by", "length", "offset", "re", "ti", "ve"];
-
-/// What a bilingual sheet puts between a line and its translation.
-///
-/// No part of the format, but the directories carry sheets written this way and left in the string
-/// the gloss is drawn as the tail of the line it is glossing, which is the one thing it must not
-/// look like. Only a caret with text either side is a separator; a bare one is a character.
-const TRANSLATION_MARK: char = '^';
 
 /// Parses a sheet, or `None` where there is nothing to show.
 ///
@@ -111,19 +104,10 @@ pub(super) fn is_timed(text: &str) -> bool {
     text.lines().any(|line| !split_stamps(line).0.is_empty())
 }
 
-/// Splits a line into the words and the gloss under them, where the sheet carries one.
-///
-/// Falls back to the whole line wherever the caret is not acting as a separator, so a sheet that
-/// simply contains one keeps it.
+/// [`split_gloss`] with both halves owned, which is what the two builders above store.
 fn split_translation(line: &str) -> (String, Option<String>) {
-    let Some((sung, gloss)) = line.split_once(TRANSLATION_MARK) else {
-        return (line.to_owned(), None);
-    };
-    let (sung, gloss) = (sung.trim_end(), gloss.trim());
-    if sung.is_empty() || gloss.is_empty() {
-        return (line.to_owned(), None);
-    }
-    (sung.to_owned(), Some(gloss.to_owned()))
+    let (sung, gloss) = split_gloss(line);
+    (sung.to_owned(), gloss.map(str::to_owned))
 }
 
 /// The `[offset:±ms]` tag, or zero.
