@@ -20,7 +20,7 @@
 use std::rc::Rc;
 use std::time::Instant;
 
-use slint::{ComponentHandle, SharedString};
+use slint::{ComponentHandle, Model};
 
 use super::measure::wrapped_lines;
 use super::{LyricsUi, Metrics, Row, RowKind};
@@ -34,6 +34,14 @@ const PIN_HOLDS_FOR_MS: f64 = 2_000.0;
 
 /// Re-measure every row against the current width, rebuilding the model and the offset table.
 ///
+/// **Most calls have nothing to publish, and that is what the early return is for.** The panel
+/// reports its width on every tick, so this runs 30 times a second for as long as a resize drag
+/// lasts — while [`wrapped_lines`] buckets to one, two or three, so almost every one of those
+/// widths lays the sheet out exactly as the last did. Past the guard the rows are written
+/// *through* rather than replaced: `set_vec` resets the model, which clears the repeater's
+/// instances and rebuilds every row's item tree, and on an un-virtualized `for` that is the whole
+/// sheet.
+///
 /// **Ends by restating the sung line**, which is an offset into the table this just moved, and
 /// which on a fresh sheet has not been answered at all. The panel's tick is the other caller of
 /// [`follow`] and it cannot cover either case: a sheet is fetched again on every mount of that
@@ -45,67 +53,104 @@ pub(super) fn republish(ui: &AppWindow, ly: &Rc<LyricsUi>) {
     // answer: a row whose romanization is suppressed has to be shorter by exactly what the panel
     // stops drawing, and both halves read this same pass's decision.
     let romanization_shown = ui.global::<Lyrics>().get_romanization_shown();
+    // A flip changes what every row *draws*, not only how tall it is, so the text goes out again
+    // with the counts.
+    let toggle_moved = ly.published_romanization.replace(romanization_shown) != romanization_shown;
 
     let mut rows = ly.rows.borrow_mut();
-    let mut offsets = Vec::with_capacity(rows.len());
-    let mut published = Vec::with_capacity(rows.len());
-    let mut top = 0.0_f32;
+    // A length the model does not share is a different sheet, which has to be replaced rather
+    // than written through. It is also what catches a fresh sheet whose measured counts happen to
+    // match the ones `Row::words` seeds.
+    let replace = ly.model.row_count() != rows.len();
+    let mut heights_moved = false;
 
     for row in rows.iter_mut() {
-        row.lines = wrapped_lines(&row.text, width, metrics.font_size);
+        let lines = wrapped_lines(&row.text, width, metrics.font_size);
         // Neither of these goes through `wrapped_lines`' floor of one, which is for a blank line a
         // plain sheet spaces its verses with. A row without one has no slot for it at all.
-        row.romanization_lines = row
+        let romanization_lines = row
             .romanization
             .as_deref()
             .filter(|_| romanization_shown)
             .map_or(0, |sound| wrapped_lines(sound, width, metrics.romanization_font_size));
-        row.translation_lines = row
+        let translation_lines = row
             .translation
             .as_deref()
             .map_or(0, |gloss| wrapped_lines(gloss, width, metrics.translation_font_size));
 
+        heights_moved |= (lines, romanization_lines, translation_lines)
+            != (row.lines, row.romanization_lines, row.translation_lines);
+        row.lines = lines;
+        row.romanization_lines = romanization_lines;
+        row.translation_lines = translation_lines;
+    }
+
+    if !replace && !toggle_moved && !heights_moved {
+        drop(rows);
+        follow(ui, ly);
+        return;
+    }
+
+    // Off the counts the pass above wrote, so the table and the drawn rows cannot disagree.
+    let mut offsets = Vec::with_capacity(rows.len());
+    let mut top = 0.0_f32;
+    for row in rows.iter() {
         offsets.push(top);
         // The layout's own `spacing`, which sits between rows rather than inside one.
         top += metrics.row_height(row) + metrics.row_gap;
-        published.push(LyricRow {
-            text: SharedString::from(row.text.as_str()),
-            romanization: row
-                .romanization
-                .as_deref()
-                .filter(|_| romanization_shown)
-                .map(SharedString::from)
-                .unwrap_or_default(),
-            translation: row.translation.as_deref().map(SharedString::from).unwrap_or_default(),
-            at_ms: row.at_ms.unwrap_or(-1),
-            is_interlude: matches!(row.kind, RowKind::Interlude { .. }),
-            line_count: i32::from(row.lines),
-            romanization_line_count: i32::from(row.romanization_lines),
-            translation_line_count: i32::from(row.translation_lines),
-        });
     }
+
+    let published: Vec<LyricRow> =
+        rows.iter().map(|row| published_row(row, romanization_shown)).collect();
     drop(rows);
 
     *ly.offsets.borrow_mut() = offsets;
-    ly.model.set_vec(published);
+    if replace {
+        ly.model.set_vec(published);
+    } else {
+        for (index, row) in published.into_iter().enumerate() {
+            ly.model.set_row_data(index, row);
+        }
+    }
     follow(ui, ly);
+}
+
+/// A row as the panel draws it, with the romanization suppressed where the toggle says so.
+fn published_row(row: &Row, romanization_shown: bool) -> LyricRow {
+    LyricRow {
+        text: row.text.clone(),
+        romanization: row
+            .romanization
+            .as_ref()
+            .filter(|_| romanization_shown)
+            .cloned()
+            .unwrap_or_default(),
+        translation: row.translation.clone().unwrap_or_default(),
+        at_ms: row.at_ms.unwrap_or(-1),
+        is_interlude: matches!(row.kind, RowKind::Interlude { .. }),
+        line_count: i32::from(row.lines),
+        romanization_line_count: i32::from(row.romanization_lines),
+        translation_line_count: i32::from(row.translation_lines),
+    }
 }
 
 /// Move the sung line on, interpolating between the position channel's roughly one-second ticks.
 pub(super) fn follow(ui: &AppWindow, ly: &Rc<LyricsUi>) {
     let player = ui.global::<Player>();
     let reported = player.get_position_ms();
-    let vm = player.get_vm();
+    // The two projections rather than `get_vm()`, which clones the whole view model — sixteen
+    // strings and two images — for these two numbers, on every tick.
+    let is_playing = player.get_vm_is_playing();
 
     // A changed reading re-anchors the clock; an unchanged one is interpolated from the last.
     // **A paused player re-anchors on every pass**, so the interpolation cannot run on past the
     // position it is holding at: the clock is the only thing that says the song stopped, the
     // reported position simply stops changing.
-    if reported != ly.anchor_ms.get() || !vm.is_playing {
+    if reported != ly.anchor_ms.get() || !is_playing {
         ly.anchor_ms.set(reported);
         ly.anchor_at.set(Instant::now());
     }
-    let speed = f64::from(vm.playback_speed).max(0.0);
+    let speed = f64::from(player.get_vm_playback_speed()).max(0.0);
     let advanced = ly.anchor_at.get().elapsed().as_secs_f64() * 1000.0 * speed;
     let position = f64::from(ly.anchor_ms.get()) + advanced;
 

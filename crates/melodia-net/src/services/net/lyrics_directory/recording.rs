@@ -74,17 +74,7 @@ impl Recording {
                 .filter(|(_, count)| *count > 0)
                 .collect(),
             core_title: squeeze(&strip_brackets(&folded_title)),
-            // **Split before folding, for the NUL.** The fold turns one into a space so it reads
-            // as a separator rather than as a glyph, which is right for a substring filter and
-            // wrong here: past it, `J+1<NUL>DrDisrespect` is one credit with a space in it, and
-            // a file crediting only the second of them stops matching its own row.
-            artists: artist
-                .split(['/', '\0'])
-                .map(fold)
-                .flat_map(|part| split_credits(&part))
-                .map(|name| squeeze(&name))
-                .filter(|name| !name.is_empty())
-                .collect(),
+            artists: credits(artist),
         }
     }
 
@@ -155,11 +145,41 @@ pub(super) fn query_artist(artist: &str) -> &str {
     }
 }
 
+/// Everyone credited on one artist string, folded and squeezed.
+///
+/// **Split before folding, for the NUL.** The fold turns one into a space so it reads as a
+/// separator rather than as a glyph, which is right for a substring filter and wrong here: past it,
+/// `J+1<NUL>DrDisrespect` is one credit with a space in it, and a file crediting only the second of
+/// them stops matching its own row.
+///
+/// A loop rather than an iterator chain because [`split_credits`] borrows from the folded string,
+/// which a `map(fold)` would drop before the split could read it.
+fn credits(artist: &str) -> BTreeSet<String> {
+    let mut names = BTreeSet::new();
+    for part in artist.split(['/', '\0']) {
+        let folded = fold(part);
+        for credit in split_credits(&folded) {
+            let name = squeeze(credit);
+            if !name.is_empty() {
+                names.insert(name);
+            }
+        }
+    }
+    names
+}
+
 /// The credits in one folded artist string.
-fn split_credits(text: &str) -> Vec<String> {
-    let mut parts = vec![text.to_owned()];
+///
+/// Borrowed rather than owned through the rounds: every separator used to re-own every part it had
+/// not split, so an ordinary single credit cost nine allocations to come back as itself. The caller
+/// squeezes what it keeps, and owns there.
+fn split_credits(text: &str) -> Vec<&str> {
+    let mut parts = vec![text];
+    let mut next = Vec::new();
     for split in ARTIST_SPLITS {
-        parts = parts.iter().flat_map(|part| part.split(split)).map(str::to_owned).collect();
+        next.clear();
+        next.extend(parts.iter().flat_map(|part| part.split(split)));
+        std::mem::swap(&mut parts, &mut next);
     }
     parts
 }

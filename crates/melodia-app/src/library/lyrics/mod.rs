@@ -32,6 +32,7 @@ mod sidecar;
 mod store;
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use crate::state::AppState;
 use melodia_core::entities::lyrics::{Lyrics, LyricsOutcome};
@@ -82,12 +83,12 @@ async fn romanized(state: &AppState, outcome: LyricsOutcome) -> Result<LyricsOut
 /// rather than one per source.
 async fn resolve(state: &AppState, track: &TrackSummary) -> Result<LyricsOutcome, AppError> {
     let path = PathBuf::from(&track.file_path);
-    let lyrics_dir = state.paths.lyrics_dir.clone();
+    let paths = Arc::clone(&state.paths);
     let track_path = track.file_path.clone();
 
     let local = state
         .runtime
-        .spawn_blocking(move || read_local(&path, &lyrics_dir, &track_path))
+        .spawn_blocking(move || read_local(&path, &paths.lyrics_dir, &track_path))
         .await
         .map_err(AppError::io_source)??;
 
@@ -126,12 +127,12 @@ async fn resolve(state: &AppState, track: &TrackSummary) -> Result<LyricsOutcome
 /// it worth keeping.
 pub async fn resident_text(state: &AppState, track_path: &str) -> Result<Option<String>, AppError> {
     let path = PathBuf::from(track_path);
-    let lyrics_dir = state.paths.lyrics_dir.clone();
+    let paths = Arc::clone(&state.paths);
     let track_path = track_path.to_owned();
 
     state
         .runtime
-        .spawn_blocking(move || read_local_text(&path, &lyrics_dir, &track_path))
+        .spawn_blocking(move || read_local_text(&path, &paths.lyrics_dir, &track_path))
         .await
         .map_err(AppError::io_source)?
 }
@@ -234,12 +235,12 @@ fn online_lookup_enabled(state: &AppState) -> bool {
 /// in the store until it ages out. Touches only the store: a sidecar and a lyrics tag are the
 /// user's own files, and a refresh that deleted either would be a delete nobody asked for.
 pub async fn forget(state: &AppState, track_path: &str) -> Result<(), AppError> {
-    let lyrics_dir = state.paths.lyrics_dir.clone();
+    let paths = Arc::clone(&state.paths);
     let track_path = track_path.to_owned();
 
     state
         .runtime
-        .spawn_blocking(move || store::forget(&lyrics_dir, &track_path))
+        .spawn_blocking(move || store::forget(&paths.lyrics_dir, &track_path))
         .await
         .map_err(AppError::io_source)?
 }

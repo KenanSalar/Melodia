@@ -286,7 +286,14 @@ export component LyricsPanel inherits Rectangle {
                 // Keep the eased position with the reader, so resuming glides from where they
                 // left the panel rather than from where the song was.
                 root.scroll-y = -sv.viewport-y;
-            } else {
+            } else if (abs(root.target-y - root.scroll-y) > 1px) {
+                // **Gated, because the step is geometric and so never arrives.** Ungated it kept
+                // moving `scroll-y` by less than a pixel for around a second after every line
+                // change, and FemtoVG has no partial rendering, so each of those writes repainted
+                // the whole window for motion the reader cannot see. A pixel is what `settled`
+                // below already calls arrived — spelled again rather than read off it, that flag
+                // being last tick's answer and the target having just moved on the tick that
+                // matters.
                 root.scroll-y += (root.target-y - root.scroll-y) * root.follow-step;
                 sv.viewport-y = -root.scroll-y;
             }

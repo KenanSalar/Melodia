@@ -51,14 +51,25 @@ pub fn parse(text: &str, source: LyricsSource) -> Option<Lyrics> {
             continue;
         }
         let stripped = strip_word_stamps(rest);
-        let (sung, gloss) = split_translation(stripped.trim());
-        timed.extend(stamps.into_iter().map(|at| LyricLine {
-            at_ms: Some(at.saturating_sub(offset).max(0)),
-            end_ms: None,
-            text: sung.clone(),
-            romanization: None,
-            translation: gloss.clone(),
-        }));
+        let (mut sung, mut gloss) = split_translation(stripped.trim());
+        // **Moved into the last stamp rather than cloned for all of them.** Nearly every line of
+        // nearly every sheet carries exactly one, where a clone-then-drop is the whole cost; the
+        // several-stamps case is a chorus written once, and it still clones for the ones before.
+        let last = stamps.len() - 1;
+        for (index, at) in stamps.into_iter().enumerate() {
+            let (text, translation) = if index == last {
+                (std::mem::take(&mut sung), gloss.take())
+            } else {
+                (sung.clone(), gloss.clone())
+            };
+            timed.push(LyricLine {
+                at_ms: Some(at.saturating_sub(offset).max(0)),
+                end_ms: None,
+                text,
+                romanization: None,
+                translation,
+            });
+        }
     }
 
     if timed.is_empty() {

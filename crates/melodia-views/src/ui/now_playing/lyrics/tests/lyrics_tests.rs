@@ -14,7 +14,7 @@ fn plain_row(at_ms: i32) -> Row {
     Row {
         kind: RowKind::Words,
         at_ms: Some(at_ms),
-        text: "x".to_owned(),
+        text: "x".into(),
         romanization: None,
         translation: None,
         lines: 1,
@@ -72,7 +72,7 @@ fn an_untimed_sheet_sings_nothing() {
     let rows = vec![Row {
         kind: RowKind::Words,
         at_ms: None,
-        text: "a".to_owned(),
+        text: "a".into(),
         romanization: None,
         translation: None,
         lines: 1,
@@ -310,13 +310,13 @@ fn a_row_with_nothing_under_it_is_its_words_and_its_padding() {
 #[test]
 fn each_block_under_the_words_charges_the_gap_above_it() {
     let mut row = plain_row(0);
-    row.romanization = Some("x".to_owned());
+    row.romanization = Some("x".into());
     row.romanization_lines = 1;
 
     let romanized = PLAIN_ROW_H + 3.0 + 14.0;
     assert!((metrics().row_height(&row) - romanized).abs() < TOLERANCE, "the romanization");
 
-    row.translation = Some("x".to_owned());
+    row.translation = Some("x".into());
     row.translation_lines = 2;
     let both = romanized + 5.0 + 15.0 * 2.0;
     assert!((metrics().row_height(&row) - both).abs() < TOLERANCE, "and the gloss beneath it");
@@ -328,7 +328,7 @@ fn a_block_a_row_does_not_have_charges_nothing_though_a_later_one_does() {
     // it" apart from a running sum: charged in order, the missing romanization's gap rides in on
     // the gloss below it and every bilingual line without a sounding sits out by that much.
     let mut row = plain_row(0);
-    row.translation = Some("x".to_owned());
+    row.translation = Some("x".into());
     row.translation_lines = 2;
 
     let gloss_only = PLAIN_ROW_H + 5.0 + 15.0 * 2.0;

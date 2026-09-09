@@ -18,7 +18,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Instant;
 
-use slint::{ComponentHandle, ModelRc, VecModel};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use super::NowPlayingState;
 use crate::ui::settings_bind;
@@ -52,15 +52,19 @@ enum RowKind {
 }
 
 /// One row as the panel draws it. An interlude carries no text and none of the two lines under it.
+///
+/// **The three texts are `SharedString` so that publishing a row is a refcount bump.** They are
+/// handed to the model on every re-measure, and a `String` here meant a second heap copy of the
+/// whole sheet each time — and a second resident copy of it for as long as the panel was open.
 struct Row {
     kind: RowKind,
     /// `None` on an untimed sheet, the two never mixing within one sheet.
     at_ms: Option<i32>,
-    text: String,
+    text: SharedString,
     /// How the words sound, for a script that does not spell it. `None` for a Latin line.
-    romanization: Option<String>,
+    romanization: Option<SharedString>,
     /// The gloss a bilingual sheet carries under the words, drawn at its own size beneath them.
-    translation: Option<String>,
+    translation: Option<SharedString>,
     /// Wrapped line count, and so this row's height in `Lyrics.line-height` units.
     lines: u8,
     /// The same for the romanization, in `Lyrics.romanization-line-height` units. Zero without
@@ -77,9 +81,9 @@ impl Row {
         Self {
             kind: RowKind::Words,
             at_ms,
-            text: line.text.clone(),
-            romanization: line.romanization.clone(),
-            translation: line.translation.clone(),
+            text: SharedString::from(line.text.as_str()),
+            romanization: line.romanization.as_deref().map(SharedString::from),
+            translation: line.translation.as_deref().map(SharedString::from),
             lines: 1,
             romanization_lines: 0,
             translation_lines: 0,
@@ -95,7 +99,7 @@ impl Row {
         Self {
             kind: RowKind::Interlude { until_ms },
             at_ms: Some(from_ms),
-            text: String::new(),
+            text: SharedString::new(),
             romanization: None,
             translation: None,
             lines: 1,
@@ -171,6 +175,9 @@ pub(crate) struct LyricsUi {
     metrics: Metrics,
     /// Panel width last reported, in logical pixels.
     width: Cell<f32>,
+    /// Which way the romanization toggle stood when the model was last written, so a re-measure
+    /// can tell a flip from a width that moved and publish only for the former.
+    published_romanization: Cell<bool>,
     /// The last position the bridge published, and when it was seen. Together they interpolate a
     /// roughly one-second tick into something a highlight can follow.
     anchor_ms: Cell<i32>,
@@ -215,6 +222,7 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
         offsets: RefCell::new(Vec::new()),
         metrics: Metrics::from_global(&global),
         width: Cell::new(ASSUMED_WIDTH),
+        published_romanization: Cell::new(state.lyrics_romanization_shown.get()),
         anchor_ms: Cell::new(0),
         anchor_at: Cell::new(Instant::now()),
         pinned: Cell::new(None),
