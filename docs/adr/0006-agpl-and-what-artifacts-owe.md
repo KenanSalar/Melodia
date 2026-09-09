@@ -42,6 +42,14 @@ obligation had been outstanding for longer than the dependency that surfaced it.
 carries both texts, `ATTRIBUTION.txt` names the four crates they cover, and the rule it states has
 moved from "what this repository modifies or carries" to that plus "what it links under copyleft".
 
+**Amendment, 2026-09-09:** the rule grew a fourth clause, and this one is not about copyleft.
+`uroman`, the general romanization engine beside `kakasi`, is Apache-2.0 and ships a NOTICE file,
+which section 4(d) asks be reproduced wherever the work is redistributed. Nothing about permissive
+terms decides that: the obligation is the NOTICE's existence, so an entry is owed for a crate whose
+licence would otherwise leave it among the hundreds that are not listed. `ATTRIBUTION.txt` now names
+five crates, four for their licence and one for its NOTICE, and states the rule as what this
+repository modifies, carries a copy of, links under copyleft, or ships a NOTICE for.
+
 This ADR was written in September 2026. The licence was chosen before the repository's first commit
 and no argument for it exists in the tree; the obligations half is reconstructed from
 `.claude/rules/ci-packaging.md` and the packaging tests, and the choice itself from the maintainer's

@@ -3,9 +3,9 @@ Third-party software bundled with Melodia
 
 Melodia links the work below into its executable -- the fonts and the Ko-fi mark
 are compiled in rather than loaded from disk, the winit fork is built from this
-tree rather than fetched from crates.io, and some crates are fetched from
-crates.io but ask for more than a permissive license does -- so every artifact
-we ship (tarball, AppImage, RPM, DEB and MSI) is a distribution of it. The full
+tree rather than fetched from crates.io, and some crates fetched from crates.io
+ask something of whoever ships a binary containing them -- so every artifact we
+ship (tarball, AppImage, RPM, DEB and MSI) is a distribution of it. The full
 license text for each sits beside this file, except where an entry says there is
 none to ship.
 
@@ -192,21 +192,34 @@ Files: none in this repository -- linked from crates.io at build time.
 uroman
 ------
 Version 0.7.0, by fulm-o, after the uroman project.
-https://github.com/fulm-o/uroman-rs
+https://github.com/stellanomia/uroman-rs
 
 Licensed under the Apache License, Version 2.0 -- full text in Apache-2.0.txt,
 the same copy the winit fork above is under.
 
 It romanizes a lyric line written in a script the reader cannot sound out. The
 crate ships a NOTICE file, which section 4(d) asks be reproduced wherever the
-work is redistributed; this entry is that copy. It is the only entry here on
-permissive terms, and it is here for the NOTICE rather than for the license.
+work is redistributed; this entry is that copy, rewrapped and not otherwise
+altered. It is the only entry here on permissive terms, and it is here for the
+NOTICE rather than for the license.
 
   uroman-rs
   Copyright 2025 fulm-o
 
   This product is a Rust implementation of the 'uroman' universal romanizer.
-  It is licensed under the Apache License, Version 2.0.
+  It is licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+
+  ==========================================================================
 
   This product contains code derived from the 'uroman' software, which is
   subject to the following license:

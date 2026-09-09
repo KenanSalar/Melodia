@@ -82,6 +82,16 @@ impl Recording {
         }
     }
 
+    /// Whether this side is comparable at all: the half of [`Self::matches`] that asks about one
+    /// recording rather than about a pair.
+    ///
+    /// A title that is nothing but a bracketed aside leaves no core title, and a credit that is
+    /// nothing but separators leaves no artists. Neither can equal anything, which is why the
+    /// caller checks it before spending a request rather than after reading the answer.
+    pub(super) fn can_match(&self) -> bool {
+        !self.core_title.is_empty() && !self.artists.is_empty()
+    }
+
     /// Whether `other` is this recording under somebody else's tags.
     ///
     /// The title has to be the same words and the same version; the credits have to be one side's
@@ -89,14 +99,14 @@ impl Recording {
     /// under "Dominic Strike, Euphoria" is this track where the file says only the first of them,
     /// and a file crediting a guest the row omits is the same case mirrored.
     pub(super) fn matches(&self, other: &Self) -> bool {
-        if self.core_title.is_empty() || self.core_title != other.core_title {
+        if !self.can_match() || !other.can_match() {
             return false;
         }
-        if self.markers != other.markers {
+        if self.core_title != other.core_title || self.markers != other.markers {
             return false;
         }
         let (ours, theirs) = (&self.artists, &other.artists);
-        !ours.is_empty() && !theirs.is_empty() && (ours.is_subset(theirs) || theirs.is_subset(ours))
+        ours.is_subset(theirs) || theirs.is_subset(ours)
     }
 }
 

@@ -3,8 +3,9 @@ import { LyricRow } from "../models.slint";
 // What the lyrics panel is showing, and why.
 //
 // A state rather than a handful of bools: they are mutually exclusive, and a set of flags can
-// spell combinations none of them means. Rust owns every one of them except `shown`, which the
-// lyrics menu writes directly so the column swaps on the click rather than after a round trip.
+// spell combinations none of them means. Rust owns every property here but the two the lyrics
+// menu writes directly, `shown` and `romanization-shown`, so each swaps on the click rather than
+// after a round trip.
 export enum LyricsState {
     // The online lookup is off and nothing local answered. The one state whose copy names a
     // setting, since it is the only one the user can do something about from here.

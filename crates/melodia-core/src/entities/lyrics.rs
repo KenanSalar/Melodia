@@ -142,7 +142,7 @@ impl LyricsAnswer {
     /// caller that consumes it will. A present-but-blank `synced` tested for presence alone ends
     /// the search on a sheet [`Self::text`] then declines to hand over.
     #[must_use]
-    pub fn is_timed(&self) -> bool {
+    pub fn is_synced(&self) -> bool {
         filled(self.synced.as_deref()).is_some()
     }
 }

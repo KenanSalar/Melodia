@@ -100,6 +100,9 @@ impl ApiLyrics {
     }
 
     /// Whether this row carries timings, which is the only thing the index is asked for.
+    ///
+    /// [`LyricsAnswer::is_synced`] asks it of a converted answer and cannot be reached from here:
+    /// the row is filtered while it still carries the duration and album the ranking below needs.
     fn is_timed(&self) -> bool {
         self.synced_lyrics.as_deref().is_some_and(|text| !text.trim().is_empty())
     }
@@ -137,10 +140,10 @@ pub(super) async fn fetch(
     duration_ms: i64,
 ) -> Result<Option<LyricsAnswer>, LookupError> {
     let exact = get_exact(client, pacer, title, artist, album, duration_ms).await?;
-    // Through `is_timed` rather than a presence test: the directory answers a plain-only row with
+    // Through `is_synced` rather than a presence test: the directory answers a plain-only row with
     // an empty `syncedLyrics` as readily as with a null one, and a search skipped on that leaves
     // the panel a page it cannot follow with a timed sheet one request away.
-    if exact.as_ref().is_some_and(|answer| answer.is_timed() || answer.instrumental) {
+    if exact.as_ref().is_some_and(|answer| answer.is_synced() || answer.instrumental) {
         return Ok(exact);
     }
 
@@ -212,19 +215,31 @@ async fn search_timed(
     album: &str,
     duration_ms: i64,
 ) -> Result<Option<LyricsAnswer>, LookupError> {
-    // **A field the query trim empties is a request that cannot match.** A title that is nothing
-    // but a credit reduces to the empty string here, and `Recording::matches` refuses every row
-    // against an empty core title, so the request could only spend its cap to be told nothing.
-    let (query_title, query_artist) = (query_title(title), query_artist(artist));
-    if query_title.is_empty() || query_artist.is_empty() {
+    // **Asked here first, because nothing this side cannot compare is worth a request.** A title
+    // that is nothing but a bracketed credit, or a credit that is nothing but separators, folds to
+    // a recording `Recording::matches` refuses every row against, so the cap could only be spent
+    // to be told nothing.
+    let ours = Recording::new(title, artist);
+    if !ours.can_match() {
         return Ok(None);
     }
+
+    // Back to the tag where the trim empties a field. The cut is there to widen the query, and a
+    // title opening on its own `feat.` would otherwise be searched for by nothing at all.
+    let track_query = match query_title(title) {
+        "" => title,
+        cut => cut,
+    };
+    let artist_query = match query_artist(artist) {
+        "" => artist,
+        cut => cut,
+    };
 
     let mut url = reqwest::Url::parse(SEARCH_ENDPOINT)
         .map_err(|e| failed("Lyrics directory endpoint is not a URL", e))?;
     url.query_pairs_mut()
-        .append_pair("track_name", query_title)
-        .append_pair("artist_name", query_artist);
+        .append_pair("track_name", track_query)
+        .append_pair("artist_name", artist_query);
 
     let Some(body) = send(client, pacer, url, "Lyrics search", MAX_SEARCH_BYTES).await? else {
         return Ok(None);
@@ -232,7 +247,6 @@ async fn search_timed(
     let rows: Vec<ApiLyrics> = serde_json::from_slice(&body)
         .map_err(|e| failed("Failed to parse the lyrics search response", e))?;
 
-    let ours = Recording::new(title, artist);
     let album = melodia_core::utils::fold::fold(album);
 
     Ok(rows
