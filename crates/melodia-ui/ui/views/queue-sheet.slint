@@ -42,6 +42,9 @@ export component QueueSheet inherits Rectangle {
         // delivers the pointer-up that would have cleared these itself.
         Queue.drag-source = -1;
         Queue.drop-slot = -1;
+        // `open-changed` fills the rows and the playing index before it returns. Assigned
+        // rather than armed, so a sheet closed before the tick disarms it.
+        seat-timer.running = self.watched-open && Queue.current-index >= 0;
     }
 
     private property <bool> has-rows: Queue.rows.length > 0;
@@ -71,6 +74,46 @@ export component QueueSheet inherits Rectangle {
                 - root.drop-line-h / 2,
         ),
     );
+
+    // Pins an offset inside the list's own travel. **Not `clamp()`**: a queue shorter
+    // than the list body puts its lower bound *above* its upper one, and `clamp` expands
+    // to `max(lo, min(v, hi))`, which then hands back the positive lower bound and shoves
+    // every row down the screen. Capping both arguments at 0 resolves that case to 0
+    // instead, which is also what leaves a queue with nothing to scroll where it is.
+    // `draggable-track-list.slint` has the same shape.
+    pure function in-travel(y: length) -> length {
+        return max(
+            min(0px, inner-list.visible-height - inner-list.viewport-height),
+            min(0px, y),
+        );
+    }
+
+    // Where the viewport sits with the playing row centred. Every row is the same height,
+    // so a row's top is its index times that and the sheet needs no offset table.
+    private property <length> centred-viewport-y:
+        inner-list.visible-height / 2
+            - Queue.current-index * root.row-height
+            - root.row-height / 2;
+
+    // Seats the list on the playing row once per open and then leaves it alone — a queue
+    // is read *past* the current track, so a sheet that kept following would fight every
+    // scroll. **Deferred rather than written from `changed watched-open`**: a `ListView`
+    // publishes `viewport-height` from its own layout pass, and the flickable's in-bounds
+    // correction pulls a scroll written against the stale one back to the top. The close
+    // teardown is what makes it stale, so an inline write works on a fast reopen and
+    // fails on every other. The wait is on that pass rather than on the interval, a slow
+    // `open-changed` being enough to land the first tick ahead of it.
+    seat-timer := Timer {
+        interval: 1ms;
+        running: false;
+        triggered => {
+            if (inner-list.viewport-height <= 0px) {
+                return;
+            }
+            self.running = false;
+            inner-list.viewport-y = root.in-travel(root.centred-viewport-y);
+        }
+    }
 
     // A derivation of `t`, with no `animate` of its own.
     Rectangle {
@@ -276,17 +319,8 @@ export component QueueSheet inherits Rectangle {
                             if (Queue.drag-source >= 0
                                 && (root.drag-src-screen-y - dy) > -root.row-height
                                 && (root.drag-src-screen-y - dy) < inner-list.visible-height) {
-                                // **Not `clamp()`**: a queue shorter than the list body
-                                // puts its lower bound *above* its upper one, and
-                                // `clamp` expands to `max(lo, min(v, hi))`, which then
-                                // hands back the positive lower bound and shoves every
-                                // row down the screen. Capping both arguments at 0
-                                // resolves that case to 0 instead.
-                                // `draggable-track-list.slint` has the same shape.
-                                inner-list.viewport-y = max(
-                                    min(0px, inner-list.visible-height - inner-list.viewport-height),
-                                    min(0px, inner-list.viewport-y - dy),
-                                );
+                                inner-list.viewport-y =
+                                    root.in-travel(inner-list.viewport-y - dy);
                             }
                         }
                     }
