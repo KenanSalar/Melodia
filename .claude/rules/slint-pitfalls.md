@@ -380,6 +380,14 @@ this file is what builds, looks right, and is wrong.
   before first layout — popup lands above trigger top, expands downward. Canonical:
   `components/now-playing/overflow-menu.slint`.
 
+- **A child with no `x`/`y` in a non-layout parent is *centred*, not at the origin** — Slint
+  generates `(parent.width - self.width) / 2`, which reads as 0 only for a child as wide as its
+  parent. **A zero-size wrapper therefore lands at half the parent**, and anything positioned
+  against it goes with it: `TrackContextMenu` is a `PopupWindow` in such a wrapper, and the row
+  passed a pointer position measured in the row's own frame, so the menu opened half a row right
+  of the cursor on both its hosts. A wrapper meant to be a coordinate frame pins `x: 0px; y: 0px`
+  **inside the component**, where a host cannot forget it.
+
 - **A flyout opens *inside* the overflow menu's single `PopupWindow` — no nesting.** The
   playback-speed row (`speed-flyout.slint`, presets in shared `flyout-presets.slint` globals) is
   the worked example. Fixed-reserve geometry, as with the volume popup: size the popup for

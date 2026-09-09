@@ -65,8 +65,9 @@ pub(super) fn spawn_queue_rows_subscriber(
 /// open / each subsequent reopen.
 ///
 /// Returns the track ids whose FK linkage the cache couldn't answer, for
-/// `links::fetch_missing`. Empty on every rebuild after the first, so the
-/// caller's follow-up is free where nothing new arrived.
+/// `links::fetch_missing` — empty on every rebuild after the first, that
+/// function claiming what it asks for, so the caller's follow-up is free where
+/// nothing new arrived.
 ///
 /// Takes `&VecModel<QueueRow>` instead of `&Rc<VecModel<…>>` so the
 /// upgrade-in-event-loop callback (which receives the model via

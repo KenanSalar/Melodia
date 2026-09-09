@@ -78,6 +78,21 @@ pub(super) fn fetch_missing(
     if missing.is_empty() {
         return;
     }
+    // Claim the ids before the query goes out. An unlinked claim renders as the row
+    // already does with nothing resolved, and it answers both ways one id can be asked
+    // for twice: a rebuild arriving while the query is in flight, and an id the query
+    // has no row for — a queue outliving a delete — which the landing never writes.
+    {
+        let mut guard = cache.lock();
+        for &id in &missing {
+            guard.entry(id).or_insert(TrackLinks {
+                id,
+                album_id: None,
+                artist_id: None,
+                genre_id: None,
+            });
+        }
+    }
     let state = state.clone();
     let weak = weak.clone();
     let cache = cache.clone();
@@ -87,20 +102,27 @@ pub(super) fn fetch_missing(
             Ok(links) => links,
             Err(e) => {
                 log::warn!("queue sheet: track links for {} rows: {e}", missing.len());
+                // Hand the claims back, so the next rebuild is the retry.
+                let mut guard = cache.lock();
+                for id in &missing {
+                    guard.remove(id);
+                }
                 return;
             }
         };
-        {
-            let mut guard = cache.lock();
-            guard.extend(links.iter().map(|l| (l.id, *l)));
-        }
         let _ = weak.upgrade_in_event_loop(move |ui| {
-            // The teardown 350 ms after a close empties the model; landing past
-            // it would refill rows nothing is looking at, against a cover tier
-            // that has already been dropped.
+            // The teardown 350 ms after a close empties the model and the cache;
+            // landing past it would refill rows nothing is looking at, against a
+            // cover tier that has already been dropped. **The cache write is
+            // inside the gate with the patch**, not before the hop: written
+            // outside it, a query slower than the teardown repopulates what the
+            // close just handed back and a shut sheet holds a map the size of
+            // its queue. The UI thread is the serialization point with the
+            // teardown, which is what makes the pair atomic against it.
             if !is_open.load(Ordering::Relaxed) {
                 return;
             }
+            cache.lock().extend(links.iter().map(|l| (l.id, *l)));
             patch_rows(&ui, &links);
         });
     });

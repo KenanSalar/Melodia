@@ -57,7 +57,8 @@ export component TrackContextMenu inherits Rectangle {
 
     property <int> multi-count: root.selection-count;
     // The queue *is* the target both of these name, so it takes neither. The separator under them
-    // goes with them, or it lands first in the menu.
+    // is on a wider gate: single mode still has Play above it, and only when that is gone too
+    // would it land first in the menu.
     property <bool> show-queue-actions: root.view-context != "queue";
 
     // One source of truth for the "Go to …" entries, read by each entry's own `if` and by the
@@ -164,7 +165,7 @@ export component TrackContextMenu inherits Rectangle {
                     icon: "queue_music";
                     clicked => { root.add-to-queue(pop.effective-ids); }
                 }
-                if root.show-queue-actions: MenuSeparator {}
+                if root.show-queue-actions || !root.multi-active: MenuSeparator {}
 
                 // Unconditional — creating a playlist is useful with none.
                 MenuItem {

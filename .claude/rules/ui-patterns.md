@@ -408,6 +408,18 @@ silently miss the other.
 
 ### Lists and playback
 
+- **The row right-click menu is `components/track-list/track-context-menu.slint`, and the only
+  place its entries are spelled.** Two hosts, `TrackListRowItem` and the queue sheet's
+  `QueueRowItem`. It owns the entries, the `multi-active` gate (this row selected *and* more than
+  one selected, so a right-click on an unselected row falls back to that row alone) and the
+  `effective-ids` every handler reads; the host keeps the pointer position, the right-click
+  snapshot and the highlight key, which is what lets the two key their watchers off different id
+  spaces. **`view-context` is most of what a host configures** — it suppresses the entry naming
+  the surface you are already on and picks the remove arm, and `"queue"` drops Play Next and Add
+  to Queue outright, the queue being what they name. A remove label handed over by the host would
+  ship untranslated, `@tr` resolving literals at codegen, so a third list's arm is one more `if`
+  here rather than a property.
+
 - **`play-row` replaces the queue with the view; there is no single-track play path, and no
   Play-All pill.** Every row activation resolves the view's *displayed* ids and hands them to
   `player_play_tracks(ids, start)`. The eight Play All pills made that same call pinned to
@@ -699,7 +711,10 @@ silently miss the other.
 
 - **PopupWindow auto-dismiss on OS focus loss** — `FocusLossWatcher`, mounted inside
   `if popup-is-open` so only the open popup has a live watcher. Singletons gate on
-  `PopupHighlight.id`, the per-row context menu on `row-ctx-id == row-data.id`. Slint 1.16 has no
+  `PopupHighlight.id`; the row context menu gates on the `ctx-key == live-ctx-key` pair its host
+  hands it, **over two key spaces that may not be merged** — a track id for a track list, a
+  play-order index for the queue sheet, since a queue may hold one track twice where a list
+  cannot and an id there would arm two rows' watchers on the one open popup. Slint 1.16 has no
   `closed` callback, but `pop.close()` is a safe no-op when hidden.
 
 - **Native dialogs (rfd) — always through `ui::file_dialog::parented(&weak, title)`.** The helper

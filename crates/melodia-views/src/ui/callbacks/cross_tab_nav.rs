@@ -1,7 +1,7 @@
 //! Single-home wiring for the `go-to-album` / `go-to-artist` / `go-to-genre` callbacks
-//! every track-list view's right-click menu emits. Its own module because each per-view
-//! callback file would otherwise need all three target UI handles; instead this runs
-//! after every `wire_*`, so the handles are guaranteed to exist.
+//! every row context menu emits — the track-list views and the queue sheet. Its own module
+//! because each per-view callback file would otherwise need all three target UI handles;
+//! instead this runs after every `wire_*`, so the handles are guaranteed to exist.
 //!
 //! Four steps, mirroring the older cross-tab hand-offs: stamp
 //! `*Detail.origin-nav-index` synchronously from where the user is standing, mark the
@@ -102,8 +102,8 @@ pub fn wire_cross_tab_nav(
 
     // One trio per global, spelled once. A `macro_rules!` rather than a helper fn because
     // the generated globals are unrelated types sharing only their accessor *names* —
-    // there is no trait to be generic over, which is why `impl_row_selection_view!` next
-    // door has the same shape.
+    // there is no trait to be generic over, which is why `ui::list_selection`'s
+    // `impl_row_selection_view!` has the same shape.
     macro_rules! wire_go_to {
         ($($global:ident),+ $(,)?) => {
             $({
