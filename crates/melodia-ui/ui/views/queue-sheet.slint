@@ -99,21 +99,23 @@ export component QueueSheet inherits Rectangle {
             inner-list.visible-height / 2 - index * root.row-height - root.row-height / 2);
     }
 
-    // The offset the seat converges on. A property because a Slint callback carries no
-    // locals and the tick both compares against this and writes it.
-    private property <length> seat-y: root.centred-on(Queue.current-index);
-
-    // Ticks the seat gets before it gives up, so a list that never finishes measuring
-    // cannot leave the timer running for the rest of the session.
+    // How long the seat keeps trying before it gives up, so a list that never finishes
+    // measuring cannot leave the timer running for the rest of the session. In ticks rather
+    // than a duration, so it follows whatever cadence the timer below is set to.
     private property <int> seat-ticks-total: 40;
     private property <int> seat-ticks-left;
 
-    // Arms the one-shot seat: the open transition, and a remount that finds the sheet
-    // already open. Reading `Queue.open` is what makes a close disarm it. **Assigned rather
-    // than bound**, because `self.running = false` in the handler would orphan a binding on
-    // the first fire, leaving the sheet seating once per process; and a binding reaching the
-    // list's height fails earlier still, evaluated by a change tracker in the pass that
-    // mounts the branch, the sheet sitting inside the miniplayer `if`.
+    // Arms the seat: the open transition, and a remount that finds the sheet already open.
+    // Reading `Queue.open` is what makes a close disarm it. **Assigned rather than bound**,
+    // because `self.running = false` in the handler would orphan a binding on the first fire,
+    // leaving the sheet seating once per process; and a binding reaching the list's height
+    // fails earlier still, evaluated by a change tracker in the pass that mounts the branch,
+    // the sheet sitting inside the miniplayer `if`.
+    //
+    // **Arms rather than seats.** A scroll written from `changed watched-open` lands inside
+    // `run_change_handlers`, which drains the flickable's in-bounds tracker re-entrantly, and
+    // that tracker evaluates against the `viewport-height` the close teardown left at zero and
+    // pins the offset straight back to the top.
     function arm-seat() {
         root.seat-ticks-left = root.seat-ticks-total;
         seat-timer.running = Queue.open && Queue.current-index >= 0;
@@ -121,13 +123,17 @@ export component QueueSheet inherits Rectangle {
 
     // Seats the list on the playing row once per open and then leaves it alone — a queue is
     // read *past* the current track, so a sheet that kept following would fight every
-    // scroll. **It converges rather than writing once**: a `ListView` settles its layout
-    // over several passes from state it keeps per mount, which a close preserves and the
-    // miniplayer swap throws away. A single write committed to whatever happened to be final
-    // on its one tick, so the open after a remount pinned against a height the list had not
-    // published and landed at the top, while the second open was reliably right. Re-reading
-    // the target each tick costs one tick where it already agreed and is right in both.
+    // scroll. **It converges rather than writing once.** A `ListView` publishes
+    // `visible-height` off its own geometry and `viewport-height` off its repeater, and on a
+    // fresh mount the two land on different passes, so a single write committed to whichever
+    // pair its one tick happened to find: the open after a miniplayer swap centred against a
+    // height of zero and put the playing row at the top, where the second open, laid out
+    // already, was reliably right. Converging also picks up the ListView's own re-anchoring,
+    // which row-aligns the offset and drops the centring remainder. Re-reading the target
+    // each tick costs one tick where it already agreed.
     seat-timer := Timer {
+        // Roughly a frame: the list republishes its heights once per layout pass, so a faster
+        // cadence only re-reads the answer it already has.
         interval: 16ms;
         running: false;
         triggered => {
@@ -136,16 +142,19 @@ export component QueueSheet inherits Rectangle {
                 self.running = false;
                 return;
             }
-            // Short of its own rows the list is still measuring, and `in-travel` would
-            // collapse to the top against a height that is about to grow.
-            if (inner-list.viewport-height < Queue.rows.length * root.row-height) {
+            // Two ways to be unmeasured and neither is safe to centre against: no geometry at
+            // all, and a viewport short of its own rows, where `in-travel` collapses to the
+            // top against a height about to grow. The second reads `QueueRowItem`'s height,
+            // which is the `row-height` handed to it.
+            if (inner-list.visible-height <= 0px
+                || inner-list.viewport-height < Queue.rows.length * root.row-height) {
                 return;
             }
-            if (abs(inner-list.viewport-y - root.seat-y) <= 1px) {
+            if (abs(inner-list.viewport-y - root.centred-on(Queue.current-index)) <= 1px) {
                 self.running = false;
                 return;
             }
-            inner-list.viewport-y = root.seat-y;
+            inner-list.viewport-y = root.centred-on(Queue.current-index);
         }
     }
 
