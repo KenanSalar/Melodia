@@ -130,10 +130,12 @@ export global Theme {
     // and every hand-mounted bar takes its width from here rather than restating the number.
     out property <length> scrollbar-slot: 10px;
 
-    // The air a `PopupWindow` leaves between itself and the control that opened it, on whichever
-    // side it hangs. Seven popups across four directories anchor on it, so it is here rather than
+    // The air a menu or flyout leaves between itself and the control that opened it, on whichever
+    // side it hangs. Seven popups across three directories anchor on it, so it is here rather than
     // beside any one family of them: a gap differing by a pixel or two between two of them reads
-    // as one being misplaced, and nothing about the source says which is the odd one.
+    // as one being misplaced, and nothing about the source says which is the odd one. The two
+    // dropdown-shaped pickers (`settings/dropdown.slint`, `radio/facet-chip.slint`) hang at 4px
+    // and are outside it; folding them in moves pixels, so it is a design call and not tidying.
     out property <length> popup-gap: 8px;
 
     // The one ink drawn on a name-hashed tile — the station monogram and the glyph beside it, on

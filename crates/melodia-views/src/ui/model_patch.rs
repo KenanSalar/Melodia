@@ -11,20 +11,27 @@ use slint::{Model, ModelRc, VecModel};
 
 use melodia_ui::TrackListRow as UiTrackListRow;
 
+/// The `VecModel` behind `rows`, logged under `label` rather than passed over when it isn't one:
+/// the rows and whatever the caller has in hand disagree from there on, and nothing else says so.
+fn vec_model<'a, T: Clone + 'static>(rows: &'a ModelRc<T>, label: &str) -> Option<&'a VecModel<T>> {
+    let found = rows.as_any().downcast_ref::<VecModel<T>>();
+    if found.is_none() {
+        log::warn!("{label}: VecModel downcast failed, rows left as they were");
+    }
+    found
+}
+
 /// Hand every row to `patch` as a clone, writing back the ones it reports as changed.
 ///
-/// **The `bool` is what keeps this affordable.** `set_row_data` fires `row_changed`, which drops
-/// that row's `ListView` delegate, so a walk that writes unconditionally costs what a reset costs.
-///
-/// A model that is not a `VecModel` is logged under `label` rather than passed over: the rows and
-/// whatever the caller has in hand disagree from there on, and nothing else says so. UI-thread only.
+/// **The `bool` is what the walk is for.** `set_row_data` on an instantiated row re-runs that
+/// delegate's bindings, so writing back a row nothing moved repaints it for no change; rows
+/// outside the `ListView`'s window cost only the clone. UI-thread only.
 pub fn patch_rows_where<T: Clone + 'static>(
     rows: &ModelRc<T>,
     label: &str,
     mut patch: impl FnMut(&mut T) -> bool,
 ) {
-    let Some(vm) = rows.as_any().downcast_ref::<VecModel<T>>() else {
-        log::warn!("{label}: VecModel downcast failed, rows left as they were");
+    let Some(vm) = vec_model(rows, label) else {
         return;
     };
     for i in 0..vm.row_count() {
@@ -45,15 +52,20 @@ pub fn patch_track_row_by_id(
     id: i64,
     patch: impl Fn(&mut UiTrackListRow),
 ) {
-    // The id is unique, so `done` is what stops a second row being handed to `patch` — the walk
-    // itself runs on, a visible window being a screenful rather than the library.
-    let mut done = false;
-    patch_rows_where(rows, "patch_track_row_by_id", |row| {
-        if done || i64::from(row.id) != id {
-            return false;
+    let Some(vm) = vec_model(rows, "patch_track_row_by_id") else {
+        return;
+    };
+    for i in 0..vm.row_count() {
+        let Some(mut row) = vm.row_data(i) else {
+            continue;
+        };
+        if i64::from(row.id) != id {
+            continue;
         }
-        patch(row);
-        done = true;
-        true
-    });
+        patch(&mut row);
+        vm.set_row_data(i, row);
+        // Ids are unique, and these models carry a whole filtered library rather than a
+        // screenful, so every row past this one would be a clone for nothing.
+        return;
+    }
 }

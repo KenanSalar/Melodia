@@ -90,7 +90,6 @@ export component DraggableTrackList inherits Rectangle {
         ),
     );
 
-    // Pins an offset inside the list's own travel.
     pure function in-travel(y: length) -> length {
         return ListTravel.pin(y, inner-list.visible-height, inner-list.viewport-height);
     }
