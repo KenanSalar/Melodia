@@ -58,9 +58,9 @@ pub(super) fn republish(ui: &AppWindow, ly: &Rc<LyricsUi>) {
     let toggle_moved = ly.published_romanization.replace(romanization_shown) != romanization_shown;
 
     let mut rows = ly.rows.borrow_mut();
-    // A length the model does not share is a different sheet, which has to be replaced rather
-    // than written through. It is also what catches a fresh sheet whose measured counts happen to
-    // match the ones `Row::words` seeds.
+    // A length the model does not share is a different sheet, and every fetch empties the model
+    // first (`sheet::mark_loading`), so a fresh sheet takes this arm rather than hoping its
+    // measured counts differ from the ones `Row::words` seeds.
     let replace = ly.model.row_count() != rows.len();
     let mut heights_moved = false;
 

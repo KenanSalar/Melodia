@@ -287,13 +287,11 @@ export component LyricsPanel inherits Rectangle {
                 // left the panel rather than from where the song was.
                 root.scroll-y = -sv.viewport-y;
             } else if (abs(root.target-y - root.scroll-y) > 1px) {
-                // **Gated, because the step is geometric and so never arrives.** Ungated it kept
-                // moving `scroll-y` by less than a pixel for around a second after every line
-                // change, and FemtoVG has no partial rendering, so each of those writes repainted
-                // the whole window for motion the reader cannot see. A pixel is what `settled`
-                // below already calls arrived — spelled again rather than read off it, that flag
-                // being last tick's answer and the target having just moved on the tick that
-                // matters.
+                // **Gated, because the step is geometric and so never arrives.** The sub-pixel
+                // tail wrote `viewport-y` on every tick of the fast cadence, and FemtoVG has no
+                // partial rendering, so each write repainted the whole window. The threshold is
+                // `settled`'s own, spelled again rather than read off it: that flag is last
+                // tick's answer, and the target has just moved on the tick that matters.
                 root.scroll-y += (root.target-y - root.scroll-y) * root.follow-step;
                 sv.viewport-y = -root.scroll-y;
             }
