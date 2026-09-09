@@ -1483,6 +1483,9 @@ msgstr "Περιορισμός σε"
 msgid "tracks by"
 msgstr "κομμάτια κατά"
 
+msgid "Add artist"
+msgstr "Προσθήκη καλλιτέχνη"
+
 msgid "Add rule"
 msgstr "Προσθήκη κανόνα"
 

@@ -1,0 +1,178 @@
+import { Theme } from "../../theme.slint";
+import { TagEditor } from "../../globals/dialog-forms.slint";
+import { ArtistCreditRow } from "../../models.slint";
+import { Dropdown } from "../settings/dropdown.slint";
+import { IconButton } from "../icon-button.slint";
+
+// Controlled name field. `text` is one-way — the host owns it — and every keystroke reports back
+// through `edited`. Same contract as `smart-playlist-editor-body.slint`'s `RuleValueInput`, and
+// for the same reason: the first keystroke orphans the inner binding, so Rust re-emitting the
+// value it just received never moves the cursor.
+component CreditNameInput inherits Rectangle {
+    in property <string> text;
+    in property <string> placeholder;
+    callback edited(string);
+
+    // 40px, matching the `LabeledInput`s this sits between: the two field kinds share a column
+    // in the Tags tab, and a shorter one reads as a different control.
+    height: 40px;
+    background: Theme.surface1;
+    border-color: ti.has-focus ? Theme.accent : Theme.border;
+    border-width: 1px;
+    border-radius: Theme.radius-md;
+    animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }
+
+    HorizontalLayout {
+        padding-left: Theme.pad-sm;
+        padding-right: Theme.pad-sm;
+        Rectangle {
+            horizontal-stretch: 1;
+            if ti.text == "": Text {
+                text: root.placeholder;
+                // Bounded and elided, per the faked-placeholder pitfall.
+                color: Theme.overlay2;
+                font-size: Theme.font-size-md;
+                vertical-alignment: center;
+                x: 0;
+                width: 100%;
+                height: 100%;
+                overflow: elide;
+            }
+            ti := TextInput {
+                text: root.text;
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+                single-line: true;
+                vertical-alignment: center;
+                height: 100%;
+                edited => { root.edited(self.text); }
+            }
+        }
+    }
+}
+
+// One credited name. Purely presentational — Rust owns the model.
+//
+// The phrase picker sits on every row *but* the last: it names what follows this name, and after
+// the last one there is nothing to join to. Removing is likewise hidden on a lone row, a credit
+// with no names being a state the editor should not be able to reach.
+component CreditRowView inherits HorizontalLayout {
+    in property <ArtistCreditRow> credit;
+    in property <bool> is-last;
+    in property <bool> is-only;
+    in property <string> placeholder;
+    callback set-name(string);
+    callback set-join(int /*phrase index*/);
+    callback remove();
+
+    spacing: Theme.pad-sm;
+
+    CreditNameInput {
+        horizontal-stretch: 1;
+        min-width: 120px;
+        text: root.credit.name;
+        placeholder: root.placeholder;
+        edited(t) => { root.set-name(t); }
+    }
+
+    if !root.is-last: VerticalLayout {
+        alignment: center;
+        Dropdown {
+            trigger-width: 112px;
+            options: TagEditor.join-phrases;
+            // One-way plus `manual` keeps Rust the single source of truth: a row removed above
+            // this one shifts every index down, and a self-writing Dropdown would orphan the
+            // binding that re-reads them.
+            manual: true;
+            selected-index: root.credit.join-index;
+            selected(idx) => { root.set-join(idx); }
+        }
+    }
+    // Keeps the remove button flush-right on the last row, which draws no picker.
+    if root.is-last: Rectangle { width: 112px; }
+
+    VerticalLayout {
+        alignment: center;
+        if !root.is-only: IconButton {
+            icon: "close";
+            icon-size: 16px;
+            diameter: 28px;
+            idle-bg: Theme.surface1;
+            hover-fg: Theme.danger;
+            clicked => { root.remove(); }
+        }
+        if root.is-only: Rectangle { width: 28px; }
+    }
+}
+
+// One artist field of the Edit-Tags dialog: the ordered credit, a row per name.
+//
+// Mounted twice, for Artist and for Album Artist — the two tags have the same shape and the same
+// convention, so the second mount is a property rather than a copy of this file.
+export component CreditEditor inherits VerticalLayout {
+    in property <string> label;
+    in property <[ArtistCreditRow]> credits;
+    in property <string> placeholder;
+    // The credit as it will be written. Shown only once it says something the rows don't already:
+    // a single name is its own preview.
+    in property <string> preview;
+    in property <int> field;
+
+    // `LabeledInput`'s own label gap and weight, for the same reason as the field height.
+    spacing: 4px;
+
+    Text {
+        text: root.label;
+        color: Theme.subtext0;
+        font-size: Theme.font-size-sm;
+        font-weight: 600;
+    }
+
+    for credit[i] in root.credits: CreditRowView {
+        credit: credit;
+        is-last: i == root.credits.length - 1;
+        is-only: root.credits.length == 1;
+        // Only the first row carries the ‹multiple values› hint; repeating it down a list would
+        // read as one hint per artist.
+        placeholder: i == 0 ? root.placeholder : "";
+        set-name(t) => { TagEditor.set-credit-name(root.field, i, t); }
+        set-join(idx) => { TagEditor.set-credit-join(root.field, i, idx); }
+        remove => { TagEditor.remove-credit(root.field, i); }
+    }
+
+    HorizontalLayout {
+        spacing: Theme.pad-sm;
+        alignment: start;
+
+        // A labelled stadium rather than an `IconButton`, matching the smart-playlist rule
+        // editor's own add control.
+        Rectangle {
+            height: 30px;
+            width: add-label.preferred-width + 2 * Theme.pad-md;
+            background: add-touch.has-hover ? Theme.surface2 : Theme.surface1;
+            border-radius: self.height / 2;
+            animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+            add-label := Text {
+                text: "+ " + @tr("Add artist");
+                color: Theme.text;
+                font-size: Theme.font-size-sm;
+                font-weight: 600;
+                vertical-alignment: center;
+            }
+            add-touch := TouchArea {
+                clicked => { TagEditor.add-credit(root.field); }
+            }
+        }
+
+        if root.credits.length > 1: VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.preview;
+                color: Theme.subtext0;
+                font-size: Theme.font-size-sm;
+                overflow: elide;
+            }
+        }
+    }
+}

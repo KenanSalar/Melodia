@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use sqlx::AssertSqlSafe;
 
 use crate::database::{DbPool, chunked_in_query};
+use melodia_core::entities::artist::{ArtistCredit, CreditedArtist};
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
 
@@ -62,7 +63,9 @@ pub async fn get_tracks_by_artist(
     artist_id: i64,
 ) -> Result<Vec<track::Track>, AppError> {
     let tracks = sqlx::query_as::<_, track::Track>(
-        "SELECT * FROM tracks WHERE artist_id = ? ORDER BY sort_key COLLATE NOCASE ASC",
+        "SELECT * FROM tracks \
+         WHERE id IN (SELECT track_id FROM track_artists WHERE artist_id = ?) \
+         ORDER BY sort_key COLLATE NOCASE ASC",
     )
     .bind(artist_id)
     .fetch_all(db.read())
@@ -283,13 +286,20 @@ pub async fn get_tracks_by_album_for_list(
 }
 
 /// Lightweight version of `get_tracks_by_artist` for list views.
+///
+/// Every track this artist is *credited* on, which is the join table rather than the
+/// `tracks.artist_id` FK — that one names only the first credit. `IN` rather than a join for two
+/// reasons: `artist_id` is a column of both tables, and a credit that names one artist twice
+/// ("X feat. X") would join the row in twice.
 pub async fn get_tracks_by_artist_for_list(
     db: &DbPool,
     artist_id: i64,
 ) -> Result<Vec<track::TrackListRow>, AppError> {
     let cols = track::track_list_columns();
     let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(format!(
-        "SELECT {cols} FROM tracks WHERE artist_id = ? ORDER BY sort_key COLLATE NOCASE ASC"
+        "SELECT {cols} FROM tracks \
+         WHERE id IN (SELECT track_id FROM track_artists WHERE artist_id = ?) \
+         ORDER BY sort_key COLLATE NOCASE ASC"
     )))
     .bind(artist_id)
     .fetch_all(db.read())
@@ -569,6 +579,29 @@ pub async fn get_unrated_track_paths_after(
     Ok(rows)
 }
 
+/// Tracks whose credit is a single row, paged by id — the work-list for the credit import.
+///
+/// The predicate is what keeps the sweep off files the current scanner already read properly: a
+/// track carrying two or more credit rows was written by it, and a single row is either a genuine
+/// solo artist or the one the migration seeded. Only the file can tell those apart, which is the
+/// whole reason this is a pass over files.
+pub async fn get_single_credit_track_paths_after(
+    db: &DbPool,
+    after_id: i64,
+    limit: i64,
+) -> Result<Vec<(i64, String)>, AppError> {
+    let rows: Vec<(i64, String)> = sqlx::query_as(
+        "SELECT id, file_path FROM tracks \
+         WHERE id > ? AND (SELECT COUNT(*) FROM track_artists WHERE track_id = tracks.id) < 2 \
+         ORDER BY id LIMIT ?",
+    )
+    .bind(after_id)
+    .bind(limit)
+    .fetch_all(db.read())
+    .await?;
+    Ok(rows)
+}
+
 /// Tracks with no `MusicBrainz` Recording ID that carry enough metadata to be
 /// looked up — the work-list for the auto-tag backfill. Rows without an artist
 /// or title can't be resolved, so they're excluded rather than attempted and
@@ -766,3 +799,55 @@ pub async fn get_recently_played(
 #[cfg(test)]
 #[path = "tests/track_tests.rs"]
 mod tests;
+
+/// Each track's ordered artist credit, plus the credit its album carries.
+///
+/// Two queries rather than one join: the two credits hang off different parents, so a single
+/// statement would multiply each track's rows by its album's. The `ORDER BY` is what makes the
+/// credit an *ordered* thing rather than a set.
+///
+/// Used by the Edit-Tags dialog over a multi-track selection. A single track reads its credit off
+/// the file instead, that being the authority and already open for the lyrics tab.
+pub async fn get_track_credits_by_ids(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<HashMap<i64, (ArtistCredit, ArtistCredit)>, AppError> {
+    let track_rows: Vec<(i64, String, String)> = chunked_in_query(db.read(), ids, |placeholders| {
+        format!(
+            "SELECT ta.track_id, a.name, ta.join_phrase \
+                 FROM track_artists ta JOIN artists a ON a.id = ta.artist_id \
+                 WHERE ta.track_id IN ({placeholders}) ORDER BY ta.track_id, ta.position"
+        )
+    })
+    .await?;
+
+    let album_rows: Vec<(i64, String, String)> = chunked_in_query(db.read(), ids, |placeholders| {
+        format!(
+            "SELECT t.id, a.name, aa.join_phrase \
+                 FROM tracks t \
+                 JOIN album_artists aa ON aa.album_id = t.album_id \
+                 JOIN artists a ON a.id = aa.artist_id \
+                 WHERE t.id IN ({placeholders}) ORDER BY t.id, aa.position"
+        )
+    })
+    .await?;
+
+    let mut out: HashMap<i64, (ArtistCredit, ArtistCredit)> = HashMap::with_capacity(ids.len());
+    for (id, artists) in group_credits(track_rows) {
+        out.entry(id).or_default().0 = ArtistCredit::new(artists);
+    }
+    for (id, artists) in group_credits(album_rows) {
+        out.entry(id).or_default().1 = ArtistCredit::new(artists);
+    }
+    Ok(out)
+}
+
+/// Collapse `(parent id, name, join phrase)` rows into one credit per parent, keeping the order
+/// the query returned them in.
+fn group_credits(rows: Vec<(i64, String, String)>) -> HashMap<i64, Vec<CreditedArtist>> {
+    let mut grouped: HashMap<i64, Vec<CreditedArtist>> = HashMap::new();
+    for (id, name, join_phrase) in rows {
+        grouped.entry(id).or_default().push(CreditedArtist { name, join_phrase });
+    }
+    grouped
+}

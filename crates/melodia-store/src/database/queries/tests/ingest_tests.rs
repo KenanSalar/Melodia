@@ -4,6 +4,7 @@ use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::fixtures::{insert_test_track, make_test_metadata};
 use crate::database::queries::ingest::{FolderResolution, ingest_scanned_files};
+use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::scan::ScannedFile;
 use melodia_core::error::AppError;
 
@@ -81,11 +82,11 @@ async fn ingest_deduplicates_artists() -> Result<(), AppError> {
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     let mut f1 = make_scanned_file("/music/a.mp3", "A");
-    f1.metadata.artist = Some("Same Artist".to_owned());
+    f1.metadata.artist = ArtistCredit::from_name("Same Artist");
     let mut f2 = make_scanned_file("/music/b.mp3", "B");
-    f2.metadata.artist = Some("Same Artist".to_owned());
+    f2.metadata.artist = ArtistCredit::from_name("Same Artist");
     let mut f3 = make_scanned_file("/music/c.mp3", "C");
-    f3.metadata.artist = Some("Same Artist".to_owned());
+    f3.metadata.artist = ArtistCredit::from_name("Same Artist");
 
     let mut tx = db.write().begin().await?;
     let result = ingest_scanned_files(
@@ -114,10 +115,10 @@ async fn ingest_deduplicates_albums() -> Result<(), AppError> {
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     let mut f1 = make_scanned_file("/music/a.mp3", "A");
-    f1.metadata.artist = Some("Artist".to_owned());
+    f1.metadata.artist = ArtistCredit::from_name("Artist");
     f1.metadata.album = Some("Same Album".to_owned());
     let mut f2 = make_scanned_file("/music/b.mp3", "B");
-    f2.metadata.artist = Some("Artist".to_owned());
+    f2.metadata.artist = ArtistCredit::from_name("Artist");
     f2.metadata.album = Some("Same Album".to_owned());
 
     let mut tx = db.write().begin().await?;
@@ -311,7 +312,7 @@ async fn ingest_empty_artist_gets_unknown_id() -> Result<(), AppError> {
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     let mut file = make_scanned_file("/music/no_artist.mp3", "No Artist Track");
-    file.metadata.artist = None;
+    file.metadata.artist = ArtistCredit::default();
 
     let mut tx = db.write().begin().await?;
     ingest_scanned_files(
@@ -394,10 +395,10 @@ async fn ingest_same_album_different_artists() -> Result<(), AppError> {
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     let mut f1 = make_scanned_file("/music/a.mp3", "A");
-    f1.metadata.artist = Some("Artist 1".to_owned());
+    f1.metadata.artist = ArtistCredit::from_name("Artist 1");
     f1.metadata.album = Some("Compilation".to_owned());
     let mut f2 = make_scanned_file("/music/b.mp3", "B");
-    f2.metadata.artist = Some("Artist 2".to_owned());
+    f2.metadata.artist = ArtistCredit::from_name("Artist 2");
     f2.metadata.album = Some("Compilation".to_owned());
 
     let mut tx = db.write().begin().await?;

@@ -25,7 +25,9 @@ pub async fn get_albums_by_artist(
     artist_id: i64,
 ) -> Result<Vec<album::AlbumStats>, AppError> {
     let albums = sqlx::query_as::<_, album::AlbumStats>(
-        "SELECT * FROM album_stats WHERE artist_id = ? ORDER BY year ASC",
+        "SELECT * FROM album_stats \
+         WHERE id IN (SELECT album_id FROM album_artists WHERE artist_id = ?) \
+         ORDER BY year ASC",
     )
     .bind(artist_id)
     .fetch_all(db.read())

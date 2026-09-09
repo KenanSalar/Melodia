@@ -162,7 +162,7 @@ async fn run_commit(db: &DbPool, files: &[FileWrite]) -> Result<usize, AppError>
         let path = Path::new(&f.path);
         let key: ResolveKey = (
             path.parent().map(Path::to_path_buf).unwrap_or_default(),
-            meta.artist.clone().unwrap_or_default(),
+            meta.artist.primary_name().to_owned(),
             meta.album.clone().unwrap_or_default(),
             meta.year,
             meta.genre.clone().unwrap_or_default(),

@@ -9,6 +9,7 @@
 pub mod artwork_renormalize;
 pub mod artwork_sweep;
 pub mod audio_health;
+pub mod credit_import;
 pub mod discord_presence;
 pub mod file_event_processor;
 pub mod first_launch;

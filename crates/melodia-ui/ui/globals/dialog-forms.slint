@@ -1,4 +1,4 @@
-import { SmartRuleRow } from "../models.slint";
+import { ArtistCreditRow, SmartRuleRow } from "../models.slint";
 
 // The form-shaped dialogs' state. Each is populated by its own entry-point callback and read back
 // by the `Dialog.accepted` dispatcher — which is why they sit apart from `Dialog`: the dispatcher
@@ -47,8 +47,6 @@ export global TagEditor {
     // Numbers cross as strings — Rust parses and validates them into a typed
     // `TagEdit` on commit.
     in-out property <string> title;
-    in-out property <string> artist;
-    in-out property <string> album-artist;
     in-out property <string> album;
     in-out property <string> genre;
     in-out property <string> year;
@@ -74,6 +72,27 @@ export global TagEditor {
     in property <string> comment-placeholder;
     in property <string> bpm-placeholder;
     in property <string> lyrics-placeholder;
+
+    // The two artist fields are credits rather than strings: an ordered list of names with a
+    // phrase between each pair. Rust owns both models and applies every edit through the
+    // callbacks below, so a row view never mutates what it is handed.
+    in-out property <[ArtistCreditRow]> artists;
+    in-out property <[ArtistCreditRow]> album-artists;
+    // Picker labels for the phrase between two names, seeded by Rust from
+    // `entities::artist::JOIN_PHRASES` **plus anything the opened files already use**, so a
+    // credit written elsewhere survives a save here. Deliberately not an inline `@tr` array:
+    // this is tag content, and a localized " feat. " would land in the user's file.
+    in property <[string]> join-phrases;
+    // The credit as it will be written, rebuilt by Rust on every edit.
+    in property <string> artist-preview;
+    in property <string> album-artist-preview;
+    // Which credit a row callback is about. Named because the body mounts one editor per field.
+    out property <int> field-artist: 0;
+    out property <int> field-album-artist: 1;
+    callback add-credit(int /*field*/);
+    callback remove-credit(int /*field*/, int /*row*/);
+    callback set-credit-name(int /*field*/, int /*row*/, string);
+    callback set-credit-join(int /*field*/, int /*row*/, int /*phrase index*/);
     // Whether this track already has a sheet somewhere other than its own tag — a `.lrc` beside
     // it, or one the directory answered with — so the tab can offer to write that into the file.
     // False where the tag is already what would be inserted, an offer to copy a field onto itself

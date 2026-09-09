@@ -22,6 +22,7 @@ use rayon::prelude::*;
 
 use crate::state::AppState;
 use melodia_artwork::media::image::artwork::{self, CoverCache};
+use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::entities::tags::{ArtworkEdit, TagEdit};
 use melodia_core::entities::track::{TagEditRow, TrackSummary};
@@ -82,6 +83,28 @@ pub async fn get_tag_edit_rows(state: &AppState, ids: &[i64]) -> Result<Vec<TagE
 /// the tag held; nothing here judges what is in it.
 pub fn read_lyrics(path: &Path) -> Result<Option<String>, AppError> {
     tag_writer::read_lyrics(path)
+}
+
+/// A file's two artist credits, for the dialog's single-selection path.
+///
+/// The file rather than the database, and the asymmetry is the point: the file is what the
+/// credit *is*, and a track whose join rows were seeded from `artist_id` alone — every row on a
+/// library that predates the credit tables — would otherwise open showing one name for a credit
+/// the file spells with three. A multi-track selection reads
+/// [`queries::track::get_track_credits_by_ids`] instead, N file reads on the open path being
+/// exactly what the `TagEditRow` projection exists to avoid.
+///
+/// Blocking; the caller owns the `spawn_blocking`, which it is already making for the lyrics.
+pub fn read_credits(path: &Path) -> Result<(ArtistCredit, ArtistCredit), AppError> {
+    melodia_store::media::ingest::metadata::read_credits(path)
+}
+
+/// The credit behind each selected track, for the dialog's multi-selection path.
+pub async fn get_tag_edit_credits(
+    state: &AppState,
+    ids: &[i64],
+) -> Result<HashMap<i64, (ArtistCredit, ArtistCredit)>, AppError> {
+    queries::track::get_track_credits_by_ids(&state.db, ids).await
 }
 
 /// Apply `edit` to `ids`, then refresh the player's cached summaries and bump
@@ -343,13 +366,14 @@ async fn run_commit(
         };
 
         let path = Path::new(&f.path);
-        // Mirror `resolve_track_context`'s own `as_deref().unwrap_or("")`
-        // normalization so a cached key matches the ids it would have produced.
+        // Mirror what `resolve_track_context` keys on, or the cache answers with ids it would
+        // never have produced: the **first** credited name, not the whole credit line, since
+        // that is the name the `artists` row carries.
         let key: ResolveKey = (
             path.parent().map(Path::to_path_buf).unwrap_or_default(),
-            meta.artist.clone().unwrap_or_default(),
+            meta.artist.primary_name().to_owned(),
             meta.album.clone().unwrap_or_default(),
-            meta.album_artist.clone().unwrap_or_default(),
+            meta.album_artist.primary_name().to_owned(),
             meta.year,
             meta.genre.clone().unwrap_or_default(),
         );

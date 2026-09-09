@@ -146,9 +146,9 @@ pub async fn search_all(db: &DbPool, query: &str) -> Result<SearchResults, AppEr
     let artists_fut = sqlx::query_as::<_, artist::ArtistStats>(
         "SELECT * FROM artist_stats
          WHERE name LIKE ? ESCAPE '\\'
-            OR id IN (SELECT t.artist_id FROM tracks t
-                      JOIN tracks_fts f ON f.rowid = t.id
-                      WHERE tracks_fts MATCH ? AND t.artist_id IS NOT NULL)
+            OR id IN (SELECT ta.artist_id FROM track_artists ta
+                      JOIN tracks_fts f ON f.rowid = ta.track_id
+                      WHERE tracks_fts MATCH ?)
          ORDER BY (name LIKE ? ESCAPE '\\') DESC, name ASC
          LIMIT 20",
     )

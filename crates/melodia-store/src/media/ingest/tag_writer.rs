@@ -40,6 +40,7 @@ use lofty::tag::{ItemValue, Tag, TagItem, TagType};
 
 use super::{metadata, rating_tags};
 use melodia_artwork::media::image::image_decode;
+use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
 use melodia_core::error::AppError;
 
@@ -63,11 +64,12 @@ impl UnsupportedFields {
 
 /// Write one text item, recording the field name when the key doesn't map.
 ///
-/// **Every write goes through here**, because [`Tag::insert_text`] silently drops an item whose
-/// `ItemKey` has no mapping for the target `TagType` and says so only in its return — the bool
-/// that makes the BPM and lyrics fallbacks below expressible. It is also why the [`Accessor`]
-/// setters are unused: they throw that bool away, and their default bodies are empty no-ops, so a
-/// non-overriding impl would discard the whole write.
+/// **Every single-valued write goes through here** ([`set_texts`] is the multi-valued sibling),
+/// because [`Tag::insert_text`] silently drops an item whose `ItemKey` has no mapping for the
+/// target `TagType` and says so only in its return — the bool that makes the BPM and lyrics
+/// fallbacks below expressible. It is also why the [`Accessor`] setters are unused: they throw
+/// that bool away, and their default bodies are empty no-ops, so a non-overriding impl would
+/// discard the whole write.
 fn set_text(
     tag: &mut Tag,
     key: ItemKey,
@@ -78,6 +80,21 @@ fn set_text(
     if !tag.insert_text(key, value) {
         out.push(field);
     }
+}
+
+/// Replace every value under `key`, which [`Tag::insert_text`] cannot do — it keeps exactly one.
+///
+/// [`Tag::push`] appends instead, so the existing values are cleared first. Reports through its
+/// return rather than `out` because its one caller writes two keys and owes the field name once.
+fn set_texts(tag: &mut Tag, key: ItemKey, values: impl IntoIterator<Item = String>) -> bool {
+    tag.remove_key(key);
+    // `&=` rather than a short-circuit: whether the key maps is a property of the key, so the
+    // first refusal is every refusal, and stopping there would only make that less obvious.
+    let mut supported = true;
+    for value in values {
+        supported &= tag.push(TagItem::new(key, ItemValue::Text(value)));
+    }
+    supported
 }
 
 /// Apply a simple string field: `Set` inserts, `Clear` removes, `Keep` does nothing.
@@ -92,6 +109,42 @@ fn apply_string(
         FieldEdit::Keep => {}
         FieldEdit::Clear => tag.remove_key(key),
         FieldEdit::Set(v) => set_text(tag, key, v.clone(), field, out),
+    }
+}
+
+/// Apply an artist field: the credit as printed under `printed_key`, one value per name under
+/// `list_key`.
+///
+/// A credit of one name writes **no** list at all. Half the point of the list tag is that its
+/// absence means "this string is one artist", so a one-entry list left behind by a credit the
+/// user reduced would keep saying the opposite.
+fn apply_credits(
+    tag: &mut Tag,
+    edit: &FieldEdit<ArtistCredit>,
+    printed_key: ItemKey,
+    list_key: ItemKey,
+    field: &'static str,
+    out: &mut Vec<&'static str>,
+) {
+    match edit {
+        FieldEdit::Keep => {}
+        FieldEdit::Clear => {
+            tag.remove_key(printed_key);
+            tag.remove_key(list_key);
+        }
+        FieldEdit::Set(credit) => {
+            let printed_ok =
+                tag.insert_text(printed_key, credit.line().unwrap_or_default().to_owned());
+            let listed_ok = if credit.artists().len() > 1 {
+                set_texts(tag, list_key, credit.artists().iter().map(|a| a.name.clone()))
+            } else {
+                tag.remove_key(list_key);
+                true
+            };
+            if !(printed_ok && listed_ok) {
+                out.push(field);
+            }
+        }
     }
 }
 
@@ -245,8 +298,22 @@ pub fn apply_edit(tag: &mut Tag, edit: &TagEdit, picture: Option<&Picture>) -> U
     let mut out: Vec<&'static str> = Vec::new();
 
     apply_string(tag, &edit.title, ItemKey::TrackTitle, "title", &mut out);
-    apply_string(tag, &edit.artist, ItemKey::TrackArtist, "artist", &mut out);
-    apply_string(tag, &edit.album_artist, ItemKey::AlbumArtist, "album_artist", &mut out);
+    apply_credits(
+        tag,
+        &edit.artist,
+        ItemKey::TrackArtist,
+        ItemKey::TrackArtists,
+        "artist",
+        &mut out,
+    );
+    apply_credits(
+        tag,
+        &edit.album_artist,
+        ItemKey::AlbumArtist,
+        ItemKey::AlbumArtists,
+        "album_artist",
+        &mut out,
+    );
     apply_string(tag, &edit.album, ItemKey::AlbumTitle, "album", &mut out);
     apply_string(tag, &edit.genre, ItemKey::Genre, "genre", &mut out);
     apply_string(tag, &edit.composer, ItemKey::Composer, "composer", &mut out);

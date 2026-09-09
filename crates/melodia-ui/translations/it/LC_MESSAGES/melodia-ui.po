@@ -1478,6 +1478,9 @@ msgstr "Limita a"
 msgid "tracks by"
 msgstr "brani per"
 
+msgid "Add artist"
+msgstr "Aggiungi artista"
+
 msgid "Add rule"
 msgstr "Aggiungi regola"
 

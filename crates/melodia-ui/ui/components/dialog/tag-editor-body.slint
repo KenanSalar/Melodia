@@ -2,6 +2,7 @@ import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../../theme.slint";
 import { TagEditor } from "../../globals/dialog-forms.slint";
 import { LabeledInput } from "../labeled-input.slint";
+import { CreditEditor } from "./credit-editor.slint";
 import { ChipGroup } from "../settings/chip-group.slint";
 import { ArtworkImage } from "../artwork-image.slint";
 import { PillButton } from "../action-pill.slint";
@@ -133,20 +134,24 @@ export component TagEditorBody inherits HorizontalLayout {
                             placeholder: TagEditor.title-placeholder;
                             text <=> TagEditor.title;
                         }
-                        LabeledInput {
+                        CreditEditor {
                             label: @tr("Artist");
+                            credits: TagEditor.artists;
                             placeholder: TagEditor.artist-placeholder;
-                            text <=> TagEditor.artist;
+                            preview: TagEditor.artist-preview;
+                            field: TagEditor.field-artist;
                         }
                         LabeledInput {
                             label: @tr("Album");
                             placeholder: TagEditor.album-placeholder;
                             text <=> TagEditor.album;
                         }
-                        LabeledInput {
+                        CreditEditor {
                             label: @tr("Album Artist");
+                            credits: TagEditor.album-artists;
                             placeholder: TagEditor.album-artist-placeholder;
-                            text <=> TagEditor.album-artist;
+                            preview: TagEditor.album-artist-preview;
+                            field: TagEditor.field-album-artist;
                         }
                         LabeledInput {
                             label: @tr("Genre");

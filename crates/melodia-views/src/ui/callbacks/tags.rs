@@ -17,11 +17,14 @@
 //! from `main.rs` after the notifications stack exists, for the same reason.
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use async_compat::Compat;
-use slint::{ComponentHandle, Image, Model, Rgb8Pixel, SharedPixelBuffer, SharedString};
+use slint::{
+    ComponentHandle, Image, Model, ModelRc, Rgb8Pixel, SharedPixelBuffer, SharedString, VecModel,
+};
 
 use crate::ui::file_dialog;
 use crate::ui::shell::notifications::{NotificationParams, NotificationsUi, RowText};
@@ -32,31 +35,38 @@ use melodia_app::state::AppState;
 use melodia_artwork::media::image::image_decode::{
     FilterType, MAX_SOURCE_DIM, decode_capped, fit_within, resize_rgb8,
 };
+use melodia_core::entities::artist::{ArtistCredit, CreditedArtist, JOIN_PHRASES};
 use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
 use melodia_core::entities::track::TagEditRow;
 use melodia_core::error::{AppError, describe};
-use melodia_ui::{AppWindow, Dialog, Settings, TagEditor};
+use melodia_ui::{AppWindow, ArtistCreditRow, Dialog, Settings, TagEditor};
 
 /// Canonical field order, shared by the three positional lists that must stay
 /// aligned: the `commit` getter array, `populate`'s `field!` calls, and
 /// [`build_edit`] / `TagSession::originals`. Indexing by name (not raw `0..12`)
 /// makes the alignment explicit — reorder here and in all three sites together.
 const TITLE: usize = 0;
-const ARTIST: usize = 1;
-const ALBUM_ARTIST: usize = 2;
-const ALBUM: usize = 3;
-const GENRE: usize = 4;
-const YEAR: usize = 5;
-const ORIGINAL_YEAR: usize = 6;
-const TRACK_NUMBER: usize = 7;
-const DISC_NUMBER: usize = 8;
-const COMPOSER: usize = 9;
-const COMMENT: usize = 10;
-const BPM: usize = 11;
-const LYRICS: usize = 12;
+const ALBUM: usize = 1;
+const GENRE: usize = 2;
+const YEAR: usize = 3;
+const ORIGINAL_YEAR: usize = 4;
+const TRACK_NUMBER: usize = 5;
+const DISC_NUMBER: usize = 6;
+const COMPOSER: usize = 7;
+const COMMENT: usize = 8;
+const BPM: usize = 9;
+const LYRICS: usize = 10;
 
-/// Number of editable fields (`title`..`lyrics`).
+/// Number of editable *string* fields (`title`..`lyrics`). The two artist fields are credits and
+/// diff structurally, so they sit outside this array rather than in it as rendered lines.
 const FIELD_COUNT: usize = LYRICS + 1;
+
+/// Which credit a `TagEditor` row callback names, mirroring the global's own `field-artist` /
+/// `field-album-artist`. Two spellings of one position is what drifts, so the Slint side reads
+/// its from the global rather than restating the number.
+const CREDIT_ARTIST: usize = 0;
+const CREDIT_ALBUM_ARTIST: usize = 1;
+const CREDIT_FIELD_COUNT: usize = 2;
 
 /// Auto-dismiss window for the completion toast, matching the playlist
 /// import/export toasts.
@@ -71,6 +81,13 @@ struct TagSession {
     /// Each editable field's value **as populated into the Slint property**, so
     /// the commit diff is a plain string compare.
     originals: Vec<String>,
+    /// The credit each artist field was populated with. Structural rather than a rendered line,
+    /// because two different credits can render the same string and only one of them is what the
+    /// user is looking at.
+    original_credits: [ArtistCredit; CREDIT_FIELD_COUNT],
+    /// Picker label paired with what it renders as, in the order the Slint `[string]` holds them.
+    /// Seeded from `JOIN_PHRASES` and extended by whatever the opened files already use.
+    join_phrases: Vec<(String, String)>,
     artwork: ArtworkEdit,
     /// The picked cover path — set only while `artwork == Replace`. Rides to the
     /// orchestrator as `apply_tag_edit`'s separate `artwork_source` arg.
@@ -88,6 +105,7 @@ pub fn wire_tags(ui: &AppWindow, state: &AppState, notifications: &Rc<Notificati
     let te = ui.global::<TagEditor>();
 
     wire_request_edit(&te, ui, state, &session);
+    wire_credits(&te, ui, &session);
     wire_insert_resident_lyrics(&te, ui, &session);
     wire_pick_artwork(&te, ui, state, &session);
     wire_remove_artwork(&te, ui, &session);
@@ -124,16 +142,34 @@ fn wire_request_edit(
             };
             let single = rows.len() == 1;
 
-            // Lyrics are stored in the file, not the DB — read them for a
-            // single selection (the Lyrics tab isn't mounted otherwise).
-            let lyrics = if single {
+            // Lyrics live in the file, not the DB, and so does the authoritative credit — a
+            // library whose join rows were seeded from `artist_id` alone knows only the first
+            // name. One read for both; a multi-selection takes the database instead, N file reads
+            // on the open path being what the row projection exists to avoid.
+            let (lyrics, credits) = if single {
                 let path = PathBuf::from(&rows[0].file_path);
-                match s.runtime.spawn_blocking(move || library::tags::read_lyrics(&path)).await {
-                    Ok(Ok(Some(l))) => l,
-                    _ => String::new(),
+                let read = s.runtime.spawn_blocking(move || {
+                    (library::tags::read_lyrics(&path), library::tags::read_credits(&path))
+                });
+                match read.await {
+                    Ok((lyrics, credits)) => (
+                        lyrics.ok().flatten().unwrap_or_default(),
+                        vec![credits.unwrap_or_default()],
+                    ),
+                    Err(e) => {
+                        log::warn!("tag edit: reading {} failed: {e}", rows[0].file_path);
+                        (String::new(), vec![<(ArtistCredit, ArtistCredit)>::default()])
+                    }
                 }
             } else {
-                String::new()
+                let by_id =
+                    library::tags::get_tag_edit_credits(&s, &ids).await.unwrap_or_else(|e| {
+                        log::warn!("tag edit credits: {}", describe(&e));
+                        HashMap::new()
+                    });
+                let credits =
+                    rows.iter().map(|r| by_id.get(&r.id).cloned().unwrap_or_default()).collect();
+                (String::new(), credits)
             };
 
             // What the Now Playing panel would show for this track, which is the tag only when
@@ -164,7 +200,7 @@ fn wire_request_edit(
             };
 
             let Some(ui) = weak.upgrade() else { return };
-            populate(&ui, &session, &rows, lyrics, resident, cover);
+            populate(&ui, &session, &rows, &credits, lyrics, resident, cover);
             // After `populate`, which resets to Tags: the request's tab is the last word. Only a
             // single selection can honour it, Lyrics and Summary being unmounted in batch mode, so
             // a request for one over many rows would open on a tab that draws nothing. The bounds
@@ -176,6 +212,213 @@ fn wire_request_edit(
             ui.global::<Dialog>().set_open(true);
         }));
     });
+}
+
+/// The four credit-row callbacks, plus the models they mutate.
+///
+/// Rust owns both models: a row view reports an edit and never writes what it was handed, which
+/// is what lets the `Dropdown`s bind one-way and keep re-reading after a removal shifts every
+/// index below it.
+fn wire_credits(te: &TagEditor, ui: &AppWindow, session: &Rc<RefCell<TagSession>>) {
+    // Installed once, and never replaced: a default-constructed `ModelRc` is a no-op model that
+    // silently ignores `set_vec`, so `populate` needs a real one to be waiting for it.
+    te.set_artists(ModelRc::new(VecModel::from(vec![blank_credit_row()])));
+    te.set_album_artists(ModelRc::new(VecModel::from(vec![blank_credit_row()])));
+
+    let weak = ui.as_weak();
+    let sess = session.clone();
+    te.on_add_credit(move |field| {
+        let Some(ui) = weak.upgrade() else { return };
+        let field = credit_field(field);
+        with_credits_model(&ui, field, |vm| vm.push(blank_credit_row()));
+        refresh_preview(&ui, &sess, field);
+    });
+
+    let weak = ui.as_weak();
+    let sess = session.clone();
+    te.on_remove_credit(move |field, row| {
+        let Some(ui) = weak.upgrade() else { return };
+        let field = credit_field(field);
+        with_credits_model(&ui, field, |vm| {
+            if let Ok(row) = usize::try_from(row)
+                && row < vm.row_count()
+            {
+                vm.remove(row);
+            }
+            // A credit with no names is a state the editor should not be able to reach: the
+            // field would read as "cleared" on save, which is not what removing a collaborator
+            // means.
+            if vm.row_count() == 0 {
+                vm.push(blank_credit_row());
+            }
+        });
+        refresh_preview(&ui, &sess, field);
+    });
+
+    let weak = ui.as_weak();
+    let sess = session.clone();
+    te.on_set_credit_name(move |field, row, name| {
+        let Some(ui) = weak.upgrade() else { return };
+        let field = credit_field(field);
+        patch_credit_row(&ui, field, row, |mut r| {
+            r.name = name;
+            r
+        });
+        refresh_preview(&ui, &sess, field);
+    });
+
+    let weak = ui.as_weak();
+    let sess = session.clone();
+    te.on_set_credit_join(move |field, row, phrase| {
+        let Some(ui) = weak.upgrade() else { return };
+        let field = credit_field(field);
+        patch_credit_row(&ui, field, row, |mut r| {
+            r.join_index = phrase;
+            r
+        });
+        refresh_preview(&ui, &sess, field);
+    });
+}
+
+/// Clamp a Slint-side field discriminator onto one of the two credits.
+fn credit_field(field: i32) -> usize {
+    if usize::try_from(field).unwrap_or(CREDIT_ARTIST) == CREDIT_ALBUM_ARTIST {
+        CREDIT_ALBUM_ARTIST
+    } else {
+        CREDIT_ARTIST
+    }
+}
+
+fn blank_credit_row() -> ArtistCreditRow {
+    ArtistCreditRow {
+        name: SharedString::new(),
+        join_index: 0,
+    }
+}
+
+fn with_credits_model<R>(
+    ui: &AppWindow,
+    field: usize,
+    f: impl FnOnce(&VecModel<ArtistCreditRow>) -> R,
+) -> Option<R> {
+    let te = ui.global::<TagEditor>();
+    let model = if field == CREDIT_ALBUM_ARTIST {
+        te.get_album_artists()
+    } else {
+        te.get_artists()
+    };
+    model.as_any().downcast_ref::<VecModel<ArtistCreditRow>>().map(f)
+}
+
+fn patch_credit_row(
+    ui: &AppWindow,
+    field: usize,
+    row: i32,
+    f: impl FnOnce(ArtistCreditRow) -> ArtistCreditRow,
+) {
+    with_credits_model(ui, field, |vm| {
+        if let Ok(row) = usize::try_from(row)
+            && let Some(old) = vm.row_data(row)
+        {
+            vm.set_row_data(row, f(old));
+        }
+    });
+}
+
+/// Re-render the credit line under the rows after every edit, so the user sees what will be
+/// written rather than having to picture the join phrases in place.
+fn refresh_preview(ui: &AppWindow, session: &Rc<RefCell<TagSession>>, field: usize) {
+    let credit = credit_from_model(ui, field, &session.borrow().join_phrases);
+    let line = SharedString::from(credit.line().unwrap_or_default());
+    let te = ui.global::<TagEditor>();
+    if field == CREDIT_ALBUM_ARTIST {
+        te.set_album_artist_preview(line);
+    } else {
+        te.set_artist_preview(line);
+    }
+}
+
+/// The credit the rows currently spell.
+///
+/// Blank names drop out, so a row added and left empty writes nothing, and the **last** surviving
+/// name loses its phrase whatever its picker says — there is nothing after it to join to, and a
+/// trailing " feat. " in the file is exactly the kind of thing nobody notices until another
+/// player shows it.
+fn credit_from_model(ui: &AppWindow, field: usize, phrases: &[(String, String)]) -> ArtistCredit {
+    let rows =
+        with_credits_model(ui, field, |vm| vm.iter().collect::<Vec<_>>()).unwrap_or_default();
+    let named: Vec<ArtistCreditRow> =
+        rows.into_iter().filter(|r| !r.name.trim().is_empty()).collect();
+    let last = named.len().saturating_sub(1);
+    let artists = named
+        .iter()
+        .enumerate()
+        .map(|(i, r)| CreditedArtist {
+            name: r.name.trim().to_owned(),
+            join_phrase: if i == last {
+                String::new()
+            } else {
+                phrase_at(phrases, r.join_index)
+            },
+        })
+        .collect();
+    ArtistCredit::new(artists)
+}
+
+fn phrase_at(phrases: &[(String, String)], index: i32) -> String {
+    usize::try_from(index)
+        .ok()
+        .and_then(|i| phrases.get(i))
+        .map_or_else(String::new, |(_, rendered)| rendered.clone())
+}
+
+/// The rows for one credit, registering any phrase the built-in list doesn't have.
+fn rows_from_credit(
+    credit: &ArtistCredit,
+    phrases: &mut Vec<(String, String)>,
+) -> Vec<ArtistCreditRow> {
+    let rows: Vec<ArtistCreditRow> = credit
+        .artists()
+        .iter()
+        .map(|a| ArtistCreditRow {
+            name: SharedString::from(a.name.as_str()),
+            join_index: register_phrase(phrases, &a.join_phrase),
+        })
+        .collect();
+    if rows.is_empty() {
+        vec![blank_credit_row()]
+    } else {
+        rows
+    }
+}
+
+/// The picker index for `rendered`, appending it when the file uses a phrase the built-in list
+/// has never heard of.
+///
+/// Round-tripping somebody else's " meets " matters more than a tidy picker: without this, opening
+/// such a file and saving any field at all would silently rewrite the credit to whatever sits at
+/// index 0.
+fn register_phrase(phrases: &mut Vec<(String, String)>, rendered: &str) -> i32 {
+    if rendered.is_empty() {
+        return 0;
+    }
+    if let Some(i) = phrases.iter().position(|(_, known)| known == rendered) {
+        return i32::try_from(i).unwrap_or(0);
+    }
+    phrases.push((rendered.trim().to_owned(), rendered.to_owned()));
+    i32::try_from(phrases.len() - 1).unwrap_or(0)
+}
+
+/// Common credit across the selection: `(credit, disagrees)`, [`common_str`]'s shape.
+fn common_credit<'a>(mut credits: impl Iterator<Item = &'a ArtistCredit>) -> (ArtistCredit, bool) {
+    let Some(first) = credits.next() else {
+        return (ArtistCredit::default(), false);
+    };
+    if credits.all(|c| c == first) {
+        (first.clone(), false)
+    } else {
+        (ArtistCredit::default(), true)
+    }
 }
 
 /// `insert-resident-lyrics`: fill the field with the sheet this track already has.
@@ -282,8 +525,6 @@ fn wire_commit(
             // Read the live properties in canonical field order (TITLE..LYRICS).
             let cur = [
                 te.get_title().to_string(),
-                te.get_artist().to_string(),
-                te.get_album_artist().to_string(),
                 te.get_album().to_string(),
                 te.get_genre().to_string(),
                 te.get_year().to_string(),
@@ -295,7 +536,17 @@ fn wire_commit(
                 te.get_bpm().to_string(),
                 te.get_lyrics().to_string(),
             ];
-            let edit = build_edit(&cur, &sess.originals, sess.artwork.clone());
+            let credits = [
+                credit_from_model(&ui, CREDIT_ARTIST, &sess.join_phrases),
+                credit_from_model(&ui, CREDIT_ALBUM_ARTIST, &sess.join_phrases),
+            ];
+            let edit = build_edit(
+                &cur,
+                &sess.originals,
+                &credits,
+                &sess.original_credits,
+                sess.artwork.clone(),
+            );
             (edit, sess.ids.clone(), sess.picked.clone())
         };
 
@@ -322,6 +573,7 @@ fn populate(
     ui: &AppWindow,
     session: &Rc<RefCell<TagSession>>,
     rows: &[TagEditRow],
+    credits: &[(ArtistCredit, ArtistCredit)],
     lyrics: String,
     resident: Option<String>,
     cover: Option<SharedPixelBuffer<Rgb8Pixel>>,
@@ -347,16 +599,35 @@ fn populate(
     }
 
     field!(common_str(rows.iter().map(|r| r.title.as_str())), set_title, set_title_placeholder);
-    field!(
-        common_str(rows.iter().map(|r| r.artist.as_deref().unwrap_or_default())),
-        set_artist,
-        set_artist_placeholder
-    );
-    field!(
-        common_str(rows.iter().map(|r| r.album_artist.as_deref().unwrap_or_default())),
-        set_album_artist,
-        set_album_artist_placeholder
-    );
+
+    // The two credits. `common_credit` decides the ‹multiple values› sentinel the way `common_str`
+    // does, and the hint rides on the first row's own input rather than a field-wide placeholder.
+    let mut phrases: Vec<(String, String)> = JOIN_PHRASES
+        .iter()
+        .map(|(label, rendered)| ((*label).to_owned(), (*rendered).to_owned()))
+        .collect();
+    let (artist, artist_disagrees) = common_credit(credits.iter().map(|(a, _)| a));
+    let (album_artist, album_artist_disagrees) = common_credit(credits.iter().map(|(_, a)| a));
+    let artist_rows = rows_from_credit(&artist, &mut phrases);
+    let album_artist_rows = rows_from_credit(&album_artist, &mut phrases);
+
+    te.set_join_phrases(ModelRc::new(VecModel::from(
+        phrases.iter().map(|(label, _)| SharedString::from(label.as_str())).collect::<Vec<_>>(),
+    )));
+    write_credit_rows(&te, CREDIT_ARTIST, artist_rows);
+    write_credit_rows(&te, CREDIT_ALBUM_ARTIST, album_artist_rows);
+    te.set_artist_placeholder(if artist_disagrees {
+        sentinel.clone()
+    } else {
+        SharedString::default()
+    });
+    te.set_album_artist_placeholder(if album_artist_disagrees {
+        sentinel.clone()
+    } else {
+        SharedString::default()
+    });
+    te.set_artist_preview(SharedString::from(artist.line().unwrap_or_default()));
+    te.set_album_artist_preview(SharedString::from(album_artist.line().unwrap_or_default()));
     field!(
         common_str(rows.iter().map(|r| r.album.as_deref().unwrap_or_default())),
         set_album,
@@ -404,7 +675,29 @@ fn populate(
     te.set_lyrics_placeholder(SharedString::default());
     originals.push(lyrics);
 
-    finalize_populate(&te, session, rows, originals, resident, cover);
+    finalize_populate(
+        &te,
+        session,
+        rows,
+        originals,
+        [artist, album_artist],
+        phrases,
+        resident,
+        cover,
+    );
+}
+
+/// Replace one credit's rows in place. The model is installed once by `wire_credits`, so this
+/// refills it rather than handing over a new one.
+fn write_credit_rows(te: &TagEditor, field: usize, rows: Vec<ArtistCreditRow>) {
+    let model = if field == CREDIT_ALBUM_ARTIST {
+        te.get_album_artists()
+    } else {
+        te.get_artists()
+    };
+    if let Some(vm) = model.as_any().downcast_ref::<VecModel<ArtistCreditRow>>() {
+        vm.set_vec(rows);
+    }
 }
 
 /// Finish a `populate`: scalar flags, cover, Summary, and the session snapshot.
@@ -413,6 +706,8 @@ fn finalize_populate(
     session: &Rc<RefCell<TagSession>>,
     rows: &[TagEditRow],
     originals: Vec<String>,
+    original_credits: [ArtistCredit; CREDIT_FIELD_COUNT],
+    join_phrases: Vec<(String, String)>,
     resident: Option<String>,
     cover: Option<SharedPixelBuffer<Rgb8Pixel>>,
 ) {
@@ -436,6 +731,8 @@ fn finalize_populate(
     *session.borrow_mut() = TagSession {
         ids: rows.iter().map(|r| r.id).collect(),
         originals,
+        original_credits,
+        join_phrases,
         artwork: ArtworkEdit::Keep,
         picked: None,
         resident_lyrics: resident,
@@ -512,12 +809,21 @@ fn show_failure_toast(ui: &AppWindow, notifications: &NotificationsUi) {
 }
 
 /// Build the `TagEdit` by diffing each current field value against the
-/// populate-time snapshot. `cur` is fixed-length 13; `orig` is checked to match.
-fn build_edit(cur: &[String], orig: &[String], artwork: ArtworkEdit) -> TagEdit {
+/// populate-time snapshot. `cur` is fixed-length [`FIELD_COUNT`]; `orig` is checked to match.
+fn build_edit(
+    cur: &[String],
+    orig: &[String],
+    credits: &[ArtistCredit; CREDIT_FIELD_COUNT],
+    original_credits: &[ArtistCredit; CREDIT_FIELD_COUNT],
+    artwork: ArtworkEdit,
+) -> TagEdit {
     TagEdit {
         title: diff_str(&cur[TITLE], &orig[TITLE]),
-        artist: diff_str(&cur[ARTIST], &orig[ARTIST]),
-        album_artist: diff_str(&cur[ALBUM_ARTIST], &orig[ALBUM_ARTIST]),
+        artist: diff_credit(&credits[CREDIT_ARTIST], &original_credits[CREDIT_ARTIST]),
+        album_artist: diff_credit(
+            &credits[CREDIT_ALBUM_ARTIST],
+            &original_credits[CREDIT_ALBUM_ARTIST],
+        ),
         album: diff_str(&cur[ALBUM], &orig[ALBUM]),
         genre: diff_str(&cur[GENRE], &orig[GENRE]),
         year: diff_parsed::<u16>(&cur[YEAR], &orig[YEAR]),
@@ -545,6 +851,22 @@ fn diff_str(cur: &str, orig: &str) -> FieldEdit<String> {
         FieldEdit::Clear
     } else {
         FieldEdit::Set(cur.to_owned())
+    }
+}
+
+/// Tri-state for an artist field, compared structurally.
+///
+/// Not through the rendered line: two different credits can render the same string, and a phrase
+/// swapped for one that renders identically is still an edit the file should receive. `Keep` is
+/// what makes an untouched multi-artist file safe, the list tag surviving a save that never
+/// looked at it.
+fn diff_credit(cur: &ArtistCredit, orig: &ArtistCredit) -> FieldEdit<ArtistCredit> {
+    if cur == orig {
+        FieldEdit::Keep
+    } else if cur.is_empty() {
+        FieldEdit::Clear
+    } else {
+        FieldEdit::Set(cur.clone())
     }
 }
 

@@ -5,9 +5,11 @@ use std::time::UNIX_EPOCH;
 use lofty::file::{FileType, TaggedFile, TaggedFileExt};
 use lofty::prelude::*;
 use lofty::properties::FileProperties;
+use lofty::tag::Tag;
 
 use super::rating_tags;
 use melodia_artwork::media::image::artwork;
+use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::error::AppError;
 
@@ -245,47 +247,37 @@ fn extract(
         artwork::find_and_cache_artwork(path, tag, artwork_dir, cover_cache)
     };
 
-    // Trim + drop whitespace-only tags. Some ripped/transcoded files carry
-    // an `Artist`/`Album`/`Genre` field that's nothing but spaces; left as-is
-    // they bypass the `is_empty()` guard in `upsert_artist`/`upsert_album`/
-    // `upsert_genre` and create ghost entity rows that pollute the Artists
-    // view and trigger Deezer image-fetch warnings on startup.
-    let (
-        title,
-        artist,
-        album_artist,
-        album,
-        genre,
-        track_number,
-        disc_number,
-        year,
-        composer,
-        comment,
-    ) = if let Some(tag) = tag {
-        (
-            // tag.title()/artist()/album()/genre()/comment() return Cow<str>; use to_string()
-            // (Cow::to_owned returns Cow). get_string() returns &str → to_owned().
-            tag.title()
-                .map(|s| s.trim().to_owned())
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(file_name),
-            tag.artist().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
-            tag.get_string(ItemKey::AlbumArtist)
-                .map(|s| s.trim().to_owned())
-                .filter(|s| !s.is_empty()),
-            tag.album().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
-            tag.genre().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
-            tag.track().map(|t| i32::try_from(t).unwrap_or(i32::MAX)),
-            tag.disk().map(|d| i32::try_from(d).unwrap_or(i32::MAX)),
-            tag.date().map(|ts| i32::from(ts.year)),
-            tag.get_string(ItemKey::Composer)
-                .map(|s| s.trim().to_owned())
-                .filter(|s| !s.is_empty()),
-            tag.comment().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
-        )
-    } else {
-        (file_name(), None, None, None, None, None, None, None, None, None)
-    };
+    // Trim + drop whitespace-only tags. Some ripped/transcoded files carry an `Album`/`Genre`
+    // field that's nothing but spaces; left as-is they bypass the `is_empty()` guard in
+    // `upsert_album`/`upsert_genre` and create ghost entity rows. `read_credit` below owes the
+    // same for the artist fields, where the ghost rows also cost a futile image fetch.
+    let (title, album, genre, track_number, disc_number, year, composer, comment) =
+        if let Some(tag) = tag {
+            (
+                // tag.title()/album()/genre()/comment() return Cow<str>; use to_string()
+                // (Cow::to_owned returns Cow). get_string() returns &str → to_owned().
+                tag.title()
+                    .map(|s| s.trim().to_owned())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(file_name),
+                tag.album().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
+                tag.genre().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
+                tag.track().map(|t| i32::try_from(t).unwrap_or(i32::MAX)),
+                tag.disk().map(|d| i32::try_from(d).unwrap_or(i32::MAX)),
+                tag.date().map(|ts| i32::from(ts.year)),
+                tag.get_string(ItemKey::Composer)
+                    .map(|s| s.trim().to_owned())
+                    .filter(|s| !s.is_empty()),
+                tag.comment().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
+            )
+        } else {
+            (file_name(), None, None, None, None, None, None, None)
+        };
+
+    // Their own lines rather than two more slots above: an artist field is a pair of tags read
+    // together, and neither half alone says what the credit is.
+    let artist = read_credit(tag, ItemKey::TrackArtist, ItemKey::TrackArtists);
+    let album_artist = read_credit(tag, ItemKey::AlbumArtist, ItemKey::AlbumArtists);
 
     // Extract extended metadata from tags
     let (
@@ -362,6 +354,51 @@ fn extract(
         date_modified,
         artwork_path,
     })
+}
+
+/// A file's two artist credits, read off the file rather than the database.
+///
+/// The Edit-Tags dialog's single-selection path: the file is the authority, and it is already
+/// being opened for the lyrics tab, so this costs no read of its own. Blocking; the caller owns
+/// the `spawn_blocking`.
+pub fn read_credits(path: &Path) -> Result<(ArtistCredit, ArtistCredit), AppError> {
+    let tagged = read_tags(path, TagScope::TagsOnly)?;
+    let tag = tagged.primary_tag().or_else(|| tagged.first_tag());
+    Ok((
+        read_credit(tag, ItemKey::TrackArtist, ItemKey::TrackArtists),
+        read_credit(tag, ItemKey::AlbumArtist, ItemKey::AlbumArtists),
+    ))
+}
+
+/// What one artist field reads as: the credit behind it, and the string that renders.
+///
+/// `ARTISTS` wins where it exists. Failing that, a multi-value `ARTIST` — a NUL-separated `TPE1`,
+/// a repeated Vorbis field — is the same list of names with nothing said about how they join. A
+/// *single* value is one artist whatever delimiters it contains, which is what the list tag
+/// exists for: `AC/DC` and `Earth, Wind & Fire` are one name each, and the exceptions list that
+/// splitting on punctuation would need is not one anybody can finish.
+///
+/// The string comes back rendered from the credit rather than copied off the tag, so the column
+/// and the join rows written beside it cannot disagree.
+fn read_credit(tag: Option<&Tag>, printed_key: ItemKey, list_key: ItemKey) -> ArtistCredit {
+    let Some(tag) = tag else {
+        return ArtistCredit::default();
+    };
+    let listed = trimmed_values(tag, list_key);
+    let printed = trimmed_values(tag, printed_key);
+    let credit_line = printed.first().cloned().unwrap_or_default();
+    let names = if listed.is_empty() { printed } else { listed };
+
+    ArtistCredit::from_tags(&credit_line, &names)
+}
+
+/// Every value under `key`, trimmed, blanks dropped.
+///
+/// The blanks are not hypothetical: a whitespace-only artist field is common enough in ripped
+/// libraries to have its own guard downstream, and a NUL-terminated UTF-8 frame leaves an empty
+/// tail value behind it.
+fn trimmed_values(tag: &Tag, key: ItemKey) -> Vec<String> {
+    tag.get_strings(key).map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned).collect()
 }
 
 #[cfg(test)]

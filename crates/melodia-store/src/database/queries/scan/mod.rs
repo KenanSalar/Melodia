@@ -23,7 +23,7 @@ pub use mutations::{
     update_track_artwork_if_missing, update_track_location, update_track_metadata,
 };
 pub use sort_key::to_natural_sort_key;
-pub use upserts::{upsert_album, upsert_artist, upsert_genre};
+pub use upserts::{replace_track_credits, upsert_album, upsert_artist, upsert_genre};
 
 /// Resolved foreign-key IDs for a track being inserted during a scan.
 #[derive(Clone, Copy)]
@@ -52,7 +52,9 @@ pub async fn resolve_track_context(
         return Ok(None);
     };
 
-    let artist_name = meta.artist.as_deref().unwrap_or("");
+    // The **first** credited name, not the whole credit line: an `artists` row named
+    // "X feat. Y" is the bug this replaced, and it was one every multi-artist file created.
+    let artist_name = meta.artist.primary_name();
     let album_name = meta.album.as_deref().unwrap_or("");
     let genre_name = meta.genre.as_deref().unwrap_or("");
 
@@ -60,14 +62,21 @@ pub async fn resolve_track_context(
     // Group the album by its album-artist (falling back to the track artist when no
     // album-artist tag is present) so a per-track featured credit ("X & Y") doesn't
     // split the album into a second row.
-    let album_artist_name =
-        meta.album_artist.as_deref().filter(|s| !s.is_empty()).unwrap_or(artist_name);
+    let album_artist_name = match meta.album_artist.primary_name() {
+        "" => artist_name,
+        name => name,
+    };
     let album_artist_id = if album_artist_name == artist_name {
         artist_id
     } else {
         upsert_artist(tx, album_artist_name, 1).await?
     };
-    let album_id = upsert_album(tx, album_name, album_artist_id, meta.year).await?;
+    let album_credit = if meta.album_artist.is_empty() {
+        &meta.artist
+    } else {
+        &meta.album_artist
+    };
+    let album_id = upsert_album(tx, album_name, album_artist_id, album_credit, meta.year).await?;
     let genre_id = upsert_genre(tx, genre_name).await?;
 
     Ok(Some(ResolvedIds {

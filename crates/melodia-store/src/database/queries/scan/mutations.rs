@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use sqlx::AssertSqlSafe;
+use sqlx::{AssertSqlSafe, Row};
 
 use crate::database::SQLITE_BIND_LIMIT;
 use melodia_core::entities::scan::ExtractedMetadata;
@@ -12,6 +12,7 @@ use melodia_core::error::AppError;
 
 use super::ResolvedIds;
 use super::sort_key::to_natural_sort_key;
+use super::upserts::replace_track_credits;
 
 /// Column-name list shared by [`insert_track`]'s single-row INSERT and
 /// [`insert_tracks_batch`]'s multi-row form. The bind order in
@@ -61,8 +62,8 @@ fn bind_track_columns<'q>(
 ) -> sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments> {
     q.bind(&meta.file_hash)
         .bind(&meta.title)
-        .bind(&meta.artist)
-        .bind(&meta.album_artist)
+        .bind(meta.artist.line())
+        .bind(meta.album_artist.line())
         .bind(&meta.album)
         .bind(&meta.genre)
         .bind(meta.track_number)
@@ -139,7 +140,9 @@ pub async fn insert_track(
         .bind(now) // date_added
         .execute(&mut **tx)
         .await?;
-    Ok(result.last_insert_rowid())
+    let track_id = result.last_insert_rowid();
+    replace_track_credits(tx, track_id, &meta.artist, ids.artist_id).await?;
+    Ok(track_id)
 }
 
 /// One buffered row for [`insert_tracks_batch`]. `meta` borrows from the
@@ -189,8 +192,8 @@ pub async fn insert_tracks_batch(
                 .push_bind(&row.file_name)
                 .push_bind(&meta.file_hash)
                 .push_bind(&meta.title)
-                .push_bind(&meta.artist)
-                .push_bind(&meta.album_artist)
+                .push_bind(meta.artist.line())
+                .push_bind(meta.album_artist.line())
                 .push_bind(&meta.album)
                 .push_bind(&meta.genre)
                 .push_bind(meta.track_number)
@@ -248,6 +251,7 @@ pub async fn insert_tracks_batch(
                     row.file_path
                 )));
             };
+            replace_track_credits(tx, id, &row.meta.artist, row.ids.artist_id).await?;
             out.push(id);
         }
     }
@@ -319,11 +323,21 @@ pub async fn update_track_metadata(
             album_id = ?, artist_id = ?, genre_id = ?, folder_id = ?,
             date_modified = ?, sort_key = ?,
             rating = CASE WHEN ? = 0 THEN rating ELSE ? END
-         WHERE file_path = ?",
+         WHERE file_path = ? RETURNING id",
     );
     let q = bind_track_columns(q, meta, ids, &sort_key);
     let tag_rating = meta.rating.unwrap_or(0);
-    q.bind(tag_rating).bind(tag_rating).bind(file_path).execute(&mut **tx).await?;
+    let updated =
+        q.bind(tag_rating).bind(tag_rating).bind(file_path).fetch_optional(&mut **tx).await?;
+
+    // Here rather than at the four callers, for the reason the module doc gives about hand-built
+    // UPDATEs: a re-ingest that refreshed the artist column and left the credit rows behind is a
+    // track that displays one thing and files under another. `RETURNING` rather than a follow-up
+    // SELECT, so an incremental scan pays no extra round trip per changed file.
+    if let Some(row) = updated {
+        let track_id: i64 = row.try_get("id")?;
+        replace_track_credits(tx, track_id, &meta.artist, ids.artist_id).await?;
+    }
     Ok(())
 }
 

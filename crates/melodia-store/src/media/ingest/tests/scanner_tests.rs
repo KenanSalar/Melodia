@@ -7,6 +7,7 @@ use tempfile::TempDir;
 
 use super::*;
 use melodia_artwork::media::image::artwork::CoverCache;
+use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::scan::ExistingTrackSummary;
 use melodia_core::error::AppError;
 use melodia_core::utils::audio_ext::AUDIO_EXTENSIONS;
@@ -170,7 +171,7 @@ fn scan_files_parallel_keeps_a_filename_row_for_unparseable_tags() -> Result<(),
     assert_eq!(scanned.metadata.title, "bad");
     assert_eq!(scanned.metadata.duration_ms, 0);
     assert_eq!(scanned.metadata.codec, None);
-    assert_eq!(scanned.metadata.artist, None);
+    assert_eq!(scanned.metadata.artist, ArtistCredit::default());
     Ok(())
 }
 

@@ -9,6 +9,8 @@
 
 use std::path::PathBuf;
 
+use super::artist::ArtistCredit;
+
 /// Size and mtime for a track already in the database, feeding the incremental-scan filter that
 /// decides whether an on-disk file is unchanged and can be skipped entirely.
 ///
@@ -30,8 +32,8 @@ pub struct ScannedFile {
 #[derive(Debug, Clone)]
 pub struct ExtractedMetadata {
     pub title: String,
-    pub artist: Option<String>,
-    pub album_artist: Option<String>,
+    pub artist: ArtistCredit,
+    pub album_artist: ArtistCredit,
     pub album: Option<String>,
     pub genre: Option<String>,
     pub track_number: Option<i32>,

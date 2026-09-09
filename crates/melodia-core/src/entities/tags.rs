@@ -4,6 +4,8 @@
 //! in `media::ingest::tag_writer` consumes them. Neither end owns the vocabulary, which is why it sits
 //! here — and why the dialog can name it without naming the writer.
 
+use super::artist::ArtistCredit;
+
 /// A per-field tri-state. The dialog reports what the user *did*, not just the value they left
 /// behind, because empty is not clear: `extract_metadata` filters whitespace-only tags to `None`,
 /// so writing `""` leaves a ghost tag our own reader ignores and other players happily display.
@@ -32,8 +34,10 @@ pub enum ArtworkEdit {
 #[derive(Debug, Clone, Default)]
 pub struct TagEdit {
     pub title: FieldEdit<String>,
-    pub artist: FieldEdit<String>,
-    pub album_artist: FieldEdit<String>,
+    /// The whole credit, not a display string: the dialog edits names and join phrases separately
+    /// and `media::ingest::tag_writer` needs both halves to write the pair of tags.
+    pub artist: FieldEdit<ArtistCredit>,
+    pub album_artist: FieldEdit<ArtistCredit>,
     pub album: FieldEdit<String>,
     pub genre: FieldEdit<String>,
     /// lofty's `Timestamp.year` is `u16`, so the form's year is parsed to `u16`.

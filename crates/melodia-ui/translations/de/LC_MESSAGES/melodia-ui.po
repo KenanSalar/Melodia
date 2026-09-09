@@ -1485,6 +1485,9 @@ msgstr "Begrenzen auf"
 msgid "tracks by"
 msgstr "Titel nach"
 
+msgid "Add artist"
+msgstr "Interpret hinzufügen"
+
 msgid "Add rule"
 msgstr "Regel hinzufügen"
 

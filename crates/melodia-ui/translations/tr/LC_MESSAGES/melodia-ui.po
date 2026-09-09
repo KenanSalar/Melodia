@@ -1483,6 +1483,9 @@ msgstr "Sınırla:"
 msgid "tracks by"
 msgstr "parça, şuna göre:"
 
+msgid "Add artist"
+msgstr "Sanatçı ekle"
+
 msgid "Add rule"
 msgstr "Kural ekle"
 

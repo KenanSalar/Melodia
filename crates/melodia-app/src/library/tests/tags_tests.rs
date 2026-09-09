@@ -10,6 +10,7 @@ use tempfile::TempDir;
 
 use super::write_tag_edit;
 use melodia_artwork::media::image::artwork;
+use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::scan::ExistingTrackSummary;
 use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
 use melodia_core::error::AppError;
@@ -323,7 +324,7 @@ async fn replace_artwork_lands_on_every_track_and_the_shared_album() -> Result<(
     // files in one album regardless of the fixtures' own tags — then the memo
     // and the Replace roll-up have a single album to converge on.
     let edit = TagEdit {
-        artist: FieldEdit::Set("Shared Artist".to_owned()),
+        artist: FieldEdit::Set(ArtistCredit::from_name("Shared Artist")),
         album: FieldEdit::Set("Shared Album".to_owned()),
         artwork: ArtworkEdit::Replace,
         ..TagEdit::default()

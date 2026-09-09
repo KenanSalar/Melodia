@@ -54,8 +54,8 @@ fn text(tag: &Tag, key: ItemKey) -> Option<String> {
 fn full_edit() -> TagEdit {
     TagEdit {
         title: FieldEdit::Set("New Title".into()),
-        artist: FieldEdit::Set("New Artist".into()),
-        album_artist: FieldEdit::Set("New Album Artist".into()),
+        artist: FieldEdit::Set(ArtistCredit::from_name("New Artist")),
+        album_artist: FieldEdit::Set(ArtistCredit::from_name("New Album Artist")),
         album: FieldEdit::Set("New Album".into()),
         genre: FieldEdit::Set("Shoegaze".into()),
         year: FieldEdit::Set(2024),

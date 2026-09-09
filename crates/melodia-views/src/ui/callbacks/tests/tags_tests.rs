@@ -2,6 +2,7 @@
 //! risky part of the commit path is turning the form snapshot into a `TagEdit`.
 
 use super::*;
+use melodia_core::entities::artist::ArtistCredit;
 
 #[test]
 fn diff_str_keep_clear_set() {
@@ -46,20 +47,19 @@ fn diff_bpm_rejects_nan_inf_negative() {
 
 #[test]
 fn build_edit_touches_only_changed_fields() {
-    // title, artist, album_artist, album, genre, year, original_year,
-    // track_number, disc_number, composer, comment, bpm, lyrics
-    let orig: Vec<String> = [
-        "Title", "Artist", "", "Album", "", "2020", "", "1", "", "", "", "120", "",
-    ]
-    .iter()
-    .map(|s| (*s).to_owned())
-    .collect();
+    // title, album, genre, year, original_year, track_number, disc_number,
+    // composer, comment, bpm, lyrics — the two artist fields are credits and diff separately.
+    let orig: Vec<String> = ["Title", "Album", "", "2020", "", "1", "", "", "", "120", ""]
+        .iter()
+        .map(|s| (*s).to_owned())
+        .collect();
+    let credits = [ArtistCredit::from_name("Artist"), ArtistCredit::default()];
 
     let mut cur = orig.clone();
-    cur[3] = "New Album".to_owned(); // change album
+    cur[1] = "New Album".to_owned(); // change album
     cur[0] = String::new(); // clear title
 
-    let edit = build_edit(&cur, &orig, ArtworkEdit::Keep);
+    let edit = build_edit(&cur, &orig, &credits, &credits, ArtworkEdit::Keep);
     assert_eq!(edit.album, FieldEdit::Set("New Album".to_owned()));
     assert_eq!(edit.title, FieldEdit::Clear);
     assert_eq!(edit.artist, FieldEdit::Keep);
@@ -67,7 +67,7 @@ fn build_edit_touches_only_changed_fields() {
     assert!(!edit.is_noop());
 
     // An unchanged form diffs to an all-Keep no-op.
-    let noop = build_edit(&orig, &orig, ArtworkEdit::Keep);
+    let noop = build_edit(&orig, &orig, &credits, &credits, ArtworkEdit::Keep);
     assert!(noop.is_noop());
 }
 

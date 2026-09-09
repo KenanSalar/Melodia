@@ -7,6 +7,7 @@
 
 use crate::database::DbPool;
 use crate::database::queries;
+use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::error::AppError;
 
@@ -15,8 +16,8 @@ use melodia_core::error::AppError;
 pub fn make_test_metadata(title: &str) -> ExtractedMetadata {
     ExtractedMetadata {
         title: title.to_owned(),
-        artist: Some("Test Artist".to_owned()),
-        album_artist: None,
+        artist: ArtistCredit::from_name("Test Artist"),
+        album_artist: ArtistCredit::default(),
         album: Some("Test Album".to_owned()),
         genre: Some("Rock".to_owned()),
         track_number: Some(1),
@@ -60,19 +61,17 @@ pub async fn insert_test_track(
     let mut tx = db.write().begin().await?;
 
     let unknown_artist_id = 1; // sentinel from schema.sql
+    let credit = ArtistCredit::from_name(artist_name);
     let artist_id = queries::scan::upsert_artist(&mut tx, artist_name, unknown_artist_id).await?;
-    let album_id = queries::scan::upsert_album(&mut tx, album_name, artist_id, Some(2024)).await?;
+    let album_id =
+        queries::scan::upsert_album(&mut tx, album_name, artist_id, &credit, Some(2024)).await?;
     let genre_id = queries::scan::upsert_genre(&mut tx, genre_name).await?;
 
     let file_name =
         std::path::Path::new(file_path).file_name().and_then(|f| f.to_str()).unwrap_or("test.mp3");
 
     let mut meta = make_test_metadata(title);
-    meta.artist = if artist_name.is_empty() {
-        None
-    } else {
-        Some(artist_name.to_owned())
-    };
+    meta.artist = credit;
     meta.album = if album_name.is_empty() {
         None
     } else {

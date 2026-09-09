@@ -428,7 +428,7 @@ impl Default for LyricsFlags {
 #[serde(default)]
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "five independent settings.json keys, three of them one-shot markers; any grouping would be a container invented for the lint rather than one describing something"
+    reason = "six independent settings.json keys, four of them one-shot markers; any grouping would be a container invented for the lint rather than one describing something"
 )]
 pub struct LibraryFlags {
     pub folder_watching_enabled: bool,
@@ -455,6 +455,13 @@ pub struct LibraryFlags {
     /// fixes that is one-shot, and marked here rather than inferred — an unrated row is
     /// indistinguishable from one the user deliberately cleared.
     pub ratings_imported_from_tags: bool,
+    /// Whether the multi-value artist tags already sitting in this library's files have been read
+    /// in once.
+    ///
+    /// The migration seeds one credit per track from `tracks.artist_id`, which is right for a
+    /// single-artist file and is every name a library indexed before the credit tables knows. The
+    /// rest is in the files, and `scanner::track_is_current` will never re-read them.
+    pub artist_credits_imported: bool,
 }
 
 impl Default for LibraryFlags {
@@ -465,6 +472,7 @@ impl Default for LibraryFlags {
             artwork_store_normalized: false,
             write_ratings_to_tags: true,
             ratings_imported_from_tags: false,
+            artist_credits_imported: false,
         }
     }
 }

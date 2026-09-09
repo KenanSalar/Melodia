@@ -152,6 +152,14 @@ export struct PlaylistExportPickRow {
 // the editor body, mirrored by position to `entities::smart_criteria::{FIELDS, ops_for}`.
 //   * field-kind — 0 text · 1 number · 2 bool · 3 date; picks the op array
 //   * input-kind — 0 none · 1 text · 2 number; picks the value widget
+// One row of the Edit-Tags credit editor. `join-index` points into `TagEditor.join-phrases`,
+// which Rust owns; the phrase itself never crosses as a string, so a mis-typed separator cannot
+// reach the file from here. The last row's index is ignored — nothing follows it to join to.
+export struct ArtistCreditRow {
+    name: string,
+    join-index: int,
+}
+
 export struct SmartRuleRow {
     field-index: int,
     op-index: int,
