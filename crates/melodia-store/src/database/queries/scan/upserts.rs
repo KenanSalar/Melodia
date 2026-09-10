@@ -195,7 +195,7 @@ async fn write_genres(
     Ok(())
 }
 
-/// [`replace_track_credits`] for an album, plus the rendered credit `album_stats` displays.
+/// [`replace_track_joins`] for an album, plus the rendered credit `album_stats` displays.
 ///
 /// No insert-only sibling: `upsert_album` reaches this down both arms of its `ON CONFLICT`, so the
 /// rows may or may not be there and only the delete can tell.
@@ -373,7 +373,7 @@ pub async fn upsert_artist(
 ///
 /// `artist_id` is the album's grouping key, the primary name behind `credit`, and the two are
 /// separate arguments because the caller has already resolved and cached the id. The credit rows
-/// are written here rather than by the caller for the reason [`replace_track_credits`] gives: an
+/// are written here rather than by the caller for the reason [`insert_track_joins`] gives: an
 /// album row without them files under nobody.
 pub async fn upsert_album(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,

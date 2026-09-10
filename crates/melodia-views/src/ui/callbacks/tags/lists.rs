@@ -177,19 +177,16 @@ pub(super) fn roles_from_model(ui: &AppWindow, original: &RoleCreditEdit) -> Rol
         let Some(inner) = outer.row_data(index) else {
             continue;
         };
-        let named: Vec<RoleCredit> = inner
-            .iter()
-            .filter_map(|name| {
-                let name = name.trim();
-                (!name.is_empty()).then(|| RoleCredit {
-                    role,
-                    detail: detail_for(original.credits(), role, name),
-                    name: name.to_owned(),
-                })
+        let before = credits.len();
+        credits.extend(inner.iter().filter_map(|name| {
+            let name = name.trim();
+            (!name.is_empty()).then(|| RoleCredit {
+                role,
+                detail: detail_for(original.credits(), role, name),
+                name: name.to_owned(),
             })
-            .collect();
-        answered[index] |= !named.is_empty();
-        credits.extend(named);
+        }));
+        answered[index] |= credits.len() > before;
     }
 
     RoleCreditEdit::new(RoleCredits::new(credits), answered)

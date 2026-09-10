@@ -41,8 +41,8 @@ pub enum ArtworkEdit {
 ///
 /// The scope is what the form could answer for: every role on one track, and on a selection the
 /// roles it agreed on plus any the user has since filled in. The writer touches nothing outside
-/// it. Kept beside the credits and built with them, so nothing can hand the writer a set whose
-/// scope describes a different form.
+/// it. Kept beside the credits so the scope travels with the form it describes, where the writer
+/// used to assume all ten.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RoleCreditEdit {
     credits: RoleCredits,

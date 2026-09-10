@@ -103,7 +103,7 @@ pub fn write_roles(tag: &mut Tag, edit: &RoleCreditEdit) -> Vec<CreditRole> {
 
 /// Remove every role credit the tag carries.
 ///
-/// Unscoped, unlike [`write_roles`], because its caller is a [`FieldEdit::Clear`] and that carries
+/// Unscoped, unlike [`write_roles`], because its caller is a `FieldEdit::Clear` and that carries
 /// no payload to take a scope from — so the only honest reading of it is every role.
 pub fn clear(tag: &mut Tag) {
     for role in ROLES {
