@@ -20,6 +20,7 @@ use std::sync::{Arc, LazyLock};
 
 use rayon::prelude::*;
 
+use crate::library::lyrics;
 use crate::state::AppState;
 use melodia_artwork::media::image::artwork::{self, CoverCache};
 use melodia_core::entities::artist::ArtistCredit;
@@ -155,10 +156,35 @@ pub async fn apply_tag_edit(
             );
         }
 
+        if edit.renames_recording() {
+            forget_stored_lyrics(state, &updated_ids).await;
+        }
+
         state.library_changed.bump();
     }
 
     Ok(report)
+}
+
+/// Drop what the lyrics directory answered for each retagged track.
+///
+/// The store is keyed on the file's path, so nothing here expires when the tags it was matched off
+/// change, and a miss stands for a month. That is how a track keeps showing no lyrics after the
+/// artist that lost them has been corrected.
+///
+/// Best-effort: the edit has already committed, so a store entry that would not clear is a line in
+/// the log rather than a save to fail.
+async fn forget_stored_lyrics(state: &AppState, ids: &[i64]) {
+    let paths = match queries::track::get_track_paths_by_ids(&state.db, ids).await {
+        Ok(rows) => rows.into_iter().map(|(_, path)| path).collect(),
+        Err(e) => {
+            log::debug!("tags: lyrics store kept: {}", describe(&e));
+            return;
+        }
+    };
+    if let Err(e) = lyrics::forget_all(state, paths).await {
+        log::debug!("tags: lyrics store kept: {}", describe(&e));
+    }
 }
 
 /// The testable core: rewrite each file's tags, re-extract, and land the batch

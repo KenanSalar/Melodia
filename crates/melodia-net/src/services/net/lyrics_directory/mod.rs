@@ -14,6 +14,7 @@ mod recording;
 use std::fmt;
 use std::time::Duration;
 
+use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::lyrics::LyricsAnswer;
 use melodia_core::error::AppError;
 
@@ -79,13 +80,16 @@ impl std::error::Error for LookupError {
 }
 
 /// Ask the directory about one track.
+///
+/// The whole credit rather than its printed line, because the two endpoints want different halves
+/// of it: the signature asks with the credit as printed, the index with the name behind it.
 pub async fn fetch(
     client: &reqwest::Client,
     pacer: &RequestPacer,
     title: &str,
-    artist: &str,
+    credit: &ArtistCredit,
     album: &str,
     duration_ms: i64,
 ) -> Result<Option<LyricsAnswer>, LookupError> {
-    lrclib::fetch(client, pacer, title, artist, album, duration_ms).await
+    lrclib::fetch(client, pacer, title, credit, album, duration_ms).await
 }

@@ -13,6 +13,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::utils::fold::fold;
 
 /// The words that make a title a *different recording* rather than the same one dressed
@@ -39,12 +40,18 @@ const VERSION_MARKERS: [&str; 9] = [
     "reprise",
 ];
 
-/// What separates one credited artist from the next, in a tag or in somebody else's row.
+/// What separates one credited artist from the next in a string nobody structured: somebody else's
+/// row, or a single-value tag of our own.
 ///
 /// Spelled once because the query and the check must agree: a splitter that trims the query to the
 /// first artist while the check compares the whole credit rejects every row the trimming found.
 /// The spaced `x` earns its place on that count — it is how half of one dance library credits a
 /// collaboration, and the spaces are what keep it off `Charli XCX`.
+///
+/// **Not to be extended to cover `entities::artist::JOIN_PHRASES`.** Each entry added trades one
+/// class of miss for another: a `" and "` here would cut `Florence and the Machine` down to
+/// `Florence`. A credit that lists its artists needs no guess at all, which is what
+/// [`Recording::from_credit`] and [`search_artist`] read instead.
 const ARTIST_SPLITS: [&str; 9] = [
     " feat ", " feat. ", " ft ", " ft. ", " with ", " & ", " x ", ",", ";",
 ];
@@ -76,6 +83,24 @@ impl Recording {
             core_title: squeeze(&strip_brackets(&folded_title)),
             artists: credits(artist),
         }
+    }
+
+    /// Our side of the comparison, built from the credit rather than from its printed line alone.
+    ///
+    /// **The credited names are added to the split, never substituted for it.** The row on the
+    /// other side is still one unstructured string [`credits`] has to guess at, so a credit of one
+    /// name that reads as two, `Simon & Garfunkel`, would stop matching the row that guessed it
+    /// apart the same way we used to. What the names buy is the case no splitter reaches: a join
+    /// phrase like `" vs. "` leaves the printed line as a single credit nobody is filed under.
+    ///
+    /// Widening only ever adds names our own tags claim, and [`Self::matches`] already reads a
+    /// superset on our side as "the row credits fewer of us".
+    pub(super) fn from_credit(title: &str, credit: &ArtistCredit) -> Self {
+        let mut recording = Self::new(title, credit.line().unwrap_or_default());
+        recording.artists.extend(
+            credit.artists().iter().map(|c| squeeze(&fold(&c.name))).filter(|n| !n.is_empty()),
+        );
+        recording
     }
 
     /// Whether this side is comparable at all: the half of [`Self::matches`] that asks about one
@@ -131,8 +156,21 @@ pub(super) fn query_title(title: &str) -> &str {
     }
 }
 
+/// The artist to search the index with.
+///
+/// A credit naming two or more artists already says who leads, so nothing is guessed. A credit of
+/// one name is a single-value tag, which is one artist whatever punctuation it carries (`AC/DC` is
+/// not two), and there [`query_artist`]'s guess at the string is the only information there is.
+pub(super) fn search_artist(credit: &ArtistCredit) -> &str {
+    if credit.artists().len() > 1 {
+        credit.primary_name()
+    } else {
+        query_artist(credit.line().unwrap_or_default())
+    }
+}
+
 /// The first credited artist, which is how a row is filed when the file credits several.
-pub(super) fn query_artist(artist: &str) -> &str {
+fn query_artist(artist: &str) -> &str {
     // ASCII-folded for [`query_title`]'s reason, and it bites sooner here: a one-byte marker like
     // `,` leaves nothing for the drift to land harmlessly inside.
     let lower = artist.to_ascii_lowercase();

@@ -237,12 +237,28 @@ fn online_lookup_enabled(state: &AppState) -> bool {
 /// in the store until it ages out. Touches only the store: a sidecar and a lyrics tag are the
 /// user's own files, and a refresh that deleted either would be a delete nobody asked for.
 pub async fn forget(state: &AppState, track_path: &str) -> Result<(), AppError> {
+    forget_all(state, vec![track_path.to_owned()]).await
+}
+
+/// [`forget`] over a retagged batch, in one hop rather than one per track.
+///
+/// Every path is attempted whatever the ones before it did: an entry left standing is a stale
+/// answer, and stopping at the first failure would leave the rest of the batch holding theirs over
+/// something that had nothing to do with them. The first error is what comes back.
+pub async fn forget_all(state: &AppState, track_paths: Vec<String>) -> Result<(), AppError> {
     let paths = Arc::clone(&state.paths);
-    let track_path = track_path.to_owned();
 
     state
         .runtime
-        .spawn_blocking(move || store::forget(&paths.lyrics_dir, &track_path))
+        .spawn_blocking(move || {
+            let mut first_error = None;
+            for track_path in &track_paths {
+                if let Err(e) = store::forget(&paths.lyrics_dir, track_path) {
+                    first_error = first_error.or(Some(e));
+                }
+            }
+            first_error.map_or(Ok(()), Err)
+        })
         .await
         .map_err(AppError::io_source)?
 }

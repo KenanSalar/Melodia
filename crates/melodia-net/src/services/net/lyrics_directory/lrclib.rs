@@ -14,12 +14,13 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
+use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::lyrics::{LyricsAnswer, carries_gloss};
 use melodia_core::error::AppError;
 use melodia_core::utils::fold::fold;
 
 use super::LookupError;
-use super::recording::{Recording, query_artist, query_title};
+use super::recording::{Recording, query_title, search_artist};
 use crate::services::net::pacer::{RequestPacer, Turn};
 
 /// The exact-signature endpoint: four fields that together name one recording, so it answers or it
@@ -152,18 +153,21 @@ pub(super) async fn fetch(
     client: &reqwest::Client,
     pacer: &RequestPacer,
     title: &str,
-    artist: &str,
+    credit: &ArtistCredit,
     album: &str,
     duration_ms: i64,
 ) -> Result<Option<LyricsAnswer>, LookupError> {
-    let exact = get_exact(client, pacer, title, artist, album, duration_ms).await?;
+    // The signature is a match against whatever the uploader tagged, so it asks with the credit as
+    // printed. Only the index, which is asked loosely, has any use for the shape behind it.
+    let printed = credit.line().unwrap_or_default();
+    let exact = get_exact(client, pacer, title, printed, album, duration_ms).await?;
     if exact.as_ref().is_some_and(|answer| answer.instrumental || settles_it(answer)) {
         return Ok(exact);
     }
     // Past `settles_it`, an answer already timed leaves the index one errand: the gloss.
     let gloss_errand = exact.as_ref().is_some_and(LyricsAnswer::is_synced);
 
-    match search_timed(client, pacer, title, artist, album, duration_ms).await {
+    match search_timed(client, pacer, title, credit, album, duration_ms).await {
         Ok(Some(timed)) if worth_taking(exact.as_ref(), &timed) => Ok(Some(timed)),
         Ok(Some(_) | None) => Ok(exact),
         // **A failed errand for a gloss may not cost the sheet it was run for.** Reported as a
@@ -264,7 +268,7 @@ async fn search_timed(
     client: &reqwest::Client,
     pacer: &RequestPacer,
     title: &str,
-    artist: &str,
+    credit: &ArtistCredit,
     album: &str,
     duration_ms: i64,
 ) -> Result<Option<LyricsAnswer>, LookupError> {
@@ -272,19 +276,20 @@ async fn search_timed(
     // that is nothing but a bracketed credit, or a credit that is nothing but separators, folds to
     // a recording `Recording::matches` refuses every row against, so the cap could only be spent
     // to be told nothing.
-    let ours = Recording::new(title, artist);
+    let ours = Recording::from_credit(title, credit);
     if !ours.can_match() {
         return Ok(None);
     }
 
     // Back to the tag where the trim empties a field. The cut is there to widen the query, and a
     // title opening on its own `feat.` would otherwise be searched for by nothing at all.
+    let printed = credit.line().unwrap_or_default();
     let track_query = match query_title(title) {
         "" => title,
         cut => cut,
     };
-    let artist_query = match query_artist(artist) {
-        "" => artist,
+    let artist_query = match search_artist(credit) {
+        "" => printed,
         cut => cut,
     };
 

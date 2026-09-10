@@ -866,6 +866,27 @@ pub async fn get_track_credits_by_ids(
     Ok(out)
 }
 
+/// One track's ordered artist credit, the album's left alone.
+///
+/// [`get_track_credits_by_ids`] over a single parent minus its second query, for the lyrics
+/// lookup: it asks about the playing track and has no album credit to show, and the caller is
+/// about to open a socket, so the row multiplication that one avoids is not a cost worth paying
+/// here either.
+pub async fn get_track_credit(db: &DbPool, id: i64) -> Result<ArtistCredit, AppError> {
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT a.name, ta.join_phrase \
+         FROM track_artists ta JOIN artists a ON a.id = ta.artist_id \
+         WHERE ta.track_id = ? ORDER BY ta.position",
+    )
+    .bind(id)
+    .fetch_all(db.read())
+    .await?;
+
+    Ok(ArtistCredit::new(
+        rows.into_iter().map(|(name, join_phrase)| CreditedArtist { name, join_phrase }).collect(),
+    ))
+}
+
 /// Collapse `(parent id, name, join phrase)` rows into one credit per parent, keeping the order
 /// the query returned them in.
 fn group_credits(rows: Vec<(i64, String, String)>) -> HashMap<i64, Vec<CreditedArtist>> {

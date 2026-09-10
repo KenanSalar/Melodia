@@ -85,6 +85,15 @@ impl TagEdit {
             || self.year != FieldEdit::Keep
     }
 
+    /// Whether this edit moves either tag a lyrics directory identifies a recording by.
+    ///
+    /// Duration is the third and no tag edit can reach it. `library::tags`' commit drops the stored
+    /// sheet on a true answer: a cached miss was earned under a name the file no longer carries, and
+    /// it stands for a month.
+    pub fn renames_recording(&self) -> bool {
+        self.title != FieldEdit::Keep || self.artist != FieldEdit::Keep
+    }
+
     /// Every field except `rating` left at [`FieldEdit::Keep`].
     fn no_field_but_rating(&self) -> bool {
         self.title == FieldEdit::Keep

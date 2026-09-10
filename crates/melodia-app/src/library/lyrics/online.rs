@@ -3,11 +3,13 @@
 use super::lrc;
 use super::store::{self, Fetched};
 use crate::state::AppState;
+use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::lyrics::{LyricsOutcome, LyricsSource};
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
 use melodia_core::utils::text::filled;
 use melodia_net::services::net::lyrics_directory as directory;
+use melodia_store::database::queries;
 
 /// Looks a sheet up for a track that carries none of its own, and records what came back.
 ///
@@ -29,7 +31,7 @@ pub(super) async fn look_up(
         state.http_client(),
         &state.lyrics_pacer,
         &track.title,
-        artist,
+        &credit_for(state, track.id, artist).await,
         filled(track.album.as_deref()).unwrap_or_default(),
         track.duration_ms,
     )
@@ -69,6 +71,23 @@ pub(super) async fn look_up(
         Fetched::Instrumental => LyricsOutcome::Instrumental,
         Fetched::Nothing => LyricsOutcome::Absent,
     })
+}
+
+/// The credit behind the printed artist line, for the half of the request that can use its shape.
+///
+/// **Taken only where it renders back to `printed`.** A credit list rendering to anything else is
+/// stale, `tasks::credit_import` not having reached that row's files yet, and the column is what
+/// every other surface displays. The fallback is what this path asked with before the credit tables
+/// existed, so losing the shape costs the lookup precision rather than its answer.
+async fn credit_for(state: &AppState, track_id: i64, printed: &str) -> ArtistCredit {
+    match queries::track::get_track_credit(&state.db, track_id).await {
+        Ok(credit) if credit.line() == Some(printed) => credit,
+        Ok(_) => ArtistCredit::from_name(printed),
+        Err(e) => {
+            log::debug!("lyrics: credit unread: {}", melodia_core::error::describe(&e));
+            ArtistCredit::from_name(printed)
+        }
+    }
 }
 
 #[cfg(test)]
