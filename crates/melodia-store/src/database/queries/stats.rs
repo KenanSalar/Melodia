@@ -2,7 +2,8 @@ use melodia_core::error::AppError;
 
 // ── Trigger SQL constants ───────────────────────────────────────────────────
 // Must stay in sync with the stats triggers in
-// migrations/20260911000000_tag_coverage.sql, which is where they were last rewritten.
+// migrations/20260910000000_tag_vocabulary.sql, which is where all nine now live — the three
+// `tracks_stats_*` in its second half, the six join-table ones in its first.
 //
 // The artist and genre arms live on the three join tables rather than on `tracks`: both sets of
 // counts mean "credited on" now, and a track carries a list rather than one name. What a `tracks`

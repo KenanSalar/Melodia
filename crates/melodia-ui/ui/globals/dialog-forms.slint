@@ -34,7 +34,7 @@ export global SmartEditor {
 }
 
 // The Edit-Track-Information dialog (`kind == "edit-tags"`), opened from a track row's context menu
-// over one *or many* rows and owned by `crates/melodia-views/src/ui/callbacks/tags.rs`. `request-edit` fetches,
+// over one *or many* rows and owned by `crates/melodia-views/src/ui/callbacks/tags/`. `request-edit` fetches,
 // populates and opens on the same fresh tick `SmartEditor` uses. `commit` diffs each field against
 // the populate-time snapshot into a Keep / Clear / Set tri-state, so only touched fields reach the
 // file.

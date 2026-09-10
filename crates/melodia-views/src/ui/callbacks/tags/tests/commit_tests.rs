@@ -1,9 +1,10 @@
-//! Pure diff + formatting logic for the tag editor. No UI, no fixtures — the
-//! risky part of the commit path is turning the form snapshot into a `TagEdit`.
+//! Pure diff logic for the tag editor. No UI, no fixtures — the risky part of the commit path is
+//! turning the form snapshot into a `TagEdit`.
 
 use super::*;
-use melodia_core::entities::artist::ArtistCredit;
-use melodia_core::entities::credits::CreditRole;
+use melodia_core::entities::credits::{CreditRole, RoleCredit};
+
+use crate::ui::callbacks::tags::form::TextFields;
 
 #[test]
 fn diff_str_keep_clear_set() {
@@ -44,6 +45,28 @@ fn diff_bpm_rejects_nan_inf_negative() {
     assert!(matches!(diff_bpm("inf", "x"), FieldEdit::Keep));
     assert!(matches!(diff_bpm("-5", "x"), FieldEdit::Keep));
     assert!(matches!(diff_bpm("junk", "x"), FieldEdit::Keep));
+}
+
+/// One ladder behind all three multi-value fields, so a `Clear` cannot start meaning `Keep` for
+/// one of them alone.
+#[test]
+fn diff_multi_keep_clear_set_for_every_multi_value_field() {
+    let rock = GenreList::from_name("Rock");
+    assert_eq!(diff_multi(&rock, &rock), FieldEdit::Keep);
+    assert_eq!(diff_multi(&GenreList::default(), &rock), FieldEdit::Clear);
+    assert_eq!(diff_multi(&rock, &GenreList::default()), FieldEdit::Set(rock.clone()));
+
+    let artist = ArtistCredit::from_name("Nadia Vance");
+    assert_eq!(diff_multi(&artist, &artist), FieldEdit::Keep);
+    assert_eq!(diff_multi(&ArtistCredit::default(), &artist), FieldEdit::Clear);
+
+    let roles = RoleCredits::new(vec![RoleCredit {
+        role: CreditRole::Composer,
+        name: "Nadia Vance".to_owned(),
+        detail: String::new(),
+    }]);
+    assert_eq!(diff_multi(&roles, &roles), FieldEdit::Keep);
+    assert_eq!(diff_multi(&RoleCredits::default(), &roles), FieldEdit::Clear);
 }
 
 #[test]
@@ -87,66 +110,4 @@ fn build_edit_touches_only_changed_fields() {
     // An unchanged form diffs to an all-Keep no-op.
     let noop = build_edit(&orig, &orig, &lists, &lists, ArtworkEdit::Keep);
     assert!(noop.is_noop());
-}
-
-#[test]
-fn common_str_agree_disagree_single_empty() {
-    assert_eq!(common_str(std::iter::empty::<&str>()), (String::new(), false));
-    assert_eq!(common_str(["A"].into_iter()), ("A".to_owned(), false));
-    assert_eq!(common_str(["A", "A"].into_iter()), ("A".to_owned(), false));
-    assert_eq!(common_str(["A", "B"].into_iter()), (String::new(), true));
-}
-
-#[test]
-fn common_by_collapses_display_equal_values() {
-    // Empty selection.
-    assert_eq!(
-        common_by(std::iter::empty::<Option<i32>>(), int_key, fmt_int),
-        (String::new(), false)
-    );
-    // Agreement formats the winner once.
-    assert_eq!(
-        common_by([Some(5), Some(5)].into_iter(), int_key, fmt_int),
-        ("5".to_owned(), false)
-    );
-    // Some(0) and None both render empty ⇒ they must agree (not disagree).
-    assert_eq!(common_by([Some(0), None].into_iter(), int_key, fmt_int), (String::new(), false));
-    // Genuinely different values disagree.
-    assert_eq!(common_by([Some(5), Some(6)].into_iter(), int_key, fmt_int), (String::new(), true));
-    // BPM: NaN and None both render empty ⇒ agree; distinct finite values disagree.
-    assert_eq!(
-        common_by([Some(f64::NAN), None].into_iter(), bpm_key, fmt_bpm),
-        (String::new(), false)
-    );
-    assert_eq!(
-        common_by([Some(128.0), Some(128.0)].into_iter(), bpm_key, fmt_bpm),
-        ("128".to_owned(), false)
-    );
-    assert_eq!(
-        common_by([Some(128.0), Some(130.0)].into_iter(), bpm_key, fmt_bpm),
-        (String::new(), true)
-    );
-}
-
-#[test]
-fn formatting_helpers() {
-    assert_eq!(fmt_int(Some(2020)), "2020");
-    assert_eq!(fmt_int(Some(0)), "");
-    assert_eq!(fmt_int(None), "");
-
-    assert_eq!(fmt_bpm(Some(128.0)), "128");
-    assert_eq!(fmt_bpm(Some(128.5)), "128.5");
-    assert_eq!(fmt_bpm(Some(f64::NAN)), "");
-    assert_eq!(fmt_bpm(None), "");
-
-    assert_eq!(fmt_sample_rate(44100), "44.1 kHz");
-    assert_eq!(fmt_sample_rate(48000), "48 kHz");
-
-    assert_eq!(fmt_channels(1), "Mono");
-    assert_eq!(fmt_channels(2), "Stereo");
-    assert_eq!(fmt_channels(6), "6 channels");
-
-    assert_eq!(fmt_size(512), "512 B");
-    assert_eq!(fmt_size(2048), "2 KB");
-    assert_eq!(fmt_size(5 * 1024 * 1024), "5.0 MB");
 }

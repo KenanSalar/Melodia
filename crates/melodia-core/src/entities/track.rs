@@ -130,7 +130,7 @@ impl From<&Track> for TrackSummary {
 
 /// List-view shape: the columns shown in the Tracks table (and the same
 /// shape returned by per-album / per-artist / per-genre track queries).
-/// 20 fields against `Track`'s 44 — under half the per-row decode cost for
+/// 20 fields against `Track`'s 60 — a third of the per-row decode cost for
 /// the most common queries. Includes the foreign-key ids (`album_id`,
 /// `artist_id`, `genre_id`) so the UI can navigate from a row without a
 /// second fetch.
@@ -177,7 +177,7 @@ pub struct TrackListRow {
 /// `FromRow` matches by column name, so the order isn't load-bearing. Used
 /// by `get_track_summaries_by_ids` to project only the columns the queue /
 /// now-playing-bar / playback paths actually read, instead of reading all
-/// 40 columns and discarding 32 of them.
+/// 60 columns and discarding 43 of them.
 pub const TRACK_SUMMARY_COLUMNS: &[&str] = &[
     "id",
     "file_path",
@@ -270,7 +270,7 @@ pub fn track_list_columns_prefixed(alias: &str) -> &'static str {
 
 /// Playlist-export projection: just the fields an Extended-M3U8 line needs
 /// (`#EXTINF` duration + "artist - title", `#MELODIA-HASH`, and the path).
-/// Reading these five columns instead of a full `Track` avoids ~35 unused
+/// Reading these five columns instead of a full `Track` avoids 55 unused
 /// column decodes per row when writing a playlist file. `file_hash` is
 /// nullable (tracks before retroactive hashing); the writer omits the hash
 /// line when it is `None`.

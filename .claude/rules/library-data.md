@@ -135,7 +135,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 - **`tracks_fts` indexes eight columns, and adding a ninth is a migration, not an edit.** fts5 has
   no `ALTER`, so a change means dropping the table plus all three triggers and rebuilding.
   The **newest** migration to have rebuilt it carries the column list, the tokenizer and the bm25
-  weights with the argument for each, which is `20260911000000` and was `20260802000001` before it
+  weights with the argument for each, which is `20260910000000` and was `20260802000001` before it
   — a rebuild moves that text rather than amending it, so read the latest one;
   `crates/melodia-store/src/database/queries/search.rs` carries the query shape and the folding
   asymmetry. Two things neither of them can tell you: **a ninth column is two edits**, since the

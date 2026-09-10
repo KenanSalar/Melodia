@@ -207,8 +207,14 @@ pub async fn get_track_summaries_by_ids(
 }
 
 /// Fetch `TagEditRow` projections by IDs for the Edit-Track-Information dialog, preserving the
-/// input order. Reads the editable tag columns plus the read-only technical ones the Summary tab
-/// shows — no joins, artist/album/genre being stored denormalized on `tracks`.
+/// input order. Reads the editable **single-valued** tag columns plus the read-only technical ones
+/// the Summary tab shows, and joins nothing.
+///
+/// The multi-valued fields are deliberately absent: the dialog reads artists, genres and role
+/// credits as rows, through the three `get_track_*_by_ids` siblings below. Widening this
+/// projection to carry one of their rendered columns instead is the regression — an editor
+/// populated from `tracks.genre` splits `Chanson, Francaise` into two genres and saving makes that
+/// permanent.
 pub async fn get_tag_edit_rows_by_ids(
     db: &DbPool,
     ids: &[i64],

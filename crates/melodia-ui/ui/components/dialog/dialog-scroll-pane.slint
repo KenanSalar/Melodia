@@ -1,0 +1,58 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "../../theme.slint";
+import { OverlayScrollbar } from "../overlay-scrollbar.slint";
+
+// A scrollable column inside a dialog card: the `ScrollView` with both stock policies off, its
+// viewport locked to its own width, and the `OverlayScrollbar` beside it.
+//
+// The bar is declared here rather than at each mount, which is what makes the pane safe inside an
+// `if`: Slint cannot read an id declared inside a branch from outside it, so a hand-rolled pair has
+// to keep both halves in the same arm every time. It also states `track-color` once — the default
+// composites to exactly `surface0` over a card and leaves the thumb nothing to gauge extent
+// against, which reads as a missing feature rather than a wrong colour.
+//
+// The host sizes the pane, as it sized the `Rectangle` this replaces: `100%`/`100%` where the card
+// gives it a fixed body, a `min-height`/`max-height` band where it may grow.
+export component DialogScrollPane inherits Rectangle {
+    // Gap between the rows the host hands over. The forms run wider apart than the field lists do.
+    in property <length> content-spacing: Theme.pad-sm;
+
+    // The column's natural height, for a host that sizes itself to its content rather than capping
+    // it. **Off the column, never off the scroller**: a `ScrollView` reports a preferred height of
+    // its own rather than its content's, and its `viewport-height` is bound to
+    // `max(content, flickable.height)`, so a host reading that closes a loop through the very
+    // property it is setting.
+    out property <length> content-height: column.preferred-height;
+
+    sv := ScrollView {
+        horizontal-scrollbar-policy: always-off;
+        vertical-scrollbar-policy: always-off;
+        // Locked to the viewport, or the stretchy inputs collapse to nothing — the smart-editor
+        // pitfall.
+        viewport-width: sv.visible-width;
+
+        column := VerticalLayout {
+            spacing: root.content-spacing;
+            // A gutter for the bar rather than letting it overlay the column — parked over an
+            // input's right edge, its TouchArea eats the click that lands there.
+            padding-right: Theme.pad-md;
+
+            @children
+        }
+    }
+
+    OverlayScrollbar {
+        horizontal: false;
+        track-color: Theme.scrollbar-track-on-card;
+        x: parent.width - self.width;
+        y: 0;
+        width: Theme.scrollbar-slot;
+        height: parent.height;
+        visible-size: sv.visible-height;
+        content-size: sv.viewport-height;
+        offset: -sv.viewport-y;
+        scroll-to(o) => {
+            sv.viewport-y = -o;
+        }
+    }
+}

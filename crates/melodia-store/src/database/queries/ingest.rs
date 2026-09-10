@@ -243,9 +243,9 @@ pub async fn ingest_scanned_files(
 
         let file_name = file.path.file_name().and_then(|f| f.to_str()).unwrap_or("").to_string();
 
-        // Buffer instead of executing one 43-bind INSERT per file —
-        // `insert_tracks_batch` flushes a full chunk as a single
-        // multi-row statement (~27× fewer round-trips on a fresh scan).
+        // Buffer instead of executing one INSERT per file — `insert_tracks_batch`
+        // flushes a whole chunk as a single multi-row statement, which is most of
+        // what a fresh scan's round-trip count comes to.
         // Safe to defer: nothing later in this loop reads not-yet-
         // inserted rows (path/hash lookups run against the pre-loaded
         // maps, and FK upserts in `resolve_ids` execute immediately).

@@ -1,5 +1,6 @@
 //! Technical-metadata chip row formatter + display helpers.
 
+use crate::ui::util::{format_channels, format_sample_rate};
 use melodia_core::entities::track::TrackMeta;
 use melodia_ui::TrackMetaRow;
 use slint::SharedString;
@@ -17,26 +18,6 @@ pub(super) fn to_slint_track_meta(t: &TrackMeta) -> TrackMetaRow {
         channels: t.channels.map(format_channels).unwrap_or_default().into(),
         year: t.year.filter(|y| *y > 0).map(|y| y.to_string()).unwrap_or_default().into(),
         genre: t.genre.as_deref().unwrap_or("").into(),
-    }
-}
-
-/// Hz → "44.1 kHz" / "48 kHz" (drops a trailing ".0").
-pub(super) fn format_sample_rate(hz: i32) -> String {
-    let khz = f64::from(hz) / 1000.0;
-    if khz.fract().abs() < f64::EPSILON {
-        format!("{khz:.0} kHz")
-    } else {
-        format!("{khz:.1} kHz")
-    }
-}
-
-/// Channel count → "Mono" / "Stereo" / "N channels". Technical terms left
-/// untranslated for v1 (built in Rust; Slint's `@tr` only covers literals).
-pub(super) fn format_channels(n: i32) -> String {
-    match n {
-        1 => "Mono".to_string(),
-        2 => "Stereo".to_string(),
-        n => format!("{n} channels"),
     }
 }
 

@@ -253,11 +253,7 @@ fn extract(
     // field that's nothing but spaces; left as-is they bypass the `is_empty()` guard in
     // `upsert_album`/`upsert_genre` and create ghost entity rows. `read_credit` below owes the
     // same for the artist fields, where the ghost rows also cost a futile image fetch.
-    let title = tag
-        .and_then(Tag::title)
-        .map(|s| s.trim().to_owned())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(file_name);
+    let title = text(tag, ItemKey::TrackTitle).unwrap_or_else(file_name);
 
     // Their own lines rather than slots in a tuple: an artist field is a pair of tags read
     // together, and neither half alone says what the credit is.
