@@ -3,6 +3,7 @@ import { TagEditor } from "../../globals/dialog-forms.slint";
 import { ArtistCreditRow } from "../../models.slint";
 import { Dropdown } from "../settings/dropdown.slint";
 import { IconButton } from "../icon-button.slint";
+import { PillButton } from "../action-pill.slint";
 
 // Controlled name field. `text` is one-way — the host owns it — and every keystroke reports back
 // through `edited`. Same contract as `smart-playlist-editor-body.slint`'s `RuleValueInput`, and
@@ -88,12 +89,16 @@ component CreditRowView inherits HorizontalLayout {
             selected(idx) => { root.set-join(idx); }
         }
     }
-    // Keeps the remove button flush-right on the last row, which draws no picker.
-    if root.is-last: Rectangle { width: 112px; }
+    // Keeps the × flush-right on a list's last row, which draws no picker. **Not on a lone
+    // credit**: there is no row above to line up with, and reserving the two slots anyway is what
+    // left the field visibly short of the `LabeledInput`s either side of it. Both trailing
+    // elements go rather than emptying, an unmounted branch claiming no layout where an empty
+    // wrapper still claims its share of the spacing.
+    if root.is-last && !root.is-only: Rectangle { width: 112px; }
 
-    VerticalLayout {
+    if !root.is-only: VerticalLayout {
         alignment: center;
-        if !root.is-only: IconButton {
+        IconButton {
             icon: "close";
             icon-size: 16px;
             diameter: 28px;
@@ -101,7 +106,6 @@ component CreditRowView inherits HorizontalLayout {
             hover-fg: Theme.danger;
             clicked => { root.remove(); }
         }
-        if root.is-only: Rectangle { width: 28px; }
     }
 }
 
@@ -144,25 +148,14 @@ export component CreditEditor inherits VerticalLayout {
         spacing: Theme.pad-sm;
         alignment: start;
 
-        // A labelled stadium rather than an `IconButton`, matching the smart-playlist rule
-        // editor's own add control.
-        Rectangle {
-            height: 30px;
-            width: add-label.preferred-width + 2 * Theme.pad-md;
-            background: add-touch.has-hover ? Theme.surface2 : Theme.surface1;
-            border-radius: self.height / 2;
-            animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-
-            add-label := Text {
-                text: "+ " + @tr("Add artist");
-                color: Theme.text;
-                font-size: Theme.font-size-sm;
-                font-weight: 600;
-                vertical-alignment: center;
-            }
-            add-touch := TouchArea {
-                clicked => { TagEditor.add-credit(root.field); }
-            }
+        // `PillButton` rather than a stadium with a `"+"` in its label, which is the shape the
+        // smart-playlist rule editor still uses: a literal plus is a text glyph at label weight
+        // and reads a size smaller than the control around it. This is the same pill, at the same
+        // size, with the same Material glyph as every other add in the app.
+        PillButton {
+            icon: "add";
+            text: @tr("Add artist");
+            clicked => { TagEditor.add-credit(root.field); }
         }
 
         if root.credits.length > 1: VerticalLayout {
