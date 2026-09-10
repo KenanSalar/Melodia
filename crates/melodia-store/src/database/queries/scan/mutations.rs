@@ -11,6 +11,7 @@ use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::error::AppError;
 
 use super::ResolvedIds;
+use super::name_cache::NameCache;
 use super::sort_key::to_natural_sort_key;
 use super::upserts::{insert_track_joins, replace_track_joins};
 
@@ -194,6 +195,7 @@ pub async fn insert_track(
     meta: &melodia_core::entities::scan::ExtractedMetadata,
     ids: &ResolvedIds,
     now: &str,
+    names: &mut NameCache,
 ) -> Result<i64, AppError> {
     let sort_key = to_natural_sort_key(sort_source(meta));
 
@@ -218,7 +220,7 @@ pub async fn insert_track(
         .execute(&mut **tx)
         .await?;
     let track_id = result.last_insert_rowid();
-    insert_track_joins(tx, track_id, meta, ids).await?;
+    insert_track_joins(tx, track_id, meta, ids, names).await?;
     Ok(track_id)
 }
 
@@ -252,6 +254,7 @@ pub async fn insert_tracks_batch(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     rows: &[NewTrackRow<'_>],
     now: &str,
+    names: &mut NameCache,
 ) -> Result<Vec<i64>, AppError> {
     let mut out = Vec::with_capacity(rows.len());
     for chunk in rows.chunks(INSERT_CHUNK_ROWS) {
@@ -292,7 +295,7 @@ pub async fn insert_tracks_batch(
                     row.file_path
                 )));
             };
-            insert_track_joins(tx, id, row.meta, &row.ids).await?;
+            insert_track_joins(tx, id, row.meta, &row.ids, names).await?;
             out.push(id);
         }
     }
@@ -347,6 +350,7 @@ pub async fn update_track_metadata(
     file_path: &str,
     meta: &melodia_core::entities::scan::ExtractedMetadata,
     ids: &ResolvedIds,
+    names: &mut NameCache,
 ) -> Result<(), AppError> {
     let sort_key = to_natural_sort_key(sort_source(meta));
     let q = sqlx::query(
@@ -382,7 +386,7 @@ pub async fn update_track_metadata(
     // SELECT, so an incremental scan pays no extra round trip per changed file.
     if let Some(row) = updated {
         let track_id: i64 = row.try_get("id")?;
-        replace_track_joins(tx, track_id, meta, ids).await?;
+        replace_track_joins(tx, track_id, meta, ids, names).await?;
     }
     Ok(())
 }
@@ -431,6 +435,11 @@ pub async fn update_album_artwork_from_tracks(
 /// keeping a featured-only one: nothing points at them from `tracks.artist_id`, and
 /// `track_artists.artist_id` cascades. So a predicate over the two FKs alone deletes exactly the
 /// artists the credit tables exist to surface, and takes their credit rows down with them.
+///
+/// **Deletes only; it recomputes nothing.** Every caller reaches this either with the stats
+/// triggers live, where `album_artists_stats_delete` has already taken the count down, or with
+/// `stats::recalculate_all_stats` behind it, which sets the same column from the same subquery.
+/// A recompute here is one of those twice and the other for nothing, over every artist row.
 pub async fn prune_orphans(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Result<(), AppError> {
     sqlx::query(
         "DELETE FROM albums \
@@ -455,14 +464,6 @@ pub async fn prune_orphans(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Resu
         "DELETE FROM genres \
          WHERE NOT EXISTS (SELECT 1 FROM tracks WHERE tracks.genre_id = genres.id) \
            AND NOT EXISTS (SELECT 1 FROM track_genres WHERE track_genres.genre_id = genres.id)",
-    )
-    .execute(&mut **tx)
-    .await?;
-
-    sqlx::query(
-        "UPDATE artists \
-         SET album_count = \
-             (SELECT COUNT(*) FROM album_artists WHERE album_artists.artist_id = artists.id)",
     )
     .execute(&mut **tx)
     .await?;

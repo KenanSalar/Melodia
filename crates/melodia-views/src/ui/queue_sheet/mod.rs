@@ -18,18 +18,24 @@ use slint::{ComponentHandle, ModelRc, VecModel, Weak};
 
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::{CoverThumbs, row_cover_size};
+use melodia_core::entities::track::TrackSummary;
 use melodia_ui::{AppWindow, Queue, QueueRow};
 
 pub(crate) use rows::to_slint_queue_row;
 
-/// Per-row selection snapshot. Kept deliberately minimal so the
-/// shadow is `Send + Sync` regardless of `SharedString`'s
-/// thread-safety guarantees — those live on the UI side inside
-/// `Rc<VecModel<QueueRow>>`.
-#[derive(Clone, Copy)]
+/// Per-row selection snapshot, beside the summary the row was built from. Kept deliberately
+/// minimal so the shadow is `Send + Sync` regardless of `SharedString`'s thread-safety
+/// guarantees — those live on the UI side inside `Rc<VecModel<QueueRow>>`.
+///
+/// `source` is what lets a rebuild answer "did any row's content move" without building one.
+/// `Arc::ptr_eq` against it is exact: a `TrackSummary` is never mutated in place, so the same
+/// pointer is the same row, and a retag that swaps one behind an unchanged id compares unequal
+/// and falls through to the full rebuild. Holding it costs a refcount, not a copy.
+#[derive(Clone)]
 pub(super) struct ShadowEntry {
     pub id: i64,
     pub selected: bool,
+    pub source: Arc<TrackSummary>,
 }
 
 /// Public handle returned by [`install`]. Surfaces the `is_open`

@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use async_compat::Compat;
 use parking_lot::Mutex;
-use slint::{ComponentHandle, VecModel, Weak};
+use slint::{ComponentHandle, Model, VecModel, Weak};
 
 use super::ShadowEntry;
 use super::links::{self, LinkCache, RowLinks};
@@ -85,6 +85,21 @@ pub(super) fn rebuild_rows(
     link_cache: &LinkCache,
     qvm: &QueueViewModel,
 ) -> Vec<i64> {
+    // `advance`, `previous` and `skip_to_index` all bump `queue.version` without touching the row
+    // set, so on a queue the size of the library every track change was building a `QueueRow` per
+    // row, four `SharedString`s each, for the differ to find nothing. Same summaries in the same
+    // order means no row's content can have moved and only the index has to be written.
+    //
+    // The row count is the other half and is not redundant: the close teardown empties the model
+    // and deliberately leaves the shadow standing, that being what carries the selection across a
+    // reopen. Without this term the reopen would match its own stale shadow and paint nothing.
+    if queue_model.row_count() == qvm.queue_tracks.len()
+        && same_sources(&shadow.lock(), &qvm.queue_tracks)
+    {
+        ui.global::<Queue>().set_current_index(qvm.queue_index);
+        return Vec::new();
+    }
+
     // Snapshot the old selection bits into a map so the per-row lookup
     // below is O(1) — a linear `.find()` per row made this O(n²) overall,
     // re-run on every queue mutation (including each frame of a drag).
@@ -106,7 +121,11 @@ pub(super) fn rebuild_rows(
                 }
                 None => unresolved.push(t.id),
             }
-            new_shadow.push(ShadowEntry { id: t.id, selected });
+            new_shadow.push(ShadowEntry {
+                id: t.id,
+                selected,
+                source: Arc::clone(t),
+            });
             new_rows.push(row);
         }
     }
@@ -132,6 +151,17 @@ pub(super) fn rebuild_rows(
     }
 
     unresolved
+}
+
+/// Whether `tracks` is the same set of summaries, in the same order, that the shadow was built
+/// from.
+///
+/// Pointer equality rather than a field compare: `PlayerState` hands the same `Arc` back on a
+/// reorder or an index move and only ever a fresh one where the row's content came from a new
+/// fetch, so this answers "nothing a row draws has moved" without reading a single field.
+fn same_sources(shadow: &[ShadowEntry], tracks: &[Arc<TrackSummary>]) -> bool {
+    shadow.len() == tracks.len()
+        && shadow.iter().zip(tracks).all(|(seen, now)| Arc::ptr_eq(&seen.source, now))
 }
 
 /// Surgically flip `is_favorite` on every visible queue row whose `id` is in

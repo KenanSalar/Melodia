@@ -1,8 +1,9 @@
 //! Scan-time database operations: foreign-key upserts, track row
 //! mutations, lookups, and the natural-sort-key helper.
 //!
-//! The four submodules are organised by *intent*: [`upserts`] handles
-//! find-or-create on artist / album / genre rows, [`mutations`] holds
+//! The five submodules are organised by *intent*: [`upserts`] handles
+//! find-or-create on artist / album / genre rows, [`name_cache`] keeps
+//! those answers for the span of a transaction, [`mutations`] holds
 //! every track-row write, [`lookups`] holds read-side queries used by
 //! the scanner / file-event processor, and [`sort_key`] precomputes the
 //! `tracks.sort_key` column. Every public function is re-exported here
@@ -10,6 +11,7 @@
 
 mod lookups;
 mod mutations;
+mod name_cache;
 mod sort_key;
 mod upserts;
 
@@ -22,6 +24,7 @@ pub use mutations::{
     insert_track, insert_tracks_batch, prune_orphans, update_album_artwork_from_tracks,
     update_track_artwork_if_missing, update_track_location, update_track_metadata,
 };
+pub use name_cache::NameCache;
 pub use sort_key::to_natural_sort_key;
 pub use upserts::{
     CreditDetails, album_artist_name_for, album_credit_for, upsert_album, upsert_artist,
@@ -49,6 +52,7 @@ pub async fn resolve_track_context(
     path_str: &str,
     meta: &melodia_core::entities::scan::ExtractedMetadata,
     context: &str,
+    names: &mut NameCache,
 ) -> Result<Option<ResolvedIds>, melodia_core::error::AppError> {
     let Some(folder_id) = find_folder_for_path(tx, path_str).await? else {
         log::debug!("{context} file not in any library folder, skipping: {}", path.display());
@@ -63,7 +67,7 @@ pub async fn resolve_track_context(
     // reach the library through `track_genres`.
     let genre_name = meta.genres.primary().unwrap_or("");
 
-    let artist_id = upsert_artist(tx, artist_name, 1).await?;
+    let artist_id = names.artist(tx, artist_name, 1).await?;
     // Group the album by its album-artist (falling back to the track artist when no
     // album-artist tag is present) so a per-track featured credit ("X & Y") doesn't
     // split the album into a second row.
@@ -71,11 +75,12 @@ pub async fn resolve_track_context(
     let album_artist_id = if album_artist_name == artist_name {
         artist_id
     } else {
-        upsert_artist(tx, album_artist_name, 1).await?
+        names.artist(tx, album_artist_name, 1).await?
     };
     let album_credit = album_credit_for(meta);
-    let album_id = upsert_album(tx, album_name, album_artist_id, &album_credit, meta).await?;
-    let genre_id = upsert_genre(tx, genre_name).await?;
+    let album_id =
+        upsert_album(tx, album_name, album_artist_id, &album_credit, meta, names).await?;
+    let genre_id = names.genre(tx, genre_name).await?;
 
     Ok(Some(ResolvedIds {
         artist_id,

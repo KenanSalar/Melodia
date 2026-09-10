@@ -13,6 +13,7 @@
 //! them back. The handler tests drive that decision directly; the `process_batch` tests at the
 //! bottom drive it against real bytes, because a delete and a create only meet at that level.
 
+use melodia_store::database::queries::scan::NameCache;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -120,6 +121,7 @@ async fn renamed_stores_the_mtime_from_the_extracted_metadata() -> Result<(), Ap
         &to,
         Some(&meta),
         &mut HashMap::new(),
+        &mut NameCache::default(),
     )
     .await?;
     tx.commit().await?;
@@ -150,9 +152,15 @@ async fn renamed_without_metadata_falls_back_to_a_stat() -> Result<(), AppError>
     assert!(on_disk.is_some(), "the temp file must have a readable mtime");
 
     let mut tx = db.write().begin().await?;
-    let changed =
-        handle_renamed(&mut tx, &tmp.path().join("from.mp3"), &to, None, &mut HashMap::new())
-            .await?;
+    let changed = handle_renamed(
+        &mut tx,
+        &tmp.path().join("from.mp3"),
+        &to,
+        None,
+        &mut HashMap::new(),
+        &mut NameCache::default(),
+    )
+    .await?;
     tx.commit().await?;
 
     assert!(changed);
@@ -171,8 +179,14 @@ async fn a_created_file_inside_a_library_folder_lands_as_a_row() -> Result<(), A
 
     let path = tmp.path().join("new.mp3");
     let mut tx = db.write().begin().await?;
-    let changed =
-        handle_created(&mut tx, &path, &make_test_metadata("New"), &mut HashMap::new()).await?;
+    let changed = handle_created(
+        &mut tx,
+        &path,
+        &make_test_metadata("New"),
+        &mut HashMap::new(),
+        &mut NameCache::default(),
+    )
+    .await?;
     tx.commit().await?;
 
     assert!(changed);
@@ -189,8 +203,14 @@ async fn a_created_path_already_in_the_library_is_not_inserted_twice() -> Result
 
     let path = tmp.path().join("from.mp3");
     let mut tx = db.write().begin().await?;
-    let changed =
-        handle_created(&mut tx, &path, &make_test_metadata("Again"), &mut HashMap::new()).await?;
+    let changed = handle_created(
+        &mut tx,
+        &path,
+        &make_test_metadata("Again"),
+        &mut HashMap::new(),
+        &mut NameCache::default(),
+    )
+    .await?;
     tx.commit().await?;
 
     assert!(!changed, "a path already in the library is not a change");
@@ -206,9 +226,14 @@ async fn a_created_file_outside_every_library_folder_is_skipped() -> Result<(), 
 
     let outside = tmp.path().join("elsewhere.mp3");
     let mut tx = db.write().begin().await?;
-    let changed =
-        handle_created(&mut tx, &outside, &make_test_metadata("Stray"), &mut HashMap::new())
-            .await?;
+    let changed = handle_created(
+        &mut tx,
+        &outside,
+        &make_test_metadata("Stray"),
+        &mut HashMap::new(),
+        &mut NameCache::default(),
+    )
+    .await?;
     tx.commit().await?;
 
     assert!(!changed);
@@ -232,8 +257,9 @@ async fn a_created_file_matching_a_vanished_row_repoints_it_once() -> Result<(),
     let twin = tmp.path().join("twin.mp3");
 
     let mut tx = db.write().begin().await?;
-    let repointed = handle_created(&mut tx, &moved, &meta, &mut candidates).await?;
-    let inserted = handle_created(&mut tx, &twin, &meta, &mut candidates).await?;
+    let mut names = NameCache::default();
+    let repointed = handle_created(&mut tx, &moved, &meta, &mut candidates, &mut names).await?;
+    let inserted = handle_created(&mut tx, &twin, &meta, &mut candidates, &mut names).await?;
     tx.commit().await?;
 
     assert!(repointed);
@@ -261,14 +287,15 @@ async fn a_move_out_of_the_watched_tree_leaves_the_candidate_alone() -> Result<(
     let inside = music.join("moved.mp3");
 
     let mut tx = db.write().begin().await?;
-    let refused = handle_created(&mut tx, &outside, &meta, &mut candidates).await?;
+    let mut names = NameCache::default();
+    let refused = handle_created(&mut tx, &outside, &meta, &mut candidates, &mut names).await?;
     assert!(!refused);
     assert!(
         candidates.contains_key(&meta.file_hash),
         "refusing a path outside the library must not spend the row's one chance to be found"
     );
 
-    let repointed = handle_created(&mut tx, &inside, &meta, &mut candidates).await?;
+    let repointed = handle_created(&mut tx, &inside, &meta, &mut candidates, &mut names).await?;
     tx.commit().await?;
 
     assert!(repointed);
@@ -292,6 +319,7 @@ async fn a_rename_from_outside_the_library_lands_as_a_new_row() -> Result<(), Ap
         &to,
         Some(&make_test_metadata("Fresh")),
         &mut HashMap::new(),
+        &mut NameCache::default(),
     )
     .await?;
     tx.commit().await?;
@@ -319,6 +347,7 @@ async fn a_rename_out_of_the_library_writes_nothing() -> Result<(), AppError> {
         &to,
         Some(&make_test_metadata("Before")),
         &mut HashMap::new(),
+        &mut NameCache::default(),
     )
     .await?;
     tx.commit().await?;
@@ -345,6 +374,7 @@ async fn a_rename_with_neither_a_row_nor_metadata_writes_nothing() -> Result<(),
         &tmp.path().join("gone.mp3"),
         None,
         &mut HashMap::new(),
+        &mut NameCache::default(),
     )
     .await?;
     tx.commit().await?;
@@ -363,9 +393,14 @@ async fn a_modify_rewrites_the_hash_in_place() -> Result<(), AppError> {
 
     let retagged = make_test_metadata("After");
     let mut tx = db.write().begin().await?;
-    let changed =
-        handle_modified(&mut tx, &tmp.path().join("from.mp3"), &retagged, &mut HashMap::new())
-            .await?;
+    let changed = handle_modified(
+        &mut tx,
+        &tmp.path().join("from.mp3"),
+        &retagged,
+        &mut HashMap::new(),
+        &mut NameCache::default(),
+    )
+    .await?;
     tx.commit().await?;
 
     assert!(changed);
@@ -383,8 +418,14 @@ async fn a_modify_of_a_path_the_library_does_not_know_inserts_it() -> Result<(),
 
     let path = tmp.path().join("unscanned.mp3");
     let mut tx = db.write().begin().await?;
-    let changed =
-        handle_modified(&mut tx, &path, &make_test_metadata("Late"), &mut HashMap::new()).await?;
+    let changed = handle_modified(
+        &mut tx,
+        &path,
+        &make_test_metadata("Late"),
+        &mut HashMap::new(),
+        &mut NameCache::default(),
+    )
+    .await?;
     tx.commit().await?;
 
     assert!(changed);

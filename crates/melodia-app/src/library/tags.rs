@@ -420,6 +420,10 @@ async fn run_commit(
     // `INSERT … ON CONFLICT … RETURNING` upserts per track. Function-scoped, so
     // it drops at batch end (no persistent cache).
     let mut resolve_cache: HashMap<ResolveKey, queries::scan::ResolvedIds> = HashMap::new();
+    // The credit tables ask per credited name per track, which `ResolveKey` never covered: it
+    // keys on the *primary* names, so a guest on every track of the selection resolved once per
+    // file. Same scope, dropped at batch end.
+    let mut names = queries::scan::NameCache::for_chunk(files.len());
     // Artwork-Remove ids with nothing left to point at, flushed as one `IN (…)` UPDATE after
     // the loop.
     let mut remove_null_ids: Vec<i64> = Vec::new();
@@ -454,9 +458,10 @@ async fn run_commit(
         let rids = if let Some(cached) = resolve_cache.get(&key) {
             *cached
         } else {
-            let Some(resolved) =
-                queries::scan::resolve_track_context(&mut tx, path, &f.path, meta, "Tag edit")
-                    .await?
+            let Some(resolved) = queries::scan::resolve_track_context(
+                &mut tx, path, &f.path, meta, "Tag edit", &mut names,
+            )
+            .await?
             else {
                 report.failures.push((f.path.clone(), "not in a library folder".to_owned()));
                 continue;
@@ -465,7 +470,7 @@ async fn run_commit(
             resolved
         };
 
-        queries::scan::update_track_metadata(&mut tx, &f.path, meta, &rids).await?;
+        queries::scan::update_track_metadata(&mut tx, &f.path, meta, &rids, &mut names).await?;
         updated_ids.push(f.id);
         if !unsupported.is_empty() {
             report.unsupported.push((f.path.clone(), unsupported.clone()));

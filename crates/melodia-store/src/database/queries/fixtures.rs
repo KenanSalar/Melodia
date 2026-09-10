@@ -96,9 +96,11 @@ pub async fn insert_test_track(
 
     // Ahead of the album upsert, which now reads the release tags off the same value the track
     // row is built from rather than taking a year on its own.
+    let mut names = queries::scan::NameCache::default();
     let artist_id = queries::scan::upsert_artist(&mut tx, artist_name, unknown_artist_id).await?;
     let album_id =
-        queries::scan::upsert_album(&mut tx, album_name, artist_id, &credit, &meta).await?;
+        queries::scan::upsert_album(&mut tx, album_name, artist_id, &credit, &meta, &mut names)
+            .await?;
     let genre_id = queries::scan::upsert_genre(&mut tx, genre_name).await?;
 
     let file_name =
@@ -112,7 +114,8 @@ pub async fn insert_test_track(
     };
 
     let now = melodia_core::utils::now_rfc3339();
-    queries::scan::insert_track(&mut tx, file_path, file_name, &meta, &ids, &now).await?;
+    queries::scan::insert_track(&mut tx, file_path, file_name, &meta, &ids, &now, &mut names)
+        .await?;
 
     tx.commit().await?;
 

@@ -6,6 +6,22 @@ use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::error::AppError;
 
+use super::name_cache::NameCache;
+
+/// The statements a credit rewrite is made of, one per table.
+///
+/// Literals rather than a `format!` over a table name, which cost a `String` per re-ingested
+/// track to say the same thing every time. Each carries its own key column, so there is no way
+/// to pair a table with the wrong one.
+const CLEAR_TRACK_ARTISTS: &str = "DELETE FROM track_artists WHERE track_id = ?";
+const CLEAR_TRACK_CREDITS: &str = "DELETE FROM track_credits WHERE track_id = ?";
+const CLEAR_TRACK_GENRES: &str = "DELETE FROM track_genres WHERE track_id = ?";
+const CLEAR_ALBUM_ARTISTS: &str = "DELETE FROM album_artists WHERE album_id = ?";
+const INSERT_TRACK_ARTIST: &str =
+    "INSERT INTO track_artists (track_id, artist_id, position, join_phrase) VALUES (?, ?, ?, ?)";
+const INSERT_ALBUM_ARTIST: &str =
+    "INSERT INTO album_artists (album_id, artist_id, position, join_phrase) VALUES (?, ?, ?, ?)";
+
 /// The credit an album files under: its own tag where it has one, else the track artist's
 /// **first** name.
 ///
@@ -58,8 +74,9 @@ pub async fn insert_track_credits(
     credit: &ArtistCredit,
     primary_artist_id: i64,
     details: CreditDetails<'_>,
+    names: &mut NameCache,
 ) -> Result<(), AppError> {
-    write_credits(tx, "track_artists", "track_id", track_id, credit, primary_artist_id, details)
+    write_credits(tx, INSERT_TRACK_ARTIST, track_id, credit, primary_artist_id, details, names)
         .await
 }
 
@@ -73,11 +90,12 @@ pub async fn insert_track_joins(
     track_id: i64,
     meta: &ExtractedMetadata,
     ids: &super::ResolvedIds,
+    names: &mut NameCache,
 ) -> Result<(), AppError> {
-    insert_track_credits(tx, track_id, &meta.artist, ids.artist_id, track_credit_details(meta))
-        .await?;
-    write_role_credits(tx, track_id, meta, ids.artist_id).await?;
-    write_genres(tx, track_id, meta).await
+    let details = track_credit_details(meta);
+    insert_track_credits(tx, track_id, &meta.artist, ids.artist_id, details, names).await?;
+    write_role_credits(tx, track_id, meta, ids.artist_id, names).await?;
+    write_genres(tx, track_id, meta, ids.genre_id, names).await
 }
 
 /// [`insert_track_joins`] for a track that may already carry rows: a re-ingest or a tag edit.
@@ -86,11 +104,12 @@ pub async fn replace_track_joins(
     track_id: i64,
     meta: &ExtractedMetadata,
     ids: &super::ResolvedIds,
+    names: &mut NameCache,
 ) -> Result<(), AppError> {
-    clear_credits(tx, "track_artists", "track_id", track_id).await?;
-    clear_credits(tx, "track_credits", "track_id", track_id).await?;
-    clear_credits(tx, "track_genres", "track_id", track_id).await?;
-    insert_track_joins(tx, track_id, meta, ids).await
+    clear_credits(tx, CLEAR_TRACK_ARTISTS, track_id).await?;
+    clear_credits(tx, CLEAR_TRACK_CREDITS, track_id).await?;
+    clear_credits(tx, CLEAR_TRACK_GENRES, track_id).await?;
+    insert_track_joins(tx, track_id, meta, ids, names).await
 }
 
 /// The identity tags behind a track's own artist credit.
@@ -127,9 +146,10 @@ async fn write_role_credits(
     track_id: i64,
     meta: &ExtractedMetadata,
     unknown_artist_id: i64,
+    names: &mut NameCache,
 ) -> Result<(), AppError> {
     for (position, credit) in meta.credits.all().iter().enumerate() {
-        let artist_id = upsert_artist(tx, &credit.name, unknown_artist_id).await?;
+        let artist_id = names.artist(tx, &credit.name, unknown_artist_id).await?;
         sqlx::query(
             "INSERT INTO track_credits (track_id, artist_id, role, detail, position)
              VALUES (?, ?, ?, ?, ?)",
@@ -153,9 +173,16 @@ async fn write_genres(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     track_id: i64,
     meta: &ExtractedMetadata,
+    primary_genre_id: Option<i64>,
+    names: &mut NameCache,
 ) -> Result<(), AppError> {
     for (position, name) in meta.genres.names().iter().enumerate() {
-        let Some(genre_id) = upsert_genre(tx, name).await? else {
+        let resolved = if position == 0 {
+            primary_genre_id
+        } else {
+            names.genre(tx, name).await?
+        };
+        let Some(genre_id) = resolved else {
             continue;
         };
         sqlx::query("INSERT INTO track_genres (track_id, genre_id, position) VALUES (?, ?, ?)")
@@ -178,9 +205,10 @@ pub async fn replace_album_credits(
     credit: &ArtistCredit,
     primary_artist_id: i64,
     details: CreditDetails<'_>,
+    names: &mut NameCache,
 ) -> Result<(), AppError> {
-    clear_credits(tx, "album_artists", "album_id", album_id).await?;
-    write_credits(tx, "album_artists", "album_id", album_id, credit, primary_artist_id, details)
+    clear_credits(tx, CLEAR_ALBUM_ARTISTS, album_id).await?;
+    write_credits(tx, INSERT_ALBUM_ARTIST, album_id, credit, primary_artist_id, details, names)
         .await?;
 
     // NULL rather than the one name it would repeat, so `album_stats` falls back to the artist row
@@ -201,14 +229,10 @@ pub async fn replace_album_credits(
 /// of step.
 async fn clear_credits(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    table: &'static str,
-    parent_column: &'static str,
+    delete: &'static str,
     parent_id: i64,
 ) -> Result<(), AppError> {
-    sqlx::query(sqlx::AssertSqlSafe(format!("DELETE FROM {table} WHERE {parent_column} = ?")))
-        .bind(parent_id)
-        .execute(&mut **tx)
-        .await?;
+    sqlx::query(delete).bind(parent_id).execute(&mut **tx).await?;
     Ok(())
 }
 
@@ -227,20 +251,15 @@ async fn clear_credits(
 /// derived sort name.
 async fn write_credits(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    table: &'static str,
-    parent_column: &'static str,
+    insert: &'static str,
     parent_id: i64,
     credit: &ArtistCredit,
     primary_artist_id: i64,
     details: CreditDetails<'_>,
+    names: &mut NameCache,
 ) -> Result<(), AppError> {
-    let insert = format!(
-        "INSERT INTO {table} ({parent_column}, artist_id, position, join_phrase)
-         VALUES (?, ?, ?, ?)"
-    );
-
     if credit.is_empty() {
-        sqlx::query(sqlx::AssertSqlSafe(insert.as_str()))
+        sqlx::query(insert)
             .bind(parent_id)
             .bind(primary_artist_id)
             .bind(0_i64)
@@ -256,7 +275,7 @@ async fn write_credits(
         let artist_id = if position == 0 {
             primary_artist_id
         } else {
-            upsert_artist(tx, &credited.name, primary_artist_id).await?
+            names.artist(tx, &credited.name, primary_artist_id).await?
         };
         let sort_name = if solo { details.sort_name } else { None };
         apply_artist_details(tx, artist_id, sort_name, details.mbids.get(position)).await?;
@@ -270,7 +289,7 @@ async fn write_credits(
         }
         written.push(artist_id);
 
-        sqlx::query(sqlx::AssertSqlSafe(insert.as_str()))
+        sqlx::query(insert)
             .bind(parent_id)
             .bind(artist_id)
             .bind(i64::try_from(position).unwrap_or(i64::MAX))
@@ -291,6 +310,10 @@ async fn write_credits(
 ///
 /// The cost is that first writer wins for good: no surface edits these, so a corrected
 /// `ARTISTSORT` in the file cannot reach a row that already has one.
+///
+/// The emptiness test is spelled twice on purpose. The `CASE` arms decide the value but still
+/// match the row, and `SQLite` rewrites a matched row whether or not a value moved. On a tagged
+/// library that is one write per credited artist per track, for nothing.
 async fn apply_artist_details(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     artist_id: i64,
@@ -308,13 +331,17 @@ async fn apply_artist_details(
             musicbrainz_id = CASE
                 WHEN ? IS NOT NULL AND (musicbrainz_id IS NULL OR musicbrainz_id = '')
                 THEN ? ELSE musicbrainz_id END
-         WHERE id = ?",
+         WHERE id = ?
+           AND ((? IS NOT NULL AND (sort_name IS NULL OR sort_name = ''))
+             OR (? IS NOT NULL AND (musicbrainz_id IS NULL OR musicbrainz_id = '')))",
     )
     .bind(sort_name)
     .bind(sort_name)
     .bind(musicbrainz_id)
     .bind(musicbrainz_id)
     .bind(artist_id)
+    .bind(sort_name)
+    .bind(musicbrainz_id)
     .execute(&mut **tx)
     .await?;
     Ok(())
@@ -354,6 +381,7 @@ pub async fn upsert_album(
     artist_id: i64,
     credit: &ArtistCredit,
     meta: &ExtractedMetadata,
+    names: &mut NameCache,
 ) -> Result<Option<i64>, AppError> {
     if name.is_empty() {
         return Ok(None);
@@ -405,7 +433,7 @@ pub async fn upsert_album(
     .bind(&release.release_country)
     .fetch_one(&mut **tx)
     .await?;
-    replace_album_credits(tx, id, credit, artist_id, album_credit_details(meta)).await?;
+    replace_album_credits(tx, id, credit, artist_id, album_credit_details(meta), names).await?;
     Ok(Some(id))
 }
 

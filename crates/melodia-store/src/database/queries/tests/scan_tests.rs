@@ -2,6 +2,7 @@ use crate::database::DbPool;
 use crate::database::queries;
 #[allow(clippy::wildcard_imports)]
 use crate::database::queries::fixtures::*;
+use crate::database::queries::scan::NameCache;
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::error::AppError;
@@ -119,9 +120,15 @@ async fn upsert_album_new_returns_some() -> Result<(), AppError> {
     let mut tx = db.write().begin().await?;
     let credit = ArtistCredit::from_name("Artist");
     let artist_id = queries::scan::upsert_artist(&mut tx, "Artist", 1).await?;
-    let album_id =
-        queries::scan::upsert_album(&mut tx, "Album", artist_id, &credit, &album_meta(Some(2024)))
-            .await?;
+    let album_id = queries::scan::upsert_album(
+        &mut tx,
+        "Album",
+        artist_id,
+        &credit,
+        &album_meta(Some(2024)),
+        &mut NameCache::default(),
+    )
+    .await?;
     assert!(album_id.is_some());
     Ok(())
 }
@@ -133,8 +140,11 @@ async fn upsert_album_duplicate_returns_same_id() -> Result<(), AppError> {
     let credit = ArtistCredit::from_name("Artist");
     let artist_id = queries::scan::upsert_artist(&mut tx, "Artist", 1).await?;
     let meta = album_meta(Some(2024));
-    let id1 = queries::scan::upsert_album(&mut tx, "Album", artist_id, &credit, &meta).await?;
-    let id2 = queries::scan::upsert_album(&mut tx, "Album", artist_id, &credit, &meta).await?;
+    let mut names = NameCache::default();
+    let id1 = queries::scan::upsert_album(&mut tx, "Album", artist_id, &credit, &meta, &mut names)
+        .await?;
+    let id2 = queries::scan::upsert_album(&mut tx, "Album", artist_id, &credit, &meta, &mut names)
+        .await?;
     assert_eq!(id1, id2);
     Ok(())
 }
@@ -144,7 +154,15 @@ async fn upsert_album_empty_returns_none() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let mut tx = db.write().begin().await?;
     let credit = ArtistCredit::default();
-    let result = queries::scan::upsert_album(&mut tx, "", 1, &credit, &album_meta(None)).await?;
+    let result = queries::scan::upsert_album(
+        &mut tx,
+        "",
+        1,
+        &credit,
+        &album_meta(None),
+        &mut NameCache::default(),
+    )
+    .await?;
     assert!(result.is_none());
     Ok(())
 }
@@ -155,14 +173,27 @@ async fn upsert_album_updates_year_on_conflict() -> Result<(), AppError> {
     let mut tx = db.write().begin().await?;
     let credit = ArtistCredit::from_name("Artist");
     let artist_id = queries::scan::upsert_artist(&mut tx, "Artist", 1).await?;
-    let id =
-        queries::scan::upsert_album(&mut tx, "Album", artist_id, &credit, &album_meta(Some(2001)))
-            .await?;
+    let mut names = NameCache::default();
+    let id = queries::scan::upsert_album(
+        &mut tx,
+        "Album",
+        artist_id,
+        &credit,
+        &album_meta(Some(2001)),
+        &mut names,
+    )
+    .await?;
 
     // Re-upsert of the same (name, artist_id) with a new year updates it (P2).
-    let same =
-        queries::scan::upsert_album(&mut tx, "Album", artist_id, &credit, &album_meta(Some(2010)))
-            .await?;
+    let same = queries::scan::upsert_album(
+        &mut tx,
+        "Album",
+        artist_id,
+        &credit,
+        &album_meta(Some(2010)),
+        &mut names,
+    )
+    .await?;
     assert_eq!(id, same);
     let album_id = id.ok_or_else(|| AppError::Validation("no album id".into()))?;
 
@@ -173,7 +204,15 @@ async fn upsert_album_updates_year_on_conflict() -> Result<(), AppError> {
     assert_eq!(year, Some(2010));
 
     // Re-upsert with a NULL year preserves the stored value (the COALESCE arm).
-    queries::scan::upsert_album(&mut tx, "Album", artist_id, &credit, &album_meta(None)).await?;
+    queries::scan::upsert_album(
+        &mut tx,
+        "Album",
+        artist_id,
+        &credit,
+        &album_meta(None),
+        &mut names,
+    )
+    .await?;
     let year: Option<i32> = sqlx::query_scalar("SELECT year FROM albums WHERE id = ?")
         .bind(album_id)
         .fetch_one(&mut *tx)
@@ -219,8 +258,10 @@ async fn insert_track_stores_correct_fields() -> Result<(), AppError> {
     let credit = ArtistCredit::from_name("Test Artist");
     let artist_id = queries::scan::upsert_artist(&mut tx, "Test Artist", 1).await?;
     let meta = make_test_metadata("My Song");
+    let mut names = NameCache::default();
     let album_id =
-        queries::scan::upsert_album(&mut tx, "Test Album", artist_id, &credit, &meta).await?;
+        queries::scan::upsert_album(&mut tx, "Test Album", artist_id, &credit, &meta, &mut names)
+            .await?;
     let genre_id = queries::scan::upsert_genre(&mut tx, "Rock").await?;
     let ids = queries::ResolvedIds {
         artist_id,
@@ -229,7 +270,8 @@ async fn insert_track_stores_correct_fields() -> Result<(), AppError> {
         folder_id: 1,
     };
     let now = "2024-01-01T00:00:00+00:00";
-    queries::scan::insert_track(&mut tx, "/music/my.mp3", "my.mp3", &meta, &ids, now).await?;
+    queries::scan::insert_track(&mut tx, "/music/my.mp3", "my.mp3", &meta, &ids, now, &mut names)
+        .await?;
     tx.commit().await?;
 
     // Verify via raw query
