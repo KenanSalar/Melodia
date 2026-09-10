@@ -13,7 +13,7 @@ A build from this repository keeps its library, settings and database in a separ
 `Melodia-dev` data directory, so you can break things without touching an installed
 copy. Set `MELODIA_DATA_DIR` if you want a scratch directory of your own.
 
-Run this once per clone, so the tree-wide formatting commit stays out of `git blame`:
+Run this once per clone, so the tree-wide formatting commits stay out of `git blame`:
 
 ```bash
 git config blame.ignoreRevsFile .git-blame-ignore-revs

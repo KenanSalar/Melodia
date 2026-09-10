@@ -6,7 +6,7 @@ style_edition = "2024"
 
 # Every width heuristic tracks `max_width`, which stays at its 100 default, rather
 # than the percentage defaults that split code already fitting the 100 columns
-# this tree was hand-written to. `struct_lit_width` is the one that showed, at 18.
+# this tree was hand-written to.
 #
 # The mode rather than per-setting numbers, and that part is load-bearing: rustfmt
 # re-validates an *explicitly set* width against a throwaway config it builds for
