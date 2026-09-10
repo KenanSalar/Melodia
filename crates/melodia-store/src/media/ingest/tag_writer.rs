@@ -150,11 +150,13 @@ fn apply_credits(
     }
 }
 
-/// Apply a genre list: one value per name, the rendered line where the format can hold only one.
+/// Apply a genre list: one value per name.
 ///
-/// No printed/list pair the way [`apply_credits`] has: `GENRE` *is* the list, and a single value
-/// containing `"; "` is how a format with no multi-value frame says the same thing —
-/// `metadata::read_genres` reads both shapes back.
+/// No printed/list pair the way [`apply_credits`] has, `GENRE` *being* the list. What lofty does
+/// with those values below us is per-format and not ours to spell: `ID3v2` collapses them into one
+/// frame joined by the v2.4 NUL, which its own reader splits back out. The other shape
+/// `metadata::read_genres` accepts, a single value holding `"; "`, is what *other* taggers write
+/// and is never written here.
 fn apply_genres(tag: &mut Tag, edit: &FieldEdit<GenreList>, out: &mut Vec<&'static str>) {
     match edit {
         FieldEdit::Keep => {}

@@ -70,6 +70,18 @@ impl GenreList {
     pub fn is_empty(&self) -> bool {
         self.names.is_empty()
     }
+
+    /// Split a line [`Self::line`] rendered back into its names, for a caller holding the column
+    /// rather than the rows.
+    ///
+    /// **Display only.** A genre whose own name contains the separator ("Chanson, Francaise") is
+    /// indistinguishable from two once rendered, so this can hand back a name nobody tagged. That
+    /// costs a wrong label on a chip and nothing else, which is why anything that *persists* a
+    /// genre reads the rows through `queries::track::get_track_genres_by_ids` instead. Lives here
+    /// so the split and `GENRE_JOIN` cannot drift apart.
+    pub fn names_in_line(line: &str) -> impl Iterator<Item = &str> {
+        line.split(GENRE_JOIN).map(str::trim).filter(|name| !name.is_empty())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]

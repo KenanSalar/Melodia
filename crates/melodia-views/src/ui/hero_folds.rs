@@ -13,6 +13,7 @@ use std::collections::HashSet;
 
 use crate::ui::util::len_as_i32;
 use melodia_core::entities::album::AlbumStats;
+use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::track::{MostPlayedFavorite, TrackListRow};
 
 #[cfg(test)]
@@ -79,20 +80,29 @@ pub fn fold_most_played(rows: &[MostPlayedFavorite]) -> MostPlayedTotals {
 /// enough that naming one would misrepresent the rest. An album is usually
 /// single-genre, so this reads as "the album's genre" there; a compilation that
 /// genuinely spans several gets no chip rather than whichever won by a track.
+///
+/// **Tallied per genre, not per rendered line.** A row carries every genre it is tagged with in
+/// one string, so an album whose tracks are all `Rock` and half also `Metal` holds two distinct
+/// lines and no majority, where what every track shares is `Rock`. The denominator stays *tracks*,
+/// each contributing at most once to any one name, so the winner is still the genre more than half
+/// the tagged tracks carry.
 pub fn dominant_genre(rows: &[TrackListRow]) -> Option<String> {
     /// Share of the tracks the winner has to hold to be worth stating.
     const MAJORITY: usize = 2;
 
     let mut tally: Vec<(&str, usize)> = Vec::new();
     let mut tagged = 0usize;
-    for genre in rows.iter().filter_map(|r| r.genre.as_deref()) {
-        if genre.is_empty() {
+    for line in rows.iter().filter_map(|r| r.genre.as_deref()) {
+        let mut names = GenreList::names_in_line(line).peekable();
+        if names.peek().is_none() {
             continue;
         }
         tagged += 1;
-        match tally.iter_mut().find(|(name, _)| *name == genre) {
-            Some((_, count)) => *count += 1,
-            None => tally.push((genre, 1)),
+        for name in names {
+            match tally.iter_mut().find(|(seen, _)| seen.eq_ignore_ascii_case(name)) {
+                Some((_, count)) => *count += 1,
+                None => tally.push((name, 1)),
+            }
         }
     }
     let (name, count) = tally.into_iter().max_by_key(|&(_, count)| count)?;

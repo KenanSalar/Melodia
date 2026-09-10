@@ -81,7 +81,9 @@ pub async fn get_tracks_by_genre(
     genre_id: i64,
 ) -> Result<Vec<track::Track>, AppError> {
     let tracks = sqlx::query_as::<_, track::Track>(
-        "SELECT * FROM tracks WHERE genre_id = ? ORDER BY sort_key COLLATE NOCASE ASC",
+        "SELECT * FROM tracks \
+         WHERE id IN (SELECT track_id FROM track_genres WHERE genre_id = ?) \
+         ORDER BY sort_key COLLATE NOCASE ASC",
     )
     .bind(genre_id)
     .fetch_all(db.read())
@@ -310,13 +312,21 @@ pub async fn get_tracks_by_artist_for_list(
 }
 
 /// Lightweight version of `get_tracks_by_genre` for list views.
+///
+/// Every track tagged with this genre, through the join table for
+/// [`get_tracks_by_artist_for_list`]'s reason. What makes it load-bearing here rather than merely
+/// consistent: `genres.track_count` is maintained off `track_genres`, so reading `tracks.genre_id`
+/// left the grid card stating a count over a page that listed a subset of it, and nothing at all
+/// for a genre no track happens to carry first.
 pub async fn get_tracks_by_genre_for_list(
     db: &DbPool,
     genre_id: i64,
 ) -> Result<Vec<track::TrackListRow>, AppError> {
     let cols = track::track_list_columns();
     let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(format!(
-        "SELECT {cols} FROM tracks WHERE genre_id = ? ORDER BY sort_key COLLATE NOCASE ASC"
+        "SELECT {cols} FROM tracks \
+         WHERE id IN (SELECT track_id FROM track_genres WHERE genre_id = ?) \
+         ORDER BY sort_key COLLATE NOCASE ASC"
     )))
     .bind(genre_id)
     .fetch_all(db.read())

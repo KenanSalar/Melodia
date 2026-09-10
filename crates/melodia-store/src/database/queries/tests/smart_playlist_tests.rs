@@ -316,8 +316,8 @@ async fn set_album_artist(db: &DbPool, id: i64, album_artist: &str) -> Result<()
 }
 
 /// Leave a row with no genre at all, which the seed has no other way to produce.
-async fn clear_genre(db: &DbPool, id: i64) -> Result<(), AppError> {
-    sqlx::query("UPDATE tracks SET genre = NULL WHERE id = ?")
+async fn clear_album(db: &DbPool, id: i64) -> Result<(), AppError> {
+    sqlx::query("UPDATE tracks SET album = NULL WHERE id = ?")
         .bind(id)
         .execute(db.write())
         .await?;
@@ -334,17 +334,21 @@ async fn clear_genre(db: &DbPool, id: i64) -> Result<(), AppError> {
 ///
 /// Every existing test of those forms uses a *single* rule, which is exactly the shape the
 /// parens cannot matter in. Needs a null column to see, hence the staging.
+///
+/// **Over a column-backed field on purpose.** The set-valued ones render `NOT EXISTS`, which
+/// carries no bare `OR` and so cannot reach this at all; staged over one of those the test goes
+/// green while pinning nothing.
 #[tokio::test]
 async fn a_null_tolerant_rule_does_not_widen_the_rules_beside_it() -> Result<(), AppError> {
     let s = seed().await?;
-    clear_genre(&s.db, s.t4).await?;
+    clear_album(&s.db, s.t4).await?;
 
     let c = SmartCriteria {
         rules: vec![
             Rule {
-                field: RuleField::Genre,
+                field: RuleField::Album,
                 op: RuleOp::NotContains,
-                value: Some(RuleValue::Text("Rock".to_owned())),
+                value: Some(RuleValue::Text("Album A".to_owned())),
             },
             Rule {
                 field: RuleField::Rating,
@@ -355,8 +359,8 @@ async fn a_null_tolerant_rule_does_not_widen_the_rules_beside_it() -> Result<(),
         ..SmartCriteria::default()
     };
 
-    // t3 is the only row that is both not-Rock and rated 4+. t4 has a null genre and rating 0,
-    // so it satisfies the first rule and fails the second — and joins the set anyway the moment
+    // t3 is the only row that is both off Album A and rated 4+. t4 has a null album and rating 0,
+    // so it satisfies the first rule and fails the second, then joins the set anyway the moment
     // the parens go.
     assert_eq!(ids(&resolve(&s.db, &c).await?), HashSet::from([s.t3]));
     Ok(())

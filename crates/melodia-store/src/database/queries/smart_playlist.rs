@@ -2,8 +2,8 @@
 //! parameterized query over the `tracks` table.
 //!
 //! **Safety contract:** only enum-derived `&'static str` fragments (the column
-//! name from [`column_for`], the SQL operator token, the ORDER BY clause) are
-//! ever pushed as raw SQL. Every user-supplied value goes through
+//! name or correlated rows from [`field_source`], the SQL operator token, the
+//! ORDER BY clause) are ever pushed as raw SQL. Every user-supplied value goes through
 //! [`sqlx::QueryBuilder::push_bind`] — the same "structure interpolated, data
 //! bound" guarantee the rest of the query layer gets from `AssertSqlSafe(sql) +
 //! .bind()`. No user string can reach the SQL text.
@@ -124,14 +124,56 @@ fn rule_is_renderable(rule: &Rule) -> bool {
 /// passed [`rule_is_renderable`]; a value-shape mismatch degrades to a benign
 /// always-false term via [`push_false`] rather than panicking.
 fn push_rule(qb: &mut QueryBuilder<Sqlite>, rule: &Rule) {
-    let col = column_for(rule.field);
     let value = rule.value.as_ref();
+    let col = match field_source(rule.field) {
+        FieldSource::Members { rows, name } => {
+            return push_member_predicate(qb, rows, name, rule.op, value);
+        }
+        FieldSource::Column(col) => col,
+    };
     match rule.field.value_type() {
         ValueType::Text => push_text_predicate(qb, col, rule.op, value),
         ValueType::Number => push_numeric_predicate(qb, col, rule.field, rule.op, value),
         ValueType::Bool => push_bool_predicate(qb, col, rule.op),
         ValueType::Date => push_date_predicate(qb, col, rule.op, value),
     }
+}
+
+/// Run a text predicate against a set-valued field's *rows*, as `(NOT) EXISTS` over the join table
+/// correlated on `tracks.id`.
+///
+/// The negation is spelled once here rather than per operator, so the inner predicate is the same
+/// [`push_text_predicate`] every column field runs and a set matches when *any* member does.
+fn push_member_predicate(
+    qb: &mut QueryBuilder<Sqlite>,
+    rows: &str,
+    name: &str,
+    op: RuleOp,
+    value: Option<&RuleValue>,
+) {
+    let (negated, op) = match op {
+        RuleOp::NotContains => (true, RuleOp::Contains),
+        RuleOp::IsNot => (true, RuleOp::Is),
+        RuleOp::IsNotSet => (true, RuleOp::IsSet),
+        op => (false, op),
+    };
+    // Ahead of the wrapper, not inside it: a value-shape mismatch owes an always-false term, and
+    // one placed under `NOT EXISTS` is an always-true one.
+    if op != RuleOp::IsSet && !matches!(value, Some(RuleValue::Text(_))) {
+        return push_false(qb);
+    }
+
+    if negated {
+        qb.push("NOT ");
+    }
+    qb.push("EXISTS (SELECT 1 FROM ");
+    qb.push(rows);
+    // `IsSet` is the row existing, so the wrapper already is the whole predicate.
+    if op != RuleOp::IsSet {
+        qb.push(" AND ");
+        push_text_predicate(qb, name, op, value);
+    }
+    qb.push(")");
 }
 
 /// A benign always-false term (`WHERE (… 0 …)` matches no row). Reached only if
@@ -286,31 +328,63 @@ fn push_date_predicate(
     }
 }
 
-/// The `tracks` column each [`RuleField`] filters on. Exhaustive `match` over an
-/// enum returning `&'static str`, so no user string reaches SQL.
-fn column_for(field: RuleField) -> &'static str {
+/// Where a [`RuleField`]'s values live.
+///
+/// One answer per field, so nothing can compare a genre against the rendered line in one place and
+/// against its rows in another.
+enum FieldSource {
+    /// A column on `tracks` holding the whole value.
+    Column(&'static str),
+    /// Rows in a join table: the `FROM` text, correlated on `tracks.id` in its own `WHERE`, and the
+    /// name column a predicate compares.
+    Members {
+        rows: &'static str,
+        name: &'static str,
+    },
+}
+
+/// The column or rows each [`RuleField`] filters on. Exhaustive `match` over an enum, and every
+/// fragment it hands back is a `&'static str`, so no user string reaches SQL.
+///
+/// **Genres and role credits are rows.** The `tracks.genre` / `.credits` columns beside them are
+/// the rendered line `tracks_fts` and the display surfaces read, and a rule run against that line
+/// leaves `is` unsatisfiable for a track carrying two of anything, `starts_with` reading only the
+/// one the line opens with, and `contains` matching across the seam between two of them.
+///
+/// **`Artist` is deliberately a column.** `tracks.artist` is the credit as the release printed it,
+/// which is the string on screen and so the string a rule is written against; the genre line is a
+/// join nothing prints.
+fn field_source(field: RuleField) -> FieldSource {
     match field {
-        RuleField::Title => "title",
-        RuleField::Artist => "artist",
-        RuleField::AlbumArtist => "album_artist",
-        RuleField::Album => "album",
-        RuleField::Genre => "genre",
-        RuleField::Credits => "credits",
-        RuleField::Mood => "mood",
-        RuleField::InitialKey => "initial_key",
-        RuleField::Isrc => "isrc",
-        RuleField::Year => "year",
-        RuleField::Bpm => "bpm",
-        RuleField::DurationMs => "duration_ms",
-        RuleField::PlayCount => "play_count",
-        RuleField::SkipCount => "skip_count",
-        RuleField::Rating => "rating",
-        RuleField::Bitrate => "bitrate",
-        RuleField::SampleRate => "sample_rate",
-        RuleField::FileSize => "file_size",
-        RuleField::Favorite => "is_favorite",
-        RuleField::LastPlayed => "last_played",
-        RuleField::DateAdded => "date_added",
+        RuleField::Genre => FieldSource::Members {
+            rows: "track_genres tg JOIN genres g ON g.id = tg.genre_id \
+                   WHERE tg.track_id = tracks.id",
+            name: "g.name",
+        },
+        RuleField::Credits => FieldSource::Members {
+            rows: "track_credits tc JOIN artists a ON a.id = tc.artist_id \
+                   WHERE tc.track_id = tracks.id",
+            name: "a.name",
+        },
+        RuleField::Title => FieldSource::Column("title"),
+        RuleField::Artist => FieldSource::Column("artist"),
+        RuleField::AlbumArtist => FieldSource::Column("album_artist"),
+        RuleField::Album => FieldSource::Column("album"),
+        RuleField::Mood => FieldSource::Column("mood"),
+        RuleField::InitialKey => FieldSource::Column("initial_key"),
+        RuleField::Isrc => FieldSource::Column("isrc"),
+        RuleField::Year => FieldSource::Column("year"),
+        RuleField::Bpm => FieldSource::Column("bpm"),
+        RuleField::DurationMs => FieldSource::Column("duration_ms"),
+        RuleField::PlayCount => FieldSource::Column("play_count"),
+        RuleField::SkipCount => FieldSource::Column("skip_count"),
+        RuleField::Rating => FieldSource::Column("rating"),
+        RuleField::Bitrate => FieldSource::Column("bitrate"),
+        RuleField::SampleRate => FieldSource::Column("sample_rate"),
+        RuleField::FileSize => FieldSource::Column("file_size"),
+        RuleField::Favorite => FieldSource::Column("is_favorite"),
+        RuleField::LastPlayed => FieldSource::Column("last_played"),
+        RuleField::DateAdded => FieldSource::Column("date_added"),
     }
 }
 

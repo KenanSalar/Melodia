@@ -79,7 +79,8 @@ struct ApiLyrics {
     plain_lyrics: Option<String>,
     #[serde(default)]
     instrumental: bool,
-    /// Seconds, fractional. Only the index needs it, the signature having matched on it already.
+    /// Seconds, fractional. Read on both legs: the query rounds to the second and no longer pins
+    /// the album, so what came back is measured against [`DURATION_TOLERANCE_MS`] either way.
     #[serde(default)]
     duration: f64,
     /// The index's own idea of what this row is, which is the half that has to be checked: it is
@@ -157,17 +158,20 @@ pub(super) async fn fetch(
     album: &str,
     duration_ms: i64,
 ) -> Result<Option<LyricsAnswer>, LookupError> {
+    // Built once and lent to both legs: each checks the rows it gets back against the same
+    // recording, and the signature no longer pins enough to skip the check.
+    let ours = Recording::from_credit(title, credit);
     // The signature is a match against whatever the uploader tagged, so it asks with the credit as
     // printed. Only the index, which is asked loosely, has any use for the shape behind it.
     let printed = credit.line().unwrap_or_default();
-    let exact = get_exact(client, pacer, title, printed, album, duration_ms).await?;
+    let exact = get_exact(client, pacer, title, printed, duration_ms, &ours).await?;
     if exact.as_ref().is_some_and(|answer| answer.instrumental || settles_it(answer)) {
         return Ok(exact);
     }
     // Past `settles_it`, an answer already timed leaves the index one errand: the gloss.
     let gloss_errand = exact.as_ref().is_some_and(LyricsAnswer::is_synced);
 
-    match search_timed(client, pacer, title, credit, album, duration_ms).await {
+    match search_timed(client, pacer, title, credit, album, duration_ms, &ours).await {
         Ok(Some(timed)) if worth_taking(exact.as_ref(), &timed) => Ok(Some(timed)),
         Ok(Some(_) | None) => Ok(exact),
         // **A failed errand for a gloss may not cost the sheet it was run for.** Reported as a
@@ -223,20 +227,28 @@ fn worth_taking(exact: Option<&LyricsAnswer>, found: &LyricsAnswer) -> bool {
     }
 }
 
-/// The row whose four fields are this recording's, or `None` where the directory has no such row.
+/// The row whose title, artist and length are this recording's, or `None` where the directory has
+/// no such row.
+///
+/// **The album is deliberately not asked about.** The endpoint treats `album_name` as a filter
+/// rather than a hint, so a value it holds no row under is a `404` even where the track, the
+/// artist and the length all agree. That is the tag least worth staking a request on: a
+/// compilation, a reissue and a soundtrack name the same recording differently every time. Sent,
+/// it turned an ordinary multi-artist track into a miss only the index could repair; omitted, the
+/// same request answers. The album still ranks a *searched* row through [`album_rank`], which is
+/// the tie-break it is fit for.
 async fn get_exact(
     client: &reqwest::Client,
     pacer: &RequestPacer,
     title: &str,
     artist: &str,
-    album: &str,
     duration_ms: i64,
+    ours: &Recording,
 ) -> Result<Option<LyricsAnswer>, LookupError> {
     let mut url = endpoint(GET_ENDPOINT)?;
     url.query_pairs_mut()
         .append_pair("track_name", title)
         .append_pair("artist_name", artist)
-        .append_pair("album_name", album)
         // Rounded rather than truncated: the window either side is two seconds, and a track
         // reported a second short spends half of it before the request is even made.
         .append_pair("duration", &((duration_ms + 500) / 1000).to_string());
@@ -244,10 +256,31 @@ async fn get_exact(
     let Some(body) = send(client, pacer, url, "Lyrics sheet", MAX_BYTES).await? else {
         return Ok(None);
     };
-    let answer: ApiLyrics = serde_json::from_slice(&body)
+    let row: ApiLyrics = serde_json::from_slice(&body)
         .map_err(|e| failed("Failed to parse the lyrics response", e))?;
 
-    Ok(Some(answer.into_answer()))
+    Ok(answers_for(ours, &row, duration_ms).then(|| row.into_answer()))
+}
+
+/// Whether the row the signature answered with is the recording that was asked about.
+///
+/// Dropping the album from the query is what makes this necessary: the answer is now drawn from
+/// every release the directory holds this recording under rather than the one release asked about,
+/// and which of them comes back is the service's to decide. Both checks are the ones
+/// [`pick_timed`] already runs on a searched row, so the two legs accept a row on the same terms
+/// rather than on the endpoint's word for it.
+///
+/// **The length is measured here rather than left to the service.** It enforces one of its own and
+/// the query rounds to the second, so both windows are already its to choose; asking again is what
+/// makes [`DURATION_TOLERANCE_MS`] mean the same thing on both legs instead of only on the one it
+/// is named in.
+///
+/// Falls through to the length alone where our own side cannot be compared at all. A title that is
+/// nothing but a bracketed aside leaves [`Recording`] nothing to equal, and refusing there would
+/// drop sheets the query used to return.
+fn answers_for(ours: &Recording, row: &ApiLyrics, duration_ms: i64) -> bool {
+    row.distance_ms(duration_ms) <= DURATION_TOLERANCE_MS
+        && (!ours.can_match() || ours.matches(&row.recording()))
 }
 
 /// The index's best timed row for this recording.
@@ -271,12 +304,13 @@ async fn search_timed(
     credit: &ArtistCredit,
     album: &str,
     duration_ms: i64,
+    ours: &Recording,
 ) -> Result<Option<LyricsAnswer>, LookupError> {
     // **Asked here first, because nothing this side cannot compare is worth a request.** A title
     // that is nothing but a bracketed credit, or a credit that is nothing but separators, folds to
     // a recording `Recording::matches` refuses every row against, so the cap could only be spent
-    // to be told nothing.
-    let ours = Recording::from_credit(title, credit);
+    // to be told nothing. The signature has no such bail: it asks by exact title and length, which
+    // stay comparable when the fold does not.
     if !ours.can_match() {
         return Ok(None);
     }
@@ -304,7 +338,7 @@ async fn search_timed(
     let rows: Vec<ApiLyrics> = serde_json::from_slice(&body)
         .map_err(|e| failed("Failed to parse the lyrics search response", e))?;
 
-    Ok(pick_timed(rows, &ours, album, duration_ms).map(ApiLyrics::into_answer))
+    Ok(pick_timed(rows, ours, album, duration_ms).map(ApiLyrics::into_answer))
 }
 
 /// The row the index returned that is this recording, or nothing it can stand behind.
