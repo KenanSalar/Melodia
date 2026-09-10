@@ -116,7 +116,7 @@ pub(super) fn republish(ui: &AppWindow, ly: &Rc<LyricsUi>) {
 }
 
 /// A row as the panel draws it, with the romanization suppressed where the toggle says so.
-fn published_row(row: &Row, romanization_shown: bool) -> LyricRow {
+pub(super) fn published_row(row: &Row, romanization_shown: bool) -> LyricRow {
     LyricRow {
         text: row.text.clone(),
         romanization: row

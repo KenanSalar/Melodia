@@ -295,3 +295,7 @@ pub(super) fn rebuild_up_next(
     np.set_queue_length(len_as_i32(qvm.queue_tracks.len()));
     ids
 }
+
+#[cfg(test)]
+#[path = "tests/up_next_tests.rs"]
+mod tests;

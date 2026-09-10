@@ -210,3 +210,7 @@ pub(crate) fn to_slint_queue_row(t: &TrackSummary, selected: bool) -> QueueRow {
         genre_id: 0,
     }
 }
+
+#[cfg(test)]
+#[path = "tests/rows_tests.rs"]
+mod tests;

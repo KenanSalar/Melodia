@@ -208,3 +208,7 @@ pub struct FavoriteArtist {
     pub image_path: Option<String>,
     pub favorite_count: i32,
 }
+
+#[cfg(test)]
+#[path = "tests/artist_tests.rs"]
+mod tests;

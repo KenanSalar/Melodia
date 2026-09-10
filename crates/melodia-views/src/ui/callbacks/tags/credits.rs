@@ -223,3 +223,7 @@ pub(super) fn write_credit_rows(te: &TagEditor, field: usize, rows: Vec<ArtistCr
         vm.set_vec(rows);
     }
 }
+
+#[cfg(test)]
+#[path = "tests/credits_tests.rs"]
+mod tests;

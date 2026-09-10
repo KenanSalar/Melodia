@@ -561,3 +561,20 @@ fn the_romanization_ships_on_but_never_overrides_a_saved_answer() -> Result<(), 
     assert!(!settings.lyrics.lyrics_romanization_shown);
     Ok(())
 }
+
+/// A one-shot marker ships false, and the direction it fails is re-running the sweep on every
+/// launch: an install that has already had its backfill would queue the whole library for a
+/// re-parse each time the default landed over the saved answer.
+#[test]
+fn the_tag_backfill_marker_ships_unset_and_survives_being_set() -> Result<(), AppError> {
+    assert!(!reading_env(SettingsData::default).library.tags_backfilled);
+
+    let predating = r#"{"theme_id": "catppuccin"}"#;
+    let settings: SettingsData = serde_json::from_str(predating).map_err(|e| json_err(&e))?;
+    assert!(!settings.library.tags_backfilled, "an older file has never had the pass");
+
+    let recorded = r#"{"theme_id": "catppuccin", "tags_backfilled": true}"#;
+    let settings: SettingsData = serde_json::from_str(recorded).map_err(|e| json_err(&e))?;
+    assert!(settings.library.tags_backfilled);
+    Ok(())
+}

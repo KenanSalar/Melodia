@@ -91,3 +91,7 @@ pub struct GenreStats {
     pub track_count: i32,
     pub total_duration_ms: i64,
 }
+
+#[cfg(test)]
+#[path = "tests/genre_tests.rs"]
+mod tests;

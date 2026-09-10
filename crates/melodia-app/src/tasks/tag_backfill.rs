@@ -74,3 +74,7 @@ async fn mark_every_track_stale(db: &DbPool) -> AppResult<u64> {
             .await?;
     Ok(result.rows_affected())
 }
+
+#[cfg(test)]
+#[path = "tests/tag_backfill_tests.rs"]
+mod tests;

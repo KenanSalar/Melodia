@@ -142,3 +142,7 @@ fn render(credits: &[RoleCredit]) -> String {
     }
     seen.join(", ")
 }
+
+#[cfg(test)]
+#[path = "tests/credits_tests.rs"]
+mod tests;

@@ -165,6 +165,49 @@ fn an_album_states_its_discs_compilation_flag_and_genre_when_it_has_them() {
     );
 }
 
+/// The release facts sit between the compilation flag and the genre, which is the order the band
+/// drops them in: the genre is the one chip that isn't about this release, so it goes first.
+#[test]
+fn an_album_states_the_release_facts_its_tags_carry() {
+    let released = AlbumStats {
+        release_type: Some("Album".into()),
+        media: Some("CD".into()),
+        label: Some("ECM".into()),
+        ..album(Some(1998), None, true)
+    };
+
+    assert_eq!(
+        texts(&album_chips(&EnglishLabels, &released, Some("Jazz"))),
+        vec![
+            "1998",
+            "5 tracks",
+            "45:33",
+            "Compilation",
+            "Album",
+            "CD",
+            "ECM",
+            "Jazz"
+        ]
+    );
+}
+
+/// **Blank rather than absent is the case to check.** A tag read off a file arrives as an empty
+/// string about as often as it is missing, and a chip drawing one is a pill with nothing in it.
+#[test]
+fn a_release_fact_the_tag_left_blank_states_nothing() {
+    let blank = AlbumStats {
+        release_type: Some(String::new()),
+        media: Some("CD".into()),
+        label: Some(String::new()),
+        ..album(Some(1998), None, false)
+    };
+
+    assert_eq!(
+        texts(&album_chips(&EnglishLabels, &blank, None)),
+        vec!["1998", "5 tracks", "45:33", "CD"]
+    );
+}
+
 #[test]
 fn an_artist_states_albums_only_when_it_has_some() {
     let mut artist = ArtistStats {

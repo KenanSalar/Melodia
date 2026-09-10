@@ -218,3 +218,7 @@ pub(super) fn common_roles(sets: &[RoleCredits]) -> (RoleCredits, [bool; ROLES.l
 
     (RoleCredits::new(agreed), disagreements)
 }
+
+#[cfg(test)]
+#[path = "tests/lists_tests.rs"]
+mod tests;

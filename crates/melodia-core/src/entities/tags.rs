@@ -188,3 +188,7 @@ impl ClearedReleaseTags {
         self == Self::default()
     }
 }
+
+#[cfg(test)]
+#[path = "tests/tags_tests.rs"]
+mod tests;

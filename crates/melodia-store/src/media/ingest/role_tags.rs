@@ -159,3 +159,7 @@ fn join_detail(credit: &RoleCredit) -> String {
 fn already_credited(credits: &[RoleCredit], role: CreditRole, name: &str) -> bool {
     credits.iter().any(|credit| credit.role == role && credit.name.eq_ignore_ascii_case(name))
 }
+
+#[cfg(test)]
+#[path = "tests/role_tags_tests.rs"]
+mod tests;

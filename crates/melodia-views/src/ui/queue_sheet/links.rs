@@ -142,3 +142,7 @@ fn patch_rows(ui: &AppWindow, links: &[TrackLinks]) {
         by_id.get(&row.id).is_some_and(|resolved| resolved.stamp(row))
     });
 }
+
+#[cfg(test)]
+#[path = "tests/links_tests.rs"]
+mod tests;

@@ -135,6 +135,71 @@ fn a_genre_is_named_only_when_it_actually_dominates() {
     assert_eq!(dominant_genre(&[]), None);
 }
 
+/// `max_by_key` keeps the *last* of equal maxima, so an album whose every track is tagged
+/// `Rock, Metal` named `Metal` while `tracks.genre_id` pointed at `Rock`.
+#[test]
+fn two_genres_over_the_majority_are_settled_by_tag_order() {
+    let both = [
+        track(None, None, Some("Rock, Metal")),
+        track(None, None, Some("Rock, Metal")),
+        track(None, None, Some("Rock, Metal")),
+    ];
+    assert_eq!(dominant_genre(&both).as_deref(), Some("Rock"));
+
+    // Tag order, not alphabetical and not first-seen-in-the-list.
+    let reversed = [
+        track(None, None, Some("Metal, Rock")),
+        track(None, None, Some("Metal, Rock")),
+    ];
+    assert_eq!(dominant_genre(&reversed).as_deref(), Some("Metal"));
+}
+
+/// Tallied per name rather than per rendered line: three of these four tracks carry `Rock`, but
+/// only two spell it the same way, so a per-line tally finds no majority at all.
+#[test]
+fn a_multi_genre_row_counts_once_toward_every_name_it_holds() {
+    let rows = [
+        track(None, None, Some("Rock, Metal")),
+        track(None, None, Some("Rock, Metal")),
+        track(None, None, Some("Rock")),
+        track(None, None, Some("Blues")),
+    ];
+    assert_eq!(dominant_genre(&rows).as_deref(), Some("Rock"));
+}
+
+/// `names_in_line` splits a rendered column, so a genre whose own name holds the separator comes
+/// back as two — and beside a genre spelling its head, one track spells that head twice. Counted
+/// twice it clears a majority no second track voted for.
+#[test]
+fn a_row_that_spells_one_name_twice_still_counts_for_one_track() {
+    let rows = [
+        track(None, None, Some("Chanson, Francaise, Chanson")),
+        track(None, None, Some("Jazz")),
+    ];
+    assert_eq!(dominant_genre(&rows), None);
+}
+
+/// The threshold is `count * 2 > tagged`, so an even list is the boundary: half is not a majority
+/// and one more is.
+#[test]
+fn half_the_tagged_tracks_is_not_a_majority_and_one_more_is() {
+    let half = [
+        track(None, None, Some("Jazz")),
+        track(None, None, Some("Jazz")),
+        track(None, None, Some("Blues")),
+        track(None, None, Some("Soul")),
+    ];
+    assert_eq!(dominant_genre(&half), None);
+
+    let over = [
+        track(None, None, Some("Jazz")),
+        track(None, None, Some("Jazz")),
+        track(None, None, Some("Jazz")),
+        track(None, None, Some("Blues")),
+    ];
+    assert_eq!(dominant_genre(&over).as_deref(), Some("Jazz"));
+}
+
 #[test]
 fn the_year_span_ignores_albums_with_no_year() {
     assert_eq!(

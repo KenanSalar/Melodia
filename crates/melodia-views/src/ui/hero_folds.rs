@@ -91,14 +91,23 @@ pub fn dominant_genre(rows: &[TrackListRow]) -> Option<String> {
     const MAJORITY: usize = 2;
 
     let mut tally: Vec<(&str, usize)> = Vec::new();
+    // Reused across rows, so the whole fold allocates once however long the list is.
+    let mut in_row: Vec<&str> = Vec::new();
     let mut tagged = 0usize;
     for line in rows.iter().filter_map(|r| r.genre.as_deref()) {
-        let mut names = GenreList::names_in_line(line).peekable();
-        if names.peek().is_none() {
+        // A line can spell one name twice: `names_in_line` splits a rendered column, and a genre
+        // whose own name holds the separator comes back as two. The denominator is tracks.
+        in_row.clear();
+        for name in GenreList::names_in_line(line) {
+            if !in_row.iter().any(|seen| seen.eq_ignore_ascii_case(name)) {
+                in_row.push(name);
+            }
+        }
+        if in_row.is_empty() {
             continue;
         }
         tagged += 1;
-        for name in names {
+        for &name in &in_row {
             match tally.iter_mut().find(|(seen, _)| seen.eq_ignore_ascii_case(name)) {
                 Some((_, count)) => *count += 1,
                 None => tally.push((name, 1)),

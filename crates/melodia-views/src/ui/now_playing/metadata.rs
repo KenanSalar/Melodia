@@ -46,3 +46,7 @@ pub(super) fn visible_chip_texts(m: &TrackMetaRow) -> Vec<SharedString> {
 
 // The wrap itself lives in `crate::ui::chips` — shared with the hero bands, so
 // both strips break the same way and only the row cap differs.
+
+#[cfg(test)]
+#[path = "tests/metadata_tests.rs"]
+mod tests;

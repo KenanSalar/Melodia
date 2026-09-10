@@ -11,6 +11,10 @@ use slint::{Model, ModelRc, VecModel};
 
 use melodia_ui::TrackListRow as UiTrackListRow;
 
+#[cfg(test)]
+#[path = "tests/model_patch_tests.rs"]
+mod tests;
+
 /// The `VecModel` behind `rows`, logged under `label` rather than passed over when it isn't one:
 /// the rows and whatever the caller has in hand disagree from there on, and nothing else says so.
 fn vec_model<'a, T: Clone + 'static>(rows: &'a ModelRc<T>, label: &str) -> Option<&'a VecModel<T>> {

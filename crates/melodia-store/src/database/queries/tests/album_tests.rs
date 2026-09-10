@@ -1,6 +1,9 @@
+use crate::database::DbPool;
 use crate::database::queries;
 #[allow(clippy::wildcard_imports)]
 use crate::database::queries::fixtures::*;
+use melodia_core::entities::scan::{ExtractedMetadata, ReleaseTags};
+use melodia_core::entities::tags::ClearedReleaseTags;
 use melodia_core::error::AppError;
 
 #[tokio::test]
@@ -123,5 +126,149 @@ async fn prune_orphans_removes_emptied_album_artist_and_genre() -> Result<(), Ap
         sqlx::query_scalar("SELECT name FROM genres ORDER BY name").fetch_all(db.read()).await?;
     assert_eq!(genres, vec!["Rock".to_owned()]);
 
+    Ok(())
+}
+
+// === Release-level columns ===
+
+/// A track carrying every release-level tag, so the album it seeds has something to clear.
+fn released(title: &str) -> ExtractedMetadata {
+    let mut meta = make_test_metadata(title);
+    meta.release = ReleaseTags {
+        label: Some("ECM".to_owned()),
+        catalog_number: Some("ECM 1064".to_owned()),
+        barcode: Some("042281100420".to_owned()),
+        media: Some("CD".to_owned()),
+        release_type: Some("Album".to_owned()),
+        release_country: Some("DE".to_owned()),
+        musicbrainz_release_group_id: None,
+        is_compilation: true,
+    };
+    meta
+}
+
+/// The six text columns and the flag, as they sit on the row.
+async fn stored_release(db: &DbPool, album_id: i64) -> Result<Release, AppError> {
+    let row = sqlx::query_as::<_, Release>(
+        "SELECT label, catalog_number, barcode, media, release_type, release_country, \
+                is_compilation FROM albums WHERE id = ?",
+    )
+    .bind(album_id)
+    .fetch_one(db.read())
+    .await?;
+    Ok(row)
+}
+
+type Release = (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    bool,
+);
+
+async fn seed_released_album() -> Result<(DbPool, i64), AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    insert_tagged_track(&db, "/music/1.mp3", &released("One")).await?;
+
+    let albums = queries::album::get_all_albums(&db).await?;
+    let id = albums.first().map(|a| a.id).ok_or_else(|| missing("the seeded album"))?;
+    Ok((db, id))
+}
+
+fn missing(what: &str) -> AppError {
+    AppError::Validation(format!("missing {what}"))
+}
+
+/// **`upsert_album` structurally cannot empty one of these.** It coalesces a NULL away so a track
+/// saying nothing doesn't blank what its neighbours said, so without this pass a release goes on
+/// showing a label no file carries. The flag is the worse half: its upsert is an `OR`, which no
+/// re-ingest can ever bring back down.
+#[tokio::test]
+async fn every_release_column_can_be_emptied() -> Result<(), AppError> {
+    let (db, album_id) = seed_released_album().await?;
+    assert_eq!(
+        stored_release(&db, album_id).await?,
+        (
+            Some("ECM".to_owned()),
+            Some("ECM 1064".to_owned()),
+            Some("042281100420".to_owned()),
+            Some("CD".to_owned()),
+            Some("Album".to_owned()),
+            Some("DE".to_owned()),
+            true,
+        )
+    );
+
+    let mut tx = db.write().begin().await?;
+    queries::album::clear_release_tags(
+        &mut tx,
+        &[album_id],
+        ClearedReleaseTags {
+            label: true,
+            catalog_number: true,
+            barcode: true,
+            media: true,
+            release_type: true,
+            release_country: true,
+            compilation: true,
+        },
+    )
+    .await?;
+    tx.commit().await?;
+
+    assert_eq!(stored_release(&db, album_id).await?, (None, None, None, None, None, None, false));
+    Ok(())
+}
+
+/// A flag left `false` leaves its column reading itself, which is what lets one statement carry
+/// seven independent decisions.
+#[tokio::test]
+async fn a_column_the_edit_did_not_clear_keeps_its_value() -> Result<(), AppError> {
+    let (db, album_id) = seed_released_album().await?;
+
+    let mut tx = db.write().begin().await?;
+    queries::album::clear_release_tags(
+        &mut tx,
+        &[album_id],
+        ClearedReleaseTags {
+            label: true,
+            ..ClearedReleaseTags::default()
+        },
+    )
+    .await?;
+    tx.commit().await?;
+
+    let stored = stored_release(&db, album_id).await?;
+    assert_eq!(stored.0, None, "the one column the edit named");
+    assert_eq!(stored.1, Some("ECM 1064".to_owned()));
+    assert!(stored.6, "the flag is not swept along with a text column");
+    Ok(())
+}
+
+/// Both early returns, since each would otherwise run an `UPDATE` whose `SET` list nulls nothing
+/// and whose `IN ()` matches nothing — free, but only by accident.
+#[tokio::test]
+async fn an_edit_that_cleared_nothing_touches_no_row() -> Result<(), AppError> {
+    let (db, album_id) = seed_released_album().await?;
+    let before = stored_release(&db, album_id).await?;
+
+    let mut tx = db.write().begin().await?;
+    queries::album::clear_release_tags(&mut tx, &[album_id], ClearedReleaseTags::default()).await?;
+    queries::album::clear_release_tags(
+        &mut tx,
+        &[],
+        ClearedReleaseTags {
+            label: true,
+            ..ClearedReleaseTags::default()
+        },
+    )
+    .await?;
+    tx.commit().await?;
+
+    assert_eq!(stored_release(&db, album_id).await?, before);
     Ok(())
 }

@@ -421,3 +421,76 @@ fn a_capital_is_charged_more_than_a_lowercase_letter_and_less_than_a_wide_one() 
     assert!(char_ems('A') > char_ems('o'), "wider than an ordinary lowercase letter");
     assert!(char_ems('A') < char_ems('m'), "narrower than the widest one");
 }
+
+// === What the panel is handed to draw ===
+
+use super::follow::published_row;
+
+/// A row carrying every optional part, so a suppression shows up as a gap rather than as a shift.
+fn glossed(at_ms: Option<i32>) -> Row {
+    Row {
+        kind: RowKind::Words,
+        at_ms,
+        text: "kimi".into(),
+        romanization: Some("kimi".into()),
+        translation: Some("you".into()),
+        lines: 1,
+        romanization_lines: 1,
+        translation_lines: 1,
+    }
+}
+
+/// The toggle suppresses the romanization and nothing else — a reader who turned it off is still
+/// reading the translation under the same line.
+#[test]
+fn the_romanization_toggle_reaches_the_romanization_alone() {
+    let shown = published_row(&glossed(Some(1_000)), true);
+    assert_eq!(shown.romanization.as_str(), "kimi");
+    assert_eq!(shown.translation.as_str(), "you");
+
+    let hidden = published_row(&glossed(Some(1_000)), false);
+    assert_eq!(hidden.romanization.as_str(), "");
+    assert_eq!(hidden.translation.as_str(), "you", "the translation is a different switch");
+    assert_eq!(hidden.text.as_str(), "kimi");
+}
+
+/// **`-1` is "this line has no stamp".** A Slint row carries an `int`, so an untimed sheet needs a
+/// value the panel can compare rather than an absent one — and zero would be a line sung at the
+/// very start of the track.
+#[test]
+fn a_line_with_no_stamp_publishes_the_sentinel_rather_than_a_zero() {
+    assert_eq!(published_row(&glossed(None), true).at_ms, -1);
+    assert_eq!(published_row(&glossed(Some(0)), true).at_ms, 0);
+}
+
+/// The row's own line counts ride across, since the panel sizes each block from them rather than
+/// measuring the text again.
+#[test]
+fn a_row_publishes_the_line_counts_it_was_measured_at() {
+    let tall = Row {
+        lines: 3,
+        romanization_lines: 2,
+        translation_lines: 1,
+        ..glossed(Some(0))
+    };
+
+    let published = published_row(&tall, true);
+
+    assert_eq!(
+        (published.line_count, published.romanization_line_count, published.translation_line_count),
+        (3, 2, 1)
+    );
+    assert!(!published.is_interlude);
+}
+
+/// A gap draws as an interlude rather than as a line of words, which is what the panel keys its
+/// fill on — and the toggle has nothing to suppress there.
+#[test]
+fn a_gap_publishes_as_an_interlude() {
+    let gap = Row::interlude(1_000, 6_000);
+
+    let published = published_row(&gap, false);
+
+    assert!(published.is_interlude);
+    assert_eq!(published.romanization.as_str(), "");
+}

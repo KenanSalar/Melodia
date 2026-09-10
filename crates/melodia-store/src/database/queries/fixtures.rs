@@ -80,13 +80,8 @@ pub async fn insert_test_track(
     album_name: &str,
     genre_name: &str,
 ) -> Result<i64, AppError> {
-    let mut tx = db.write().begin().await?;
-
-    let unknown_artist_id = 1; // sentinel from schema.sql
-    let credit = ArtistCredit::from_name(artist_name);
-
     let mut meta = make_test_metadata(title);
-    meta.artist = credit.clone();
+    meta.artist = ArtistCredit::from_name(artist_name);
     meta.album = if album_name.is_empty() {
         None
     } else {
@@ -94,14 +89,44 @@ pub async fn insert_test_track(
     };
     meta.genres = GenreList::from_name(genre_name);
 
-    // Ahead of the album upsert, which now reads the release tags off the same value the track
-    // row is built from rather than taking a year on its own.
+    insert_tagged_track(db, file_path, &meta).await
+}
+
+/// Insert a track from a prepared [`ExtractedMetadata`], resolving its rows the way
+/// `queries::scan::resolve_track_context` does.
+///
+/// The multi-value half of a tag — a guest credit, a second genre, a role credit — has no shape in
+/// [`insert_test_track`]'s flat arguments, and the join tables every stat is now counted off are
+/// written from exactly that half. Everything but the folder is the scan's own path; `folder_id`
+/// is the seeded 1, since no fixture stages a path a library folder actually contains.
+pub async fn insert_tagged_track(
+    db: &DbPool,
+    file_path: &str,
+    meta: &ExtractedMetadata,
+) -> Result<i64, AppError> {
+    let unknown_artist_id = 1; // sentinel from schema.sql
+    let mut tx = db.write().begin().await?;
     let mut names = queries::scan::NameCache::default();
-    let artist_id = queries::scan::upsert_artist(&mut tx, artist_name, unknown_artist_id).await?;
-    let album_id =
-        queries::scan::upsert_album(&mut tx, album_name, artist_id, &credit, &meta, &mut names)
-            .await?;
-    let genre_id = queries::scan::upsert_genre(&mut tx, genre_name).await?;
+
+    let artist_name = meta.artist.primary_name();
+    let artist_id = names.artist(&mut tx, artist_name, unknown_artist_id).await?;
+    let album_artist_name = queries::scan::album_artist_name_for(meta);
+    let album_artist_id = if album_artist_name == artist_name {
+        artist_id
+    } else {
+        names.artist(&mut tx, album_artist_name, unknown_artist_id).await?
+    };
+    let album_credit = queries::scan::album_credit_for(meta);
+    let album_id = queries::scan::upsert_album(
+        &mut tx,
+        meta.album.as_deref().unwrap_or(""),
+        album_artist_id,
+        &album_credit,
+        meta,
+        &mut names,
+    )
+    .await?;
+    let genre_id = names.genre(&mut tx, meta.genres.primary().unwrap_or("")).await?;
 
     let file_name =
         std::path::Path::new(file_path).file_name().and_then(|f| f.to_str()).unwrap_or("test.mp3");
@@ -114,16 +139,10 @@ pub async fn insert_test_track(
     };
 
     let now = melodia_core::utils::now_rfc3339();
-    queries::scan::insert_track(&mut tx, file_path, file_name, &meta, &ids, &now, &mut names)
-        .await?;
-
+    let id =
+        queries::scan::insert_track(&mut tx, file_path, file_name, meta, &ids, &now, &mut names)
+            .await?;
     tx.commit().await?;
-
-    // Retrieve the track ID
-    let id: i64 = sqlx::query_scalar::<_, i64>("SELECT id FROM tracks WHERE file_path = ?")
-        .bind(file_path)
-        .fetch_one(db.read())
-        .await?;
     Ok(id)
 }
 
