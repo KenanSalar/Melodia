@@ -1483,8 +1483,6 @@ msgstr "Sınırla:"
 msgid "tracks by"
 msgstr "parça, şuna göre:"
 
-msgid "Add artist"
-msgstr "Sanatçı ekle"
 
 msgid "Add rule"
 msgstr "Kural ekle"
@@ -2119,3 +2117,95 @@ msgstr "Dosyaya kaydet"
 # lyrics tag. The detail line beside it is the track's title.
 msgid "Lyrics saved"
 msgstr "Şarkı sözleri kaydedildi"
+
+# The Edit-Track-Information dialog's Credits and Details tabs. Every role below is a
+# credit a file can carry; the rest are the release-level tags beside them.
+msgid "Credits"
+msgstr "Katkıda bulunanlar"
+
+msgid "Details"
+msgstr "Ayrıntılar"
+
+msgid "Lyricist"
+msgstr "Söz yazarı"
+
+msgid "Arranger"
+msgstr "Düzenleyen"
+
+msgid "Conductor"
+msgstr "Orkestra şefi"
+
+msgid "Performer"
+msgstr "İcracı"
+
+msgid "Remixer"
+msgstr "Remiksçi"
+
+msgid "Producer"
+msgstr "Yapımcı"
+
+msgid "Engineer"
+msgstr "Ses mühendisi"
+
+msgid "Mixer"
+msgstr "Miksçi"
+
+msgid "DJ Mixer"
+msgstr "DJ miksçi"
+
+msgid "Subtitle"
+msgstr "Alt başlık"
+
+msgid "Disc Subtitle"
+msgstr "Disk alt başlığı"
+
+msgid "Grouping"
+msgstr "Gruplama"
+
+msgid "Work"
+msgstr "Eser"
+
+msgid "Movement"
+msgstr "Bölüm"
+
+# Labels for the second and third box of a numbered pair: "Track 3 / Total 12".
+msgid "Number"
+msgstr "Numara"
+
+msgid "Total"
+msgstr "Toplam"
+
+# Musical key, as in A minor — not a keyboard key or a lookup key.
+msgid "Key"
+msgstr "Ton"
+
+msgid "Mood"
+msgstr "Ruh hali"
+
+msgid "ISRC"
+msgstr "ISRC"
+
+msgid "Copyright"
+msgstr "Telif hakkı"
+
+msgid "Record Label"
+msgstr "Plak şirketi"
+
+msgid "Catalog Number"
+msgstr "Katalog numarası"
+
+msgid "Barcode"
+msgstr "Barkod"
+
+# The physical medium a release came out on — CD, vinyl, digital.
+msgid "Media"
+msgstr "Ortam"
+
+msgid "Release Type"
+msgstr "Yayın türü"
+
+msgid "Release Country"
+msgstr "Yayın ülkesi"
+
+msgid "Part of a compilation"
+msgstr "Bir derlemenin parçası"

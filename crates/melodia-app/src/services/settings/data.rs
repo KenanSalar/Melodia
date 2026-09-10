@@ -455,13 +455,14 @@ pub struct LibraryFlags {
     /// fixes that is one-shot, and marked here rather than inferred — an unrated row is
     /// indistinguishable from one the user deliberately cleared.
     pub ratings_imported_from_tags: bool,
-    /// Whether the multi-value artist tags already sitting in this library's files have been read
-    /// in once.
+    /// Whether the tags this library's files carry have been re-read once since the ingest
+    /// widened.
     ///
-    /// The migration seeds one credit per track from `tracks.artist_id`, which is right for a
-    /// single-artist file and is every name a library indexed before the credit tables knows. The
-    /// rest is in the files, and `scanner::track_is_current` will never re-read them.
-    pub artist_credits_imported: bool,
+    /// The migrations seed what the database already knew — one artist credit per track, one
+    /// genre, a composer — and that is every name a library indexed before them holds. Everything
+    /// the reader gained since is in the files, and `scanner::track_is_current` will never re-read
+    /// them on its own.
+    pub tags_backfilled: bool,
 }
 
 impl Default for LibraryFlags {
@@ -472,7 +473,7 @@ impl Default for LibraryFlags {
             artwork_store_normalized: false,
             write_ratings_to_tags: true,
             ratings_imported_from_tags: false,
-            artist_credits_imported: false,
+            tags_backfilled: false,
         }
     }
 }

@@ -32,6 +32,19 @@ pub fn album_artist_name_for(meta: &ExtractedMetadata) -> &str {
     }
 }
 
+/// The identity tags a credit's names carry beside their spelling.
+///
+/// Its own type because the two travel to the same place and follow opposite rules — see
+/// [`write_credits`] for why one is position-aligned and the other is not.
+#[derive(Default, Clone, Copy)]
+pub struct CreditDetails<'a> {
+    /// `ARTISTSORT` / `ALBUMARTISTSORT`, which describes the whole printed credit rather than any
+    /// one name in it.
+    pub sort_name: Option<&'a str>,
+    /// One `MusicBrainz` id per credited name, in the same order, or empty.
+    pub mbids: &'a [String],
+}
+
 /// Write a freshly inserted track's artist credit.
 ///
 /// **Position 0 is the row's own `tracks.artist_id`.** Album grouping and the sort indexes still
@@ -44,21 +57,115 @@ pub async fn insert_track_credits(
     track_id: i64,
     credit: &ArtistCredit,
     primary_artist_id: i64,
+    details: CreditDetails<'_>,
 ) -> Result<(), AppError> {
-    write_credits(tx, "track_artists", "track_id", track_id, credit, primary_artist_id).await
+    write_credits(tx, "track_artists", "track_id", track_id, credit, primary_artist_id, details)
+        .await
 }
 
-/// [`insert_track_credits`] for a track that may already carry one: a re-ingest, or the credit
-/// import. The insert paths take the sibling, a rowid the INSERT just minted having nothing to
-/// clear, and a DELETE per row being a statement per track of a bulk scan.
-pub async fn replace_track_credits(
+/// Every join row a freshly inserted track owes: its artist credit, its role credits, its genres.
+///
+/// One entry point rather than three calls at each of the two insert sites, because the three
+/// tables are one fact about the row — a path that wrote two of them is a track that displays
+/// credits it cannot be found by, and the bug is invisible from either half.
+pub async fn insert_track_joins(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     track_id: i64,
-    credit: &ArtistCredit,
-    primary_artist_id: i64,
+    meta: &ExtractedMetadata,
+    ids: &super::ResolvedIds,
+) -> Result<(), AppError> {
+    insert_track_credits(tx, track_id, &meta.artist, ids.artist_id, track_credit_details(meta))
+        .await?;
+    write_role_credits(tx, track_id, meta, ids.artist_id).await?;
+    write_genres(tx, track_id, meta).await
+}
+
+/// [`insert_track_joins`] for a track that may already carry rows: a re-ingest or a tag edit.
+pub async fn replace_track_joins(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    track_id: i64,
+    meta: &ExtractedMetadata,
+    ids: &super::ResolvedIds,
 ) -> Result<(), AppError> {
     clear_credits(tx, "track_artists", "track_id", track_id).await?;
-    insert_track_credits(tx, track_id, credit, primary_artist_id).await
+    clear_credits(tx, "track_credits", "track_id", track_id).await?;
+    clear_credits(tx, "track_genres", "track_id", track_id).await?;
+    insert_track_joins(tx, track_id, meta, ids).await
+}
+
+/// The identity tags behind a track's own artist credit.
+#[must_use]
+pub fn track_credit_details(meta: &ExtractedMetadata) -> CreditDetails<'_> {
+    CreditDetails {
+        sort_name: meta.sort.artist.as_deref(),
+        mbids: &meta.artist_mbids,
+    }
+}
+
+/// The identity tags behind the credit an album files under.
+///
+/// Falls back to the track artist's the way [`album_credit_for`] does, so the sort name and the
+/// credit it describes come from the same tag rather than from different ones.
+#[must_use]
+pub fn album_credit_details(meta: &ExtractedMetadata) -> CreditDetails<'_> {
+    if meta.album_artist.is_empty() {
+        return track_credit_details(meta);
+    }
+    CreditDetails {
+        sort_name: meta.sort.album_artist.as_deref(),
+        mbids: &meta.album_artist_mbids,
+    }
+}
+
+/// One row per role credit, upserting the names it hasn't seen.
+///
+/// **No stats**, unlike `track_artists`: `artists.track_count` means "credited as an artist", and a
+/// composer inflating it would seat them in the Artists grid as a performer. The row keeps the
+/// artist alive through `prune_orphans` and nothing else.
+async fn write_role_credits(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    track_id: i64,
+    meta: &ExtractedMetadata,
+    unknown_artist_id: i64,
+) -> Result<(), AppError> {
+    for (position, credit) in meta.credits.all().iter().enumerate() {
+        let artist_id = upsert_artist(tx, &credit.name, unknown_artist_id).await?;
+        sqlx::query(
+            "INSERT INTO track_credits (track_id, artist_id, role, detail, position)
+             VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(track_id)
+        .bind(artist_id)
+        .bind(credit.role.as_db_str())
+        .bind(&credit.detail)
+        .bind(i64::try_from(position).unwrap_or(i64::MAX))
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+/// One row per genre, in tag order.
+///
+/// Position 0 takes the already-resolved `tracks.genre_id` for [`write_credits`]' reason: the
+/// caller resolved that id from this list's first name.
+async fn write_genres(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    track_id: i64,
+    meta: &ExtractedMetadata,
+) -> Result<(), AppError> {
+    for (position, name) in meta.genres.names().iter().enumerate() {
+        let Some(genre_id) = upsert_genre(tx, name).await? else {
+            continue;
+        };
+        sqlx::query("INSERT INTO track_genres (track_id, genre_id, position) VALUES (?, ?, ?)")
+            .bind(track_id)
+            .bind(genre_id)
+            .bind(i64::try_from(position).unwrap_or(i64::MAX))
+            .execute(&mut **tx)
+            .await?;
+    }
+    Ok(())
 }
 
 /// [`replace_track_credits`] for an album, plus the rendered credit `album_stats` displays.
@@ -70,9 +177,11 @@ pub async fn replace_album_credits(
     album_id: i64,
     credit: &ArtistCredit,
     primary_artist_id: i64,
+    details: CreditDetails<'_>,
 ) -> Result<(), AppError> {
     clear_credits(tx, "album_artists", "album_id", album_id).await?;
-    write_credits(tx, "album_artists", "album_id", album_id, credit, primary_artist_id).await?;
+    write_credits(tx, "album_artists", "album_id", album_id, credit, primary_artist_id, details)
+        .await?;
 
     // NULL rather than the one name it would repeat, so `album_stats` falls back to the artist row
     // and a single-artist album keeps rendering from one place.
@@ -108,6 +217,14 @@ async fn clear_credits(
 /// Position 0 takes `primary_artist_id` rather than an upsert of its own: every caller resolved
 /// that id *from* this credit's first name, so the round trip would ask a question it is holding
 /// the answer to. Which is also the invariant `album_credit_for` exists to keep true.
+///
+/// The two halves of `details` follow opposite rules, and both are conventions rather than
+/// choices. A `MusicBrainz` id is written **per name**, the tag listing one per credited artist in
+/// the same order. A sort name is written **only for a solo credit**: `ARTISTSORT` is the sort form
+/// of the whole printed line, so on "The Beatles & Yoko Ono" it reads "Beatles, The; Ono, Yoko" and
+/// stamping that onto the first artist files the Beatles under a string naming two people. The
+/// per-artist plural (`ARTISTSSORT`) has no lofty key, so a multi-artist credit keeps the locally
+/// derived sort name.
 async fn write_credits(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     table: &'static str,
@@ -115,6 +232,7 @@ async fn write_credits(
     parent_id: i64,
     credit: &ArtistCredit,
     primary_artist_id: i64,
+    details: CreditDetails<'_>,
 ) -> Result<(), AppError> {
     let insert = format!(
         "INSERT INTO {table} ({parent_column}, artist_id, position, join_phrase)
@@ -132,12 +250,15 @@ async fn write_credits(
         return Ok(());
     }
 
+    let solo = credit.artists().len() == 1;
     for (position, credited) in credit.artists().iter().enumerate() {
         let artist_id = if position == 0 {
             primary_artist_id
         } else {
             upsert_artist(tx, &credited.name, primary_artist_id).await?
         };
+        let sort_name = if solo { details.sort_name } else { None };
+        apply_artist_details(tx, artist_id, sort_name, details.mbids.get(position)).await?;
         sqlx::query(sqlx::AssertSqlSafe(insert.as_str()))
             .bind(parent_id)
             .bind(artist_id)
@@ -146,6 +267,41 @@ async fn write_credits(
             .execute(&mut **tx)
             .await?;
     }
+    Ok(())
+}
+
+/// Fill in an artist's sort name and `MusicBrainz` id from the file that named them.
+///
+/// **Only where the column is still empty.** These arrive once per track, so every track of an
+/// album would otherwise rewrite them, and a library where one file disagrees with its neighbours
+/// would flip the artist's filing order on each rescan depending on which file reached the upsert
+/// last. First writer wins; a user correcting it is the Edit-Tags path, not this one.
+async fn apply_artist_details(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    artist_id: i64,
+    sort_name: Option<&str>,
+    musicbrainz_id: Option<&String>,
+) -> Result<(), AppError> {
+    if sort_name.is_none() && musicbrainz_id.is_none() {
+        return Ok(());
+    }
+    sqlx::query(
+        "UPDATE artists SET
+            sort_name = CASE
+                WHEN ? IS NOT NULL AND (sort_name IS NULL OR sort_name = '') THEN ?
+                ELSE sort_name END,
+            musicbrainz_id = CASE
+                WHEN ? IS NOT NULL AND (musicbrainz_id IS NULL OR musicbrainz_id = '')
+                THEN ? ELSE musicbrainz_id END
+         WHERE id = ?",
+    )
+    .bind(sort_name)
+    .bind(sort_name)
+    .bind(musicbrainz_id)
+    .bind(musicbrainz_id)
+    .bind(artist_id)
+    .execute(&mut **tx)
+    .await?;
     Ok(())
 }
 
@@ -182,28 +338,58 @@ pub async fn upsert_album(
     name: &str,
     artist_id: i64,
     credit: &ArtistCredit,
-    year: Option<i32>,
+    meta: &ExtractedMetadata,
 ) -> Result<Option<i64>, AppError> {
     if name.is_empty() {
         return Ok(None);
     }
+    let release = &meta.release;
     let id = sqlx::query_scalar::<_, i64>(
-        // `year = COALESCE(excluded.year, albums.year)` updates the stored year on
-        // re-ingest (e.g. a tag edit) but preserves it when the new value is NULL.
-        // `excluded.year` / `albums.year` reference already-present columns, so no
-        // extra bind — the (name, artist_id, year) bind order is unchanged.
-        "INSERT INTO albums (name, artist_id, year) VALUES (?, ?, ?)
+        // Every release field is `COALESCE(excluded.x, albums.x)`: it updates the stored value on
+        // re-ingest (e.g. a tag edit) but preserves it when the new value is NULL, so the first
+        // track of a release carrying one wins and a later track missing it doesn't blank it.
+        //
+        // `is_compilation` is the one exception, and an OR rather than a COALESCE: the column is
+        // NOT NULL so there is no "said nothing" to coalesce against, and one track flagged makes
+        // the release one. Unsetting it means retagging every track, which is what flagging it
+        // took.
+        "INSERT INTO albums (
+             name, artist_id, year, sort_name, is_compilation,
+             musicbrainz_id, musicbrainz_release_group_id,
+             label, catalog_number, barcode, media, release_type, release_country
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(name, artist_id) DO UPDATE SET
              name = excluded.name,
-             year = COALESCE(excluded.year, albums.year)
+             year = COALESCE(excluded.year, albums.year),
+             sort_name = COALESCE(albums.sort_name, excluded.sort_name),
+             is_compilation = albums.is_compilation OR excluded.is_compilation,
+             musicbrainz_id = COALESCE(excluded.musicbrainz_id, albums.musicbrainz_id),
+             musicbrainz_release_group_id = COALESCE(
+                 excluded.musicbrainz_release_group_id, albums.musicbrainz_release_group_id),
+             label = COALESCE(excluded.label, albums.label),
+             catalog_number = COALESCE(excluded.catalog_number, albums.catalog_number),
+             barcode = COALESCE(excluded.barcode, albums.barcode),
+             media = COALESCE(excluded.media, albums.media),
+             release_type = COALESCE(excluded.release_type, albums.release_type),
+             release_country = COALESCE(excluded.release_country, albums.release_country)
          RETURNING id",
     )
     .bind(name)
     .bind(artist_id)
-    .bind(year)
+    .bind(meta.year)
+    .bind(meta.sort.album.as_deref())
+    .bind(release.is_compilation)
+    .bind(&meta.musicbrainz_release_id)
+    .bind(&release.musicbrainz_release_group_id)
+    .bind(&release.label)
+    .bind(&release.catalog_number)
+    .bind(&release.barcode)
+    .bind(&release.media)
+    .bind(&release.release_type)
+    .bind(&release.release_country)
     .fetch_one(&mut **tx)
     .await?;
-    replace_album_credits(tx, id, credit, artist_id).await?;
+    replace_album_credits(tx, id, credit, artist_id, album_credit_details(meta)).await?;
     Ok(Some(id))
 }
 

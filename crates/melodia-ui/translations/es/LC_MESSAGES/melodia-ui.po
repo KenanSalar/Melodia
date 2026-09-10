@@ -1479,8 +1479,6 @@ msgstr "Limitar a"
 msgid "tracks by"
 msgstr "pistas por"
 
-msgid "Add artist"
-msgstr "Añadir artista"
 
 msgid "Add rule"
 msgstr "Añadir regla"
@@ -2111,3 +2109,95 @@ msgstr "Guardar en el archivo"
 # lyrics tag. The detail line beside it is the track's title.
 msgid "Lyrics saved"
 msgstr "Letra guardada"
+
+# The Edit-Track-Information dialog's Credits and Details tabs. Every role below is a
+# credit a file can carry; the rest are the release-level tags beside them.
+msgid "Credits"
+msgstr "Créditos"
+
+msgid "Details"
+msgstr "Detalles"
+
+msgid "Lyricist"
+msgstr "Letrista"
+
+msgid "Arranger"
+msgstr "Arreglista"
+
+msgid "Conductor"
+msgstr "Director"
+
+msgid "Performer"
+msgstr "Intérprete"
+
+msgid "Remixer"
+msgstr "Remezclador"
+
+msgid "Producer"
+msgstr "Productor"
+
+msgid "Engineer"
+msgstr "Ingeniero de sonido"
+
+msgid "Mixer"
+msgstr "Mezclador"
+
+msgid "DJ Mixer"
+msgstr "Mezclador DJ"
+
+msgid "Subtitle"
+msgstr "Subtítulo"
+
+msgid "Disc Subtitle"
+msgstr "Subtítulo del disco"
+
+msgid "Grouping"
+msgstr "Agrupación"
+
+msgid "Work"
+msgstr "Obra"
+
+msgid "Movement"
+msgstr "Movimiento"
+
+# Labels for the second and third box of a numbered pair: "Track 3 / Total 12".
+msgid "Number"
+msgstr "Número"
+
+msgid "Total"
+msgstr "Total"
+
+# Musical key, as in A minor — not a keyboard key or a lookup key.
+msgid "Key"
+msgstr "Tonalidad"
+
+msgid "Mood"
+msgstr "Estado de ánimo"
+
+msgid "ISRC"
+msgstr "ISRC"
+
+msgid "Copyright"
+msgstr "Copyright"
+
+msgid "Record Label"
+msgstr "Sello discográfico"
+
+msgid "Catalog Number"
+msgstr "Número de catálogo"
+
+msgid "Barcode"
+msgstr "Código de barras"
+
+# The physical medium a release came out on — CD, vinyl, digital.
+msgid "Media"
+msgstr "Medio"
+
+msgid "Release Type"
+msgstr "Tipo de publicación"
+
+msgid "Release Country"
+msgstr "País de publicación"
+
+msgid "Part of a compilation"
+msgstr "Parte de una recopilación"

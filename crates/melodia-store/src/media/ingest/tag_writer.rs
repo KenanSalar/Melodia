@@ -38,9 +38,11 @@ use lofty::prelude::{Accessor, ItemKey};
 use lofty::tag::items::Timestamp;
 use lofty::tag::{ItemValue, Tag, TagItem, TagType};
 
-use super::{metadata, rating_tags};
+use super::{metadata, rating_tags, role_tags};
 use melodia_artwork::media::image::image_decode;
 use melodia_core::entities::artist::ArtistCredit;
+use melodia_core::entities::credits::RoleCredits;
+use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
 use melodia_core::error::AppError;
 
@@ -145,6 +147,59 @@ fn apply_credits(
                 out.push(field);
             }
         }
+    }
+}
+
+/// Apply a genre list: one value per name, the rendered line where the format can hold only one.
+///
+/// No printed/list pair the way [`apply_credits`] has: `GENRE` *is* the list, and a single value
+/// containing `"; "` is how a format with no multi-value frame says the same thing —
+/// `metadata::read_genres` reads both shapes back.
+fn apply_genres(tag: &mut Tag, edit: &FieldEdit<GenreList>, out: &mut Vec<&'static str>) {
+    match edit {
+        FieldEdit::Keep => {}
+        FieldEdit::Clear => tag.remove_key(ItemKey::Genre),
+        FieldEdit::Set(genres) => {
+            if !set_texts(tag, ItemKey::Genre, genres.names().iter().cloned()) {
+                out.push("genre");
+            }
+        }
+    }
+}
+
+/// Apply the whole role credit set, reporting the roles this format has no key for.
+///
+/// Every role is cleared even when the set says nothing about it, which is what makes an emptied
+/// role actually leave the file — argued in [`super::role_tags`] along with the per-format holes
+/// and the one key that is read and never written.
+fn apply_roles(tag: &mut Tag, edit: &FieldEdit<RoleCredits>, out: &mut Vec<&'static str>) {
+    match edit {
+        FieldEdit::Keep => {}
+        FieldEdit::Clear => role_tags::clear(tag),
+        FieldEdit::Set(credits) => {
+            for role in role_tags::write_roles(tag, credits) {
+                out.push(role.as_db_str());
+            }
+        }
+    }
+}
+
+/// Apply a boolean flag tag, written as `1`.
+///
+/// `Set(false)` removes rather than writing `0`: `extract_metadata` reads a missing flag and a
+/// literal `0` the same way, and a player that only checks for the key's presence reads the `0` as
+/// set.
+fn apply_flag(
+    tag: &mut Tag,
+    edit: &FieldEdit<bool>,
+    key: ItemKey,
+    field: &'static str,
+    out: &mut Vec<&'static str>,
+) {
+    match edit {
+        FieldEdit::Keep => {}
+        FieldEdit::Clear | FieldEdit::Set(false) => tag.remove_key(key),
+        FieldEdit::Set(true) => set_text(tag, key, "1".to_owned(), field, out),
     }
 }
 
@@ -315,19 +370,46 @@ pub fn apply_edit(tag: &mut Tag, edit: &TagEdit, picture: Option<&Picture>) -> U
         &mut out,
     );
     apply_string(tag, &edit.album, ItemKey::AlbumTitle, "album", &mut out);
-    apply_string(tag, &edit.genre, ItemKey::Genre, "genre", &mut out);
-    apply_string(tag, &edit.composer, ItemKey::Composer, "composer", &mut out);
+    apply_genres(tag, &edit.genres, &mut out);
+    apply_roles(tag, &edit.credits, &mut out);
     apply_string(tag, &edit.comment, ItemKey::Comment, "comment", &mut out);
+    apply_string(tag, &edit.disc_subtitle, ItemKey::SetSubtitle, "disc_subtitle", &mut out);
+    apply_string(tag, &edit.subtitle, ItemKey::TrackSubtitle, "subtitle", &mut out);
+    apply_string(tag, &edit.initial_key, ItemKey::InitialKey, "initial_key", &mut out);
+    apply_string(tag, &edit.mood, ItemKey::Mood, "mood", &mut out);
+    apply_string(tag, &edit.grouping, ItemKey::ContentGroup, "grouping", &mut out);
+    apply_string(tag, &edit.work, ItemKey::Work, "work", &mut out);
+    apply_string(tag, &edit.movement, ItemKey::Movement, "movement", &mut out);
+    apply_string(tag, &edit.language, ItemKey::Language, "language", &mut out);
+    apply_string(tag, &edit.copyright, ItemKey::CopyrightMessage, "copyright", &mut out);
+    apply_string(tag, &edit.isrc, ItemKey::Isrc, "isrc", &mut out);
+    apply_string(tag, &edit.label, ItemKey::Label, "label", &mut out);
+    apply_string(tag, &edit.catalog_number, ItemKey::CatalogNumber, "catalog_number", &mut out);
+    apply_string(tag, &edit.barcode, ItemKey::Barcode, "barcode", &mut out);
+    apply_string(tag, &edit.media, ItemKey::OriginalMediaType, "media", &mut out);
+    apply_string(
+        tag,
+        &edit.release_type,
+        ItemKey::MusicBrainzReleaseType,
+        "release_type",
+        &mut out,
+    );
+    apply_string(tag, &edit.release_country, ItemKey::ReleaseCountry, "release_country", &mut out);
     apply_recording_id(tag, &edit.musicbrainz_track_id);
 
     apply_number(tag, &edit.track_number, ItemKey::TrackNumber, "track_number", &mut out);
+    apply_number(tag, &edit.track_total, ItemKey::TrackTotal, "track_total", &mut out);
     apply_number(tag, &edit.disc_number, ItemKey::DiscNumber, "disc_number", &mut out);
-    // `OriginalReleaseDate` maps on all three primary tag types, and `extract_metadata` reads it
-    // back with `s.get(..4)` — so a bare 4-digit year is the right shape.
+    apply_number(tag, &edit.disc_total, ItemKey::DiscTotal, "disc_total", &mut out);
+    apply_number(tag, &edit.movement_number, ItemKey::MovementNumber, "movement_number", &mut out);
+    apply_number(tag, &edit.movement_total, ItemKey::MovementTotal, "movement_total", &mut out);
+    // `OriginalReleaseDate` maps on all three primary tag types, and a bare 4-digit year is a
+    // valid whole timestamp — `extract_metadata` parses it back as a year-only one.
     apply_number(tag, &edit.original_year, ItemKey::OriginalReleaseDate, "original_year", &mut out);
 
     apply_year(tag, &edit.year, &mut out);
     apply_bpm(tag, &edit.bpm, &mut out);
+    apply_flag(tag, &edit.compilation, ItemKey::FlagCompilation, "compilation", &mut out);
     apply_lyrics(tag, &edit.lyrics, &mut out);
     apply_rating(tag, &edit.rating, &mut out);
 

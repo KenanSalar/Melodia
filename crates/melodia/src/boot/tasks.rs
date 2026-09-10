@@ -30,9 +30,9 @@ pub fn spawn_background_tasks(
     // The other one-shot: reads the ratings a library already carried in before the scan
     // learned to look for them, which no rescan can reach.
     tasks::rating_import::spawn(spawner, state);
-    // And the third: reads the multi-value artist tags a library carried in before the credit
-    // tables existed, which the migration's own seed can only guess at from one FK.
-    tasks::credit_import::spawn(spawner, state);
+    // And the third: marks a library indexed before the ingest widened as stale, so the boot scan
+    // re-reads the tags the migrations could only seed from what the database already knew.
+    tasks::tag_backfill::spawn(spawner, state);
     // Carries a star back out into the file. Before any callback can set one.
     tasks::rating_writeback::spawn(spawner, state);
     tasks::heap_trim::spawn(spawner);

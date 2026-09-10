@@ -371,10 +371,23 @@ pub struct TagEditRow {
     pub year: Option<i32>,
     pub original_year: Option<i32>,
     pub track_number: Option<i32>,
+    pub track_total: Option<i32>,
     pub disc_number: Option<i32>,
-    pub composer: Option<String>,
+    pub disc_total: Option<i32>,
+    pub disc_subtitle: Option<String>,
+    pub subtitle: Option<String>,
     pub comment: Option<String>,
     pub bpm: Option<f64>,
+    pub initial_key: Option<String>,
+    pub mood: Option<String>,
+    pub grouping: Option<String>,
+    pub work: Option<String>,
+    pub movement: Option<String>,
+    pub movement_number: Option<i32>,
+    pub movement_total: Option<i32>,
+    pub language: Option<String>,
+    pub copyright: Option<String>,
+    pub isrc: Option<String>,
     pub artwork_path: Option<String>,
     pub codec: Option<String>,
     pub bitrate: Option<i32>,
@@ -401,10 +414,23 @@ pub const TRACK_TAG_EDIT_COLUMNS: &[&str] = &[
     "year",
     "original_year",
     "track_number",
+    "track_total",
     "disc_number",
-    "composer",
+    "disc_total",
+    "disc_subtitle",
+    "subtitle",
     "comment",
     "bpm",
+    "initial_key",
+    "mood",
+    "grouping",
+    "work",
+    "movement",
+    "movement_number",
+    "movement_total",
+    "language",
+    "copyright",
+    "isrc",
     "artwork_path",
     "codec",
     "bitrate",
@@ -514,14 +540,33 @@ pub struct Track {
     pub album: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub genre: Option<String>,
+    /// The role credits as one rendered string. The structured rows are `track_credits`, read
+    /// through `queries::track::get_track_role_credits_by_ids`; this column is what the FTS index
+    /// searches, which is why it is denormalized here at all.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub credits: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub track_number: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub track_total: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub disc_number: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disc_total: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disc_subtitle: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subtitle: Option<String>,
+    /// The whole release date; `year` is the integer derived from it and is what every index and
+    /// smart-playlist rule reads.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub release_date: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub year: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub composer: Option<String>,
+    pub original_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_year: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comment: Option<String>,
 
@@ -529,13 +574,31 @@ pub struct Track {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bpm: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub initial_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mood: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grouping: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub work: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub movement: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub movement_number: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub movement_total: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub copyright: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub isrc: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub musicbrainz_track_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub musicbrainz_release_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub label: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub original_year: Option<i32>,
+    pub musicbrainz_release_track_id: Option<String>,
 
     // ReplayGain
     #[serde(skip_serializing_if = "Option::is_none")]

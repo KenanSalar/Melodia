@@ -2,11 +2,12 @@ use melodia_core::error::AppError;
 
 // ── Trigger SQL constants ───────────────────────────────────────────────────
 // Must stay in sync with the stats triggers in
-// migrations/20260910000000_artist_credits.sql, which is where they were last rewritten.
+// migrations/20260911000000_tag_coverage.sql, which is where they were last rewritten.
 //
-// The artist arms live on the two credit tables rather than on `tracks`: an artist's counts mean
-// "credited on" now, and a track carries a list rather than one name. What a `tracks` row can
-// still move by itself is the duration, hence the one artist arm left in the update trigger.
+// The artist and genre arms live on the three join tables rather than on `tracks`: both sets of
+// counts mean "credited on" now, and a track carries a list rather than one name. What a `tracks`
+// row can still move by itself is the duration, hence the two duration arms left in the update
+// trigger.
 
 const CREATE_TRACKS_STATS_INSERT: &str = r"
 CREATE TRIGGER IF NOT EXISTS tracks_stats_insert AFTER INSERT ON tracks BEGIN
@@ -16,13 +17,6 @@ SET
     total_duration_ms = total_duration_ms + new.duration_ms
 WHERE
     id = new.album_id;
-
-UPDATE genres
-SET
-    track_count = track_count + 1,
-    total_duration_ms = total_duration_ms + new.duration_ms
-WHERE
-    id = new.genre_id;
 
 END
 ";
@@ -36,20 +30,12 @@ SET
 WHERE
     id = old.album_id;
 
-UPDATE genres
-SET
-    track_count = MAX(track_count - 1, 0),
-    total_duration_ms = MAX(total_duration_ms - old.duration_ms, 0)
-WHERE
-    id = old.genre_id;
-
 END
 ";
 
 const CREATE_TRACKS_STATS_UPDATE: &str = r"
 CREATE TRIGGER IF NOT EXISTS tracks_stats_update AFTER
 UPDATE OF album_id,
-genre_id,
 duration_ms ON tracks BEGIN
 UPDATE artists
 SET
@@ -67,6 +53,22 @@ WHERE
             track_id = new.id
     );
 
+UPDATE genres
+SET
+    total_duration_ms = MAX(
+        total_duration_ms + new.duration_ms - old.duration_ms,
+        0
+    )
+WHERE
+    id IN (
+        SELECT
+            genre_id
+        FROM
+            track_genres
+        WHERE
+            track_id = new.id
+    );
+
 UPDATE albums
 SET
     track_count = MAX(track_count - 1, 0),
@@ -74,26 +76,12 @@ SET
 WHERE
     id = old.album_id;
 
-UPDATE genres
-SET
-    track_count = MAX(track_count - 1, 0),
-    total_duration_ms = MAX(total_duration_ms - old.duration_ms, 0)
-WHERE
-    id = old.genre_id;
-
 UPDATE albums
 SET
     track_count = track_count + 1,
     total_duration_ms = total_duration_ms + new.duration_ms
 WHERE
     id = new.album_id;
-
-UPDATE genres
-SET
-    track_count = track_count + 1,
-    total_duration_ms = total_duration_ms + new.duration_ms
-WHERE
-    id = new.genre_id;
 
 END
 ";
@@ -145,6 +133,53 @@ WHERE
 END
 ";
 
+const CREATE_TRACK_GENRES_STATS_INSERT: &str = r"
+CREATE TRIGGER IF NOT EXISTS track_genres_stats_insert AFTER INSERT ON track_genres BEGIN
+UPDATE genres
+SET
+    track_count = track_count + 1,
+    total_duration_ms = total_duration_ms + COALESCE(
+        (
+            SELECT
+                duration_ms
+            FROM
+                tracks
+            WHERE
+                id = new.track_id
+        ),
+        0
+    )
+WHERE
+    id = new.genre_id;
+
+END
+";
+
+const CREATE_TRACK_GENRES_STATS_DELETE: &str = r"
+CREATE TRIGGER IF NOT EXISTS track_genres_stats_delete AFTER DELETE ON track_genres BEGIN
+UPDATE genres
+SET
+    track_count = MAX(track_count - 1, 0),
+    total_duration_ms = MAX(
+        total_duration_ms - COALESCE(
+            (
+                SELECT
+                    duration_ms
+                FROM
+                    tracks
+                WHERE
+                    id = old.track_id
+            ),
+            0
+        ),
+        0
+    )
+WHERE
+    id = old.genre_id;
+
+END
+";
+
 const CREATE_ALBUM_ARTISTS_STATS_INSERT: &str = r"
 CREATE TRIGGER IF NOT EXISTS album_artists_stats_insert AFTER INSERT ON album_artists BEGIN
 UPDATE artists
@@ -184,12 +219,14 @@ END
 /// Every stats-maintenance trigger: the name to drop it by, and the SQL to put it back. One array
 /// rather than two, so a trigger cannot be added to half of the pair and silently survive a bulk
 /// scan it was meant to sit out.
-const STATS_TRIGGERS: [(&str, &str); 7] = [
+const STATS_TRIGGERS: [(&str, &str); 9] = [
     ("tracks_stats_insert", CREATE_TRACKS_STATS_INSERT),
     ("tracks_stats_delete", CREATE_TRACKS_STATS_DELETE),
     ("tracks_stats_update", CREATE_TRACKS_STATS_UPDATE),
     ("track_artists_stats_insert", CREATE_TRACK_ARTISTS_STATS_INSERT),
     ("track_artists_stats_delete", CREATE_TRACK_ARTISTS_STATS_DELETE),
+    ("track_genres_stats_insert", CREATE_TRACK_GENRES_STATS_INSERT),
+    ("track_genres_stats_delete", CREATE_TRACK_GENRES_STATS_DELETE),
     ("album_artists_stats_insert", CREATE_ALBUM_ARTISTS_STATS_INSERT),
     ("album_artists_stats_delete", CREATE_ALBUM_ARTISTS_STATS_DELETE),
 ];
@@ -251,11 +288,11 @@ pub async fn recalculate_all_stats(
     .execute(&mut **tx)
     .await?;
 
-    // Genres: track_count, total_duration_ms
+    // Genres: both off `track_genres`, which is where "how many" now lives.
     sqlx::query(
         "UPDATE genres SET
-            track_count = COALESCE((SELECT COUNT(*) FROM tracks WHERE genre_id = genres.id), 0),
-            total_duration_ms = COALESCE((SELECT SUM(duration_ms) FROM tracks WHERE genre_id = genres.id), 0)"
+            track_count = COALESCE((SELECT COUNT(*) FROM track_genres WHERE genre_id = genres.id), 0),
+            total_duration_ms = COALESCE((SELECT SUM(t.duration_ms) FROM track_genres tg JOIN tracks t ON t.id = tg.track_id WHERE tg.genre_id = genres.id), 0)"
     )
     .execute(&mut **tx)
     .await?;

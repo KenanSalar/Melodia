@@ -1,0 +1,85 @@
+import { Theme } from "../../theme.slint";
+import { IconButton } from "../icon-button.slint";
+import { PillButton } from "../action-pill.slint";
+import { CreditNameInput } from "./credit-name-input.slint";
+
+// One name in a plain list. `CreditRowView` without the phrase picker, which is the whole of the
+// difference: an artist credit prints as a line and needs to say what joins two names, where a
+// genre list is a set and joins with one separator nothing chooses.
+component NameRowView inherits HorizontalLayout {
+    in property <string> name;
+    in property <bool> is-only;
+    in property <string> placeholder;
+    callback set-name(string);
+    callback remove();
+
+    spacing: Theme.pad-sm;
+
+    CreditNameInput {
+        horizontal-stretch: 1;
+        min-width: 120px;
+        text: root.name;
+        placeholder: root.placeholder;
+        edited(t) => { root.set-name(t); }
+    }
+
+    // Hidden on a lone row for `CreditRowView`'s reason: a field with no entries is a state the
+    // editor should not be able to reach, the save reading it as "cleared" rather than as the
+    // removal it was. Unmounted rather than emptied — an empty wrapper still claims its spacing.
+    if !root.is-only: VerticalLayout {
+        alignment: center;
+        IconButton {
+            icon: "close";
+            icon-size: 16px;
+            diameter: 28px;
+            idle-bg: Theme.surface1;
+            hover-fg: Theme.danger;
+            clicked => { root.remove(); }
+        }
+    }
+}
+
+// An ordered list of plain names, a row each: the genre field of the Edit-Tags dialog.
+//
+// A model of `[string]` rather than a row struct, because a name is all there is — the artist
+// editor's `ArtistCreditRow` exists to carry the join phrase beside it.
+export component NameListEditor inherits VerticalLayout {
+    in property <string> label;
+    in property <[string]> names;
+    in property <string> placeholder;
+
+    callback set-name(int /*row*/, string);
+    callback add();
+    callback remove(int /*row*/);
+
+    // `LabeledInput`'s own label gap and weight, for the same reason as the field height.
+    spacing: 4px;
+
+    Text {
+        text: root.label;
+        color: Theme.subtext0;
+        font-size: Theme.font-size-sm;
+        font-weight: 600;
+    }
+
+    for name[i] in root.names: NameRowView {
+        name: name;
+        is-only: root.names.length == 1;
+        // Only the first row carries the ‹multiple values› hint; repeating it down a list would
+        // read as one hint per entry.
+        placeholder: i == 0 ? root.placeholder : "";
+        set-name(t) => { root.set-name(i, t); }
+        remove => { root.remove(i); }
+    }
+
+    HorizontalLayout {
+        alignment: start;
+        PillButton {
+            icon: "add";
+            // The label is the component's, not a property: every mount sits under its own heading,
+            // so naming the field again here would only repeat what the line above it says.
+            text: @tr("Add");
+            clicked => { root.add(); }
+        }
+    }
+}

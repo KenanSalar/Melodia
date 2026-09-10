@@ -11,6 +11,7 @@ use tempfile::TempDir;
 use super::write_tag_edit;
 use melodia_artwork::media::image::artwork;
 use melodia_core::entities::artist::ArtistCredit;
+use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::ExistingTrackSummary;
 use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
 use melodia_core::error::AppError;
@@ -191,7 +192,7 @@ async fn set_genre(
     genre: &str,
 ) -> Result<(String, i64), AppError> {
     let edit = TagEdit {
-        genre: FieldEdit::Set(genre.to_owned()),
+        genres: FieldEdit::Set(GenreList::from_name(genre)),
         ..TagEdit::default()
     };
     write_tag_edit(db, artwork_dir, cover_cache, self_writes, &[id], &edit, None).await?;

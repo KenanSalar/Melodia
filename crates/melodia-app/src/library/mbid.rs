@@ -165,7 +165,7 @@ async fn run_commit(db: &DbPool, files: &[FileWrite]) -> Result<usize, AppError>
             meta.artist.primary_name().to_owned(),
             meta.album.clone().unwrap_or_default(),
             meta.year,
-            meta.genre.clone().unwrap_or_default(),
+            meta.genres.primary().unwrap_or_default().to_owned(),
         );
         let rids = if let Some(cached) = resolve_cache.get(&key) {
             *cached

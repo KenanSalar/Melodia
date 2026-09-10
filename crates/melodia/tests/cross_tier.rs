@@ -77,11 +77,12 @@ fn the_nav_bound_reaches_the_highest_section_that_routes() {
 async fn the_filter_boxes_search_every_indexed_column_they_can_reach() -> Result<(), AppError> {
     use melodia_store::database::DbPool;
 
-    // `composer` has no slot on `TrackListRow`, and `file_name` is left out deliberately — the
-    // tiebreaker weight that keeps a filename echo below the tags it repeats has no equivalent in
-    // an unranked substring filter. `year` is an integer that joins the match through
-    // `row_match::Needle::matches_number` instead of the text list.
-    const NOT_TEXT_SEARCHED: [&str; 3] = ["composer", "file_name", "year"];
+    // `credits` has no slot on `TrackListRow` — the role credits live in `track_credits` and reach
+    // the index through a denormalized column no list renders. `file_name` is left out
+    // deliberately: the tiebreaker weight that keeps a filename echo below the tags it repeats has
+    // no equivalent in an unranked substring filter. `year` is an integer that joins the match
+    // through `row_match::Needle::matches_number` instead of the text list.
+    const NOT_TEXT_SEARCHED: [&str; 3] = ["credits", "file_name", "year"];
 
     let db = DbPool::test_pool().await?;
     let indexed: Vec<String> =

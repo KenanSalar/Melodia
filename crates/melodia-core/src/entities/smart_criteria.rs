@@ -120,8 +120,15 @@ pub enum RuleField {
     AlbumArtist,
     Album,
     Genre,
+    /// The rendered role-credit names — composer, conductor, producer and the rest as one string,
+    /// which is the same column `tracks_fts` searches. A rule per role would need a join per rule.
+    Credits,
+    Mood,
+    InitialKey,
+    Isrc,
     // numeric
     Year,
+    Bpm,
     DurationMs,
     PlayCount,
     SkipCount,
@@ -145,8 +152,13 @@ impl RuleField {
             | RuleField::Artist
             | RuleField::AlbumArtist
             | RuleField::Album
-            | RuleField::Genre => ValueType::Text,
+            | RuleField::Genre
+            | RuleField::Credits
+            | RuleField::Mood
+            | RuleField::InitialKey
+            | RuleField::Isrc => ValueType::Text,
             RuleField::Year
+            | RuleField::Bpm
             | RuleField::DurationMs
             | RuleField::PlayCount
             | RuleField::SkipCount
@@ -305,7 +317,12 @@ pub const FIELDS: &[RuleField] = &[
     RuleField::AlbumArtist,
     RuleField::Album,
     RuleField::Genre,
+    RuleField::Credits,
+    RuleField::Mood,
+    RuleField::InitialKey,
+    RuleField::Isrc,
     RuleField::Year,
+    RuleField::Bpm,
     RuleField::DurationMs,
     RuleField::PlayCount,
     RuleField::SkipCount,

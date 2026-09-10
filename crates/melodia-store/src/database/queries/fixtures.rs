@@ -8,7 +8,9 @@
 use crate::database::DbPool;
 use crate::database::queries;
 use melodia_core::entities::artist::ArtistCredit;
-use melodia_core::entities::scan::ExtractedMetadata;
+use melodia_core::entities::credits::RoleCredits;
+use melodia_core::entities::genre::GenreList;
+use melodia_core::entities::scan::{ExtractedMetadata, ReleaseTags, SortTags};
 use melodia_core::error::AppError;
 
 /// Create a default `ExtractedMetadata` with sensible test values.
@@ -18,18 +20,38 @@ pub fn make_test_metadata(title: &str) -> ExtractedMetadata {
         title: title.to_owned(),
         artist: ArtistCredit::from_name("Test Artist"),
         album_artist: ArtistCredit::default(),
+        artist_mbids: Vec::new(),
+        album_artist_mbids: Vec::new(),
         album: Some("Test Album".to_owned()),
-        genre: Some("Rock".to_owned()),
+        genres: GenreList::from_name("Rock"),
+        credits: RoleCredits::default(),
+        sort: SortTags::default(),
+        release: ReleaseTags::default(),
         track_number: Some(1),
+        track_total: None,
         disc_number: Some(1),
+        disc_total: None,
+        disc_subtitle: None,
+        subtitle: None,
+        release_date: None,
         year: Some(2024),
-        composer: None,
+        original_date: None,
+        original_year: None,
         comment: None,
         bpm: None,
+        initial_key: None,
+        mood: None,
+        grouping: None,
+        work: None,
+        movement: None,
+        movement_number: None,
+        movement_total: None,
+        language: None,
+        copyright: None,
+        isrc: None,
         musicbrainz_track_id: None,
         musicbrainz_release_id: None,
-        label: None,
-        original_year: None,
+        musicbrainz_release_track_id: None,
         replaygain_track_gain: None,
         replaygain_track_peak: None,
         replaygain_album_gain: None,
@@ -62,26 +84,25 @@ pub async fn insert_test_track(
 
     let unknown_artist_id = 1; // sentinel from schema.sql
     let credit = ArtistCredit::from_name(artist_name);
-    let artist_id = queries::scan::upsert_artist(&mut tx, artist_name, unknown_artist_id).await?;
-    let album_id =
-        queries::scan::upsert_album(&mut tx, album_name, artist_id, &credit, Some(2024)).await?;
-    let genre_id = queries::scan::upsert_genre(&mut tx, genre_name).await?;
-
-    let file_name =
-        std::path::Path::new(file_path).file_name().and_then(|f| f.to_str()).unwrap_or("test.mp3");
 
     let mut meta = make_test_metadata(title);
-    meta.artist = credit;
+    meta.artist = credit.clone();
     meta.album = if album_name.is_empty() {
         None
     } else {
         Some(album_name.to_owned())
     };
-    meta.genre = if genre_name.is_empty() {
-        None
-    } else {
-        Some(genre_name.to_owned())
-    };
+    meta.genres = GenreList::from_name(genre_name);
+
+    // Ahead of the album upsert, which now reads the release tags off the same value the track
+    // row is built from rather than taking a year on its own.
+    let artist_id = queries::scan::upsert_artist(&mut tx, artist_name, unknown_artist_id).await?;
+    let album_id =
+        queries::scan::upsert_album(&mut tx, album_name, artist_id, &credit, &meta).await?;
+    let genre_id = queries::scan::upsert_genre(&mut tx, genre_name).await?;
+
+    let file_name =
+        std::path::Path::new(file_path).file_name().and_then(|f| f.to_str()).unwrap_or("test.mp3");
 
     let ids = queries::ResolvedIds {
         artist_id,

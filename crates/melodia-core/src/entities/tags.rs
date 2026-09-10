@@ -5,6 +5,8 @@
 //! here — and why the dialog can name it without naming the writer.
 
 use super::artist::ArtistCredit;
+use super::credits::RoleCredits;
+use super::genre::GenreList;
 
 /// A per-field tri-state. The dialog reports what the user *did*, not just the value they left
 /// behind, because empty is not clear: `extract_metadata` filters whitespace-only tags to `None`,
@@ -31,7 +33,7 @@ pub enum ArtworkEdit {
 
 /// One dialog's worth of edits. Every field defaults to [`FieldEdit::Keep`], so a caller only sets
 /// what the user actually changed.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct TagEdit {
     pub title: FieldEdit<String>,
     /// The whole credit, not a display string: the dialog edits names and join phrases separately
@@ -39,18 +41,46 @@ pub struct TagEdit {
     pub artist: FieldEdit<ArtistCredit>,
     pub album_artist: FieldEdit<ArtistCredit>,
     pub album: FieldEdit<String>,
-    pub genre: FieldEdit<String>,
+    /// The whole list, for [`Self::artist`]'s reason: the `genre` column is the rendered form of
+    /// these and `track_genres` the rows, and a writer handed only the string could not produce
+    /// the repeated tag that carries more than one.
+    pub genres: FieldEdit<GenreList>,
+    /// Composer, conductor, producer and the rest — the roles of
+    /// [`super::credits::ROLES`], as one set.
+    pub credits: FieldEdit<RoleCredits>,
     /// lofty's `Timestamp.year` is `u16`, so the form's year is parsed to `u16`.
     pub year: FieldEdit<u16>,
     pub original_year: FieldEdit<u16>,
     pub track_number: FieldEdit<u32>,
+    pub track_total: FieldEdit<u32>,
     pub disc_number: FieldEdit<u32>,
-    pub composer: FieldEdit<String>,
+    pub disc_total: FieldEdit<u32>,
+    pub disc_subtitle: FieldEdit<String>,
+    pub subtitle: FieldEdit<String>,
     pub comment: FieldEdit<String>,
+    pub bpm: FieldEdit<f64>,
+    pub initial_key: FieldEdit<String>,
+    pub mood: FieldEdit<String>,
+    pub grouping: FieldEdit<String>,
+    pub work: FieldEdit<String>,
+    pub movement: FieldEdit<String>,
+    pub movement_number: FieldEdit<u32>,
+    pub movement_total: FieldEdit<u32>,
+    pub language: FieldEdit<String>,
+    pub copyright: FieldEdit<String>,
+    pub isrc: FieldEdit<String>,
+    /// Release-level tags. Stored per-file like everything else here, and they reach `albums`
+    /// through the re-ingest the commit ends with.
+    pub label: FieldEdit<String>,
+    pub catalog_number: FieldEdit<String>,
+    pub barcode: FieldEdit<String>,
+    pub media: FieldEdit<String>,
+    pub release_type: FieldEdit<String>,
+    pub release_country: FieldEdit<String>,
+    pub compilation: FieldEdit<bool>,
     /// Written by the auto-tag backfill so `ListenBrainz` loves — which key on it — work. Not
     /// surfaced in the Edit-Tags dialog.
     pub musicbrainz_track_id: FieldEdit<String>,
-    pub bpm: FieldEdit<f64>,
     pub lyrics: FieldEdit<String>,
     /// Written by the rating write-back, not the Edit-Tags dialog. Stars, 0–5; `Clear` and
     /// `Set(0)` mean the same thing and both remove the tag.
@@ -81,7 +111,7 @@ impl TagEdit {
         self.artist != FieldEdit::Keep
             || self.album_artist != FieldEdit::Keep
             || self.album != FieldEdit::Keep
-            || self.genre != FieldEdit::Keep
+            || self.genres != FieldEdit::Keep
             || self.year != FieldEdit::Keep
     }
 
@@ -98,21 +128,15 @@ impl TagEdit {
     }
 
     /// Every field except `rating` left at [`FieldEdit::Keep`].
+    ///
+    /// A comparison against the default rather than a term per field, because the failure mode of
+    /// the chain this replaced is silent and costly: a field missing from it makes
+    /// [`Self::is_noop`] answer true for a real edit, and the commit then skips the write with no
+    /// error anywhere. Every field defaults to `Keep`, so one `==` covers the ones added next.
     fn no_field_but_rating(&self) -> bool {
-        self.title == FieldEdit::Keep
-            && self.artist == FieldEdit::Keep
-            && self.album_artist == FieldEdit::Keep
-            && self.album == FieldEdit::Keep
-            && self.genre == FieldEdit::Keep
-            && self.year == FieldEdit::Keep
-            && self.original_year == FieldEdit::Keep
-            && self.track_number == FieldEdit::Keep
-            && self.disc_number == FieldEdit::Keep
-            && self.composer == FieldEdit::Keep
-            && self.comment == FieldEdit::Keep
-            && self.musicbrainz_track_id == FieldEdit::Keep
-            && self.bpm == FieldEdit::Keep
-            && self.lyrics == FieldEdit::Keep
-            && self.artwork == ArtworkEdit::Keep
+        Self {
+            rating: FieldEdit::Keep,
+            ..self.clone()
+        } == Self::default()
     }
 }

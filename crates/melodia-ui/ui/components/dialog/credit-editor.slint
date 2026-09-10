@@ -4,53 +4,7 @@ import { ArtistCreditRow } from "../../models.slint";
 import { Dropdown } from "../settings/dropdown.slint";
 import { IconButton } from "../icon-button.slint";
 import { PillButton } from "../action-pill.slint";
-
-// Controlled name field. `text` is one-way — the host owns it — and every keystroke reports back
-// through `edited`. Same contract as `smart-playlist-editor-body.slint`'s `RuleValueInput`, and
-// for the same reason: the first keystroke orphans the inner binding, so Rust re-emitting the
-// value it just received never moves the cursor.
-component CreditNameInput inherits Rectangle {
-    in property <string> text;
-    in property <string> placeholder;
-    callback edited(string);
-
-    // 40px, matching the `LabeledInput`s this sits between: the two field kinds share a column
-    // in the Tags tab, and a shorter one reads as a different control.
-    height: 40px;
-    background: Theme.surface1;
-    border-color: ti.has-focus ? Theme.accent : Theme.border;
-    border-width: 1px;
-    border-radius: Theme.radius-md;
-    animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }
-
-    HorizontalLayout {
-        padding-left: Theme.pad-sm;
-        padding-right: Theme.pad-sm;
-        Rectangle {
-            horizontal-stretch: 1;
-            if ti.text == "": Text {
-                text: root.placeholder;
-                // Bounded and elided, per the faked-placeholder pitfall.
-                color: Theme.overlay2;
-                font-size: Theme.font-size-md;
-                vertical-alignment: center;
-                x: 0;
-                width: 100%;
-                height: 100%;
-                overflow: elide;
-            }
-            ti := TextInput {
-                text: root.text;
-                color: Theme.text;
-                font-size: Theme.font-size-md;
-                single-line: true;
-                vertical-alignment: center;
-                height: 100%;
-                edited => { root.edited(self.text); }
-            }
-        }
-    }
-}
+import { CreditNameInput } from "./credit-name-input.slint";
 
 // One credited name. Purely presentational — Rust owns the model.
 //
@@ -154,7 +108,10 @@ export component CreditEditor inherits VerticalLayout {
         // size, with the same Material glyph as every other add in the app.
         PillButton {
             icon: "add";
-            text: @tr("Add artist");
+            // `NameListEditor`'s label, and the same reason: the field's own heading sits directly
+            // above, so naming it again here repeats it. Two spellings of one literal rather than a
+            // shared property, the two components having no relationship to hang one off.
+            text: @tr("Add");
             clicked => { TagEditor.add-credit(root.field); }
         }
 

@@ -3,6 +3,7 @@
 
 use super::*;
 use melodia_core::entities::artist::ArtistCredit;
+use melodia_core::entities::credits::CreditRole;
 
 #[test]
 fn diff_str_keep_clear_set() {
@@ -47,27 +48,46 @@ fn diff_bpm_rejects_nan_inf_negative() {
 
 #[test]
 fn build_edit_touches_only_changed_fields() {
-    // title, album, genre, year, original_year, track_number, disc_number,
-    // composer, comment, bpm, lyrics — the two artist fields are credits and diff separately.
-    let orig: Vec<String> = ["Title", "Album", "", "2020", "", "1", "", "", "", "120", ""]
-        .iter()
-        .map(|s| (*s).to_owned())
-        .collect();
-    let credits = [ArtistCredit::from_name("Artist"), ArtistCredit::default()];
+    let orig = FormState {
+        text: TextFields {
+            title: "Title".to_owned(),
+            album: "Album".to_owned(),
+            year: "2020".to_owned(),
+            track_number: "1".to_owned(),
+            bpm: "120".to_owned(),
+            ..TextFields::default()
+        },
+        compilation: false,
+    };
+    let lists = ListFields {
+        credits: [ArtistCredit::from_name("Artist"), ArtistCredit::default()],
+        genres: GenreList::from_name("Rock"),
+        roles: RoleCredits::new(vec![RoleCredit {
+            role: CreditRole::Composer,
+            name: "Nadia Vance".to_owned(),
+            detail: String::new(),
+        }]),
+    };
 
     let mut cur = orig.clone();
-    cur[1] = "New Album".to_owned(); // change album
-    cur[0] = String::new(); // clear title
+    cur.text.album = "New Album".to_owned();
+    cur.text.title = String::new();
 
-    let edit = build_edit(&cur, &orig, &credits, &credits, ArtworkEdit::Keep);
+    let edit = build_edit(&cur, &orig, &lists, &lists, ArtworkEdit::Keep);
     assert_eq!(edit.album, FieldEdit::Set("New Album".to_owned()));
     assert_eq!(edit.title, FieldEdit::Clear);
     assert_eq!(edit.artist, FieldEdit::Keep);
     assert_eq!(edit.year, FieldEdit::Keep);
+    // The role boxes are untouched, so the whole set stays `Keep` — the property that stops one
+    // edited role clearing the nine beside it.
+    // Every list field is untouched, and all three diff structurally rather than through the
+    // strings they render as.
+    assert_eq!(edit.credits, FieldEdit::Keep);
+    assert_eq!(edit.genres, FieldEdit::Keep);
     assert!(!edit.is_noop());
 
     // An unchanged form diffs to an all-Keep no-op.
-    let noop = build_edit(&orig, &orig, &credits, &credits, ArtworkEdit::Keep);
+    let noop = build_edit(&orig, &orig, &lists, &lists, ArtworkEdit::Keep);
     assert!(noop.is_noop());
 }
 

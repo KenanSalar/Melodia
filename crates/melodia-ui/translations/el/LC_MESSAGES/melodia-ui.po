@@ -1483,8 +1483,6 @@ msgstr "Περιορισμός σε"
 msgid "tracks by"
 msgstr "κομμάτια κατά"
 
-msgid "Add artist"
-msgstr "Προσθήκη καλλιτέχνη"
 
 msgid "Add rule"
 msgstr "Προσθήκη κανόνα"
@@ -2115,3 +2113,95 @@ msgstr "Αποθήκευση στο αρχείο"
 # lyrics tag. The detail line beside it is the track's title.
 msgid "Lyrics saved"
 msgstr "Οι στίχοι αποθηκεύτηκαν"
+
+# The Edit-Track-Information dialog's Credits and Details tabs. Every role below is a
+# credit a file can carry; the rest are the release-level tags beside them.
+msgid "Credits"
+msgstr "Συντελεστές"
+
+msgid "Details"
+msgstr "Λεπτομέρειες"
+
+msgid "Lyricist"
+msgstr "Στιχουργός"
+
+msgid "Arranger"
+msgstr "Ενορχηστρωτής"
+
+msgid "Conductor"
+msgstr "Μαέστρος"
+
+msgid "Performer"
+msgstr "Ερμηνευτής"
+
+msgid "Remixer"
+msgstr "Remixer"
+
+msgid "Producer"
+msgstr "Παραγωγός"
+
+msgid "Engineer"
+msgstr "Ηχολήπτης"
+
+msgid "Mixer"
+msgstr "Μίκτης"
+
+msgid "DJ Mixer"
+msgstr "DJ mixer"
+
+msgid "Subtitle"
+msgstr "Υπότιτλος"
+
+msgid "Disc Subtitle"
+msgstr "Υπότιτλος δίσκου"
+
+msgid "Grouping"
+msgstr "Ομαδοποίηση"
+
+msgid "Work"
+msgstr "Έργο"
+
+msgid "Movement"
+msgstr "Μέρος"
+
+# Labels for the second and third box of a numbered pair: "Track 3 / Total 12".
+msgid "Number"
+msgstr "Αριθμός"
+
+msgid "Total"
+msgstr "Σύνολο"
+
+# Musical key, as in A minor — not a keyboard key or a lookup key.
+msgid "Key"
+msgstr "Τονικότητα"
+
+msgid "Mood"
+msgstr "Διάθεση"
+
+msgid "ISRC"
+msgstr "ISRC"
+
+msgid "Copyright"
+msgstr "Πνευματικά δικαιώματα"
+
+msgid "Record Label"
+msgstr "Δισκογραφική εταιρεία"
+
+msgid "Catalog Number"
+msgstr "Αριθμός καταλόγου"
+
+msgid "Barcode"
+msgstr "Γραμμωτός κώδικας"
+
+# The physical medium a release came out on — CD, vinyl, digital.
+msgid "Media"
+msgstr "Μέσο"
+
+msgid "Release Type"
+msgstr "Τύπος κυκλοφορίας"
+
+msgid "Release Country"
+msgstr "Χώρα κυκλοφορίας"
+
+msgid "Part of a compilation"
+msgstr "Μέρος συλλογής"

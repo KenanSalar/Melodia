@@ -26,9 +26,10 @@ use melodia_core::utils::fold::{fold, fold_ascii_byte, push_folded};
 /// The searchable text of a track row, in the order `tracks_fts` lists its columns. `year`
 /// joins through [`any_field_matches`], being an integer.
 ///
-/// `composer` and `file_name` are indexed by FTS and deliberately not carried here:
-/// `TrackListRow` has no composer column, and a filename echoes the tags beside it, which
-/// an unranked substring filter has no way to de-prioritize as bm25 does.
+/// `credits` and `file_name` are indexed by FTS and deliberately not carried here: the role
+/// credits reach the index through a denormalized column no list renders, so `TrackListRow` has no
+/// slot for them, and a filename echoes the tags beside it, which an unranked substring filter has
+/// no way to de-prioritize as bm25 does.
 pub fn search_fields(r: &TrackListRow) -> [&str; 5] {
     [
         &r.title,

@@ -2,6 +2,7 @@
 
 pub mod metadata;
 pub mod rating_tags;
+pub mod role_tags;
 pub mod scanner;
 pub mod tag_writer;
 pub mod watcher;

@@ -4,6 +4,8 @@ use sqlx::AssertSqlSafe;
 
 use crate::database::{DbPool, chunked_in_query};
 use melodia_core::entities::artist::{ArtistCredit, CreditedArtist};
+use melodia_core::entities::credits::{CreditRole, RoleCredit, RoleCredits};
+use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
 
@@ -579,53 +581,6 @@ pub async fn get_unrated_track_paths_after(
     Ok(rows)
 }
 
-/// Tracks whose credit is a single row, paged by id — the work-list for the credit import.
-///
-/// The predicate is what keeps the sweep off files the current scanner already read properly: a
-/// track carrying two or more credit rows was written by it, and a single row is either a genuine
-/// solo artist or the one the migration seeded. Only the file can tell those apart, which is the
-/// whole reason this is a pass over files.
-pub async fn get_single_credit_track_paths_after(
-    db: &DbPool,
-    after_id: i64,
-    limit: i64,
-) -> Result<Vec<(i64, String)>, AppError> {
-    let rows: Vec<(i64, String)> = sqlx::query_as(
-        "SELECT id, file_path FROM tracks \
-         WHERE id > ? AND (SELECT COUNT(*) FROM track_artists WHERE track_id = tracks.id) < 2 \
-         ORDER BY id LIMIT ?",
-    )
-    .bind(after_id)
-    .bind(limit)
-    .fetch_all(db.read())
-    .await?;
-    Ok(rows)
-}
-
-/// Point a track at the artist its credit actually leads with, and store the credit as printed.
-///
-/// The credit import's other half: a library indexed before the credit tables resolved
-/// `artist_id` from the whole credit line, so the row points at an `artists` row named
-/// "X feat. Y" that nobody ever recorded under. Re-pointing it is what makes that row prunable.
-///
-/// Writing `artist` in the same statement is not incidental. The column is what every display
-/// surface and `tracks_fts` read, and its update trigger names it, so the rendered credit and the
-/// index move together or neither does.
-pub async fn repoint_primary_artist(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    track_id: i64,
-    artist_id: i64,
-    line: Option<&str>,
-) -> Result<(), AppError> {
-    sqlx::query("UPDATE tracks SET artist_id = ?, artist = ? WHERE id = ?")
-        .bind(artist_id)
-        .bind(line)
-        .bind(track_id)
-        .execute(&mut **tx)
-        .await?;
-    Ok(())
-}
-
 /// Tracks with no `MusicBrainz` Recording ID that carry enough metadata to be
 /// looked up — the work-list for the auto-tag backfill. Rows without an artist
 /// or title can't be resolved, so they're excluded rather than attempted and
@@ -864,6 +819,65 @@ pub async fn get_track_credits_by_ids(
         out.entry(id).or_default().1 = ArtistCredit::new(artists);
     }
     Ok(out)
+}
+
+/// Every track's role credits, keyed by track id.
+///
+/// A sibling of [`get_track_credits_by_ids`] rather than a third query inside it: the Edit-Tags
+/// dialog is the only caller that needs both, and a track with no role credits is the common case
+/// — most files name nobody but their artist, so the join returns nothing for them and they get a
+/// `RoleCredits::default()` from the `or_default` rather than a row.
+///
+/// A role this build doesn't know is skipped: the column is a string, so a database written by a
+/// newer version can hold one, and dropping it beats inventing a variant for it.
+pub async fn get_track_role_credits_by_ids(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<HashMap<i64, RoleCredits>, AppError> {
+    let rows: Vec<(i64, String, String, String)> =
+        chunked_in_query(db.read(), ids, |placeholders| {
+            format!(
+                "SELECT tc.track_id, a.name, tc.role, tc.detail \
+                 FROM track_credits tc JOIN artists a ON a.id = tc.artist_id \
+                 WHERE tc.track_id IN ({placeholders}) ORDER BY tc.track_id, tc.position"
+            )
+        })
+        .await?;
+
+    let mut grouped: HashMap<i64, Vec<RoleCredit>> = HashMap::new();
+    for (id, name, role, detail) in rows {
+        let Some(role) = CreditRole::from_db_str(&role) else {
+            continue;
+        };
+        grouped.entry(id).or_default().push(RoleCredit { role, name, detail });
+    }
+    Ok(grouped.into_iter().map(|(id, credits)| (id, RoleCredits::new(credits))).collect())
+}
+
+/// Every track's genres, keyed by track id.
+///
+/// Read as rows rather than by splitting the rendered `tracks.genre` column, which is what the
+/// Edit-Tags dialog did while its genre field was one box: a genre containing the separator
+/// (`Chanson, Francaise`) came back as two, and saving made that permanent. The rows are the truth
+/// and the column is derived from them, so the editor reads the truth.
+pub async fn get_track_genres_by_ids(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<HashMap<i64, GenreList>, AppError> {
+    let rows: Vec<(i64, String)> = chunked_in_query(db.read(), ids, |placeholders| {
+        format!(
+            "SELECT tg.track_id, g.name \
+             FROM track_genres tg JOIN genres g ON g.id = tg.genre_id \
+             WHERE tg.track_id IN ({placeholders}) ORDER BY tg.track_id, tg.position"
+        )
+    })
+    .await?;
+
+    let mut grouped: HashMap<i64, Vec<String>> = HashMap::new();
+    for (id, name) in rows {
+        grouped.entry(id).or_default().push(name);
+    }
+    Ok(grouped.into_iter().map(|(id, names)| (id, GenreList::new(names))).collect())
 }
 
 /// One track's ordered artist credit, the album's left alone.

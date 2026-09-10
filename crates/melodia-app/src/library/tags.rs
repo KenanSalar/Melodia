@@ -23,7 +23,10 @@ use rayon::prelude::*;
 use crate::library::lyrics;
 use crate::state::AppState;
 use melodia_artwork::media::image::artwork::{self, CoverCache};
+use melodia_core::entities::album::ReleaseTagRow;
 use melodia_core::entities::artist::ArtistCredit;
+use melodia_core::entities::credits::RoleCredits;
+use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::entities::tags::{ArtworkEdit, TagEdit};
 use melodia_core::entities::track::{TagEditRow, TrackSummary};
@@ -110,6 +113,35 @@ pub async fn get_tag_edit_credits(
     ids: &[i64],
 ) -> Result<HashMap<i64, (ArtistCredit, ArtistCredit)>, AppError> {
     queries::track::get_track_credits_by_ids(&state.db, ids).await
+}
+
+/// The role credits behind each selected track.
+///
+/// From the database for a single track as well as a selection, unlike [`get_tag_edit_credits`]'s
+/// caller, which reads one track's artist credit off the file. There is no second read to share
+/// here — the lyrics tab's open covers the artist tags and the lyrics, not these — so the row,
+/// re-ingested from the file on every scan and every save, is the cheaper of two right answers.
+pub async fn get_tag_edit_role_credits(
+    state: &AppState,
+    ids: &[i64],
+) -> Result<HashMap<i64, RoleCredits>, AppError> {
+    queries::track::get_track_role_credits_by_ids(&state.db, ids).await
+}
+
+/// The genres behind each selected track, as rows rather than as the rendered column.
+pub async fn get_tag_edit_genres(
+    state: &AppState,
+    ids: &[i64],
+) -> Result<HashMap<i64, GenreList>, AppError> {
+    queries::track::get_track_genres_by_ids(&state.db, ids).await
+}
+
+/// The release tags behind each selected track, for the dialog's Details tab.
+pub async fn get_tag_edit_release_tags(
+    state: &AppState,
+    ids: &[i64],
+) -> Result<Vec<ReleaseTagRow>, AppError> {
+    queries::album::get_release_tags_for_tracks(&state.db, ids).await
 }
 
 /// Apply `edit` to `ids`, then refresh the player's cached summaries and bump
@@ -408,7 +440,7 @@ async fn run_commit(
             meta.album.clone().unwrap_or_default(),
             meta.album_artist.primary_name().to_owned(),
             meta.year,
-            meta.genre.clone().unwrap_or_default(),
+            meta.genres.primary().unwrap_or_default().to_owned(),
         );
         let rids = if let Some(cached) = resolve_cache.get(&key) {
             *cached

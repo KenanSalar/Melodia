@@ -24,7 +24,7 @@ pub use mutations::{
 };
 pub use sort_key::to_natural_sort_key;
 pub use upserts::{
-    album_artist_name_for, album_credit_for, replace_track_credits, upsert_album, upsert_artist,
+    CreditDetails, album_artist_name_for, album_credit_for, upsert_album, upsert_artist,
     upsert_genre,
 };
 
@@ -59,7 +59,9 @@ pub async fn resolve_track_context(
     // "X feat. Y" is the bug this replaced, and it was one every multi-artist file created.
     let artist_name = meta.artist.primary_name();
     let album_name = meta.album.as_deref().unwrap_or("");
-    let genre_name = meta.genre.as_deref().unwrap_or("");
+    // The first genre for the same reason: `tracks.genre_id` is the primary one, and the rest
+    // reach the library through `track_genres`.
+    let genre_name = meta.genres.primary().unwrap_or("");
 
     let artist_id = upsert_artist(tx, artist_name, 1).await?;
     // Group the album by its album-artist (falling back to the track artist when no
@@ -72,7 +74,7 @@ pub async fn resolve_track_context(
         upsert_artist(tx, album_artist_name, 1).await?
     };
     let album_credit = album_credit_for(meta);
-    let album_id = upsert_album(tx, album_name, album_artist_id, &album_credit, meta.year).await?;
+    let album_id = upsert_album(tx, album_name, album_artist_id, &album_credit, meta).await?;
     let genre_id = upsert_genre(tx, genre_name).await?;
 
     Ok(Some(ResolvedIds {

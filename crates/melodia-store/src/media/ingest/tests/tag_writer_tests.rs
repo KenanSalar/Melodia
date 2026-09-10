@@ -17,6 +17,8 @@ use tempfile::TempDir;
 use super::*;
 use crate::media::ingest::metadata::{TagScope, extract_metadata, read_tags};
 use melodia_artwork::media::image::artwork;
+use melodia_core::entities::credits::{CreditRole, RoleCredit, RoleCredits};
+use melodia_core::entities::genre::GenreList;
 use melodia_core::error::AppError;
 use melodia_testkit::{ASSETS_DIR, UNBOUNDED};
 
@@ -57,12 +59,16 @@ fn full_edit() -> TagEdit {
         artist: FieldEdit::Set(ArtistCredit::from_name("New Artist")),
         album_artist: FieldEdit::Set(ArtistCredit::from_name("New Album Artist")),
         album: FieldEdit::Set("New Album".into()),
-        genre: FieldEdit::Set("Shoegaze".into()),
+        genres: FieldEdit::Set(GenreList::from_name("Shoegaze")),
         year: FieldEdit::Set(2024),
         original_year: FieldEdit::Set(1999),
         track_number: FieldEdit::Set(7),
         disc_number: FieldEdit::Set(2),
-        composer: FieldEdit::Set("New Composer".into()),
+        credits: FieldEdit::Set(RoleCredits::new(vec![RoleCredit {
+            role: CreditRole::Composer,
+            name: "New Composer".into(),
+            detail: String::new(),
+        }])),
         comment: FieldEdit::Set("New Comment".into()),
         bpm: FieldEdit::Set(128.0),
         lyrics: FieldEdit::Set("la la la".into()),

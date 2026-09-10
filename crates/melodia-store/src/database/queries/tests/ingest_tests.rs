@@ -5,6 +5,7 @@ use crate::database::queries;
 use crate::database::queries::fixtures::{insert_test_track, make_test_metadata};
 use crate::database::queries::ingest::{FolderResolution, ingest_scanned_files};
 use melodia_core::entities::artist::ArtistCredit;
+use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::ScannedFile;
 use melodia_core::error::AppError;
 
@@ -145,9 +146,9 @@ async fn ingest_deduplicates_genres() -> Result<(), AppError> {
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     let mut f1 = make_scanned_file("/music/a.mp3", "A");
-    f1.metadata.genre = Some("Rock".to_owned());
+    f1.metadata.genres = GenreList::from_name("Rock");
     let mut f2 = make_scanned_file("/music/b.mp3", "B");
-    f2.metadata.genre = Some("Rock".to_owned());
+    f2.metadata.genres = GenreList::from_name("Rock");
 
     let mut tx = db.write().begin().await?;
     ingest_scanned_files(

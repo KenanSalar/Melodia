@@ -439,7 +439,7 @@ async fn resolve_ids(
     // row keyed on the whole credit line is a third artist nobody recorded under.
     let artist_name = meta.artist.primary_name();
     let album_name = meta.album.as_deref().unwrap_or("");
-    let genre_name = meta.genre.as_deref().unwrap_or("");
+    let genre_name = meta.genres.primary().unwrap_or("");
 
     // Resolve artist
     let artist_id = if let Some(&id) = caches.artist.get(artist_name) {
@@ -473,9 +473,8 @@ async fn resolve_ids(
         // Behind the cache miss deliberately: an album's credit is a property of the album, so
         // rewriting it per *track* would cost a delete-and-insert cycle per row of a bulk scan.
         let album_credit = queries::scan::album_credit_for(meta);
-        let id =
-            queries::scan::upsert_album(tx, album_name, album_artist_id, &album_credit, meta.year)
-                .await?;
+        let id = queries::scan::upsert_album(tx, album_name, album_artist_id, &album_credit, meta)
+            .await?;
         caches.album.entry(album_name.to_owned()).or_default().insert(album_artist_id, id);
         id
     };

@@ -4,6 +4,66 @@ use crate::database::DbPool;
 use melodia_core::entities::album;
 use melodia_core::error::AppError;
 
+/// The release tags behind each of `ids`, in the order given.
+///
+/// One row per *track*, not per album, so the Edit-Tags form folds them with `common_str` the way
+/// it folds every other column and a selection spanning two releases shows the sentinel. A track
+/// with no album yields the default row, which reads as "says nothing" — the same as a release
+/// carrying none.
+pub async fn get_release_tags_for_tracks(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<Vec<album::ReleaseTagRow>, AppError> {
+    // A flat tuple rather than `(i64, ReleaseTagRow)`: sqlx decodes a tuple element per *column*,
+    // so a nested row type there asks it to decode a struct out of one value.
+    type Row = (i64, String, String, String, String, String, String, bool);
+    let rows: Vec<Row> = crate::database::chunked_in_query(db.read(), ids, |placeholders| {
+        format!(
+            "SELECT t.id, \
+                COALESCE(al.label, ''), \
+                COALESCE(al.catalog_number, ''), \
+                COALESCE(al.barcode, ''), \
+                COALESCE(al.media, ''), \
+                COALESCE(al.release_type, ''), \
+                COALESCE(al.release_country, ''), \
+                COALESCE(al.is_compilation, FALSE) \
+             FROM tracks t LEFT JOIN albums al ON al.id = t.album_id \
+             WHERE t.id IN ({placeholders})"
+        )
+    })
+    .await?;
+
+    let by_id: std::collections::HashMap<i64, album::ReleaseTagRow> = rows
+        .into_iter()
+        .map(
+            |(
+                id,
+                label,
+                catalog_number,
+                barcode,
+                media,
+                release_type,
+                release_country,
+                compilation,
+            )| {
+                (
+                    id,
+                    album::ReleaseTagRow {
+                        label,
+                        catalog_number,
+                        barcode,
+                        media,
+                        release_type,
+                        release_country,
+                        is_compilation: compilation,
+                    },
+                )
+            },
+        )
+        .collect();
+    Ok(ids.iter().map(|id| by_id.get(id).cloned().unwrap_or_default()).collect())
+}
+
 pub async fn get_all_albums(db: &DbPool) -> Result<Vec<album::AlbumStats>, AppError> {
     let albums =
         sqlx::query_as::<_, album::AlbumStats>("SELECT * FROM album_stats ORDER BY name ASC")

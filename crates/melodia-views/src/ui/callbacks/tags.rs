@@ -35,31 +35,124 @@ use melodia_app::state::AppState;
 use melodia_artwork::media::image::image_decode::{
     FilterType, MAX_SOURCE_DIM, decode_capped, fit_within, resize_rgb8,
 };
+use melodia_core::entities::album::ReleaseTagRow;
 use melodia_core::entities::artist::{ArtistCredit, CreditedArtist, JOIN_PHRASES};
+use melodia_core::entities::credits::{CreditRole, ROLES, RoleCredit, RoleCredits};
+use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
 use melodia_core::entities::track::TagEditRow;
 use melodia_core::error::{AppError, describe};
 use melodia_ui::{AppWindow, ArtistCreditRow, Dialog, Settings, TagEditor};
 
-/// Canonical field order, shared by the three positional lists that must stay
-/// aligned: the `commit` getter array, `populate`'s `field!` calls, and
-/// [`build_edit`] / `TagSession::originals`. Indexing by name (not raw `0..12`)
-/// makes the alignment explicit — reorder here and in all three sites together.
-const TITLE: usize = 0;
-const ALBUM: usize = 1;
-const GENRE: usize = 2;
-const YEAR: usize = 3;
-const ORIGINAL_YEAR: usize = 4;
-const TRACK_NUMBER: usize = 5;
-const DISC_NUMBER: usize = 6;
-const COMPOSER: usize = 7;
-const COMMENT: usize = 8;
-const BPM: usize = 9;
-const LYRICS: usize = 10;
+/// Every editable field that crosses the boundary as a string, named rather than numbered.
+///
+/// This replaced three positional lists — a getter array, `populate`'s `field!` calls and the
+/// diff — that had to agree on an index per field. At eleven fields that was merely fragile; the
+/// vocabulary is thirty-odd now, and the failure mode is silent and destructive: an index off by
+/// one writes the user's ISRC into their mood tag. Named on both sides of the diff, a mistake is a
+/// compile error.
+///
+/// The two artist fields are absent on purpose — they are credits and diff structurally, not as
+/// the rendered lines this holds.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct TextFields {
+    title: String,
+    album: String,
+    year: String,
+    original_year: String,
+    track_number: String,
+    track_total: String,
+    disc_number: String,
+    disc_total: String,
+    comment: String,
+    bpm: String,
+    subtitle: String,
+    disc_subtitle: String,
+    grouping: String,
+    work: String,
+    movement: String,
+    movement_number: String,
+    movement_total: String,
+    initial_key: String,
+    mood: String,
+    language: String,
+    isrc: String,
+    copyright: String,
+    label: String,
+    catalog_number: String,
+    barcode: String,
+    media: String,
+    release_type: String,
+    release_country: String,
+    lyrics: String,
+}
 
-/// Number of editable *string* fields (`title`..`lyrics`). The two artist fields are credits and
-/// diff structurally, so they sit outside this array rather than in it as rendered lines.
-const FIELD_COUNT: usize = LYRICS + 1;
+/// The whole editable form: the text fields plus the one switch among them.
+///
+/// The switch rides here rather than as its own argument so "what the user was shown" and "what
+/// the user left behind" are one type, compared as a whole.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct FormState {
+    text: TextFields,
+    compilation: bool,
+}
+
+/// The four multi-value fields, which every format worth the name stores as a list.
+///
+/// Their own type because they share a contract the text fields don't: each is edited as *rows*
+/// and diffed **structurally**, never through the string it renders as. Two credits that render
+/// alike are still different credits, and a genre may contain the comma its column joins with.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct ListFields {
+    credits: [ArtistCredit; CREDIT_FIELD_COUNT],
+    genres: GenreList,
+    roles: RoleCredits,
+}
+
+/// The live form, read back off the globals in one place.
+///
+/// Its counterpart is `populate`'s `field!`, which writes each of these and records the same value
+/// as the baseline — so the two sites name the same field and nothing pairs them by position.
+fn read_form(te: &TagEditor) -> FormState {
+    FormState {
+        compilation: te.get_compilation(),
+        text: read_text_fields(te),
+    }
+}
+
+fn read_text_fields(te: &TagEditor) -> TextFields {
+    TextFields {
+        title: te.get_title().to_string(),
+        album: te.get_album().to_string(),
+        year: te.get_year().to_string(),
+        original_year: te.get_original_year().to_string(),
+        track_number: te.get_track_number().to_string(),
+        track_total: te.get_track_total().to_string(),
+        disc_number: te.get_disc_number().to_string(),
+        disc_total: te.get_disc_total().to_string(),
+        comment: te.get_comment().to_string(),
+        bpm: te.get_bpm().to_string(),
+        subtitle: te.get_subtitle().to_string(),
+        disc_subtitle: te.get_disc_subtitle().to_string(),
+        grouping: te.get_grouping().to_string(),
+        work: te.get_work().to_string(),
+        movement: te.get_movement().to_string(),
+        movement_number: te.get_movement_number().to_string(),
+        movement_total: te.get_movement_total().to_string(),
+        initial_key: te.get_initial_key().to_string(),
+        mood: te.get_mood().to_string(),
+        language: te.get_language().to_string(),
+        isrc: te.get_isrc().to_string(),
+        copyright: te.get_copyright().to_string(),
+        label: te.get_label().to_string(),
+        catalog_number: te.get_catalog_number().to_string(),
+        barcode: te.get_barcode().to_string(),
+        media: te.get_media().to_string(),
+        release_type: te.get_release_type().to_string(),
+        release_country: te.get_release_country().to_string(),
+        lyrics: te.get_lyrics().to_string(),
+    }
+}
 
 /// Which credit a `TagEditor` row callback names, mirroring the global's own `field-artist` /
 /// `field-album-artist`. Two spellings of one position is what drifts, so the Slint side reads
@@ -78,13 +171,12 @@ const TOAST_MS: u32 = 3000;
 #[derive(Default)]
 struct TagSession {
     ids: Vec<i64>,
-    /// Each editable field's value **as populated into the Slint property**, so
-    /// the commit diff is a plain string compare.
-    originals: Vec<String>,
-    /// The credit each artist field was populated with. Structural rather than a rendered line,
-    /// because two different credits can render the same string and only one of them is what the
-    /// user is looking at.
-    original_credits: [ArtistCredit; CREDIT_FIELD_COUNT],
+    /// The whole form **as populated into the Slint properties**, so the commit diff is a plain
+    /// field-by-field compare against what the user was shown.
+    originals: FormState,
+    /// The four list fields as populated. Structural rather than rendered lines, for the reason
+    /// [`ListFields`] gives.
+    original_lists: ListFields,
     /// Picker label paired with what it renders as, in the order the Slint `[string]` holds them.
     /// Seeded from `JOIN_PHRASES` and extended by whatever the opened files already use.
     join_phrases: Vec<(String, String)>,
@@ -106,6 +198,8 @@ pub fn wire_tags(ui: &AppWindow, state: &AppState, notifications: &Rc<Notificati
 
     wire_request_edit(&te, ui, state, &session);
     wire_credits(&te, ui, &session);
+    wire_genres(&te, ui);
+    wire_roles(&te, ui);
     wire_insert_resident_lyrics(&te, ui, &session);
     wire_pick_artwork(&te, ui, state, &session);
     wire_remove_artwork(&te, ui, &session);
@@ -199,8 +293,47 @@ fn wire_request_edit(
                 None => None,
             };
 
+            // Always from the database, single selection included — argued at
+            // `library::tags::get_tag_edit_role_credits`.
+            let roles_by_id =
+                library::tags::get_tag_edit_role_credits(&s, &ids).await.unwrap_or_else(|e| {
+                    log::warn!("tag edit role credits: {}", describe(&e));
+                    HashMap::new()
+                });
+            let roles: Vec<RoleCredits> =
+                rows.iter().map(|r| roles_by_id.get(&r.id).cloned().unwrap_or_default()).collect();
+
+            let genres_by_id =
+                library::tags::get_tag_edit_genres(&s, &ids).await.unwrap_or_else(|e| {
+                    log::warn!("tag edit genres: {}", describe(&e));
+                    HashMap::new()
+                });
+            let genre_lists: Vec<GenreList> =
+                rows.iter().map(|r| genres_by_id.get(&r.id).cloned().unwrap_or_default()).collect();
+
+            // Release-level tags live on `albums`, so the Details tab reads them through the album
+            // each selected track sits on.
+            let release =
+                library::tags::get_tag_edit_release_tags(&s, &ids).await.unwrap_or_else(|e| {
+                    log::warn!("tag edit release tags: {}", describe(&e));
+                    Vec::new()
+                });
+
             let Some(ui) = weak.upgrade() else { return };
-            populate(&ui, &session, &rows, &credits, lyrics, resident, cover);
+            populate(
+                &ui,
+                &session,
+                Fetched {
+                    rows,
+                    credits,
+                    roles,
+                    genre_lists,
+                    release,
+                    lyrics,
+                    resident,
+                    cover,
+                },
+            );
             // After `populate`, which resets to Tags: the request's tab is the last word. Only a
             // single selection can honour it, Lyrics and Summary being unmounted in batch mode, so
             // a request for one over many rows would open on a tab that draws nothing. The bounds
@@ -219,6 +352,209 @@ fn wire_request_edit(
 /// Rust owns both models: a row view reports an edit and never writes what it was handed, which
 /// is what lets the `Dropdown`s bind one-way and keep re-reading after a removal shifts every
 /// index below it.
+/// The genre list's three callbacks, mirroring [`wire_credits`] minus the join phrase.
+///
+/// A model of `SharedString` rather than a row struct: a genre is a name and nothing else, where
+/// an `ArtistCreditRow` exists to carry the phrase beside it.
+fn wire_genres(te: &TagEditor, ui: &AppWindow) {
+    // Installed once and never replaced, for `wire_credits`' reason: a default-constructed
+    // `ModelRc` silently ignores `set_vec`.
+    te.set_genres(ModelRc::new(VecModel::from(vec![SharedString::default()])));
+
+    let weak = ui.as_weak();
+    te.on_add_genre(move || {
+        let Some(ui) = weak.upgrade() else { return };
+        with_genres_model(&ui, |vm| vm.push(SharedString::default()));
+    });
+
+    let weak = ui.as_weak();
+    te.on_remove_genre(move |row| {
+        let Some(ui) = weak.upgrade() else { return };
+        with_genres_model(&ui, |vm| {
+            if let Ok(row) = usize::try_from(row)
+                && row < vm.row_count()
+            {
+                vm.remove(row);
+            }
+            // A field with no rows would save as "cleared", which is not what removing one genre
+            // means — the same state `wire_credits` keeps its own editor out of.
+            if vm.row_count() == 0 {
+                vm.push(SharedString::default());
+            }
+        });
+    });
+
+    let weak = ui.as_weak();
+    te.on_set_genre_name(move |row, name| {
+        let Some(ui) = weak.upgrade() else { return };
+        with_genres_model(&ui, |vm| {
+            if let Ok(row) = usize::try_from(row)
+                && row < vm.row_count()
+            {
+                vm.set_row_data(row, name);
+            }
+        });
+    });
+}
+
+/// The role lists' three callbacks — [`wire_genres`] once more, indexed by role.
+///
+/// One outer model of ten inner ones, so a role is a position rather than a property name and the
+/// ten editors are one mount. `ROLES` is that position's meaning on both sides.
+fn wire_roles(te: &TagEditor, ui: &AppWindow) {
+    let rows: Vec<ModelRc<SharedString>> =
+        ROLES.iter().map(|_| ModelRc::new(VecModel::from(vec![SharedString::default()]))).collect();
+    te.set_role_names(ModelRc::new(VecModel::from(rows)));
+
+    let weak = ui.as_weak();
+    te.on_add_role(move |role| {
+        let Some(ui) = weak.upgrade() else { return };
+        with_role_model(&ui, role, |vm| vm.push(SharedString::default()));
+    });
+
+    let weak = ui.as_weak();
+    te.on_remove_role(move |role, row| {
+        let Some(ui) = weak.upgrade() else { return };
+        with_role_model(&ui, role, |vm| {
+            if let Ok(row) = usize::try_from(row)
+                && row < vm.row_count()
+            {
+                vm.remove(row);
+            }
+            if vm.row_count() == 0 {
+                vm.push(SharedString::default());
+            }
+        });
+    });
+
+    let weak = ui.as_weak();
+    te.on_set_role_name(move |role, row, name| {
+        let Some(ui) = weak.upgrade() else { return };
+        with_role_model(&ui, role, |vm| {
+            if let Ok(row) = usize::try_from(row)
+                && row < vm.row_count()
+            {
+                vm.set_row_data(row, name);
+            }
+        });
+    });
+}
+
+/// Run `f` over one role's row model, if `role` names one and it is the model `wire_roles`
+/// installed.
+fn with_role_model(ui: &AppWindow, role: i32, f: impl FnOnce(&VecModel<SharedString>)) {
+    let Ok(role) = usize::try_from(role) else {
+        return;
+    };
+    let Some(inner) = ui.global::<TagEditor>().get_role_names().row_data(role) else {
+        return;
+    };
+    if let Some(vm) = inner.as_any().downcast_ref::<VecModel<SharedString>>() {
+        f(vm);
+    }
+}
+
+/// Fill every role's rows, keeping one blank row per role so each editor has a field to type into.
+fn write_role_rows(ui: &AppWindow, credits: &RoleCredits) {
+    for (index, role) in ROLES.into_iter().enumerate() {
+        let mut names: Vec<SharedString> =
+            credits.for_role(role).map(|credit| SharedString::from(credit.name.as_str())).collect();
+        if names.is_empty() {
+            names.push(SharedString::default());
+        }
+        with_role_model(ui, i32::try_from(index).unwrap_or(i32::MAX), |vm| vm.set_vec(names));
+    }
+}
+
+/// The role credit set the form currently shows, blanks dropped.
+///
+/// Rebuilt in `ROLES` order, which is also the order the rows are mounted in, so the rendered
+/// `credits` line is stable across a save that changed one name.
+fn roles_from_model(ui: &AppWindow, original: &RoleCredits) -> RoleCredits {
+    let outer = ui.global::<TagEditor>().get_role_names();
+    let mut credits = Vec::new();
+    for (index, role) in ROLES.into_iter().enumerate() {
+        let Some(inner) = outer.row_data(index) else {
+            continue;
+        };
+        credits.extend(inner.iter().filter_map(|name| {
+            let name = name.trim();
+            (!name.is_empty()).then(|| RoleCredit {
+                role,
+                detail: detail_for(original, role, name),
+                name: name.to_owned(),
+            })
+        }));
+    }
+    RoleCredits::new(credits)
+}
+
+/// The instrument or voice `name` was credited with in `role`, carried across from what the file
+/// said.
+///
+/// The editor has no field for it — only [`CreditRole::Performer`] has one at all, and a second
+/// column on every row would be ten empty boxes to explain one. Without this the round trip is
+/// *lossy in both directions*: the read-back would differ from the baseline for any track carrying
+/// one, so [`diff_roles`] would answer `Set` on a form nobody touched and write the credit back
+/// with the instrument stripped. Matched on the name, which is the only handle a row still has.
+fn detail_for(original: &RoleCredits, role: CreditRole, name: &str) -> String {
+    original
+        .for_role(role)
+        .find(|credit| credit.name.eq_ignore_ascii_case(name))
+        .map(|credit| credit.detail.clone())
+        .unwrap_or_default()
+}
+
+/// Run `f` over the genre model, if it is the `VecModel` `wire_genres` installed.
+fn with_genres_model(ui: &AppWindow, f: impl FnOnce(&VecModel<SharedString>)) {
+    let model = ui.global::<TagEditor>().get_genres();
+    if let Some(vm) = model.as_any().downcast_ref::<VecModel<SharedString>>() {
+        f(vm);
+    }
+}
+
+/// Fill the genre rows, keeping one blank row for an empty list so the editor always has a field
+/// to type into.
+fn write_genre_rows(te: &TagEditor, genres: &GenreList) {
+    let mut rows: Vec<SharedString> =
+        genres.names().iter().map(|name| SharedString::from(name.as_str())).collect();
+    if rows.is_empty() {
+        rows.push(SharedString::default());
+    }
+    let model = te.get_genres();
+    if let Some(vm) = model.as_any().downcast_ref::<VecModel<SharedString>>() {
+        vm.set_vec(rows);
+    }
+}
+
+/// The genre list a selection agrees on, and whether it disagreed.
+///
+/// `common_credit`'s contract, structural rather than over a rendered string: comparing the lists
+/// themselves is what lets a genre contain the separator its column happens to render with.
+fn common_genres<'a>(lists: impl Iterator<Item = &'a GenreList>) -> (GenreList, bool) {
+    let mut lists = lists;
+    let Some(first) = lists.next() else {
+        return (GenreList::default(), false);
+    };
+    if lists.all(|other| other == first) {
+        (first.clone(), false)
+    } else {
+        (GenreList::default(), true)
+    }
+}
+
+/// The genre list the form currently shows, blanks dropped.
+fn genres_from_model(ui: &AppWindow) -> GenreList {
+    let names = ui
+        .global::<TagEditor>()
+        .get_genres()
+        .iter()
+        .map(|name| name.trim().to_owned())
+        .filter(|name| !name.is_empty())
+        .collect();
+    GenreList::new(names)
+}
+
 fn wire_credits(te: &TagEditor, ui: &AppWindow, session: &Rc<RefCell<TagSession>>) {
     // Installed once, and never replaced: a default-constructed `ModelRc` is a no-op model that
     // silently ignores `set_vec`, so `populate` needs a real one to be waiting for it.
@@ -519,32 +855,19 @@ fn wire_commit(
 
         let (edit, ids, artwork_source) = {
             let sess = session.borrow();
-            if sess.originals.len() != FIELD_COUNT {
-                return;
-            }
-            // Read the live properties in canonical field order (TITLE..LYRICS).
-            let cur = [
-                te.get_title().to_string(),
-                te.get_album().to_string(),
-                te.get_genre().to_string(),
-                te.get_year().to_string(),
-                te.get_original_year().to_string(),
-                te.get_track_number().to_string(),
-                te.get_disc_number().to_string(),
-                te.get_composer().to_string(),
-                te.get_comment().to_string(),
-                te.get_bpm().to_string(),
-                te.get_lyrics().to_string(),
-            ];
-            let credits = [
-                credit_from_model(&ui, CREDIT_ARTIST, &sess.join_phrases),
-                credit_from_model(&ui, CREDIT_ALBUM_ARTIST, &sess.join_phrases),
-            ];
+            let lists = ListFields {
+                credits: [
+                    credit_from_model(&ui, CREDIT_ARTIST, &sess.join_phrases),
+                    credit_from_model(&ui, CREDIT_ALBUM_ARTIST, &sess.join_phrases),
+                ],
+                genres: genres_from_model(&ui),
+                roles: roles_from_model(&ui, &sess.original_lists.roles),
+            };
             let edit = build_edit(
-                &cur,
+                &read_form(&te),
                 &sess.originals,
-                &credits,
-                &sess.original_credits,
+                &lists,
+                &sess.original_lists,
                 sess.artwork.clone(),
             );
             (edit, sess.ids.clone(), sess.picked.clone())
@@ -568,25 +891,49 @@ fn wire_commit(
     });
 }
 
-/// Fill the `TagEditor` global from the fetched rows and record the snapshot.
-fn populate(
-    ui: &AppWindow,
-    session: &Rc<RefCell<TagSession>>,
-    rows: &[TagEditRow],
-    credits: &[(ArtistCredit, ArtistCredit)],
+/// Everything one open of the dialog fetched, before any of it reaches a property.
+///
+/// One value rather than seven parameters: the four slices are all per-selected-track and
+/// **parallel to `rows`**, which is an invariant a reader can check here and could not check across
+/// an argument list. The three singles come off the same fetch and travel with them.
+struct Fetched {
+    rows: Vec<TagEditRow>,
+    credits: Vec<(ArtistCredit, ArtistCredit)>,
+    roles: Vec<RoleCredits>,
+    genre_lists: Vec<GenreList>,
+    release: Vec<ReleaseTagRow>,
     lyrics: String,
     resident: Option<String>,
     cover: Option<SharedPixelBuffer<Rgb8Pixel>>,
-) {
+}
+
+/// Fill the `TagEditor` global from the fetched rows and record the snapshot.
+fn populate(ui: &AppWindow, session: &Rc<RefCell<TagSession>>, fetched: Fetched) {
+    let Fetched {
+        rows,
+        credits,
+        roles,
+        genre_lists,
+        release,
+        lyrics,
+        resident,
+        cover,
+    } = fetched;
+    let (rows, credits, roles, release) =
+        (rows.as_slice(), credits.as_slice(), roles.as_slice(), release.as_slice());
+
     let te = ui.global::<TagEditor>();
     let sentinel = ui.global::<Settings>().invoke_tag_multiple_values();
 
-    let mut originals: Vec<String> = Vec::with_capacity(FIELD_COUNT);
+    let mut originals = FormState::default();
 
     // Set one field: value + placeholder (the ‹multiple values› sentinel iff the
     // selection disagrees) + record the populated string as the diff baseline.
+    //
+    // The leading field name is what pairs this with `read_text_fields` — the commit reads the
+    // same name back, so the two can't drift the way an index into a shared array could.
     macro_rules! field {
-        ($val:expr, $set:ident, $set_ph:ident) => {{
+        ($name:ident, $val:expr, $set:ident, $set_ph:ident) => {{
             let (value, disagrees) = $val;
             te.$set(SharedString::from(value.as_str()));
             te.$set_ph(if disagrees {
@@ -594,11 +941,23 @@ fn populate(
             } else {
                 SharedString::default()
             });
-            originals.push(value);
+            originals.text.$name = value;
         }};
     }
 
-    field!(common_str(rows.iter().map(|r| r.title.as_str())), set_title, set_title_placeholder);
+    /// A `TagEditRow` string column, folded to the value the whole selection agrees on.
+    macro_rules! shared {
+        ($field:ident) => {
+            common_str(rows.iter().map(|r| r.$field.as_deref().unwrap_or_default()))
+        };
+    }
+
+    field!(
+        title,
+        common_str(rows.iter().map(|r| r.title.as_str())),
+        set_title,
+        set_title_placeholder
+    );
 
     // The two credits. `common_credit` decides the ‹multiple values› sentinel the way `common_str`
     // does, and the hint rides on the first row's own input rather than a field-wide placeholder.
@@ -628,63 +987,189 @@ fn populate(
     });
     te.set_artist_preview(SharedString::from(artist.line().unwrap_or_default()));
     te.set_album_artist_preview(SharedString::from(album_artist.line().unwrap_or_default()));
+    field!(album, shared!(album), set_album, set_album_placeholder);
+    // The genre list, one row per name. `common_genres` picks the sentinel the way `common_str`
+    // does; the rows themselves are the baseline, so nothing is recorded in `originals.text`.
+    let (genres, genres_disagree) = common_genres(genre_lists.iter());
+    write_genre_rows(&te, &genres);
+    te.set_genre_placeholder(if genres_disagree {
+        sentinel.clone()
+    } else {
+        SharedString::default()
+    });
     field!(
-        common_str(rows.iter().map(|r| r.album.as_deref().unwrap_or_default())),
-        set_album,
-        set_album_placeholder
-    );
-    field!(
-        common_str(rows.iter().map(|r| r.genre.as_deref().unwrap_or_default())),
-        set_genre,
-        set_genre_placeholder
-    );
-    field!(
+        year,
         common_by(rows.iter().map(|r| r.year), int_key, fmt_int),
         set_year,
         set_year_placeholder
     );
     field!(
+        original_year,
         common_by(rows.iter().map(|r| r.original_year), int_key, fmt_int),
         set_original_year,
         set_original_year_placeholder
     );
     field!(
+        track_number,
         common_by(rows.iter().map(|r| r.track_number), int_key, fmt_int),
         set_track_number,
         set_track_number_placeholder
     );
     field!(
+        track_total,
+        common_by(rows.iter().map(|r| r.track_total), int_key, fmt_int),
+        set_track_total,
+        set_track_total_placeholder
+    );
+    field!(
+        disc_number,
         common_by(rows.iter().map(|r| r.disc_number), int_key, fmt_int),
         set_disc_number,
         set_disc_number_placeholder
     );
     field!(
-        common_str(rows.iter().map(|r| r.composer.as_deref().unwrap_or_default())),
-        set_composer,
-        set_composer_placeholder
+        disc_total,
+        common_by(rows.iter().map(|r| r.disc_total), int_key, fmt_int),
+        set_disc_total,
+        set_disc_total_placeholder
+    );
+    field!(comment, shared!(comment), set_comment, set_comment_placeholder);
+    field!(
+        bpm,
+        common_by(rows.iter().map(|r| r.bpm), bpm_key, fmt_bpm),
+        set_bpm,
+        set_bpm_placeholder
+    );
+
+    // The role credits, a list of rows per role. Structural like the genres and the two artist
+    // credits, so the sentinel is per role: one selection can agree on the composer and disagree
+    // on the producer.
+    let (common_roles, role_disagreements) = common_roles(roles);
+    write_role_rows(ui, &common_roles);
+    te.set_role_placeholders(ModelRc::new(VecModel::from(
+        role_disagreements
+            .iter()
+            .map(|disagrees| {
+                if *disagrees {
+                    sentinel.clone()
+                } else {
+                    SharedString::default()
+                }
+            })
+            .collect::<Vec<_>>(),
+    )));
+
+    field!(subtitle, shared!(subtitle), set_subtitle, set_subtitle_placeholder);
+    field!(disc_subtitle, shared!(disc_subtitle), set_disc_subtitle, set_disc_subtitle_placeholder);
+    field!(grouping, shared!(grouping), set_grouping, set_grouping_placeholder);
+    field!(work, shared!(work), set_work, set_work_placeholder);
+    field!(movement, shared!(movement), set_movement, set_movement_placeholder);
+    field!(
+        movement_number,
+        common_by(rows.iter().map(|r| r.movement_number), int_key, fmt_int),
+        set_movement_number,
+        set_movement_number_placeholder
     );
     field!(
-        common_str(rows.iter().map(|r| r.comment.as_deref().unwrap_or_default())),
-        set_comment,
-        set_comment_placeholder
+        movement_total,
+        common_by(rows.iter().map(|r| r.movement_total), int_key, fmt_int),
+        set_movement_total,
+        set_movement_total_placeholder
     );
-    field!(common_by(rows.iter().map(|r| r.bpm), bpm_key, fmt_bpm), set_bpm, set_bpm_placeholder);
+    field!(initial_key, shared!(initial_key), set_initial_key, set_initial_key_placeholder);
+    field!(mood, shared!(mood), set_mood, set_mood_placeholder);
+    field!(language, shared!(language), set_language, set_language_placeholder);
+    field!(isrc, shared!(isrc), set_isrc, set_isrc_placeholder);
+    field!(copyright, shared!(copyright), set_copyright, set_copyright_placeholder);
+
+    // Release-level, read off the album the selection sits on rather than off `tracks`.
+    field!(
+        label,
+        common_str(release.iter().map(|r| r.label.as_str())),
+        set_label,
+        set_label_placeholder
+    );
+    field!(
+        catalog_number,
+        common_str(release.iter().map(|r| r.catalog_number.as_str())),
+        set_catalog_number,
+        set_catalog_number_placeholder
+    );
+    field!(
+        barcode,
+        common_str(release.iter().map(|r| r.barcode.as_str())),
+        set_barcode,
+        set_barcode_placeholder
+    );
+    field!(
+        media,
+        common_str(release.iter().map(|r| r.media.as_str())),
+        set_media,
+        set_media_placeholder
+    );
+    field!(
+        release_type,
+        common_str(release.iter().map(|r| r.release_type.as_str())),
+        set_release_type,
+        set_release_type_placeholder
+    );
+    field!(
+        release_country,
+        common_str(release.iter().map(|r| r.release_country.as_str())),
+        set_release_country,
+        set_release_country_placeholder
+    );
+
+    // A switch has no ‹multiple values› state to show, so a selection that disagrees starts off
+    // and an untouched switch stays `Keep` — nothing is written unless the user moves it.
+    originals.compilation = release.iter().all(|r| r.is_compilation) && !release.is_empty();
+    te.set_compilation(originals.compilation);
 
     // Lyrics (single selection only; multi mode leaves it "" ⇒ Keep).
     te.set_lyrics(SharedString::from(lyrics.as_str()));
     te.set_lyrics_placeholder(SharedString::default());
-    originals.push(lyrics);
+    originals.text.lyrics = lyrics;
 
     finalize_populate(
         &te,
         session,
         rows,
-        originals,
-        [artist, album_artist],
-        phrases,
+        Baseline {
+            originals,
+            lists: ListFields {
+                credits: [artist, album_artist],
+                genres,
+                roles: common_roles,
+            },
+            join_phrases: phrases,
+        },
         resident,
         cover,
     );
+}
+
+/// The role credits a selection agrees on, and which roles it disagreed about.
+///
+/// Per role rather than for the set as a whole: a batch that shares a composer and differs on the
+/// producer should still show the composer, the way `common_str` shows every other field the
+/// selection agrees on.
+fn common_roles(sets: &[RoleCredits]) -> (RoleCredits, [bool; ROLES.len()]) {
+    let mut agreed = Vec::new();
+    let mut disagreements = [false; ROLES.len()];
+
+    for (index, role) in ROLES.into_iter().enumerate() {
+        let mut per_track = sets.iter().map(|set| set.for_role(role).cloned().collect::<Vec<_>>());
+        let Some(first) = per_track.next() else {
+            continue;
+        };
+        if per_track.all(|other| other == first) {
+            agreed.extend(first);
+        } else {
+            disagreements[index] = true;
+        }
+    }
+
+    (RoleCredits::new(agreed), disagreements)
 }
 
 /// Replace one credit's rows in place. The model is installed once by `wire_credits`, so this
@@ -700,14 +1185,23 @@ fn write_credit_rows(te: &TagEditor, field: usize, rows: Vec<ArtistCreditRow>) {
     }
 }
 
+/// Everything the commit diffs against, as it was the moment the dialog opened.
+///
+/// One value rather than four parameters because that is what the four are: a baseline. They are
+/// written once by `populate` and read once by the commit, and `join_phrases` rides with them
+/// because the picker list the dialog offers is part of what the user was shown.
+struct Baseline {
+    originals: FormState,
+    lists: ListFields,
+    join_phrases: Vec<(String, String)>,
+}
+
 /// Finish a `populate`: scalar flags, cover, Summary, and the session snapshot.
 fn finalize_populate(
     te: &TagEditor,
     session: &Rc<RefCell<TagSession>>,
     rows: &[TagEditRow],
-    originals: Vec<String>,
-    original_credits: [ArtistCredit; CREDIT_FIELD_COUNT],
-    join_phrases: Vec<(String, String)>,
+    baseline: Baseline,
     resident: Option<String>,
     cover: Option<SharedPixelBuffer<Rgb8Pixel>>,
 ) {
@@ -730,9 +1224,9 @@ fn finalize_populate(
 
     *session.borrow_mut() = TagSession {
         ids: rows.iter().map(|r| r.id).collect(),
-        originals,
-        original_credits,
-        join_phrases,
+        originals: baseline.originals,
+        original_lists: baseline.lists,
+        join_phrases: baseline.join_phrases,
         artwork: ArtworkEdit::Keep,
         picked: None,
         resident_lyrics: resident,
@@ -811,29 +1305,51 @@ fn show_failure_toast(ui: &AppWindow, notifications: &NotificationsUi) {
 /// Build the `TagEdit` by diffing each current field value against the
 /// populate-time snapshot. `cur` is fixed-length [`FIELD_COUNT`]; `orig` is checked to match.
 fn build_edit(
-    cur: &[String],
-    orig: &[String],
-    credits: &[ArtistCredit; CREDIT_FIELD_COUNT],
-    original_credits: &[ArtistCredit; CREDIT_FIELD_COUNT],
+    form: &FormState,
+    orig: &FormState,
+    lists: &ListFields,
+    was_lists: &ListFields,
     artwork: ArtworkEdit,
 ) -> TagEdit {
+    let (cur, was) = (&form.text, &orig.text);
     TagEdit {
-        title: diff_str(&cur[TITLE], &orig[TITLE]),
-        artist: diff_credit(&credits[CREDIT_ARTIST], &original_credits[CREDIT_ARTIST]),
+        title: diff_str(&cur.title, &was.title),
+        artist: diff_credit(&lists.credits[CREDIT_ARTIST], &was_lists.credits[CREDIT_ARTIST]),
         album_artist: diff_credit(
-            &credits[CREDIT_ALBUM_ARTIST],
-            &original_credits[CREDIT_ALBUM_ARTIST],
+            &lists.credits[CREDIT_ALBUM_ARTIST],
+            &was_lists.credits[CREDIT_ALBUM_ARTIST],
         ),
-        album: diff_str(&cur[ALBUM], &orig[ALBUM]),
-        genre: diff_str(&cur[GENRE], &orig[GENRE]),
-        year: diff_parsed::<u16>(&cur[YEAR], &orig[YEAR]),
-        original_year: diff_parsed::<u16>(&cur[ORIGINAL_YEAR], &orig[ORIGINAL_YEAR]),
-        track_number: diff_parsed::<u32>(&cur[TRACK_NUMBER], &orig[TRACK_NUMBER]),
-        disc_number: diff_parsed::<u32>(&cur[DISC_NUMBER], &orig[DISC_NUMBER]),
-        composer: diff_str(&cur[COMPOSER], &orig[COMPOSER]),
-        comment: diff_str(&cur[COMMENT], &orig[COMMENT]),
-        bpm: diff_bpm(&cur[BPM], &orig[BPM]),
-        lyrics: diff_str(&cur[LYRICS], &orig[LYRICS]),
+        album: diff_str(&cur.album, &was.album),
+        genres: diff_genre_list(&lists.genres, &was_lists.genres),
+        credits: diff_roles(&lists.roles, &was_lists.roles),
+        year: diff_parsed::<u16>(&cur.year, &was.year),
+        original_year: diff_parsed::<u16>(&cur.original_year, &was.original_year),
+        track_number: diff_parsed::<u32>(&cur.track_number, &was.track_number),
+        track_total: diff_parsed::<u32>(&cur.track_total, &was.track_total),
+        disc_number: diff_parsed::<u32>(&cur.disc_number, &was.disc_number),
+        disc_total: diff_parsed::<u32>(&cur.disc_total, &was.disc_total),
+        disc_subtitle: diff_str(&cur.disc_subtitle, &was.disc_subtitle),
+        subtitle: diff_str(&cur.subtitle, &was.subtitle),
+        comment: diff_str(&cur.comment, &was.comment),
+        bpm: diff_bpm(&cur.bpm, &was.bpm),
+        initial_key: diff_str(&cur.initial_key, &was.initial_key),
+        mood: diff_str(&cur.mood, &was.mood),
+        grouping: diff_str(&cur.grouping, &was.grouping),
+        work: diff_str(&cur.work, &was.work),
+        movement: diff_str(&cur.movement, &was.movement),
+        movement_number: diff_parsed::<u32>(&cur.movement_number, &was.movement_number),
+        movement_total: diff_parsed::<u32>(&cur.movement_total, &was.movement_total),
+        language: diff_str(&cur.language, &was.language),
+        copyright: diff_str(&cur.copyright, &was.copyright),
+        isrc: diff_str(&cur.isrc, &was.isrc),
+        label: diff_str(&cur.label, &was.label),
+        catalog_number: diff_str(&cur.catalog_number, &was.catalog_number),
+        barcode: diff_str(&cur.barcode, &was.barcode),
+        media: diff_str(&cur.media, &was.media),
+        release_type: diff_str(&cur.release_type, &was.release_type),
+        release_country: diff_str(&cur.release_country, &was.release_country),
+        compilation: diff_flag(form.compilation, orig.compilation),
+        lyrics: diff_str(&cur.lyrics, &was.lyrics),
         artwork,
         // The Edit-Tags dialog doesn't surface MusicBrainz ids; leaving them
         // `Keep` preserves whatever the file (or the auto-tag backfill) wrote.
@@ -851,6 +1367,50 @@ fn diff_str(cur: &str, orig: &str) -> FieldEdit<String> {
         FieldEdit::Clear
     } else {
         FieldEdit::Set(cur.to_owned())
+    }
+}
+
+/// Tri-state for the genre list, compared structurally.
+///
+/// Not through the rendered line, for [`diff_credit`]'s reason one field over: the rows are what
+/// the user edited and the line is derived from them, so a reordering that renders the same string
+/// is still an edit the file should receive.
+fn diff_genre_list(cur: &GenreList, orig: &GenreList) -> FieldEdit<GenreList> {
+    if cur == orig {
+        FieldEdit::Keep
+    } else if cur.is_empty() {
+        FieldEdit::Clear
+    } else {
+        FieldEdit::Set(cur.clone())
+    }
+}
+
+/// Tri-state for the whole role credit set, over the ten boxes the Credits tab mounts.
+///
+/// **All ten or nothing**, because `TagEdit::credits` writes all ten: a set built from the one box
+/// that changed would clear every role beside it. So the answer is `Keep` until *some* box moves,
+/// and then the set is rebuilt from every box at once. That also makes the emptied box work —
+/// a role the user cleared is simply absent from the rebuild, and the writer removes its key.
+///
+/// Rebuilt in [`ROLES`] order, so a save that changed one name leaves the rendered `credits` line
+/// where it was rather than reordering it.
+fn diff_roles(cur: &RoleCredits, orig: &RoleCredits) -> FieldEdit<RoleCredits> {
+    if cur == orig {
+        FieldEdit::Keep
+    } else if cur.is_empty() {
+        FieldEdit::Clear
+    } else {
+        FieldEdit::Set(cur.clone())
+    }
+}
+
+/// Tri-state for a switch. `Set(false)` and `Clear` mean the same thing to the writer, so an
+/// un-ticked box is `Set(false)` and removes the tag.
+fn diff_flag(cur: bool, orig: bool) -> FieldEdit<bool> {
+    if cur == orig {
+        FieldEdit::Keep
+    } else {
+        FieldEdit::Set(cur)
     }
 }
 

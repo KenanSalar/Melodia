@@ -12,7 +12,7 @@ use melodia_core::error::AppError;
 
 use super::ResolvedIds;
 use super::sort_key::to_natural_sort_key;
-use super::upserts::{insert_track_credits, replace_track_credits};
+use super::upserts::{insert_track_joins, replace_track_joins};
 
 /// Column-name list shared by [`insert_track`]'s single-row INSERT and
 /// [`insert_tracks_batch`]'s multi-row form. The bind order in
@@ -21,8 +21,12 @@ use super::upserts::{insert_track_credits, replace_track_credits};
 /// — change all three together. `update_track_metadata` shares
 /// `bind_track_columns`, so it is coupled to the same order via its SET list.
 const TRACK_INSERT_COLUMNS: &str = "file_path, file_name,
-    file_hash, title, artist, album_artist, album, genre, track_number, disc_number, year, composer, comment,
-    bpm, musicbrainz_track_id, musicbrainz_release_id, label, original_year,
+    file_hash, title, artist, album_artist, album, genre, credits,
+    track_number, track_total, disc_number, disc_total, disc_subtitle, subtitle,
+    release_date, year, original_date, original_year, comment,
+    bpm, initial_key, mood, grouping, work, movement, movement_number, movement_total,
+    language, copyright, isrc,
+    musicbrainz_track_id, musicbrainz_release_id, musicbrainz_release_track_id,
     replaygain_track_gain, replaygain_track_peak, replaygain_album_gain, replaygain_album_peak,
     duration_ms, file_size, codec, bitrate, channels, sample_rate, bit_depth,
     artwork_path,
@@ -48,8 +52,8 @@ pub async fn update_track_artwork_if_missing(
     Ok(())
 }
 
-/// Bind the canonical 34-column block shared by `insert_track` and
-/// `update_track_metadata`: 28 metadata fields (`file_hash` through
+/// Bind the canonical 50-column block shared by `insert_track` and
+/// `update_track_metadata`: 44 metadata fields (`file_hash` through
 /// `artwork_path`), 4 foreign-key ids (`album_id`, `artist_id`, `genre_id`,
 /// `folder_id`), then `date_modified` and `sort_key`. Both call sites place
 /// these in the same order in their respective SQL so this single helper
@@ -65,17 +69,33 @@ fn bind_track_columns<'q>(
         .bind(meta.artist.line())
         .bind(meta.album_artist.line())
         .bind(&meta.album)
-        .bind(&meta.genre)
+        .bind(meta.genres.line())
+        .bind(meta.credits.line())
         .bind(meta.track_number)
+        .bind(meta.track_total)
         .bind(meta.disc_number)
+        .bind(meta.disc_total)
+        .bind(&meta.disc_subtitle)
+        .bind(&meta.subtitle)
+        .bind(&meta.release_date)
         .bind(meta.year)
-        .bind(&meta.composer)
+        .bind(&meta.original_date)
+        .bind(meta.original_year)
         .bind(&meta.comment)
         .bind(meta.bpm)
+        .bind(&meta.initial_key)
+        .bind(&meta.mood)
+        .bind(&meta.grouping)
+        .bind(&meta.work)
+        .bind(&meta.movement)
+        .bind(meta.movement_number)
+        .bind(meta.movement_total)
+        .bind(&meta.language)
+        .bind(&meta.copyright)
+        .bind(&meta.isrc)
         .bind(&meta.musicbrainz_track_id)
         .bind(&meta.musicbrainz_release_id)
-        .bind(&meta.label)
-        .bind(meta.original_year)
+        .bind(&meta.musicbrainz_release_track_id)
         .bind(meta.replaygain_track_gain)
         .bind(meta.replaygain_track_peak)
         .bind(meta.replaygain_album_gain)
@@ -96,6 +116,14 @@ fn bind_track_columns<'q>(
         .bind(sort_key)
 }
 
+/// The string a track's `sort_key` is derived from: the file's `TITLESORT` where it has one, the
+/// title otherwise. Spelled once because `insert_track`, `insert_tracks_batch` and
+/// `update_track_metadata` all need it and a row sorting by a different rule than its neighbours
+/// is invisible until a list is read top to bottom.
+fn sort_source(meta: &ExtractedMetadata) -> &str {
+    meta.sort.title.as_deref().unwrap_or(&meta.title)
+}
+
 /// Insert a new track into the database. Returns the new track's `id` so the
 /// caller can collect inserted IDs without a follow-up `SELECT … WHERE
 /// file_path IN (…)` round-trip.
@@ -108,15 +136,19 @@ pub async fn insert_track(
     ids: &ResolvedIds,
     now: &str,
 ) -> Result<i64, AppError> {
-    let sort_key = to_natural_sort_key(&meta.title);
+    let sort_key = to_natural_sort_key(sort_source(meta));
 
-    // Column order: file_path, file_name, then the 34-column shared block
+    // Column order: file_path, file_name, then the 50-column shared block
     // bound by `bind_track_columns`, then the playback defaults and date_added.
     let sql = format!(
         "INSERT INTO tracks ({TRACK_INSERT_COLUMNS}) VALUES (
             ?, ?,
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?,
             ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?,
             ?,
@@ -141,7 +173,7 @@ pub async fn insert_track(
         .execute(&mut **tx)
         .await?;
     let track_id = result.last_insert_rowid();
-    insert_track_credits(tx, track_id, &meta.artist, ids.artist_id).await?;
+    insert_track_joins(tx, track_id, meta, ids).await?;
     Ok(track_id)
 }
 
@@ -154,15 +186,15 @@ pub struct NewTrackRow<'a> {
     pub ids: ResolvedIds,
 }
 
-/// Rows per multi-row INSERT statement: 38 binds each (`file_path` +
-/// `file_name` + the 34-column shared block + `rating` + `date_added`; the
+/// Rows per multi-row INSERT statement: 54 binds each (`file_path` +
+/// `file_name` + the 50-column shared block + `rating` + `date_added`; the
 /// five remaining playback defaults are SQL literals), kept under `SQLite`'s
 /// bind cap.
 ///
 /// The rating is bound rather than pushed as a literal like its neighbours
 /// because it is the one of the six that carries a *value* — the file's own
 /// tag — and data never rides in the statement text.
-pub const INSERT_CHUNK_ROWS: usize = SQLITE_BIND_LIMIT / 38;
+pub const INSERT_CHUNK_ROWS: usize = SQLITE_BIND_LIMIT / 54;
 
 /// Multi-row variant of [`insert_track`] for the scan/import ingest hot
 /// path: one `INSERT … VALUES (…), (…), … RETURNING id, file_path` per
@@ -179,7 +211,7 @@ pub async fn insert_tracks_batch(
     let mut out = Vec::with_capacity(rows.len());
     for chunk in rows.chunks(INSERT_CHUNK_ROWS) {
         let sort_keys: Vec<String> =
-            chunk.iter().map(|r| to_natural_sort_key(&r.meta.title)).collect();
+            chunk.iter().map(|r| to_natural_sort_key(sort_source(r.meta))).collect();
 
         let mut qb = sqlx::QueryBuilder::<sqlx::Sqlite>::new(format!(
             "INSERT INTO tracks ({TRACK_INSERT_COLUMNS}) "
@@ -195,17 +227,33 @@ pub async fn insert_tracks_batch(
                 .push_bind(meta.artist.line())
                 .push_bind(meta.album_artist.line())
                 .push_bind(&meta.album)
-                .push_bind(&meta.genre)
+                .push_bind(meta.genres.line())
+                .push_bind(meta.credits.line())
                 .push_bind(meta.track_number)
+                .push_bind(meta.track_total)
                 .push_bind(meta.disc_number)
+                .push_bind(meta.disc_total)
+                .push_bind(&meta.disc_subtitle)
+                .push_bind(&meta.subtitle)
+                .push_bind(&meta.release_date)
                 .push_bind(meta.year)
-                .push_bind(&meta.composer)
+                .push_bind(&meta.original_date)
+                .push_bind(meta.original_year)
                 .push_bind(&meta.comment)
                 .push_bind(meta.bpm)
+                .push_bind(&meta.initial_key)
+                .push_bind(&meta.mood)
+                .push_bind(&meta.grouping)
+                .push_bind(&meta.work)
+                .push_bind(&meta.movement)
+                .push_bind(meta.movement_number)
+                .push_bind(meta.movement_total)
+                .push_bind(&meta.language)
+                .push_bind(&meta.copyright)
+                .push_bind(&meta.isrc)
                 .push_bind(&meta.musicbrainz_track_id)
                 .push_bind(&meta.musicbrainz_release_id)
-                .push_bind(&meta.label)
-                .push_bind(meta.original_year)
+                .push_bind(&meta.musicbrainz_release_track_id)
                 .push_bind(meta.replaygain_track_gain)
                 .push_bind(meta.replaygain_track_peak)
                 .push_bind(meta.replaygain_album_gain)
@@ -251,7 +299,7 @@ pub async fn insert_tracks_batch(
                     row.file_path
                 )));
             };
-            insert_track_credits(tx, id, &row.meta.artist, row.ids.artist_id).await?;
+            insert_track_joins(tx, id, row.meta, &row.ids).await?;
             out.push(id);
         }
     }
@@ -307,14 +355,19 @@ pub async fn update_track_metadata(
     meta: &melodia_core::entities::scan::ExtractedMetadata,
     ids: &ResolvedIds,
 ) -> Result<(), AppError> {
-    let sort_key = to_natural_sort_key(&meta.title);
+    let sort_key = to_natural_sort_key(sort_source(meta));
     let q = sqlx::query(
         "UPDATE tracks SET
             file_hash = ?, title = ?, artist = ?, album_artist = ?, album = ?,
-            genre = ?, track_number = ?, disc_number = ?, year = ?,
-            composer = ?, comment = ?,
-            bpm = ?, musicbrainz_track_id = ?, musicbrainz_release_id = ?,
-            label = ?, original_year = ?,
+            genre = ?, credits = ?,
+            track_number = ?, track_total = ?, disc_number = ?, disc_total = ?,
+            disc_subtitle = ?, subtitle = ?,
+            release_date = ?, year = ?, original_date = ?, original_year = ?, comment = ?,
+            bpm = ?, initial_key = ?, mood = ?, grouping = ?,
+            work = ?, movement = ?, movement_number = ?, movement_total = ?,
+            language = ?, copyright = ?, isrc = ?,
+            musicbrainz_track_id = ?, musicbrainz_release_id = ?,
+            musicbrainz_release_track_id = ?,
             replaygain_track_gain = ?, replaygain_track_peak = ?,
             replaygain_album_gain = ?, replaygain_album_peak = ?,
             duration_ms = ?, file_size = ?, codec = ?, bitrate = ?,
@@ -336,7 +389,7 @@ pub async fn update_track_metadata(
     // SELECT, so an incremental scan pays no extra round trip per changed file.
     if let Some(row) = updated {
         let track_id: i64 = row.try_get("id")?;
-        replace_track_credits(tx, track_id, &meta.artist, ids.artist_id).await?;
+        replace_track_joins(tx, track_id, meta, ids).await?;
     }
     Ok(())
 }
@@ -399,14 +452,16 @@ pub async fn prune_orphans(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Resu
            AND NOT EXISTS (SELECT 1 FROM tracks WHERE tracks.artist_id = artists.id) \
            AND NOT EXISTS (SELECT 1 FROM albums WHERE albums.artist_id = artists.id) \
            AND NOT EXISTS (SELECT 1 FROM track_artists WHERE track_artists.artist_id = artists.id) \
-           AND NOT EXISTS (SELECT 1 FROM album_artists WHERE album_artists.artist_id = artists.id)",
+           AND NOT EXISTS (SELECT 1 FROM album_artists WHERE album_artists.artist_id = artists.id) \
+           AND NOT EXISTS (SELECT 1 FROM track_credits WHERE track_credits.artist_id = artists.id)",
     )
     .execute(&mut **tx)
     .await?;
 
     sqlx::query(
         "DELETE FROM genres \
-         WHERE NOT EXISTS (SELECT 1 FROM tracks WHERE tracks.genre_id = genres.id)",
+         WHERE NOT EXISTS (SELECT 1 FROM tracks WHERE tracks.genre_id = genres.id) \
+           AND NOT EXISTS (SELECT 1 FROM track_genres WHERE track_genres.genre_id = genres.id)",
     )
     .execute(&mut **tx)
     .await?;
