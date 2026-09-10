@@ -231,10 +231,9 @@ pub struct NewTrackRow<'a> {
     pub ids: ResolvedIds,
 }
 
-/// Rows per multi-row INSERT statement: 54 binds each (`file_path` +
-/// `file_name` + the 50-column shared block + `rating` + `date_added`; the
-/// five remaining playback defaults are SQL literals), kept under `SQLite`'s
-/// bind cap.
+/// Rows per multi-row INSERT statement, sized so a chunk stays under `SQLite`'s bind cap. A row
+/// binds `file_path`, `file_name`, the shared block, `rating` and `date_added`; the five playback
+/// defaults beside them ride as SQL literals, which is what [`LITERAL_DEFAULTS`] subtracts.
 ///
 /// The rating is bound rather than pushed as a literal like its neighbours
 /// because it is the one of the six that carries a *value* — the file's own

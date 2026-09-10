@@ -152,8 +152,12 @@ fn diff_str(cur: &str, orig: &str) -> FieldEdit<String> {
 /// The trait exists so [`diff_multi`] is written once: the tri-state ladder is the dialog's
 /// central semantic, and three copies of it are three chances for one field to start answering
 /// `Keep` where its siblings answer `Clear`.
+///
+/// Named for the answer rather than for the state: spelled `is_empty` it shadows the inherent
+/// method each impl below delegates to, so retiring one of those turns the delegation into
+/// unbounded recursion that still compiles.
 trait MultiValue: Clone + PartialEq {
-    fn is_empty(&self) -> bool;
+    fn is_cleared(&self) -> bool;
 }
 
 /// Compared structurally, not through the rendered line: two different credits can render the same
@@ -161,16 +165,16 @@ trait MultiValue: Clone + PartialEq {
 /// receive. `Keep` is what makes an untouched multi-artist file safe, the list tag surviving a save
 /// that never looked at it.
 impl MultiValue for ArtistCredit {
-    fn is_empty(&self) -> bool {
-        Self::is_empty(self)
+    fn is_cleared(&self) -> bool {
+        self.is_empty()
     }
 }
 
 /// Structural for the reason above: the rows are what the user edited and the line is derived from
 /// them, so a reordering that renders the same string is still an edit.
 impl MultiValue for GenreList {
-    fn is_empty(&self) -> bool {
-        Self::is_empty(self)
+    fn is_cleared(&self) -> bool {
+        self.is_empty()
     }
 }
 
@@ -179,8 +183,8 @@ impl MultiValue for GenreList {
 /// moves, and then the set is rebuilt from every box at once. That also makes the emptied box work
 /// — a role the user cleared is simply absent from the rebuild, and the writer removes its key.
 impl MultiValue for RoleCredits {
-    fn is_empty(&self) -> bool {
-        Self::is_empty(self)
+    fn is_cleared(&self) -> bool {
+        self.is_empty()
     }
 }
 
@@ -188,7 +192,7 @@ impl MultiValue for RoleCredits {
 fn diff_multi<T: MultiValue>(cur: &T, orig: &T) -> FieldEdit<T> {
     if cur == orig {
         FieldEdit::Keep
-    } else if cur.is_empty() {
+    } else if cur.is_cleared() {
         FieldEdit::Clear
     } else {
         FieldEdit::Set(cur.clone())
