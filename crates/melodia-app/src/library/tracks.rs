@@ -20,6 +20,16 @@ pub async fn get_track_meta(
     queries::track::get_track_meta(&state.db, id).await
 }
 
+/// Fetch the album/artist/genre linkage for the given ids, in the order
+/// asked. Ids with no row are dropped, so a shorter result is a queue that
+/// outlived a delete rather than an error.
+pub async fn get_track_links(
+    state: &AppState,
+    ids: &[i64],
+) -> Result<Vec<track::TrackLinks>, AppError> {
+    queries::track::get_track_links_by_ids(&state.db, ids).await
+}
+
 /// Open the OS file manager at the folder containing the given track,
 /// backing the track-row "Open Containing Folder" context-menu action.
 ///

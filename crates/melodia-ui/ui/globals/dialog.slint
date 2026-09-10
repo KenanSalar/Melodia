@@ -209,9 +209,9 @@ export global Dialog {
     //
     // **Only the kinds opened from more than one place are here**, a kind with one caller earning
     // nothing by moving.
-    // `ui::playlists::tests::every_multi_caller_playlist_dialog_opens_through_its_own_function`
-    // walks the tree rather than naming the six call sites, what it guards against being the
-    // *seventh* — a re-spelled populate block opens the right dialog and is free to drift.
+    // `crates/melodia/tests/dialog_openers.rs` walks the tree rather than naming the call sites,
+    // what it guards against being the *next* one — a re-spelled populate block opens the right
+    // dialog and is free to drift.
 
     // Three call sites: the Playlists tab's New pill, Ctrl+N, and a track row's Add-to-Playlist →
     // "New Playlist…". The last passes the ids to add once the row exists, the other two `[]`.
@@ -227,6 +227,24 @@ export global Dialog {
         root.input-text-2 = "";
         root.pending-track-ids = track-ids;
         root.open = true;
+    }
+
+    // Two call sites: a track row's context menu over one or many rows, and the Now-Playing lyrics
+    // menu over the playing one. The title is the caller's because only it knows how many rows it
+    // has; everything else below is the same dialog either way.
+    //
+    // **The one opener that does not set `open`.** Rust fetches the rows, reads the lyrics off the
+    // file and decodes a cover before it has anything to show, so it raises the card itself when
+    // that lands — which is also why the tab is an argument rather than a property set beside this
+    // call, the populate resetting `active-tab` a tick later.
+    public function open-tag-editor(heading: string, ids: [int], tab: int) {
+        root.title = heading;
+        root.message = "";
+        root.confirm-label = @tr("Save");
+        root.cancel-label = @tr("Cancel");
+        root.destructive = false;
+        root.kind = "edit-tags";
+        TagEditor.request-edit(ids, tab);
     }
 
     // Two call sites — the Playlists grid card's overflow and the open playlist's pill row —

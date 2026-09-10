@@ -149,6 +149,8 @@ type ResolveKey = (PathBuf, String, String, Option<i32>, String);
 async fn run_commit(db: &DbPool, files: &[FileWrite]) -> Result<usize, AppError> {
     let mut tx = db.write().begin().await?;
     let mut resolve_cache: HashMap<ResolveKey, queries::scan::ResolvedIds> = HashMap::new();
+    // `ResolveKey` keys on the primary names; the credit tables ask about every credited one.
+    let mut names = queries::scan::NameCache::for_chunk(files.len());
     let mut updated = 0usize;
 
     for f in files {
@@ -162,17 +164,23 @@ async fn run_commit(db: &DbPool, files: &[FileWrite]) -> Result<usize, AppError>
         let path = Path::new(&f.path);
         let key: ResolveKey = (
             path.parent().map(Path::to_path_buf).unwrap_or_default(),
-            meta.artist.clone().unwrap_or_default(),
+            meta.artist.primary_name().to_owned(),
             meta.album.clone().unwrap_or_default(),
             meta.year,
-            meta.genre.clone().unwrap_or_default(),
+            meta.genres.primary().unwrap_or_default().to_owned(),
         );
         let rids = if let Some(cached) = resolve_cache.get(&key) {
             *cached
         } else {
-            let Some(resolved) =
-                queries::scan::resolve_track_context(&mut tx, path, &f.path, meta, "MBID backfill")
-                    .await?
+            let Some(resolved) = queries::scan::resolve_track_context(
+                &mut tx,
+                path,
+                &f.path,
+                meta,
+                "MBID backfill",
+                &mut names,
+            )
+            .await?
             else {
                 log::warn!("mbid backfill: {} not in a library folder", f.path);
                 continue;
@@ -180,7 +188,7 @@ async fn run_commit(db: &DbPool, files: &[FileWrite]) -> Result<usize, AppError>
             resolve_cache.insert(key, resolved);
             resolved
         };
-        queries::scan::update_track_metadata(&mut tx, &f.path, meta, &rids).await?;
+        queries::scan::update_track_metadata(&mut tx, &f.path, meta, &rids, &mut names).await?;
         updated += 1;
     }
 

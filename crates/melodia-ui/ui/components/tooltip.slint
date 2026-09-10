@@ -18,6 +18,11 @@ export component Tooltip inherits Rectangle {
     in property <TooltipSide> side: TooltipSide.above;
     // Gap between the pill and the host, on whichever axis `side` clears.
     in property <length> gap: 6px;
+    // Pins the pill's right edge to the host's rather than centring it under one of the vertical
+    // sides — for a control at the panel's own right edge, where the centred arm's overhang has
+    // nothing to hang over. The widest form of a label is a translation, so an English layout that
+    // fits says nothing about whether it does. Read by `above`/`below` only.
+    in property <bool> align-end: false;
     // Bypasses the reveal delay, for a caller surfacing the pill without a real hover — a keyboard
     // volume change, say. It rides the same `animate`, so the fade matches.
     in property <bool> force-shown: false;
@@ -35,6 +40,7 @@ export component Tooltip inherits Rectangle {
     // vertical sides do the mirror of that.
     x: root.side == TooltipSide.right ? (root.host-width + root.gap)
         : root.side == TooltipSide.left ? (-self.width - root.gap)
+        : root.align-end ? (root.host-width - self.width)
         : (root.host-width - self.width) / 2;
     y: root.side == TooltipSide.above ? (-self.height - root.gap)
         : root.side == TooltipSide.below ? (root.host-height + root.gap)

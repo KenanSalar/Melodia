@@ -24,7 +24,11 @@ export component MetaChipStrip inherits Rectangle {
 
     // == MetaChip height. Reserving it unconditionally is what keeps a track with no metadata — or
     // a slow fetch — from reflowing whatever sits above.
-    min-height: 26px;
+    //
+    // **The floor, not the answer**: an explicit binding replaces the folded one, so a bare 26px is
+    // a promise of one row from a strip that draws however many it was handed, and a host short of
+    // height takes it at its word and lets the rows past the first paint over whatever follows.
+    min-height: max(26px, rows-box.min-height);
     vertical-stretch: 0;
     // The other half of the wrapper below, and the half nothing catches at build time: that wrapper
     // is a real layout, so the root merges its horizontal constraint and the widest published row
@@ -53,7 +57,7 @@ export component MetaChipStrip inherits Rectangle {
     // *layout* into its own layout info but not a conditional one — an `if` lowers to a repeater,
     // which `gen_layout_info_prop` skips — so with the `if` as the direct child the strip reported
     // `preferred: 0`, took its `min-height` floor and drew every row past the first outside the box.
-    VerticalLayout {
+    rows-box := VerticalLayout {
         if root.show-rows: VerticalLayout {
             // Tighter than the gap between chips: a wrapped row is the same strip continuing, not
             // a second one, which is what lets a hero band absorb it without growing. Only the

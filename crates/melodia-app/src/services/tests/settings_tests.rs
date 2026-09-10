@@ -524,3 +524,57 @@ fn the_tray_ships_on_but_never_overrides_a_saved_answer() -> Result<(), AppError
     assert!(!reading_env(SettingsData::default).tray.close_to_tray);
     Ok(())
 }
+
+/// Two of the three ship off and one ships on, so a derived `Default` would be right about the
+/// panel and the lookup and silently wrong about the romanization. A sheet in a script the reader
+/// cannot sound out is the whole reason that one is on.
+#[test]
+fn the_lyrics_switches_ship_as_two_off_and_one_on() {
+    let lyrics = reading_env(SettingsData::default).lyrics;
+
+    assert!(!lyrics.lyrics_panel_shown, "the column opens on Up Next");
+    assert!(!lyrics.lyrics_online_enabled, "an outbound feature is opt-in");
+    assert!(lyrics.lyrics_romanization_shown);
+}
+
+#[test]
+fn the_lyrics_switches_take_their_defaults_from_a_file_that_predates_them() -> Result<(), AppError>
+{
+    // They are flattened into the same object as every other key, so an older `settings.json` is
+    // missing all three rather than carrying an empty section.
+    let json = r#"{"theme_id": "catppuccin"}"#;
+    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+
+    assert!(!settings.lyrics.lyrics_panel_shown);
+    assert!(!settings.lyrics.lyrics_online_enabled);
+    assert!(settings.lyrics.lyrics_romanization_shown);
+    Ok(())
+}
+
+#[test]
+fn the_romanization_ships_on_but_never_overrides_a_saved_answer() -> Result<(), AppError> {
+    // The direction a default-on field goes wrong: a reader that fills the default in over a
+    // saved `false` turns the row back on at every launch.
+    let json = r#"{"theme_id": "catppuccin", "lyrics_romanization_shown": false}"#;
+    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+
+    assert!(!settings.lyrics.lyrics_romanization_shown);
+    Ok(())
+}
+
+/// A one-shot marker ships false, and the direction it fails is re-running the sweep on every
+/// launch: an install that has already had its backfill would queue the whole library for a
+/// re-parse each time the default landed over the saved answer.
+#[test]
+fn the_tag_backfill_marker_ships_unset_and_survives_being_set() -> Result<(), AppError> {
+    assert!(!reading_env(SettingsData::default).library.tags_backfilled);
+
+    let predating = r#"{"theme_id": "catppuccin"}"#;
+    let settings: SettingsData = serde_json::from_str(predating).map_err(|e| json_err(&e))?;
+    assert!(!settings.library.tags_backfilled, "an older file has never had the pass");
+
+    let recorded = r#"{"theme_id": "catppuccin", "tags_backfilled": true}"#;
+    let settings: SettingsData = serde_json::from_str(recorded).map_err(|e| json_err(&e))?;
+    assert!(settings.library.tags_backfilled);
+    Ok(())
+}

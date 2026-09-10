@@ -29,5 +29,11 @@ lyrics display or search feature is wanted, the column becomes correct, and it a
 migration plus a backfill task, which is a pattern the tree already runs elsewhere. Until then it
 would be a column nothing reads.
 
+**Amendment, 2026-09-08:** the sentence above about lyrics not being displayable outside the editor
+is no longer true. A Now Playing panel reads them, and the column stays refused all the same:
+[ADR 38](0038-lyrics-display-reads-the-file.md) argues why a display never reaches the scan-resident
+vector this decision turns on. Search still would, and is still the half of that exit ramp that
+would make the column correct.
+
 This ADR was written in September 2026 from the tag-editing working doc, deleted when that feature
 shipped.

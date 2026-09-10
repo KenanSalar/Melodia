@@ -48,6 +48,13 @@ export global Player {
             ? @tr("Paused")
             : (root.vm.radio.buffering ? @tr("Buffering…") : @tr("LIVE")));
 
+    // Projected out of `vm` for a *Rust* reader, which is the half a binding cannot help with:
+    // reading a struct property from Rust clones the whole of it, and the lyrics panel's follow
+    // wants these two on a 33 ms tick. Derived here so the clone happens once per publish rather
+    // than once per tick, the same trade the three scalars below make against their writers.
+    out property <bool> vm-is-playing: root.vm.is_playing;
+    out property <float> vm-playback-speed: root.vm.playback_speed;
+
     // Standalone rather than fields of `vm`, so the 500 ms monitor publish only invalidates
     // the bindings that read them — see `PlayerVm` in `models.slint`.
     in-out property <int> position-ms;

@@ -159,6 +159,32 @@ msgstr "Als Nächstes"
 msgid "No tracks up next"
 msgstr "Keine weiteren Titel"
 
+# The lyrics panel's five states. "Turn it on…" names the Settings tab, so it has to match the
+# tab label above.
+msgid "Play something to see its lyrics"
+msgstr "Spiele etwas ab, um den Songtext zu sehen"
+
+msgid "Looking for lyrics…"
+msgstr "Songtext wird gesucht …"
+
+msgid "No lyrics found"
+msgstr "Kein Songtext gefunden"
+
+msgid "This track has no words"
+msgstr "Dieser Titel hat keinen Gesang"
+
+msgid "Lyrics lookup is off"
+msgstr "Songtextsuche ist deaktiviert"
+
+msgid "Turn it on in the Lyrics menu"
+msgstr "Im Liedtext-Menü aktivieren"
+
+msgid "Couldn't reach the lyrics service"
+msgstr "Songtextdienst nicht erreichbar"
+
+msgid "Try again from the Lyrics menu"
+msgstr "Über das Liedtext-Menü erneut versuchen"
+
 # ---- Queue sheet ------------------------------------------------------------
 
 msgid "No tracks"
@@ -172,6 +198,12 @@ msgstr "Zum Hinzufügen zur Warteschlange ablegen"
 
 msgid "Remove selected"
 msgstr "Auswahl entfernen"
+
+msgid "Remove from Queue"
+msgstr "Aus Warteschlange entfernen"
+
+msgid "Remove {} from Queue"
+msgstr "{} aus Warteschlange entfernen"
 
 msgid "Clear queue"
 msgstr "Warteschlange leeren"
@@ -1453,6 +1485,7 @@ msgstr "Begrenzen auf"
 msgid "tracks by"
 msgstr "Titel nach"
 
+
 msgid "Add rule"
 msgstr "Regel hinzufügen"
 
@@ -1751,6 +1784,22 @@ msgstr "Internetradio"
 msgid "Browse and play live stations from radio-browser.info"
 msgstr "Livesender von radio-browser.info durchsuchen und abspielen"
 
+# The online-lyrics switch. Named in the Services card and again on the welcome card, so both
+# read from this one pair.
+msgid "Look up lyrics online"
+msgstr "Songtexte online suchen"
+
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Wenn ein Titel keinen eigenen Songtext enthält, bei lrclib.net nachfragen"
+
+# The romanization switch. Named on the Services card and again in the Now Playing lyrics menu,
+# so both read from this one label.
+msgid "Show romanization"
+msgstr "Umschrift anzeigen"
+
+msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
+msgstr "Unter den Worten anzeigen, wie eine Zeile klingt, in lateinischen Buchstaben, für Schriften, die sie nicht verwenden"
+
 # The Settings sub-rows, shown only while the master switch is on.
 msgid "Hide segmented stations"
 msgstr "Segmentierte Sender ausblenden"
@@ -2038,3 +2087,123 @@ msgstr "Die Ersteinrichtung erneut anzeigen."
 # Button on the About row above. Short by design — it sits in a narrow control slot.
 msgid "Show"
 msgstr "Anzeigen"
+
+# Tag editor, Lyrics tab: fills the box with the sheet the track already has elsewhere —
+# a `.lrc` beside it, or one the lyrics directory answered with. Saving is the dialog's own.
+msgid "Insert found lyrics"
+msgstr "Gefundenen Text einfügen"
+
+# The Now Playing lyrics menu. "Look up again" forgets what the directory said about this
+# track and asks once more, for a sheet matched off tags that have since been corrected;
+# "Save to file" writes the sheet on screen into the track's own lyrics tag.
+msgid "Hide lyrics"
+msgstr "Songtext ausblenden"
+
+msgid "Show lyrics"
+msgstr "Songtext anzeigen"
+
+msgid "Look up again"
+msgstr "Erneut suchen"
+
+msgid "Edit lyrics…"
+msgstr "Songtext bearbeiten…"
+
+msgid "Save to file"
+msgstr "In Datei speichern"
+
+# Toast title after the Now Playing menu writes the sheet on screen into the track's own
+# lyrics tag. The detail line beside it is the track's title.
+msgid "Lyrics saved"
+msgstr "Songtext gespeichert"
+
+# The Edit-Track-Information dialog's Credits and Details tabs. Every role below is a
+# credit a file can carry; the rest are the release-level tags beside them.
+msgid "Credits"
+msgstr "Mitwirkende"
+
+msgid "Details"
+msgstr "Details"
+
+msgid "Lyricist"
+msgstr "Texter"
+
+msgid "Arranger"
+msgstr "Arrangeur"
+
+msgid "Conductor"
+msgstr "Dirigent"
+
+msgid "Performer"
+msgstr "Interpret"
+
+msgid "Remixer"
+msgstr "Remixer"
+
+msgid "Producer"
+msgstr "Produzent"
+
+msgid "Engineer"
+msgstr "Toningenieur"
+
+msgid "Mixer"
+msgstr "Mixer"
+
+msgid "DJ Mixer"
+msgstr "DJ-Mixer"
+
+msgid "Subtitle"
+msgstr "Untertitel"
+
+msgid "Disc Subtitle"
+msgstr "Untertitel des Datenträgers"
+
+msgid "Grouping"
+msgstr "Gruppierung"
+
+msgid "Work"
+msgstr "Werk"
+
+msgid "Movement"
+msgstr "Satz"
+
+# Labels for the second and third box of a numbered pair: "Track 3 / Total 12".
+msgid "Number"
+msgstr "Nummer"
+
+msgid "Total"
+msgstr "Gesamt"
+
+# Musical key, as in A minor — not a keyboard key or a lookup key.
+msgid "Key"
+msgstr "Tonart"
+
+msgid "Mood"
+msgstr "Stimmung"
+
+msgid "ISRC"
+msgstr "ISRC"
+
+msgid "Copyright"
+msgstr "Copyright"
+
+msgid "Record Label"
+msgstr "Plattenlabel"
+
+msgid "Catalog Number"
+msgstr "Katalognummer"
+
+msgid "Barcode"
+msgstr "Barcode"
+
+# The physical medium a release came out on — CD, vinyl, digital.
+msgid "Media"
+msgstr "Medium"
+
+msgid "Release Type"
+msgstr "Veröffentlichungstyp"
+
+msgid "Release Country"
+msgstr "Veröffentlichungsland"
+
+msgid "Part of a compilation"
+msgstr "Teil einer Kompilation"

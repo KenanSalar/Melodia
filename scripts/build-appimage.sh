@@ -147,9 +147,10 @@ cp "$REPO_ROOT/packaging/com.github.kenansalar.melodia.metainfo.xml" \
 
 # Licences. The AppImage is self-contained — nothing resolves the MetaInfo's
 # `<project_license>` back to a text — so it needs the AGPL itself, and the
-# bundled fonts and the vendored winit fork are all compiled into the binary,
-# which puts their licence text here under Apache-2.0 §4(a) rather than as a
-# courtesy. Same destination the DEB uses. See licenses/ATTRIBUTION.txt.
+# bundled fonts, the vendored winit fork and the crates on copyleft terms are
+# all compiled into the binary, which puts their licence text here under
+# Apache-2.0 §4(a), GPLv3 §4 and MPL-2.0 §3.2 rather than as a courtesy. Same
+# destination the DEB uses. See licenses/ATTRIBUTION.txt.
 mkdir -p "$APPDIR/usr/share/doc/melodia"
 cp "$REPO_ROOT/LICENSE" "$APPDIR/usr/share/doc/melodia/LICENSE"
 cp -r "$REPO_ROOT/licenses" "$APPDIR/usr/share/doc/melodia/licenses"

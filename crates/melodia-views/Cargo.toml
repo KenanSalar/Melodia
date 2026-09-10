@@ -38,8 +38,6 @@ async-compat.workspace = true
 parking_lot.workspace = true
 # Shuffle-all picks its starting row here.
 rand.workspace = true
-# Accent folding for the per-view filter boxes, matching what `tracks_fts` does.
-unicode-normalization.workspace = true
 image.workspace = true
 lru.workspace = true
 material-colors.workspace = true

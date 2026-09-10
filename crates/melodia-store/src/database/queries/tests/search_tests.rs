@@ -205,7 +205,7 @@ async fn a_narrow_retag_reindexes_the_new_fts_columns() -> Result<(), AppError> 
     let db = setup_seeded_db().await?;
 
     sqlx::query(
-        "UPDATE tracks SET genre = ?, year = ?, album_artist = ?, composer = ?
+        "UPDATE tracks SET genre = ?, year = ?, album_artist = ?, credits = ?
          WHERE file_path = ?",
     )
     .bind("Ambient")
@@ -227,7 +227,7 @@ async fn a_narrow_retag_reindexes_the_new_fts_columns() -> Result<(), AppError> 
     assert!(hit(&queries::search::search_all(&db, "Ambient").await?), "new genre");
     assert!(hit(&queries::search::search_all(&db, "1977").await?), "new year");
     assert!(hit(&queries::search::search_all(&db, "Various").await?), "album_artist");
-    assert!(hit(&queries::search::search_all(&db, "Ligeti").await?), "composer");
+    assert!(hit(&queries::search::search_all(&db, "Ligeti").await?), "credits");
     Ok(())
 }
 
@@ -246,7 +246,7 @@ async fn bm25_weights_cover_every_indexed_column() -> Result<(), AppError> {
         "album_artist",
         "album",
         "genre",
-        "composer",
+        "credits",
         "year",
         "file_name",
     ];

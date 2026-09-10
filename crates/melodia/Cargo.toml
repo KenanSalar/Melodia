@@ -38,7 +38,7 @@ section = "sound"
 priority = "optional"
 # Copied verbatim only because it opens with DEP-5 keys (cargo-deb reads the first
 # ten lines); otherwise it prepends a generated header declaring one author and a
-# whole-package AGPL, which the fonts and the vendored winit falsify. Bare string,
+# whole-package AGPL, which the fonts, winit and the four copyleft crates falsify. Bare string,
 # not the `[path, skip-lines]` pair: that is a `Vec<String>`, so a `0` won't parse.
 license-file = "../../packaging/debian-copyright"
 # `$auto` keeps the detected shared-library deps. `policykit-1` is transitional in
@@ -51,7 +51,8 @@ extended-description = """
 Melodia is a modern, local-first desktop music player with a Material
 3-inspired interface. Your music collection lives entirely on your own
 machine, and every online feature is a setting you control: scrobbling,
-Discord presence and internet radio all ship switched off. It pairs a
+Discord presence, internet radio and online lyrics all ship switched
+off. It pairs a
 Slint user interface with a pure-Rust backend: gapless playback via
 Symphonia and cpal (MP3, FLAC, M4A/M4B with AAC and ALAC, Ogg Vorbis,
 WAV, AIFF/AIFF-C, Matroska and CAF), a fast local SQLite library with
@@ -73,9 +74,9 @@ assets = [
     ["../../packaging/com.github.kenansalar.melodia.metainfo.xml", "usr/share/metainfo/com.github.kenansalar.melodia.metainfo.xml", "644"],
     ["../../assets/icons/logo-with-background.svg", "usr/share/icons/hicolor/scalable/apps/melodia.svg", "644"],
     ["../../LICENSE", "usr/share/doc/melodia/LICENSE", "644"],
-    # The fonts and the vendored winit compile into the binary, so this package owes
-    # their licence text. Globbed, so a fourth file needs no edit here, unlike
-    # `wix/main.wxs`, which has to name each one.
+    # The fonts, the vendored winit and the crates on copyleft terms all compile into
+    # the binary, so this package owes their licence text. Globbed, so a new file needs
+    # no edit here, unlike `wix/main.wxs`, which has to name each one.
     ["../../licenses/*", "usr/share/doc/melodia/licenses/", "644"],
     ["../../packaging/melodia-update-helper", "usr/libexec/melodia-update-helper", "755"],
     ["../../packaging/com.github.kenansalar.melodia.update.policy", "usr/share/polkit-1/actions/com.github.kenansalar.melodia.update.policy", "644"],

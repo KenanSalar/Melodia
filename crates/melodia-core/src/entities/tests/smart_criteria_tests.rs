@@ -124,7 +124,12 @@ fn editor_field_array_is_exhaustive_and_unique() {
             | RuleField::AlbumArtist
             | RuleField::Album
             | RuleField::Genre
+            | RuleField::Credits
+            | RuleField::Mood
+            | RuleField::InitialKey
+            | RuleField::Isrc
             | RuleField::Year
+            | RuleField::Bpm
             | RuleField::DurationMs
             | RuleField::PlayCount
             | RuleField::SkipCount

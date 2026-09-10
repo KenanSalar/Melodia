@@ -20,6 +20,12 @@ export global Queue {
     in property <int> current-index: -1;
     // A Slint expression can't iterate a model, so Rust maintains this for the header's label.
     in property <int> selected-count: 0;
+    // The same selection as a batch payload for the row context menu, **deduped by track id and
+    // in display order**. Deliberately not `selected-count`'s length: a queue may hold one track
+    // twice and the shadow keys selection by id, so selecting either instance marks both — an
+    // undeduped list would add that track to a playlist twice. The menu counts rows and acts on
+    // ids, which is why both properties exist.
+    in property <[int]> selected-ids;
     // The close animation outlives `open == false`, so the sheet never gates on `if Queue.open`.
     in-out property <bool> open;
     // -1 when idle, else the play-order index being dragged.
@@ -49,14 +55,30 @@ export global Queue {
     callback clear-queue();
     // Close-side effects, so the sheet can close without coupling to the `open-changed` atomic.
     callback close();
+    // The close triple every dismiss site spells. A `public function` rather than a body on
+    // `close()`: that callback has a single handler slot, which Rust's `on_close` claims, so a
+    // default body here would be installed at construction and then silently replaced.
+    public function dismiss() {
+        self.close();
+        self.open = false;
+        self.clear-selection();
+    }
     // Plain replaces, ctrl toggles, shift extends; the anchor lives in Rust.
     callback toggle-select(int /*idx*/, bool /*ctrl*/, bool /*shift*/);
     callback clear-selection();
     callback select-all();
 
-    // The `Tracks.toggle-row-favorite` contract: Rust persists, flips the in-memory bit on the
-    // matching queue track and on `current_track` when the id matches, then re-emits.
-    callback toggle-row-favorite(int /*id*/, bool /*new*/);
+    // The `Tracks.toggle-row-favorite` contract, batch-shaped like it: Rust persists, flips the
+    // in-memory bit on every matching queue track and on `current_track`, then re-emits. The
+    // hover heart passes one id; the context menu passes the selection.
+    callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+
+    // The row menu's cross-tab entries. Wired in `ui::callbacks::cross_tab_nav` alongside the
+    // nine track-list globals; the sheet dismisses itself before invoking, a navigation with the
+    // queue still up landing behind it.
+    callback go-to-album(int /*album_id*/);
+    callback go-to-artist(int /*artist_id*/);
+    callback go-to-genre(int /*genre_id*/);
 
     callback open-changed(bool);
 }

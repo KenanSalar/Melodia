@@ -1,0 +1,23 @@
+import { Theme } from "../../theme.slint";
+import { Player } from "../../globals/player.slint";
+import { OverlayScrollbar } from "../overlay-scrollbar.slint";
+
+// The Now-Playing column's scrollbar: an `OverlayScrollbar` tinted with the per-artwork accent, so
+// the bar sits *into* the backdrop blur rather than on top of it.
+//
+// The palette is here because all three arms of that column draw the same bar — Up Next, the
+// lyrics sheet and the station panel — and a tint spelled per arm is one the three would come to
+// disagree about, which reads as one column not belonging with the others.
+//
+// `compact` is the miniplayer, which keeps the neutral page treatment: it paints no backdrop for
+// an accent to sit into. Each pair is restated per branch rather than gated, Slint having no way
+// to apply a property conditionally.
+export component NpOverlayScrollbar inherits OverlayScrollbar {
+    in property <bool> compact: false;
+
+    track-color: root.compact ? Theme.surface0 : Player.np-accent-bright;
+    track-opacity: root.compact ? 0.5 : 0.25;
+    track-opacity-active: root.compact ? 0.85 : 0.4;
+    thumb-color: root.compact ? Theme.surface2 : Player.np-accent-dim;
+    thumb-active-color: root.compact ? Theme.accent : Player.np-accent-bright.transparentize(0.2);
+}

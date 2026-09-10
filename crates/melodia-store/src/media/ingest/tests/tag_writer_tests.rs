@@ -17,6 +17,8 @@ use tempfile::TempDir;
 use super::*;
 use crate::media::ingest::metadata::{TagScope, extract_metadata, read_tags};
 use melodia_artwork::media::image::artwork;
+use melodia_core::entities::credits::{CreditRole, ROLES, RoleCredit, RoleCredits};
+use melodia_core::entities::genre::GenreList;
 use melodia_core::error::AppError;
 use melodia_testkit::{ASSETS_DIR, UNBOUNDED};
 
@@ -54,15 +56,19 @@ fn text(tag: &Tag, key: ItemKey) -> Option<String> {
 fn full_edit() -> TagEdit {
     TagEdit {
         title: FieldEdit::Set("New Title".into()),
-        artist: FieldEdit::Set("New Artist".into()),
-        album_artist: FieldEdit::Set("New Album Artist".into()),
+        artist: FieldEdit::Set(ArtistCredit::from_name("New Artist")),
+        album_artist: FieldEdit::Set(ArtistCredit::from_name("New Album Artist")),
         album: FieldEdit::Set("New Album".into()),
-        genre: FieldEdit::Set("Shoegaze".into()),
+        genres: FieldEdit::Set(GenreList::from_name("Shoegaze")),
         year: FieldEdit::Set(2024),
         original_year: FieldEdit::Set(1999),
         track_number: FieldEdit::Set(7),
         disc_number: FieldEdit::Set(2),
-        composer: FieldEdit::Set("New Composer".into()),
+        credits: FieldEdit::Set(RoleCreditEdit::whole(RoleCredits::new(vec![RoleCredit {
+            role: CreditRole::Composer,
+            name: "New Composer".into(),
+            detail: String::new(),
+        }]))),
         comment: FieldEdit::Set("New Comment".into()),
         bpm: FieldEdit::Set(128.0),
         lyrics: FieldEdit::Set("la la la".into()),
@@ -763,5 +769,310 @@ fn aiff_and_aifc_round_trip_a_full_edit_through_id3v2() -> Result<(), AppError> 
         assert_full_edit_landed(&tag)?;
         assert_eq!(text(&tag, ItemKey::IntegerBpm).as_deref(), Some("128"), "{fixture}");
     }
+    Ok(())
+}
+
+// ------------------------------------------- release tags and multi-value fields
+
+/// The six release columns as they sit in the tag, in the order the dialog lists them.
+fn release_texts(tag: &Tag) -> Vec<Option<String>> {
+    [
+        ItemKey::Label,
+        ItemKey::CatalogNumber,
+        ItemKey::Barcode,
+        ItemKey::OriginalMediaType,
+        ItemKey::MusicBrainzReleaseType,
+        ItemKey::ReleaseCountry,
+    ]
+    .into_iter()
+    .map(|key| text(tag, key))
+    .collect()
+}
+
+fn released_tag() -> Tag {
+    let mut tag = Tag::new(TagType::VorbisComments);
+    tag.insert_text(ItemKey::Label, "ECM".into());
+    tag.insert_text(ItemKey::CatalogNumber, "ECM 1064".into());
+    tag.insert_text(ItemKey::Barcode, "042281100420".into());
+    tag.insert_text(ItemKey::OriginalMediaType, "CD".into());
+    tag.insert_text(ItemKey::MusicBrainzReleaseType, "Album".into());
+    tag.insert_text(ItemKey::ReleaseCountry, "DE".into());
+    tag.insert_text(ItemKey::FlagCompilation, "1".into());
+    tag
+}
+
+/// Every release field the dialog offers owes the user a way back to empty — the file half of the
+/// same promise `queries::album::clear_release_tags` keeps on the row.
+#[test]
+fn every_release_field_can_be_cleared_out_of_the_file() {
+    let mut tag = released_tag();
+
+    let unsupported = apply_edit(
+        &mut tag,
+        &TagEdit {
+            label: FieldEdit::Clear,
+            catalog_number: FieldEdit::Clear,
+            barcode: FieldEdit::Clear,
+            media: FieldEdit::Clear,
+            release_type: FieldEdit::Clear,
+            release_country: FieldEdit::Clear,
+            compilation: FieldEdit::Clear,
+            ..TagEdit::default()
+        },
+        None,
+    );
+
+    assert!(unsupported.is_empty());
+    assert_eq!(release_texts(&tag), vec![None; 6]);
+    assert_eq!(text(&tag, ItemKey::FlagCompilation), None);
+}
+
+#[test]
+fn a_release_field_set_lands_under_its_own_key() {
+    let mut tag = Tag::new(TagType::VorbisComments);
+
+    apply_edit(
+        &mut tag,
+        &TagEdit {
+            label: FieldEdit::Set("ECM".into()),
+            catalog_number: FieldEdit::Set("ECM 1064".into()),
+            barcode: FieldEdit::Set("042281100420".into()),
+            media: FieldEdit::Set("CD".into()),
+            release_type: FieldEdit::Set("Album".into()),
+            release_country: FieldEdit::Set("DE".into()),
+            compilation: FieldEdit::Set(true),
+            ..TagEdit::default()
+        },
+        None,
+    );
+
+    assert_eq!(
+        release_texts(&tag),
+        vec![
+            Some("ECM".to_owned()),
+            Some("ECM 1064".to_owned()),
+            Some("042281100420".to_owned()),
+            Some("CD".to_owned()),
+            Some("Album".to_owned()),
+            Some("DE".to_owned()),
+        ]
+    );
+    assert_eq!(text(&tag, ItemKey::FlagCompilation).as_deref(), Some("1"));
+}
+
+/// The switch has no third state, so an un-ticked box arrives as `Set(false)` and has to remove
+/// the tag rather than write a `0` every other reader would take as present.
+#[test]
+fn an_unticked_compilation_switch_removes_the_tag() {
+    let mut tag = released_tag();
+
+    apply_edit(
+        &mut tag,
+        &TagEdit {
+            compilation: FieldEdit::Set(false),
+            ..TagEdit::default()
+        },
+        None,
+    );
+
+    assert_eq!(text(&tag, ItemKey::FlagCompilation), None);
+}
+
+fn artists(tag: &Tag, key: ItemKey) -> Vec<String> {
+    tag.get_strings(key).map(str::to_owned).collect()
+}
+
+/// **A credit of one name writes no list at all.** The list tag's absence is what says "this
+/// string is one artist", so a one-entry list left behind by a credit the user reduced would keep
+/// claiming the opposite — and the next scan would read the reduced credit back as two.
+#[test]
+fn a_credit_reduced_to_one_name_leaves_no_list_behind() {
+    let mut tag = Tag::new(TagType::VorbisComments);
+    apply_edit(
+        &mut tag,
+        &TagEdit {
+            artist: FieldEdit::Set(ArtistCredit::from_tags(
+                "Alice feat. Bob",
+                &["Alice".to_owned(), "Bob".to_owned()],
+            )),
+            ..TagEdit::default()
+        },
+        None,
+    );
+    assert_eq!(artists(&tag, ItemKey::TrackArtists), vec!["Alice", "Bob"]);
+    assert_eq!(text(&tag, ItemKey::TrackArtist).as_deref(), Some("Alice feat. Bob"));
+
+    apply_edit(
+        &mut tag,
+        &TagEdit {
+            artist: FieldEdit::Set(ArtistCredit::from_name("Alice")),
+            ..TagEdit::default()
+        },
+        None,
+    );
+
+    assert!(artists(&tag, ItemKey::TrackArtists).is_empty());
+    assert_eq!(text(&tag, ItemKey::TrackArtist).as_deref(), Some("Alice"));
+}
+
+#[test]
+fn a_cleared_credit_takes_both_of_its_keys() {
+    let mut tag = Tag::new(TagType::VorbisComments);
+    tag.insert_text(ItemKey::AlbumArtist, "Alice & Bob".into());
+    tag.insert_text(ItemKey::AlbumArtists, "Alice".into());
+
+    apply_edit(
+        &mut tag,
+        &TagEdit {
+            album_artist: FieldEdit::Clear,
+            ..TagEdit::default()
+        },
+        None,
+    );
+
+    assert_eq!(text(&tag, ItemKey::AlbumArtist), None);
+    assert!(artists(&tag, ItemKey::AlbumArtists).is_empty());
+}
+
+/// One value per name, which is the multi-value form every reader understands — never the
+/// `"; "`-joined single value other taggers write and `metadata::read_genres` merely tolerates.
+#[test]
+fn a_second_genre_is_written_as_a_second_value() {
+    let mut tag = Tag::new(TagType::VorbisComments);
+
+    apply_edit(
+        &mut tag,
+        &TagEdit {
+            genres: FieldEdit::Set(GenreList::new(vec!["Rock".to_owned(), "Metal".to_owned()])),
+            ..TagEdit::default()
+        },
+        None,
+    );
+
+    assert_eq!(artists(&tag, ItemKey::Genre), vec!["Rock", "Metal"]);
+}
+
+/// A performer's instrument travels inside the value, so the write and the read have to agree
+/// about where the name ends.
+#[test]
+fn a_performers_instrument_survives_the_write() {
+    let mut tag = Tag::new(TagType::VorbisComments);
+
+    apply_edit(
+        &mut tag,
+        &TagEdit {
+            credits: FieldEdit::Set(RoleCreditEdit::whole(RoleCredits::new(vec![RoleCredit {
+                role: CreditRole::Performer,
+                name: "Alice Monroe".into(),
+                detail: "cello".into(),
+            }]))),
+            ..TagEdit::default()
+        },
+        None,
+    );
+
+    assert_eq!(text(&tag, ItemKey::Performer).as_deref(), Some("Alice Monroe (cello)"));
+}
+
+/// **Every key goes before one is written.** `release_timestamp` prefers `ReleaseDate`, so a file
+/// carrying both that and `RecordingDate` would otherwise read back the year the edit never
+/// touched — the edit landing under a key nothing reads first.
+#[test]
+fn a_year_edit_leaves_no_earlier_key_to_be_read_instead() {
+    let mut tag = Tag::new(TagType::VorbisComments);
+    tag.insert_text(ItemKey::ReleaseDate, "1959".into());
+    tag.insert_text(ItemKey::RecordingDate, "1958".into());
+
+    apply_edit(
+        &mut tag,
+        &TagEdit {
+            year: FieldEdit::Set(2024),
+            ..TagEdit::default()
+        },
+        None,
+    );
+
+    assert_eq!(text(&tag, ItemKey::ReleaseDate), None);
+    assert_eq!(text(&tag, ItemKey::RecordingDate).as_deref(), Some("2024"));
+}
+
+/// What an MP3 actually keeps of a role credit.
+///
+/// The read and write halves of the `ID3v2` mapping are not the same set — `TIPL` reaches the
+/// generic tag on the way *in* and there is no key to put it back through — so six of the ten are
+/// reported and dropped rather than written. Only a real file settles which, and a user losing a
+/// producer credit silently is the thing the report exists to prevent.
+#[test]
+fn mp3_reports_the_roles_it_has_no_key_to_write() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let audio = stage(&tmp, "silence.mp3")?;
+
+    let every_role: Vec<RoleCredit> = ROLES
+        .into_iter()
+        .map(|role| RoleCredit {
+            role,
+            name: "Alice".into(),
+            detail: String::new(),
+        })
+        .collect();
+
+    let unsupported = apply_to_file(
+        &audio,
+        &TagEdit {
+            credits: FieldEdit::Set(RoleCreditEdit::whole(RoleCredits::new(every_role))),
+            ..TagEdit::default()
+        },
+        None,
+    )?;
+
+    // Sorted, since `ROLES` order is the list's own presentation choice and free to change.
+    let mut reported = unsupported.0.clone();
+    reported.sort_unstable();
+    assert_eq!(
+        reported,
+        [
+            "arranger",
+            "dj_mixer",
+            "engineer",
+            "mixer",
+            "performer",
+            "producer"
+        ]
+    );
+
+    let tag = read_primary(&audio)?;
+    assert_eq!(text(&tag, ItemKey::Composer).as_deref(), Some("Alice"));
+    assert_eq!(text(&tag, ItemKey::Conductor).as_deref(), Some("Alice"));
+    assert_eq!(text(&tag, ItemKey::Producer), None, "reported, and genuinely not stored");
+    Ok(())
+}
+
+/// FLAC is the format with no holes at all, which is what makes the `ID3v2` set above a property
+/// of that format rather than of the writer.
+#[test]
+fn flac_writes_every_role_there_is() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let audio = stage(&tmp, "silence.flac")?;
+
+    let every_role: Vec<RoleCredit> = ROLES
+        .into_iter()
+        .map(|role| RoleCredit {
+            role,
+            name: "Alice".into(),
+            detail: String::new(),
+        })
+        .collect();
+
+    let unsupported = apply_to_file(
+        &audio,
+        &TagEdit {
+            credits: FieldEdit::Set(RoleCreditEdit::whole(RoleCredits::new(every_role))),
+            ..TagEdit::default()
+        },
+        None,
+    )?;
+
+    assert!(unsupported.is_empty(), "{:?}", unsupported.0);
+    assert_eq!(text(&read_primary(&audio)?, ItemKey::Performer).as_deref(), Some("Alice"));
     Ok(())
 }

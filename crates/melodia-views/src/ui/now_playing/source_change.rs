@@ -118,6 +118,14 @@ pub(super) async fn apply_source_change(
     let artwork_path = source.as_ref().and_then(|s| s.artwork_path.clone());
     let is_station = matches!(key, Some(SourceKey::Station(_)));
 
+    // **Kicked rather than awaited, and ahead of both reads rather than past the guard below.**
+    // The lookup reaches a file and then a socket, so awaited here it put the cover, the title and
+    // the backdrop behind a request that can time out, leaving this view painting the previous
+    // track for as long as the directory takes to refuse. The hook reads the source cell every
+    // caller here has already written, takes its own claim before its first `.await` and drops its
+    // result if a newer song took that claim, which is the guard below one layer in.
+    np_state.lyrics.kick();
+
     let meta = fetch_track_meta(state, track.as_ref()).await;
     let (cover, blurred, sample) = decode_artwork_for(state, np_artwork, artwork_path).await;
 

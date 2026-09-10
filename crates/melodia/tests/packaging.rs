@@ -202,9 +202,10 @@ fn every_package_format_ships_the_licenses_dir() {
     );
     assert!(
         missing.is_empty(),
-        "{missing:?} no longer ship licenses/ — the fonts and the vendored winit fork are \
-         compiled into the binary, so every format that ships the binary redistributes \
-         them. If the spelling changed rather than the behaviour, update LICENSE_SHIPPERS."
+        "{missing:?} no longer ship licenses/ — the fonts, the vendored winit fork and the \
+         crates on copyleft terms are compiled into the binary, so every format that ships \
+         the binary redistributes them. If the spelling changed rather than the behaviour, \
+         update LICENSE_SHIPPERS."
     );
 }
 
@@ -353,7 +354,7 @@ fn strip_xml_comments(src: &str) -> String {
 
 /// The sibling above catches `main.wxs` dropping `licenses/` altogether. This catches one file
 /// going missing from it, which is the likelier half and the one no reviewer here can see: the
-/// other four formats glob the directory, so a fourth licence text ships in all of them for free
+/// other four formats glob the directory, so a new licence text ships in all of them for free
 /// and is absent from exactly the format no Linux runner can build.
 ///
 /// A walk rather than a list, which is [`every_bundled_font_is_named_in_the_attribution`]'s call
@@ -457,12 +458,28 @@ fn as_dep5_field_body(text: &str) -> String {
 /// `usr/share/doc/melodia/copyright` is the first thing a Debian packager reads, and cargo-deb
 /// generates it from `license` + `authors` unless handed a file that already opens with DEP-5
 /// keys — which is to say the default states the whole package is AGPL-3.0-or-later by one author,
-/// and the bundled fonts and the vendored winit both falsify that.
+/// and the bundled fonts, the vendored winit fork and the crates on copyleft terms all falsify
+/// that.
 ///
 /// Debian Policy 12.5 lets a package *reference* `/usr/share/common-licenses` only for the
-/// licences shipped there. Apache-2.0 is one; AGPL-3 and OFL-1.1 are not, so both are quoted in
-/// full — and a quoted licence is a second copy that can drift from the one the package actually
-/// ships. This re-derives both from their sources rather than trusting the copy.
+/// licences shipped there. Apache-2.0, GPL-3 and MPL-2.0 are; AGPL-3 and OFL-1.1 are not, so those
+/// two are quoted in full — and a quoted licence is a second copy that can drift from the one the
+/// package actually ships. This re-derives both from their sources rather than trusting the copy,
+/// and holds all three references: a deleted one leaves the file silent about terms the binary
+/// carries, which is the same failure as a missing quote and looks like nothing at all.
+///
+/// Two structural checks ride along, because the file's failures are all of one kind — it keeps
+/// saying something, just not the true thing, so nothing looks broken.
+///
+/// **`licenses/` may not fall through to `Files: *`.** Those texts are the FSF's, the ASF's,
+/// Mozilla's, SIL's and the Vazirmatn authors', reproduced because their own licences require it;
+/// swept into the catch-all they are declared AGPL by this package's author, which is the Ko-fi
+/// stanza's argument over four more files. Nothing about `GPL-3.0.txt` changes when the package
+/// starts claiming it, so a diff of the texts cannot show this.
+///
+/// **And every short name a stanza uses has to be defined.** DEP-5 resolves a `License:` field
+/// against a standalone paragraph of the same name; without one the stanza names a licence the
+/// file never states, which is a package whose copyright is unreadable rather than merely terse.
 ///
 /// `LICENSE` compiles nothing and must still stay off `pr-validation.yml`'s skip denylist: a PR
 /// touching only that file would skip `test`, and the gate counts `skipped` as a pass.
@@ -499,28 +516,177 @@ fn the_debian_copyright_quotes_the_licences_it_ships() {
         );
     }
 
+    for (licence, reference) in [
+        ("Apache-2.0", "/usr/share/common-licenses/Apache-2.0"),
+        ("GPL-3", "/usr/share/common-licenses/GPL-3"),
+        ("MPL-2.0", "/usr/share/common-licenses/MPL-2.0"),
+    ] {
+        assert!(
+            copyright.contains(reference),
+            "{licence} is in Debian's common-licenses, so Policy 12.5 wants a reference to it \
+             rather than another quoted copy — and dropping the reference leaves the file saying \
+             nothing about a licence the binary is carrying"
+        );
+    }
+
+    // The glob and the one file inside it that really is ours, which has to stay carved back out.
+    let patterns = dep5_file_patterns(&copyright);
+    let glob_at = patterns.iter().position(|found| *found == "licenses/*");
+    let carve_out_at = patterns.iter().position(|found| *found == "licenses/ATTRIBUTION.txt");
+
     assert!(
-        copyright.contains("/usr/share/common-licenses/Apache-2.0"),
-        "Apache-2.0 is in Debian's common-licenses, so Policy 12.5 wants a reference to it \
-         rather than a third quoted copy"
+        glob_at.is_some(),
+        "no `Files:` stanza names `licenses/*`, so the reproduced texts fall through to \
+         `Files: *` and the package declares other organisations' licences AGPL by its own \
+         author. Patterns found: {patterns:?}"
+    );
+    assert!(
+        carve_out_at.is_some(),
+        "no `Files:` stanza names `licenses/ATTRIBUTION.txt`, so our own attribution file is \
+         taken by the glob above it and declared somebody else's verbatim text, which is the \
+         carve-out inverted rather than merely absent. Patterns found: {patterns:?}"
+    );
+    // DEP-5 applies the *last* matching stanza, so the order is the whole of what makes the
+    // carve-out one: above the glob it is a line that reads as an exception and does nothing.
+    assert!(
+        glob_at < carve_out_at,
+        "`licenses/ATTRIBUTION.txt` is named above `licenses/*`, so the glob below it wins and \
+         the carve-out is dead. Move its stanza back under the globbed one"
+    );
+
+    let mut named: Vec<&str> = copyright
+        .lines()
+        .filter_map(|line| line.strip_prefix("License: "))
+        .map(str::trim)
+        .collect();
+    named.sort_unstable();
+    named.dedup();
+    // A standalone paragraph is the only `License:` line an indented body follows; the one inside
+    // a `Files:` stanza is followed by `Comment:` or by the blank line ending it.
+    let undefined: Vec<&str> = named
+        .into_iter()
+        .filter(|name| !copyright.contains(&format!("\nLicense: {name}\n ")))
+        .collect();
+    assert!(
+        undefined.is_empty(),
+        "{undefined:?} are named by a stanza with no standalone `License:` paragraph defining \
+         them, so the copyright file points at terms it never states"
     );
 }
 
+/// Every path pattern any `Files:` stanza names, continuation lines included.
+///
+/// A parse rather than a `contains`, because the two shapes a pattern can take — first on the
+/// `Files:` line, or on an indented continuation under it — are what a needle would have to
+/// guess between, and the wrong guess passes.
+fn dep5_file_patterns(copyright: &str) -> Vec<&str> {
+    let mut patterns = Vec::new();
+    let mut in_files = false;
+
+    for line in copyright.lines() {
+        if let Some(rest) = line.strip_prefix("Files:") {
+            in_files = true;
+            patterns.extend(rest.split_whitespace());
+        } else if in_files && line.starts_with(' ') {
+            patterns.extend(line.split_whitespace());
+        } else {
+            in_files = false;
+        }
+    }
+    patterns
+}
+
 /// A truncated or placeholder copy satisfies every path check above while delivering nothing, and
-/// the two texts are large enough that no reviewer diffs them against upstream. One phrase apiece,
+/// the texts are large enough that no reviewer diffs them against upstream. One phrase apiece,
 /// from deep enough in each to require the body rather than the header.
+///
+/// **A walk against a table, not a list of names**, which is [`the_msi_names_every_licence_file`]'s
+/// call for its reason: the set of licence texts is open, it grew by two when the first copyleft
+/// crate landed, and an addition to an open set is exactly what a fixed list walks past. So the
+/// table is held from both sides — a shipped file with no phrase fails, and a phrase naming a file
+/// that no longer ships fails too, an entry that has stopped matching being a hole that reads as
+/// coverage.
+///
+/// `ATTRIBUTION.txt` is the one exemption: ours rather than an upstream text, and pinned by
+/// [`every_bundled_font_is_named_in_the_attribution`] instead.
 #[test]
 fn the_bundled_licence_texts_are_the_real_ones() {
-    let root = Path::new(REPO_ROOT);
-    for (file, phrase) in [
-        ("licenses/Vazirmatn-OFL-1.1.txt", "SIL OPEN FONT LICENSE Version 1.1"),
-        ("licenses/Apache-2.0.txt", "TERMS AND CONDITIONS FOR USE"),
-    ] {
-        let src = std::fs::read_to_string(root.join(file)).unwrap_or_default();
+    /// Our own file, so there is no upstream copy for a phrase to authenticate it against.
+    const NOT_A_LICENCE: &str = "ATTRIBUTION.txt";
+
+    /// One phrase per shipped text, from deep enough in the body that a header alone will not do.
+    const PHRASES: [(&str, &str); 4] = [
+        ("Vazirmatn-OFL-1.1.txt", "SIL OPEN FONT LICENSE Version 1.1"),
+        ("Apache-2.0.txt", "TERMS AND CONDITIONS FOR USE"),
+        ("GPL-3.0.txt", "Automatic Licensing of Downstream Recipients"),
+        ("MPL-2.0.txt", "3.3. Distribution of a Larger Work"),
+    ];
+
+    let dir = Path::new(REPO_ROOT).join("licenses");
+    let (mut shipped, mut unreadable, mut nested) = (Vec::new(), Vec::new(), Vec::new());
+    match std::fs::read_dir(&dir) {
+        Ok(entries) => {
+            for entry in entries {
+                match entry {
+                    Ok(entry) if !entry.path().is_file() => {
+                        nested.push(entry.file_name().to_string_lossy().into_owned());
+                    }
+                    Ok(entry) => shipped.push(entry.file_name().to_string_lossy().into_owned()),
+                    Err(e) => unreadable.push(e.to_string()),
+                }
+            }
+        }
+        Err(e) => unreadable.push(e.to_string()),
+    }
+
+    // Collected rather than skipped: a path that will not read is indistinguishable from a
+    // directory holding nothing, and one of those passes every assertion below.
+    assert!(unreadable.is_empty(), "licenses/ would not list: {unreadable:?}");
+    // Its own answer rather than an unreadable path, being a layout rule and not a failure:
+    // `build-appimage.sh` and `build-tarball.sh` both ship this tree with `cp -r`, so a text one
+    // level down reaches users while this walk and the MSI's read one level and go on passing.
+    assert!(
+        nested.is_empty(),
+        "{nested:?} sit under licenses/ without being files, so their contents reach users \
+         through the formats that copy the tree recursively and are checked by neither walk \
+         over it. Flatten them, or teach both walks to recurse"
+    );
+    assert!(
+        !shipped.is_empty(),
+        "licenses/ listed no files — a walk that finds nothing satisfies every check below \
+         without opening a single text"
+    );
+
+    let tabled: Vec<&str> = PHRASES.iter().map(|(file, _)| *file).collect();
+
+    let untabled: Vec<&str> = shipped
+        .iter()
+        .map(String::as_str)
+        .filter(|name| *name != NOT_A_LICENCE && !tabled.contains(name))
+        .collect();
+    assert!(
+        untabled.is_empty(),
+        "{untabled:?} ship in every package format with nothing here proving they are the \
+         licence text they claim to be — add a phrase from deep in each body to PHRASES"
+    );
+
+    let stale: Vec<&str> = tabled
+        .iter()
+        .copied()
+        .filter(|file| !shipped.iter().any(|name| name.as_str() == *file))
+        .collect();
+    assert!(
+        stale.is_empty(),
+        "{stale:?} are named in PHRASES but no longer ship, so those entries are checking \
+         nothing and read as though they were"
+    );
+
+    for (file, phrase) in PHRASES {
+        let src = std::fs::read_to_string(dir.join(file)).unwrap_or_default();
         assert!(
             src.contains(phrase),
-            "{file} does not contain {phrase:?} — missing, truncated, or not the licence \
-             text it claims to be"
+            "licenses/{file} does not contain {phrase:?} — missing, truncated, or not the \
+             licence text it claims to be"
         );
     }
 }

@@ -13,6 +13,7 @@ pub mod discord_presence;
 pub mod file_event_processor;
 pub mod first_launch;
 pub mod heap_trim;
+pub mod lyrics_cache;
 pub mod material_you;
 pub mod mbid_backfill;
 pub mod one_shot;
@@ -26,6 +27,7 @@ pub mod retroactive_hash;
 pub mod rss_sampler;
 pub mod scrobble;
 pub mod spawner;
+pub mod tag_backfill;
 pub mod updater_daily;
 
 pub use spawner::TaskSpawner;

@@ -1,0 +1,155 @@
+import { LyricRow } from "../models.slint";
+
+// What the lyrics panel is showing, and why.
+//
+// A state rather than a handful of bools: they are mutually exclusive, and a set of flags can
+// spell combinations none of them means. Rust owns every property here but the two the lyrics
+// menu writes directly, `shown` and `romanization-shown`, so each swaps on the click rather than
+// after a round trip.
+export enum LyricsState {
+    // The online lookup is off and nothing local answered. The one state whose copy names a
+    // setting, since it is the only one the user can do something about from here.
+    off,
+    // Nothing is playing.
+    idle,
+    // A lookup is out.
+    loading,
+    // `rows` is worth drawing.
+    ready,
+    // Asked, and nobody has a sheet.
+    missing,
+    // The directory says this recording has no words. A different sentence from `missing`, and it
+    // is never retried.
+    instrumental,
+    // The directory could not be asked, or refused. Not a fact about the track, so nothing is
+    // cached and the menu's Refresh is what tries again.
+    unavailable,
+}
+
+export global Lyrics {
+    // **The sheet's own type scale, and Rust reads every one of these from here.** The panel
+    // multiplies each height by the row's line count and Rust multiplies it by the same to build
+    // the offset table it follows the song with, so the two cannot disagree about where a line
+    // sits; the sizes are what its wrap estimate measures against. Spelled once rather than twice
+    // because a drift here is a scroll that is subtly, increasingly wrong down a long sheet.
+    //
+    // A step above the rest of the column on purpose. This is the one panel a reader looks *at*
+    // rather than glances over, and it has the column to itself.
+    //
+    // **Every line height below is a floor rather than a preference.** An elided line past its
+    // box is dropped rather than clipped, so a part whose box is shorter than the line the
+    // renderer actually sets draws *nothing*. Each has to clear the tallest face a lyric can
+    // reach it with, which is CJK at about 1.45× its size.
+    out property <length> font-size: 16px;
+    out property <length> line-height: 28px;
+
+    // How the line sounds, for a script the reader cannot sound out. A step under the words and a
+    // step over the gloss, which is the order the three are read in: this one is sung along to
+    // while the line plays, where a translation is glanced at.
+    out property <length> romanization-font-size: 14px;
+    out property <length> romanization-line-height: 22px;
+
+    // The gloss a bilingual sheet carries under a line.
+    out property <length> translation-font-size: 13px;
+    out property <length> translation-line-height: 20px;
+
+    // **The gaps are the whole of what groups a line with the two under it**, and both inner ones
+    // have to stay clearly under half the last or the sheet reads as one column of evenly-spaced
+    // lines with no telling which belongs to which. Proximity is doing the work here, not the size
+    // step: a reader pairs by distance before they pair by weight, and a row of three needs that
+    // more than a row of two did.
+    //
+    // **They are the *drawn* gap's smaller half.** Each part is centred in a box tall enough for
+    // the tallest face, so the leading either side of the words already separates them by several
+    // pixels before these are added, and reading them as the whole distance sets all three too
+    // far apart.
+    out property <length> romanization-gap: 2px;
+    out property <length> translation-gap: 2px;
+    out property <length> row-gap: 12px;
+
+    // Breathing room inside a row, so the hover fill is a band around the words rather than a box
+    // flush against them. The horizontal half comes off the width the panel reports, so Rust's
+    // wrap estimate measures the room the text actually has.
+    //
+    // **The vertical half is not decoration**: CJK sets its ink close under the line-box top, so
+    // without it the words touch the fill's own edge on exactly the sheets this panel exists for.
+    out property <length> row-pad-x: 8px;
+    out property <length> row-pad-y: 6px;
+
+    in property <[LyricRow]> rows;
+    in property <LyricsState> state: LyricsState.idle;
+    // Whether `rows` carries timings, so the panel knows to follow rather than only print.
+    in property <bool> synced;
+
+    // Which row is being sung, and where it sits. **All three are Rust's**, computed off one
+    // cumulative offset table it can only keep because it also chose each row's `line_count`.
+    // `-1` is "no line yet", which is every plain sheet and the run-in before the first stamp.
+    in property <int> active-index: -1;
+    in property <length> active-offset;
+    in property <length> active-height;
+
+    // How far through the active row's gap the song is, for its notes to fill against. **One
+    // property rather than a field on every row**: only one gap can be running, and a per-row float
+    // would rewrite the whole model on every tick of a solo. Zero on a row of words, which have
+    // nothing to fill, so the rows ahead and behind read it off `active-index` instead.
+    in property <float> interlude-progress;
+
+    // Whether the Now Playing column shows this instead of Up Next. Written from the column's own
+    // menu and persisted by Rust, the `Visualizer.enabled` shape.
+    in-out property <bool> shown;
+    callback set-shown(bool);
+
+    // Whether the romanization line is drawn. **A display filter and nothing more**: Rust fills it
+    // whatever this says, so a flip re-lays the sheet it already holds rather than resolving one.
+    //
+    // Two writers, this menu and the Settings card, which is why the answer lives in one
+    // `SharedFlag` on `AppState` rather than in whichever of them wrote last.
+    in-out property <bool> romanization-shown;
+    callback set-romanization-shown(bool);
+
+    // Whether the panel may ask the directory. The Settings card's switch, mirrored here for the
+    // romanization one's reason and one of its own: `LyricsState.off` is the panel telling the
+    // reader a setting is why it is empty, and the row this feeds is that sentence's button.
+    in-out property <bool> online-enabled;
+    callback set-online-enabled(bool);
+
+    // Forget what the directory said about this track and resolve it again, for a sheet matched
+    // off tags the user has since corrected. Rust's, and it touches only the cache: a sidecar and
+    // a lyrics tag are the user's own files.
+    callback refresh();
+    // Write the sheet on screen into the track's own lyrics tag.
+    callback save-to-tag();
+
+    // Whether the sheet on screen is worth writing into the file, which is true of every source
+    // but the file's own tag. **Rust's, off the sheet it resolved**: nothing the menu can read
+    // tells it where a sheet came from, and `state` is the same `ready` either way. There is no
+    // sibling for the refresh row, which asks only whether a track is up — `state` answers that.
+    in property <bool> can-save-to-tag;
+
+    // Which row the pointer is over, or `-1`. Rust's, off the same offset table the click below
+    // resolves against, so the row that lights up is the row a click would seek.
+    in property <int> hover-index: -1;
+    callback hover-at(length);
+
+    // Somewhere in the sheet was clicked, in logical pixels down the scrolled content.
+    //
+    // **A point rather than a row index, because the panel draws one `TouchArea` for the whole
+    // sheet rather than one per line.** Which row that lands in is a question the offset table
+    // Rust already keeps answers exactly, so a per-row area would be a second answer to it — and
+    // three elements a row rather than four, over a sheet nothing virtualizes.
+    callback seek-at(length);
+
+    // Drives the sung line between position ticks, which arrive about once a second. Fired by the
+    // panel's own `Timer` so it dies with the panel.
+    callback tick();
+
+    // How wide the panel draws, in logical pixels, so Rust can estimate how many lines each row
+    // wraps to.
+    //
+    // **Polled from that same `Timer` rather than watched.** A `changed` handler on a layout
+    // property is the tracker this panel must not carry, and the width has to survive a window
+    // resize, so the timer reports it on both its cadences and Rust ignores a repeat. Being wrong
+    // costs wrap quality and nothing else: the panel draws whatever `line_count` Rust decided, so
+    // the offset table cannot disagree with the layout however bad the guess.
+    callback report-width(length);
+}

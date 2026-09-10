@@ -28,6 +28,11 @@ silently miss the other.
   half of a side**: the `x`/`y` ternaries fall through to the *centred* arm, so a new `side`
   without its own arm puts the pill on the host and looks deliberate.
 
+- **A host at the panel's own edge aligns its pill rather than centring it** — `align-end`, reached
+  through `IconButton.tooltip-align-end`, pins the pill's trailing edge to the host's, the centred
+  arm's overhang having nothing to hang over there. Both Now-Playing view toggles take it, and what
+  decides is a translated label: the English one fits and says nothing about the six that follow.
+
 - **Two mount shapes.** In-tree is the default. **Top-layer** is for hosts whose pill lands where
   Slint paints later (bands, header strips): `components/tooltip-frame.slint`'s `TooltipFrame`,
   declared *after* the occluder, tracking the host via `absolute-position` deltas the host spells
@@ -403,6 +408,18 @@ silently miss the other.
 
 ### Lists and playback
 
+- **The row right-click menu is `components/track-list/track-context-menu.slint`, and the only
+  place its entries are spelled.** Two hosts, `TrackListRowItem` and the queue sheet's
+  `QueueRowItem`. It owns the entries, the `multi-active` gate (this row selected *and* more than
+  one selected, so a right-click on an unselected row falls back to that row alone) and the
+  `effective-ids` every handler reads; the host keeps the pointer position, the right-click
+  snapshot and the highlight key, which is what lets the two key their watchers off different id
+  spaces. **`view-context` is most of what a host configures** — it suppresses the entry naming
+  the surface you are already on and picks the remove arm, and `"queue"` drops Play Next and Add
+  to Queue outright, the queue being what they name. A remove label handed over by the host would
+  ship untranslated, `@tr` resolving literals at codegen, so a third list's arm is one more `if`
+  here rather than a property.
+
 - **`play-row` replaces the queue with the view; there is no single-track play path, and no
   Play-All pill.** Every row activation resolves the view's *displayed* ids and hands them to
   `player_play_tracks(ids, start)`. The eight Play All pills made that same call pinned to
@@ -434,6 +451,18 @@ silently miss the other.
   own edge the moment it hits the `below-sv.visible-height` cap. A composite host owes the lane a
   second time as a term in that cap's content-fit arm, which hand-sums rows + header + spacing.
   Search's songs section is the one opt-out, its bar being a layout sibling with a slot already.
+
+- **The Now Playing right column is one column with three arms, not a place two things share.**
+  Up Next, the lyrics panel and the station panel, swapped on `Player.vm.has_station` and
+  `Lyrics.shown`; a station keeps its panel whatever the toggle says, and the toggle's own control
+  is gone rather than disabled there, a stream having no track to look a sheet up for.
+  **Don't answer a fourth thing with a fourth column.** `content-width` is what the chip wrap, the
+  strip width and the cover slot all derive from, so another region reflows the artwork column
+  every time a track without lyrics comes on, which is the worst property a panel can have when
+  availability is data rather than intent. The lyrics arm sizes its rows in Rust and reads its
+  whole type scale off the `Lyrics` global, both halves argued at those two anchors: neither number
+  is one to redefine at a call site. One `TouchArea` covers that sheet, so there is no per-row
+  `has-hover` to reach for.
 
 ### Dialogs, pickers, toasts
 
@@ -682,7 +711,10 @@ silently miss the other.
 
 - **PopupWindow auto-dismiss on OS focus loss** — `FocusLossWatcher`, mounted inside
   `if popup-is-open` so only the open popup has a live watcher. Singletons gate on
-  `PopupHighlight.id`, the per-row context menu on `row-ctx-id == row-data.id`. Slint 1.16 has no
+  `PopupHighlight.id`; the row context menu gates on the `ctx-key == live-ctx-key` pair its host
+  hands it, **over two key spaces that may not be merged** — a track id for a track list, a
+  play-order index for the queue sheet, since a queue may hold one track twice where a list
+  cannot and an id there would arm two rows' watchers on the one open popup. Slint 1.16 has no
   `closed` callback, but `pop.close()` is a safe no-op when hidden.
 
 - **Native dialogs (rfd) — always through `ui::file_dialog::parented(&weak, title)`.** The helper

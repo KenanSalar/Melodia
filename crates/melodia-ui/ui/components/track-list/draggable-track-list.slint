@@ -1,5 +1,6 @@
 import { ListView, ScrollView } from "std-widgets.slint";
 import { Theme } from "../../theme.slint";
+import { ListTravel } from "../../globals/list-travel.slint";
 import { TrackListRow } from "../../models.slint";
 import { TrackListHeader } from "track-list-header.slint";
 import { TrackListRowItem } from "track-list-row.slint";
@@ -88,6 +89,10 @@ export component DraggableTrackList inherits Rectangle {
                 - root.drop-line-h / 2,
         ),
     );
+
+    pure function in-travel(y: length) -> length {
+        return ListTravel.pin(y, inner-list.visible-height, inner-list.viewport-height);
+    }
 
     callback request-sort(string /*field*/);
     callback play-row(int /*track_id*/, int /*index*/);
@@ -234,12 +239,8 @@ export component DraggableTrackList inherits Rectangle {
                         if (root.drag-source >= 0
                             && (root.drag-src-screen-y - dy) > -root.row-height
                             && (root.drag-src-screen-y - dy) < inner-list.visible-height) {
-                            // Both capped at 0, so a list shorter than its
-                            // viewport lands on 0px rather than over-scrolled.
-                            inner-list.viewport-y = max(
-                                min(0px, inner-list.visible-height - inner-list.viewport-height),
-                                min(0px, inner-list.viewport-y - dy),
-                            );
+                            inner-list.viewport-y =
+                                root.in-travel(inner-list.viewport-y - dy);
                         }
                     }
                 }

@@ -121,7 +121,7 @@ export component OverflowMenu inherits Rectangle {
         width: root.left-col-w + root.gap + self.menu-w;
         height: max(root.menu-h, max(root.flyout-h, root.sleep-flyout-h));
         x: btn.width - self.width;
-        y: -self.height - 8px;
+        y: -self.height - Theme.popup-gap;
         close-policy: close-on-click-outside;
 
         // Mirrors the volume popup's left-strip catcher.

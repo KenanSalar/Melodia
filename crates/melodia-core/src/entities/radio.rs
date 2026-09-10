@@ -76,6 +76,11 @@ pub struct RadioStation {
 
 /// A value that is empty rather than absent reads as absent: the directory serves `""` about as
 /// readily as it omits a field, and a caller asking "is there one" means the same by both.
+///
+/// **Not [`crate::utils::text::filled`], which trims first.** The two differ on a field that is
+/// whitespace and nothing else, and [`RadioStation::can_override`] is where that is observable:
+/// it offers an editor exactly where the directory said nothing, so trimming here would open one
+/// over a value the directory did send.
 fn filled(value: Option<&str>) -> Option<&str> {
     value.filter(|text| !text.is_empty())
 }

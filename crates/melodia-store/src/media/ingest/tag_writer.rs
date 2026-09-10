@@ -34,13 +34,15 @@ use std::path::Path;
 use lofty::config::WriteOptions;
 use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::picture::{Picture, PictureType};
-use lofty::prelude::{Accessor, ItemKey};
+use lofty::prelude::ItemKey;
 use lofty::tag::items::Timestamp;
 use lofty::tag::{ItemValue, Tag, TagItem, TagType};
 
-use super::{metadata, rating_tags};
+use super::{metadata, rating_tags, role_tags};
 use melodia_artwork::media::image::image_decode;
-use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
+use melodia_core::entities::artist::ArtistCredit;
+use melodia_core::entities::genre::GenreList;
+use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, RoleCreditEdit, TagEdit};
 use melodia_core::error::AppError;
 
 /// Upper bound for a written BPM. Anything past this is a typo, not a tempo, and a tag holding a
@@ -63,11 +65,12 @@ impl UnsupportedFields {
 
 /// Write one text item, recording the field name when the key doesn't map.
 ///
-/// **Every write goes through here**, because [`Tag::insert_text`] silently drops an item whose
-/// `ItemKey` has no mapping for the target `TagType` and says so only in its return — the bool
-/// that makes the BPM and lyrics fallbacks below expressible. It is also why the [`Accessor`]
-/// setters are unused: they throw that bool away, and their default bodies are empty no-ops, so a
-/// non-overriding impl would discard the whole write.
+/// **Every single-valued write goes through here** ([`set_texts`] is the multi-valued sibling),
+/// because [`Tag::insert_text`] silently drops an item whose `ItemKey` has no mapping for the
+/// target `TagType` and says so only in its return — the bool that makes the BPM and lyrics
+/// fallbacks below expressible. It is also why the `Accessor` setters are unused: they throw
+/// that bool away, and their default bodies are empty no-ops, so a non-overriding impl would
+/// discard the whole write.
 fn set_text(
     tag: &mut Tag,
     key: ItemKey,
@@ -78,6 +81,21 @@ fn set_text(
     if !tag.insert_text(key, value) {
         out.push(field);
     }
+}
+
+/// Replace every value under `key`, which [`Tag::insert_text`] cannot do — it keeps exactly one.
+///
+/// [`Tag::push`] appends instead, so the existing values are cleared first. Reports through its
+/// return rather than `out` because its one caller writes two keys and owes the field name once.
+fn set_texts(tag: &mut Tag, key: ItemKey, values: impl IntoIterator<Item = String>) -> bool {
+    tag.remove_key(key);
+    // `&=` rather than a short-circuit: whether the key maps is a property of the key, so the
+    // first refusal is every refusal, and stopping there would only make that less obvious.
+    let mut supported = true;
+    for value in values {
+        supported &= tag.push(TagItem::new(key, ItemValue::Text(value)));
+    }
+    supported
 }
 
 /// Apply a simple string field: `Set` inserts, `Clear` removes, `Keep` does nothing.
@@ -92,6 +110,101 @@ fn apply_string(
         FieldEdit::Keep => {}
         FieldEdit::Clear => tag.remove_key(key),
         FieldEdit::Set(v) => set_text(tag, key, v.clone(), field, out),
+    }
+}
+
+/// Apply an artist field: the credit as printed under `printed_key`, one value per name under
+/// `list_key`.
+///
+/// A credit of one name writes **no** list at all. Half the point of the list tag is that its
+/// absence means "this string is one artist", so a one-entry list left behind by a credit the
+/// user reduced would keep saying the opposite.
+fn apply_credits(
+    tag: &mut Tag,
+    edit: &FieldEdit<ArtistCredit>,
+    printed_key: ItemKey,
+    list_key: ItemKey,
+    field: &'static str,
+    out: &mut Vec<&'static str>,
+) {
+    match edit {
+        FieldEdit::Keep => {}
+        FieldEdit::Clear => {
+            tag.remove_key(printed_key);
+            tag.remove_key(list_key);
+        }
+        FieldEdit::Set(credit) => {
+            let printed_ok =
+                tag.insert_text(printed_key, credit.line().unwrap_or_default().to_owned());
+            let listed_ok = if credit.artists().len() > 1 {
+                set_texts(tag, list_key, credit.artists().iter().map(|a| a.name.clone()))
+            } else {
+                tag.remove_key(list_key);
+                true
+            };
+            if !(printed_ok && listed_ok) {
+                out.push(field);
+            }
+        }
+    }
+}
+
+/// Apply a genre list: one value per name.
+///
+/// No printed/list pair the way [`apply_credits`] has, `GENRE` *being* the list. What lofty does
+/// with those values below us is per-format and not ours to spell: `ID3v2` collapses them into one
+/// frame joined by the v2.4 NUL, which its own reader splits back out. The other shape
+/// `metadata::read_genres` accepts, a single value holding `"; "`, is what *other* taggers write
+/// and is never written here.
+fn apply_genres(tag: &mut Tag, edit: &FieldEdit<GenreList>, out: &mut Vec<&'static str>) {
+    match edit {
+        FieldEdit::Keep => {}
+        FieldEdit::Clear => tag.remove_key(ItemKey::Genre),
+        FieldEdit::Set(genres) => {
+            if !set_texts(tag, ItemKey::Genre, genres.names().iter().cloned()) {
+                out.push("genre");
+            }
+        }
+    }
+}
+
+/// Apply the role credits, reporting the roles this format has no key for.
+///
+/// Every role the edit speaks for is cleared even when the set says nothing about it, which is
+/// what makes an emptied role actually leave the file; a role outside that scope is left alone.
+/// Both halves are argued at [`RoleCreditEdit`], along with the per-format holes and the one key
+/// that is read and never written in [`super::role_tags`].
+///
+/// The dialog never sends `Clear` — an emptied form arrives as a `Set` of an empty set, so the
+/// scope still decides what goes. This arm is for a producer that has no scope to offer.
+fn apply_roles(tag: &mut Tag, edit: &FieldEdit<RoleCreditEdit>, out: &mut Vec<&'static str>) {
+    match edit {
+        FieldEdit::Keep => {}
+        FieldEdit::Clear => role_tags::clear(tag),
+        FieldEdit::Set(credits) => {
+            for role in role_tags::write_roles(tag, credits) {
+                out.push(role.as_db_str());
+            }
+        }
+    }
+}
+
+/// Apply a boolean flag tag, written as `1`.
+///
+/// `Set(false)` removes rather than writing `0`: `extract_metadata` reads a missing flag and a
+/// literal `0` the same way, and a player that only checks for the key's presence reads the `0` as
+/// set.
+fn apply_flag(
+    tag: &mut Tag,
+    edit: &FieldEdit<bool>,
+    key: ItemKey,
+    field: &'static str,
+    out: &mut Vec<&'static str>,
+) {
+    match edit {
+        FieldEdit::Keep => {}
+        FieldEdit::Clear | FieldEdit::Set(false) => tag.remove_key(key),
+        FieldEdit::Set(true) => set_text(tag, key, "1".to_owned(), field, out),
     }
 }
 
@@ -217,25 +330,35 @@ fn apply_rating(tag: &mut Tag, edit: &FieldEdit<i32>, out: &mut Vec<&'static str
     }
 }
 
-/// Year, done by hand: [`Accessor`] exposes `date: Timestamp` rather than `year`, and `set_date`
-/// discards the `insert_text` bool — so do what it does with the bool visible.
+/// Year, done by hand: `Accessor::set_date` discards the `insert_text` bool, and `remove_date`
+/// reaches two of the three keys the reader takes a year from.
 ///
-/// Seeding from the existing `tag.date()` is what preserves a month/day through a year-only edit;
+/// **Every key goes, then one is written.** `metadata::release_timestamp` prefers `ReleaseDate`,
+/// so a file carrying both that and `RecordingDate` would otherwise read back the value the edit
+/// did not touch. The one written is `RecordingDate` regardless: `TDRC`/`DATE` is what every other
+/// player looks at, where `TDRL`/`RELEASEDATE` is a key most of them ignore.
+///
+/// Seeding from the existing timestamp is what preserves a month/day through a year-only edit;
 /// `Timestamp`'s `Display` appends `-MM-DD` only when those parts are present.
 fn apply_year(tag: &mut Tag, edit: &FieldEdit<u16>, out: &mut Vec<&'static str>) {
     match edit {
         FieldEdit::Keep => {}
-        // Removes both `Year` and `RecordingDate`.
-        FieldEdit::Clear => tag.remove_date(),
+        FieldEdit::Clear => clear_release_dates(tag),
         FieldEdit::Set(y) => {
-            let existing = tag.date().unwrap_or_default();
+            let existing = metadata::release_timestamp(Some(tag)).unwrap_or_default();
             let ts = Timestamp {
                 year: *y,
                 ..existing
             };
-            tag.remove_key(ItemKey::Year);
+            clear_release_dates(tag);
             set_text(tag, ItemKey::RecordingDate, ts.to_string(), "year", out);
         }
+    }
+}
+
+fn clear_release_dates(tag: &mut Tag) {
+    for key in metadata::RELEASE_DATE_KEYS {
+        tag.remove_key(key);
     }
 }
 
@@ -245,22 +368,63 @@ pub fn apply_edit(tag: &mut Tag, edit: &TagEdit, picture: Option<&Picture>) -> U
     let mut out: Vec<&'static str> = Vec::new();
 
     apply_string(tag, &edit.title, ItemKey::TrackTitle, "title", &mut out);
-    apply_string(tag, &edit.artist, ItemKey::TrackArtist, "artist", &mut out);
-    apply_string(tag, &edit.album_artist, ItemKey::AlbumArtist, "album_artist", &mut out);
+    apply_credits(
+        tag,
+        &edit.artist,
+        ItemKey::TrackArtist,
+        ItemKey::TrackArtists,
+        "artist",
+        &mut out,
+    );
+    apply_credits(
+        tag,
+        &edit.album_artist,
+        ItemKey::AlbumArtist,
+        ItemKey::AlbumArtists,
+        "album_artist",
+        &mut out,
+    );
     apply_string(tag, &edit.album, ItemKey::AlbumTitle, "album", &mut out);
-    apply_string(tag, &edit.genre, ItemKey::Genre, "genre", &mut out);
-    apply_string(tag, &edit.composer, ItemKey::Composer, "composer", &mut out);
+    apply_genres(tag, &edit.genres, &mut out);
+    apply_roles(tag, &edit.credits, &mut out);
     apply_string(tag, &edit.comment, ItemKey::Comment, "comment", &mut out);
+    apply_string(tag, &edit.disc_subtitle, ItemKey::SetSubtitle, "disc_subtitle", &mut out);
+    apply_string(tag, &edit.subtitle, ItemKey::TrackSubtitle, "subtitle", &mut out);
+    apply_string(tag, &edit.initial_key, ItemKey::InitialKey, "initial_key", &mut out);
+    apply_string(tag, &edit.mood, ItemKey::Mood, "mood", &mut out);
+    apply_string(tag, &edit.grouping, ItemKey::ContentGroup, "grouping", &mut out);
+    apply_string(tag, &edit.work, ItemKey::Work, "work", &mut out);
+    apply_string(tag, &edit.movement, ItemKey::Movement, "movement", &mut out);
+    apply_string(tag, &edit.language, ItemKey::Language, "language", &mut out);
+    apply_string(tag, &edit.copyright, ItemKey::CopyrightMessage, "copyright", &mut out);
+    apply_string(tag, &edit.isrc, ItemKey::Isrc, "isrc", &mut out);
+    apply_string(tag, &edit.label, ItemKey::Label, "label", &mut out);
+    apply_string(tag, &edit.catalog_number, ItemKey::CatalogNumber, "catalog_number", &mut out);
+    apply_string(tag, &edit.barcode, ItemKey::Barcode, "barcode", &mut out);
+    apply_string(tag, &edit.media, ItemKey::OriginalMediaType, "media", &mut out);
+    apply_string(
+        tag,
+        &edit.release_type,
+        ItemKey::MusicBrainzReleaseType,
+        "release_type",
+        &mut out,
+    );
+    apply_string(tag, &edit.release_country, ItemKey::ReleaseCountry, "release_country", &mut out);
     apply_recording_id(tag, &edit.musicbrainz_track_id);
 
     apply_number(tag, &edit.track_number, ItemKey::TrackNumber, "track_number", &mut out);
+    apply_number(tag, &edit.track_total, ItemKey::TrackTotal, "track_total", &mut out);
     apply_number(tag, &edit.disc_number, ItemKey::DiscNumber, "disc_number", &mut out);
-    // `OriginalReleaseDate` maps on all three primary tag types, and `extract_metadata` reads it
-    // back with `s.get(..4)` — so a bare 4-digit year is the right shape.
+    apply_number(tag, &edit.disc_total, ItemKey::DiscTotal, "disc_total", &mut out);
+    apply_number(tag, &edit.movement_number, ItemKey::MovementNumber, "movement_number", &mut out);
+    apply_number(tag, &edit.movement_total, ItemKey::MovementTotal, "movement_total", &mut out);
+    // `OriginalReleaseDate` maps on all three primary tag types, and a bare 4-digit year is a
+    // valid whole timestamp — `extract_metadata` parses it back as a year-only one.
     apply_number(tag, &edit.original_year, ItemKey::OriginalReleaseDate, "original_year", &mut out);
 
     apply_year(tag, &edit.year, &mut out);
     apply_bpm(tag, &edit.bpm, &mut out);
+    apply_flag(tag, &edit.compilation, ItemKey::FlagCompilation, "compilation", &mut out);
     apply_lyrics(tag, &edit.lyrics, &mut out);
     apply_rating(tag, &edit.rating, &mut out);
 
@@ -379,14 +543,28 @@ pub fn cover_picture_from_path(path: &Path) -> Result<Picture, AppError> {
 /// `ID3v2` having no `Lyrics` mapping. Blocking; call under `spawn_blocking`.
 pub fn read_lyrics(path: &Path) -> Result<Option<String>, AppError> {
     let tagged = metadata::read_tags(path, metadata::TagScope::TagsOnly)?;
-    let Some(tag) = tagged.primary_tag().or_else(|| tagged.first_tag()) else {
-        return Ok(None);
-    };
-    Ok(tag
-        .get_string(ItemKey::Lyrics)
+    Ok(tagged.primary_tag().or_else(|| tagged.first_tag()).and_then(lyrics_from))
+}
+
+/// Both of the things the Edit-Tags dialog wants off a single selected file, for one open.
+///
+/// The credit belongs to the file rather than to the database, a track whose join rows were
+/// seeded from `artist_id` alone otherwise opening on one name for a credit the file spells with
+/// three. The Lyrics tab wants the same tag, so asking twice is two probes and two parses of one
+/// file. Blocking; call under `spawn_blocking`.
+pub fn read_lyrics_and_credits(
+    path: &Path,
+) -> Result<(Option<String>, (ArtistCredit, ArtistCredit)), AppError> {
+    let tagged = metadata::read_tags(path, metadata::TagScope::TagsOnly)?;
+    let tag = tagged.primary_tag().or_else(|| tagged.first_tag());
+    Ok((tag.and_then(lyrics_from), metadata::credits_from_tag(tag)))
+}
+
+fn lyrics_from(tag: &Tag) -> Option<String> {
+    tag.get_string(ItemKey::Lyrics)
         .or_else(|| tag.get_string(ItemKey::UnsyncLyrics))
         .map(str::to_owned)
-        .filter(|s| !s.is_empty()))
+        .filter(|s| !s.is_empty())
 }
 
 #[cfg(test)]

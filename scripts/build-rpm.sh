@@ -66,9 +66,10 @@ chmod 0755 "$PKG_DIR/melodia"
 # titlebar where the window mantle provides the disc behind the glyph.
 cp "$REPO_ROOT/assets/icons/logo-with-background.svg" "$PKG_DIR/melodia.svg"
 cp "$REPO_ROOT/LICENSE" "$PKG_DIR/LICENSE"
-# The two bundled fonts and the vendored winit fork are all compiled
-# into the binary, so this package redistributes them and owes their
-# license text — Apache-2.0 §4(a) outright, and SIL's OFL FAQ
+# The two bundled fonts, the vendored winit fork and the crates on
+# copyleft terms are all compiled into the binary, so this package
+# redistributes them and owes their license text — Apache-2.0 §4(a),
+# GPLv3 §4 and MPL-2.0 §3.2 outright, and SIL's OFL FAQ
 # recommends it for a bundled font even though the name-table metadata
 # would technically do. `%license` below globs this directory and
 # flattens the paths, so its contents land beside LICENSE in

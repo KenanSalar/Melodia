@@ -1,6 +1,21 @@
 use super::*;
 
 #[test]
+fn sample_rate_drops_trailing_zero() {
+    assert_eq!(format_sample_rate(44_100), "44.1 kHz");
+    assert_eq!(format_sample_rate(48_000), "48 kHz");
+    assert_eq!(format_sample_rate(96_000), "96 kHz");
+    assert_eq!(format_sample_rate(88_200), "88.2 kHz");
+}
+
+#[test]
+fn channels_have_friendly_names() {
+    assert_eq!(format_channels(1), "Mono");
+    assert_eq!(format_channels(2), "Stereo");
+    assert_eq!(format_channels(6), "6 channels");
+}
+
+#[test]
 fn clamp_i64_to_i32_passes_through_in_range_and_saturates_outside() {
     assert_eq!(clamp_i64_to_i32(0), 0);
     assert_eq!(clamp_i64_to_i32(42), 42);

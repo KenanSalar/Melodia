@@ -133,6 +133,19 @@ pub(super) fn wire_now_playing_open(
     ui.global::<Nav>().on_now_playing_open_changed(move |is_open| {
         np_state.open.set(is_open);
         if !is_open {
+            // The sheet and its offset table, which are the whole of what the lyrics panel
+            // pinned: the model is the larger half and there is no reason to hold a closed
+            // view's words. The store's own bounds are checked here for the same reason the
+            // radio logo cache checks its own on a section leave — this view is the only thing
+            // that writes to it, so its close is when it stops growing.
+            if let Some(ui) = weak.upgrade() {
+                super::lyrics::release(&ui, &np_state.lyrics);
+            }
+            melodia_app::tasks::lyrics_cache::spawn(
+                &melodia_app::tasks::TaskSpawner::from_state(&state),
+                &state,
+            );
+
             // Drop the decoded cover and blur buffers and hand the pages back. The
             // displayed track's stay alive, the `Player` global still referencing its
             // `Image`s, so a same-track reopen needs no decode. Off the UI thread —
@@ -167,6 +180,12 @@ pub(super) fn wire_now_playing_open(
                 log::warn!("ui::now_playing open-seed task spawn_local: {e}");
             }
         }
+
+        // **Outside that guard, and that is the whole point of it being here.** The close above
+        // hands the sheet back, so a re-open on the same track needs one again — but the artwork
+        // is still applied, so the branch that would have fetched it returns early. It dedupes on
+        // its own claim, so on the open that *did* re-decode this costs nothing.
+        np_state.lyrics.kick();
     });
 }
 
@@ -276,3 +295,7 @@ pub(super) fn rebuild_up_next(
     np.set_queue_length(len_as_i32(qvm.queue_tracks.len()));
     ids
 }
+
+#[cfg(test)]
+#[path = "tests/up_next_tests.rs"]
+mod tests;

@@ -825,16 +825,14 @@ async fn get_tag_edit_rows_by_ids_projects_and_preserves_order() -> Result<(), A
         sqlx::query_scalar("SELECT id FROM tracks ORDER BY id").fetch_all(db.read()).await?;
 
     // Patch the fields `make_test_metadata` leaves empty so the projection is exercised.
-    sqlx::query(
-        "UPDATE tracks SET composer = ?, comment = ?, bpm = ?, original_year = ? WHERE id = ?",
-    )
-    .bind("Composer X")
-    .bind("A comment")
-    .bind(128.5_f64)
-    .bind(1999_i32)
-    .bind(ids[0])
-    .execute(db.write())
-    .await?;
+    sqlx::query("UPDATE tracks SET isrc = ?, comment = ?, bpm = ?, original_year = ? WHERE id = ?")
+        .bind("GBAYE0601498")
+        .bind("A comment")
+        .bind(128.5_f64)
+        .bind(1999_i32)
+        .bind(ids[0])
+        .execute(db.write())
+        .await?;
 
     // Request reversed so a plain re-read couldn't accidentally pass.
     let rows = queries::track::get_tag_edit_rows_by_ids(&db, &[ids[1], ids[0]]).await?;
@@ -844,7 +842,7 @@ async fn get_tag_edit_rows_by_ids_projects_and_preserves_order() -> Result<(), A
 
     let alpha = &rows[1];
     assert_eq!(alpha.title, "Alpha");
-    assert_eq!(alpha.composer.as_deref(), Some("Composer X"));
+    assert_eq!(alpha.isrc.as_deref(), Some("GBAYE0601498"));
     assert_eq!(alpha.comment.as_deref(), Some("A comment"));
     assert_eq!(alpha.original_year, Some(1999));
     assert!(matches!(alpha.bpm, Some(b) if (b - 128.5).abs() < 1e-9));

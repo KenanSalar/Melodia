@@ -146,6 +146,14 @@ export struct PlaylistExportPickRow {
     selected: bool,
 }
 
+// One row of the Edit-Tags credit editor. `join-index` points into `TagEditor.join-phrases`,
+// which Rust owns; the phrase itself never crosses as a string, so a mis-typed separator cannot
+// reach the file from here. The last row's index is ignored — nothing follows it to join to.
+export struct ArtistCreditRow {
+    name: string,
+    join-index: int,
+}
+
 // One rule row in the Smart-Playlist editor. Rust-owned; the editor mutates it through
 // `SmartEditor.set-rule-*` and Rust rebuilds a `SmartCriteria` on commit. **Every value is an index
 // or code**, so no translated string round-trips — the dropdown labels are inline `@tr` arrays in
@@ -261,6 +269,12 @@ export struct QueueRow {
     display_duration: string,
     selected: bool,
     is_favorite: bool,
+    // FK targets for the context menu's "Go to …" entries; 0 means no linkage and hides the
+    // entry. `TrackSummary` carries no foreign keys, so unlike `TrackListRow`'s these arrive a
+    // beat after the row does — `ui::queue_sheet::links` fetches and patches them in.
+    album_id: int,
+    artist_id: int,
+    genre_id: int,
 }
 
 // The Now Playing chip row's technical metadata, async-fetched on track change through
@@ -421,4 +435,34 @@ export struct RadioSuggestionRow {
     name: string,
     code: string,
     station_count: int,
+}
+
+// One row of the lyrics panel: a line of the sheet, or a gap the sheet leaves between two of them.
+// Mirror of `entities::lyrics::LyricLine`, plus the heights the panel draws its three parts at.
+//
+// **Every count is Rust's answer, not the layout's.** A `for` loop exposes no per-item element
+// whose `y` could be read back, so following the song means Rust owning a cumulative offset table.
+// It can only do that if it also decides how tall each row is, which it does by estimating the
+// wrap the way `ui::chips` estimates a chip's width. Over by one costs a blank line; under by one
+// elides.
+//
+// The three are declared in the order they are drawn: the words, how they sound, what they mean.
+//
+// `at_ms` is `-1` on an untimed sheet, the two never mixing within one sheet.
+export struct LyricRow {
+    text: string,
+    // Empty for a Latin line and for every line while the toggle is off, `romanization_line_count`
+    // being 0 with it. Rust blanks it rather than the panel hiding it, so one answer decides both
+    // what is drawn and how tall the row is.
+    romanization: string,
+    // Empty where the sheet carries no gloss, `translation_line_count` being 0 with it.
+    translation: string,
+    at_ms: int,
+    // Whether this row is a gap rather than a line, drawn as the filling notes. Spelled out rather
+    // than read off empty text and a stamp: that pair only means a gap because the parser folds the
+    // blank stamps away, which is not something the panel can see.
+    is_interlude: bool,
+    line_count: int,
+    romanization_line_count: int,
+    translation_line_count: int,
 }

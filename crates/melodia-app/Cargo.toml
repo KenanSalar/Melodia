@@ -41,6 +41,13 @@ rayon.workspace = true
 blake3.workspace = true
 natord.workspace = true
 unicode-normalization.workspace = true
+# `library::lyrics::romanize` and nowhere else. Declared here rather than in a leaf crate of
+# their own because the isolation is the same either way — a package's dependencies reach only
+# the packages that name it — and a private module under `library/lyrics/` is unreachable from
+# outside this crate, where a leaf would have to publish an API all of it could call.
+uroman.workspace = true
+kakasi.workspace = true
+unicode-script.workspace = true
 image.workspace = true
 serde.workspace = true
 serde_json.workspace = true

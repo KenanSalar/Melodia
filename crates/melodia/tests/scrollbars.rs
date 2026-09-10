@@ -251,6 +251,12 @@ fn the_tree_declares_no_bare_flickable() {
 /// contrast, so the thumb floats with nothing saying how far the list runs. It looks
 /// like a missing feature rather than a wrong colour, and a new dialog scrollbar
 /// inherits it by writing nothing at all.
+///
+/// Most dialog scrollers reach it through `DialogScrollPane`, which states it once for every
+/// host it serves; what this still covers is that pane plus the bars whose scroller is shaped
+/// differently enough to hand-roll one. So the floor is well under the count — a host moving
+/// onto the pane *lowers* it, which is the direction that means the colour is stated in fewer
+/// places rather than in none.
 #[test]
 fn every_dialog_scrollbar_takes_the_track_that_reads_on_a_card() {
     let sources = sources();
@@ -271,7 +277,7 @@ fn every_dialog_scrollbar_takes_the_track_that_reads_on_a_card() {
         }
     }
 
-    assert!(bars >= 5, "only {bars} dialog scrollbars found — the walk is broken");
+    assert!(bars >= 3, "only {bars} dialog scrollbars found — the walk is broken");
     assert!(
         offenders.is_empty(),
         "an OverlayScrollbar on a dialog card composites the default track into the \

@@ -7,7 +7,7 @@ paths:
   - crates/melodia-ui/ui/components/now-playing/visualizer-flyout.slint
   - crates/melodia-ui/ui/components/now-playing/spectrum-bars.slint
   - crates/melodia-ui/ui/components/now-playing/waveform-trace.slint
-  - crates/melodia-ui/ui/components/now-playing/view-menu.slint
+  - crates/melodia-ui/ui/components/now-playing/visualizer-picker.slint
   - crates/melodia-ui/ui/components/now-playing/overflow-menu.slint
   - crates/melodia-ui/ui/components/now-playing/menu-surface.slint
   - crates/melodia-ui/ui/components/now-playing/flyout-presets.slint
@@ -69,32 +69,32 @@ counter, both worth reading before changing a gate.
 
 ## The strip and its styles
 
-- **Both dimensions are the *view's*, not the strip's, and they are tied to each other.** Width is
+- **Both dimensions are the *view's*, not the strip's.** Width is
   `max(cover-size, min(content-width * 0.75, strip-w-max))` — three quarters of the column the
   metadata chips wrap against, derived arithmetically from view-root properties rather than read
   off the `MetaChipStrip` (inside `if Player.vm.has_track`, and a binding-loop risk); the `max` is
   load-bearing at the window's 350 px floor, where `content-width` goes negative. Height is
-  `clamp(root.height * 0.12, 56px, 128px)`, handed down as `VisualizerStrip.strip-height` since a
-  component root cannot reach `parent` — 56 px is the old pinned height and stays both the floor
-  and the component's fallback, so a call site that forgets still gets a strip. **The width ceiling
-  exists because the band count doesn't move**: `spectrum::NUM_BANDS` is fixed, so a strip that
-  widens without getting taller divides the same bars into ever-fatter columns, and a resting band
-  drawn as a dot of its own column's width turns the row of beads into a row of slabs.
-  `strip-w-max` is `strip-h / 4 * Visualizer.bars.length` — a band no wider than a quarter of the
-  strip's height, read off the model rather than restating the constant. A 16:9 window never
-  reaches it; a wide-and-short one does. `.length` lowers to `track_row_count_changes()`, which
+  `clamp(root.height * 0.12, 28px, 128px)`, handed down as `VisualizerStrip.strip-height` since a
+  component root cannot reach `parent`. The floor is low because the strip is what a short panel
+  buys the cover's floor back with; 56 px stays the *component's* fallback, so a call site that
+  forgets still gets a strip at the height it used to pin. **The width ceiling is a per-band column
+  pitch times `Visualizer.bars.length`, argued at `strip-w-max`**, and a maximized window on an
+  ordinary desktop is what reaches it. `.length` lowers to `track_row_count_changes()`, which
   `set_row_data` doesn't dirty, so the per-band tick doesn't re-evaluate it.
 
-- **What keeps the strip inside the panel is the *cover slot*, not anything the strip does.**
-  Slint's shrink pass (`solve_box_layout` falls through to `layout_items` the moment the column's
-  preferred sizes stop fitting) can only take height off a cell with room between `min` and
-  `preferred`, and positions from the top — so the last child, the strip, overflows. Every child of
-  the artwork column has `min == preferred` except the cover, in a plain `Rectangle` slot carrying
-  `preferred-height`/`max-height: cover-size` and no min. The tile inside spells out `x` and `y`,
-  so it contributes nothing to the slot's constraints (`gen_layout_info_prop`, argued in
-  `slint-pitfalls.md`). Wrap it in a centring layout again and the slot's min returns to
-  `cover-size`, the column loses its only slack, and a short — or merely wide, the tile growing
-  with the width — window pushes the strip out of the panel.
+- **What keeps the strip inside the panel is the column's scroller; what the column spends before
+  reaching for it is the *cover slot*.** Slint's shrink pass (`solve_box_layout` falls through to
+  `layout_items` the moment the column's preferred sizes stop fitting) can only take height off a
+  cell with room between `min` and `preferred`, and positions from the top, so the last child is
+  the one that leaves the box. Every child of the artwork column has `min == preferred` except the
+  cover, in a plain `Rectangle` slot carrying `preferred-height`/`max-height: cover-h` over a
+  `cover-min` floor. The tile inside spells out `x` and `y`, so it contributes nothing to the
+  slot's constraints (`gen_layout_info_prop`, argued in `slint-pitfalls.md`). Wrap it in a centring
+  layout again and the slot's min returns to its preferred, the column loses its only slack, and
+  every panel too short for the group at full size scrolls rather than resizing the artwork.
+  Past that floor the scroller is what answers: the `ScrollView` is handed
+  `max(visible-height, group.min-height)`, so the column's own minimum decides when a bar appears
+  and nothing is drawn in half.
 
 - **A style needn't be its own component.** "Mirrored" is the same bars under a different anchor:
   `SpectrumBars` takes an `in property <bool> centred` the strip sets from the key on the
@@ -121,27 +121,30 @@ counter, both worth reading before changing a gate.
 
 ## The two style pickers
 
-- **Settings → Playback chips and the Now-Playing view menu render the same list**, so the
+- **Settings → Playback chips and the Now-Playing picker render the same list**, so the
   translated names live once as the `viz-style-names` `@tr` literal array in
   `flyout-presets.slint`, and the flyout's style rows take their picker index off the `for name[i]`
   loop so its leading "Off" row can't shift them.
 
-- **The view menu is the bar's overflow popup mirrored on the vertical axis** (trigger at the *top*
-  ⇒ opens downward, columns anchored `y: 0`). The two share everything but geometry and rows:
-  `OverflowRow`, `MenuSurface` (chrome + the `popup-id`-gated `FocusLossWatcher`),
-  `PopupDismissCatcher`, `FlyoutMetrics.{menu-row-h,chrome-h}` for the column-height maths. **Not
-  the trigger** — the bar's stays a plain `IconButton` (tooltip + bar-relative sizing, both
-  hardcoded by `AccentDiscButton`), which is instead shared by the view's two accent discs, its
-  back button and this menu's trigger.
+- **`VisualizerFlyout` is the whole of the picker's popup, not a column in a menu**, which is what
+  `visualizer-picker.slint` bought by replacing the Now-Playing view menu: no second column, so no
+  fixed reserve to keep in step, no `PopupDismissCatcher` over gaps that no longer exist, and no
+  collapse flag — the geometry is the flyout's own height off `FlyoutMetrics` and the preset count.
+  The `FocusLossWatcher` is mounted directly and gated on `PopupHighlight.id`, the volume popup's
+  shape, where the bar's overflow menu takes `MenuSurface` and its `popup-id`. That menu keeps the
+  Speed and Sleep flyouts and the whole two-column apparatus; it is the reference for what a *menu*
+  costs, not a second host of this list.
 
-- **Each host keeps one `public function dismiss()`** holding the close-triple (`pop.close()` +
-  collapse the flyouts + clear `PopupHighlight.id`) that every row calls — a `public function`, not
-  a callback, for the same single-handler-slot reason the Dialog teardown is one. What can't move
+- **Each host keeps one `dismiss()` function** holding its close set — `pop.close()`, whatever
+  flyout flags it has, and `PopupHighlight.id = ""` — that every closing path calls; a function, not a
+  callback, for the same single-handler-slot reason the Dialog teardown is one. What can't move
   into `MenuSurface` is the rows' `VerticalLayout`: the popup sizes itself off that layout's
   `preferred-width` and only the host can name a descendant, so it stays in the host and passes
   through `@children`.
 
-- **The menu needs no Rust.** Its "Off" row writes **both** halves of `Visualizer.enabled` (the
-  two-way binding, so the Settings toggle and `watched-viz-active` follow, plus `set-enabled` to
-  persist); a style row re-enables before `set-style`, which already resolves the index, publishes
-  `style` + `style-idx` and persists.
+- **The picker needs no Rust.** "Off" writes **both** halves of `Visualizer.enabled` (the two-way
+  binding, so the Settings toggle and `watched-viz-active` follow, plus `set-enabled` to persist);
+  a style row re-enables before `set-style`, which already resolves the index, publishes `style` +
+  `style-idx` and persists. **The picker's trigger carries the state the popup used to** — a bare
+  glyph has no disc for `force-bg`, so `filled` reads `enabled` and `active` covers both drawing
+  and picking.

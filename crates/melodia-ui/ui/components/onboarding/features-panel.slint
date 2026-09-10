@@ -1,4 +1,5 @@
 import { Theme } from "../../theme.slint";
+import { OnboardingPanelHeader } from "onboarding-panel-header.slint";
 import { Settings } from "../../settings.slint";
 import { Onboarding } from "../../globals/onboarding.slint";
 import { MelodiaUpdater } from "../../globals/updater.slint";
@@ -13,18 +14,9 @@ export component OnboardingFeaturesPanel inherits VerticalLayout {
     min-width: 0px;
     spacing: Theme.pad-sm;
 
-    Text {
-        text: @tr("What Melodia can reach");
-        font-size: Theme.font-size-lg;
-        font-weight: 700;
-        color: Theme.text;
-        overflow: elide;
-    }
-    Text {
-        text: @tr("Melodia works offline. These are the parts that reach out.");
-        font-size: Theme.font-size-sm;
-        color: Theme.text-muted;
-        wrap: word-wrap;
+    OnboardingPanelHeader {
+        title: @tr("What Melodia can reach");
+        summary: @tr("Melodia works offline. These are the parts that reach out.");
     }
 
     // Same labels as the Services tab's own rows, so the two never describe one feature differently.
@@ -46,6 +38,17 @@ export component OnboardingFeaturesPanel inherits VerticalLayout {
         ToggleSwitch {
             checked <=> Settings.discord-rpc-enabled;
             toggled(v) => { Settings.discord-rpc-enabled-changed(v); }
+        }
+    }
+    SectionDivider {}
+
+    OnboardingFeatureRow {
+        icon: "lyrics";
+        label: @tr("Look up lyrics online");
+        description: @tr("When a track carries no words of its own, ask lrclib.net for them");
+        ToggleSwitch {
+            checked <=> Settings.lyrics-online-enabled;
+            toggled(v) => { Settings.lyrics-online-enabled-changed(v); }
         }
     }
     SectionDivider {}

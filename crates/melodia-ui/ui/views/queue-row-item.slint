@@ -1,10 +1,12 @@
 import { Theme } from "../theme.slint";
 import { Queue } from "../globals/queue.slint";
+import { PopupHighlight } from "../globals/shell.slint";
 import { QueueRow } from "../models.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
 import { ArtworkImage } from "../components/artwork-image.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { Checkbox } from "../components/checkbox.slint";
+import { TrackContextMenu } from "../components/track-list/track-context-menu.slint";
 
 // One fixed-height queue row: number-or-checkbox, artwork, title, duration, delete.
 //
@@ -35,6 +37,11 @@ export component QueueRowItem inherits Rectangle {
     property <bool> is-drag-source: root.row-index == Queue.drag-source;
     property <bool> selected: root.row-data.selected;
     property <bool> show-checkbox: touch.has-hover || root.selected;
+
+    // The play-order index snapshotted at right-click, gating this row's `FocusLossWatcher`. An
+    // **index**, not `row-data.id`, because a queue may hold one track twice: keyed by id, both
+    // rows would mount a watcher for the one open popup.
+    property <int> right-click-row-index: -1;
 
     private property <length> press-abs-y;
     private property <bool> drag-started: false;
@@ -167,6 +174,14 @@ export component QueueRowItem inherits Rectangle {
                     Queue.drag-source = -1;
                     Queue.drop-slot = -1;
                     root.drag-started = false;
+                }
+                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
+                    // **Both writes must precede `show()`**, or the menu's watcher gate is still
+                    // false when the watcher would mount. Nothing here touches the drag state:
+                    // its arm is left-only, so a right-click can't ghost the row.
+                    root.right-click-row-index = root.row-index;
+                    PopupHighlight.queue-ctx-index = root.row-index;
+                    ctx-menu.show();
                 }
             }
             moved => {
@@ -327,7 +342,7 @@ export component QueueRowItem inherits Rectangle {
                                 mouse-cursor: pointer;
                                 clicked => {
                                     Queue.toggle-row-favorite(
-                                        root.row-data.id,
+                                        [root.row-data.id],
                                         !root.row-data.is_favorite,
                                     );
                                 }
@@ -353,6 +368,48 @@ export component QueueRowItem inherits Rectangle {
                         }
                     }
                 }
+            }
+        }
+
+        // The same menu the track lists raise, under `view-context: "queue"` — which drops Play
+        // Next and Add to Queue (the queue *is* what they name) and swaps the remove entry onto
+        // this list. `play-next` and `add-to-queue` are left unbound; nothing under that
+        // context fires them.
+        ctx-menu := TrackContextMenu {
+            row-id: root.row-data.id;
+            row-is-favorite: root.row-data.is_favorite;
+            row-selected: root.row-data.selected;
+            album-id: root.row-data.album_id;
+            artist-id: root.row-data.artist_id;
+            genre-id: root.row-data.genre_id;
+            view-context: "queue";
+            effective-selection: Queue.selected-ids;
+            selection-count: Queue.selected-count;
+            at-x: touch.mouse-x;
+            at-y: touch.mouse-y;
+            ctx-key: root.right-click-row-index;
+            live-ctx-key: PopupHighlight.queue-ctx-index;
+
+            play-single => { Queue.skip-to(root.row-index); }
+            toggle-favorite(ids, on) => { Queue.toggle-row-favorite(ids, on); }
+            // The one action that stays index-shaped: `remove-selected` reads the Rust shadow, so
+            // a queue holding one track twice removes the rows the user ticked rather than every
+            // row sharing their ids. The payload is ignored for exactly that reason.
+            request-remove(ids) => {
+                if (ctx-menu.multi-active) {
+                    Queue.remove-selected();
+                } else {
+                    Queue.remove(root.row-index);
+                }
+            }
+            // Dismiss first: the sheet sits above the content panel, so a navigation with it
+            // still up lands behind it.
+            go-to-album(aid) => { Queue.dismiss(); Queue.go-to-album(aid); }
+            go-to-artist(aid) => { Queue.dismiss(); Queue.go-to-artist(aid); }
+            go-to-genre(gid) => { Queue.dismiss(); Queue.go-to-genre(gid); }
+            released => {
+                PopupHighlight.queue-ctx-index = -1;
+                root.right-click-row-index = -1;
             }
         }
     }

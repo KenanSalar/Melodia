@@ -1,15 +1,17 @@
 //! `Queue.*` callback wiring + click-with-modifier selection helper.
 
+use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use slint::{ComponentHandle, Model, VecModel};
+use slint::{ComponentHandle, Model, VecModel, Weak};
 
+use super::links::{self, LinkCache};
 use super::rows::rebuild_rows;
-use super::{ShadowEntry, push_selected_count};
+use super::{ShadowEntry, push_selection};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
@@ -30,10 +32,21 @@ pub(super) fn wire_callbacks(
     queue_model: &Rc<VecModel<QueueRow>>,
     queue_covers: &Arc<CoverThumbs>,
     shadow: &Arc<Mutex<Vec<ShadowEntry>>>,
+    link_cache: &LinkCache,
     anchor: &Arc<Mutex<Option<usize>>>,
     is_open: &Arc<AtomicBool>,
 ) {
-    let weak = ui.as_weak();
+    wire_transport(ui, state, shadow);
+    wire_favorite(ui, state);
+    wire_selection(ui, queue_model, shadow, anchor);
+    wire_open_close(ui, state, queue_model, queue_covers, shadow, link_cache, is_open);
+}
+
+/// The five rows that only ask the engine for something, plus the sheet's reserved close hook.
+///
+/// None of them reports anything back: the mutation lands on `sinks.queue` and the subscriber
+/// rebuilds the model from there.
+fn wire_transport(ui: &AppWindow, state: &AppState, shadow: &Arc<Mutex<Vec<ShadowEntry>>>) {
     let queue = ui.global::<Queue>();
 
     {
@@ -119,54 +132,72 @@ pub(super) fn wire_callbacks(
         });
     }
 
-    // Hover-swap favorite toggle from a queue row. Three updates:
-    //   1. DB write via `library::favorites::set_favorite` (also bumps
-    //      `library_changed` so other tracklist views refetch).
-    //   2. In-memory flip on `PlayerState.queue.tracks` (so the next
-    //      sheet open / view-model emit reads the fresh value) and on
-    //      `current_track` (so the Now Playing heart reflects it via
-    //      the Player view-model push).
-    //   3. Surgical patch of the visible `VecModel<QueueRow>` via
-    //      `apply_row_favorite`. `with_state_emit` only publishes on
-    //      `sinks.queue` when `queue.version` changes — a favorite
-    //      toggle isn't a queue mutation, so the subscriber wouldn't
-    //      fire and the row's `is_favorite` would stay stale (next
-    //      click would compute `!false` again and be a no-op DB write).
-    {
-        let s = state.clone();
-        let weak = weak.clone();
-        queue.on_toggle_row_favorite(move |id, fav| {
-            let id = i64::from(id);
-            let s_inner = s.clone();
-            let weak = weak.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::favorites::set_favorite(&s_inner, vec![id], fav).await {
-                    log::warn!("queue toggle_row_favorite({id}, {fav}): {e}");
-                    return;
-                }
-                with_state_emit(&s_inner.player_state, &s_inner.sinks, |st| {
-                    for t in &mut st.queue.tracks {
-                        if t.id == id {
-                            Arc::make_mut(t).is_favorite = fav;
-                        }
-                    }
-                    if let Some(ct) = st.current_track_mut()
-                        && ct.id == id
-                    {
-                        Arc::make_mut(ct).is_favorite = fav;
-                    }
-                    Vec::<PlayerAction>::new()
-                });
-                super::rows::apply_row_favorite(&weak, id, fav);
-            });
-        });
-    }
-
     // Reserved hook — the sheet's `Queue.close()` invocation lets us
     // attach future side effects without coupling to the open-changed
     // atomic. Slint also clears selection synchronously from the same
     // event handler, so this stays empty.
     queue.on_close(|| {});
+}
+
+/// Hover-swap favorite toggle from a queue row. Three updates:
+///   1. DB write via `library::favorites::set_favorite` (also bumps
+///      `library_changed` so other tracklist views refetch).
+///   2. In-memory flip on `PlayerState.queue.tracks` (so the next
+///      sheet open / view-model emit reads the fresh value) and on
+///      `current_track` (so the Now Playing heart reflects it via
+///      the Player view-model push).
+///   3. Surgical patch of the visible `VecModel<QueueRow>` via
+///      `apply_row_favorite`. `with_state_emit` only publishes on
+///      `sinks.queue` when `queue.version` changes — a favorite
+///      toggle isn't a queue mutation, so the subscriber wouldn't
+///      fire and the row's `is_favorite` would stay stale (next
+///      click would compute `!false` again and be a no-op DB write).
+fn wire_favorite(ui: &AppWindow, state: &AppState) {
+    let weak = ui.as_weak();
+    let s = state.clone();
+
+    ui.global::<Queue>().on_toggle_row_favorite(move |ids, fav| {
+        let ids: Vec<i64> = ids.iter().map(i64::from).collect();
+        if ids.is_empty() {
+            return;
+        }
+        let s_inner = s.clone();
+        let weak = weak.clone();
+        s.runtime.clone().spawn(async move {
+            let count = ids.len();
+            if let Err(e) = library::favorites::set_favorite(&s_inner, ids.clone(), fav).await {
+                log::warn!("queue toggle_row_favorite({count} tracks, {fav}): {e}");
+                return;
+            }
+            let marked: HashSet<i64> = ids.iter().copied().collect();
+            with_state_emit(&s_inner.player_state, &s_inner.sinks, |st| {
+                for t in &mut st.queue.tracks {
+                    if marked.contains(&t.id) {
+                        Arc::make_mut(t).is_favorite = fav;
+                    }
+                }
+                if let Some(ct) = st.current_track_mut()
+                    && marked.contains(&ct.id)
+                {
+                    Arc::make_mut(ct).is_favorite = fav;
+                }
+                Vec::<PlayerAction>::new()
+            });
+            super::rows::apply_row_favorite(&weak, &ids, fav);
+        });
+    });
+}
+
+/// The three selection rows. Each moves the shadow first and mirrors it into the live model, so
+/// the accent border flips before the next queue broadcast rather than after it.
+fn wire_selection(
+    ui: &AppWindow,
+    queue_model: &Rc<VecModel<QueueRow>>,
+    shadow: &Arc<Mutex<Vec<ShadowEntry>>>,
+    anchor: &Arc<Mutex<Option<usize>>>,
+) {
+    let weak = ui.as_weak();
+    let queue = ui.global::<Queue>();
 
     {
         let queue_model = queue_model.clone();
@@ -178,7 +209,7 @@ pub(super) fn wire_callbacks(
                 return;
             };
             apply_select(&queue_model, &shadow, &anchor, idx, ctrl, shift);
-            push_selected_count(&weak, &shadow.lock());
+            push_selection(&weak, &shadow.lock());
         });
     }
 
@@ -188,23 +219,10 @@ pub(super) fn wire_callbacks(
         let anchor = anchor.clone();
         let weak = weak.clone();
         queue.on_clear_selection(move || {
-            let mut sh = shadow.lock();
-            for e in sh.iter_mut() {
-                e.selected = false;
-            }
-            // Mirror to the visible model so the accent border drops
-            // synchronously instead of waiting for the next queue
-            // broadcast.
-            for i in 0..sh.len() {
-                if let Some(mut row) = queue_model.row_data(i)
-                    && row.selected
-                {
-                    row.selected = false;
-                    queue_model.set_row_data(i, row);
-                }
-            }
+            set_all_selected(&queue_model, &shadow, &weak, false);
+            // Only the clear drops the anchor: Select All leaves whatever a click last established,
+            // so a following Shift-click still extends from where the user was.
             *anchor.lock() = None;
-            push_selected_count(&weak, &sh);
         });
     }
 
@@ -212,22 +230,46 @@ pub(super) fn wire_callbacks(
         let queue_model = queue_model.clone();
         let shadow = shadow.clone();
         let weak = weak.clone();
-        queue.on_select_all(move || {
-            let mut sh = shadow.lock();
-            for e in sh.iter_mut() {
-                e.selected = true;
-            }
-            for i in 0..sh.len() {
-                if let Some(mut row) = queue_model.row_data(i)
-                    && !row.selected
-                {
-                    row.selected = true;
-                    queue_model.set_row_data(i, row);
-                }
-            }
-            push_selected_count(&weak, &sh);
-        });
+        queue.on_select_all(move || set_all_selected(&queue_model, &shadow, &weak, true));
     }
+}
+
+/// Set every row's `selected` bit to `selected`, in the shadow and in the live model, and publish
+/// the new count. Only rows that move are written back.
+fn set_all_selected(
+    queue_model: &Rc<VecModel<QueueRow>>,
+    shadow: &Arc<Mutex<Vec<ShadowEntry>>>,
+    weak: &Weak<AppWindow>,
+    selected: bool,
+) {
+    let mut sh = shadow.lock();
+    for e in sh.iter_mut() {
+        e.selected = selected;
+    }
+    for i in 0..sh.len() {
+        if let Some(mut row) = queue_model.row_data(i)
+            && row.selected != selected
+        {
+            row.selected = selected;
+            queue_model.set_row_data(i, row);
+        }
+    }
+    push_selection(weak, &sh);
+}
+
+/// The sheet's whole lifecycle: fill on the way up, hand everything back once the slide-out has
+/// finished.
+fn wire_open_close(
+    ui: &AppWindow,
+    state: &AppState,
+    queue_model: &Rc<VecModel<QueueRow>>,
+    queue_covers: &Arc<CoverThumbs>,
+    shadow: &Arc<Mutex<Vec<ShadowEntry>>>,
+    link_cache: &LinkCache,
+    is_open: &Arc<AtomicBool>,
+) {
+    let weak = ui.as_weak();
+    let queue = ui.global::<Queue>();
 
     {
         // Per-handler generation counter — every close bumps it and stamps
@@ -247,6 +289,7 @@ pub(super) fn wire_callbacks(
         let queue_model = queue_model.clone();
         let queue_covers = queue_covers.clone();
         let shadow = shadow.clone();
+        let link_cache = link_cache.clone();
         queue.on_open_changed(move |open| {
             log::debug!("queue sheet: {}", if open { "open" } else { "closed" });
             is_open.store(open, Ordering::Relaxed);
@@ -276,8 +319,12 @@ pub(super) fn wire_callbacks(
                     let s = lock_state(&state.player_state);
                     s.to_queue_view_model()
                 };
-                rebuild_rows(&ui, &queue_model, &shadow, &qvm);
+                let missing = rebuild_rows(&ui, &queue_model, &shadow, &link_cache, &qvm);
                 drop(ui);
+                // The menu's "Go to …" entries. Off-thread and patched in when
+                // it lands: a right-click is several frames away, and the rows
+                // owe the slide-up their text on frame one.
+                links::fetch_missing(&state, &weak, &link_cache, &is_open, missing);
                 let paths = crate::ui::grid_prewarm::unique_artwork_paths(
                     qvm.queue_tracks.iter().map(|t| t.artwork_path.as_deref()),
                     QUEUE_PREWARM_AHEAD,
@@ -313,6 +360,8 @@ pub(super) fn wire_callbacks(
                 let is_open = is_open.clone();
                 let weak = weak.clone();
                 let queue_covers = queue_covers.clone();
+                let link_cache = link_cache.clone();
+                let shadow = shadow.clone();
                 let close_epoch = close_epoch.clone();
                 let runtime = state.runtime.clone();
                 runtime.clone().spawn(async move {
@@ -334,11 +383,10 @@ pub(super) fn wire_callbacks(
                         // they do hold four `SharedString`s each, and the
                         // queue is as long as whatever was played into it.
                         let queue = ui.global::<Queue>();
-                        if let Some(vm) =
-                            queue.get_rows().as_any().downcast_ref::<VecModel<QueueRow>>()
-                        {
-                            vm.set_vec(Vec::new());
-                        }
+                        crate::ui::model_diff::clear_vec_model(
+                            &queue.get_rows(),
+                            "queue sheet teardown",
+                        );
                         // Drop the cache's buffer refs too — only with
                         // both gone is the underlying memory actually
                         // freed. Rewinding the generation alongside it is
@@ -348,6 +396,16 @@ pub(super) fn wire_callbacks(
                         // cache-only first frame.
                         queue.set_covers_generation(0);
                         queue_covers.clear();
+                        // The FK trio the row menu navigates by, on the same
+                        // terms as the covers: a closed sheet holds nothing,
+                        // and the next open re-resolves what it shows.
+                        link_cache.lock().clear();
+                        // Just the summaries — the selection bits are what a
+                        // reopen restores. Held, a queue replaced behind the
+                        // closed sheet stays resident with nothing to draw it.
+                        for entry in shadow.lock().iter_mut() {
+                            entry.source = None;
+                        }
                         runtime
                             .spawn_blocking(melodia_platform::services::platform::allocator::trim);
                     });

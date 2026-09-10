@@ -159,6 +159,32 @@ msgstr "Sıradaki"
 msgid "No tracks up next"
 msgstr "Sırada başka parça yok"
 
+# The lyrics panel's five states. "Turn it on…" names the Settings tab, so it has to match the
+# tab label above.
+msgid "Play something to see its lyrics"
+msgstr "Şarkı sözlerini görmek için bir şey çalın"
+
+msgid "Looking for lyrics…"
+msgstr "Şarkı sözleri aranıyor…"
+
+msgid "No lyrics found"
+msgstr "Şarkı sözü bulunamadı"
+
+msgid "This track has no words"
+msgstr "Bu parçada söz yok"
+
+msgid "Lyrics lookup is off"
+msgstr "Şarkı sözü araması kapalı"
+
+msgid "Turn it on in the Lyrics menu"
+msgstr "Şarkı Sözleri menüsünden açın"
+
+msgid "Couldn't reach the lyrics service"
+msgstr "Şarkı sözü hizmetine ulaşılamadı"
+
+msgid "Try again from the Lyrics menu"
+msgstr "Şarkı Sözleri menüsünden tekrar deneyin"
+
 # ---- Queue sheet ------------------------------------------------------------
 
 msgid "No tracks"
@@ -172,6 +198,12 @@ msgstr "Sıraya eklemek için bırak"
 
 msgid "Remove selected"
 msgstr "Seçimi kaldır"
+
+msgid "Remove from Queue"
+msgstr "Sıradan çıkar"
+
+msgid "Remove {} from Queue"
+msgstr "{} Sıradan Çıkar"
 
 msgid "Clear queue"
 msgstr "Sırayı temizle"
@@ -1451,6 +1483,7 @@ msgstr "Sınırla:"
 msgid "tracks by"
 msgstr "parça, şuna göre:"
 
+
 msgid "Add rule"
 msgstr "Kural ekle"
 
@@ -1751,6 +1784,22 @@ msgstr "İnternet radyosu"
 msgid "Browse and play live stations from radio-browser.info"
 msgstr "radio-browser.info üzerindeki canlı istasyonlara göz at ve dinle"
 
+# The online-lyrics switch. Named in the Services card and again on the welcome card, so both
+# read from this one pair.
+msgid "Look up lyrics online"
+msgstr "Şarkı sözlerini çevrimiçi ara"
+
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Bir parça kendi sözlerini içermiyorsa lrclib.net'ten iste"
+
+# The romanization switch. Named on the Services card and again in the Now Playing lyrics menu,
+# so both read from this one label.
+msgid "Show romanization"
+msgstr "Latin harfli okunuşu göster"
+
+msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
+msgstr "Latin alfabesini kullanmayan yazılar için her satırın okunuşunu sözlerin altında Latin harfleriyle yaz"
+
 # The Settings sub-rows, shown only while the master switch is on.
 msgid "Hide segmented stations"
 msgstr "Parçalı istasyonları gizle"
@@ -2040,3 +2089,123 @@ msgstr "İlk kurulumu yeniden gösterin."
 # Button on the About row above. Short by design — it sits in a narrow control slot.
 msgid "Show"
 msgstr "Göster"
+
+# Tag editor, Lyrics tab: fills the box with the sheet the track already has elsewhere —
+# a `.lrc` beside it, or one the lyrics directory answered with. Saving is the dialog's own.
+msgid "Insert found lyrics"
+msgstr "Bulunan sözleri ekle"
+
+# The Now Playing lyrics menu. "Look up again" forgets what the directory said about this
+# track and asks once more, for a sheet matched off tags that have since been corrected;
+# "Save to file" writes the sheet on screen into the track's own lyrics tag.
+msgid "Hide lyrics"
+msgstr "Şarkı sözlerini gizle"
+
+msgid "Show lyrics"
+msgstr "Şarkı sözlerini göster"
+
+msgid "Look up again"
+msgstr "Yeniden ara"
+
+msgid "Edit lyrics…"
+msgstr "Şarkı sözlerini düzenle…"
+
+msgid "Save to file"
+msgstr "Dosyaya kaydet"
+
+# Toast title after the Now Playing menu writes the sheet on screen into the track's own
+# lyrics tag. The detail line beside it is the track's title.
+msgid "Lyrics saved"
+msgstr "Şarkı sözleri kaydedildi"
+
+# The Edit-Track-Information dialog's Credits and Details tabs. Every role below is a
+# credit a file can carry; the rest are the release-level tags beside them.
+msgid "Credits"
+msgstr "Katkıda bulunanlar"
+
+msgid "Details"
+msgstr "Ayrıntılar"
+
+msgid "Lyricist"
+msgstr "Söz yazarı"
+
+msgid "Arranger"
+msgstr "Düzenleyen"
+
+msgid "Conductor"
+msgstr "Orkestra şefi"
+
+msgid "Performer"
+msgstr "İcracı"
+
+msgid "Remixer"
+msgstr "Remiksçi"
+
+msgid "Producer"
+msgstr "Yapımcı"
+
+msgid "Engineer"
+msgstr "Ses mühendisi"
+
+msgid "Mixer"
+msgstr "Miksçi"
+
+msgid "DJ Mixer"
+msgstr "DJ miksçi"
+
+msgid "Subtitle"
+msgstr "Alt başlık"
+
+msgid "Disc Subtitle"
+msgstr "Disk alt başlığı"
+
+msgid "Grouping"
+msgstr "Gruplama"
+
+msgid "Work"
+msgstr "Eser"
+
+msgid "Movement"
+msgstr "Bölüm"
+
+# Labels for the second and third box of a numbered pair: "Track 3 / Total 12".
+msgid "Number"
+msgstr "Numara"
+
+msgid "Total"
+msgstr "Toplam"
+
+# Musical key, as in A minor — not a keyboard key or a lookup key.
+msgid "Key"
+msgstr "Ton"
+
+msgid "Mood"
+msgstr "Ruh hali"
+
+msgid "ISRC"
+msgstr "ISRC"
+
+msgid "Copyright"
+msgstr "Telif hakkı"
+
+msgid "Record Label"
+msgstr "Plak şirketi"
+
+msgid "Catalog Number"
+msgstr "Katalog numarası"
+
+msgid "Barcode"
+msgstr "Barkod"
+
+# The physical medium a release came out on — CD, vinyl, digital.
+msgid "Media"
+msgstr "Ortam"
+
+msgid "Release Type"
+msgstr "Yayın türü"
+
+msgid "Release Country"
+msgstr "Yayın ülkesi"
+
+msgid "Part of a compilation"
+msgstr "Bir derlemenin parçası"

@@ -380,6 +380,14 @@ this file is what builds, looks right, and is wrong.
   before first layout — popup lands above trigger top, expands downward. Canonical:
   `components/now-playing/overflow-menu.slint`.
 
+- **A child with no `x`/`y` in a non-layout parent is *centred*, not at the origin** — Slint
+  generates `(parent.width - self.width) / 2`, which reads as 0 only for a child as wide as its
+  parent. **A zero-size wrapper therefore lands at half the parent**, and anything positioned
+  against it goes with it: `TrackContextMenu` is a `PopupWindow` in such a wrapper, and the row
+  passed a pointer position measured in the row's own frame, so the menu opened half a row right
+  of the cursor on both its hosts. A wrapper meant to be a coordinate frame pins `x: 0px; y: 0px`
+  **inside the component**, where a host cannot forget it.
+
 - **A flyout opens *inside* the overflow menu's single `PopupWindow` — no nesting.** The
   playback-speed row (`speed-flyout.slint`, presets in shared `flyout-presets.slint` globals) is
   the worked example. Fixed-reserve geometry, as with the volume popup: size the popup for
@@ -548,6 +556,18 @@ this file is what builds, looks right, and is wrong.
   `ui::library_tab_band_tests::the_chip_strip_outlives_every_morph_it_is_painted_in` (a brace
   walk, not an indent walk — the band has `if`-gated *siblings* at shallower depths).
 
+- **A `Timer`'s `interval` may not reach a layout property, even transitively.** Slint evaluates it
+  through a `ChangeTracker` initialised in the component's `user_init`, and for a timer inside an
+  `if` that runs from `Conditional::ensure_updated` — *inside the parent's layout pass*. So a
+  cadence gated on anything that reads a scroller's height re-enters the layout cache being
+  computed and panics `Recursion detected` (`properties.rs::access`) on the frame the branch
+  mounts. The same expression is fine in any ordinary binding, and the backtrace names layout
+  closures either side of the property you wrote, so it reads as a layout bug. Cure: keep the
+  interval's inputs to plain properties and let the timer's **handler** compute the
+  layout-dependent half into one of them — `lyrics-panel.slint` decides `settled` (has the glide
+  reached the sung line) at the end of each tick, where reading `target-y` is free, the handler
+  running nowhere near the pass.
+
 - **`init` runs *after* bindings resolve to final values — useless for entry animations.** Setting
   `shown: true` in `init` makes `true` the *initial* value, so `animate opacity` never runs. Fix:
   single-shot 1 ms `Timer` flips `shown` once at mount.
@@ -556,3 +576,17 @@ this file is what builds, looks right, and is wrong.
   arrows or any glyph the bundled font lacks pulls a fallback font; its taller `typoAsc/Desc`
   defines the line-box, so patched glyphs drift down. Fix: render the foreign glyph as a sibling
   `MaterialIcon` (collapsed em-box).
+
+- **Slint 1.16 draws a Hangul syllable with no final consonant as two loose jamo, and the trigger
+  is the generic family it appends to every font stack.** `sharedparley.rs`'s `ranged_builder`
+  pushes `[<default-font-family>, Generic(SansSerif), Generic(SystemUi)]`, and that list is what
+  breaks composition: the same line through *any single* named family shapes correctly, Vazirmatn
+  included, which covers no Hangul at all. Reproducible against parley 0.8 with no Slint in the
+  picture, so there is nothing to reach from a `.slint` file. A syllable that carries a final
+  consonant is unaffected, which is why half a Korean line looks blocky and half looks spaced out.
+  **The cost is width, not only looks.** Swept across the whole syllables block, an open syllable
+  measures 2 em against a closed one's 0.92, so a Korean line lays out up to 1.6× wider than its
+  syllable count says. Anything sizing a box from a character count under-measures it, and an
+  elided `Text` **drops** the line that overflows its box rather than clipping it, so words go
+  missing rather than looking cramped. `ui::now_playing::lyrics`'s `OPEN_HANGUL_EMS` is the one
+  place that pays for it; delete it when a Slint release composes the block, and not before.

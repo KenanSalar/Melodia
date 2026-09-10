@@ -34,4 +34,4 @@ manifest name it, so a tag that moves or disappears breaks links for everyone al
 version. Deleting and force-updating are blocked by rule, and the cost of that is that a blocker
 found during release QA costs a patch version rather than a re-pointed tag.
 
-This ADR was written in September 2026; `docs/RELEASING.md` is the procedure.
+This ADR was written in September 2026.

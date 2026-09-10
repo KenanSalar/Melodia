@@ -1,0 +1,169 @@
+import { Theme } from "../../theme.slint";
+import { Lyrics, LyricsState } from "../../globals/lyrics.slint";
+import { Player } from "../../globals/player.slint";
+import { Dialog } from "../../globals/dialog.slint";
+import { TagEditor } from "../../globals/dialog-forms.slint";
+import { PopupHighlight } from "../../globals/shell.slint";
+import { TooltipSide } from "../tooltip.slint";
+import { AccentGlyphButton } from "./accent-glyph-button.slint";
+import { MenuSurface } from "./menu-surface.slint";
+import { OverflowRow } from "./overflow-row.slint";
+import { FlyoutMetrics } from "./flyout-presets.slint";
+
+// The lyrics column's own menu, top right of the Now-Playing view. `VisualizerPicker`'s shape with
+// a menu column where that one has a flyout: one popup, one surface, and the rows in the host
+// because the popup sizes itself off their layout.
+//
+// **The first row is the toggle the glyph used to be.** Turning the column back to Up Next costs a
+// click more than it did, and buys the five controls the panel has nowhere else to put: a sheet
+// matched off tags that were wrong has to be re-askable, a sheet worth keeping has to be writable
+// into the file that will outlive this cache, a sheet that is nearly right has to be editable, a
+// sheet in a script the reader cannot sound out has to be able to say how it sounds, and a panel
+// whose whole copy is that a setting turned the lookup off has to be able to turn it back on.
+export component LyricsMenu inherits Rectangle {
+    width: btn.width;
+    height: btn.height;
+
+    // Every row is drawn whether or not it can act, so the popup's reserve below is a constant and
+    // the rows do not move under the pointer between one open and the next.
+    property <length> menu-h: FlyoutMetrics.menu-row-h * 6 + FlyoutMetrics.chrome-h;
+
+    function dismiss() {
+        pop.close();
+        PopupHighlight.id = "";
+    }
+
+    btn := AccentGlyphButton {
+        icon: "lyrics";
+        filled: Lyrics.shown;
+        // Lit while the column is showing lyrics, and while the menu that says so is open: a bare
+        // glyph has no disc for `force-bg` to light.
+        active: Lyrics.shown || PopupHighlight.id == "np-lyrics";
+        tooltip-text: @tr("Lyrics");
+        // This row is the panel's top edge and its right one, so a pill is cut off above it and
+        // clipped beside it.
+        tooltip-side: TooltipSide.below;
+        tooltip-align-end: true;
+        clicked => {
+            PopupHighlight.id = "np-lyrics";
+            pop.show();
+        }
+    }
+
+    pop := PopupWindow {
+        // Here rather than up top, so it can read its own descendant's `preferred-width`: the
+        // rows' content sets the floor, over a minimum that preserves the English look.
+        property <length> menu-w: max(200px, menu-vl.preferred-width + 2px);
+
+        // Downward and right-aligned on the trigger, which is the last control in the row: a
+        // left-aligned popup would hang off the panel.
+        x: btn.width - self.width;
+        y: btn.height + Theme.popup-gap;
+        width: self.menu-w;
+        height: root.menu-h;
+        close-policy: close-on-click-outside;
+
+        MenuSurface {
+            popup-id: "np-lyrics";
+            width: 100%;
+            height: 100%;
+            close-requested => {
+                root.dismiss();
+            }
+
+            menu-vl := VerticalLayout {
+                padding: Theme.pad-xs;
+                spacing: 0;
+
+                // Both halves, the visualizer picker's shape: the property so the column swaps on
+                // the click, the callback so it is still swapped next launch.
+                OverflowRow {
+                    icon: "lyrics";
+                    label: Lyrics.shown ? @tr("Hide lyrics") : @tr("Show lyrics");
+                    active: Lyrics.shown;
+                    filled: Lyrics.shown;
+                    clicked => {
+                        Lyrics.shown = !Lyrics.shown;
+                        Lyrics.set-shown(Lyrics.shown);
+                        root.dismiss();
+                    }
+                }
+
+                // The same two halves as the toggle above. Enabled only where there is a sheet to
+                // re-lay: on every other state the row would say it had done something and the
+                // panel would look identical, which is worse than a row that is plainly inert.
+                OverflowRow {
+                    icon: "translate";
+                    label: @tr("Show romanization");
+                    active: Lyrics.romanization-shown;
+                    filled: Lyrics.romanization-shown;
+                    button-enabled: Lyrics.state == LyricsState.ready;
+                    clicked => {
+                        Lyrics.romanization-shown = !Lyrics.romanization-shown;
+                        Lyrics.set-romanization-shown(Lyrics.romanization-shown);
+                        root.dismiss();
+                    }
+                }
+
+                // The Settings switch, where the panel's own "lookup is off" copy sends the reader.
+                // Same two halves again, and the same argument as romanization for being in both
+                // places: a default worth finding in Settings, and the thing you reach for the
+                // moment a panel tells you a setting is why it is empty.
+                OverflowRow {
+                    icon: "travel_explore";
+                    label: @tr("Look up lyrics online");
+                    active: Lyrics.online-enabled;
+                    filled: Lyrics.online-enabled;
+                    clicked => {
+                        Lyrics.online-enabled = !Lyrics.online-enabled;
+                        Lyrics.set-online-enabled(Lyrics.online-enabled);
+                        root.dismiss();
+                    }
+                }
+
+                OverflowRow {
+                    icon: "refresh";
+                    label: @tr("Look up again");
+                    // A track has to be up, which is anything but `idle`, including the two states
+                    // that found nothing where a re-ask is most useful. And the row above has to be
+                    // on: forgetting what the directory said *is* the re-ask, so with the lookup
+                    // off this could only delete the sheet the panel is showing.
+                    button-enabled: Lyrics.state != LyricsState.idle && Lyrics.online-enabled;
+                    clicked => {
+                        Lyrics.refresh();
+                        root.dismiss();
+                    }
+                }
+
+                OverflowRow {
+                    icon: "save";
+                    label: @tr("Save to file");
+                    button-enabled: Lyrics.can-save-to-tag;
+                    clicked => {
+                        Lyrics.save-to-tag();
+                        root.dismiss();
+                    }
+                }
+
+                // The tag editor's own Lyrics tab, on the playing track. "Save to file" above
+                // writes what the panel found and asks nothing; this is for the sheet that is
+                // nearly right, where a stamp is half a second out and the fix is to type it.
+                //
+                // **The playing track is read here rather than at wire time**, this popup
+                // outliving any one song.
+                OverflowRow {
+                    icon: "edit";
+                    label: @tr("Edit lyrics…");
+                    button-enabled: Player.vm.has_track;
+                    clicked => {
+                        Dialog.open-tag-editor(
+                            @tr("Edit Track Information"),
+                            [Player.vm.track.id],
+                            TagEditor.tab-lyrics);
+                        root.dismiss();
+                    }
+                }
+            }
+        }
+    }
+}

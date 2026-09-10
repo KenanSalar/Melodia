@@ -13,6 +13,7 @@ use std::collections::HashSet;
 
 use crate::ui::util::len_as_i32;
 use melodia_core::entities::album::AlbumStats;
+use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::track::{MostPlayedFavorite, TrackListRow};
 
 #[cfg(test)]
@@ -79,23 +80,44 @@ pub fn fold_most_played(rows: &[MostPlayedFavorite]) -> MostPlayedTotals {
 /// enough that naming one would misrepresent the rest. An album is usually
 /// single-genre, so this reads as "the album's genre" there; a compilation that
 /// genuinely spans several gets no chip rather than whichever won by a track.
+///
+/// **Tallied per genre, not per rendered line.** A row carries every genre it is tagged with in
+/// one string, so an album whose tracks are all `Rock` and half also `Metal` holds two distinct
+/// lines and no majority, where what every track shares is `Rock`. The denominator stays *tracks*,
+/// each contributing at most once to any one name, so the winner is a genre more than half the
+/// tagged tracks carry — several can be, and the first in tag order takes it.
 pub fn dominant_genre(rows: &[TrackListRow]) -> Option<String> {
     /// Share of the tracks the winner has to hold to be worth stating.
     const MAJORITY: usize = 2;
 
     let mut tally: Vec<(&str, usize)> = Vec::new();
+    // Reused across rows, so the whole fold allocates once however long the list is.
+    let mut in_row: Vec<&str> = Vec::new();
     let mut tagged = 0usize;
-    for genre in rows.iter().filter_map(|r| r.genre.as_deref()) {
-        if genre.is_empty() {
+    for line in rows.iter().filter_map(|r| r.genre.as_deref()) {
+        // A line can spell one name twice: `names_in_line` splits a rendered column, and a genre
+        // whose own name holds the separator comes back as two. The denominator is tracks.
+        in_row.clear();
+        for name in GenreList::names_in_line(line) {
+            if !in_row.iter().any(|seen| seen.eq_ignore_ascii_case(name)) {
+                in_row.push(name);
+            }
+        }
+        if in_row.is_empty() {
             continue;
         }
         tagged += 1;
-        match tally.iter_mut().find(|(name, _)| *name == genre) {
-            Some((_, count)) => *count += 1,
-            None => tally.push((genre, 1)),
+        for &name in &in_row {
+            match tally.iter_mut().find(|(seen, _)| seen.eq_ignore_ascii_case(name)) {
+                Some((_, count)) => *count += 1,
+                None => tally.push((name, 1)),
+            }
         }
     }
-    let (name, count) = tally.into_iter().max_by_key(|&(_, count)| count)?;
+    // Strict `>` rather than `max_by_key`, which keeps the *last* of equal maxima: where two names
+    // both clear the majority, the first is the one tag order calls primary.
+    let (name, count) =
+        tally.into_iter().reduce(|best, next| if next.1 > best.1 { next } else { best })?;
     (count * MAJORITY > tagged).then(|| name.to_owned())
 }
 

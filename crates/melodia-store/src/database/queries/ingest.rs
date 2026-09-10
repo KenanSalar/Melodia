@@ -6,6 +6,7 @@ use sqlx::AssertSqlSafe;
 
 use crate::database::SQLITE_BIND_LIMIT;
 use crate::database::queries;
+use crate::database::queries::scan::NameCache;
 use melodia_core::entities::scan::ScannedFile;
 use melodia_core::error::AppError;
 
@@ -41,21 +42,22 @@ struct ExistingTrackInfo {
 }
 
 /// In-memory caches reused across `resolve_ids` calls within a single ingest
-/// transaction. Bundles the four parallel `HashMap`s so per-call signatures
-/// don't balloon (and so capacity hints stay co-located).
+/// transaction. Bundles them so per-call signatures don't balloon.
+///
+/// Artist and genre live in `queries::scan::NameCache` rather than here, because the join
+/// writers ask the same questions once per credit per track and had no way to reach a cache
+/// scoped to this call.
 struct ResolveCaches {
-    artist: HashMap<String, i64>,
+    names: NameCache,
     album: HashMap<String, HashMap<i64, Option<i64>>>,
-    genre: HashMap<String, Option<i64>>,
     folder: HashMap<String, i64>,
 }
 
 impl ResolveCaches {
     fn with_capacity_for(estimated: usize) -> Self {
         Self {
-            artist: HashMap::with_capacity(estimated / 10 + 1),
+            names: NameCache::for_chunk(estimated),
             album: HashMap::with_capacity(estimated / 8 + 1),
-            genre: HashMap::with_capacity(32),
             folder: HashMap::with_capacity(estimated / 20 + 1),
         }
     }
@@ -182,7 +184,8 @@ pub async fn ingest_scanned_files(
                 folder_id,
             };
 
-            queries::scan::update_track_metadata(tx, file_path_str, meta, &ids).await?;
+            queries::scan::update_track_metadata(tx, file_path_str, meta, &ids, &mut caches.names)
+                .await?;
             updated_count += 1;
             continue;
         }
@@ -243,9 +246,9 @@ pub async fn ingest_scanned_files(
 
         let file_name = file.path.file_name().and_then(|f| f.to_str()).unwrap_or("").to_string();
 
-        // Buffer instead of executing one 43-bind INSERT per file —
-        // `insert_tracks_batch` flushes a full chunk as a single
-        // multi-row statement (~27× fewer round-trips on a fresh scan).
+        // Buffer instead of executing one INSERT per file — `insert_tracks_batch`
+        // flushes a whole chunk as a single multi-row statement, which is most of
+        // what a fresh scan's round-trip count comes to.
         // Safe to defer: nothing later in this loop reads not-yet-
         // inserted rows (path/hash lookups run against the pre-loaded
         // maps, and FK upserts in `resolve_ids` execute immediately).
@@ -256,8 +259,13 @@ pub async fn ingest_scanned_files(
             ids,
         });
         if pending_inserts.len() >= queries::scan::INSERT_CHUNK_ROWS {
-            let ids =
-                queries::scan::insert_tracks_batch(tx, &pending_inserts, scan_timestamp).await?;
+            let ids = queries::scan::insert_tracks_batch(
+                tx,
+                &pending_inserts,
+                scan_timestamp,
+                &mut caches.names,
+            )
+            .await?;
             inserted_count += u32::try_from(ids.len()).unwrap_or(u32::MAX);
             inserted_track_ids.extend(ids);
             pending_inserts.clear();
@@ -267,7 +275,13 @@ pub async fn ingest_scanned_files(
     // Flush the insert remainder before the artwork backfill so the new
     // rows exist for any later same-transaction reads.
     if !pending_inserts.is_empty() {
-        let ids = queries::scan::insert_tracks_batch(tx, &pending_inserts, scan_timestamp).await?;
+        let ids = queries::scan::insert_tracks_batch(
+            tx,
+            &pending_inserts,
+            scan_timestamp,
+            &mut caches.names,
+        )
+        .await?;
         inserted_count += u32::try_from(ids.len()).unwrap_or(u32::MAX);
         inserted_track_ids.extend(ids);
         pending_inserts.clear();
@@ -435,32 +449,21 @@ async fn resolve_ids(
         return Ok(None);
     };
 
-    let artist_name = meta.artist.as_deref().unwrap_or("");
+    // The **first** credited name, matching `queries::scan::resolve_track_context` — an `artists`
+    // row keyed on the whole credit line is a third artist nobody recorded under.
+    let artist_name = meta.artist.primary_name();
     let album_name = meta.album.as_deref().unwrap_or("");
-    let genre_name = meta.genre.as_deref().unwrap_or("");
+    let genre_name = meta.genres.primary().unwrap_or("");
 
-    // Resolve artist
-    let artist_id = if let Some(&id) = caches.artist.get(artist_name) {
-        id
-    } else {
-        let id = queries::scan::upsert_artist(tx, artist_name, UNKNOWN_ARTIST_ID).await?;
-        caches.artist.insert(artist_name.to_owned(), id);
-        id
-    };
+    let artist_id = caches.names.artist(tx, artist_name, UNKNOWN_ARTIST_ID).await?;
 
-    // Resolve the album-artist (album_artist tag, else the track artist) — the album
-    // groups by this so a per-track featured credit doesn't split it. Reuses the
-    // artist cache.
-    let album_artist_name =
-        meta.album_artist.as_deref().filter(|s| !s.is_empty()).unwrap_or(artist_name);
+    // The album-artist (album_artist tag, else the track artist). The album groups by this, so a
+    // per-track featured credit doesn't split it.
+    let album_artist_name = queries::scan::album_artist_name_for(meta);
     let album_artist_id = if album_artist_name == artist_name {
         artist_id
-    } else if let Some(&id) = caches.artist.get(album_artist_name) {
-        id
     } else {
-        let id = queries::scan::upsert_artist(tx, album_artist_name, UNKNOWN_ARTIST_ID).await?;
-        caches.artist.insert(album_artist_name.to_owned(), id);
-        id
+        caches.names.artist(tx, album_artist_name, UNKNOWN_ARTIST_ID).await?
     };
 
     // Resolve album (two-level cache, keyed on the album-artist)
@@ -469,19 +472,23 @@ async fn resolve_ids(
     {
         id
     } else {
-        let id = queries::scan::upsert_album(tx, album_name, album_artist_id, meta.year).await?;
+        // Behind the cache miss deliberately: an album's credit is a property of the album, so
+        // rewriting it per *track* would cost a delete-and-insert cycle per row of a bulk scan.
+        let album_credit = queries::scan::album_credit_for(meta);
+        let id = queries::scan::upsert_album(
+            tx,
+            album_name,
+            album_artist_id,
+            &album_credit,
+            meta,
+            &mut caches.names,
+        )
+        .await?;
         caches.album.entry(album_name.to_owned()).or_default().insert(album_artist_id, id);
         id
     };
 
-    // Resolve genre
-    let genre_id = if let Some(&id) = caches.genre.get(genre_name) {
-        id
-    } else {
-        let id = queries::scan::upsert_genre(tx, genre_name).await?;
-        caches.genre.insert(genre_name.to_owned(), id);
-        id
-    };
+    let genre_id = caches.names.genre(tx, genre_name).await?;
 
     Ok(Some((artist_id, album_id, genre_id, folder_id)))
 }

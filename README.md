@@ -66,12 +66,12 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - A first-run card that sets language, theme and accent, reports the scan already running over your Music folder, and names every feature that reaches the network so you can switch it on or leave it off. Three panels, closeable in a click, and reachable again from Settings ▸ About
 - Parallel folder scanning, live folder watching, and incremental re-scans
 - Content hashing (BLAKE3), so a moved or renamed file keeps its play counts, favorites, and place in the queue
-- Full-text search (SQLite FTS5) over tracks, albums, artists, and genres: accent-insensitive, relevance-ranked, with a top-result card and recent history. The filter box on every list searches the same fields
+- Full-text search (SQLite FTS5) over tracks, albums, artists, and genres, and over the people credited on a track, so a composer or a producer reaches their work: accent-insensitive, relevance-ranked, with a top-result card and recent history. The filter box on every list searches the same fields
 - **My Library** gathers everything into one page with five tabs (Songs, Albums, Artists, Genres, Playlists); opening an entity grows the tab band into its banner rather than navigating away
 - Favorites and Recently Played, each a hero banner over sortable lists and browsable card grids
 - Browse by folder, as a detailed list or a grid of cards
 - Star ratings, play and skip counts, natural sort, resizable and toggleable columns
-- Tag editing for one track or many at once, cover art included, written straight back to the files
+- Tag editing for one track or many at once, cover art included, written straight back to the files. A track's artists, its genres and the ten studio credits (composer, lyricist, conductor, performer, producer and the rest) are each an editable list rather than one text box, beside the rest of what a file can carry: work and movement, key, mood, ISRC, and the release's own label, catalog number, barcode and medium
 - Manual and smart playlists, the latter rule-based and resolved live; `.m3u8` import and export, drag-and-drop import and reordering
 - A database backup before every schema migration, three kept
 
@@ -84,6 +84,14 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Full-screen Now Playing with an up-next list and a spectrum, mirrored, or waveform visualizer tinted to the album's own colors
 - Playback speed 0.25×–2.0×, a playback-linked sleep timer, resume on startup, media keys
 - Responsive mini-player: shrink the window and the UI collapses to a strip or a square widget
+
+### Lyrics
+- A panel in the Now Playing column, switched on from the lyrics menu in that view's header. A timed sheet follows the song line by line, and clicking a line seeks to it
+- Read from a `.lrc` beside the track or from the file's own lyrics tag, so a library that already carries them needs nothing switched on
+- **Online lookup is off until you switch it on**, from the lyrics menu or under Settings ▸ Services ▸ Lyrics. Nothing contacts **lrclib.net** until you do, and what it answers is cached under your data folder rather than written into your files
+- Romanization printed under a line written in a script you don't read. Korean and Japanese each get an engine matched to them; around a hundred scripts are covered in all, Chinese, Cyrillic and Arabic among them. On by default, and it draws nothing for a sheet already in Latin letters
+- A bilingual sheet's translation is drawn under the words it glosses
+- **Look up again** when a sheet matched the wrong recording, **Save to file** to write the one on screen into the track's own tag, and **Edit lyrics…** when it is nearly right and a stamp needs typing. The Edit Tags dialog offers the same sheet above its Lyrics field
 
 ### Internet Radio
 - **Off until you switch it on**, under Settings ▸ Services ▸ Radio. Nothing contacts the directory until you do
@@ -244,6 +252,7 @@ Everything lives under the OS application-data directory, `~/.local/share/Melodi
 | `settings.json`, `views.json`, `queue.json` | Preferences, per-view UI state, and the queue with the station tuned over it |
 | `scrobble_*.json` | Last.fm session key and ListenBrainz token (`0600` on Unix), plus the offline queue |
 | `artwork/`, `artists/`, `radio-logos/` | Cached album, artist, and station images |
+| `lyrics/` | Sheets the online lookup found, and a marker for the tracks it found none for |
 | `backups/` | Database copies taken before each schema migration |
 | `logs/` | Rolling logs and crash reports |
 
@@ -279,9 +288,10 @@ Copyright (C) 2026 Kenan Salar. Melodia is free software under the
 [GNU Affero General Public License](LICENSE), version 3 or, at your option, any later version, and is
 distributed without any warranty.
 
-The AGPL covers Melodia itself. Two fonts and a patched winit fork are compiled into the binary under
-their own terms; every one of those licenses ships in [`licenses/`](licenses/), which every package
-carries alongside this file.
+The AGPL covers Melodia itself. Two fonts, a patched winit fork and several crates on copyleft terms
+(the UI toolkit, the audio decoders and the Japanese romanization engine) are compiled into the
+binary under their own terms; every one of those licenses ships in [`licenses/`](licenses/), which
+every package carries alongside this file.
 
 ## Acknowledgments
 
@@ -292,7 +302,9 @@ Built on the work of the [Slint](https://slint.dev/),
 [Catppuccin](https://catppuccin.com/) palette, and
 [Material Foundation](https://m3.material.io/)'s color utilities, along with the many other crates
 listed in `Cargo.toml`. The station directory is [radio-browser.info](https://www.radio-browser.info)
-(CC0 data, no account).
+(CC0 data, no account), and the lyrics directory is [LRCLIB](https://lrclib.net) (also no account).
+Romanization is [uroman-rs](https://github.com/stellanomia/uroman-rs) for most scripts and
+[kakasi](https://github.com/Theta-Dev/kakasi) for Japanese.
 
 Melodia's interface is set in [Vazirmatn](https://github.com/rastikerdar/vazirmatn) (SIL Open Font
 License 1.1) and draws its icons from

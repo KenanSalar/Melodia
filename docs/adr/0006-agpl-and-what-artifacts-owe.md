@@ -33,6 +33,23 @@ that quietly stops shipping the text fails nowhere until a packager files a bug.
 that walk the packaging inputs rather than by review, for exactly that reason, and
 `crates/melodia/tests/packaging.rs` is where they live.
 
+**Amendment, 2026-09-08:** the constraint named above has bound. `kakasi`, the Japanese
+romanization engine [ADR 39](0039-romanization-runs-three-engines.md) chose, is GPL-3.0 with no
+permissive arm, which an AGPL-3.0-or-later work may link under GPLv3 section 13 with the combination
+staying AGPL. Auditing that claim showed it was not the first: Slint is tri-licensed and an AGPL
+project takes its GPL-3.0 arm, and Symphonia's sixteen decoder crates are MPL-2.0. So the
+obligation had been outstanding for longer than the dependency that surfaced it. `licenses/` now
+carries both texts, `ATTRIBUTION.txt` names the four crates they cover, and the rule it states has
+moved from "what this repository modifies or carries" to that plus "what it links under copyleft".
+
+**Amendment, 2026-09-09:** the rule grew a fourth clause, and this one is not about copyleft.
+`uroman`, the general romanization engine beside `kakasi`, is Apache-2.0 and ships a NOTICE file,
+which section 4(d) asks be reproduced wherever the work is redistributed. Nothing about permissive
+terms decides that: the obligation is the NOTICE's existence, so an entry is owed for a crate whose
+licence would otherwise leave it among the hundreds that are not listed. `ATTRIBUTION.txt` now names
+five crates, four for their licence and one for its NOTICE, and states the rule as what this
+repository modifies, carries a copy of, links under copyleft, or ships a NOTICE for.
+
 This ADR was written in September 2026. The licence was chosen before the repository's first commit
 and no argument for it exists in the tree; the obligations half is reconstructed from
 `.claude/rules/ci-packaging.md` and the packaging tests, and the choice itself from the maintainer's

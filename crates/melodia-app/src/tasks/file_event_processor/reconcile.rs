@@ -174,12 +174,17 @@ pub(super) async fn process_batch(
     // album-artwork window-function pass or a stats recalc — mirrors the
     // `any_changes` gate on the scan path (`library/settings/folders.rs`).
     let mut changes: usize = 0;
+    // One per batch, not one per event: a folder drop lands a release at a time, so every file in
+    // it names the same artist and genre.
+    let mut names = queries::scan::NameCache::for_chunk(events.len());
 
     for event in &events {
         match event {
             FileEvent::Created(path) => {
                 if let Some(meta) = metadata_map.get(path) {
-                    match handle_created(&mut tx, path, meta, &mut moved_candidates).await {
+                    match handle_created(&mut tx, path, meta, &mut moved_candidates, &mut names)
+                        .await
+                    {
                         Ok(changed) => changes += usize::from(changed),
                         Err(e) => {
                             log::warn!("Failed to process created file {}: {}", path.display(), e);
@@ -200,7 +205,9 @@ pub(super) async fn process_batch(
             }
             FileEvent::Renamed { from, to } => {
                 let meta = metadata_map.get(to);
-                match handle_renamed(&mut tx, from, to, meta, &mut moved_candidates).await {
+                match handle_renamed(&mut tx, from, to, meta, &mut moved_candidates, &mut names)
+                    .await
+                {
                     Ok(changed) => changes += usize::from(changed),
                     Err(e) => log::warn!(
                         "Failed to process rename {} -> {}: {}",
@@ -212,7 +219,9 @@ pub(super) async fn process_batch(
             }
             FileEvent::Modified(path) => {
                 if let Some(meta) = metadata_map.get(path) {
-                    match handle_modified(&mut tx, path, meta, &mut moved_candidates).await {
+                    match handle_modified(&mut tx, path, meta, &mut moved_candidates, &mut names)
+                        .await
+                    {
                         Ok(changed) => changes += usize::from(changed),
                         Err(e) => {
                             log::warn!("Failed to process modified file {}: {}", path.display(), e);
@@ -256,6 +265,7 @@ async fn handle_created(
     path: &Path,
     meta: &ExtractedMetadata,
     moved_candidates: &mut HashMap<String, (i64, String)>,
+    names: &mut queries::scan::NameCache,
 ) -> AppResult<bool> {
     let path_str = path.to_string_lossy().into_owned();
 
@@ -300,14 +310,15 @@ async fn handle_created(
     }
 
     let Some(ids) =
-        queries::scan::resolve_track_context(tx, path, &path_str, meta, "Created").await?
+        queries::scan::resolve_track_context(tx, path, &path_str, meta, "Created", names).await?
     else {
         return Ok(false);
     };
 
     let file_name = file_name_owned(path);
     let now = melodia_core::utils::now_rfc3339();
-    let _new_id = queries::scan::insert_track(tx, &path_str, &file_name, meta, &ids, &now).await?;
+    let _new_id =
+        queries::scan::insert_track(tx, &path_str, &file_name, meta, &ids, &now, names).await?;
     log::info!("Added new track: {path_str}");
 
     Ok(true)
@@ -320,6 +331,7 @@ async fn handle_renamed(
     to: &Path,
     meta: Option<&ExtractedMetadata>,
     moved_candidates: &mut HashMap<String, (i64, String)>,
+    names: &mut queries::scan::NameCache,
 ) -> AppResult<bool> {
     let from_str = from.to_string_lossy().into_owned();
     let to_str = to.to_string_lossy().into_owned();
@@ -356,7 +368,7 @@ async fn handle_renamed(
         log::info!("Renamed track: {from_str} -> {to_str}");
         return Ok(true);
     } else if let Some(meta) = meta {
-        return handle_created(tx, to, meta, moved_candidates).await;
+        return handle_created(tx, to, meta, moved_candidates, names).await;
     }
 
     Ok(false)
@@ -368,20 +380,21 @@ async fn handle_modified(
     path: &Path,
     meta: &ExtractedMetadata,
     moved_candidates: &mut HashMap<String, (i64, String)>,
+    names: &mut queries::scan::NameCache,
 ) -> AppResult<bool> {
     let path_str = path.to_string_lossy().into_owned();
 
     if !queries::scan::track_exists_by_path(tx, &path_str).await? {
-        return handle_created(tx, path, meta, moved_candidates).await;
+        return handle_created(tx, path, meta, moved_candidates, names).await;
     }
 
     let Some(ids) =
-        queries::scan::resolve_track_context(tx, path, &path_str, meta, "Modified").await?
+        queries::scan::resolve_track_context(tx, path, &path_str, meta, "Modified", names).await?
     else {
         return Ok(false);
     };
 
-    queries::scan::update_track_metadata(tx, &path_str, meta, &ids).await?;
+    queries::scan::update_track_metadata(tx, &path_str, meta, &ids, names).await?;
     log::info!("Updated metadata for: {path_str}");
 
     Ok(true)

@@ -1,10 +1,12 @@
 pub mod album;
 pub mod artist;
 pub mod browse;
+pub mod credits;
 pub mod folder;
 pub mod genre;
 pub mod integrations;
 pub mod locale;
+pub mod lyrics;
 pub mod playlist;
 pub mod playlist_item;
 pub mod radio;

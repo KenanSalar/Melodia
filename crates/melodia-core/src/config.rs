@@ -26,6 +26,13 @@ pub struct Paths {
     /// against a database with no `radio_stations` table reads every logo as an orphan, which is
     /// how two of them were deleted out from under their rows.
     pub radio_logos_dir: PathBuf,
+    /// Sheets `library::lyrics` fetched, and markers for the tracks it asked about and got
+    /// nothing for.
+    ///
+    /// Its own directory rather than a table: nothing else in the tree names these files, so the
+    /// filesystem is the whole index and the retention sweep needs no reference set, which is the
+    /// half of the artwork store that costs the most to get right.
+    pub lyrics_dir: PathBuf,
     /// Pre-migration copies of [`Self::db_path`], written by
     /// `database::backup`. Its own directory so the retention sweep runs
     /// somewhere the live database and its `-wal`/`-shm` sidecars aren't.
@@ -113,6 +120,7 @@ impl Paths {
             artwork_dir: data_dir.join("artwork"),
             artists_dir: data_dir.join("artists"),
             radio_logos_dir: data_dir.join("radio-logos"),
+            lyrics_dir: data_dir.join("lyrics"),
             backups_dir: data_dir.join("backups"),
             logs_dir: data_dir.join("logs"),
             data_dir,
@@ -126,6 +134,7 @@ impl Paths {
             &self.artwork_dir,
             &self.artists_dir,
             &self.radio_logos_dir,
+            &self.lyrics_dir,
             &self.backups_dir,
             &self.logs_dir,
         ] {

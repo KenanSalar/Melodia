@@ -1,6 +1,6 @@
 //! Full-screen Now Playing view wiring.
 //!
-//! Three pieces of Rust→Slint glue, all installed by [`install`] on the event-loop
+//! Four pieces of Rust→Slint glue, all installed by [`install`] on the event-loop
 //! thread:
 //!
 //! 1. **Dual-slot blurred background + sharp cover.** A `sinks.view_model` subscriber
@@ -12,7 +12,11 @@
 //! 2. **Technical-metadata chips**, off the same subscriber's `TrackMeta` fetch.
 //! 3. **"Up Next" list.** A `sinks.queue` subscriber rebuilds `NowPlaying.up-next-rows`
 //!    and resets `slide-phase` only when the current track actually changed.
+//! 4. **The lyrics panel**, which takes that same column when it is switched on. No
+//!    subscriber of its own: three edges kick [`lyrics`]'s hook and it dedupes on the
+//!    track it is holding.
 
+mod lyrics;
 mod metadata;
 mod source_change;
 mod up_next;
@@ -38,11 +42,14 @@ pub(crate) use source_change::republish_for_palette;
 use source_change::{apply_source_change, spawn_source_change_subscriber};
 use up_next::{rebuild_up_next, spawn_up_next_subscriber, wire_now_playing_open};
 
-/// Re-seed a `NowPlayingState`-shadowed surface — the Up Next list or the high-res cover
-/// slot — from the stashed snapshot. Set once by [`install`], called by
-/// [`crate::ui::shell::mini_player::install`] when the miniplayer becomes visible: the
-/// subscribers stash while no surface renders the model, so without these kicks a
-/// never-opened session followed by a direct shrink-to-mini shows empty or stale content.
+/// Re-fill a `NowPlayingState`-shadowed surface: the Up Next list, the high-res cover slot, or
+/// the lyrics panel's sheet.
+///
+/// Set once, after [`install`] has built the state each one reads. The first two are called by
+/// [`crate::ui::shell::mini_player::install`] when the miniplayer becomes visible — the
+/// subscribers stash while no surface renders the model, so without those kicks a never-opened
+/// session followed by a direct shrink-to-mini shows empty or stale content. The lyrics one is
+/// called from wherever a sheet could have gone stale, and dedupes on the one it holds.
 type Seeder = Box<dyn Fn()>;
 
 /// The list scrolls, so this is a soft cap — large enough to feel complete, small enough
@@ -159,6 +166,10 @@ pub struct NowPlayingState {
     /// square miniplayer becomes visible so the sharp tile replaces the row-tier fallback
     /// without waiting for the next source change.
     artwork_seeder: RefCell<Option<Seeder>>,
+    /// The lyrics panel's rows, offset table and sung index. Lives here rather than beside the
+    /// panel because the panel is `if`-mounted and this outlives it, and because the three edges
+    /// that refill it are all out here.
+    pub(super) lyrics: Rc<lyrics::LyricsUi>,
 }
 
 impl NowPlayingState {
@@ -230,6 +241,7 @@ pub fn install(
         chip_last_shape: RefCell::new(Vec::new()),
         up_next_seeder: RefCell::new(None),
         artwork_seeder: RefCell::new(None),
+        lyrics: lyrics::install(ui, state),
     });
 
     spawn_source_change_subscriber(ui, state, np_artwork.clone(), np_state.clone(), initial_key)?;
@@ -313,6 +325,11 @@ pub fn install(
             }
         }));
     }
+
+    // Same `Weak<NowPlayingState>` reason, one layer down: the lyrics panel's own state is a
+    // field of the thing its reseed has to read.
+    lyrics::wire_reseed(ui, state, &np_state);
+    lyrics::wire_menu(ui, state, &np_state);
 
     // No artwork seed here: backdrop, cover and chips are decoded on demand by
     // `wire_now_playing_open` on first open, or by `kick_artwork` when the square

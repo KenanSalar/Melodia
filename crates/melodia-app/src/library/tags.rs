@@ -20,8 +20,13 @@ use std::sync::{Arc, LazyLock};
 
 use rayon::prelude::*;
 
+use crate::library::lyrics;
 use crate::state::AppState;
 use melodia_artwork::media::image::artwork::{self, CoverCache};
+use melodia_core::entities::album::ReleaseTagRow;
+use melodia_core::entities::artist::ArtistCredit;
+use melodia_core::entities::credits::RoleCredits;
+use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::entities::tags::{ArtworkEdit, TagEdit};
 use melodia_core::entities::track::{TagEditRow, TrackSummary};
@@ -71,13 +76,72 @@ pub async fn get_tag_edit_rows(state: &AppState, ids: &[i64]) -> Result<Vec<TagE
     queries::track::get_tag_edit_rows_by_ids(&state.db, ids).await
 }
 
-/// The dialog's Lyrics tab, which reads off the file rather than the database.
+/// A file's lyrics tag, read off the file rather than the database.
 ///
-/// Here for [`get_tag_edit_rows`]' reason: it is the read half of the same dialog, and the one
-/// piece of it the UI would otherwise have to reach into `media::ingest::tag_writer` for. Blocking —
-/// the caller owns the `spawn_blocking`, having a runtime handle in hand where this does not.
+/// `library::lyrics` is what is left of its callers, handing what comes back to an LRC parser
+/// because this tag is routinely filled with a timed sheet. The string is whatever the tag held;
+/// nothing here judges what is in it. Blocking — the caller owns the `spawn_blocking`, having a
+/// runtime handle in hand where this does not.
+///
+/// The Edit-Tags dialog took this once and takes [`read_lyrics_and_credits`] now, wanting the
+/// artist credit off the same open. Which is why this stays: `library::lyrics` wants the lyrics
+/// and nothing else, and a second parse of the whole tag is not free.
 pub fn read_lyrics(path: &Path) -> Result<Option<String>, AppError> {
     tag_writer::read_lyrics(path)
+}
+
+/// Everything the dialog's single-selection path reads out of the file itself: the lyrics tag and
+/// the two artist credits, off one open.
+///
+/// The credit comes from the file rather than the database, and the asymmetry is the point: the
+/// file is what the credit *is*, and a track whose join rows were seeded from `artist_id` alone
+/// (every row on a library that predates the credit tables) would otherwise open showing one name
+/// for a credit the file spells with three. A multi-track selection reads
+/// [`queries::track::get_track_credits_by_ids`] instead, N file reads on the open path being
+/// exactly what the `TagEditRow` projection exists to avoid.
+///
+/// Blocking; the caller owns the `spawn_blocking`.
+pub fn read_lyrics_and_credits(
+    path: &Path,
+) -> Result<(Option<String>, (ArtistCredit, ArtistCredit)), AppError> {
+    tag_writer::read_lyrics_and_credits(path)
+}
+
+/// The credit behind each selected track, for the dialog's multi-selection path.
+pub async fn get_tag_edit_credits(
+    state: &AppState,
+    ids: &[i64],
+) -> Result<HashMap<i64, (ArtistCredit, ArtistCredit)>, AppError> {
+    queries::track::get_track_credits_by_ids(&state.db, ids).await
+}
+
+/// The role credits behind each selected track.
+///
+/// From the database for a single track as well as a selection, unlike [`get_tag_edit_credits`]'s
+/// caller, which reads one track's artist credit off the file. There is no second read to share
+/// here — the lyrics tab's open covers the artist tags and the lyrics, not these — so the row,
+/// re-ingested from the file on every scan and every save, is the cheaper of two right answers.
+pub async fn get_tag_edit_role_credits(
+    state: &AppState,
+    ids: &[i64],
+) -> Result<HashMap<i64, RoleCredits>, AppError> {
+    queries::track::get_track_role_credits_by_ids(&state.db, ids).await
+}
+
+/// The genres behind each selected track, as rows rather than as the rendered column.
+pub async fn get_tag_edit_genres(
+    state: &AppState,
+    ids: &[i64],
+) -> Result<HashMap<i64, GenreList>, AppError> {
+    queries::track::get_track_genres_by_ids(&state.db, ids).await
+}
+
+/// The release tags behind each selected track, for the dialog's Details tab.
+pub async fn get_tag_edit_release_tags(
+    state: &AppState,
+    ids: &[i64],
+) -> Result<Vec<ReleaseTagRow>, AppError> {
+    queries::album::get_release_tags_for_tracks(&state.db, ids).await
 }
 
 /// Apply `edit` to `ids`, then refresh the player's cached summaries and bump
@@ -105,6 +169,13 @@ pub async fn apply_tag_edit(
     .await?;
 
     if !updated_ids.is_empty() {
+        // Ahead of the resync, which is the one step here that can still fail: the files are
+        // written and the batch is committed, so a read error below would otherwise leave the
+        // stale answer standing over something that had nothing to do with it.
+        if edit.renames_recording() {
+            forget_stored_lyrics(state, &updated_ids).await;
+        }
+
         // Overwrite any queued / currently-playing summary with its fresh copy
         // so the Now-Playing bar, Queue Sheet and Up Next stop showing old tags.
         // Only pay for the refetch + resync when the player actually references
@@ -128,6 +199,27 @@ pub async fn apply_tag_edit(
     }
 
     Ok(report)
+}
+
+/// Drop what the lyrics directory answered for each retagged track.
+///
+/// The store is keyed on the file's path, so nothing here expires when the tags it was matched off
+/// change, and a miss stands for a month. That is how a track keeps showing no lyrics after the
+/// artist that lost them has been corrected.
+///
+/// Best-effort: the edit has already committed, so a store entry that would not clear is a line in
+/// the log rather than a save to fail.
+async fn forget_stored_lyrics(state: &AppState, ids: &[i64]) {
+    let paths = match queries::track::get_track_paths_by_ids(&state.db, ids).await {
+        Ok(rows) => rows.into_iter().map(|(_, path)| path).collect(),
+        Err(e) => {
+            log::debug!("tags: lyrics store kept: {}", describe(&e));
+            return;
+        }
+    };
+    if let Err(e) = lyrics::forget_all(state, paths).await {
+        log::debug!("tags: lyrics store kept: {}", describe(&e));
+    }
 }
 
 /// The testable core: rewrite each file's tags, re-extract, and land the batch
@@ -302,6 +394,11 @@ fn run_write_pass(
 /// `COALESCE`-on-conflict input), and genre — so identical keys yield identical
 /// ids. Keeping `year` in the key preserves the per-track album-year semantics:
 /// tracks with differing years land in different buckets and each still upserts.
+///
+/// **Ids only.** `upsert_album` also writes the release-level columns off the same metadata, and a
+/// cache hit skips that write, so whichever file resolved the key first is the one those columns
+/// come from. That is right for the dialog, where every selected file receives the same values,
+/// and it is why a batch of files disagreeing about a label has no surface to show it on.
 type ResolveKey = (PathBuf, String, String, String, Option<i32>, String);
 
 /// Land the successful writes in one transaction: resolve ids, refresh each
@@ -323,9 +420,17 @@ async fn run_commit(
     // `INSERT … ON CONFLICT … RETURNING` upserts per track. Function-scoped, so
     // it drops at batch end (no persistent cache).
     let mut resolve_cache: HashMap<ResolveKey, queries::scan::ResolvedIds> = HashMap::new();
+    // The credit tables ask per credited name per track, which `ResolveKey` never covered: it
+    // keys on the *primary* names, so a guest on every track of the selection resolved once per
+    // file. Same scope, dropped at batch end.
+    let mut names = queries::scan::NameCache::for_chunk(files.len());
     // Artwork-Remove ids with nothing left to point at, flushed as one `IN (…)` UPDATE after
     // the loop.
     let mut remove_null_ids: Vec<i64> = Vec::new();
+    // The release-level fields `upsert_album`'s COALESCE cannot empty, and the albums owed the
+    // statement that does. Answered once: an edit clearing none of them collects nothing.
+    let cleared_release = edit.cleared_release_tags();
+    let mut cleared_album_ids: Vec<i64> = Vec::new();
 
     for f in files {
         let (meta, unsupported) = match &f.outcome {
@@ -339,22 +444,24 @@ async fn run_commit(
         };
 
         let path = Path::new(&f.path);
-        // Mirror `resolve_track_context`'s own `as_deref().unwrap_or("")`
-        // normalization so a cached key matches the ids it would have produced.
+        // Mirror what `resolve_track_context` keys on, or the cache answers with ids it would
+        // never have produced: the **first** credited name, not the whole credit line, since
+        // that is the name the `artists` row carries.
         let key: ResolveKey = (
             path.parent().map(Path::to_path_buf).unwrap_or_default(),
-            meta.artist.clone().unwrap_or_default(),
+            meta.artist.primary_name().to_owned(),
             meta.album.clone().unwrap_or_default(),
-            meta.album_artist.clone().unwrap_or_default(),
+            meta.album_artist.primary_name().to_owned(),
             meta.year,
-            meta.genre.clone().unwrap_or_default(),
+            meta.genres.primary().unwrap_or_default().to_owned(),
         );
         let rids = if let Some(cached) = resolve_cache.get(&key) {
             *cached
         } else {
-            let Some(resolved) =
-                queries::scan::resolve_track_context(&mut tx, path, &f.path, meta, "Tag edit")
-                    .await?
+            let Some(resolved) = queries::scan::resolve_track_context(
+                &mut tx, path, &f.path, meta, "Tag edit", &mut names,
+            )
+            .await?
             else {
                 report.failures.push((f.path.clone(), "not in a library folder".to_owned()));
                 continue;
@@ -363,10 +470,17 @@ async fn run_commit(
             resolved
         };
 
-        queries::scan::update_track_metadata(&mut tx, &f.path, meta, &rids).await?;
+        queries::scan::update_track_metadata(&mut tx, &f.path, meta, &rids, &mut names).await?;
         updated_ids.push(f.id);
         if !unsupported.is_empty() {
             report.unsupported.push((f.path.clone(), unsupported.clone()));
+        }
+
+        if !cleared_release.is_empty()
+            && let Some(aid) = rids.album_id
+            && !cleared_album_ids.contains(&aid)
+        {
+            cleared_album_ids.push(aid);
         }
 
         // Artwork the metadata UPDATE can't express: its `COALESCE(?, ...)` can
@@ -403,6 +517,9 @@ async fn run_commit(
         }
         ArtworkEdit::Keep => {}
     }
+
+    // After every `upsert_album` above, which is what it exists to undo.
+    queries::album::clear_release_tags(&mut tx, &cleared_album_ids, cleared_release).await?;
 
     // Both passes answer to a track that changed parents, and both are whole-table:
     // the rollup is a window CTE over every row in `tracks`, the sweep three

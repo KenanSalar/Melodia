@@ -4,7 +4,11 @@ use sqlx::{QueryBuilder, Sqlite};
 
 use crate::database::DbPool;
 use crate::database::queries;
-use crate::database::queries::fixtures::insert_test_track;
+use crate::database::queries::fixtures::{
+    insert_tagged_track, insert_test_track, make_test_metadata,
+};
+use melodia_core::entities::credits::{CreditRole, RoleCredit, RoleCredits};
+use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::smart_criteria::{
     FIELDS, LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria, SmartLimit,
     ops_for,
@@ -315,9 +319,9 @@ async fn set_album_artist(db: &DbPool, id: i64, album_artist: &str) -> Result<()
     Ok(())
 }
 
-/// Leave a row with no genre at all, which the seed has no other way to produce.
-async fn clear_genre(db: &DbPool, id: i64) -> Result<(), AppError> {
-    sqlx::query("UPDATE tracks SET genre = NULL WHERE id = ?")
+/// Leave a row with no album at all, which the seed has no other way to produce.
+async fn clear_album(db: &DbPool, id: i64) -> Result<(), AppError> {
+    sqlx::query("UPDATE tracks SET album = NULL WHERE id = ?")
         .bind(id)
         .execute(db.write())
         .await?;
@@ -334,17 +338,21 @@ async fn clear_genre(db: &DbPool, id: i64) -> Result<(), AppError> {
 ///
 /// Every existing test of those forms uses a *single* rule, which is exactly the shape the
 /// parens cannot matter in. Needs a null column to see, hence the staging.
+///
+/// **Over a column-backed field on purpose.** The set-valued ones render `NOT EXISTS`, which
+/// carries no bare `OR` and so cannot reach this at all; staged over one of those the test goes
+/// green while pinning nothing.
 #[tokio::test]
 async fn a_null_tolerant_rule_does_not_widen_the_rules_beside_it() -> Result<(), AppError> {
     let s = seed().await?;
-    clear_genre(&s.db, s.t4).await?;
+    clear_album(&s.db, s.t4).await?;
 
     let c = SmartCriteria {
         rules: vec![
             Rule {
-                field: RuleField::Genre,
+                field: RuleField::Album,
                 op: RuleOp::NotContains,
-                value: Some(RuleValue::Text("Rock".to_owned())),
+                value: Some(RuleValue::Text("Album A".to_owned())),
             },
             Rule {
                 field: RuleField::Rating,
@@ -355,8 +363,8 @@ async fn a_null_tolerant_rule_does_not_widen_the_rules_beside_it() -> Result<(),
         ..SmartCriteria::default()
     };
 
-    // t3 is the only row that is both not-Rock and rated 4+. t4 has a null genre and rating 0,
-    // so it satisfies the first rule and fails the second — and joins the set anyway the moment
+    // t3 is the only row that is both off Album A and rated 4+. t4 has a null album and rating 0,
+    // so it satisfies the first rule and fails the second, then joins the set anyway the moment
     // the parens go.
     assert_eq!(ids(&resolve(&s.db, &c).await?), HashSet::from([s.t3]));
     Ok(())
@@ -394,7 +402,7 @@ async fn a_percent_in_a_rule_value_matches_only_a_percent() -> Result<(), AppErr
 
 // ---- the column each field filters on ----
 
-/// **`AlbumArtist` and `Artist` are the swap `column_for` exists to get right**, and the one a
+/// **`AlbumArtist` and `Artist` are the swap `field_source` exists to get right**, and the one a
 /// reader cannot catch: both compile, both return rows, and the playlist is merely a different
 /// set than the user asked for. Ten of the sixteen arms had no case at all; these two are the
 /// pair that can be told apart by a query rather than by reading the match.
@@ -557,4 +565,145 @@ fn a_rule_whose_value_shape_is_wrong_renders_as_matching_nothing() {
         "the gate is what keeps the fallback below unreachable"
     );
     assert_eq!(rendered_predicate(&text_field_holding_a_number), "0");
+}
+
+// === The set-valued fields ===
+
+/// A seed the flat helper cannot spell: genres and role credits are rows, and every rule below is
+/// about a track carrying more than one of something.
+struct MultiSeed {
+    db: DbPool,
+    /// `Rock` + `Metal`, composer Alice, producer Bob.
+    both: i64,
+    /// `Rock` alone, composer Carol.
+    rock: i64,
+    /// `Pop` alone, no role credit at all.
+    pop: i64,
+}
+
+async fn multi_seed() -> Result<MultiSeed, AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+
+    let mut first = make_test_metadata("One");
+    first.genres = GenreList::new(vec!["Rock".to_owned(), "Metal".to_owned()]);
+    first.credits = RoleCredits::new(vec![
+        role(CreditRole::Composer, "Alice"),
+        role(CreditRole::Producer, "Bob"),
+    ]);
+    let both = insert_tagged_track(&db, "/music/1.mp3", &first).await?;
+
+    let mut second = make_test_metadata("Two");
+    second.genres = GenreList::from_name("Rock");
+    second.credits = RoleCredits::new(vec![role(CreditRole::Composer, "Carol")]);
+    let rock = insert_tagged_track(&db, "/music/2.mp3", &second).await?;
+
+    let mut third = make_test_metadata("Three");
+    third.genres = GenreList::from_name("Pop");
+    let pop = insert_tagged_track(&db, "/music/3.mp3", &third).await?;
+
+    Ok(MultiSeed {
+        db,
+        both,
+        rock,
+        pop,
+    })
+}
+
+fn role(role: CreditRole, name: &str) -> RoleCredit {
+    RoleCredit {
+        role,
+        name: name.to_owned(),
+        detail: String::new(),
+    }
+}
+
+/// **The correlation is the whole rule.** These fields render as `EXISTS (SELECT 1 FROM …)`, and a
+/// fragment that leaves out the `WHERE track_id = tracks.id` half asks whether the join table
+/// holds any row at all — true for every track, so the playlist quietly becomes the library.
+#[tokio::test]
+async fn a_genre_rule_admits_only_the_tracks_that_carry_it() -> Result<(), AppError> {
+    let s = multi_seed().await?;
+    let c = one(RuleField::Genre, RuleOp::Is, Some(RuleValue::Text("Pop".to_owned())));
+
+    assert_eq!(ids(&resolve(&s.db, &c).await?), HashSet::from([s.pop]));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_credits_rule_admits_only_the_tracks_that_carry_it() -> Result<(), AppError> {
+    let s = multi_seed().await?;
+    let c = one(RuleField::Credits, RuleOp::Is, Some(RuleValue::Text("Carol".to_owned())));
+
+    assert_eq!(ids(&resolve(&s.db, &c).await?), HashSet::from([s.rock]));
+    Ok(())
+}
+
+/// Against the rendered line `is` is unsatisfiable for a track carrying two of anything: the
+/// column reads `Rock, Metal` and no exact match on either name can reach it.
+#[tokio::test]
+async fn an_exact_rule_reaches_a_track_that_carries_two() -> Result<(), AppError> {
+    let s = multi_seed().await?;
+    let rock = one(RuleField::Genre, RuleOp::Is, Some(RuleValue::Text("Rock".to_owned())));
+    let metal = one(RuleField::Genre, RuleOp::Is, Some(RuleValue::Text("Metal".to_owned())));
+
+    assert_eq!(ids(&resolve(&s.db, &rock).await?), HashSet::from([s.both, s.rock]));
+    // The second genre is the one the rendered line buries mid-string.
+    assert_eq!(ids(&resolve(&s.db, &metal).await?), HashSet::from([s.both]));
+    Ok(())
+}
+
+/// `starts_with` against the line only ever reads the first name, so the second is unreachable by
+/// prefix however it is spelled.
+#[tokio::test]
+async fn a_prefix_rule_reaches_a_name_that_is_not_first() -> Result<(), AppError> {
+    let s = multi_seed().await?;
+    let c = one(RuleField::Genre, RuleOp::StartsWith, Some(RuleValue::Text("Met".to_owned())));
+
+    assert_eq!(ids(&resolve(&s.db, &c).await?), HashSet::from([s.both]));
+    Ok(())
+}
+
+/// The negated arm renders `NOT EXISTS`, which is true for a track with no rows of that kind at
+/// all — the honest reading, since a track credits nobody rather than crediting the empty string.
+#[tokio::test]
+async fn a_negated_rule_excludes_only_the_carriers_and_keeps_the_untagged() -> Result<(), AppError>
+{
+    let s = multi_seed().await?;
+    let c = one(RuleField::Credits, RuleOp::NotContains, Some(RuleValue::Text("Alice".to_owned())));
+
+    assert_eq!(ids(&resolve(&s.db, &c).await?), HashSet::from([s.rock, s.pop]));
+    Ok(())
+}
+
+/// A set-valued fragment and a column-backed one have to compose, and `Any` is where an
+/// uncorrelated `EXISTS` would be loudest — one arm true for everything widens the whole rule.
+#[tokio::test]
+async fn a_set_valued_rule_composes_with_a_column_rule() -> Result<(), AppError> {
+    let s = multi_seed().await?;
+
+    let all = SmartCriteria {
+        rules: vec![
+            Rule {
+                field: RuleField::Genre,
+                op: RuleOp::Is,
+                value: Some(RuleValue::Text("Rock".to_owned())),
+            },
+            Rule {
+                field: RuleField::Title,
+                op: RuleOp::Is,
+                value: Some(RuleValue::Text("One".to_owned())),
+            },
+        ],
+        match_mode: MatchMode::All,
+        ..SmartCriteria::default()
+    };
+    assert_eq!(ids(&resolve(&s.db, &all).await?), HashSet::from([s.both]));
+
+    let any = SmartCriteria {
+        match_mode: MatchMode::Any,
+        ..all
+    };
+    assert_eq!(ids(&resolve(&s.db, &any).await?), HashSet::from([s.both, s.rock]));
+    Ok(())
 }

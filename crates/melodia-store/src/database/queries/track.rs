@@ -3,6 +3,9 @@ use std::collections::HashMap;
 use sqlx::AssertSqlSafe;
 
 use crate::database::{DbPool, chunked_in_query};
+use melodia_core::entities::artist::{ArtistCredit, CreditedArtist};
+use melodia_core::entities::credits::{CreditRole, RoleCredit, RoleCredits};
+use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
 
@@ -62,7 +65,9 @@ pub async fn get_tracks_by_artist(
     artist_id: i64,
 ) -> Result<Vec<track::Track>, AppError> {
     let tracks = sqlx::query_as::<_, track::Track>(
-        "SELECT * FROM tracks WHERE artist_id = ? ORDER BY sort_key COLLATE NOCASE ASC",
+        "SELECT * FROM tracks \
+         WHERE id IN (SELECT track_id FROM track_artists WHERE artist_id = ?) \
+         ORDER BY sort_key COLLATE NOCASE ASC",
     )
     .bind(artist_id)
     .fetch_all(db.read())
@@ -76,7 +81,9 @@ pub async fn get_tracks_by_genre(
     genre_id: i64,
 ) -> Result<Vec<track::Track>, AppError> {
     let tracks = sqlx::query_as::<_, track::Track>(
-        "SELECT * FROM tracks WHERE genre_id = ? ORDER BY sort_key COLLATE NOCASE ASC",
+        "SELECT * FROM tracks \
+         WHERE id IN (SELECT track_id FROM track_genres WHERE genre_id = ?) \
+         ORDER BY sort_key COLLATE NOCASE ASC",
     )
     .bind(genre_id)
     .fetch_all(db.read())
@@ -200,8 +207,14 @@ pub async fn get_track_summaries_by_ids(
 }
 
 /// Fetch `TagEditRow` projections by IDs for the Edit-Track-Information dialog, preserving the
-/// input order. Reads the editable tag columns plus the read-only technical ones the Summary tab
-/// shows — no joins, artist/album/genre being stored denormalized on `tracks`.
+/// input order. Reads the editable **single-valued** tag columns plus the read-only technical ones
+/// the Summary tab shows, and joins nothing.
+///
+/// The multi-valued fields are deliberately absent: the dialog reads artists, genres and role
+/// credits as rows, through the three `get_track_*_by_ids` siblings below. Widening this
+/// projection to carry one of their rendered columns instead is the regression — an editor
+/// populated from `tracks.genre` splits `Chanson, Francaise` into two genres and saving makes that
+/// permanent.
 pub async fn get_tag_edit_rows_by_ids(
     db: &DbPool,
     ids: &[i64],
@@ -236,6 +249,25 @@ pub async fn get_track_paths_by_ids(
     Ok(ids.iter().filter_map(|id| map.remove(id).map(|path| (*id, path))).collect())
 }
 
+/// Fetch `TrackLinks` projections by IDs, preserving the input order. The queue sheet renders from
+/// `TrackSummary`, which carries no foreign keys, so its context menu resolves them here rather
+/// than widening the projection the player and `queue.json` share.
+pub async fn get_track_links_by_ids(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<Vec<track::TrackLinks>, AppError> {
+    let cols = track::track_links_columns();
+    let links: Vec<track::TrackLinks> = chunked_in_query(db.read(), ids, |placeholders| {
+        format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})")
+    })
+    .await?;
+
+    let mut map: HashMap<i64, track::TrackLinks> = HashMap::with_capacity(links.len());
+    map.extend(links.into_iter().map(|l| (l.id, l)));
+
+    Ok(ids.iter().filter_map(|id| map.remove(id)).collect())
+}
+
 /// Lightweight version of `get_all_tracks` returning only list-view columns.
 ///
 /// The display order is the caller's: this hands back [`TRACK_LIST_ORDER`] and
@@ -264,13 +296,20 @@ pub async fn get_tracks_by_album_for_list(
 }
 
 /// Lightweight version of `get_tracks_by_artist` for list views.
+///
+/// Every track this artist is *credited* on, which is the join table rather than the
+/// `tracks.artist_id` FK — that one names only the first credit. `IN` rather than a join for two
+/// reasons: `artist_id` is a column of both tables, and a credit that names one artist twice
+/// ("X feat. X") would join the row in twice.
 pub async fn get_tracks_by_artist_for_list(
     db: &DbPool,
     artist_id: i64,
 ) -> Result<Vec<track::TrackListRow>, AppError> {
     let cols = track::track_list_columns();
     let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(format!(
-        "SELECT {cols} FROM tracks WHERE artist_id = ? ORDER BY sort_key COLLATE NOCASE ASC"
+        "SELECT {cols} FROM tracks \
+         WHERE id IN (SELECT track_id FROM track_artists WHERE artist_id = ?) \
+         ORDER BY sort_key COLLATE NOCASE ASC"
     )))
     .bind(artist_id)
     .fetch_all(db.read())
@@ -279,13 +318,21 @@ pub async fn get_tracks_by_artist_for_list(
 }
 
 /// Lightweight version of `get_tracks_by_genre` for list views.
+///
+/// Every track tagged with this genre, through the join table for
+/// [`get_tracks_by_artist_for_list`]'s reason. What makes it load-bearing here rather than merely
+/// consistent: `genres.track_count` is maintained off `track_genres`, so reading `tracks.genre_id`
+/// left the grid card stating a count over a page that listed a subset of it, and nothing at all
+/// for a genre no track happens to carry first.
 pub async fn get_tracks_by_genre_for_list(
     db: &DbPool,
     genre_id: i64,
 ) -> Result<Vec<track::TrackListRow>, AppError> {
     let cols = track::track_list_columns();
     let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(format!(
-        "SELECT {cols} FROM tracks WHERE genre_id = ? ORDER BY sort_key COLLATE NOCASE ASC"
+        "SELECT {cols} FROM tracks \
+         WHERE id IN (SELECT track_id FROM track_genres WHERE genre_id = ?) \
+         ORDER BY sort_key COLLATE NOCASE ASC"
     )))
     .bind(genre_id)
     .fetch_all(db.read())
@@ -747,3 +794,135 @@ pub async fn get_recently_played(
 #[cfg(test)]
 #[path = "tests/track_tests.rs"]
 mod tests;
+
+/// Each track's ordered artist credit, plus the credit its album carries.
+///
+/// Two queries rather than one join: the two credits hang off different parents, so a single
+/// statement would multiply each track's rows by its album's. The `ORDER BY` is what makes the
+/// credit an *ordered* thing rather than a set.
+///
+/// Used by the Edit-Tags dialog over a multi-track selection. A single track reads its credit off
+/// the file instead, that being the authority and already open for the lyrics tab.
+pub async fn get_track_credits_by_ids(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<HashMap<i64, (ArtistCredit, ArtistCredit)>, AppError> {
+    let track_rows: Vec<(i64, String, String)> = chunked_in_query(db.read(), ids, |placeholders| {
+        format!(
+            "SELECT ta.track_id, a.name, ta.join_phrase \
+                 FROM track_artists ta JOIN artists a ON a.id = ta.artist_id \
+                 WHERE ta.track_id IN ({placeholders}) ORDER BY ta.track_id, ta.position"
+        )
+    })
+    .await?;
+
+    let album_rows: Vec<(i64, String, String)> = chunked_in_query(db.read(), ids, |placeholders| {
+        format!(
+            "SELECT t.id, a.name, aa.join_phrase \
+                 FROM tracks t \
+                 JOIN album_artists aa ON aa.album_id = t.album_id \
+                 JOIN artists a ON a.id = aa.artist_id \
+                 WHERE t.id IN ({placeholders}) ORDER BY t.id, aa.position"
+        )
+    })
+    .await?;
+
+    let mut out: HashMap<i64, (ArtistCredit, ArtistCredit)> = HashMap::with_capacity(ids.len());
+    for (id, artists) in group_credits(track_rows) {
+        out.entry(id).or_default().0 = ArtistCredit::new(artists);
+    }
+    for (id, artists) in group_credits(album_rows) {
+        out.entry(id).or_default().1 = ArtistCredit::new(artists);
+    }
+    Ok(out)
+}
+
+/// Every track's role credits, keyed by track id.
+///
+/// A sibling of [`get_track_credits_by_ids`] rather than a third query inside it: the Edit-Tags
+/// dialog is the only caller that needs both, and a track with no role credits is the common case
+/// — most files name nobody but their artist, so the join returns nothing for them and they get a
+/// `RoleCredits::default()` from the `or_default` rather than a row.
+///
+/// A role this build doesn't know is skipped: the column is a string, so a database written by a
+/// newer version can hold one, and dropping it beats inventing a variant for it.
+pub async fn get_track_role_credits_by_ids(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<HashMap<i64, RoleCredits>, AppError> {
+    let rows: Vec<(i64, String, String, String)> =
+        chunked_in_query(db.read(), ids, |placeholders| {
+            format!(
+                "SELECT tc.track_id, a.name, tc.role, tc.detail \
+                 FROM track_credits tc JOIN artists a ON a.id = tc.artist_id \
+                 WHERE tc.track_id IN ({placeholders}) ORDER BY tc.track_id, tc.position"
+            )
+        })
+        .await?;
+
+    let mut grouped: HashMap<i64, Vec<RoleCredit>> = HashMap::new();
+    for (id, name, role, detail) in rows {
+        let Some(role) = CreditRole::from_db_str(&role) else {
+            continue;
+        };
+        grouped.entry(id).or_default().push(RoleCredit { role, name, detail });
+    }
+    Ok(grouped.into_iter().map(|(id, credits)| (id, RoleCredits::new(credits))).collect())
+}
+
+/// Every track's genres, keyed by track id.
+///
+/// Read as rows rather than by splitting the rendered `tracks.genre` column, which is what the
+/// Edit-Tags dialog did while its genre field was one box: a genre containing the separator
+/// (`Chanson, Francaise`) came back as two, and saving made that permanent. The rows are the truth
+/// and the column is derived from them, so the editor reads the truth.
+pub async fn get_track_genres_by_ids(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<HashMap<i64, GenreList>, AppError> {
+    let rows: Vec<(i64, String)> = chunked_in_query(db.read(), ids, |placeholders| {
+        format!(
+            "SELECT tg.track_id, g.name \
+             FROM track_genres tg JOIN genres g ON g.id = tg.genre_id \
+             WHERE tg.track_id IN ({placeholders}) ORDER BY tg.track_id, tg.position"
+        )
+    })
+    .await?;
+
+    let mut grouped: HashMap<i64, Vec<String>> = HashMap::new();
+    for (id, name) in rows {
+        grouped.entry(id).or_default().push(name);
+    }
+    Ok(grouped.into_iter().map(|(id, names)| (id, GenreList::new(names))).collect())
+}
+
+/// One track's ordered artist credit, the album's left alone.
+///
+/// [`get_track_credits_by_ids`] over a single parent minus its second query, for the lyrics
+/// lookup: it asks about the playing track and has no album credit to show, and the caller is
+/// about to open a socket, so the row multiplication that one avoids is not a cost worth paying
+/// here either.
+pub async fn get_track_credit(db: &DbPool, id: i64) -> Result<ArtistCredit, AppError> {
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT a.name, ta.join_phrase \
+         FROM track_artists ta JOIN artists a ON a.id = ta.artist_id \
+         WHERE ta.track_id = ? ORDER BY ta.position",
+    )
+    .bind(id)
+    .fetch_all(db.read())
+    .await?;
+
+    Ok(ArtistCredit::new(
+        rows.into_iter().map(|(name, join_phrase)| CreditedArtist { name, join_phrase }).collect(),
+    ))
+}
+
+/// Collapse `(parent id, name, join phrase)` rows into one credit per parent, keeping the order
+/// the query returned them in.
+fn group_credits(rows: Vec<(i64, String, String)>) -> HashMap<i64, Vec<CreditedArtist>> {
+    let mut grouped: HashMap<i64, Vec<CreditedArtist>> = HashMap::new();
+    for (id, name, join_phrase) in rows {
+        grouped.entry(id).or_default().push(CreditedArtist { name, join_phrase });
+    }
+    grouped
+}

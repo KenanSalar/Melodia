@@ -1,0 +1,31 @@
+import { Theme } from "../../theme.slint";
+
+// The heading and one-line summary every step of the welcome card opens with.
+//
+// Shared so the three steps cannot drift into different weights: the card is read as one sequence,
+// and a step whose title sits a size off the others reads as a different surface.
+//
+// **No `changed` handler, here or anywhere under this directory.** The card is `if`-mounted on
+// `Onboarding.mounted` and a tracker in a dropped branch outlives it; `crates/melodia/tests/onboarding.rs`
+// walks these files for it.
+export component OnboardingPanelHeader inherits VerticalLayout {
+    in property <string> title;
+    in property <string> summary;
+
+    min-width: 0px;
+    spacing: Theme.pad-sm;
+
+    Text {
+        text: root.title;
+        font-size: Theme.font-size-lg;
+        font-weight: 700;
+        color: Theme.text;
+        overflow: elide;
+    }
+    Text {
+        text: root.summary;
+        font-size: Theme.font-size-sm;
+        color: Theme.text-muted;
+        wrap: word-wrap;
+    }
+}

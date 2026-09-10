@@ -1,4 +1,4 @@
-import { SmartRuleRow } from "../models.slint";
+import { ArtistCreditRow, SmartRuleRow } from "../models.slint";
 
 // The form-shaped dialogs' state. Each is populated by its own entry-point callback and read back
 // by the `Dialog.accepted` dispatcher — which is why they sit apart from `Dialog`: the dispatcher
@@ -34,7 +34,7 @@ export global SmartEditor {
 }
 
 // The Edit-Track-Information dialog (`kind == "edit-tags"`), opened from a track row's context menu
-// over one *or many* rows and owned by `crates/melodia-views/src/ui/callbacks/tags.rs`. `request-edit` fetches,
+// over one *or many* rows and owned by `crates/melodia-views/src/ui/callbacks/tags/`. `request-edit` fetches,
 // populates and opens on the same fresh tick `SmartEditor` uses. `commit` diffs each field against
 // the populate-time snapshot into a Keep / Clear / Set tri-state, so only touched fields reach the
 // file.
@@ -47,18 +47,40 @@ export global TagEditor {
     // Numbers cross as strings — Rust parses and validates them into a typed
     // `TagEdit` on commit.
     in-out property <string> title;
-    in-out property <string> artist;
-    in-out property <string> album-artist;
     in-out property <string> album;
-    in-out property <string> genre;
     in-out property <string> year;
     in-out property <string> original-year;
     in-out property <string> track-number;
     in-out property <string> disc-number;
-    in-out property <string> composer;
     in-out property <string> comment;
     in-out property <string> bpm;
     in-out property <string> lyrics;
+
+    // The rest of the vocabulary. Track-level first, then the release-level tags that reach
+    // `albums` through the re-ingest the commit ends with.
+    in-out property <string> track-total;
+    in-out property <string> disc-total;
+    in-out property <string> disc-subtitle;
+    in-out property <string> subtitle;
+    in-out property <string> initial-key;
+    in-out property <string> mood;
+    in-out property <string> grouping;
+    in-out property <string> work;
+    in-out property <string> movement;
+    in-out property <string> movement-number;
+    in-out property <string> movement-total;
+    in-out property <string> language;
+    in-out property <string> copyright;
+    in-out property <string> isrc;
+    in-out property <string> label;
+    in-out property <string> catalog-number;
+    in-out property <string> barcode;
+    in-out property <string> media;
+    in-out property <string> release-type;
+    in-out property <string> release-country;
+    // A plain bool rather than a tri-state: the commit diffs it against what `populate` wrote, so
+    // an untouched switch is `Keep` like every other field.
+    in-out property <bool> compilation;
 
     // The sentinel where the selection disagrees, the normal hint otherwise.
     in property <string> title-placeholder;
@@ -70,15 +92,95 @@ export global TagEditor {
     in property <string> original-year-placeholder;
     in property <string> track-number-placeholder;
     in property <string> disc-number-placeholder;
-    in property <string> composer-placeholder;
     in property <string> comment-placeholder;
     in property <string> bpm-placeholder;
     in property <string> lyrics-placeholder;
+    in property <string> track-total-placeholder;
+    in property <string> disc-total-placeholder;
+    in property <string> disc-subtitle-placeholder;
+    in property <string> subtitle-placeholder;
+    in property <string> initial-key-placeholder;
+    in property <string> mood-placeholder;
+    in property <string> grouping-placeholder;
+    in property <string> work-placeholder;
+    in property <string> movement-placeholder;
+    in property <string> movement-number-placeholder;
+    in property <string> movement-total-placeholder;
+    in property <string> language-placeholder;
+    in property <string> copyright-placeholder;
+    in property <string> isrc-placeholder;
+    in property <string> label-placeholder;
+    in property <string> catalog-number-placeholder;
+    in property <string> barcode-placeholder;
+    in property <string> media-placeholder;
+    in property <string> release-type-placeholder;
+    in property <string> release-country-placeholder;
+
+    // The two artist fields are credits rather than strings: an ordered list of names with a
+    // phrase between each pair. Rust owns both models and applies every edit through the
+    // callbacks below, so a row view never mutates what it is handed.
+    in-out property <[ArtistCreditRow]> artists;
+    in-out property <[ArtistCreditRow]> album-artists;
+    // Picker labels for the phrase between two names, seeded by Rust from
+    // `entities::artist::JOIN_PHRASES` **plus anything the opened files already use**, so a
+    // credit written elsewhere survives a save here. Deliberately not an inline `@tr` array:
+    // this is tag content, and a localized " feat. " would land in the user's file.
+    in property <[string]> join-phrases;
+    // The genre list, a row per name. Rust owns the model and applies every edit through the
+    // callbacks below, exactly as it does for the two credits — a genre is multi-value in every
+    // format that can hold one, so the field is a list rather than a box with separators in it.
+    in-out property <[string]> genres;
+    callback set-genre-name(int /*row*/, string);
+    callback add-genre();
+    callback remove-genre(int /*row*/);
+
+    // The role credits, the same shape one level deeper: a list of names **per role**, indexed by
+    // position in `entities::credits::ROLES`. One model and three callbacks rather than ten of
+    // each, the roles differing only in which tag key they end up under.
+    //
+    // `tag-editor-body.slint`'s inline label array mirrors `ROLES` by index — the
+    // `smart_criteria::FIELDS` arrangement, and the same hazard: a label out of order silently
+    // files a conductor as a producer.
+    in-out property <[[string]]> role-names;
+    in property <[string]> role-placeholders;
+    callback set-role-name(int /*role*/, int /*row*/, string);
+    callback add-role(int /*role*/);
+    callback remove-role(int /*role*/, int /*row*/);
+
+    // The credit as it will be written, rebuilt by Rust on every edit.
+    in property <string> artist-preview;
+    in property <string> album-artist-preview;
+    // Which credit a row callback is about. Named because the body mounts one editor per field.
+    out property <int> field-artist: 0;
+    out property <int> field-album-artist: 1;
+    callback add-credit(int /*field*/);
+    callback remove-credit(int /*field*/, int /*row*/);
+    callback set-credit-name(int /*field*/, int /*row*/, string);
+    callback set-credit-join(int /*field*/, int /*row*/, int /*phrase index*/);
+    // Whether this track already has a sheet somewhere other than its own tag — a `.lrc` beside
+    // it, or one the directory answered with — so the tab can offer to write that into the file.
+    // False where the tag is already what would be inserted, an offer to copy a field onto itself
+    // reading as a broken button rather than as a no-op.
+    in property <bool> has-resident-lyrics;
+    callback insert-resident-lyrics();
 
     // 1 = single selection (Lyrics + Summary available), >1 = batch.
     in property <int> track-count;
-    // Rust resets this to 0 (Tags) on every populate.
+    // Rust resets this to `tab-tags` on every populate, then applies whatever the request asked
+    // for. Only reachable over a single selection: the other two tabs are unmounted in batch mode.
     in-out property <int> active-tab;
+
+    // The positions `tag-editor-body.slint` mounts the tabs in. Named because an opener that wants
+    // one has to agree with the body about which is which, and two spellings of the same position
+    // are what drift: a tab inserted anywhere but the end moves both.
+    //
+    // The single-selection-only tabs sit **last** on purpose: batch mode mounts the leading three
+    // and `active-tab` indexes the visible options, so the two lists agree without a second map.
+    out property <int> tab-tags: 0;
+    out property <int> tab-credits: 1;
+    out property <int> tab-details: 2;
+    out property <int> tab-lyrics: 3;
+    out property <int> tab-summary: 4;
     // Preview of the current or picked cover; `has-cover` gates Remove.
     in-out property <image> cover;
     in property <bool> has-cover;
@@ -96,7 +198,10 @@ export global TagEditor {
     in property <string> summary-modified;
     in property <string> summary-hash;
 
-    callback request-edit([int] /*track ids*/);
+    // The tab is the request's rather than the dialog's own: Rust populates asynchronously and
+    // resets `active-tab` when it lands, so an opener setting the property beside this call would
+    // have it overwritten a tick later. Reach it through `Dialog.open-tag-editor`.
+    callback request-edit([int] /*track ids*/, int /*tab*/);
     // rfd on the UI thread.
     callback pick-artwork();
     callback remove-artwork();

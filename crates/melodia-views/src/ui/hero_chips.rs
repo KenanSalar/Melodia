@@ -474,6 +474,13 @@ fn album_chips(
     if album.is_compilation {
         out.push(labels.compilation());
     }
+    // Release facts the tags now carry, each omitted when blank — most releases name none of
+    // them, and a chip reading "Digital Media" on every row states nothing.
+    for field in [&album.release_type, &album.media, &album.label] {
+        if let Some(value) = field.as_deref().filter(|v| !v.is_empty()) {
+            out.push(SharedString::from(value));
+        }
+    }
     // Last: the one chip that isn't about *this* release, so the one worth losing first
     // on a narrow band.
     if let Some(genre) = genre {

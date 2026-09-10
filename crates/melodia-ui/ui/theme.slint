@@ -32,6 +32,12 @@ export global Theme {
     // state it once. No further than unavailable — starting from `text-muted` the two dims compound.
     out property <float> dim-disabled: 0.4;
 
+    // Where a lit control rests while nothing is pointing at it, as an alpha. Full weight belongs
+    // to the pointer, so a control already at it has nothing left to answer a hover with. Shared
+    // rather than spelled per component because the Now-Playing star row and the glyph family
+    // beside it sit in one row: a lift on one that its neighbour answers flat reads as a fault.
+    out property <float> lit-rest: 0.9;
+
     // Accent (default mauve) + colour on accent
     in-out property <brush> accent: #cba6f7;
     in-out property <brush> accent-text: #1e1e2e;
@@ -123,6 +129,14 @@ export global Theme {
     // at its right end so the two don't meet in the corner, a `TrackList` reserves it as a lane,
     // and every hand-mounted bar takes its width from here rather than restating the number.
     out property <length> scrollbar-slot: 10px;
+
+    // The air a menu or flyout leaves between itself and the control that opened it, on whichever
+    // side it hangs. Seven popups across three directories anchor on it, so it is here rather than
+    // beside any one family of them: a gap differing by a pixel or two between two of them reads
+    // as one being misplaced, and nothing about the source says which is the odd one. The two
+    // dropdown-shaped pickers (`settings/dropdown.slint`, `radio/facet-chip.slint`) hang at 4px
+    // and are outside it; folding them in moves pixels, so it is a design call and not tidying.
+    out property <length> popup-gap: 8px;
 
     // The one ink drawn on a name-hashed tile — the station monogram and the glyph beside it, on
     // the four surfaces that paint one. Theme-independent on purpose: it is legible because

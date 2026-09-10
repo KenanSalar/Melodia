@@ -3,6 +3,7 @@ import { SettingsPage } from "../../../globals/settings-page.slint";
 import { RadioSection } from "../radio-section.slint";
 import { ScrobblingSection } from "../scrobbling-section.slint";
 import { DiscordSection } from "../discord-section.slint";
+import { LyricsSection } from "../lyrics-section.slint";
 
 // The outside services Melodia talks to: the radio directory, which is the one here that
 // needs no account, the two scrobbling ones — with MusicBrainz ID tagging riding on one of
@@ -13,7 +14,7 @@ export component ServicesPage inherits Rectangle {
     vertical-stretch: 0;
 
     out property <bool> has-matches: radio.has-matches || scrobbling.has-matches
-        || discord.has-matches;
+        || discord.has-matches || lyrics.has-matches;
 
     // See `library-page.slint` for why the cards live in columns that place
     // themselves.
@@ -35,6 +36,7 @@ export component ServicesPage inherits Rectangle {
             spacing: Theme.pad-lg;
 
             discord := DiscordSection { tab-name: @tr("Services"); }
+            lyrics := LyricsSection { tab-name: @tr("Services"); }
         }
     }
 }

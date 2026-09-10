@@ -120,8 +120,16 @@ pub enum RuleField {
     AlbumArtist,
     Album,
     Genre,
+    /// Everyone credited in a role — composer, conductor, producer and the rest. Matched against
+    /// the `track_credits` rows in any role rather than against the rendered `tracks.credits` line
+    /// the FTS index reads, so a rule finds a name wherever the tag put it.
+    Credits,
+    Mood,
+    InitialKey,
+    Isrc,
     // numeric
     Year,
+    Bpm,
     DurationMs,
     PlayCount,
     SkipCount,
@@ -145,8 +153,13 @@ impl RuleField {
             | RuleField::Artist
             | RuleField::AlbumArtist
             | RuleField::Album
-            | RuleField::Genre => ValueType::Text,
+            | RuleField::Genre
+            | RuleField::Credits
+            | RuleField::Mood
+            | RuleField::InitialKey
+            | RuleField::Isrc => ValueType::Text,
             RuleField::Year
+            | RuleField::Bpm
             | RuleField::DurationMs
             | RuleField::PlayCount
             | RuleField::SkipCount
@@ -305,7 +318,12 @@ pub const FIELDS: &[RuleField] = &[
     RuleField::AlbumArtist,
     RuleField::Album,
     RuleField::Genre,
+    RuleField::Credits,
+    RuleField::Mood,
+    RuleField::InitialKey,
+    RuleField::Isrc,
     RuleField::Year,
+    RuleField::Bpm,
     RuleField::DurationMs,
     RuleField::PlayCount,
     RuleField::SkipCount,

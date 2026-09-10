@@ -77,11 +77,12 @@ fn the_nav_bound_reaches_the_highest_section_that_routes() {
 async fn the_filter_boxes_search_every_indexed_column_they_can_reach() -> Result<(), AppError> {
     use melodia_store::database::DbPool;
 
-    // `composer` has no slot on `TrackListRow`, and `file_name` is left out deliberately — the
-    // tiebreaker weight that keeps a filename echo below the tags it repeats has no equivalent in
-    // an unranked substring filter. `year` is an integer that joins the match through
-    // `row_match::Needle::matches_number` instead of the text list.
-    const NOT_TEXT_SEARCHED: [&str; 3] = ["composer", "file_name", "year"];
+    // `credits` has no slot on `TrackListRow` — the role credits live in `track_credits` and reach
+    // the index through a denormalized column no list renders. `file_name` is left out
+    // deliberately: the tiebreaker weight that keeps a filename echo below the tags it repeats has
+    // no equivalent in an unranked substring filter. `year` is an integer that joins the match
+    // through `row_match::Needle::matches_number` instead of the text list.
+    const NOT_TEXT_SEARCHED: [&str; 3] = ["credits", "file_name", "year"];
 
     let db = DbPool::test_pool().await?;
     let indexed: Vec<String> =
@@ -158,4 +159,55 @@ fn both_ends_of_the_nav_bound_take_it_from_one_const() {
         read.contains("(0..=services::view_state::MAX_NAV_INDEX).contains("),
         "`install_views` must guard the persisted index against the same const the write clamps to"
     );
+}
+
+/// **A shipped migration seeds role credits by name, and the enum owns those names.**
+/// `track_credits.role` is written as a literal in SQL nobody may edit again, and read back
+/// through `CreditRole::from_db_str` — so renaming a variant's stored form strands the seeded
+/// rows: they stop reaching the credits list with no error anywhere and no column to blame.
+///
+/// An equality rather than a containment, so a migration that starts seeding a second role has to
+/// say so here, and so a rename that empties the set fails rather than passing vacuously.
+#[test]
+fn every_role_a_migration_seeds_is_one_this_build_reads_back() {
+    use melodia_core::entities::credits::{CreditRole, ROLES};
+
+    let dir = std::path::Path::new(melodia_testkit::REPO_ROOT).join("migrations");
+    let (sql, unreadable): (Vec<String>, Vec<std::path::PathBuf>) =
+        migration_sources(&dir).unwrap_or_default();
+    assert!(unreadable.is_empty(), "unreadable migrations: {unreadable:?}");
+    assert!(sql.len() >= 5, "the migration set is smaller than any release has shipped");
+
+    let corpus = sql.join("\n");
+    let mut seeded: Vec<&'static str> = ROLES
+        .into_iter()
+        .map(CreditRole::as_db_str)
+        .filter(|role| corpus.contains(&format!("'{role}'")))
+        .collect();
+    seeded.sort_unstable();
+
+    assert_eq!(
+        seeded,
+        ["composer"],
+        "a migration names a role this build no longer stores under that string, or seeds a new one"
+    );
+}
+
+/// Every `.sql` under `dir`, and the paths that would not read.
+fn migration_sources(
+    dir: &std::path::Path,
+) -> std::io::Result<(Vec<String>, Vec<std::path::PathBuf>)> {
+    let mut sources = Vec::new();
+    let mut unreadable = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.extension().is_none_or(|ext| ext != "sql") {
+            continue;
+        }
+        match std::fs::read_to_string(&path) {
+            Ok(text) => sources.push(text),
+            Err(_) => unreadable.push(path),
+        }
+    }
+    Ok((sources, unreadable))
 }

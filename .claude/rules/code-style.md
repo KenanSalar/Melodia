@@ -45,6 +45,56 @@ Avoid the tells of machine-generated code: comments that restate the code, defen
 boilerplate nobody asked for, needless abstraction, over-verbose names, and style that drifts
 within a file. The result should look like a thoughtful human wrote it.
 
+## Clean code
+
+The list above is the half of clean code that gets quoted: names, small functions, guard
+clauses, no magic values, no duplication. What follows is the rest of it, and it is the half
+that bites in review. The frame underneath both is that code is finished when it passes its
+tests, holds no duplication, says what it means, and has no more parts than that.
+
+**Signatures**
+
+- **Few parameters** - none, one or two read at a glance; three is worth a second look and
+  four wants a struct. A list long enough to count is usually two functions, or one type that
+  hasn't been named yet.
+- **No flag parameters** - a `bool` argument splits the body before the reader reaches it, and
+  `foo(path, true)` says nothing at the call site. Ship the two functions the branches already
+  are; where it genuinely is one operation, name the choice with an enum.
+- **Meaning belongs in the type, not the primitive** - a bare `bool`, `u32` or `String` at a
+  boundary lets the wrong one through in silence. An enum or newtype makes that a compile
+  error and retires the comment explaining the unit.
+- **Command or query, never both** - a function either changes state or answers a question.
+  One that does both leaves every call site working out whether calling it twice is safe.
+- **Don't reach through** - `a.b().c().d()` couples the caller to the shape of everything in
+  the middle. Ask the neighbour for the answer instead of walking its internals; the method
+  you want usually belongs on the type you already hold.
+
+**Reading order**
+
+- **Newspaper order** - a file opens with what it is and descends into detail: caller above
+  callee, related functions adjacent, blank lines separating concepts rather than decorating
+  them.
+- **Declare close to first use** - a binding introduced far above the line that reads it is
+  state the reader has to carry until then.
+- **Name the sub-expression** - lift a dense condition or a nested call into a `let` whose name
+  is the explanation. That is the comment you never have to keep true.
+- **Say it positively** - `if !not_ready` costs a mental flip at every read. Name the positive
+  condition and negate at the one site that needs it.
+
+**Vocabulary and shape**
+
+- **One word per concept** - `get`, `fetch` and `load` for the same act, or two names for one
+  thing, force the reader to check whether the difference means something. Rename it; never
+  add the synonym.
+- **A distinction that isn't in the name isn't a distinction** - `data`, `info`, `manager`,
+  `helper` and a trailing `2` name nothing. If two things need telling apart, the names do it.
+- **One home per boundary condition** - the cap, the clamp, the off-by-one. A named place that
+  owns it beats the literal repeated at each call: tuning is one edit, reviewing is one read.
+- **A match repeated is a method missing** - the same dispatch spelled in three files wants to
+  be one method on the enum or trait. Adding a variant should break one file, not find three.
+
+Test practice, including what all of this means for a test, is `.claude/rules/testing.md`.
+
 ## Comments
 
 Comments are a liability, not an asset — each one is prose you must keep true. Write few, make

@@ -19,9 +19,11 @@ use tokio_util::sync::CancellationToken;
 
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
+use melodia_core::error;
 use melodia_engine::player::engine::state::PlayerViewModelLight;
 use melodia_integrations::services::integrations::discord::DiscordPresenceService;
 use melodia_integrations::services::integrations::discord::model::{PresenceState, Update};
+use melodia_store::database::{DbPool, queries};
 
 /// Self-throttle between presence writes. The Rich Presence SDK docs cite one
 /// update per 15 s, but that's the conservative legacy figure: over raw IPC the
@@ -34,8 +36,9 @@ const MIN_UPDATE_INTERVAL: Duration = Duration::from_secs(4);
 /// Spawn the presence detector on the shared task lifecycle.
 pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let service = state.discord.clone();
+    let db = state.db.clone();
     let vm_rx = state.sinks.view_model.subscribe();
-    spawner.spawn_cancellable(move |shutdown| run_detector(shutdown, service, vm_rx));
+    spawner.spawn_cancellable(move |shutdown| run_detector(shutdown, service, db, vm_rx));
     log::info!("Discord presence task started");
 }
 
@@ -48,9 +51,10 @@ fn now_ts() -> i64 {
 async fn run_detector(
     shutdown: CancellationToken,
     service: Arc<DiscordPresenceService>,
+    db: DbPool,
     mut vm_rx: watch::Receiver<Option<PlayerViewModelLight>>,
 ) {
-    let mut detector = Detector::new(service);
+    let mut detector = Detector::new(service, db);
     detector.prime(&mut vm_rx).await;
 
     loop {
@@ -97,6 +101,9 @@ async fn run_detector(
 /// keeps the per-step signatures to `&mut self` + the watch receiver.
 struct Detector {
     service: Arc<DiscordPresenceService>,
+    /// Read only by [`Self::resolve_cover`], for the credited name behind a track's printed
+    /// artist. `tasks::scrobble`'s detector holds one off the same seam for its own row fetch.
+    db: DbPool,
     presence: PresenceState,
     /// False→true edge means the feature was just enabled — the card was cleared
     /// while off, so the dedupe state must forget it (else the re-enable dedupes).
@@ -110,9 +117,10 @@ struct Detector {
 }
 
 impl Detector {
-    fn new(service: Arc<DiscordPresenceService>) -> Self {
+    fn new(service: Arc<DiscordPresenceService>, db: DbPool) -> Self {
         Self {
             service,
+            db,
             presence: PresenceState::new(),
             was_armed: false,
             last_update: None,
@@ -194,10 +202,33 @@ impl Detector {
         // A new track: resolve only when both tags are present (an untagged
         // library would otherwise spend a request per track searching for nothing).
         let url = match (track.artist.as_deref(), track.album.as_deref()) {
-            (Some(artist), Some(album)) => self.service.resolve_artwork(artist, album).await,
+            (Some(artist), Some(album)) => {
+                let lead = self.lead_artist(track.id, artist).await;
+                self.service.resolve_artwork(&lead, album).await
+            }
             _ => None,
         };
         self.last_art = Some((track.id, url.clone()));
         url
+    }
+
+    /// The name to search a cover directory with: the first artist the track's credit names.
+    ///
+    /// **The printed credit is the wrong key and Deezer's search is why.** It pins the field
+    /// exactly, and `artist:"Alice feat. Bob"` names no album on it, so a guest credit sent whole
+    /// drops the lookup onto the looser iTunes term search, which is not pinned to the album
+    /// either. A cover is filed under the lead, which is what `artist_id` has always pointed at.
+    ///
+    /// Falls back to the printed line, which is what this asked with before the credit tables and
+    /// what a single-name credit renders to anyway.
+    async fn lead_artist(&self, track_id: i64, printed: &str) -> String {
+        match queries::track::get_track_credit(&self.db, track_id).await {
+            Ok(credit) if !credit.is_empty() => credit.primary_name().to_owned(),
+            Ok(_) => printed.to_owned(),
+            Err(e) => {
+                log::debug!("Discord presence: credit unread: {}", error::describe(&e));
+                printed.to_owned()
+            }
+        }
     }
 }

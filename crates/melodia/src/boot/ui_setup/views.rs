@@ -232,6 +232,7 @@ pub fn install_library_settings_and_friends(
     ui::settings::scrobbling_settings::install_scrobbling(app, state);
     ui::settings::discord_settings::install_discord(app, state);
     ui::settings::radio_settings::install_radio(app, state);
+    ui::settings::lyrics_settings::install(app, state);
     let notifications = ui::shell::notifications::install(app);
     ui::settings::file_watching::install(app, state, &notifications);
     ui::settings::rating_writeback::install(app, state);

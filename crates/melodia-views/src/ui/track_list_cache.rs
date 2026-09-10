@@ -59,7 +59,7 @@ impl RowSearchKey {
             if i > 0 {
                 buf.push('\0');
             }
-            row_match::push_folded(&mut buf, field);
+            melodia_core::utils::fold::push_folded(&mut buf, field);
         }
         Self {
             packed: buf.into_boxed_str(),

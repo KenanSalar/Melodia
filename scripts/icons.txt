@@ -19,6 +19,7 @@ chevron_left
 chevron_right
 clear_all
 close
+cloud_off
 colorize
 content_copy
 create_new_folder
@@ -49,6 +50,7 @@ info
 library_add
 library_music
 link
+lyrics
 minimize
 more_vert
 move_to_inbox
@@ -73,6 +75,7 @@ repeat
 repeat_one
 restart_alt
 rounded_corner
+save
 search
 search_off
 settings

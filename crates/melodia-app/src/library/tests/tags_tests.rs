@@ -10,6 +10,8 @@ use tempfile::TempDir;
 
 use super::write_tag_edit;
 use melodia_artwork::media::image::artwork;
+use melodia_core::entities::artist::ArtistCredit;
+use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::ExistingTrackSummary;
 use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
 use melodia_core::error::AppError;
@@ -190,7 +192,7 @@ async fn set_genre(
     genre: &str,
 ) -> Result<(String, i64), AppError> {
     let edit = TagEdit {
-        genre: FieldEdit::Set(genre.to_owned()),
+        genres: FieldEdit::Set(GenreList::from_name(genre)),
         ..TagEdit::default()
     };
     write_tag_edit(db, artwork_dir, cover_cache, self_writes, &[id], &edit, None).await?;
@@ -323,7 +325,7 @@ async fn replace_artwork_lands_on_every_track_and_the_shared_album() -> Result<(
     // files in one album regardless of the fixtures' own tags — then the memo
     // and the Replace roll-up have a single album to converge on.
     let edit = TagEdit {
-        artist: FieldEdit::Set("Shared Artist".to_owned()),
+        artist: FieldEdit::Set(ArtistCredit::from_name("Shared Artist")),
         album: FieldEdit::Set("Shared Album".to_owned()),
         artwork: ArtworkEdit::Replace,
         ..TagEdit::default()
@@ -623,4 +625,73 @@ async fn an_edit_that_changes_nothing_rewrites_no_file() -> Result<(), AppError>
     assert_eq!(report.updated, 0);
     assert!(updated.is_empty(), "and left the caller nothing to resync or repaint");
     Ok(())
+}
+
+/// **The meeting point of the two halves of a cleared release field.** `upsert_album` coalesces
+/// the NULL away — that is what stops one track saying nothing from blanking what its neighbours
+/// said — so emptying a label is `clear_release_tags` running after the re-ingest. Neither half is
+/// visible from the other, and the commit is the only place both run.
+#[tokio::test]
+async fn clearing_a_release_field_empties_the_column_the_upsert_cannot() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let tmp = TempDir::new()?;
+    let folder = tmp.path().to_string_lossy().into_owned();
+    queries::folder::insert_folder(&db, &folder, true).await?;
+
+    let path = stage(&tmp, "silence.flac")?;
+    let path_str = path.to_string_lossy().into_owned();
+    let id = seed_track(&db, &path_str).await?;
+
+    let artwork_dir = tmp.path().join("artwork");
+    std::fs::create_dir(&artwork_dir)?;
+    let cover_cache = artwork::new_cover_cache();
+    let self_writes = Arc::new(SelfWrites::default());
+
+    // The album comes with them: a release field describes a release, and the fixture carries no
+    // album tag of its own, so the re-ingest would leave the row pointing at nothing to write to.
+    let set = TagEdit {
+        album: FieldEdit::Set("Kind of Blue".to_owned()),
+        label: FieldEdit::Set("ECM".to_owned()),
+        catalog_number: FieldEdit::Set("ECM 1064".to_owned()),
+        compilation: FieldEdit::Set(true),
+        ..TagEdit::default()
+    };
+    write_tag_edit(&db, &artwork_dir, &cover_cache, &self_writes, &[id], &set, None).await?;
+    assert_eq!(
+        stored_release(&db, id).await?,
+        (Some("ECM".to_owned()), Some("ECM 1064".to_owned()), true)
+    );
+
+    let cleared = TagEdit {
+        label: FieldEdit::Clear,
+        // A switch has no third state, so an un-ticked box arrives as `Set(false)`.
+        compilation: FieldEdit::Set(false),
+        ..TagEdit::default()
+    };
+    let (report, _) =
+        write_tag_edit(&db, &artwork_dir, &cover_cache, &self_writes, &[id], &cleared, None)
+            .await?;
+
+    assert!(report.failures.is_empty());
+    assert_eq!(
+        stored_release(&db, id).await?,
+        (None, Some("ECM 1064".to_owned()), false),
+        "the field the edit named goes, and only that one"
+    );
+    Ok(())
+}
+
+/// A track's album row, as the two release columns this exercise touches plus the flag.
+async fn stored_release(
+    db: &DbPool,
+    track_id: i64,
+) -> Result<(Option<String>, Option<String>, bool), AppError> {
+    let row = sqlx::query_as::<_, (Option<String>, Option<String>, bool)>(
+        "SELECT al.label, al.catalog_number, al.is_compilation \
+         FROM tracks t JOIN albums al ON al.id = t.album_id WHERE t.id = ?",
+    )
+    .bind(track_id)
+    .fetch_one(db.read())
+    .await?;
+    Ok(row)
 }

@@ -102,11 +102,19 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 - **Track projections by use case**, each with a `*_columns()` helper: `TrackSummary` (17 cols;
   queue/NP/playback, incl. 4 ReplayGain + `rating`); `TrackListRow` (20; lists incl. Files/Browse,
   which render through the shared `TrackList` so there is no narrower browse slice; incl.
-  `rating`); `TrackMeta` (8; NP chips); `TagEditRow` (24; Edit-Tags dialog — the only production
-  by-id multi-fetch, incl. composer/comment/bpm + technical Summary cols); `PlaylistExportRow` (5;
-  `file_path`/`file_hash`/`title`/`artist`/`duration_ms`, M3U8 export only); `Track` (44; scan
+  `rating`); `TrackMeta` (8; NP chips); `TagEditRow` (36; Edit-Tags dialog — the only production
+  by-id multi-fetch, every single-valued tag column + the technical Summary cols); `PlaylistExportRow` (5;
+  `file_path`/`file_hash`/`title`/`artist`/`duration_ms`, M3U8 export only); `Track` (60; scan
   ingest, hash backfill, detail, fixtures). Pick the slimmest — `SELECT *` into `Track` for a list
-  view costs ~24 unused decodes/row.
+  view costs ~40 unused decodes/row.
+
+  - **The multi-valued fields are deliberately absent from `TagEditRow`**, and a widening that puts
+    one back is the regression. Artists, genres and role credits are rows (`track_artists`,
+    `track_genres`, `track_credits`), each with a rendered column beside them (`tracks.artist`,
+    `.genre`, `.credits`) that exists for the FTS index and the display surfaces. The dialog reads
+    the rows, through `queries::track::get_track_{credits,role_credits,genres}_by_ids`: an editor
+    populated from the rendered line splits `Chanson, Francaise` into two genres and saving makes
+    that permanent.
 
   - **The other half of narrowing is `ui::track_list_cache`**: the two views that retain a whole
     list resident (My Library's Songs tab, Favorites') keep *converted* rows rather than
@@ -126,8 +134,10 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 
 - **`tracks_fts` indexes eight columns, and adding a ninth is a migration, not an edit.** fts5 has
   no `ALTER`, so a change means dropping the table plus all three triggers and rebuilding.
-  Migration `20260802000001` carries the column list, the tokenizer and the bm25 weights with the
-  argument for each; `crates/melodia-store/src/database/queries/search.rs` carries the query shape and the folding
+  The **newest** migration to have rebuilt it carries the column list, the tokenizer and the bm25
+  weights with the argument for each, which is `20260910000000` and was `20260802000001` before it
+  — a rebuild moves that text rather than amending it, so read the latest one;
+  `crates/melodia-store/src/database/queries/search.rs` carries the query shape and the folding
   asymmetry. Two things neither of them can tell you: **a ninth column is two edits**, since the
   per-view filter boxes never touch this index and walk in-memory caches through
   `ui::row_match::search_fields`, which mirrors the column list by hand
@@ -156,16 +166,28 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   (`crates/melodia-app/src/library/tags.rs::apply_tag_edit`, `crates/melodia-store/src/media/ingest/tag_writer.rs`). Right-click rows → **Edit
   Tags…** (`Dialog.kind == "edit-tags"`); **batch is the point** — **touched-tracking is a
   Rust-side diff against a populate-time snapshot** (Keep/Clear/Set), so only changed fields write.
-  **Lyrics live in the file, not the DB** (single-track tab only). The writer always targets the
-  **primary tag type** (never `first_tag_mut()` — an ID3v1-only MP3 would drop
-  album-artist/composer/BPM/lyrics); BPM writes `IntegerBpm` **and** `Bpm`; **M4A `Ilst` flattens
-  every `pic_type` to `Other`**, so `clear_front_cover` must remove *both* `CoverFront` and `Other`
-  or Replace/Remove silently revert. Cover picks decode-validate up front, so a corrupt pick fails
+  **Lyrics live in the file, not the DB** (single-track tab only), though the tab is no longer their
+  only reader: `library::lyrics` resolves a sidecar, this tag and a fetched-sheet store for the Now
+  Playing panel, and hands the tab that same reading as an *Insert found lyrics* offer above the
+  field. The writer always targets the **primary tag type** (never `first_tag_mut()` — an ID3v1-only
+  MP3 would drop album-artist/composer/BPM/lyrics); BPM writes `IntegerBpm` **and** `Bpm`; **M4A
+  `Ilst` flattens every `pic_type` to `Other`**, so `clear_front_cover` must remove *both*
+  `CoverFront` and `Other` or Replace/Remove silently revert. Cover picks decode-validate up front, so a corrupt pick fails
   the batch before any file is touched. After the write it's the scan pipeline: re-extract via
   `extract_metadata` (**never hand-build the UPDATE** — a fresh mtime beside a stale hash is the
   one state `track_is_current` can't repair) → `update_track_metadata`. Own writes stay out of the
   watcher via `SelfWrites` (TTL 30 s, `mark` per-file *before* its write). Post-commit refresh is
   the `library_changed` bump, **not** an optimistic patch — a retag can change list membership.
+
+- **A release-level tag is written per *file* and read off `albums`.** Label, catalog number,
+  barcode, medium, release type, country and the compilation flag describe the release, and every
+  one of its tracks carries a copy, so the dialog folds them across the selection with `common_str`
+  and writes them back to every selected file. Two consequences that neither half can state alone.
+  **`upsert_album` can raise one and cannot lower one** — its `COALESCE` discards the NULL a
+  cleared field arrives as, and the compilation flag's `OR` is worse still — so emptying one is
+  `queries::album::clear_release_tags`, running after every upsert of the commit. And **editing a
+  subset of a release is not durable**: the untouched files still carry the old value, and the next
+  re-ingest of any of them puts it back. Select the whole release, or expect it back.
 
 - **Playlist import/export = Extended M3U8** (`crates/melodia-app/src/library/playlist_files.rs` + the pure `m3u`
   submodule; hand-rolled writer/parser, no crate). One `.m3u8` per playlist; writer emits

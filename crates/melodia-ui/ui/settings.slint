@@ -161,6 +161,22 @@ export global Settings {
     in-out property <bool> radio-send-clicks: true;
     callback radio-send-clicks-changed(bool);
 
+    // Whether a track carrying no words of its own may be looked up online. Declared false so a
+    // settings read that fails leaves a local-only install local-only, which is the radio switch's
+    // reason. **Nothing in Slint gates on it either**: `library::lyrics` refuses on the Rust
+    // shadow, and this is the control surface rather than the answer. The panel reads it once, to
+    // choose between "nothing found" and "the lookup is off".
+    in-out property <bool> lyrics-online-enabled: false;
+    callback lyrics-online-enabled-changed(bool);
+
+    // Whether the panel draws how a line sounds under the line itself. Declared true, unlike its
+    // neighbour: it reaches nothing and costs nothing, drawing only under a script the reader
+    // cannot sound out, so a settings read that fails leaves it on rather than hiding a feature.
+    // **The Now Playing menu writes the same field**, which is why both surfaces go through one
+    // `SharedFlag` rather than through whichever of them the user touched last.
+    in-out property <bool> lyrics-romanization-shown: true;
+    callback lyrics-romanization-shown-changed(bool);
+
     // Persists, then flips the `FolderWatcher` on the tokio runtime rather than the
     // blocking pool — the start needs an async DB query before it can take the
     // parking_lot lock. **On by default**: consumer players auto-watch with no toggle
@@ -464,6 +480,10 @@ export global Settings {
     pure callback toast-love-sync-title() -> string;
     toast-love-sync-title => {
         return @tr("Loved tracks");
+    }
+    pure callback toast-lyrics-saved-title() -> string;
+    toast-lyrics-saved-title => {
+        return @tr("Lyrics saved");
     }
     pure callback toast-radio-vote-title() -> string;
     toast-radio-vote-title => {

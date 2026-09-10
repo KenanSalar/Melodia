@@ -49,6 +49,8 @@ chronological and the groups are not, so a low number can sit anywhere.
 | [20. Artwork is content-addressed and swept, never reference-counted](0020-artwork-swept-not-refcounted.md) | Accepted, 2026-08-19 |
 | [21. Lyrics live in the file, not in a column](0021-lyrics-live-in-the-file.md) | Accepted, 2026-07-20 |
 | [22. Smart playlist membership is derived at read time](0022-smart-playlists-derived-at-read-time.md) | Accepted, 2026-07-08 |
+| [38. The lyrics display reads the file, one track at a time](0038-lyrics-display-reads-the-file.md) | Accepted, 2026-09-08 |
+| [39. Romanization runs three engines, and the Korean one is ours](0039-romanization-runs-three-engines.md) | Accepted, 2026-09-08 |
 
 ### Radio and integrations
 

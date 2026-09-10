@@ -48,9 +48,10 @@ pub async fn update_artist_image_path(
 pub async fn get_favorite_artists(db: &DbPool) -> Result<Vec<artist::FavoriteArtist>, AppError> {
     let artists = sqlx::query_as::<_, artist::FavoriteArtist>(
         "SELECT ar.id, ar.name, ar.image_path, \
-                COUNT(t.id) AS favorite_count \
+                COUNT(DISTINCT t.id) AS favorite_count \
          FROM artists ar \
-         JOIN tracks t ON t.artist_id = ar.id AND t.is_favorite = TRUE \
+         JOIN track_artists ta ON ta.artist_id = ar.id \
+         JOIN tracks t ON t.id = ta.track_id AND t.is_favorite = TRUE \
          GROUP BY ar.id",
     )
     .fetch_all(db.read())

@@ -18,6 +18,7 @@ pub mod discord_settings;
 pub mod file_watching;
 pub mod library_settings;
 pub mod locale;
+pub mod lyrics_settings;
 pub mod motion;
 pub mod playback_settings;
 pub mod radio_settings;

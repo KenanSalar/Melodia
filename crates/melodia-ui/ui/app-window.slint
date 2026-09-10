@@ -20,6 +20,7 @@ import { HeroBackdrop } from "globals/hero-backdrop.slint";
 import { HeroChips } from "globals/hero-chips.slint";
 import { LibrarySettings } from "globals/library-settings.slint";
 import { MyLibrary } from "globals/my-library.slint";
+import { Lyrics, LyricsState } from "globals/lyrics.slint";
 import { Nav, NavEnterFrom } from "globals/nav.slint";
 import { Onboarding } from "globals/onboarding.slint";
 import { Player } from "globals/player.slint";
@@ -35,7 +36,7 @@ import { TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListR
          BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
          AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
          GenreRow, GenreGridRow,
-         PlaylistRow, PlaylistGridRow, SmartRuleRow } from "models.slint";
+         PlaylistRow, PlaylistGridRow, SmartRuleRow, LyricRow } from "models.slint";
 import { Sidebar } from "layout/sidebar.slint";
 import { NowPlayingBar } from "layout/now-playing-bar.slint";
 import { ResizeRing } from "layout/resize-ring.slint";
@@ -62,8 +63,8 @@ import { ViewTransition } from "components/view-transition.slint";
 
 // Re-export so Rust can mention these from `slint::include_modules!`.
 export {
-    Theme, Settings, SettingsPage, Player, HeroBackdrop, HeroChips, Equalizer, ReplayGain, Visualizer, ScrobbleUi, SmartEditor, TagEditor, Nav, CompositeScroll, MiniPlayer, MyLibrary, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers, Radio, RadioForm, Onboarding,
-    TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow,
+    Theme, Settings, SettingsPage, Player, HeroBackdrop, HeroChips, Equalizer, ReplayGain, Visualizer, ScrobbleUi, SmartEditor, TagEditor, Nav, CompositeScroll, MiniPlayer, MyLibrary, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers, Radio, RadioForm, Onboarding, Lyrics,
+    TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow, LyricRow,
     BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
     AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
     GenreRow, GenreGridRow,

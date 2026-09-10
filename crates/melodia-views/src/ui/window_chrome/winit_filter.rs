@@ -184,6 +184,9 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                     if ph.get_row_ctx_id() != -1 {
                         ph.set_row_ctx_id(-1);
                     }
+                    if ph.get_queue_ctx_index() != -1 {
+                        ph.set_queue_ctx_index(-1);
+                    }
                 }
                 slint::winit_030::EventResult::Propagate
             }

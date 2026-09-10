@@ -80,7 +80,13 @@ export global CompositeScroll {
 // `row-ctx-id` is the track id of the row whose right-click menu is open, -1 for none, gating the
 // `FocusLossWatcher` inside `TrackListRowItem`. The same Release path clears it, else a
 // click-outside blocks re-opening the row.
+//
+// `queue-ctx-index` is the queue sheet's own key and holds a **play-order index**, not an id: a
+// queue may hold one track twice, where a track list cannot, so an id there would gate two rows'
+// watchers onto one popup. Keeping it separate is what lets `row-ctx-id` go on meaning "track id"
+// everywhere. Cleared on the same Release.
 export global PopupHighlight {
     in-out property <string> id: "";
     in-out property <int> row-ctx-id: -1;
+    in-out property <int> queue-ctx-index: -1;
 }

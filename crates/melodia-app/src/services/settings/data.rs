@@ -377,6 +377,45 @@ impl Default for RadioFlags {
     }
 }
 
+/// The Now Playing lyrics panel, whether it may look a sheet up online, and how it draws a line.
+///
+/// **Three switches because they sell different things.** The panel is a view preference and reads
+/// whatever is already on disk or in the file; the lookup is traffic. Turning the lookup off
+/// leaves a sheet already in the store perfectly readable, which is what "no traffic" means and
+/// what "no lyrics" would not. Romanization is neither: it is how a line the panel already has is
+/// drawn, so it costs nothing and reaches nothing.
+///
+/// **The first two are off and the third is on**, which is why the `Default` is written out rather
+/// than derived. A panel nobody asked for should not take the Up Next column on upgrade, and the
+/// shipped package description promises that every online feature is a setting the user controls;
+/// but a reader who has turned the panel on and is looking at a script they cannot sound out
+/// wanted this before they knew to ask. It draws nothing at all for a Latin sheet, so "on" costs
+/// the other libraries nothing.
+///
+/// **The three are independent, and the third one especially.** Turning the panel off and on again
+/// says nothing about romanization, so a reader who switched it off gets it back off.
+///
+/// `settings.json` rather than `views.json` for the panel too, for `VisualizerFlags::viz_enabled`'s
+/// reason: it is the other Now Playing preference flipped from that view's own overflow menu, and
+/// a `views.json` flag may not be a bool.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LyricsFlags {
+    pub lyrics_panel_shown: bool,
+    pub lyrics_online_enabled: bool,
+    pub lyrics_romanization_shown: bool,
+}
+
+impl Default for LyricsFlags {
+    fn default() -> Self {
+        Self {
+            lyrics_panel_shown: false,
+            lyrics_online_enabled: false,
+            lyrics_romanization_shown: true,
+        }
+    }
+}
+
 /// Library-management toggles.
 ///
 /// Two default-on switches, both because the off state is the surprising one.
@@ -389,7 +428,7 @@ impl Default for RadioFlags {
 #[serde(default)]
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "five independent settings.json keys, three of them one-shot markers; any grouping would be a container invented for the lint rather than one describing something"
+    reason = "six independent settings.json keys, four of them one-shot markers; any grouping would be a container invented for the lint rather than one describing something"
 )]
 pub struct LibraryFlags {
     pub folder_watching_enabled: bool,
@@ -416,6 +455,14 @@ pub struct LibraryFlags {
     /// fixes that is one-shot, and marked here rather than inferred — an unrated row is
     /// indistinguishable from one the user deliberately cleared.
     pub ratings_imported_from_tags: bool,
+    /// Whether the tags this library's files carry have been re-read once since the ingest
+    /// widened.
+    ///
+    /// The migrations seed what the database already knew — one artist credit per track, one
+    /// genre, a composer — and that is every name a library indexed before them holds. Everything
+    /// the reader gained since is in the files, and `scanner::track_is_current` will never re-read
+    /// them on its own.
+    pub tags_backfilled: bool,
 }
 
 impl Default for LibraryFlags {
@@ -426,6 +473,7 @@ impl Default for LibraryFlags {
             artwork_store_normalized: false,
             write_ratings_to_tags: true,
             ratings_imported_from_tags: false,
+            tags_backfilled: false,
         }
     }
 }
@@ -691,6 +739,8 @@ pub struct SettingsData {
     #[serde(flatten)]
     pub radio: RadioFlags,
     #[serde(flatten)]
+    pub lyrics: LyricsFlags,
+    #[serde(flatten)]
     pub library: LibraryFlags,
     #[serde(flatten)]
     pub layout: LayoutFlags,
@@ -739,6 +789,7 @@ impl Default for SettingsData {
             scrobble: ScrobbleFlags::default(),
             discord: DiscordFlags::default(),
             radio: RadioFlags::default(),
+            lyrics: LyricsFlags::default(),
             library: LibraryFlags::default(),
             layout: LayoutFlags::default(),
             motion: MotionFlags::default(),

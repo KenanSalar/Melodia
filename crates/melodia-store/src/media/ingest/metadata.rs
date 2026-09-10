@@ -5,10 +5,14 @@ use std::time::UNIX_EPOCH;
 use lofty::file::{FileType, TaggedFile, TaggedFileExt};
 use lofty::prelude::*;
 use lofty::properties::FileProperties;
+use lofty::tag::Tag;
+use lofty::tag::items::Timestamp;
 
-use super::rating_tags;
+use super::{rating_tags, role_tags};
 use melodia_artwork::media::image::artwork;
-use melodia_core::entities::scan::ExtractedMetadata;
+use melodia_core::entities::artist::ArtistCredit;
+use melodia_core::entities::genre::GenreList;
+use melodia_core::entities::scan::{ExtractedMetadata, ReleaseTags, SortTags};
 use melodia_core::error::AppError;
 
 /// Compute a full BLAKE3 hash of a file (64-char hex string).
@@ -57,6 +61,11 @@ pub fn extract_date_modified(path: &Path) -> Option<String> {
 /// of somebody's audio. A header matching nothing has to stay unidentified.
 ///
 /// Reads what lofty's own sniffer reads: its longest check reaches byte 36.
+///
+/// **A fallback, never an identifier.** `from_buffer` makes no attempt to search past a leading
+/// `ID3v2` tag, so it answers `None` for the great majority of MP3s, which open with one. That is
+/// harmless where [`read_tags`] asks it, once the extension has resolved to nothing. Reached for
+/// as a primary gate it silently refuses nearly every MP3 there is.
 fn sniff_file_type(path: &Path) -> Option<FileType> {
     const SNIFF_BYTES: usize = 36;
 
@@ -240,111 +249,86 @@ fn extract(
         artwork::find_and_cache_artwork(path, tag, artwork_dir, cover_cache)
     };
 
-    // Trim + drop whitespace-only tags. Some ripped/transcoded files carry
-    // an `Artist`/`Album`/`Genre` field that's nothing but spaces; left as-is
-    // they bypass the `is_empty()` guard in `upsert_artist`/`upsert_album`/
-    // `upsert_genre` and create ghost entity rows that pollute the Artists
-    // view and trigger Deezer image-fetch warnings on startup.
-    let (
-        title,
-        artist,
-        album_artist,
-        album,
-        genre,
-        track_number,
-        disc_number,
-        year,
-        composer,
-        comment,
-    ) = if let Some(tag) = tag {
-        (
-            // tag.title()/artist()/album()/genre()/comment() return Cow<str>; use to_string()
-            // (Cow::to_owned returns Cow). get_string() returns &str → to_owned().
-            tag.title()
-                .map(|s| s.trim().to_owned())
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(file_name),
-            tag.artist().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
-            tag.get_string(ItemKey::AlbumArtist)
-                .map(|s| s.trim().to_owned())
-                .filter(|s| !s.is_empty()),
-            tag.album().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
-            tag.genre().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
-            tag.track().map(|t| i32::try_from(t).unwrap_or(i32::MAX)),
-            tag.disk().map(|d| i32::try_from(d).unwrap_or(i32::MAX)),
-            tag.date().map(|ts| i32::from(ts.year)),
-            tag.get_string(ItemKey::Composer)
-                .map(|s| s.trim().to_owned())
-                .filter(|s| !s.is_empty()),
-            tag.comment().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
-        )
-    } else {
-        (file_name(), None, None, None, None, None, None, None, None, None)
-    };
+    // Trim + drop whitespace-only tags. Some ripped/transcoded files carry an `Album`/`Genre`
+    // field that's nothing but spaces; left as-is they bypass the `is_empty()` guard in
+    // `upsert_album`/`upsert_genre` and create ghost entity rows. `read_credit` below owes the
+    // same for the artist fields, where the ghost rows also cost a futile image fetch.
+    let title = text(tag, ItemKey::TrackTitle).unwrap_or_else(file_name);
 
-    // Extract extended metadata from tags
-    let (
-        bpm,
-        musicbrainz_track_id,
-        musicbrainz_release_id,
-        label,
-        original_year,
-        replaygain_track_gain,
-        replaygain_track_peak,
-        replaygain_album_gain,
-        replaygain_album_peak,
-    ) = if let Some(tag) = tag {
-        (
-            // `ItemKey::Bpm` has NO ID3v2 mapping — MP3 / WAV / AIFF keep BPM in `TBPM`,
-            // which lofty exposes as `IntegerBpm`. Reading only `Bpm` therefore misses it
-            // on every ID3v2 file, including the ones `tag_writer::apply_bpm` writes.
-            // Prefer the decimal key (Vorbis `BPM`, MP4 freeform); fall back to the integer.
-            tag.get_string(ItemKey::Bpm)
-                .or_else(|| tag.get_string(ItemKey::IntegerBpm))
-                .and_then(|s| s.trim().parse::<f64>().ok())
-                .filter(|v| v.is_finite()),
-            tag.get_string(ItemKey::MusicBrainzRecordingId)
-                .map(|s| s.trim().to_owned())
-                .filter(|s| !s.is_empty()),
-            tag.get_string(ItemKey::MusicBrainzReleaseId)
-                .map(|s| s.trim().to_owned())
-                .filter(|s| !s.is_empty()),
-            tag.get_string(ItemKey::Label).map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
-            tag.get_string(ItemKey::OriginalReleaseDate)
-                .and_then(|s| s.get(..4).and_then(|y| y.parse::<i32>().ok())),
-            tag.get_string(ItemKey::ReplayGainTrackGain).and_then(parse_replaygain_gain),
-            tag.get_string(ItemKey::ReplayGainTrackPeak).and_then(parse_replaygain_peak),
-            tag.get_string(ItemKey::ReplayGainAlbumGain).and_then(parse_replaygain_gain),
-            tag.get_string(ItemKey::ReplayGainAlbumPeak).and_then(parse_replaygain_peak),
-        )
-    } else {
-        (None, None, None, None, None, None, None, None, None)
-    };
+    // Their own lines rather than slots in a tuple: an artist field is a pair of tags read
+    // together, and neither half alone says what the credit is.
+    let artist = read_credit(tag, ItemKey::TrackArtist, ItemKey::TrackArtists);
+    let album_artist = read_credit(tag, ItemKey::AlbumArtist, ItemKey::AlbumArtists);
 
-    // Its own line rather than a tenth slot in the tuple above: the whole read is one call, and
-    // the conversion it fronts is argued in `rating_tags` where every format's shape is in view.
+    // Both halves of the release date are kept: the year every index and smart-playlist rule is
+    // built on, and the month and day beside it.
+    let released = release_timestamp(tag);
+    let originally_released = read_timestamp(tag, ItemKey::OriginalReleaseDate);
+
+    // The conversion this fronts is argued in `rating_tags`, where every format's shape is in
+    // view; the role credits' per-format holes are argued in `role_tags` for the same reason.
     let rating = tag.and_then(rating_tags::stars_from_tag);
+    let credits = tag.map(role_tags::read_roles).unwrap_or_default();
 
     Ok(ExtractedMetadata {
+        artist_mbids: read_credit_mbids(tag, ItemKey::MusicBrainzArtistId, artist.artists().len()),
+        album_artist_mbids: read_credit_mbids(
+            tag,
+            ItemKey::MusicBrainzReleaseArtistId,
+            album_artist.artists().len(),
+        ),
         title,
         artist,
         album_artist,
-        album,
-        genre,
-        track_number,
-        disc_number,
-        year,
-        composer,
-        comment,
-        bpm,
-        musicbrainz_track_id,
-        musicbrainz_release_id,
-        label,
-        original_year,
-        replaygain_track_gain,
-        replaygain_track_peak,
-        replaygain_album_gain,
-        replaygain_album_peak,
+        album: text(tag, ItemKey::AlbumTitle),
+        genres: read_genres(tag),
+        credits,
+        sort: read_sort_tags(tag),
+        release: read_release_tags(tag),
+        track_number: count(tag.and_then(Tag::track)),
+        track_total: count(tag.and_then(Tag::track_total)),
+        disc_number: count(tag.and_then(Tag::disk)),
+        disc_total: count(tag.and_then(Tag::disk_total)),
+        disc_subtitle: text(tag, ItemKey::SetSubtitle),
+        subtitle: text(tag, ItemKey::TrackSubtitle),
+        release_date: released.map(|ts| ts.to_string()),
+        year: released.map(|ts| i32::from(ts.year)),
+        original_date: originally_released.map(|ts| ts.to_string()),
+        original_year: originally_released.map(|ts| i32::from(ts.year)),
+        comment: text(tag, ItemKey::Comment),
+        // `ItemKey::Bpm` has NO ID3v2 mapping — MP3 / WAV / AIFF keep BPM in `TBPM`, which lofty
+        // exposes as `IntegerBpm`. Reading only `Bpm` therefore misses it on every ID3v2 file,
+        // including the ones `tag_writer::apply_bpm` writes. Prefer the decimal key (Vorbis
+        // `BPM`, MP4 freeform); fall back to the integer.
+        bpm: text(tag, ItemKey::Bpm)
+            .or_else(|| text(tag, ItemKey::IntegerBpm))
+            .and_then(|s| s.parse::<f64>().ok())
+            .filter(|v| v.is_finite()),
+        initial_key: text(tag, ItemKey::InitialKey),
+        mood: text(tag, ItemKey::Mood),
+        grouping: text(tag, ItemKey::ContentGroup),
+        work: text(tag, ItemKey::Work),
+        movement: text(tag, ItemKey::Movement),
+        movement_number: number(tag, ItemKey::MovementNumber),
+        movement_total: number(tag, ItemKey::MovementTotal),
+        language: text(tag, ItemKey::Language),
+        copyright: text(tag, ItemKey::CopyrightMessage),
+        isrc: text(tag, ItemKey::Isrc),
+        musicbrainz_track_id: text(tag, ItemKey::MusicBrainzRecordingId),
+        musicbrainz_release_id: text(tag, ItemKey::MusicBrainzReleaseId),
+        musicbrainz_release_track_id: text(tag, ItemKey::MusicBrainzTrackId),
+        replaygain_track_gain: text(tag, ItemKey::ReplayGainTrackGain)
+            .as_deref()
+            .and_then(parse_replaygain_gain),
+        replaygain_track_peak: text(tag, ItemKey::ReplayGainTrackPeak)
+            .as_deref()
+            .and_then(parse_replaygain_peak),
+        replaygain_album_gain: text(tag, ItemKey::ReplayGainAlbumGain)
+            .as_deref()
+            .and_then(parse_replaygain_gain),
+        replaygain_album_peak: text(tag, ItemKey::ReplayGainAlbumPeak)
+            .as_deref()
+            .and_then(parse_replaygain_peak),
         rating,
         duration_ms,
         codec,
@@ -357,6 +341,184 @@ fn extract(
         date_modified,
         artwork_path,
     })
+}
+
+/// One tag value, trimmed, `None` when absent or blank.
+///
+/// Takes `Option<&Tag>` so a file whose tags wouldn't parse reads as a file with none, which is
+/// what the filename-row fallback needs — every field below is one line rather than a slot in a
+/// tuple whose `else` arm has to spell the same count of `None`s.
+fn text(tag: Option<&Tag>, key: ItemKey) -> Option<String> {
+    tag.and_then(|tag| tag.get_string(key))
+        .map(|s| s.trim().to_owned())
+        .filter(|s| !s.is_empty())
+}
+
+/// [`text`] parsed as a whole number, for the counts that have no [`Accessor`] getter.
+fn number(tag: Option<&Tag>, key: ItemKey) -> Option<i32> {
+    text(tag, key).and_then(|s| s.parse().ok())
+}
+
+/// Whether a flag tag is set. Anything but a `0` or a `false` counts, `TCMP` being written as `1`
+/// and `COMPILATION` as either.
+///
+/// **Case-folded, and it is the false half that has to be.** `upsert_album`'s `is_compilation` is
+/// an `OR`, so nothing but an explicit Edit-Tags clear ever lowers the flag again — one file whose
+/// tagger spelled it `FALSE` would mark the whole release, and no rescan could repair it. A
+/// spelling this doesn't know still fails toward "set", which is the direction a *present* flag
+/// argues for.
+fn flag(tag: Option<&Tag>, key: ItemKey) -> bool {
+    text(tag, key).is_some_and(|value| value != "0" && !value.eq_ignore_ascii_case("false"))
+}
+
+/// A count lofty already parsed, saturated rather than wrapped.
+fn count(value: Option<u32>) -> Option<i32> {
+    value.map(|n| i32::try_from(n).unwrap_or(i32::MAX))
+}
+
+/// A whole date under one key. `BestAttempt` parsing, so a year-only tag is a year-only
+/// [`Timestamp`] and renders back as the four digits it came in as.
+fn read_timestamp(tag: Option<&Tag>, key: ItemKey) -> Option<Timestamp> {
+    text(tag, key).and_then(|value| value.parse().ok())
+}
+
+/// Where a release date can sit, in the order it is taken.
+///
+/// `TDRL`/`RELEASEDATE` is the explicit answer, `TDRC`/`DATE` the one Picard actually writes, and
+/// `YEAR` a Vorbis-only spelling that `Accessor::date` keeps an arm for and some rippers still
+/// emit alone. Shared with [`super::tag_writer`], which clears the whole list before writing so an
+/// edit cannot land behind a key read first.
+pub(super) const RELEASE_DATE_KEYS: [ItemKey; 3] =
+    [ItemKey::ReleaseDate, ItemKey::RecordingDate, ItemKey::Year];
+
+/// The release date a file carries, under whichever of [`RELEASE_DATE_KEYS`] it used.
+pub(super) fn release_timestamp(tag: Option<&Tag>) -> Option<Timestamp> {
+    RELEASE_DATE_KEYS.into_iter().find_map(|key| read_timestamp(tag, key))
+}
+
+/// Every genre the file names.
+///
+/// A repeated `GENRE` is the multi-value form and needs no splitting. A *single* value is split on
+/// `;`, and on nothing else: that is the separator Picard flattens a list to when the frame cannot
+/// hold one, which is every ID3v2.3 file. Not `/` — `ID3v1`'s own genre list contains `Pop/Funk`, so
+/// a slash is genuinely ambiguous where a semicolon is not — and not `,` or `&`, which live inside
+/// names like `Drum & Bass`.
+fn read_genres(tag: Option<&Tag>) -> GenreList {
+    let Some(tag) = tag else {
+        return GenreList::default();
+    };
+    let values = trimmed_values(tag, ItemKey::Genre);
+    let names = match values.as_slice() {
+        [single] => {
+            single.split(';').map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned).collect()
+        }
+        _ => values,
+    };
+    GenreList::new(names)
+}
+
+fn read_sort_tags(tag: Option<&Tag>) -> SortTags {
+    SortTags {
+        artist: text(tag, ItemKey::TrackArtistSortOrder),
+        album_artist: text(tag, ItemKey::AlbumArtistSortOrder),
+        album: text(tag, ItemKey::AlbumTitleSortOrder),
+        title: text(tag, ItemKey::TrackTitleSortOrder),
+    }
+}
+
+fn read_release_tags(tag: Option<&Tag>) -> ReleaseTags {
+    ReleaseTags {
+        label: text(tag, ItemKey::Label),
+        catalog_number: text(tag, ItemKey::CatalogNumber),
+        barcode: text(tag, ItemKey::Barcode),
+        media: text(tag, ItemKey::OriginalMediaType),
+        release_type: text(tag, ItemKey::MusicBrainzReleaseType),
+        release_country: text(tag, ItemKey::ReleaseCountry),
+        musicbrainz_release_group_id: text(tag, ItemKey::MusicBrainzReleaseGroupId),
+        is_compilation: flag(tag, ItemKey::FlagCompilation),
+    }
+}
+
+/// The `MusicBrainz` ids listed in parallel with a credit's names.
+///
+/// **All of them or none.** Picard writes one id per credited artist in the same order, so the
+/// pairing is positional and a file whose counts disagree has no alignment left to trust — and a
+/// misaligned id stamps the wrong `MBID` onto a real artist, which nothing downstream can detect
+/// or undo. A solo credit is the common case and still passes.
+fn read_credit_mbids(tag: Option<&Tag>, key: ItemKey, credited: usize) -> Vec<String> {
+    let Some(tag) = tag else {
+        return Vec::new();
+    };
+    let ids = trimmed_values(tag, key);
+    if ids.len() == credited {
+        ids
+    } else {
+        Vec::new()
+    }
+}
+
+/// A file's two artist credits, over a tag already in hand.
+///
+/// The file is the authority, which is what a database seeded from `artist_id` alone cannot be.
+/// Takes the tag rather than a path because its one caller — the Edit-Tags dialog — is opening the
+/// file for the lyrics tag anyway.
+pub fn credits_from_tag(tag: Option<&Tag>) -> (ArtistCredit, ArtistCredit) {
+    (
+        read_credit(tag, ItemKey::TrackArtist, ItemKey::TrackArtists),
+        read_credit(tag, ItemKey::AlbumArtist, ItemKey::AlbumArtists),
+    )
+}
+
+/// What one artist field reads as: the credit behind it, and the string that renders.
+///
+/// `ARTISTS` wins where it exists. Failing that, a multi-value `ARTIST` — a NUL-separated `TPE1`,
+/// a repeated Vorbis field — is the same list of names with nothing said about how they join. A
+/// *single* value is one artist whatever delimiters it contains, which is what the list tag
+/// exists for: `AC/DC` and `Earth, Wind & Fire` are one name each, and the exceptions list that
+/// splitting on punctuation would need is not one anybody can finish.
+///
+/// The string comes back rendered from the credit rather than copied off the tag, so the column
+/// and the join rows written beside it cannot disagree.
+fn read_credit(tag: Option<&Tag>, printed_key: ItemKey, list_key: ItemKey) -> ArtistCredit {
+    let Some(tag) = tag else {
+        return ArtistCredit::default();
+    };
+    let listed = unflattened(trimmed_values(tag, list_key));
+    let printed = trimmed_values(tag, printed_key);
+    let credit_line = printed.first().cloned().unwrap_or_default();
+    let names = if listed.is_empty() { printed } else { listed };
+
+    ArtistCredit::from_tags(&credit_line, &names)
+}
+
+/// A list tag that arrived as one `"; "`-joined string, split back into the names it holds.
+///
+/// ID3v2.3 has no multi-value frame, so Picard writes `TXXX:Artists` as `"Alice; Bob"` — and that
+/// is most MP3s in the wild. Left whole it reads as one artist named that, which is the exact bug
+/// the `ARTISTS` tag exists to prevent.
+///
+/// Narrower than reversing [`read_credit`]'s never-split rule, and deliberately: this runs on the
+/// **list** key only, where a single value can only ever be a flattened list, never on the printed
+/// key where `AC/DC` and `Earth, Wind & Fire` live. The separator is the one Picard documents for
+/// the purpose, with the space required — a bare `;` inside a single name stays inside it.
+fn unflattened(values: Vec<String>) -> Vec<String> {
+    let [single] = values.as_slice() else {
+        return values;
+    };
+    if !single.contains("; ") {
+        return values;
+    }
+    single.split("; ").map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned).collect()
+}
+
+/// Every value under `key`, trimmed, blanks dropped. The one multi-value read in the tree —
+/// [`super::role_tags`] unpacks its ten keys through it too.
+///
+/// The blanks are not hypothetical: a whitespace-only artist field is common enough in ripped
+/// libraries to have its own guard downstream, and a NUL-terminated UTF-8 frame leaves an empty
+/// tail value behind it.
+pub(super) fn trimmed_values(tag: &Tag, key: ItemKey) -> Vec<String> {
+    tag.get_strings(key).map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned).collect()
 }
 
 #[cfg(test)]

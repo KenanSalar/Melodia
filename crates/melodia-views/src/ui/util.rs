@@ -1,6 +1,6 @@
 //! Small shared helpers and artwork constants for the UI glue layer: one source of truth
-//! for the row conversions and the cover-decode sizes, rather than a comment in each copy
-//! asserting they match.
+//! for the row conversions, the technical-metadata display strings and the cover-decode
+//! sizes, rather than a comment in each copy asserting they match.
 
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
@@ -51,6 +51,30 @@ pub fn len_as_i32(len: usize) -> i32 {
 /// reach a toast being accumulated as `u32`.
 pub fn count_as_i32(n: u32) -> i32 {
     i32::try_from(n).unwrap_or(i32::MAX)
+}
+
+/// Hz → "44.1 kHz" / "48 kHz" (drops a trailing ".0").
+///
+/// Here rather than beside either reader: the Now Playing chip row and the Edit-Tags Summary tab
+/// state the same technical facts, and two copies of the rounding is how one of them comes to
+/// round differently.
+pub fn format_sample_rate(hz: i32) -> String {
+    let khz = f64::from(hz) / 1000.0;
+    if khz.fract().abs() < f64::EPSILON {
+        format!("{khz:.0} kHz")
+    } else {
+        format!("{khz:.1} kHz")
+    }
+}
+
+/// Channel count → "Mono" / "Stereo" / "N channels". Technical terms left
+/// untranslated for v1 (built in Rust; Slint's `@tr` only covers literals).
+pub fn format_channels(n: i32) -> String {
+    match n {
+        1 => "Mono".to_owned(),
+        2 => "Stereo".to_owned(),
+        n => format!("{n} channels"),
+    }
 }
 
 #[cfg(test)]

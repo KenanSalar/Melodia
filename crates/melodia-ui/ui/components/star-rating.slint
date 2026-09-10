@@ -1,13 +1,18 @@
 import { Theme } from "../theme.slint";
 import { MaterialIcon } from "material-icon.slint";
 
-// Inline 0–5 rating: five glyphs, each with its own `TouchArea` so hit-testing
-// is per-star. Clicking the current top star clears the rating, the heart's
-// click-again-to-toggle-off affordance.
+// Inline 0–5 rating: five glyphs under one `TouchArea`, the pointer's x deciding which star it is
+// over. Clicking the current top star clears the rating, the heart's click-again-to-toggle-off
+// affordance.
 //
-// Inside a track row this must stay a *descendant* of the row's own `touch`, so
-// hovering a star keeps `has-hover` true and the strip stays mounted — the
-// reason the favorite and checkbox TouchAreas live there too.
+// **One area rather than one per star, because a click sets the whole run below the pointer.**
+// A run is a question about one coordinate, where five areas could only answer it by agreeing
+// through a property none of them owns. A press-drag across the strip is one gesture besides,
+// which the star that took the grab would own alone while the rest never saw the pointer move.
+//
+// Inside a track row this must stay a *descendant* of the row's own `touch`, so hovering a star
+// keeps `has-hover` true and the strip stays mounted — the reason the favorite and checkbox
+// TouchAreas live there too.
 export component StarRating {
     in property <int> rating;              // 0–5 (values outside are clamped by callers)
     in property <bool> enabled: true;
@@ -16,30 +21,71 @@ export component StarRating {
     // star / heart group with the per-artwork accent.
     in property <brush> filled-color: Theme.yellow;
     in property <brush> empty-color: Theme.subtext0;
+    // Draw the rating a click would set while the pointer is over the strip, the run coming up from
+    // `Theme.lit-rest` to full the way the heart beside it does in Now Playing. Off in a track row,
+    // where the stars already sit inside the row's own hover treatment.
+    in property <bool> hover-preview: false;
 
     callback rated(int /*new_rating*/);
 
+    // Between glyphs. Both the strip's width and the pointer's star are measured against it, so it
+    // is not a literal on the layout.
+    property <length> gap: 1px;
+    // Only where the star can be clicked: a preview under a dead pointer promises an act it can't
+    // make.
+    property <bool> previewing: root.hover-preview && root.enabled;
+    // 1–5 under the pointer, 0 when it is elsewhere.
+    property <int> pointed: touch.has-hover
+        ? clamp(Math.floor(touch.mouse-x / (root.star-size + root.gap)) + 1, 1, 5)
+        : 0;
+    // What the strip draws: the prospective rating under the pointer, the current one at rest.
+    // **The run rather than the star being pointed at** — a third star lighting alone says nothing
+    // about the two a click would light with it, which is the whole question a rating strip is
+    // asked on the way to a click.
+    property <int> shown: root.previewing && root.pointed > 0 ? root.pointed : root.rating;
+
     HorizontalLayout {
-        spacing: 1px;
         alignment: start;
 
-        for i in 5: Rectangle {
-            property <int> idx: i + 1;
-            width: root.star-size;
+        Rectangle {
+            width: 5 * root.star-size + 4 * root.gap;
             height: root.star-size;
 
-            MaterialIcon {
-                name: parent.idx <= root.rating ? "star" : "star_border";
-                icon-size: root.star-size;
-                icon-color: parent.idx <= root.rating ? root.filled-color : root.empty-color;
-                filled: parent.idx <= root.rating;
+            HorizontalLayout {
+                spacing: root.gap;
+
+                for i in 5: Rectangle {
+                    property <bool> lit: i + 1 <= root.shown;
+                    width: root.star-size;
+                    height: root.star-size;
+
+                    // A float rather than a third brush, so nothing the host hands over can dirty
+                    // it and restart the colour ease below.
+                    property <float> level: root.previewing && self.lit && root.pointed == 0
+                        ? Theme.lit-rest
+                        : 1.0;
+                    animate level { duration: Theme.dur-fast; easing: ease-in-out; }
+
+                    MaterialIcon {
+                        name: parent.lit ? "star" : "star_border";
+                        icon-size: root.star-size;
+                        icon-color: parent.lit ? root.filled-color : root.empty-color;
+                        filled: parent.lit;
+                        fade: parent.level;
+                        // Animating a brush a host hands over is safe here for `IconButton`'s
+                        // reason: neither host eases the pair, writing both discretely on a theme
+                        // or artwork change. Read `slint-pitfalls.md` before giving one of them a
+                        // crossfade.
+                        animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
+                    }
+                }
             }
 
-            TouchArea {
+            touch := TouchArea {
                 mouse-cursor: root.enabled ? pointer : default;
                 clicked => {
                     if (root.enabled) {
-                        root.rated(parent.idx == root.rating ? 0 : parent.idx);
+                        root.rated(root.pointed == root.rating ? 0 : root.pointed);
                     }
                 }
             }
