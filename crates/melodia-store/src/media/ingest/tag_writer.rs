@@ -34,7 +34,7 @@ use std::path::Path;
 use lofty::config::WriteOptions;
 use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::picture::{Picture, PictureType};
-use lofty::prelude::{Accessor, ItemKey};
+use lofty::prelude::ItemKey;
 use lofty::tag::items::Timestamp;
 use lofty::tag::{ItemValue, Tag, TagItem, TagType};
 
@@ -69,7 +69,7 @@ impl UnsupportedFields {
 /// **Every single-valued write goes through here** ([`set_texts`] is the multi-valued sibling),
 /// because [`Tag::insert_text`] silently drops an item whose `ItemKey` has no mapping for the
 /// target `TagType` and says so only in its return — the bool that makes the BPM and lyrics
-/// fallbacks below expressible. It is also why the [`Accessor`] setters are unused: they throw
+/// fallbacks below expressible. It is also why the `Accessor` setters are unused: they throw
 /// that bool away, and their default bodies are empty no-ops, so a non-overriding impl would
 /// discard the whole write.
 fn set_text(
@@ -325,25 +325,35 @@ fn apply_rating(tag: &mut Tag, edit: &FieldEdit<i32>, out: &mut Vec<&'static str
     }
 }
 
-/// Year, done by hand: [`Accessor`] exposes `date: Timestamp` rather than `year`, and `set_date`
-/// discards the `insert_text` bool — so do what it does with the bool visible.
+/// Year, done by hand: `Accessor::set_date` discards the `insert_text` bool, and `remove_date`
+/// reaches two of the three keys the reader takes a year from.
 ///
-/// Seeding from the existing `tag.date()` is what preserves a month/day through a year-only edit;
+/// **Every key goes, then one is written.** `metadata::release_timestamp` prefers `ReleaseDate`,
+/// so a file carrying both that and `RecordingDate` would otherwise read back the value the edit
+/// did not touch. The one written is `RecordingDate` regardless: `TDRC`/`DATE` is what every other
+/// player looks at, where `TDRL`/`RELEASEDATE` is a key most of them ignore.
+///
+/// Seeding from the existing timestamp is what preserves a month/day through a year-only edit;
 /// `Timestamp`'s `Display` appends `-MM-DD` only when those parts are present.
 fn apply_year(tag: &mut Tag, edit: &FieldEdit<u16>, out: &mut Vec<&'static str>) {
     match edit {
         FieldEdit::Keep => {}
-        // Removes both `Year` and `RecordingDate`.
-        FieldEdit::Clear => tag.remove_date(),
+        FieldEdit::Clear => clear_release_dates(tag),
         FieldEdit::Set(y) => {
-            let existing = tag.date().unwrap_or_default();
+            let existing = metadata::release_timestamp(Some(tag)).unwrap_or_default();
             let ts = Timestamp {
                 year: *y,
                 ..existing
             };
-            tag.remove_key(ItemKey::Year);
+            clear_release_dates(tag);
             set_text(tag, ItemKey::RecordingDate, ts.to_string(), "year", out);
         }
+    }
+}
+
+fn clear_release_dates(tag: &mut Tag) {
+    for key in metadata::RELEASE_DATE_KEYS {
+        tag.remove_key(key);
     }
 }
 

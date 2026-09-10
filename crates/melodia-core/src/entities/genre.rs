@@ -19,12 +19,24 @@ pub struct GenreList {
 const GENRE_JOIN: &str = ", ";
 
 impl GenreList {
+    /// **Each name once.** `genres.name` is `UNIQUE COLLATE NOCASE`, so `"Rock; rock"` and a
+    /// repeated `GENRE` frame both resolve to one `genres` row and would write two `track_genres`
+    /// rows for one track. The primary key is `(track_id, position)`, so nothing downstream
+    /// rejects that, and the stats triggers *and* `recalculate_all_stats` would agree on a count
+    /// that is twice what it should be. Kept first-seen, which is the order the tag wrote.
     #[must_use]
     pub fn new(names: Vec<String>) -> Self {
-        let rendered = names.join(GENRE_JOIN);
+        let mut kept: Vec<String> = Vec::with_capacity(names.len());
+        for name in names {
+            if !kept.iter().any(|seen| seen.eq_ignore_ascii_case(&name)) {
+                kept.push(name);
+            }
+        }
+
+        let rendered = kept.join(GENRE_JOIN);
         Self {
             line: (!rendered.is_empty()).then_some(rendered),
-            names,
+            names: kept,
         }
     }
 

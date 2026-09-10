@@ -356,9 +356,13 @@ pub fn track_meta_columns() -> &'static str {
 
 /// Projection backing the Edit-Track-Information dialog: the editable tag
 /// columns plus the read-only technical columns the Summary tab shows.
-/// Every field is a native `tracks` column (artist/album/genre are stored
-/// denormalized as text alongside their FK ids), so the fetch needs no joins.
+/// Every field is a native `tracks` column, so the fetch needs no joins.
 /// `bpm` is the `REAL` column, hence `f64`.
+///
+/// The three multi-valued fields are absent for that reason and not by oversight: genres, role
+/// credits and the artist credits are rows, and the dialog reads them through the queries that
+/// return rows. `tracks.genre` and `tracks.credits` are the rendered halves those rows produce,
+/// and an editor populated from a rendered line is what splits `Chanson, Francaise` in two.
 #[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct TagEditRow {
     pub id: i64,
@@ -367,7 +371,6 @@ pub struct TagEditRow {
     pub artist: Option<String>,
     pub album_artist: Option<String>,
     pub album: Option<String>,
-    pub genre: Option<String>,
     pub year: Option<i32>,
     pub original_year: Option<i32>,
     pub track_number: Option<i32>,
@@ -410,7 +413,6 @@ pub const TRACK_TAG_EDIT_COLUMNS: &[&str] = &[
     "artist",
     "album_artist",
     "album",
-    "genre",
     "year",
     "original_year",
     "track_number",

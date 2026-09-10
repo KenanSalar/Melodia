@@ -394,6 +394,11 @@ fn run_write_pass(
 /// `COALESCE`-on-conflict input), and genre — so identical keys yield identical
 /// ids. Keeping `year` in the key preserves the per-track album-year semantics:
 /// tracks with differing years land in different buckets and each still upserts.
+///
+/// **Ids only.** `upsert_album` also writes the release-level columns off the same metadata, and a
+/// cache hit skips that write, so whichever file resolved the key first is the one those columns
+/// come from. That is right for the dialog, where every selected file receives the same values,
+/// and it is why a batch of files disagreeing about a label has no surface to show it on.
 type ResolveKey = (PathBuf, String, String, String, Option<i32>, String);
 
 /// Land the successful writes in one transaction: resolve ids, refresh each
@@ -418,6 +423,10 @@ async fn run_commit(
     // Artwork-Remove ids with nothing left to point at, flushed as one `IN (…)` UPDATE after
     // the loop.
     let mut remove_null_ids: Vec<i64> = Vec::new();
+    // The release-level fields `upsert_album`'s COALESCE cannot empty, and the albums owed the
+    // statement that does. Answered once: an edit clearing none of them collects nothing.
+    let cleared_release = edit.cleared_release_tags();
+    let mut cleared_album_ids: Vec<i64> = Vec::new();
 
     for f in files {
         let (meta, unsupported) = match &f.outcome {
@@ -462,6 +471,13 @@ async fn run_commit(
             report.unsupported.push((f.path.clone(), unsupported.clone()));
         }
 
+        if !cleared_release.is_empty()
+            && let Some(aid) = rids.album_id
+            && !cleared_album_ids.contains(&aid)
+        {
+            cleared_album_ids.push(aid);
+        }
+
         // Artwork the metadata UPDATE can't express: its `COALESCE(?, ...)` can
         // never null a path, and a re-extract of a Replaced file returns the
         // *external* cover (which shadows embedded art) rather than the one we
@@ -496,6 +512,9 @@ async fn run_commit(
         }
         ArtworkEdit::Keep => {}
     }
+
+    // After every `upsert_album` above, which is what it exists to undo.
+    queries::album::clear_release_tags(&mut tx, &cleared_album_ids, cleared_release).await?;
 
     // Both passes answer to a track that changed parents, and both are whole-table:
     // the rollup is a window CTE over every row in `tracks`, the sweep three

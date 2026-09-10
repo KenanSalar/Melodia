@@ -115,6 +115,29 @@ impl TagEdit {
             || self.year != FieldEdit::Keep
     }
 
+    /// The release-level fields this edit **emptied**.
+    ///
+    /// They live on `albums`, which every track of a release writes through a
+    /// `COALESCE(excluded.x, albums.x)` upsert: a cleared field arrives as the NULL that coalesce
+    /// discards, so the stored value would otherwise survive the tag leaving the file and the
+    /// release would go on showing a label nothing carries. The compilation flag is worse still,
+    /// its upsert being an `OR` that no re-ingest can ever bring back down.
+    ///
+    /// `library::tags`' commit answers this once and nulls what it names, after the upserts.
+    pub fn cleared_release_tags(&self) -> ClearedReleaseTags {
+        ClearedReleaseTags {
+            label: self.label == FieldEdit::Clear,
+            catalog_number: self.catalog_number == FieldEdit::Clear,
+            barcode: self.barcode == FieldEdit::Clear,
+            media: self.media == FieldEdit::Clear,
+            release_type: self.release_type == FieldEdit::Clear,
+            release_country: self.release_country == FieldEdit::Clear,
+            // A switch has no third state, so an un-ticked box arrives as `Set(false)`; the writer
+            // treats that and `Clear` alike and removes the tag either way.
+            compilation: matches!(self.compilation, FieldEdit::Clear | FieldEdit::Set(false)),
+        }
+    }
+
     /// Whether this edit moves any tag a lyrics directory identifies a recording by.
     ///
     /// Its signature takes four fields and duration is the one no tag edit can reach, so the album
@@ -138,5 +161,30 @@ impl TagEdit {
             rating: FieldEdit::Keep,
             ..self.clone()
         } == Self::default()
+    }
+}
+
+/// Which release-level columns a commit has to null by hand, from
+/// [`TagEdit::cleared_release_tags`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "one flag per clearable `albums` column, and the point is that the set is exhaustive"
+)]
+pub struct ClearedReleaseTags {
+    pub label: bool,
+    pub catalog_number: bool,
+    pub barcode: bool,
+    pub media: bool,
+    pub release_type: bool,
+    pub release_country: bool,
+    pub compilation: bool,
+}
+
+impl ClearedReleaseTags {
+    /// Nothing to null, which is every edit that emptied no release field.
+    #[must_use]
+    pub fn is_empty(self) -> bool {
+        self == Self::default()
     }
 }

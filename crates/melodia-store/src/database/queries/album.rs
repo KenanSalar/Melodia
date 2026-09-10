@@ -1,7 +1,7 @@
 use sqlx::AssertSqlSafe;
 
 use crate::database::DbPool;
-use melodia_core::entities::album;
+use melodia_core::entities::{album, tags};
 use melodia_core::error::AppError;
 
 /// The release tags behind each of `ids`, in the order given.
@@ -114,6 +114,55 @@ pub async fn set_album_artwork(
         let placeholders = crate::database::placeholders(chunk.len());
         let sql = format!("UPDATE albums SET artwork_path = ? WHERE id IN ({placeholders})");
         let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(artwork_path);
+        for id in chunk {
+            query = query.bind(*id);
+        }
+        query.execute(&mut **tx).await?;
+    }
+    Ok(())
+}
+
+/// Empty the release-level columns a tag edit cleared, on the albums it touched.
+///
+/// The half of a release tag `upsert_album` structurally cannot write: it coalesces a NULL away so
+/// that a track saying nothing doesn't blank what its neighbours said, which leaves no way to say
+/// "this release has no label" through it. `is_compilation` is worse, its upsert being an `OR`.
+/// Every column here is one the Edit-Tags dialog offers, so every one of them owes the user a way
+/// back to empty.
+///
+/// One statement with a flag per column rather than assembled SET clauses: the column names stay
+/// literals, and a `false` flag leaves the column reading itself.
+pub async fn clear_release_tags(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    album_ids: &[i64],
+    cleared: tags::ClearedReleaseTags,
+) -> Result<(), AppError> {
+    if album_ids.is_empty() || cleared.is_empty() {
+        return Ok(());
+    }
+    // Reserve the seven flag binds.
+    for chunk in album_ids.chunks(crate::database::SQLITE_BIND_LIMIT - 7) {
+        let placeholders = crate::database::placeholders(chunk.len());
+        let sql = format!(
+            "UPDATE albums SET
+                 label = CASE WHEN ? THEN NULL ELSE label END,
+                 catalog_number = CASE WHEN ? THEN NULL ELSE catalog_number END,
+                 barcode = CASE WHEN ? THEN NULL ELSE barcode END,
+                 media = CASE WHEN ? THEN NULL ELSE media END,
+                 release_type = CASE WHEN ? THEN NULL ELSE release_type END,
+                 release_country = CASE WHEN ? THEN NULL ELSE release_country END,
+                 is_compilation = CASE WHEN ? THEN FALSE ELSE is_compilation END
+             WHERE id IN ({placeholders})"
+        );
+        let mut query = sqlx::query(AssertSqlSafe(sql))
+            .persistent(false)
+            .bind(cleared.label)
+            .bind(cleared.catalog_number)
+            .bind(cleared.barcode)
+            .bind(cleared.media)
+            .bind(cleared.release_type)
+            .bind(cleared.release_country)
+            .bind(cleared.compilation);
         for id in chunk {
             query = query.bind(*id);
         }

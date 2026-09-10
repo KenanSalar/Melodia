@@ -251,6 +251,7 @@ async fn write_credits(
     }
 
     let solo = credit.artists().len() == 1;
+    let mut written: Vec<i64> = Vec::with_capacity(credit.artists().len());
     for (position, credited) in credit.artists().iter().enumerate() {
         let artist_id = if position == 0 {
             primary_artist_id
@@ -259,6 +260,16 @@ async fn write_credits(
         };
         let sort_name = if solo { details.sort_name } else { None };
         apply_artist_details(tx, artist_id, sort_name, details.mbids.get(position)).await?;
+
+        // One row per *artist*, not per name. `artists.name` is `UNIQUE COLLATE NOCASE`, so a
+        // credit naming someone twice under two spellings resolves to one row here — and the
+        // stats triggers on this table would then count the track twice for them. The line keeps
+        // both names, being what the release printed; the join rows are what a count reads.
+        if written.contains(&artist_id) {
+            continue;
+        }
+        written.push(artist_id);
+
         sqlx::query(sqlx::AssertSqlSafe(insert.as_str()))
             .bind(parent_id)
             .bind(artist_id)
@@ -272,10 +283,14 @@ async fn write_credits(
 
 /// Fill in an artist's sort name and `MusicBrainz` id from the file that named them.
 ///
-/// **Only where the column is still empty.** These arrive once per track, so every track of an
-/// album would otherwise rewrite them, and a library where one file disagrees with its neighbours
-/// would flip the artist's filing order on each rescan depending on which file reached the upsert
-/// last. First writer wins; a user correcting it is the Edit-Tags path, not this one.
+/// **Only where the column is still empty**, deliberately unlike the release columns in
+/// [`upsert_album`], which take the newest value. These arrive once per *credited artist per
+/// track* rather than once per release, so a library where one file disagrees with its neighbours
+/// would flip the artist's filing order on every rescan depending on which file reached the upsert
+/// last.
+///
+/// The cost is that first writer wins for good: no surface edits these, so a corrected
+/// `ARTISTSORT` in the file cannot reach a row that already has one.
 async fn apply_artist_details(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     artist_id: i64,
@@ -346,13 +361,14 @@ pub async fn upsert_album(
     let release = &meta.release;
     let id = sqlx::query_scalar::<_, i64>(
         // Every release field is `COALESCE(excluded.x, albums.x)`: it updates the stored value on
-        // re-ingest (e.g. a tag edit) but preserves it when the new value is NULL, so the first
-        // track of a release carrying one wins and a later track missing it doesn't blank it.
+        // re-ingest (e.g. a tag edit) but preserves it when the new value is NULL, so a track
+        // carrying one wins and a later track missing it doesn't blank it. Which is also why
+        // nothing here can *clear* one: a cleared field arrives as the NULL this coalesces away,
+        // so the Edit-Tags path nulls it explicitly afterwards (`library::tags::clear_release_tags`).
         //
         // `is_compilation` is the one exception, and an OR rather than a COALESCE: the column is
         // NOT NULL so there is no "said nothing" to coalesce against, and one track flagged makes
-        // the release one. Unsetting it means retagging every track, which is what flagging it
-        // took.
+        // the release one. It is unset by that same pass.
         "INSERT INTO albums (
              name, artist_id, year, sort_name, is_compilation,
              musicbrainz_id, musicbrainz_release_group_id,
@@ -361,7 +377,7 @@ pub async fn upsert_album(
          ON CONFLICT(name, artist_id) DO UPDATE SET
              name = excluded.name,
              year = COALESCE(excluded.year, albums.year),
-             sort_name = COALESCE(albums.sort_name, excluded.sort_name),
+             sort_name = COALESCE(excluded.sort_name, albums.sort_name),
              is_compilation = albums.is_compilation OR excluded.is_compilation,
              musicbrainz_id = COALESCE(excluded.musicbrainz_id, albums.musicbrainz_id),
              musicbrainz_release_group_id = COALESCE(

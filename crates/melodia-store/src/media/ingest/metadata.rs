@@ -264,11 +264,9 @@ fn extract(
     let artist = read_credit(tag, ItemKey::TrackArtist, ItemKey::TrackArtists);
     let album_artist = read_credit(tag, ItemKey::AlbumArtist, ItemKey::AlbumArtists);
 
-    // `TDRL`/`RELEASEDATE` is the explicit answer and `TDRC`/`DATE` the one Picard actually
-    // writes, so the specific key wins and the common one backs it up. Both halves are kept: the
-    // year every index and smart-playlist rule is built on, and the month and day beside it.
-    let released = read_timestamp(tag, ItemKey::ReleaseDate)
-        .or_else(|| read_timestamp(tag, ItemKey::RecordingDate));
+    // Both halves of the release date are kept: the year every index and smart-playlist rule is
+    // built on, and the month and day beside it.
+    let released = release_timestamp(tag);
     let originally_released = read_timestamp(tag, ItemKey::OriginalReleaseDate);
 
     // The conversion this fronts is argued in `rating_tags`, where every format's shape is in
@@ -380,6 +378,20 @@ fn count(value: Option<u32>) -> Option<i32> {
 /// [`Timestamp`] and renders back as the four digits it came in as.
 fn read_timestamp(tag: Option<&Tag>, key: ItemKey) -> Option<Timestamp> {
     text(tag, key).and_then(|value| value.parse().ok())
+}
+
+/// Where a release date can sit, in the order it is taken.
+///
+/// `TDRL`/`RELEASEDATE` is the explicit answer, `TDRC`/`DATE` the one Picard actually writes, and
+/// `YEAR` a Vorbis-only spelling that `Accessor::date` keeps an arm for and some rippers still
+/// emit alone. Shared with [`super::tag_writer`], which clears the whole list before writing so an
+/// edit cannot land behind a key read first.
+pub(super) const RELEASE_DATE_KEYS: [ItemKey; 3] =
+    [ItemKey::ReleaseDate, ItemKey::RecordingDate, ItemKey::Year];
+
+/// The release date a file carries, under whichever of [`RELEASE_DATE_KEYS`] it used.
+pub(super) fn release_timestamp(tag: Option<&Tag>) -> Option<Timestamp> {
+    RELEASE_DATE_KEYS.into_iter().find_map(|key| read_timestamp(tag, key))
 }
 
 /// Every genre the file names.

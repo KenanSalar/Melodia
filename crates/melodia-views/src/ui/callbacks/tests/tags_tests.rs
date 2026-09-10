@@ -78,10 +78,8 @@ fn build_edit_touches_only_changed_fields() {
     assert_eq!(edit.title, FieldEdit::Clear);
     assert_eq!(edit.artist, FieldEdit::Keep);
     assert_eq!(edit.year, FieldEdit::Keep);
-    // The role boxes are untouched, so the whole set stays `Keep` — the property that stops one
-    // edited role clearing the nine beside it.
-    // Every list field is untouched, and all three diff structurally rather than through the
-    // strings they render as.
+    // Every list field is untouched, and the role set staying `Keep` is what stops one edited
+    // role clearing the nine beside it.
     assert_eq!(edit.credits, FieldEdit::Keep);
     assert_eq!(edit.genres, FieldEdit::Keep);
     assert!(!edit.is_noop());

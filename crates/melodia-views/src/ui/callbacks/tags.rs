@@ -1302,8 +1302,8 @@ fn show_failure_toast(ui: &AppWindow, notifications: &NotificationsUi) {
     });
 }
 
-/// Build the `TagEdit` by diffing each current field value against the
-/// populate-time snapshot. `cur` is fixed-length [`FIELD_COUNT`]; `orig` is checked to match.
+/// Build the `TagEdit` by diffing the live form against the populate-time snapshot, field by
+/// named field.
 fn build_edit(
     form: &FormState,
     orig: &FormState,

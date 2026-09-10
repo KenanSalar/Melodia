@@ -76,7 +76,7 @@ pub(super) async fn look_up(
 /// The credit behind the printed artist line, for the half of the request that can use its shape.
 ///
 /// **Taken only where it renders back to `printed`.** A credit list rendering to anything else is
-/// stale, `tasks::credit_import` not having reached that row's files yet, and the column is what
+/// stale, `tasks::tag_backfill` not having reached that row's files yet, and the column is what
 /// every other surface displays. The fallback is what this path asked with before the credit tables
 /// existed, so losing the shape costs the lookup precision rather than its answer.
 async fn credit_for(state: &AppState, track_id: i64, printed: &str) -> ArtistCredit {
