@@ -36,7 +36,11 @@ paths:
 
 ## Bulk Inserts
 
-- SQLite default bind variable limit is 999 (can be raised to 32,766)
+- SQLite's default bind variable limit is 32,766 as of 3.32. The 999 that most documentation still
+  quotes is the *old* default.
+    - **Melodia chunks at its own `database::MAX_BINDS_PER_STATEMENT`, which keeps that lower
+      figure deliberately.** Named for the role rather than for the engine, because it is a budget
+      we pick; the argument for the value, and for what moving it would take, lives on the constant.
 - Chunk rows: `BIND_LIMIT / num_columns` rows per batch (e.g., 5 columns = 199 rows/chunk)
 - Use `QueryBuilder::push_values()` for building multi-row INSERT statements
 - Set `.persistent(false)` on dynamic bulk queries — prevents statement cache bloat

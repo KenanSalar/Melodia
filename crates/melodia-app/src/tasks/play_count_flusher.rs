@@ -132,9 +132,8 @@ async fn flush_play_counts(
     counts: &HashMap<i64, u32>,
     now: &str,
 ) -> Result<(), melodia_core::error::AppError> {
-    // Stay below SQLite's 999 bind cap: 2 binds per row (id for CASE, id for
-    // IN) + 1 for `now`.
-    const MAX_ROWS: usize = (melodia_store::database::SQLITE_BIND_LIMIT - 1) / 2;
+    // 2 binds per row (id for CASE, id for IN) plus 1 for `now`.
+    const MAX_ROWS: usize = (melodia_store::database::MAX_BINDS_PER_STATEMENT - 1) / 2;
     let entries: Vec<(i64, u32)> = counts.iter().map(|(&k, &v)| (k, v)).collect();
     for chunk in entries.chunks(MAX_ROWS) {
         let mut sql = String::from("UPDATE tracks SET play_count = play_count + CASE id");
@@ -167,7 +166,7 @@ async fn flush_skip_counts(
     db: &DbPool,
     counts: &HashMap<i64, u32>,
 ) -> Result<(), melodia_core::error::AppError> {
-    const MAX_ROWS: usize = melodia_store::database::SQLITE_BIND_LIMIT / 2;
+    const MAX_ROWS: usize = melodia_store::database::MAX_BINDS_PER_STATEMENT / 2;
     let entries: Vec<(i64, u32)> = counts.iter().map(|(&k, &v)| (k, v)).collect();
     for chunk in entries.chunks(MAX_ROWS) {
         let mut sql = String::from("UPDATE tracks SET skip_count = skip_count + CASE id");

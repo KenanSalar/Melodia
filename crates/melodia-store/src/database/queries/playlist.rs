@@ -205,9 +205,9 @@ pub async fn add_tracks_to_playlist(
     playlist_id: i64,
     track_ids: &[i64],
 ) -> Result<(), AppError> {
-    // Batch INSERT — 4 columns per row, chunked within SQLite's bind limit
+    // Batch INSERT — 4 columns per row, chunked within one statement's bind budget
     const COLS_PER_ROW: usize = 4;
-    const CHUNK_SIZE: usize = crate::database::SQLITE_BIND_LIMIT / COLS_PER_ROW;
+    const CHUNK_SIZE: usize = crate::database::MAX_BINDS_PER_STATEMENT / COLS_PER_ROW;
 
     if track_ids.is_empty() {
         return Ok(());
@@ -261,9 +261,9 @@ pub async fn remove_tracks_from_playlist_batch(
 
     let mut tx = db.write().begin().await?;
 
-    // Chunk to stay within the SQLite bind limit — one slot is the
+    // Chunk to stay within one statement's bind budget — one slot is the
     // `playlist_id`, the rest are the `track_id` IN-list.
-    for chunk in track_ids.chunks(crate::database::SQLITE_BIND_LIMIT - 1) {
+    for chunk in track_ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 1) {
         let placeholders = crate::database::placeholders(chunk.len());
         let sql = format!(
             "DELETE FROM playlist_items WHERE playlist_id = ? AND track_id IN ({placeholders})"
@@ -388,7 +388,7 @@ async fn batch_update_positions_pairs(
 /// Playlist picker dialog so full-overlap rows can be greyed out and
 /// partial-overlap rows can show a `2 of 4 already added` badge.
 ///
-/// Chunked through `chunked_in_query` to stay inside `SQLITE_BIND_LIMIT`;
+/// Chunked through `chunked_in_query` to stay inside `MAX_BINDS_PER_STATEMENT`;
 /// counts are summed across chunks because a playlist may appear in more
 /// than one chunk's result set.
 pub async fn count_tracks_in_playlists_for_selection(

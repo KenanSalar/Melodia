@@ -696,6 +696,29 @@ pub struct MostPlayedFavorite {
     pub duration_ms: i64,
 }
 
+/// Explicit SELECT columns for `MostPlayedFavorite` queries, in field order for
+/// legibility (sqlx `FromRow` matches by name, so order isn't load-bearing).
+pub const MOST_PLAYED_COLUMNS: &[&str] = &[
+    "id",
+    "title",
+    "artist",
+    "album_artist",
+    "album",
+    "genre",
+    "year",
+    "artwork_path",
+    "play_count",
+    "duration_ms",
+];
+
+/// Comma-separated form of `MOST_PLAYED_COLUMNS` for direct `SELECT` usage,
+/// built once and reused (same `OnceLock` pattern as `track_summary_columns`).
+pub fn most_played_columns() -> &'static str {
+    use std::sync::OnceLock;
+    static CACHED: OnceLock<String> = OnceLock::new();
+    CACHED.get_or_init(|| MOST_PLAYED_COLUMNS.join(", "))
+}
+
 #[cfg(test)]
 #[path = "tests/track_tests.rs"]
 mod tests;

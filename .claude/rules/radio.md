@@ -94,8 +94,8 @@ is the copy to delete.
   re-import, so a user edit folded into them would be silently reverted; kept apart, a reader takes
   the local one first and both writers stay correct. `RadioStation::can_override` is why a field is
   offered only where the directory said nothing.
-- **The migration is branch-local until this ships, so fold changes into it** rather than adding a
-  second. Its header argues the schema — no `AUTOINCREMENT`, no secondary indexes, why `hls` and
+- **The migration shipped in v0.12.0, so a schema change here is a second migration, never an edit
+  to it.** Its header argues the schema — no `AUTOINCREMENT`, no secondary indexes, why `hls` and
   `country` are stored rather than re-derived — and none of that is restated here.
 - **A deleted station's id can be reused**, there being no `AUTOINCREMENT`. So a persisted
   `last_detail_ids` entry can land on a different station across a restart, exactly as it can for a

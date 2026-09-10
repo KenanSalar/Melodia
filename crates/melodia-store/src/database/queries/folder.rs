@@ -45,12 +45,14 @@ pub async fn delete_folder(db: &DbPool, id: i64) -> Result<(), AppError> {
 
 /// Batch delete by id list. Used by `add_folder` to remove subfolders covered
 /// by a newly-added parent — one round-trip instead of one per child.
-/// Chunks at `SQLite`'s bind-variable limit so we never bust 999 placeholders.
+/// Chunks at [`MAX_BINDS_PER_STATEMENT`] so a long id list stays inside one statement's budget.
+///
+/// [`MAX_BINDS_PER_STATEMENT`]: crate::database::MAX_BINDS_PER_STATEMENT
 pub async fn delete_folders_by_ids(db: &DbPool, ids: &[i64]) -> Result<(), AppError> {
     if ids.is_empty() {
         return Ok(());
     }
-    for chunk in ids.chunks(crate::database::SQLITE_BIND_LIMIT) {
+    for chunk in ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT) {
         let placeholders = crate::database::placeholders(chunk.len());
         let sql = format!("DELETE FROM folders WHERE id IN ({placeholders})");
         let mut q = sqlx::query(AssertSqlSafe(sql));

@@ -373,7 +373,7 @@ pub async fn set_favorite(db: &DbPool, ids: &[i64], favorite: bool) -> Result<()
         return Ok(());
     }
     // Reserve 1 bind slot for the `favorite` parameter itself.
-    for chunk in ids.chunks(crate::database::SQLITE_BIND_LIMIT - 1) {
+    for chunk in ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 1) {
         let placeholders = crate::database::placeholders(chunk.len());
         let sql = format!("UPDATE tracks SET is_favorite = ? WHERE id IN ({placeholders})");
         let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(favorite);
@@ -386,14 +386,14 @@ pub async fn set_favorite(db: &DbPool, ids: &[i64], favorite: bool) -> Result<()
 }
 
 /// Set the star `rating` (0–5) for one or more tracks by ID. Mirrors [`set_favorite`]: the value
-/// is clamped by `library::ratings::set_rating`, chunked to respect the `SQLite` bind limit, and
-/// run non-persistently since the placeholder count is dynamic.
+/// is clamped by `library::ratings::set_rating`, chunked to stay inside one statement's bind
+/// budget, and run non-persistently since the placeholder count is dynamic.
 pub async fn set_rating(db: &DbPool, ids: &[i64], rating: i32) -> Result<(), AppError> {
     if ids.is_empty() {
         return Ok(());
     }
     // Reserve 1 bind slot for the `rating` parameter itself.
-    for chunk in ids.chunks(crate::database::SQLITE_BIND_LIMIT - 1) {
+    for chunk in ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 1) {
         let placeholders = crate::database::placeholders(chunk.len());
         let sql = format!("UPDATE tracks SET rating = ? WHERE id IN ({placeholders})");
         let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(rating);
@@ -419,7 +419,7 @@ pub async fn set_track_artwork(
         return Ok(());
     }
     // Reserve 1 bind slot for the `artwork_path` parameter itself.
-    for chunk in ids.chunks(crate::database::SQLITE_BIND_LIMIT - 1) {
+    for chunk in ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 1) {
         let placeholders = crate::database::placeholders(chunk.len());
         let sql = format!("UPDATE tracks SET artwork_path = ? WHERE id IN ({placeholders})");
         let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(artwork_path);
@@ -621,14 +621,16 @@ pub async fn get_tracks_missing_mbid(
 /// `synchronous=NORMAL` — fast for retroactive backfills on large libraries.
 ///
 /// Each chunk runs as a single CTE-driven UPDATE so the round-trip count
-/// is O(chunks), not O(rows). Chunk size is bounded by `SQLite`'s 999-bind
-/// limit divided by 3 columns per row.
+/// is O(chunks), not O(rows). Chunk size is [`MAX_BINDS_PER_STATEMENT`] divided
+/// by 3 columns per row.
+///
+/// [`MAX_BINDS_PER_STATEMENT`]: crate::database::MAX_BINDS_PER_STATEMENT
 pub async fn batch_update_hashes(
     db: &DbPool,
     updates: &[(i64, String, Option<String>)],
 ) -> Result<(), AppError> {
     const COLS_PER_ROW: usize = 3;
-    const CHUNK_SIZE: usize = crate::database::SQLITE_BIND_LIMIT / COLS_PER_ROW; // 333
+    const CHUNK_SIZE: usize = crate::database::MAX_BINDS_PER_STATEMENT / COLS_PER_ROW; // 333
 
     if updates.is_empty() {
         return Ok(());
@@ -713,9 +715,9 @@ pub async fn get_most_played_favorites(
 ) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
     // The order's trailing keys are read, not selected — `MostPlayedFavorite`
     // is the card projection and has no slot for a timestamp.
+    let cols = track::most_played_columns();
     let rows = sqlx::query_as::<_, track::MostPlayedFavorite>(AssertSqlSafe(format!(
-        "SELECT id, title, artist, album_artist, album, genre, year, \
-                artwork_path, play_count, duration_ms \
+        "SELECT {cols} \
            FROM tracks \
           WHERE is_favorite = TRUE AND play_count > 0 \
           ORDER BY {MOST_PLAYED_ORDER}"
@@ -745,9 +747,9 @@ pub async fn get_most_played_favorites(
 /// (`RecentlyPlayedUiState::most_played`). Partial index `idx_tracks_play_count`
 /// covers the `WHERE` and the leading `ORDER BY` term.
 pub async fn get_most_played(db: &DbPool) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
+    let cols = track::most_played_columns();
     let rows = sqlx::query_as::<_, track::MostPlayedFavorite>(AssertSqlSafe(format!(
-        "SELECT id, title, artist, album_artist, album, genre, year, \
-                artwork_path, play_count, duration_ms \
+        "SELECT {cols} \
            FROM tracks \
           WHERE play_count > 0 \
           ORDER BY {MOST_PLAYED_ORDER}"

@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use sqlx::{AssertSqlSafe, Row};
 
-use crate::database::{SQLITE_BIND_LIMIT, placeholders};
+use crate::database::{MAX_BINDS_PER_STATEMENT, placeholders};
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::error::AppError;
 
@@ -241,7 +241,7 @@ pub struct NewTrackRow<'a> {
 /// because it is the one of the six that carries a *value* — the file's own
 /// tag — and data never rides in the statement text.
 pub const INSERT_CHUNK_ROWS: usize =
-    SQLITE_BIND_LIMIT / (TRACK_INSERT_COLUMN_COUNT - LITERAL_DEFAULTS);
+    MAX_BINDS_PER_STATEMENT / (TRACK_INSERT_COLUMN_COUNT - LITERAL_DEFAULTS);
 
 /// Multi-row variant of [`insert_track`] for the scan/import ingest hot
 /// path: one `INSERT … VALUES (…), (…), … RETURNING id, file_path` per
@@ -482,7 +482,7 @@ pub async fn delete_track_by_path(
     Ok(result.rows_affected() > 0)
 }
 
-/// Batch-delete tracks by file paths, respecting `SQLite`'s 999-parameter bind limit.
+/// Batch-delete tracks by file paths, chunked at [`MAX_BINDS_PER_STATEMENT`].
 /// Returns the total number of rows deleted.
 pub async fn delete_tracks_by_paths_batch(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
@@ -493,7 +493,7 @@ pub async fn delete_tracks_by_paths_batch(
     }
 
     let mut total_deleted: u64 = 0;
-    for chunk in file_paths.chunks(crate::database::SQLITE_BIND_LIMIT) {
+    for chunk in file_paths.chunks(crate::database::MAX_BINDS_PER_STATEMENT) {
         let placeholders = crate::database::placeholders(chunk.len());
         let sql = format!("DELETE FROM tracks WHERE file_path IN ({placeholders})");
         let mut query = sqlx::query(AssertSqlSafe(sql));

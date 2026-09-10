@@ -10,8 +10,13 @@ use std::time::Duration;
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 
-/// `SQLite` bind variable limit — queries with more placeholders will fail.
-pub const SQLITE_BIND_LIMIT: usize = 999;
+/// Bind-variable budget for one statement, divided by a query's columns-per-row to size its chunks.
+///
+/// A bound we choose, not one the engine gives us: the bundled `SQLite` has allowed 32766 bind
+/// variables since 3.32. Raising it is not free either, the code generator being quadratic in a
+/// statement's columns while every bulk site runs `.persistent(false)` and so re-prepares per
+/// chunk. Move it against a profile of a first scan on a large library, not on the arithmetic.
+pub const MAX_BINDS_PER_STATEMENT: usize = 999;
 
 /// sqlx's default migrations-tracking table; the 0.9 `Migrate` trait methods
 /// take it explicitly (it became configurable via `sqlx.toml`).
@@ -45,7 +50,7 @@ pub(crate) fn placeholders(n: usize) -> String {
     s
 }
 
-/// Execute a chunked single-column IN-clause query inside `SQLite`'s bind limit,
+/// Execute a chunked single-column IN-clause query inside [`MAX_BINDS_PER_STATEMENT`],
 /// concatenating the results.
 ///
 /// Each item binds exactly one placeholder. **Not** for a tuple-IN clause — the
@@ -65,7 +70,7 @@ where
 
     let mut all_results: Vec<T> = Vec::new();
 
-    for chunk in items.chunks(SQLITE_BIND_LIMIT) {
+    for chunk in items.chunks(MAX_BINDS_PER_STATEMENT) {
         let sql = build_sql(&placeholders(chunk.len()));
 
         let mut query = sqlx::query_as::<_, T>(AssertSqlSafe(sql));
