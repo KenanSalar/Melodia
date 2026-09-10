@@ -404,7 +404,7 @@ impl VoicePull {
                 Ok(Command::Append { loaded, frames }) => self.accept(loaded, frames),
                 Ok(Command::Clear) => self.clear(),
                 Ok(Command::Replace { loaded, frames, mounted }) => {
-                    self.replace(loaded, frames, mounted)
+                    self.replace(loaded, frames, mounted);
                 }
                 Err(TryRecvError::Empty | TryRecvError::Disconnected) => break,
             }

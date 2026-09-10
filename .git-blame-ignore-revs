@@ -6,3 +6,6 @@
 
 # style(fmt): the wrapping nobody was enforcing, and the nine lints it was hiding
 24b4b2b7f06a5cc3fdc9ebb8685db10611e9b452
+
+# style(fmt): the widths that warned on every run, and the struct literals split at 18 columns
+effe1a9e49fc3930fccd37012dabc1451e23bbf2
