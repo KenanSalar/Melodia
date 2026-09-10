@@ -137,6 +137,13 @@ pub async fn apply_tag_edit(
     .await?;
 
     if !updated_ids.is_empty() {
+        // Ahead of the resync, which is the one step here that can still fail: the files are
+        // written and the batch is committed, so a read error below would otherwise leave the
+        // stale answer standing over something that had nothing to do with it.
+        if edit.renames_recording() {
+            forget_stored_lyrics(state, &updated_ids).await;
+        }
+
         // Overwrite any queued / currently-playing summary with its fresh copy
         // so the Now-Playing bar, Queue Sheet and Up Next stop showing old tags.
         // Only pay for the refetch + resync when the player actually references
@@ -154,10 +161,6 @@ pub async fn apply_tag_edit(
                 &state.sinks,
                 &map,
             );
-        }
-
-        if edit.renames_recording() {
-            forget_stored_lyrics(state, &updated_ids).await;
         }
 
         state.library_changed.bump();

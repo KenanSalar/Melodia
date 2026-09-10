@@ -69,6 +69,12 @@ pub(super) struct Recording {
     markers: BTreeMap<&'static str, usize>,
     /// Every credited artist, folded and split apart.
     artists: BTreeSet<String>,
+    /// The names our own tags list, where they list them, and empty for every row.
+    ///
+    /// A second reading rather than more of the first: the other side is always one string
+    /// [`credits`] split, so a name that split would have cut belongs to neither set the row can
+    /// be a subset of, and folding it in breaks the comparison it was added for.
+    named: BTreeSet<String>,
 }
 
 impl Recording {
@@ -82,24 +88,25 @@ impl Recording {
                 .collect(),
             core_title: squeeze(&strip_brackets(&folded_title)),
             artists: credits(artist),
+            named: BTreeSet::new(),
         }
     }
 
     /// Our side of the comparison, built from the credit rather than from its printed line alone.
     ///
-    /// **The credited names are added to the split, never substituted for it.** The row on the
-    /// other side is still one unstructured string [`credits`] has to guess at, so a credit of one
-    /// name that reads as two, `Simon & Garfunkel`, would stop matching the row that guessed it
-    /// apart the same way we used to. What the names buy is the case no splitter reaches: a join
-    /// phrase like `" vs. "` leaves the printed line as a single credit nobody is filed under.
-    ///
-    /// Widening only ever adds names our own tags claim, and [`Self::matches`] already reads a
-    /// superset on our side as "the row credits fewer of us".
+    /// **The credited names are read beside the split, never merged into it.** The row on the
+    /// other side is still one unstructured string [`credits`] has to guess at, so the guess has
+    /// to stay: a credit of one name that reads as two, `Simon & Garfunkel`, matches the row that
+    /// guessed it apart the same way. What the names buy is the case no splitter reaches, a join
+    /// phrase like `" vs. "` leaving the printed line as a single credit nobody is filed under.
     pub(super) fn from_credit(title: &str, credit: &ArtistCredit) -> Self {
         let mut recording = Self::new(title, credit.line().unwrap_or_default());
-        recording.artists.extend(
-            credit.artists().iter().map(|c| squeeze(&fold(&c.name))).filter(|n| !n.is_empty()),
-        );
+        recording.named = credit
+            .artists()
+            .iter()
+            .map(|credited| squeeze(&fold(&credited.name)))
+            .filter(|name| !name.is_empty())
+            .collect();
         recording
     }
 
@@ -107,18 +114,18 @@ impl Recording {
     /// recording rather than about a pair.
     ///
     /// A title that is nothing but a bracketed aside leaves no core title, and a credit that is
-    /// nothing but separators leaves no artists. Neither can equal anything, which is why the
-    /// caller checks it before spending a request rather than after reading the answer.
+    /// nothing but separators leaves no artists unless our own tags name them. Neither can equal
+    /// anything, which is why the caller checks it before spending a request rather than after
+    /// reading the answer.
     pub(super) fn can_match(&self) -> bool {
-        !self.core_title.is_empty() && !self.artists.is_empty()
+        !self.core_title.is_empty() && (!self.artists.is_empty() || !self.named.is_empty())
     }
 
     /// Whether `other` is this recording under somebody else's tags.
     ///
-    /// The title has to be the same words and the same version; the credits have to be one side's
-    /// subset of the other's, which is what a shorter credit on one of them means — a row filed
-    /// under "Dominic Strike, Euphoria" is this track where the file says only the first of them,
-    /// and a file crediting a guest the row omits is the same case mirrored.
+    /// The title has to be the same words and the same version, and the credits have to agree
+    /// under either reading of ours: a row filed under names one of them claims is this track,
+    /// whichever of the two reached them.
     pub(super) fn matches(&self, other: &Self) -> bool {
         if !self.can_match() || !other.can_match() {
             return false;
@@ -126,9 +133,20 @@ impl Recording {
         if self.core_title != other.core_title || self.markers != other.markers {
             return false;
         }
-        let (ours, theirs) = (&self.artists, &other.artists);
-        ours.is_subset(theirs) || theirs.is_subset(ours)
+        credits_agree(&self.artists, &other.artists) || credits_agree(&self.named, &other.artists)
     }
+}
+
+/// Whether two credits name one recording: either side a subset of the other, which is what a
+/// shorter credit on one of them means. A row filed under "Dominic Strike, Euphoria" is this track
+/// where the file says only the first of them, and a file crediting a guest the row omits is the
+/// same case mirrored.
+///
+/// **An empty left side is refused rather than trivially accepted.** `named` is empty for every row
+/// and for a credit whose tags list nobody, and the subset test alone would have it match all of
+/// them.
+fn credits_agree(ours: &BTreeSet<String>, theirs: &BTreeSet<String>) -> bool {
+    !ours.is_empty() && (ours.is_subset(theirs) || theirs.is_subset(ours))
 }
 
 /// The title to search the index with: the tag's own, less a `feat.` credit.
@@ -159,8 +177,8 @@ pub(super) fn query_title(title: &str) -> &str {
 /// The artist to search the index with.
 ///
 /// A credit naming two or more artists already says who leads, so nothing is guessed. A credit of
-/// one name is a single-value tag, which is one artist whatever punctuation it carries (`AC/DC` is
-/// not two), and there [`query_artist`]'s guess at the string is the only information there is.
+/// one name is a single-value tag that may still be several artists run together, and there
+/// [`query_artist`]'s guess at the string is the only information there is.
 pub(super) fn search_artist(credit: &ArtistCredit) -> &str {
     if credit.artists().len() > 1 {
         credit.primary_name()

@@ -99,16 +99,21 @@ fn still_stands(marker: &Path) -> bool {
 /// **The one thing that makes a re-ask possible.** Every other answer here expires or is
 /// overwritten on its own schedule, so without this a track the directory answered wrongly — off
 /// tags since corrected — keeps that answer until the store outgrows its budget.
+///
+/// Every name is attempted whatever the ones before it did, and the first error is what comes
+/// back. Stopping at the sheet would leave the absent marker behind, and that marker is what
+/// answers for the month the refresh was asked for.
 pub(super) fn forget(dir: &Path, track_path: &str) -> Result<(), AppError> {
     let stem = key(track_path);
+    let mut first_error = None;
     for extension in [SHEET_EXT, INSTRUMENTAL_EXT, ABSENT_EXT] {
         match fs::remove_file(entry(dir, &stem, extension)) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(AppError::io_source(e)),
+            Err(e) => first_error = first_error.or(Some(AppError::io_source(e))),
         }
     }
-    Ok(())
+    first_error.map_or(Ok(()), Err)
 }
 
 /// The stored sheet's text, verbatim as the directory sent it.

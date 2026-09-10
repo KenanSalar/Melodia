@@ -1,12 +1,27 @@
 //! Cases taken from rows the directory actually returned, plus the ones it would be wrong to
 //! accept. Every case names the tags on both sides, since what is being tested is a judgement
 //! about two spellings rather than a function of one.
+//!
+//! Our side has two of those spellings where a file lists its artists, so a case built through
+//! [`tagged`] is testing something [`same`] cannot reach: the row is one string either way.
 
 use super::*;
 
 /// `(our title, our artist)` against `(their title, their artist)`.
 fn same(ours: (&str, &str), theirs: (&str, &str)) -> bool {
     Recording::new(ours.0, ours.1).matches(&Recording::new(theirs.0, theirs.1))
+}
+
+/// [`same`] with the credit behind our tags rather than its printed line alone.
+fn same_credit(ours: (&str, &ArtistCredit), theirs: (&str, &str)) -> bool {
+    Recording::from_credit(ours.0, ours.1).matches(&Recording::new(theirs.0, theirs.1))
+}
+
+/// The credit a file's two artist tags give: `ARTIST` as printed, `ARTISTS` one value per name.
+/// An empty `names` is the single-value tag most libraries carry.
+fn tagged(printed: &str, names: &[&str]) -> ArtistCredit {
+    let names: Vec<String> = names.iter().map(|name| (*name).to_owned()).collect();
+    ArtistCredit::from_tags(printed, &names)
 }
 
 #[test]
@@ -155,4 +170,65 @@ fn the_query_drops_the_feat_credit_and_the_guests_after_the_first() {
     assert_eq!(query_artist("Dominic Strike, Euphoria"), "Dominic Strike");
     assert_eq!(query_artist("J+1\u{0}DrDisrespect"), "J+1");
     assert_eq!(query_artist("Alesso & Hailee Steinfeld"), "Alesso");
+}
+
+#[test]
+fn a_join_phrase_no_splitter_carries_still_finds_the_row_filed_under_the_lead() {
+    let ours = tagged("Alesso vs. Hailee Steinfeld", &["Alesso", "Hailee Steinfeld"]);
+
+    assert!(
+        same_credit(("Let Me Go", &ours), ("Let Me Go", "Alesso")),
+        "the names are what the file lists, so who leads is stated rather than guessed at"
+    );
+    assert!(
+        !same(("Let Me Go", "Alesso vs. Hailee Steinfeld"), ("Let Me Go", "Alesso")),
+        "and the printed line alone cannot find it: nothing splits `vs.`, so the whole credit \
+         reads as one name nobody is filed under"
+    );
+}
+
+#[test]
+fn a_name_that_contains_a_splitter_still_matches_a_row_crediting_a_guest() {
+    // The reading that finds the case above is a second set rather than more of the first, and
+    // this is the case that costs: `credits` always cuts ` & `, so a row can never carry
+    // `simon garfunkel` as one name and a merged set is a subset of nothing.
+    let ours = tagged("Simon & Garfunkel", &[]);
+
+    assert!(
+        same_credit(("The Boxer", &ours), ("The Boxer", "Simon & Garfunkel, Aretha Franklin")),
+        "one band whose own name reads as two credits, against a row that adds a guest"
+    );
+    assert!(
+        same_credit(("The Boxer", &ours), ("The Boxer", "Simon & Garfunkel")),
+        "and against the row that spells it exactly as the tag does"
+    );
+}
+
+#[test]
+fn a_credited_name_does_not_make_another_artists_song_of_the_same_name_ours() {
+    let ours = tagged("Alesso vs. Hailee Steinfeld", &["Alesso", "Hailee Steinfeld"]);
+
+    assert!(
+        !same_credit(("Let Me Go", &ours), ("Let Me Go", "Pink Floyd")),
+        "reading the names beside the split widens what matches, and the widening may not reach \
+         a row sharing no name at all"
+    );
+}
+
+#[test]
+fn the_query_takes_the_lead_off_a_credit_and_guesses_only_without_one() {
+    assert_eq!(
+        search_artist(&tagged("Alesso vs. Hailee Steinfeld", &["Alesso", "Hailee Steinfeld"])),
+        "Alesso"
+    );
+    assert_eq!(
+        search_artist(&tagged("Alesso & Hailee Steinfeld", &[])),
+        "Alesso",
+        "a single-value tag may still be several artists run together, so the guess stands"
+    );
+    assert_eq!(
+        search_artist(&tagged("Alesso vs. Hailee Steinfeld", &[])),
+        "Alesso vs. Hailee Steinfeld",
+        "and where the guess finds no separator it leaves the string whole"
+    );
 }
