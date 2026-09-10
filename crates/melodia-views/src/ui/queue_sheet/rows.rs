@@ -124,7 +124,7 @@ pub(super) fn rebuild_rows(
             new_shadow.push(ShadowEntry {
                 id: t.id,
                 selected,
-                source: Arc::clone(t),
+                source: Some(Arc::clone(t)),
             });
             new_rows.push(row);
         }
@@ -157,11 +157,15 @@ pub(super) fn rebuild_rows(
 /// from.
 ///
 /// Pointer equality rather than a field compare: `PlayerState` hands the same `Arc` back on a
-/// reorder or an index move and only ever a fresh one where the row's content came from a new
-/// fetch, so this answers "nothing a row draws has moved" without reading a single field.
+/// reorder or an index move and only ever a fresh one where the row's content moved, so this
+/// answers "nothing a row draws has changed" without reading a single field. A shadow whose
+/// sources the teardown handed back answers `false` — see [`ShadowEntry`].
 fn same_sources(shadow: &[ShadowEntry], tracks: &[Arc<TrackSummary>]) -> bool {
     shadow.len() == tracks.len()
-        && shadow.iter().zip(tracks).all(|(seen, now)| Arc::ptr_eq(&seen.source, now))
+        && shadow
+            .iter()
+            .zip(tracks)
+            .all(|(seen, now)| seen.source.as_ref().is_some_and(|s| Arc::ptr_eq(s, now)))
 }
 
 /// Surgically flip `is_favorite` on every visible queue row whose `id` is in

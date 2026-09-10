@@ -425,10 +425,7 @@ pub async fn update_album_artwork_from_tracks(
 ///
 /// Order matters — albums first, so an artist whose only album just emptied
 /// becomes prunable in the same pass; then artists, except the id-1 "unknown"
-/// default that `albums.artist_id` falls back to. `artists.album_count` is
-/// recomputed afterwards as a backstop rather than because nothing maintains
-/// it: `album_artists_stats_delete` moves it per row, and the album DELETE
-/// above reaches that through `albums_credits_cleanup`. Genres share no FK with
+/// default that `albums.artist_id` falls back to. Genres share no FK with
 /// albums/artists and have no sentinel, so they're pruned independently.
 ///
 /// **The credit tables are part of what keeps an artist alive**, and they are the only thing
@@ -437,9 +434,10 @@ pub async fn update_album_artwork_from_tracks(
 /// artists the credit tables exist to surface, and takes their credit rows down with them.
 ///
 /// **Deletes only; it recomputes nothing.** Every caller reaches this either with the stats
-/// triggers live, where `album_artists_stats_delete` has already taken the count down, or with
-/// `stats::recalculate_all_stats` behind it, which sets the same column from the same subquery.
-/// A recompute here is one of those twice and the other for nothing, over every artist row.
+/// triggers live, where the album DELETE reaches `album_artists_stats_delete` through
+/// `albums_credits_cleanup` and the count is already down, or with `stats::recalculate_all_stats`
+/// behind it, which sets the same column from the same subquery. A recompute here is one of those
+/// twice and the other for nothing, over every artist row.
 pub async fn prune_orphans(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Result<(), AppError> {
     sqlx::query(
         "DELETE FROM albums \

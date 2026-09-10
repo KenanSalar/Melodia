@@ -42,8 +42,7 @@ struct ExistingTrackInfo {
 }
 
 /// In-memory caches reused across `resolve_ids` calls within a single ingest
-/// transaction. Bundles them so per-call signatures don't balloon (and so
-/// capacity hints stay co-located).
+/// transaction. Bundles them so per-call signatures don't balloon.
 ///
 /// Artist and genre live in `queries::scan::NameCache` rather than here, because the join
 /// writers ask the same questions once per credit per track and had no way to reach a cache

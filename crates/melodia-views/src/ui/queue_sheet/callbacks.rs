@@ -361,6 +361,7 @@ fn wire_open_close(
                 let weak = weak.clone();
                 let queue_covers = queue_covers.clone();
                 let link_cache = link_cache.clone();
+                let shadow = shadow.clone();
                 let close_epoch = close_epoch.clone();
                 let runtime = state.runtime.clone();
                 runtime.clone().spawn(async move {
@@ -399,6 +400,12 @@ fn wire_open_close(
                         // terms as the covers: a closed sheet holds nothing,
                         // and the next open re-resolves what it shows.
                         link_cache.lock().clear();
+                        // Just the summaries — the selection bits are what a
+                        // reopen restores. Held, a queue replaced behind the
+                        // closed sheet stays resident with nothing to draw it.
+                        for entry in shadow.lock().iter_mut() {
+                            entry.source = None;
+                        }
                         runtime
                             .spawn_blocking(melodia_platform::services::platform::allocator::trim);
                     });

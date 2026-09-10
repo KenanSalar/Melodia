@@ -27,15 +27,21 @@ pub(crate) use rows::to_slint_queue_row;
 /// minimal so the shadow is `Send + Sync` regardless of `SharedString`'s thread-safety
 /// guarantees — those live on the UI side inside `Rc<VecModel<QueueRow>>`.
 ///
-/// `source` is what lets a rebuild answer "did any row's content move" without building one.
-/// `Arc::ptr_eq` against it is exact: a `TrackSummary` is never mutated in place, so the same
-/// pointer is the same row, and a retag that swaps one behind an unchanged id compares unequal
-/// and falls through to the full rebuild. Holding it costs a refcount, not a copy.
+/// `source` is what lets a rebuild answer "did any row's content move" without building one, and
+/// **the strong reference is the whole reason `Arc::ptr_eq` against it is exact.** A summary *is*
+/// mutated in place where it is uniquely owned (`sync_track_summaries` reaches `queue.tracks`
+/// through `Arc::make_mut`), so an address alone would compare equal to content that had moved
+/// underneath it. Holding one here puts the refcount above one, which is what leaves `make_mut`
+/// no arm but to clone — so a shadowed row that changed is always a different pointer.
+///
+/// `None` past the close teardown: the summaries are the larger half of what the shadow costs on
+/// a queue the size of the library, and a queue replaced while the sheet is closed would leave
+/// them pinned with nothing to draw them. The row-count term is what covers the reopen.
 #[derive(Clone)]
 pub(super) struct ShadowEntry {
     pub id: i64,
     pub selected: bool,
-    pub source: Arc<TrackSummary>,
+    pub source: Option<Arc<TrackSummary>>,
 }
 
 /// Public handle returned by [`install`]. Surfaces the `is_open`
