@@ -315,7 +315,7 @@ async fn set_album_artist(db: &DbPool, id: i64, album_artist: &str) -> Result<()
     Ok(())
 }
 
-/// Leave a row with no genre at all, which the seed has no other way to produce.
+/// Leave a row with no album at all, which the seed has no other way to produce.
 async fn clear_album(db: &DbPool, id: i64) -> Result<(), AppError> {
     sqlx::query("UPDATE tracks SET album = NULL WHERE id = ?")
         .bind(id)
@@ -398,7 +398,7 @@ async fn a_percent_in_a_rule_value_matches_only_a_percent() -> Result<(), AppErr
 
 // ---- the column each field filters on ----
 
-/// **`AlbumArtist` and `Artist` are the swap `column_for` exists to get right**, and the one a
+/// **`AlbumArtist` and `Artist` are the swap `field_source` exists to get right**, and the one a
 /// reader cannot catch: both compile, both return rows, and the playlist is merely a different
 /// set than the user asked for. Ten of the sixteen arms had no case at all; these two are the
 /// pair that can be told apart by a query rather than by reading the match.

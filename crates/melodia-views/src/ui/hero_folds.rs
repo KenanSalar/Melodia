@@ -84,8 +84,8 @@ pub fn fold_most_played(rows: &[MostPlayedFavorite]) -> MostPlayedTotals {
 /// **Tallied per genre, not per rendered line.** A row carries every genre it is tagged with in
 /// one string, so an album whose tracks are all `Rock` and half also `Metal` holds two distinct
 /// lines and no majority, where what every track shares is `Rock`. The denominator stays *tracks*,
-/// each contributing at most once to any one name, so the winner is still the genre more than half
-/// the tagged tracks carry.
+/// each contributing at most once to any one name, so the winner is a genre more than half the
+/// tagged tracks carry — several can be, and the first in tag order takes it.
 pub fn dominant_genre(rows: &[TrackListRow]) -> Option<String> {
     /// Share of the tracks the winner has to hold to be worth stating.
     const MAJORITY: usize = 2;
@@ -105,7 +105,10 @@ pub fn dominant_genre(rows: &[TrackListRow]) -> Option<String> {
             }
         }
     }
-    let (name, count) = tally.into_iter().max_by_key(|&(_, count)| count)?;
+    // Strict `>` rather than `max_by_key`, which keeps the *last* of equal maxima: where two names
+    // both clear the majority, the first is the one tag order calls primary.
+    let (name, count) =
+        tally.into_iter().reduce(|best, next| if next.1 > best.1 { next } else { best })?;
     (count * MAJORITY > tagged).then(|| name.to_owned())
 }
 

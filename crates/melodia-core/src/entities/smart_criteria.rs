@@ -120,8 +120,9 @@ pub enum RuleField {
     AlbumArtist,
     Album,
     Genre,
-    /// The rendered role-credit names — composer, conductor, producer and the rest as one string,
-    /// which is the same column `tracks_fts` searches. A rule per role would need a join per rule.
+    /// Everyone credited in a role — composer, conductor, producer and the rest. Matched against
+    /// the `track_credits` rows in any role rather than against the rendered `tracks.credits` line
+    /// the FTS index reads, so a rule finds a name wherever the tag put it.
     Credits,
     Mood,
     InitialKey,

@@ -126,9 +126,7 @@ fn rule_is_renderable(rule: &Rule) -> bool {
 fn push_rule(qb: &mut QueryBuilder<Sqlite>, rule: &Rule) {
     let value = rule.value.as_ref();
     let col = match field_source(rule.field) {
-        FieldSource::Members { rows, name } => {
-            return push_member_predicate(qb, rows, name, rule.op, value);
-        }
+        FieldSource::Members(rows) => return push_member_predicate(qb, rows, rule.op, value),
         FieldSource::Column(col) => col,
     };
     match rule.field.value_type() {
@@ -146,8 +144,7 @@ fn push_rule(qb: &mut QueryBuilder<Sqlite>, rule: &Rule) {
 /// [`push_text_predicate`] every column field runs and a set matches when *any* member does.
 fn push_member_predicate(
     qb: &mut QueryBuilder<Sqlite>,
-    rows: &str,
-    name: &str,
+    rows: MemberRows,
     op: RuleOp,
     value: Option<&RuleValue>,
 ) {
@@ -167,11 +164,16 @@ fn push_member_predicate(
         qb.push("NOT ");
     }
     qb.push("EXISTS (SELECT 1 FROM ");
-    qb.push(rows);
-    // `IsSet` is the row existing, so the wrapper already is the whole predicate.
+    qb.push(rows.from);
+    qb.push(" WHERE ");
+    qb.push(rows.correlate);
+    // `IsSet` is the row existing, so the correlation already is the whole predicate.
     if op != RuleOp::IsSet {
-        qb.push(" AND ");
-        push_text_predicate(qb, name, op, value);
+        // Parenthesized: two of `push_text_predicate`'s arms spell a bare `OR`, and one reaching
+        // here would bind the correlation to its left half and leave the `EXISTS` uncorrelated.
+        qb.push(" AND (");
+        push_text_predicate(qb, rows.name, op, value);
+        qb.push(")");
     }
     qb.push(")");
 }
@@ -335,12 +337,21 @@ fn push_date_predicate(
 enum FieldSource {
     /// A column on `tracks` holding the whole value.
     Column(&'static str),
-    /// Rows in a join table: the `FROM` text, correlated on `tracks.id` in its own `WHERE`, and the
-    /// name column a predicate compares.
-    Members {
-        rows: &'static str,
-        name: &'static str,
-    },
+    /// Rows in a join table, reached through a correlated `EXISTS`.
+    Members(MemberRows),
+}
+
+/// The three fragments a correlated `EXISTS` over a join table needs. Split rather than one string
+/// so the correlation can't be left out of a fourth set of rows and go unnoticed — omitted, the
+/// subquery matches the whole library instead of failing.
+#[derive(Clone, Copy)]
+struct MemberRows {
+    /// The `FROM` text: the join table and whatever it reaches for a name.
+    from: &'static str,
+    /// The term tying one of its rows to the track under test.
+    correlate: &'static str,
+    /// The name column a predicate compares.
+    name: &'static str,
 }
 
 /// The column or rows each [`RuleField`] filters on. Exhaustive `match` over an enum, and every
@@ -356,16 +367,16 @@ enum FieldSource {
 /// join nothing prints.
 fn field_source(field: RuleField) -> FieldSource {
     match field {
-        RuleField::Genre => FieldSource::Members {
-            rows: "track_genres tg JOIN genres g ON g.id = tg.genre_id \
-                   WHERE tg.track_id = tracks.id",
+        RuleField::Genre => FieldSource::Members(MemberRows {
+            from: "track_genres tg JOIN genres g ON g.id = tg.genre_id",
+            correlate: "tg.track_id = tracks.id",
             name: "g.name",
-        },
-        RuleField::Credits => FieldSource::Members {
-            rows: "track_credits tc JOIN artists a ON a.id = tc.artist_id \
-                   WHERE tc.track_id = tracks.id",
+        }),
+        RuleField::Credits => FieldSource::Members(MemberRows {
+            from: "track_credits tc JOIN artists a ON a.id = tc.artist_id",
+            correlate: "tc.track_id = tracks.id",
             name: "a.name",
-        },
+        }),
         RuleField::Title => FieldSource::Column("title"),
         RuleField::Artist => FieldSource::Column("artist"),
         RuleField::AlbumArtist => FieldSource::Column("album_artist"),
