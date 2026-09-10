@@ -8,6 +8,7 @@ use lofty::tag::{ItemValue, Tag, TagItem, TagType};
 
 use super::super::role_tags::{clear, read_roles, write_roles};
 use melodia_core::entities::credits::{CreditRole, ROLES, RoleCredit, RoleCredits};
+use melodia_core::entities::tags::RoleCreditEdit;
 
 fn vorbis(values: &[(ItemKey, &str)]) -> Tag {
     let mut tag = Tag::new(TagType::VorbisComments);
@@ -141,7 +142,7 @@ fn a_written_credit_reads_back_as_the_one_that_went_in() {
         credit(CreditRole::Producer, "Carol", ""),
     ]);
 
-    assert!(write_roles(&mut tag, &credits).is_empty());
+    assert!(write_roles(&mut tag, &RoleCreditEdit::whole(credits.clone())).is_empty());
 
     assert_eq!(spelled(&read_roles(&tag)), spelled(&credits));
 }
@@ -152,7 +153,10 @@ fn a_written_credit_reads_back_as_the_one_that_went_in() {
 fn a_role_the_new_set_no_longer_names_leaves_the_file() {
     let mut tag = vorbis(&[(ItemKey::Composer, "Alice"), (ItemKey::Producer, "Bob")]);
 
-    write_roles(&mut tag, &RoleCredits::new(vec![credit(CreditRole::Composer, "Alice", "")]));
+    write_roles(
+        &mut tag,
+        &RoleCreditEdit::whole(RoleCredits::new(vec![credit(CreditRole::Composer, "Alice", "")])),
+    );
 
     assert_eq!(spelled(&read_roles(&tag)), vec![("composer", "Alice", "")]);
 }
@@ -200,7 +204,10 @@ fn each_format_names_exactly_the_roles_it_has_no_key_for() {
     for (tag_type, expected) in table {
         let mut tag = Tag::new(tag_type);
         let mut unsupported: Vec<&'static str> =
-            write_roles(&mut tag, &credits).into_iter().map(CreditRole::as_db_str).collect();
+            write_roles(&mut tag, &RoleCreditEdit::whole(credits.clone()))
+                .into_iter()
+                .map(CreditRole::as_db_str)
+                .collect();
         unsupported.sort_unstable();
         let mut expected: Vec<&'static str> = expected.to_vec();
         expected.sort_unstable();

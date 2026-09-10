@@ -41,9 +41,8 @@ use lofty::tag::{ItemValue, Tag, TagItem, TagType};
 use super::{metadata, rating_tags, role_tags};
 use melodia_artwork::media::image::image_decode;
 use melodia_core::entities::artist::ArtistCredit;
-use melodia_core::entities::credits::RoleCredits;
 use melodia_core::entities::genre::GenreList;
-use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
+use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, RoleCreditEdit, TagEdit};
 use melodia_core::error::AppError;
 
 /// Upper bound for a written BPM. Anything past this is a typo, not a tempo, and a tag holding a
@@ -169,12 +168,16 @@ fn apply_genres(tag: &mut Tag, edit: &FieldEdit<GenreList>, out: &mut Vec<&'stat
     }
 }
 
-/// Apply the whole role credit set, reporting the roles this format has no key for.
+/// Apply the role credits, reporting the roles this format has no key for.
 ///
-/// Every role is cleared even when the set says nothing about it, which is what makes an emptied
-/// role actually leave the file — argued in [`super::role_tags`] along with the per-format holes
-/// and the one key that is read and never written.
-fn apply_roles(tag: &mut Tag, edit: &FieldEdit<RoleCredits>, out: &mut Vec<&'static str>) {
+/// Every role the edit speaks for is cleared even when the set says nothing about it, which is
+/// what makes an emptied role actually leave the file; a role outside that scope is left alone.
+/// Both halves are argued at [`RoleCreditEdit`], along with the per-format holes and the one key
+/// that is read and never written in [`super::role_tags`].
+///
+/// The dialog never sends `Clear` — an emptied form arrives as a `Set` of an empty set, so the
+/// scope still decides what goes. This arm is for a producer that has no scope to offer.
+fn apply_roles(tag: &mut Tag, edit: &FieldEdit<RoleCreditEdit>, out: &mut Vec<&'static str>) {
     match edit {
         FieldEdit::Keep => {}
         FieldEdit::Clear => role_tags::clear(tag),

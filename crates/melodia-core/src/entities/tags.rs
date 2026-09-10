@@ -5,7 +5,7 @@
 //! here — and why the dialog can name it without naming the writer.
 
 use super::artist::ArtistCredit;
-use super::credits::RoleCredits;
+use super::credits::{CreditRole, ROLES, RoleCredits};
 use super::genre::GenreList;
 
 /// A per-field tri-state. The dialog reports what the user *did*, not just the value they left
@@ -31,6 +31,53 @@ pub enum ArtworkEdit {
     Replace,
 }
 
+/// Role credits to write, and the roles the form behind them could answer for.
+///
+/// The writer clears every role it is handed before writing, which is what makes an emptied box
+/// actually leave the file. That only holds where the form spoke for all ten, and a batch
+/// selection whose tracks disagree about a role shows nothing for it — so the set rebuilt from
+/// such a form names nobody in that role, and clearing it would take a credit the user was never
+/// shown from every file at once.
+///
+/// The scope is what the form could answer for: every role on one track, and on a selection the
+/// roles it agreed on plus any the user has since filled in. The writer touches nothing outside
+/// it. Kept beside the credits and built with them, so nothing can hand the writer a set whose
+/// scope describes a different form.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RoleCreditEdit {
+    credits: RoleCredits,
+    answered: [bool; ROLES.len()],
+}
+
+impl RoleCreditEdit {
+    /// `credits` scoped to the roles `answered` marks, positional over [`ROLES`].
+    #[must_use]
+    pub fn new(credits: RoleCredits, answered: [bool; ROLES.len()]) -> Self {
+        Self { credits, answered }
+    }
+
+    /// Every role in scope, which is what a form showing one track always answers for.
+    #[must_use]
+    pub fn whole(credits: RoleCredits) -> Self {
+        Self::new(credits, [true; ROLES.len()])
+    }
+
+    #[must_use]
+    pub fn credits(&self) -> &RoleCredits {
+        &self.credits
+    }
+
+    /// The roles the writer may touch, in [`ROLES`] order.
+    pub fn scope(&self) -> impl Iterator<Item = CreditRole> + '_ {
+        ROLES.into_iter().zip(self.answered).filter_map(|(role, ok)| ok.then_some(role))
+    }
+
+    #[must_use]
+    pub fn answered(&self) -> [bool; ROLES.len()] {
+        self.answered
+    }
+}
+
 /// One dialog's worth of edits. Every field defaults to [`FieldEdit::Keep`], so a caller only sets
 /// what the user actually changed.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -46,8 +93,8 @@ pub struct TagEdit {
     /// the repeated tag that carries more than one.
     pub genres: FieldEdit<GenreList>,
     /// Composer, conductor, producer and the rest — the roles of
-    /// [`super::credits::ROLES`], as one set.
-    pub credits: FieldEdit<RoleCredits>,
+    /// [`super::credits::ROLES`], as one set, plus the roles the writer may touch.
+    pub credits: FieldEdit<RoleCreditEdit>,
     /// lofty's `Timestamp.year` is `u16`, so the form's year is parsed to `u16`.
     pub year: FieldEdit<u16>,
     pub original_year: FieldEdit<u16>,

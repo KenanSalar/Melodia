@@ -8,6 +8,7 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use melodia_core::entities::credits::{CreditRole, ROLES, RoleCredit, RoleCredits};
 use melodia_core::entities::genre::GenreList;
+use melodia_core::entities::tags::RoleCreditEdit;
 use melodia_ui::{AppWindow, TagEditor};
 
 /// Run `f` over a name-row model, if it is the `VecModel` the wiring installed.
@@ -156,27 +157,42 @@ pub(super) fn write_role_rows(ui: &AppWindow, credits: &RoleCredits) {
     }
 }
 
-/// The role credit set the form currently shows, blanks dropped.
+/// The role credit set the form currently shows, blanks dropped, scoped to what it can answer for.
 ///
 /// Rebuilt in `ROLES` order, which is also the order the rows are mounted in, so the rendered
 /// `credits` line is stable across a save that changed one name.
-pub(super) fn roles_from_model(ui: &AppWindow, original: &RoleCredits) -> RoleCredits {
+///
+/// **The scope grows by what the user typed.** It opens as the roles the selection agreed on, and
+/// a role it disagreed about joins once its box holds a name — that being the only way a batch
+/// form can say anything about one. Left blank it stays out, so the credit each file carries
+/// survives an edit to the role beside it. The consequence, and it is the same one every
+/// ‹multiple values› field already has: a role the selection disagrees about cannot be *emptied*
+/// across it, a blank box there meaning "leave this alone".
+pub(super) fn roles_from_model(ui: &AppWindow, original: &RoleCreditEdit) -> RoleCreditEdit {
     let outer = ui.global::<TagEditor>().get_role_names();
     let mut credits = Vec::new();
+    let mut answered = original.answered();
+
     for (index, role) in ROLES.into_iter().enumerate() {
         let Some(inner) = outer.row_data(index) else {
             continue;
         };
-        credits.extend(inner.iter().filter_map(|name| {
-            let name = name.trim();
-            (!name.is_empty()).then(|| RoleCredit {
-                role,
-                detail: detail_for(original, role, name),
-                name: name.to_owned(),
+        let named: Vec<RoleCredit> = inner
+            .iter()
+            .filter_map(|name| {
+                let name = name.trim();
+                (!name.is_empty()).then(|| RoleCredit {
+                    role,
+                    detail: detail_for(original.credits(), role, name),
+                    name: name.to_owned(),
+                })
             })
-        }));
+            .collect();
+        answered[index] |= !named.is_empty();
+        credits.extend(named);
     }
-    RoleCredits::new(credits)
+
+    RoleCreditEdit::new(RoleCredits::new(credits), answered)
 }
 
 /// The instrument or voice `name` was credited with in `role`, carried across from what the file
@@ -195,14 +211,18 @@ fn detail_for(original: &RoleCredits, role: CreditRole, name: &str) -> String {
         .unwrap_or_default()
 }
 
-/// The role credits a selection agrees on, and which roles it disagreed about.
+/// The role credits a selection agrees on, scoped to the roles it agreed about.
 ///
 /// Per role rather than for the set as a whole: a batch that shares a composer and differs on the
 /// producer should still show the composer, the way `common_str` shows every other field the
 /// selection agrees on.
-pub(super) fn common_roles(sets: &[RoleCredits]) -> (RoleCredits, [bool; ROLES.len()]) {
+///
+/// The scope is what makes that safe to save. A disagreeing role shows nothing, so the form cannot
+/// speak for it and the writer must not clear it — [`RoleCreditEdit`] carries that, and the
+/// placeholder row reads the same answer back off it.
+pub(super) fn common_roles(sets: &[RoleCredits]) -> RoleCreditEdit {
     let mut agreed = Vec::new();
-    let mut disagreements = [false; ROLES.len()];
+    let mut answered = [true; ROLES.len()];
 
     for (index, role) in ROLES.into_iter().enumerate() {
         let mut per_track = sets.iter().map(|set| set.for_role(role).cloned().collect::<Vec<_>>());
@@ -212,11 +232,11 @@ pub(super) fn common_roles(sets: &[RoleCredits]) -> (RoleCredits, [bool; ROLES.l
         if per_track.all(|other| other == first) {
             agreed.extend(first);
         } else {
-            disagreements[index] = true;
+            answered[index] = false;
         }
     }
 
-    (RoleCredits::new(agreed), disagreements)
+    RoleCreditEdit::new(RoleCredits::new(agreed), answered)
 }
 
 #[cfg(test)]

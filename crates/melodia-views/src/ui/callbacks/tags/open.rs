@@ -319,12 +319,16 @@ fn populate(ui: &AppWindow, session: &Rc<RefCell<TagSession>>, fetched: Fetched)
     // The role credits, a list of rows per role. Structural like the genres and the two artist
     // credits, so the sentinel is per role: one selection can agree on the composer and disagree
     // on the producer.
-    let (common_roles, role_disagreements) = common_roles(roles);
-    write_role_rows(ui, &common_roles);
+    //
+    // The sentinel rides the edit's own scope rather than a mask beside it — a role the form
+    // cannot answer for is exactly the one that shows the hint, so one answer serves both.
+    let role_edit = common_roles(roles);
+    write_role_rows(ui, role_edit.credits());
     te.set_role_placeholders(ModelRc::new(VecModel::from(
-        role_disagreements
+        role_edit
+            .answered()
             .iter()
-            .map(|disagrees| placeholder(*disagrees, &sentinel))
+            .map(|answered| placeholder(!answered, &sentinel))
             .collect::<Vec<_>>(),
     )));
 
@@ -408,7 +412,7 @@ fn populate(ui: &AppWindow, session: &Rc<RefCell<TagSession>>, fetched: Fetched)
             lists: ListFields {
                 credits: [artist, album_artist],
                 genres,
-                roles: common_roles,
+                roles: role_edit,
             },
             join_phrases: phrases,
         },

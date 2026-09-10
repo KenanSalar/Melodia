@@ -25,6 +25,7 @@
 use lofty::prelude::ItemKey;
 use lofty::tag::Tag;
 use melodia_core::entities::credits::{CreditRole, ROLES, RoleCredit, RoleCredits};
+use melodia_core::entities::tags::RoleCreditEdit;
 
 use super::metadata::trimmed_values;
 
@@ -74,14 +75,17 @@ pub fn read_roles(tag: &Tag) -> RoleCredits {
     RoleCredits::new(credits)
 }
 
-/// Write `credits` into `tag`, answering with the roles the format has no key for.
+/// Write `edit` into `tag`, answering with the roles the format has no key for.
 ///
-/// Every role is cleared first, including the ones `credits` says nothing about: a role the user
-/// emptied has to leave the file, and a partial write would leave the old names behind it.
-pub fn write_roles(tag: &mut Tag, credits: &RoleCredits) -> Vec<CreditRole> {
+/// Every role **in scope** is cleared first, including the ones the set says nothing about: a role
+/// the user emptied has to leave the file, and a partial write would leave the old names behind
+/// it. A role outside the scope is neither cleared nor written — see [`RoleCreditEdit`] for what
+/// puts one there, and why clearing it would take a credit nobody was shown.
+pub fn write_roles(tag: &mut Tag, edit: &RoleCreditEdit) -> Vec<CreditRole> {
     let mut unsupported = Vec::new();
+    let credits = edit.credits();
 
-    for role in ROLES {
+    for role in edit.scope() {
         let key = key_for(role);
         tag.remove_key(key);
 
@@ -98,6 +102,9 @@ pub fn write_roles(tag: &mut Tag, credits: &RoleCredits) -> Vec<CreditRole> {
 }
 
 /// Remove every role credit the tag carries.
+///
+/// Unscoped, unlike [`write_roles`], because its caller is a [`FieldEdit::Clear`] and that carries
+/// no payload to take a scope from — so the only honest reading of it is every role.
 pub fn clear(tag: &mut Tag) {
     for role in ROLES {
         tag.remove_key(key_for(role));

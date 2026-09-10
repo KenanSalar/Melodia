@@ -14,9 +14,8 @@ use crate::ui::shell::notifications::NotificationsUi;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::artist::ArtistCredit;
-use melodia_core::entities::credits::RoleCredits;
 use melodia_core::entities::genre::GenreList;
-use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
+use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, RoleCreditEdit, TagEdit};
 use melodia_ui::{AppWindow, TagEditor};
 
 use super::credits::credit_from_model;
@@ -178,13 +177,20 @@ impl MultiValue for GenreList {
     }
 }
 
-/// **All ten roles or nothing**, because `TagEdit::credits` writes all ten: a set built from the
-/// one box that changed would clear every role beside it. So the answer is `Keep` until *some* box
-/// moves, and then the set is rebuilt from every box at once. That also makes the emptied box work
-/// — a role the user cleared is simply absent from the rebuild, and the writer removes its key.
-impl MultiValue for RoleCredits {
+/// **Every role the form answers for or nothing**, because that is what the writer clears: a set
+/// built from the one box that changed would take every role beside it. So the answer is `Keep`
+/// until *some* box moves, and then the set is rebuilt from every box at once. That also makes the
+/// emptied box work — a role the user cleared is simply absent from the rebuild, and the writer
+/// removes its key.
+///
+/// **Never `Clear`, and that is load-bearing rather than an oversight.** `FieldEdit::Clear` carries
+/// no payload, so a writer reaching it has no scope to honour and clears all ten roles — which on
+/// a selection that disagreed about one takes a credit nobody was shown. An emptied form arrives
+/// as a `Set` of an empty set instead, and the scope then decides exactly what goes, which is what
+/// `Clear` meant for the only selection that could have produced it.
+impl MultiValue for RoleCreditEdit {
     fn is_cleared(&self) -> bool {
-        self.is_empty()
+        false
     }
 }
 

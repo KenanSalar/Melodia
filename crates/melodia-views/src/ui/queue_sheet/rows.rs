@@ -97,7 +97,11 @@ pub(super) fn rebuild_rows(
         && same_sources(&shadow.lock(), &qvm.queue_tracks)
     {
         ui.global::<Queue>().set_current_index(qvm.queue_index);
-        return Vec::new();
+        // **Still reports what the cache has no answer for**, which is what makes a failed fetch
+        // retryable: it hands its claims back so "the next rebuild is the retry", and a track
+        // change on an untouched queue is the commonest rebuild there is. Empty on every pass
+        // after the fetch landed, the claim it takes standing in for the answer.
+        return unresolved_ids(link_cache, &qvm.queue_tracks);
     }
 
     // Snapshot the old selection bits into a map so the per-row lookup
@@ -107,7 +111,6 @@ pub(super) fn rebuild_rows(
         shadow.lock().iter().map(|e| (e.id, e.selected)).collect();
     let mut new_shadow: Vec<ShadowEntry> = Vec::with_capacity(qvm.queue_tracks.len());
     let mut new_rows: Vec<QueueRow> = Vec::with_capacity(qvm.queue_tracks.len());
-    let mut unresolved: Vec<i64> = Vec::new();
     {
         // One acquisition for the whole build rather than one per row. Nothing
         // inside awaits, and the only other writer is the fetch's own landing.
@@ -115,11 +118,8 @@ pub(super) fn rebuild_rows(
         for t in &qvm.queue_tracks {
             let selected = old_sel.get(&t.id).copied().unwrap_or(false);
             let mut row = to_slint_queue_row(t.as_ref(), selected);
-            match cached.get(&t.id).copied() {
-                Some(l) => {
-                    RowLinks::from(l).stamp(&mut row);
-                }
-                None => unresolved.push(t.id),
+            if let Some(links) = cached.get(&t.id).copied() {
+                RowLinks::from(links).stamp(&mut row);
             }
             new_shadow.push(ShadowEntry {
                 id: t.id,
@@ -129,8 +129,6 @@ pub(super) fn rebuild_rows(
             new_rows.push(row);
         }
     }
-    unresolved.sort_unstable();
-    unresolved.dedup();
 
     // The swap's own verdict rather than the shadow's, which only mirrors the model. It resets
     // when the rows moved, arrived or left and patches otherwise, so a `skip_to_index` that
@@ -150,7 +148,20 @@ pub(super) fn rebuild_rows(
         queue.set_drop_slot(-1);
     }
 
-    unresolved
+    unresolved_ids(link_cache, &qvm.queue_tracks)
+}
+
+/// The track ids the link cache has no entry for, sorted and each once.
+///
+/// Asked by both of [`rebuild_rows`]' arms rather than collected while the rows are built: the
+/// fast path builds none, and it is the path a failed fetch has to be retried from.
+fn unresolved_ids(link_cache: &LinkCache, tracks: &[Arc<TrackSummary>]) -> Vec<i64> {
+    let cached = link_cache.lock();
+    let mut missing: Vec<i64> =
+        tracks.iter().map(|t| t.id).filter(|id| !cached.contains_key(id)).collect();
+    missing.sort_unstable();
+    missing.dedup();
+    missing
 }
 
 /// Whether `tracks` is the same set of summaries, in the same order, that the shadow was built

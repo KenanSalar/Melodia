@@ -359,10 +359,16 @@ fn number(tag: Option<&Tag>, key: ItemKey) -> Option<i32> {
     text(tag, key).and_then(|s| s.parse().ok())
 }
 
-/// Whether a flag tag is set. Anything but a literal `0` or `false` counts, `TCMP` being written
-/// as `1` and `COMPILATION` as either.
+/// Whether a flag tag is set. Anything but a `0` or a `false` counts, `TCMP` being written as `1`
+/// and `COMPILATION` as either.
+///
+/// **Case-folded, and it is the false half that has to be.** `upsert_album`'s `is_compilation` is
+/// an `OR`, so nothing but an explicit Edit-Tags clear ever lowers the flag again — one file whose
+/// tagger spelled it `FALSE` would mark the whole release, and no rescan could repair it. A
+/// spelling this doesn't know still fails toward "set", which is the direction a *present* flag
+/// argues for.
 fn flag(tag: Option<&Tag>, key: ItemKey) -> bool {
-    text(tag, key).is_some_and(|value| !matches!(value.as_str(), "0" | "false" | "False"))
+    text(tag, key).is_some_and(|value| value != "0" && !value.eq_ignore_ascii_case("false"))
 }
 
 /// A count lofty already parsed, saturated rather than wrapped.

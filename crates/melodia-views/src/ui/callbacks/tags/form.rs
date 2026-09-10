@@ -4,8 +4,8 @@
 //! diff as strings, while the four multi-value fields are edited as rows and diff structurally.
 
 use melodia_core::entities::artist::ArtistCredit;
-use melodia_core::entities::credits::RoleCredits;
 use melodia_core::entities::genre::GenreList;
+use melodia_core::entities::tags::RoleCreditEdit;
 use melodia_ui::TagEditor;
 
 /// Which credit a `TagEditor` row callback names, mirroring the global's own `field-artist` /
@@ -77,7 +77,7 @@ pub(super) struct FormState {
 pub(super) struct ListFields {
     pub credits: [ArtistCredit; CREDIT_FIELD_COUNT],
     pub genres: GenreList,
-    pub roles: RoleCredits,
+    pub roles: RoleCreditEdit,
 }
 
 /// The live form, read back off the globals in one place.

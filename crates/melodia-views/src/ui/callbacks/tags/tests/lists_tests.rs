@@ -2,6 +2,7 @@
 
 use super::{common_roles, detail_for};
 use melodia_core::entities::credits::{CreditRole, ROLES, RoleCredit, RoleCredits};
+use melodia_core::entities::tags::RoleCreditEdit;
 
 fn credit(role: CreditRole, name: &str, detail: &str) -> RoleCredit {
     RoleCredit {
@@ -15,11 +16,13 @@ fn spelled(credits: &RoleCredits) -> Vec<(&'static str, &str)> {
     credits.all().iter().map(|c| (c.role.as_db_str(), c.name.as_str())).collect()
 }
 
-fn disagreed(flags: [bool; ROLES.len()]) -> Vec<&'static str> {
+/// The roles the fold could not answer for, which is what the ‹multiple values› hint marks and
+/// what the writer is scoped out of.
+fn disagreed(folded: &RoleCreditEdit) -> Vec<&'static str> {
     ROLES
         .into_iter()
-        .zip(flags)
-        .filter(|(_, differs)| *differs)
+        .zip(folded.answered())
+        .filter(|(_, answered)| !answered)
         .map(|(role, _)| role.as_db_str())
         .collect()
 }
@@ -40,10 +43,10 @@ fn a_selection_shows_the_roles_it_agrees_on_and_flags_the_rest() {
         ]),
     ];
 
-    let (agreed, flags) = common_roles(&sets);
+    let folded = common_roles(&sets);
 
-    assert_eq!(spelled(&agreed), vec![("composer", "Alice")]);
-    assert_eq!(disagreed(flags), ["producer"]);
+    assert_eq!(spelled(folded.credits()), vec![("composer", "Alice")]);
+    assert_eq!(disagreed(&folded), ["producer"]);
 }
 
 /// A role one track leaves empty is a disagreement rather than an agreement on nothing — saving
@@ -55,10 +58,10 @@ fn a_role_only_one_track_carries_is_a_disagreement() {
         RoleCredits::default(),
     ];
 
-    let (agreed, flags) = common_roles(&sets);
+    let folded = common_roles(&sets);
 
-    assert!(agreed.is_empty());
-    assert_eq!(disagreed(flags), ["composer"]);
+    assert!(folded.credits().is_empty());
+    assert_eq!(disagreed(&folded), ["composer"]);
 }
 
 /// Order counts: two tracks crediting the same pair the other way round are not the same credit,
@@ -76,10 +79,10 @@ fn the_same_names_in_a_different_order_do_not_agree() {
         ]),
     ];
 
-    let (agreed, flags) = common_roles(&sets);
+    let folded = common_roles(&sets);
 
-    assert!(agreed.is_empty());
-    assert_eq!(disagreed(flags), ["composer"]);
+    assert!(folded.credits().is_empty());
+    assert_eq!(disagreed(&folded), ["composer"]);
 }
 
 #[test]
@@ -89,18 +92,18 @@ fn a_single_track_agrees_with_itself_about_everything() {
         credit(CreditRole::Performer, "Bob", "cello"),
     ]);
 
-    let (agreed, flags) = common_roles(std::slice::from_ref(&only));
+    let folded = common_roles(std::slice::from_ref(&only));
 
-    assert_eq!(spelled(&agreed), spelled(&only));
-    assert!(disagreed(flags).is_empty());
+    assert_eq!(spelled(folded.credits()), spelled(&only));
+    assert!(disagreed(&folded).is_empty());
 }
 
 #[test]
 fn an_empty_selection_agrees_on_nothing_and_disagrees_about_nothing() {
-    let (agreed, flags) = common_roles(&[]);
+    let folded = common_roles(&[]);
 
-    assert!(agreed.is_empty());
-    assert!(disagreed(flags).is_empty());
+    assert!(folded.credits().is_empty());
+    assert!(disagreed(&folded).is_empty());
 }
 
 /// **The editor has no field for an instrument**, so the baseline is where it comes from on the

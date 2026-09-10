@@ -64,11 +64,11 @@ fn full_edit() -> TagEdit {
         original_year: FieldEdit::Set(1999),
         track_number: FieldEdit::Set(7),
         disc_number: FieldEdit::Set(2),
-        credits: FieldEdit::Set(RoleCredits::new(vec![RoleCredit {
+        credits: FieldEdit::Set(RoleCreditEdit::whole(RoleCredits::new(vec![RoleCredit {
             role: CreditRole::Composer,
             name: "New Composer".into(),
             detail: String::new(),
-        }])),
+        }]))),
         comment: FieldEdit::Set("New Comment".into()),
         bpm: FieldEdit::Set(128.0),
         lyrics: FieldEdit::Set("la la la".into()),
@@ -961,11 +961,11 @@ fn a_performers_instrument_survives_the_write() {
     apply_edit(
         &mut tag,
         &TagEdit {
-            credits: FieldEdit::Set(RoleCredits::new(vec![RoleCredit {
+            credits: FieldEdit::Set(RoleCreditEdit::whole(RoleCredits::new(vec![RoleCredit {
                 role: CreditRole::Performer,
                 name: "Alice Monroe".into(),
                 detail: "cello".into(),
-            }])),
+            }]))),
             ..TagEdit::default()
         },
         None,
@@ -1019,7 +1019,7 @@ fn mp3_reports_the_roles_it_has_no_key_to_write() -> Result<(), AppError> {
     let unsupported = apply_to_file(
         &audio,
         &TagEdit {
-            credits: FieldEdit::Set(RoleCredits::new(every_role)),
+            credits: FieldEdit::Set(RoleCreditEdit::whole(RoleCredits::new(every_role))),
             ..TagEdit::default()
         },
         None,
@@ -1066,7 +1066,7 @@ fn flac_writes_every_role_there_is() -> Result<(), AppError> {
     let unsupported = apply_to_file(
         &audio,
         &TagEdit {
-            credits: FieldEdit::Set(RoleCredits::new(every_role)),
+            credits: FieldEdit::Set(RoleCreditEdit::whole(RoleCredits::new(every_role))),
             ..TagEdit::default()
         },
         None,

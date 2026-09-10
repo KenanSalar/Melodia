@@ -2,7 +2,7 @@
 //! turning the form snapshot into a `TagEdit`.
 
 use super::*;
-use melodia_core::entities::credits::{CreditRole, RoleCredit};
+use melodia_core::entities::credits::{CreditRole, RoleCredit, RoleCredits};
 
 use crate::ui::callbacks::tags::form::TextFields;
 
@@ -60,13 +60,17 @@ fn diff_multi_keep_clear_set_for_every_multi_value_field() {
     assert_eq!(diff_multi(&artist, &artist), FieldEdit::Keep);
     assert_eq!(diff_multi(&ArtistCredit::default(), &artist), FieldEdit::Clear);
 
-    let roles = RoleCredits::new(vec![RoleCredit {
+    // **Never `Clear`, unlike its two neighbours above.** `Clear` carries no scope, and a writer
+    // reaching it clears all ten roles — which on a selection that disagreed about one takes a
+    // credit nobody was shown. An emptied form is a `Set` of an empty set instead.
+    let roles = RoleCreditEdit::whole(RoleCredits::new(vec![RoleCredit {
         role: CreditRole::Composer,
         name: "Nadia Vance".to_owned(),
         detail: String::new(),
-    }]);
+    }]));
+    let emptied = RoleCreditEdit::whole(RoleCredits::default());
     assert_eq!(diff_multi(&roles, &roles), FieldEdit::Keep);
-    assert_eq!(diff_multi(&RoleCredits::default(), &roles), FieldEdit::Clear);
+    assert_eq!(diff_multi(&emptied, &roles), FieldEdit::Set(emptied.clone()));
 }
 
 #[test]
@@ -85,11 +89,11 @@ fn build_edit_touches_only_changed_fields() {
     let lists = ListFields {
         credits: [ArtistCredit::from_name("Artist"), ArtistCredit::default()],
         genres: GenreList::from_name("Rock"),
-        roles: RoleCredits::new(vec![RoleCredit {
+        roles: RoleCreditEdit::whole(RoleCredits::new(vec![RoleCredit {
             role: CreditRole::Composer,
             name: "Nadia Vance".to_owned(),
             detail: String::new(),
-        }]),
+        }])),
     };
 
     let mut cur = orig.clone();
