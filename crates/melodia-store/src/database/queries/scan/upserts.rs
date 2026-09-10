@@ -3,32 +3,76 @@
 //! `None`) for empty names so callers can stay branch-free.
 
 use melodia_core::entities::artist::ArtistCredit;
+use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::error::AppError;
 
-/// Rewrite a track's artist credit: every name upserted, the ordered rows replaced.
+/// The credit an album files under: its own tag where it has one, else the track artist's
+/// **first** name.
+///
+/// The whole track credit is the wrong fallback and the reason is the one the album-artist
+/// fallback already exists for. A guest on one track is not an album artist, so taking
+/// "X feat. Y" here would rename the album after whichever track happened to reach the upsert
+/// first and list the album in Y's discography. Same answer as [`album_artist_name_for`], one
+/// shape up.
+#[must_use]
+pub fn album_credit_for(meta: &ExtractedMetadata) -> ArtistCredit {
+    if meta.album_artist.is_empty() {
+        ArtistCredit::from_name(meta.artist.primary_name())
+    } else {
+        meta.album_artist.clone()
+    }
+}
+
+/// The name behind [`album_credit_for`], for the caller that needs the grouping key on its own.
+#[must_use]
+pub fn album_artist_name_for(meta: &ExtractedMetadata) -> &str {
+    match meta.album_artist.primary_name() {
+        "" => meta.artist.primary_name(),
+        name => name,
+    }
+}
+
+/// Write a freshly inserted track's artist credit.
 ///
 /// **Position 0 is the row's own `tracks.artist_id`.** Album grouping and the sort indexes still
 /// read that FK, so the join table agreeing with it at the head is what stops an artist-scoped
 /// query and an album-scoped one disagreeing about the same track. `primary_artist_id` covers the
 /// one case the credit can't: a file with no artist tag, which resolves to the sentinel and still
 /// gets its row rather than being credited to nobody.
+pub async fn insert_track_credits(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    track_id: i64,
+    credit: &ArtistCredit,
+    primary_artist_id: i64,
+) -> Result<(), AppError> {
+    write_credits(tx, "track_artists", "track_id", track_id, credit, primary_artist_id).await
+}
+
+/// [`insert_track_credits`] for a track that may already carry one: a re-ingest, or the credit
+/// import. The insert paths take the sibling, a rowid the INSERT just minted having nothing to
+/// clear, and a DELETE per row being a statement per track of a bulk scan.
 pub async fn replace_track_credits(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     track_id: i64,
     credit: &ArtistCredit,
     primary_artist_id: i64,
 ) -> Result<(), AppError> {
-    replace_credits(tx, "track_artists", "track_id", track_id, credit, primary_artist_id).await
+    clear_credits(tx, "track_artists", "track_id", track_id).await?;
+    insert_track_credits(tx, track_id, credit, primary_artist_id).await
 }
 
 /// [`replace_track_credits`] for an album, plus the rendered credit `album_stats` displays.
+///
+/// No insert-only sibling: `upsert_album` reaches this down both arms of its `ON CONFLICT`, so the
+/// rows may or may not be there and only the delete can tell.
 pub async fn replace_album_credits(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     album_id: i64,
     credit: &ArtistCredit,
     primary_artist_id: i64,
 ) -> Result<(), AppError> {
-    replace_credits(tx, "album_artists", "album_id", album_id, credit, primary_artist_id).await?;
+    clear_credits(tx, "album_artists", "album_id", album_id).await?;
+    write_credits(tx, "album_artists", "album_id", album_id, credit, primary_artist_id).await?;
 
     // NULL rather than the one name it would repeat, so `album_stats` falls back to the artist row
     // and a single-artist album keeps rendering from one place.
@@ -41,10 +85,30 @@ pub async fn replace_album_credits(
     Ok(())
 }
 
+/// Drop a parent's whole credit, ahead of writing the replacement.
+///
 /// Delete-then-insert rather than a diff: a credit is a handful of ordered rows, so a diff would
 /// have to reconcile positions anyway and buys nothing but a way to leave the stats triggers out
 /// of step.
-async fn replace_credits(
+async fn clear_credits(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    table: &'static str,
+    parent_column: &'static str,
+    parent_id: i64,
+) -> Result<(), AppError> {
+    sqlx::query(sqlx::AssertSqlSafe(format!("DELETE FROM {table} WHERE {parent_column} = ?")))
+        .bind(parent_id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+/// One row per credited name, in order, upserting the names it hasn't seen.
+///
+/// Position 0 takes `primary_artist_id` rather than an upsert of its own: every caller resolved
+/// that id *from* this credit's first name, so the round trip would ask a question it is holding
+/// the answer to. Which is also the invariant `album_credit_for` exists to keep true.
+async fn write_credits(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     table: &'static str,
     parent_column: &'static str,
@@ -52,11 +116,6 @@ async fn replace_credits(
     credit: &ArtistCredit,
     primary_artist_id: i64,
 ) -> Result<(), AppError> {
-    sqlx::query(sqlx::AssertSqlSafe(format!("DELETE FROM {table} WHERE {parent_column} = ?")))
-        .bind(parent_id)
-        .execute(&mut **tx)
-        .await?;
-
     let insert = format!(
         "INSERT INTO {table} ({parent_column}, artist_id, position, join_phrase)
          VALUES (?, ?, ?, ?)"
@@ -74,7 +133,11 @@ async fn replace_credits(
     }
 
     for (position, credited) in credit.artists().iter().enumerate() {
-        let artist_id = upsert_artist(tx, &credited.name, primary_artist_id).await?;
+        let artist_id = if position == 0 {
+            primary_artist_id
+        } else {
+            upsert_artist(tx, &credited.name, primary_artist_id).await?
+        };
         sqlx::query(sqlx::AssertSqlSafe(insert.as_str()))
             .bind(parent_id)
             .bind(artist_id)

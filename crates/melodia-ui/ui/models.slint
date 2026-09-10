@@ -146,12 +146,6 @@ export struct PlaylistExportPickRow {
     selected: bool,
 }
 
-// One rule row in the Smart-Playlist editor. Rust-owned; the editor mutates it through
-// `SmartEditor.set-rule-*` and Rust rebuilds a `SmartCriteria` on commit. **Every value is an index
-// or code**, so no translated string round-trips — the dropdown labels are inline `@tr` arrays in
-// the editor body, mirrored by position to `entities::smart_criteria::{FIELDS, ops_for}`.
-//   * field-kind — 0 text · 1 number · 2 bool · 3 date; picks the op array
-//   * input-kind — 0 none · 1 text · 2 number; picks the value widget
 // One row of the Edit-Tags credit editor. `join-index` points into `TagEditor.join-phrases`,
 // which Rust owns; the phrase itself never crosses as a string, so a mis-typed separator cannot
 // reach the file from here. The last row's index is ignored — nothing follows it to join to.
@@ -160,6 +154,12 @@ export struct ArtistCreditRow {
     join-index: int,
 }
 
+// One rule row in the Smart-Playlist editor. Rust-owned; the editor mutates it through
+// `SmartEditor.set-rule-*` and Rust rebuilds a `SmartCriteria` on commit. **Every value is an index
+// or code**, so no translated string round-trips — the dropdown labels are inline `@tr` arrays in
+// the editor body, mirrored by position to `entities::smart_criteria::{FIELDS, ops_for}`.
+//   * field-kind — 0 text · 1 number · 2 bool · 3 date; picks the op array
+//   * input-kind — 0 none · 1 text · 2 number; picks the value widget
 export struct SmartRuleRow {
     field-index: int,
     op-index: int,

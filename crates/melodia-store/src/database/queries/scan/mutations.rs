@@ -12,7 +12,7 @@ use melodia_core::error::AppError;
 
 use super::ResolvedIds;
 use super::sort_key::to_natural_sort_key;
-use super::upserts::replace_track_credits;
+use super::upserts::{insert_track_credits, replace_track_credits};
 
 /// Column-name list shared by [`insert_track`]'s single-row INSERT and
 /// [`insert_tracks_batch`]'s multi-row form. The bind order in
@@ -141,7 +141,7 @@ pub async fn insert_track(
         .execute(&mut **tx)
         .await?;
     let track_id = result.last_insert_rowid();
-    replace_track_credits(tx, track_id, &meta.artist, ids.artist_id).await?;
+    insert_track_credits(tx, track_id, &meta.artist, ids.artist_id).await?;
     Ok(track_id)
 }
 
@@ -251,7 +251,7 @@ pub async fn insert_tracks_batch(
                     row.file_path
                 )));
             };
-            replace_track_credits(tx, id, &row.meta.artist, row.ids.artist_id).await?;
+            insert_track_credits(tx, id, &row.meta.artist, row.ids.artist_id).await?;
             out.push(id);
         }
     }
@@ -375,9 +375,16 @@ pub async fn update_album_artwork_from_tracks(
 ///
 /// Order matters — albums first, so an artist whose only album just emptied
 /// becomes prunable in the same pass; then artists, except the id-1 "unknown"
-/// default that `albums.artist_id` falls back to. `artists.album_count` has no
-/// delete-side trigger, so it's recomputed afterwards. Genres share no FK with
+/// default that `albums.artist_id` falls back to. `artists.album_count` is
+/// recomputed afterwards as a backstop rather than because nothing maintains
+/// it: `album_artists_stats_delete` moves it per row, and the album DELETE
+/// above reaches that through `albums_credits_cleanup`. Genres share no FK with
 /// albums/artists and have no sentinel, so they're pruned independently.
+///
+/// **The credit tables are part of what keeps an artist alive**, and they are the only thing
+/// keeping a featured-only one: nothing points at them from `tracks.artist_id`, and
+/// `track_artists.artist_id` cascades. So a predicate over the two FKs alone deletes exactly the
+/// artists the credit tables exist to surface, and takes their credit rows down with them.
 pub async fn prune_orphans(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Result<(), AppError> {
     sqlx::query(
         "DELETE FROM albums \
@@ -390,7 +397,9 @@ pub async fn prune_orphans(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Resu
         "DELETE FROM artists \
          WHERE id <> 1 \
            AND NOT EXISTS (SELECT 1 FROM tracks WHERE tracks.artist_id = artists.id) \
-           AND NOT EXISTS (SELECT 1 FROM albums WHERE albums.artist_id = artists.id)",
+           AND NOT EXISTS (SELECT 1 FROM albums WHERE albums.artist_id = artists.id) \
+           AND NOT EXISTS (SELECT 1 FROM track_artists WHERE track_artists.artist_id = artists.id) \
+           AND NOT EXISTS (SELECT 1 FROM album_artists WHERE album_artists.artist_id = artists.id)",
     )
     .execute(&mut **tx)
     .await?;
@@ -404,7 +413,8 @@ pub async fn prune_orphans(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Resu
 
     sqlx::query(
         "UPDATE artists \
-         SET album_count = (SELECT COUNT(*) FROM albums WHERE albums.artist_id = artists.id)",
+         SET album_count = \
+             (SELECT COUNT(*) FROM album_artists WHERE album_artists.artist_id = artists.id)",
     )
     .execute(&mut **tx)
     .await?;

@@ -358,16 +358,23 @@ fn extract(
 
 /// A file's two artist credits, read off the file rather than the database.
 ///
-/// The Edit-Tags dialog's single-selection path: the file is the authority, and it is already
-/// being opened for the lyrics tab, so this costs no read of its own. Blocking; the caller owns
-/// the `spawn_blocking`.
+/// The file is the authority, which is what the credit import needs and what a database seeded
+/// from `artist_id` alone cannot answer. Blocking; the caller owns the `spawn_blocking`.
+///
+/// The Edit-Tags dialog wants the same answer and reaches [`credits_from_tag`] instead, opening
+/// the file once for the lyrics tag as well.
 pub fn read_credits(path: &Path) -> Result<(ArtistCredit, ArtistCredit), AppError> {
     let tagged = read_tags(path, TagScope::TagsOnly)?;
-    let tag = tagged.primary_tag().or_else(|| tagged.first_tag());
-    Ok((
+    Ok(credits_from_tag(tagged.primary_tag().or_else(|| tagged.first_tag())))
+}
+
+/// [`read_credits`] over a tag already in hand, for the caller opening the file for something else
+/// as well.
+pub fn credits_from_tag(tag: Option<&Tag>) -> (ArtistCredit, ArtistCredit) {
+    (
         read_credit(tag, ItemKey::TrackArtist, ItemKey::TrackArtists),
         read_credit(tag, ItemKey::AlbumArtist, ItemKey::AlbumArtists),
-    ))
+    )
 }
 
 /// What one artist field reads as: the credit behind it, and the string that renders.

@@ -446,14 +446,28 @@ pub fn cover_picture_from_path(path: &Path) -> Result<Picture, AppError> {
 /// `ID3v2` having no `Lyrics` mapping. Blocking; call under `spawn_blocking`.
 pub fn read_lyrics(path: &Path) -> Result<Option<String>, AppError> {
     let tagged = metadata::read_tags(path, metadata::TagScope::TagsOnly)?;
-    let Some(tag) = tagged.primary_tag().or_else(|| tagged.first_tag()) else {
-        return Ok(None);
-    };
-    Ok(tag
-        .get_string(ItemKey::Lyrics)
+    Ok(tagged.primary_tag().or_else(|| tagged.first_tag()).and_then(lyrics_from))
+}
+
+/// Both of the things the Edit-Tags dialog wants off a single selected file, for one open.
+///
+/// The credit belongs to the file rather than to the database, a track whose join rows were
+/// seeded from `artist_id` alone otherwise opening on one name for a credit the file spells with
+/// three. The Lyrics tab wants the same tag, so asking twice is two probes and two parses of one
+/// file. Blocking; call under `spawn_blocking`.
+pub fn read_lyrics_and_credits(
+    path: &Path,
+) -> Result<(Option<String>, (ArtistCredit, ArtistCredit)), AppError> {
+    let tagged = metadata::read_tags(path, metadata::TagScope::TagsOnly)?;
+    let tag = tagged.primary_tag().or_else(|| tagged.first_tag());
+    Ok((tag.and_then(lyrics_from), metadata::credits_from_tag(tag)))
+}
+
+fn lyrics_from(tag: &Tag) -> Option<String> {
+    tag.get_string(ItemKey::Lyrics)
         .or_else(|| tag.get_string(ItemKey::UnsyncLyrics))
         .map(str::to_owned)
-        .filter(|s| !s.is_empty()))
+        .filter(|s| !s.is_empty())
 }
 
 #[cfg(test)]

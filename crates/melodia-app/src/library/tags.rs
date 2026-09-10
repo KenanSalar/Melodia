@@ -74,29 +74,33 @@ pub async fn get_tag_edit_rows(state: &AppState, ids: &[i64]) -> Result<Vec<TagE
 
 /// A file's lyrics tag, read off the file rather than the database.
 ///
-/// Here for [`get_tag_edit_rows`]' reason: it is the read half of the same dialog, and the one
-/// piece of it the UI would otherwise have to reach into `media::ingest::tag_writer` for. Blocking —
-/// the caller owns the `spawn_blocking`, having a runtime handle in hand where this does not.
+/// `library::lyrics` is what is left of its callers, handing what comes back to an LRC parser
+/// because this tag is routinely filled with a timed sheet. The string is whatever the tag held;
+/// nothing here judges what is in it. Blocking — the caller owns the `spawn_blocking`, having a
+/// runtime handle in hand where this does not.
 ///
-/// Two callers now: the dialog's Lyrics tab, and `library::lyrics`, which hands what comes back to
-/// an LRC parser because this tag is routinely filled with a timed sheet. The string is whatever
-/// the tag held; nothing here judges what is in it.
+/// The Edit-Tags dialog took this once and takes [`read_lyrics_and_credits`] now, wanting the
+/// artist credit off the same open. Which is why this stays: `library::lyrics` wants the lyrics
+/// and nothing else, and a second parse of the whole tag is not free.
 pub fn read_lyrics(path: &Path) -> Result<Option<String>, AppError> {
     tag_writer::read_lyrics(path)
 }
 
-/// A file's two artist credits, for the dialog's single-selection path.
+/// Everything the dialog's single-selection path reads out of the file itself: the lyrics tag and
+/// the two artist credits, off one open.
 ///
-/// The file rather than the database, and the asymmetry is the point: the file is what the
-/// credit *is*, and a track whose join rows were seeded from `artist_id` alone — every row on a
-/// library that predates the credit tables — would otherwise open showing one name for a credit
-/// the file spells with three. A multi-track selection reads
+/// The credit comes from the file rather than the database, and the asymmetry is the point: the
+/// file is what the credit *is*, and a track whose join rows were seeded from `artist_id` alone
+/// (every row on a library that predates the credit tables) would otherwise open showing one name
+/// for a credit the file spells with three. A multi-track selection reads
 /// [`queries::track::get_track_credits_by_ids`] instead, N file reads on the open path being
 /// exactly what the `TagEditRow` projection exists to avoid.
 ///
-/// Blocking; the caller owns the `spawn_blocking`, which it is already making for the lyrics.
-pub fn read_credits(path: &Path) -> Result<(ArtistCredit, ArtistCredit), AppError> {
-    melodia_store::media::ingest::metadata::read_credits(path)
+/// Blocking; the caller owns the `spawn_blocking`.
+pub fn read_lyrics_and_credits(
+    path: &Path,
+) -> Result<(Option<String>, (ArtistCredit, ArtistCredit)), AppError> {
+    tag_writer::read_lyrics_and_credits(path)
 }
 
 /// The credit behind each selected track, for the dialog's multi-selection path.

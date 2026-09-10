@@ -148,14 +148,14 @@ fn wire_request_edit(
             // on the open path being what the row projection exists to avoid.
             let (lyrics, credits) = if single {
                 let path = PathBuf::from(&rows[0].file_path);
-                let read = s.runtime.spawn_blocking(move || {
-                    (library::tags::read_lyrics(&path), library::tags::read_credits(&path))
-                });
+                let read =
+                    s.runtime.spawn_blocking(move || library::tags::read_lyrics_and_credits(&path));
                 match read.await {
-                    Ok((lyrics, credits)) => (
-                        lyrics.ok().flatten().unwrap_or_default(),
-                        vec![credits.unwrap_or_default()],
-                    ),
+                    Ok(Ok((lyrics, credits))) => (lyrics.unwrap_or_default(), vec![credits]),
+                    Ok(Err(e)) => {
+                        log::warn!("tag edit: reading {}: {}", rows[0].file_path, describe(&e));
+                        (String::new(), vec![<(ArtistCredit, ArtistCredit)>::default()])
+                    }
                     Err(e) => {
                         log::warn!("tag edit: reading {} failed: {e}", rows[0].file_path);
                         (String::new(), vec![<(ArtistCredit, ArtistCredit)>::default()])

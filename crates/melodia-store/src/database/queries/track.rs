@@ -602,6 +602,30 @@ pub async fn get_single_credit_track_paths_after(
     Ok(rows)
 }
 
+/// Point a track at the artist its credit actually leads with, and store the credit as printed.
+///
+/// The credit import's other half: a library indexed before the credit tables resolved
+/// `artist_id` from the whole credit line, so the row points at an `artists` row named
+/// "X feat. Y" that nobody ever recorded under. Re-pointing it is what makes that row prunable.
+///
+/// Writing `artist` in the same statement is not incidental. The column is what every display
+/// surface and `tracks_fts` read, and its update trigger names it, so the rendered credit and the
+/// index move together or neither does.
+pub async fn repoint_primary_artist(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    track_id: i64,
+    artist_id: i64,
+    line: Option<&str>,
+) -> Result<(), AppError> {
+    sqlx::query("UPDATE tracks SET artist_id = ?, artist = ? WHERE id = ?")
+        .bind(artist_id)
+        .bind(line)
+        .bind(track_id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
 /// Tracks with no `MusicBrainz` Recording ID that carry enough metadata to be
 /// looked up — the work-list for the auto-tag backfill. Rows without an artist
 /// or title can't be resolved, so they're excluded rather than attempted and

@@ -11,6 +11,14 @@
 //! scanned before this feature has an `artists` row literally named "X feat. Y", and every track
 //! crediting them points at it. Re-pointing the FK is what makes those rows prunable.
 //!
+//! **Track credits only, and the album keeps whichever name the old ingest gave it.** That name is
+//! the credit *line* wherever the file carried no album-artist tag, the fallback having been the
+//! whole `meta.artist` string, so an upgraded library goes on filing such an album under
+//! "X feat. Y" and showing it that way. Nothing here repairs it and no rescan will either, the
+//! same `track_is_current` that hides the track credits hiding this. Moving it is a merge rather
+//! than an update: `idx_albums_name_artist` is unique over `(name, artist_id)`, so re-pointing
+//! can collide with an album of that name already under the primary artist.
+//!
 //! **Not an `SQLx` migration**, for [`super::rating_import`]'s reason: it is a slow pass over
 //! files, and a migration failure is fatal at boot.
 
@@ -29,8 +37,9 @@ use melodia_store::media::ingest::metadata;
 /// passes do the same shape of work and can run on the same boot.
 const PAGE_ROWS: i64 = 2_000;
 
-/// The sentinel artist, for the one argument [`queries::scan::replace_track_credits`] only reads
-/// over an empty credit. This pass writes none, having filtered them out.
+/// The sentinel artist [`queries::scan::upsert_artist`] falls back to on an empty name. Out of
+/// reach here, a credit reaching the write having named at least two artists, and spelled anyway:
+/// the argument has no other honest value.
 const UNKNOWN_ARTIST_ID: i64 = 1;
 
 /// Run the import unless this install has already had one.
@@ -70,7 +79,6 @@ async fn import(db: &DbPool, library_changed: &Signal) -> AppResult<()> {
 ///
 /// Keyset paging, and here it is only for the page size: unlike the rating import, a rewritten row
 /// *does* leave the predicate, so an offset window would step over rows it had just written.
-/// `page_rows` is a parameter so a test can reach a second page at all.
 async fn import_into(db: &DbPool, page_rows: i64) -> AppResult<usize> {
     let mut after_id = 0;
     let mut imported = 0;
@@ -94,9 +102,11 @@ async fn import_into(db: &DbPool, page_rows: i64) -> AppResult<usize> {
     }
 
     if imported > 0 {
-        // The `artists` rows named for a whole credit line are unreferenced now, and nothing else
-        // will notice: the row's own FK was the last thing pointing at them. Once at the end
-        // rather than per page, the sweep being the only writer for its duration.
+        // An `artists` row named for a whole credit line is unreferenced once the tracks that
+        // pointed at it have moved, and nothing else looks for it. Only *once*: an album still
+        // filed under that name keeps it alive through both of `prune_orphans`' album arms, which
+        // is the residue the module doc argues about. Once at the end rather than per page, the
+        // sweep being the only writer for its duration.
         let mut tx = db.write().begin().await?;
         queries::scan::prune_orphans(&mut tx).await?;
         tx.commit().await?;
@@ -113,12 +123,7 @@ async fn write_page(db: &DbPool, found: &[(i64, ArtistCredit)]) -> AppResult<usi
         let primary =
             queries::scan::upsert_artist(&mut tx, credit.primary_name(), UNKNOWN_ARTIST_ID).await?;
         queries::scan::replace_track_credits(&mut tx, *id, credit, primary).await?;
-        sqlx::query("UPDATE tracks SET artist_id = ?, artist = ? WHERE id = ?")
-            .bind(primary)
-            .bind(credit.line())
-            .bind(id)
-            .execute(&mut *tx)
-            .await?;
+        queries::track::repoint_primary_artist(&mut tx, *id, primary, credit.line()).await?;
     }
     tx.commit().await?;
     Ok(found.len())

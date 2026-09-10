@@ -453,10 +453,7 @@ async fn resolve_ids(
     // Resolve the album-artist (album_artist tag, else the track artist) — the album
     // groups by this so a per-track featured credit doesn't split it. Reuses the
     // artist cache.
-    let album_artist_name = match meta.album_artist.primary_name() {
-        "" => artist_name,
-        name => name,
-    };
+    let album_artist_name = queries::scan::album_artist_name_for(meta);
     let album_artist_id = if album_artist_name == artist_name {
         artist_id
     } else if let Some(&id) = caches.artist.get(album_artist_name) {
@@ -475,13 +472,9 @@ async fn resolve_ids(
     } else {
         // Behind the cache miss deliberately: an album's credit is a property of the album, so
         // rewriting it per *track* would cost a delete-and-insert cycle per row of a bulk scan.
-        let album_credit = if meta.album_artist.is_empty() {
-            &meta.artist
-        } else {
-            &meta.album_artist
-        };
+        let album_credit = queries::scan::album_credit_for(meta);
         let id =
-            queries::scan::upsert_album(tx, album_name, album_artist_id, album_credit, meta.year)
+            queries::scan::upsert_album(tx, album_name, album_artist_id, &album_credit, meta.year)
                 .await?;
         caches.album.entry(album_name.to_owned()).or_default().insert(album_artist_id, id);
         id
