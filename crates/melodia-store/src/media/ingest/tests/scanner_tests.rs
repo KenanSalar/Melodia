@@ -28,14 +28,7 @@ fn collects_audio_files() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     create_test_files(
         tmp.path(),
-        &[
-            "song.mp3",
-            "track.flac",
-            "audio.m4a",
-            "clip.aac",
-            "voice.ogg",
-            "pcm.wav",
-        ],
+        &["song.mp3", "track.flac", "audio.m4a", "clip.aac", "voice.ogg", "pcm.wav"],
     )?;
     let files = collect_media_files(tmp.path());
     assert_eq!(files.len(), 6);
@@ -88,13 +81,7 @@ fn extension_match_is_case_insensitive() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     create_test_files(
         tmp.path(),
-        &[
-            "Track.FLAC",
-            "Song.Mp3",
-            "clip.AAC",
-            "cover.JPG",
-            "notes.TXT",
-        ],
+        &["Track.FLAC", "Song.Mp3", "clip.AAC", "cover.JPG", "notes.TXT"],
     )?;
     let mut names: Vec<String> = collect_media_files(tmp.path())
         .iter()
@@ -226,10 +213,7 @@ fn existing_for(path: &Path) -> Result<HashMap<String, ExistingTrackSummary>, Ap
     let mut map = HashMap::new();
     map.insert(
         path.to_string_lossy().into_owned(),
-        ExistingTrackSummary {
-            file_size: Some(size),
-            date_modified: mtime,
-        },
+        ExistingTrackSummary { file_size: Some(size), date_modified: mtime },
     );
     Ok(map)
 }

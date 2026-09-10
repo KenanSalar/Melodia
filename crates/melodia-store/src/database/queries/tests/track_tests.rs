@@ -526,11 +526,7 @@ async fn get_favorite_stats_orders_artwork_by_play_count() -> Result<(), AppErro
     // duplicate paths to reach 4, `compose_cover` having a layout per count.
     assert_eq!(
         stats.artwork_paths,
-        vec![
-            "/art/beta.jpg".to_owned(),
-            "/art/gamma.jpg".to_owned(),
-            "/art/alpha.jpg".to_owned(),
-        ],
+        vec!["/art/beta.jpg".to_owned(), "/art/gamma.jpg".to_owned(), "/art/alpha.jpg".to_owned(),],
         "artwork_paths must be the distinct set in play_count DESC order"
     );
     Ok(())

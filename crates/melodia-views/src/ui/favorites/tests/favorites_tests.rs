@@ -431,10 +431,7 @@ fn a_grid_pick_rewinds_the_count_it_could_not_answer() {
         before_fetch.contains("apply_filtered_grids_now(&ui, &fu)"),
         "and the apply must come first, so a warm cache still paints on this tick"
     );
-    for rewound in [
-        "set_most_played_count(UNFETCHED_COUNT)",
-        "set_artist_count(UNFETCHED_COUNT)",
-    ] {
+    for rewound in ["set_most_played_count(UNFETCHED_COUNT)", "set_artist_count(UNFETCHED_COUNT)"] {
         assert!(
             after_fetch.contains(rewound),
             "a grid pick that spawns a fetch must rewind that tab's count ({rewound})"

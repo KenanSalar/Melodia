@@ -47,11 +47,7 @@ const ROW_THUMB_SIZE_HIDPI: u32 = 72;
 /// threshold sits below 1.5 so a fractional-scale desktop rounds *up* — softness is the worse of
 /// the two failures.
 pub fn row_cover_size(scale: f64) -> u32 {
-    if scale > 1.25 {
-        ROW_THUMB_SIZE_HIDPI
-    } else {
-        ROW_THUMB_SIZE
-    }
+    if scale > 1.25 { ROW_THUMB_SIZE_HIDPI } else { ROW_THUMB_SIZE }
 }
 
 /// Row-tier LRU capacity, counting unique *covers* rather than tracks, so it scales with library

@@ -403,9 +403,7 @@ async fn send(
     cap: u64,
 ) -> Result<Option<Vec<u8>>, LookupError> {
     if let Turn::Stopped(left) = pacer.acquire().await {
-        return Err(LookupError::RateLimited {
-            retry_after: Some(left),
-        });
+        return Err(LookupError::RateLimited { retry_after: Some(left) });
     }
 
     let response = client

@@ -292,11 +292,8 @@ async fn an_empty_mirror_list_is_an_error_rather_than_a_pick() -> TestResult {
 /// working, every session on one mirror, and nothing else able to tell.
 #[tokio::test]
 async fn the_mirror_picked_is_one_the_directory_served() -> TestResult {
-    const SERVED: [&str; 3] = [
-        "de1.api.example.test",
-        "nl1.api.example.test",
-        "us1.api.example.test",
-    ];
+    const SERVED: [&str; 3] =
+        ["de1.api.example.test", "nl1.api.example.test", "us1.api.example.test"];
 
     let (_server, url) = serving(TestResponse::ok(
         r#"[{"ip":"10.0.0.1","name":"de1.api.example.test"},

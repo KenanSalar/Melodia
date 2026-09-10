@@ -33,11 +33,7 @@ impl Library {
         let tmp = TempDir::new()?;
         let paths = Paths::rooted_at(tmp.path().to_path_buf());
         paths.create_dirs()?;
-        Ok(Self {
-            db: DbPool::test_pool().await?,
-            paths,
-            _tmp: tmp,
-        })
+        Ok(Self { db: DbPool::test_pool().await?, paths, _tmp: tmp })
     }
 }
 

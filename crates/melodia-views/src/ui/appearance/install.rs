@@ -196,9 +196,5 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
     window_settings::wire_overflow_buttons_changed(ui, state);
     window_settings::wire_close_to_tray_changed(ui, state);
 
-    Ok(AppearanceHandles {
-        os_state,
-        kick,
-        repaint_tx,
-    })
+    Ok(AppearanceHandles { os_state, kick, repaint_tx })
 }

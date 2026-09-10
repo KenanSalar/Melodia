@@ -101,21 +101,9 @@ fn assert_full_edit_landed(tag: &Tag) -> Result<(), AppError> {
 #[test]
 fn default_edit_is_a_noop() {
     assert!(TagEdit::default().is_noop());
-    assert!(
-        !TagEdit {
-            title: FieldEdit::Set("x".into()),
-            ..TagEdit::default()
-        }
-        .is_noop()
-    );
+    assert!(!TagEdit { title: FieldEdit::Set("x".into()), ..TagEdit::default() }.is_noop());
     // Artwork alone is enough to make it real work.
-    assert!(
-        !TagEdit {
-            artwork: ArtworkEdit::Remove,
-            ..TagEdit::default()
-        }
-        .is_noop()
-    );
+    assert!(!TagEdit { artwork: ArtworkEdit::Remove, ..TagEdit::default() }.is_noop());
 }
 
 #[test]
@@ -134,10 +122,7 @@ fn clear_removes_the_key_rather_than_writing_an_empty_string() {
     let mut tag = Tag::new(TagType::VorbisComments);
     tag.insert_text(ItemKey::TrackTitle, "Original".into());
 
-    let edit = TagEdit {
-        title: FieldEdit::Clear,
-        ..TagEdit::default()
-    };
+    let edit = TagEdit { title: FieldEdit::Clear, ..TagEdit::default() };
     apply_edit(&mut tag, &edit, None);
 
     // Not `Some("")` — a ghost empty tag is exactly what we must not produce.
@@ -147,17 +132,9 @@ fn clear_removes_the_key_rather_than_writing_an_empty_string() {
 #[test]
 fn a_year_only_edit_preserves_an_existing_month_and_day() -> Result<(), AppError> {
     let mut tag = Tag::new(TagType::VorbisComments);
-    tag.set_date(Timestamp {
-        year: 2001,
-        month: Some(6),
-        day: Some(15),
-        ..Timestamp::default()
-    });
+    tag.set_date(Timestamp { year: 2001, month: Some(6), day: Some(15), ..Timestamp::default() });
 
-    let edit = TagEdit {
-        year: FieldEdit::Set(2024),
-        ..TagEdit::default()
-    };
+    let edit = TagEdit { year: FieldEdit::Set(2024), ..TagEdit::default() };
     apply_edit(&mut tag, &edit, None);
 
     let date = tag.date().ok_or_else(|| missing("date"))?;
@@ -174,10 +151,7 @@ fn keep_leaves_replaygain_and_musicbrainz_keys_untouched() {
     tag.insert_text(ItemKey::MusicBrainzRecordingId, "mbid-123".into());
 
     // A real edit to an unrelated field must not disturb them.
-    let edit = TagEdit {
-        title: FieldEdit::Set("New".into()),
-        ..TagEdit::default()
-    };
+    let edit = TagEdit { title: FieldEdit::Set("New".into()), ..TagEdit::default() };
     apply_edit(&mut tag, &edit, None);
 
     assert_eq!(text(&tag, ItemKey::ReplayGainTrackGain).as_deref(), Some("-6.50 dB"));
@@ -188,14 +162,8 @@ fn keep_leaves_replaygain_and_musicbrainz_keys_untouched() {
 fn bpm_writes_the_integer_key_on_id3v2_and_the_decimal_key_on_vorbis() {
     // ID3v2 has TBPM (IntegerBpm) but NO plain `Bpm` mapping.
     let mut id3 = Tag::new(TagType::Id3v2);
-    let unsupported = apply_edit(
-        &mut id3,
-        &TagEdit {
-            bpm: FieldEdit::Set(128.5),
-            ..TagEdit::default()
-        },
-        None,
-    );
+    let unsupported =
+        apply_edit(&mut id3, &TagEdit { bpm: FieldEdit::Set(128.5), ..TagEdit::default() }, None);
     assert!(
         unsupported.is_empty(),
         "BPM must not be reported unsupported on ID3v2 — IntegerBpm maps"
@@ -206,10 +174,7 @@ fn bpm_writes_the_integer_key_on_id3v2_and_the_decimal_key_on_vorbis() {
     let mut vorbis = Tag::new(TagType::VorbisComments);
     let unsupported = apply_edit(
         &mut vorbis,
-        &TagEdit {
-            bpm: FieldEdit::Set(128.5),
-            ..TagEdit::default()
-        },
+        &TagEdit { bpm: FieldEdit::Set(128.5), ..TagEdit::default() },
         None,
     );
     assert!(unsupported.is_empty());
@@ -226,21 +191,11 @@ fn bpm_writes_the_integer_key_on_id3v2_and_the_decimal_key_on_vorbis() {
 /// proves they agree.
 #[test]
 fn bpm_set_is_bounded_and_nan_safe() {
-    for (input, expected) in [
-        (f64::NAN, "0"),
-        (-5.0, "0"),
-        (1e9, "1000"),
-        (f64::from(UNBOUNDED), "1000"),
-    ] {
+    for (input, expected) in
+        [(f64::NAN, "0"), (-5.0, "0"), (1e9, "1000"), (f64::from(UNBOUNDED), "1000")]
+    {
         let mut tag = Tag::new(TagType::Mp4Ilst);
-        apply_edit(
-            &mut tag,
-            &TagEdit {
-                bpm: FieldEdit::Set(input),
-                ..TagEdit::default()
-            },
-            None,
-        );
+        apply_edit(&mut tag, &TagEdit { bpm: FieldEdit::Set(input), ..TagEdit::default() }, None);
 
         assert_eq!(
             text(&tag, ItemKey::IntegerBpm).as_deref(),
@@ -261,14 +216,7 @@ fn clearing_bpm_removes_both_keys() {
     tag.insert_text(ItemKey::Bpm, "128.5".into());
     tag.insert_text(ItemKey::IntegerBpm, "128".into());
 
-    apply_edit(
-        &mut tag,
-        &TagEdit {
-            bpm: FieldEdit::Clear,
-            ..TagEdit::default()
-        },
-        None,
-    );
+    apply_edit(&mut tag, &TagEdit { bpm: FieldEdit::Clear, ..TagEdit::default() }, None);
 
     assert_eq!(text(&tag, ItemKey::Bpm), None);
     assert_eq!(text(&tag, ItemKey::IntegerBpm), None);
@@ -281,10 +229,7 @@ fn lyrics_key_is_chosen_by_tag_type() {
     let mut vorbis = Tag::new(TagType::VorbisComments);
     apply_edit(
         &mut vorbis,
-        &TagEdit {
-            lyrics: FieldEdit::Set("words".into()),
-            ..TagEdit::default()
-        },
+        &TagEdit { lyrics: FieldEdit::Set("words".into()), ..TagEdit::default() },
         None,
     );
     assert_eq!(text(&vorbis, ItemKey::Lyrics).as_deref(), Some("words"));
@@ -293,10 +238,7 @@ fn lyrics_key_is_chosen_by_tag_type() {
     let mut id3 = Tag::new(TagType::Id3v2);
     let unsupported = apply_edit(
         &mut id3,
-        &TagEdit {
-            lyrics: FieldEdit::Set("words".into()),
-            ..TagEdit::default()
-        },
+        &TagEdit { lyrics: FieldEdit::Set("words".into()), ..TagEdit::default() },
         None,
     );
     assert!(unsupported.is_empty());
@@ -309,14 +251,7 @@ fn clearing_lyrics_removes_both_keys() {
     tag.insert_text(ItemKey::Lyrics, "a".into());
     tag.insert_text(ItemKey::UnsyncLyrics, "b".into());
 
-    apply_edit(
-        &mut tag,
-        &TagEdit {
-            lyrics: FieldEdit::Clear,
-            ..TagEdit::default()
-        },
-        None,
-    );
+    apply_edit(&mut tag, &TagEdit { lyrics: FieldEdit::Clear, ..TagEdit::default() }, None);
 
     assert_eq!(text(&tag, ItemKey::Lyrics), None);
     assert_eq!(text(&tag, ItemKey::UnsyncLyrics), None);
@@ -334,10 +269,7 @@ fn read_lyrics_round_trips_on_flac_and_mp3() -> Result<(), AppError> {
     let flac = stage(&tmp, "silence.flac")?;
     apply_to_file(
         &flac,
-        &TagEdit {
-            lyrics: FieldEdit::Set("first line\nsecond line".into()),
-            ..TagEdit::default()
-        },
+        &TagEdit { lyrics: FieldEdit::Set("first line\nsecond line".into()), ..TagEdit::default() },
         None,
     )?;
     assert_eq!(read_lyrics(&flac)?.as_deref(), Some("first line\nsecond line"));
@@ -345,10 +277,7 @@ fn read_lyrics_round_trips_on_flac_and_mp3() -> Result<(), AppError> {
     let mp3 = stage(&tmp, "silence.mp3")?;
     apply_to_file(
         &mp3,
-        &TagEdit {
-            lyrics: FieldEdit::Set("mp3 lyrics".into()),
-            ..TagEdit::default()
-        },
+        &TagEdit { lyrics: FieldEdit::Set("mp3 lyrics".into()), ..TagEdit::default() },
         None,
     )?;
     assert_eq!(read_lyrics(&mp3)?.as_deref(), Some("mp3 lyrics"));
@@ -385,10 +314,7 @@ fn m4a_artwork_replace_actually_replaces() -> Result<(), AppError> {
     let new_bytes = picture.data().to_vec();
     assert_ne!(old_bytes, new_bytes, "fixtures must differ, or nothing is proven");
 
-    let edit = TagEdit {
-        artwork: ArtworkEdit::Replace,
-        ..TagEdit::default()
-    };
+    let edit = TagEdit { artwork: ArtworkEdit::Replace, ..TagEdit::default() };
     let unsupported = apply_to_file(&audio, &edit, Some(&picture))?;
     assert!(unsupported.is_empty());
 
@@ -423,10 +349,7 @@ fn m4a_artwork_remove_actually_removes() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let audio = stage(&tmp, "silence-cover.m4a")?;
 
-    let edit = TagEdit {
-        artwork: ArtworkEdit::Remove,
-        ..TagEdit::default()
-    };
+    let edit = TagEdit { artwork: ArtworkEdit::Remove, ..TagEdit::default() };
     apply_to_file(&audio, &edit, None)?;
 
     let after = read_primary(&audio)?;
@@ -462,10 +385,7 @@ fn m4a_accepts_a_webp_cover_by_normalizing_it_to_jpeg() -> Result<(), AppError> 
         "a WebP must be re-encoded to JPEG"
     );
 
-    let edit = TagEdit {
-        artwork: ArtworkEdit::Replace,
-        ..TagEdit::default()
-    };
+    let edit = TagEdit { artwork: ArtworkEdit::Replace, ..TagEdit::default() };
     // The assertion is simply that this does not error: an un-normalized WebP
     // would trip MP4's `FileEncodingError` here.
     apply_to_file(&audio, &edit, Some(&picture))?;
@@ -541,10 +461,7 @@ fn an_embedded_picture_survives_an_edit_that_does_not_touch_artwork() -> Result<
     let cover_bytes = before.pictures()[0].data().to_vec();
 
     // ArtworkEdit::Keep — we are editing text only.
-    let edit = TagEdit {
-        title: FieldEdit::Set("Retitled".into()),
-        ..TagEdit::default()
-    };
+    let edit = TagEdit { title: FieldEdit::Set("Retitled".into()), ..TagEdit::default() };
     apply_to_file(&audio, &edit, None)?;
 
     let after = read_primary(&audio)?;
@@ -620,10 +537,7 @@ fn an_mp3_bpm_edit_is_read_back_by_extract_metadata() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let audio = stage(&tmp, "silence.mp3")?;
 
-    let edit = TagEdit {
-        bpm: FieldEdit::Set(128.0),
-        ..TagEdit::default()
-    };
+    let edit = TagEdit { bpm: FieldEdit::Set(128.0), ..TagEdit::default() };
     apply_to_file(&audio, &edit, None)?;
 
     let cache = artwork::new_cover_cache();
@@ -868,10 +782,7 @@ fn an_unticked_compilation_switch_removes_the_tag() {
 
     apply_edit(
         &mut tag,
-        &TagEdit {
-            compilation: FieldEdit::Set(false),
-            ..TagEdit::default()
-        },
+        &TagEdit { compilation: FieldEdit::Set(false), ..TagEdit::default() },
         None,
     );
 
@@ -904,10 +815,7 @@ fn a_credit_reduced_to_one_name_leaves_no_list_behind() {
 
     apply_edit(
         &mut tag,
-        &TagEdit {
-            artist: FieldEdit::Set(ArtistCredit::from_name("Alice")),
-            ..TagEdit::default()
-        },
+        &TagEdit { artist: FieldEdit::Set(ArtistCredit::from_name("Alice")), ..TagEdit::default() },
         None,
     );
 
@@ -921,14 +829,7 @@ fn a_cleared_credit_takes_both_of_its_keys() {
     tag.insert_text(ItemKey::AlbumArtist, "Alice & Bob".into());
     tag.insert_text(ItemKey::AlbumArtists, "Alice".into());
 
-    apply_edit(
-        &mut tag,
-        &TagEdit {
-            album_artist: FieldEdit::Clear,
-            ..TagEdit::default()
-        },
-        None,
-    );
+    apply_edit(&mut tag, &TagEdit { album_artist: FieldEdit::Clear, ..TagEdit::default() }, None);
 
     assert_eq!(text(&tag, ItemKey::AlbumArtist), None);
     assert!(artists(&tag, ItemKey::AlbumArtists).is_empty());
@@ -983,14 +884,7 @@ fn a_year_edit_leaves_no_earlier_key_to_be_read_instead() {
     tag.insert_text(ItemKey::ReleaseDate, "1959".into());
     tag.insert_text(ItemKey::RecordingDate, "1958".into());
 
-    apply_edit(
-        &mut tag,
-        &TagEdit {
-            year: FieldEdit::Set(2024),
-            ..TagEdit::default()
-        },
-        None,
-    );
+    apply_edit(&mut tag, &TagEdit { year: FieldEdit::Set(2024), ..TagEdit::default() }, None);
 
     assert_eq!(text(&tag, ItemKey::ReleaseDate), None);
     assert_eq!(text(&tag, ItemKey::RecordingDate).as_deref(), Some("2024"));
@@ -1009,11 +903,7 @@ fn mp3_reports_the_roles_it_has_no_key_to_write() -> Result<(), AppError> {
 
     let every_role: Vec<RoleCredit> = ROLES
         .into_iter()
-        .map(|role| RoleCredit {
-            role,
-            name: "Alice".into(),
-            detail: String::new(),
-        })
+        .map(|role| RoleCredit { role, name: "Alice".into(), detail: String::new() })
         .collect();
 
     let unsupported = apply_to_file(
@@ -1028,17 +918,7 @@ fn mp3_reports_the_roles_it_has_no_key_to_write() -> Result<(), AppError> {
     // Sorted, since `ROLES` order is the list's own presentation choice and free to change.
     let mut reported = unsupported.0.clone();
     reported.sort_unstable();
-    assert_eq!(
-        reported,
-        [
-            "arranger",
-            "dj_mixer",
-            "engineer",
-            "mixer",
-            "performer",
-            "producer"
-        ]
-    );
+    assert_eq!(reported, ["arranger", "dj_mixer", "engineer", "mixer", "performer", "producer"]);
 
     let tag = read_primary(&audio)?;
     assert_eq!(text(&tag, ItemKey::Composer).as_deref(), Some("Alice"));
@@ -1056,11 +936,7 @@ fn flac_writes_every_role_there_is() -> Result<(), AppError> {
 
     let every_role: Vec<RoleCredit> = ROLES
         .into_iter()
-        .map(|role| RoleCredit {
-            role,
-            name: "Alice".into(),
-            detail: String::new(),
-        })
+        .map(|role| RoleCredit { role, name: "Alice".into(), detail: String::new() })
         .collect();
 
     let unsupported = apply_to_file(

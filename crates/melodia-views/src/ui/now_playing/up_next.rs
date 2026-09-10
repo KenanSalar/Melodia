@@ -53,11 +53,8 @@ pub(super) fn spawn_up_next_subscriber(
             let ids_changed = *np_state.rendered_ids.borrow() != new_ids;
             // Before the rebuild overwrites them: needed only on a track change, to
             // look up the row that fell off the bottom for the outgoing overlay.
-            let old_rendered_ids: Vec<i64> = if track_changed {
-                np_state.rendered_ids.borrow().clone()
-            } else {
-                Vec::new()
-            };
+            let old_rendered_ids: Vec<i64> =
+                if track_changed { np_state.rendered_ids.borrow().clone() } else { Vec::new() };
             if ids_changed || track_changed {
                 let ids = rebuild_up_next(&ui, &up_next_model, &qvm);
                 *np_state.rendered_ids.borrow_mut() = ids;

@@ -148,11 +148,7 @@ fn main() -> AppResult<()> {
 
     log::info!(
         "AppState initialized: db ok, watcher built, media controls = {}",
-        if state.media_controls.is_some() {
-            "ready"
-        } else {
-            "no-op"
-        }
+        if state.media_controls.is_some() { "ready" } else { "no-op" }
     );
 
     let spawner = tasks::TaskSpawner::from_state(&state);
@@ -186,11 +182,7 @@ fn main() -> AppResult<()> {
     slint::BackendSelector::new()
         .backend_name("winit".into())
         .with_winit_window_attributes_hook(move |attrs| {
-            let attrs = if restore_maximized {
-                attrs.with_maximized(true)
-            } else {
-                attrs
-            };
+            let attrs = if restore_maximized { attrs.with_maximized(true) } else { attrs };
             // Pin the window identity so the compositor resolves our icon and
             // label. X11 matches `WM_CLASS` against the desktop file's
             // `StartupWMClass=Melodia`, falling back to the binary basename when

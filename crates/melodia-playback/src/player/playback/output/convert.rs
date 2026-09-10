@@ -64,10 +64,7 @@ impl Converter {
         let width = usize::from(self.device.channels.get());
         let step = f64::from(self.source.rate.get()) * speed / f64::from(self.device.rate.get());
 
-        let mut filled = Filled {
-            samples: 0,
-            source_frames: 0,
-        };
+        let mut filled = Filled { samples: 0, source_frames: 0 };
         if self.done {
             return filled;
         }

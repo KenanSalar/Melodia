@@ -102,9 +102,7 @@ async fn a_row_whose_file_is_gone_does_not_cost_its_neighbour_a_hash() -> Result
 #[tokio::test]
 async fn a_row_that_already_has_a_hash_is_left_alone() -> Result<(), AppError> {
     let (db, _tmp) = library(&[("song.mp3", b"bytes")]).await?;
-    sqlx::query("UPDATE tracks SET file_hash = 'from an earlier pass'")
-        .execute(db.write())
-        .await?;
+    sqlx::query("UPDATE tracks SET file_hash = 'from an earlier pass'").execute(db.write()).await?;
 
     hash_unhashed_tracks(&db).await?;
 

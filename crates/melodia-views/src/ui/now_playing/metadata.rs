@@ -26,15 +26,8 @@ pub(super) fn to_slint_track_meta(t: &TrackMeta) -> TrackMetaRow {
 /// texts. Used both to seed the chip shadow on track-meta change and to
 /// re-chunk on width changes without re-reading the global.
 pub(super) fn visible_chip_texts(m: &TrackMetaRow) -> Vec<SharedString> {
-    let fields = [
-        &m.codec,
-        &m.bitrate,
-        &m.sample_rate,
-        &m.bit_depth,
-        &m.channels,
-        &m.year,
-        &m.genre,
-    ];
+    let fields =
+        [&m.codec, &m.bitrate, &m.sample_rate, &m.bit_depth, &m.channels, &m.year, &m.genre];
     let mut out = Vec::with_capacity(fields.len());
     for s in fields {
         if !s.is_empty() {

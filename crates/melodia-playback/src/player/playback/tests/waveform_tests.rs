@@ -171,10 +171,7 @@ fn columns_hold_the_nearest_sample_when_asked_for_more_than_there_are() {
 
 #[test]
 fn an_empty_source_blanks_the_columns() {
-    let mut out = [Column {
-        min: -0.7,
-        max: 0.7,
-    }; 4];
+    let mut out = [Column { min: -0.7, max: 0.7 }; 4];
     min_max_columns(&[], &mut out);
     for c in out {
         approx(c.min, 0.0);
@@ -290,18 +287,9 @@ fn a_tie_in_the_x_prefixes_rounds_the_way_push_fixed_does() {
 #[test]
 fn the_path_closes_one_figure_around_both_edges() {
     let columns = [
-        Column {
-            min: -0.5,
-            max: 0.5,
-        },
-        Column {
-            min: -0.25,
-            max: 0.75,
-        },
-        Column {
-            min: -1.0,
-            max: 0.0,
-        },
+        Column { min: -0.5, max: 0.5 },
+        Column { min: -0.25, max: 0.75 },
+        Column { min: -1.0, max: 0.0 },
     ];
     let mut out = String::new();
     write_path_commands(&columns, &mut out);
@@ -329,13 +317,7 @@ fn the_path_flips_both_edges_so_peaks_point_upward() {
     // Screen y grows downward, so a positive sample has to come out negative or
     // the whole trace draws upside down.
     let mut out = String::new();
-    write_path_commands(
-        &[Column {
-            min: -0.25,
-            max: 0.75,
-        }],
-        &mut out,
-    );
+    write_path_commands(&[Column { min: -0.25, max: 0.75 }], &mut out);
 
     assert_eq!(out, "M0.0000 0.250 L0.0000 -0.750Z");
 }
@@ -366,13 +348,7 @@ fn the_thickness_floor_opens_a_column_about_its_own_midpoint() {
 fn a_loud_column_is_not_widened() {
     // The floor is a floor, not a bias — anything already thicker passes through.
     let mut out = String::new();
-    write_path_commands(
-        &[Column {
-            min: -0.8,
-            max: 0.6,
-        }],
-        &mut out,
-    );
+    write_path_commands(&[Column { min: -0.8, max: 0.6 }], &mut out);
 
     assert_eq!(out, "M0.0000 0.800 L0.0000 -0.600Z");
 }
@@ -381,16 +357,7 @@ fn a_loud_column_is_not_widened() {
 fn the_closed_figure_winds_positively() {
     // Slint's femtovg renderer reads a subpath's signed area to decide whether
     // it is solid or a hole, so the edges have to be emitted lower-first.
-    let columns = [
-        Column {
-            min: -0.5,
-            max: 0.5,
-        },
-        Column {
-            min: -0.5,
-            max: 0.5,
-        },
-    ];
+    let columns = [Column { min: -0.5, max: 0.5 }, Column { min: -0.5, max: 0.5 }];
     let mut out = String::new();
     write_path_commands(&columns, &mut out);
 

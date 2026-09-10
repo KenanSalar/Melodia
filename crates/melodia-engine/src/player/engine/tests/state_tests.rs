@@ -46,13 +46,11 @@ fn test_play_track_with_start_position() {
     let actions = play_track_inner(&mut state, track, Some(45_000));
 
     assert_eq!(state.position_ms, 45_000);
-    assert!(actions.iter().any(|a| matches!(
-        a,
-        PlayerAction::PlayMedia {
-            start_position_ms: Some(45_000),
-            ..
-        }
-    )));
+    assert!(
+        actions
+            .iter()
+            .any(|a| matches!(a, PlayerAction::PlayMedia { start_position_ms: Some(45_000), .. }))
+    );
 }
 
 #[test]
@@ -71,25 +69,16 @@ fn test_play_track_inner_with_resume_position() -> Result<(), AppError> {
         .cloned()
         .ok_or_else(|| AppError::Validation("current_track None".into()))?;
     let resume_pos = state.position_ms;
-    let actions = play_track_inner(
-        &mut state,
-        track,
-        if resume_pos > 0 {
-            Some(resume_pos)
-        } else {
-            None
-        },
-    );
+    let actions =
+        play_track_inner(&mut state, track, if resume_pos > 0 { Some(resume_pos) } else { None });
 
     assert_eq!(state.status, PlaybackStatus::Playing);
     assert_eq!(state.position_ms, 60_000);
-    assert!(actions.iter().any(|a| matches!(
-        a,
-        PlayerAction::PlayMedia {
-            start_position_ms: Some(60_000),
-            ..
-        }
-    )));
+    assert!(
+        actions
+            .iter()
+            .any(|a| matches!(a, PlayerAction::PlayMedia { start_position_ms: Some(60_000), .. }))
+    );
     Ok(())
 }
 
@@ -107,24 +96,15 @@ fn test_resume_from_stopped_at_zero_starts_fresh() -> Result<(), AppError> {
         .cloned()
         .ok_or_else(|| AppError::Validation("current_track None".into()))?;
     let resume_pos = state.position_ms;
-    let actions = play_track_inner(
-        &mut state,
-        track,
-        if resume_pos > 0 {
-            Some(resume_pos)
-        } else {
-            None
-        },
-    );
+    let actions =
+        play_track_inner(&mut state, track, if resume_pos > 0 { Some(resume_pos) } else { None });
 
     assert_eq!(state.position_ms, 0);
-    assert!(actions.iter().any(|a| matches!(
-        a,
-        PlayerAction::PlayMedia {
-            start_position_ms: None,
-            ..
-        }
-    )));
+    assert!(
+        actions
+            .iter()
+            .any(|a| matches!(a, PlayerAction::PlayMedia { start_position_ms: None, .. }))
+    );
     Ok(())
 }
 
@@ -137,13 +117,11 @@ fn test_play_track_start_position_clamped_to_near_end() {
     let actions = play_track_inner(&mut state, track, Some(200_000));
 
     assert_eq!(state.position_ms, 179_500);
-    assert!(actions.iter().any(|a| matches!(
-        a,
-        PlayerAction::PlayMedia {
-            start_position_ms: Some(179_500),
-            ..
-        }
-    )));
+    assert!(
+        actions
+            .iter()
+            .any(|a| matches!(a, PlayerAction::PlayMedia { start_position_ms: Some(179_500), .. }))
+    );
 }
 
 #[test]
@@ -155,21 +133,16 @@ fn test_play_track_some_zero_filtered_to_none() {
     let actions = play_track_inner(&mut state, track, Some(0));
 
     assert_eq!(state.position_ms, 0);
-    assert!(actions.iter().any(|a| matches!(
-        a,
-        PlayerAction::PlayMedia {
-            start_position_ms: None,
-            ..
-        }
-    )));
+    assert!(
+        actions
+            .iter()
+            .any(|a| matches!(a, PlayerAction::PlayMedia { start_position_ms: None, .. }))
+    );
 }
 
 #[test]
 fn test_play_track_with_resume_does_not_eager_preload() {
-    let mut state = PlayerState {
-        gapless_enabled: true,
-        ..Default::default()
-    };
+    let mut state = PlayerState { gapless_enabled: true, ..Default::default() };
 
     let track1 = make_summary(1, "Song 1", 180_000);
     let track2 = make_summary(2, "Song 2", 180_000);
@@ -214,13 +187,11 @@ fn test_play_track_start_position_clamp_on_short_track() {
     let actions = play_track_inner(&mut state, track, Some(250));
 
     assert_eq!(state.position_ms, 0);
-    assert!(actions.iter().any(|a| matches!(
-        a,
-        PlayerAction::PlayMedia {
-            start_position_ms: None,
-            ..
-        }
-    )));
+    assert!(
+        actions
+            .iter()
+            .any(|a| matches!(a, PlayerAction::PlayMedia { start_position_ms: None, .. }))
+    );
 }
 
 #[test]
@@ -235,21 +206,16 @@ fn test_resume_from_stopped_helper() {
 
     assert_eq!(state.status, PlaybackStatus::Playing);
     assert_eq!(state.position_ms, 60_000);
-    assert!(actions.iter().any(|a| matches!(
-        a,
-        PlayerAction::PlayMedia {
-            start_position_ms: Some(60_000),
-            ..
-        }
-    )));
+    assert!(
+        actions
+            .iter()
+            .any(|a| matches!(a, PlayerAction::PlayMedia { start_position_ms: Some(60_000), .. }))
+    );
 }
 
 #[test]
 fn test_resume_from_stopped_no_track() {
-    let mut state = PlayerState {
-        status: PlaybackStatus::Stopped,
-        ..Default::default()
-    };
+    let mut state = PlayerState { status: PlaybackStatus::Stopped, ..Default::default() };
 
     let actions = resume_from_stopped(&mut state);
     assert!(actions.is_empty());
@@ -354,10 +320,7 @@ fn test_cycle_repeat_mode() {
 fn test_queue_loaded_restores_state() {
     let mut state = PlayerState::default();
 
-    let tracks = vec![
-        make_summary(1, "Song 1", 100_000),
-        make_summary(2, "Song 2", 200_000),
-    ];
+    let tracks = vec![make_summary(1, "Song 1", 100_000), make_summary(2, "Song 2", 200_000)];
 
     state.queue.add_tracks(tracks);
     state.queue.current_index = Some(1);
@@ -396,11 +359,7 @@ fn test_view_model() {
 
 #[test]
 fn test_position_tick() {
-    let state = PlayerState {
-        position_ms: 5000,
-        duration_ms: 100_000,
-        ..Default::default()
-    };
+    let state = PlayerState { position_ms: 5000, duration_ms: 100_000, ..Default::default() };
 
     assert_eq!(state.position_ms, 5000);
     assert_eq!(state.duration_ms, 100_000);
@@ -448,10 +407,7 @@ fn test_volume_is_capped_at_max_and_converts_to_amplitude() {
 
 #[test]
 fn test_play_track_inner_includes_speed() {
-    let mut state = PlayerState {
-        playback_speed: 1.5,
-        ..Default::default()
-    };
+    let mut state = PlayerState { playback_speed: 1.5, ..Default::default() };
 
     let track = make_summary(1, "Song", 100_000);
     let actions = play_track_inner(&mut state, track, None);
@@ -481,10 +437,7 @@ fn test_to_view_model_empty_queue() {
 #[test]
 fn test_to_view_model_has_previous_with_repeat_all() {
     let mut state = PlayerState::default();
-    let tracks = vec![
-        make_summary(1, "Song 1", 100_000),
-        make_summary(2, "Song 2", 100_000),
-    ];
+    let tracks = vec![make_summary(1, "Song 1", 100_000), make_summary(2, "Song 2", 100_000)];
     state.queue.add_tracks(tracks);
     state.queue.current_index = Some(0);
     state.queue.repeat_mode = RepeatMode::All;
@@ -496,10 +449,7 @@ fn test_to_view_model_has_previous_with_repeat_all() {
 #[test]
 fn test_to_view_model_has_previous_false_at_start() {
     let mut state = PlayerState::default();
-    let tracks = vec![
-        make_summary(1, "Song 1", 100_000),
-        make_summary(2, "Song 2", 100_000),
-    ];
+    let tracks = vec![make_summary(1, "Song 1", 100_000), make_summary(2, "Song 2", 100_000)];
     state.queue.add_tracks(tracks);
     state.queue.current_index = Some(0);
     state.queue.repeat_mode = RepeatMode::Off;
@@ -510,11 +460,7 @@ fn test_to_view_model_has_previous_false_at_start() {
 
 #[test]
 fn test_to_view_model_zero_duration() {
-    let state = PlayerState {
-        duration_ms: 0,
-        position_ms: 0,
-        ..Default::default()
-    };
+    let state = PlayerState { duration_ms: 0, position_ms: 0, ..Default::default() };
 
     let vm = state.to_view_model();
     assert!((vm.progress_percent - 0.0).abs() < f64::EPSILON); // not NaN or Inf
@@ -530,10 +476,7 @@ fn test_to_view_model_light_mirrors_full() {
         ..Default::default()
     };
 
-    let tracks = vec![
-        make_summary(1, "Song 1", 200_000),
-        make_summary(2, "Song 2", 100_000),
-    ];
+    let tracks = vec![make_summary(1, "Song 1", 200_000), make_summary(2, "Song 2", 100_000)];
     state.queue.add_tracks(tracks);
     state.queue.current_index = Some(0);
     state.source = Some(PlaybackSource::Track(make_summary(1, "Song 1", 200_000)));
@@ -596,10 +539,7 @@ fn test_to_queue_view_model_shuffled() {
 #[test]
 fn test_to_queue_view_model_has_next_at_end() {
     let mut state = PlayerState::default();
-    let tracks = vec![
-        make_summary(1, "Song 1", 100_000),
-        make_summary(2, "Song 2", 100_000),
-    ];
+    let tracks = vec![make_summary(1, "Song 1", 100_000), make_summary(2, "Song 2", 100_000)];
     state.queue.add_tracks(tracks);
     state.queue.current_index = Some(1); // last track
 
@@ -619,14 +559,8 @@ fn test_to_queue_view_model_has_next_at_end() {
 #[test]
 fn test_restore_queue_basic() {
     let mut state = PlayerState::default();
-    let tracks = vec![
-        make_summary(1, "Song 1", 100_000),
-        make_summary(2, "Song 2", 200_000),
-    ];
-    let persistable = PersistableQueue {
-        track_ids: vec![1, 2],
-        current_index: 1,
-    };
+    let tracks = vec![make_summary(1, "Song 1", 100_000), make_summary(2, "Song 2", 200_000)];
+    let persistable = PersistableQueue { track_ids: vec![1, 2], current_index: 1 };
 
     restore_queue(&mut state, tracks, &persistable);
 
@@ -639,10 +573,7 @@ fn test_restore_queue_basic() {
 #[test]
 fn test_restore_queue_empty() {
     let mut state = PlayerState::default();
-    let persistable = PersistableQueue {
-        track_ids: vec![],
-        current_index: 0,
-    };
+    let persistable = PersistableQueue { track_ids: vec![], current_index: 0 };
 
     restore_queue(&mut state, vec![], &persistable);
 
@@ -674,10 +605,7 @@ fn test_restore_queue_with_last_position() {
         replaygain_album_peak: None,
     });
 
-    let persistable = PersistableQueue {
-        track_ids: vec![1],
-        current_index: 0,
-    };
+    let persistable = PersistableQueue { track_ids: vec![1], current_index: 0 };
 
     restore_queue(&mut state, vec![track], &persistable);
 
@@ -781,11 +709,7 @@ fn view_model_light_carries_sleep_at_track_end() {
 /// coherent one, then perturb the *state* to model a control op winning the race
 /// between the decision and the emit lock.
 fn decision(fade_ms: u64, track_id: i64, position_ms: u64) -> CrossfadeDecision {
-    CrossfadeDecision {
-        fade_ms,
-        track_id: Some(track_id),
-        position_ms,
-    }
+    CrossfadeDecision { fade_ms, track_id: Some(track_id), position_ms }
 }
 
 #[test]
@@ -974,11 +898,7 @@ fn sync_track_summaries_patches_current_queue_and_republishes() {
     let handle = PlayerStateHandle::default();
     let (vm_tx, _vm_rx) = watch::channel(None);
     let (q_tx, mut q_rx) = watch::channel(None);
-    let sinks = PlayerSinks {
-        view_model: vm_tx,
-        queue: q_tx,
-        media_controls: None,
-    };
+    let sinks = PlayerSinks { view_model: vm_tx, queue: q_tx, media_controls: None };
 
     // Seed a current track + a coherent two-entry queue.
     with_state_emit(&handle, &sinks, |s| {
@@ -1288,10 +1208,7 @@ fn previous_goes_back_under_threshold() {
 
 #[test]
 fn set_volume_clamps_and_unmutes() {
-    let mut state = PlayerState {
-        is_muted: true,
-        ..Default::default()
-    };
+    let mut state = PlayerState { is_muted: true, ..Default::default() };
 
     let actions = state.build_set_volume_actions(999);
 
@@ -1307,10 +1224,7 @@ fn set_volume_clamps_and_unmutes() {
 /// not overwrite it — a toggle-off that re-stamped it would pin the volume at zero.
 #[test]
 fn toggle_mute_roundtrip() {
-    let mut state = PlayerState {
-        volume: 80,
-        ..Default::default()
-    };
+    let mut state = PlayerState { volume: 80, ..Default::default() };
 
     let actions = state.build_toggle_mute_actions();
     assert!(state.is_muted);
@@ -1368,10 +1282,7 @@ use crate::player::engine::fixtures::test_station as station;
 /// A player mid-album, so every "the queue is untouched" assertion has something to be about.
 fn playing_a_queue() -> PlayerState {
     let mut state = PlayerState::default();
-    state.queue.add_tracks(vec![
-        make_summary(1, "One", 180_000),
-        make_summary(2, "Two", 180_000),
-    ]);
+    state.queue.add_tracks(vec![make_summary(1, "One", 180_000), make_summary(2, "Two", 180_000)]);
     state.queue.current_index = Some(0);
     let track = make_summary(1, "One", 180_000);
     let _actions = play_track_inner(&mut state, track, Some(30_000));
@@ -1431,13 +1342,7 @@ fn a_connected_station_starts_the_staged_stream() {
     let actions = state.build_station_connected_actions(generation);
 
     assert_eq!(state.status, PlaybackStatus::Playing);
-    assert_eq!(
-        actions,
-        vec![PlayerAction::PlayStream {
-            generation,
-            volume: 1.0,
-        }]
-    );
+    assert_eq!(actions, vec![PlayerAction::PlayStream { generation, volume: 1.0 }]);
 }
 
 /// An open takes seconds and a click takes none, so a stream that arrives after the user moved on
@@ -1557,10 +1462,7 @@ fn a_station_reports_no_next_or_previous() {
 #[test]
 fn an_empty_deck_rules_nothing_out() {
     let mut state = PlayerState::default();
-    state.queue.add_tracks(vec![
-        make_summary(1, "One", 100_000),
-        make_summary(2, "Two", 100_000),
-    ]);
+    state.queue.add_tracks(vec![make_summary(1, "One", 100_000), make_summary(2, "Two", 100_000)]);
     state.queue.current_index = Some(0);
     assert!(state.current_track().is_none(), "nothing has reached the deck yet");
 
@@ -1603,11 +1505,7 @@ fn the_view_model_carries_the_station_instead_of_a_track() {
 /// line goes into the tail users attach to public issues.
 #[test]
 fn the_play_stream_action_never_renders_a_url() {
-    let rendered = PlayerAction::PlayStream {
-        generation: 7,
-        volume: 1.0,
-    }
-    .to_string();
+    let rendered = PlayerAction::PlayStream { generation: 7, volume: 1.0 }.to_string();
 
     assert!(rendered.contains('7'), "{rendered:?} should name the session it belongs to");
     assert!(!rendered.contains("http"), "{rendered:?} must not carry the stream URL");
@@ -1685,10 +1583,7 @@ fn a_station_over_a_queue_writes_both_halves_down() {
 #[test]
 fn a_station_with_no_row_of_its_own_is_not_written_down() {
     let mut state = playing_a_queue();
-    let unsaved = Arc::new(RadioNowPlaying {
-        station_id: 0,
-        ..(*station("Unsaved FM")).clone()
-    });
+    let unsaved = Arc::new(RadioNowPlaying { station_id: 0, ..(*station("Unsaved FM")).clone() });
     let (generation, _actions) = state.build_station_connecting_actions(unsaved);
     let _started = state.build_station_connected_actions(generation);
 
@@ -1701,16 +1596,10 @@ fn a_station_with_no_row_of_its_own_is_not_written_down() {
 #[test]
 fn the_station_replaces_the_restored_track_and_not_the_queue_under_it() {
     let mut state = PlayerState::default();
-    let persistable = PersistableQueue {
-        track_ids: vec![1, 2],
-        current_index: 0,
-    };
+    let persistable = PersistableQueue { track_ids: vec![1, 2], current_index: 0 };
     restore_queue(
         &mut state,
-        vec![
-            make_summary(1, "One", 180_000),
-            make_summary(2, "Two", 180_000),
-        ],
+        vec![make_summary(1, "One", 180_000), make_summary(2, "Two", 180_000)],
         &persistable,
     );
     assert!(state.current_track().is_some(), "the queue restore seats a track first");
@@ -1738,10 +1627,7 @@ fn a_restart_puts_the_queue_back_under_the_station() -> Result<(), AppError> {
     let mut after = PlayerState::default();
     restore_queue(
         &mut after,
-        vec![
-            make_summary(1, "One", 180_000),
-            make_summary(2, "Two", 180_000),
-        ],
+        vec![make_summary(1, "One", 180_000), make_summary(2, "Two", 180_000)],
         &read.queue,
     );
     let _actions = restore_station(&mut after, station("Example FM"));

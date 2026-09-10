@@ -31,10 +31,7 @@ impl NameCache {
     /// Sized for a chunk of `files`, on the shape a music library tends to have.
     #[must_use]
     pub fn for_chunk(files: usize) -> Self {
-        Self {
-            artists: HashMap::with_capacity(files / 10 + 1),
-            genres: HashMap::with_capacity(32),
-        }
+        Self { artists: HashMap::with_capacity(files / 10 + 1), genres: HashMap::with_capacity(32) }
     }
 
     /// The artist row for `name`, upserting it the first time this transaction asks.

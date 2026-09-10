@@ -71,18 +71,11 @@ fn a_logo_already_found_is_never_asked_for_twice() {
 #[test]
 fn what_is_asked_about_is_deduplicated_blank_free_and_in_page_order() {
     let memo = LogoMemo::new();
-    let page = [
-        "https://b.invalid/a.png",
-        "",
-        "https://a.invalid/a.png",
-        "https://b.invalid/a.png",
-    ];
+    let page =
+        ["https://b.invalid/a.png", "", "https://a.invalid/a.png", "https://b.invalid/a.png"];
 
     assert_eq!(
         memo.unanswered(page.into_iter(), Effort::Page),
-        vec![
-            "https://b.invalid/a.png".to_owned(),
-            "https://a.invalid/a.png".to_owned()
-        ],
+        vec!["https://b.invalid/a.png".to_owned(), "https://a.invalid/a.png".to_owned()],
     );
 }

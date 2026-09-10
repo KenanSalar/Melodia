@@ -34,10 +34,7 @@ pub struct FolderWatcher {
 
 impl FolderWatcher {
     pub fn new(tx: mpsc::Sender<FileEvent>) -> Self {
-        Self {
-            debouncer: None,
-            tx,
-        }
+        Self { debouncer: None, tx }
     }
 
     pub fn start(&mut self, paths: &[PathBuf]) -> Result<(), AppError> {
@@ -135,10 +132,7 @@ fn classify_event(kind: EventKind, paths: &[PathBuf]) -> Vec<FileEvent> {
                 let from_audio = is_audio_file(from);
                 let to_audio = is_audio_file(to);
                 if from_audio && to_audio {
-                    events.push(FileEvent::Renamed {
-                        from: from.clone(),
-                        to: to.clone(),
-                    });
+                    events.push(FileEvent::Renamed { from: from.clone(), to: to.clone() });
                 } else if from_audio {
                     // audio → non-audio: treat as removal
                     events.push(FileEvent::Removed(from.clone()));

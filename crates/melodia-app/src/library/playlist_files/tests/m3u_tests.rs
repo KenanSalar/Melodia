@@ -19,13 +19,7 @@ fn row(
 
 #[test]
 fn serialize_emits_header_name_and_tags() {
-    let tracks = [row(
-        "/music/Song.flac",
-        Some("abc123"),
-        "Get Lucky",
-        Some("Daft Punk"),
-        248_000,
-    )];
+    let tracks = [row("/music/Song.flac", Some("abc123"), "Get Lucky", Some("Daft Punk"), 248_000)];
     let text = serialize("Roadtrip", &tracks);
 
     assert!(text.starts_with("#EXTM3U\n"));
@@ -136,13 +130,7 @@ fn parse_garbage_extinf_duration_is_none_not_panic() {
 
 #[test]
 fn serialize_neutralizes_newlines_in_title() {
-    let tracks = [row(
-        "/m/a.mp3",
-        None,
-        "Line1\nLine2",
-        Some("Art\rist"),
-        1000,
-    )];
+    let tracks = [row("/m/a.mp3", None, "Line1\nLine2", Some("Art\rist"), 1000)];
     let text = serialize("Na\nme", &tracks);
     // The #PLAYLIST and #EXTINF lines must each stay single-line.
     assert!(text.contains("#PLAYLIST:Na me\n"));

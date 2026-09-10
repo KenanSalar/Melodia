@@ -281,11 +281,7 @@ fn push_numeric_predicate(
             // The editor presents Duration in whole seconds ("Duration (sec)"),
             // but the column stores milliseconds — scale the bound value so the
             // comparison is against the same unit the user typed.
-            let bound = if field == RuleField::DurationMs {
-                *n * 1000.0
-            } else {
-                *n
-            };
+            let bound = if field == RuleField::DurationMs { *n * 1000.0 } else { *n };
             qb.push(col).push(sql_op).push_bind(bound);
         }
         _ => push_false(qb),

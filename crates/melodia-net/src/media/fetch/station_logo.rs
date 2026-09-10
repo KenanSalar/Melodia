@@ -134,10 +134,7 @@ fn store_if_big_enough(bytes: &[u8], ext: &'static str, dir: &Path) -> Option<St
     // A file the store just wrote or already had; a stat that fails says nothing about whether it
     // is drawable, so the answer stands and the size falls back to what arrived.
     let stored = std::fs::metadata(&path).map_or(bytes.len() as u64, |meta| meta.len());
-    Some(StoredLogo {
-        path,
-        bytes: stored,
-    })
+    Some(StoredLogo { path, bytes: stored })
 }
 
 /// What [`logo_tile::compose`] makes of the source, past the decode it needs.

@@ -35,11 +35,7 @@ pub const MAX_SPEED: f64 = 2.0;
 /// the audio backend and OS media controls (MPRIS) both expect. Muted → 0.0.
 /// `MAX_VOLUME` is the ceiling, so the result never exceeds unity gain.
 pub fn volume_to_amplitude(volume: u32, is_muted: bool) -> f64 {
-    if is_muted {
-        0.0
-    } else {
-        f64::from(volume) / 100.0
-    }
+    if is_muted { 0.0 } else { f64::from(volume) / 100.0 }
 }
 
 pub struct PlayerState {
@@ -279,17 +275,11 @@ pub enum PlayerAction {
 impl std::fmt::Display for PlayerAction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::PlayMedia {
-                file_path,
-                start_position_ms,
-                ..
-            } => match start_position_ms {
+            Self::PlayMedia { file_path, start_position_ms, .. } => match start_position_ms {
                 Some(ms) => write!(f, "play {file_path} from {ms}ms"),
                 None => write!(f, "play {file_path}"),
             },
-            Self::BeginCrossfade {
-                file_path, fade_ms, ..
-            } => {
+            Self::BeginCrossfade { file_path, fade_ms, .. } => {
                 write!(f, "crossfade {fade_ms}ms into {file_path}")
             }
             Self::Resume => f.write_str("resume"),
@@ -780,10 +770,7 @@ impl PlayerState {
             return vec![];
         }
         self.status = PlaybackStatus::Playing;
-        vec![PlayerAction::PlayStream {
-            generation,
-            volume: self.effective_volume(),
-        }]
+        vec![PlayerAction::PlayStream { generation, volume: self.effective_volume() }]
     }
 
     /// The stream could not be opened. Clears the station rather than leaving a play button that

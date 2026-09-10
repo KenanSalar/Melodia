@@ -111,11 +111,7 @@ async fn write_playlists(
 
     failed.extend(write_errs);
 
-    Ok(ExportPlaylistsResult {
-        exported,
-        folder: folder.display().to_string(),
-        failed,
-    })
+    Ok(ExportPlaylistsResult { exported, folder: folder.display().to_string(), failed })
 }
 
 /// Fetch a playlist's name + ordered tracks and render them to M3U8 text.
@@ -230,12 +226,7 @@ async fn match_entries(
     let missing = u32::try_from(ids.iter().filter(|id| id.is_none()).count()).unwrap_or(u32::MAX);
     let ordered_ids: Vec<i64> = ids.into_iter().flatten().collect();
 
-    Ok(MatchOutcome {
-        ordered_ids,
-        matched_by_path,
-        matched_by_hash,
-        missing,
-    })
+    Ok(MatchOutcome { ordered_ids, matched_by_path, matched_by_hash, missing })
 }
 
 /// Resolve a (possibly relative) entry path to a string for path matching.

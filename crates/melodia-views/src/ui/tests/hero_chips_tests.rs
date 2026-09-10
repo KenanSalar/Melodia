@@ -35,10 +35,7 @@ const HERO_VIEWS: [(&str, &str); 2] = [
 /// — a title, a chip strip or an artwork size appearing in either is the
 /// extraction coming undone one binding at a time.
 const MOSAIC_HOSTS: [(&str, &str); 2] = [
-    (
-        include_str!("../../../../melodia-ui/ui/views/favorites-view.slint"),
-        "favorites-view.slint",
-    ),
+    (include_str!("../../../../melodia-ui/ui/views/favorites-view.slint"), "favorites-view.slint"),
     (
         include_str!("../../../../melodia-ui/ui/views/recently-played-view.slint"),
         "recently-played-view.slint",
@@ -152,17 +149,7 @@ fn an_album_states_its_discs_compilation_flag_and_genre_when_it_has_them() {
     // Genre last — the one chip here that isn't about this release, so it is
     // the one worth losing first when the band runs out of room.
     let chips = album_chips(&EnglishLabels, &album(Some(1998), Some(3), true), Some("Jazz"));
-    assert_eq!(
-        texts(&chips),
-        vec![
-            "1998",
-            "5 tracks",
-            "45:33",
-            "3 discs",
-            "Compilation",
-            "Jazz"
-        ]
-    );
+    assert_eq!(texts(&chips), vec!["1998", "5 tracks", "45:33", "3 discs", "Compilation", "Jazz"]);
 }
 
 /// The release facts sit between the compilation flag and the genre, which is the order the band
@@ -178,16 +165,7 @@ fn an_album_states_the_release_facts_its_tags_carry() {
 
     assert_eq!(
         texts(&album_chips(&EnglishLabels, &released, Some("Jazz"))),
-        vec![
-            "1998",
-            "5 tracks",
-            "45:33",
-            "Compilation",
-            "Album",
-            "CD",
-            "ECM",
-            "Jazz"
-        ]
+        vec!["1998", "5 tracks", "45:33", "Compilation", "Album", "CD", "ECM", "Jazz"]
     );
 }
 
@@ -249,21 +227,10 @@ fn a_one_year_discography_reads_as_a_year_not_a_span() {
 
 #[test]
 fn a_genre_states_its_count_running_time_and_spread() {
-    let genre = GenreStats {
-        id: 1,
-        name: "Jazz".into(),
-        track_count: 30,
-        total_duration_ms: 5_400_000,
-    };
+    let genre =
+        GenreStats { id: 1, name: "Jazz".into(), track_count: 30, total_duration_ms: 5_400_000 };
     assert_eq!(
-        texts(&genre_chips(
-            &EnglishLabels,
-            &genre,
-            HeroFold {
-                artists: 12,
-                albums: 18
-            }
-        )),
+        texts(&genre_chips(&EnglishLabels, &genre, HeroFold { artists: 12, albums: 18 })),
         vec!["30 tracks", "1:30:00", "12 artists", "18 albums"]
     );
 }
@@ -271,21 +238,10 @@ fn a_genre_states_its_count_running_time_and_spread() {
 #[test]
 fn a_spread_of_one_is_not_worth_a_chip() {
     // A single-artist, single-album list says nothing by saying "1 artist".
-    let genre = GenreStats {
-        id: 1,
-        name: "Jazz".into(),
-        track_count: 5,
-        total_duration_ms: 600_000,
-    };
+    let genre =
+        GenreStats { id: 1, name: "Jazz".into(), track_count: 5, total_duration_ms: 600_000 };
     assert_eq!(
-        texts(&genre_chips(
-            &EnglishLabels,
-            &genre,
-            HeroFold {
-                artists: 1,
-                albums: 1
-            }
-        )),
+        texts(&genre_chips(&EnglishLabels, &genre, HeroFold { artists: 1, albums: 1 })),
         vec!["5 tracks", "10:00"]
     );
 }
@@ -307,10 +263,7 @@ fn a_playlist_does_not_repeat_the_smart_badge() {
         track_count: 8,
         total_duration_ms: 1_800_000,
     };
-    let fold = HeroFold {
-        artists: 6,
-        albums: 7,
-    };
+    let fold = HeroFold { artists: 6, albums: 7 };
     let smart = texts(&playlist_chips(&EnglishLabels, &playlist, fold)).join("|");
     playlist.is_smart = false;
     let plain = texts(&playlist_chips(&EnglishLabels, &playlist, fold)).join("|");
@@ -344,15 +297,8 @@ fn favorites_facts(tab: FavoritesTab) -> FavoritesFacts {
         tab,
         tracks: 142,
         duration_ms: 33_273_000, // 9:14:33
-        songs: HeroFold {
-            artists: 37,
-            albums: 51,
-        },
-        most_played: MostPlayedTotals {
-            tracks: 88,
-            duration_ms: 20_462_000,
-            plays: 1204,
-        },
+        songs: HeroFold { artists: 37, albums: 51 },
+        most_played: MostPlayedTotals { tracks: 88, duration_ms: 20_462_000, plays: 1204 },
         artists: 9,
     }
 }
@@ -365,10 +311,7 @@ fn recently_played_facts(tab: RecentlyPlayedTab) -> RecentlyPlayedFacts {
         tab,
         tracks: 200,
         duration_ms: 43_451_000, // 12:04:11
-        songs: HeroFold {
-            artists: 44,
-            albums: 60,
-        },
+        songs: HeroFold { artists: 44, albums: 60 },
         most_played: MostPlayedTotals {
             tracks: 512,
             duration_ms: 118_800_000, // 33:00:00
@@ -414,11 +357,7 @@ fn most_played_sums_itself_and_not_the_songs_tab() {
 #[test]
 fn a_never_played_most_played_tab_states_no_plays() {
     let facts = FavoritesFacts {
-        most_played: MostPlayedTotals {
-            tracks: 3,
-            duration_ms: 600_000,
-            plays: 0,
-        },
+        most_played: MostPlayedTotals { tracks: 3, duration_ms: 600_000, plays: 0 },
         ..favorites_facts(FavoritesTab::MostPlayed)
     };
     assert_eq!(texts(&favorites_chips(&EnglishLabels, &facts)), vec!["3 tracks", "10:00"]);
@@ -437,11 +376,7 @@ fn an_empty_hero_leaves_its_empty_state_to_the_view() {
         artists: 0,
         ..favorites_facts(FavoritesTab::Songs)
     };
-    for tab in [
-        FavoritesTab::Songs,
-        FavoritesTab::MostPlayed,
-        FavoritesTab::Artists,
-    ] {
+    for tab in [FavoritesTab::Songs, FavoritesTab::MostPlayed, FavoritesTab::Artists] {
         let facts = FavoritesFacts { tab, ..empty };
         assert!(
             favorites_chips(&EnglishLabels, &facts).is_empty(),
@@ -804,12 +739,7 @@ fn no_hero_folds_out_of_a_shared_cache() {
     ];
 
     for (src, name) in FOLDERS {
-        for fold in [
-            "fold_tracks(",
-            "fold_most_played(",
-            "dominant_genre(",
-            "year_span(",
-        ] {
+        for fold in ["fold_tracks(", "fold_most_played(", "dominant_genre(", "year_span("] {
             for (i, m) in src.match_indices(fold) {
                 let tail = &src[i + m.len()..];
                 // Scan to the first `)`, which a `.lock()` argument reaches
@@ -834,10 +764,7 @@ fn no_hero_folds_out_of_a_shared_cache() {
 /// Facts arrive as arguments, or off the section's own handle.
 #[test]
 fn no_publisher_reads_its_facts_back_off_a_slint_global() {
-    for publisher in [
-        "pub fn publish_favorites(",
-        "pub fn publish_recently_played(",
-    ] {
+    for publisher in ["pub fn publish_favorites(", "pub fn publish_recently_played("] {
         let body = HERO_CHIPS
             .split_once(publisher)
             .and_then(|(_, rest)| rest.split_once("\n}"))
@@ -849,11 +776,7 @@ fn no_publisher_reads_its_facts_back_off_a_slint_global() {
             "hero_chips.rs no longer defines `{publisher}` as a body ending in `publish(...)` — \
              move this pin with it, or the checks below hold over an empty window"
         );
-        for getter in [
-            "get_track_count(",
-            "get_duration_text(",
-            "get_artist_count(",
-        ] {
+        for getter in ["get_track_count(", "get_duration_text(", "get_artist_count("] {
             assert!(
                 !body.contains(getter),
                 "`{publisher}` reads `{getter}` back off a Slint global. Take the fact as an \
@@ -1026,10 +949,7 @@ fn the_subtitled_heroes_share_one_collapsing_line() {
     // The two facts that reach it. The band is data-agnostic, so which entity
     // owns a second line is the sheet's ternary and nowhere else.
     let sheet: String = SHEET.split_whitespace().collect::<Vec<_>>().join(" ");
-    for fact in [
-        "AlbumDetail.album.artist_name",
-        "PlaylistDetail.playlist.description",
-    ] {
+    for fact in ["AlbumDetail.album.artist_name", "PlaylistDetail.playlist.description"] {
         assert!(
             sheet.contains(&format!("? {fact}")),
             "my-library-view.slint must feed `{fact}` into the band's `subtitle` — the band \

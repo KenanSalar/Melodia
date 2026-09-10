@@ -275,11 +275,7 @@ fn apply_bpm(tag: &mut Tag, edit: &FieldEdit<f64>, out: &mut Vec<&'static str>) 
             // are false) and `str::parse::<f64>()` accepts "nan"/"inf", hence the explicit guard;
             // and `.round()` before formatting is load-bearing, `{:.0}` rounding half-to-even
             // where half-away-from-zero is what "rounded BPM" means everywhere else.
-            let bpm = if v.is_nan() {
-                0.0
-            } else {
-                v.clamp(0.0, MAX_BPM)
-            };
+            let bpm = if v.is_nan() { 0.0 } else { v.clamp(0.0, MAX_BPM) };
             let int_ok = tag.insert_text(ItemKey::IntegerBpm, format!("{:.0}", bpm.round()));
             let dec_ok = tag.insert_text(ItemKey::Bpm, bpm.to_string());
             if !int_ok && !dec_ok {
@@ -346,10 +342,7 @@ fn apply_year(tag: &mut Tag, edit: &FieldEdit<u16>, out: &mut Vec<&'static str>)
         FieldEdit::Clear => clear_release_dates(tag),
         FieldEdit::Set(y) => {
             let existing = metadata::release_timestamp(Some(tag)).unwrap_or_default();
-            let ts = Timestamp {
-                year: *y,
-                ..existing
-            };
+            let ts = Timestamp { year: *y, ..existing };
             clear_release_dates(tag);
             set_text(tag, ItemKey::RecordingDate, ts.to_string(), "year", out);
         }

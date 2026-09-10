@@ -39,10 +39,7 @@ pub(crate) fn nz_u32(v: u32) -> SampleRate {
 
 /// A [`Shape`] from the plain integers a test spells, over the two above.
 pub(crate) fn shape(channels: u16, rate: u32) -> Shape {
-    Shape {
-        channels: nz_u16(channels),
-        rate: nz_u32(rate),
-    }
+    Shape { channels: nz_u16(channels), rate: nz_u32(rate) }
 }
 
 /// Scalar near-equality — avoids `clippy::float_cmp` on checks that are exact
@@ -83,12 +80,7 @@ pub(crate) struct TestSource {
 
 impl TestSource {
     pub(crate) fn new(data: Vec<f32>, channels: u16, sample_rate: u32) -> Self {
-        Self {
-            data,
-            pos: 0,
-            channels,
-            sample_rate,
-        }
+        Self { data, pos: 0, channels, sample_rate }
     }
 }
 

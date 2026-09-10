@@ -692,11 +692,7 @@ pub async fn get_favorite_stats(db: &DbPool) -> Result<track::FavoriteStats, App
     .fetch_all(db.read())
     .await?;
 
-    Ok(track::FavoriteStats {
-        count,
-        total_duration_ms,
-        artwork_paths,
-    })
+    Ok(track::FavoriteStats { count, total_duration_ms, artwork_paths })
 }
 
 /// Favorite tracks by play count, most played first (only those with

@@ -169,9 +169,5 @@ pub fn on_accent_hex(accent_hex: u32) -> u32 {
     let g = f64::from((accent_hex >> 8) & 0xff) / 255.0;
     let b = f64::from(accent_hex & 0xff) / 255.0;
     let lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
-    if lum > LUMA_THRESHOLD {
-        0x001e_1e2e
-    } else {
-        0x00ff_ffff
-    }
+    if lum > LUMA_THRESHOLD { 0x001e_1e2e } else { 0x00ff_ffff }
 }

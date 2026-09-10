@@ -233,11 +233,7 @@ fn apply(
         LyricsOutcome::Absent => {
             clear(ui, ly);
             // The one state that names a setting, being the only one a reader can act on here.
-            global.set_state(if online_enabled {
-                LyricsState::Missing
-            } else {
-                LyricsState::Off
-            });
+            global.set_state(if online_enabled { LyricsState::Missing } else { LyricsState::Off });
         }
         // **The claim above is still recorded, deliberately.** Nothing retries on its own, so
         // without it every tick that reaches `reseed` would start another lookup against a service

@@ -56,10 +56,7 @@ struct HashingWriter<W: Write> {
 
 impl<W: Write> HashingWriter<W> {
     fn new(inner: W) -> Self {
-        Self {
-            inner,
-            hasher: blake3::Hasher::new(),
-        }
+        Self { inner, hasher: blake3::Hasher::new() }
     }
 }
 

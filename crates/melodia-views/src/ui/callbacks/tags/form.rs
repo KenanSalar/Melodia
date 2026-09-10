@@ -85,10 +85,7 @@ pub(super) struct ListFields {
 /// Its counterpart is `populate`'s `field!`, which writes each of these and records the same value
 /// as the baseline — so the two sites name the same field and nothing pairs them by position.
 pub(super) fn read_form(te: &TagEditor) -> FormState {
-    FormState {
-        compilation: te.get_compilation(),
-        text: read_text_fields(te),
-    }
+    FormState { compilation: te.get_compilation(), text: read_text_fields(te) }
 }
 
 fn read_text_fields(te: &TagEditor) -> TextFields {

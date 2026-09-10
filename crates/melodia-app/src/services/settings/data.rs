@@ -59,11 +59,7 @@ impl SortDir {
     /// Parse a Slint `sort-dir` token; anything other than `"desc"` is `Asc`.
     #[must_use]
     pub fn from_token(token: &str) -> Self {
-        if token == "desc" {
-            SortDir::Desc
-        } else {
-            SortDir::Asc
-        }
+        if token == "desc" { SortDir::Desc } else { SortDir::Asc }
     }
 }
 
@@ -231,10 +227,7 @@ pub const DEFAULT_VIZ_STYLE: &str = "bars";
 
 impl Default for VisualizerFlags {
     fn default() -> Self {
-        Self {
-            viz_enabled: true,
-            viz_style: DEFAULT_VIZ_STYLE.to_owned(),
-        }
+        Self { viz_enabled: true, viz_style: DEFAULT_VIZ_STYLE.to_owned() }
     }
 }
 
@@ -248,10 +241,7 @@ pub struct QueueFlags {
 
 impl Default for QueueFlags {
     fn default() -> Self {
-        Self {
-            shuffle_enabled: false,
-            repeat_mode: RepeatMode::Off,
-        }
+        Self { shuffle_enabled: false, repeat_mode: RepeatMode::Off }
     }
 }
 
@@ -324,10 +314,7 @@ pub struct TrayFlags {
 
 impl Default for TrayFlags {
     fn default() -> Self {
-        Self {
-            tray_enabled: true,
-            close_to_tray: false,
-        }
+        Self { tray_enabled: true, close_to_tray: false }
     }
 }
 
@@ -369,11 +356,7 @@ pub struct RadioFlags {
 
 impl Default for RadioFlags {
     fn default() -> Self {
-        Self {
-            radio_enabled: false,
-            radio_hide_segmented: false,
-            radio_send_clicks: true,
-        }
+        Self { radio_enabled: false, radio_hide_segmented: false, radio_send_clicks: true }
     }
 }
 
@@ -638,9 +621,7 @@ pub struct BackdropFlags {
 
 impl Default for BackdropFlags {
     fn default() -> Self {
-        Self {
-            aurora_backdrop: true,
-        }
+        Self { aurora_backdrop: true }
     }
 }
 
@@ -809,11 +790,7 @@ fn default_locale() -> String {
 fn detect_os_locale() -> Option<String> {
     let raw = detect_system_locale_raw()?;
     let lang = parse_language_code(&raw)?;
-    if SUPPORTED_LOCALES.contains(&lang.as_str()) {
-        Some(lang)
-    } else {
-        None
-    }
+    if SUPPORTED_LOCALES.contains(&lang.as_str()) { Some(lang) } else { None }
 }
 
 fn detect_system_locale_raw() -> Option<String> {
@@ -879,11 +856,7 @@ fn parse_language_code(locale_str: &str) -> Option<String> {
     let without_encoding = locale_str.split('.').next()?;
     let lang = without_encoding.split(['_', '-']).next()?;
     let lang = lang.to_lowercase();
-    if lang.len() == 2 && lang.chars().all(|c| c.is_ascii_alphabetic()) {
-        Some(lang)
-    } else {
-        None
-    }
+    if lang.len() == 2 && lang.chars().all(|c| c.is_ascii_alphabetic()) { Some(lang) } else { None }
 }
 
 #[cfg(test)]

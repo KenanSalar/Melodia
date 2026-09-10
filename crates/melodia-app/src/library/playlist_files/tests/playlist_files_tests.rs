@@ -37,11 +37,8 @@ fn hash_of(title: &str) -> String {
 #[tokio::test]
 async fn match_entries_by_path() -> Result<(), AppError> {
     let (db, a, b, c) = seed().await?;
-    let entries = [
-        entry("/music/a.mp3", None),
-        entry("/music/b.mp3", None),
-        entry("/music/c.mp3", None),
-    ];
+    let entries =
+        [entry("/music/a.mp3", None), entry("/music/b.mp3", None), entry("/music/c.mp3", None)];
     let out = match_entries(&db, &entries, None).await?;
     assert_eq!(out.matched_by_path, 3);
     assert_eq!(out.matched_by_hash, 0);
@@ -190,11 +187,8 @@ async fn seed_under(dir: &Path) -> Result<(DbPool, Vec<i64>), AppError> {
     queries::folder::insert_folder(&db, &dir.to_string_lossy(), true).await?;
 
     let mut ids = Vec::new();
-    for (file, title) in [
-        ("a.mp3", "Alpha Song"),
-        ("b.mp3", "Beta Song"),
-        ("c.mp3", "Gamma Song"),
-    ] {
+    for (file, title) in [("a.mp3", "Alpha Song"), ("b.mp3", "Beta Song"), ("c.mp3", "Gamma Song")]
+    {
         let path = dir.join(file);
         ids.push(
             insert_test_track(&db, &path.to_string_lossy(), title, "Artist A", "Album", "Rock")

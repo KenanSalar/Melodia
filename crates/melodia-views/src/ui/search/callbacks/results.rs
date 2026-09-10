@@ -182,10 +182,7 @@ pub(super) fn wire(
                 next_sort(g.get_sort_field().as_str(), g.get_sort_dir().as_str(), &field);
             g.set_sort_field(SharedString::from(new_field.as_str()));
             g.set_sort_dir(SharedString::from(new_dir.as_str()));
-            *su.state().sort.lock() = ViewSort {
-                field: new_field.clone(),
-                dir: new_dir,
-            };
+            *su.state().sort.lock() = ViewSort { field: new_field.clone(), dir: new_dir };
             persist_view_sort(&s, view_id::SEARCH, new_field, new_dir);
 
             // Re-derive the visible Songs slice from the cached

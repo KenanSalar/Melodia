@@ -100,11 +100,7 @@ async fn list_directory(
 
         let (folders, audio_paths) = classify_dir_entries(&canonical)?;
 
-        Ok(DirScanResult {
-            canonical,
-            folders,
-            audio_paths,
-        })
+        Ok(DirScanResult { canonical, folders, audio_paths })
     })
     .await
     .map_err(AppError::io_source)??;
@@ -126,10 +122,7 @@ async fn list_directory(
             audio_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
 
         if let Some(row) = track_map.remove(path_str.as_ref()) {
-            files.push(BrowseFile {
-                row,
-                in_library: true,
-            });
+            files.push(BrowseFile { row, in_library: true });
         } else {
             // Disk-only file: present on disk inside a library folder but
             // not (yet) in the DB (just copied, or scanner-rejected).
@@ -170,12 +163,7 @@ async fn list_directory(
         .file_name()
         .map_or_else(|| dir_str.to_string(), |n| n.to_string_lossy().into_owned());
 
-    Ok(BrowseResult {
-        path: dir_str.into_owned(),
-        name,
-        folders: scan.folders,
-        files,
-    })
+    Ok(BrowseResult { path: dir_str.into_owned(), name, folders: scan.folders, files })
 }
 
 #[cfg(test)]

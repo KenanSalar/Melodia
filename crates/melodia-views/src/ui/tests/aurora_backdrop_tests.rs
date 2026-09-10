@@ -117,13 +117,7 @@ fn each_sweep_fades_between_the_same_two_stops() {
 /// while the foreground stays solved for dark.
 #[test]
 fn the_backdrop_names_no_global() {
-    for global in [
-        "Player.",
-        "HeroBackdrop.",
-        "Theme.base",
-        "Theme.text",
-        "Theme.accent",
-    ] {
+    for global in ["Player.", "HeroBackdrop.", "Theme.base", "Theme.text", "Theme.accent"] {
         assert!(
             !code(AURORA).contains(global),
             "`{global}` reached into the shared backdrop — it can then serve only that tier"

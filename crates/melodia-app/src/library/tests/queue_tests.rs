@@ -226,13 +226,7 @@ fn persisted(
     current_index: i32,
     station_id: Option<i64>,
 ) -> PersistedPlayback {
-    PersistedPlayback {
-        queue: PersistableQueue {
-            track_ids,
-            current_index,
-        },
-        station_id,
-    }
+    PersistedPlayback { queue: PersistableQueue { track_ids, current_index }, station_id }
 }
 
 fn plan_of(
@@ -410,11 +404,7 @@ fn titled(id: i64, title: &str) -> Arc<TrackSummary> {
 /// `natord` is what puts "Track 2" ahead of "Track 10".
 #[test]
 fn a_dropped_batch_is_ordered_the_way_a_list_is() {
-    let mut batch = vec![
-        titled(1, "Track 10"),
-        titled(2, "Track 9"),
-        titled(3, "Track 1"),
-    ];
+    let mut batch = vec![titled(1, "Track 10"), titled(2, "Track 9"), titled(3, "Track 1")];
 
     sort_for_queue(&mut batch);
 
@@ -429,11 +419,7 @@ fn a_dropped_batch_is_ordered_the_way_a_list_is() {
 /// handed it over in rather than an arbitrary one.
 #[test]
 fn equal_titles_keep_the_order_the_drop_handed_over() {
-    let mut batch = vec![
-        titled(7, "Untitled"),
-        titled(3, "Untitled"),
-        titled(5, "Untitled"),
-    ];
+    let mut batch = vec![titled(7, "Untitled"), titled(3, "Untitled"), titled(5, "Untitled")];
 
     sort_for_queue(&mut batch);
 
@@ -517,10 +503,7 @@ fn opened_file(dir: &std::path::Path, file_name: &str, title: &str) -> Result<St
         std::path::PathBuf::from(melodia_testkit::ASSETS_DIR).join("silence.mp3"),
         &dest,
     )?;
-    let edit = TagEdit {
-        title: FieldEdit::Set(title.to_owned()),
-        ..TagEdit::default()
-    };
+    let edit = TagEdit { title: FieldEdit::Set(title.to_owned()), ..TagEdit::default() };
     melodia_store::media::ingest::tag_writer::apply_to_file(&dest, &edit, None)?;
     Ok(dest.to_string_lossy().into_owned())
 }
@@ -561,10 +544,7 @@ async fn opened_files_reach_the_queue_in_natural_title_order() -> Result<(), App
 async fn opening_a_batch_starts_at_the_first_track_in_order() -> Result<(), AppError> {
     let fx = TestPlayback::empty().await?;
     let dir = fx.tmp.path();
-    let opened = vec![
-        opened_file(dir, "b.mp3", "Second")?,
-        opened_file(dir, "a.mp3", "First")?,
-    ];
+    let opened = vec![opened_file(dir, "b.mp3", "Second")?, opened_file(dir, "a.mp3", "First")?];
 
     open_as_queue(&fx.ctx, &new_cover_cache(), &opened).await?;
 

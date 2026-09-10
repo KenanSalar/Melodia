@@ -173,11 +173,7 @@ fn every_url_a_heal_pass_can_name_in_advance_is_seeded() {
 
     assert_eq!(
         heal_seed_urls(&stations),
-        [
-            "https://a.example.test/icon.png",
-            "https://a.example.test/",
-            "https://b.example.test/",
-        ]
+        ["https://a.example.test/icon.png", "https://a.example.test/", "https://b.example.test/",]
     );
 }
 
@@ -198,10 +194,7 @@ fn the_users_own_columns_are_what_a_heal_pass_asks_about() {
 
     assert_eq!(
         heal_seed_urls(&[overridden]),
-        [
-            "https://mine.example.test/logo.png",
-            "https://mine.example.test/"
-        ]
+        ["https://mine.example.test/logo.png", "https://mine.example.test/"]
     );
 }
 
@@ -258,10 +251,7 @@ async fn each_miss_counts_the_ones_before_it_and_schedules_further_out()
 async fn a_hit_between_two_misses_starts_the_ladder_again() -> Result<(), Box<dyn std::error::Error>>
 {
     let db = DbPool::test_pool().await?;
-    let logo = StoredLogo {
-        path: "radio-logos/ab/abcd.png".to_owned(),
-        bytes: 1_024,
-    };
+    let logo = StoredLogo { path: "radio-logos/ab/abcd.png".to_owned(), bytes: 1_024 };
 
     note_logo_miss(&db, DEAD_HOST).await?;
     note_logo_miss(&db, DEAD_HOST).await?;
@@ -279,10 +269,7 @@ async fn a_hit_between_two_misses_starts_the_ladder_again() -> Result<(), Box<dy
 async fn an_outcome_is_recorded_as_the_arm_it_was_given() -> Result<(), Box<dyn std::error::Error>>
 {
     let db = DbPool::test_pool().await?;
-    let logo = StoredLogo {
-        path: "radio-logos/ab/abcd.png".to_owned(),
-        bytes: 1_024,
-    };
+    let logo = StoredLogo { path: "radio-logos/ab/abcd.png".to_owned(), bytes: 1_024 };
 
     record_outcome(&db, "https://live.example/logo.png", Some(&logo)).await;
     record_outcome(&db, DEAD_HOST, None).await;

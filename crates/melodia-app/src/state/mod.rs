@@ -294,10 +294,7 @@ impl AppState {
             shutdown_token: CancellationToken::new(),
         };
 
-        let channels = StartupChannels {
-            media_control_rx: Some(mc_rx),
-            file_event_rx: file_rx,
-        };
+        let channels = StartupChannels { media_control_rx: Some(mc_rx), file_event_rx: file_rx };
 
         Ok((state, channels))
     }

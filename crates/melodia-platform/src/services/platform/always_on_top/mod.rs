@@ -37,12 +37,7 @@ impl AlwaysOnTopCapability {
     }
 
     fn supported(method: AlwaysOnTopMethod) -> Self {
-        Self {
-            supported: true,
-            reason: None,
-            method,
-            use_native_decorations: false,
-        }
+        Self { supported: true, reason: None, method, use_native_decorations: false }
     }
 
     #[cfg(target_os = "linux")]

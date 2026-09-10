@@ -145,33 +145,18 @@ fn each_field_the_panel_draws_is_a_write_of_its_own() {
     let differs =
         |source: &SourceSummary<'_>| !PublishedMetadata::still_current(Some(&held), Some(source));
 
-    let retitled = SourceSummary {
-        title: "Sunset Drive (Remastered)",
-        ..reference
-    };
+    let retitled = SourceSummary { title: "Sunset Drive (Remastered)", ..reference };
     assert!(differs(&retitled), "a track re-tagged in place");
 
-    let announced = SourceSummary {
-        secondary: Some("Night Bus"),
-        ..reference
-    };
+    let announced = SourceSummary { secondary: Some("Night Bus"), ..reference };
     assert!(differs(&announced), "a station announcing its next song");
 
-    let recompiled = SourceSummary {
-        album: Some("Singles"),
-        ..reference
-    };
+    let recompiled = SourceSummary { album: Some("Singles"), ..reference };
     assert!(differs(&recompiled), "the album alone");
 
-    let recovered = SourceSummary {
-        artwork_path: Some("artwork/cd/cdef01.jpg"),
-        ..reference
-    };
+    let recovered = SourceSummary { artwork_path: Some("artwork/cd/cdef01.jpg"), ..reference };
     assert!(differs(&recovered), "the cover alone");
 
-    let remastered = SourceSummary {
-        duration_ms: Some(215_000),
-        ..reference
-    };
+    let remastered = SourceSummary { duration_ms: Some(215_000), ..reference };
     assert!(differs(&remastered), "the length alone");
 }

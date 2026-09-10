@@ -297,10 +297,7 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
 
     log::info!("Database initialized successfully (read pool: {read_conns} connections)");
 
-    Ok(DbPool {
-        read: read_pool,
-        write: write_pool,
-    })
+    Ok(DbPool { read: read_pool, write: write_pool })
 }
 
 #[doc(hidden)]
@@ -317,10 +314,7 @@ impl DbPool {
 
         sqlx::migrate!("../../migrations").run(&pool).await?;
 
-        Ok(DbPool {
-            read: pool.clone(),
-            write: pool,
-        })
+        Ok(DbPool { read: pool.clone(), write: pool })
     }
 }
 

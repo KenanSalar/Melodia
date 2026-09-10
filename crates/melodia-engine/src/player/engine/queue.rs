@@ -303,11 +303,7 @@ impl QueueState {
             RepeatMode::All => self.track_at(next_from(self.current_index) % len),
             RepeatMode::Off => {
                 let next = next_from(self.current_index);
-                if next >= len {
-                    None
-                } else {
-                    self.track_at(next)
-                }
+                if next >= len { None } else { self.track_at(next) }
             }
         }
     }
@@ -475,20 +471,14 @@ impl QueueState {
         self.tracks = new_tracks;
         self.version += 1;
 
-        PruneOutcome {
-            removed,
-            current_was_removed,
-        }
+        PruneOutcome { removed, current_was_removed }
     }
 
     pub fn to_persistable(&self) -> PersistableQueue {
         let mut track_ids: Vec<i64> = Vec::with_capacity(self.play_order.len());
         track_ids
             .extend(self.play_order.iter().filter_map(|&ti| self.tracks.get(ti).map(|t| t.id)));
-        PersistableQueue {
-            track_ids,
-            current_index: current_index_to_i32(self.current_index),
-        }
+        PersistableQueue { track_ids, current_index: current_index_to_i32(self.current_index) }
     }
 
     /// Return tracks in current play order for `ViewModel` emission.

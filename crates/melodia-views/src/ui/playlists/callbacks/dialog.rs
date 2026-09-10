@@ -106,11 +106,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             // than an empty string; mirrors Tauri's `description.trim()
             // || undefined` pattern.
             let desc_trimmed = description.trim();
-            let description_opt = if desc_trimmed.is_empty() {
-                None
-            } else {
-                Some(desc_trimmed.to_owned())
-            };
+            let description_opt =
+                if desc_trimmed.is_empty() { None } else { Some(desc_trimmed.to_owned()) };
             let pending_vec: Vec<i64> = pending.iter().map(i64::from).collect();
             let s = s.clone();
             let pu = pu.clone();
@@ -157,11 +154,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             // with the current description, so an empty value at
             // commit time really does mean "user removed it".
             let desc_trimmed = description.trim();
-            let description_opt = if desc_trimmed.is_empty() {
-                None
-            } else {
-                Some(desc_trimmed.to_owned())
-            };
+            let description_opt =
+                if desc_trimmed.is_empty() { None } else { Some(desc_trimmed.to_owned()) };
             let s = s.clone();
             let pu = pu.clone();
             let weak = weak.clone();

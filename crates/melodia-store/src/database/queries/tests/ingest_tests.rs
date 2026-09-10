@@ -14,19 +14,13 @@ fn make_scanned_file(path: &str, title: &str) -> ScannedFile {
     // Give each file a unique hash derived from path content
     let hash = blake3::hash(path.as_bytes());
     meta.file_hash = hash.to_hex().to_string();
-    ScannedFile {
-        path: PathBuf::from(path),
-        metadata: meta,
-    }
+    ScannedFile { path: PathBuf::from(path), metadata: meta }
 }
 
 fn make_scanned_file_with_hash(path: &str, title: &str, hash: &str) -> ScannedFile {
     let mut meta = make_test_metadata(title);
     meta.file_hash = hash.to_owned();
-    ScannedFile {
-        path: PathBuf::from(path),
-        metadata: meta,
-    }
+    ScannedFile { path: PathBuf::from(path), metadata: meta }
 }
 
 #[tokio::test]
@@ -439,11 +433,7 @@ async fn ingest_detects_moved_file() -> Result<(), AppError> {
         .await?;
 
     // Now ingest the same content at a new path
-    let files = vec![make_scanned_file_with_hash(
-        "/music/new/song.mp3",
-        "Song",
-        &hash.0,
-    )];
+    let files = vec![make_scanned_file_with_hash("/music/new/song.mp3", "Song", &hash.0)];
 
     let mut tx = db.write().begin().await?;
     let result = ingest_scanned_files(
@@ -593,11 +583,7 @@ async fn ingest_does_not_move_when_hash_differs() -> Result<(), AppError> {
     insert_test_track(&db, "/music/existing.mp3", "Existing", "Art", "Alb", "Rock").await?;
 
     // Ingest a new file with a different hash
-    let files = vec![make_scanned_file_with_hash(
-        "/music/new.mp3",
-        "New Song",
-        &"b".repeat(64),
-    )];
+    let files = vec![make_scanned_file_with_hash("/music/new.mp3", "New Song", &"b".repeat(64))];
 
     let mut tx = db.write().begin().await?;
     let result = ingest_scanned_files(
@@ -636,11 +622,7 @@ async fn ingest_moved_file_preserves_playback_state() -> Result<(), AppError> {
         .await?;
 
     // Ingest same hash at new path
-    let files = vec![make_scanned_file_with_hash(
-        "/music/new.mp3",
-        "Song",
-        &hash.0,
-    )];
+    let files = vec![make_scanned_file_with_hash("/music/new.mp3", "Song", &hash.0)];
     let mut tx = db.write().begin().await?;
     ingest_scanned_files(
         &mut tx,
@@ -727,11 +709,7 @@ async fn ingest_stores_file_hash() -> Result<(), AppError> {
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     let hash = "c".repeat(64);
-    let files = vec![make_scanned_file_with_hash(
-        "/music/song.mp3",
-        "Song",
-        &hash,
-    )];
+    let files = vec![make_scanned_file_with_hash("/music/song.mp3", "Song", &hash)];
 
     let mut tx = db.write().begin().await?;
     ingest_scanned_files(

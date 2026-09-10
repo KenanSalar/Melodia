@@ -275,12 +275,7 @@ fn every_section_seed_reads_the_mounted_tab() {
 /// swap is also what puts My Library where Tracks was — directly under Recently Played.
 #[test]
 fn the_sidebar_offers_one_row_for_the_whole_page() {
-    for gone in [
-        "@tr(\"Tracks\")",
-        "@tr(\"Albums\")",
-        "@tr(\"Artists\")",
-        "@tr(\"Genres\")",
-    ] {
+    for gone in ["@tr(\"Tracks\")", "@tr(\"Albums\")", "@tr(\"Artists\")", "@tr(\"Genres\")"] {
         assert!(
             !SIDEBAR.contains(gone),
             "`sidebar.slint` still carries a row for {gone} — those are tabs now",
@@ -318,10 +313,7 @@ fn a_tab_pick_clears_the_filter_on_both_sides() {
          `on_persist_tab_idx` \
          — this pin bounds the handler between the two",
     );
-    for clear in [
-        "g.set_filter(SharedString::from(\"\"))",
-        "filter::clear_mounted(&ui)",
-    ] {
+    for clear in ["g.set_filter(SharedString::from(\"\"))", "filter::clear_mounted(&ui)"] {
         assert!(
             handler.contains(clear),
             "`on_tab_changed` must spell `{clear}` — the band's box and the entering tab's \
@@ -473,11 +465,7 @@ fn the_nine_surfaces_are_enumerated_once_and_every_caller_routes_through_it() {
 
     // Every consumer, so a fourth question about the mounted surface can't quietly grow a
     // fourth copy of the table beside them.
-    for caller in [
-        "pub fn dispatch(",
-        "fn mounted_filter(",
-        "fn rewind_grid_count(",
-    ] {
+    for caller in ["pub fn dispatch(", "fn mounted_filter(", "fn rewind_grid_count("] {
         let body = FILTER
             .split_once(caller)
             .and_then(|(_, rest)| rest.split_once("\n}\n"))
@@ -817,11 +805,7 @@ fn no_close_detail_hands_the_hero_back() {
             .map_or(String::new(), |(body, _)| body.to_owned());
         assert!(!handler.is_empty(), "{name}/detail.rs no longer wires `on_close_detail`");
 
-        for banned in [
-            "release_detail_hero_images!",
-            "hero_backdrop::reset",
-            "hero_chips::clear",
-        ] {
+        for banned in ["release_detail_hero_images!", "hero_backdrop::reset", "hero_chips::clear"] {
             assert!(
                 !handler.contains(banned),
                 "{name}/detail.rs must not run `{banned}` on close: every hero fact is a ternary \
@@ -946,14 +930,7 @@ fn the_playlist_action_tooltip_is_published_rather_than_drawn() {
         4,
         "all four Playlists action pills must suppress their in-tree tooltip",
     );
-    for anchor in [
-        "tip-x",
-        "tip-y",
-        "tip-w",
-        "tip-h",
-        "tip-label",
-        "tip-visible",
-    ] {
+    for anchor in ["tip-x", "tip-y", "tip-w", "tip-h", "tip-label", "tip-visible"] {
         assert!(
             PILLS.contains(&format!("out property <{}> {anchor}", type_of(anchor))),
             "`tab-pills.slint` must publish `{anchor}` for the sheet's frame to read",

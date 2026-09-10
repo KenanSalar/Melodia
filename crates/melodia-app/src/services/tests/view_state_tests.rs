@@ -114,11 +114,8 @@ fn test_view_sort_in_view_state() -> Result<(), AppError> {
 /// A `views.json` naming Radio comes back naming Radio.
 #[test]
 fn the_top_of_the_range_survives_a_views_json_round_trip() -> Result<(), AppError> {
-    let vs = ViewStateData {
-        last_nav_index: MAX_NAV_INDEX,
-        radio_tab: 2,
-        ..ViewStateData::default()
-    };
+    let vs =
+        ViewStateData { last_nav_index: MAX_NAV_INDEX, radio_tab: 2, ..ViewStateData::default() };
     let json = serde_json::to_string(&vs).map_err(|e| json_err(&e))?;
     let back: ViewStateData = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
     assert_eq!(back.last_nav_index, MAX_NAV_INDEX);

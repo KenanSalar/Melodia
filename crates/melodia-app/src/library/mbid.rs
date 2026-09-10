@@ -123,10 +123,7 @@ fn run_write_pass(
                 self_writes.mark(p);
                 let outcome = tag_writer::apply_to_file(p, &edit, None)
                     .and_then(|_| extract_metadata(p, artwork_dir, cover_cache, true));
-                FileWrite {
-                    path: path.clone(),
-                    outcome,
-                }
+                FileWrite { path: path.clone(), outcome }
             })
             .collect::<Vec<FileWrite>>()
     };

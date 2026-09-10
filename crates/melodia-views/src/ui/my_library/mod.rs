@@ -42,11 +42,7 @@ pub const NAV_MY_LIBRARY: i32 = 3;
 /// branch and the user boots onto `PlaceholderView`. Anything else passes through,
 /// including values outside the valid range, which the caller still has to bound.
 pub fn fold_retired_nav_index(idx: i32) -> i32 {
-    if (4..=7).contains(&idx) {
-        NAV_MY_LIBRARY
-    } else {
-        idx
-    }
+    if (4..=7).contains(&idx) { NAV_MY_LIBRARY } else { idx }
 }
 
 #[cfg(test)]

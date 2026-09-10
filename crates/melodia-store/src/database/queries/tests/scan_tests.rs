@@ -265,12 +265,7 @@ async fn insert_track_stores_correct_fields() -> Result<(), AppError> {
         queries::scan::upsert_album(&mut tx, "Test Album", artist_id, &credit, &meta, &mut names)
             .await?;
     let genre_id = queries::scan::upsert_genre(&mut tx, "Rock").await?;
-    let ids = queries::ResolvedIds {
-        artist_id,
-        album_id,
-        genre_id,
-        folder_id: 1,
-    };
+    let ids = queries::ResolvedIds { artist_id, album_id, genre_id, folder_id: 1 };
     let now = "2024-01-01T00:00:00+00:00";
     queries::scan::insert_track(&mut tx, "/music/my.mp3", "my.mp3", &meta, &ids, now, &mut names)
         .await?;
@@ -394,10 +389,7 @@ async fn delete_track_by_path_returns_false_when_not_found() -> Result<(), AppEr
 async fn delete_tracks_batch_deletes_multiple() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
 
-    let paths = vec![
-        "/music/track1.mp3".to_owned(),
-        "/music/track3.mp3".to_owned(),
-    ];
+    let paths = vec!["/music/track1.mp3".to_owned(), "/music/track3.mp3".to_owned()];
     let mut tx = db.write().begin().await?;
     let deleted = queries::scan::delete_tracks_by_paths_batch(&mut tx, &paths).await?;
     tx.commit().await?;
@@ -615,10 +607,7 @@ async fn a_credit_writes_one_row_per_name_with_the_primary_at_the_head() -> Resu
 
     assert_eq!(
         track_artists(&db, id).await?,
-        vec![
-            (0, "Alice".to_owned(), " feat. ".to_owned()),
-            (1, "Bob".to_owned(), String::new()),
-        ]
+        vec![(0, "Alice".to_owned(), " feat. ".to_owned()), (1, "Bob".to_owned(), String::new()),]
     );
 
     let head: (i64,) = sqlx::query_as(

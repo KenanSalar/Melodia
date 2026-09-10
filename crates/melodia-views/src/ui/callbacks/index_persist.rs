@@ -30,10 +30,7 @@ impl IndexPersist {
     /// Seeded from the property the writes catch up to rather than from zero. Nothing reads
     /// the shadow before the first publish, but a zero seed would name index 0 as one.
     pub(in crate::ui) fn new(seed: i32) -> Self {
-        Self {
-            latest: AtomicI32::new(seed),
-            writer: parking_lot::Mutex::new(()),
-        }
+        Self { latest: AtomicI32::new(seed), writer: parking_lot::Mutex::new(()) }
     }
 
     /// Publish the value about to be written. **UI thread, ahead of the spawn** — a queued

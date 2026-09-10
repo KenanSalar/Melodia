@@ -84,13 +84,7 @@ fn the_fold_counts_distinct_ids_and_skips_the_untagged() {
         track(Some(2), Some(11), None),
         track(None, None, None),
     ];
-    assert_eq!(
-        fold_tracks(&rows),
-        HeroFold {
-            artists: 2,
-            albums: 2
-        }
-    );
+    assert_eq!(fold_tracks(&rows), HeroFold { artists: 2, albums: 2 });
     assert_eq!(fold_tracks(&[]), HeroFold::default());
 }
 
@@ -99,11 +93,7 @@ fn most_played_totals_sum_duration_and_plays() {
     let rows = [played(180_000, 12), played(240_000, 30)];
     assert_eq!(
         fold_most_played(&rows),
-        MostPlayedTotals {
-            tracks: 2,
-            duration_ms: 420_000,
-            plays: 42,
-        }
+        MostPlayedTotals { tracks: 2, duration_ms: 420_000, plays: 42 }
     );
 }
 
@@ -118,19 +108,13 @@ fn a_genre_is_named_only_when_it_actually_dominates() {
 
     // An even split has no majority — naming either would misrepresent the
     // other half, so a genuinely mixed compilation gets no chip.
-    let split = [
-        track(None, None, Some("Jazz")),
-        track(None, None, Some("Blues")),
-    ];
+    let split = [track(None, None, Some("Jazz")), track(None, None, Some("Blues"))];
     assert_eq!(dominant_genre(&split), None);
 
     // Untagged tracks don't count toward the total, so one tagged track among
     // three still dominates the tracks that have a genre at all.
-    let sparse = [
-        track(None, None, Some("Jazz")),
-        track(None, None, None),
-        track(None, None, Some("")),
-    ];
+    let sparse =
+        [track(None, None, Some("Jazz")), track(None, None, None), track(None, None, Some(""))];
     assert_eq!(dominant_genre(&sparse).as_deref(), Some("Jazz"));
     assert_eq!(dominant_genre(&[]), None);
 }
@@ -147,10 +131,7 @@ fn two_genres_over_the_majority_are_settled_by_tag_order() {
     assert_eq!(dominant_genre(&both).as_deref(), Some("Rock"));
 
     // Tag order, not alphabetical and not first-seen-in-the-list.
-    let reversed = [
-        track(None, None, Some("Metal, Rock")),
-        track(None, None, Some("Metal, Rock")),
-    ];
+    let reversed = [track(None, None, Some("Metal, Rock")), track(None, None, Some("Metal, Rock"))];
     assert_eq!(dominant_genre(&reversed).as_deref(), Some("Metal"));
 }
 
@@ -172,10 +153,8 @@ fn a_multi_genre_row_counts_once_toward_every_name_it_holds() {
 /// twice it clears a majority no second track voted for.
 #[test]
 fn a_row_that_spells_one_name_twice_still_counts_for_one_track() {
-    let rows = [
-        track(None, None, Some("Chanson, Francaise, Chanson")),
-        track(None, None, Some("Jazz")),
-    ];
+    let rows =
+        [track(None, None, Some("Chanson, Francaise, Chanson")), track(None, None, Some("Jazz"))];
     assert_eq!(dominant_genre(&rows), None);
 }
 
@@ -203,11 +182,7 @@ fn half_the_tagged_tracks_is_not_a_majority_and_one_more_is() {
 #[test]
 fn the_year_span_ignores_albums_with_no_year() {
     assert_eq!(
-        year_span(&[
-            dated_album(Some(1963)),
-            dated_album(None),
-            dated_album(Some(1957))
-        ]),
+        year_span(&[dated_album(Some(1963)), dated_album(None), dated_album(Some(1957))]),
         Some((1957, 1963))
     );
     assert_eq!(year_span(&[dated_album(Some(0)), dated_album(None)]), None);

@@ -68,10 +68,7 @@ impl FavoritesUiState {
         Self {
             tracks_all: TrackListCache::new(),
             filter: Mutex::new(Needle::default()),
-            sort: Mutex::new(ViewSort {
-                field: "title".to_owned(),
-                dir: SortDir::Asc,
-            }),
+            sort: Mutex::new(ViewSort { field: "title".to_owned(), dir: SortDir::Asc }),
             artist_sort: Mutex::new(ViewSort {
                 field: "favorite_count".to_owned(),
                 dir: SortDir::Desc,

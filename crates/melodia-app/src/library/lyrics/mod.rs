@@ -94,11 +94,7 @@ async fn resolve(state: &AppState, track: &TrackSummary) -> Result<LyricsOutcome
         .await
         .map_err(AppError::io_source)??;
 
-    let Local {
-        own,
-        is_sidecar,
-        stored,
-    } = local;
+    let Local { own, is_sidecar, stored } = local;
     let own = match own {
         // A sidecar is the sheet a user placed on purpose, and a timed sheet is already the best a
         // lookup could answer with. Either ends it here.
@@ -197,11 +193,7 @@ fn timed_first(fetched: LyricsOutcome, own: Option<Lyrics>) -> LyricsOutcome {
 /// The three sources that need no network, in the order a user's own file wins. Blocking.
 fn read_local(path: &Path, lyrics_dir: &Path, track_path: &str) -> Result<Local, AppError> {
     if let Some(lyrics) = sidecar::read(path)? {
-        return Ok(Local {
-            own: Some(lyrics),
-            is_sidecar: true,
-            stored: None,
-        });
+        return Ok(Local { own: Some(lyrics), is_sidecar: true, stored: None });
     }
     let own = embedded::read(path)?;
     // Skipped where the tag is already timed: nothing the store holds could better it, and this
@@ -210,11 +202,7 @@ fn read_local(path: &Path, lyrics_dir: &Path, track_path: &str) -> Result<Local,
         Some(lyrics) if lyrics.is_synced() => None,
         _ => store::read(lyrics_dir, track_path),
     };
-    Ok(Local {
-        own,
-        is_sidecar: false,
-        stored,
-    })
+    Ok(Local { own, is_sidecar: false, stored })
 }
 
 /// Whether a track with no sheet of its own may be looked up online.
@@ -272,10 +260,7 @@ pub async fn forget_all(state: &AppState, track_paths: Vec<String>) -> Result<()
 /// **Here rather than at the call site** because the two surfaces that offer it, the Edit Tags
 /// dialog and the Now Playing menu, must not each build their own idea of a lyrics-only edit.
 pub async fn write_to_tag(state: &AppState, track_id: i64, text: &str) -> Result<(), AppError> {
-    let edit = TagEdit {
-        lyrics: FieldEdit::Set(text.to_owned()),
-        ..TagEdit::default()
-    };
+    let edit = TagEdit { lyrics: FieldEdit::Set(text.to_owned()), ..TagEdit::default() };
     let report = crate::library::tags::apply_tag_edit(state, vec![track_id], edit, None).await?;
 
     // **The writer reports per file rather than failing the batch**, so one track's refusal — a

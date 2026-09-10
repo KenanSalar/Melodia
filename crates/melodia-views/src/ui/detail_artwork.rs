@@ -25,10 +25,7 @@ use melodia_app::state::AppState;
 /// Public because the curated heroes want it without wanting this tier's LRU — their
 /// source is composed per refresh, so there is no path to key it on, but they draw the
 /// same band shape and owe it the same blur.
-pub(crate) const BLUR: BlurSpec = BlurSpec {
-    height: 85,
-    sigma: 13.3,
-};
+pub(crate) const BLUR: BlurSpec = BlurSpec { height: 85, sigma: 13.3 };
 
 /// LRU capacity. The working set for a detail view is the currently-open
 /// entity plus a handful of recently-opened ones (the back-and-forth
@@ -82,11 +79,7 @@ pub(crate) struct DetailPair {
 
 impl From<ArtworkPair> for DetailPair {
     fn from(pair: ArtworkPair) -> Self {
-        Self {
-            cover: Some(pair.cover),
-            blur: pair.blur,
-            sample: pair.sample,
-        }
+        Self { cover: Some(pair.cover), blur: pair.blur, sample: pair.sample }
     }
 }
 

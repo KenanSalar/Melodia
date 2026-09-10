@@ -235,10 +235,7 @@ pub struct SmartLimit {
 
 impl Default for SmartLimit {
     fn default() -> Self {
-        Self {
-            count: 25,
-            order: LimitOrder::DateAddedDesc,
-        }
+        Self { count: 25, order: LimitOrder::DateAddedDesc }
     }
 }
 
@@ -293,12 +290,7 @@ const NUMBER_OPS: &[RuleOp] = &[
 
 const BOOL_OPS: &[RuleOp] = &[RuleOp::IsTrue, RuleOp::IsFalse];
 
-const DATE_OPS: &[RuleOp] = &[
-    RuleOp::InLast,
-    RuleOp::NotInLast,
-    RuleOp::IsSet,
-    RuleOp::IsNotSet,
-];
+const DATE_OPS: &[RuleOp] = &[RuleOp::InLast, RuleOp::NotInLast, RuleOp::IsSet, RuleOp::IsNotSet];
 
 // ---------------------------------------------------------------------------
 // Editor (UI) bridge

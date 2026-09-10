@@ -57,10 +57,8 @@ const DRAG_PAN_OPT_OUT: &str = "false";
 /// The two components that own a `TrackList`'s bar pair — the plain page and the
 /// nested-under-another-scroller case. They are the only files allowed to bind a list's
 /// vertical metrics onto an `OverlayScrollbar`.
-const SCROLLBAR_COMPONENTS: [&str; 2] = [
-    "components/track-list-scrollbars.slint",
-    "components/composite-scrollbars.slint",
-];
+const SCROLLBAR_COMPONENTS: [&str; 2] =
+    ["components/track-list-scrollbars.slint", "components/composite-scrollbars.slint"];
 
 /// The band a `TrackList`'s vertical bar has to clear and the height of what's left —
 /// the two metrics **only** a `TrackList` publishes, only it having a column header

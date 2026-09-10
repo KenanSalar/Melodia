@@ -90,10 +90,7 @@ struct FrameWatch {
 impl FrameWatch {
     /// Seeded from the count as it stands, so a session opens believing it is drawn.
     fn new() -> Self {
-        Self {
-            last: pulse::frames().unwrap_or_default(),
-            stalled_ticks: 0,
-        }
+        Self { last: pulse::frames().unwrap_or_default(), stalled_ticks: 0 }
     }
 
     /// Whether the window has painted recently enough to be worth drawing for.

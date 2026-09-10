@@ -87,26 +87,10 @@ const MOCHA: Palette = Palette {
 };
 
 const VARIANTS: &[Variant] = &[
-    Variant {
-        id: "latte",
-        name: "Latte",
-        palette: LATTE,
-    },
-    Variant {
-        id: "frappe",
-        name: "Frappe",
-        palette: FRAPPE,
-    },
-    Variant {
-        id: "macchiato",
-        name: "Macchiato",
-        palette: MACCHIATO,
-    },
-    Variant {
-        id: "mocha",
-        name: "Mocha",
-        palette: MOCHA,
-    },
+    Variant { id: "latte", name: "Latte", palette: LATTE },
+    Variant { id: "frappe", name: "Frappe", palette: FRAPPE },
+    Variant { id: "macchiato", name: "Macchiato", palette: MACCHIATO },
+    Variant { id: "mocha", name: "Mocha", palette: MOCHA },
 ];
 
 const ACCENTS: &[AccentDef] = &[

@@ -128,10 +128,7 @@ pub async fn get_session(
         .get("name")
         .and_then(serde_json::Value::as_str)
         .ok_or_else(|| AppError::network_msg("Last.fm auth.getSession: session had no name"))?;
-    Ok(LastfmCredentials {
-        session_key: session_key.to_owned(),
-        username: username.to_owned(),
-    })
+    Ok(LastfmCredentials { session_key: session_key.to_owned(), username: username.to_owned() })
 }
 
 /// Report the currently-playing track. Ephemeral — never retried or queued.

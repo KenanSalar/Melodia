@@ -31,13 +31,8 @@ fn tags(model: &VecModel<Row>) -> Vec<u32> {
 }
 
 fn track_rows(ids: &[i32]) -> (Rc<VecModel<UiTrackListRow>>, ModelRc<UiTrackListRow>) {
-    let vec: Vec<UiTrackListRow> = ids
-        .iter()
-        .map(|&id| UiTrackListRow {
-            id,
-            ..UiTrackListRow::default()
-        })
-        .collect();
+    let vec: Vec<UiTrackListRow> =
+        ids.iter().map(|&id| UiTrackListRow { id, ..UiTrackListRow::default() }).collect();
     let model = Rc::new(VecModel::from(vec));
     let rc = ModelRc::from(Rc::clone(&model));
     (model, rc)

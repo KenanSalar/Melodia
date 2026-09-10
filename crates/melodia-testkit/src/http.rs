@@ -87,12 +87,7 @@ impl TestResponse {
 
     #[must_use]
     pub fn status(status: u16) -> Self {
-        Self {
-            status,
-            headers: Vec::new(),
-            body: Vec::new(),
-            declared: DeclaredLength::FromBody,
-        }
+        Self { status, headers: Vec::new(), body: Vec::new(), declared: DeclaredLength::FromBody }
     }
 
     #[must_use]
@@ -158,12 +153,7 @@ impl TestServer {
             })?
         };
 
-        Ok(Self {
-            addr,
-            requests,
-            running,
-            worker: Some(worker),
-        })
+        Ok(Self { addr, requests, running, worker: Some(worker) })
     }
 
     /// The origin to hand whatever is under test, with no trailing separator.
@@ -248,20 +238,12 @@ fn read_request(stream: &TcpStream) -> std::io::Result<Option<TestRequest>> {
     let mut body = vec![0u8; declared];
     reader.read_exact(&mut body)?;
 
-    Ok(Some(TestRequest {
-        method,
-        path,
-        headers,
-        body,
-    }))
+    Ok(Some(TestRequest { method, path, headers, body }))
 }
 
 fn write_response(stream: &mut TcpStream, response: &TestResponse) -> std::io::Result<()> {
-    let mut lines = vec![format!(
-        "HTTP/1.1 {} {}",
-        response.status,
-        reason_phrase(response.status)
-    )];
+    let mut lines =
+        vec![format!("HTTP/1.1 {} {}", response.status, reason_phrase(response.status))];
     lines.extend(response.headers.iter().map(|(field, value)| format!("{field}: {value}")));
 
     // A 304 carries no body by definition, and stating a length it will not send hangs a client

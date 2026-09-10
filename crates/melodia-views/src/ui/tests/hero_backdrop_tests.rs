@@ -448,10 +448,9 @@ fn the_genre_hero_washes_the_saturated_pair_and_floors_on_the_dimmed_one() {
         after.split_once(other).map_or(after, |(bound, _)| bound)
     };
 
-    for (field, other, pair) in [
-        ("floor:", "wash:", "hero_color_"),
-        ("wash:", "floor:", "tile_color_"),
-    ] {
+    for (field, other, pair) in
+        [("floor:", "wash:", "hero_color_"), ("wash:", "floor:", "tile_color_")]
+    {
         let bound = field_of(field, other);
         assert_eq!(
             bound.matches(pair).count(),
@@ -473,11 +472,7 @@ fn the_genre_hero_picks_its_arm_off_the_setting() {
         .map(|(body, _)| body)
         .unwrap_or_default();
 
-    for needle in [
-        "backdrop::kind(ui)",
-        "backdrop::theme_backdrop(",
-        "backdrop::solve(",
-    ] {
+    for needle in ["backdrop::kind(ui)", "backdrop::theme_backdrop(", "backdrop::solve("] {
         assert!(
             body.contains(needle),
             "`apply_gradient` no longer reaches `{needle}` — a genre that solves one arm for both \

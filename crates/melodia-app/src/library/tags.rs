@@ -369,11 +369,7 @@ fn run_write_pass(
             extract_metadata(p, artwork_dir, cover_cache, skip_artwork)
                 .map(|meta| (meta, unsupported.0))
         });
-        FileWrite {
-            id: *id,
-            path: path.clone(),
-            outcome,
-        }
+        FileWrite { id: *id, path: path.clone(), outcome }
     };
 
     // Sequentially, rather than on the global pool, where the build failed. That pool is

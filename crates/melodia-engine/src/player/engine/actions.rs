@@ -34,13 +34,7 @@ pub fn execute_actions<B: PlayerBackend>(
         // its file directly.
         log::debug!("player: {action}");
         match action {
-            PlayerAction::PlayMedia {
-                file_path,
-                volume,
-                speed,
-                start_position_ms,
-                replaygain,
-            } => {
+            PlayerAction::PlayMedia { file_path, volume, speed, start_position_ms, replaygain } => {
                 start_or_skip(
                     &mut pending,
                     engine,
@@ -51,13 +45,7 @@ pub fn execute_actions<B: PlayerBackend>(
                     || engine.play_media(&file_path, volume, speed, start_position_ms, replaygain),
                 );
             }
-            PlayerAction::BeginCrossfade {
-                file_path,
-                replaygain,
-                fade_ms,
-                volume,
-                speed,
-            } => {
+            PlayerAction::BeginCrossfade { file_path, replaygain, fade_ms, volume, speed } => {
                 // `build_crossfade_actions` already advanced onto this track, so
                 // the `advance_skip` a failure triggers correctly lands on the one
                 // after it. In `RepeatMode::One` that also steps off the repeated
@@ -75,11 +63,7 @@ pub fn execute_actions<B: PlayerBackend>(
             PlayerAction::Resume => engine.resume(),
             PlayerAction::Pause { fade_ms } => engine.pause_with_fade(fade_ms),
             PlayerAction::Stop { fade_ms } => engine.stop_with_fade(fade_ms),
-            PlayerAction::Seek {
-                position_ms,
-                file_path,
-                replaygain,
-            } => {
+            PlayerAction::Seek { position_ms, file_path, replaygain } => {
                 engine.seek(&file_path, position_ms, replaygain);
             }
             PlayerAction::SetVolume(v) => engine.set_volume(v),

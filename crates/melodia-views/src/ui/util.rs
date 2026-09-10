@@ -60,11 +60,7 @@ pub fn count_as_i32(n: u32) -> i32 {
 /// round differently.
 pub fn format_sample_rate(hz: i32) -> String {
     let khz = f64::from(hz) / 1000.0;
-    if khz.fract().abs() < f64::EPSILON {
-        format!("{khz:.0} kHz")
-    } else {
-        format!("{khz:.1} kHz")
-    }
+    if khz.fract().abs() < f64::EPSILON { format!("{khz:.0} kHz") } else { format!("{khz:.1} kHz") }
 }
 
 /// Channel count → "Mono" / "Stereo" / "N channels". Technical terms left

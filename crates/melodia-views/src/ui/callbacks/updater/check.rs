@@ -57,10 +57,7 @@ pub(super) fn spawn_manual_check(
                     server_etag.or(etag),
                 );
             }
-            Ok(CheckOutcome::UnsupportedSchema {
-                schema,
-                etag: server_etag,
-            }) => {
+            Ok(CheckOutcome::UnsupportedSchema { schema, etag: server_etag }) => {
                 // Schema gate already logged at warn level inside
                 // `services::updater::check`.
                 // Settings panel stays on whatever it was painted with last;
@@ -75,11 +72,7 @@ pub(super) fn spawn_manual_check(
                     server_etag.or(etag),
                 );
             }
-            Ok(CheckOutcome::Available {
-                manifest,
-                asset,
-                etag: server_etag,
-            }) => {
+            Ok(CheckOutcome::Available { manifest, asset, etag: server_etag }) => {
                 let skipped = current_skipped_release(&state);
                 let critical = manifest.critical;
                 let skip_still_active = !skipped.is_empty()

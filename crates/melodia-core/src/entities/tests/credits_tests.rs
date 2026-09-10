@@ -3,11 +3,7 @@
 use super::super::credits::{CreditRole, ROLES, RoleCredit, RoleCredits};
 
 fn credit(role: CreditRole, name: &str) -> RoleCredit {
-    RoleCredit {
-        role,
-        name: name.to_owned(),
-        detail: String::new(),
-    }
+    RoleCredit { role, name: name.to_owned(), detail: String::new() }
 }
 
 /// The stored form is stable — renaming one is a data migration, not an edit — so the round trip

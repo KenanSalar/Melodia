@@ -204,10 +204,7 @@ impl TagEdit {
     /// [`Self::is_noop`] answer true for a real edit, and the commit then skips the write with no
     /// error anywhere. Every field defaults to `Keep`, so one `==` covers the ones added next.
     fn no_field_but_rating(&self) -> bool {
-        Self {
-            rating: FieldEdit::Keep,
-            ..self.clone()
-        } == Self::default()
+        Self { rating: FieldEdit::Keep, ..self.clone() } == Self::default()
     }
 }
 

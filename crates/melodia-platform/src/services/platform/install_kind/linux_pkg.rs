@@ -72,24 +72,14 @@ fn owned_by_rpm(path: &PathBuf) -> bool {
     // Exits 0 when the file is owned by an installed package. A missing `rpm`
     // reads as "not owned", which is correct — there is no `dnf` to elevate
     // through without it.
-    Command::new("rpm")
-        .arg("-qf")
-        .arg("--")
-        .arg(path)
-        .output()
-        .is_ok_and(|o| o.status.success())
+    Command::new("rpm").arg("-qf").arg("--").arg(path).output().is_ok_and(|o| o.status.success())
 }
 
 fn owned_by_dpkg(path: &PathBuf) -> bool {
     // `dpkg -S <path>` exits 0 when the file is owned by an installed
     // package. Note: `dpkg -S` matches by path-suffix in its db, so
     // pass the absolute path — `install_target()` always does.
-    Command::new("dpkg")
-        .arg("-S")
-        .arg("--")
-        .arg(path)
-        .output()
-        .is_ok_and(|o| o.status.success())
+    Command::new("dpkg").arg("-S").arg("--").arg(path).output().is_ok_and(|o| o.status.success())
 }
 
 /// The program to drive an elevated install of `format`, or `None` when no

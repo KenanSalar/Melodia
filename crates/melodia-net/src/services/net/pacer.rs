@@ -54,10 +54,7 @@ impl RequestPacer {
     /// A pacer that leaves at least `floor` between requests.
     #[must_use]
     pub fn new(floor: Duration) -> Self {
-        Self {
-            floor,
-            state: Mutex::new(Inner::default()),
-        }
+        Self { floor, state: Mutex::new(Inner::default()) }
     }
 
     /// Wait out the floor, or refuse where a stop is still open.

@@ -189,11 +189,7 @@ fn create_controls(
     hwnd: Option<*mut std::ffi::c_void>,
     tx: mpsc::Sender<MediaControlEvent>,
 ) -> Result<MediaControls, souvlaki::Error> {
-    let config = PlatformConfig {
-        dbus_name: "melodia",
-        display_name: "Melodia",
-        hwnd,
-    };
+    let config = PlatformConfig { dbus_name: "melodia", display_name: "Melodia", hwnd };
 
     let mut controls = MediaControls::new(config)?;
 

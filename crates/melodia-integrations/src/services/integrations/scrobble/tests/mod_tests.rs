@@ -215,10 +215,7 @@ async fn backfill_loves_is_unarmed_for_lastfm_without_a_stored_session() -> Test
     let dir = tempfile::tempdir()?;
     let service = init_service(
         &paths_in(dir.path()),
-        &ScrobbleFlags {
-            lastfm_love_enabled: true,
-            ..Default::default()
-        },
+        &ScrobbleFlags { lastfm_love_enabled: true, ..Default::default() },
     );
     assert!(!service.love_target_armed(LoveTarget::Lastfm));
     let queued = service
@@ -277,22 +274,14 @@ async fn the_mbid_lookup_token_needs_both_the_toggle_and_a_connection() -> TestR
     let dir = tempfile::tempdir()?;
     let paths = paths_in(dir.path());
 
-    let unconnected = init_service(
-        &paths,
-        &ScrobbleFlags {
-            mbid_auto_tag: true,
-            ..Default::default()
-        },
-    );
+    let unconnected =
+        init_service(&paths, &ScrobbleFlags { mbid_auto_tag: true, ..Default::default() });
     assert_eq!(unconnected.mbid_lookup_token(), None, "auto-tag on, nothing to authenticate with");
 
     let untoggled = lb_love_service(&paths_in(dir.path()), false).await?;
     assert_eq!(untoggled.mbid_lookup_token(), None, "connected, but auto-tagging is off");
 
-    untoggled.set_flags(ScrobbleFlags {
-        mbid_auto_tag: true,
-        ..Default::default()
-    });
+    untoggled.set_flags(ScrobbleFlags { mbid_auto_tag: true, ..Default::default() });
     assert_eq!(untoggled.mbid_lookup_token().as_deref(), Some("tok"));
     Ok(())
 }
@@ -336,10 +325,7 @@ async fn now_playing_reaches_a_connected_provider() -> TestResult {
     let dir = tempfile::tempdir()?;
     let service = init_service(
         &paths_in(dir.path()),
-        &ScrobbleFlags {
-            listenbrainz_enabled: true,
-            ..Default::default()
-        },
+        &ScrobbleFlags { listenbrainz_enabled: true, ..Default::default() },
     )
     .with_listenbrainz_base(server.base_url());
     service

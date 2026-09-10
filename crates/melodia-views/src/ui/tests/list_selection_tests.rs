@@ -90,12 +90,8 @@ fn visible_ids_is_not_invoked_on_plain_or_ctrl_clicks() {
 
 #[test]
 fn restamp_marks_only_selected_rows() {
-    let mut rows: Vec<UiTrackListRow> = (0..3)
-        .map(|i| UiTrackListRow {
-            id: i,
-            ..Default::default()
-        })
-        .collect();
+    let mut rows: Vec<UiTrackListRow> =
+        (0..3).map(|i| UiTrackListRow { id: i, ..Default::default() }).collect();
     let selected: HashSet<i32> = [1].into_iter().collect();
     restamp_selected(&mut rows, &selected);
     assert!(!rows[0].selected);
@@ -105,11 +101,7 @@ fn restamp_marks_only_selected_rows() {
 
 #[test]
 fn restamp_with_empty_set_is_a_no_op() {
-    let mut rows = vec![UiTrackListRow {
-        id: 7,
-        selected: true,
-        ..Default::default()
-    }];
+    let mut rows = vec![UiTrackListRow { id: 7, selected: true, ..Default::default() }];
     restamp_selected(&mut rows, &HashSet::new());
     // Empty set early-returns without clearing existing flags — restamp runs
     // on freshly-built (all-false) rows; clearing is stamp_rows_selected's job.

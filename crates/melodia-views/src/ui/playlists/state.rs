@@ -36,12 +36,8 @@ pub(super) struct GridData {
 
 impl GridData {
     pub(super) fn new(playlists: Vec<PlaylistStats>) -> Self {
-        let keys = playlists
-            .iter()
-            .map(|p| PlaylistSortKey {
-                name_lc: p.name.to_lowercase(),
-            })
-            .collect();
+        let keys =
+            playlists.iter().map(|p| PlaylistSortKey { name_lc: p.name.to_lowercase() }).collect();
         let stat_dependent = playlists
             .iter()
             .map(|p| {
@@ -50,11 +46,7 @@ impl GridData {
                         .depends_on_play_stats()
             })
             .collect();
-        Self {
-            playlists,
-            keys,
-            stat_dependent,
-        }
+        Self { playlists, keys, stat_dependent }
     }
 
     /// Whether any cached row is a stat-dependent smart playlist — the gate for

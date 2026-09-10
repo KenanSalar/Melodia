@@ -182,11 +182,7 @@ impl Voice {
     pub fn replace<S: AudioSource + 'static>(&self, source: S, position: Duration, mounted: u64) {
         let frames = frames_in(position, source.sample_rate());
         let loaded = self.load(source);
-        self.send_counted(Command::Replace {
-            loaded,
-            frames,
-            mounted,
-        });
+        self.send_counted(Command::Replace { loaded, frames, mounted });
     }
 
     /// The ticket of the source last mounted here, for a later [`Self::replace`] to be matched
@@ -197,10 +193,7 @@ impl Voice {
 
     /// Pair `source` with the converter that brings it to this device.
     fn load<S: AudioSource + 'static>(&self, source: S) -> Loaded {
-        Loaded {
-            converter: Converter::new(source.shape(), self.device),
-            source: Box::new(source),
-        }
+        Loaded { converter: Converter::new(source.shape(), self.device), source: Box::new(source) }
     }
 
     /// Send a command carrying a source, counting it before the callback can see it.
@@ -373,10 +366,8 @@ impl VoicePull {
             let Some(loaded) = self.current.as_mut() else {
                 break;
             };
-            let Filled {
-                samples,
-                source_frames,
-            } = loaded.converter.fill(&mut block[written..], &mut *loaded.source, speed);
+            let Filled { samples, source_frames } =
+                loaded.converter.fill(&mut block[written..], &mut *loaded.source, speed);
             written += samples;
             self.shared.frames.fetch_add(source_frames, Ordering::Relaxed);
             if loaded.converter.is_done() {
@@ -412,11 +403,9 @@ impl VoicePull {
             match self.commands.try_recv() {
                 Ok(Command::Append { loaded, frames }) => self.accept(loaded, frames),
                 Ok(Command::Clear) => self.clear(),
-                Ok(Command::Replace {
-                    loaded,
-                    frames,
-                    mounted,
-                }) => self.replace(loaded, frames, mounted),
+                Ok(Command::Replace { loaded, frames, mounted }) => {
+                    self.replace(loaded, frames, mounted)
+                }
                 Err(TryRecvError::Empty | TryRecvError::Disconnected) => break,
             }
         }
@@ -526,12 +515,8 @@ pub fn pair(device: Shape) -> (Voice, VoicePull) {
         mounted: AtomicU64::new(0),
     });
 
-    let voice = Voice {
-        shared: shared.clone(),
-        commands: command_tx,
-        spent: Mutex::new(spent_rx),
-        device,
-    };
+    let voice =
+        Voice { shared: shared.clone(), commands: command_tx, spent: Mutex::new(spent_rx), device };
     let pull = VoicePull {
         shared,
         commands: command_rx,

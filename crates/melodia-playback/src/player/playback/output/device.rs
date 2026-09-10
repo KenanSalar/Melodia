@@ -199,12 +199,7 @@ where
     Ok((
         DeviceStream {
             _stream: stream,
-            negotiated: Negotiated {
-                shape,
-                format,
-                requested_period,
-                period,
-            },
+            negotiated: Negotiated { shape, format, requested_period, period },
         },
         kept,
     ))

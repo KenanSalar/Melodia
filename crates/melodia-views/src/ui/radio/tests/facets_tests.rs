@@ -31,33 +31,21 @@ fn picked(chip: ChipFilter, name: &str, code: &str) -> StationSearch {
 fn a_country_filters_by_code_and_the_rest_by_name() {
     assert_eq!(
         picked(ChipFilter::Country, "Germany", "DE"),
-        StationSearch {
-            country_code: "DE".to_owned(),
-            ..StationSearch::default()
-        }
+        StationSearch { country_code: "DE".to_owned(), ..StationSearch::default() }
     );
     assert_eq!(
         picked(ChipFilter::Language, "english", "en"),
-        StationSearch {
-            language: "english".to_owned(),
-            ..StationSearch::default()
-        },
+        StationSearch { language: "english".to_owned(), ..StationSearch::default() },
         "a language carries an `iso_639`, and the endpoint has no parameter that takes it"
     );
     assert_eq!(
         picked(ChipFilter::Tag, "jazz", ""),
-        StationSearch {
-            tags: vec!["jazz".to_owned()],
-            ..StationSearch::default()
-        }
+        StationSearch { tags: vec!["jazz".to_owned()], ..StationSearch::default() }
     );
     // The codeless fallback: a caller with only a label to hand over sends it as the value.
     assert_eq!(
         picked(ChipFilter::Codec, "AAC", ""),
-        StationSearch {
-            codec: "AAC".to_owned(),
-            ..StationSearch::default()
-        }
+        StationSearch { codec: "AAC".to_owned(), ..StationSearch::default() }
     );
 }
 
@@ -70,10 +58,7 @@ fn a_country_filters_by_code_and_the_rest_by_name() {
 fn a_codec_pick_sends_the_directorys_own_word_rather_than_the_label() {
     assert_eq!(
         picked(ChipFilter::Codec, SEGMENTED_CODEC_LABEL, UNKNOWN_CODEC),
-        StationSearch {
-            codec: UNKNOWN_CODEC.to_owned(),
-            ..StationSearch::default()
-        }
+        StationSearch { codec: UNKNOWN_CODEC.to_owned(), ..StationSearch::default() }
     );
 }
 
@@ -85,11 +70,7 @@ fn a_codec_pick_sends_the_directorys_own_word_rather_than_the_label() {
 #[test]
 fn a_codec_row_is_found_by_the_word_it_draws() {
     let chip = Some(ChipFilter::Codec);
-    let facet = |name: &str| Facet {
-        name: name.to_owned(),
-        code: None,
-        station_count: 1,
-    };
+    let facet = |name: &str| Facet { name: name.to_owned(), code: None, station_count: 1 };
     let found =
         |facet: &Facet, needle: &str| matches_needle(chip, facet, &row_match::fold_needle(needle));
 

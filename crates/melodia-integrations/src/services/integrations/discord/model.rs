@@ -74,10 +74,9 @@ impl From<&SourceSummary<'_>> for CardSource {
     fn from(source: &SourceSummary<'_>) -> Self {
         match source.id {
             SourceId::Track(id) => Self::Track(id),
-            SourceId::Station(stream_url) => Self::Station {
-                stream_url: stream_url.to_owned(),
-                title: source.title.to_owned(),
-            },
+            SourceId::Station(stream_url) => {
+                Self::Station { stream_url: stream_url.to_owned(), title: source.title.to_owned() }
+            }
         }
     }
 }
@@ -102,14 +101,8 @@ impl Identity {
             (Identity::Cleared, Identity::Cleared) => true,
             (Identity::Paused { source: a }, Identity::Paused { source: b }) => a == b,
             (
-                Identity::Playing {
-                    source: a,
-                    start_ts: sa,
-                },
-                Identity::Playing {
-                    source: b,
-                    start_ts: sb,
-                },
+                Identity::Playing { source: a, start_ts: sa },
+                Identity::Playing { source: b, start_ts: sb },
             ) => a == b && sa.abs_diff(*sb) <= ANCHOR_TOLERANCE_SECS,
             _ => false,
         }
@@ -126,9 +119,7 @@ pub struct PresenceState {
 
 impl Default for PresenceState {
     fn default() -> Self {
-        Self {
-            last: Identity::Cleared,
-        }
+        Self { last: Identity::Cleared }
     }
 }
 
@@ -162,11 +153,9 @@ impl PresenceState {
         // deduped republish never pays for a presence it would immediately discard.
         let update = match decision {
             Decision::Clear => Update::Clear,
-            Decision::Set {
-                source,
-                paused,
-                anchor,
-            } => Update::Set(build_presence(&source, paused, anchor)),
+            Decision::Set { source, paused, anchor } => {
+                Update::Set(build_presence(&source, paused, anchor))
+            }
         };
         Some(update)
     }
@@ -179,11 +168,7 @@ enum Decision<'a> {
     /// Remove the card.
     Clear,
     /// Show a card built from these inputs by [`build_presence`].
-    Set {
-        source: SourceSummary<'a>,
-        paused: bool,
-        anchor: u64,
-    },
+    Set { source: SourceSummary<'a>, paused: bool, anchor: u64 },
 }
 
 /// The decision, with its dedupe identity. `None` means "hold the current card"
@@ -215,19 +200,9 @@ fn classify<'a>(
             let identity = if paused {
                 Identity::Paused { source: card }
             } else {
-                Identity::Playing {
-                    source: card,
-                    start_ts: anchor,
-                }
+                Identity::Playing { source: card, start_ts: anchor }
             };
-            Some((
-                identity,
-                Decision::Set {
-                    source,
-                    paused,
-                    anchor,
-                },
-            ))
+            Some((identity, Decision::Set { source, paused, anchor }))
         }
     }
 }
@@ -245,15 +220,7 @@ fn build_presence(source: &SourceSummary<'_>, paused: bool, anchor: u64) -> Pres
     } else {
         (None, None)
     };
-    Presence {
-        details,
-        state,
-        large_text,
-        large_image: None,
-        paused,
-        start_ts,
-        end_ts,
-    }
+    Presence { details, state, large_text, large_image: None, paused, start_ts, end_ts }
 }
 
 /// Clamp a field to Discord's limits: trim, drop when empty, pad a lone

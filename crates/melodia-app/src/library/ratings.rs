@@ -104,10 +104,7 @@ pub(crate) async fn write_rating_to_files(
     ids: &[i64],
     rating: i32,
 ) -> Result<usize, AppError> {
-    let edit = TagEdit {
-        rating: FieldEdit::Set(clamp_rating(rating)),
-        ..TagEdit::default()
-    };
+    let edit = TagEdit { rating: FieldEdit::Set(clamp_rating(rating)), ..TagEdit::default() };
     let (report, _) =
         super::tags::write_tag_edit(db, artwork_dir, cover_cache, self_writes, ids, &edit, None)
             .await?;

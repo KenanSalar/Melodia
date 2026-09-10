@@ -54,11 +54,7 @@ fn station(rate: u32, seconds: u32) -> PrebufferSource {
 
     let total = usize::try_from(rate * seconds).unwrap_or(0);
     for index in 0..total {
-        let polarity = if (index / HALF_PERIOD).is_multiple_of(2) {
-            1.0
-        } else {
-            -1.0
-        };
+        let polarity = if (index / HALF_PERIOD).is_multiple_of(2) { 1.0 } else { -1.0 };
         assert!(writer.push(polarity), "the ring must take the whole station up front");
     }
     shared.finish();

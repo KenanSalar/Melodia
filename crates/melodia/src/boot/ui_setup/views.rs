@@ -202,15 +202,7 @@ pub fn install_views(
 
     // The four handles not returned are deliberately dropped here — see
     // `UiHandles`.
-    UiHandles {
-        cover_thumbs,
-        tracks_ui,
-        albums_ui,
-        artists_ui,
-        genres_ui,
-        playlists_ui,
-        radio_ui,
-    }
+    UiHandles { cover_thumbs, tracks_ui, albums_ui, artists_ui, genres_ui, playlists_ui, radio_ui }
 }
 
 /// Every Settings section, plus the notifications stack. The updater's Slint

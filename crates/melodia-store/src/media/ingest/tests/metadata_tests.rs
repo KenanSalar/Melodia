@@ -239,10 +239,9 @@ fn extract_metadata_reads_an_oga_by_its_header() -> Result<(), AppError> {
 /// Only the extension list stood between them and the library.
 #[test]
 fn extract_metadata_reads_the_alias_extensions() -> Result<(), AppError> {
-    for (fixture, alias, codec) in [
-        ("silence.aiff", "quiet.aif", "Aiff"),
-        ("silence.m4a", "quiet.m4b", "Mp4"),
-    ] {
+    for (fixture, alias, codec) in
+        [("silence.aiff", "quiet.aif", "Aiff"), ("silence.m4a", "quiet.m4b", "Mp4")]
+    {
         let tmp = TempDir::new()?;
         let artwork_dir = tmp.path().join("artwork");
         std::fs::create_dir(&artwork_dir)?;
@@ -410,10 +409,8 @@ fn the_list_tag_wins_over_the_printed_one() {
 /// is most MP3s in the wild, and left whole it reads as one artist named that.
 #[test]
 fn a_flattened_list_tag_splits_back_into_its_names() {
-    let tag = tagged(&[
-        (ItemKey::TrackArtist, "Alice & Bob"),
-        (ItemKey::TrackArtists, "Alice; Bob"),
-    ]);
+    let tag =
+        tagged(&[(ItemKey::TrackArtist, "Alice & Bob"), (ItemKey::TrackArtists, "Alice; Bob")]);
 
     assert_eq!(credit_names(&tag), ["Alice", "Bob"]);
 }
@@ -486,10 +483,8 @@ fn artist_ids_are_kept_only_where_they_line_up_with_the_names() {
 
 #[test]
 fn a_solo_credit_keeps_its_only_id() {
-    let tag = tagged(&[
-        (ItemKey::TrackArtist, "Alice"),
-        (ItemKey::MusicBrainzArtistId, "id-alice"),
-    ]);
+    let tag =
+        tagged(&[(ItemKey::TrackArtist, "Alice"), (ItemKey::MusicBrainzArtistId, "id-alice")]);
 
     assert_eq!(read_credit_mbids(Some(&tag), ItemKey::MusicBrainzArtistId, 1), ["id-alice"]);
 }

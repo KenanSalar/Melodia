@@ -78,12 +78,7 @@ fn artist(id: i64, name: &str) -> ArtistStats {
 }
 
 fn genre(id: i64, name: &str) -> GenreStats {
-    GenreStats {
-        id,
-        name: name.to_owned(),
-        track_count: 1,
-        total_duration_ms: 0,
-    }
+    GenreStats { id, name: name.to_owned(), track_count: 1, total_duration_ms: 0 }
 }
 
 /// Most tiers only need two of the three lists, so this leaves genres
@@ -97,12 +92,7 @@ fn results_with_genres(
     artists: Vec<ArtistStats>,
     genres: Vec<GenreStats>,
 ) -> SearchResults {
-    SearchResults {
-        tracks: Vec::new(),
-        albums,
-        artists,
-        genres,
-    }
+    SearchResults { tracks: Vec::new(), albums, artists, genres }
 }
 
 #[test]

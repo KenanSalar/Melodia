@@ -94,14 +94,8 @@ pub(crate) fn tints(seeds: [Option<u32>; SEED_COUNT], theme: &ThemeTokens) -> [T
     let origin = seeds.iter().flatten().next().copied().unwrap_or(theme.accent);
 
     std::array::from_fn(|wash| match seeds[wash] {
-        Some(argb) => Tint {
-            rgb: argb,
-            weight: 1.0,
-        },
-        None => Tint {
-            rgb: rotate_hue(origin, FILL_HUES[wash]),
-            weight: FILL_WEIGHT,
-        },
+        Some(argb) => Tint { rgb: argb, weight: 1.0 },
+        None => Tint { rgb: rotate_hue(origin, FILL_HUES[wash]), weight: FILL_WEIGHT },
     })
 }
 
@@ -112,10 +106,7 @@ pub(crate) fn tints(seeds: [Option<u32>; SEED_COUNT], theme: &ThemeTokens) -> [T
 /// nothing to quantize, this is one not yet asked. Painting the first while a collage composes is
 /// what flashed the accent across the two curated banners.
 pub(crate) fn idle_tints(theme: &ThemeTokens) -> [Tint; WASH_COUNT] {
-    std::array::from_fn(|_| Tint {
-        rgb: theme.base,
-        weight: 1.0,
-    })
+    std::array::from_fn(|_| Tint { rgb: theme.base, weight: 1.0 })
 }
 
 #[cfg(test)]

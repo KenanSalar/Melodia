@@ -108,11 +108,7 @@ pub fn install(
         let covers = queue_covers.clone();
         ui.global::<Queue>().on_request_cover(move |path, generation| {
             let path = Some(path.as_str()).filter(|s| !s.is_empty());
-            if generation == 0 {
-                covers.get_cached_opt(path)
-            } else {
-                covers.get_or_load_opt(path)
-            }
+            if generation == 0 { covers.get_cached_opt(path) } else { covers.get_or_load_opt(path) }
         });
     }
 

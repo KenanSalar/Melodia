@@ -12,10 +12,7 @@
 
 use super::*;
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "test row builder mirrors TrackListRow"
-)]
+#[expect(clippy::too_many_arguments, reason = "test row builder mirrors TrackListRow")]
 fn mk(
     id: i64,
     sort_key: &str,
@@ -133,15 +130,7 @@ fn track_number_sorts_disc_then_track_with_null_sentinel() {
 #[test]
 fn order_is_a_permutation_of_all_indices() {
     let rows = fixture();
-    for field in [
-        "title",
-        "artist",
-        "album",
-        "genre",
-        "year",
-        "length",
-        "track_number",
-    ] {
+    for field in ["title", "artist", "album", "genre", "year", "length", "track_number"] {
         for dir in ["asc", "desc"] {
             let mut order = compute_track_order(&rows, field, dir);
             order.sort_unstable();
@@ -156,15 +145,7 @@ fn order_is_a_permutation_of_all_indices() {
 fn sort_track_list_rows_matches_the_permutation() {
     // The in-place wrapper and the permutation wrapper share one core, so
     // sorting a slice must yield the same id order as the permutation.
-    for field in [
-        "title",
-        "artist",
-        "album",
-        "genre",
-        "year",
-        "length",
-        "track_number",
-    ] {
+    for field in ["title", "artist", "album", "genre", "year", "length", "track_number"] {
         for dir in ["asc", "desc"] {
             let base = fixture();
             let expect = perm_ids(&base, &compute_track_order(&base, field, dir));
@@ -271,15 +252,7 @@ fn every_header_column_asks_for_a_field_the_comparator_knows() {
     // The arms above, restated. `track_number` is the one handled ahead of the
     // `match`; the rest are its named arms. A field dropped there and left here
     // fails the round-trip below.
-    const ARMS: [&str; 7] = [
-        "track_number",
-        "title",
-        "artist",
-        "album",
-        "genre",
-        "year",
-        "length",
-    ];
+    const ARMS: [&str; 7] = ["track_number", "title", "artist", "album", "genre", "year", "length"];
 
     let asked: Vec<&str> = HEADER
         .lines()

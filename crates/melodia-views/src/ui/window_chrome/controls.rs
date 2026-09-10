@@ -97,11 +97,7 @@ pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool
             // The native path is winit-only and UI-thread-only, so it runs before the
             // persistence task. The Linux paths route to the KWin / GNOME backend.
             if is_native {
-                let level = if new {
-                    WindowLevel::AlwaysOnTop
-                } else {
-                    WindowLevel::Normal
-                };
+                let level = if new { WindowLevel::AlwaysOnTop } else { WindowLevel::Normal };
                 let _ = ui.window().with_winit_window(|w| w.set_window_level(level));
             }
 
@@ -117,11 +113,8 @@ pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool
                         // Applied through winit above, so roll the OS-level state back
                         // too and keep it in step with the reverted property.
                         if is_native {
-                            let revert = if new {
-                                WindowLevel::Normal
-                            } else {
-                                WindowLevel::AlwaysOnTop
-                            };
+                            let revert =
+                                if new { WindowLevel::Normal } else { WindowLevel::AlwaysOnTop };
                             let _ = ui.window().with_winit_window(|w| w.set_window_level(revert));
                         }
                     });

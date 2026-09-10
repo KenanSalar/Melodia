@@ -119,11 +119,7 @@ pub(super) fn rebuild_rows(
             if let Some(links) = cached.get(&t.id).copied() {
                 RowLinks::from(links).stamp(&mut row);
             }
-            new_shadow.push(ShadowEntry {
-                id: t.id,
-                selected,
-                source: Some(Arc::clone(t)),
-            });
+            new_shadow.push(ShadowEntry { id: t.id, selected, source: Some(Arc::clone(t)) });
             new_rows.push(row);
         }
     }

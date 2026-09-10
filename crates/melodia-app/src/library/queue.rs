@@ -371,25 +371,13 @@ async fn plan_restore(
     .await
     .map_err(|e| AppError::Settings(format!("restore_persisted_playback join: {e}")))??;
 
-    Ok(RestorePlan {
-        persisted,
-        summaries,
-        station,
-        repeat_mode,
-        shuffle_enabled,
-    })
+    Ok(RestorePlan { persisted, summaries, station, repeat_mode, shuffle_enabled })
 }
 
 /// Seat a [`RestorePlan`]. The queue first and the station over it, which is the order the two
 /// halves of `queue.json` owe each other.
 fn apply_restore(state: &mut PlayerState, plan: RestorePlan) -> Vec<PlayerAction> {
-    let RestorePlan {
-        persisted,
-        summaries,
-        station,
-        repeat_mode,
-        shuffle_enabled,
-    } = plan;
+    let RestorePlan { persisted, summaries, station, repeat_mode, shuffle_enabled } = plan;
 
     if let Some(p) = persisted {
         restore_queue(state, summaries, &p.queue);

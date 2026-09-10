@@ -244,11 +244,7 @@ fn legacy_backups_are_adopted_and_then_pruned() -> Result<(), AppError> {
     assert_eq!(kept.len(), MAX_BACKUPS);
     assert_eq!(
         kept,
-        [
-            "melodia-v20260705000000.db",
-            "melodia-v20260708000000.db",
-            "melodia-v20260802000000.db",
-        ],
+        ["melodia-v20260705000000.db", "melodia-v20260708000000.db", "melodia-v20260802000000.db",],
     );
     Ok(())
 }

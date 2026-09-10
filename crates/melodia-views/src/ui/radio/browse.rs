@@ -45,10 +45,7 @@ impl Default for BrowseState {
         Self {
             // `StationSearch::default()` is the first screen with nothing typed: most-clicked
             // first, no filters. The limit is spelled because the offset advances by it.
-            search: StationSearch {
-                limit: DEFAULT_PAGE_LIMIT,
-                ..StationSearch::default()
-            },
+            search: StationSearch { limit: DEFAULT_PAGE_LIMIT, ..StationSearch::default() },
             stations: Vec::new(),
             has_more: false,
             generation: 0,
@@ -76,10 +73,7 @@ impl BrowseState {
 
     /// The query minus where it is paged to.
     fn identity(&self) -> StationSearch {
-        StationSearch {
-            offset: 0,
-            ..self.search.clone()
-        }
+        StationSearch { offset: 0, ..self.search.clone() }
     }
 
     /// Take a page's worth of request, or `None` where the request would be redundant.

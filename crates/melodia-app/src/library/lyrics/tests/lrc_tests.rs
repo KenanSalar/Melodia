@@ -67,10 +67,7 @@ fn several_stamps_on_one_line_repeat_it_in_time_order() {
     // the song, silently.
     assert_eq!(
         drawn("[00:45.10][00:21.10]chorus"),
-        vec![
-            (Some(21_100), "chorus".to_owned()),
-            (Some(45_100), "chorus".to_owned())
-        ]
+        vec![(Some(21_100), "chorus".to_owned()), (Some(45_100), "chorus".to_owned())]
     );
 }
 
@@ -79,10 +76,7 @@ fn two_lines_against_one_stamp_keep_the_order_they_were_written_in() {
     // The sort has to be stable, or a couplet reads backwards.
     assert_eq!(
         drawn("[00:01.00]first\n[00:01.00]second"),
-        vec![
-            (Some(1_000), "first".to_owned()),
-            (Some(1_000), "second".to_owned())
-        ]
+        vec![(Some(1_000), "first".to_owned()), (Some(1_000), "second".to_owned())]
     );
 }
 
@@ -148,11 +142,7 @@ fn an_untimed_sheet_keeps_its_markers_and_its_blank_lines() {
     // known key, so nothing mistakes it for metadata.
     assert_eq!(
         drawn("[Chorus]\n\nhello"),
-        vec![
-            (None, "[Chorus]".to_owned()),
-            (None, String::new()),
-            (None, "hello".to_owned()),
-        ]
+        vec![(None, "[Chorus]".to_owned()), (None, String::new()), (None, "hello".to_owned()),]
     );
 }
 

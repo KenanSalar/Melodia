@@ -82,14 +82,9 @@ fn a_second_dismiss_inside_the_fade_is_a_no_op() {
 fn the_card_is_owed_on_a_fresh_or_unreadable_install_and_not_on_a_settled_one() {
     use melodia_app::services::settings::{ONBOARDING_VERSION, OnboardingFlags, SettingsData};
 
-    let fresh = SettingsData {
-        onboarding: OnboardingFlags::default(),
-        ..default_settings()
-    };
+    let fresh = SettingsData { onboarding: OnboardingFlags::default(), ..default_settings() };
     let seen = SettingsData {
-        onboarding: OnboardingFlags {
-            onboarding_version: ONBOARDING_VERSION,
-        },
+        onboarding: OnboardingFlags { onboarding_version: ONBOARDING_VERSION },
         ..default_settings()
     };
 

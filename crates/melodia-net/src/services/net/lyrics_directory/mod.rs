@@ -57,9 +57,7 @@ pub enum LookupError {
 impl fmt::Display for LookupError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::RateLimited {
-                retry_after: Some(wait),
-            } => {
+            Self::RateLimited { retry_after: Some(wait) } => {
                 write!(f, "The lyrics directory is rate limiting us for {} s", wait.as_secs())
             }
             Self::RateLimited { retry_after: None } => {

@@ -5,20 +5,13 @@ use super::{
 };
 
 fn facet(name: &str, code: Option<&str>, count: i64) -> Facet {
-    Facet {
-        name: name.to_owned(),
-        code: code.map(str::to_owned),
-        station_count: count,
-    }
+    Facet { name: name.to_owned(), code: code.map(str::to_owned), station_count: count }
 }
 
 /// The four lists as a session that has finished priming holds them.
 fn index() -> FacetIndex {
     FacetIndex::from_lists(
-        vec![
-            facet("Germany", Some("DE"), 4102),
-            facet("Turkey", Some("TR"), 611),
-        ],
+        vec![facet("Germany", Some("DE"), 4102), facet("Turkey", Some("TR"), 611)],
         vec![facet("Turkish", None, 281), facet("German", None, 3900)],
         vec![
             facet("turkish", None, 14),
@@ -62,10 +55,7 @@ fn one_pill_per_scope_even_where_several_entries_match() {
 
 #[test]
 fn a_scope_the_query_already_carries_is_not_offered_back() {
-    let active = StationSearch {
-        language: "Turkish".to_owned(),
-        ..StationSearch::default()
-    };
+    let active = StationSearch { language: "Turkish".to_owned(), ..StationSearch::default() };
     let out = suggestions(&fold_needle("turkish"), &index(), &active);
     assert!(out.iter().all(|s| s.chip != ChipFilter::Language));
     // The tag of the same name is still on offer — it is a different scope.
@@ -121,10 +111,7 @@ fn a_number_outside_the_kbps_band_stays_a_name_search() {
 
 #[test]
 fn a_bitrate_floor_already_applied_is_not_offered_back() {
-    let active = StationSearch {
-        bitrate_min: 128,
-        ..StationSearch::default()
-    };
+    let active = StationSearch { bitrate_min: 128, ..StationSearch::default() };
     let out = suggestions(&fold_needle("128"), &index(), &active);
     assert!(out.iter().all(|s| s.chip != ChipFilter::BitrateMin));
 }

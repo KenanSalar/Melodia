@@ -64,12 +64,7 @@ pub fn rebuild_grid(ui: &AppWindow, artists_ui: &ArtistsUi) {
             !matches!(cache.as_ref(), Some(c) if c.matches(&filter, &sort_field, &sort_dir));
         if stale {
             let indices = compute_indices(&data, &sort_field, &sort_dir, &filter);
-            *cache = Some(GridIndexCache {
-                filter,
-                sort_field,
-                sort_dir,
-                indices,
-            });
+            *cache = Some(GridIndexCache { filter, sort_field, sort_dir, indices });
         }
         let indices = cache.as_ref().map_or(&[][..], |c| c.indices.as_slice());
         chunk_indices(&data, indices, columns)

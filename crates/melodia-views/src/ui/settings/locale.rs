@@ -26,15 +26,8 @@ use melodia_ui::{AppWindow, Settings};
 
 /// Native-name labels for [`SUPPORTED_LOCALES`]. Indices
 /// match 1:1 — adding a locale means appending to both arrays.
-const LOCALE_NATIVE_NAMES: &[&str] = &[
-    "English",
-    "Deutsch",
-    "Français",
-    "Español",
-    "Türkçe",
-    "Ελληνικά",
-    "Italiano",
-];
+const LOCALE_NATIVE_NAMES: &[&str] =
+    &["English", "Deutsch", "Français", "Español", "Türkçe", "Ελληνικά", "Italiano"];
 
 /// Synchronous in-memory shadow of `settings.locale`, updated by the language-changed
 /// callback before it spawns the disk write —

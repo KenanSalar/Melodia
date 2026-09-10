@@ -256,9 +256,7 @@ fn spawn_action_receiver(
     ui_weak: slint::Weak<AppWindow>,
     mut rx: tokio::sync::mpsc::Receiver<TrayAction>,
 ) {
-    let sink: Arc<dyn EventSink> = Arc::new(SlintEventSink {
-        state: state.clone(),
-    });
+    let sink: Arc<dyn EventSink> = Arc::new(SlintEventSink { state: state.clone() });
     spawner.spawn_cancellable(move |shutdown| async move {
         loop {
             tokio::select! {

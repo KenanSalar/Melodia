@@ -218,10 +218,8 @@ async fn recents_come_back_newest_first_and_skip_the_unplayed() -> Result<(), Ap
     let newer = save_station(&db, &custom_station("Newer", "http://b.invalid/")).await?;
     save_station(&db, &custom_station("Never", "http://c.invalid/")).await?;
 
-    for (id, stamp) in [
-        (older, "2026-08-01T00:00:00+00:00"),
-        (newer, "2026-08-02T00:00:00+00:00"),
-    ] {
+    for (id, stamp) in [(older, "2026-08-01T00:00:00+00:00"), (newer, "2026-08-02T00:00:00+00:00")]
+    {
         sqlx::query("UPDATE radio_stations SET last_played = ? WHERE id = ?")
             .bind(stamp)
             .bind(id)
@@ -478,11 +476,7 @@ async fn a_hit_clears_the_backoff_the_same_url_earned_while_it_was_down() -> Res
 #[tokio::test]
 async fn the_byte_cap_keeps_the_newest_hits_and_drops_the_tail() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    for (url, stamp) in [
-        ("a", NEWER),
-        ("b", RECENT),
-        ("c", "2026-08-19T00:00:00.000+00:00"),
-    ] {
+    for (url, stamp) in [("a", NEWER), ("b", RECENT), ("c", "2026-08-19T00:00:00.000+00:00")] {
         record_logo_hit(&db, url, &format!("/store/{url}.png"), 400, stamp).await?;
     }
 

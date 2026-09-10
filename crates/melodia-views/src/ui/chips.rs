@@ -63,11 +63,7 @@ pub fn chunk_chips_to_rows(
 
     for chip in chips {
         let cw = estimated_chip_width(chip);
-        let candidate = if current.is_empty() {
-            cw
-        } else {
-            current_w + SPACING + cw
-        };
+        let candidate = if current.is_empty() { cw } else { current_w + SPACING + cw };
         if !current.is_empty() && candidate > avail_width {
             if max_rows == Some(rows.len() + 1) {
                 // The row being closed is the last one allowed, so the rest is overflow.

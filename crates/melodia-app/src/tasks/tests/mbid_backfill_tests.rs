@@ -87,18 +87,9 @@ async fn the_manual_kick_clears_the_file_as_well_as_the_set() -> Result<(), AppE
 /// rather than on the whole sentence: the arm is the behaviour, the rest is copy.
 #[test]
 fn summarize_tells_the_three_outcomes_apart() {
-    let nothing_to_do = summarize(&SweepOutcome {
-        looked_up: 0,
-        tagged: 0,
-    });
-    let all_missed = summarize(&SweepOutcome {
-        looked_up: 5,
-        tagged: 0,
-    });
-    let some_tagged = summarize(&SweepOutcome {
-        looked_up: 5,
-        tagged: 3,
-    });
+    let nothing_to_do = summarize(&SweepOutcome { looked_up: 0, tagged: 0 });
+    let all_missed = summarize(&SweepOutcome { looked_up: 5, tagged: 0 });
+    let some_tagged = summarize(&SweepOutcome { looked_up: 5, tagged: 3 });
 
     assert!(nothing_to_do.contains("already have"), "got {nothing_to_do:?}");
     assert!(all_missed.contains("No matches"), "got {all_missed:?}");
@@ -149,10 +140,7 @@ fn the_backfill_never_bumps_the_channel_it_subscribes_to() {
 /// The transient arm, standing in for anything the endpoint answers that is neither a 401 nor a
 /// 429. `Transport` is the other member of the same partition and takes the same row.
 fn server_error() -> Result<Vec<Option<listenbrainz::MbidMatch>>, ListenBrainzError> {
-    Err(ListenBrainzError::Server {
-        status: 503,
-        message: "unavailable".to_owned(),
-    })
+    Err(ListenBrainzError::Server { status: 503, message: "unavailable".to_owned() })
 }
 
 /// A rate limit is the one refusal that must not retire its chunk: those tracks were never asked
@@ -164,22 +152,13 @@ fn only_a_rate_limit_keeps_the_chunk_it_was_refused_over() {
         ("answered", BatchStep::for_outcome(&Ok(vec![None])).retires_chunk()),
         (
             "rate limited",
-            BatchStep::for_outcome(&Err(ListenBrainzError::RateLimited {
-                reset_in_secs: Some(9),
-            }))
-            .retires_chunk(),
+            BatchStep::for_outcome(&Err(ListenBrainzError::RateLimited { reset_in_secs: Some(9) }))
+                .retires_chunk(),
         ),
         ("server error", BatchStep::for_outcome(&server_error()).retires_chunk()),
     ];
 
-    assert_eq!(
-        rows,
-        vec![
-            ("answered", true),
-            ("rate limited", false),
-            ("server error", true)
-        ]
-    );
+    assert_eq!(rows, vec![("answered", true), ("rate limited", false), ("server error", true)]);
 }
 
 /// A rejected token ends the sweep. Answering it like a server error would ask the endpoint for
@@ -197,9 +176,8 @@ fn a_rejected_token_ends_the_sweep_where_a_server_error_does_not() {
 /// asked for a minute or park for a minute over one that asked for a second.
 #[test]
 fn the_throttled_wait_is_the_one_the_server_asked_for() {
-    let step = BatchStep::for_outcome(&Err(ListenBrainzError::RateLimited {
-        reset_in_secs: Some(7),
-    }));
+    let step =
+        BatchStep::for_outcome(&Err(ListenBrainzError::RateLimited { reset_in_secs: Some(7) }));
 
     assert_eq!(step, BatchStep::Throttled(std::time::Duration::from_secs(7)));
     assert_eq!(step.wait_before_next(), Some(listenbrainz::rate_limit_backoff(Some(7))));

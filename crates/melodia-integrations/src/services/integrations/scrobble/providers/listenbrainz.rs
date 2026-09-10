@@ -78,10 +78,7 @@ pub async fn validate_token(
 
     let status = response.status();
     if status == StatusCode::UNAUTHORIZED {
-        return Ok(ValidatedToken {
-            valid: false,
-            user_name: None,
-        });
+        return Ok(ValidatedToken { valid: false, user_name: None });
     }
     if !status.is_success() {
         return Err(server_error(status, response).await);
@@ -252,10 +249,7 @@ async fn server_error(status: StatusCode, response: reqwest::Response) -> Listen
     .await
     .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
     .unwrap_or_default();
-    ListenBrainzError::Server {
-        status: status.as_u16(),
-        message,
-    }
+    ListenBrainzError::Server { status: status.as_u16(), message }
 }
 
 /// Parse `X-RateLimit-Reset-In` (seconds until the rate-limit window resets).
@@ -287,21 +281,14 @@ pub fn rate_limit_backoff(reset_in_secs: Option<u64>) -> Duration {
 fn playing_now_payload(track: &ScrobbleTrack) -> SubmitListens<'_> {
     SubmitListens {
         listen_type: "playing_now",
-        payload: vec![Listen {
-            listened_at: None,
-            track_metadata: build_metadata(track),
-        }],
+        payload: vec![Listen { listened_at: None, track_metadata: build_metadata(track) }],
     }
 }
 
 /// A durable-listen payload: `single` for one listen, `import` for a batch.
 fn listens_payload<'a>(listens: &'a [(&'a ScrobbleTrack, i64)]) -> SubmitListens<'a> {
     SubmitListens {
-        listen_type: if listens.len() == 1 {
-            "single"
-        } else {
-            "import"
-        },
+        listen_type: if listens.len() == 1 { "single" } else { "import" },
         payload: listens
             .iter()
             .map(|(track, timestamp)| Listen {
@@ -314,10 +301,7 @@ fn listens_payload<'a>(listens: &'a [(&'a ScrobbleTrack, i64)]) -> SubmitListens
 
 /// The `recording-feedback` body: the recording MBID and its `1`/`0` score.
 fn feedback_payload(recording_mbid: &str, score: i8) -> RecordingFeedback<'_> {
-    RecordingFeedback {
-        recording_mbid,
-        score,
-    }
+    RecordingFeedback { recording_mbid, score }
 }
 
 /// The bulk `metadata/lookup` body: one `recordings` entry per query.
@@ -325,11 +309,7 @@ fn bulk_lookup_payload<'a>(queries: &'a [LookupQuery<'a>]) -> BulkLookupRequest<
     BulkLookupRequest {
         recordings: queries
             .iter()
-            .map(|q| LookupRecording {
-                artist: q.artist,
-                recording: q.title,
-                release: q.release,
-            })
+            .map(|q| LookupRecording { artist: q.artist, recording: q.title, release: q.release })
             .collect(),
     }
 }
@@ -355,10 +335,7 @@ fn align_bulk_results(len: usize, results: Vec<BulkLookupResult>) -> Vec<Option<
 /// match".
 fn mbid_match(recording_mbid: Option<String>, release_mbid: Option<String>) -> Option<MbidMatch> {
     let recording_mbid = recording_mbid.filter(|s| !s.trim().is_empty())?;
-    Some(MbidMatch {
-        recording_mbid,
-        release_mbid: release_mbid.filter(|s| !s.trim().is_empty()),
-    })
+    Some(MbidMatch { recording_mbid, release_mbid: release_mbid.filter(|s| !s.trim().is_empty()) })
 }
 
 /// Build the `track_metadata` block shared by "playing now" and listen payloads.

@@ -18,11 +18,7 @@ const APPEARANCE_NAMESPACE: &str = "org.freedesktop.appearance";
 const COLOR_SCHEME_KEY: &str = "color-scheme";
 
 pub(crate) fn color_scheme_to_str(value: u32) -> &'static str {
-    if value == COLOR_SCHEME_PREFER_LIGHT {
-        "light"
-    } else {
-        "dark"
-    }
+    if value == COLOR_SCHEME_PREFER_LIGHT { "light" } else { "dark" }
 }
 
 fn unwrap_variant_u32(value: zbus::zvariant::Value<'_>) -> Option<u32> {

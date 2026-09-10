@@ -64,10 +64,7 @@ async fn a_drop_with_nothing_importable_reports_every_path_and_imports_none() ->
 
     let notes = tmp.path().join("notes.txt");
     std::fs::write(&notes, b"not audio")?;
-    let batch = vec![
-        notes.to_string_lossy().into_owned(),
-        "/nowhere/at/all.mp3".to_owned(),
-    ];
+    let batch = vec![notes.to_string_lossy().into_owned(), "/nowhere/at/all.mp3".to_owned()];
 
     let result = import_files(&db, &artwork_dir, &artwork::new_cover_cache(), &batch).await?;
 
@@ -105,10 +102,7 @@ async fn summaries_arrive_one_per_id_and_the_ids_only_half_fetches_none() -> Res
     let (tmp, artwork_dir) = staging()?;
     let db = DbPool::test_pool().await?;
     let cover_cache = artwork::new_cover_cache();
-    let batch = vec![
-        drop_file(tmp.path(), "a.mp3")?,
-        drop_file(tmp.path(), "b.mp3")?,
-    ];
+    let batch = vec![drop_file(tmp.path(), "a.mp3")?, drop_file(tmp.path(), "b.mp3")?];
 
     let summarized = import_and_summarize(&db, &artwork_dir, &cover_cache, &batch).await?;
     assert_eq!(summarized.track_ids.len(), 2);

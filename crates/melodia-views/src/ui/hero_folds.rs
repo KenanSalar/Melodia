@@ -55,10 +55,7 @@ pub fn fold_tracks(rows: &[TrackListRow]) -> HeroFold {
             albums.insert(id);
         }
     }
-    HeroFold {
-        artists: len_as_i32(artists.len()),
-        albums: len_as_i32(albums.len()),
-    }
+    HeroFold { artists: len_as_i32(artists.len()), albums: len_as_i32(albums.len()) }
 }
 
 /// Sum the Most Played tab's own totals off its cached rows. One walk rather than two:
@@ -69,11 +66,7 @@ pub fn fold_most_played(rows: &[MostPlayedFavorite]) -> MostPlayedTotals {
     let (duration_ms, plays) = rows.iter().fold((0i64, 0i32), |(duration_ms, plays), row| {
         (duration_ms + row.duration_ms, plays + row.play_count)
     });
-    MostPlayedTotals {
-        tracks: len_as_i32(rows.len()),
-        duration_ms,
-        plays,
-    }
+    MostPlayedTotals { tracks: len_as_i32(rows.len()), duration_ms, plays }
 }
 
 /// The genre most of a track list is tagged with, or `None` when it is split evenly

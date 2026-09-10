@@ -112,14 +112,8 @@ fn only_a_station_with_a_row_is_named_for_the_next_launch() {
     assert!(!crate::ui::radio::station_has_row(0), "a browsed station has no row");
     assert!(crate::ui::radio::station_has_row(1));
 
-    let browsed = super::StationRef {
-        id: 0,
-        uuid: "9cf9…".to_owned(),
-    };
-    let kept = super::StationRef {
-        id: 7,
-        uuid: String::new(),
-    };
+    let browsed = super::StationRef { id: 0, uuid: "9cf9…".to_owned() };
+    let kept = super::StationRef { id: 7, uuid: String::new() };
     assert!(!browsed.is_kept());
     assert!(kept.is_kept(), "a hand-typed station is kept and carries no uuid at all");
 }

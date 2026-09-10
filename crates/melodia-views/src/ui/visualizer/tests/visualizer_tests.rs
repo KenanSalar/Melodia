@@ -209,10 +209,7 @@ fn a_dormant_strip_polls_rather_than_running_at_frame_rate() {
 
 /// A watch that has never seen a frame, so a test controls the whole count.
 fn watch() -> FrameWatch {
-    FrameWatch {
-        last: 0,
-        stalled_ticks: 0,
-    }
+    FrameWatch { last: 0, stalled_ticks: 0 }
 }
 
 #[test]

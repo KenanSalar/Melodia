@@ -63,11 +63,7 @@ impl FileSource {
         // Anything but a regular file is a pipe or a device wearing an audio extension: no length,
         // and nowhere to seek to.
         let regular = inner.metadata().ok().filter(Metadata::is_file);
-        Self {
-            seekable: regular.is_some(),
-            byte_len: regular.map(|m| m.len()),
-            inner,
-        }
+        Self { seekable: regular.is_some(), byte_len: regular.map(|m| m.len()), inner }
     }
 }
 
@@ -123,15 +119,9 @@ impl FileDecoder {
             hint.with_extension(extension);
         }
 
-        let decode::Opened {
-            format,
-            decoder,
-            track,
-            cursor,
-            time_base,
-            total_duration,
-        } = decode::open(Box::new(FileSource::new(file)), &hint)
-            .map_err(|e| AppError::Player(format!("{} {e}", path.display())))?;
+        let decode::Opened { format, decoder, track, cursor, time_base, total_duration } =
+            decode::open(Box::new(FileSource::new(file)), &hint)
+                .map_err(|e| AppError::Player(format!("{} {e}", path.display())))?;
 
         let mut decoded = Self {
             format,
@@ -302,13 +292,7 @@ impl AudioSource for FileDecoder {
 
         let seeked = self
             .format
-            .seek(
-                SeekMode::Accurate,
-                SeekTo::Time {
-                    time,
-                    track_id: Some(self.track),
-                },
-            )
+            .seek(SeekMode::Accurate, SeekTo::Time { time, track_id: Some(self.track) })
             .map_err(other)?;
 
         // A seek is a demuxer operation the decoder is told nothing about, so whatever overlap

@@ -57,10 +57,7 @@ fn hiding_segmented_stations_leaves_the_paging_flag_alone() {
     hide_segmented(&mut page, true);
     assert!(page.has_more, "the drop is the client's, and `has_more` is the directory's answer");
 
-    let mut ended = StationPage {
-        has_more: false,
-        ..mixed_page()
-    };
+    let mut ended = StationPage { has_more: false, ..mixed_page() };
     hide_segmented(&mut ended, true);
     assert!(!ended.has_more, "and it must not be invented either");
 }
@@ -121,11 +118,7 @@ fn only_a_hand_typed_station_can_be_edited() {
 fn hiding_segmented_stations_drops_the_codecs_only_they_use() {
     let facets: Arc<[Facet]> = ["MP3", "AAC+", "UNKNOWN", "OGG", "AAC,H.264", "MP4", "FLV"]
         .iter()
-        .map(|name| Facet {
-            code: None,
-            name: (*name).to_owned(),
-            station_count: 1,
-        })
+        .map(|name| Facet { code: None, name: (*name).to_owned(), station_count: 1 })
         .collect();
 
     let kept = hide_segmented_codecs(Arc::clone(&facets), FacetKind::Codecs, true);
@@ -142,17 +135,12 @@ fn hiding_segmented_stations_drops_the_codecs_only_they_use() {
 /// every other kind has to come back as the same allocation rather than a rebuilt one.
 #[test]
 fn no_other_facet_list_is_rebuilt() {
-    let facets: Arc<[Facet]> = Arc::from(vec![Facet {
-        code: None,
-        name: "UNKNOWN".to_owned(),
-        station_count: 1,
-    }]);
+    let facets: Arc<[Facet]> =
+        Arc::from(vec![Facet { code: None, name: "UNKNOWN".to_owned(), station_count: 1 }]);
 
-    for (kind, hide) in [
-        (FacetKind::Tags, true),
-        (FacetKind::Countries, true),
-        (FacetKind::Codecs, false),
-    ] {
+    for (kind, hide) in
+        [(FacetKind::Tags, true), (FacetKind::Countries, true), (FacetKind::Codecs, false)]
+    {
         let kept = hide_segmented_codecs(Arc::clone(&facets), kind, hide);
         assert!(Arc::ptr_eq(&facets, &kept), "{kind:?} with hide={hide} was rebuilt");
     }
@@ -204,12 +192,7 @@ fn a_typed_website_is_normalized_or_refused_and_blank_clears_it() {
         "cleartext is admitted for the reason the logo fetch admits it"
     );
 
-    for refused in [
-        "nidaa.fm",
-        "file:///etc/passwd",
-        "javascript:alert(1)",
-        "https://",
-    ] {
+    for refused in ["nidaa.fm", "file:///etc/passwd", "javascript:alert(1)", "https://"] {
         assert!(website_url(refused).is_err(), "{refused} must not reach a browser launch");
     }
 }

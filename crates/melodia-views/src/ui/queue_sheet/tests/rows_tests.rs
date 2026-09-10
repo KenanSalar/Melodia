@@ -36,11 +36,7 @@ fn summary(id: i64, title: &str) -> Arc<TrackSummary> {
 fn shadow(tracks: &[Arc<TrackSummary>]) -> Vec<ShadowEntry> {
     tracks
         .iter()
-        .map(|track| ShadowEntry {
-            id: track.id,
-            selected: false,
-            source: Some(Arc::clone(track)),
-        })
+        .map(|track| ShadowEntry { id: track.id, selected: false, source: Some(Arc::clone(track)) })
         .collect()
 }
 
@@ -88,11 +84,7 @@ fn a_reordered_queue_is_not_the_same_sources() {
 #[test]
 fn a_shadow_the_teardown_emptied_is_not_the_same_sources() {
     let tracks = [summary(1, "Alpha")];
-    let released = vec![ShadowEntry {
-        id: 1,
-        selected: false,
-        source: None,
-    }];
+    let released = vec![ShadowEntry { id: 1, selected: false, source: None }];
 
     assert!(!same_sources(&released, &tracks));
 }

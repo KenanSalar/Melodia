@@ -137,10 +137,7 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
         artists.retain(|a| !attempted.contains(&a.id));
     }
     if artists.is_empty() {
-        return Ok(PassOutcome {
-            fetched: 0,
-            halted: false,
-        });
+        return Ok(PassOutcome { fetched: 0, halted: false });
     }
 
     let artists_dir = paths.artists_dir.clone();
@@ -241,10 +238,7 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
 
     // Fetched images land in the DB but nothing signals the UI, so a grid
     // that's already painted won't pick them up until its next refresh.
-    Ok(PassOutcome {
-        fetched: fetched_count,
-        halted,
-    })
+    Ok(PassOutcome { fetched: fetched_count, halted })
 }
 
 /// Spawn a background task to fetch artist images. Fire-and-forget.

@@ -122,14 +122,7 @@ async fn process_effects(
                     service.update_now_playing(track);
                 }
             }
-            Effect::Scrobble {
-                track_id,
-                timestamp,
-            }
-            | Effect::Finalize {
-                track_id,
-                timestamp,
-            } => {
+            Effect::Scrobble { track_id, timestamp } | Effect::Finalize { track_id, timestamp } => {
                 if let Some(row) = fetch_row(db, track_id, last_row).await
                     && let Err(e) = service.enqueue_scrobble(&row, timestamp).await
                 {

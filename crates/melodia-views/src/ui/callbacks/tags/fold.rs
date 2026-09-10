@@ -10,11 +10,7 @@ pub(super) fn common_str<'a>(mut values: impl Iterator<Item = &'a str>) -> (Stri
     let Some(first) = values.next() else {
         return (String::new(), false);
     };
-    if values.any(|v| v != first) {
-        (String::new(), true)
-    } else {
-        (first.to_owned(), false)
-    }
+    if values.any(|v| v != first) { (String::new(), true) } else { (first.to_owned(), false) }
 }
 
 /// [`common_str`] for a field compared as a whole value rather than as a string.
@@ -29,11 +25,7 @@ where
     let Some(first) = values.next() else {
         return (T::default(), false);
     };
-    if values.all(|other| other == first) {
-        (first.clone(), false)
-    } else {
-        (T::default(), true)
-    }
+    if values.all(|other| other == first) { (first.clone(), false) } else { (T::default(), true) }
 }
 
 /// Common value across the selection for a formatted (numeric) field. Compares a
@@ -50,11 +42,7 @@ pub(super) fn common_by<T: Copy, K: Eq>(
         return (String::new(), false);
     };
     let first_key = key(first);
-    if values.any(|v| key(v) != first_key) {
-        (String::new(), true)
-    } else {
-        (fmt(first), false)
-    }
+    if values.any(|v| key(v) != first_key) { (String::new(), true) } else { (fmt(first), false) }
 }
 
 /// Display-collapsing key for an integer field: non-positive / absent all render

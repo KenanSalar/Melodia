@@ -41,9 +41,7 @@ struct MockBackend {
 
 impl MockBackend {
     fn new() -> Self {
-        Self {
-            inner: Mutex::new(MockBackendInner::default()),
-        }
+        Self { inner: Mutex::new(MockBackendInner::default()) }
     }
 
     fn with_play_failure() -> Self {
@@ -153,11 +151,7 @@ impl PlayerBackend for MockBackend {
 fn make_test_sinks() -> PlayerSinks {
     let (view_model, _) = watch::channel(None);
     let (queue, _) = watch::channel(None);
-    PlayerSinks {
-        view_model,
-        queue,
-        media_controls: None,
-    }
+    PlayerSinks { view_model, queue, media_controls: None }
 }
 
 /// Bundles every fixture the `execute_actions` tests need. The temp dir is
@@ -285,10 +279,7 @@ async fn execute_stop_forwards_the_fade_length() -> Result<(), AppError> {
     let fx = fixture()?;
     let mock = MockBackend::new();
 
-    let actions = vec![
-        PlayerAction::Stop { fade_ms: 250 },
-        PlayerAction::Stop { fade_ms: 0 },
-    ];
+    let actions = vec![PlayerAction::Stop { fade_ms: 250 }, PlayerAction::Stop { fade_ms: 0 }];
 
     crate::player::engine::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
@@ -304,10 +295,7 @@ async fn execute_pause_forwards_the_fade_length() -> Result<(), AppError> {
     let fx = fixture()?;
     let mock = MockBackend::new();
 
-    let actions = vec![
-        PlayerAction::Pause { fade_ms: 250 },
-        PlayerAction::Pause { fade_ms: 0 },
-    ];
+    let actions = vec![PlayerAction::Pause { fade_ms: 250 }, PlayerAction::Pause { fade_ms: 0 }];
 
     crate::player::engine::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
@@ -496,10 +484,7 @@ async fn execute_play_stream_reaches_the_backend_without_a_path() -> Result<(), 
     let mock = MockBackend::new();
     let generation = tune_in(&fx.player_state);
 
-    let actions = vec![PlayerAction::PlayStream {
-        generation,
-        volume: 0.8,
-    }];
+    let actions = vec![PlayerAction::PlayStream { generation, volume: 0.8 }];
     crate::player::engine::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     let inner = mock.inner();
@@ -516,10 +501,7 @@ async fn execute_play_stream_failure_clears_the_station() -> Result<(), AppError
     let mock = MockBackend::with_stream_failure();
     let generation = tune_in(&fx.player_state);
 
-    let actions = vec![PlayerAction::PlayStream {
-        generation,
-        volume: 1.0,
-    }];
+    let actions = vec![PlayerAction::PlayStream { generation, volume: 1.0 }];
     crate::player::engine::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     let state = crate::player::engine::state::lock_state(&fx.player_state);

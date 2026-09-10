@@ -329,10 +329,7 @@ fn replaygain_applies_with_eq_disabled() {
     let rg = ReplayGainShared::new();
     rg.set_enabled(true);
     rg.set_mode(RgMode::Album);
-    let baked = TrackReplayGain {
-        album_gain: Some(-6.020_6),
-        ..Default::default()
-    };
+    let baked = TrackReplayGain { album_gain: Some(-6.020_6), ..Default::default() };
 
     let out = run_rg(false, rg, baked, input.clone());
 
@@ -360,10 +357,7 @@ fn live_replaygain_change_is_observed_via_generation() {
     // ReplayGain generation too.
     let input = ramp(2048);
     let rg = ReplayGainShared::new(); // starts disabled
-    let baked = TrackReplayGain {
-        album_gain: Some(-6.020_6),
-        ..Default::default()
-    };
+    let baked = TrackReplayGain { album_gain: Some(-6.020_6), ..Default::default() };
 
     let shared = EqShared::new(true, &[0.0; NUM_BANDS]);
     let mut src = EqSource::new(

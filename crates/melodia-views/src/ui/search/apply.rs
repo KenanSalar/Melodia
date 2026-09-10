@@ -94,11 +94,8 @@ fn sort_track_rows(
 /// Truncate the Songs rows against the live `show-all-tracks` flag and write
 /// them, with the untruncated total beside them.
 fn write_tracks(g: &Search, rows: Vec<UiTrackListRow>, total: i32) {
-    let take = if g.get_show_all_tracks() {
-        rows.len()
-    } else {
-        rows.len().min(COMPACT_TRACK_LIMIT)
-    };
+    let take =
+        if g.get_show_all_tracks() { rows.len() } else { rows.len().min(COMPACT_TRACK_LIMIT) };
     let mut shown: Vec<UiTrackListRow> = rows.into_iter().take(take).collect();
     restamp_rows(g, &mut shown);
     write_track_model(g, shown);

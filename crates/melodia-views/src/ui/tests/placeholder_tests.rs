@@ -130,11 +130,9 @@ fn the_multiline_placeholder_is_bounded_and_wraps() {
 #[test]
 fn the_search_bar_negotiates_its_width() {
     let src = normalized(SEARCH_BAR);
-    for constraint in [
-        "min-width: root.min-w;",
-        "preferred-width: input-width;",
-        "max-width: input-width;",
-    ] {
+    for constraint in
+        ["min-width: root.min-w;", "preferred-width: input-width;", "max-width: input-width;"]
+    {
         assert!(src.contains(constraint), "search-bar.slint's root is missing `{constraint}`");
     }
     // Leading space so this doesn't read the tail of `max-width: input-width;`.

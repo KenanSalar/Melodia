@@ -19,11 +19,7 @@ pub enum UpdaterEvent {
     /// `critical` mirrors the manifest flag and hides "Skip this version". Dismissing
     /// the toast still works — it re-appears next session; only the permanent skip is
     /// suppressed.
-    Available {
-        version: String,
-        notes_short: String,
-        critical: bool,
-    },
+    Available { version: String, notes_short: String, critical: bool },
     /// `download_and_install` finished and atomically swapped the live binary.
     /// Becomes the "Update installed — Restart" toast, `kind = "update-restart"`.
     Installed,

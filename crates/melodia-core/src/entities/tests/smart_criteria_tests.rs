@@ -13,26 +13,15 @@ fn sample() -> SmartCriteria {
                 op: RuleOp::Contains,
                 value: Some(RuleValue::Text("Rock".to_owned())),
             },
-            Rule {
-                field: RuleField::Rating,
-                op: RuleOp::Gte,
-                value: Some(RuleValue::Number(4.0)),
-            },
+            Rule { field: RuleField::Rating, op: RuleOp::Gte, value: Some(RuleValue::Number(4.0)) },
             Rule {
                 field: RuleField::LastPlayed,
                 op: RuleOp::InLast,
                 value: Some(RuleValue::Days(30)),
             },
-            Rule {
-                field: RuleField::Favorite,
-                op: RuleOp::IsTrue,
-                value: None,
-            },
+            Rule { field: RuleField::Favorite, op: RuleOp::IsTrue, value: None },
         ],
-        limit: Some(SmartLimit {
-            count: 50,
-            order: LimitOrder::PlayCountDesc,
-        }),
+        limit: Some(SmartLimit { count: 50, order: LimitOrder::PlayCountDesc }),
     }
 }
 
@@ -102,12 +91,7 @@ fn field_value_types_and_operator_lists_are_coherent() {
     assert_eq!(RuleField::LastPlayed.value_type(), ValueType::Date);
 
     // Every value category exposes at least one operator.
-    for vt in [
-        ValueType::Text,
-        ValueType::Number,
-        ValueType::Bool,
-        ValueType::Date,
-    ] {
+    for vt in [ValueType::Text, ValueType::Number, ValueType::Bool, ValueType::Date] {
         assert!(!ops_for(vt).is_empty(), "no operators for {vt:?}");
     }
 }
@@ -199,11 +183,7 @@ fn depends_on_play_stats_classification() {
     // Helper: criteria with a single rule on `field` (value shape irrelevant to
     // the stat-dependence check, which only inspects the field) and no limit.
     let with_field = |field: RuleField| SmartCriteria {
-        rules: vec![Rule {
-            field,
-            op: RuleOp::IsSet,
-            value: None,
-        }],
+        rules: vec![Rule { field, op: RuleOp::IsSet, value: None }],
         limit: None,
         ..SmartCriteria::default()
     };
@@ -316,12 +296,7 @@ fn shape_of(value: Option<&RuleValue>) -> Shape {
 /// the way this pair of tests would go quiet rather than fail.
 #[test]
 fn the_shape_table_covers_exactly_the_operators_the_editor_offers() {
-    for vt in [
-        ValueType::Text,
-        ValueType::Number,
-        ValueType::Bool,
-        ValueType::Date,
-    ] {
+    for vt in [ValueType::Text, ValueType::Number, ValueType::Bool, ValueType::Date] {
         let declared: Vec<RuleOp> =
             OFFERED_SHAPES.iter().filter(|(v, ..)| *v == vt).map(|&(_, op, _)| op).collect();
         assert_eq!(

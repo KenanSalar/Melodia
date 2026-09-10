@@ -67,11 +67,7 @@ pub struct RowText {
 impl RowText {
     /// A row with no action button — most of them.
     pub fn plain(title: SharedString, message: SharedString) -> Self {
-        Self {
-            title,
-            message,
-            action_label: SharedString::default(),
-        }
+        Self { title, message, action_label: SharedString::default() }
     }
 }
 

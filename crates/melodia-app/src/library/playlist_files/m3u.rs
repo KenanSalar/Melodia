@@ -69,11 +69,7 @@ pub fn serialize(playlist_name: &str, tracks: &[PlaylistExportRow]) -> String {
     out.push('\n');
 
     for t in tracks {
-        let secs = if t.duration_ms > 0 {
-            (t.duration_ms + 500) / 1000
-        } else {
-            -1
-        };
+        let secs = if t.duration_ms > 0 { (t.duration_ms + 500) / 1000 } else { -1 };
         out.push_str(EXTINF_TAG);
         out.push_str(&secs.to_string());
         out.push(',');

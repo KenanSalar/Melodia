@@ -22,11 +22,7 @@ pub const NO_TAB: i32 = -1;
 /// about the live one; spelled twice, the two could disagree about what a tabless section
 /// reports and a replay would never match its own recording.
 pub fn tab_of_section(ui: &AppWindow, section: i32) -> i32 {
-    if section == super::NAV_MY_LIBRARY {
-        ui.global::<MyLibrary>().get_tab_idx()
-    } else {
-        NO_TAB
-    }
+    if section == super::NAV_MY_LIBRARY { ui.global::<MyLibrary>().get_tab_idx() } else { NO_TAB }
 }
 
 /// Move the My Library tab and remember it. Deliberately **not** `tab-changed`, which is
@@ -55,13 +51,8 @@ impl MyLibraryTab {
     /// [`tab_from_index`] ends in a default arm, so a tab added to `my-library.slint`
     /// without one here resolves to `Songs` and `ui::view_tag` logs that. Pinned
     /// against `tab-count`.
-    pub const ALL: [Self; 5] = [
-        Self::Songs,
-        Self::Albums,
-        Self::Artists,
-        Self::Genres,
-        Self::Playlists,
-    ];
+    pub const ALL: [Self; 5] =
+        [Self::Songs, Self::Albums, Self::Artists, Self::Genres, Self::Playlists];
 }
 
 /// Resolve a `MyLibrary.tab-idx` value against the global's own `tab-*` constants. UI
@@ -140,10 +131,7 @@ pub fn mounted_surface(ui: &AppWindow) -> MountedSurface {
         let g = ui.global::<MyLibrary>();
         tab_from_index(&g, g.get_tab_idx())
     };
-    MountedSurface {
-        tab,
-        detail_id: detail_id_for(ui, tab),
-    }
+    MountedSurface { tab, detail_id: detail_id_for(ui, tab) }
 }
 
 /// The mounted tab and the detail it has open, from [`mounted_surface`].

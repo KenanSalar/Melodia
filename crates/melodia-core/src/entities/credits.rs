@@ -100,10 +100,7 @@ impl RoleCredits {
     #[must_use]
     pub fn new(credits: Vec<RoleCredit>) -> Self {
         let rendered = render(&credits);
-        Self {
-            line: (!rendered.is_empty()).then_some(rendered),
-            credits,
-        }
+        Self { line: (!rendered.is_empty()).then_some(rendered), credits }
     }
 
     /// The names as one string, for the `credits` column and the FTS index behind it.

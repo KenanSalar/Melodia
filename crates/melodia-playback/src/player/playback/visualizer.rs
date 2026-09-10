@@ -169,11 +169,7 @@ impl VisualizerShared {
         if let Some(ring) = self.decks.get(deck) {
             ring.open();
         }
-        DeckRun {
-            viz: self.clone(),
-            deck,
-            released: false,
-        }
+        DeckRun { viz: self.clone(), deck, released: false }
     }
 
     /// Publish the rate of the source now feeding a ring.

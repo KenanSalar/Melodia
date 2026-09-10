@@ -170,10 +170,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
             // highlight re-set `PopupHighlight.id` from their own `pointer-event(up)`,
             // which runs after this filter. Both writes are sentinel-gated so a random
             // click doesn't churn the property.
-            WindowEvent::MouseInput {
-                state: ElementState::Released,
-                ..
-            } => {
+            WindowEvent::MouseInput { state: ElementState::Released, .. } => {
                 // Synchronous rather than `upgrade_in_event_loop`: a deferred clear lands
                 // after those `pointer-event(up)` handlers and wipes the re-set.
                 if let Some(ui) = weak.upgrade() {

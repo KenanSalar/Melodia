@@ -99,11 +99,7 @@ impl Decks {
                 AppError::Player(format!("The mixer has no voice {slot} for a deck"))
             })?;
             voice.pause();
-            decks.push(Deck {
-                voice,
-                fade: FadeShared::idle(),
-                viz_slot: slot,
-            });
+            decks.push(Deck { voice, fade: FadeShared::idle(), viz_slot: slot });
         }
         let decks = <[Deck; DECK_COUNT]>::try_from(decks)
             .map_err(|_| AppError::Player("Wrong number of decks built".to_owned()))?;

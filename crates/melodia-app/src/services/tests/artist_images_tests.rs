@@ -53,9 +53,7 @@ async fn a_library_whose_artists_all_have_images_asks_for_nothing() -> Result<()
     let paths = Paths::rooted_at(tmp.path().to_path_buf());
     paths.create_dirs()?;
     let db = DbPool::test_pool().await?;
-    sqlx::query("UPDATE artists SET image_path = '/cached/artist.jpg'")
-        .execute(db.write())
-        .await?;
+    sqlx::query("UPDATE artists SET image_path = '/cached/artist.jpg'").execute(db.write()).await?;
 
     let fetched = fetch_artist_images(&paths, &db, &reqwest::Client::new()).await?;
 

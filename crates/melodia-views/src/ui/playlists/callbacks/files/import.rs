@@ -80,11 +80,7 @@ pub(super) fn wire(
                     )
                 });
             } else {
-                let variant = if missing > 0 || failures > 0 {
-                    "warning"
-                } else {
-                    "success"
-                };
+                let variant = if missing > 0 || failures > 0 { "warning" } else { "success" };
                 notifications.show_auto_dismiss(
                     NotificationParams::plain(
                         variant,

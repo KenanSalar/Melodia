@@ -28,11 +28,7 @@ impl Library {
         paths.create_dirs()?;
         let db = DbPool::test_pool().await?;
         queries::folder::insert_folder(&db, "/music", true).await?;
-        Ok(Self {
-            db,
-            paths,
-            _tmp: tmp,
-        })
+        Ok(Self { db, paths, _tmp: tmp })
     }
 
     /// Point the one track row at `stored`, which is the only thing that puts a file in front of

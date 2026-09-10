@@ -67,11 +67,7 @@ pub const NAV_RADIO: i32 = 10;
 /// setting. Left unfolded, a boot with the switch off selects a router branch that is
 /// gated away and paints nothing.
 pub fn fold_disabled_nav_index(idx: i32, radio_enabled: bool) -> i32 {
-    if idx == NAV_RADIO && !radio_enabled {
-        crate::ui::my_library::NAV_MY_LIBRARY
-    } else {
-        idx
-    }
+    if idx == NAV_RADIO && !radio_enabled { crate::ui::my_library::NAV_MY_LIBRARY } else { idx }
 }
 
 /// Everything switching Radio off has to undo, past the row and the router branch that

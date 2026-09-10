@@ -82,11 +82,7 @@ pub async fn insert_test_track(
 ) -> Result<i64, AppError> {
     let mut meta = make_test_metadata(title);
     meta.artist = ArtistCredit::from_name(artist_name);
-    meta.album = if album_name.is_empty() {
-        None
-    } else {
-        Some(album_name.to_owned())
-    };
+    meta.album = if album_name.is_empty() { None } else { Some(album_name.to_owned()) };
     meta.genres = GenreList::from_name(genre_name);
 
     insert_tagged_track(db, file_path, &meta).await

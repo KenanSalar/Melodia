@@ -93,10 +93,9 @@ fn an_adts_stream_has_no_config_to_demote() {
 
 #[test]
 fn symphonia_refuses_the_config_and_accepts_its_core_layer() -> Result<(), AppError> {
-    for (what, asc, rate, channels) in [
-        ("HE-AAC", HE_AAC, 22050, 2),
-        ("HE-AAC v2", HE_AAC_V2, 22050, 1),
-    ] {
+    for (what, asc, rate, channels) in
+        [("HE-AAC", HE_AAC, 22050, 2), ("HE-AAC v2", HE_AAC_V2, 22050, 1)]
+    {
         let mut params = AudioCodecParameters::new();
         params.for_codec(CODEC_ID_AAC).with_extra_data(asc.into());
         assert!(

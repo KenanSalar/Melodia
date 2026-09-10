@@ -72,12 +72,7 @@ pub(super) fn build_filtered_grid(rp_ui: &RecentlyPlayedUi) -> PreparedGrid {
     drop(cache);
 
     let most_played_count = most_played.len();
-    PreparedGrid {
-        tab,
-        most_played,
-        most_played_count,
-        most_played_content: hasher.finish(),
-    }
+    PreparedGrid { tab, most_played, most_played_count, most_played_content: hasher.finish() }
 }
 
 /// Chunk the prepared rows into cards and push them into the grid's model. UI thread only, and

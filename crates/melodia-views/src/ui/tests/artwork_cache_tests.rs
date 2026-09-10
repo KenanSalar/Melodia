@@ -6,13 +6,7 @@ use crate::ui::util::BLUR_SIGMA;
 /// literal drifts off the tier it claims to be the moment either is retuned.
 fn test_cache(capacity: usize) -> ArtworkCache {
     let cap = NonZeroUsize::new(capacity).unwrap_or(NonZeroUsize::MIN);
-    ArtworkCache::new(
-        cap,
-        Some(BlurSpec {
-            height: BLUR_TARGET,
-            sigma: BLUR_SIGMA,
-        }),
-    )
+    ArtworkCache::new(cap, Some(BlurSpec { height: BLUR_TARGET, sigma: BLUR_SIGMA }))
 }
 
 #[test]
@@ -62,10 +56,7 @@ fn neither_half_enlarges_a_small_source_and_the_band_keeps_its_aspect() {
     // Smaller than `COVER_SIZE` and than `BLUR_TARGET`, so both halves are asked to enlarge.
     let source =
         DynamicImage::ImageRgb8(image::ImageBuffer::from_pixel(96, 96, image::Rgb([90, 140, 210])));
-    let spec = BlurSpec {
-        height: 85,
-        sigma: 8.0,
-    };
+    let spec = BlurSpec { height: 85, sigma: 8.0 };
 
     let Some(pair) = pair_from_image(&source, Some(spec)) else {
         unreachable!("a decoded source always resamples into the cover tile");
@@ -122,20 +113,11 @@ fn the_brightness_comes_off_the_blur_and_the_seeds_off_the_sharp_downscale() {
     // A wordmark's worth of white on black, deliberately *under* `PERCENTILE_TAIL` so the sharp
     // percentile steps over it — the whole case this split exists for.
     let source = DynamicImage::ImageRgb8(image::ImageBuffer::from_fn(192, 192, |x, y| {
-        image::Rgb(if x < 56 && y < 56 {
-            [255, 255, 255]
-        } else {
-            [0, 0, 0]
-        })
+        image::Rgb(if x < 56 && y < 56 { [255, 255, 255] } else { [0, 0, 0] })
     }));
 
-    let Some(pair) = pair_from_image(
-        &source,
-        Some(BlurSpec {
-            height: BLUR_TARGET,
-            sigma: 24.0,
-        }),
-    ) else {
+    let Some(pair) = pair_from_image(&source, Some(BlurSpec { height: BLUR_TARGET, sigma: 24.0 }))
+    else {
         unreachable!("a decoded source always resamples into the cover tile");
     };
 

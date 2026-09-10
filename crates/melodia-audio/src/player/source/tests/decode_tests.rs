@@ -39,11 +39,8 @@ fn a_decoder_running_at_half_the_container_rate_halves_the_count() {
 /// what makes the disagreement above the whole of the difference.
 #[test]
 fn the_two_roundings_agree_wherever_the_conversion_is_exact() {
-    for (ticks, denom, rate) in [
-        (1_000, 1_000, 48_000),
-        (441, 44_100, 44_100),
-        (0, 1_000, 44_100),
-    ] {
+    for (ticks, denom, rate) in [(1_000, 1_000, 48_000), (441, 44_100, 44_100), (0, 1_000, 44_100)]
+    {
         assert_eq!(
             frames(ticks, denom, rate, Rounding::Down),
             frames(ticks, denom, rate, Rounding::Up),

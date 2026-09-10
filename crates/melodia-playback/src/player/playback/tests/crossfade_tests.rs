@@ -399,10 +399,7 @@ fn abort_ramp_is_short_enough_to_be_inaudible_but_not_a_step() {
 // --- manual_fade_ms --------------------------------------------------------
 
 fn manual_settings() -> CrossfadeSettings {
-    CrossfadeSettings {
-        manual: true,
-        ..settings()
-    }
+    CrossfadeSettings { manual: true, ..settings() }
 }
 
 #[test]

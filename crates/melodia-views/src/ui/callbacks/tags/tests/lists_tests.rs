@@ -5,11 +5,7 @@ use melodia_core::entities::credits::{CreditRole, ROLES, RoleCredit, RoleCredits
 use melodia_core::entities::tags::RoleCreditEdit;
 
 fn credit(role: CreditRole, name: &str, detail: &str) -> RoleCredit {
-    RoleCredit {
-        role,
-        name: name.to_owned(),
-        detail: detail.to_owned(),
-    }
+    RoleCredit { role, name: name.to_owned(), detail: detail.to_owned() }
 }
 
 fn spelled(credits: &RoleCredits) -> Vec<(&'static str, &str)> {
@@ -53,10 +49,8 @@ fn a_selection_shows_the_roles_it_agrees_on_and_flags_the_rest() {
 /// the fold back would otherwise strip the credit off the track that had one.
 #[test]
 fn a_role_only_one_track_carries_is_a_disagreement() {
-    let sets = [
-        RoleCredits::new(vec![credit(CreditRole::Composer, "Alice", "")]),
-        RoleCredits::default(),
-    ];
+    let sets =
+        [RoleCredits::new(vec![credit(CreditRole::Composer, "Alice", "")]), RoleCredits::default()];
 
     let folded = common_roles(&sets);
 

@@ -88,18 +88,11 @@ fn credit_field(field: i32) -> usize {
 /// The model behind one of the two credits. Spelled once: three call sites used to carry the same
 /// branch, which is two chances for the album artist's rows to be written into the artist's.
 fn credit_model(te: &TagEditor, field: usize) -> ModelRc<ArtistCreditRow> {
-    if field == CREDIT_ALBUM_ARTIST {
-        te.get_album_artists()
-    } else {
-        te.get_artists()
-    }
+    if field == CREDIT_ALBUM_ARTIST { te.get_album_artists() } else { te.get_artists() }
 }
 
 fn blank_credit_row() -> ArtistCreditRow {
-    ArtistCreditRow {
-        name: SharedString::new(),
-        join_index: 0,
-    }
+    ArtistCreditRow { name: SharedString::new(), join_index: 0 }
 }
 
 fn with_credits_model<R>(
@@ -162,11 +155,7 @@ pub(super) fn credit_from_model(
         .enumerate()
         .map(|(i, r)| CreditedArtist {
             name: r.name.trim().to_owned(),
-            join_phrase: if i == last {
-                String::new()
-            } else {
-                phrase_at(phrases, r.join_index)
-            },
+            join_phrase: if i == last { String::new() } else { phrase_at(phrases, r.join_index) },
         })
         .collect();
     ArtistCredit::new(artists)
@@ -192,11 +181,7 @@ pub(super) fn rows_from_credit(
             join_index: register_phrase(phrases, &a.join_phrase),
         })
         .collect();
-    if rows.is_empty() {
-        vec![blank_credit_row()]
-    } else {
-        rows
-    }
+    if rows.is_empty() { vec![blank_credit_row()] } else { rows }
 }
 
 /// The picker index for `rendered`, appending it when the file uses a phrase the built-in list

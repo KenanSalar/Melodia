@@ -334,16 +334,8 @@ pub struct TrackMeta {
 /// The explicit SELECT columns for `TrackMeta` queries. Listed in
 /// `TrackMeta`'s field order for legibility — sqlx's derived `FromRow`
 /// matches by column name, so the order isn't load-bearing.
-pub const TRACK_META_COLUMNS: &[&str] = &[
-    "id",
-    "codec",
-    "bitrate",
-    "sample_rate",
-    "bit_depth",
-    "channels",
-    "year",
-    "genre",
-];
+pub const TRACK_META_COLUMNS: &[&str] =
+    &["id", "codec", "bitrate", "sample_rate", "bit_depth", "channels", "year", "genre"];
 
 /// Comma-separated form of `TRACK_META_COLUMNS` for direct `SELECT` usage.
 /// Built once on first access and reused (same `OnceLock` pattern as

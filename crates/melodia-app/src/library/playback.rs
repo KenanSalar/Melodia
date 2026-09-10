@@ -255,11 +255,7 @@ pub fn player_stop(ctx: &PlaybackContext) -> Result<(), AppError> {
 pub fn player_stop_station(ctx: &PlaybackContext) -> Result<(), AppError> {
     let fade_ms = transport_fade_ms(ctx);
     ctx.emit_and_execute(move |s| {
-        if s.station().is_some() {
-            s.build_stop_actions(fade_ms)
-        } else {
-            Vec::new()
-        }
+        if s.station().is_some() { s.build_stop_actions(fade_ms) } else { Vec::new() }
     });
     Ok(())
 }

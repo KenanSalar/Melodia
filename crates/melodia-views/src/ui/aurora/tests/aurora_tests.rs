@@ -14,20 +14,12 @@ const THEME_ACCENT: u32 = 0x00cb_a6f7;
 /// Catppuccin Mocha — the shipped default, reaching the washes only as the fallback for a set with
 /// no seeds at all.
 fn mocha() -> ThemeTokens {
-    ThemeTokens {
-        base: 0x001e_1e2e,
-        text: 0x00cd_d6f4,
-        accent: THEME_ACCENT,
-    }
+    ThemeTokens { base: 0x001e_1e2e, text: 0x00cd_d6f4, accent: THEME_ACCENT }
 }
 
 /// A cover whose quantize separated a full set of hues — the real seeds off `Real for Me`.
-const MANY_HUES: [Option<u32>; SEED_COUNT] = [
-    Some(0x0038_718b),
-    Some(0x00cc_2841),
-    Some(0x0030_3446),
-    Some(0x007d_5c79),
-];
+const MANY_HUES: [Option<u32>; SEED_COUNT] =
+    [Some(0x0038_718b), Some(0x00cc_2841), Some(0x0030_3446), Some(0x007d_5c79)];
 
 /// A monochrome sleeve: one seed, the rest owed to the filling rule.
 const ONE_HUE: [Option<u32>; SEED_COUNT] = [Some(0x00c0_3030), None, None, None];
@@ -154,9 +146,7 @@ fn a_measured_wash_is_the_seed_untouched() {
     let painted = tints(MANY_HUES, &mocha());
 
     for (slot, seed) in MANY_HUES.iter().take(WASH_COUNT).enumerate() {
-        let Some(seed) = *seed else {
-            unreachable!("MANY_HUES is a full set")
-        };
+        let Some(seed) = *seed else { unreachable!("MANY_HUES is a full set") };
         assert_eq!(
             painted[slot].rgb, seed,
             "wash {slot} came back as {:#08x} against the seed {seed:#08x}",
@@ -251,12 +241,7 @@ fn a_greyscale_cover_stays_grey() {
 /// job, by giving each sweep an edge; the solve's is to hand over what the artwork had.
 #[test]
 fn a_multi_coloured_cover_keeps_its_colours_apart() {
-    let blue_and_red = [
-        Some(0x0038_718b),
-        Some(0x00cc_2841),
-        Some(0x0030_3446),
-        Some(0x007d_5c79),
-    ];
+    let blue_and_red = [Some(0x0038_718b), Some(0x00cc_2841), Some(0x0030_3446), Some(0x007d_5c79)];
     let painted = tints(blue_and_red, &mocha());
 
     // The painted set is the quantizer's first `WASH_COUNT`; the box it drops is not this test's.
@@ -336,11 +321,7 @@ fn the_seated_accent_pair_runs_light_to_dark() {
 #[test]
 fn an_accent_below_the_ceiling_washes_untouched() {
     const LATTE_ACCENT: u32 = 0x0088_39ef;
-    let latte = ThemeTokens {
-        base: 0x00ef_f1f5,
-        text: 0x004c_4f69,
-        accent: LATTE_ACCENT,
-    };
+    let latte = ThemeTokens { base: 0x00ef_f1f5, text: 0x004c_4f69, accent: LATTE_ACCENT };
 
     assert!(
         hct_of(LATTE_ACCENT).get_tone() < WASH_MAX_TONE,

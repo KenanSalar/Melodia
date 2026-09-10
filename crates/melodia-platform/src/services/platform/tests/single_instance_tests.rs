@@ -156,9 +156,7 @@ fn the_same_data_directory_gets_the_same_name() {
 /// mutating the environment races it either way.
 #[test]
 fn a_second_launch_hands_its_paths_to_the_first_and_stands_down() {
-    let Ok(data_dir) = tempdir() else {
-        unreachable!("no writable temp directory")
-    };
+    let Ok(data_dir) = tempdir() else { unreachable!("no writable temp directory") };
     let (tx, rx) = mpsc::channel();
 
     reading_env(|| {
@@ -195,9 +193,7 @@ fn a_second_launch_hands_its_paths_to_the_first_and_stands_down() {
 /// does eventually give up, because "eventually" is the whole complaint.
 #[test]
 fn a_silent_peer_does_not_cost_the_launch_behind_it() {
-    let Ok(data_dir) = tempdir() else {
-        unreachable!("no writable temp directory")
-    };
+    let Ok(data_dir) = tempdir() else { unreachable!("no writable temp directory") };
     let (tx, rx) = mpsc::channel();
 
     reading_env(|| {
@@ -211,9 +207,7 @@ fn a_silent_peer_does_not_cost_the_launch_behind_it() {
         let Ok(name) = socket_name(data_dir.path()) else {
             unreachable!("the name just claimed must still spell")
         };
-        let Ok(_silent) = Stream::connect(name) else {
-            unreachable!("the primary is listening")
-        };
+        let Ok(_silent) = Stream::connect(name) else { unreachable!("the primary is listening") };
 
         let opened = PathBuf::from("/music/Album/02 - Track.flac");
         assert!(
@@ -239,9 +233,7 @@ fn a_silent_peer_does_not_cost_the_launch_behind_it() {
 /// name. Well inside `RESPAWN_WAIT`, so a slow runner still lands on the same answer.
 #[test]
 fn a_restarting_child_waits_for_the_name_rather_than_forwarding() {
-    let Ok(data_dir) = tempdir() else {
-        unreachable!("no writable temp directory")
-    };
+    let Ok(data_dir) = tempdir() else { unreachable!("no writable temp directory") };
 
     with_env_set(&[RESPAWN_ENV], &[(RESPAWN_ENV, "1")], || {
         let Claim::Primary(held) = claim(data_dir.path(), &[]) else {

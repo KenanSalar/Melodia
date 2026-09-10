@@ -82,12 +82,7 @@ pub async fn resolve_track_context(
         upsert_album(tx, album_name, album_artist_id, &album_credit, meta, names).await?;
     let genre_id = names.genre(tx, genre_name).await?;
 
-    Ok(Some(ResolvedIds {
-        artist_id,
-        album_id,
-        genre_id,
-        folder_id,
-    }))
+    Ok(Some(ResolvedIds { artist_id, album_id, genre_id, folder_id }))
 }
 
 #[cfg(test)]

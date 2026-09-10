@@ -63,10 +63,7 @@ fn test_volume_clamped_to_max() -> Result<(), AppError> {
 fn test_settings_roundtrip_volume_mute() -> Result<(), AppError> {
     let settings = SettingsData {
         volume: 42,
-        playback: PlaybackFlags {
-            is_muted: true,
-            ..PlaybackFlags::default()
-        },
+        playback: PlaybackFlags { is_muted: true, ..PlaybackFlags::default() },
         // `SettingsData::default()` reads the environment through its serde
         // defaults, so it takes the same lock the mutating tests below do.
         ..reading_env(SettingsData::default)
@@ -81,10 +78,7 @@ fn test_settings_roundtrip_volume_mute() -> Result<(), AppError> {
 #[test]
 fn test_settings_roundtrip_playback_speed() -> Result<(), AppError> {
     let settings = SettingsData {
-        playback: PlaybackFlags {
-            playback_speed: 1.5,
-            ..PlaybackFlags::default()
-        },
+        playback: PlaybackFlags { playback_speed: 1.5, ..PlaybackFlags::default() },
         ..reading_env(SettingsData::default)
     };
     let json = serde_json::to_string(&settings).map_err(|e| json_err(&e))?;
@@ -161,10 +155,7 @@ fn test_skip_startup_animation_defaults_false_and_reads_a_top_level_key() -> Res
 
 #[test]
 fn test_view_sort_roundtrip() -> Result<(), AppError> {
-    let sort = ViewSort {
-        field: "title".to_owned(),
-        dir: SortDir::Desc,
-    };
+    let sort = ViewSort { field: "title".to_owned(), dir: SortDir::Desc };
     let json = serde_json::to_string(&sort).map_err(|e| json_err(&e))?;
     let deserialized: ViewSort = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
     assert_eq!(deserialized.field, "title");
@@ -477,24 +468,9 @@ fn test_radio_sub_toggles_survive_an_older_settings_file() -> Result<(), AppErro
 /// than shown a card it has already seen.
 #[test]
 fn the_welcome_card_is_owed_only_below_the_current_revision() {
-    assert!(
-        OnboardingFlags {
-            onboarding_version: 0
-        }
-        .needs_onboarding()
-    );
-    assert!(
-        !OnboardingFlags {
-            onboarding_version: ONBOARDING_VERSION
-        }
-        .needs_onboarding()
-    );
-    assert!(
-        !OnboardingFlags {
-            onboarding_version: ONBOARDING_VERSION + 1
-        }
-        .needs_onboarding()
-    );
+    assert!(OnboardingFlags { onboarding_version: 0 }.needs_onboarding());
+    assert!(!OnboardingFlags { onboarding_version: ONBOARDING_VERSION }.needs_onboarding());
+    assert!(!OnboardingFlags { onboarding_version: ONBOARDING_VERSION + 1 }.needs_onboarding());
 }
 
 /// The field is flattened, so an install written before the card existed has no key at all — and

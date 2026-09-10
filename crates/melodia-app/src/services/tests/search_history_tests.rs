@@ -13,18 +13,14 @@ fn add_query_inserts_at_front() {
 
 #[test]
 fn add_query_deduplicates() {
-    let mut history = SearchHistory {
-        queries: vec!["a".into(), "b".into(), "c".into()],
-    };
+    let mut history = SearchHistory { queries: vec!["a".into(), "b".into(), "c".into()] };
     add_query(&mut history, "b");
     assert_eq!(history.queries, vec!["b", "a", "c"]);
 }
 
 #[test]
 fn add_query_caps_at_max() {
-    let mut history = SearchHistory {
-        queries: (1..=10).map(|i| format!("q{i}")).collect(),
-    };
+    let mut history = SearchHistory { queries: (1..=10).map(|i| format!("q{i}")).collect() };
     assert_eq!(history.queries.len(), 10);
     add_query(&mut history, "new");
     assert_eq!(history.queries.len(), 10);

@@ -27,10 +27,8 @@ const PLAYING_TEXT: &str = "Playing";
 /// a fixed target has no per-track state and can never point somewhere wrong.
 /// English-only, like the tray labels. (Discord hides a button from the owner
 /// and shows it to everyone else viewing the profile.)
-const MELODIA_BUTTON: ButtonDto = ButtonDto {
-    label: "Get Melodia",
-    url: "https://github.com/KenanSalar/Melodia",
-};
+const MELODIA_BUTTON: ButtonDto =
+    ButtonDto { label: "Get Melodia", url: "https://github.com/KenanSalar/Melodia" };
 
 /// Activity type 2 = "Listening" — the only value that renders "Listening to …"
 /// and permits an `end` timestamp (the progress bar).
@@ -141,10 +139,7 @@ pub fn handshake_json(client_id: &str) -> Vec<u8> {
 pub fn set_activity_json(presence: &Presence, pid: u32, nonce: &str) -> Vec<u8> {
     serde_json::to_vec(&SetActivityDto {
         cmd: "SET_ACTIVITY",
-        args: SetActivityArgs {
-            pid,
-            activity: Some(activity_dto(presence)),
-        },
+        args: SetActivityArgs { pid, activity: Some(activity_dto(presence)) },
         nonce,
     })
     .unwrap_or_default()
@@ -154,10 +149,7 @@ pub fn set_activity_json(presence: &Presence, pid: u32, nonce: &str) -> Vec<u8> 
 pub fn clear_activity_json(pid: u32, nonce: &str) -> Vec<u8> {
     serde_json::to_vec(&SetActivityDto {
         cmd: "SET_ACTIVITY",
-        args: SetActivityArgs {
-            pid,
-            activity: None,
-        },
+        args: SetActivityArgs { pid, activity: None },
         nonce,
     })
     .unwrap_or_default()

@@ -125,14 +125,7 @@ fn the_sub_view_slide_is_disarmed_until_the_first_switch() {
 /// is the row's alone, that one every band's.
 #[test]
 fn the_row_publishes_every_tooltip_anchor_its_host_needs() {
-    for prop in [
-        "tip-x",
-        "tip-y",
-        "tip-w",
-        "tip-h",
-        "tip-label",
-        "tip-visible",
-    ] {
+    for prop in ["tip-x", "tip-y", "tip-w", "tip-h", "tip-label", "tip-visible"] {
         assert!(
             HEADER.contains(&format!("out property <length> {prop}:"))
                 || HEADER.contains(&format!("out property <string> {prop}:"))

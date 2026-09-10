@@ -47,59 +47,31 @@ const LIGHT: Palette = Palette {
 };
 
 const VARIANTS: &[Variant] = &[
-    Variant {
-        id: "dark",
-        name: "Dark",
-        palette: DARK,
-    },
-    Variant {
-        id: "light",
-        name: "Light",
-        palette: LIGHT,
-    },
+    Variant { id: "dark", name: "Dark", palette: DARK },
+    Variant { id: "light", name: "Light", palette: LIGHT },
 ];
 
 const ACCENTS: &[AccentDef] = &[
-    AccentDef {
-        id: "blue",
-        name: "Blue",
-        per_variant: &[("dark", 0x60cdff), ("light", 0x005fb8)],
-    },
+    AccentDef { id: "blue", name: "Blue", per_variant: &[("dark", 0x60cdff), ("light", 0x005fb8)] },
     AccentDef {
         id: "purple",
         name: "Purple",
         per_variant: &[("dark", 0xb4a0ff), ("light", 0x7160e8)],
     },
-    AccentDef {
-        id: "teal",
-        name: "Teal",
-        per_variant: &[("dark", 0x4cd7d0), ("light", 0x038387)],
-    },
+    AccentDef { id: "teal", name: "Teal", per_variant: &[("dark", 0x4cd7d0), ("light", 0x038387)] },
     AccentDef {
         id: "green",
         name: "Green",
         per_variant: &[("dark", 0x6ccb5f), ("light", 0x107c10)],
     },
-    AccentDef {
-        id: "red",
-        name: "Red",
-        per_variant: &[("dark", 0xff6767), ("light", 0xc42b1c)],
-    },
+    AccentDef { id: "red", name: "Red", per_variant: &[("dark", 0xff6767), ("light", 0xc42b1c)] },
     AccentDef {
         id: "orange",
         name: "Orange",
         per_variant: &[("dark", 0xffa24b), ("light", 0xca5010)],
     },
-    AccentDef {
-        id: "pink",
-        name: "Pink",
-        per_variant: &[("dark", 0xff7eb3), ("light", 0xbf0077)],
-    },
-    AccentDef {
-        id: "gold",
-        name: "Gold",
-        per_variant: &[("dark", 0xffd700), ("light", 0x986f0b)],
-    },
+    AccentDef { id: "pink", name: "Pink", per_variant: &[("dark", 0xff7eb3), ("light", 0xbf0077)] },
+    AccentDef { id: "gold", name: "Gold", per_variant: &[("dark", 0xffd700), ("light", 0x986f0b)] },
 ];
 
 pub static WINDOWS: ThemeDef = ThemeDef {

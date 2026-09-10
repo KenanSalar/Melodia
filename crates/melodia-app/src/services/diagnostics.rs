@@ -148,11 +148,7 @@ fn settings_block(paths: &Paths) -> String {
         theme = settings.theme_id,
         variant = settings.theme_variant,
         locale = settings.locale,
-        titlebar = if settings.window.use_native_titlebar {
-            "native"
-        } else {
-            "custom"
-        },
+        titlebar = if settings.window.use_native_titlebar { "native" } else { "custom" },
         tray = settings.tray.tray_enabled,
         close_to_tray = settings.tray.close_to_tray,
         crossfade = settings.crossfade.crossfade_enabled,
@@ -231,11 +227,8 @@ fn tail_of(path: &Path, max_bytes: u64) -> Option<String> {
 
     // A seek into the middle of the file lands mid-line; drop the partial one
     // rather than emit a fragment that reads like a whole record.
-    let trimmed = if start > 0 {
-        text.find('\n').map_or("", |i| &text[i + 1..])
-    } else {
-        text.as_ref()
-    };
+    let trimmed =
+        if start > 0 { text.find('\n').map_or("", |i| &text[i + 1..]) } else { text.as_ref() };
 
     Some(redacted_lines(trimmed))
 }
@@ -258,11 +251,8 @@ fn head_of(path: &Path, max_bytes: u64) -> Option<String> {
 
     // Only when the budget actually cut something — a whole file that happens
     // to end without a newline must keep its last line.
-    let trimmed = if len > max_bytes {
-        text.rfind('\n').map_or("", |i| &text[..=i])
-    } else {
-        text.as_ref()
-    };
+    let trimmed =
+        if len > max_bytes { text.rfind('\n').map_or("", |i| &text[..=i]) } else { text.as_ref() };
 
     Some(redacted_lines(trimmed))
 }

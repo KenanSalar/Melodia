@@ -35,11 +35,7 @@ impl SectionState {
     /// section's own state but not the band. **Browse takes the same seed for the card
     /// view's cover tier**, which an off-screen prewarm releases rather than keeps.
     pub fn new() -> Self {
-        Self {
-            active: AtomicBool::new(false),
-            dirty: AtomicBool::new(false),
-            gate: Mutex::new(()),
-        }
+        Self { active: AtomicBool::new(false), dirty: AtomicBool::new(false), gate: Mutex::new(()) }
     }
 
     /// Mirror the section-visible flag (`section-active-changed`).

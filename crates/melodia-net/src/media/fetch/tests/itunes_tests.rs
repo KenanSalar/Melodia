@@ -13,9 +13,7 @@ use melodia_core::error::AppError;
 type TestResult = Result<(), AppError>;
 
 fn parse(json: &str) -> ItunesSearchResponse {
-    serde_json::from_str(json).unwrap_or(ItunesSearchResponse {
-        results: Vec::new(),
-    })
+    serde_json::from_str(json).unwrap_or(ItunesSearchResponse { results: Vec::new() })
 }
 
 async fn cover_from(response: TestResponse) -> Result<Option<String>, AppError> {

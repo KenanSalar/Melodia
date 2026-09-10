@@ -206,11 +206,7 @@ async fn nothing_is_written_until_the_clicking_stops() -> Result<(), AppError> {
 #[tokio::test]
 async fn the_exit_drain_writes_up_to_its_budget_and_stops() -> Result<(), AppError> {
     for over_budget in [false, true] {
-        let queued = if over_budget {
-            SHUTDOWN_FLUSH_MAX + 4
-        } else {
-            SHUTDOWN_FLUSH_MAX - 3
-        };
+        let queued = if over_budget { SHUTDOWN_FLUSH_MAX + 4 } else { SHUTDOWN_FLUSH_MAX - 3 };
         let fixture = Fixture::new(true).await?;
 
         let mut paths = Vec::with_capacity(queued);

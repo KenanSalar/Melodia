@@ -52,10 +52,7 @@ fn vm(status: &'static str, current_track: Option<Arc<TrackSummary>>) -> PlayerV
 }
 
 fn tick(position_ms: u64, duration_ms: u64) -> PositionTick {
-    PositionTick {
-        position_ms,
-        duration_ms,
-    }
+    PositionTick { position_ms, duration_ms }
 }
 
 /// Feed position ticks from the play's start up to `target_ms` in
@@ -90,10 +87,7 @@ fn normal_play_then_track_change_scrobbles() {
     assert_eq!(
         changed,
         vec![
-            Effect::Scrobble {
-                track_id: 1,
-                timestamp: START,
-            },
+            Effect::Scrobble { track_id: 1, timestamp: START },
             Effect::NowPlaying { track_id: 2 },
         ]
     );
@@ -119,10 +113,7 @@ fn skip_just_past_threshold_scrobbles() {
     assert_eq!(
         changed,
         vec![
-            Effect::Scrobble {
-                track_id: 1,
-                timestamp: START,
-            },
+            Effect::Scrobble { track_id: 1, timestamp: START },
             Effect::NowPlaying { track_id: 2 },
         ]
     );
@@ -164,10 +155,7 @@ fn a_restart_scrobbles_the_prior_play_and_now_plays_again() {
     assert_eq!(
         restart,
         vec![
-            Effect::Scrobble {
-                track_id: 1,
-                timestamp: START,
-            },
+            Effect::Scrobble { track_id: 1, timestamp: START },
             Effect::NowPlaying { track_id: 1 },
         ]
     );
@@ -213,13 +201,7 @@ fn a_stop_finalizes_the_current_play() {
     play_to(&mut d, 95_000, 180_000, START);
 
     let stopped = d.on_view_model(Some(&vm("stopped", Some(summary(1, 180_000)))), 300_000);
-    assert_eq!(
-        stopped,
-        vec![Effect::Finalize {
-            track_id: 1,
-            timestamp: START,
-        }]
-    );
+    assert_eq!(stopped, vec![Effect::Finalize { track_id: 1, timestamp: START }]);
 }
 
 #[test]
@@ -228,13 +210,7 @@ fn shutdown_finalizes_the_current_play() {
     d.on_view_model(Some(&vm("playing", Some(summary(1, 180_000)))), START);
     play_to(&mut d, 95_000, 180_000, START);
 
-    assert_eq!(
-        d.on_shutdown(),
-        vec![Effect::Finalize {
-            track_id: 1,
-            timestamp: START,
-        }]
-    );
+    assert_eq!(d.on_shutdown(), vec![Effect::Finalize { track_id: 1, timestamp: START }]);
 }
 
 #[test]

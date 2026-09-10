@@ -117,11 +117,7 @@ fn classify_manifest(
         )));
     };
 
-    Ok(CheckOutcome::Available {
-        manifest,
-        asset,
-        etag,
-    })
+    Ok(CheckOutcome::Available { manifest, asset, etag })
 }
 
 #[cfg(test)]

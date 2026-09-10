@@ -368,11 +368,7 @@ fn broadband_energy_accumulates_across_a_wider_band() {
 fn a_bands_tilt_gain_scales_its_level() {
     // Quiet enough that neither reading clamps at the ceiling.
     let quiet = db_to_linear(-40.0);
-    let spectrum = [
-        Complex::new(0.0, 0.0),
-        Complex::new(quiet, 0.0),
-        Complex::new(quiet, 0.0),
-    ];
+    let spectrum = [Complex::new(0.0, 0.0), Complex::new(quiet, 0.0), Complex::new(quiet, 0.0)];
     let mut plain = [0.0; 1];
     bands_from_spectrum(&spectrum, &[1.0, 2.0], &[1.0], 1.0, &mut plain);
     let mut lifted = [0.0; 1];
@@ -387,11 +383,7 @@ fn a_band_narrower_than_a_bin_interpolates_between_its_neighbours() {
     // clamps at the ceiling. A band sitting entirely between them has no bin of
     // its own, so it must read the slope rather than seize either.
     let loud = db_to_linear(-45.0);
-    let spectrum = [
-        Complex::new(0.0, 0.0),
-        Complex::new(0.0, 0.0),
-        Complex::new(loud, 0.0),
-    ];
+    let spectrum = [Complex::new(0.0, 0.0), Complex::new(0.0, 0.0), Complex::new(loud, 0.0)];
     let quarter = level_from_magnitude(0.25 * loud);
     let half = level_from_magnitude(0.5 * loud);
 

@@ -38,11 +38,7 @@ pub(super) fn show_report_toast(
 
     let failed = len_as_i32(report.failures.len());
     let unsupported = len_as_i32(report.unsupported.len());
-    let variant = if failed == 0 && unsupported == 0 {
-        "success"
-    } else {
-        "warning"
-    };
+    let variant = if failed == 0 && unsupported == 0 { "success" } else { "warning" };
     notifications.show_auto_dismiss(
         NotificationParams::plain(
             variant,

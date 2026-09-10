@@ -19,10 +19,8 @@ const KEPT_TAB: &str =
     include_str!("../../../../melodia-ui/ui/views/radio/kept-stations-tab.slint");
 
 /// Every file that draws a card carrying the badge, named for the failure message.
-const CARDS: [(&str, &str); 2] = [
-    ("entity-card.slint", ENTITY_CARD),
-    ("station-card.slint", STATION_CARD),
-];
+const CARDS: [(&str, &str); 2] =
+    [("entity-card.slint", ENTITY_CARD), ("station-card.slint", STATION_CARD)];
 
 /// The pill's own markup, as only the leaf may spell it. `border-color` rather than the fill,
 /// which is a colour other overlays on the same tile legitimately share.

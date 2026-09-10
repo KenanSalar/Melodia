@@ -138,11 +138,7 @@ pub fn init(action_tx: mpsc::Sender<TrayAction>) -> Option<LinuxTray> {
         .map(|icon| vec![icon])
         .unwrap_or_default();
 
-    let tray = MelodiaTray {
-        snapshot: TraySnapshot::default(),
-        icon,
-        action_tx,
-    };
+    let tray = MelodiaTray { snapshot: TraySnapshot::default(), icon, action_tx };
 
     match tray.spawn() {
         Ok(handle) => {

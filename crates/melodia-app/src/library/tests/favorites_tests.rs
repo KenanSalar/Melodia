@@ -72,10 +72,9 @@ impl Fixture {
     }
 
     async fn arm_listenbrainz(&self) -> Result<(), AppError> {
-        self.write.scrobble.set_flags(ScrobbleFlags {
-            listenbrainz_love_enabled: true,
-            ..Default::default()
-        });
+        self.write
+            .scrobble
+            .set_flags(ScrobbleFlags { listenbrainz_love_enabled: true, ..Default::default() });
         self.write
             .scrobble
             .set_listenbrainz_credentials(Some(ListenBrainzCredentials {

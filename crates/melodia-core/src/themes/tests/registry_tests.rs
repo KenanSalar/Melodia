@@ -10,14 +10,7 @@ fn registry_lists_six_themes_in_display_order() {
     let ids: Vec<_> = registry().iter().map(|t| t.id).collect();
     assert_eq!(
         ids,
-        vec![
-            "catppuccin",
-            "gnome-adwaita",
-            "kde-breeze",
-            "macos",
-            "material3",
-            "windows-fluent"
-        ],
+        vec!["catppuccin", "gnome-adwaita", "kde-breeze", "macos", "material3", "windows-fluent"],
     );
 }
 
@@ -69,11 +62,9 @@ fn every_variant_defines_three_distinct_semantic_colours() {
             let p = &variant.palette;
             let where_ = format!("{}/{}", theme.id, variant.id);
             for (name, semantic) in [("red", p.red), ("green", p.green), ("yellow", p.yellow)] {
-                for (neutral_name, neutral) in [
-                    ("overlay0", p.overlay0),
-                    ("overlay1", p.overlay1),
-                    ("overlay2", p.overlay2),
-                ] {
+                for (neutral_name, neutral) in
+                    [("overlay0", p.overlay0), ("overlay1", p.overlay1), ("overlay2", p.overlay2)]
+                {
                     assert_ne!(
                         semantic, neutral,
                         "{where_}: {name} must not be the {neutral_name} neutral",

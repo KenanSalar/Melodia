@@ -122,10 +122,7 @@ pub fn min_max_columns(src: &[f32], out: &mut [Column]) {
         // At least one sample per bucket, so upsampling holds rather than reading an empty
         // range — which is also what guarantees the fold below sees a value.
         let hi = ((i + 1) * src.len() / buckets).max(lo + 1).min(src.len());
-        let mut range = Column {
-            min: f32::MAX,
-            max: f32::MIN,
-        };
+        let mut range = Column { min: f32::MAX, max: f32::MIN };
         for &sample in &src[lo..hi] {
             if sample < range.min {
                 range.min = sample;
@@ -206,10 +203,7 @@ struct XPrefixes {
 
 impl XPrefixes {
     fn new() -> Self {
-        Self {
-            text: String::new(),
-            ends: Vec::new(),
-        }
+        Self { text: String::new(), ends: Vec::new() }
     }
 
     fn with_capacity(columns: usize) -> Self {

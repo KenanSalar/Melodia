@@ -80,10 +80,7 @@ pub fn install(cx: ViewCtx<'_>, artists_ui: &Arc<ArtistsUi>) -> Arc<FavoritesUi>
     let favorites_ui =
         Arc::new(FavoritesUi::new(cx.cover_thumbs.clone(), detail_artwork::blur_spec(cx.app)));
     callbacks::wire(cx.app, cx.state, cx.view_state, &favorites_ui, artists_ui);
-    for tier in [
-        &favorites_ui.most_played_thumbs,
-        &favorites_ui.artist_thumbs,
-    ] {
+    for tier in [&favorites_ui.most_played_thumbs, &favorites_ui.artist_thumbs] {
         crate::ui::cover_generation::notify_on_decode(tier, cx.app, grids::repaint_covers);
     }
     if let Some(vs) = cx.view_state {
@@ -220,11 +217,8 @@ impl FavoritesUi {
         {
             let _gate = self.gate();
             self.inner.tracks_all.clear();
-            *self.inner.stats.lock() = FavoriteStats {
-                count: 0,
-                total_duration_ms: 0,
-                artwork_paths: Vec::new(),
-            };
+            *self.inner.stats.lock() =
+                FavoriteStats { count: 0, total_duration_ms: 0, artwork_paths: Vec::new() };
             self.inner.most_played.lock().clear();
             self.inner.fav_artists.lock().clear();
             // The folds go with the caches they summarise: a derived value outliving its source is

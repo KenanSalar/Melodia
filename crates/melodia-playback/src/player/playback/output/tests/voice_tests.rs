@@ -52,10 +52,7 @@ impl Callback {
                 thread::sleep(Duration::from_millis(1));
             }
         });
-        Self {
-            stop,
-            handle: Some(handle),
-        }
+        Self { stop, handle: Some(handle) }
     }
 }
 

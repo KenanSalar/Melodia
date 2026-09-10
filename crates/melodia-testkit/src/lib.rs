@@ -270,11 +270,7 @@ pub fn rust_sources() -> Vec<(String, String)> {
         unreadable.append(&mut missed);
         for path in &paths {
             let rel = rel_path(&root, path);
-            let rel = if rel.contains('/') {
-                rel
-            } else {
-                format!("{krate}/{rel}")
-            };
+            let rel = if rel.contains('/') { rel } else { format!("{krate}/{rel}") };
             match fs::read_to_string(path) {
                 Ok(src) => out.push((rel, strip_line_comments(&src))),
                 Err(_) => unreadable.push(path.clone()),
@@ -458,9 +454,7 @@ pub fn normalize_ws(src: &str) -> String {
 /// doesn't appear — the caller's failure to report, there being no binding whose expected
 /// value is nothing.
 pub fn binding_value<'a>(src: &'a str, name: &str) -> &'a str {
-    src.split_once(name)
-        .and_then(|(_, rest)| rest.split_once(';'))
-        .map_or("", |(value, _)| value)
+    src.split_once(name).and_then(|(_, rest)| rest.split_once(';')).map_or("", |(value, _)| value)
 }
 
 /// The `N` in a global's `out property <int> tab-count: N;`.

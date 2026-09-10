@@ -113,13 +113,8 @@ pub async fn ingest_scanned_files(
         }
         let rows = query.persistent(false).fetch_all(&mut **tx).await?;
         for (path, size, mtime) in rows {
-            existing_tracks.insert(
-                path,
-                ExistingTrackInfo {
-                    file_size: size,
-                    date_modified: mtime,
-                },
-            );
+            existing_tracks
+                .insert(path, ExistingTrackInfo { file_size: size, date_modified: mtime });
         }
     }
 
@@ -177,12 +172,7 @@ pub async fn ingest_scanned_files(
                 continue;
             };
 
-            let ids = queries::ResolvedIds {
-                artist_id,
-                album_id,
-                genre_id,
-                folder_id,
-            };
+            let ids = queries::ResolvedIds { artist_id, album_id, genre_id, folder_id };
 
             queries::scan::update_track_metadata(tx, file_path_str, meta, &ids, &mut caches.names)
                 .await?;
@@ -237,12 +227,7 @@ pub async fn ingest_scanned_files(
             continue;
         };
 
-        let ids = queries::ResolvedIds {
-            artist_id,
-            album_id,
-            genre_id,
-            folder_id,
-        };
+        let ids = queries::ResolvedIds { artist_id, album_id, genre_id, folder_id };
 
         let file_name = file.path.file_name().and_then(|f| f.to_str()).unwrap_or("").to_string();
 
@@ -291,12 +276,7 @@ pub async fn ingest_scanned_files(
     // group, instead of one per affected track.
     flush_artwork_backfill(tx, artwork_backfill).await?;
 
-    Ok(IngestResult {
-        inserted_count,
-        moved_count,
-        updated_count,
-        inserted_track_ids,
-    })
+    Ok(IngestResult { inserted_count, moved_count, updated_count, inserted_track_ids })
 }
 
 /// Chunked `WHERE file_hash IN (…)` lookup, deduped to the lowest-id row per

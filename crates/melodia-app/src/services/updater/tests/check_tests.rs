@@ -41,11 +41,7 @@ fn a_schema_past_the_supported_one_is_refused_and_the_etag_kept() -> Result<(), 
         Some(TARGET),
     )?;
 
-    let CheckOutcome::UnsupportedSchema {
-        schema,
-        etag: cached,
-    } = outcome
-    else {
+    let CheckOutcome::UnsupportedSchema { schema, etag: cached } = outcome else {
         return Err(AppError::Validation(format!("expected UnsupportedSchema, got {outcome:?}")));
     };
     assert_eq!(schema, SUPPORTED_MANIFEST_SCHEMA + 1);
@@ -137,20 +133,12 @@ fn an_upgrade_resolves_the_asset_for_the_running_target() -> Result<(), AppError
     let mut with_two = manifest("0.3.0", SUPPORTED_MANIFEST_SCHEMA, &[TARGET]);
     with_two.platforms.insert(
         "linux-aarch64-rpm".into(),
-        PlatformAsset {
-            url: "https://example.test/other".into(),
-            ..asset()
-        },
+        PlatformAsset { url: "https://example.test/other".into(), ..asset() },
     );
 
     let outcome = classify_manifest(with_two, Some(ETAG.to_owned()), "0.2.0", Some(TARGET))?;
 
-    let CheckOutcome::Available {
-        manifest,
-        asset: picked,
-        etag: cached,
-    } = outcome
-    else {
+    let CheckOutcome::Available { manifest, asset: picked, etag: cached } = outcome else {
         return Err(AppError::Validation(format!("expected Available, got {outcome:?}")));
     };
     assert_eq!(manifest.version, "0.3.0");

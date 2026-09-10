@@ -173,14 +173,7 @@ fn every_other_script_comes_back_readable() {
 /// line under a lyric that is already readable.
 #[test]
 fn a_latin_line_gets_no_second_line() {
-    for line in [
-        "I want you",
-        "Cómo estás",
-        "Déjà vu",
-        "Grüße aus Bordeaux",
-        "",
-        "   ",
-    ] {
+    for line in ["I want you", "Cómo estás", "Déjà vu", "Grüße aus Bordeaux", "", "   "] {
         assert_eq!(one(line), None, "{line}");
     }
 }

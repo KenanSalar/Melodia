@@ -368,11 +368,7 @@ pub async fn scan_folder_internal(state: &AppState, folder_id: i64) -> Result<u3
     let mut inserted_count: u32 = 0;
     let mut moved_count: u32 = 0;
     let mut updated_count: u32 = 0;
-    let chunk_size = if is_bulk {
-        TX_CHUNK_FILES
-    } else {
-        scanned_files.len().max(1)
-    };
+    let chunk_size = if is_bulk { TX_CHUNK_FILES } else { scanned_files.len().max(1) };
     for chunk in scanned_files.chunks(chunk_size) {
         let mut tx = state.db.write().begin().await?;
         if is_bulk {

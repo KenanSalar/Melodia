@@ -61,11 +61,7 @@ where
 {
     let sort_key = to_natural_sort_key(&station.name);
     let now = melodia_core::utils::now_rfc3339();
-    let conflict = if station.station_uuid.is_some() {
-        DIRECTORY_CONFLICT
-    } else {
-        ""
-    };
+    let conflict = if station.station_uuid.is_some() { DIRECTORY_CONFLICT } else { "" };
 
     let sql = format!(
         "INSERT INTO radio_stations ({INSERT_COLUMNS})

@@ -68,10 +68,7 @@ pub struct ArtworkCache {
 
 impl ArtworkCache {
     pub fn new(capacity: NonZeroUsize, blur: Option<BlurSpec>) -> Self {
-        Self {
-            cache: Mutex::new(LruCache::new(capacity)),
-            blur,
-        }
+        Self { cache: Mutex::new(LruCache::new(capacity)), blur }
     }
 
     /// Cached lookup, decoding the source **once** and deriving both buffers on a miss.
@@ -135,11 +132,7 @@ pub(crate) fn pair_from_image(
 
     let Some(spec) = blur_spec else {
         let sample = BackdropSample::quantize(cover.as_bytes());
-        return Some(ArtworkPair {
-            cover,
-            blur: None,
-            sample,
-        });
+        return Some(ArtworkPair { cover, blur: None, sample });
     };
 
     // Downscale hard first, so the blur is cheap. The aspect distortion is deliberate — a square
@@ -154,11 +147,7 @@ pub(crate) fn pair_from_image(
     // so both are paid once per cover rather than once per open.
     let sample = BackdropSample::measure(small.as_raw(), blur.as_bytes());
 
-    Some(ArtworkPair {
-        cover,
-        blur: Some(blur),
-        sample,
-    })
+    Some(ArtworkPair { cover, blur: Some(blur), sample })
 }
 
 #[cfg(test)]

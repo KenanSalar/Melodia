@@ -109,13 +109,7 @@ pub fn init(action_tx: mpsc::Sender<TrayAction>) -> bool {
     }));
 
     TRAY.with_borrow_mut(|slot| {
-        *slot = Some(TrayState {
-            tray,
-            track_item,
-            play_pause_item,
-            next_item,
-            prev_item,
-        });
+        *slot = Some(TrayState { tray, track_item, play_pause_item, next_item, prev_item });
     });
     log::info!("System tray registered");
     true

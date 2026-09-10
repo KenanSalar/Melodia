@@ -233,11 +233,7 @@ pub fn cover_cap_for_window(app: &AppWindow, fallback: NonZeroUsize) -> NonZeroU
 /// and quietly retire the mechanism.
 pub fn grid_cover(thumbs: &Arc<CoverThumbs>, artwork_path: &str, generation: i32) -> Image {
     let path = nonempty_artwork_path(artwork_path);
-    if generation == 0 {
-        thumbs.get_cached_opt(path)
-    } else {
-        thumbs.get_or_schedule_opt(path)
-    }
+    if generation == 0 { thumbs.get_cached_opt(path) } else { thumbs.get_or_schedule_opt(path) }
 }
 
 /// [`grid_cover`] for a surface with no generation behind it, which has to decode inline: nothing

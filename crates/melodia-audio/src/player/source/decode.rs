@@ -189,14 +189,7 @@ pub(super) fn open(source: Box<dyn MediaSource>, hint: &Hint) -> Result<Opened, 
         .map_err(OpenError::Unreadable)?
         .ok_or(OpenError::Empty)?;
 
-    Ok(Opened {
-        format,
-        decoder,
-        track: track_id,
-        cursor,
-        time_base,
-        total_duration,
-    })
+    Ok(Opened { format, decoder, track: track_id, cursor, time_base, total_duration })
 }
 
 /// How long the track plays for.
@@ -259,12 +252,7 @@ impl Cursor {
         let Some(shape) = fill(format, decoder, track, &mut samples)? else {
             return Ok(None);
         };
-        Ok(Some(Self {
-            samples,
-            next: 0,
-            shape,
-            ended: false,
-        }))
+        Ok(Some(Self { samples, next: 0, shape, ended: false }))
     }
 
     pub(super) fn shape(&self) -> Shape {

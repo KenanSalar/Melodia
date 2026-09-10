@@ -3,13 +3,7 @@
 use super::*;
 
 fn line(at_ms: Option<i64>, text: &str) -> LyricLine {
-    LyricLine {
-        at_ms,
-        end_ms: None,
-        text: text.to_owned(),
-        romanization: None,
-        translation: None,
-    }
+    LyricLine { at_ms, end_ms: None, text: text.to_owned(), romanization: None, translation: None }
 }
 
 #[test]
@@ -69,22 +63,14 @@ fn an_empty_timed_field_does_not_shadow_a_real_plain_one() {
 
 #[test]
 fn an_answer_with_neither_field_filled_has_no_text() {
-    let answer = LyricsAnswer {
-        synced: None,
-        plain: None,
-        instrumental: false,
-    };
+    let answer = LyricsAnswer { synced: None, plain: None, instrumental: false };
     assert_eq!(answer.text(), None);
 }
 
 #[test]
 fn an_instrumental_carries_no_text_of_its_own() {
     // The flag is the answer; there is nothing to draw and nothing to store as a sheet.
-    let answer = LyricsAnswer {
-        synced: None,
-        plain: None,
-        instrumental: true,
-    };
+    let answer = LyricsAnswer { synced: None, plain: None, instrumental: true };
     assert_eq!(answer.text(), None);
     assert!(answer.instrumental);
 }
@@ -94,11 +80,7 @@ fn a_blank_timed_field_does_not_call_an_answer_timed() {
     // This is the branch a lookup decides a second request on, and it has to read the field the
     // way `text` will: tested for presence alone, a `""` here ends the search on an answer that
     // then hands over nothing.
-    let answer = LyricsAnswer {
-        synced: Some("   ".to_owned()),
-        plain: None,
-        instrumental: false,
-    };
+    let answer = LyricsAnswer { synced: Some("   ".to_owned()), plain: None, instrumental: false };
     assert!(!answer.is_synced());
 }
 

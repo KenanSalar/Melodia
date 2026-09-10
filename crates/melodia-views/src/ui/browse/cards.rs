@@ -68,11 +68,7 @@ impl BrowseViewMode {
 
 /// Resolve a `Browse.view-mode` value against the global's own `mode-*` constants.
 pub fn mode_from_index(g: &Browse<'_>, idx: i32) -> BrowseViewMode {
-    if idx == g.get_mode_card() {
-        BrowseViewMode::Card
-    } else {
-        BrowseViewMode::List
-    }
+    if idx == g.get_mode_card() { BrowseViewMode::Card } else { BrowseViewMode::List }
 }
 
 /// The `Browse.view-mode` value for `mode` — [`mode_from_index`] backwards.
@@ -105,11 +101,7 @@ pub fn to_browse_card_rows(folders: &[BrowseFolder], files: &[BrowseFile]) -> Ve
         enabled: true,
     }));
     cards.extend(files.iter().enumerate().map(|(idx, f)| UiBrowseCardRow {
-        id: if f.in_library {
-            clamp_i64_to_i32(f.row.id)
-        } else {
-            0
-        },
+        id: if f.in_library { clamp_i64_to_i32(f.row.id) } else { 0 },
         row_index: len_as_i32(idx),
         path: SharedString::from(""),
         title: SharedString::from(f.row.title.as_str()),

@@ -34,10 +34,7 @@ fn grid_data_precomputes_the_lowercased_sort_key() {
 
 #[test]
 fn compute_indices_with_empty_filter_keeps_all_artists() {
-    let data = GridData::new(vec![
-        artist(1, "Alpha", None, 0, 0),
-        artist(2, "Bravo", None, 0, 0),
-    ]);
+    let data = GridData::new(vec![artist(1, "Alpha", None, 0, 0), artist(2, "Bravo", None, 0, 0)]);
     let idx = compute_indices(&data, "name", "asc", "");
     assert_eq!(names(&data, &idx), ["Alpha", "Bravo"]);
 }
@@ -62,10 +59,8 @@ fn compute_indices_filter_matches_name_or_sort_name_case_insensitively() {
 
 #[test]
 fn compute_indices_filter_ignores_accents_the_way_the_search_view_does() {
-    let data = GridData::new(vec![
-        artist(1, "Björk", None, 0, 0),
-        artist(2, "Sigur Rós", None, 0, 0),
-    ]);
+    let data =
+        GridData::new(vec![artist(1, "Björk", None, 0, 0), artist(2, "Sigur Rós", None, 0, 0)]);
     assert_eq!(names(&data, &compute_indices(&data, "name", "asc", "bjork")), ["Björk"]);
     assert_eq!(names(&data, &compute_indices(&data, "name", "asc", "ros")), ["Sigur Rós"]);
 }

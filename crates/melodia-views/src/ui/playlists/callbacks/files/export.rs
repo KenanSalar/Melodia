@@ -109,11 +109,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, notifications: &Rc<Notifica
                 let settings = ui.global::<Settings>();
                 match result {
                     Ok(res) if res.exported > 0 => {
-                        let variant = if res.failed.is_empty() {
-                            "success"
-                        } else {
-                            "warning"
-                        };
+                        let variant = if res.failed.is_empty() { "success" } else { "warning" };
                         notifications.show_auto_dismiss(
                             NotificationParams::plain(
                                 variant,

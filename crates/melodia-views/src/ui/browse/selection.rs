@@ -49,11 +49,7 @@ pub fn handle_select_row(
                     (f.in_library && rid != 0).then_some(rid)
                 })
                 .collect();
-            if range.is_empty() {
-                (vec![id], idx)
-            } else {
-                (range, cur_anchor)
-            }
+            if range.is_empty() { (vec![id], idx) } else { (range, cur_anchor) }
         }
     } else if ctrl {
         let mut next = cur_selected.clone();

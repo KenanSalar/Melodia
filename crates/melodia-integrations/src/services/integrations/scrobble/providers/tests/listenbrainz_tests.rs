@@ -87,16 +87,8 @@ fn feedback_payload_maps_love_state_to_score() -> TestResult {
 #[test]
 fn bulk_lookup_payload_omits_absent_release() -> TestResult {
     let queries = [
-        LookupQuery {
-            artist: "50 Cent",
-            title: "Candy Shop",
-            release: Some("The Massacre"),
-        },
-        LookupQuery {
-            artist: "Nas",
-            title: "N.Y. State of Mind",
-            release: None,
-        },
+        LookupQuery { artist: "50 Cent", title: "Candy Shop", release: Some("The Massacre") },
+        LookupQuery { artist: "Nas", title: "N.Y. State of Mind", release: None },
     ];
     let value = serde_json::to_value(bulk_lookup_payload(&queries))?;
 
@@ -237,11 +229,7 @@ async fn a_rate_limited_lookup_is_throttled_rather_than_a_server_error() -> Test
     let server =
         TestServer::start(|_| TestResponse::status(429).header("X-RateLimit-Reset-In", "42"))?;
     let client = reqwest::Client::new();
-    let queries = [LookupQuery {
-        artist: "Artist",
-        title: "Song",
-        release: None,
-    }];
+    let queries = [LookupQuery { artist: "Artist", title: "Song", release: None }];
 
     match lookup_recording_mbids_bulk(&client, &server.base_url(), "tok", &queries).await {
         Err(ListenBrainzError::RateLimited { reset_in_secs }) => {

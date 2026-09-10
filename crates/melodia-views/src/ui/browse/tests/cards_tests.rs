@@ -2,10 +2,7 @@ use super::*;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 
 fn folder(name: &str, path: &str) -> BrowseFolder {
-    BrowseFolder {
-        name: name.to_owned(),
-        path: path.to_owned(),
-    }
+    BrowseFolder { name: name.to_owned(), path: path.to_owned() }
 }
 
 fn file(id: i64, title: &str, artist: Option<&str>, in_library: bool) -> BrowseFile {
@@ -38,14 +35,8 @@ fn file(id: i64, title: &str, artist: Option<&str>, in_library: bool) -> BrowseF
 
 #[test]
 fn folders_lead_and_every_file_keeps_its_row_index() {
-    let folders = [
-        folder("Live Sets", "/music/live"),
-        folder("Demos", "/music/demos"),
-    ];
-    let files = [
-        file(7, "One", Some("Artist"), true),
-        file(9, "Two", Some("Artist"), true),
-    ];
+    let folders = [folder("Live Sets", "/music/live"), folder("Demos", "/music/demos")];
+    let files = [file(7, "One", Some("Artist"), true), file(9, "Two", Some("Artist"), true)];
 
     let cards = to_browse_card_rows(&folders, &files);
 

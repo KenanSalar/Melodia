@@ -111,22 +111,15 @@ fn lookup_remembered(state: &AppState, theme: &ThemeDef) -> (String, String) {
     // synthetic "system" id passes through even though it isn't in `theme.variants`.
     let variant_known = theme.variant(&pref.variant).is_some()
         || (pref.variant == themes::SYSTEM_VARIANT_ID && theme.supports_system_mode);
-    let variant = if variant_known {
-        pref.variant.clone()
-    } else {
-        theme.default_variant.to_owned()
-    };
+    let variant =
+        if variant_known { pref.variant.clone() } else { theme.default_variant.to_owned() };
     // Material 3 alone accepts the synthetic `MATERIAL_YOU_ACCENT_ID`: it is in no
     // `theme.accents`, having no static swatch, but is a legitimate persisted value the
     // dynamic-colour pipeline resolves at paint time. Without this, switching themes
     // through material3 forgets the user's pick on every round trip.
     let accent_known = theme.accent(&pref.accent).is_some()
         || (theme.id == "material3" && pref.accent == MATERIAL_YOU_ACCENT_ID);
-    let accent = if accent_known {
-        pref.accent.clone()
-    } else {
-        theme.default_accent.to_owned()
-    };
+    let accent = if accent_known { pref.accent.clone() } else { theme.default_accent.to_owned() };
     (variant, accent)
 }
 

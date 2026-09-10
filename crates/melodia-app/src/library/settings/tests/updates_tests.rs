@@ -26,10 +26,7 @@ fn defaults_are_safe_for_new_install() {
 /// after years of failed checks.
 #[test]
 fn failure_counter_saturates_at_u8_max() {
-    let mut flags = UpdateFlags {
-        consecutive_failures: u8::MAX,
-        ..UpdateFlags::default()
-    };
+    let mut flags = UpdateFlags { consecutive_failures: u8::MAX, ..UpdateFlags::default() };
     flags.record_failure(1_717_243_200);
     assert_eq!(flags.consecutive_failures, u8::MAX);
 }
@@ -81,10 +78,7 @@ fn a_success_carrying_a_version_and_etag_stores_both() {
 /// daily task's call and not this layer's.
 #[test]
 fn recording_a_check_never_touches_the_skipped_release() {
-    let mut flags = UpdateFlags {
-        skipped_release: "0.3.0".to_owned(),
-        ..UpdateFlags::default()
-    };
+    let mut flags = UpdateFlags { skipped_release: "0.3.0".to_owned(), ..UpdateFlags::default() };
 
     flags.record_success(1, Some("0.4.0".to_owned()), None);
     flags.record_failure(2);

@@ -74,29 +74,13 @@ const LIGHT: Palette = Palette {
 };
 
 const VARIANTS: &[Variant] = &[
-    Variant {
-        id: "dark",
-        name: "Dark",
-        palette: DARK,
-    },
-    Variant {
-        id: "light",
-        name: "Light",
-        palette: LIGHT,
-    },
+    Variant { id: "dark", name: "Dark", palette: DARK },
+    Variant { id: "light", name: "Light", palette: LIGHT },
 ];
 
 const ACCENTS: &[AccentDef] = &[
-    AccentDef {
-        id: "blue",
-        name: "Blue",
-        per_variant: &[("dark", 0x3daee9), ("light", 0x2980b9)],
-    },
-    AccentDef {
-        id: "teal",
-        name: "Teal",
-        per_variant: &[("dark", 0x2bc4ac), ("light", 0x038387)],
-    },
+    AccentDef { id: "blue", name: "Blue", per_variant: &[("dark", 0x3daee9), ("light", 0x2980b9)] },
+    AccentDef { id: "teal", name: "Teal", per_variant: &[("dark", 0x2bc4ac), ("light", 0x038387)] },
     AccentDef {
         id: "green",
         name: "Green",
@@ -107,21 +91,13 @@ const ACCENTS: &[AccentDef] = &[
         name: "Orange",
         per_variant: &[("dark", 0xf67400), ("light", 0xca5010)],
     },
-    AccentDef {
-        id: "red",
-        name: "Red",
-        per_variant: &[("dark", 0xda4453), ("light", 0xc0392b)],
-    },
+    AccentDef { id: "red", name: "Red", per_variant: &[("dark", 0xda4453), ("light", 0xc0392b)] },
     AccentDef {
         id: "purple",
         name: "Purple",
         per_variant: &[("dark", 0x9b59b6), ("light", 0x7d3c98)],
     },
-    AccentDef {
-        id: "pink",
-        name: "Pink",
-        per_variant: &[("dark", 0xe966a0), ("light", 0xbf0077)],
-    },
+    AccentDef { id: "pink", name: "Pink", per_variant: &[("dark", 0xe966a0), ("light", 0xbf0077)] },
     AccentDef {
         id: "slate",
         name: "Slate",

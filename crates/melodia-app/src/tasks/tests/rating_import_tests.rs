@@ -20,10 +20,7 @@ fn staged(tmp: &TempDir, name: &str, stars: Option<i32>) -> Result<String, AppEr
     let dst = tmp.path().join(name);
     std::fs::copy(PathBuf::from(ASSETS_DIR).join("silence.flac"), &dst)?;
     if let Some(stars) = stars {
-        let edit = TagEdit {
-            rating: FieldEdit::Set(stars),
-            ..TagEdit::default()
-        };
+        let edit = TagEdit { rating: FieldEdit::Set(stars), ..TagEdit::default() };
         tag_writer::apply_to_file(&dst, &edit, None)?;
     }
     Ok(dst.to_string_lossy().into_owned())
