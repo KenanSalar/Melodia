@@ -43,9 +43,9 @@ counter, both worth reading before changing a gate.
   spectra and scratch, plus the trace's window, x-coordinate table and path string, live in an
   `Rc<RefCell<Option<Analyzers>>>` the tick builds on its first frame (`get_or_insert_with`, the
   one construction site, so no mount ordering can leave the tick without them) and that callback
-  clears — a user who never opens Now Playing never pays for the plans. The tick's shadows
-  (`was_idle`, `was_dormant`, the `FrameWatch`) live in that struct rather than beside it, so
-  dropping it resets them to the resting values `set-active` publishes on the way out.
+  clears — a user who never opens Now Playing never pays for the plans. The tick's one shadow, the
+  `FrameWatch`, lives in that struct rather than beside it, so dropping it starts the next session
+  counting from a clean slate instead of from whatever the last one stalled at.
 
 ## The tick's gates
 
@@ -78,9 +78,11 @@ counter, both worth reading before changing a gate.
   component root cannot reach `parent`. The floor is low because the strip is what a short panel
   buys the cover's floor back with; 56 px stays the *component's* fallback, so a call site that
   forgets still gets a strip at the height it used to pin. **The width ceiling is a per-band column
-  pitch times `Visualizer.bars.length`, argued at `strip-w-max`**, and a maximized window on an
-  ordinary desktop is what reaches it. `.length` lowers to `track_row_count_changes()`, which
-  `set_row_data` doesn't dirty, so the per-band tick doesn't re-evaluate it.
+  pitch times `Visualizer.band-count`, argued at `strip-w-max`**, and a maximized window on an
+  ordinary desktop is what reaches it. That count is published once from `spectrum::NUM_BANDS`
+  rather than read off the figure, which carries its band count only in its own geometry; the
+  ceiling is also clamped to the column less both scrollbar lanes, `cover-size`'s 200px floor
+  being wider than the whole column on any panel under about 900px.
 
 - **What keeps the strip inside the panel is the column's scroller; what the column spends before
   reaching for it is the *cover slot*.** Slint's shrink pass (`solve_box_layout` falls through to
@@ -96,22 +98,22 @@ counter, both worth reading before changing a gate.
   `max(visible-height, group.min-height)`, so the column's own minimum decides when a bar appears
   and nothing is drawn in half.
 
-- **A style needn't be its own component.** "Mirrored" is the same bars under a different anchor:
-  `SpectrumBars` takes an `in property <bool> centred` the strip sets from the key on the
-  *catch-all* branch, so switching Bars↔Mirrored re-evaluates one binding instead of rebuilding the
-  whole 64-band subtree, and the column-width floor and two-axis radius clamp stay in one copy. The
-  bar's `height` binding is its **total** height in both anchorings, so a centred bar puts
-  `level * H/2` either side rather than a full bar each way, which is what a mirrored analyzer
-  owes; doubling would clip past level 0.5 at any strip height. The word is overloaded elsewhere,
-  where *mirror* often means the horizontal fold with bass in the centre, which we don't build.
+- **A style needn't be its own component, and the anchor is Rust's.** "Mirrored" is the same bands
+  under a different anchor: `spectrum::write_bar_path` takes a `BarAnchor` that `bar_anchor`
+  resolves off the style key on the *catch-all* branch, so switching Bars↔Mirrored changes which
+  figure the writer emits and the `.slint` side mounts one `Path` either way. A bar's height is its
+  **total** in both anchorings, so a centred one puts half either side rather than a full bar each
+  way, which is what a mirrored analyzer owes; doubling would clip past level 0.5 at any strip
+  height. The word is overloaded elsewhere, where *mirror* often means the horizontal fold with
+  bass in the centre, which we don't build.
 
 - **Every style ticks at 33 ms** — one interval for all three (`visualizer-strip.slint`,
-  `dormant ? 500ms : 33ms`), not one per style. 30 Hz rather than 60 because the bars' rounded-rect
-  re-tessellation dominated allocation counts at vsync, and a trace has no decay animation to keep
-  smooth besides, and a high rate only makes it look frantic.
+  `dormant ? 500ms : 33ms`), not one per style. 30 Hz rather than 60 because both figures are
+  rebuilt and re-tessellated from scratch on every tick, so the rate is what that costs, and a
+  trace has no decay animation to keep smooth besides, so a high rate only makes it look frantic.
   `VISUALIZER_DECAY` being per *frame*, one interval means all three settle in about the same
-  second, and there is no per-style rate to retune. The trace's geometry crosses as an SVG
-  `commands` string with a fixed viewbox rather than a model — `slint-pitfalls.md`'s `Path` entry.
+  second, and there is no per-style rate to retune. **Both styles' geometry crosses as an SVG
+  `commands` string with a fixed viewbox**, neither as a model — `slint-pitfalls.md`'s `Path` entry.
 
 - **The trace is the visualizer's most expensive frame, and the `x` half of it is cached.**
   Rebuilding the path string outweighs a whole spectrum frame, two FFTs included, and it is the

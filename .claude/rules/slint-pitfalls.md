@@ -474,16 +474,36 @@ this file is what builds, looks right, and is wrong.
   (`rad.min(halfw)` / `rad.min(halfh)`) and Slint passes the radius straight through, so a short
   wide rect with a large radius has arcs spanning its half-width and pinches to a lens. Any radius
   on a **size-varying** element must be clamped on both axes —
-  `min(self.width / 2, self.height / 2, <cap>)`. Bit the spectrum bars at their resting floor and
-  the EQ band fill at 0 dB; a fixed-size pill is fine with the usual `self.height / 2`.
+  `min(self.width / 2, self.height / 2, <cap>)`. Bit the EQ band fill at 0 dB, and the spectrum
+  bars at their resting floor before they gave their radius up entirely; a fixed-size pill is fine
+  with the usual `self.height / 2`.
 
 - **An explicit `background: transparent` costs a discarded path per element per frame.**
   `resolve_native_classes` picks an element's native class from *which properties have bindings*,
   regardless of value, so binding `background` at all promotes it out of `Empty` (never visited by
   the renderer) into `Rectangle` — and the FemtoVG item renderer builds the path *before* it looks
   at the paint. `Rectangle` already defaults to transparent, so the binding is pure cost; delete
-  it rather than spelling out the default. Only matters at scale — 65 wasted paths a frame in
-  `spectrum-bars.slint` (root plus 64 bands); noise on a one-off container.
+  it rather than spelling out the default. Only matters at scale, a repeater's worth of them per
+  frame; noise on a one-off container.
+
+- **A gradient stop inset from the extents drops FemtoVG's two-stop path and costs a slab of the
+  GPU driver's buffer pool.** `femtovg`'s `GradientColors::from_stops` answers the cheap `TwoStop`
+  variant, filled from shader uniforms with no texture at all, only when there are exactly two
+  stops **and** the near one sits at or before `0` with the far one at or past `1`. Everything
+  else falls through to `MultiStop`, which synthesizes a 256×1 gradient texture per distinct stop
+  set through `GradientStore` and allocates it out of the driver's pool. A *two*-stop gradient
+  whose far stop is inset is the case to watch, reading as the cheap shape at a glance.
+  **Source-level reasoning predicts the trigger and not the magnitude, which is the whole trap.**
+  The texture is a kilobyte and `GradientStore` migrates it across frames rather than
+  reallocating, so the cost reads as nothing until it is measured on the process, where the driver
+  turns out to back it with a whole slab that is never handed back. It surfaces only while
+  something animates over it: a static frame re-submits nothing, so a hero that merely *sits*
+  there costs the same either way and the bill arrives when a visualizer or a morph starts
+  repainting the window.
+  The aurora's three washes ended at `70.71%` and were the tree's only brushes on that path;
+  moving the stop to `100%` retired the slab. `aurora-backdrop.slint` argues why the stops sit at
+  the extents and `ui::aurora_backdrop_tests` pins them, an inset stop looking like nothing on
+  screen and only a measurement or that test catching one coming back.
 
 - **Generated `Path` geometry has to arrive as an SVG `commands` string, and needs an explicit
   viewbox with `fit: fill`.** `for`-`in` inside a `Path` is rejected outright (slint-ui/slint#754),
