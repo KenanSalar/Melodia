@@ -13,6 +13,7 @@ use super::state::COMPACT_TRACK_LIMIT;
 use super::top_result::{TopKind, TopResult, TopSubtitle, compute_top_result};
 use super::{SearchUi, restamp_rows, to_slint_album_strip_row, to_slint_artist_strip_row};
 use crate::ui::genres::genre_accent;
+use crate::ui::model_patch;
 use crate::ui::track_sort::sort_track_rows_by;
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use melodia_app::services::settings::SortDir;
@@ -174,6 +175,26 @@ pub fn clear_results_on_ui(weak: &Weak<AppWindow>) {
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
         clear_result_models(&ui.global::<Search>());
+    });
+}
+
+/// Flip `is_favorite` on a single row in the Slint `VecModel`. Only touches
+/// the affected row — scroll position and neighbouring rows stay put.
+pub fn apply_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
+    let _ = weak.upgrade_in_event_loop(move |ui| {
+        model_patch::patch_track_row_by_id(&ui.global::<Search>().get_tracks(), id, |r| {
+            r.is_favorite = fav;
+        });
+    });
+}
+
+/// Set `rating` on a single row in the Slint `VecModel` — the star-rating
+/// analogue of [`apply_row_favorite`].
+pub fn apply_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
+    let _ = weak.upgrade_in_event_loop(move |ui| {
+        model_patch::patch_track_row_by_id(&ui.global::<Search>().get_tracks(), id, |r| {
+            r.rating = rating;
+        });
     });
 }
 

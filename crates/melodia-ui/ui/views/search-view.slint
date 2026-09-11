@@ -75,7 +75,12 @@ export component SearchView inherits Rectangle {
                 padding-bottom: Theme.pad-lg;
                 spacing: Theme.pad-lg;
 
-                if Search.query == "" && Search.recent-rows.length > 0: RecentSearches { }
+                // The chips wrap against the column's content width, which the layout fixes
+                // independently of them, so handing it over is a derivation rather than a
+                // cycle — and a plain binding, so the strip owes no width mirror.
+                if Search.query == "" && Search.recent-rows.length > 0: RecentSearches {
+                    avail-width: root.width - 2 * Theme.pad-lg;
+                }
 
                 if Search.loading && Search.query != "": HorizontalLayout {
                     vertical-stretch: 0;

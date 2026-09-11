@@ -16,6 +16,11 @@
 //! released on section leave. There is deliberately **no**
 //! `library_changed` subscriber — Search is query-driven, and a scan
 //! completing mid-query must not swap results out from under the user.
+//! That argument is about *refetching*, so a row edit is covered the other
+//! way: [`SearchUi::flip_favorite`] and its rating sibling patch the cached
+//! row, with `apply::apply_row_*` patching the one on screen. With neither,
+//! the page is the only track list that is neither optimistic nor subscribed,
+//! and the pip stays stale until the next commit.
 
 mod apply;
 mod callbacks;
@@ -37,12 +42,14 @@ use crate::ui::view_ctx::ViewCtx;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::album::AlbumStats;
 use melodia_core::entities::artist::ArtistStats;
+use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 use melodia_ui::{
     AppWindow, EntityStripRow as UiEntityStripRow, Search, TrackListRow as UiTrackListRow,
 };
 
 use state::{ALBUM_STRIP_THUMB_SIZE, ARTIST_STRIP_THUMB_SIZE, STRIP_THUMB_CAP, SearchUiState};
 
+pub(super) use apply::{apply_row_favorite, apply_row_rating};
 pub(super) use selection::{clear_selection, handle_select_row, restamp_rows};
 
 /// Install the Search models, build the handle, and wire every `Search.*`
@@ -146,6 +153,29 @@ impl SearchUi {
         self.inner.last_query.lock().clear();
         self.inner.applied_selection.lock().clear();
         melodia_platform::services::platform::allocator::trim();
+    }
+
+    /// Flip `is_favorite` on the cached result row, so the "Show all" toggle, a re-sort and
+    /// `fetch::reapply_cached_results` don't repaint the stale value back — all three
+    /// re-derive the visible slice from `last_results`. Paired with
+    /// `apply::apply_row_favorite`, which patches the row already on screen.
+    pub fn flip_favorite(&self, id: i64, fav: bool) {
+        self.patch_cached_track(id, |t| t.is_favorite = fav);
+    }
+
+    /// The star-rating analogue of [`Self::flip_favorite`].
+    pub fn flip_rating(&self, id: i64, rating: i32) {
+        self.patch_cached_track(id, |t| t.rating = rating);
+    }
+
+    /// No-ops when the id isn't in the cached set, which is the common case for a Now-Playing
+    /// edit landing while some unrelated query is on screen.
+    fn patch_cached_track(&self, id: i64, edit: impl FnOnce(&mut RsTrackListRow)) {
+        if let Some(results) = self.inner.last_results.lock().as_mut()
+            && let Some(track) = results.tracks.iter_mut().find(|t| t.id == id)
+        {
+            edit(track);
+        }
     }
 
     pub(crate) fn state(&self) -> &SearchUiState {

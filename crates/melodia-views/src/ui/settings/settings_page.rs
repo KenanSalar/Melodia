@@ -1,13 +1,11 @@
-//! Chrome wiring for the Settings page — the search predicate its sections filter through,
-//! the row split its wrapping strips lay themselves out on, and the persistence for which
-//! tab is showing. Distinct from the per-concern installers, which wire the values the
-//! page *configures*.
+//! Chrome wiring for the Settings page — the search predicate its sections filter through
+//! and the persistence for which tab is showing. Distinct from the per-concern installers,
+//! which wire the values the page *configures*.
 
 use std::cell::RefCell;
-use std::rc::Rc;
 use std::sync::Arc;
 
-use slint::{ComponentHandle, ModelRc, VecModel};
+use slint::ComponentHandle;
 
 use crate::ui::callbacks::index_persist::IndexPersist;
 use crate::ui::row_match::{self, Needle};
@@ -49,28 +47,6 @@ pub fn tab_from_index(page: &SettingsPage<'_>, idx: i32) -> SettingsTab {
     }
 }
 
-/// Split `0..count` into rows of at most `per_row` — the wrapping chip and swatch strips
-/// need their items grouped and Slint can't build a nested array. Indices rather than the
-/// items themselves, so a chip still knows which option it is.
-///
-/// `per_row` is floored at 1: it comes from a measured width, which is zero for the frame
-/// before the first layout reports one.
-fn chunk_indices(count: i32, per_row: i32) -> Vec<Vec<i32>> {
-    let count = count.max(0);
-    let per_row = per_row.max(1);
-
-    let row_count =
-        usize::try_from(count).unwrap_or(0).div_ceil(usize::try_from(per_row).unwrap_or(1));
-    let mut rows = Vec::with_capacity(row_count);
-    let mut start = 0;
-    while start < count {
-        let end = start.saturating_add(per_row).min(count);
-        rows.push((start..end).collect());
-        start = end;
-    }
-    rows
-}
-
 /// Seed the active tab from `views.json`. Call from
 /// `boot::ui_setup::hydrate_ui_from_settings`, which already has the view state loaded.
 pub fn seed_tab(ui: &AppWindow, persisted_tab: i32) {
@@ -98,15 +74,6 @@ pub fn install(ui: &AppWindow, state: &AppState) {
             memo.0 = needle.into();
         }
         memo.1.contains(&haystack)
-    });
-
-    // Row split for the wrapping chip / swatch strips — see `chunk_indices`.
-    page.on_chunk_indices(|count, per_row| {
-        let rows: Vec<ModelRc<i32>> = chunk_indices(count, per_row)
-            .into_iter()
-            .map(|row| ModelRc::from(Rc::new(VecModel::from(row))))
-            .collect();
-        ModelRc::from(Rc::new(VecModel::from(rows)))
     });
 
     // The tab bar two-way binds `tab-idx`, so the UI is already showing the new tab and

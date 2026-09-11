@@ -1,13 +1,105 @@
 import { Theme } from "../../theme.slint";
 import { Search } from "../../globals/search.slint";
+import { Wrap } from "../../globals/wrap.slint";
 import { MaterialIcon } from "../../components/material-icon.slint";
 
-// The empty-query state: saved history as removable chips under a "Clear all"
-// affordance. No inputs — everything it reads and writes is on `Search`. The mount site
-// gates it on there being history, so it never renders an empty case of its own.
+// One history chip: the body re-runs the term, the X forgets it. Unexported, as `ChipGroup`'s
+// own `Chip` is — nothing else wants a removable pill.
+component RecentChip inherits Rectangle {
+    in property <string> term;
+    // Everything of the chip that isn't its label. An input rather than a constant, because
+    // the packer has to agree with it and one definition is what keeps them agreeing.
+    in property <length> chrome-w;
+    // A ceiling on the chip: uncapped, one pasted query is wider than any row and paints
+    // straight out of the view whatever the wrap decides. Its own name rather than the
+    // built-in `max-width`, which this sets from itself.
+    in property <length> width-cap;
+
+    callback picked();
+    callback removed();
+
+    property <length> natural-w: min(term-text.preferred-width + root.chrome-w, root.width-cap);
+
+    // The three rather than a bound `width`, which is reported as both min and max: the
+    // packer works off an estimate, so a row it packed one chip too full has to compress and
+    // elide rather than paint out of the strip. The floor is the chrome plus one `…`, which
+    // is what `overflow: elide` lowers the label's own minimum to.
+    min-width: min(root.chrome-w + term-text.min-width, root.natural-w);
+    preferred-width: root.natural-w;
+    max-width: root.natural-w;
+    horizontal-stretch: 0;
+
+    height: 28px;
+    border-radius: self.height / 2;
+    background: chip-touch.has-hover
+        ? Theme.surface1
+        : Theme.surface0;
+    border-width: 1px;
+    border-color: Theme.surface2;
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+    term-text := Text {
+        x: 10px;
+        y: (root.height - self.height) / 2;
+        // Bound *and* elided. `elide` is what keeps the line-box scissor from cutting the
+        // marks off whatever the user typed, but it leaves `preferred-width` at the full
+        // string, and a non-layout parent hands that over — so unbounded the label paints
+        // through the pill's right edge and every cap above buys nothing. Not a cycle: a
+        // `Text`'s horizontal layout info is intrinsic to the string.
+        width: max(0px, root.width - root.chrome-w);
+        text: root.term;
+        color: Theme.text;
+        font-size: Theme.font-size-sm;
+        overflow: elide;
+    }
+
+    // Declared **before** the close cell, so that cell's nested TouchArea wins dispatch on
+    // the X: Slint dispatches to the last-declared overlapping one.
+    chip-touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.picked(); }
+    }
+
+    close-cell := Rectangle {
+        x: root.width - self.width - 4px;
+        y: (root.height - self.height) / 2;
+        width: 20px;
+        height: 20px;
+        border-radius: 10px;
+        background: close-touch.has-hover
+            ? Theme.surface2
+            : transparent;
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        MaterialIcon {
+            name: "close";
+            icon-size: 14px;
+            icon-color: Theme.subtext0;
+        }
+        close-touch := TouchArea {
+            mouse-cursor: pointer;
+            // Declared after the chip's own, so this sits on top and wins dispatch here.
+            clicked => { root.removed(); }
+        }
+    }
+}
+
+// The empty-query state: saved history as removable chips under a "Clear all" affordance.
+// Everything it reads and writes beyond its own width is on `Search`; the mount site gates it
+// on there being history, so it never renders an empty case of its own.
 export component RecentSearches inherits VerticalLayout {
+    // The width the chips lay themselves out in. `ChipGroup`'s contract — host owns the
+    // width, component owns the verdict — so this needs no mirror and no `changed` tracker.
+    in property <length> avail-width;
+
+    // The 20 px close cell, the 4 px either side of it and the 10 px lead inset.
+    property <length> chip-chrome-w: 38px;
+
     vertical-stretch: 0;
     spacing: Theme.pad-sm;
+    // Load-bearing, and the half of the wrap that reaches the user: left to the children, the
+    // widest published row merges into a floor nothing can narrow past, so the strip keeps
+    // being handed the width it packed at and clips instead of re-wrapping.
+    min-width: 0px;
 
     HorizontalLayout {
         alignment: space-between;
@@ -46,65 +138,25 @@ export component RecentSearches inherits VerticalLayout {
         }
     }
 
-    // Slint 1.16 has no wrapping `HorizontalLayout`, so this is a plain one and overflow
-    // sits outside the visible area. The history is capped and chip widths are bounded,
-    // so at any sensible window size every chip fits — the `SettingsPage.chunk-indices`
-    // wrap is what a real fix looks like, if this ever stops being true.
-    HorizontalLayout {
+    // Slint 1.16 has no wrapping layout and no `Flow`, so Rust packs the history into rows
+    // against the width above. Per chip, not off the widest one: a history of "it" and
+    // "synthwave" is exactly the spread `ChipGroup`'s uniform rows get wrong, and they wrap
+    // at two thirds of the strip.
+    VerticalLayout {
         spacing: Theme.pad-sm;
-        alignment: start;
-        for term in Search.recent-rows: chip-host := Rectangle {
-            height: 28px;
-            width: term-text.preferred-width + close-cell.width + 18px;
-            border-radius: self.height / 2;
-            background: chip-touch.has-hover
-                ? Theme.surface1
-                : Theme.surface0;
-            border-width: 1px;
-            border-color: Theme.surface2;
-            animate background { duration: Theme.dur-fast; easing: ease-in-out; }
 
-            term-text := Text {
-                x: 10px;
-                y: (parent.height - self.height) / 2;
-                text: term;
-                color: Theme.text;
-                font-size: Theme.font-size-sm;
-                // Ink, not elision — the chip sizes off `preferred-width` above, which
-                // `elide` leaves alone, so nothing truncates and the line-box scissor
-                // stops cutting the marks off whatever the user typed.
-                overflow: elide;
-            }
+        for row in Wrap.pack-labels(Search.recent-rows, root.avail-width, root.chip-chrome-w):
+            HorizontalLayout {
+                spacing: Theme.pad-sm;
+                alignment: start;
 
-            // Declared **before** the close cell, so that cell's nested TouchArea wins
-            // dispatch on the X: Slint dispatches to the last-declared overlapping one.
-            chip-touch := TouchArea {
-                mouse-cursor: pointer;
-                clicked => { Search.recent-pick(term); }
-            }
-
-            close-cell := Rectangle {
-                x: parent.width - self.width - 4px;
-                y: (parent.height - self.height) / 2;
-                width: 20px;
-                height: 20px;
-                border-radius: 10px;
-                background: close-touch.has-hover
-                    ? Theme.surface2
-                    : transparent;
-                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-                MaterialIcon {
-                    name: "close";
-                    icon-size: 14px;
-                    icon-color: Theme.subtext0;
-                }
-                close-touch := TouchArea {
-                    mouse-cursor: pointer;
-                    // Declared after the chip's own, so this sits on top and wins
-                    // dispatch here.
-                    clicked => { Search.recent-remove(term); }
+                for t in row: RecentChip {
+                    term: t;
+                    chrome-w: root.chip-chrome-w;
+                    width-cap: root.avail-width;
+                    picked => { Search.recent-pick(self.term); }
+                    removed => { Search.recent-remove(self.term); }
                 }
             }
-        }
     }
 }

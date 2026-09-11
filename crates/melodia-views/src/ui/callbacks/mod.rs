@@ -33,7 +33,7 @@ use macros::{spawn_logged_sync, wire_pb, wire_sync, wire_sync_pb};
 
 pub use cross_tab_nav::wire_cross_tab_nav;
 pub use library_settings::wire_library_settings;
-pub use now_playing::{wire_now_playing_favorite, wire_now_playing_rating};
+pub use now_playing::{RowFlagHandles, wire_now_playing_favorite, wire_now_playing_rating};
 pub use tags::wire_tags;
 pub use updater::wire as wire_updater;
 

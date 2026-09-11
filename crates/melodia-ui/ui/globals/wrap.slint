@@ -1,0 +1,37 @@
+// Row-splitting for the strips that lay themselves out as a column of rows.
+//
+// Slint 1.16 has no `Flow` and no wrapping layout, so anything that wraps decides how many
+// items fit on a line and then walks two real arrays. Building the nested one is Rust's
+// (`melodia-views`' `ui::chips`); the arithmetic either side of it is expressible here.
+//
+// Feature-neutral on purpose: three surfaces across two features read it, and the settings
+// global it used to live on describes that page's chrome.
+export global Wrap {
+    // Two splits, and which one a surface takes follows where its items are measured.
+    //
+    // By **index**, for a host that measures real items with a hidden ruler and sizes every
+    // row off the widest — right where the items are near enough the same width that a
+    // uniform row reads as deliberate. Indices rather than the items themselves, so a wrapped
+    // item still knows which option it is.
+    pure callback chunk-indices(int /*count*/, int /*per-row*/) -> [[int]];
+
+    // By **width**, where the items differ enough that a uniform row wraps at two thirds of
+    // the space. Rust estimates each label against the one font the chips are drawn in and
+    // packs greedily, so `chrome` is whatever of the chip isn't its label.
+    pure callback pack-labels([string] /*labels*/, length /*avail*/,
+                              length /*chrome*/) -> [[string]];
+
+    // Floored at one: a row of zero items never terminates, where one too wide for its slot
+    // is a visible overflow rather than a hang.
+    public pure function per-row(avail: length, item-w: length, gap: length) -> int {
+        return max(1, Math.floor((avail + gap) / (item-w + gap)));
+    }
+
+    // For a host whose root can't fold the rows' height itself. Zero items stand at zero
+    // rather than at minus one gap.
+    public pure function rows-height(count: int, per-row: int, cell-h: length,
+                                    gap: length) -> length {
+        return max(0px, Math.ceil(count / per-row) * cell-h
+            + (Math.ceil(count / per-row) - 1) * gap);
+    }
+}

@@ -1,4 +1,4 @@
-use super::{chunk_chips_to_rows, rows_to_model};
+use super::{chunk_chips_to_rows, chunk_indices, rows_to_model};
 use slint::{Model, SharedString};
 
 /// `estimated_chip_width` is `chars * 6.5 + 24`, so a 4-char chip measures
@@ -68,4 +68,26 @@ fn the_model_mirrors_the_row_shape() {
     assert_eq!(model.row_count(), 2);
     let widths: Vec<usize> = model.iter().map(|row| row.row_count()).collect();
     assert_eq!(widths, vec![2, 1]);
+}
+
+#[test]
+fn chunk_indices_fills_rows_left_to_right() {
+    assert_eq!(chunk_indices(7, 3), vec![vec![0, 1, 2], vec![3, 4, 5], vec![6]]);
+    assert_eq!(chunk_indices(6, 3), vec![vec![0, 1, 2], vec![3, 4, 5]]);
+    assert_eq!(chunk_indices(2, 5), vec![vec![0, 1]]);
+}
+
+#[test]
+fn chunk_indices_has_no_rows_for_nothing_to_place() {
+    assert!(chunk_indices(0, 4).is_empty());
+    assert!(chunk_indices(-3, 4).is_empty());
+}
+
+/// `per_row` comes from a measured width, which is zero for the frame before
+/// the first layout reports one — so it has to floor at one item per row
+/// rather than loop forever or divide by zero.
+#[test]
+fn chunk_indices_floors_a_degenerate_row_width_at_one() {
+    assert_eq!(chunk_indices(3, 0), vec![vec![0], vec![1], vec![2]]);
+    assert_eq!(chunk_indices(3, -1), vec![vec![0], vec![1], vec![2]]);
 }

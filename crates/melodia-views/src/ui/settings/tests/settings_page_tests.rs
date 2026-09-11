@@ -1,30 +1,8 @@
-use super::{SettingsTab, chunk_indices};
+use super::SettingsTab;
 
 /// The tab count Slint declares today. Kept local so a change to
 /// `SettingsPage.tab-count` doesn't silently rewrite what these assert.
 const TABS: i32 = 5;
-
-#[test]
-fn chunk_indices_fills_rows_left_to_right() {
-    assert_eq!(chunk_indices(7, 3), vec![vec![0, 1, 2], vec![3, 4, 5], vec![6]]);
-    assert_eq!(chunk_indices(6, 3), vec![vec![0, 1, 2], vec![3, 4, 5]]);
-    assert_eq!(chunk_indices(2, 5), vec![vec![0, 1]]);
-}
-
-#[test]
-fn chunk_indices_has_no_rows_for_nothing_to_place() {
-    assert!(chunk_indices(0, 4).is_empty());
-    assert!(chunk_indices(-3, 4).is_empty());
-}
-
-/// `per_row` comes from a measured width, which is zero for the frame before
-/// the first layout reports one — so it has to floor at one item per row
-/// rather than loop forever or divide by zero.
-#[test]
-fn chunk_indices_floors_a_degenerate_row_width_at_one() {
-    assert_eq!(chunk_indices(3, 0), vec![vec![0], vec![1], vec![2]]);
-    assert_eq!(chunk_indices(3, -1), vec![vec![0], vec![1], vec![2]]);
-}
 
 const GLOBAL: &str = include_str!("../../../../../melodia-ui/ui/globals/settings-page.slint");
 const ROUTER: &str =

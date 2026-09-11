@@ -108,9 +108,7 @@ pub fn install_views(
     let favorites_ui = ui::favorites::install(cx, &artists_ui);
     let recently_played_ui = ui::recently_played::install(cx);
     let radio_ui = ui::radio::install(cx);
-    // Bound under an underscore rather than dropped at the semicolon, so the
-    // keepalive note on `UiHandles` has something to attach to.
-    let _search_ui = ui::search::install(cx, &albums_ui, &artists_ui);
+    let search_ui = ui::search::install(cx, &albums_ui, &artists_ui);
 
     // Every track-list view's right-click "Go to Album/Artist/Genre", after all
     // three target handles exist.
@@ -143,24 +141,16 @@ pub fn install_views(
     ui::nav_history::record_current(app);
 
     // The Now-Playing heart and star rating fan into every per-row cache.
-    ui::callbacks::wire_now_playing_favorite(
-        app,
-        state,
-        &tracks_ui,
-        &browse_ui,
-        &albums_ui,
-        &artists_ui,
-        &genres_ui,
-    );
-    ui::callbacks::wire_now_playing_rating(
-        app,
-        state,
-        &tracks_ui,
-        &browse_ui,
-        &albums_ui,
-        &artists_ui,
-        &genres_ui,
-    );
+    let row_flags = ui::callbacks::RowFlagHandles {
+        tracks: &tracks_ui,
+        browse: &browse_ui,
+        albums: &albums_ui,
+        artists: &artists_ui,
+        genres: &genres_ui,
+        search: &search_ui,
+    };
+    ui::callbacks::wire_now_playing_favorite(app, state, row_flags);
+    ui::callbacks::wire_now_playing_rating(app, state, row_flags);
     // Retune every grid-tier cover LRU to the real display — one band for all of
     // them, drawing the same card at the same size. Genres has no cover cache.
     //
@@ -235,6 +225,7 @@ pub fn install_library_settings_and_friends(
     // pushes the "crashed last time" notice itself.
     ui::settings::diagnostics::install(app, state, &notifications);
     ui::settings::settings_page::install(app, state);
+    ui::chips::install(app);
     ui::hero_chips::install(app);
     // The stack is the one surface a language switch can't reach on its own: its rows carry
     // strings Rust resolved once, they outlive every navigation, and the file-watching

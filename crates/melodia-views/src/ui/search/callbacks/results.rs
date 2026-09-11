@@ -11,11 +11,11 @@ use super::NAV_SEARCH;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::ArtistsUi;
 use crate::ui::callbacks::cross_tab_nav;
-use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged};
+use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
 use crate::ui::callbacks::{
     collect_track_ids, model_track_ids, next_sort, persist_view_sort, play_row_start,
 };
-use crate::ui::search::{self as search_ui_mod, SearchUi, fetch};
+use crate::ui::search::{self as search_ui_mod, SearchUi, apply, fetch};
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use melodia_app::library;
 use melodia_app::services::settings::ViewSort;
@@ -131,44 +131,32 @@ pub(super) fn wire(
             spawn_logged!(s, "search::add_to_queue", library::queue::queue_add_tracks(&s, id_vec));
         });
     }
+    // toggle-row-favorite / set-row-rating: write through, then patch the cached result set
+    // and the visible row. Search has no `library_changed` subscriber to fall back on, so
+    // without the patch the pip never moves and the next click recomputes the same `!false`
+    // and re-sends a value the database already holds.
     {
-        let s = state.clone();
-        g.on_toggle_row_favorite(move |ids, fav| {
-            let id_vec = collect_track_ids(&ids);
-            if id_vec.is_empty() {
-                return;
+        let su = search_ui.clone();
+        wire_row_flag!(g, on_toggle_row_favorite, state, "search::set_favorite",
+        library::favorites::set_favorite, collect_track_ids,
+        captures: [weak, su],
+        after: |id_vec, fav| {
+            for id in &id_vec {
+                su.flip_favorite(*id, fav);
+                apply::apply_row_favorite(&weak, *id, fav);
             }
-            let s = s.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::favorites::set_favorite(&s, id_vec, fav).await {
-                    log::warn!("search::set_favorite: {e}");
-                }
-                // No optimistic local update — `Search.tracks` is
-                // backed by `last_results` which lives on disk; the
-                // next `library_changed` tick won't refresh us
-                // (Search is query-driven), and a stale `is_favorite`
-                // pip on a result row resolves itself on the user's
-                // next search or page revisit. Better than mutating
-                // the cached result set behind the user's back.
-            });
         });
     }
     {
-        let s = state.clone();
-        g.on_set_row_rating(move |ids, rating| {
-            let id_vec = collect_track_ids(&ids);
-            if id_vec.is_empty() {
-                return;
+        let su = search_ui.clone();
+        wire_row_flag!(g, on_set_row_rating, state, "search::set_rating",
+        library::ratings::set_rating, collect_track_ids,
+        captures: [weak, su],
+        after: |id_vec, rating| {
+            for id in &id_vec {
+                su.flip_rating(*id, rating);
+                apply::apply_row_rating(&weak, *id, rating);
             }
-            let s = s.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::ratings::set_rating(&s, id_vec, rating).await {
-                    log::warn!("search::set_rating: {e}");
-                }
-                // No optimistic local update — mirrors `on_toggle_row_favorite`
-                // above (Search is query-driven; the hover star reflects the
-                // new rating on the user's next search or page revisit).
-            });
         });
     }
     {
