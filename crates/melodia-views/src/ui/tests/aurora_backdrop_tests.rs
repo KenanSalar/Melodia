@@ -92,10 +92,15 @@ fn the_sweeps_keep_their_headings() {
     );
 }
 
-/// Each ramp is 55% at its near edge and gone by 70.71% of the gradient line. `transparentize`
+/// Each ramp is 55% at its near edge and gone by the far end of its line. `transparentize`
 /// *multiplies*, so 0.45 leaves a measured wash at 55% while a synthesized one keeps the lower
-/// weight `ui::aurora` gave it — `with-alpha` would wash a guess on as hard as a fact. The far stop
-/// is 1/√2, where a 45° traversal reaches the opposite corner, so nothing bands at the edges.
+/// weight `ui::aurora` gave it — `with-alpha` would wash a guess on as hard as a fact.
+///
+/// **Both stops sit at the extents, and that is what this pins.** `FemtoVG` only fills a two-stop
+/// gradient from shader uniforms while neither stop is inset; past that the brush takes the
+/// multi-stop path and synthesizes a gradient texture, which costs a slab of the driver's buffer
+/// pool that is never handed back. Nothing about an inset stop looks wrong, so only a measurement
+/// or this test would catch one coming back.
 #[test]
 fn each_sweep_fades_between_the_same_two_stops() {
     let src = normalized(&code(AURORA));
@@ -104,9 +109,10 @@ fn each_sweep_fades_between_the_same_two_stops() {
         "the near edge left 55%, so a measured wash lands at a weight the set wasn't tuned for"
     );
     assert_eq!(
-        src.matches("root.tint.transparentize(1.0) 70.71%").count(),
+        src.matches("root.tint.transparentize(1.0) 100%").count(),
         2,
-        "both arms owe the same far stop, or the shown/hidden pair cross through a solid"
+        "both arms owe the same far stop, at the extent: inset it and the pair either cross \
+         through a solid or leave FemtoVG's two-stop path for a gradient texture"
     );
 }
 
