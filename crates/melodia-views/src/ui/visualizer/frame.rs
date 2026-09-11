@@ -6,25 +6,25 @@
 //! yet all reach the same path: no snapshot, no transform, just the decay. Each returns
 //! whether its drawing has settled, which is what stops the Timer. Neither allocates.
 
-use slint::{Model, VecModel};
-
-use melodia_playback::player::playback::spectrum::SpectrumAnalyzer;
+use melodia_playback::player::playback::spectrum::{self, BarAnchor, SpectrumAnalyzer, StripSize};
 use melodia_playback::player::playback::visualizer::VisualizerShared;
 use melodia_playback::player::playback::waveform::{self, WaveformAnalyzer};
 
 /// Below this level a drawing is visually at rest, so the driving Timer can stop.
 const IDLE_LEVEL: f32 = 0.001;
 
-/// One bars (or mirrored) frame: snapshot → two FFTs → bands → model.
+/// One bars (or mirrored) frame: snapshot → two FFTs → bands → path string.
 ///
-/// Every band is written every tick, changed or not, and that is load-bearing beyond the
+/// The path is rewritten every tick, changed or not, and that is load-bearing beyond the
 /// drawing: the repaint it asks for is what [`super::pulse`] counts to tell a window being
 /// drawn from one that isn't.
 pub(super) fn bars(
     viz: &VisualizerShared,
     analyzer: &mut SpectrumAnalyzer,
-    model: &VecModel<f32>,
+    path: &mut String,
     rate: u32,
+    anchor: BarAnchor,
+    strip: StripSize,
 ) -> bool {
     if rate > 0 {
         // Straight into the transforms' own input buffers. They overlap, the long one
@@ -32,11 +32,9 @@ pub(super) fn bars(
         analyzer.fill_windows(|window| viz.snapshot(window));
     }
 
-    let mut idle = true;
-    for (band, &level) in analyzer.analyze(rate).iter().enumerate() {
-        idle &= level < IDLE_LEVEL;
-        model.set_row_data(band, level);
-    }
+    let levels = analyzer.analyze(rate);
+    let idle = levels.iter().all(|&level| level < IDLE_LEVEL);
+    spectrum::write_bar_path(levels, strip, anchor, path);
     idle
 }
 
@@ -46,7 +44,7 @@ pub(super) fn waveform(
     analyzer: &mut WaveformAnalyzer,
     path: &mut String,
     rate: u32,
-    strip_width: f32,
+    strip: StripSize,
 ) -> bool {
     // The trace's span is a fixed number of milliseconds, so the window can only be sized
     // once the rate is known; without one, `analyze` decays the last trace instead.
@@ -55,6 +53,6 @@ pub(super) fn waveform(
         viz.snapshot(analyzer.window_mut(rate));
     }
 
-    let columns = analyzer.trace(live, rate, waveform::columns_for_width(strip_width), path);
+    let columns = analyzer.trace(live, rate, waveform::columns_for_width(strip.width), path);
     columns.iter().all(|c| c.max.abs() < IDLE_LEVEL && c.min.abs() < IDLE_LEVEL)
 }

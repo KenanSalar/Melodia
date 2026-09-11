@@ -1,50 +1,47 @@
 import { Visualizer } from "../../globals/audio.slint";
 import { Player } from "../../globals/player.slint";
 
-// Spectrum-analyzer style: one bar per band, bass left. A silent band rests at its own column
-// width rather than collapsing, so an idle strip reads as a row of marks rather than a flat rule
-// waiting for something.
+// Spectrum-analyzer style: one bar per band, bass left. A silent band rests at its own column width
+// rather than collapsing, so an idle strip reads as a row of marks rather than a flat rule waiting
+// for something.
 //
-// Heights come straight off `Visualizer.bars`, which Rust has already smoothed with a fast attack
-// and a slow decay — which is why there is deliberately **no** `animate` on the height: animating
-// an already-smoothed value phase-lags, and one shared Timer plus math-derived bindings is cheaper
-// at vsync than N concurrent `animate` blocks. Pure render, the footprint and Timer belonging to
-// `visualizer-strip.slint`.
+// **Every band is one figure, not one element.** FemtoVG builds and tessellates a path per drawn
+// element and caches none of it between frames, so a band drawn as its own Rectangle costs a path
+// built, tessellated and filled on its own every frame, and the strip rewrites every band every
+// tick. The geometry arrives as an SVG command string for the same reason the trace's does, Slint
+// rejecting `for`-generated path elements outright (slint-ui/slint#754).
+// `spectrum::write_bar_path` is the writer and owns the anchor too, so "Mirrored" needs nothing
+// here.
 //
-// **The bars carry no `border-radius`.** A radius promotes each one to `BasicBorderRectangle`,
-// which FemtoVG tessellates as an anti-aliased rounded path; without one they take its
-// `draw_rectangle`, a four-point fill with anti-aliasing off. Neither path is cached between
-// frames, and there are 64 of them.
+// Heights come straight off the analyzer, which Rust has already smoothed with a fast attack and a
+// slow decay, which is why there is deliberately **no** `animate`: animating an already-smoothed
+// value phase-lags. Pure render, the footprint and Timer belonging to `visualizer-strip.slint`.
 export component SpectrumBars inherits Rectangle {
-    // Centre-line anchoring instead of the baseline — the "Mirrored" style.
-    in property <bool> centred;
+    Path {
+        commands: Visualizer.bars-path;
 
-    HorizontalLayout {
-        // The bars stretch, so each is what's left after the gaps — kept tight because at this
-        // band count a wider gap starts eating the bars themselves on a narrow window.
-        spacing: 2px;
+        // Rust normalizes into this box, so it's a constant and no band count crosses the
+        // boundary. Not optional: without one, Slint fits the path's *own* bounding box to the
+        // element, renormalizing every frame and drawing a quiet band as tall as a peak.
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: 1;
+        viewbox-height: 1;
+        // The default `contain` preserves aspect ratio and would letterbox this box into a sliver
+        // down the middle.
+        fit: fill;
 
-        for level in Visualizer.bars: Rectangle {
-            horizontal-stretch: 1;
+        // **Off, and the geometry is snapped to suit.** A bar is a few pixels wide and, mirrored, a
+        // few tall, so a half-covered row at each end is a visible share of it rather than a soft
+        // edge — and snapping inside the viewbox can't fix that on its own, the strip's own origin
+        // landing wherever a centred column in a scroller puts it. `write_bar_path` gives every
+        // band the same whole-pixel width so thresholded coverage can't make neighbours differ.
+        anti-alias: false;
 
-            // Computed geometry rather than a layout, the `dialog/eq-band-slider.slint` idiom.
-            Rectangle {
-                width: parent.width;
-                // Floored at the band's own column width, so a silent band rests as a square
-                // rather than vanishing. A fixed-px floor can't: the column follows the strip's
-                // width, so the resting mark would be square at exactly one window size.
-                height: max(parent.width, parent.height * level);
-                // Height is the total in both anchorings, so a centred bar puts half either side
-                // of the axis rather than a full bar each way.
-                y: root.centred
-                    ? (parent.height - self.height) / 2
-                    : parent.height - self.height;
-                // The per-artwork accent, so the strip harmonizes with the blur, but the
-                // tone-floored variant — a dark album's raw accent sinks into the scrimmed backdrop.
-                // `np-viz` rather than the tier itself: the bars move, and motion reads louder than
-                // the weight the still chrome around them wants.
-                background: Player.np-viz;
-            }
-        }
+        // The per-artwork accent, so the strip harmonizes with the blur, but the tone-floored
+        // variant — a dark album's raw accent sinks into the scrimmed backdrop. `np-viz` rather
+        // than the tier itself: the bars move, and motion reads louder than the weight the still
+        // chrome around them wants.
+        fill: Player.np-viz;
     }
 }

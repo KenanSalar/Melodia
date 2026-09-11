@@ -2,6 +2,7 @@
 //! `ReplayGain` and crossfade state cells on the audio thread, and the
 //! visualizer's spectrum and waveform analysis on the UI thread.
 
+use std::fmt::Write as _;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 /// Fraction of its height a visualizer bar or trace keeps per frame while falling.
@@ -29,6 +30,39 @@ const _: () = assert!(
 )]
 pub(crate) fn index_to_f32(i: usize) -> f32 {
     i as f32
+}
+
+/// Append `value` to `out` with exactly `DECIMALS` fractional digits.
+///
+/// Both drawn styles serialize their figure as SVG path text every tick, and their coordinates are
+/// normalized and quantized to a few places, so the format is a sign, one digit and a zero-padded
+/// remainder. `{value:.N$}` would instead ask `core::fmt` for the exactly-rounded decimal, twice
+/// per vertex per frame.
+///
+/// `DECIMALS` is a const parameter so a request too wide for a `u16` overflows the `const` block
+/// rather than needing a runtime clamp — but that diagnostic arrives at **codegen**, so `cargo
+/// clippy`, this repo's usual gate, passes what `cargo build` rejects.
+///
+/// Two deliberate differences from `core::fmt`, each worth one unit in the last place on a unit
+/// viewbox: negative zero prints as `0`, and an exact tie rounds away from zero rather than to
+/// even.
+pub(crate) fn push_fixed<const DECIMALS: u32>(out: &mut String, value: f32) {
+    let scale = const { 10u16.pow(DECIMALS) };
+
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "coordinates are normalized to a unit range, so the scaled value is at most ±10_000; a float→int `as` saturates besides, so even a forged input clamps rather than wrapping"
+    )]
+    let units = (value * f32::from(scale)).round() as i32;
+
+    if units < 0 {
+        out.push('-');
+    }
+    let magnitude = units.unsigned_abs();
+    let scale = u32::from(scale);
+    let width = DECIMALS as usize;
+    // Writing into a String cannot fail.
+    let _ = write!(out, "{}.{:0width$}", magnitude / scale, magnitude % scale);
 }
 
 /// Convert a decibel value to a linear amplitude factor.

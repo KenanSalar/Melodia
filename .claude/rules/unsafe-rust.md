@@ -157,9 +157,9 @@ bounds-check problem. Read these before proposing anything:
   and asking `core::fmt` for an exactly-rounded decimal at a fixed precision is a far
   harder question than the coordinates need — Grisu's `format_exact` with a bignum
   fallback, to print a sign, one digit and a zero-padded remainder. The fix was
-  `waveform::push_fixed::<N>` — integer scale, integer print — in safe code, with the
+  `dsp::push_fixed::<N>` — integer scale, integer print — in safe code, with the
   width a const parameter so an unrepresentable scale is a build failure rather than a
-  runtime clamp.
+  runtime clamp. Both drawn styles write their figure through it now.
 - **The backdrop solve's cost was a transcendental with a 256-value domain.** `linearized`
   takes a `u8`; three calls per pixel became three loads from a `LazyLock<[f64; 256]>`
   in `ui/backdrop.rs`.

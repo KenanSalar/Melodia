@@ -21,15 +21,13 @@ export component VisualizerStrip inherits Rectangle {
     // install's saved style. The `!=` makes bars the catch-all, so an unknown key degrades to
     // the default instead of drawing nothing; Mirrored is those same bars, re-anchored.
     if Visualizer.style == "waveform": WaveformTrace { }
-    if Visualizer.style != "waveform": SpectrumBars {
-        centred: Visualizer.style == "mirrored";
-    }
+    if Visualizer.style != "waveform": SpectrumBars { }
 
     // One shared Timer, running a full snapshot → analysis → property pass in Rust; the only thing
-    // that reads the sample ring. **30 Hz for every style**: at vsync the bars' rounded-rect
-    // re-tessellation dominated the process's allocation calls for as long as Now Playing stayed
-    // open, and a trace has no decay to keep smooth, so a high rate only makes it frantic.
-    // `dormant` overrides both, the tick then only still here to notice frames coming back.
+    // that reads the sample ring. **30 Hz for every style**: both figures are rebuilt and
+    // re-tessellated from scratch on every tick, so the rate is what that costs, and a trace has no
+    // decay to keep smooth, so a high rate only makes it frantic. `dormant` overrides both, the
+    // tick then only still here to notice frames coming back.
     //
     // **`running` is deliberately not just `is_playing`**: a pause stops the tap but leaves the
     // last window of samples in the ring, so freezing the Timer would strand the drawing on a stale
@@ -39,8 +37,26 @@ export component VisualizerStrip inherits Rectangle {
         interval: Visualizer.dormant ? 500ms : 33ms;
         running: (Player.vm.is_playing && Visualizer.window-shown) || !Visualizer.idle;
         triggered() => {
-            // The width rides along because the trace's column count follows the strip.
-            Visualizer.tick(Player.vm.is_playing, root.width / 1px);
+            // Both sizes ride along: the trace's column count follows the strip's width, and the
+            // bars floor each band against its own column.
+            Visualizer.tick(Player.vm.is_playing, root.width / 1px, root.height / 1px);
+        }
+    }
+
+    // The bars floor each band against its own column width, so their resting figure can't be
+    // written until something has measured the strip — and the Timer above only runs once
+    // something is playing, so a strip mounted over a stopped player would never hand Rust a size.
+    // One tick at mount seeds it. A `changed width` mirror would keep it exact across a resize at
+    // rest, and is deliberately not here: the tracker would outlive this branch and watch a layout
+    // property the surviving parent re-dirties (`slint-pitfalls.md`). The figure is normalized, so
+    // an un-ticked resize stretches it rather than breaking it, and the next played frame is exact.
+    property <bool> seed-pending: true;
+    Timer {
+        interval: 1ms;
+        running: root.seed-pending;
+        triggered() => {
+            root.seed-pending = false;
+            Visualizer.tick(Player.vm.is_playing, root.width / 1px, root.height / 1px);
         }
     }
 }

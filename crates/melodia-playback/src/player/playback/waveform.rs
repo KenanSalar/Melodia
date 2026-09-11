@@ -7,23 +7,20 @@
 //! in its own way: the loudest alternates between opposite extremes and scribbles, the nearest
 //! aliases, the mean lowpasses anything bright. So a [`Column`] carries the whole `min`..`max`
 //! its samples covered and the strip is the area between the two edges — nothing skipped, so
-//! nothing can alias. `DeaDBeeF`'s scope and every audio editor's waveform view resolve it the
-//! same way.
+//! nothing can alias. Every audio editor's waveform view resolves it the same way.
 //!
 //! Like [`spectrum`] the work is free functions over slices; [`WaveformAnalyzer`] only holds
 //! the buffers that must not be reallocated per frame.
 //!
 //! [`spectrum`]: super::spectrum
 
-use std::fmt::Write as _;
-
-use super::dsp::{VISUALIZER_DECAY, index_to_f32};
+use super::dsp::{VISUALIZER_DECAY, index_to_f32, push_fixed};
 
 /// Milliseconds of audio drawn across the strip.
 ///
 /// Time, not samples — a fixed sample count would draw the same music differently depending on
-/// the rate it was mastered at. Sits between `DeaDBeeF`'s 50 ms and `foobar2000`'s 100, low
-/// enough that a bass note still reads as a wave rather than a blur at the strip's height.
+/// the rate it was mastered at. Under the 50 to 100 ms a scope usually spans, low enough that a
+/// bass note still reads as a wave rather than a blur at the strip's height.
 pub const WAVE_SPAN_MS: u32 = 40;
 
 /// Extra milliseconds snapshotted *ahead* of the drawn span, giving [`find_trigger`] somewhere
@@ -32,7 +29,7 @@ pub const TRIGGER_SLACK_MS: u32 = 20;
 
 /// Logical pixels per drawn column.
 ///
-/// `DeaDBeeF` uses one per pixel. One per two is indistinguishable under the envelope's own
+/// One per pixel is the obvious answer. One per two is indistinguishable under the envelope's own
 /// stroke and halves the path string, its re-parse and the tessellation behind it — which
 /// matters here in a way it doesn't for a scope drawing straight to a canvas.
 const LOGICAL_PX_PER_COLUMN: f32 = 2.0;
@@ -150,38 +147,6 @@ pub fn write_path_commands(columns: &[Column], out: &mut String) {
 
 /// Bytes one entry of [`XPrefixes`] takes: `"0.1234 "`.
 const X_PREFIX_BYTES: usize = 7;
-
-/// Append `value` to `out` with exactly `DECIMALS` fractional digits.
-///
-/// The trace's coordinates are all normalized and quantized to a few places, so the format is a
-/// sign, one digit and a zero-padded remainder. `{value:.N$}` would instead ask `core::fmt` for
-/// the exactly-rounded decimal, twice per column per frame.
-///
-/// `DECIMALS` is a const parameter so a request too wide for a `u16` overflows the `const` block
-/// rather than needing a runtime clamp — but that diagnostic arrives at **codegen**, so `cargo
-/// clippy`, this repo's usual gate, passes what `cargo build` rejects.
-///
-/// Two deliberate differences from `core::fmt`, each worth one unit in the last place on a
-/// viewbox two units tall: negative zero prints as `0`, and an exact tie rounds away from zero
-/// rather than to even.
-fn push_fixed<const DECIMALS: u32>(out: &mut String, value: f32) {
-    let scale = const { 10u16.pow(DECIMALS) };
-
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "coordinates are normalized to a unit range, so the scaled value is at most ±10_000; a float→int `as` saturates besides, so even a forged input clamps rather than wrapping"
-    )]
-    let units = (value * f32::from(scale)).round() as i32;
-
-    if units < 0 {
-        out.push('-');
-    }
-    let magnitude = units.unsigned_abs();
-    let scale = u32::from(scale);
-    let width = DECIMALS as usize;
-    // Writing into a String cannot fail.
-    let _ = write!(out, "{}.{:0width$}", magnitude / scale, magnitude % scale);
-}
 
 /// What every vertex but the first opens with. Kept out of the cached entry so the opening `M`
 /// vertex can reuse the same entry rather than slice a lead off it.

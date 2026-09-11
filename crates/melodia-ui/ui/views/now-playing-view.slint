@@ -64,14 +64,22 @@ export component NowPlayingView inherits Rectangle {
 
     // **A band's column pitch is the ceiling, not the strip's.** The band count is fixed, so a
     // strip that keeps widening divides the same bars into ever-fatter columns whatever height it
-    // is drawn at. Ten pixels, the 2px gap included, is where a resting dot stops reading as a bead.
-    // Reading the model's length beats restating `spectrum::NUM_BANDS`; the `max` covers boot.
-    property <length> strip-w-max: 10px * max(1, Visualizer.bars.length);
+    // is drawn at. Ten pixels, the 2px gap included, is where a resting mark stops reading as one.
+    // Reading the published count beats restating `spectrum::NUM_BANDS`; the `max` covers boot.
+    property <length> strip-w-max: 10px * max(1, Visualizer.band-count);
 
     // Three quarters of that column, so the strip reads as the base of the whole cover → title →
     // chips group. **The floor is not cosmetic**: at the window's own minimum `content-width` goes
     // negative.
-    property <length> strip-w: max(root.cover-size, min(root.content-width * 0.75, root.strip-w-max));
+    //
+    // Capped at the column *less both scrollbar lanes* besides. `cover-size` floors at 200px and
+    // only grows past it on a panel wider than ~900px, so on every narrower one the floor is wider
+    // than the whole column and the strip overhung both edges. Both lanes because the group is
+    // centred: clearing only the bar's own side would move the strip off the column's axis.
+    property <length> strip-w: max(0px, min(
+        root.content-width - 2 * Theme.scrollbar-slot,
+        max(root.cover-size, min(root.content-width * 0.75, root.strip-w-max))
+    ));
 
     // Which of the two backdrops this view paints — a process constant, the setting being
     // restart-gated, so only the live arm is mounted: a hidden stack is not free,

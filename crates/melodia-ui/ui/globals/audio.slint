@@ -62,8 +62,11 @@ export global Visualizer {
     in-out property <bool> enabled: true;
     in-out property <string> style: "bars";
     in-out property <int> style-idx;
-    in property <[float]> bars;
+    in property <string> bars-path;
     in property <string> wave-path;
+    // Published from `spectrum::NUM_BANDS` rather than restated here. Only the strip's width
+    // ceiling reads it: the figure itself carries its own band count in its geometry.
+    in property <int> band-count;
     in property <bool> idle: true;
     in property <bool> window-shown: true;
     in property <bool> dormant;
@@ -77,5 +80,11 @@ export global Visualizer {
     // state but can't be relied on here: `window-shown` also gates the strip's Timer, so a hide
     // landing on a settled drawing stops it in the same pass and no further tick arrives.
     callback window-hidden();
-    callback tick(bool /*is-playing*/, float /*strip width, logical px*/);
+    // Both sizes ride along: the trace's column count follows the strip's width, and the bars floor
+    // each band against its own column, which is a ratio of the two.
+    callback tick(
+        bool /*is-playing*/,
+        float /*strip width, logical px*/,
+        float /*strip height, logical px*/,
+    );
 }

@@ -24,13 +24,15 @@ mod pulse;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, SharedString};
 
 use crate::ui::settings_bind::read_or_default;
 use crate::ui::shell::tray_bridge;
 use melodia_app::library;
 use melodia_app::state::AppState;
-use melodia_playback::player::playback::spectrum::{FFT_SIZE, NUM_BANDS, SpectrumAnalyzer};
+use melodia_playback::player::playback::spectrum::{
+    BarAnchor, FFT_SIZE, NUM_BANDS, SpectrumAnalyzer, StripSize,
+};
 use melodia_playback::player::playback::visualizer::RING_CAP;
 use melodia_playback::player::playback::waveform::{self, MAX_COLUMNS, WaveformAnalyzer};
 use melodia_ui::{AppWindow, Visualizer};
@@ -45,9 +47,9 @@ const STYLE_MIRRORED: &str = "mirrored";
 /// back in from silence.
 const FRAME_STALL_TICKS: u32 = 60;
 
-/// The two flags a strip at rest carries, shared by [`publish_resting`] and [`Analyzers::new`]
-/// rather than spelled twice: drift is silent, the tick's `idle != session.was_idle` gate skipping
-/// the publish so a stale flag stands for the whole session.
+/// The two flags a strip at rest carries. Named rather than spelled inline at
+/// [`publish_resting`], which is the one place a drawing is declared settled without a frame
+/// having decided it.
 const RESTING_IDLE: bool = true;
 const RESTING_DORMANT: bool = false;
 
@@ -58,12 +60,8 @@ struct Analyzers {
     spectrum: SpectrumAnalyzer,
     wave: WaveformAnalyzer,
     /// Sized once for the widest trace, so the per-frame rebuild only writes into capacity it
-    /// already has.
+    /// already has. The bars figure is the smaller of the two and rides the same buffer.
     path: String,
-    /// Shadows `Visualizer.idle` / `Visualizer.dormant`, so an unchanged value doesn't dirty the
-    /// property sixty times a second.
-    was_idle: bool,
-    was_dormant: bool,
     frames: FrameWatch,
 }
 
@@ -74,8 +72,6 @@ impl Analyzers {
             // A wider window would only be padded with silence.
             wave: WaveformAnalyzer::new(RING_CAP, MAX_COLUMNS),
             path: String::with_capacity(MAX_COLUMNS * 2 * 20),
-            was_idle: RESTING_IDLE,
-            was_dormant: RESTING_DORMANT,
             frames: FrameWatch::new(),
         }
     }
@@ -133,9 +129,19 @@ fn style_index_from_i32(index: i32) -> usize {
 }
 
 /// Whether an index selects the waveform. The other two are the same bars under a different
-/// anchor, which Slint resolves from the key.
+/// anchor, which [`bar_anchor`] resolves.
 fn is_waveform(index: usize) -> bool {
     STYLES.get(index).copied() == Some(STYLE_WAVEFORM)
+}
+
+/// Which edge an index's bars grow from. Bars is the catch-all, so an index that has drifted out
+/// of step with [`STYLES`] degrades to the default anchor rather than drawing nothing.
+fn bar_anchor(index: usize) -> BarAnchor {
+    if STYLES.get(index).copied() == Some(STYLE_MIRRORED) {
+        BarAnchor::Centre
+    } else {
+        BarAnchor::Baseline
+    }
 }
 
 /// Both halves: the key the strip mounts on, and the index the pickers bind to.
@@ -144,26 +150,21 @@ fn publish_style(global: &Visualizer, index: usize) {
     global.set_style_idx(i32::try_from(index).unwrap_or_default());
 }
 
-/// The drawing a strip nobody is watching mounts on: every band at rest and the flat figure a
-/// decayed trace settles to, with the two flags that say so — both built by the code the live path
-/// uses, so neither can drift from what a decay lands on.
+/// The drawing a strip nobody is watching mounts on: the flat figure a decayed trace settles to,
+/// with the two flags that say so — built by the code the live path uses, so it can't drift from
+/// what a decay lands on.
+///
+/// **Only the trace, because only the trace can be drawn without a size.** The bars figure floors
+/// each band against the strip's own width, so rest for the bars is whatever the strip's seed tick
+/// writes once it has a layout to measure (`visualizer-strip.slint`).
 ///
 /// The session-end call is the load-bearing one: the strip's Timer runs on
 /// `(playing && window-shown) || !idle`, so a strip remounting over a *paused* player never ticks
 /// and whatever the last session left would sit there until playback resumed.
-fn publish_resting(global: &Visualizer, model: &VecModel<f32>) {
-    rest_bars(model);
+fn publish_resting(global: &Visualizer) {
     global.set_wave_path(SharedString::from(resting_wave_path().as_str()));
     global.set_idle(RESTING_IDLE);
     global.set_dormant(RESTING_DORMANT);
-}
-
-/// Back to the seeded level — the strip floors each band at a visible dot, so rest for the bars is
-/// the seed rather than a height.
-fn rest_bars(model: &VecModel<f32>) {
-    for band in 0..model.row_count() {
-        model.set_row_data(band, 0.0);
-    }
 }
 
 /// The trace's resting figure, through its real writer rather than as a literal so it is exactly
@@ -180,9 +181,6 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
     let flags = read_or_default(state, "visualizer").visualizer;
     let selected = style_index(&flags.viz_style);
 
-    // Mutated in place every frame rather than replaced, the strip reading this one.
-    let model: Rc<VecModel<f32>> = Rc::new(VecModel::from(vec![0.0; NUM_BANDS]));
-
     // A shadow rather than a read off the global, which would clone a `SharedString` out of a
     // Slint property every tick.
     let style: Rc<Cell<usize>> = Rc::new(Cell::new(selected));
@@ -194,22 +192,22 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
     let viz_global = ui.global::<Visualizer>();
     viz_global.set_enabled(flags.viz_enabled);
     publish_style(&viz_global, selected);
-    viz_global.set_bars(ModelRc::from(model.clone()));
+    viz_global.set_band_count(i32::try_from(NUM_BANDS).unwrap_or_default());
 
-    // The bars come up at rest on their own; the trace has nothing to fall back on and its Timer
-    // doesn't run until something plays, so a view opened on a fresh app would show an empty strip.
-    publish_resting(&viz_global, &model);
+    // Neither figure's Timer runs until something plays, so a view opened on a fresh app would
+    // show an empty strip. The trace can be seeded from here; the bars wait for the strip's seed
+    // tick, having no size to floor themselves against yet.
+    publish_resting(&viz_global);
 
-    // tick — one frame. Nothing here allocates except the one `SharedString` the waveform path has
-    // to be handed to Slint as.
+    // tick — one frame. Nothing here allocates except the one `SharedString` the figure has to be
+    // handed to Slint as.
     {
         let viz = state.engine.visualizer();
-        let model = model.clone();
         let style = style.clone();
         let analyzers = analyzers.clone();
         let weak = ui.as_weak();
 
-        viz_global.on_tick(move |playing, strip_width| {
+        viz_global.on_tick(move |playing, strip_width, strip_height| {
             let mut slot = analyzers.borrow_mut();
             // The one construction site, so no mount ordering can leave the tick without buffers
             // however `set-active` and the strip interleave.
@@ -229,31 +227,35 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
             // is applied. Zero is the "draw nothing new" signal both styles decay on.
             let rate = if analyzing { viz.analysis_rate() } else { 0 };
 
-            let waveform = is_waveform(style.get());
+            // The scale factor is read here rather than passed in: `.slint` has no way to spell it,
+            // and the bars need it to put a horizontal edge on a whole device row. A window that
+            // has gone can't be drawn into anyway, so the fallback never reaches a frame.
+            let scale = weak.upgrade().map_or(1.0, |ui| ui.window().scale_factor());
+            let strip = StripSize { width: strip_width, height: strip_height, scale };
+            let style = style.get();
+            let waveform = is_waveform(style);
             let idle = if waveform {
-                frame::waveform(&viz, &mut session.wave, &mut session.path, rate, strip_width)
+                frame::waveform(&viz, &mut session.wave, &mut session.path, rate, strip)
             } else {
-                frame::bars(&viz, &mut session.spectrum, &model, rate)
+                let anchor = bar_anchor(style);
+                frame::bars(&viz, &mut session.spectrum, &mut session.path, rate, anchor, strip)
             };
             // Settled with nothing arriving to unsettle it: the tick is only still here to watch
             // for frames, which it can do far more slowly.
             let dormant = idle && !painting;
 
-            // The bars ride their own model, written above; only the trace and the two flags come
-            // through here. Both drive the strip's Timer so neither can be skipped.
-            if waveform || idle != session.was_idle || dormant != session.was_dormant {
-                if let Some(ui) = weak.upgrade() {
-                    let global = ui.global::<Visualizer>();
-                    // Only the mounted style's property — the other one's consumer isn't in the
-                    // tree to read it.
-                    if waveform {
-                        global.set_wave_path(SharedString::from(session.path.as_str()));
-                    }
-                    global.set_idle(idle);
-                    global.set_dormant(dormant);
+            if let Some(ui) = weak.upgrade() {
+                let global = ui.global::<Visualizer>();
+                // Only the mounted style's property — the other one's consumer isn't in the tree
+                // to read it. The two flags are value-compared by `Property::set`, so writing them
+                // every tick costs a comparison rather than a repaint.
+                if waveform {
+                    global.set_wave_path(SharedString::from(session.path.as_str()));
+                } else {
+                    global.set_bars_path(SharedString::from(session.path.as_str()));
                 }
-                session.was_idle = idle;
-                session.was_dormant = dormant;
+                global.set_idle(idle);
+                global.set_dormant(dormant);
             }
         });
     }
@@ -264,7 +266,6 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
     {
         let viz = state.engine.visualizer();
         let analyzers = analyzers.clone();
-        let model = model.clone();
         let weak = ui.as_weak();
         viz_global.on_set_active(move |active| {
             viz.set_enabled(active && tray_bridge::is_window_visible());
@@ -280,7 +281,7 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
             // A strip remounting over a paused player never ticks, so hand back the rest a fresh
             // `Analyzers` shadows — or the next open comes up on the frame this one ended on.
             if let Some(ui) = weak.upgrade() {
-                publish_resting(&ui.global::<Visualizer>(), &model);
+                publish_resting(&ui.global::<Visualizer>());
             }
         });
     }
