@@ -41,7 +41,10 @@ paths:
     - **Melodia chunks at its own `database::MAX_BINDS_PER_STATEMENT`, which keeps that lower
       figure deliberately.** Named for the role rather than for the engine, because it is a budget
       we pick; the argument for the value, and for what moving it would take, lives on the constant.
-- Chunk rows: `BIND_LIMIT / num_columns` rows per batch (e.g., 5 columns = 199 rows/chunk)
+- Chunk rows at the budget *less* every bind that is not part of a row (the `SET` value an
+  `UPDATE … WHERE id IN (…)` carries, the parent id an `IN`-list hangs off), and divide what
+  remains by the query's binds-per-row. Subtract first: dividing first spends the reserved slots
+  once per row
 - Use `QueryBuilder::push_values()` for building multi-row INSERT statements
 - Set `.persistent(false)` on dynamic bulk queries — prevents statement cache bloat
 - Always guard against zero-length input before building bulk queries

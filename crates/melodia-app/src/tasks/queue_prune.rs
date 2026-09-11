@@ -83,7 +83,7 @@ async fn reconcile_once(
     }
 
     // Step 2: ask the DB which of those ids still exist. The chunked helper
-    // keeps a very long queue inside one statement's bind budget.
+    // splits a very long queue so each statement stays inside the bind budget.
     let surviving_rows: Vec<IdRow> =
         melodia_store::database::chunked_in_query(db.read(), &queued_ids, |placeholders| {
             format!("SELECT id FROM tracks WHERE id IN ({placeholders})")

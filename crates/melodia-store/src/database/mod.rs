@@ -13,9 +13,11 @@ use melodia_core::error::AppError;
 /// Bind-variable budget for one statement, divided by a query's columns-per-row to size its chunks.
 ///
 /// A bound we choose, not one the engine gives us: the bundled `SQLite` has allowed 32766 bind
-/// variables since 3.32. Raising it is not free either, the code generator being quadratic in a
-/// statement's columns while every bulk site runs `.persistent(false)` and so re-prepares per
-/// chunk. Move it against a profile of a first scan on a large library, not on the arithmetic.
+/// variables since 3.32, and 999 is the older default this value kept. The arithmetic settles
+/// nothing, because moving it trades in both directions: a larger chunk buys fewer prepares,
+/// every bulk site running `.persistent(false)` and so re-preparing per chunk, and costs a
+/// proportionally larger parameter array and bind set resident per statement. Move it against
+/// a profile of a first scan on a large library.
 pub const MAX_BINDS_PER_STATEMENT: usize = 999;
 
 /// sqlx's default migrations-tracking table; the 0.9 `Migrate` trait methods

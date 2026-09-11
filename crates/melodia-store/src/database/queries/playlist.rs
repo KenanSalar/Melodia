@@ -268,7 +268,7 @@ pub async fn remove_tracks_from_playlist_batch(
         let sql = format!(
             "DELETE FROM playlist_items WHERE playlist_id = ? AND track_id IN ({placeholders})"
         );
-        let mut query = sqlx::query(AssertSqlSafe(sql)).bind(playlist_id);
+        let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(playlist_id);
         for &id in chunk {
             query = query.bind(id);
         }
@@ -356,30 +356,39 @@ async fn batch_update_positions(
 }
 
 /// Batch UPDATE positions from (id, position) pairs using a CASE expression.
+///
+/// Chunked because a reorder hands over the whole playlist, and a pair spends three binds: the
+/// `WHEN ? THEN ?` of the `CASE`, then the id again in the `IN` list. Splitting is safe here, the
+/// positions being absolute and each chunk touching a disjoint id set.
 async fn batch_update_positions_pairs(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     pairs: &[(i64, i32)],
 ) -> Result<(), AppError> {
+    const BINDS_PER_PAIR: usize = 3;
+    const CHUNK_SIZE: usize = crate::database::MAX_BINDS_PER_STATEMENT / BINDS_PER_PAIR;
+
     if pairs.is_empty() {
         return Ok(());
     }
 
-    let mut sql = String::from("UPDATE playlist_items SET position = CASE id ");
-    for _ in pairs {
-        sql.push_str("WHEN ? THEN ? ");
-    }
-    sql.push_str("END WHERE id IN (");
-    sql.push_str(&crate::database::placeholders(pairs.len()));
-    sql.push(')');
+    for chunk in pairs.chunks(CHUNK_SIZE) {
+        let mut sql = String::from("UPDATE playlist_items SET position = CASE id ");
+        for _ in chunk {
+            sql.push_str("WHEN ? THEN ? ");
+        }
+        sql.push_str("END WHERE id IN (");
+        sql.push_str(&crate::database::placeholders(chunk.len()));
+        sql.push(')');
 
-    let mut query = sqlx::query(AssertSqlSafe(sql));
-    for &(id, pos) in pairs {
-        query = query.bind(id).bind(pos);
+        let mut query = sqlx::query(AssertSqlSafe(sql));
+        for &(id, pos) in chunk {
+            query = query.bind(id).bind(pos);
+        }
+        for &(id, _) in chunk {
+            query = query.bind(id);
+        }
+        query.persistent(false).execute(&mut **tx).await?;
     }
-    for &(id, _) in pairs {
-        query = query.bind(id);
-    }
-    query.persistent(false).execute(&mut **tx).await?;
     Ok(())
 }
 

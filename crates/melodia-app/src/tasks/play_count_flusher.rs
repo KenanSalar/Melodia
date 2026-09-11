@@ -125,6 +125,10 @@ async fn flush(
     }
 }
 
+/// What a counted row spends in either statement below: the `WHEN ? THEN ?` of the `CASE`, then
+/// the id again in the `IN` list.
+const BINDS_PER_ROW: usize = 3;
+
 /// Build a single `UPDATE … SET play_count = play_count + CASE id … END,
 /// last_played = ? WHERE id IN (…)` and execute it.
 async fn flush_play_counts(
@@ -132,8 +136,8 @@ async fn flush_play_counts(
     counts: &HashMap<i64, u32>,
     now: &str,
 ) -> Result<(), melodia_core::error::AppError> {
-    // 2 binds per row (id for CASE, id for IN) plus 1 for `now`.
-    const MAX_ROWS: usize = (melodia_store::database::MAX_BINDS_PER_STATEMENT - 1) / 2;
+    // The reserved slot is `now`, the one bind that is not part of a row.
+    const MAX_ROWS: usize = (melodia_store::database::MAX_BINDS_PER_STATEMENT - 1) / BINDS_PER_ROW;
     let entries: Vec<(i64, u32)> = counts.iter().map(|(&k, &v)| (k, v)).collect();
     for chunk in entries.chunks(MAX_ROWS) {
         let mut sql = String::from("UPDATE tracks SET play_count = play_count + CASE id");
@@ -166,7 +170,7 @@ async fn flush_skip_counts(
     db: &DbPool,
     counts: &HashMap<i64, u32>,
 ) -> Result<(), melodia_core::error::AppError> {
-    const MAX_ROWS: usize = melodia_store::database::MAX_BINDS_PER_STATEMENT / 2;
+    const MAX_ROWS: usize = melodia_store::database::MAX_BINDS_PER_STATEMENT / BINDS_PER_ROW;
     let entries: Vec<(i64, u32)> = counts.iter().map(|(&k, &v)| (k, v)).collect();
     for chunk in entries.chunks(MAX_ROWS) {
         let mut sql = String::from("UPDATE tracks SET skip_count = skip_count + CASE id");
