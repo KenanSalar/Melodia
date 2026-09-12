@@ -127,9 +127,9 @@ Seven locales (English, German, French, Spanish, Turkish, Greek, Italian), switc
 | Idle (Fedora) | 158 MB | 88 MB | 33 MB | 125 MB | 0.1% |
 | Playing, list view (Fedora) | 158 MB | 89 MB | 34 MB | 124 MB | 0.6% |
 | Playing, visualizer live (Fedora) | 166 MB | 96 MB | 34 MB | 132 MB | 4.0% |
-| Idle (Windows) | 117 MB | 58 MB | 54 MB | 63 MB | 0.1–0.2% |
-| Playing, list view (Windows) | 125 MB | 65 MB | 61 MB | 64 MB | 0.8–1.0% |
-| Playing, visualizer live (Windows) | 132 MB | 71 MB | 67 MB | 65 MB | 9.6–9.9% |
+| Idle (Windows) | 121 MB | 62 MB | 58 MB | 63 MB | 0.1% |
+| Playing, list view (Windows) | 122 MB | 63 MB | 59 MB | 64 MB | 0.7% |
+| Playing, visualizer live (Windows) | 128 MB | 68 MB | 64 MB | 64 MB | 6.1% |
 
 Release builds against the same 512-track library, each on a 16-core machine with the window on the same 144 Hz display, measured after the process had settled. CPU is a share of **one** core.
 
