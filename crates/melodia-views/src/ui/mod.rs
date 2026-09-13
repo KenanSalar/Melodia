@@ -69,7 +69,9 @@ pub mod window_chrome;
 // `startup_motion_tests` pins two components across a second seam: what the shell and the
 // view mounted inside it do on the frame the window opens. `titlebar_tests` reaches a third
 // tree — it holds the brand mark's theme brush to the asset it is painted over, the only
-// thing here a dark-palette reviewer cannot see going wrong.
+// thing here a dark-palette reviewer cannot see going wrong. `frameless_tests` holds the
+// shell's frame bindings and the miniplayer's exit edge to one another, a pairing only a Win32
+// or macOS frame shows breaking.
 //
 // What used to sit among them and no longer does is the set that walked the *tree* rather
 // than reading a component: those are `crates/melodia/tests/`, on the rule that a check
@@ -83,6 +85,9 @@ mod detail_restore_tests;
 #[cfg(test)]
 #[path = "tests/entity_card_tests.rs"]
 mod entity_card_tests;
+#[cfg(test)]
+#[path = "tests/frameless_tests.rs"]
+mod frameless_tests;
 #[cfg(test)]
 #[path = "tests/hero_blur_backdrop_tests.rs"]
 mod hero_blur_backdrop_tests;

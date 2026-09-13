@@ -81,20 +81,25 @@ export component AppWindow inherits Window {
     // the user can drag straight into mini mode with no runtime winit constraint mutation.
     min-width: 350px;
     min-height: 90px;
-    // Custom-frame + windowed gets a transparent ARGB surface, so the compositor blends the rounded
-    // mantle shell with the desktop and the alpha=0 corners read as "not our window". Native-frame
+    // The custom titlebar never has an OS frame, and the native one drops it for the miniplayer,
+    // which carries its own drag region. On `render-active` rather than `active`, so the frame
+    // changes on the tick the branches swap, while both sit at opacity 0.
+    property <bool> frameless: !Theme.use-native-titlebar || mini-switch.render-active;
+
+    // Frameless + windowed gets a transparent ARGB surface, so the compositor blends the rounded
+    // mantle shell with the desktop and the alpha=0 corners read as "not our window". A native frame
     // or maximized goes opaque: native wants the OS frame to abut a solid backdrop, and rounded
     // corners on an edge-to-edge window clip against the screen edge.
-    background: (Theme.use-native-titlebar || WindowChrome.is-maximized)
+    background: (!root.frameless || WindowChrome.is-maximized)
         ? Theme.mantle
         : Colors.transparent;
 
-    // Slint reads `no-frame` once at first show, so `Theme.use-native-titlebar` must be hydrated
-    // before `app.run()` — `window_chrome::install` does it. Dropping the OS frame also drops
-    // winit's resize edges, which `Theme.resize-border` restores; `ResizeRing` reads the same
+    // `window_chrome::install` hydrates `Theme.use-native-titlebar` before `app.run()`, so the
+    // window maps with the right frame; Slint applies later flips live. Dropping the OS frame also
+    // drops winit's resize edges, which `Theme.resize-border` restores; `ResizeRing` reads the same
     // token, so a drift leaves a band where the cursor changes but the widget still flashes hover.
-    no-frame: !Theme.use-native-titlebar;
-    resize-border-width: Theme.use-native-titlebar ? 0px : Theme.resize-border;
+    no-frame: root.frameless;
+    resize-border-width: root.frameless ? Theme.resize-border : 0px;
 
     default-font-family: "Vazirmatn";
     default-font-size: Theme.font-size-md;
@@ -226,6 +231,8 @@ export component AppWindow inherits Window {
     mini-switch := MiniPlayerSwitch {
         host-width: root.width;
         host-height: root.height;
+        exit-allowance-w: WindowChrome.frame-allowance-w;
+        exit-allowance-h: WindowChrome.frame-allowance-h;
     }
 
     // One gate per section in nav-index order, plus one per tab for a section built out of tabs.
@@ -331,12 +338,12 @@ export component AppWindow inherits Window {
 
     // Outer mantle shell. With a transparent Window background this rounded Rectangle *is* the
     // visible window outline, and `clip: true` masks anything a child paints outside it.
-    // Native-frame or maximized drops the radius to 0 and stays full-bleed; the panel still rounds.
+    // A native frame or maximized drops the radius to 0 and stays full-bleed; the panel still rounds.
     Rectangle {
         width: 100%;
         height: 100%;
         background: Theme.mantle;
-        border-radius: (Theme.use-native-titlebar || WindowChrome.is-maximized)
+        border-radius: (!root.frameless || WindowChrome.is-maximized)
             ? 0px
             : Theme.shell-radius;
         clip: true;
@@ -569,9 +576,9 @@ export component AppWindow inherits Window {
     }
 
     // Cursor hints over the band winit resizes from. Mounted only when resizing is both possible
-    // and ours to advertise: not while maximized, where it's a no-op, and not in native mode, where
-    // the OS draws its own border. Geometry comes from the same `Theme.resize-*` tokens above.
-    if !Theme.use-native-titlebar && !WindowChrome.is-maximized: ResizeRing {
+    // and ours to advertise: not while maximized, where it's a no-op, and not under a native frame,
+    // where the OS draws its own border. Geometry comes from the same `Theme.resize-*` tokens above.
+    if root.frameless && !WindowChrome.is-maximized: ResizeRing {
         width: 100%;
         height: 100%;
     }

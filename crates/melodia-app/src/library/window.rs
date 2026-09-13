@@ -39,10 +39,9 @@ async fn apply_then_persist(
     .map_err(|e| AppError::Settings(format!("set_always_on_top join: {e}")))?
 }
 
-/// Persist the user's titlebar choice. Slint reads `Window.no-frame` once
-/// at first show, so this only commits the new value to disk — the
-/// caller (`window_chrome::on_restart_app`) respawns the binary so the
-/// next process picks up the new setting at construction time.
+/// Persist the user's titlebar choice. This only commits the new value to disk; the
+/// caller (`window_chrome::on_restart_app`) respawns the binary, and the next process
+/// hydrates it before first show.
 ///
 /// On KDE, enabling the native titlebar also turns on
 /// `match_unfocused_to_system_bg` in the same write: the unfocused-tint

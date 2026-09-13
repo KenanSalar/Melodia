@@ -110,6 +110,31 @@ fn the_move_arm_ticks_the_loop_win32_parked() {
     );
 }
 
+/// The frame reading has to outlive the frame it measured. Once the miniplayer drops the frame
+/// `frame_allowance` answers `None`, and an arm writing a default there hands `MiniPlayerSwitch`
+/// a zero allowance while the client area is still grown by the real one, so a window parked just
+/// inside the threshold bounces straight back out.
+#[test]
+fn the_resize_arm_writes_the_frame_only_when_one_was_measured() {
+    const ARM: &str = "WindowEvent::Resized(_) =>";
+    const GATE: &str = "if let Some(frame) = frame";
+    let code = filter_source();
+    let arm = arm_body(&code, ARM);
+    let gated = arm_body(arm, GATE);
+
+    assert!(!arm.is_empty(), "no `{ARM}` block found: the walk is broken, not the code");
+    assert!(
+        gated.contains("set_frame_allowance_w(") && gated.contains("set_frame_allowance_h("),
+        "the frame reading is written outside its `Some` gate, so a frameless resize can zero \
+         it:\n{arm}"
+    );
+    assert_eq!(
+        arm.matches("set_frame_allowance_").count(),
+        2,
+        "the arm writes the frame reading somewhere besides the gated pair:\n{arm}"
+    );
+}
+
 /// Nothing paints the two properties the arm writes, so without the request no frame is
 /// scheduled and the `changed` handler that applies them waits for an unrelated event —
 /// every notch landing one notch late (#64). A source walk because scheduling is what a

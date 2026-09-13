@@ -15,9 +15,25 @@ export component MiniPlayerSwitch {
     in property <length> host-width;
     in property <length> host-height;
 
+    // What the OS frame adds to the client area, for a host that drops the frame in miniplayer mode.
+    in property <length> exit-allowance-w;
+    in property <length> exit-allowance-h;
+
+    private property <length> enter-w: 550px;
+    private property <length> enter-h: 250px;
+    // Absorbs physical-to-logical rounding, so a frame toggle can't land the size exactly on an edge.
+    private property <length> exit-slack: 4px;
+
     // Flips the instant the threshold is crossed. **`render-active` is what a host
     // branches on**; this is only the decision.
-    out property <bool> active: root.host-width < 550px || root.host-height < 250px;
+    //
+    // Leaving takes more room than entering: dropping the frame grows the client area by the
+    // allowance, so one shared edge would bounce a window parked just inside it straight back out.
+    // Keyed on `render-active`, which only the timers write, so the binding can't loop on itself.
+    out property <bool> active: root.render-active
+        ? (root.host-width < root.enter-w + root.exit-allowance-w + root.exit-slack
+            || root.host-height < root.enter-h + root.exit-allowance-h + root.exit-slack)
+        : (root.host-width < root.enter-w || root.host-height < root.enter-h);
 
     // Which branch is mounted right now: `active`, delayed by one fade so the
     // outgoing layout can reach opacity 0 before it is destroyed.

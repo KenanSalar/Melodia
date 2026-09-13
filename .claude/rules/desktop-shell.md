@@ -40,9 +40,17 @@ the OS owns has to be attached late or not at all on at least one platform.
   is what keeps them running and carries the argument; a new drag-reachable winit arm is where a
   third pump site would go.
 
-- **`Window.no-frame` is sticky** — read once at first show. The Native Title Bar toggle restarts
-  via `Dialog` `"restart-titlebar"` → `window_chrome::request_respawn_and_quit`; hydrate
-  `Theme.use-native-titlebar` *before* `app.run()`.
+- **The Native Title Bar toggle restarts** via `Dialog` `"restart-titlebar"` →
+  `window_chrome::request_respawn_and_quit`; hydrate `Theme.use-native-titlebar` *before*
+  `app.run()` so the window maps with the right frame. The frame itself is not what the restart
+  waits on: Slint applies `no-frame` live.
+
+- **Under the native title bar the miniplayer drops the frame**, through `app-window.slint`'s
+  `frameless`, and that couples three trees. On Win32 and macOS the client area grows into the
+  frame it lost, so the winit `Resized` arm measures the frame while one stands
+  (`window_chrome::geometry::frame_allowance`), `WindowChrome.frame-allowance-*` holds the reading
+  across the frameless span, and `MiniPlayerSwitch` widens its exit edge by it. Drop any link and a
+  window parked just inside the threshold bounces in and out, which no Linux runner can show.
 
 - **`"restart-backdrop"` is the third of these and the one whose deadline is earlier than
   `app.run()`** — `BackdropFlags.aurora_backdrop` decides whether the two artwork tiers hold a

@@ -101,11 +101,9 @@ export component WindowChromeSection inherits Rectangle {
     if has-matches: SectionCard {
         title: root.card-title;
 
-        // Slint reads `Window.no-frame` once at first show, so a runtime flip
-        // would leave the OS frame stale — hence the restart dialog, with
-        // `target-id: 1|0` carrying the requested value. `manual: true` keeps
-        // the switch anchored to the persisted value until the new process
-        // boots, so cancelling needs no explicit revert.
+        // The restart dialog carries the requested value as `target-id: 1|0`.
+        // `manual: true` keeps the switch anchored to the persisted value until
+        // the new process boots, so cancelling needs no explicit revert.
         if root.show-native-titlebar: SettingRow {
             icon: "title";
             label: root.native-titlebar-label;

@@ -2,9 +2,9 @@
 //! property to the persisted setting, the `slint::Window` API, and
 //! winit (via Slint's `unstable-winit-030` accessor).
 //!
-//! Six reasons it exists: hydrating `Theme.use-native-titlebar` (Slint reads
-//! `Window.no-frame` once at first show, so it has to land in the gap between
-//! `AppWindow::new()` and `app.run()` — exactly where `main.rs` calls [`install`]), the
+//! Six reasons it exists: hydrating `Theme.use-native-titlebar` (in the gap between
+//! `AppWindow::new()` and `app.run()`, where `main.rs` calls [`install`], so the window maps
+//! with its frame decided rather than swapping it on screen), the
 //! window control callbacks ([`controls`]), window dragging ([`winit_filter`]), file-drop
 //! coalescing ([`drop_coalescer`]), geometry ([`geometry`]) and the restart flow.
 //!
@@ -15,10 +15,11 @@
 //! handler dodges this by intercepting `MouseInput { Pressed, Left }` before dispatch, and
 //! this mirrors it against an atomic a Slint callback keeps in step with drag-area hover.
 //!
-//! **`no-frame` is sticky after first show**, so toggling the native titlebar needs a
-//! fresh process: persist, then hand off to [`request_respawn_and_quit`], which arms
+//! **A restart persists, then hands off to [`request_respawn_and_quit`]**, which arms
 //! [`RESPAWN_AFTER_EXIT`] and quits the loop so `main()` falls through to shutdown before
 //! the new process takes over. One function rather than three, since it owns the refusal.
+//! The native titlebar toggle still takes this path, but the frame is not what it waits on:
+//! Slint applies `no-frame` live, and the miniplayer drops the native frame through it.
 
 mod controls;
 mod drop_coalescer;

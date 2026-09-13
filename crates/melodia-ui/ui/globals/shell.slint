@@ -5,11 +5,16 @@
 // `is-maximized` comes off a winit `Resized` subscription, so the icon stays right under tiling
 // shortcuts that bypass our buttons. **Window dragging is not handled inside Slint** — a
 // `TouchArea` calling `drag_window()` leaks its mouse grab and wedges the window; Rust intercepts
-// the press at the winit layer. `restart-app` persists then respawns, Slint reading `no-frame` only
-// at first show; `restart-tray` and `restart-backdrop` mirror it so the startup gates each reads
+// the press at the winit layer. `restart-app` persists then respawns for the titlebar toggle;
+// `restart-tray` and `restart-backdrop` mirror it so the startup gates each reads
 // once — `main.rs`'s tray install, and `boot::ui_setup::apply_backdrop_style` — re-evaluate.
 export global WindowChrome {
     in property <bool> is-maximized;
+
+    // What the OS frame adds to the client area on each axis. Rust writes it only while a frame is
+    // up, so the reading from before the miniplayer dropped the frame survives for its exit edge.
+    in property <length> frame-allowance-w;
+    in property <length> frame-allowance-h;
 
     // `supported` gates the pin button so bare-Wayland and GNOME-without-window-calls users don't
     // see a dead control. `active` is written optimistically on click; Rust reverts it on failure.

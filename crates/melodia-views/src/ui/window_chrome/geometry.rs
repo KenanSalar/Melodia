@@ -23,7 +23,7 @@ use std::sync::{Once, OnceLock};
 use parking_lot::Mutex;
 use slint::winit_030::winit::dpi::{
     LogicalPosition as WinitLogicalPosition, LogicalSize as WinitLogicalSize,
-    PhysicalPosition as WinitPhysicalPosition,
+    PhysicalPosition as WinitPhysicalPosition, PhysicalSize as WinitPhysicalSize,
 };
 use slint::winit_030::winit::window::Window as WinitWindow;
 use slint::{ComponentHandle, LogicalPosition, LogicalSize};
@@ -146,6 +146,29 @@ pub fn record(w: &WinitWindow) {
     }
 }
 
+/// Returns what the OS frame adds to the client area, in logical pixels.
+///
+/// `None` while undecorated, there being no frame to measure, and while maximized, where a WM may
+/// strip the frame without the window ever learning it lost one.
+pub fn frame_allowance(w: &WinitWindow) -> Option<WinitLogicalSize<f32>> {
+    if !w.is_decorated() || w.is_maximized() {
+        return None;
+    }
+    Some(allowance_between(w.outer_size(), w.inner_size(), w.scale_factor()))
+}
+
+fn allowance_between(
+    outer: WinitPhysicalSize<u32>,
+    inner: WinitPhysicalSize<u32>,
+    scale: f64,
+) -> WinitLogicalSize<f32> {
+    WinitPhysicalSize::new(
+        outer.width.saturating_sub(inner.width),
+        outer.height.saturating_sub(inner.height),
+    )
+    .to_logical(scale)
+}
+
 /// A `u32` monitor or window dimension as `i32`, saturating rather than wrapping — real
 /// display dimensions sit far below `i32::MAX`, so that branch is unreachable.
 fn dim_i32(v: u32) -> i32 {
@@ -218,3 +241,7 @@ pub fn snapshot_into(settings: &mut SettingsData) {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/geometry_tests.rs"]
+mod tests;

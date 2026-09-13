@@ -177,8 +177,8 @@ export global Theme {
     out property <duration> dur-med: 250ms;
     out property <duration> dur-spatial: 400ms;
 
-    // **`window_chrome` must hydrate this between `AppWindow::new()` and `app.run()`** — Slint reads
-    // `Window.no-frame` once at first show. Defaults false, matching `WindowFlags::default()`.
+    // **`window_chrome` must hydrate this between `AppWindow::new()` and `app.run()`**: Slint applies
+    // `no-frame` live, so a later write maps the window with the wrong frame and swaps it on screen.
     in-out property <bool> use-native-titlebar: false;
 
     // 0 = Standard (Material bar icons), 1 = macOS (traffic lights). `custom-titlebar.slint` reads
