@@ -1,5 +1,5 @@
 //! Source pins for the native title bar dropping its frame under the miniplayer, and for the
-//! outline a frameless window draws in the frame's place.
+//! outline and resize grabs a frameless window draws in the frame's place.
 //!
 //! Neither half can go wrong where CI looks. A shell binding reading the setting instead of
 //! `frameless` is right under the custom titlebar and wrong only for the native miniplayer, and
@@ -7,7 +7,7 @@
 //! Win32 and macOS. The kept margins matter on Win32 alone, the one frame with invisible edges. The
 //! Rust half of the frame reading is pinned beside `window_chrome::geometry` and its `Resized` arm.
 
-use melodia_testkit::{binding_value, normalize_ws, strip_line_comments};
+use melodia_testkit::{binding_value, blocks_named, normalize_ws, strip_line_comments};
 
 const APP_WINDOW: &str = include_str!("../../../../melodia-ui/ui/app-window.slint");
 const MINI_SWITCH: &str =
@@ -28,12 +28,11 @@ fn tokens(src: &str) -> String {
 /// transparent window with square corners, or no resize edge to grow it back out through.
 #[test]
 fn every_frame_question_in_the_shell_reads_frameless() {
-    const BINDINGS: [&str; 5] = [
+    const BINDINGS: [&str; 4] = [
         "no-frame: root.frameless;",
-        "resize-border-width: root.frameless ? root.resize-band : 0px;",
         "background: (!root.frameless || WindowChrome.is-maximized) ? Theme.mantle : Colors.transparent;",
         "border-radius: (!root.frameless || WindowChrome.is-maximized) ? 0px : Theme.window-radius;",
-        "if root.frameless && !WindowChrome.is-maximized: ResizeRing {",
+        "active: root.frameless && !WindowChrome.is-maximized;",
     ];
     let shell = tokens(APP_WINDOW);
 
@@ -153,8 +152,8 @@ fn the_resize_band_covers_every_kept_margin() {
     );
 }
 
-/// The ring steals hover over the band winit resizes from. On a band of its own, a strip either
-/// resizes while the widget under it flashes hover, or drags the window where it should resize.
+/// The band is the one widened over the kept margins, and the ring is all that resizes from it. On
+/// a band of its own, the margin strip past it takes the click and does nothing.
 #[test]
 fn the_resize_ring_is_handed_the_windows_band() {
     let shell = tokens(APP_WINDOW);
@@ -173,6 +172,167 @@ fn the_resize_ring_reads_no_band_but_the_one_it_is_handed() {
     let own = ring.matches("Theme.resize-border").count();
 
     assert_eq!(own, 1, "a ring edge reads the theme's band past the `band` default");
+}
+
+/// Slint's handler for this binding hit-tests square corners a band wide and compares a logical
+/// width with a physical cursor. Beside the ring it takes presses the ring's cursor says mean
+/// something else: no diagonal anywhere on a rounded corner, and a thinner edge on a scaled display.
+#[test]
+fn the_shell_leaves_every_resize_press_to_the_ring() {
+    let shell = tokens(APP_WINDOW);
+
+    let bound = shell.matches("resize-border-width").count();
+
+    assert_eq!(bound, 0, "the shell binds `resize-border-width` beside the ring again");
+}
+
+/// Unmounted, the ring can't move its zone back to `none`, so the last grab the pointer was over
+/// stays armed in Rust and the next click anywhere, a maximized window's included, resizes.
+#[test]
+fn the_resize_ring_is_never_behind_an_if() {
+    let shell = tokens(APP_WINDOW);
+
+    let mounts = blocks_named(&shell, "ResizeRing").len();
+    let conditional = shell.matches(": ResizeRing {").count();
+
+    assert_eq!((mounts, conditional), (1, 0), "the ring is no longer mounted once and for good");
+}
+
+/// The corners grow along the curve they are handed. Left at the default, every preset gets the
+/// square window's corner, whose diagonal sits in the transparent cut-out outside a rounded one.
+#[test]
+fn the_resize_ring_is_handed_the_windows_radius() {
+    let shell = tokens(APP_WINDOW);
+    let mounts = blocks_named(&shell, "ResizeRing");
+
+    let handed: Vec<bool> =
+        mounts.iter().map(|mount| mount.contains("radius: Theme.window-radius;")).collect();
+
+    assert_eq!(handed, [true], "the ring's mount no longer hands it the window's corner radius");
+}
+
+/// The grabs are hover, and hover goes to whatever sits on top. Under an overlay, an open dialog
+/// or the first-run card takes resizing away, which Slint's own handler never let it do.
+#[test]
+fn the_resize_ring_mounts_above_every_overlay() -> Result<(), Box<dyn std::error::Error>> {
+    const OVERLAYS: [&str; 3] = ["OnboardingOverlay {", "DialogOverlay {", "NotificationStack {"];
+    let shell = tokens(APP_WINDOW);
+    let (under_ring, _) = shell
+        .split_once("ResizeRing {")
+        .ok_or("no `ResizeRing {` mount found: the walk is broken, not the shell")?;
+
+    let not_under: Vec<&str> =
+        OVERLAYS.into_iter().filter(|overlay| !under_ring.contains(overlay)).collect();
+
+    assert!(
+        not_under.is_empty(),
+        "these overlays aren't declared before the resize ring, so it can't sit above them: \
+         {not_under:?}"
+    );
+    Ok(())
+}
+
+/// Enabled while the ring is off, a grab still steals hover and shows a resize cursor, over a
+/// maximized window's close button or a native frame's content, for a press nothing acts on.
+#[test]
+fn every_grab_in_the_ring_switches_off_with_it() {
+    let ring = tokens(RESIZE_RING);
+
+    let touch_areas = ring.matches("TouchArea {").count();
+    let enabled = ring.matches("enabled: root.active;").count();
+    let corners_handed = ring.matches("active: root.active;").count();
+
+    assert_eq!(
+        (touch_areas, enabled, corners_handed),
+        (7, 7, 4),
+        "a grab (four edges, three per corner, four corners) no longer follows `active`"
+    );
+}
+
+/// The `!active` arm is what clears a zone when the ring switches off under the pointer, a
+/// maximize by keyboard with the cursor on an edge being the usual way.
+#[test]
+fn the_resize_zone_is_none_whenever_the_ring_is_off() {
+    let ring = tokens(RESIZE_RING);
+
+    let zone = binding_value(&ring, "property <ResizeZone> zone:").trim();
+
+    assert!(
+        zone.starts_with("!root.active ? ResizeZone.none :"),
+        "the zone no longer answers `none` first while the ring is off:\n{zone}"
+    );
+}
+
+/// A direction missing from the binding is a grab that shows its cursor and resizes nothing.
+#[test]
+fn the_resize_zone_names_every_direction_a_grab_can_take() {
+    const DIRECTIONS: [&str; 8] = [
+        "ResizeZone.north :",
+        "ResizeZone.south :",
+        "ResizeZone.west :",
+        "ResizeZone.east :",
+        "ResizeZone.north-west :",
+        "ResizeZone.north-east :",
+        "ResizeZone.south-west :",
+        "ResizeZone.south-east :",
+    ];
+    let ring = tokens(RESIZE_RING);
+    let zone = binding_value(&ring, "property <ResizeZone> zone:");
+
+    let missing: Vec<&str> = DIRECTIONS.into_iter().filter(|d| !zone.contains(d)).collect();
+
+    assert!(missing.is_empty(), "the zone never answers {missing:?}:\n{zone}");
+}
+
+/// Without the callback the ring still sets every cursor, and no press ever resizes.
+#[test]
+fn the_resize_zone_reaches_the_window_chrome() {
+    let ring = tokens(RESIZE_RING);
+
+    let handed = ring.matches("changed zone => { WindowChrome.resize-zone-changed(root.zone); }");
+
+    assert_eq!(handed.count(), 1, "the ring's zone no longer reaches `WindowChrome`");
+}
+
+/// Slint gives hover to the last-declared item under the pointer. With the corners first, every
+/// arm they share with an edge resizes along that edge's one axis.
+#[test]
+fn the_corners_are_declared_after_the_edges() -> Result<(), Box<dyn std::error::Error>> {
+    let ring = tokens(RESIZE_RING);
+    let (_, from_first_corner) = ring
+        .split_once(":= ResizeCorner {")
+        .ok_or("no corner mount found: the walk is broken, not the ring")?;
+
+    let edges_after = from_first_corner.matches("TouchArea {").count();
+
+    assert_eq!(edges_after, 0, "an edge is declared after a corner it has to lose to");
+    Ok(())
+}
+
+/// The rounded run is the diagonal. Measured from the window edge instead of the band, the native
+/// miniplayer's corners end inside the transparent margin, and on the radius alone a square
+/// window's corner shrinks to nothing.
+#[test]
+fn the_corner_arms_run_the_curve_and_a_band_past_it() {
+    let ring = tokens(RESIZE_RING);
+
+    let reach = binding_value(&ring, "private property <length> reach:").trim();
+
+    assert_eq!(reach, "root.band * 2 + root.radius", "the corner arms no longer follow the radius");
+}
+
+/// An elbow of the band alone leaves the middle of a rounded corner with its grab in the cut-out
+/// only. The ring argues the half radius.
+#[test]
+fn the_corner_elbow_follows_the_curve_inward() {
+    let ring = tokens(RESIZE_RING);
+
+    let elbow = binding_value(&ring, "private property <length> elbow:").trim();
+
+    assert_eq!(
+        elbow, "root.band + max(root.band, root.radius / 2)",
+        "the corner elbow no longer follows the curve"
+    );
 }
 
 /// The native miniplayer paints its own outline once the OS frame goes, and on the custom

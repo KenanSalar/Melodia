@@ -15,6 +15,7 @@ paths:
   - crates/melodia-ui/ui/components/custom-titlebar.slint
   - crates/melodia-ui/ui/components/macos-titlebar-cluster.slint
   - crates/melodia-ui/ui/components/macos-traffic-light.slint
+  - crates/melodia-ui/ui/layout/resize-ring.slint
   - crates/melodia-ui/ui/views/settings/window-chrome-section.slint
 ---
 
@@ -33,6 +34,16 @@ the OS owns has to be attached late or not at all on at least one platform.
   leaks the input grab. `TouchArea` reports `has-hover` via
   `WindowChrome.drag-region-hover-changed`; `on_winit_window_event` intercepts
   `MouseInput { Pressed, Left }` when that atomic is true → `drag_window()` → `PreventDefault`.
+
+- **Resizing a frameless window takes the same path, and the ring's hover is the whole geometry.**
+  `ResizeRing` reports a `ResizeZone` via `WindowChrome.resize-zone-changed`, kept by
+  `window_chrome::resize_grab`, and the filter's resize arm (`drag_resize_window`) is matched
+  **before** the drag arm, since the miniplayer's drag region runs to the edge and its atomic can
+  still read true on a press that lands on a grab. The `Window`'s `resize-border-width` stays
+  unbound: Slint's handler for it gives a corner only a band-wide square, which on a rounded window
+  sits in the transparent cut-out, and compares the logical band with a physical cursor, so beside
+  the ring the press disagreed with the cursor. macOS answers `NotSupported` and keeps AppKit's own
+  edge resizing.
 
 - **On Win32 a resize or move drag parks winit's loop, and with it every Slint `Timer` and
   `changed` handler**, so the whole responsive layer — the miniplayer swap, grid column counts,

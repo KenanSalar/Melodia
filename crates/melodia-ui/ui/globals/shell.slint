@@ -7,7 +7,7 @@ export enum ResizeZone { none, north, south, west, east, north-west, north-east,
 
 // The custom titlebar, owned by `ui/window_chrome/` with Slint as the dumb renderer.
 // `is-maximized` comes off a winit `Resized` subscription, so the icon stays right under tiling
-// shortcuts that bypass our buttons. **Window dragging is not handled inside Slint** — a
+// shortcuts that bypass our buttons. **Window dragging and resizing are not handled inside Slint** — a
 // `TouchArea` calling `drag_window()` leaks its mouse grab and wedges the window; Rust intercepts
 // the press at the winit layer. `restart-app` persists then respawns for the titlebar toggle;
 // `restart-tray` and `restart-backdrop` mirror it so the startup gates each reads
@@ -45,7 +45,8 @@ export global WindowChrome {
     // Mirrored into an atomic the winit `MouseInput` filter checks before starting an
     // OS-level window move.
     callback drag-region-hover-changed(bool);
-    // The same for `ResizeRing`'s grabs, before an OS-level resize.
+    // The same for `ResizeRing`'s grabs, kept in a cell the filter checks first, before an OS-level
+    // resize.
     callback resize-zone-changed(ResizeZone);
     callback restart-app();
     callback restart-tray();

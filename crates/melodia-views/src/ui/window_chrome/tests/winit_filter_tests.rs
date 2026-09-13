@@ -53,6 +53,50 @@ fn arm_body<'a>(code: &'a str, arm: &str) -> &'a str {
         .unwrap_or_default()
 }
 
+/// The guard the resize press arm is found by.
+const RESIZE_ARM: &str = "if let Some(direction) = resize.get() =>";
+
+/// The drag and resize cells move in separate `changed` handlers, and the miniplayer's drag region
+/// runs right up to the edge, so the drag cell can still read true on a press that lands on a grab.
+/// Matched first, that press moves the window the user meant to resize.
+#[test]
+fn the_resize_press_arm_is_matched_before_the_drag_arm() -> Result<(), Box<dyn std::error::Error>> {
+    let code = filter_source();
+    let (before_resize, _) =
+        code.split_once(RESIZE_ARM).ok_or("no resize press arm found: the walk is broken")?;
+
+    let drag_arms_before = before_resize.matches("drag_hover.load(").count();
+
+    assert_eq!(drag_arms_before, 0, "the drag arm is matched ahead of the resize arm");
+    Ok(())
+}
+
+#[test]
+fn the_resize_press_arm_starts_the_os_resize() {
+    let code = filter_source();
+
+    let arm = arm_body(&code, RESIZE_ARM);
+
+    assert!(
+        arm.contains("drag_resize_window(direction)"),
+        "the resize press arm no longer starts a resize:\n{arm}"
+    );
+}
+
+/// Propagated, the press reaches the ring's `TouchArea` under the pointer, which grabs the mouse
+/// while the OS takes the pointer for the resize, and the release never comes back to free it.
+#[test]
+fn the_resize_press_arm_keeps_the_press_from_slint() {
+    let code = filter_source();
+
+    let arm = arm_body(&code, RESIZE_ARM);
+
+    assert!(
+        arm.contains("EventResult::PreventDefault") && !arm.contains("EventResult::Propagate"),
+        "the resize press arm hands its press on to Slint:\n{arm}"
+    );
+}
+
 /// Every cover tier sizes its capacity and its decode size against the window, and both are read
 /// once after `app.show()`. This arm is the only thing that re-derives them, so without the
 /// signal a window maximized after launch mounts more cards than its tier can hold and the

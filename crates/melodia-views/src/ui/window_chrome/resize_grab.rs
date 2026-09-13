@@ -35,3 +35,7 @@ fn direction(zone: ResizeZone) -> Option<ResizeDirection> {
         ResizeZone::SouthEast => Some(ResizeDirection::SouthEast),
     }
 }
+
+#[cfg(test)]
+#[path = "tests/resize_grab_tests.rs"]
+mod tests;
