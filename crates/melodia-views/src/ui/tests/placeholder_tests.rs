@@ -248,6 +248,21 @@ fn the_tooltip_pill_is_capped() {
     );
 }
 
+/// A pill with a child under any opacity short of 1.0 renders into a layer of its own, so a
+/// tooltip that is only transparent held a texture per mount, every idle one in the tree. Hidden
+/// on `shown` alone, the fade-out never plays: the pill vanishes on the frame the hover ends.
+#[test]
+fn an_idle_tooltip_is_hidden_once_its_fade_out_lands() {
+    let src = normalized(&code(TOOLTIP));
+
+    let visible = binding_value(&src, "visible:").trim();
+
+    assert_eq!(
+        visible, r#"root.text != "" && (root.shown || root.force-shown || self.opacity > 0)"#,
+        "tooltip.slint's pill is no longer hidden between fades the way its fade-out allows"
+    );
+}
+
 /// All four sides, and the `x` arm that makes the fourth one mean anything: a variant with
 /// no arm falls through to the centred branch, so the pill lands *on* the host — for the
 /// volume readout, over the slider it is reading out. The mount still compiles and still

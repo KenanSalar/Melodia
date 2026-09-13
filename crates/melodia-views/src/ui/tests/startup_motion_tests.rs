@@ -1,18 +1,35 @@
-//! Source pins for what the window does on the frame it opens.
+//! Source pins for what the window does on the frame it opens, and on the swap in and out of the
+//! miniplayer.
 //!
 //! Two components decide that, and neither has a Rust module the contract could sit beside.
 //! `ViewTransition` fades and slides the view mounted at launch, which is what "Skip
 //! Startup Animation" turns off; `MiniPlayerSwitch` reads the construction-time 0×0 window
 //! as miniplayer size, so the first real layout looks like a swap out of it. Pinned
 //! together because they are one symptom — a window that spends its first moments dark —
-//! and restoring either half puts that symptom back on its own.
+//! and restoring either half puts that symptom back on its own. The swap's own crossfade sits
+//! here beside them, the shell painting what the switch's fade decides.
 
-use melodia_testkit::strip_line_comments;
+use melodia_testkit::{normalize_ws, strip_line_comments};
 
 const VIEW_TRANSITION: &str =
     include_str!("../../../../melodia-ui/ui/components/view-transition.slint");
 const MINI_SWITCH: &str =
     include_str!("../../../../melodia-ui/ui/components/mini-player-switch.slint");
+const APP_WINDOW: &str = include_str!("../../../../melodia-ui/ui/app-window.slint");
+
+/// The crossfade overlay's whole declaration, as tokens.
+const CROSSFADE_OVERLAY: &str = "Rectangle { width: 100%; height: 100%; \
+     background: Theme.mantle.transparentize(mini-switch.fade-opacity); \
+     visible: mini-switch.fade-opacity < 1.0; }";
+
+/// The overlay's brush alone, which is how the paint-order pin finds it without also failing
+/// whenever the rest of the declaration moves.
+const CROSSFADE_BRUSH: &str = "background: Theme.mantle.transparentize(mini-switch.fade-opacity);";
+
+/// Comments stripped and whitespace collapsed, so a pin reads tokens rather than one layout.
+fn tokens(src: &str) -> String {
+    normalize_ws(&strip_line_comments(src))
+}
 
 /// Comment-stripped, trimmed, blank lines dropped — so a pin means the *code* lines sit
 /// in that order regardless of how the prose around them grows.
@@ -125,5 +142,45 @@ fn the_swap_fade_is_gated_on_the_branch_actually_changing() {
         following(&lines, seed, swap - seed).contains(&"root.render-active = root.active;"),
         "the seed timer stopped adopting the first reading — a window launched below the \
          threshold never transitions, so nothing else would ever mount the miniplayer"
+    );
+}
+
+/// The crossfade is painted over the branches, never through them. `opacity` below 1.0 renders the
+/// whole UI into a layer every frame of the fade and crops glyph ink to that layer's box, and put
+/// back beside the overlay it doubles the fade, dimming the midpoint of every swap.
+#[test]
+fn no_branch_fades_through_an_opacity_of_its_own() {
+    let shell = tokens(APP_WINDOW);
+
+    let spent = shell.matches("opacity: mini-switch.fade-opacity").count();
+
+    assert_eq!(spent, 0, "a swap branch fades through `opacity` again");
+}
+
+/// `mantle` at `1 - t` over a branch composites to the branch at `t` over the shell's `mantle`,
+/// which is the whole argument for the overlay and holds only while it paints that exact brush
+/// against that exact fade. The `visible` gate keeps it out of every frame the fade isn't running.
+#[test]
+fn the_crossfade_is_one_mantle_overlay_hidden_outside_the_fade() {
+    let shell = tokens(APP_WINDOW);
+
+    let overlays = shell.matches(CROSSFADE_OVERLAY).count();
+
+    assert_eq!(overlays, 1, "the swap's crossfade is no longer the one mantle overlay");
+}
+
+/// Paint order is declaration order. Declared ahead of either branch, the overlay paints under it
+/// and the swap pops from one branch to the other with nothing fading.
+#[test]
+fn the_crossfade_overlay_paints_over_both_branches() {
+    let shell = tokens(APP_WINDOW);
+    let full = shell.find("if !mini-switch.render-active:");
+    let mini = shell.find("if mini-switch.render-active:");
+
+    let overlay = shell.find(CROSSFADE_BRUSH);
+
+    assert!(
+        full.is_some() && mini.is_some() && overlay > full && overlay > mini,
+        "the crossfade overlay is declared ahead of a branch it has to cover"
     );
 }

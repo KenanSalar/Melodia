@@ -67,7 +67,8 @@ pub mod window_chrome;
 // band morph, centred by a layout it folds an animated press into every host's layout
 // cache. Each reads the one component it is about, by name.
 // `startup_motion_tests` pins two components across a second seam: what the shell and the
-// view mounted inside it do on the frame the window opens. `titlebar_tests` reaches a third
+// view mounted inside it do on the frame the window opens, and on the miniplayer swap's
+// crossfade. `titlebar_tests` reaches a third
 // tree — it holds the brand mark's theme brush to the asset it is painted over, the only
 // thing here a dark-palette reviewer cannot see going wrong. `frameless_tests` holds the
 // shell's frame bindings and the miniplayer's exit edge to one another, a pairing only a Win32

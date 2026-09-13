@@ -9,6 +9,34 @@ const ROUTER: &str =
     include_str!("../../../../../melodia-ui/ui/views/settings/settings-tabs.slint");
 const VIEW: &str = include_str!("../../../../../melodia-ui/ui/views/settings-view.slint");
 
+const SECTION_CARD: &str =
+    include_str!("../../../../../melodia-ui/ui/components/settings/section-card.slint");
+
+/// The shared rows and divider the section cards are built from, by name so a failure says which
+/// file, each with the inset that keeps its content clear of the card's rounded corners.
+const CARD_CHILDREN: [(&str, &str, &str); 3] = [
+    (
+        "setting-row",
+        include_str!("../../../../../melodia-ui/ui/components/settings/setting-row.slint"),
+        "HorizontalLayout { padding: Theme.pad-lg;",
+    ),
+    (
+        "setting-row-stacked",
+        include_str!("../../../../../melodia-ui/ui/components/settings/setting-row-stacked.slint"),
+        "HorizontalLayout { padding: Theme.pad-lg;",
+    ),
+    (
+        "section-divider",
+        include_str!("../../../../../melodia-ui/ui/components/settings/section-divider.slint"),
+        "x: Theme.pad-lg; y: 0; width: parent.width - 2 * Theme.pad-lg;",
+    ),
+];
+
+/// Comments stripped and whitespace collapsed, so a pin reads tokens rather than one layout.
+fn tokens(src: &str) -> String {
+    melodia_testkit::normalize_ws(&melodia_testkit::strip_line_comments(src))
+}
+
 /// One tab page per tab, by name so a failure says which file.
 const PAGES: [(&str, &str); 5] = [
     (
@@ -196,6 +224,35 @@ fn every_mounted_section_carries_its_tab_name() {
             );
         }
     }
+}
+
+/// A rounded clip over children is an offscreen layer in `FemtoVG`, reallocated whenever the card's
+/// width moves, which below the cap is every frame of a resize: the card half of the Settings page
+/// stuttering through the miniplayer swap. It also blurs the card's text on `HiDPI`.
+#[test]
+fn no_section_card_clips_its_rounded_surface() {
+    let card = tokens(SECTION_CARD);
+
+    let clips = card.matches("clip: true").count();
+
+    assert_eq!(clips, 0, "section-card.slint clips its rounded surface again");
+}
+
+/// What made dropping the clip safe: nothing a card holds reaches its corners. A row or divider
+/// that loses its inset now paints square across the card's rounded edge, where the clip used to
+/// hide it.
+#[test]
+fn every_card_child_insets_its_content_from_the_rounded_edge() {
+    let flush: Vec<&str> = CARD_CHILDREN
+        .into_iter()
+        .filter(|(_, src, inset)| !tokens(src).contains(inset))
+        .map(|(name, _, _)| name)
+        .collect();
+
+    assert!(
+        flush.is_empty(),
+        "these card children no longer inset from the card's edge: {flush:?}"
+    );
 }
 
 /// Every `SettingsPage.<name>(N)` index in `src`, in source order.

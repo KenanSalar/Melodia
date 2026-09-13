@@ -106,11 +106,23 @@ fn an_unchanged_row_shape_hands_back_the_model_already_mounted() {
 }
 
 #[test]
-fn a_new_row_shape_gets_a_model_of_its_own() {
+fn a_row_width_seating_fewer_items_gets_a_model_of_its_own() {
     let rows = IndexRows::default();
+    let wider = rows.rows(7, 4);
 
-    assert_ne!(rows.rows(7, 3), rows.rows(7, 4), "a narrower strip kept the wider rows");
-    assert_ne!(rows.rows(7, 3), rows.rows(6, 3), "a shorter option list kept the longer rows");
+    let narrower = rows.rows(7, 3);
+
+    assert_ne!(narrower, wider, "a narrower strip kept the wider strip's rows");
+}
+
+#[test]
+fn a_different_item_count_gets_a_model_of_its_own() {
+    let rows = IndexRows::default();
+    let longer = rows.rows(7, 3);
+
+    let shorter = rows.rows(6, 3);
+
+    assert_ne!(shorter, longer, "a shorter option list kept the longer list's rows");
 }
 
 // Every width past the item count is the one row, so a drag through them shares one model.
@@ -120,6 +132,45 @@ fn every_row_width_seating_all_items_shares_one_model() {
 
     assert_eq!(rows.rows(4, 4), rows.rows(4, 5));
     assert_eq!(rows.rows(4, 4), rows.rows(4, 40));
+}
+
+// The fold's edge from below: one short of the item count still wraps, so it can't share the
+// single row's model.
+#[test]
+fn a_row_width_one_short_of_every_item_is_a_shape_of_its_own() {
+    let rows = IndexRows::default();
+    let single_row = rows.rows(4, 4);
+
+    let wrapped = rows.rows(4, 3);
+
+    assert_ne!(wrapped, single_row, "a strip that wraps was handed the unwrapped single row");
+}
+
+#[test]
+fn no_items_share_one_model_whatever_the_width() {
+    let rows = IndexRows::default();
+
+    assert_eq!(rows.rows(0, 1), rows.rows(0, 8));
+}
+
+#[test]
+fn the_model_for_no_items_has_no_rows() {
+    let rows = IndexRows::default();
+
+    let model = rows.rows(0, 4);
+
+    assert_eq!(model.row_count(), 0);
+}
+
+// A count below zero is malformed rather than reachable, and `chunk_indices` reads it as nothing.
+#[test]
+fn a_negative_item_count_shares_the_empty_model() {
+    let rows = IndexRows::default();
+    let empty = rows.rows(0, 4);
+
+    let negative = rows.rows(-3, 4);
+
+    assert_eq!(negative, empty, "a negative count built rows of its own");
 }
 
 // The floor `chunk_indices` applies, taken before the lookup so a degenerate width is one entry.
