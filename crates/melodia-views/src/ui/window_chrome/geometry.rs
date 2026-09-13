@@ -21,9 +21,12 @@
 use std::sync::{Once, OnceLock};
 
 use parking_lot::Mutex;
+#[cfg(target_os = "windows")]
+use slint::winit_030::winit::dpi::PhysicalInsets as WinitPhysicalInsets;
 use slint::winit_030::winit::dpi::{
-    LogicalPosition as WinitLogicalPosition, LogicalSize as WinitLogicalSize,
-    PhysicalPosition as WinitPhysicalPosition, PhysicalSize as WinitPhysicalSize,
+    LogicalInsets as WinitLogicalInsets, LogicalPosition as WinitLogicalPosition,
+    LogicalSize as WinitLogicalSize, PhysicalPosition as WinitPhysicalPosition,
+    PhysicalSize as WinitPhysicalSize,
 };
 use slint::winit_030::winit::window::Window as WinitWindow;
 use slint::{ComponentHandle, LogicalPosition, LogicalSize};
@@ -156,15 +159,41 @@ pub fn record(w: &WinitWindow) {
 
 /// Returns what the OS frame adds to the client area, in logical pixels.
 ///
-/// `None` while undecorated, there being no frame to measure; while maximized, where a WM may
-/// strip the frame without the window ever learning it lost one; and while minimized, the outer
-/// rect then being the minimized one.
+/// `None` wherever [`measurable_client`] finds no frame to read.
 pub fn frame_allowance(w: &WinitWindow) -> Option<WinitLogicalSize<f32>> {
-    let inner = w.inner_size();
-    if !w.is_decorated() || w.is_maximized() || is_minimized_client(inner) {
-        return None;
-    }
+    let inner = measurable_client(w)?;
     Some(allowance_between(w.outer_size(), inner, w.scale_factor()))
+}
+
+/// Returns the part of the OS frame outside the edges it draws, in logical pixels: what the client
+/// takes over when the frame drops, without the visible window having moved.
+///
+/// Win32's left, right and bottom are invisible resize borders, and its top is the caption the user
+/// sees, so `top` is always zero. `None` wherever [`measurable_client`] finds no frame to read.
+#[cfg(target_os = "windows")]
+pub fn frame_margins(w: &WinitWindow) -> Option<WinitLogicalInsets<f32>> {
+    let inner = measurable_client(w)?;
+    let outer = ScreenRect { at: w.outer_position().ok()?, size: w.outer_size() };
+    let client = ScreenRect { at: w.inner_position().ok()?, size: inner };
+    Some(margins_between(outer, client, w.scale_factor()))
+}
+
+/// No invisible frame to hand over off Win32: X11 takes a dropped frame out of the window rather
+/// than giving it to the client, and a macOS or Wayland frame has no undrawn edge beside it.
+#[cfg(not(target_os = "windows"))]
+pub fn frame_margins(_: &WinitWindow) -> Option<WinitLogicalInsets<f32>> {
+    None
+}
+
+/// The client size while there is a frame to measure around it.
+///
+/// `None` while undecorated, there being no frame; while maximized, where a WM may strip the frame
+/// without the window ever learning it lost one; and while minimized, the outer rect then being the
+/// minimized one.
+fn measurable_client(w: &WinitWindow) -> Option<WinitPhysicalSize<u32>> {
+    let inner = w.inner_size();
+    let framed = w.is_decorated() && !w.is_maximized() && !is_minimized_client(inner);
+    framed.then_some(inner)
 }
 
 /// Whether a client size is Win32's reading of a minimized window: empty, inside a small outer
@@ -185,6 +214,47 @@ fn allowance_between(
         outer.height.saturating_sub(inner.height),
     )
     .to_logical(scale)
+}
+
+/// A rectangle on screen in physical pixels, winit reporting its corner and its size apart.
+#[cfg(target_os = "windows")]
+#[derive(Clone, Copy)]
+struct ScreenRect {
+    at: WinitPhysicalPosition<i32>,
+    size: WinitPhysicalSize<u32>,
+}
+
+#[cfg(target_os = "windows")]
+impl ScreenRect {
+    fn left(self) -> i64 {
+        i64::from(self.at.x)
+    }
+
+    fn right(self) -> i64 {
+        i64::from(self.at.x) + i64::from(self.size.width)
+    }
+
+    fn bottom(self) -> i64 {
+        i64::from(self.at.y) + i64::from(self.size.height)
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn margins_between(outer: ScreenRect, client: ScreenRect, scale: f64) -> WinitLogicalInsets<f32> {
+    WinitPhysicalInsets::new(
+        0,
+        gap(outer.left(), client.left()),
+        gap(client.bottom(), outer.bottom()),
+        gap(client.right(), outer.right()),
+    )
+    .to_logical(scale)
+}
+
+/// The distance from `near` to `far`, floored at zero rather than wrapped: a wrapped `u32` is a
+/// margin wider than any window, and the miniplayer would inset itself out of existence.
+#[cfg(target_os = "windows")]
+fn gap(near: i64, far: i64) -> u32 {
+    u32::try_from(far - near).unwrap_or(0)
 }
 
 /// A `u32` monitor or window dimension as `i32`, saturating rather than wrapping — real

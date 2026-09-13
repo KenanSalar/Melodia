@@ -10,6 +10,11 @@ import { Theme } from "../theme.slint";
 // The caller mounts it full-size and owns the decision to mount at all: one
 // condition at the mount site instead of eight repeated here.
 export component ResizeRing {
+    // The Window's `resize-border-width`, handed over by the one host that sets both.
+    in property <length> band: Theme.resize-border;
+    // Never narrower than the band, or an edge's strip would run past the corner meant to cover it.
+    private property <length> corner: max(Theme.resize-corner, root.band);
+
     // Order matters: edges first, corners after. Slint gives hover to the
     // last-declared item under the cursor, so the diagonal wins at the corners
     // and the edges win everywhere else.
@@ -19,30 +24,30 @@ export component ResizeRing {
         x: 0;
         y: 0;
         width: root.width;
-        height: Theme.resize-border;
+        height: root.band;
         mouse-cursor: ns-resize;
     }
     // Bottom.
     TouchArea {
         x: 0;
-        y: root.height - Theme.resize-border;
+        y: root.height - root.band;
         width: root.width;
-        height: Theme.resize-border;
+        height: root.band;
         mouse-cursor: ns-resize;
     }
     // Left.
     TouchArea {
         x: 0;
         y: 0;
-        width: Theme.resize-border;
+        width: root.band;
         height: root.height;
         mouse-cursor: ew-resize;
     }
     // Right — this is the one that overlaps a scrollbar.
     TouchArea {
-        x: root.width - Theme.resize-border;
+        x: root.width - root.band;
         y: 0;
-        width: Theme.resize-border;
+        width: root.band;
         height: root.height;
         mouse-cursor: ew-resize;
     }
@@ -51,29 +56,29 @@ export component ResizeRing {
     TouchArea {
         x: 0;
         y: 0;
-        width: Theme.resize-corner;
-        height: Theme.resize-corner;
+        width: root.corner;
+        height: root.corner;
         mouse-cursor: nwse-resize;
     }
     TouchArea {
-        x: root.width - Theme.resize-corner;
+        x: root.width - root.corner;
         y: 0;
-        width: Theme.resize-corner;
-        height: Theme.resize-corner;
+        width: root.corner;
+        height: root.corner;
         mouse-cursor: nesw-resize;
     }
     TouchArea {
         x: 0;
-        y: root.height - Theme.resize-corner;
-        width: Theme.resize-corner;
-        height: Theme.resize-corner;
+        y: root.height - root.corner;
+        width: root.corner;
+        height: root.corner;
         mouse-cursor: nesw-resize;
     }
     TouchArea {
-        x: root.width - Theme.resize-corner;
-        y: root.height - Theme.resize-corner;
-        width: Theme.resize-corner;
-        height: Theme.resize-corner;
+        x: root.width - root.corner;
+        y: root.height - root.corner;
+        width: root.corner;
+        height: root.corner;
         mouse-cursor: nwse-resize;
     }
 }

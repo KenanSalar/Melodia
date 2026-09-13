@@ -128,14 +128,104 @@ fn a_minimized_window_records_nothing() {
 /// answering needs a live, decorated window.
 #[test]
 fn an_undecorated_window_gives_no_reading() {
-    const FN: &str = "pub fn frame_allowance";
+    const FN: &str = "fn measurable_client";
     let code = geometry_source();
     let body = block_after(&code, FN);
 
     assert!(!body.is_empty(), "no `{FN}` found: the walk is broken, not the code");
     assert!(
         body.contains("is_decorated()"),
-        "`frame_allowance` measures an undecorated window, whose zero reading replaces the frame \
+        "`measurable_client` passes an undecorated window, whose zero reading replaces the frame \
          the miniplayer's exit edge allows for:\n{body}"
     );
+}
+
+/// Both frame readings answer the same question about when there is a frame to read, and a reader
+/// that asks its own version is how one of them starts measuring an undecorated or minimized
+/// window again.
+#[test]
+fn every_frame_reading_goes_through_the_one_gate() {
+    const READERS: [&str; 2] = ["pub fn frame_allowance", "pub fn frame_margins"];
+    let code = geometry_source();
+
+    let ungated: Vec<&str> = READERS
+        .into_iter()
+        .filter(|reader| !block_after(&code, reader).contains("measurable_client(w)?"))
+        .collect();
+
+    assert!(ungated.is_empty(), "these frame readings skip `measurable_client`: {ungated:?}");
+}
+
+#[cfg(target_os = "windows")]
+fn rect(x: i32, y: i32, width: u32, height: u32) -> ScreenRect {
+    ScreenRect { at: WinitPhysicalPosition::new(x, y), size: WinitPhysicalSize::new(width, height) }
+}
+
+#[cfg(target_os = "windows")]
+fn assert_margins(got: WinitLogicalInsets<f32>, left: f32, right: f32, bottom: f32) {
+    assert!(
+        (got.left - left).abs() < TOLERANCE
+            && (got.right - right).abs() < TOLERANCE
+            && (got.bottom - bottom).abs() < TOLERANCE,
+        "expected left {left}, right {right}, bottom {bottom}; got {}, {}, {}",
+        got.left,
+        got.right,
+        got.bottom
+    );
+}
+
+// A Windows 11 frame at 100 %: an 8 px border either side and below, a 31 px caption above.
+#[cfg(target_os = "windows")]
+#[test]
+fn the_margins_are_the_frame_beside_and_below_the_client() {
+    let margins = margins_between(rect(100, 50, 816, 639), rect(108, 81, 800, 600), 1.0);
+
+    assert_margins(margins, 8.0, 8.0, 8.0);
+}
+
+// Windows 11 draws all three sides alike, which is exactly why a side read off its neighbour would
+// pass every symmetric fixture; this frame is uneven on purpose.
+#[cfg(target_os = "windows")]
+#[test]
+fn each_margin_is_measured_on_its_own_side() {
+    let margins = margins_between(rect(100, 50, 822, 641), rect(106, 81, 800, 600), 1.0);
+
+    assert_margins(margins, 6.0, 16.0, 10.0);
+}
+
+/// The caption is the frame the user sees. Counted as a margin, the miniplayer would drop its top
+/// edge by the caption's height and the window would visibly move on every swap.
+#[cfg(target_os = "windows")]
+#[test]
+fn the_caption_above_the_client_is_no_margin() {
+    let margins = margins_between(rect(100, 50, 816, 639), rect(108, 81, 800, 600), 1.0);
+
+    assert!(margins.top.abs() < TOLERANCE, "the caption was read as {} px of margin", margins.top);
+}
+
+// The shell insets in logical pixels, so the reading has to be in them too.
+#[cfg(target_os = "windows")]
+#[test]
+fn a_scale_factor_divides_the_margins_back_into_logical_pixels() {
+    let margins = margins_between(rect(100, 50, 1224, 960), rect(112, 98, 1200, 900), 1.5);
+
+    assert_margins(margins, 8.0, 8.0, 8.0);
+}
+
+// Every position is negative on a monitor left of or above the primary; only the distances count.
+#[cfg(target_os = "windows")]
+#[test]
+fn a_window_on_a_monitor_left_of_the_primary_measures_the_same_margins() {
+    let margins = margins_between(rect(-1920, -40, 816, 639), rect(-1912, -9, 800, 600), 1.0);
+
+    assert_margins(margins, 8.0, 8.0, 8.0);
+}
+
+// Floored rather than wrapped: a wrapped `u32` is a margin wider than the window.
+#[cfg(target_os = "windows")]
+#[test]
+fn a_client_past_the_frame_edge_never_wraps() {
+    let margins = margins_between(rect(100, 50, 800, 600), rect(99, 50, 802, 601), 1.0);
+
+    assert_margins(margins, 0.0, 0.0, 0.0);
 }

@@ -101,12 +101,28 @@ export component AppWindow inherits Window {
         ? Theme.mantle
         : Colors.transparent;
 
+    // What the native miniplayer leaves transparent around itself: the invisible borders the frame
+    // it dropped kept outside its visible edges, which the client takes over when the frame goes. Left
+    // painted, the window grows by them on every swap in and shrinks by them on every swap out.
+    // Zero off Win32, where Rust writes none.
+    property <bool> keeps-frame-margins: Theme.use-native-titlebar && root.frameless
+        && !WindowChrome.is-maximized;
+    property <length> margin-left: root.keeps-frame-margins ? WindowChrome.frame-margin-left : 0px;
+    property <length> margin-right: root.keeps-frame-margins ? WindowChrome.frame-margin-right : 0px;
+    property <length> margin-bottom: root.keeps-frame-margins ? WindowChrome.frame-margin-bottom : 0px;
+    // The rect the shell and everything over it occupies inside the client.
+    property <length> content-width: root.width - root.margin-left - root.margin-right;
+    property <length> content-height: root.height - root.margin-bottom;
+
     // `window_chrome::install` hydrates `Theme.use-native-titlebar` before `app.run()`, so the
     // window maps with the right frame; Slint applies later flips live. Dropping the OS frame also
-    // drops winit's resize edges, which `Theme.resize-border` restores; `ResizeRing` reads the same
-    // token, so a drift leaves a band where the cursor changes but the widget still flashes hover.
+    // drops winit's resize edges, which this band restores, as wide as the margins it covers so they
+    // resize the way the frame's borders did. `ResizeRing` reads the same band, so a drift leaves a
+    // strip where the cursor changes but the widget still flashes hover.
+    property <length> resize-band: max(Theme.resize-border, root.margin-left, root.margin-right,
+        root.margin-bottom);
     no-frame: root.frameless;
-    resize-border-width: root.frameless ? Theme.resize-border : 0px;
+    resize-border-width: root.frameless ? root.resize-band : 0px;
 
     default-font-family: "Vazirmatn";
     default-font-size: Theme.font-size-md;
@@ -347,8 +363,10 @@ export component AppWindow inherits Window {
     // visible window outline, and `clip: true` masks anything a child paints outside it.
     // A native frame or maximized drops the radius to 0 and stays full-bleed; the panel still rounds.
     Rectangle {
-        width: 100%;
-        height: 100%;
+        x: root.margin-left;
+        y: 0px;
+        width: root.content-width;
+        height: root.content-height;
         background: Theme.mantle;
         border-radius: (!root.frameless || WindowChrome.is-maximized)
             ? 0px
@@ -582,11 +600,15 @@ export component AppWindow inherits Window {
 
     // Cursor hints over the band winit resizes from. Mounted only when resizing is both possible
     // and ours to advertise: not while maximized, where it's a no-op, and not under a native frame,
-    // where the OS draws its own border. Geometry comes from the same `Theme.resize-*` tokens above.
+    // where the OS draws its own border. Full-size, the band being the client's edge, margins and all.
     if root.frameless && !WindowChrome.is-maximized: ResizeRing {
         width: 100%;
         height: 100%;
+        band: root.resize-band;
     }
+
+    // The overlays below cover the shell's rect rather than the client, so a dialog's backdrop or a
+    // toast doesn't paint into the margins the native miniplayer leaves transparent.
 
     // The first-run card, and deliberately *below* `DialogOverlay`: step 2's folder picker can
     // raise a real `Dialog` on failure, which has to paint over the card and take Esc first.
@@ -594,21 +616,27 @@ export component AppWindow inherits Window {
     // the launch it runs on or after the click that closes it. Rust holds the unmount a beat past
     // `Onboarding.open` so the fade can play; see the global.
     if Onboarding.mounted: OnboardingOverlay {
-        width: 100%;
-        height: 100%;
+        x: root.margin-left;
+        y: 0px;
+        width: root.content-width;
+        height: root.content-height;
     }
 
     // Declared after the main layout, so it paints above it. Always rendered so the open/close
     // animation can play; its TouchArea is `enabled` only while `Dialog.open`.
     DialogOverlay {
-        width: 100%;
-        height: 100%;
+        x: root.margin-left;
+        y: 0px;
+        width: root.content-width;
+        height: root.content-height;
     }
 
     // After `DialogOverlay`, so a toast firing mid-dialog paints above the backdrop rather than
     // behind it. No root TouchArea, so its empty area blocks no clicks.
     NotificationStack {
-        width: 100%;
-        height: 100%;
+        x: root.margin-left;
+        y: 0px;
+        width: root.content-width;
+        height: root.content-height;
     }
 }

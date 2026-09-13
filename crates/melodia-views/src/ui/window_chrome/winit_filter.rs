@@ -10,7 +10,8 @@
 //!    context.
 //! 3. **`Resized`** — re-read `is_maximized`, so the maximize/restore icon stays in sync
 //!    with Win+↑ and window-tile shortcuts that bypass our buttons. Also measures the OS
-//!    frame, which the miniplayer's exit edge allows for once it drops the frame.
+//!    frame, which the miniplayer's exit edge allows for once it drops the frame, and on
+//!    Win32 the invisible borders it keeps transparent so the window's edges stay put.
 //! 4. **`Focused(bool)`** — mirror OS focus into `Theme.window-focused`, and use the
 //!    transition to reconcile the tray-bridge's visibility shadow: raise on focus, ask
 //!    the OS about a minimize on focus loss (see [`schedule_minimize_probe`]).
@@ -173,20 +174,29 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                 // Into the live mirror while the winit window is still alive: shutdown
                 // reads the mirror, `with_winit_window` answering `None` once
                 // `app.run()` has returned.
-                let (maximized, frame) = w
+                let (maximized, frame, margins) = w
                     .with_winit_window(|ww| {
                         geometry::record(ww);
                         // One-shot, on the first (synthetic, post-map) `Resized` only.
                         geometry::ensure_on_screen(ww);
-                        (ww.is_maximized(), geometry::frame_allowance(ww))
+                        (
+                            ww.is_maximized(),
+                            geometry::frame_allowance(ww),
+                            geometry::frame_margins(ww),
+                        )
                     })
-                    .unwrap_or((false, None));
+                    .unwrap_or((false, None, None));
                 let _ = weak.upgrade_in_event_loop(move |ui| {
                     let chrome = ui.global::<melodia_ui::WindowChrome>();
                     chrome.set_is_maximized(maximized);
                     if let Some(frame) = frame {
                         chrome.set_frame_allowance_w(frame.width);
                         chrome.set_frame_allowance_h(frame.height);
+                    }
+                    if let Some(margins) = margins {
+                        chrome.set_frame_margin_left(margins.left);
+                        chrome.set_frame_margin_right(margins.right);
+                        chrome.set_frame_margin_bottom(margins.bottom);
                     }
                     // The cover tiers size themselves against the window, so this is the edge
                     // that re-derives them — see the handler in `boot::ui_setup`.

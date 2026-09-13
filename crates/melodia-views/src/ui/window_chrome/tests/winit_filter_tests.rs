@@ -138,6 +138,28 @@ fn the_resize_arm_writes_the_frame_only_when_one_was_measured() {
     );
 }
 
+/// The margins have the allowance's reason to outlive their frame, with a worse failure: zeroed by
+/// a frameless resize, the native miniplayer paints into the invisible borders again and the
+/// window grows by them at its next layout.
+#[test]
+fn the_resize_arm_writes_the_margins_only_when_they_were_measured() {
+    const ARM: &str = "WindowEvent::Resized(_) =>";
+    const GATE: &str = "if let Some(margins) = margins";
+    const SETTERS: [&str; 3] =
+        ["set_frame_margin_left(", "set_frame_margin_right(", "set_frame_margin_bottom("];
+    let code = filter_source();
+    let arm = arm_body(&code, ARM);
+    let gated = arm_body(arm, GATE);
+
+    let outside: Vec<&str> = SETTERS.into_iter().filter(|s| !gated.contains(s)).collect();
+
+    assert!(!arm.is_empty(), "no `{ARM}` block found: the walk is broken, not the code");
+    assert!(
+        outside.is_empty() && arm.matches("set_frame_margin_").count() == SETTERS.len(),
+        "the frame margins are written outside their `Some` gate: {outside:?}\n{arm}"
+    );
+}
+
 /// Nothing paints the two properties the arm writes, so without the request no frame is
 /// scheduled and the `changed` handler that applies them waits for an unrelated event —
 /// every notch landing one notch late (#64). A source walk because scheduling is what a

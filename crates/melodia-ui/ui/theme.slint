@@ -118,9 +118,10 @@ export global Theme {
     in-out property <length> native-content-radius: 6px;
     out property <length> native-content-radius-inner: max(0px, native-content-radius - 1px);
 
-    // Read by **both** the `Window`'s `resize-border-width` and the `ResizeRing` overlays setting
-    // the cursor over it, so a drift leaves a band that resizes with no cursor or the reverse.
-    // Corners are deliberately larger for a forgiving diagonal grab.
+    // The floor of `AppWindow`'s `resize-band`, which **both** the `Window`'s `resize-border-width`
+    // and the `ResizeRing` overlays setting the cursor over it read, so a drift leaves a band that
+    // resizes with no cursor or the reverse. Corners are deliberately larger for a forgiving
+    // diagonal grab.
     out property <length> resize-border: 4px;
     out property <length> resize-corner: 8px;
 

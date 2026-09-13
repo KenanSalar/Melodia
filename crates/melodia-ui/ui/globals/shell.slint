@@ -17,6 +17,12 @@ export global WindowChrome {
     in property <length> frame-allowance-w;
     in property <length> frame-allowance-h;
 
+    // The part of that frame outside the edges it draws: Win32's invisible resize borders, which a
+    // dropped frame hands to the client. Zero elsewhere, and written only while a frame stands.
+    in property <length> frame-margin-left;
+    in property <length> frame-margin-right;
+    in property <length> frame-margin-bottom;
+
     // `supported` gates the pin button so bare-Wayland and GNOME-without-window-calls users don't
     // see a dead control. `active` is written optimistically on click; Rust reverts it on failure.
     in property <bool> always-on-top-supported;

@@ -59,7 +59,12 @@ the OS owns has to be attached late or not at all on at least one platform.
   frameless miniplayer down to its floor until the button comes up. The
   frame changes on the swap tick in **both** directions, under the crossfade. Returned at the
   decision to leave instead, it came back over a miniplayer still on screen, and Win32 stepped the
-  visible window in by its invisible resize borders before the full UI appeared.
+  visible window in by its invisible resize borders before the full UI appeared. **Those borders
+  are the fourth link**: the client takes them over with the frame, so the `Resized` arm also
+  measures them (`geometry::frame_margins`, Win32 only), `WindowChrome.frame-margin-*` holds them,
+  and the shell and its overlays inset by them under the native miniplayer, leaving them
+  transparent. The root's `resize-band` widens to cover them, so they still resize as the frame's
+  borders did and the visible window keeps its edges across the swap.
 
 - **`"restart-backdrop"` is the third of these and the one whose deadline is earlier than
   `app.run()`** — `BackdropFlags.aurora_backdrop` decides whether the two artwork tiers hold a
