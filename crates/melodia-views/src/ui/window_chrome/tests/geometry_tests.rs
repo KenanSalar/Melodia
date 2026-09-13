@@ -13,6 +13,20 @@ fn assert_allowance(got: WinitLogicalSize<f32>, width: f32, height: f32) {
     );
 }
 
+/// `geometry.rs`, comments stripped, for the walks below.
+fn geometry_source() -> String {
+    strip_line_comments(include_str!("../geometry.rs"))
+}
+
+/// The body of the first block opening after `needle`, or empty when the walk found no such
+/// block, which every caller asserts apart from the code being wrong.
+fn block_after<'a>(code: &'a str, needle: &str) -> &'a str {
+    code.find(needle)
+        .and_then(|at| code[at..].find('{').map(|rel| at + rel))
+        .and_then(|open| block_body(code, open))
+        .unwrap_or_default()
+}
+
 // The Win32 case the miniplayer's exit edge exists for: undecorated, the client area takes the
 // whole window rect, so it grows by exactly this much.
 #[test]
@@ -50,6 +64,64 @@ fn an_inner_size_past_the_outer_never_wraps() {
     assert_allowance(frame, 0.0, 0.0);
 }
 
+// The Win32 reading of a minimized window, which neither caller may take as geometry.
+#[test]
+fn an_empty_client_is_a_minimized_window() {
+    assert!(
+        is_minimized_client(WinitPhysicalSize::new(0, 0)),
+        "a minimized window's empty client would be recorded as the size to restore"
+    );
+}
+
+// Either axis on its own, so the check can't narrow to both without failing here.
+#[test]
+fn a_client_empty_on_one_axis_is_a_minimized_window() {
+    assert!(
+        is_minimized_client(WinitPhysicalSize::new(0, 600)),
+        "a client with no width describes no window to restore"
+    );
+    assert!(
+        is_minimized_client(WinitPhysicalSize::new(800, 0)),
+        "a client with no height describes no window to restore"
+    );
+}
+
+// The step past the edge: any client with area is a window the user can see.
+#[test]
+fn a_one_pixel_client_is_a_live_window() {
+    assert!(
+        !is_minimized_client(WinitPhysicalSize::new(1, 1)),
+        "a live window read as minimized would stop recording its geometry"
+    );
+}
+
+/// Win32 minimizes to an empty client at −32000, −32000 and clears the maximized flag, so a
+/// window closed from the taskbar persisted all of it and relaunched un-maximized, clamped and
+/// re-centred. A source walk because the reading needs a live, minimized window: the guard has to
+/// return before the mirror is touched, the maximized flag being written under the same lock.
+#[test]
+fn a_minimized_window_records_nothing() {
+    const FN: &str = "pub fn record";
+    const GUARD: &str = "if is_minimized_client(";
+    const MIRROR_WRITE: &str = "live().lock()";
+    let code = geometry_source();
+    let body = block_after(&code, FN);
+    let guard_at = body.find(GUARD);
+    let write_at = body.find(MIRROR_WRITE);
+
+    assert!(!body.is_empty(), "no `{FN}` found: the walk is broken, not the code");
+    assert_eq!(
+        block_after(body, GUARD).trim(),
+        "return;",
+        "`record` no longer leaves a minimized reading out of the mirror:\n{body}"
+    );
+    assert!(
+        matches!((guard_at, write_at), (Some(guard), Some(write)) if guard < write),
+        "the minimized guard has to run before the mirror write, or the maximized flag still \
+         lands:\n{body}"
+    );
+}
+
 /// Once the miniplayer drops the frame, outer equals inner, so a reading taken there is zero and
 /// would overwrite the one the exit edge needs. The client area has already grown by the frame,
 /// so the window lands past the shrunken edge and bounces back out. A source walk because
@@ -57,12 +129,8 @@ fn an_inner_size_past_the_outer_never_wraps() {
 #[test]
 fn an_undecorated_window_gives_no_reading() {
     const FN: &str = "pub fn frame_allowance";
-    let code = strip_line_comments(include_str!("../geometry.rs"));
-    let body = code
-        .find(FN)
-        .and_then(|at| code[at..].find('{').map(|rel| at + rel))
-        .and_then(|open| block_body(&code, open))
-        .unwrap_or_default();
+    let code = geometry_source();
+    let body = block_after(&code, FN);
 
     assert!(!body.is_empty(), "no `{FN}` found: the walk is broken, not the code");
     assert!(

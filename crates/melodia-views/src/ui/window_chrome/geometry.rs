@@ -113,13 +113,21 @@ fn live() -> &'static Mutex<Option<LiveGeometry>> {
 /// Update the live mirror from the current winit window state, called by the `Resized` and
 /// `Moved` handlers while the winit window is still alive.
 ///
+/// Skips everything while minimized, the maximized flag included: winit clears it on a Win32
+/// minimize, so closing from the taskbar would otherwise persist an un-maximized, empty rect at
+/// the parked position, which the next launch can only clamp and re-centre.
+///
 /// Skips size and position while maximized: winit's `inner_size` there is the maximized
 /// screen size, and persisting it would clobber the user's real restore geometry. The
-/// `maximized` flag itself is always recorded.
+/// `maximized` flag itself is still recorded.
 pub fn record(w: &WinitWindow) {
+    let client = w.inner_size();
+    if is_minimized_client(client) {
+        return;
+    }
     let scale = w.scale_factor();
     let maximized = w.is_maximized();
-    let inner: WinitLogicalSize<f64> = w.inner_size().to_logical(scale);
+    let inner: WinitLogicalSize<f64> = client.to_logical(scale);
     let outer: Option<WinitLogicalPosition<f64>> =
         w.outer_position().ok().map(|p| p.to_logical(scale));
 
@@ -149,14 +157,22 @@ pub fn record(w: &WinitWindow) {
 /// Returns what the OS frame adds to the client area, in logical pixels.
 ///
 /// `None` while undecorated, there being no frame to measure; while maximized, where a WM may
-/// strip the frame without the window ever learning it lost one; and over an empty client, which
-/// is how Win32 reports a minimized window, whose outer rect is then the minimized one.
+/// strip the frame without the window ever learning it lost one; and while minimized, the outer
+/// rect then being the minimized one.
 pub fn frame_allowance(w: &WinitWindow) -> Option<WinitLogicalSize<f32>> {
     let inner = w.inner_size();
-    if !w.is_decorated() || w.is_maximized() || inner.width == 0 || inner.height == 0 {
+    if !w.is_decorated() || w.is_maximized() || is_minimized_client(inner) {
         return None;
     }
     Some(allowance_between(w.outer_size(), inner, w.scale_factor()))
+}
+
+/// Whether a client size is Win32's reading of a minimized window: empty, inside a small outer
+/// rect parked at −32000, −32000, so nothing measured off it describes the window the user will
+/// restore. Read off the size rather than asked of `is_minimized`, which costs X11 a round trip
+/// on every resize and move event these run for.
+fn is_minimized_client(client: WinitPhysicalSize<u32>) -> bool {
+    client.width == 0 || client.height == 0
 }
 
 fn allowance_between(
