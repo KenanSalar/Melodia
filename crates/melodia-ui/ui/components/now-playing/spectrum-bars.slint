@@ -34,8 +34,10 @@ export component SpectrumBars inherits Rectangle {
         // **Off, and the geometry is snapped to suit.** A bar is a few pixels wide and, mirrored, a
         // few tall, so a half-covered row at each end is a visible share of it rather than a soft
         // edge — and snapping inside the viewbox can't fix that on its own, the strip's own origin
-        // landing wherever a centred column in a scroller puts it. `write_bar_path` gives every
-        // band the same whole-pixel width so thresholded coverage can't make neighbours differ.
+        // landing wherever a centred column in a scroller puts it. Equal whole-pixel widths aren't
+        // enough either: counted from a half-pixel origin, every edge sits on a pixel centre and
+        // thresholded coverage rounds each one its own way. `write_bar_path` takes the strip's
+        // window position and puts every edge on a pixel boundary instead.
         anti-alias: false;
 
         // The per-artwork accent, so the strip harmonizes with the blur, but the tone-floored

@@ -31,7 +31,7 @@ use crate::ui::shell::tray_bridge;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_playback::player::playback::spectrum::{
-    BarAnchor, FFT_SIZE, NUM_BANDS, SpectrumAnalyzer, StripSize,
+    BarAnchor, FFT_SIZE, NUM_BANDS, SpectrumAnalyzer, StripGeometry,
 };
 use melodia_playback::player::playback::visualizer::RING_CAP;
 use melodia_playback::player::playback::waveform::{self, MAX_COLUMNS, WaveformAnalyzer};
@@ -207,7 +207,7 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
         let analyzers = analyzers.clone();
         let weak = ui.as_weak();
 
-        viz_global.on_tick(move |playing, strip_width, strip_height| {
+        viz_global.on_tick(move |playing, strip_x, strip_y, strip_width, strip_height| {
             let mut slot = analyzers.borrow_mut();
             // The one construction site, so no mount ordering can leave the tick without buffers
             // however `set-active` and the strip interleave.
@@ -228,10 +228,16 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
             let rate = if analyzing { viz.analysis_rate() } else { 0 };
 
             // The scale factor is read here rather than passed in: `.slint` has no way to spell it,
-            // and the bars need it to put a horizontal edge on a whole device row. A window that
-            // has gone can't be drawn into anyway, so the fallback never reaches a frame.
+            // and the bars need it to find the window's device pixels under the strip. A window
+            // that has gone can't be drawn into anyway, so the fallback never reaches a frame.
             let scale = weak.upgrade().map_or(1.0, |ui| ui.window().scale_factor());
-            let strip = StripSize { width: strip_width, height: strip_height, scale };
+            let strip = StripGeometry {
+                x: strip_x,
+                y: strip_y,
+                width: strip_width,
+                height: strip_height,
+                scale,
+            };
             let style = style.get();
             let waveform = is_waveform(style);
             let idle = if waveform {

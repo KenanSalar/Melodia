@@ -445,13 +445,17 @@ pub enum BarAnchor {
     Centre,
 }
 
-/// The strip's drawn size, in logical pixels.
+/// Where the strip is drawn and how large, in logical pixels.
 ///
-/// The figure normalizes into a unit viewbox, but two of its terms are pixel facts and mean
-/// nothing until they are divided by a real size: the gap between bars, and the floor that keeps a
-/// silent band visible.
+/// The figure normalizes into a unit viewbox, but three of its terms are pixel facts and mean
+/// nothing until they are measured against a real strip: the gap between bars, the floor that keeps
+/// a silent band visible, and where the window's pixel grid falls under the strip.
 #[derive(Clone, Copy, Debug)]
-pub struct StripSize {
+pub struct StripGeometry {
+    /// Left edge, measured from the window's.
+    pub x: f32,
+    /// Top edge, measured from the window's.
+    pub y: f32,
     /// Logical pixels across.
     pub width: f32,
     /// Logical pixels down.
@@ -475,6 +479,49 @@ const BAR_GAP_PX: f32 = 2.0;
 /// changes width. One part in ten thousand holds that well past any strip this panel can seat.
 const COORD_DECIMALS: u32 = 4;
 
+/// One axis of the strip, measured on the window's device-pixel grid, which is the grid the bars
+/// rasterize against.
+///
+/// The renderer places the strip at its logical origin times the scale factor and rounds neither,
+/// so the strip's own edge is rarely a pixel boundary. With anti-aliasing off a pixel is painted
+/// only when its centre is inside a bar, and an edge a whole number of pixels from a half-pixel
+/// origin sits exactly on those centres, where float noise picks a side edge by edge. Laid out
+/// between grid lines instead, every edge is half a pixel clear of the nearest centre.
+struct GridAxis {
+    /// How far past a grid line the strip starts, in device pixels.
+    phase: f32,
+    /// The first grid line inside the strip.
+    first: f32,
+    /// The last grid line inside the strip.
+    last: f32,
+    /// The strip's device-pixel length, which the viewbox normalizes against.
+    extent: f32,
+}
+
+impl GridAxis {
+    fn new(origin: f32, length: f32, scale: f32) -> Self {
+        let phase = (origin * scale).rem_euclid(1.0);
+        let extent = length * scale;
+        Self { phase, first: phase.ceil(), last: (phase + extent).floor(), extent }
+    }
+
+    /// Whole device pixels between the first grid line and the last.
+    fn pixels(&self) -> f32 {
+        self.last - self.first
+    }
+
+    /// Whether there is a whole pixel to draw into. False for a strip no layout pass has sized
+    /// yet, and for any geometry that isn't a number.
+    fn is_drawable(&self) -> bool {
+        self.pixels().is_finite() && self.pixels() >= 1.0
+    }
+
+    /// A grid line as a fraction of the strip, which `fit: fill` maps back onto that line.
+    fn normalize(&self, line: f32) -> f32 {
+        (line - self.phase) / self.extent
+    }
+}
+
 /// Write `levels` into `out` as SVG path commands: one closed rectangle per band, all of them one
 /// figure.
 ///
@@ -485,19 +532,18 @@ const COORD_DECIMALS: u32 = 4;
 /// path per drawn element and caches none of it between frames, and the strip rewrites every band
 /// every tick, so a bar that is its own element is a path built, tessellated and filled on its own
 /// every frame. It costs the same to say all of them once.
-pub fn write_bar_path(levels: &[f32], strip: StripSize, anchor: BarAnchor, out: &mut String) {
+pub fn write_bar_path(levels: &[f32], strip: StripGeometry, anchor: BarAnchor, out: &mut String) {
     out.clear();
     if levels.is_empty() {
         return;
     }
     let count = index_to_f32(levels.len());
 
-    // Device pixels the figure rasterizes into. The strip has no size until its first layout pass,
-    // and the seed tick can land before that — with nothing to measure there is no figure to draw
-    // rather than a degenerate one, and the next tick has a size.
-    let cols = strip.width * strip.scale;
-    let rows = strip.height * strip.scale;
-    if !cols.is_finite() || !rows.is_finite() || cols <= 0.0 || rows <= 0.0 {
+    // The seed tick can land before the strip's first layout pass. With nothing to measure there
+    // is no figure to draw rather than a degenerate one, and the next tick has a size.
+    let horizontal = GridAxis::new(strip.x, strip.width, strip.scale);
+    let vertical = GridAxis::new(strip.y, strip.height, strip.scale);
+    if !horizontal.is_drawable() || !vertical.is_drawable() {
         return;
     }
 
@@ -512,7 +558,7 @@ pub fn write_bar_path(levels: &[f32], strip: StripSize, anchor: BarAnchor, out: 
     // and sixty-four bands degraded into hairlines with more space than mark. Held to half the
     // pitch, so a bar is never thinner than the gap beside it, and dropped outright below two
     // pixels a band, where there is nothing to separate.
-    let pitch = ((cols + BAR_GAP_PX * strip.scale) / count).floor().max(1.0);
+    let pitch = ((horizontal.pixels() + BAR_GAP_PX * strip.scale) / count).floor().max(1.0);
     let gap = if pitch < 2.0 {
         0.0
     } else {
@@ -520,31 +566,34 @@ pub fn write_bar_path(levels: &[f32], strip: StripSize, anchor: BarAnchor, out: 
     };
     let bar_width = (pitch - gap).max(1.0);
     let span = pitch * index_to_f32(levels.len() - 1) + bar_width;
-    let origin = ((cols - span) * 0.5).max(0.0).round();
+    let origin = horizontal.first + ((horizontal.pixels() - span) * 0.5).max(0.0).round();
     // "At least as tall as it is wide", so a silent band rests as a square mark rather than
     // vanishing. Derived from the column rather than fixed, the column following the strip.
-    let floor = bar_width.min(rows);
+    let floor = bar_width.min(vertical.pixels());
+    let middle = (vertical.first + vertical.last) * 0.5;
 
     for (i, &level) in levels.iter().enumerate() {
-        let height = (level.clamp(0.0, 1.0) * rows).max(floor);
+        let height = (level.clamp(0.0, 1.0) * vertical.pixels()).max(floor);
         let (top, bottom) = match anchor {
-            BarAnchor::Baseline => (rows - height, rows),
+            BarAnchor::Baseline => (vertical.last - height, vertical.last),
             // Height is the total in both anchorings, so a centred bar puts half either side of
             // the axis rather than a full bar each way.
-            BarAnchor::Centre => ((rows - height) * 0.5, (rows + height) * 0.5),
+            BarAnchor::Centre => (middle - height * 0.5, middle + height * 0.5),
         };
         let top = top.round();
         // A band at the floor can round both edges onto one row, which would draw nothing at all.
         let bottom = bottom.round().max(top + 1.0);
         let left = origin + index_to_f32(i) * pitch;
-        let right = (left + bar_width).min(cols);
+        let right = (left + bar_width).min(horizontal.last);
 
+        let (left, right) = (horizontal.normalize(left), horizontal.normalize(right));
+        let (top, bottom) = (vertical.normalize(top), vertical.normalize(bottom));
         // Lower edge first, then the upper edge back — the winding `waveform::write_path` emits
         // for the same reason, femtovg reading a subpath's signed area to decide solid from hole.
-        push_vertex(out, "M", left / cols, bottom / rows);
-        push_vertex(out, " L", right / cols, bottom / rows);
-        push_vertex(out, " L", right / cols, top / rows);
-        push_vertex(out, " L", left / cols, top / rows);
+        push_vertex(out, "M", left, bottom);
+        push_vertex(out, " L", right, bottom);
+        push_vertex(out, " L", right, top);
+        push_vertex(out, " L", left, top);
         out.push('Z');
     }
 }

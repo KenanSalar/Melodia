@@ -81,9 +81,12 @@ export global Visualizer {
     // landing on a settled drawing stops it in the same pass and no further tick arrives.
     callback window-hidden();
     // Both sizes ride along: the trace's column count follows the strip's width, and the bars floor
-    // each band against its own column, which is a ratio of the two.
+    // each band against its own column, which is a ratio of the two. The position does too, the
+    // bars putting their edges on the window's pixel grid rather than the strip's.
     callback tick(
         bool /*is-playing*/,
+        float /*strip x, logical px from the window's left*/,
+        float /*strip y, logical px from the window's top*/,
         float /*strip width, logical px*/,
         float /*strip height, logical px*/,
     );

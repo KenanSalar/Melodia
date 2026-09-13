@@ -126,8 +126,10 @@ fn resting_bars_stand_at_their_floor_rather_than_collapsing() {
     // Rest is every band at zero, and the floor is the only thing between that and a strip
     // that draws nothing at all. It is also the one term needing a measured strip, so what
     // has to hold is that a measured rest says something a sizeless one doesn't.
-    const MEASURED: StripSize = StripSize { width: 600.0, height: 56.0, scale: 1.0 };
-    const UNMEASURED: StripSize = StripSize { width: 0.0, height: 0.0, scale: 1.0 };
+    const MEASURED: StripGeometry =
+        StripGeometry { x: 0.0, y: 0.0, width: 600.0, height: 56.0, scale: 1.0 };
+    const UNMEASURED: StripGeometry =
+        StripGeometry { x: 0.0, y: 0.0, width: 0.0, height: 0.0, scale: 1.0 };
     let rest = [0.0_f32; NUM_BANDS];
 
     let mut measured = String::new();

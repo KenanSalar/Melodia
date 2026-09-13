@@ -6,7 +6,9 @@
 //! yet all reach the same path: no snapshot, no transform, just the decay. Each returns
 //! whether its drawing has settled, which is what stops the Timer. Neither allocates.
 
-use melodia_playback::player::playback::spectrum::{self, BarAnchor, SpectrumAnalyzer, StripSize};
+use melodia_playback::player::playback::spectrum::{
+    self, BarAnchor, SpectrumAnalyzer, StripGeometry,
+};
 use melodia_playback::player::playback::visualizer::VisualizerShared;
 use melodia_playback::player::playback::waveform::{self, WaveformAnalyzer};
 
@@ -24,7 +26,7 @@ pub(super) fn bars(
     path: &mut String,
     rate: u32,
     anchor: BarAnchor,
-    strip: StripSize,
+    strip: StripGeometry,
 ) -> bool {
     if rate > 0 {
         // Straight into the transforms' own input buffers. They overlap, the long one
@@ -44,7 +46,7 @@ pub(super) fn waveform(
     analyzer: &mut WaveformAnalyzer,
     path: &mut String,
     rate: u32,
-    strip: StripSize,
+    strip: StripGeometry,
 ) -> bool {
     // The trace's span is a fixed number of milliseconds, so the window can only be sized
     // once the rate is known; without one, `analyze` decays the last trace instead.
