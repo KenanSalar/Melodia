@@ -231,6 +231,8 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                     // callbacks, so the shadow would stay stuck `false`.
                     if focused {
                         crate::ui::shell::tray_bridge::set_window_visible(&ui, true);
+                        #[cfg(target_os = "windows")]
+                        crate::ui::appearance::window_border::refresh_system_color(&ui);
                     }
                 });
                 slint::winit_030::EventResult::Propagate

@@ -23,6 +23,12 @@ export global WindowChrome {
     in property <length> frame-margin-right;
     in property <length> frame-margin-bottom;
 
+    // The frameless outline's colour, resolved from the Window Border Color pick. Unfocused is its
+    // own brush because Windows' accent borders go neutral on an inactive window; for any other pick
+    // the two are the same.
+    in property <brush> border-color;
+    in property <brush> border-color-unfocused;
+
     // `supported` gates the pin button so bare-Wayland and GNOME-without-window-calls users don't
     // see a dead control. `active` is written optimistically on click; Rust reverts it on failure.
     in property <bool> always-on-top-supported;

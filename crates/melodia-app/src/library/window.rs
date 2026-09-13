@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::services::{
     self,
-    settings::{TitlebarButtonSide, TitlebarButtonStyle},
+    settings::{TitlebarButtonSide, TitlebarButtonStyle, WindowBorder},
 };
 use crate::state::AppState;
 use melodia_core::config::Paths;
@@ -132,6 +132,22 @@ pub fn set_titlebar_button_side(
 ) -> Result<(), AppError> {
     services::settings::mutate_settings(&state.paths, move |s| {
         s.window.titlebar_button_side = side;
+    })
+}
+
+/// Persist whether the frameless window draws its outline. The Slint switch has already flipped
+/// `Settings.window-border-shown`, which the outline reads directly, so this only commits it.
+pub fn set_window_border(state: &AppState, border: WindowBorder) -> Result<(), AppError> {
+    services::settings::mutate_settings(&state.paths, move |s| {
+        s.window.window_border = border;
+    })
+}
+
+/// Persist the outline's colour: `WINDOW_BORDER_SYSTEM_COLOR`, or an accent id of the active
+/// theme. The UI callback has already painted the pick, so this only commits it.
+pub fn set_window_border_color(state: &AppState, color_id: String) -> Result<(), AppError> {
+    services::settings::mutate_settings(&state.paths, move |s| {
+        s.window.window_border_color = color_id;
     })
 }
 

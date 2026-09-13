@@ -40,6 +40,37 @@ fn test_empty_json_uses_defaults() -> Result<(), AppError> {
 }
 
 #[test]
+fn a_fresh_install_draws_the_window_border() {
+    assert_eq!(WindowFlags::default().window_border, WindowBorder::Shown);
+}
+
+#[test]
+fn a_fresh_install_draws_the_window_border_in_the_system_color() {
+    assert_eq!(WindowFlags::default().window_border_color, WINDOW_BORDER_SYSTEM_COLOR);
+}
+
+/// A `settings.json` written before the border existed carries no key for it, and has to read as
+/// the default rather than as an install that turned the border off.
+#[test]
+fn a_settings_file_from_before_the_border_draws_it() -> Result<(), AppError> {
+    let window: WindowFlags =
+        serde_json::from_str(r#"{"use_native_titlebar": true}"#).map_err(|e| json_err(&e))?;
+
+    assert_eq!(window.window_border, WindowBorder::Shown);
+    Ok(())
+}
+
+/// Persisted as a name, the way the titlebar button tokens are, so a third state needs no schema
+/// change and a hand-edited file reads the way it is spelled.
+#[test]
+fn the_window_border_persists_as_a_token() -> Result<(), AppError> {
+    let hidden = serde_json::to_string(&WindowBorder::Hidden).map_err(|e| json_err(&e))?;
+
+    assert_eq!(hidden, r#""hidden""#);
+    Ok(())
+}
+
+#[test]
 fn test_unknown_fields_silently_ignored() -> Result<(), AppError> {
     // Forward compatibility: future settings versions may add new fields.
     // Without deny_unknown_fields, old code should deserialize them fine.

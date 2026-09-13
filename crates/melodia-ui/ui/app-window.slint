@@ -639,4 +639,20 @@ export component AppWindow inherits Window {
         width: root.content-width;
         height: root.content-height;
     }
+
+    // The 1 px outline an OS draws round its own frames, which a frameless window has to draw for
+    // itself. Last, and a sibling rather than a border on the shell, so nothing in the window paints
+    // over the edge, a dialog's scrim included, and a childless element is no layer. One physical
+    // pixel, as the OS draws it.
+    if root.frameless && !WindowChrome.is-maximized && Settings.window-border-shown: Rectangle {
+        x: root.margin-left;
+        y: 0px;
+        width: root.content-width;
+        height: root.content-height;
+        border-radius: Theme.window-radius;
+        border-width: 1phx;
+        border-color: Theme.window-focused
+            ? WindowChrome.border-color
+            : WindowChrome.border-color-unfocused;
+    }
 }

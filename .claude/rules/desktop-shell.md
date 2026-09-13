@@ -96,6 +96,15 @@ the OS owns has to be attached late or not at all on at least one platform.
   under the custom titlebar and the host's (`native-content-radius`) under the native one, so the
   native miniplayer keeps the frame's corners when it drops the frame.
 
+- **A frameless window draws its own 1 px outline**, the edge every OS frame has, as the root's
+  last child under the same `frameless && !is-maximized` gate, so it outlines the whole window
+  under the custom titlebar and only the miniplayer under the native one. The Settings rows stay
+  live in both modes for that reason. `ui::appearance::window_border` paints
+  `WindowChrome.border-color{,-unfocused}` from the palette republish; its System colour is the
+  Windows accent while the user has it on window borders (`platform::window_border`, the registry),
+  and Windows says nothing when that switch moves, so the winit `Focused` arm asks again on a
+  focus gain.
+
 - **Match Unfocused Window Background (KDE-only)** — tints sidebar + NP-bar to the OS unfocused
   titlebar. `LayoutFlags.match_unfocused_to_system_bg`, serde default `is_kde_desktop()`; hidden
   off-KDE, disabled in custom-titlebar. `Theme.window-focused` mirrors winit `Focused(bool)` raw;

@@ -264,13 +264,15 @@ libc = "0.2.189"
 
 # Windows
 # `MoveFileExW(MOVEFILE_DELAY_UNTIL_REBOOT)` in `updater/install/swap.rs`, for when
-# `Melodia.exe.old` is still loaded, and `GetUserDefaultLocaleName`. Declarations
-# from here rather than a hand-rolled `extern` block only review can keep true.
+# `Melodia.exe.old` is still loaded, `GetUserDefaultLocaleName`, and the DWM accent
+# values `window_border` reads out of the registry. Declarations from here rather
+# than a hand-rolled `extern` block only review can keep true.
 windows-sys = { version = "0.61.2", features = [
     "Win32_Storage_FileSystem",
     "Win32_Graphics_Dwm",
     "Win32_Foundation",
     "Win32_Globalization",
+    "Win32_System_Registry",
 ] }
 # `canonicalize` returns the extended-length form (`\\?\C:\...`), which lands in
 # `folders.path` and then fails to match the plain paths `read_dir` yields, greying

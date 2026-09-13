@@ -267,6 +267,20 @@ pub enum TitlebarButtonSide {
     Left,
 }
 
+/// Whether a frameless window draws the 1 px outline an OS draws round its own frames. A token
+/// rather than a `bool`, [`WindowFlags`] already sitting at clippy's `struct_excessive_bools` cap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WindowBorder {
+    #[default]
+    Shown,
+    Hidden,
+}
+
+/// The [`WindowFlags::window_border_color`] that follows the OS's own border colour. Every other
+/// value is an accent id of the active theme, and one the theme doesn't have reads as this.
+pub const WINDOW_BORDER_SYSTEM_COLOR: &str = "system";
+
 /// Window-chrome toggles. The two `titlebar_button_*` fields only take effect
 /// under `use_native_titlebar == false`; otherwise the OS paints its own.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -278,6 +292,10 @@ pub struct WindowFlags {
     pub use_native_titlebar: bool,
     pub titlebar_button_style: TitlebarButtonStyle,
     pub titlebar_button_side: TitlebarButtonSide,
+    /// Drawn wherever the window is frameless: always under the custom titlebar, and for the
+    /// miniplayer under the native one.
+    pub window_border: WindowBorder,
+    pub window_border_color: String,
 }
 
 impl Default for WindowFlags {
@@ -293,6 +311,8 @@ impl Default for WindowFlags {
             use_native_titlebar: cfg!(target_os = "windows"),
             titlebar_button_style: TitlebarButtonStyle::Standard,
             titlebar_button_side: TitlebarButtonSide::Right,
+            window_border: WindowBorder::Shown,
+            window_border_color: WINDOW_BORDER_SYSTEM_COLOR.to_owned(),
         }
     }
 }

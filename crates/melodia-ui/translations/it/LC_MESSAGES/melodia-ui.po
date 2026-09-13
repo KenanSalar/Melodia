@@ -492,6 +492,24 @@ msgstr "Colora la barra laterale e la barra di riproduzione con lo sfondo del co
 msgid "Window Corner Radius"
 msgstr "Raggio degli angoli della finestra"
 
+msgid "Window Border"
+msgstr "Bordo della finestra"
+
+msgid "Draw a thin outline around the miniplayer. The full window keeps the border of its system frame."
+msgstr "Disegna un contorno sottile attorno al mini player. La finestra completa mantiene il bordo della sua cornice di sistema."
+
+msgid "Draw a thin outline around the whole window, the miniplayer included."
+msgstr "Disegna un contorno sottile attorno all'intera finestra, mini player incluso."
+
+msgid "Window Border Color"
+msgstr "Colore del bordo della finestra"
+
+msgid "System follows the color the operating system draws its own window borders in."
+msgstr "Sistema segue il colore con cui il sistema operativo disegna i bordi delle proprie finestre."
+
+msgid "Available only while the window border is shown."
+msgstr "Disponibile solo quando il bordo della finestra è visibile."
+
 msgid "Managed by the operating system"
 msgstr "Gestito dal sistema operativo"
 

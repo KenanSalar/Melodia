@@ -492,6 +492,24 @@ msgstr "Seitenleiste und Wiedergabeleiste an den Inhaltshintergrund anpassen, we
 msgid "Window Corner Radius"
 msgstr "Fensterecken-Radius"
 
+msgid "Window Border"
+msgstr "Fensterrand"
+
+msgid "Draw a thin outline around the miniplayer. The full window keeps the border of its system frame."
+msgstr "Zeichnet eine dünne Umrandung um den Miniplayer. Das volle Fenster behält den Rand seines Systemrahmens."
+
+msgid "Draw a thin outline around the whole window, the miniplayer included."
+msgstr "Zeichnet eine dünne Umrandung um das gesamte Fenster, den Miniplayer eingeschlossen."
+
+msgid "Window Border Color"
+msgstr "Farbe des Fensterrands"
+
+msgid "System follows the color the operating system draws its own window borders in."
+msgstr "System folgt der Farbe, in der das Betriebssystem seine eigenen Fensterränder zeichnet."
+
+msgid "Available only while the window border is shown."
+msgstr "Nur verfügbar, solange der Fensterrand angezeigt wird."
+
 msgid "Managed by the operating system"
 msgstr "Vom Betriebssystem verwaltet"
 

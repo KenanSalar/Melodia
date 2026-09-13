@@ -497,6 +497,24 @@ msgstr "Pencere odağı kaybettiğinde kenar çubuğunu ve çalma çubuğunu iç
 msgid "Window Corner Radius"
 msgstr "Pencere Köşe Yarıçapı"
 
+msgid "Window Border"
+msgstr "Pencere Kenarlığı"
+
+msgid "Draw a thin outline around the miniplayer. The full window keeps the border of its system frame."
+msgstr "Mini oynatıcının etrafına ince bir kenarlık çizer. Tam pencere, sistem çerçevesinin kenarlığını korur."
+
+msgid "Draw a thin outline around the whole window, the miniplayer included."
+msgstr "Mini oynatıcı dahil tüm pencerenin etrafına ince bir kenarlık çizer."
+
+msgid "Window Border Color"
+msgstr "Pencere Kenarlığı Rengi"
+
+msgid "System follows the color the operating system draws its own window borders in."
+msgstr "Sistem, işletim sisteminin kendi pencere kenarlıklarını çizdiği rengi izler."
+
+msgid "Available only while the window border is shown."
+msgstr "Yalnızca pencere kenarlığı gösterilirken kullanılabilir."
+
 msgid "Managed by the operating system"
 msgstr "İşletim sistemi tarafından yönetilir"
 

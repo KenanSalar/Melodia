@@ -492,6 +492,24 @@ msgstr "Teinter la barre latérale et la barre de lecture vers l'arrière-plan d
 msgid "Window Corner Radius"
 msgstr "Rayon des coins de la fenêtre"
 
+msgid "Window Border"
+msgstr "Bordure de la fenêtre"
+
+msgid "Draw a thin outline around the miniplayer. The full window keeps the border of its system frame."
+msgstr "Dessine un fin contour autour du mini-lecteur. La fenêtre complète garde la bordure de son cadre système."
+
+msgid "Draw a thin outline around the whole window, the miniplayer included."
+msgstr "Dessine un fin contour autour de toute la fenêtre, mini-lecteur compris."
+
+msgid "Window Border Color"
+msgstr "Couleur de la bordure de la fenêtre"
+
+msgid "System follows the color the operating system draws its own window borders in."
+msgstr "Système suit la couleur dans laquelle le système d'exploitation dessine ses propres bordures de fenêtre."
+
+msgid "Available only while the window border is shown."
+msgstr "Disponible uniquement lorsque la bordure de la fenêtre est affichée."
+
 msgid "Managed by the operating system"
 msgstr "Géré par le système d'exploitation"
 

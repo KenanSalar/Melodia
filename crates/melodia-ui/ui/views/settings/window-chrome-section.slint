@@ -8,6 +8,7 @@ import { SettingRow } from "../../components/settings/setting-row.slint";
 import { SettingRowStacked } from "../../components/settings/setting-row-stacked.slint";
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 import { ChipGroup } from "../../components/settings/chip-group.slint";
+import { ColorDotGrid } from "../../components/settings/color-dot-grid.slint";
 
 // The OS-facing window shell — titlebar mode, decoration buttons, corner
 // radius, tray. Split from `appearance-section.slint`: chrome is set once and
@@ -44,6 +45,16 @@ export component WindowChromeSection inherits Rectangle {
         ? @tr("Only available with the native title bar.")
         : @tr("Tint the sidebar and now-playing bar toward the content background when the window loses focus.");
     property <string> corner-radius-label: @tr("Window Corner Radius");
+    // Frameless is the whole window under the custom titlebar and only the miniplayer under the
+    // native one, where the OS frame draws its own border round everything else.
+    property <string> window-border-label: @tr("Window Border");
+    property <string> window-border-desc: root.native-titlebar
+        ? @tr("Draw a thin outline around the miniplayer. The full window keeps the border of its system frame.")
+        : @tr("Draw a thin outline around the whole window, the miniplayer included.");
+    property <string> border-color-label: @tr("Window Border Color");
+    property <string> border-color-desc: Settings.window-border-shown
+        ? @tr("System follows the color the operating system draws its own window borders in.")
+        : @tr("Available only while the window border is shown.");
     property <string> tb-style-label: @tr("Decoration Button Style");
     property <string> tb-side-label: @tr("Decoration Button Side");
     property <string> tray-icon-label: @tr("System Tray Icon");
@@ -59,6 +70,8 @@ export component WindowChromeSection inherits Rectangle {
     property <bool> show-match-unfocused: Settings.match-unfocused-supported
         && row-visible(match-unfocused-label, match-unfocused-desc);
     property <bool> show-corner-radius: row-visible(corner-radius-label, os-managed-when-native);
+    property <bool> show-window-border: row-visible(window-border-label, window-border-desc);
+    property <bool> show-border-color: row-visible(border-color-label, border-color-desc);
     property <bool> show-titlebar-button-style: row-visible(tb-style-label, os-managed-when-native);
     property <bool> show-titlebar-button-side: row-visible(tb-side-label, os-managed-when-native);
     property <bool> show-tray-icon: row-visible(tray-icon-label, tray-icon-desc);
@@ -66,12 +79,15 @@ export component WindowChromeSection inherits Rectangle {
 
     out property <bool> has-matches:
         show-native-titlebar || show-match-unfocused || show-corner-radius
+            || show-window-border || show-border-color
             || show-titlebar-button-style || show-titlebar-button-side
             || show-tray-icon || show-close-to-tray;
 
     property <bool> any-above-match: show-native-titlebar;
     property <bool> any-above-corner: any-above-match || show-match-unfocused;
-    property <bool> any-above-tb-style: any-above-corner || show-corner-radius;
+    property <bool> any-above-window-border: any-above-corner || show-corner-radius;
+    property <bool> any-above-border-color: any-above-window-border || show-window-border;
+    property <bool> any-above-tb-style: any-above-border-color || show-border-color;
     property <bool> any-above-tb-side: any-above-tb-style || show-titlebar-button-style;
     property <bool> any-above-tray-icon: any-above-tb-side || show-titlebar-button-side;
     property <bool> any-above-close-to-tray: any-above-tray-icon || show-tray-icon;
@@ -166,6 +182,38 @@ export component WindowChromeSection inherits Rectangle {
                     Settings.corner-radius = preset-to-px(i);
                     Settings.corner-radius-changed(Settings.corner-radius);
                 }
+            }
+        }
+
+        if root.any-above-window-border && root.show-window-border: SectionDivider {}
+
+        // Live in both titlebar modes: the native one still drops its frame for the miniplayer.
+        if root.show-window-border: SettingRow {
+            icon: "crop_square";
+            label: root.window-border-label;
+            description: root.window-border-desc;
+            ToggleSwitch {
+                checked <=> Settings.window-border-shown;
+                toggled(v) => { Settings.window-border-shown-changed(v); }
+            }
+        }
+
+        if root.any-above-border-color && root.show-border-color: SectionDivider {}
+
+        // Swatches are per-(theme, variant), the System one mixed from the palette; Rust computes
+        // the list. The first dot draws as a rounded square so System reads apart from the accents.
+        if root.show-border-color: SettingRowStacked {
+            icon: "brush";
+            label: root.border-color-label;
+            description: root.border-color-desc;
+            disabled: !Settings.window-border-shown;
+            ColorDotGrid {
+                colors: Settings.window-border-colors;
+                labels: Settings.window-border-names;
+                first-is-dynamic: true;
+                first-label: @tr("System");
+                selected-index <=> Settings.window-border-color-idx;
+                selected(i) => { Settings.window-border-color-changed(i); }
             }
         }
 

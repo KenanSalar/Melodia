@@ -12,7 +12,8 @@ use tokio::sync::watch;
 use super::repaint::repaint_from_settings;
 use super::{
     AppearanceHandles, PersistedAccent, accent_picker, apply_and_seed, material_you_sync,
-    read_initial_system_state, seed_theme_names, system_watcher, theme_picker, window_settings,
+    read_initial_system_state, seed_theme_names, system_watcher, theme_picker, window_border,
+    window_settings,
 };
 use melodia_app::library;
 use melodia_app::services;
@@ -68,6 +69,8 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
     );
 
     seed_theme_names(ui);
+    // Ahead of `apply_and_seed`, whose palette apply resolves the border colour seeded here.
+    window_border::seed(ui, &settings.window);
     let initial_last_static = settings
         .theme_preferences
         .get(&settings.theme_id)
@@ -195,6 +198,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
     window_settings::wire_titlebar_button_side_changed(ui, state);
     window_settings::wire_overflow_buttons_changed(ui, state);
     window_settings::wire_close_to_tray_changed(ui, state);
+    window_border::wire(ui, state);
 
     Ok(AppearanceHandles { os_state, kick, repaint_tx })
 }

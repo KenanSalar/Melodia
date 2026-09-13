@@ -208,6 +208,20 @@ export global Settings {
     in-out property <int> titlebar-button-side: 0;
     callback titlebar-button-side-changed(int);
 
+    // The outline a frameless window draws where an OS frame would: under the custom titlebar
+    // always, and for the miniplayer under the native one. The outline reads the switch directly,
+    // so Rust only persists it.
+    in-out property <bool> window-border-shown: true;
+    callback window-border-shown-changed(bool);
+
+    // The System swatch followed by the theme's accents in the live variant's shade, re-seeded on
+    // every palette change, since a variant reshades both. 1:1 with `window-border-names`, whose
+    // first entry is empty: the grid names the System swatch itself, so it stays translated.
+    in property <[brush]> window-border-colors;
+    in property <[string]> window-border-names;
+    in-out property <int> window-border-color-idx;
+    callback window-border-color-changed(int);
+
     // Mirrors `SettingsData.overflow_buttons`, a `Vec<String>` of ids. Discrete bools
     // rather than a `[string]` model so the callback can name which button toggled
     // without diffing arrays; Rust applies the add/remove and persists. The

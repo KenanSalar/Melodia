@@ -1,4 +1,5 @@
-//! Source pins for the native title bar dropping its frame under the miniplayer.
+//! Source pins for the native title bar dropping its frame under the miniplayer, and for the
+//! outline a frameless window draws in the frame's place.
 //!
 //! Neither half can go wrong where CI looks. A shell binding reading the setting instead of
 //! `frameless` is right under the custom titlebar and wrong only for the native miniplayer, and
@@ -75,16 +76,66 @@ fn the_content_rect_gives_up_each_kept_margin_on_its_own_side() {
     assert!(missing.is_empty(), "these margin bindings no longer hold:\n{missing:#?}");
 }
 
-/// The shell, the first-run card, the dialog overlay and the toast stack. One of them left
-/// full-client paints into the transparent margins: a dialog's backdrop as a dark strip around the
-/// miniplayer, a toast hanging off its edge.
+/// The shell, the first-run card, the dialog overlay, the toast stack and the window outline. One
+/// of them left full-client paints into the transparent margins: a dialog's backdrop as a dark
+/// strip around the miniplayer, a toast hanging off its edge, an outline round nothing.
 #[test]
 fn the_shell_and_every_overlay_over_it_sit_inside_the_kept_margins() {
     let shell = tokens(APP_WINDOW);
 
     let inset = shell.matches(CONTENT_RECT).count();
 
-    assert_eq!(inset, 4, "the shell and its three overlays no longer all take the content rect");
+    assert_eq!(inset, 5, "the shell and its four overlays no longer all take the content rect");
+}
+
+/// Gated on the setting instead, the outline draws inside the full window's OS frame under the
+/// native titlebar, and along the screen edge of a maximized window.
+#[test]
+fn the_outline_mounts_only_where_no_frame_draws_one() {
+    let shell = tokens(APP_WINDOW);
+
+    let gated = shell
+        .matches(
+            "if root.frameless && !WindowChrome.is-maximized && Settings.window-border-shown: Rectangle {",
+        )
+        .count();
+
+    assert_eq!(gated, 1, "the window outline no longer mounts under the frameless gate");
+}
+
+/// A logical pixel is two physical ones at 200 % and a blurred one and a half at 150 %, where the
+/// OS draws exactly one at every scale.
+#[test]
+fn the_outline_is_one_physical_pixel() {
+    let shell = tokens(APP_WINDOW);
+
+    let hairlines = shell.matches("border-width: 1phx;").count();
+
+    assert_eq!(hairlines, 1, "the window outline is no longer one physical pixel wide");
+}
+
+/// The shell rounds on `window-radius`, so any other radius leaves the outline's corners cutting
+/// across the shell's or standing off it in the transparent corner.
+#[test]
+fn the_outline_rounds_with_the_shell() {
+    let shell = tokens(APP_WINDOW);
+
+    let radius = binding_value(&shell, "height: root.content-height; border-radius:").trim();
+
+    assert_eq!(radius, "Theme.window-radius", "the outline's corners no longer follow the shell's");
+}
+
+/// Swapped, System paints the Windows accent round every window but the focused one.
+#[test]
+fn the_outline_takes_the_unfocused_colour_only_on_an_unfocused_window() {
+    let shell = tokens(APP_WINDOW);
+
+    let color = binding_value(&shell, "border-color: Theme.window-focused").trim();
+
+    assert_eq!(
+        color, "? WindowChrome.border-color : WindowChrome.border-color-unfocused",
+        "the outline no longer picks its colour off the window's focus"
+    );
 }
 
 /// The margins were the frame's resize borders, and they stay transparent, so they have to stay a

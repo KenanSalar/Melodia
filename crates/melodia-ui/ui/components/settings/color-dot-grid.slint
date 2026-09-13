@@ -71,6 +71,9 @@ export component ColorDotGrid inherits Rectangle {
     in property <[brush]> colors;
     in property <[string]> labels;
     in property <bool> first-is-dynamic;
+    // Names the first swatch in place of `labels[0]`, for a host whose first swatch is a word to
+    // translate rather than a colour name Rust can hand over. Empty leaves `labels` in charge.
+    in property <string> first-label;
     in-out property <int> selected-index;
     // See `ChipGroup.avail-width` — same contract, same default.
     in property <length> avail-width: SettingsPage.row-content-w;
@@ -100,7 +103,8 @@ export component ColorDotGrid inherits Rectangle {
                         swatch: root.colors[i];
                         selected: i == root.selected-index;
                         is-dynamic: root.first-is-dynamic && i == 0;
-                        label: i < root.labels.length ? root.labels[i] : "";
+                        label: i == 0 && root.first-label != "" ? root.first-label
+                            : i < root.labels.length ? root.labels[i] : "";
                         tip-side: r == 0 ? TooltipSide.above : TooltipSide.below;
                         clicked => {
                             root.selected-index = i;

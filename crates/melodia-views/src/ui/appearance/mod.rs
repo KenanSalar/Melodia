@@ -14,6 +14,7 @@ mod repaint;
 mod system_watcher;
 pub mod theme_apply;
 mod theme_picker;
+pub mod window_border;
 mod window_settings;
 
 use std::rc::Rc;
@@ -90,11 +91,13 @@ pub(super) fn read_last_static_accent(state: &AppState, theme_id: &str) -> Optio
         .and_then(|s| s.theme_preferences.get(theme_id).and_then(|p| p.last_static_accent.clone()))
 }
 
-/// Write the palette, then re-solve the two artwork-derived tiers against it.
+/// Write the palette, then re-solve the two artwork-derived tiers and the window border against it.
 ///
 /// **The only place `theme_apply::apply` may be called from.** Both tiers are snapshots taken when a
 /// hero or a track landed, so a palette change reaches neither on its own — visibly, since the
 /// aurora's whole tier set is the theme's own and Now Playing republishes only on the next track.
+/// The border's swatches are shaded per variant and its System colour is mixed from the palette, so
+/// it owes the same.
 pub(super) fn apply_palette(
     ui: &AppWindow,
     theme_id: &str,
@@ -105,6 +108,7 @@ pub(super) fn apply_palette(
     theme_apply::apply(ui, theme_id, variant_id, accent_id, system);
     crate::ui::hero_backdrop::republish_for_palette(ui);
     crate::ui::now_playing::republish_for_palette(ui);
+    window_border::republish_for_palette(ui, theme_id, variant_id, system);
 }
 
 /// Persist the user's pick on tokio's blocking pool — `set_appearance`

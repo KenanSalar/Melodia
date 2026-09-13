@@ -494,6 +494,24 @@ msgstr "Χρωμάτισε την πλευρική γραμμή και τη γρ
 msgid "Window Corner Radius"
 msgstr "Ακτίνα γωνίας παραθύρου"
 
+msgid "Window Border"
+msgstr "Περίγραμμα παραθύρου"
+
+msgid "Draw a thin outline around the miniplayer. The full window keeps the border of its system frame."
+msgstr "Σχεδιάζει ένα λεπτό περίγραμμα γύρω από τον μίνι αναπαραγωγέα. Το πλήρες παράθυρο διατηρεί το περίγραμμα του πλαισίου συστήματος."
+
+msgid "Draw a thin outline around the whole window, the miniplayer included."
+msgstr "Σχεδιάζει ένα λεπτό περίγραμμα γύρω από ολόκληρο το παράθυρο, μαζί με τον μίνι αναπαραγωγέα."
+
+msgid "Window Border Color"
+msgstr "Χρώμα περιγράμματος παραθύρου"
+
+msgid "System follows the color the operating system draws its own window borders in."
+msgstr "Το Σύστημα ακολουθεί το χρώμα με το οποίο το λειτουργικό σύστημα σχεδιάζει τα δικά του περιγράμματα παραθύρων."
+
+msgid "Available only while the window border is shown."
+msgstr "Διαθέσιμο μόνο όταν εμφανίζεται το περίγραμμα παραθύρου."
+
 msgid "Managed by the operating system"
 msgstr "Διαχειρίζεται από το λειτουργικό σύστημα"
 
