@@ -382,7 +382,7 @@ export component AppWindow inherits Window {
         Rectangle {
             width: 100%;
             height: 100%;
-            background: Theme.mantle;
+            background: WindowChrome.mantle;
         }
 
         // The only FocusScope in the tree, wrapping the whole main layout — every key a focused
@@ -404,138 +404,119 @@ export component AppWindow inherits Window {
             // entirely in native mode — a hidden child still claims its stretch.
             if !Theme.use-native-titlebar: CustomTitleBar { }
 
-            // The custom-frame `padding-right` pushes the content panel and its scrollbar off the
-            // window edge; flush, grabbing the edge to resize catches the scrollbar's hover
-            // instead. Native mode leaves the OS frame abutting.
+            // Only the right side needs a gutter: the titlebar, the sidebar and the bar frame the
+            // panel's other three. The native titlebar gets one too rather than a flush edge, for
+            // the reason the panel gives.
             HorizontalLayout {
                 vertical-stretch: 1;
-                padding-right: Theme.use-native-titlebar ? 0px : 4px;
+                padding-right: Theme.pad-xs;
 
                 sidebar := Sidebar {}
 
-                // Rounded content panel — one Rectangle with a real rounded stroke, the
-                // `popup-surface.slint` pattern, so the border follows the corner curve with no
-                // clip-masking. Native mode rounds only the left side and sits flush against the OS
-                // frame: `Rectangle` has no per-side `border-width`, so the trick is a square-clip
-                // wrapper plus a panel oversized 1 px to the right, that border falling outside the
-                // wrapper and being clipped while top/bottom/left match. Custom mode keeps the
-                // panel at wrapper width, so the parent's right margin lands a closed rect.
+                // Rounded content panel: one Rectangle with a real rounded stroke, the
+                // `popup-surface.slint` pattern, so the border follows the corner curve. **One radius
+                // on all four corners, under either titlebar.** The clip insets every corner by the
+                // border without clamping at zero, so a square corner beside rounded ones folds back
+                // on itself and paints the page over the border's last pixel.
                 Rectangle {
                     horizontal-stretch: 1;
+                    background: Theme.base;
+                    border-color: Theme.border;
+                    border-width: 1px;
+                    // The radius the mantle shell rounds with when frameless: concentric arcs under
+                    // the custom titlebar, the host's corners under the native one.
+                    border-radius: Theme.window-radius;
                     clip: true;
 
-                    Rectangle {
+                    // One branch per nav index, `if` rather than `visible: false` so the
+                    // unselected ones leave the layout tree. Every regular branch is also gated
+                    // on `!now-playing-open`, the full-screen view replacing the current one
+                    // inside this panel. Unrouted indices fall through to the placeholder.
+                    if !Nav.now-playing-open && Nav.selected-index == 0: ViewTransition {
+                        width: parent.width;
+                        height: parent.height;
+                        enter-from: Nav.pending-enter-from;
+                        SearchView { width: 100%; height: 100%; }
+                    }
+                    if !Nav.now-playing-open && Nav.selected-index == 1: ViewTransition {
+                        width: parent.width;
+                        height: parent.height;
+                        enter-from: Nav.pending-enter-from;
+                        BrowseView { width: 100%; height: 100%; }
+                    }
+                    // An artist card and the Songs rows' go-to-{album,artist,genre} actions all
+                    // stamp `*Detail.origin-nav-index = 2`, so the back arrow returns here.
+                    if !Nav.now-playing-open && Nav.selected-index == 2: ViewTransition {
+                        width: parent.width;
+                        height: parent.height;
+                        enter-from: Nav.pending-enter-from;
+                        FavoritesView { width: 100%; height: 100%; }
+                    }
+                    // Five tabs over what used to be nav 3–7, each tab's grid ↔ detail swap
+                    // inside the page — so which body is mounted is `MyLibrary.tab-idx`'s.
+                    if !Nav.now-playing-open && Nav.selected-index == 3: ViewTransition {
+                        width: parent.width;
+                        height: parent.height;
+                        enter-from: Nav.pending-enter-from;
+                        MyLibraryView { width: 100%; height: 100%; }
+                    }
+                    if !Nav.now-playing-open && Nav.selected-index == 8: ViewTransition {
+                        width: parent.width;
+                        height: parent.height;
+                        enter-from: Nav.pending-enter-from;
+                        RecentlyPlayedView { width: 100%; height: 100%; }
+                    }
+                    if !Nav.now-playing-open && Nav.selected-index == 9: ViewTransition {
+                        width: parent.width;
+                        height: parent.height;
+                        enter-from: Nav.pending-enter-from;
+                        SettingsView { width: 100%; height: 100%; }
+                    }
+                    // Gated with the sidebar row, so the switch mounts and unmounts the
+                    // section with no restart. The fall-through below keeps its plain
+                    // `!= 10`: the row goes, and `ui::radio::disable` sweeps the nav history
+                    // and folds the live index, so nothing selects 10 with the switch off.
+                    if !Nav.now-playing-open && Settings.radio-enabled
+                        && Nav.selected-index == 10: ViewTransition {
+                        width: parent.width;
+                        height: parent.height;
+                        enter-from: Nav.pending-enter-from;
+                        RadioView { width: 100%; height: 100%; }
+                    }
+                    if !Nav.now-playing-open
+                        && Nav.selected-index != 0
+                        && Nav.selected-index != 1
+                        && Nav.selected-index != 2
+                        && Nav.selected-index != 3
+                        && Nav.selected-index != 8
+                        && Nav.selected-index != 9
+                        && Nav.selected-index != 10: ViewTransition {
+                        width: parent.width;
+                        height: parent.height;
+                        enter-from: Nav.pending-enter-from;
+                        PlaceholderView {
+                            width: 100%;
+                            height: 100%;
+                            title: root.view-title(Nav.selected-index);
+                        }
+                    }
+                    // Hard-coded to `below`: this branch only fires on open, and closing
+                    // is the outgoing state, which `ViewTransition` doesn't animate.
+                    if Nav.now-playing-open: ViewTransition {
+                        width: parent.width;
+                        height: parent.height;
+                        enter-from: NavEnterFrom.below;
+                        NowPlayingView { width: 100%; height: 100%; }
+                    }
+
+                    // Inside the content panel so its backdrop and slide stay off the sidebar
+                    // and the bar, after the view branches so it stacks above them. Always
+                    // rendered so the close animation can play; the panel's clip hides it.
+                    QueueSheet {
                         x: 0;
                         y: 0;
-                        width: Theme.use-native-titlebar
-                            ? parent.width + 1px
-                            : parent.width;
+                        width: parent.width;
                         height: parent.height;
-                        background: Theme.base;
-                        border-color: Theme.border;
-                        border-width: 1px;
-                        // The radius the mantle shell rounds with when frameless: concentric arcs
-                        // under the custom titlebar, the host's corners under the native one.
-                        border-top-left-radius: Theme.window-radius;
-                        border-bottom-left-radius: Theme.window-radius;
-                        border-top-right-radius: Theme.use-native-titlebar
-                            ? 0px
-                            : Theme.window-radius;
-                        border-bottom-right-radius: Theme.use-native-titlebar
-                            ? 0px
-                            : Theme.window-radius;
-                        clip: true;
-
-                        // One branch per nav index, `if` rather than `visible: false` so the
-                        // unselected ones leave the layout tree. Every regular branch is also gated
-                        // on `!now-playing-open`, the full-screen view replacing the current one
-                        // inside this panel. Unrouted indices fall through to the placeholder.
-                        if !Nav.now-playing-open && Nav.selected-index == 0: ViewTransition {
-                            width: parent.width;
-                            height: parent.height;
-                            enter-from: Nav.pending-enter-from;
-                            SearchView { width: 100%; height: 100%; }
-                        }
-                        if !Nav.now-playing-open && Nav.selected-index == 1: ViewTransition {
-                            width: parent.width;
-                            height: parent.height;
-                            enter-from: Nav.pending-enter-from;
-                            BrowseView { width: 100%; height: 100%; }
-                        }
-                        // An artist card and the Songs rows' go-to-{album,artist,genre} actions all
-                        // stamp `*Detail.origin-nav-index = 2`, so the back arrow returns here.
-                        if !Nav.now-playing-open && Nav.selected-index == 2: ViewTransition {
-                            width: parent.width;
-                            height: parent.height;
-                            enter-from: Nav.pending-enter-from;
-                            FavoritesView { width: 100%; height: 100%; }
-                        }
-                        // Five tabs over what used to be nav 3–7, each tab's grid ↔ detail swap
-                        // inside the page — so which body is mounted is `MyLibrary.tab-idx`'s.
-                        if !Nav.now-playing-open && Nav.selected-index == 3: ViewTransition {
-                            width: parent.width;
-                            height: parent.height;
-                            enter-from: Nav.pending-enter-from;
-                            MyLibraryView { width: 100%; height: 100%; }
-                        }
-                        if !Nav.now-playing-open && Nav.selected-index == 8: ViewTransition {
-                            width: parent.width;
-                            height: parent.height;
-                            enter-from: Nav.pending-enter-from;
-                            RecentlyPlayedView { width: 100%; height: 100%; }
-                        }
-                        if !Nav.now-playing-open && Nav.selected-index == 9: ViewTransition {
-                            width: parent.width;
-                            height: parent.height;
-                            enter-from: Nav.pending-enter-from;
-                            SettingsView { width: 100%; height: 100%; }
-                        }
-                        // Gated with the sidebar row, so the switch mounts and unmounts the
-                        // section with no restart. The fall-through below keeps its plain
-                        // `!= 10`: the row goes, and `ui::radio::disable` sweeps the nav history
-                        // and folds the live index, so nothing selects 10 with the switch off.
-                        if !Nav.now-playing-open && Settings.radio-enabled
-                            && Nav.selected-index == 10: ViewTransition {
-                            width: parent.width;
-                            height: parent.height;
-                            enter-from: Nav.pending-enter-from;
-                            RadioView { width: 100%; height: 100%; }
-                        }
-                        if !Nav.now-playing-open
-                            && Nav.selected-index != 0
-                            && Nav.selected-index != 1
-                            && Nav.selected-index != 2
-                            && Nav.selected-index != 3
-                            && Nav.selected-index != 8
-                            && Nav.selected-index != 9
-                            && Nav.selected-index != 10: ViewTransition {
-                            width: parent.width;
-                            height: parent.height;
-                            enter-from: Nav.pending-enter-from;
-                            PlaceholderView {
-                                width: 100%;
-                                height: 100%;
-                                title: root.view-title(Nav.selected-index);
-                            }
-                        }
-                        // Hard-coded to `below`: this branch only fires on open, and closing
-                        // is the outgoing state, which `ViewTransition` doesn't animate.
-                        if Nav.now-playing-open: ViewTransition {
-                            width: parent.width;
-                            height: parent.height;
-                            enter-from: NavEnterFrom.below;
-                            NowPlayingView { width: 100%; height: 100%; }
-                        }
-
-                        // Inside the content panel so its backdrop and slide stay off the sidebar
-                        // and the bar, after the view branches so it stacks above them. Always
-                        // rendered so the close animation can play; the panel's clip hides it.
-                        QueueSheet {
-                            x: 0;
-                            y: 0;
-                            width: parent.width;
-                            height: parent.height;
-                        }
                     }
                 }
             }
@@ -604,7 +585,7 @@ export component AppWindow inherits Window {
         Rectangle {
             width: 100%;
             height: 100%;
-            background: Theme.mantle.transparentize(mini-switch.fade-opacity);
+            background: WindowChrome.mantle.transparentize(mini-switch.fade-opacity);
             visible: mini-switch.fade-opacity < 1.0;
         }
         }

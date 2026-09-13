@@ -488,6 +488,20 @@ this file is what builds, looks right, and is wrong.
   bars at their resting floor before they gave their radius up entirely; a fixed-size pill is fine
   with the usual `self.height / 2`.
 
+- **A rounded `clip: true` with a square corner beside rounded ones paints its children over the
+  border at the square corner.** A clip with any radius renders its children into a layer and
+  fills it through `clip_path_for_rect_alike_item` (`i-slint-renderer-femtovg`'s
+  `itemrenderer.rs`), which subtracts `border_width * KAPPA90` from **every** radius, and
+  `BorderRadius`'s `SubAssign` doesn't clamp. The zero corner goes negative, `rounded_rect_varying`
+  skips its plain-rect path unless all four radii are under 0.1, and the negative corner makes the
+  path overshoot and double back, landing the page on the border's last pixel. Symptom: a border
+  that stops one pixel short of the square corner, with the content showing through, which reads as
+  a faint rounding and only against a contrasting child (a hero, the Now Playing backdrop). Bit the
+  content panel under the native titlebar, rounded on the left and oversized past a square wrapper
+  to meet the OS frame flush on the right. **Safe shapes are one radius on every corner, or zero on
+  all four** (a scissor with no layer). Where an edge has to look square, give the element a gutter
+  rather than clipping a square corner; `app-window.slint`'s panel is the worked example.
+
 - **An explicit `background: transparent` costs a discarded path per element per frame.**
   `resolve_native_classes` picks an element's native class from *which properties have bindings*,
   regardless of value, so binding `background` at all promotes it out of `Empty` (never visited by

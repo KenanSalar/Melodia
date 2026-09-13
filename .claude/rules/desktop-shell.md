@@ -125,12 +125,14 @@ the OS owns has to be attached late or not at all on at least one platform.
   and Windows says nothing when that switch moves, so the winit `Focused` arm asks again on a
   focus gain.
 
-- **Match Unfocused Window Background (KDE-only)** — tints sidebar + NP-bar to the OS unfocused
+- **Match Unfocused Window Background (KDE-only)** tints the full UI's chrome to the OS unfocused
   titlebar. `LayoutFlags.match_unfocused_to_system_bg`, serde default `is_kde_desktop()`; hidden
-  off-KDE, disabled in custom-titlebar. `Theme.window-focused` mirrors winit `Focused(bool)` raw;
-  sites gate on all three:
-  `(Settings.match-unfocused-bg && Theme.use-native-titlebar && !Theme.window-focused)`
-  `? mantle-unfocused : mantle`. No `animate` — desyncs the OS swap.
+  off-KDE, disabled in custom-titlebar. `Theme.window-focused` mirrors winit `Focused(bool)` raw.
+  **The gate is one brush, `WindowChrome.mantle`, which argues its three terms and the missing
+  `animate`**, and every surface the tint covers reads it: the sidebar, the now-playing bar, the
+  shell's ground showing through the gutter beside the content panel, and the swap's crossfade,
+  which has to paint that ground's brush. A surface spelling the ternary again, or `Theme.mantle`
+  where the chrome shows, leaves a strip that stays dark on an unfocused window.
 
 - **Always-on-top (Linux)** — D-Bus to KWin or GNOME (`window-calls` ext.); bare GNOME falls back
   to native decorations.

@@ -1,3 +1,6 @@
+import { Theme } from "../theme.slint";
+import { Settings } from "../settings.slint";
+
 // Window-shell plumbing: the chrome the OS frame doesn't draw, the responsive miniplayer swap, and
 // the two globals keeping pointer state coherent when a view switch unmounts what was under it.
 
@@ -32,6 +35,14 @@ export global WindowChrome {
     // the two are the same.
     in property <brush> border-color;
     in property <brush> border-color-unfocused;
+
+    // The mantle behind the full UI's chrome: the sidebar, the now-playing bar and the gutter
+    // beside the content panel, so they swap together. The KDE-only unfocused tint mirrors the fade
+    // an OS-drawn titlebar does, which is why it also gates on `use-native-titlebar`: under our own
+    // chrome there is nothing to match, and the toggle is kept across a titlebar disable so it
+    // survives a re-enable. No `animate` on any reader, since the OS swaps its colour instantly.
+    out property <brush> mantle: (Settings.match-unfocused-bg && Theme.use-native-titlebar
+        && !Theme.window-focused) ? Theme.mantle-unfocused : Theme.mantle;
 
     // `supported` gates the pin button so bare-Wayland and GNOME-without-window-calls users don't
     // see a dead control. `active` is written optimistically on click; Rust reverts it on failure.

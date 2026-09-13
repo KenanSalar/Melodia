@@ -19,12 +19,13 @@ const APP_WINDOW: &str = include_str!("../../../../melodia-ui/ui/app-window.slin
 
 /// The crossfade overlay's whole declaration, as tokens.
 const CROSSFADE_OVERLAY: &str = "Rectangle { width: 100%; height: 100%; \
-     background: Theme.mantle.transparentize(mini-switch.fade-opacity); \
+     background: WindowChrome.mantle.transparentize(mini-switch.fade-opacity); \
      visible: mini-switch.fade-opacity < 1.0; }";
 
 /// The overlay's brush alone, which is how the paint-order pin finds it without also failing
 /// whenever the rest of the declaration moves.
-const CROSSFADE_BRUSH: &str = "background: Theme.mantle.transparentize(mini-switch.fade-opacity);";
+const CROSSFADE_BRUSH: &str =
+    "background: WindowChrome.mantle.transparentize(mini-switch.fade-opacity);";
 
 /// Comments stripped and whitespace collapsed, so a pin reads tokens rather than one layout.
 fn tokens(src: &str) -> String {
