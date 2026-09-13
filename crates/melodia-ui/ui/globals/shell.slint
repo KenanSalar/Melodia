@@ -13,6 +13,7 @@ export global WindowChrome {
 
     // What the OS frame adds to the client area on each axis. Rust writes it only while a frame is
     // up, so the reading from before the miniplayer dropped the frame survives for its exit edge.
+    // The window's minimum reads it too, while the frame stands.
     in property <length> frame-allowance-w;
     in property <length> frame-allowance-h;
 

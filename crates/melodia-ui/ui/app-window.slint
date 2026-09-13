@@ -78,9 +78,14 @@ export component AppWindow inherits Window {
     // `set_size` after `AppWindow::new()`, setting winit's `has_explicit_size` — the only thing
     // stopping Slint snapping to the content-preferred size on first show, which a preferred size
     // here would be the target of. The floor is the miniplayer's smallest sensible footprint, so
-    // the user can drag straight into mini mode with no runtime winit constraint mutation.
-    min-width: 350px;
-    min-height: 90px;
+    // the user can drag straight into mini mode.
+    //
+    // **Under an OS frame it gives up the frame's size.** Win32 reads the minimum once, at the start
+    // of a resize drag, and adds the frame to it; the miniplayer drops that frame mid-drag, so a
+    // drag begun in the full UI held it that much above the floor until the button came up. Framed,
+    // the window only sits under the true floor for the swap's fade.
+    min-width: 350px - (root.frameless ? 0px : WindowChrome.frame-allowance-w);
+    min-height: 90px - (root.frameless ? 0px : WindowChrome.frame-allowance-h);
     // The custom titlebar never has an OS frame, and the native one drops it for the miniplayer,
     // which carries its own drag region. On `render-active`, so the frame changes on the tick the
     // branches swap, with the outgoing one faded out and the crossfade still opaque. Any earlier, the

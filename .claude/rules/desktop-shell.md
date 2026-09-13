@@ -54,6 +54,9 @@ the OS owns has to be attached late or not at all on at least one platform.
   (`window_chrome::geometry::frame_allowance`), `WindowChrome.frame-allowance-*` holds the reading
   across the frameless span, and `MiniPlayerSwitch` widens its exit edge by it. Drop any link and a
   window parked just inside the threshold bounces in and out, which no Linux runner can show. The
+  window's own minimum gives the reading up while a frame stands: Win32 fixes a resize drag's
+  minimum when the drag starts, framed, and a drag from the full UI otherwise can't take the
+  frameless miniplayer down to its floor until the button comes up. The
   frame changes on the swap tick in **both** directions, under the crossfade. Returned at the
   decision to leave instead, it came back over a miniplayer still on screen, and Win32 stepped the
   visible window in by its invisible resize borders before the full UI appeared.

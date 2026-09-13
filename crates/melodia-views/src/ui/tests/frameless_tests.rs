@@ -68,6 +68,26 @@ fn the_frame_drops_with_the_mounted_miniplayer_not_the_threshold() {
     );
 }
 
+/// Win32 takes a resize drag's minimum once, when the drag starts, as the window's minimum plus
+/// whatever frame stands then. A drag from the full UI starts framed and ends frameless, so a
+/// minimum that keeps the frame's share holds the miniplayer that far above its floor until the
+/// button is released and a second drag asks again.
+#[test]
+fn the_framed_window_minimum_gives_up_the_frame_the_miniplayer_drops() {
+    const BINDINGS: [&str; 2] = [
+        "min-width: 350px - (root.frameless ? 0px : WindowChrome.frame-allowance-w);",
+        "min-height: 90px - (root.frameless ? 0px : WindowChrome.frame-allowance-h);",
+    ];
+    let shell = tokens(APP_WINDOW);
+
+    let missing: Vec<&str> = BINDINGS.into_iter().filter(|b| !shell.contains(b)).collect();
+
+    assert!(
+        missing.is_empty(),
+        "the window minimum no longer gives up the frame while one stands:\n{missing:#?}"
+    );
+}
+
 /// Dropping the frame grows the client area by the frame, so an exit edge without the allowance
 /// sits inside the size the miniplayer has just grown to.
 #[test]
