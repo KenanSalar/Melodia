@@ -31,8 +31,8 @@ use slint::{ComponentHandle, LogicalPosition, LogicalSize};
 use melodia_app::services::settings::SettingsData;
 use melodia_ui::AppWindow;
 
-/// Lower bound for a restored window size, mirroring `app-window.slint`'s own — a guard
-/// against a corrupt `settings.json` producing a 0×0 window.
+/// Lower bound for a restored window size, a guard against a corrupt `settings.json`
+/// producing a 0×0 window.
 const MIN_RESTORE_WIDTH: f64 = 640.0;
 const MIN_RESTORE_HEIGHT: f64 = 420.0;
 
@@ -148,13 +148,15 @@ pub fn record(w: &WinitWindow) {
 
 /// Returns what the OS frame adds to the client area, in logical pixels.
 ///
-/// `None` while undecorated, there being no frame to measure, and while maximized, where a WM may
-/// strip the frame without the window ever learning it lost one.
+/// `None` while undecorated, there being no frame to measure; while maximized, where a WM may
+/// strip the frame without the window ever learning it lost one; and over an empty client, which
+/// is how Win32 reports a minimized window, whose outer rect is then the minimized one.
 pub fn frame_allowance(w: &WinitWindow) -> Option<WinitLogicalSize<f32>> {
-    if !w.is_decorated() || w.is_maximized() {
+    let inner = w.inner_size();
+    if !w.is_decorated() || w.is_maximized() || inner.width == 0 || inner.height == 0 {
         return None;
     }
-    Some(allowance_between(w.outer_size(), w.inner_size(), w.scale_factor()))
+    Some(allowance_between(w.outer_size(), inner, w.scale_factor()))
 }
 
 fn allowance_between(

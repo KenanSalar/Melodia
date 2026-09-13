@@ -42,8 +42,8 @@ the OS owns has to be attached late or not at all on at least one platform.
 
 - **The Native Title Bar toggle restarts** via `Dialog` `"restart-titlebar"` →
   `window_chrome::request_respawn_and_quit`; hydrate `Theme.use-native-titlebar` *before*
-  `app.run()` so the window maps with the right frame. The frame itself is not what the restart
-  waits on: Slint applies `no-frame` live.
+  `app.run()` so the window maps with the right frame. Slint applies `no-frame` live, so the frame
+  is not what the restart is for; `window_chrome`'s module doc says what is.
 
 - **Under the native title bar the miniplayer drops the frame**, through `app-window.slint`'s
   `frameless`, and that couples three trees. On Win32 and macOS the client area grows into the
@@ -75,10 +75,10 @@ the OS owns has to be attached late or not at all on at least one platform.
   at a fourth site; outside `window_chrome` you can't, both statics being private, so the rule only
   binds *inside* that module.
 
-- **Transparent ARGB window for the rounded outline.** winit `with_transparent(true)`;
-  `Window.background: Colors.transparent`; rounded mantle `Rectangle` (`clip: true`,
-  `border-radius: Theme.shell-radius`) the only direct child. Opaque + square when `is-maximized`
-  or `use-native-titlebar`.
+- **Transparent ARGB window for the rounded outline.** Slint's winit backend creates every window
+  `with_transparent(true)`; `Window.background: Colors.transparent`; rounded mantle `Rectangle`
+  (`clip: true`, `border-radius: Theme.shell-radius`) the only direct child. Opaque + square when
+  `is-maximized` or while an OS frame stands (`!frameless`).
 
 - **Match Unfocused Window Background (KDE-only)** — tints sidebar + NP-bar to the OS unfocused
   titlebar. `LayoutFlags.match_unfocused_to_system_bg`, serde default `is_kde_desktop()`; hidden

@@ -18,8 +18,10 @@
 //! **A restart persists, then hands off to [`request_respawn_and_quit`]**, which arms
 //! [`RESPAWN_AFTER_EXIT`] and quits the loop so `main()` falls through to shutdown before
 //! the new process takes over. One function rather than three, since it owns the refusal.
-//! The native titlebar toggle still takes this path, but the frame is not what it waits on:
-//! Slint applies `no-frame` live, and the miniplayer drops the native frame through it.
+//! The native titlebar toggle takes this path because boot is the only writer of
+//! `Theme.use-native-titlebar`, and of `Settings.match-unfocused-bg`, which a KDE enable turns
+//! on alongside. The frame itself needs no restart: Slint applies `no-frame` live, which is how
+//! the miniplayer drops the native one.
 
 mod controls;
 mod drop_coalescer;
