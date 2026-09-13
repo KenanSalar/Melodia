@@ -142,7 +142,7 @@ Source0:        %{name}-%{version}.tar.gz
 ExclusiveArch:  $ARCH
 
 # Auto-detected runtime deps via rpmbuild's find-requires (fontconfig,
-# freetype, wayland, libxkbcommon, alsa-lib, libdbus, libGL, ...) cover
+# freetype, wayland, libxkbcommon, alsa-lib, libGL, ...) cover
 # everything the binary loads via dlopen / NEEDED entries — no manual
 # Requires: list needed.
 

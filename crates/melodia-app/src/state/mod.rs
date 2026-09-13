@@ -1,6 +1,5 @@
 use std::sync::{Arc, OnceLock};
 
-use souvlaki::MediaControlEvent;
 use tokio::runtime::Handle;
 use tokio::sync::{mpsc, watch};
 use tokio_util::sync::CancellationToken;
@@ -20,7 +19,7 @@ use melodia_core::config::Paths;
 use melodia_core::error::{AppError, AppResult};
 use melodia_core::utils::self_writes::SelfWrites;
 use melodia_engine::player::engine::backend::PlaybackEngine;
-use melodia_engine::player::engine::event_sink::{MediaControlsSync, PlayerSinks};
+use melodia_engine::player::engine::event_sink::{MediaControlsSync, PlayerEvent, PlayerSinks};
 use melodia_engine::player::engine::state::{
     PlayerStateHandle, PlayerViewModelLight, PositionTick, QueueViewModel, lock_state,
 };
@@ -173,7 +172,7 @@ pub struct AppState {
 /// Holding them on `AppState` would force a `Mutex<Option<…>>` shape nothing
 /// needs; returning them keeps the struct stable.
 pub struct StartupChannels {
-    pub media_control_rx: Option<mpsc::Receiver<MediaControlEvent>>,
+    pub media_control_rx: Option<mpsc::Receiver<PlayerEvent>>,
     pub file_event_rx: mpsc::Receiver<FileEvent>,
 }
 

@@ -57,21 +57,6 @@ const _: () = assert!(
     "the save cadence must span at least one poll, or its modulus is zero"
 );
 
-/// How often the OS media controls are handed a position. Their widgets advance on their own
-/// between updates, so this only has to keep the two from visibly diverging.
-#[cfg(any(target_os = "windows", target_os = "macos"))]
-const MEDIA_POSITION_INTERVAL_MS: u64 = 5_000;
-
-/// Polls spanning [`MEDIA_POSITION_INTERVAL_MS`], for [`SAVE_EVERY_N_TICKS`]' reason.
-#[cfg(any(target_os = "windows", target_os = "macos"))]
-const MEDIA_POSITION_EVERY_N_TICKS: u64 = MEDIA_POSITION_INTERVAL_MS / POLL_INTERVAL_MS;
-
-#[cfg(any(target_os = "windows", target_os = "macos"))]
-const _: () = assert!(
-    MEDIA_POSITION_EVERY_N_TICKS > 0,
-    "the media-controls cadence must span at least one poll, or its modulus is zero"
-);
-
 /// Rate limiter on the position publish, admitting one tick per whole second.
 ///
 /// The monitor wakes at [`POLL_INTERVAL_MS`] so the crossfade and gapless windows stay tight,
@@ -309,9 +294,6 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
     tracker.spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_millis(POLL_INTERVAL_MS));
 
-        #[cfg(any(target_os = "windows", target_os = "macos"))]
-        let mut media_tick_counter: u64 = 0;
-
         let mut save_tick_counter: u64 = 0;
         let mut publish = SecondGate::default();
 
@@ -338,10 +320,6 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                 == PlaybackStatus::Playing as u8;
 
             if !is_playing {
-                #[cfg(any(target_os = "windows", target_os = "macos"))]
-                {
-                    media_tick_counter = 0;
-                }
                 continue;
             }
 
@@ -414,6 +392,9 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                     if publish.admits(tick.position_ms) {
                         let _ = position_tx.send(Some(tick.clone()));
                     }
+                    if let Some(mc) = sinks.media_controls.as_ref() {
+                        mc.update_position(tick.position_ms);
+                    }
 
                     if let Some(stream) = engine.stream_shared() {
                         reconcile_live_stream(
@@ -436,17 +417,6 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                         });
                     } else if let Some((path, rg)) = late_preload {
                         engine.preload_gapless(Some(&path), rg);
-                    }
-
-                    #[cfg(any(target_os = "windows", target_os = "macos"))]
-                    {
-                        media_tick_counter =
-                            (media_tick_counter + 1) % MEDIA_POSITION_EVERY_N_TICKS;
-                        if media_tick_counter == 0
-                            && let Some(mc) = sinks.media_controls.as_ref()
-                        {
-                            mc.update_position(tick.position_ms);
-                        }
                     }
                 }
             }

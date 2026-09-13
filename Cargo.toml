@@ -225,7 +225,6 @@ minisign-verify = "0.2.5"
 semver = "1.0.28"
 
 # OS integrations
-souvlaki = "0.8.3"
 rfd = "0.17.2"
 # Hands a path to the OS default handler, for "Open Containing Folder".
 open = "5.4.0"
@@ -249,7 +248,8 @@ glob = "0.3.4"
 # Linux
 # Do NOT enable the `tokio` feature: cargo unifies it onto Slint's accesskit_unix →
 # atspi → zbus chain, whose a11y thread has no tokio context and panics at startup.
-# Always-on-top uses `zbus::blocking::*` inside `spawn_blocking`.
+# Always-on-top uses `zbus::blocking::*` inside `spawn_blocking`; MPRIS serves on a
+# blocking connection and signals from a thread of its own.
 zbus = "5.18.0"
 # Linux tray (StatusNotifierItem, no GTK); Windows/macOS take `tray-icon` below.
 # Defaults off: ksni's default `tokio` feature turns on `zbus/tokio` and walks into
@@ -284,6 +284,9 @@ winresource = "0.1.31"
 # Defaults off to drop `gtk` and `libxdo`, the Linux paths `ksni` covers. The icon is
 # created on the main thread, its menu events pumped from Slint's winit loop.
 tray-icon = { version = "0.24.2", default-features = false }
+# SMTC and `MediaPlayer`. Linux serves MPRIS over `zbus` instead: souvlaki's `Position`
+# is whatever it was last pushed, and each push re-announces the playback status.
+souvlaki = "0.8.3"
 
 [workspace.lints.rust]
 unused = { level = "warn", priority = -1 }

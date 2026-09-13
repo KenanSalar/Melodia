@@ -31,9 +31,14 @@ parking_lot.workspace = true
 lru.workspace = true
 # Last.fm mandates MD5 for `api_sig`; nothing security-sensitive.
 md5.workspace = true
-souvlaki.workspace = true
 thiserror.workspace = true
 log.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus.workspace = true
+
+[target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
+souvlaki.workspace = true
 
 [dev-dependencies]
 # The submitter's drain is driven against `melodia_testkit::http::TestServer`, which is what lets

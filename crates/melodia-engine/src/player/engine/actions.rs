@@ -65,6 +65,9 @@ pub fn execute_actions<B: PlayerBackend>(
             PlayerAction::Stop { fade_ms } => engine.stop_with_fade(fade_ms),
             PlayerAction::Seek { position_ms, file_path, replaygain } => {
                 engine.seek(&file_path, position_ms, replaygain);
+                if let Some(mc) = sinks.media_controls.as_ref() {
+                    mc.seeked(position_ms);
+                }
             }
             PlayerAction::SetVolume(v) => engine.set_volume(v),
             PlayerAction::SetSpeed(s) => engine.set_speed(s),

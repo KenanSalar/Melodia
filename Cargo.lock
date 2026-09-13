@@ -3710,7 +3710,6 @@ dependencies = [
  "serde",
  "serde_json",
  "slint",
- "souvlaki",
  "sqlx",
  "tempfile",
  "thiserror 2.0.19",
@@ -3818,6 +3817,7 @@ dependencies = [
  "thiserror 2.0.19",
  "tokio",
  "tokio-util",
+ "zbus",
 ]
 
 [[package]]

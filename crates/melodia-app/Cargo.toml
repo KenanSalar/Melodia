@@ -54,8 +54,6 @@ serde_json.workspace = true
 chrono.workspace = true
 dirs.workspace = true
 reqwest.workspace = true
-# `AppState` carries the media-key event channel, whose item type is souvlaki's.
-souvlaki.workspace = true
 log.workspace = true
 thiserror.workspace = true
 open.workspace = true
