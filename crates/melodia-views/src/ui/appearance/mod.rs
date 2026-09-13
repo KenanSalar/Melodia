@@ -111,19 +111,14 @@ pub(super) fn apply_palette(
     window_border::republish_for_palette(ui, theme_id, variant_id, system);
 }
 
-/// Persist the user's pick on tokio's blocking pool — `set_appearance`
-/// is sync `std::fs` I/O and must not block the Slint event loop. Any
-/// write failure (disk full, permissions) surfaces as a `log::warn!`
-/// instead of being silently dropped.
+/// Persist the user's pick without waking the Material You coordinator; [`persist_and_kick`] is
+/// the one that does.
 pub(super) fn persist(state: &AppState, theme_id: &str, variant_id: &str, accent_id: &str) {
-    let s = state.clone();
     let theme_id = theme_id.to_owned();
     let variant_id = variant_id.to_owned();
     let accent_id = accent_id.to_owned();
-    state.runtime.spawn_blocking(move || {
-        if let Err(e) = library::settings::set_appearance(&s, theme_id, variant_id, accent_id) {
-            log::warn!("persist appearance: {e}");
-        }
+    state.persist_blocking("persist appearance", move |s| {
+        library::settings::set_appearance(s, theme_id, variant_id, accent_id)
     });
 }
 

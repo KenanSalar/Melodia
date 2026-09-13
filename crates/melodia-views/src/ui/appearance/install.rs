@@ -178,13 +178,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
         kick.clone(),
         persisted_accent.clone(),
     );
-    accent_picker::wire_accent_changed(
-        ui,
-        state,
-        os_state.clone(),
-        kick.clone(),
-        persisted_accent.clone(),
-    );
+    accent_picker::wire_accent_changed(ui, state, os_state.clone(), persisted_accent.clone());
     material_you_sync::wire_color_style_changed(
         ui,
         state,

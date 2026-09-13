@@ -108,15 +108,11 @@ export global Theme {
     // The rounded mantle shell — the visible window outline in custom-frame windowed mode.
     // Deliberately decoupled from `radius-md` so component radii stay put when it moves.
     in-out property <length> shell-radius: 6px;
-    // Concentric-ring helper: the border rectangle takes `shell-radius` and the base rectangle
-    // this, keeping the 1 px ring even around each corner.
-    out property <length> shell-radius-inner: max(0px, shell-radius - 1px);
     // The host desktop's corner radius, seeded once from `get_os_corner_radius()` so native mode
     // matches it regardless of the persisted pick — that pick governs custom mode, which the user
     // opted into. Hence the greyed-out "Managed by the operating system" row in Settings. Read
     // through `window-radius`.
     in-out property <length> native-content-radius: 6px;
-    out property <length> native-content-radius-inner: max(0px, native-content-radius - 1px);
 
     // The floor of `AppWindow`'s `resize-band`, the depth of a frameless window's resize grab along
     // each edge. `ResizeRing` sizes its corners off the band it is handed, never off this directly.

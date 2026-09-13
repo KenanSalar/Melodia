@@ -74,27 +74,32 @@ pub(super) fn republish_for_palette(
     paint(ui, border_colors(picked, os_accent, neutral));
 }
 
-/// Repaint a System outline against the OS's current answer.
+/// Repaint the System swatch, and a System outline, against the OS's current answer.
 ///
 /// Windows lets the accent go on or off window borders with Melodia running and tells a client
 /// nothing, so a focus gain, the first thing after a trip to the Settings app, asks again.
 #[cfg(target_os = "windows")]
 pub fn refresh_system_color(ui: &AppWindow) {
-    if ui.global::<Settings>().get_window_border_color_idx() != 0 {
-        return;
+    let g = ui.global::<Settings>();
+    let system = system_border(os_accent(), palette_neutral(ui));
+
+    let swatches = g.get_window_border_colors();
+    let swatch = brush(system.0);
+    if swatches.row_data(0).is_some_and(|seated| seated != swatch) {
+        swatches.set_row_data(0, swatch);
     }
-    paint(ui, border_colors(None, os_accent(), palette_neutral(ui)));
+
+    if g.get_window_border_color_idx() == 0 {
+        paint(ui, system);
+    }
 }
 
 pub(super) fn wire(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
     ui.global::<Settings>().on_window_border_shown_changed(move |shown| {
         let border = if shown { WindowBorder::Shown } else { WindowBorder::Hidden };
-        let s_clone = s.clone();
-        s.runtime.spawn_blocking(move || {
-            if let Err(e) = library::window::set_window_border(&s_clone, border) {
-                log::warn!("persist window_border: {e}");
-            }
+        s.persist_blocking("persist window_border", move |state| {
+            library::window::set_window_border(state, border)
         });
     });
 
@@ -117,12 +122,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState) {
 
         // Ahead of the write, so a palette change landing before it commits re-resolves this pick.
         COLOR_ID.with_borrow_mut(|id| color_id.clone_into(id));
-        let s_clone = s.clone();
-        s.runtime.spawn_blocking(move || {
-            if let Err(e) = library::window::set_window_border_color(&s_clone, color_id.to_owned())
-            {
-                log::warn!("persist window_border_color: {e}");
-            }
+        s.persist_blocking("persist window_border_color", move |state| {
+            library::window::set_window_border_color(state, color_id.to_owned())
         });
     });
 }
