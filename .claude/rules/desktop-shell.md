@@ -101,13 +101,22 @@ the OS owns has to be attached late or not at all on at least one platform.
   binds *inside* that module.
 
 - **Transparent ARGB window for the rounded outline.** Slint's winit backend creates every window
-  `with_transparent(true)`; `Window.background: Colors.transparent`; rounded mantle `Rectangle`
-  (`clip: true`, `border-radius: Theme.window-radius`) the only direct child. Opaque + square when
+  `with_transparent(true)`; `Window.background: Colors.transparent`; the shell, a rounded
+  `Rectangle` (`clip: true`, `border-radius: Theme.window-radius`), holds everything the window
+  paints, with only `ResizeRing` beside it, which paints nothing. Opaque + square when
   `is-maximized` or while an OS frame stands (`!frameless`). `window-radius` is the user's pick
   under the custom titlebar and the host's (`native-content-radius`) under the native one, so the
   native miniplayer keeps the frame's corners when it drops the frame.
 
-- **A frameless window draws its own 1 px outline**, the edge every OS frame has, as the root's
+- **The shell's clip is the only antialiased pass the corner may get.** FemtoVG antialiases every
+  rounded fill and stroke separately and their coverages stack, so a second rounded shape on the
+  silhouette paints the arc visibly harder than the OS frame's at the same radius. That is why the
+  shell has no `background` of its own (its mantle is a square child), why the three overlays
+  mount inside it (their scrims otherwise square off the corners over the desktop), and why the
+  outline straddles the edge. `app-window.slint` argues each at its mount; a new element reaching
+  the window's edge goes inside the shell too.
+
+- **A frameless window draws its own 1 px outline**, the edge every OS frame has, as the shell's
   last child under the same `frameless && !is-maximized` gate, so it outlines the whole window
   under the custom titlebar and only the miniplayer under the native one. The Settings rows stay
   live in both modes for that reason. `ui::appearance::window_border` paints
