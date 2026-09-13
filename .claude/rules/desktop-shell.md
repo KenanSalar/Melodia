@@ -52,11 +52,11 @@ the OS owns has to be attached late or not at all on at least one platform.
   `frameless`, and that couples three trees. On Win32 and macOS the client area grows into the
   frame it lost, so the winit `Resized` arm measures the frame while one stands
   (`window_chrome::geometry::frame_allowance`), `WindowChrome.frame-allowance-*` holds the reading
-  across the frameless span, and `MiniPlayerSwitch` widens its exit edge by it while its
-  `frame-dropped` latch says the frame is down. Drop any link and a window parked just inside the
-  threshold bounces in and out, which no Linux runner can show. The latch drops with the swap into
-  the miniplayer and returns at the decision to leave, so the frame is back before the full UI
-  mounts; returned with the swap, it resizes the page that mount just built.
+  across the frameless span, and `MiniPlayerSwitch` widens its exit edge by it. Drop any link and a
+  window parked just inside the threshold bounces in and out, which no Linux runner can show. The
+  frame changes on the swap tick in **both** directions, under the crossfade. Returned at the
+  decision to leave instead, it came back over a miniplayer still on screen, and Win32 stepped the
+  visible window in by its invisible resize borders before the full UI appeared.
 
 - **`"restart-backdrop"` is the third of these and the one whose deadline is earlier than
   `app.run()`** — `BackdropFlags.aurora_backdrop` decides whether the two artwork tiers hold a

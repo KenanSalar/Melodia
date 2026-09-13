@@ -82,9 +82,11 @@ export component AppWindow inherits Window {
     min-width: 350px;
     min-height: 90px;
     // The custom titlebar never has an OS frame, and the native one drops it for the miniplayer,
-    // which carries its own drag region. `frame-dropped` rather than `active`, so the frame never
-    // leaves while the full UI is still fading out; the switch argues why it returns early.
-    property <bool> frameless: !Theme.use-native-titlebar || mini-switch.frame-dropped;
+    // which carries its own drag region. On `render-active`, so the frame changes on the tick the
+    // branches swap, with the outgoing one faded out and the crossfade still opaque. Any earlier, the
+    // full UI fades out with no titlebar at all or the miniplayer fades out under the OS one, and on
+    // Win32 the visible window steps in or out by the invisible resize borders while it's on screen.
+    property <bool> frameless: !Theme.use-native-titlebar || mini-switch.render-active;
 
     // Frameless + windowed gets a transparent ARGB surface, so the compositor blends the rounded
     // mantle shell with the desktop and the alpha=0 corners read as "not our window". A native frame
