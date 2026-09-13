@@ -14,7 +14,7 @@ use melodia_platform::services::platform;
 use melodia_ui::AppWindow;
 use melodia_views::ui;
 
-/// Spawn every always-running background task and the souvlaki event
+/// Spawn every always-running background task and the OS media-control event
 /// receiver. Consumes `channels`.
 pub fn spawn_background_tasks(
     spawner: &tasks::TaskSpawner,
@@ -54,8 +54,8 @@ pub fn spawn_background_tasks(
     tasks::discord_presence::spawn(spawner, state);
     state.discord.start_if_enabled();
 
-    // souvlaki events drive the same `library::*` paths the UI does, keeping
-    // MPRIS / SMTC in lockstep with it.
+    // OS media-control events drive the same `library::*` paths the UI does,
+    // keeping MPRIS / SMTC in lockstep with it.
     if let Some(rx) = channels.media_control_rx.take() {
         let sink: Arc<dyn EventSink> =
             Arc::new(ui::shell::event_sink::SlintEventSink { state: state.clone() });

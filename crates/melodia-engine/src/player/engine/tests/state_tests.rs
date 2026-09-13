@@ -496,6 +496,20 @@ fn test_to_view_model_light_mirrors_full() {
     assert!((full.progress_percent - light.progress_percent).abs() < f64::EPSILON);
 }
 
+/// The OS media panel reads both off the light model. Neither is the resting value, so a builder
+/// that filled either with a default would fail here.
+#[test]
+fn the_light_view_model_carries_the_queues_shuffle_and_repeat() {
+    let mut state = PlayerState::default();
+    state.queue.shuffle_enabled = true;
+    state.queue.repeat_mode = RepeatMode::One;
+
+    let light = state.to_view_model_light();
+
+    assert!(light.shuffle_enabled, "shuffle");
+    assert_eq!(light.repeat_mode, RepeatMode::One, "repeat");
+}
+
 // ── QueueViewModel tests ──
 
 #[test]

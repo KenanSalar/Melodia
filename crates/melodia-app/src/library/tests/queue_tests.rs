@@ -111,9 +111,9 @@ fn shuffle_unshuffle_roundtrip() {
     assert_eq!(restored, original_ids);
 }
 
-// --- The three transport doors ---------------------------------------------
+// --- The transport doors ---------------------------------------------------
 //
-// Driven through the workers under `queue_{set_shuffle,toggle_shuffle,cycle_repeat}` rather than
+// Driven through the workers under `queue_{set_shuffle,toggle_shuffle,cycle_repeat,set_repeat}` rather than
 // by rebuilding their bodies over a bare `PlayerState`, which is what the tests these replaced
 // did: none of the three ever called the door it was named after, so an instrumented run reported
 // all three doors never executed while all three tests passed. What the doors add over the queue
@@ -204,6 +204,36 @@ fn a_repeat_press_answers_with_the_mode_it_landed_on() {
 
     assert_eq!(announced, RepeatMode::All, "one press off `Off` lands on `All`");
     assert_eq!(announced, lock_state(&player_state).queue.repeat_mode);
+}
+
+/// The answer to `set_repeat` from `start`, over a queue already holding that mode.
+fn repeat_set_from(start: RepeatMode, requested: RepeatMode) -> RepeatMode {
+    let (player_state, sinks) = seated_queue(3);
+    with_state_emit(&player_state, &sinks, |s| s.queue.repeat_mode = start);
+
+    set_repeat(&player_state, &sinks, requested)
+}
+
+/// An OS panel names the mode it wants, `playerctl loop Track` among them. Each row pairs a start
+/// with a request that one press from it would not reach, so a door that stepped instead of
+/// setting fails every row rather than the one that happens to coincide.
+#[test]
+fn a_repeat_request_lands_on_the_mode_it_names_rather_than_the_next_one() {
+    assert_eq!(
+        repeat_set_from(RepeatMode::Off, RepeatMode::One),
+        RepeatMode::One,
+        "a press off `Off` would land on `All`"
+    );
+    assert_eq!(
+        repeat_set_from(RepeatMode::One, RepeatMode::All),
+        RepeatMode::All,
+        "a press off `One` would land on `Off`"
+    );
+    assert_eq!(
+        repeat_set_from(RepeatMode::All, RepeatMode::Off),
+        RepeatMode::Off,
+        "a press off `All` would land on `One`"
+    );
 }
 
 // --- The restart -----------------------------------------------------------

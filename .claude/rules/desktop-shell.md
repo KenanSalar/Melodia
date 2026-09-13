@@ -147,8 +147,9 @@ The other way paths arrive from outside, and the one that can arrive before ther
 
 ## Tray and media keys
 
-- **OS media controls** — souvlaki 0.8. Bounded `mpsc` (cap 32) decouples the callback thread from
-  `PlayerState`, `EventSink` from Slint. **Windows SMTC deferred** — souvlaki panics on a null
+- **OS media controls** — MPRIS over `zbus` on Linux, souvlaki 0.8 for SMTC and macOS
+  `MediaPlayer`. Bounded `mpsc` (cap 32) decouples the callback thread from `PlayerState`,
+  `EventSink` from Slint. **Windows SMTC deferred** — souvlaki panics on a null
   `HWND` and no OS window exists at `AppState::init`, so `init_media_controls()` leaves Windows
   inert; `main()` posts a one-shot post-show `invoke_from_event_loop` grabbing the `HWND` and
   calling `MediaControlsHandle::attach_smtc`, a newly-attached `true` triggering a no-op
@@ -157,9 +158,9 @@ The other way paths arrive from outside, and the one that can arrive before ther
 
 - **System tray** — `crates/melodia-platform/src/services/platform/tray/` cfg-split (Linux `ksni`, Win/mac `tray-icon 0.24`) behind
   a `mod.rs` façade (`TrayAction`, `TraySnapshot`, embedded `tray.png`, `init_tray`).
-  `ui/shell/tray_bridge.rs` runs one task off a bounded `mpsc<TrayAction>`: playback reuses
-  souvlaki's `EventSink`, `ShowHideWindow`/`Quit` hop to the UI via `invoke_from_event_loop`, a
-  `sinks.view_model` subscriber pushes tooltip + play/pause label. Linux eager; **Win/mac deferred,
+  `ui/shell/tray_bridge.rs` runs one task off a bounded `mpsc<TrayAction>`: playback reuses the
+  media controls' `EventSink`, `ShowHideWindow`/`Quit` hop to the UI via `invoke_from_event_loop`,
+  a `sinks.view_model` subscriber pushes tooltip + play/pause label. Linux eager; **Win/mac deferred,
   and dropped by `tray_bridge::shutdown()` before `process::exit` or the icon ghosts**. No SNI host
   → `init_tray` `None`/`false`, tray-less still usable; labels English-only. **Opt-in**
   `TrayFlags.enabled` (default off) gates `tray_bridge::install` from `main.rs`; flipping it is
@@ -175,8 +176,9 @@ The other way paths arrive from outside, and the one that can arrive before ther
 
 ## Shutdown
 
-- **Force-exit.** `main()` ends in `std::process::exit(0)`; a normal return lets souvlaki's MPRIS
-  thread, accesskit's a11y thread and any tokio worker parked on a blocking call pin the process.
+- **Force-exit.** `main()` ends in `std::process::exit(0)`; a normal return lets the OS media
+  controls' thread, accesskit's a11y thread and any tokio worker parked on a blocking call pin the
+  process.
   The audio output used to be a fourth and no longer is — `AudioOutput` is owned on `AppState` since
   #90 — which changes nothing here. `tracker.wait()` + `db.close()` in a 3 s
   `timeout`, runtime dropped on a background thread; `save_state_on_exit` flushes synchronously

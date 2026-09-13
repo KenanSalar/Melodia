@@ -5,7 +5,7 @@
 
 use melodia_engine::player::engine::now_playing::SourceSummary;
 use melodia_engine::player::engine::state::PlayerViewModelLight;
-use melodia_engine::player::engine::types::PlaybackStatus;
+use melodia_engine::player::engine::types::{PlaybackStatus, RepeatMode};
 
 /// The metadata last handed to the panel.
 ///
@@ -65,6 +65,8 @@ pub(super) struct Changes {
     pub(super) status: bool,
     pub(super) position: bool,
     pub(super) volume: bool,
+    pub(super) shuffle: bool,
+    pub(super) repeat: bool,
 }
 
 /// The panel as last published.
@@ -75,6 +77,8 @@ pub(super) struct Published {
     pub(super) position_ms: u64,
     pub(super) volume: u32,
     pub(super) is_muted: bool,
+    pub(super) shuffle_enabled: bool,
+    pub(super) repeat_mode: Option<RepeatMode>,
 }
 
 impl Published {
@@ -87,6 +91,8 @@ impl Published {
             status: self.status != Some(status),
             position: self.position_ms != vm.position_ms,
             volume: self.volume != vm.volume || self.is_muted != vm.is_muted,
+            shuffle: self.shuffle_enabled != vm.shuffle_enabled,
+            repeat: self.repeat_mode != Some(vm.repeat_mode),
         }
     }
 
@@ -105,6 +111,8 @@ impl Published {
         self.position_ms = vm.position_ms;
         self.volume = vm.volume;
         self.is_muted = vm.is_muted;
+        self.shuffle_enabled = vm.shuffle_enabled;
+        self.repeat_mode = Some(vm.repeat_mode);
     }
 }
 

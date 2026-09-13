@@ -321,6 +321,33 @@ fn advance_skip_off_stops_at_end() {
     assert!(q.advance_skip().is_none());
 }
 
+// ── set_repeat_mode ─────────────────────────────────────────────────
+
+/// A panel re-sends the mode it already shows, and a bump there re-publishes the whole queue to
+/// every subscriber for nothing.
+#[test]
+fn setting_the_repeat_mode_already_in_force_leaves_the_version_alone() {
+    let mut q = make_queue(3);
+    q.repeat_mode = RepeatMode::All;
+    let before = q.version;
+
+    q.set_repeat_mode(RepeatMode::All);
+
+    assert_eq!(q.version, before);
+}
+
+/// `with_state_emit` gates the queue re-emit on the version, so a move that skipped the bump would
+/// leave the transport bar's repeat button showing the mode it just left.
+#[test]
+fn a_new_repeat_mode_bumps_the_version() {
+    let mut q = make_queue(3);
+    let before = q.version;
+
+    q.set_repeat_mode(RepeatMode::One);
+
+    assert_ne!(q.version, before);
+}
+
 // ── previous ────────────────────────────────────────────────────────
 
 #[test]

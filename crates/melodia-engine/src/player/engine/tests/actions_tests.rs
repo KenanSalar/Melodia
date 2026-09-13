@@ -1,10 +1,11 @@
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use tokio::sync::watch;
 
 use crate::player::engine::backend::PlayerBackend;
-use crate::player::engine::event_sink::PlayerSinks;
-use crate::player::engine::state::{PlayerAction, PlayerStateHandle};
+use crate::player::engine::event_sink::{MediaControlsSync, PlayerSinks};
+use crate::player::engine::state::{PlayerAction, PlayerStateHandle, PlayerViewModelLight};
+use crate::player::engine::types::PlaybackStatus;
 use melodia_core::error::AppError;
 use melodia_playback::player::playback::replaygain::TrackReplayGain;
 
@@ -388,6 +389,48 @@ async fn execute_seek_calls_backend() -> Result<(), AppError> {
 
     let inner = mock.inner();
     assert_eq!(inner.seek_calls, vec![("/music/a.flac".to_owned(), 30_000)]);
+    Ok(())
+}
+
+/// The seeks the OS media controls were told about. `sync` records nothing: it belongs to the
+/// emit before `execute_actions`, so only what this layer sends itself is worth watching.
+#[derive(Default)]
+struct SeekRecorder {
+    seeks: Mutex<Vec<u64>>,
+}
+
+impl SeekRecorder {
+    fn seeks(&self) -> Vec<u64> {
+        self.seeks.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
+    }
+}
+
+impl MediaControlsSync for SeekRecorder {
+    fn sync(&self, _vm: &PlayerViewModelLight, _status: PlaybackStatus) {}
+
+    fn seeked(&self, position_ms: u64) {
+        self.seeks.lock().unwrap_or_else(std::sync::PoisonError::into_inner).push(position_ms);
+    }
+}
+
+/// An MPRIS client advances its bar on its own between reads and learns of a jump only through
+/// `Seeked`, so a seek that told nobody leaves an open panel drawing the old position.
+#[test]
+fn a_seek_tells_the_media_controls_where_it_landed() -> Result<(), AppError> {
+    let fx = fixture()?;
+    let mock = MockBackend::new();
+    let recorder = Arc::new(SeekRecorder::default());
+    let media_controls: Arc<dyn MediaControlsSync> = recorder.clone();
+    let sinks = PlayerSinks { media_controls: Some(media_controls), ..make_test_sinks() };
+    let actions = vec![PlayerAction::Seek {
+        position_ms: 30_000,
+        file_path: "/music/a.flac".to_owned(),
+        replaygain: TrackReplayGain::default(),
+    }];
+
+    crate::player::engine::actions::execute_actions(actions, &mock, &fx.player_state, &sinks);
+
+    assert_eq!(recorder.seeks(), vec![30_000]);
     Ok(())
 }
 

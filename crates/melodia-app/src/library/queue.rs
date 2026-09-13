@@ -225,6 +225,14 @@ pub fn queue_cycle_repeat(state: &AppState) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Drive repeat to `mode`, for a caller naming the mode rather than stepping through them.
+pub fn queue_set_repeat(state: &AppState, mode: RepeatMode) -> Result<(), AppError> {
+    let new_mode = set_repeat(&state.player_state, &state.sinks, mode);
+    log::debug!("queue: repeat → {new_mode:?}");
+    persist_repeat(state, new_mode);
+    Ok(())
+}
+
 /// Answers with the shuffle state it settled in, which is *not* the request: an empty queue
 /// refuses to shuffle, so a caller persisting `enabled` writes a shuffle the next launch
 /// restores over a queue that was never reordered.
@@ -259,6 +267,18 @@ fn toggle_shuffle(player_state: &PlayerStateHandle, sinks: &PlayerSinks) -> bool
 fn cycle_repeat(player_state: &PlayerStateHandle, sinks: &PlayerSinks) -> RepeatMode {
     with_state_emit(player_state, sinks, |s| {
         s.queue.cycle_repeat_mode();
+        s.queue.repeat_mode
+    })
+}
+
+/// Set the repeat mode, answering with the one it landed on.
+fn set_repeat(
+    player_state: &PlayerStateHandle,
+    sinks: &PlayerSinks,
+    mode: RepeatMode,
+) -> RepeatMode {
+    with_state_emit(player_state, sinks, |s| {
+        s.queue.set_repeat_mode(mode);
         s.queue.repeat_mode
     })
 }

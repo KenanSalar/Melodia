@@ -126,8 +126,8 @@ fn main() -> AppResult<()> {
     }
 
     // Two workers: the async work is event-driven (queries, watch publishes,
-    // position ticks, souvlaki) and CPU-bound work goes to Rayon or
-    // `spawn_blocking`, neither of which draws on this pool. The `num_cpus`
+    // position ticks, media-control events) and CPU-bound work goes to Rayon
+    // or `spawn_blocking`, neither of which draws on this pool. The `num_cpus`
     // default leaves 6+ idle threads on a desktop, each with a 2 MB stack.
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
@@ -513,9 +513,9 @@ fn main() -> AppResult<()> {
     shutdown::respawn_if_requested();
 
     // Returning normally would linger until every non-daemon thread exits, and
-    // three never do: souvlaki's MPRIS thread, accesskit's a11y thread, and any
-    // tokio worker parked on a blocking call. State is flushed and the rest is
-    // OS-managed.
+    // three never do: the OS media controls' thread, accesskit's a11y thread, and
+    // any tokio worker parked on a blocking call. State is flushed and the rest
+    // is OS-managed.
     std::process::exit(0);
 }
 

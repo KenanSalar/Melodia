@@ -3,9 +3,9 @@ use std::sync::Arc;
 use tokio::sync::watch;
 
 use super::state::{PlayerViewModelLight, QueueViewModel};
-use super::types::PlaybackStatus;
+use super::types::{PlaybackStatus, RepeatMode};
 
-/// Events that come *from* OS media controls (souvlaki) into the player.
+/// Events that come *from* OS media controls (MPRIS, SMTC, `MediaPlayer`) into the player.
 #[derive(Debug, Clone)]
 pub enum PlayerEvent {
     Play,
@@ -16,6 +16,8 @@ pub enum PlayerEvent {
     Stop,
     SeekTo(u64),
     SetVolume(u32),
+    SetShuffle(bool),
+    SetRepeat(RepeatMode),
 }
 
 pub trait EventSink: Send + Sync + 'static {

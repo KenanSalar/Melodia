@@ -11,7 +11,7 @@ use zbus::zvariant::{ObjectPath, Value};
 
 use melodia_engine::player::engine::event_sink::PlayerEvent;
 use melodia_engine::player::engine::state::volume_to_amplitude;
-use melodia_engine::player::engine::types::PlaybackStatus;
+use melodia_engine::player::engine::types::{PlaybackStatus, RepeatMode};
 
 use crate::services::integrations::media_controls::published::Published;
 use crate::services::integrations::media_controls::{cover_url, forward, volume_percent};
@@ -178,6 +178,35 @@ impl Player {
         forward(&self.events, PlayerEvent::SetVolume(percent));
     }
 
+    #[zbus(property)]
+    fn loop_status(&self) -> &'static str {
+        as_loop_status(self.published.lock().repeat_mode.unwrap_or(RepeatMode::Off))
+    }
+
+    /// Recorded before the player applies it, for `set_volume`'s reason.
+    #[zbus(property)]
+    fn set_loop_status(&self, loop_status: &str) -> zbus::fdo::Result<()> {
+        let mode = parse_loop_status(loop_status).ok_or_else(|| {
+            zbus::fdo::Error::InvalidArgs(format!("unknown LoopStatus {loop_status:?}"))
+        })?;
+        self.published.lock().repeat_mode = Some(mode);
+        forward(&self.events, PlayerEvent::SetRepeat(mode));
+        Ok(())
+    }
+
+    #[zbus(property)]
+    fn shuffle(&self) -> bool {
+        self.published.lock().shuffle_enabled
+    }
+
+    /// Recorded before the player applies it, for `set_volume`'s reason. An empty queue refuses
+    /// to shuffle, and the sync that follows puts the answer back.
+    #[zbus(property)]
+    fn set_shuffle(&self, shuffle: bool) {
+        self.published.lock().shuffle_enabled = shuffle;
+        forward(&self.events, PlayerEvent::SetShuffle(shuffle));
+    }
+
     /// Read on request and never announced, as the spec has it: clients extrapolate from `Rate`
     /// between reads and hear about jumps through `Seeked`.
     #[zbus(property(emits_changed_signal = "false"))]
@@ -240,6 +269,24 @@ pub(super) fn micros(ms: u64) -> i64 {
     i64::try_from(ms.saturating_mul(1000)).unwrap_or(i64::MAX)
 }
 
+/// The spec's name for a repeat mode.
+fn as_loop_status(mode: RepeatMode) -> &'static str {
+    match mode {
+        RepeatMode::Off => "None",
+        RepeatMode::All => "Playlist",
+        RepeatMode::One => "Track",
+    }
+}
+
+fn parse_loop_status(loop_status: &str) -> Option<RepeatMode> {
+    match loop_status {
+        "None" => Some(RepeatMode::Off),
+        "Playlist" => Some(RepeatMode::All),
+        "Track" => Some(RepeatMode::One),
+        _ => None,
+    }
+}
+
 /// Where a `SetPosition` lands, or `None` where the spec says to ignore it: a negative position,
 /// or one past the end of the track.
 fn seek_target(position_us: i64, length_ms: Option<u64>) -> Option<u64> {
@@ -249,3 +296,7 @@ fn seek_target(position_us: i64, length_ms: Option<u64>) -> Option<u64> {
         _ => Some(target_ms),
     }
 }
+
+#[cfg(test)]
+#[path = "tests/interface_tests.rs"]
+mod tests;

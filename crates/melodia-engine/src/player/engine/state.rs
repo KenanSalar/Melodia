@@ -190,6 +190,10 @@ pub struct PlayerViewModelLight {
     pub radio: Option<Arc<RadioNowPlaying>>,
     pub has_next: bool,
     pub has_previous: bool,
+    /// Copied from the queue, as `has_next` is, so an OS media panel reads them off the model it
+    /// is already synced with rather than waiting on a queue emit.
+    pub shuffle_enabled: bool,
+    pub repeat_mode: RepeatMode,
 }
 
 /// Queue-specific `ViewModel` emitted only when the queue changes.
@@ -405,6 +409,8 @@ impl PlayerState {
             radio: self.station().cloned(),
             has_next: self.has_next(),
             has_previous: self.has_previous(),
+            shuffle_enabled: self.queue.shuffle_enabled,
+            repeat_mode: self.queue.repeat_mode,
         }
     }
 

@@ -32,6 +32,8 @@ enum Emit {
     Metadata,
     PlaybackStatus,
     Volume,
+    LoopStatus,
+    Shuffle,
     Seeked(u64),
 }
 
@@ -121,6 +123,8 @@ fn send(player: &InterfaceRef<Player>, emit: Emit) -> zbus::Result<()> {
         Emit::Metadata => zbus::block_on(player.get().metadata_changed(emitter)),
         Emit::PlaybackStatus => zbus::block_on(player.get().playback_status_changed(emitter)),
         Emit::Volume => zbus::block_on(player.get().volume_changed(emitter)),
+        Emit::LoopStatus => zbus::block_on(player.get().loop_status_changed(emitter)),
+        Emit::Shuffle => zbus::block_on(player.get().shuffle_changed(emitter)),
         Emit::Seeked(position_ms) => zbus::block_on(Player::seeked(emitter, micros(position_ms))),
     }
 }
@@ -144,6 +148,12 @@ impl MediaControlsSync for MediaControlsHandle {
         if changes.volume {
             self.emit(Emit::Volume);
         }
+        if changes.repeat {
+            self.emit(Emit::LoopStatus);
+        }
+        if changes.shuffle {
+            self.emit(Emit::Shuffle);
+        }
     }
 
     fn update_position(&self, position_ms: u64) {
@@ -154,3 +164,7 @@ impl MediaControlsSync for MediaControlsHandle {
         self.emit(Emit::Seeked(position_ms));
     }
 }
+
+#[cfg(test)]
+#[path = "tests/mod_tests.rs"]
+mod tests;

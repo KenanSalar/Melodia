@@ -3,6 +3,7 @@ use std::sync::Arc;
 use super::{DetectorState, Effect};
 use melodia_core::entities::track::TrackSummary;
 use melodia_engine::player::engine::state::{PlayerViewModelLight, PositionTick};
+use melodia_engine::player::engine::types::RepeatMode;
 
 /// UNIX-seconds "now" at each play's start; every scrobble should carry it as its
 /// timestamp.
@@ -48,6 +49,8 @@ fn vm(status: &'static str, current_track: Option<Arc<TrackSummary>>) -> PlayerV
         radio: None,
         has_next: false,
         has_previous: false,
+        shuffle_enabled: false,
+        repeat_mode: RepeatMode::Off,
     }
 }
 

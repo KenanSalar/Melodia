@@ -18,6 +18,8 @@ fn tag(event: MediaControlEvent) -> Option<&'static str> {
         PlayerEvent::Stop => Some("stop"),
         PlayerEvent::SeekTo(_) => Some("seek-to"),
         PlayerEvent::SetVolume(_) => Some("set-volume"),
+        PlayerEvent::SetShuffle(_) => Some("set-shuffle"),
+        PlayerEvent::SetRepeat(_) => Some("set-repeat"),
     }
 }
 

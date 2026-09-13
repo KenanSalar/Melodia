@@ -302,8 +302,9 @@ pub async fn player_toggle_mute(ctx: &PlaybackContext) -> Result<(), AppError> {
 }
 
 /// Persist the current `PlayerState`'s volume + `is_muted` into settings.json.
-/// Called once from the volume slider's `pointer-event Up` (after a drag
-/// or click), and inline from the mute mutators / souvlaki `SetVolume`.
+/// Called once from the volume slider's `pointer-event Up` (after a drag or
+/// click), and inline from the mute mutators / the OS media controls'
+/// `SetVolume`.
 ///
 /// Reads-then-writes settings.json on a `spawn_blocking` thread so the
 /// async runtime worker isn't blocked. Short-circuits when settings already

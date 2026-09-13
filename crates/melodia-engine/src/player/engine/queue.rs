@@ -385,6 +385,16 @@ impl QueueState {
         self.version += 1;
     }
 
+    /// Bumps `version` only on a move, so a panel re-sending the mode already set re-publishes
+    /// no queue.
+    pub fn set_repeat_mode(&mut self, mode: RepeatMode) {
+        if self.repeat_mode == mode {
+            return;
+        }
+        self.repeat_mode = mode;
+        self.version += 1;
+    }
+
     /// Drop tracks whose ID is in `ids_to_remove` from the queue. Maintains the
     /// `tracks` / `play_order` / `original_order` invariants by remapping all
     /// surviving track-indices. Adjusts `current_index` to land on the next
