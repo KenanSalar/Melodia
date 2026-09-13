@@ -11,8 +11,9 @@ export component IconButton inherits Rectangle {
     // Selects the FILL=1 Material Symbols variant, so a toggled button reads as a solid glyph.
     in property <bool> filled: false;
     in property <bool> button-enabled: true;
-    // How a disabled glyph is drawn. Greyed and halved by default; a toggle whose off state *is*
-    // disabled sets these to its idle look, so switching it off doesn't also read as broken.
+    // How a disabled glyph is drawn, greyed and halved by default. A host whose neighbouring
+    // control already says why this one is inert draws it at rest instead, so it doesn't read as
+    // broken.
     in property <brush> disabled-fg: Theme.overlay0;
     in property <float> disabled-fade: 0.5;
     // Lets a popup trigger keep its highlight while the popup is open — see `PopupHighlight`.

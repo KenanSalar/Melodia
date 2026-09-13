@@ -201,9 +201,7 @@ export component NowPlayingView inherits Rectangle {
                 }
             }
 
-            // **The two toggles the view menu held, each on its own glyph.** They were the whole
-            // of that menu, so reaching either cost a popup and a read of it; what they lose
-            // with it is its labels, which come back as tooltips.
+            // The visualizer's style on its own glyph, its label a tooltip.
             //
             // Not gated on `vm.has_track` — a style means something with an empty queue.
             VerticalLayout {

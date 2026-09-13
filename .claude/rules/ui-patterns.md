@@ -456,10 +456,7 @@ silently miss the other.
   Up Next, the lyrics panel and the station panel, swapped on `Player.vm.has_station` and
   `Lyrics.enabled`; a station keeps its panel whatever the switch says, and the header's lyrics
   pill (`LyricsControls`, the switch and the menu glyph together) is gone rather than disabled
-  there, a stream having no track to look a sheet up for. **`Lyrics.enabled` is the feature's
-  switch, not a view preference**: the Settings card writes the same `SharedFlag` and
-  `library::lyrics::for_track` refuses on it, so the Up Next arm is never a hidden panel still
-  fetching. The glyph is inert while it is off, because every row of its menu acts on a sheet.
+  there, a stream having no track to look a sheet up for.
   **Don't answer a fourth thing with a fourth column.** `content-width` is what the chip wrap, the
   strip width and the cover slot all derive from, so another region reflows the artwork column
   every time a track without lyrics comes on, which is the worst property a panel can have when
