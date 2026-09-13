@@ -113,11 +113,11 @@ fn shuffle_unshuffle_roundtrip() {
 
 // --- The transport doors ---------------------------------------------------
 //
-// Driven through the workers under `queue_{set_shuffle,toggle_shuffle,cycle_repeat,set_repeat}` rather than
-// by rebuilding their bodies over a bare `PlayerState`, which is what the tests these replaced
-// did: none of the three ever called the door it was named after, so an instrumented run reported
-// all three doors never executed while all three tests passed. What the doors add over the queue
-// methods `melodia-engine` already pins is the branch they pick and the value they hand
+// Driven through the workers under `queue_{set_shuffle,toggle_shuffle,cycle_repeat,set_repeat}`
+// rather than by rebuilding their bodies over a bare `PlayerState`, which is what the tests these
+// replaced did: none of the three ever called the door it was named after, so an instrumented run
+// reported all three doors never executed while all three tests passed. What the doors add over
+// the queue methods `melodia-engine` already pins is the branch they pick and the value they hand
 // `persist_{shuffle,repeat}`, so that is what these assert.
 
 fn seated_queue(count: i64) -> (PlayerStateHandle, PlayerSinks) {

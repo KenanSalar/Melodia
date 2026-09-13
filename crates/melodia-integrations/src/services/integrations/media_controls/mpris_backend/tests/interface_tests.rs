@@ -154,8 +154,8 @@ fn a_status_goes_out_under_the_spec_name_a_panel_draws() {
     assert_eq!(named(None), "Stopped", "before the first sync");
 }
 
-/// The names are the spec's contract rather than ours. A swap between two of them still round-trips,
-/// so both directions are written out.
+/// The names are the spec's contract rather than ours. A swap between two of them still
+/// round-trips, so both directions are written out.
 #[test]
 fn each_repeat_mode_goes_out_under_the_spec_name() {
     assert_eq!(as_loop_status(RepeatMode::Off), "None");

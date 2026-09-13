@@ -513,9 +513,8 @@ fn main() -> AppResult<()> {
     shutdown::respawn_if_requested();
 
     // Returning normally would linger until every non-daemon thread exits, and
-    // three never do: the OS media controls' thread, accesskit's a11y thread, and
-    // any tokio worker parked on a blocking call. State is flushed and the rest
-    // is OS-managed.
+    // two never do: accesskit's a11y thread and any tokio worker parked on a
+    // blocking call. State is flushed and the rest is OS-managed.
     std::process::exit(0);
 }
 

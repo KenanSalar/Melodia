@@ -93,6 +93,9 @@ fn start(
 fn serve(player: Player) -> zbus::Result<Connection> {
     zbus::blocking::connection::Builder::session()?
         .name(BUS_NAME)?
+        // zbus offers the name up by default, so a second Melodia would take the panel from the
+        // first and leave it unowned on exit. Refused, the second stays inert instead.
+        .allow_name_replacements(false)
         .serve_at(OBJECT_PATH, Root)?
         .serve_at(OBJECT_PATH, player)?
         .build()

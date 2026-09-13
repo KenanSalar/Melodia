@@ -176,10 +176,9 @@ The other way paths arrive from outside, and the one that can arrive before ther
 
 ## Shutdown
 
-- **Force-exit.** `main()` ends in `std::process::exit(0)`; a normal return lets the OS media
-  controls' thread, accesskit's a11y thread and any tokio worker parked on a blocking call pin the
-  process.
-  The audio output used to be a fourth and no longer is — `AudioOutput` is owned on `AppState` since
+- **Force-exit.** `main()` ends in `std::process::exit(0)`; a normal return lets accesskit's a11y
+  thread and any tokio worker parked on a blocking call pin the process.
+  The audio output used to be a third and no longer is — `AudioOutput` is owned on `AppState` since
   #90 — which changes nothing here. `tracker.wait()` + `db.close()` in a 3 s
   `timeout`, runtime dropped on a background thread; `save_state_on_exit` flushes synchronously
   *before* the timeout.
