@@ -15,7 +15,7 @@ const MINI_SWITCH: &str =
 const THEME: &str = include_str!("../../../../melodia-ui/ui/theme.slint");
 const RESIZE_RING: &str = include_str!("../../../../melodia-ui/ui/layout/resize-ring.slint");
 
-/// The rect the shell and every overlay over it takes inside the client, as tokens.
+/// The rect the shell takes inside the client, as tokens.
 const CONTENT_RECT: &str =
     "x: root.margin-left; y: 0px; width: root.content-width; height: root.content-height;";
 
@@ -75,16 +75,33 @@ fn the_content_rect_gives_up_each_kept_margin_on_its_own_side() {
     assert!(missing.is_empty(), "these margin bindings no longer hold:\n{missing:#?}");
 }
 
-/// The shell, the first-run card, the dialog overlay, the toast stack and the window outline. One
-/// of them left full-client paints into the transparent margins: a dialog's backdrop as a dark
-/// strip around the miniplayer, a toast hanging off its edge, an outline round nothing.
+/// The first-run card, the dialog overlay, the toast stack and the window outline take the content
+/// rect by mounting inside the shell. One of them left full-client paints into the transparent
+/// margins: a dialog's backdrop as a dark strip around the miniplayer, a toast hanging off its edge,
+/// an outline round nothing.
 #[test]
-fn the_shell_and_every_overlay_over_it_sit_inside_the_kept_margins() {
+fn the_shell_and_every_overlay_over_it_sit_inside_the_kept_margins()
+-> Result<(), Box<dyn std::error::Error>> {
+    const MOUNTS: [&str; 4] = [
+        "if Onboarding.mounted: OnboardingOverlay {",
+        "DialogOverlay {",
+        "NotificationStack {",
+        "if root.frameless && !WindowChrome.is-maximized && Settings.window-border-shown: Rectangle {",
+    ];
     let shell = tokens(APP_WINDOW);
+    let shell_body = blocks_named(&shell, "Rectangle")
+        .into_iter()
+        .find(|body| body.trim_start().starts_with(CONTENT_RECT))
+        .ok_or("no `Rectangle` takes the content rect: the walk is broken, not the shell")?;
 
-    let inset = shell.matches(CONTENT_RECT).count();
+    let outside: Vec<&str> =
+        MOUNTS.into_iter().filter(|mount| !shell_body.contains(mount)).collect();
 
-    assert_eq!(inset, 5, "the shell and its four overlays no longer all take the content rect");
+    assert!(
+        outside.is_empty(),
+        "these no longer mount inside the shell's content rect: {outside:?}"
+    );
+    Ok(())
 }
 
 /// Gated on the setting instead, the outline draws inside the full window's OS frame under the
@@ -103,25 +120,36 @@ fn the_outline_mounts_only_where_no_frame_draws_one() {
 }
 
 /// A logical pixel is two physical ones at 200 % and a blurred one and a half at 150 %, where the
-/// OS draws exactly one at every scale.
+/// OS draws exactly one at every scale. The outline strokes two centred on the shell's edge and the
+/// clip keeps the inner one, so a stroke not pushed out by one shows both.
 #[test]
 fn the_outline_is_one_physical_pixel() {
+    const BINDINGS: [&str; 2] = [
+        "x: -1phx; y: -1phx; width: parent.width + 2phx; height: parent.height + 2phx;",
+        "border-width: 2phx;",
+    ];
     let shell = tokens(APP_WINDOW);
 
-    let hairlines = shell.matches("border-width: 1phx;").count();
+    let missing: Vec<&str> = BINDINGS.into_iter().filter(|b| !shell.contains(b)).collect();
 
-    assert_eq!(hairlines, 1, "the window outline is no longer one physical pixel wide");
+    assert!(
+        missing.is_empty(),
+        "the window outline no longer leaves one physical pixel:\n{missing:#?}"
+    );
 }
 
-/// The shell rounds on `window-radius`, so any other radius leaves the outline's corners cutting
-/// across the shell's or standing off it in the transparent corner.
+/// The outline is pushed out by one physical pixel, so its radius takes that pixel on top of the
+/// shell's. Any other leaves its corners cutting across the shell's or standing off it inside.
 #[test]
 fn the_outline_rounds_with_the_shell() {
     let shell = tokens(APP_WINDOW);
 
-    let radius = binding_value(&shell, "height: root.content-height; border-radius:").trim();
+    let radius = binding_value(&shell, "height: parent.height + 2phx; border-radius:").trim();
 
-    assert_eq!(radius, "Theme.window-radius", "the outline's corners no longer follow the shell's");
+    assert_eq!(
+        radius, "Theme.window-radius + 1phx",
+        "the outline's corners no longer follow the shell's"
+    );
 }
 
 /// Swapped, System paints the Windows accent round every window but the focused one.

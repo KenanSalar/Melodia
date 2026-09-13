@@ -364,16 +364,26 @@ export component AppWindow inherits Window {
     // Outer mantle shell. With a transparent Window background this rounded Rectangle *is* the
     // visible window outline, and `clip: true` masks anything a child paints outside it.
     // A native frame or maximized drops the radius to 0 and stays full-bleed; the panel still rounds.
+    //
+    // **The clip is the only antialiased edge the corner may get.** FemtoVG antialiases every
+    // rounded fill and stroke on its own, and partial coverages of one curve stack, so a background
+    // on the shell or an outline beside it paints the arc fuller and harder than its radius. Hence
+    // no `background` here, and everything that reaches the edge mounts inside.
     Rectangle {
         x: root.margin-left;
         y: 0px;
         width: root.content-width;
         height: root.content-height;
-        background: Theme.mantle;
         border-radius: (!root.frameless || WindowChrome.is-maximized)
             ? 0px
             : Theme.window-radius;
         clip: true;
+
+        Rectangle {
+            width: 100%;
+            height: 100%;
+            background: Theme.mantle;
+        }
 
         // The only FocusScope in the tree, wrapping the whole main layout — every key a focused
         // TextInput doesn't consume lands here directly. Bindings, the volume-commit debounce and
@@ -598,39 +608,51 @@ export component AppWindow inherits Window {
             visible: mini-switch.fade-opacity < 1.0;
         }
         }
-    }
 
-    // The overlays below cover the shell's rect rather than the client, so a dialog's backdrop or a
-    // toast doesn't paint into the margins the native miniplayer leaves transparent.
+        // The overlays share the shell's clip, so a dialog's backdrop takes the window's rounded
+        // corners instead of darkening the desktop behind them, and neither it nor a toast paints
+        // into the margins the native miniplayer leaves transparent.
 
-    // The first-run card, and deliberately *below* `DialogOverlay`: step 2's folder picker can
-    // raise a real `Dialog` on failure, which has to paint over the card and take Esc first.
-    // `if`-mounted rather than permanent — this one opens once ever, so none of it exists before
-    // the launch it runs on or after the click that closes it. Rust holds the unmount a beat past
-    // `Onboarding.open` so the fade can play; see the global.
-    if Onboarding.mounted: OnboardingOverlay {
-        x: root.margin-left;
-        y: 0px;
-        width: root.content-width;
-        height: root.content-height;
-    }
+        // The first-run card, and deliberately *below* `DialogOverlay`: step 2's folder picker can
+        // raise a real `Dialog` on failure, which has to paint over the card and take Esc first.
+        // `if`-mounted rather than permanent — this one opens once ever, so none of it exists before
+        // the launch it runs on or after the click that closes it. Rust holds the unmount a beat past
+        // `Onboarding.open` so the fade can play; see the global.
+        if Onboarding.mounted: OnboardingOverlay {
+            width: 100%;
+            height: 100%;
+        }
 
-    // Declared after the main layout, so it paints above it. Always rendered so the open/close
-    // animation can play; its TouchArea is `enabled` only while `Dialog.open`.
-    DialogOverlay {
-        x: root.margin-left;
-        y: 0px;
-        width: root.content-width;
-        height: root.content-height;
-    }
+        // Declared after the main layout, so it paints above it. Always rendered so the open/close
+        // animation can play; its TouchArea is `enabled` only while `Dialog.open`.
+        DialogOverlay {
+            width: 100%;
+            height: 100%;
+        }
 
-    // After `DialogOverlay`, so a toast firing mid-dialog paints above the backdrop rather than
-    // behind it. No root TouchArea, so its empty area blocks no clicks.
-    NotificationStack {
-        x: root.margin-left;
-        y: 0px;
-        width: root.content-width;
-        height: root.content-height;
+        // After `DialogOverlay`, so a toast firing mid-dialog paints above the backdrop rather than
+        // behind it. No root TouchArea, so its empty area blocks no clicks.
+        NotificationStack {
+            width: 100%;
+            height: 100%;
+        }
+
+        // The 1 px outline an OS draws round its own frames, which a frameless window has to draw
+        // for itself. Last, so nothing in the window paints over the edge, a dialog's scrim
+        // included, and a childless element is no layer. Two physical pixels centred on the shell's
+        // edge, so the clip cuts the outer one away through solid colour: one physical pixel
+        // survives, as the OS draws it, and the clip stays the corner's only antialiased pass.
+        if root.frameless && !WindowChrome.is-maximized && Settings.window-border-shown: Rectangle {
+            x: -1phx;
+            y: -1phx;
+            width: parent.width + 2phx;
+            height: parent.height + 2phx;
+            border-radius: Theme.window-radius + 1phx;
+            border-width: 2phx;
+            border-color: Theme.window-focused
+                ? WindowChrome.border-color
+                : WindowChrome.border-color-unfocused;
+        }
     }
 
     // The resize grabs, live only while resizing is ours: not maximized, where it's a no-op, and not
@@ -643,21 +665,5 @@ export component AppWindow inherits Window {
         active: root.frameless && !WindowChrome.is-maximized;
         band: root.resize-band;
         radius: Theme.window-radius;
-    }
-
-    // The 1 px outline an OS draws round its own frames, which a frameless window has to draw for
-    // itself. Last, and a sibling rather than a border on the shell, so nothing in the window paints
-    // over the edge, a dialog's scrim included, and a childless element is no layer. One physical
-    // pixel, as the OS draws it.
-    if root.frameless && !WindowChrome.is-maximized && Settings.window-border-shown: Rectangle {
-        x: root.margin-left;
-        y: 0px;
-        width: root.content-width;
-        height: root.content-height;
-        border-radius: Theme.window-radius;
-        border-width: 1phx;
-        border-color: Theme.window-focused
-            ? WindowChrome.border-color
-            : WindowChrome.border-color-unfocused;
     }
 }
