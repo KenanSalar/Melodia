@@ -83,8 +83,10 @@ the OS owns has to be attached late or not at all on at least one platform.
 
 - **Transparent ARGB window for the rounded outline.** Slint's winit backend creates every window
   `with_transparent(true)`; `Window.background: Colors.transparent`; rounded mantle `Rectangle`
-  (`clip: true`, `border-radius: Theme.shell-radius`) the only direct child. Opaque + square when
-  `is-maximized` or while an OS frame stands (`!frameless`).
+  (`clip: true`, `border-radius: Theme.window-radius`) the only direct child. Opaque + square when
+  `is-maximized` or while an OS frame stands (`!frameless`). `window-radius` is the user's pick
+  under the custom titlebar and the host's (`native-content-radius`) under the native one, so the
+  native miniplayer keeps the frame's corners when it drops the frame.
 
 - **Match Unfocused Window Background (KDE-only)** — tints sidebar + NP-bar to the OS unfocused
   titlebar. `LayoutFlags.match_unfocused_to_system_bg`, serde default `is_kde_desktop()`; hidden

@@ -11,6 +11,7 @@ use melodia_testkit::{binding_value, normalize_ws, strip_line_comments};
 const APP_WINDOW: &str = include_str!("../../../../melodia-ui/ui/app-window.slint");
 const MINI_SWITCH: &str =
     include_str!("../../../../melodia-ui/ui/components/mini-player-switch.slint");
+const THEME: &str = include_str!("../../../../melodia-ui/ui/theme.slint");
 
 /// Comments stripped and whitespace collapsed, so a pin reads tokens rather than one layout.
 fn tokens(src: &str) -> String {
@@ -25,7 +26,7 @@ fn every_frame_question_in_the_shell_reads_frameless() {
         "no-frame: root.frameless;",
         "resize-border-width: root.frameless ? Theme.resize-border : 0px;",
         "background: (!root.frameless || WindowChrome.is-maximized) ? Theme.mantle : Colors.transparent;",
-        "border-radius: (!root.frameless || WindowChrome.is-maximized) ? 0px : Theme.shell-radius;",
+        "border-radius: (!root.frameless || WindowChrome.is-maximized) ? 0px : Theme.window-radius;",
         "if root.frameless && !WindowChrome.is-maximized: ResizeRing {",
     ];
     let shell = tokens(APP_WINDOW);
@@ -33,6 +34,21 @@ fn every_frame_question_in_the_shell_reads_frameless() {
     let missing: Vec<&str> = BINDINGS.into_iter().filter(|b| !shell.contains(b)).collect();
 
     assert!(missing.is_empty(), "these frame bindings no longer read `frameless`:\n{missing:#?}");
+}
+
+/// The native miniplayer paints its own outline once the OS frame goes, and on the custom
+/// titlebar's radius that outline changes shape mid-swap wherever the user's pick differs from the
+/// host's: the frame's rounding one tick, Melodia's the next.
+#[test]
+fn the_native_miniplayer_rounds_like_the_frame_it_replaced() {
+    let theme = tokens(THEME);
+
+    let radius = binding_value(&theme, "out property <length> window-radius:").trim();
+
+    assert_eq!(
+        radius, "use-native-titlebar ? native-content-radius : shell-radius",
+        "`Theme.window-radius` no longer takes the host's radius under the native titlebar"
+    );
 }
 
 /// On `active` the frame would drop while the full UI is still fading out, leaving it with neither

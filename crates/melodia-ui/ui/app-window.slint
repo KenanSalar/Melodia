@@ -345,7 +345,7 @@ export component AppWindow inherits Window {
         background: Theme.mantle;
         border-radius: (!root.frameless || WindowChrome.is-maximized)
             ? 0px
-            : Theme.shell-radius;
+            : Theme.window-radius;
         clip: true;
 
         // The only FocusScope in the tree, wrapping the whole main layout — every key a focused
@@ -397,21 +397,16 @@ export component AppWindow inherits Window {
                         background: Theme.base;
                         border-color: Theme.border;
                         border-width: 1px;
-                        // Custom mode tracks the user-pickable `shell-radius` so the panel and the
-                        // mantle shell read as concentric arcs; native tracks
-                        // `native-content-radius`, seeded from the OS, so it matches the host.
-                        border-top-left-radius: Theme.use-native-titlebar
-                            ? Theme.native-content-radius
-                            : Theme.shell-radius;
-                        border-bottom-left-radius: Theme.use-native-titlebar
-                            ? Theme.native-content-radius
-                            : Theme.shell-radius;
+                        // The radius the mantle shell rounds with when frameless: concentric arcs
+                        // under the custom titlebar, the host's corners under the native one.
+                        border-top-left-radius: Theme.window-radius;
+                        border-bottom-left-radius: Theme.window-radius;
                         border-top-right-radius: Theme.use-native-titlebar
                             ? 0px
-                            : Theme.shell-radius;
+                            : Theme.window-radius;
                         border-bottom-right-radius: Theme.use-native-titlebar
                             ? 0px
-                            : Theme.shell-radius;
+                            : Theme.window-radius;
                         clip: true;
 
                         // One branch per nav index, `if` rather than `visible: false` so the

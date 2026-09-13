@@ -111,10 +111,10 @@ export global Theme {
     // Concentric-ring helper: the border rectangle takes `shell-radius` and the base rectangle
     // this, keeping the 1 px ring even around each corner.
     out property <length> shell-radius-inner: max(0px, shell-radius - 1px);
-    // The content panel's left-side rounding under a native titlebar, seeded once from
-    // `get_os_corner_radius()` so it matches the host desktop regardless of the persisted pick —
-    // that pick governs custom mode, which the user opted into. Hence the greyed-out "Managed by
-    // the operating system" row in Settings.
+    // The host desktop's corner radius, seeded once from `get_os_corner_radius()` so native mode
+    // matches it regardless of the persisted pick — that pick governs custom mode, which the user
+    // opted into. Hence the greyed-out "Managed by the operating system" row in Settings. Read
+    // through `window-radius`.
     in-out property <length> native-content-radius: 6px;
     out property <length> native-content-radius-inner: max(0px, native-content-radius - 1px);
 
@@ -180,6 +180,11 @@ export global Theme {
     // **`window_chrome` must hydrate this between `AppWindow::new()` and `app.run()`**: Slint applies
     // `no-frame` live, so a later write maps the window with the wrong frame and swaps it on screen.
     in-out property <bool> use-native-titlebar: false;
+
+    // The corner radius for the titlebar mode in force: the user's pick under the custom titlebar,
+    // the host's under the native one. The miniplayer draws its own outline once it drops the OS
+    // frame, and on `shell-radius` it changed shape the moment the frame went.
+    out property <length> window-radius: use-native-titlebar ? native-content-radius : shell-radius;
 
     // 0 = Standard (Material bar icons), 1 = macOS (traffic lights). `custom-titlebar.slint` reads
     // it through `Theme` rather than reaching into `Settings`, the `shell-radius` precedent.
