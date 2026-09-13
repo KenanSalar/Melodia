@@ -1,4 +1,4 @@
-use super::{chunk_chips_to_rows, chunk_indices, rows_to_model};
+use super::{IndexRows, chunk_chips_to_rows, chunk_indices, rows_to_model};
 use slint::{Model, SharedString};
 
 /// `estimated_chip_width` is `chars * 6.5 + 24`, so a 4-char chip measures
@@ -90,4 +90,53 @@ fn chunk_indices_has_no_rows_for_nothing_to_place() {
 fn chunk_indices_floors_a_degenerate_row_width_at_one() {
     assert_eq!(chunk_indices(3, 0), vec![vec![0], vec![1], vec![2]]);
     assert_eq!(chunk_indices(3, -1), vec![vec![0], vec![1], vec![2]]);
+}
+
+/// A repeater rebuilds every instance under a model it can't prove is the one it already has, and
+/// it asks by pointer. Handing back a fresh model for an unchanged shape rebuilt every settings chip
+/// and swatch on each frame of a resize drag.
+#[test]
+fn an_unchanged_row_shape_hands_back_the_model_already_mounted() {
+    let rows = IndexRows::default();
+
+    let first = rows.rows(7, 3);
+    let again = rows.rows(7, 3);
+
+    assert_eq!(first, again, "the same shape built a second model, so its strip rebuilds");
+}
+
+#[test]
+fn a_new_row_shape_gets_a_model_of_its_own() {
+    let rows = IndexRows::default();
+
+    assert_ne!(rows.rows(7, 3), rows.rows(7, 4), "a narrower strip kept the wider rows");
+    assert_ne!(rows.rows(7, 3), rows.rows(6, 3), "a shorter option list kept the longer rows");
+}
+
+// Every width past the item count is the one row, so a drag through them shares one model.
+#[test]
+fn every_row_width_seating_all_items_shares_one_model() {
+    let rows = IndexRows::default();
+
+    assert_eq!(rows.rows(4, 4), rows.rows(4, 5));
+    assert_eq!(rows.rows(4, 4), rows.rows(4, 40));
+}
+
+// The floor `chunk_indices` applies, taken before the lookup so a degenerate width is one entry.
+#[test]
+fn a_degenerate_row_width_shares_the_one_per_row_model() {
+    let rows = IndexRows::default();
+
+    assert_eq!(rows.rows(3, 1), rows.rows(3, 0));
+    assert_eq!(rows.rows(3, 1), rows.rows(3, -1));
+}
+
+#[test]
+fn a_shared_model_still_mirrors_its_shape() {
+    let rows = IndexRows::default();
+
+    let model = rows.rows(7, 3);
+    let widths: Vec<usize> = model.iter().map(|row| row.row_count()).collect();
+
+    assert_eq!(widths, vec![3, 3, 1]);
 }

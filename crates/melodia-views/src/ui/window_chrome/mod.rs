@@ -2,11 +2,12 @@
 //! property to the persisted setting, the `slint::Window` API, and
 //! winit (via Slint's `unstable-winit-030` accessor).
 //!
-//! Six reasons it exists: hydrating `Theme.use-native-titlebar` (in the gap between
+//! Seven reasons it exists: hydrating `Theme.use-native-titlebar` (in the gap between
 //! `AppWindow::new()` and `app.run()`, where `main.rs` calls [`install`], so the window maps
 //! with its frame decided rather than swapping it on screen), the
-//! window control callbacks ([`controls`]), window dragging ([`winit_filter`]), file-drop
-//! coalescing ([`drop_coalescer`]), geometry ([`geometry`]) and the restart flow.
+//! window control callbacks ([`controls`]), window dragging ([`winit_filter`]), the Slint tick a
+//! Win32 drag parks (`parked_loop`), file-drop coalescing ([`drop_coalescer`]), geometry
+//! ([`geometry`]) and the restart flow.
 //!
 //! **Dragging belongs at the winit layer.** `drag_window()` from a `TouchArea`'s
 //! `pointer-event` leaks the grab: the compositor takes pointer ownership for the move and
@@ -26,6 +27,8 @@
 mod controls;
 mod drop_coalescer;
 pub mod geometry;
+#[cfg(target_os = "windows")]
+pub mod parked_loop;
 mod winit_filter;
 
 pub use drop_coalescer::{

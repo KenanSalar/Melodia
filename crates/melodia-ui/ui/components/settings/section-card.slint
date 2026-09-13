@@ -43,10 +43,13 @@ export component SectionCard inherits Rectangle {
             }
         }
 
+        // **No `clip`.** A rounded clip over children is an offscreen layer in FemtoVG, reallocated
+        // whenever the card's width moves, which below the cap is every frame of a resize, and it
+        // blurs the card's text on HiDPI. Nothing needs it: rows and dividers inset by `pad-lg`, so
+        // nothing reaches the rounded corners.
         Rectangle {
             background: Theme.surface0;
             border-radius: Theme.radius-lg;
-            clip: true;
 
             VerticalLayout {
                 @children

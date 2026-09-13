@@ -73,6 +73,24 @@ fn the_launch_mount_reads_the_suppression_and_hands_it_back_settled() {
     );
 }
 
+/// Leaving the miniplayer rebuilds the whole full UI, and its page skips its own entrance under the
+/// suppression the launch mount reads. Dropped, the page's 400 ms fade and slide play again inside
+/// the crossfade, a second full-window layer over the rebuild, and nothing looks broken. Gated on
+/// the full-UI arm because the miniplayer mounts no `ViewTransition` to hand the flag back.
+#[test]
+fn leaving_the_miniplayer_suppresses_the_page_entrance() {
+    const RAISE: [&str; 3] = ["if (!root.active) {", "Nav.suppress-enter-animation = true;", "}"];
+    let lines = code_lines(MINI_SWITCH);
+    // The swap timer closes the file, so everything from its declaration on is its body.
+    let swap = index_of(&lines, "swap-timer := Timer {");
+    let timer = following(&lines, swap, usize::MAX);
+
+    assert!(
+        timer.windows(RAISE.len()).any(|window| window == RAISE),
+        "the swap into the full UI no longer suppresses the page's own entrance:\n{timer:#?}"
+    );
+}
+
 /// The swap fade runs only when the mounted branch actually has to change.
 ///
 /// `active` reads `true` at construction because the host has no size yet, and it has to

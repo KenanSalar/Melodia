@@ -11,6 +11,8 @@
 //! tile and wraps only as far as the slack above its action pill.
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use melodia_ui::{AppWindow, Wrap};
@@ -143,17 +145,47 @@ fn chunk_indices(count: i32, per_row: i32) -> Vec<Vec<i32>> {
     rows
 }
 
+/// The `[[int]]` models `Wrap.chunk-indices` hands out, built once per row shape.
+///
+/// Slint re-runs a strip's model binding whenever a width feeding its `per-row` moves, whether or
+/// not `per-row` did, and a repeater compares its model by pointer. A fresh model per call rebuilds
+/// every chip and swatch under it, tooltips and all, on every frame of a window resize. Nothing
+/// writes these models, so strips of one shape can share one.
+#[derive(Default)]
+struct IndexRows {
+    /// Keyed on `(count, per_row)`.
+    by_shape: RefCell<HashMap<(i32, i32), IndexRowsModel>>,
+}
+
+/// What a `[[int]]` binding reads.
+type IndexRowsModel = ModelRc<ModelRc<i32>>;
+
+impl IndexRows {
+    fn rows(&self, count: i32, per_row: i32) -> IndexRowsModel {
+        let count = count.max(0);
+        // Any row width seating every item lays out the same single row. Folding them onto one
+        // entry also bounds the map by the option counts rather than by the widths a drag passes.
+        let shape = (count, per_row.clamp(1, count.max(1)));
+        self.by_shape
+            .borrow_mut()
+            .entry(shape)
+            .or_insert_with(|| {
+                let rows: Vec<ModelRc<i32>> = chunk_indices(shape.0, shape.1)
+                    .into_iter()
+                    .map(|row| ModelRc::from(Rc::new(VecModel::from(row))))
+                    .collect();
+                ModelRc::from(Rc::new(VecModel::from(rows)))
+            })
+            .clone()
+    }
+}
+
 /// Wire the two row splits. Call once during startup.
 pub fn install(ui: &AppWindow) {
     let wrap = ui.global::<Wrap>();
 
-    wrap.on_chunk_indices(|count, per_row| {
-        let rows: Vec<ModelRc<i32>> = chunk_indices(count, per_row)
-            .into_iter()
-            .map(|row| ModelRc::from(Rc::new(VecModel::from(row))))
-            .collect();
-        ModelRc::from(Rc::new(VecModel::from(rows)))
-    });
+    let index_rows = IndexRows::default();
+    wrap.on_chunk_indices(move |count, per_row| index_rows.rows(count, per_row));
 
     // Wraps freely: the one caller is a page that scrolls, so there is no band height to
     // drop a row against.

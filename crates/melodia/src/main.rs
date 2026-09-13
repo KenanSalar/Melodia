@@ -179,7 +179,7 @@ fn main() -> AppResult<()> {
         ui::window_chrome::geometry::PersistedGeometry::from_settings,
     );
     let restore_maximized = geometry.maximized;
-    slint::BackendSelector::new()
+    let backend = slint::BackendSelector::new()
         .backend_name("winit".into())
         .with_winit_window_attributes_hook(move |attrs| {
             let attrs = if restore_maximized { attrs.with_maximized(true) } else { attrs };
@@ -202,9 +202,12 @@ fn main() -> AppResult<()> {
                 )
             };
             attrs
-        })
-        .select()
-        .map_err(|e| AppError::Window(format!("backend selector: {e}")))?;
+        });
+    // Counts the loop's `NewEvents`, which is how the pump tells a Win32 drag's modal loop apart.
+    #[cfg(target_os = "windows")]
+    let backend =
+        backend.with_winit_custom_application_handler(ui::window_chrome::parked_loop::LoopTicks);
+    backend.select().map_err(|e| AppError::Window(format!("backend selector: {e}")))?;
 
     let app = AppWindow::new().map_err(|e| AppError::Window(e.to_string()))?;
 

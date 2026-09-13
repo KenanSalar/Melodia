@@ -29,8 +29,9 @@ export component MiniPlayerSwitch {
     //
     // Leaving takes more room than entering: dropping the frame grows the client area by the
     // allowance, so one shared edge would bounce a window parked just inside it straight back out.
-    // Keyed on `render-active`, which only the timers write, so the binding can't loop on itself.
-    out property <bool> active: root.render-active
+    // Keyed on `frame-dropped`, which only the handler and the timers write, so the binding can't
+    // loop on itself.
+    out property <bool> active: root.frame-dropped
         ? (root.host-width < root.enter-w + root.exit-allowance-w + root.exit-slack
             || root.host-height < root.enter-h + root.exit-allowance-h + root.exit-slack)
         : (root.host-width < root.enter-w || root.host-height < root.enter-h);
@@ -38,6 +39,12 @@ export component MiniPlayerSwitch {
     // Which branch is mounted right now: `active`, delayed by one fade so the
     // outgoing layout can reach opacity 0 before it is destroyed.
     out property <bool> render-active: false;
+
+    // Whether a host with an OS frame should have dropped it. It drops with the swap into the
+    // miniplayer, once the full UI is gone, and returns at the decision to leave, so the frame is
+    // back before the full UI mounts and that mount lays out once, at its final size. Returning it
+    // with the swap instead resizes the freshly built page mid-fade.
+    out property <bool> frame-dropped: false;
 
     // Named around the builtin property of that name.
     out property <float> fade-opacity: 1.0;
@@ -54,13 +61,17 @@ export component MiniPlayerSwitch {
     private property <bool> watched-active: root.active;
     changed watched-active => {
         MiniPlayer.active = root.watched-active;
-        // **Lateral, and owed twice.** The swap destroys the whole full UI, so the content branch
-        // is a fresh `ViewTransition` mount on the way back; and the line below closes Now Playing,
-        // which remounts the branch underneath it. Unconditional because the first is owed in both
-        // directions — an unwritten edge is whatever the last drill or back left behind.
+        // **Lateral.** The line below closes Now Playing, which remounts the branch underneath it.
+        // Written in both directions anyway: the way back mounts under the swap timer's suppression
+        // and never reads it, but an unwritten edge is whatever the last drill or back left behind.
         Nav.pending-enter-from = NavEnterFrom.below;
         if (root.watched-active && Nav.now-playing-open) {
             Nav.now-playing-open = false;
+        }
+        // Ahead of the swap, while the miniplayer fades out. The client shrinks as the frame
+        // returns, and `active` already reads the entry edge, so that doesn't carry it back in.
+        if (!root.watched-active) {
+            root.frame-dropped = false;
         }
         // The host has no size at construction, so `active` reads `true` for a window about to lay
         // out full-size, and the first settle arrives here looking like a swap. It isn't one while
@@ -91,6 +102,7 @@ export component MiniPlayerSwitch {
             MiniPlayer.active = root.active;
             MiniPlayer.square = root.square;
             root.render-active = root.active;
+            root.frame-dropped = root.render-active;
             MiniPlayer.active-changed(root.active);
             self.running = false;
         }
@@ -98,12 +110,20 @@ export component MiniPlayerSwitch {
 
     // Flips the render shadow and eases the opacity back. Single-shot, armed only by a crossing the
     // guard above let through — a wiggle back inside the 100 ms needn't re-arm it, the body landing
-    // on whichever branch `active` ended on.
+    // on whichever branch `active` ended on. That wiggle is also why the frame follows the branch
+    // here rather than only dropping: a leave that turned back has already brought it back.
     swap-timer := Timer {
         interval: 100ms;
         running: false;
         triggered => {
+            // The page returning under the crossfade skips its own entrance, as the launch mount
+            // does: a slide played over a whole rebuilt UI is a second full-window layer at the
+            // moment that UI is most expensive. The mounted `ViewTransition` hands the flag back.
+            if (!root.active) {
+                Nav.suppress-enter-animation = true;
+            }
             root.render-active = root.active;
+            root.frame-dropped = root.render-active;
             root.fade-opacity = 1.0;
             self.running = false;
         }

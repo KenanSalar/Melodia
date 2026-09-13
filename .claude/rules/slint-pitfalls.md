@@ -41,6 +41,16 @@ this file is what builds, looks right, and is wrong.
   tab-bar brushes cross to `HeroBackdrop` tiers solved from the artwork decode — it eases the four
   mirrors it crosses *to* on a short curve of their own and lets the transition follow.
 
+- **A `for` over a `pure callback`'s model rebuilds every instance whenever one of the call's
+  inputs is marked dirty, not when its answer changes.** The same structural dirt as the entry
+  above re-runs the binding, and `Repeater::model` (`i-slint-core/model/repeater.rs`) compares the
+  old and new `ModelRc` **by pointer**, so a callback building a fresh model per call drops and
+  rebuilds the whole repeater, trackers and tooltip layers included. Symptom: a page that stutters
+  through a resize drag while nothing on it visibly changes, because every width feeding an argument
+  re-ran the call. Cure: hand back the *same* `ModelRc` for the same answer. `ui::chips::IndexRows`
+  memoizes the settings strips by row shape. `Wrap.pack-labels`, behind Recent Searches, still
+  builds a fresh model per call.
+
 - **A shared component may not `animate` a brush its host hands it — it cannot tell an eased
   input from a stepped one, so it eases a *float* and lets the brush track its source.** A host
   crossing its palette over 400 ms re-dirties the leaf's binding every frame, so the leaf's

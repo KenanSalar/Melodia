@@ -85,11 +85,14 @@ fn the_redraw_arm_ticks_the_loop_win32_parked() {
 
     assert!(!arm.is_empty(), "no `{ARM}` block found — the walk is broken, not the code");
     assert!(
-        arm.contains("pump_parked_loop()"),
+        arm.contains("parked_loop::pump()"),
         "a paint is what the Win32 modal loop still delivers, so this arm is where the tick it \
          parked winit out of gets run:\n{arm}"
     );
-    assert!(code.contains("fn pump_parked_loop"), "the arm calls a pump that no longer exists");
+    assert!(
+        include_str!("../parked_loop.rs").contains("pub fn pump()"),
+        "the arm calls a pump that no longer exists"
+    );
 }
 
 /// The redraw arm's sibling, and not redundant with it: a **move** drag resizes nothing, so the
@@ -105,7 +108,7 @@ fn the_move_arm_ticks_the_loop_win32_parked() {
 
     assert!(!arm.is_empty(), "no `{ARM}` block found — the walk is broken, not the code");
     assert!(
-        arm.contains("pump_parked_loop()"),
+        arm.contains("parked_loop::pump()"),
         "a move drag invalidates nothing, so this arm is the only tick it gets:\n{arm}"
     );
 }

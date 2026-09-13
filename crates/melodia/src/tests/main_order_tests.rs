@@ -75,6 +75,22 @@ fn the_instance_claim_is_settled_before_the_shared_log_is_opened() {
     );
 }
 
+/// The parked-loop pump arms its heartbeat only when two pumps see the same `NewEvents` count, and
+/// `LoopTicks` is the only thing that counts. Left off the backend the count never moves, every
+/// pump reads as parked, and a window animating in the ordinary loop wakes it a second time for
+/// every timer. A source pin because the install is Windows-only and nothing observes its absence.
+#[test]
+fn the_backend_counts_the_loop_ticks_the_parked_pump_reads() {
+    let install = offset_of("with_winit_custom_application_handler(");
+    let select = offset_of("backend.select()");
+
+    assert!(
+        MAIN.contains("ui::window_chrome::parked_loop::LoopTicks"),
+        "the backend's application handler is no longer `parked_loop::LoopTicks`"
+    );
+    assert!(install < select, "a handler added after `select()` is never installed");
+}
+
 /// Neither of the two ways out of `main()` runs a destructor: `respawn_if_requested` `exec`s on
 /// Unix and never returns, and `process::exit` unwinds nothing. So the log's buffered tail is
 /// only on disk if it was flushed explicitly, ahead of both.

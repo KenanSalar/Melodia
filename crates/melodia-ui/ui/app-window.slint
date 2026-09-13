@@ -82,9 +82,9 @@ export component AppWindow inherits Window {
     min-width: 350px;
     min-height: 90px;
     // The custom titlebar never has an OS frame, and the native one drops it for the miniplayer,
-    // which carries its own drag region. On `render-active` rather than `active`, so the frame
-    // changes on the tick the branches swap, while both sit at opacity 0.
-    property <bool> frameless: !Theme.use-native-titlebar || mini-switch.render-active;
+    // which carries its own drag region. `frame-dropped` rather than `active`, so the frame never
+    // leaves while the full UI is still fading out; the switch argues why it returns early.
+    property <bool> frameless: !Theme.use-native-titlebar || mini-switch.frame-dropped;
 
     // Frameless + windowed gets a transparent ARGB surface, so the compositor blends the rounded
     // mantle shell with the desktop and the alpha=0 corners read as "not our window". A native frame
@@ -355,13 +355,12 @@ export component AppWindow inherits Window {
             width: 100%;
             height: 100%;
 
-        // Full UI branch, wrapped so the fade is driven from one ancestor. Gated on `render-active`
-        // — the fade-delayed shadow of `active` — so only one branch is ever mounted, and the
-        // sidebar's grid covers never sit alive beside the mini up-next subscriber mid-swap.
+        // Full UI branch. Gated on `render-active` — the fade-delayed shadow of `active` — so only
+        // one branch is ever mounted, and the sidebar's grid covers never sit alive beside the mini
+        // up-next subscriber mid-swap.
         if !mini-switch.render-active: Rectangle {
             width: 100%;
             height: 100%;
-            opacity: mini-switch.fade-opacity;
 
             VerticalLayout {
             // `if` rather than `visible: false` so the bar's slot leaves the layout
@@ -560,17 +559,21 @@ export component AppWindow inherits Window {
             }
         }
 
-        // Miniplayer branch — same opacity-binding, inside-the-scope shape as the full branch, so
-        // the fade animates symmetrically in either direction.
-        if mini-switch.render-active: Rectangle {
+        // Miniplayer branch, inside the scope like the full one.
+        if mini-switch.render-active: MiniPlayerView {
             width: 100%;
             height: 100%;
-            opacity: mini-switch.fade-opacity;
+        }
 
-            MiniPlayerView {
-                width: 100%;
-                height: 100%;
-            }
+        // The swap's crossfade, painted over whichever branch is mounted rather than spent as
+        // `opacity` on it. Both branches sit on the shell's opaque `mantle`, so `mantle` at `1 - t`
+        // over a branch is the pixel the branch at `t` over `mantle` was, without rendering the whole
+        // UI into a layer for every frame of the fade, or cropping glyph ink to the layer's box.
+        Rectangle {
+            width: 100%;
+            height: 100%;
+            background: Theme.mantle.transparentize(mini-switch.fade-opacity);
+            visible: mini-switch.fade-opacity < 1.0;
         }
         }
     }

@@ -751,8 +751,9 @@ silently miss the other.
   - **An unwritten edge is not a default — it is whatever the last navigation left in the global**,
     and `mark_drill_back` fires on every detail close, so the value sitting there is reliably
     `left`. *Every* Slint-side mount writes its own, `below` by construction, the two non-lateral
-    directions being Rust's; the pin **walks** the tree. The miniplayer's mark isn't about a closer
-    — the swap destroys the whole full UI, so the content branch remounts on the way *back*.
+    directions being Rust's; the pin **walks** the tree. The miniplayer's mark is for the Now Playing
+    close it performs. The full UI it rebuilds on the way *back* mounts under the suppression below
+    and never reads the edge.
   - **Two inputs turn parts of it off and answer different questions**: `enabled: false` is "does
     this view animate at all", `slide: false` is "is anything *else* already translating it" —
     fade, don't move. Both default on, so a mount that owns its motion says nothing.
@@ -768,6 +769,10 @@ silently miss the other.
     the hand-back can't be Rust's. Gated on **`enabled`**, since a nested body mounted at boot runs
     the same `Timer` and would otherwise drop the flag for the page above it. Pinned by
     `ui::startup_motion_tests`.
+    **`MiniPlayerSwitch`'s swap timer raises the same flag** on the way out of the miniplayer, ahead
+    of the flip that rebuilds the full UI. That rebuild is already crossfading, and a page sliding in
+    under it put a second full-window layer over the most expensive frames of the swap. The setting
+    has no say there.
   - **A page with sub-views nests a second one and must disarm it at mount**, the page's own enter
     still playing when the first tab body mounts and a horizontal slide composed with a fade-up
     reading as a diagonal. The host arms it in the tab bar's `selected` handler; starting `false`
@@ -1147,4 +1152,7 @@ edit would otherwise reverse.
   parent layout's spacing. `wrap-per-row` and `wrap-height` sit beside it. **How many fit is
   measured, not estimated** — `ChipGroup` mounts a hidden ruler of real `Chip`s, `TabBar`'s idiom,
   and **`min-width: 0px` on the root is load-bearing**, stopping that ruler leaking a floor into
-  the card.
+  the card. **`chunk-indices` hands back one model per row shape** (`ui::chips::IndexRows`), and
+  that is what keeps a resize cheap. Every width change re-runs the strip's binding through
+  `SettingsPage.page-w`, and a repeater handed a model it can't match by pointer rebuilds every chip
+  and swatch under it, tooltips included; see the repeater entry in `slint-pitfalls.md`.

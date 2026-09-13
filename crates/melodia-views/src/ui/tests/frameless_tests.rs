@@ -2,8 +2,9 @@
 //!
 //! Neither half can go wrong where CI looks. A shell binding reading the setting instead of
 //! `frameless` is right under the custom titlebar and wrong only for the native miniplayer, and
-//! the exit edge matters only where dropping a frame grows the client area, Win32 and macOS. The
-//! Rust half of the frame reading is pinned beside `window_chrome::geometry` and its `Resized` arm.
+//! the exit edge and the latch's timing matter only where dropping a frame grows the client area,
+//! Win32 and macOS. The Rust half of the frame reading is pinned beside `window_chrome::geometry`
+//! and its `Resized` arm.
 
 use melodia_testkit::{binding_value, normalize_ws, strip_line_comments};
 
@@ -34,18 +35,39 @@ fn every_frame_question_in_the_shell_reads_frameless() {
     assert!(missing.is_empty(), "these frame bindings no longer read `frameless`:\n{missing:#?}");
 }
 
-/// The frame changes on the tick the branches swap, both at opacity 0. On `active` it would drop
-/// while the full UI is still fading out, leaving it with neither the OS frame nor the custom
-/// titlebar, which doesn't mount under the native setting.
+/// On `active` the frame would drop while the full UI is still fading out, leaving it with neither
+/// the OS frame nor the custom titlebar, which doesn't mount under the native setting.
 #[test]
-fn the_frame_drops_with_the_mounted_miniplayer_not_the_threshold() {
+fn the_frame_follows_the_switch_latch_not_the_threshold() {
     let shell = tokens(APP_WINDOW);
 
     let frameless = binding_value(&shell, "property <bool> frameless:").trim();
 
     assert_eq!(
-        frameless, "!Theme.use-native-titlebar || mini-switch.render-active",
-        "`frameless` no longer follows the mounted branch"
+        frameless, "!Theme.use-native-titlebar || mini-switch.frame-dropped",
+        "`frameless` no longer follows the switch's `frame-dropped` latch"
+    );
+}
+
+/// The frame drops once the miniplayer is mounted and returns at the decision to leave, ahead of
+/// the full UI's mount. Cleared only at the swap, it comes back one pump after that mount and
+/// resizes the page it just built. Copied before `render-active` rather than after, it takes the
+/// branch being left, and a completed leave drops the frame over the full UI.
+#[test]
+fn the_frame_latch_returns_at_the_exit_decision_and_follows_each_swap() {
+    const EXIT_ARM: &str = "if (!root.watched-active) { root.frame-dropped = false; }";
+    const FOLLOW: &str =
+        "root.render-active = root.active; root.frame-dropped = root.render-active;";
+    let switch = tokens(MINI_SWITCH);
+
+    assert!(
+        switch.contains(EXIT_ARM),
+        "the exit decision no longer brings the frame back ahead of the full UI's mount"
+    );
+    assert_eq!(
+        switch.matches(FOLLOW).count(),
+        2,
+        "the seed and swap timers no longer both set the frame from the branch they mounted"
     );
 }
 
@@ -54,7 +76,7 @@ fn the_frame_drops_with_the_mounted_miniplayer_not_the_threshold() {
 #[test]
 fn the_exit_edge_widens_by_the_frame_allowance() {
     const TERMS: [&str; 3] =
-        ["root.render-active ?", "root.exit-allowance-w", "root.exit-allowance-h"];
+        ["root.frame-dropped ?", "root.exit-allowance-w", "root.exit-allowance-h"];
     let switch = tokens(MINI_SWITCH);
     let active = binding_value(&switch, "out property <bool> active:");
 

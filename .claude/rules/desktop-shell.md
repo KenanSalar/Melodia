@@ -36,9 +36,12 @@ the OS owns has to be attached late or not at all on at least one platform.
 
 - **On Win32 a resize or move drag parks winit's loop, and with it every Slint `Timer` and
   `changed` handler**, so the whole responsive layer — the miniplayer swap, grid column counts,
-  each `changed width` mirror — waits for the button to come up. `winit_filter::pump_parked_loop`
-  is what keeps them running and carries the argument; a new drag-reachable winit arm is where a
-  third pump site would go.
+  each `changed width` mirror — waits for the button to come up. `window_chrome::parked_loop` is
+  what keeps them running and carries the argument. The filter's `RedrawRequested` and `Moved` arms
+  pump from the events the modal loop still delivers. A heartbeat thread carries the tick past the
+  last of them, armed only once `LoopTicks` (installed on the backend in `main.rs`) has seen no
+  `NewEvents` between two pumps, so the ordinary loop never wakes for it. A new drag-reachable winit
+  arm is where a third pump site would go.
 
 - **The Native Title Bar toggle restarts** via `Dialog` `"restart-titlebar"` →
   `window_chrome::request_respawn_and_quit`; hydrate `Theme.use-native-titlebar` *before*
@@ -49,8 +52,11 @@ the OS owns has to be attached late or not at all on at least one platform.
   `frameless`, and that couples three trees. On Win32 and macOS the client area grows into the
   frame it lost, so the winit `Resized` arm measures the frame while one stands
   (`window_chrome::geometry::frame_allowance`), `WindowChrome.frame-allowance-*` holds the reading
-  across the frameless span, and `MiniPlayerSwitch` widens its exit edge by it. Drop any link and a
-  window parked just inside the threshold bounces in and out, which no Linux runner can show.
+  across the frameless span, and `MiniPlayerSwitch` widens its exit edge by it while its
+  `frame-dropped` latch says the frame is down. Drop any link and a window parked just inside the
+  threshold bounces in and out, which no Linux runner can show. The latch drops with the swap into
+  the miniplayer and returns at the decision to leave, so the frame is back before the full UI
+  mounts; returned with the swap, it resizes the page that mount just built.
 
 - **`"restart-backdrop"` is the third of these and the one whose deadline is earlier than
   `app.run()`** — `BackdropFlags.aurora_backdrop` decides whether the two artwork tiers hold a
