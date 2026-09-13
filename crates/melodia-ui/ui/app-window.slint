@@ -116,13 +116,15 @@ export component AppWindow inherits Window {
 
     // `window_chrome::install` hydrates `Theme.use-native-titlebar` before `app.run()`, so the
     // window maps with the right frame; Slint applies later flips live. Dropping the OS frame also
-    // drops winit's resize edges, which this band restores, as wide as the margins it covers so they
-    // resize the way the frame's borders did. `ResizeRing` reads the same band, so a drift leaves a
-    // strip where the cursor changes but the widget still flashes hover.
+    // drops its resize edges, which `ResizeRing` restores along this band, as wide as the margins it
+    // covers so they resize the way the frame's borders did.
+    //
+    // No `resize-border-width`: Slint's handler for it hit-tests square corners a band wide, against
+    // a logical width compared with a physical cursor, so it took presses the ring's cursor said
+    // meant something else.
     property <length> resize-band: max(Theme.resize-border, root.margin-left, root.margin-right,
         root.margin-bottom);
     no-frame: root.frameless;
-    resize-border-width: root.frameless ? root.resize-band : 0px;
 
     default-font-family: "Vazirmatn";
     default-font-size: Theme.font-size-md;
@@ -598,15 +600,6 @@ export component AppWindow inherits Window {
         }
     }
 
-    // Cursor hints over the band winit resizes from. Mounted only when resizing is both possible
-    // and ours to advertise: not while maximized, where it's a no-op, and not under a native frame,
-    // where the OS draws its own border. Full-size, the band being the client's edge, margins and all.
-    if root.frameless && !WindowChrome.is-maximized: ResizeRing {
-        width: 100%;
-        height: 100%;
-        band: root.resize-band;
-    }
-
     // The overlays below cover the shell's rect rather than the client, so a dialog's backdrop or a
     // toast doesn't paint into the margins the native miniplayer leaves transparent.
 
@@ -638,6 +631,18 @@ export component AppWindow inherits Window {
         y: 0px;
         width: root.content-width;
         height: root.content-height;
+    }
+
+    // The resize grabs, live only while resizing is ours: not maximized, where it's a no-op, and not
+    // under a native frame, which has its own borders. Above the overlays, so an open dialog or the
+    // first-run card doesn't take resizing away, and full-size, the band being the client's edge,
+    // margins and all.
+    ResizeRing {
+        width: 100%;
+        height: 100%;
+        active: root.frameless && !WindowChrome.is-maximized;
+        band: root.resize-band;
+        radius: Theme.window-radius;
     }
 
     // The 1 px outline an OS draws round its own frames, which a frameless window has to draw for

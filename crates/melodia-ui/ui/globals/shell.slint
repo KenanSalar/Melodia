@@ -1,6 +1,10 @@
 // Window-shell plumbing: the chrome the OS frame doesn't draw, the responsive miniplayer swap, and
 // the two globals keeping pointer state coherent when a view switch unmounts what was under it.
 
+// Which of the frameless window's resize grabs the pointer is over, named by the edge or corner it
+// moves. `ResizeRing` is the only writer.
+export enum ResizeZone { none, north, south, west, east, north-west, north-east, south-west, south-east }
+
 // The custom titlebar, owned by `ui/window_chrome/` with Slint as the dumb renderer.
 // `is-maximized` comes off a winit `Resized` subscription, so the icon stays right under tiling
 // shortcuts that bypass our buttons. **Window dragging is not handled inside Slint** — a
@@ -41,6 +45,8 @@ export global WindowChrome {
     // Mirrored into an atomic the winit `MouseInput` filter checks before starting an
     // OS-level window move.
     callback drag-region-hover-changed(bool);
+    // The same for `ResizeRing`'s grabs, before an OS-level resize.
+    callback resize-zone-changed(ResizeZone);
     callback restart-app();
     callback restart-tray();
     callback restart-backdrop();

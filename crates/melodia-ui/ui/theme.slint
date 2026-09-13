@@ -118,12 +118,9 @@ export global Theme {
     in-out property <length> native-content-radius: 6px;
     out property <length> native-content-radius-inner: max(0px, native-content-radius - 1px);
 
-    // The floor of `AppWindow`'s `resize-band`, which **both** the `Window`'s `resize-border-width`
-    // and the `ResizeRing` overlays setting the cursor over it read, so a drift leaves a band that
-    // resizes with no cursor or the reverse. Corners are deliberately larger for a forgiving
-    // diagonal grab.
+    // The floor of `AppWindow`'s `resize-band`, the depth of a frameless window's resize grab along
+    // each edge. `ResizeRing` sizes its corners off the band it is handed, never off this directly.
     out property <length> resize-border: 4px;
-    out property <length> resize-corner: 8px;
 
     // The `OverlayScrollbar` *element's* slot, distinct from the 8 px it paints inside it. Four
     // sides agree on it: both bar pairs size their elements by it, the horizontal bar subtracts it

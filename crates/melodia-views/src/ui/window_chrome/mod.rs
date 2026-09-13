@@ -5,16 +5,16 @@
 //! Seven reasons it exists: hydrating `Theme.use-native-titlebar` (in the gap between
 //! `AppWindow::new()` and `app.run()`, where `main.rs` calls [`install`], so the window maps
 //! with its frame decided rather than swapping it on screen), the
-//! window control callbacks ([`controls`]), window dragging ([`winit_filter`]), the Slint tick a
-//! Win32 drag parks (`parked_loop`), file-drop coalescing ([`drop_coalescer`]), geometry
-//! ([`geometry`]) and the restart flow.
+//! window control callbacks ([`controls`]), window dragging and resizing ([`winit_filter`],
+//! [`resize_grab`]), the Slint tick a Win32 drag parks (`parked_loop`), file-drop coalescing
+//! ([`drop_coalescer`]), geometry ([`geometry`]) and the restart flow.
 //!
-//! **Dragging belongs at the winit layer.** `drag_window()` from a `TouchArea`'s
+//! **Dragging and resizing belong at the winit layer.** `drag_window()` from a `TouchArea`'s
 //! `pointer-event` leaks the grab: the compositor takes pointer ownership for the move and
 //! the matching `Released` never reaches Slint, so a `TouchArea` that returned `GrabMouse`
-//! stays pressed forever and every later click routes back to it. Slint's own resize-border
-//! handler dodges this by intercepting `MouseInput { Pressed, Left }` before dispatch, and
-//! this mirrors it against an atomic a Slint callback keeps in step with drag-area hover.
+//! stays pressed forever and every later click routes back to it. A resize drag is the same
+//! handover. So the filter intercepts `MouseInput { Pressed, Left }` before dispatch, against
+//! cells Slint callbacks keep in step with drag-region and resize-grab hover.
 //!
 //! **A restart persists, then hands off to [`request_respawn_and_quit`]**, which arms
 //! [`RESPAWN_AFTER_EXIT`] and quits the loop so `main()` falls through to shutdown before
@@ -29,6 +29,7 @@ mod drop_coalescer;
 pub mod geometry;
 #[cfg(target_os = "windows")]
 pub mod parked_loop;
+mod resize_grab;
 mod winit_filter;
 
 pub use drop_coalescer::{
@@ -167,8 +168,12 @@ pub fn install(app: &AppWindow, state: &AppState) -> Result<(), AppError> {
     app.global::<Theme>().set_use_native_titlebar(use_native);
 
     let drag_hover = Arc::new(AtomicBool::new(false));
+    let press_targets = winit_filter::PressTargets {
+        drag_hover: Arc::clone(&drag_hover),
+        resize: resize_grab::wire(app),
+    };
 
-    winit_filter::install(app, state, drag_hover.clone());
+    winit_filter::install(app, state, press_targets);
     controls::wire(app, state, drag_hover);
     seed_always_on_top(app, state, settings.window.always_on_top);
 

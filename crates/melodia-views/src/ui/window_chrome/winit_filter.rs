@@ -2,9 +2,9 @@
 //!
 //! Seven reasons to subscribe:
 //!
-//! 1. **`MouseInput { Pressed, Left }`** over the titlebar drag area — an OS-level window
-//!    move plus `PreventDefault`, bypassing the TouchArea-grab issue the parent module's
-//!    docs describe.
+//! 1. **`MouseInput { Pressed, Left }`** over a `ResizeRing` grab or a drag region: an
+//!    OS-level resize or window move plus `PreventDefault`, bypassing the TouchArea-grab
+//!    issue the parent module's docs describe.
 //! 2. **`MouseInput { Pressed, Back | Forward }`** — Mouse-4 / Mouse-5 into the nav
 //!    history, gated on no overlay being open so the buttons don't fight its input
 //!    context.
@@ -22,6 +22,8 @@
 //! 7. **`RedrawRequested`** and **`Moved`** — the Slint tick Win32's modal resize-and-move
 //!    loop parks winit out of; see `parked_loop`.
 
+use std::cell::Cell;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -31,7 +33,7 @@ use slint::winit_030::WinitWindowAccessor;
 use slint::winit_030::winit::event::{
     ElementState, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent,
 };
-use slint::winit_030::winit::window::Window as WinitWindow;
+use slint::winit_030::winit::window::{ResizeDirection, Window as WinitWindow};
 
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, CompositeScroll, PlaylistDetail, PopupHighlight, Queue, Theme};
@@ -105,13 +107,38 @@ fn route_wheel(
     WheelRoute::Native
 }
 
-pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool>) {
+/// What the pointer is over that turns a left press into an OS window operation, each kept in
+/// step with Slint hover by a `WindowChrome` callback.
+pub(super) struct PressTargets {
+    /// Over a titlebar or miniplayer drag region.
+    pub(super) drag_hover: Arc<AtomicBool>,
+    /// Over one of `ResizeRing`'s grabs, and which way it resizes.
+    pub(super) resize: Rc<Cell<Option<ResizeDirection>>>,
+}
+
+pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) {
+    let PressTargets { drag_hover, resize } = targets;
     let weak = app.as_weak();
     let state = state.clone();
     // Where the pointer is, for the synthetic scroll below.
     let mut cursor_pos = slint::LogicalPosition::default();
     app.window().on_winit_window_event(move |w, event| {
         match event {
+            // Ahead of the drag arm: the miniplayer's drag region runs right up to the edge, and its
+            // hover can still read true for a tick after the pointer reaches a grab.
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Left,
+                ..
+            } if let Some(direction) = resize.get() => {
+                // macOS answers `NotSupported` and resizes a borderless window at its own edges.
+                let _ = w.with_winit_window(|ww| {
+                    if let Err(e) = ww.drag_resize_window(direction) {
+                        log::debug!("drag_resize_window unsupported on this platform: {e}");
+                    }
+                });
+                slint::winit_030::EventResult::PreventDefault
+            }
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
                 button: MouseButton::Left,
