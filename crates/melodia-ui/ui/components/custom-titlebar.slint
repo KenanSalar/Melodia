@@ -1,14 +1,19 @@
 import { Theme } from "../theme.slint";
 import { WindowChrome } from "../globals/shell.slint";
-import { MaterialIcon } from "material-icon.slint";
 import { Tooltip } from "tooltip.slint";
 import { MacOsTitleBarCluster } from "macos-titlebar-cluster.slint";
+
+enum CaptionGlyph { minimize, maximize, restore, close }
 
 // One decoration button. Hover paints a rounded fill; the close button overrides both hover brushes
 // to flash the theme's danger red. Bespoke rather than an `IconButton` because these are
 // rectangular and need a `hover-bg` knob that component doesn't expose. Private to this file.
+//
+// Cell and glyph follow Windows 11's caption buttons: 46 × 32, with a 10 px glyph of 1 px strokes.
+// The glyphs are drawn because Segoe Fluent Icons isn't ours to ship, and Material Symbols' window
+// icons have proportions of their own, `minimize` sitting on the baseline like an underscore.
 component TitleBarButton inherits Rectangle {
-    in property <string> icon;
+    in property <CaptionGlyph> glyph;
     in property <string> tooltip-text;
     in property <brush> hover-bg: Theme.surface0;
     in property <brush> idle-fg: Theme.overlay1;
@@ -18,8 +23,8 @@ component TitleBarButton inherits Rectangle {
 
     // Pinned on both axes as a layout child: `height: 100%` forms the unbounded-layout
     // cycle and collapses the sibling buttons to zero width.
-    min-width: 40px;
-    max-width: 40px;
+    min-width: 46px;
+    max-width: 46px;
     min-height: 32px;
     max-height: 32px;
     horizontal-stretch: 0;
@@ -45,17 +50,22 @@ component TitleBarButton inherits Rectangle {
         animate background { duration: Theme.dur-fast; easing: ease-in-out; }
     }
 
-    HorizontalLayout {
-        alignment: center;
-        VerticalLayout {
-            alignment: center;
-            MaterialIcon {
-                name: root.icon;
-                icon-size: 16px;
-                icon-color: touch.has-hover ? root.hover-fg : root.idle-fg;
-                animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
-            }
-        }
+    // Centred by leaving `x`/`y` unset, which lands on whole pixels in a 46 × 32 cell, and the
+    // half-pixel coordinates then put each stroke on one pixel row. The viewbox is required: without
+    // it Slint fits the path's own bounds, and the minimize line has no height to fit.
+    Path {
+        width: 10px;
+        height: 10px;
+        viewbox-width: 10;
+        viewbox-height: 10;
+        commands: root.glyph == CaptionGlyph.minimize ? "M 0 5.5 H 10"
+            : root.glyph == CaptionGlyph.maximize ? "M 0.5 0.5 H 9.5 V 9.5 H 0.5 Z"
+            : root.glyph == CaptionGlyph.restore ? "M 0.5 2.5 H 7.5 V 9.5 H 0.5 Z M 2.5 2.5 V 0.5 H 9.5 V 7.5 H 7.5"
+            : "M 0 0 L 10 10 M 10 0 L 0 10";
+        stroke: touch.has-hover ? root.hover-fg : root.idle-fg;
+        stroke-width: 1px;
+        stroke-line-join: round;
+        animate stroke { duration: Theme.dur-fast; easing: ease-in-out; }
     }
 
     Tooltip {
@@ -101,7 +111,7 @@ export component CustomTitleBar inherits Rectangle {
         // Standard icons on the left, close at the *corner* so "click corner = close"
         // still holds. Three siblings rather than a wrapper, per the header.
         if Theme.titlebar-button-side == 1 && Theme.titlebar-button-style == 0: TitleBarButton {
-            icon: "close";
+            glyph: CaptionGlyph.close;
             tooltip-text: @tr("Close");
             hover-bg: Theme.danger;
             // **The on-danger ink, not a chrome token.** `Theme.mantle` stood in here
@@ -111,12 +121,12 @@ export component CustomTitleBar inherits Rectangle {
             clicked => { WindowChrome.close-window(); }
         }
         if Theme.titlebar-button-side == 1 && Theme.titlebar-button-style == 0: TitleBarButton {
-            icon: WindowChrome.is-maximized ? "filter_none" : "crop_square";
+            glyph: WindowChrome.is-maximized ? CaptionGlyph.restore : CaptionGlyph.maximize;
             tooltip-text: WindowChrome.is-maximized ? @tr("Restore") : @tr("Maximize");
             clicked => { WindowChrome.toggle-maximize(); }
         }
         if Theme.titlebar-button-side == 1 && Theme.titlebar-button-style == 0: TitleBarButton {
-            icon: "minimize";
+            glyph: CaptionGlyph.minimize;
             tooltip-text: @tr("Minimize");
             clicked => { WindowChrome.minimize(); }
         }
@@ -178,17 +188,17 @@ export component CustomTitleBar inherits Rectangle {
 
         // Standard icons in Windows / KDE order, close at the corner.
         if Theme.titlebar-button-side == 0 && Theme.titlebar-button-style == 0: TitleBarButton {
-            icon: "minimize";
+            glyph: CaptionGlyph.minimize;
             tooltip-text: @tr("Minimize");
             clicked => { WindowChrome.minimize(); }
         }
         if Theme.titlebar-button-side == 0 && Theme.titlebar-button-style == 0: TitleBarButton {
-            icon: WindowChrome.is-maximized ? "filter_none" : "crop_square";
+            glyph: WindowChrome.is-maximized ? CaptionGlyph.restore : CaptionGlyph.maximize;
             tooltip-text: WindowChrome.is-maximized ? @tr("Restore") : @tr("Maximize");
             clicked => { WindowChrome.toggle-maximize(); }
         }
         if Theme.titlebar-button-side == 0 && Theme.titlebar-button-style == 0: TitleBarButton {
-            icon: "close";
+            glyph: CaptionGlyph.close;
             tooltip-text: @tr("Close");
             hover-bg: Theme.danger;
             hover-fg: Theme.danger-text;

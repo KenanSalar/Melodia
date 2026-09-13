@@ -246,7 +246,7 @@ impl Default for QueueFlags {
 }
 
 /// Style of the custom titlebar's decoration buttons: `Standard` paints
-/// Material Symbols bar icons, `Macos` the three traffic-light circles.
+/// Windows 11's caption glyphs, `Macos` the three traffic-light circles.
 /// Persisted as a token so a future style needs no schema change.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

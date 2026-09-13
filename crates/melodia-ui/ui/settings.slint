@@ -197,7 +197,7 @@ export global Settings {
     in-out property <int> corner-radius: 6;
     callback corner-radius-changed(int);
 
-    // 0 = Standard (Material bar icons), 1 = macOS (traffic lights with hover-reveal glyphs).
+    // 0 = Standard (Windows caption glyphs), 1 = macOS (traffic lights with hover-reveal glyphs).
     // Mirrored into `Theme.titlebar-button-style` so `custom-titlebar.slint` reads it through
     // `Theme`, the `shell-radius` precedent. Inert under the native titlebar.
     in-out property <int> titlebar-button-style: 0;
