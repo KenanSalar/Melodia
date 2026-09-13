@@ -1796,6 +1796,14 @@ msgstr "Radio en ligne"
 msgid "Browse and play live stations from radio-browser.info"
 msgstr "Parcourez et écoutez des stations en direct depuis radio-browser.info"
 
+# The lyrics switch, which turns lyrics on in place of Up Next. Named on the Services card and
+# again as the tooltip of the Now Playing header's switch, so both read from this one label.
+msgid "Show lyrics"
+msgstr "Afficher les paroles"
+
+msgid "Show the playing track's words in Now Playing instead of Up Next"
+msgstr "Afficher les paroles du titre en cours dans « Lecture en cours » à la place de « À suivre »"
+
 # The online-lyrics switch. Named in the Services card and again on the welcome card, so both
 # read from this one pair.
 msgid "Look up lyrics online"
@@ -2108,12 +2116,6 @@ msgstr "Insérer les paroles trouvées"
 # The Now Playing lyrics menu. "Look up again" forgets what the directory said about this
 # track and asks once more, for a sheet matched off tags that have since been corrected;
 # "Save to file" writes the sheet on screen into the track's own lyrics tag.
-msgid "Hide lyrics"
-msgstr "Masquer les paroles"
-
-msgid "Show lyrics"
-msgstr "Afficher les paroles"
-
 msgid "Look up again"
 msgstr "Rechercher à nouveau"
 

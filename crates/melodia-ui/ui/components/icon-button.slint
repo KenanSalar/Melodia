@@ -11,6 +11,10 @@ export component IconButton inherits Rectangle {
     // Selects the FILL=1 Material Symbols variant, so a toggled button reads as a solid glyph.
     in property <bool> filled: false;
     in property <bool> button-enabled: true;
+    // How a disabled glyph is drawn. Greyed and halved by default; a toggle whose off state *is*
+    // disabled sets these to its idle look, so switching it off doesn't also read as broken.
+    in property <brush> disabled-fg: Theme.overlay0;
+    in property <float> disabled-fade: 0.5;
     // Lets a popup trigger keep its highlight while the popup is open — see `PopupHighlight`.
     in property <bool> force-bg: false;
     in property <brush> idle-bg: transparent;
@@ -114,13 +118,13 @@ export component IconButton inherits Rectangle {
         // Active beats hover, so a hovered toggled button still reads as toggled;
         // hover then beats idle, which is what carries a destructive cue.
         icon-color: !root.button-enabled
-            ? Theme.overlay0
+            ? root.disabled-fg
             : (root.active
                 ? root.active-fg
                 : (touch.has-hover ? root.hover-fg : root.idle-fg));
         // The disabled dim rides the same float rather than a second `opacity`: this root wraps a
         // `Text`, so an `opacity` here layered and cropped the glyph to its line box.
-        fade: root.fade * (root.button-enabled ? 1.0 : 0.5) * root.lit-level;
+        fade: root.fade * (root.button-enabled ? 1.0 : root.disabled-fade) * root.lit-level;
         animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
     }
 

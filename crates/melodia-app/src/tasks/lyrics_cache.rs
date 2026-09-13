@@ -1,10 +1,11 @@
 //! Holds the lyrics store to its bounds.
 //!
-//! **Run when Now Playing closes, not after a scan.** Nothing but that view calls
-//! `library::lyrics::for_track`, so the store only grows while it is open and the close is exactly
-//! when it stops: `tasks::radio_logo_cache`'s argument for pruning on a section leave, and for the
-//! same reason the artwork sweep's scan trigger would be wrong here. A user who plays music for a
-//! week without opening Now Playing writes nothing for this to collect.
+//! **Run when the store stops growing, not after a scan.** Nothing but Now Playing calls
+//! `library::lyrics::for_track`, so the store only grows while that view is open with lyrics on,
+//! and its close or the switch going off is exactly when it stops: `tasks::radio_logo_cache`'s
+//! argument for pruning on a section leave, and for the same reason the artwork sweep's scan
+//! trigger would be wrong here. A user who plays music for a week without opening Now Playing
+//! writes nothing for this to collect.
 
 use std::sync::Arc;
 

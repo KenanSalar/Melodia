@@ -4,16 +4,16 @@ import { SectionCard } from "../../components/settings/section-card.slint";
 import { SettingRow } from "../../components/settings/setting-row.slint";
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 
-// The switch that lets the lyrics panel reach the network, and the one that decides how it draws a
-// line. The first description names lrclib.net for the radio master row's reason: a user deciding
-// to stay local is entitled to know who would be contacted. Search visibility follows
-// `radio-section.slint`.
+// The switch that turns lyrics on, the one that lets the panel reach the network, and the one that
+// decides how it draws a line. The lookup's description names lrclib.net for the radio master
+// row's reason: a user deciding to stay local is entitled to know who would be contacted. Search
+// visibility follows `radio-section.slint`.
 //
-// **The panel itself is not configured here.** Whether the column shows lyrics or Up Next is a
-// view preference, flipped from that view's own overflow menu. Both switches below are on this card
-// *and* in that menu, each being two things: a default worth finding in Settings, and the one you
-// reach for the moment it is wanted — a song in another script starts, or the panel says a setting
-// is why it has nothing to show.
+// **Unlike Radio's, the two rows under the master stay put while it is off.** Both are defaults a
+// user sets before turning lyrics on, and neither does anything until then. Every switch here is
+// also in Now Playing, the master as the header's switch and the other two in its lyrics menu, each
+// being two things: a default worth finding in Settings, and the one you reach for the moment it
+// is wanted.
 export component LyricsSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -31,23 +31,37 @@ export component LyricsSection inherits Rectangle {
 
     // Declared once, because the search predicate is fed `label + " " + desc` and a pair spelled
     // at both sites lets a reworded description stop its own row matching.
+    property <string> enabled-label: @tr("Show lyrics");
+    property <string> enabled-desc: @tr("Show the playing track's words in Now Playing instead of Up Next");
+
     property <string> online-label: @tr("Look up lyrics online");
     property <string> online-desc: @tr("When a track carries no words of its own, ask lrclib.net for them");
 
     property <string> romanization-label: @tr("Show romanization");
     property <string> romanization-desc: @tr("Print how a line sounds in Latin letters under the words, for a script that does not use them");
 
+    property <bool> show-enabled: row-visible(enabled-label, enabled-desc);
     property <bool> show-online: row-visible(online-label, online-desc);
     property <bool> show-romanization: row-visible(romanization-label, romanization-desc);
 
-    out property <bool> has-matches: show-online || show-romanization;
+    out property <bool> has-matches: show-enabled || show-online || show-romanization;
 
     VerticalLayout {
         if has-matches: SectionCard {
             title: root.card-title;
 
-            if root.show-online: SettingRow {
+            if root.show-enabled: SettingRow {
                 icon: "lyrics";
+                label: root.enabled-label;
+                description: root.enabled-desc;
+                ToggleSwitch {
+                    checked <=> Settings.lyrics-enabled;
+                    toggled(v) => { Settings.lyrics-enabled-changed(v); }
+                }
+            }
+
+            if root.show-online: SettingRow {
+                icon: "travel_explore";
                 label: root.online-label;
                 description: root.online-desc;
                 ToggleSwitch {

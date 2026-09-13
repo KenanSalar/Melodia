@@ -1,0 +1,80 @@
+import { Theme } from "../../theme.slint";
+import { Lyrics } from "../../globals/lyrics.slint";
+import { Player } from "../../globals/player.slint";
+import { ToggleSwitch } from "../settings/toggle-switch.slint";
+import { Tooltip, TooltipSide } from "../tooltip.slint";
+import { LyricsMenu } from "./lyrics-menu.slint";
+
+// Lyrics, top right of the Now-Playing view: the panel's menu and the switch that mounts it, on one
+// pill. The switch is the swap between Up Next and the panel and the whole feature's on/off with
+// it, so a column showing Up Next is one where nothing is looked up.
+//
+// **The pill is there so the glyph reads as the switch's**, which is what explains a glyph that
+// does nothing while the switch is off. Grouping rather than a control, so it carries the disc
+// buttons' accent under their weight and answers no pointer of its own.
+export component LyricsControls inherits Rectangle {
+    background: Player.np-accent-bright.transparentize(0.9);
+    border-radius: self.height / 2;
+
+    // The pair's resting tier, a step over the header's `np-accent-dim` and the disc fill since both
+    // sit on the pill and lose some contrast to it. One spelling for the glyph and the thumb, so the
+    // two read as one control switched off.
+    property <brush> off-fg: Player.np-accent-bright.transparentize(0.3);
+    property <brush> off-track: Player.np-accent-bright.transparentize(0.76);
+
+    // The pill's edge, so a fill this faint still has a shape against a busy backdrop. A childless
+    // sibling rather than a `border` on the root, which would put the glyph and the switch behind a
+    // layer; declared first so both tooltips paint over it. `x`/`y` keep it out of the root's size.
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        border-radius: root.border-radius;
+        border-width: 1px;
+        border-color: Player.np-accent-bright.transparentize(0.8);
+    }
+
+    HorizontalLayout {
+        // The glyph sits in a slot wider than its ink, so the right end takes the slot's own
+        // margin: an even ring around both, and a switch end concentric with the pill's.
+        padding-right: (menu.height - menu.glyph-size) / 2;
+        spacing: Theme.pad-xs;
+
+        menu := LyricsMenu {
+            off-fg: root.off-fg;
+        }
+
+        VerticalLayout {
+            alignment: center;
+
+            lyrics-switch := ToggleSwitch {
+                // As tall as the glyph beside it, the width following.
+                height: menu.glyph-size;
+                // Both halves, the visualizer picker's shape: the property so the column swaps on
+                // the click, the callback so it is still swapped next launch.
+                checked <=> Lyrics.enabled;
+                toggled(on) => {
+                    Lyrics.set-enabled(on);
+                }
+
+                // Lit at the glyph family's full accent.
+                track-on: Player.np-accent-bright;
+                track-off: root.off-track;
+                thumb-on: Theme.ink-on(Player.np-accent-bright);
+                thumb-off: root.off-fg;
+
+                // A switch has no label to carry its name. Below and end-aligned: this is the
+                // row's last control, on the panel's top edge and its right one.
+                Tooltip {
+                    text: @tr("Show lyrics");
+                    hovered: lyrics-switch.has-hover;
+                    host-width: lyrics-switch.width;
+                    host-height: lyrics-switch.height;
+                    side: TooltipSide.below;
+                    align-end: true;
+                }
+            }
+        }
+    }
+}

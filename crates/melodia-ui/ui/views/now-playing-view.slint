@@ -16,7 +16,7 @@ import { Lyrics } from "../globals/lyrics.slint";
 import { StationFacts, StationHistory } from "../components/station-facts.slint";
 import { NpOverlayScrollbar } from "../components/now-playing/np-overlay-scrollbar.slint";
 import { TooltipSide } from "../components/tooltip.slint";
-import { LyricsMenu } from "../components/now-playing/lyrics-menu.slint";
+import { LyricsControls } from "../components/now-playing/lyrics-controls.slint";
 import { VisualizerPicker } from "../components/now-playing/visualizer-picker.slint";
 import { VisualizerStrip } from "../components/now-playing/visualizer-strip.slint";
 import { AuroraBackdrop } from "../components/aurora-backdrop.slint";
@@ -212,11 +212,11 @@ export component NowPlayingView inherits Rectangle {
             }
 
             // **Gone rather than disabled on a station**, the vote's rule directly above: the
-            // column keeps its panel whatever the toggle says, a stream having no track to look a
+            // column keeps its panel whatever the switch says, a stream having no track to look a
             // sheet up for, so here it could only ever swap nothing for nothing.
             if !Player.vm.has_station: VerticalLayout {
                 alignment: center;
-                LyricsMenu { }
+                LyricsControls { }
             }
         }
 
@@ -411,7 +411,7 @@ export component NowPlayingView inherits Rectangle {
                     // slot on a track, the column being one column with three arms rather than a
                     // place two things share.
                     text: Player.vm.has_station ? @tr("Station")
-                        : Lyrics.shown ? @tr("Lyrics")
+                        : Lyrics.enabled ? @tr("Lyrics")
                         : @tr("Up Next");
                     // Accent-tinted like the divider under it but solid: a heading carries it at
                     // full alpha where a hairline can't. The rows below keep the list palette.
@@ -427,15 +427,15 @@ export component NowPlayingView inherits Rectangle {
                 }
 
                 // The mini-player mounts the same component with `compact: true`.
-                if !Player.vm.has_station && !Lyrics.shown: UpNextList {
+                if !Player.vm.has_station && !Lyrics.enabled: UpNextList {
                     vertical-stretch: 1;
                     compact: false;
                 }
 
-                // **A station keeps its panel whatever the toggle says.** A stream has no track to
+                // **A station keeps its panel whatever the switch says.** A stream has no track to
                 // look a sheet up for, so the switch would be offering something that could only
                 // ever be empty; what a station has instead is the description below.
-                if !Player.vm.has_station && Lyrics.shown: LyricsPanel {
+                if !Player.vm.has_station && Lyrics.enabled: LyricsPanel {
                     vertical-stretch: 1;
                 }
                 // **The station page's own body, on this view's palette.** What a stream has

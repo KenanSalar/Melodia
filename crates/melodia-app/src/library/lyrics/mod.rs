@@ -1,12 +1,17 @@
 //! Lyrics for the playing track, and the one door onto them.
 //!
 //! Four places a sheet can come from, and a caller learns which one answered only by asking the
-//! sheet itself. They resolve through one function so the switch that turns the lookup off has a
-//! single place to guard, which is `library::radio`'s shape and is here for its reason.
+//! sheet itself. They resolve through one function so the two switches in front of them each have
+//! a single place to guard, which is `library::radio`'s shape and is here for its reason: the
+//! feature switch in front of all four, the lookup switch in front of the directory.
 //!
-//! **`online_lookup_enabled` may not move, and `lyrics_online_enabled` is named inside it and
-//! nowhere else.** The switch is enforced at the seam rather than per call site, so a fifth source
-//! added later cannot reach the network around it.
+//! **`is_enabled` and `online_lookup_enabled` may not move, and each is the one place its flag is
+//! named.** A switch is enforced at the seam rather than per call site, so a fifth source added
+//! later cannot reach a file or the network around it.
+//!
+//! **What stays reachable with lyrics off is what keeps the store honest or belongs to the tag
+//! editor**: `forget_all` still runs on a retag, or the stale answer would be waiting when lyrics
+//! come back on, and `resident_text` and `write_to_tag` are that dialog's, local and user-driven.
 //!
 //! **The order is sidecar, tag, store, lookup, and timings cut across it.** A sidecar is the one a
 //! user places deliberately, so it outranks everything; the tag is the file's own and outranks
@@ -48,7 +53,28 @@ use melodia_net::services::net::pacer::RequestPacer;
 /// does. Two hops at most and neither is per source: [`resolve`] puts all three local reads on the
 /// pool together, and [`romanized`] goes back only for a sheet that has something to romanize.
 pub async fn for_track(state: &AppState, track: &TrackSummary) -> Result<LyricsOutcome, AppError> {
+    ensure_enabled(state)?;
     romanized(state, resolve(state, track).await?).await
+}
+
+/// Whether lyrics run at all.
+///
+/// **The one place the decision is read**, Now Playing's reseed and close included, so the view
+/// deciding whether to ask and this door deciding whether to answer cannot disagree.
+pub fn is_enabled(state: &AppState) -> bool {
+    state.lyrics_enabled.get()
+}
+
+/// A refusal when the user has switched lyrics off.
+///
+/// **A refusal rather than [`LyricsOutcome::Absent`], `library::radio`'s shape**: the panel is
+/// unmounted while off, so a call still arriving is a stale edge worth a log line, where
+/// [`online_lookup_enabled`]'s `false` is the ordinary state of most libraries.
+fn ensure_enabled(state: &AppState) -> Result<(), AppError> {
+    if is_enabled(state) {
+        return Ok(());
+    }
+    Err(AppError::Settings("Lyrics are switched off".to_owned()))
 }
 
 /// The romanization drawn under each line, filled in off the UI thread.

@@ -1800,6 +1800,14 @@ msgstr "Διαδικτυακό ραδιόφωνο"
 msgid "Browse and play live stations from radio-browser.info"
 msgstr "Περιήγηση και αναπαραγωγή ζωντανών σταθμών από το radio-browser.info"
 
+# The lyrics switch, which turns lyrics on in place of Up Next. Named on the Services card and
+# again as the tooltip of the Now Playing header's switch, so both read from this one label.
+msgid "Show lyrics"
+msgstr "Εμφάνιση στίχων"
+
+msgid "Show the playing track's words in Now Playing instead of Up Next"
+msgstr "Εμφάνιση των στίχων του κομματιού που παίζει στην οθόνη «Αναπαράγεται τώρα» αντί για τα «Επόμενα»"
+
 # The online-lyrics switch. Named in the Services card and again on the welcome card, so both
 # read from this one pair.
 msgid "Look up lyrics online"
@@ -2112,12 +2120,6 @@ msgstr "Εισαγωγή στίχων που βρέθηκαν"
 # The Now Playing lyrics menu. "Look up again" forgets what the directory said about this
 # track and asks once more, for a sheet matched off tags that have since been corrected;
 # "Save to file" writes the sheet on screen into the track's own lyrics tag.
-msgid "Hide lyrics"
-msgstr "Απόκρυψη στίχων"
-
-msgid "Show lyrics"
-msgstr "Εμφάνιση στίχων"
-
 msgid "Look up again"
 msgstr "Νέα αναζήτηση"
 

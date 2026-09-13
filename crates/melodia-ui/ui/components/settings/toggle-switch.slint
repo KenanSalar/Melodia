@@ -13,15 +13,28 @@ export component ToggleSwitch inherits Rectangle {
     // flipping themselves.
     in property <bool> manual: false;
 
+    // The Settings palette by default. Now Playing hands in its own tier, which is written once per
+    // track rather than eased, so the `animate background`s below never restart on it.
+    in property <brush> track-on: Theme.accent;
+    in property <brush> track-off: Theme.surface1;
+    in property <brush> thumb-on: Theme.accent-text;
+    in property <brush> thumb-off: Theme.text;
+
+    // For a host mounting its own `Tooltip`, a switch having no label to carry the name.
+    out property <bool> has-hover: touch.has-hover;
+
     callback toggled(bool /* requested new value */);
 
-    width: 52px;
+    // Sized by its height alone, so a host shrinking one to sit beside a glyph sets one number and
+    // keeps the Settings proportions rather than restating them.
     height: 32px;
+    width: self.height * 1.625;
+    property <length> thumb-inset: root.height / 8;
 
     // On the shared fast duration, so it lines up with the page's other
     // control feedback.
     track := Rectangle {
-        background: root.checked ? Theme.accent : Theme.surface1;
+        background: root.checked ? root.track-on : root.track-off;
         border-radius: root.height / 2;
         animate background { duration: Theme.dur-fast; easing: ease-in-out; }
     }
@@ -30,12 +43,12 @@ export component ToggleSwitch inherits Rectangle {
     animate a { duration: Theme.dur-fast; easing: ease-in-out; }
 
     Rectangle {
-        x: 4px + root.a * (root.width - root.height);
-        y: 4px;
-        width: root.height - 8px;
-        height: root.height - 8px;
+        x: root.thumb-inset + root.a * (root.width - root.height);
+        y: root.thumb-inset;
+        width: root.height - 2 * root.thumb-inset;
+        height: root.height - 2 * root.thumb-inset;
         border-radius: self.width / 2;
-        background: root.checked ? Theme.accent-text : Theme.text;
+        background: root.checked ? root.thumb-on : root.thumb-off;
         animate background { duration: Theme.dur-fast; easing: ease-in-out; }
     }
 

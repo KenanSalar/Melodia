@@ -10,23 +10,29 @@ import { MenuSurface } from "./menu-surface.slint";
 import { OverflowRow } from "./overflow-row.slint";
 import { FlyoutMetrics } from "./flyout-presets.slint";
 
-// The lyrics column's own menu, top right of the Now-Playing view. `VisualizerPicker`'s shape with
-// a menu column where that one has a flyout: one popup, one surface, and the rows in the host
-// because the popup sizes itself off their layout.
+// The lyrics panel's own menu, beside the switch that mounts it at the top right of the Now-Playing
+// view. `VisualizerPicker`'s shape with a menu column where that one has a flyout: one popup, one
+// surface, and the rows in the host because the popup sizes itself off their layout.
 //
-// **The first row is the toggle the glyph used to be.** Turning the column back to Up Next costs a
-// click more than it did, and buys the five controls the panel has nowhere else to put: a sheet
-// matched off tags that were wrong has to be re-askable, a sheet worth keeping has to be writable
-// into the file that will outlive this cache, a sheet that is nearly right has to be editable, a
-// sheet in a script the reader cannot sound out has to be able to say how it sounds, and a panel
-// whose whole copy is that a setting turned the lookup off has to be able to turn it back on.
+// **The switch owns the swap, so everything here acts on a panel that is on screen**, which is why
+// the trigger is inert while lyrics are off: a sheet matched off tags that were wrong has to be
+// re-askable, a sheet worth keeping has to be writable into the file that will outlive this cache,
+// a sheet that is nearly right has to be editable, a sheet in a script the reader cannot sound out
+// has to be able to say how it sounds, and a panel whose whole copy is that a setting turned the
+// lookup off has to be able to turn it back on.
 export component LyricsMenu inherits Rectangle {
     width: btn.width;
     height: btn.height;
 
+    // The drawn glyph's edge, inside the larger hit slot above, for a host matching it by eye.
+    out property <length> glyph-size: btn.icon-size;
+
+    // The glyph while lyrics are off. The host's, so it can match the switch beside it.
+    in property <brush> off-fg: Player.np-accent-dim;
+
     // Every row is drawn whether or not it can act, so the popup's reserve below is a constant and
     // the rows do not move under the pointer between one open and the next.
-    property <length> menu-h: FlyoutMetrics.menu-row-h * 6 + FlyoutMetrics.chrome-h;
+    property <length> menu-h: FlyoutMetrics.menu-row-h * 5 + FlyoutMetrics.chrome-h;
 
     function dismiss() {
         pop.close();
@@ -35,13 +41,18 @@ export component LyricsMenu inherits Rectangle {
 
     btn := AccentGlyphButton {
         icon: "lyrics";
-        filled: Lyrics.shown;
-        // Lit while the column is showing lyrics, and while the menu that says so is open: a bare
-        // glyph has no disc for `force-bg` to light.
-        active: Lyrics.shown || PopupHighlight.id == "np-lyrics";
+        filled: Lyrics.enabled;
+        // Lit while the column is showing lyrics, and while the menu is open: a bare glyph has no
+        // disc for `force-bg` to light.
+        active: Lyrics.enabled || PopupHighlight.id == "np-lyrics";
+        // Off, drawn at rest rather than greyed: the switch beside it says why nothing answers,
+        // and a greyed glyph beside a working switch reads as something broken.
+        button-enabled: Lyrics.enabled;
+        disabled-fg: root.off-fg;
+        disabled-fade: 1.0;
         tooltip-text: @tr("Lyrics");
-        // This row is the panel's top edge and its right one, so a pill is cut off above it and
-        // clipped beside it.
+        // This row is the panel's top edge, and the switch leaves too little room at its right one
+        // for a centred pill in a long locale.
         tooltip-side: TooltipSide.below;
         tooltip-align-end: true;
         clicked => {
@@ -55,7 +66,7 @@ export component LyricsMenu inherits Rectangle {
         // rows' content sets the floor, over a minimum that preserves the English look.
         property <length> menu-w: max(200px, menu-vl.preferred-width + 2px);
 
-        // Downward and right-aligned on the trigger, which is the last control in the row: a
+        // Downward and right-aligned on the trigger, which sits one control from the row's end: a
         // left-aligned popup would hang off the panel.
         x: btn.width - self.width;
         y: btn.height + Theme.popup-gap;
@@ -75,23 +86,11 @@ export component LyricsMenu inherits Rectangle {
                 padding: Theme.pad-xs;
                 spacing: 0;
 
-                // Both halves, the visualizer picker's shape: the property so the column swaps on
-                // the click, the callback so it is still swapped next launch.
-                OverflowRow {
-                    icon: "lyrics";
-                    label: Lyrics.shown ? @tr("Hide lyrics") : @tr("Show lyrics");
-                    active: Lyrics.shown;
-                    filled: Lyrics.shown;
-                    clicked => {
-                        Lyrics.shown = !Lyrics.shown;
-                        Lyrics.set-shown(Lyrics.shown);
-                        root.dismiss();
-                    }
-                }
-
-                // The same two halves as the toggle above. Enabled only where there is a sheet to
-                // re-lay: on every other state the row would say it had done something and the
-                // panel would look identical, which is worse than a row that is plainly inert.
+                // Both halves, the visualizer picker's shape: the property so the sheet re-lays on
+                // the click, the callback so it is still that way next launch. Enabled only where
+                // there is a sheet to re-lay: on every other state the row would say it had done
+                // something and the panel would look identical, which is worse than a row that is
+                // plainly inert.
                 OverflowRow {
                     icon: "translate";
                     label: @tr("Show romanization");

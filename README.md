@@ -86,8 +86,9 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Responsive mini-player: shrink the window and the UI collapses to a strip or a square widget
 
 ### Lyrics
-- A panel in the Now Playing column, switched on from the lyrics menu in that view's header. A timed sheet follows the song line by line, and clicking a line seeks to it
-- Read from a `.lrc` beside the track or from the file's own lyrics tag, so a library that already carries them needs nothing switched on
+- A panel in the Now Playing column in place of Up Next, switched on from the switch in that view's header or under Settings ▸ Services ▸ Lyrics. A timed sheet follows the song line by line, and clicking a line seeks to it
+- **Off by default, and off means off**: while lyrics are switched off nothing reads, looks up or holds a sheet
+- Read from a `.lrc` beside the track or from the file's own lyrics tag, so a library that already carries them needs no online lookup
 - **Online lookup is off until you switch it on**, from the lyrics menu or under Settings ▸ Services ▸ Lyrics. Nothing contacts **lrclib.net** until you do, and what it answers is cached under your data folder rather than written into your files
 - Romanization printed under a line written in a script you don't read. Korean and Japanese each get an engine matched to them; around a hundred scripts are covered in all, Chinese, Cyrillic and Arabic among them. On by default, and it draws nothing for a sheet already in Latin letters
 - A bilingual sheet's translation is drawn under the words it glosses

@@ -161,6 +161,11 @@ export global Settings {
     in-out property <bool> radio-send-clicks: true;
     callback radio-send-clicks-changed(bool);
 
+    // Whether lyrics run at all, the Now Playing header's switch being its twin. Declared false so a
+    // settings read that fails does not hand the Up Next column to a panel nobody asked for.
+    in-out property <bool> lyrics-enabled: false;
+    callback lyrics-enabled-changed(bool);
+
     // Whether a track carrying no words of its own may be looked up online. Declared false so a
     // settings read that fails leaves a local-only install local-only, which is the radio switch's
     // reason. **Nothing in Slint gates on it either**: `library::lyrics` refuses on the Rust

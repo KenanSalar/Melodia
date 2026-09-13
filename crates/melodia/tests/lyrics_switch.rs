@@ -284,8 +284,8 @@ fn the_now_playing_column_mounts_exactly_one_arm() {
     let source = melodia_testkit::normalize_ws(&strip_line_comments(NOW_PLAYING_VIEW));
 
     let arms = [
-        "if !Player.vm.has_station && !Lyrics.shown: UpNextList {",
-        "if !Player.vm.has_station && Lyrics.shown: LyricsPanel {",
+        "if !Player.vm.has_station && !Lyrics.enabled: UpNextList {",
+        "if !Player.vm.has_station && Lyrics.enabled: LyricsPanel {",
         "if Player.vm.has_station: Rectangle {",
     ];
     for arm in arms {
@@ -299,10 +299,10 @@ fn the_now_playing_column_mounts_exactly_one_arm() {
     // The heading names whichever arm is up, so it has to branch on the same two properties in
     // the same order. Read the other way round it labels a station panel "Lyrics".
     let station_at = source.find("Player.vm.has_station ? @tr(\"Station\")");
-    let lyrics_at = source.find("Lyrics.shown ? @tr(\"Lyrics\")");
+    let lyrics_at = source.find("Lyrics.enabled ? @tr(\"Lyrics\")");
     assert!(
         matches!((station_at, lyrics_at), (Some(station), Some(lyrics)) if station < lyrics),
-        "the column heading must test the station before the lyrics toggle, as the mounts do"
+        "the column heading must test the station before the lyrics switch, as the mounts do"
     );
 }
 
