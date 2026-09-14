@@ -24,7 +24,7 @@ fn block_body(src: &'static str, open: &str, close: &str) -> Option<&'static str
 
 /// The `TrackList { … }` property block in `views/recently-played/songs-tab.slint`.
 fn track_list_mount() -> Option<&'static str> {
-    block_body(SONGS_TAB, "tl := TrackList {", "\n        }")
+    block_body(SONGS_TAB, "tl := TrackList {", "\n    }")
 }
 
 /// The `TrackListHeader { … }` property block inside `TrackList`.

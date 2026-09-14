@@ -22,10 +22,15 @@ export component TrackList inherits Rectangle {
 
     in-out property <TrackColumns> columns;
 
+    // Measured from this element's own edges, which on every page but Search's column are the
+    // content panel's, with the page's scrollbar at the right one.
+    in property <length> inset-left: Theme.track-list-inset;
+    in property <length> inset-right: Theme.scrollbar-slot;
+
     // Resolved once and handed to the header and every row, so no two of them can disagree about
     // where a column is.
-    property <TrackColumnLayout> layout:
-        TrackColumnSizing.resolve(root.columns, root.width, Theme.pad-sm);
+    property <TrackColumnLayout> layout: TrackColumnSizing.resolve(root.columns,
+        root.width - root.inset-left - root.inset-right, Theme.pad-sm);
 
     // Forwarded to every row: `"index"` is the row position, `"track_number"` the real
     // album track number.
@@ -81,6 +86,8 @@ export component TrackList inherits Rectangle {
     set-v-offset(o) => { inner-list.viewport-y = -o; }
 
     VerticalLayout {
+        padding-left: root.inset-left;
+        padding-right: root.inset-right;
         spacing: Theme.pad-xs;
 
         TrackListHeader {

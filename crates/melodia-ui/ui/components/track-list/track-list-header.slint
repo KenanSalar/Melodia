@@ -151,10 +151,12 @@ export component TrackListHeader inherits Rectangle {
     max-height: Theme.track-header-h;
     vertical-stretch: 0;
 
+    // Reaches back over the leading gap, which holds no divider, so its label starts where the
+    // numbers do.
     if root.columns.show_number: HeaderCell {
-        x: root.layout.number_x;
+        x: root.layout.number_x - Theme.pad-sm;
         y: 0;
-        width: root.layout.number_w;
+        width: root.layout.number_w + Theme.pad-sm;
         height: root.height;
         label: "#";
         field: "track_number";

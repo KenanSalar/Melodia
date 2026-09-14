@@ -13,9 +13,8 @@ export component MyLibrarySongsTab inherits Rectangle {
     HorizontalLayout {
         // Never the bottom. A bottom pad sits outside the list's viewport and reads as a
         // dead strip of page background above the panel border, with the last row clipped
-        // against the viewport edge rather than scrolling clear of it.
-        padding-left: Theme.track-list-inset;
-        padding-right: Theme.pad-lg;
+        // against the viewport edge rather than scrolling clear of it. The sides are the
+        // list's own.
         padding-top: Theme.pad-md;
 
         tl := TrackList {

@@ -14,9 +14,9 @@ import { CollapsibleSectionHeader } from "../../components/collapsible-section-h
 // hands off to the Albums tab, and the artist column locked off, every row being the same
 // artist. The banner is `LibraryTabBand`'s and the action pills `tab-pills.slint`'s.
 //
-// **This is the one detail body that keeps its insets per child**: `below-hero` is the
-// region `CompositeScrollbars` measures and the `CompositeScroll` hover sentinel covers,
-// so it has to run full-bleed to the panel edge.
+// **Its insets are per child**, the Albums sub-section's own and the list's: `below-hero` is the
+// region `CompositeScrollbars` measures and the `CompositeScroll` hover sentinel covers, so it
+// has to run full-bleed to the panel edge.
 export component ArtistDetailBody inherits Rectangle {
     // Smaller than the grid view's cards, so several albums fit at once without
     // dominating the page vertically.
@@ -141,54 +141,44 @@ export component ArtistDetailBody inherits Rectangle {
                         }
                     }
 
-                    // Inset per child rather than on the root, so `below-hero` stays
-                    // full-bleed for the composite scroll region while the list's edges
-                    // still match the Songs tabs and the other details.
-                    HorizontalLayout {
+                    tl := TrackList {
                         horizontal-stretch: 1;
                         vertical-stretch: 0;
-                        padding-left: Theme.track-list-inset;
-                        padding-right: Theme.pad-lg;
+                        // **Capped at the outer viewport**: a small list keeps the
+                        // content-tall layout, a large one pins to the visible region
+                        // so the inner list virtualizes instead of instantiating every
+                        // row. The content-fit arm is a hand-sum of what the list
+                        // holds: rows, header and spacing.
+                        height: min(
+                            max(1, ArtistDetail.tracks.length)
+                                * (ArtistDetail.track-columns.show_artwork
+                                    ? Theme.row-h
+                                    : Theme.row-h-compact)
+                                + Theme.track-header-h + Theme.pad-xs,
+                            below-sv.visible-height);
 
-                        tl := TrackList {
-                            horizontal-stretch: 1;
-                            vertical-stretch: 0;
-                            // **Capped at the outer viewport**: a small list keeps the
-                            // content-tall layout, a large one pins to the visible region
-                            // so the inner list virtualizes instead of instantiating every
-                            // row. The content-fit arm is a hand-sum of what the list
-                            // holds: rows, header and spacing.
-                            height: min(
-                                max(1, ArtistDetail.tracks.length)
-                                    * (ArtistDetail.track-columns.show_artwork
-                                        ? Theme.row-h
-                                        : Theme.row-h-compact)
-                                    + Theme.track-header-h + Theme.pad-xs,
-                                below-sv.visible-height);
+                        rows: ArtistDetail.tracks;
+                        columns <=> ArtistDetail.track-columns;
+                        number-mode: "index";
 
-                            rows: ArtistDetail.tracks;
-                            columns <=> ArtistDetail.track-columns;
-                            number-mode: "index";
+                        sort-field: ArtistDetail.sort-field;
+                        sort-dir: ArtistDetail.sort-dir;
+                        playing-track-id: Player.vm.track.id;
+                        view-context: "artist-detail";
+                        view-selected-ids: ArtistDetail.selected-ids;
 
-                            sort-field: ArtistDetail.sort-field;
-                            sort-dir: ArtistDetail.sort-dir;
-                            playing-track-id: Player.vm.track.id;
-                            view-context: "artist-detail";
-                            view-selected-ids: ArtistDetail.selected-ids;
-
-                            request-sort(f) => { ArtistDetail.request-sort(f); }
-                            play-row(id, idx) => { ArtistDetail.play-row(id, idx); }
-                            play-next(ids) => { ArtistDetail.play-next(ids); }
-                            add-to-queue(ids) => { ArtistDetail.add-to-queue(ids); }
-                            toggle-row-favorite(ids, on) => { ArtistDetail.toggle-row-favorite(ids, on); }
-                            set-row-rating(ids, n) => { ArtistDetail.set-row-rating(ids, n); }
-                            select-row(idx, id, sh, ct) => { ArtistDetail.select-row(idx, id, sh, ct); }
-                            // A click in the track list blurs the band's SearchBar.
-                            request-blur-search => { MyLibrary.blur-search-tick += 1; }
-                            go-to-album(aid) => { ArtistDetail.go-to-album(aid); }
-                            go-to-artist(aid) => { ArtistDetail.go-to-artist(aid); }
-                            go-to-genre(gid) => { ArtistDetail.go-to-genre(gid); }
-                        }
+                        request-sort(f) => { ArtistDetail.request-sort(f); }
+                        play-row(id, idx) => { ArtistDetail.play-row(id, idx); }
+                        play-next(ids) => { ArtistDetail.play-next(ids); }
+                        add-to-queue(ids) => { ArtistDetail.add-to-queue(ids); }
+                        toggle-row-favorite(ids, on) => { ArtistDetail.toggle-row-favorite(ids, on); }
+                        set-row-rating(ids, n) => { ArtistDetail.set-row-rating(ids, n); }
+                        select-row(idx, id, sh, ct) => { ArtistDetail.select-row(idx, id, sh, ct); }
+                        // A click in the track list blurs the band's SearchBar.
+                        request-blur-search => { MyLibrary.blur-search-tick += 1; }
+                        go-to-album(aid) => { ArtistDetail.go-to-album(aid); }
+                        go-to-artist(aid) => { ArtistDetail.go-to-artist(aid); }
+                        go-to-genre(gid) => { ArtistDetail.go-to-genre(gid); }
                     }
                 }
             }

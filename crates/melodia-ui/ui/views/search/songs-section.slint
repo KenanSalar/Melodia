@@ -63,6 +63,10 @@ export component SongsSection inherits VerticalLayout {
                 ? Theme.row-h
                 : Theme.row-h-compact)
             + Theme.track-header-h + Theme.pad-xs;
+        // A column inside the page's own inset, beside the Top Result and under the page's
+        // scrollbar rather than one at its own edge.
+        inset-left: 0px;
+        inset-right: 0px;
 
         rows: Search.tracks;
         columns <=> Search.track-columns;

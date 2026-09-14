@@ -44,8 +44,12 @@ export component BrowseView inherits Rectangle {
     // component declaring it, and the grid needs the same number.
     property <length> grid-gap: 20px;
 
+    // The page inset the header strip and the card grid keep. The body itself runs full-bleed,
+    // the track list insetting its own sides and the folder rows following it.
+    property <length> page-inset: Theme.pad-lg;
+
     geom := GridGeometry {
-        avail-width: body.width;
+        avail-width: body.width - 2 * root.page-inset;
         gap: root.grid-gap;
     }
 
@@ -58,16 +62,16 @@ export component BrowseView inherits Rectangle {
     }
 
     vl := VerticalLayout {
-        // Three sides only — `my-library/songs-tab.slint` says why a bottom pad here
-        // reads as a dead strip under the list.
-        padding-left: Theme.pad-lg;
-        padding-right: Theme.pad-lg;
+        // Top only — `my-library/songs-tab.slint` says why a bottom pad here reads as a
+        // dead strip under the list, and the sides are each child's own.
         padding-top: Theme.pad-lg;
         spacing: Theme.pad-md;
 
         // Header strip.
         HorizontalLayout {
             vertical-stretch: 0;
+            padding-left: root.page-inset;
+            padding-right: root.page-inset;
             spacing: Theme.pad-sm;
             alignment: stretch;
 
@@ -172,10 +176,12 @@ export component BrowseView inherits Rectangle {
                             height: Browse.folders.length * 50px
                                 + (Browse.current-path == "" ? 0px : Theme.pad-md);
 
+                            // In the track list's own column, so a folder row's pill lines up
+                            // with the track rows under it.
                             ListView {
-                                x: 0;
+                                x: Theme.track-list-inset;
                                 y: 0;
-                                width: parent.width;
+                                width: parent.width - Theme.track-list-inset - Theme.scrollbar-slot;
                                 height: Browse.folders.length * 50px;
                                 vertical-scrollbar-policy: always-off;
                                 horizontal-scrollbar-policy: always-off;
@@ -238,23 +244,30 @@ export component BrowseView inherits Rectangle {
                         // The card view. Same mounted-with-a-`0px`-arm shape as `tl`
                         // above and for the same reason, and pinned to the outer viewport
                         // so its own `ListView` virtualizes rather than instantiating
-                        // every card.
-                        grid := BrowseCardGrid {
-                            visible: root.card-mode;
-                            horizontal-stretch: 1;
+                        // every card. A layout rather than an `if`, so `grid` stays
+                        // readable from the view root.
+                        HorizontalLayout {
                             vertical-stretch: 0;
-                            height: root.card-mode ? below-sv.visible-height : 0px;
+                            padding-left: root.page-inset;
+                            padding-right: root.page-inset;
 
-                            rows: Browse.card-rows;
-                            card-width: geom.card-w;
-                            card-height: geom.card-h;
-                            row-height: geom.row-h;
-                            gap: root.grid-gap;
-                            covers-generation: Browse.covers-generation;
+                            grid := BrowseCardGrid {
+                                visible: root.card-mode;
+                                horizontal-stretch: 1;
+                                vertical-stretch: 0;
+                                height: root.card-mode ? below-sv.visible-height : 0px;
 
-                            request-cover(p, gen) => { Browse.request-card-cover(p, gen) }
-                            folder-clicked(path) => { Browse.open-folder(path); }
-                            track-clicked(id, idx) => { Browse.play-row(id, idx); }
+                                rows: Browse.card-rows;
+                                card-width: geom.card-w;
+                                card-height: geom.card-h;
+                                row-height: geom.row-h;
+                                gap: root.grid-gap;
+                                covers-generation: Browse.covers-generation;
+
+                                request-cover(p, gen) => { Browse.request-card-cover(p, gen) }
+                                folder-clicked(path) => { Browse.open-folder(path); }
+                                track-clicked(id, idx) => { Browse.play-row(id, idx); }
+                            }
                         }
                     }
                 }
@@ -301,7 +314,7 @@ export component BrowseView inherits Rectangle {
         }
     }
 
-    // At the view root, outside the padded layout, so the bar sits flush with the content
+    // At the view root, outside the layout, so the bar sits flush with the content
     // panel's rounded edges; the nested ids come through `absolute-position`. **The inner half
     // follows the mounted body**, in card mode the outer scroller having no travel.
     CompositeScrollbars {

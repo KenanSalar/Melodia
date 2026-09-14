@@ -1,4 +1,3 @@
-import { Theme } from "../../theme.slint";
 import { AlbumDetail } from "../../globals/albums.slint";
 import { MyLibrary } from "../../globals/my-library.slint";
 import { Player } from "../../globals/player.slint";
@@ -15,43 +14,37 @@ export component AlbumDetailBody inherits Rectangle {
         clicked => { MyLibrary.blur-search-tick += 1; }
     }
 
-    // Insets the sides only: the header sits flush under the band, and a root bottom pad sits
-    // *outside* the list's viewport and reads as a dead strip.
-    VerticalLayout {
-        padding-left: Theme.track-list-inset;
-        padding-right: Theme.pad-lg;
+    // Full-bleed: the header sits flush under the band, the list insets its own sides, and a
+    // bottom pad would sit *outside* the list's viewport and read as a dead strip.
+    tl := TrackList {
+        width: 100%;
+        height: 100%;
 
-        tl := TrackList {
-            horizontal-stretch: 1;
-            vertical-stretch: 1;
+        rows: AlbumDetail.tracks;
+        columns <=> AlbumDetail.track-columns;
+        number-mode: "track_number";
 
-            rows: AlbumDetail.tracks;
-            columns <=> AlbumDetail.track-columns;
-            number-mode: "track_number";
+        sort-field: AlbumDetail.sort-field;
+        sort-dir: AlbumDetail.sort-dir;
+        playing-track-id: Player.vm.track.id;
+        view-context: "album-detail";
+        view-selected-ids: AlbumDetail.selected-ids;
 
-            sort-field: AlbumDetail.sort-field;
-            sort-dir: AlbumDetail.sort-dir;
-            playing-track-id: Player.vm.track.id;
-            view-context: "album-detail";
-            view-selected-ids: AlbumDetail.selected-ids;
-
-            request-sort(f) => { AlbumDetail.request-sort(f); }
-            play-row(id, idx) => { AlbumDetail.play-row(id, idx); }
-            play-next(ids) => { AlbumDetail.play-next(ids); }
-            add-to-queue(ids) => { AlbumDetail.add-to-queue(ids); }
-            toggle-row-favorite(ids, on) => { AlbumDetail.toggle-row-favorite(ids, on); }
-            set-row-rating(ids, n) => { AlbumDetail.set-row-rating(ids, n); }
-            select-row(idx, id, sh, ct) => { AlbumDetail.select-row(idx, id, sh, ct); }
-            // A click in the track list blurs the band's SearchBar.
-            request-blur-search => { MyLibrary.blur-search-tick += 1; }
-            go-to-album(aid) => { AlbumDetail.go-to-album(aid); }
-            go-to-artist(aid) => { AlbumDetail.go-to-artist(aid); }
-            go-to-genre(gid) => { AlbumDetail.go-to-genre(gid); }
-        }
+        request-sort(f) => { AlbumDetail.request-sort(f); }
+        play-row(id, idx) => { AlbumDetail.play-row(id, idx); }
+        play-next(ids) => { AlbumDetail.play-next(ids); }
+        add-to-queue(ids) => { AlbumDetail.add-to-queue(ids); }
+        toggle-row-favorite(ids, on) => { AlbumDetail.toggle-row-favorite(ids, on); }
+        set-row-rating(ids, n) => { AlbumDetail.set-row-rating(ids, n); }
+        select-row(idx, id, sh, ct) => { AlbumDetail.select-row(idx, id, sh, ct); }
+        // A click in the track list blurs the band's SearchBar.
+        request-blur-search => { MyLibrary.blur-search-tick += 1; }
+        go-to-album(aid) => { AlbumDetail.go-to-album(aid); }
+        go-to-artist(aid) => { AlbumDetail.go-to-artist(aid); }
+        go-to-genre(gid) => { AlbumDetail.go-to-genre(gid); }
     }
 
-    // At the view root, flush with the content panel's rounded edges. `tl` is nested, so
-    // its position comes through `absolute-position`.
+    // At the view root, flush with the content panel's rounded edges.
     TrackListScrollbars {
         x: 0; y: 0; width: 100%; height: 100%;
         list-y: tl.absolute-position.y - root.absolute-position.y;

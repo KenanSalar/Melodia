@@ -21,9 +21,11 @@ export component DraggableTrackList inherits Rectangle {
 
     in-out property <TrackColumns> columns;
 
-    // See `TrackList`.
-    property <TrackColumnLayout> layout:
-        TrackColumnSizing.resolve(root.columns, root.width, Theme.pad-sm);
+    // See `TrackList`, for the insets and the layout both.
+    in property <length> inset-left: Theme.track-list-inset;
+    in property <length> inset-right: Theme.scrollbar-slot;
+    property <TrackColumnLayout> layout: TrackColumnSizing.resolve(root.columns,
+        root.width - root.inset-left - root.inset-right, Theme.pad-sm);
 
     // Number-column mode — forwarded to every row. See TrackList.
     in property <string> number-mode: "index";
@@ -100,6 +102,8 @@ export component DraggableTrackList inherits Rectangle {
     set-v-offset(o) => { inner-list.viewport-y = -o; }
 
     VerticalLayout {
+        padding-left: root.inset-left;
+        padding-right: root.inset-right;
         spacing: Theme.pad-xs;
 
         TrackListHeader {

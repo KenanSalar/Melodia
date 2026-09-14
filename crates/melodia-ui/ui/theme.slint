@@ -103,7 +103,7 @@ export global Theme {
     // The column header over every track list, read too by the hosts that hand-sum a list's height.
     out property <length> track-header-h: 36px;
     // A track list's inset from the content panel's left edge, before the column solver's own
-    // `pad-sm`. Left only: the right keeps `pad-lg`, which clears the overlay scrollbar's slot.
+    // `pad-sm`. The right edge stops at `scrollbar-slot` instead.
     out property <length> track-list-inset: 7px;
 
     // Radii / spacing
@@ -123,10 +123,10 @@ export global Theme {
     // each edge. `ResizeRing` sizes its corners off the band it is handed, never off this directly.
     out property <length> resize-border: 4px;
 
-    // The `OverlayScrollbar` *element's* slot, distinct from the 8 px it paints inside it. Four
-    // sides agree on it: both bar pairs size their elements by it, the horizontal bar subtracts it
-    // at its right end so the two don't meet in the corner, a `TrackList` reserves it as a lane,
-    // and every hand-mounted bar takes its width from here rather than restating the number.
+    // The `OverlayScrollbar` *element's* slot, distinct from the 8 px it paints inside it. Both bar
+    // components size their bar by it, a track list's right edge stops at it so a row's pill never
+    // runs under the always-painted track, and every hand-mounted bar takes its width from here
+    // rather than restating the number.
     out property <length> scrollbar-slot: 10px;
 
     // The air a menu or flyout leaves between itself and the control that opened it, on whichever
