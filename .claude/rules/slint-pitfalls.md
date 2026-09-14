@@ -15,6 +15,16 @@ this file is what builds, looks right, and is wrong.
 - **`visible: false` doesn't remove from layout.** Hidden child still claims stretch.
   Fix: `if !collapsed: VerticalLayout { … }`. Ref: slint#7377.
 
+- **A box collapsed with `clip: true` cuts everything its contents draw past it, collapsed or not.**
+  A zero-width clip is a tempting way to hide something while keeping its ids readable, but the
+  clip applies while the box is open too, and a box sized to its content leaves no room for what a
+  control paints outside its own geometry: a focus swell, a drop shadow, a tooltip. It bit the
+  shared tab header's search box, whose swollen ends were shaved flat and whose focus shadow was
+  cut into a box. Collapse through `visible` instead: `passes/visible.rs` lowers it to a `Clip`
+  whose `clip` is `!visible`, so the element is clipped only while hidden, and hidden it draws
+  nothing and takes no events. Layouts are lowered before that pass, so the element's own width
+  constraints still collapse it (`tab-search-header.slint`).
+
 - **Don't `animate` a property driven by both toggle and continuous input** (drag micro-updates
   get full easing → spongy). Gate duration on bool:
   `animate width { duration: is-dragging ? 0ms : 250ms; }`. Boolean ternaries safe; #7999 only
@@ -445,6 +455,13 @@ this file is what builds, looks right, and is wrong.
   window shell); fill and border on **one** element, where the renderer tucks the fill under the
   stroke; a stroke inside a rounded clip as an `EdgeOutline`, which argues its straddle; and a
   track drawn only beside its fill (`ProgressBar`, `EqBandSlider`).
+  **The one-element cure holds only for an opaque border.** `draw_border_rectangle` tucks the fill
+  under an opaque stroke and runs it out to the edge under a translucent one, so a translucent
+  border (the lyrics pill, a focus ring, a colour fading through `transparent`) stacks again. Tuck
+  the fill yourself with a `TuckedFill`, or keep the border opaque (the dropdown rests on its fill
+  colour). **Except over a drop shadow**: the shadow sits under the whole element, and a tucked fill
+  lets it show through the rim, which reads worse than the second pass. The search bar keeps its
+  fill out to the edge for that.
 
 - **Nothing that draws text may be cut to its layout box — the box is a line box and the ink is
   not. Two mechanisms cut, and both are invisible in Latin.** The shipped Vazirmatn faces are
@@ -460,6 +477,10 @@ this file is what builds, looks right, and is wrong.
     *fade* therefore crops the marks for its whole duration and hands them back on the settling
     frame. **The union decides who bleeds** — the block's first and last children, not every
     `Text` under the fade.
+    **A dimmed state is the long case**: a disabled button or a row outside the library holds its
+    texture for as long as it stays dimmed, not for the length of a fade. The dimmed row, card,
+    button and menu row carry a `fade` float into every brush instead, the track row folding it
+    into one `ink` its cells share.
     Three cures, in order of preference. **Fold the alpha into the brush**
     (`Theme.text.with-alpha(t)`): pixel-identical where elements don't overlap, no texture.
     **Where there is no brush, pass a `fade` float into the component** (`ArtworkImage` spends it

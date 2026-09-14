@@ -80,7 +80,10 @@ export component Dropdown inherits Rectangle {
         height: 32px;
         border-radius: Theme.radius-md;
         background: touch.has-hover ? Theme.surface2 : Theme.surface1;
-        border-color: touch.has-hover ? Theme.accent : transparent;
+        // The resting fill rather than `transparent`, which reads the same: the renderer tucks a
+        // fill under an opaque border only, and a border fading through transparent would
+        // antialias the corners twice for as long as it eases.
+        border-color: touch.has-hover ? Theme.accent : Theme.surface1;
         border-width: 1px;
         animate background { duration: Theme.dur-fast; easing: ease-in-out; }
         animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }

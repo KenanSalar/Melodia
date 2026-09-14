@@ -1,0 +1,18 @@
+// The fill for a host that strokes its own rounded border, inset to the stroke's middle: where
+// FemtoVG puts a fill under an opaque border. A `background` on the host reaches the outer edge
+// instead, and wherever the border is translucent the renderer leaves it there, so the fill's edge
+// and the border's antialias one curve. Mounted first, at the host's full size.
+export component TuckedFill inherits Rectangle {
+    in property <length> radius;
+    in property <length> stroke-width;
+    in property <brush> fill;
+
+    Rectangle {
+        x: root.stroke-width / 2;
+        y: root.stroke-width / 2;
+        width: parent.width - root.stroke-width;
+        height: parent.height - root.stroke-width;
+        border-radius: root.radius - root.stroke-width / 2;
+        background: root.fill;
+    }
+}

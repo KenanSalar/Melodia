@@ -26,21 +26,29 @@ export component SectionButton inherits Rectangle {
 
     callback clicked();
 
+    // The disabled dimming, through each brush rather than `opacity`, which would render the
+    // button into a texture of its own for as long as it stays disabled.
+    private property <float> fade: root.button-enabled ? 1.0 : 0.5;
+    private property <brush> ink: (root.primary
+            ? (root.destructive ? Theme.danger-text : Theme.accent-text)
+            : Theme.text)
+        .transparentize(1.0 - root.fade);
+
     height: 32px;
     horizontal-stretch: 0;
     border-radius: root.corner-radius;
-    background: !root.button-enabled
-        ? Theme.surface1
-        : (root.primary
-            ? (root.destructive
-                ? (touch.has-hover ? Theme.danger.brighter(10%) : Theme.danger)
-                : (touch.has-hover ? Theme.accent.brighter(10%) : Theme.accent))
-            : (touch.has-hover ? Theme.surface2 : Theme.surface1));
+    background: (!root.button-enabled
+            ? Theme.surface1
+            : (root.primary
+                ? (root.destructive
+                    ? (touch.has-hover ? Theme.danger.brighter(10%) : Theme.danger)
+                    : (touch.has-hover ? Theme.accent.brighter(10%) : Theme.accent))
+                : (touch.has-hover ? Theme.surface2 : Theme.surface1)))
+        .transparentize(1.0 - root.fade);
     border-color: root.primary || !root.button-enabled
         ? transparent
         : Theme.surface2;
     border-width: 1px;
-    opacity: root.button-enabled ? 1.0 : 0.5;
     animate background { duration: Theme.dur-fast; easing: ease-in-out; }
 
     HorizontalLayout {
@@ -54,9 +62,7 @@ export component SectionButton inherits Rectangle {
             MaterialIcon {
                 name: root.icon;
                 icon-size: 18px;
-                icon-color: root.primary
-                    ? (root.destructive ? Theme.danger-text : Theme.accent-text)
-                    : Theme.text;
+                icon-color: root.ink;
             }
         }
 
@@ -70,6 +76,8 @@ export component SectionButton inherits Rectangle {
                 height: 18px;
                 width: 18px * root.leading-image.width / root.leading-image.height;
                 image-fit: contain;
+                // Free on a childless `Image`, which never gets a texture for it.
+                opacity: root.fade;
             }
         }
 
@@ -77,9 +85,7 @@ export component SectionButton inherits Rectangle {
             alignment: center;
             Text {
                 text: root.label;
-                color: root.primary
-                    ? (root.destructive ? Theme.danger-text : Theme.accent-text)
-                    : Theme.text;
+                color: root.ink;
                 font-size: Theme.font-size-sm;
                 font-weight: 600;
                 vertical-alignment: center;

@@ -3,6 +3,7 @@ import { Lyrics } from "../../globals/lyrics.slint";
 import { Player } from "../../globals/player.slint";
 import { ToggleSwitch } from "../settings/toggle-switch.slint";
 import { Tooltip, TooltipSide } from "../tooltip.slint";
+import { TuckedFill } from "../tucked-fill.slint";
 import { LyricsMenu } from "./lyrics-menu.slint";
 
 // Lyrics, top right of the Now-Playing view: the panel's menu and the switch that mounts it, on one
@@ -13,8 +14,10 @@ import { LyricsMenu } from "./lyrics-menu.slint";
 // does nothing while the switch is off. Grouping rather than a control, so it carries the disc
 // buttons' accent under their weight and answers no pointer of its own.
 export component LyricsControls inherits Rectangle {
-    background: Player.np-accent-bright.transparentize(0.9);
     border-radius: self.height / 2;
+    // The pill's edge, so a fill this faint still has a shape against a busy backdrop.
+    border-width: 1px;
+    border-color: Player.np-accent-bright.transparentize(0.8);
 
     // The pair's resting tier, a step over the header's `np-accent-dim` and the disc fill since both
     // sit on the pill and lose some contrast to it. One spelling for the glyph and the thumb, so the
@@ -22,17 +25,16 @@ export component LyricsControls inherits Rectangle {
     property <brush> off-fg: Player.np-accent-bright.transparentize(0.3);
     property <brush> off-track: Player.np-accent-bright.transparentize(0.76);
 
-    // The pill's edge, so a fill this faint still has a shape against a busy backdrop. A childless
-    // sibling rather than a `border` on the root, which would put the glyph and the switch behind a
-    // layer; declared first so both tooltips paint over it. `x`/`y` keep it out of the root's size.
-    Rectangle {
+    // Tucked rather than a `background`: the border is translucent, so a fill out to the edge would
+    // antialias the pill's outline twice. `x`/`y` keep it out of the root's size.
+    TuckedFill {
         x: 0;
         y: 0;
-        width: root.width;
-        height: root.height;
-        border-radius: root.border-radius;
-        border-width: 1px;
-        border-color: Player.np-accent-bright.transparentize(0.8);
+        width: 100%;
+        height: 100%;
+        radius: root.border-radius;
+        stroke-width: root.border-width;
+        fill: Player.np-accent-bright.transparentize(0.9);
     }
 
     HorizontalLayout {

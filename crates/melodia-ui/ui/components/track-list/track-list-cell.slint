@@ -12,7 +12,8 @@ import { Theme } from "../../theme.slint";
 export component DataCell inherits Rectangle {
     in property <length> cell-width;
     in property <string> text-content;
-    in property <bool> playing;
+    // The row's `ink`, so every cell answers playing and dimmed in one place.
+    in property <brush> ink;
 
     width: root.cell-width;
     clip: true;
@@ -20,11 +21,7 @@ export component DataCell inherits Rectangle {
         alignment: center;
         Text {
             text: "‎" + root.text-content;
-            // The body-copy rung, not the muted one: muted, this cell fell
-            // under 4.5:1 on macOS Light and sat exactly on it under two other
-            // light variants. The whole list, header included, is on this one
-            // rung, and hierarchy comes from size and weight instead.
-            color: root.playing ? Theme.accent : Theme.text;
+            color: root.ink;
             font-size: Theme.font-size-row;
             overflow: elide;
         }

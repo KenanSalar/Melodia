@@ -20,11 +20,15 @@ export component OverflowRow inherits Rectangle {
 
     callback clicked();
 
+    // The disabled dimming, through each brush rather than `opacity`, which would render the row
+    // into a texture of its own for as long as the menu shows it disabled. A disabled row takes no
+    // hover, so the fill needs none.
+    private property <float> fade: root.button-enabled ? 1.0 : 0.5;
+
     height: FlyoutMetrics.menu-row-h;
     border-radius: Theme.radius-sm;
     background: touch.has-hover && root.button-enabled ? Theme.surface1 : transparent;
     animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-    opacity: root.button-enabled ? 1 : 0.5;
 
     HorizontalLayout {
         padding-left: Theme.pad-sm;
@@ -39,6 +43,7 @@ export component OverflowRow inherits Rectangle {
                 icon-size: 20px;
                 icon-color: root.active ? Theme.accent : Theme.text;
                 filled: root.filled;
+                fade: root.fade;
             }
         }
         VerticalLayout {
@@ -46,7 +51,7 @@ export component OverflowRow inherits Rectangle {
             horizontal-stretch: 1;
             Text {
                 text: root.label;
-                color: root.active ? Theme.accent : Theme.text;
+                color: (root.active ? Theme.accent : Theme.text).transparentize(1.0 - root.fade);
                 font-size: Theme.font-size-md;
             }
         }
@@ -54,7 +59,7 @@ export component OverflowRow inherits Rectangle {
             alignment: center;
             Text {
                 text: root.trailing-text;
-                color: root.active ? Theme.accent : Theme.subtext0;
+                color: (root.active ? Theme.accent : Theme.subtext0).transparentize(1.0 - root.fade);
                 font-size: Theme.font-size-md;
             }
         }
@@ -64,6 +69,7 @@ export component OverflowRow inherits Rectangle {
                 name: root.trailing-icon;
                 icon-size: 18px;
                 icon-color: root.active ? Theme.accent : Theme.subtext0;
+                fade: root.fade;
             }
         }
     }

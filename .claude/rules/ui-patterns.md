@@ -45,10 +45,10 @@ silently miss the other.
 
 - **An anchor crossing a component boundary has three answers**, a frame reading only ids in its
   own file: `out` properties (the hero bands), a global (the sidebar rail, whose boundary the
-  frame's file doesn't contain), and a zero-width `clip: true` collapse rather than an `if`
-  (`tab-pills.slint` — an id inside an `if` is unreadable from outside, and `Clip` swallows every
-  event outside its empty rect, so the row is as unreachable as an unmounted branch while its ids
-  stay readable).
+  frame's file doesn't contain), and a zero-width collapse rather than an `if` (`tab-pills.slint`:
+  an id inside an `if` is unreadable from outside, and a collapsed box takes no events, so the row
+  is as unreachable as an unmounted branch while its ids stay readable). Collapse through
+  `visible` wherever the contents draw past the box: `slint-pitfalls.md` has why a `clip` doesn't.
 
 - **The rail's tooltip needs a hold the tab bar doesn't**, its rows sitting 4 px apart so a
   travelling pointer is over nothing for a frame or two: a `held` bool cleared by a 150 ms
@@ -114,7 +114,7 @@ silently miss the other.
 ### Rounded edges
 
 The one-pass-per-curve rule and what a rounded clip costs are `slint-pitfalls.md`'s. These are the
-two components that answer it, and each argues its geometry at its own file.
+three components that answer it, and each argues its geometry at its own file.
 
 - **`EdgeOutline`** (`components/edge-outline.slint`) is the stroke along a rounded clip's inside
   edge: the window outline, the artwork dialog's preview, and a candidate tile's hover hairline and
@@ -126,6 +126,14 @@ two components that answer it, and each argues its geometry at its own file.
   the content panel. **Only over an opaque ground that is exactly `ground`**: over a hero, a blur or
   anything the corners can't name in one brush it paints them visibly, and a rounded clip over a
   square fill with an `EdgeOutline` is the answer there, texture and all.
+
+- **`TuckedFill`** (`components/tucked-fill.slint`) is the fill for a host stroking its own rounded
+  border, inset to the stroke's middle: where the renderer puts a fill under an *opaque* border,
+  and where it doesn't under a translucent one. Mounted first, at full size. Two mounts: the lyrics
+  pill, whose border is translucent, and the toast, whose accent bar has to sit between the fill
+  and the border. **Not under a drop shadow**: the search bar keeps its `background` out to the
+  edge, since a fill stopping half a pixel in lets its focus shadow darken the rim, and
+  `search-bar.slint` argues that at the binding.
 
 ### Grids, strips, cards
 

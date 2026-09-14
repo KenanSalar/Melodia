@@ -70,6 +70,13 @@ export component TrackListRowItem inherits Rectangle {
     // Disk-only Browse rows arrive `enabled == false` — dimmed, and swallowing every
     // interaction: row body, # checkbox, favourite button and right-click menu alike.
     property <bool> enabled: root.row-data.enabled;
+    // The dimming, through each brush rather than `opacity`, which would render every dimmed row
+    // into a texture of its own for as long as it stays dimmed.
+    property <float> fade: root.enabled ? 1.0 : 0.45;
+    // Every cell's colour. The body-copy rung, not the muted one: muted, a cell fell under 4.5:1 on
+    // macOS Light and sat exactly on it under two other light variants. The whole list, header
+    // included, is on this one rung, and hierarchy comes from size and weight instead.
+    property <brush> ink: (root.playing ? Theme.accent : Theme.text).transparentize(1.0 - root.fade);
 
     // Drives context-menu entry visibility (no "Go to Album" inside Album Detail, "Remove from
     // Playlist" only in Playlist Detail) and the current-playlist exclusion in the Add-to-Playlist
@@ -180,11 +187,9 @@ export component TrackListRowItem inherits Rectangle {
             // cursor. Mirrors the outer slot's `show-artwork` ternary.
             min-height: root.show-artwork ? Theme.row-h : Theme.row-h-compact;
             max-height: root.show-artwork ? Theme.row-h : Theme.row-h-compact;
-        // Disk-only Browse rows dim; a drag source fades further so it reads as lifted out of
-        // position. The second arm is inert without `enable-drag`, `drag-source` staying -1.
-        opacity: !root.enabled
-            ? 0.45
-            : ((root.enable-drag && root.drag-source == root.row-index) ? 0.4 : 1.0);
+        // A drag source fades so it reads as lifted out of position, for the length of the drag
+        // only. Inert without `enable-drag`, `drag-source` staying -1.
+        opacity: root.enable-drag && root.drag-source == root.row-index ? 0.4 : 1.0;
         animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
         // No radius here: a clip copies its element's radius, and a rounded one renders the whole
         // row into a texture. Nothing reaches the corners, so a plain clip cuts the same overflow.
@@ -331,10 +336,7 @@ export component TrackListRowItem inherits Rectangle {
                             : ((root.sort-field == "track_number" && root.sort-dir == "desc")
                                 ? root.row-count - root.row-index
                                 : root.row-index + 1);
-                        // Every cell is `Theme.text`, as is the header: rows are body
-                        // copy and hierarchy comes from size and weight, not
-                        // contrast. `DataCell` says what `subtext0` cost.
-                        color: root.playing ? Theme.accent : Theme.text;
+                        color: root.ink;
                         font-size: Theme.font-size-row;
                         horizontal-alignment: left;
                     }
@@ -344,7 +346,7 @@ export component TrackListRowItem inherits Rectangle {
                         checked: root.selected;
                         // The rim stands in for the number it replaced, so it takes
                         // that cell's ink rather than the quieter default.
-                        unchecked-border: root.playing ? Theme.accent : Theme.text;
+                        unchecked-border: root.ink;
 
                         cb-touch := TouchArea {
                             mouse-cursor: pointer;
@@ -391,6 +393,7 @@ export component TrackListRowItem inherits Rectangle {
                                 RowCovers.generation);
                             tile-size: 36px;
                             tile-radius: Theme.radius-sm;
+                            fade: root.fade;
                         }
                     }
                     VerticalLayout {
@@ -405,7 +408,7 @@ export component TrackListRowItem inherits Rectangle {
                             // inline — only the base direction moves, so the indicator
                             // anchors right for every row whatever the script.
                             text: "‎" + root.row-data.title;
-                            color: root.playing ? Theme.accent : Theme.text;
+                            color: root.ink;
                             font-size: Theme.font-size-row;
                             overflow: elide;
                         }
@@ -417,6 +420,7 @@ export component TrackListRowItem inherits Rectangle {
                             icon-size: 18px;
                             icon-color: Theme.red;
                             filled: true;
+                            fade: root.fade;
                         }
                     }
                     // Revealed on hover to the right of the title, which elides to make room rather
@@ -444,19 +448,19 @@ export component TrackListRowItem inherits Rectangle {
                 text-content: root.row-data.artist != ""
                     ? root.row-data.artist
                     : @tr("Unknown artist");
-                playing: root.playing;
+                ink: root.ink;
             }
             if root.show-album: DataCell {
                 cell-width: root.w-album;
                 text-content: root.row-data.album != ""
                     ? root.row-data.album
                     : @tr("Unknown album");
-                playing: root.playing;
+                ink: root.ink;
             }
             if root.show-genre: DataCell {
                 cell-width: root.w-genre;
                 text-content: root.row-data.genre;
-                playing: root.playing;
+                ink: root.ink;
             }
 
             // Year — no LRM, no elide (4-digit value always fits).
@@ -467,7 +471,7 @@ export component TrackListRowItem inherits Rectangle {
                     alignment: center;
                     Text {
                         text: root.row-data.year > 0 ? root.row-data.year : "";
-                        color: root.playing ? Theme.accent : Theme.text;
+                        color: root.ink;
                         font-size: Theme.font-size-row;
                     }
                 }
@@ -488,7 +492,7 @@ export component TrackListRowItem inherits Rectangle {
                             // Precomputed in Rust at row build, so this binding doesn't
                             // re-run a Slint pure function on every invalidation.
                             text: root.row-data.display_duration;
-                            color: root.playing ? Theme.accent : Theme.text;
+                            color: root.ink;
                             font-size: Theme.font-size-row;
                             horizontal-alignment: left;
                         }

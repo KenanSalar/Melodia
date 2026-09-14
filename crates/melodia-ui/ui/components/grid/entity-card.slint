@@ -81,10 +81,13 @@ export component EntityCard inherits Rectangle {
     // would otherwise skew that silently.
     out property <length> tile-size: root.card-width - 2 * Theme.pad-sm;
 
+    // The dimming, through the tile and the text rather than `opacity`, which would render every
+    // dimmed card into a texture of its own for as long as it stays dimmed. The badges need none:
+    // Browse, the one host disabling cards, sets neither.
+    private property <float> fade: root.enabled ? 1.0 : 0.45;
+
     width: card-width;
     height: card-height;
-    opacity: root.enabled ? 1.0 : 0.45;
-    animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
 
     inner := Rectangle {
         width: 100%;
@@ -108,6 +111,7 @@ export component EntityCard inherits Rectangle {
                 native-size: root.native-size;
                 tile-bg: root.tile-bg;
                 tile-icon-color: root.tile-icon-color;
+                fade: root.fade;
             }
 
             VerticalLayout {
@@ -115,21 +119,21 @@ export component EntityCard inherits Rectangle {
                 // The LRM keeps mixed-script titles from drifting, as in the rows.
                 Text {
                     text: "‎" + root.title;
-                    color: Theme.text;
+                    color: Theme.text.transparentize(1.0 - root.fade);
                     font-size: Theme.font-size-md;
                     font-weight: 600;
                     overflow: elide;
                 }
                 Text {
                     text: "‎" + root.subtitle;
-                    color: Theme.subtext0;
+                    color: Theme.subtext0.transparentize(1.0 - root.fade);
                     font-size: Theme.font-size-sm;
                     overflow: elide;
                     visible: root.subtitle != "";
                 }
                 Text {
                     text: "‎" + root.subtitle2;
-                    color: Theme.overlay1;
+                    color: Theme.overlay1.transparentize(1.0 - root.fade);
                     font-size: Theme.font-size-sm;
                     overflow: elide;
                     visible: root.subtitle2 != "";

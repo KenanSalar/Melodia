@@ -18,15 +18,17 @@ import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 export component SelectIndicator inherits Rectangle {
     in property <bool> checked;
     in property <bool> indeterminate;
+    // A disabled row's dimming, handed down so the row needs no `opacity`.
+    in property <float> fade: 1.0;
 
     private property <bool> active: root.checked || root.indeterminate;
 
     width: 24px;
     height: 24px;
     border-radius: self.width / 2;
-    background: root.active ? Theme.accent : transparent;
+    background: (root.active ? Theme.accent : transparent).transparentize(1.0 - root.fade);
     border-width: root.active ? 0px : 2px;
-    border-color: Theme.overlay0;
+    border-color: Theme.overlay0.transparentize(1.0 - root.fade);
     animate background { duration: Theme.dur-fast; easing: ease-in-out; }
     animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }
 
@@ -36,6 +38,7 @@ export component SelectIndicator inherits Rectangle {
         name: root.indeterminate ? "remove" : "check";
         icon-size: 16px;
         icon-color: Theme.accent-text;
+        fade: root.fade;
     }
 }
 
@@ -52,13 +55,17 @@ export component SelectableRow inherits Rectangle {
     in property <bool> disabled;
     callback toggled();
 
+    // The disabled dimming, through each brush rather than `opacity`, which would render the row
+    // into a texture of its own for as long as the dialog shows it disabled.
+    private property <float> fade: root.disabled ? 0.5 : 1.0;
+
     height: 60px;
     border-radius: Theme.radius-md;
-    opacity: root.disabled ? 0.5 : 1.0;
     // Tonal accent when selected, flat with a soft hover fill otherwise.
-    background: root.selected
-        ? Theme.accent.with-alpha(0.16)
-        : (touch.has-hover && !root.disabled ? Theme.surface1 : transparent);
+    background: (root.selected
+            ? Theme.accent.with-alpha(0.16)
+            : (touch.has-hover && !root.disabled ? Theme.surface1 : transparent))
+        .transparentize(1.0 - root.fade);
     animate background { duration: Theme.dur-fast; easing: ease-in-out; }
 
     HorizontalLayout {
@@ -77,6 +84,7 @@ export component SelectableRow inherits Rectangle {
                 fallback-icon: root.fallback-icon;
                 // The grid cards' hover zoom, skipped while disabled.
                 cover-scale: touch.has-hover && !root.disabled ? 1.05 : 1.0;
+                fade: root.fade;
             }
         }
 
@@ -86,14 +94,14 @@ export component SelectableRow inherits Rectangle {
             spacing: 2px;
             Text {
                 text: root.name;
-                color: Theme.text;
+                color: Theme.text.transparentize(1.0 - root.fade);
                 font-size: Theme.font-size-md;
                 font-weight: 600;
                 overflow: elide;
             }
             if root.subtitle != "": Text {
                 text: root.subtitle;
-                color: root.selected ? Theme.accent : Theme.subtext0;
+                color: (root.selected ? Theme.accent : Theme.subtext0).transparentize(1.0 - root.fade);
                 font-size: Theme.font-size-sm;
                 overflow: elide;
                 animate color { duration: Theme.dur-fast; easing: ease-in-out; }
@@ -102,7 +110,10 @@ export component SelectableRow inherits Rectangle {
 
         VerticalLayout {
             alignment: center;
-            SelectIndicator { checked: root.selected; }
+            SelectIndicator {
+                checked: root.selected;
+                fade: root.fade;
+            }
         }
     }
 
