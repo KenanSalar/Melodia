@@ -19,31 +19,30 @@ Six theme families, light and dark variants, configurable accents, and Material 
 
 <table>
   <tr>
-    <td width="50%"><img src="assets/screenshots/albums.png" alt="My Library on the Albums tab"><br><sub><b>My Library</b>: one page and five tabs, here over a virtualized cover grid.</sub></td>
-    <td width="50%"><img src="assets/screenshots/playlist-detail.png" alt="A playlist opened inside My Library"><br><sub><b>Detail in place</b>: opening a playlist grows the band into its banner, tabs still in reach.</sub></td>
+    <td width="50%"><img src="assets/screenshots/songs.png" alt="My Library on the Songs tab"><br><sub><b>My Library</b>: one page and five tabs, here on Songs with sortable, toggleable columns.</sub></td>
+    <td width="50%"><img src="assets/screenshots/album.png" alt="My Library on the Albums tab"><br><sub><b>Albums</b>: a virtualized cover grid, sorted by name, year, or artist.</sub></td>
   </tr>
   <tr>
+    <td><img src="assets/screenshots/playlist-detail.png" alt="A playlist opened inside My Library"><br><sub><b>Detail in place</b>: opening a playlist grows the band into its banner, tabs still in reach.</sub></td>
     <td><img src="assets/screenshots/search.png" alt="Search view"><br><sub><b>Search</b>: a top-result card over songs, albums, artists, and genres.</sub></td>
-    <td><img src="assets/screenshots/browse.png" alt="File-system browse view"><br><sub><b>Browse</b>: navigate the library by folder, as a list or a grid of cards.</sub></td>
   </tr>
 </table>
 
-### Favorites
+### Now Playing
 
 <table>
   <tr>
-    <td><img src="assets/screenshots/favorites.png" alt="Favorites view"><br><sub><b>Favorites</b>: an artwork mosaic hero over tabs for songs, most played, and favorite artists. Recently Played is built the same way.</sub></td>
+    <td width="50%"><img src="assets/screenshots/nowplaying-upnext.png" alt="Now Playing with the Up Next list"><br><sub><b>Up Next</b>: the queue beside the artwork, the file's format, and the visualizer.</sub></td>
+    <td width="50%"><img src="assets/screenshots/nowplaying-lyrics.png" alt="Now Playing with a timed lyrics sheet"><br><sub><b>Lyrics</b>: the header switch trades Up Next for a timed sheet that follows the song line by line.</sub></td>
   </tr>
 </table>
 
-### Internet Radio
-
-Off until you switch it on, under Settings ▸ Services ▸ Radio.
+### Internet Radio and Settings
 
 <table>
   <tr>
-    <td width="50%"><img src="assets/screenshots/radio-browse.png" alt="Radio browse view"><br><sub><b>Browse</b>: a worldwide directory, narrowed by country, language, genre, codec, or bitrate.</sub></td>
-    <td width="50%"><img src="assets/screenshots/radio-detail.png" alt="Radio station page"><br><sub><b>Station page</b>: logo, homepage, format, bitrate, votes, and what the station has announced this session.</sub></td>
+    <td width="50%"><img src="assets/screenshots/radio-browse.png" alt="Radio browse view"><br><sub><b>Internet Radio</b>: a worldwide directory, narrowed by country, language, genre, codec, or bitrate. Off until you switch it on, under Settings ▸ Services ▸ Radio.</sub></td>
+    <td width="50%"><img src="assets/screenshots/settings.png" alt="Settings on the Interface tab"><br><sub><b>Settings</b>: five tabs and a search box, here on the theme, variant, accent, and backdrop.</sub></td>
   </tr>
 </table>
 
@@ -53,8 +52,8 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 
 <table>
   <tr>
-    <td width="60%" valign="top"><img src="assets/screenshots/miniplayer_rectangle.png" alt="Horizontal mini-player strip" width="360"><br><sub><b>Horizontal strip</b>: the most compact form.</sub></td>
-    <td width="40%" valign="top"><img src="assets/screenshots/miniplayer_square.png" alt="Square mini-player widget with up-next list" width="240"><br><sub><b>Square widget</b>: grows an up-next list when tall enough.</sub></td>
+    <td width="60%" valign="top"><img src="assets/screenshots/miniplayer-rectangle.png" alt="Horizontal mini-player strip" width="360"><br><sub><b>Horizontal strip</b>: the most compact form.</sub></td>
+    <td width="40%" valign="top"><img src="assets/screenshots/miniplayer-square.png" alt="Square mini-player widget with up-next list" width="240"><br><sub><b>Square widget</b>: grows an up-next list when tall enough.</sub></td>
   </tr>
 </table>
 
