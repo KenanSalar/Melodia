@@ -8,7 +8,7 @@
 
 use std::fs::File;
 use std::io::{BufWriter, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -51,6 +51,14 @@ pub fn write_json_sync<T: Serialize>(path: &Path, value: &T) -> AppResult<()> {
 /// owns line endings and the trailing newline.
 pub fn write_text_sync(path: &Path, text: &str) -> AppResult<()> {
     write_with_sync(path, |writer| Ok(writer.write_all(text.as_bytes())?))
+}
+
+/// [`write_text_sync`] on the blocking pool, for a caller that must not block the thread it
+/// awaits on.
+pub async fn write_text(path: PathBuf, text: String) -> AppResult<()> {
+    tokio::task::spawn_blocking(move || write_text_sync(&path, &text))
+        .await
+        .map_err(AppError::io_source)?
 }
 
 /// Hands `write` the temp file the other writers go through, renaming it over `path` only once

@@ -15,7 +15,6 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use sqlx::AssertSqlSafe;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio_util::sync::CancellationToken;
 
@@ -23,7 +22,7 @@ use crate::state::Signal;
 use crate::tasks::TaskSpawner;
 use melodia_core::utils::now_rfc3339;
 use melodia_core::utils::play_counts::{self, PlayCountEvent};
-use melodia_store::database::DbPool;
+use melodia_store::database::{DbPool, queries};
 
 /// How often to flush pending events. Short enough that play counts feel
 /// up-to-date in the UI on the next track change, long enough to batch a
@@ -101,18 +100,17 @@ async fn flush(
 
     let mut play_flush_ok = false;
     if !plays.is_empty() {
-        let now = now_rfc3339();
-        match flush_play_counts(db, plays, &now).await {
+        let increments: Vec<(i64, u32)> = plays.drain().collect();
+        match queries::track::add_play_counts(db, &increments, &now_rfc3339()).await {
             Ok(()) => play_flush_ok = true,
             Err(e) => log::warn!("Failed to flush play counts: {e}"),
         }
-        plays.clear();
     }
     if !skips.is_empty() {
-        if let Err(e) = flush_skip_counts(db, skips).await {
+        let increments: Vec<(i64, u32)> = skips.drain().collect();
+        if let Err(e) = queries::track::add_skip_counts(db, &increments).await {
             log::warn!("Failed to flush skip counts: {e}");
         }
-        skips.clear();
     }
     // Bump only on a successful play-count flush — the Favorites hero
     // mosaic (top-4 most-played) and any future "Most Played" widget
@@ -123,79 +121,6 @@ async fn flush(
     if play_flush_ok {
         stats_changed.bump();
     }
-}
-
-/// What a counted row spends in either statement below: the `WHEN ? THEN ?` of the `CASE`, then
-/// the id again in the `IN` list.
-const BINDS_PER_ROW: usize = 3;
-
-/// Build a single `UPDATE … SET play_count = play_count + CASE id … END,
-/// last_played = ? WHERE id IN (…)` and execute it.
-async fn flush_play_counts(
-    db: &DbPool,
-    counts: &HashMap<i64, u32>,
-    now: &str,
-) -> Result<(), melodia_core::error::AppError> {
-    // The reserved slot is `now`, the one bind that is not part of a row.
-    const MAX_ROWS: usize = (melodia_store::database::MAX_BINDS_PER_STATEMENT - 1) / BINDS_PER_ROW;
-    let entries: Vec<(i64, u32)> = counts.iter().map(|(&k, &v)| (k, v)).collect();
-    for chunk in entries.chunks(MAX_ROWS) {
-        let mut sql = String::from("UPDATE tracks SET play_count = play_count + CASE id");
-        for _ in chunk {
-            sql.push_str(" WHEN ? THEN ?");
-        }
-        sql.push_str(" END, last_played = ? WHERE id IN (");
-        for i in 0..chunk.len() {
-            if i > 0 {
-                sql.push_str(", ");
-            }
-            sql.push('?');
-        }
-        sql.push(')');
-
-        let mut q = sqlx::query(AssertSqlSafe(sql));
-        for &(id, n) in chunk {
-            q = q.bind(id).bind(i64::from(n));
-        }
-        q = q.bind(now);
-        for &(id, _) in chunk {
-            q = q.bind(id);
-        }
-        q.persistent(false).execute(db.write()).await?;
-    }
-    Ok(())
-}
-
-async fn flush_skip_counts(
-    db: &DbPool,
-    counts: &HashMap<i64, u32>,
-) -> Result<(), melodia_core::error::AppError> {
-    const MAX_ROWS: usize = melodia_store::database::MAX_BINDS_PER_STATEMENT / BINDS_PER_ROW;
-    let entries: Vec<(i64, u32)> = counts.iter().map(|(&k, &v)| (k, v)).collect();
-    for chunk in entries.chunks(MAX_ROWS) {
-        let mut sql = String::from("UPDATE tracks SET skip_count = skip_count + CASE id");
-        for _ in chunk {
-            sql.push_str(" WHEN ? THEN ?");
-        }
-        sql.push_str(" END WHERE id IN (");
-        for i in 0..chunk.len() {
-            if i > 0 {
-                sql.push_str(", ");
-            }
-            sql.push('?');
-        }
-        sql.push(')');
-
-        let mut q = sqlx::query(AssertSqlSafe(sql));
-        for &(id, n) in chunk {
-            q = q.bind(id).bind(i64::from(n));
-        }
-        for &(id, _) in chunk {
-            q = q.bind(id);
-        }
-        q.persistent(false).execute(db.write()).await?;
-    }
-    Ok(())
 }
 
 #[cfg(test)]

@@ -81,6 +81,12 @@ export component TrackList inherits Rectangle {
     out property <length> body-y: inner-list.absolute-position.y - root.absolute-position.y;
     out property <length> body-height: inner-list.height;
 
+    // Tall enough for every row with no inner travel, for a host sizing the list to what it holds:
+    // header, the spacing under it, and the rows, floored at one so a header still shows over none.
+    // Reads no geometry, so the list's own `height` may bind to it.
+    out property <length> content-height: Theme.track-header-h + Theme.pad-xs
+        + max(1, root.rows.length) * (Theme.track-row-h(root.columns.show_artwork) + Theme.row-gap);
+
     callback set-v-offset(length);
 
     set-v-offset(o) => { inner-list.viewport-y = -o; }

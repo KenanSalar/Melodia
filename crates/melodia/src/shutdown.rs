@@ -61,15 +61,7 @@ pub fn save_state_on_exit(app: &AppWindow, state: &AppState, runtime: &tokio::ru
     // retired key below.
     match services::view_state::read_view_state(&state.paths) {
         Ok(mut vs) => {
-            ui::track_list_view::snapshot_tracks_view(app, &mut vs);
-            ui::track_list_view::snapshot_browse_view(app, &mut vs);
-            ui::track_list_view::snapshot_album_detail_view(app, &mut vs);
-            ui::track_list_view::snapshot_artist_detail_view(app, &mut vs);
-            ui::track_list_view::snapshot_genre_detail_view(app, &mut vs);
-            ui::track_list_view::snapshot_playlist_detail_view(app, &mut vs);
-            ui::track_list_view::snapshot_favorites_view(app, &mut vs);
-            ui::track_list_view::snapshot_recently_played_view(app, &mut vs);
-            ui::track_list_view::snapshot_search_view(app, &mut vs);
+            ui::track_list_view::snapshot_all(app, &mut vs);
             // Recently Played stopped being sortable; drop the key builds
             // before that wrote so an upgraded views.json doesn't carry
             // state nothing reads.

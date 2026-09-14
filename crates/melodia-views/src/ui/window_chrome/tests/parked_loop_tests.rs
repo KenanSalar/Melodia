@@ -1,5 +1,5 @@
 use super::*;
-use melodia_testkit::{block_body, strip_line_comments};
+use melodia_testkit::{block_after, strip_line_comments};
 
 // Each loop-tick count below is a `NewEvents` count: equal counts mean no `NewEvents` ran between
 // the two calls, the one signal a Win32 modal loop gives off.
@@ -142,11 +142,7 @@ fn a_timer_due_past_a_frame_is_slept_toward_a_frame_at_a_time() {
 fn the_heartbeat_asks_the_watch_before_it_ticks_or_rearms() {
     const FN: &str = "fn on_heartbeat()";
     let code = strip_line_comments(include_str!("../parked_loop.rs"));
-    let body = code
-        .find(FN)
-        .and_then(|at| code[at..].find('{').map(|rel| at + rel))
-        .and_then(|open| block_body(&code, open))
-        .unwrap_or_default();
+    let body = block_after(&code, FN);
     let ask = body.find(".heartbeat(");
     let tick = body.find("update_timers_and_animations()");
     let rearm = body.find("arm_heartbeat(");

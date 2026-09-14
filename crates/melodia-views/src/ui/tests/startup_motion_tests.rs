@@ -9,7 +9,7 @@
 //! and restoring either half puts that symptom back on its own. The swap's own crossfade sits
 //! here beside them, the shell painting what the switch's fade decides.
 
-use melodia_testkit::{normalize_ws, strip_line_comments};
+use melodia_testkit::{code_tokens, strip_line_comments};
 
 const VIEW_TRANSITION: &str =
     include_str!("../../../../melodia-ui/ui/components/view-transition.slint");
@@ -26,11 +26,6 @@ const CROSSFADE_OVERLAY: &str = "Rectangle { width: 100%; height: 100%; \
 /// whenever the rest of the declaration moves.
 const CROSSFADE_BRUSH: &str =
     "background: WindowChrome.mantle.transparentize(mini-switch.fade-opacity);";
-
-/// Comments stripped and whitespace collapsed, so a pin reads tokens rather than one layout.
-fn tokens(src: &str) -> String {
-    normalize_ws(&strip_line_comments(src))
-}
 
 /// Comment-stripped, trimmed, blank lines dropped — so a pin means the *code* lines sit
 /// in that order regardless of how the prose around them grows.
@@ -151,7 +146,7 @@ fn the_swap_fade_is_gated_on_the_branch_actually_changing() {
 /// back beside the overlay it doubles the fade, dimming the midpoint of every swap.
 #[test]
 fn no_branch_fades_through_an_opacity_of_its_own() {
-    let shell = tokens(APP_WINDOW);
+    let shell = code_tokens(APP_WINDOW);
 
     let spent = shell.matches("opacity: mini-switch.fade-opacity").count();
 
@@ -163,7 +158,7 @@ fn no_branch_fades_through_an_opacity_of_its_own() {
 /// against that exact fade. The `visible` gate keeps it out of every frame the fade isn't running.
 #[test]
 fn the_crossfade_is_one_mantle_overlay_hidden_outside_the_fade() {
-    let shell = tokens(APP_WINDOW);
+    let shell = code_tokens(APP_WINDOW);
 
     let overlays = shell.matches(CROSSFADE_OVERLAY).count();
 
@@ -174,7 +169,7 @@ fn the_crossfade_is_one_mantle_overlay_hidden_outside_the_fade() {
 /// and the swap pops from one branch to the other with nothing fading.
 #[test]
 fn the_crossfade_overlay_paints_over_both_branches() {
-    let shell = tokens(APP_WINDOW);
+    let shell = code_tokens(APP_WINDOW);
     let full = shell.find("if !mini-switch.render-active:");
     let mini = shell.find("if mini-switch.render-active:");
 

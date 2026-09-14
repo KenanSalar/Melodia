@@ -15,7 +15,7 @@ const FACET_CHIP: &str = include_str!("../../../../../melodia-ui/ui/views/radio/
 /// The picker's tree, comment-stripped and flattened — its prose argues the same bindings these
 /// pins read, and would answer for them.
 fn picker() -> String {
-    melodia_testkit::normalize_ws(&melodia_testkit::strip_line_comments(FACET_CHIP))
+    melodia_testkit::code_tokens(FACET_CHIP)
 }
 
 /// The query one pick leaves behind, starting from no filters at all.

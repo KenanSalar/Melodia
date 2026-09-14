@@ -53,10 +53,10 @@ export component EntityCard inherits Rectangle {
     in property <bool> overlay-hovered: false;
 
     // Browse's card view draws disk-only files — present inside a library folder but
-    // not in the DB — and dims them inert, the same 0.45 the disabled `TrackListRow`
-    // takes. Defaulted `true`, so every other mount is unaffected; `touch` is gated on
-    // it, which drops the hover fill, the zoom and the pointer cursor together rather
-    // than leaving a card that looks live and does nothing.
+    // not in the DB — and dims them inert, as the disabled `TrackListRow` is. Defaulted
+    // `true`, so every other mount is unaffected; `touch` is gated on it, which drops the
+    // hover fill, the zoom and the pointer cursor together rather than leaving a card that
+    // looks live and does nothing.
     in property <bool> enabled: true;
 
     // A Material Symbols ligature, marking a smart playlist. Empty means no badge.
@@ -84,7 +84,7 @@ export component EntityCard inherits Rectangle {
     // The dimming, through the tile and the text rather than `opacity`, which would render every
     // dimmed card into a texture of its own for as long as it stays dimmed. The badges need none:
     // Browse, the one host disabling cards, sets neither.
-    private property <float> fade: root.enabled ? 1.0 : 0.45;
+    private property <float> fade: root.enabled ? 1.0 : Theme.fade-disk-only;
 
     width: card-width;
     height: card-height;

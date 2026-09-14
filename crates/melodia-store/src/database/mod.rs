@@ -52,6 +52,22 @@ pub(crate) fn placeholders(n: usize) -> String {
     s
 }
 
+/// What one row spends in an `UPDATE … SET col = CASE id WHEN ? THEN ? … END WHERE id IN (…)`: the
+/// `WHEN ? THEN ?` pair, then its id again in the `IN` list.
+pub(crate) const CASE_BINDS_PER_ROW: usize = 3;
+
+/// `CASE id WHEN ? THEN ? … END` over `rows` pairs, each bound id first.
+pub(crate) fn case_by_id(rows: usize) -> String {
+    const WHEN_THEN: &str = " WHEN ? THEN ?";
+    let mut s = String::with_capacity("CASE id END".len() + rows * WHEN_THEN.len());
+    s.push_str("CASE id");
+    for _ in 0..rows {
+        s.push_str(WHEN_THEN);
+    }
+    s.push_str(" END");
+    s
+}
+
 /// Execute a chunked single-column IN-clause query inside [`MAX_BINDS_PER_STATEMENT`],
 /// concatenating the results.
 ///

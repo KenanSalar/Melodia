@@ -97,21 +97,20 @@ export component AppWindow inherits Window {
     // full UI fades out with no titlebar at all or the miniplayer fades out under the OS one, and on
     // Win32 the visible window steps in or out by the invisible resize borders while it's on screen.
     property <bool> frameless: !Theme.use-native-titlebar || mini-switch.render-active;
+    // The one shape that draws its own window edge: rounded corners, the outline and the resize
+    // grabs. Maximized, the corners would clip against the screen edge and resizing is a no-op.
+    property <bool> rounded-shell: root.frameless && !WindowChrome.is-maximized;
 
-    // Frameless + windowed gets a transparent ARGB surface, so the compositor blends the rounded
-    // mantle shell with the desktop and the alpha=0 corners read as "not our window". A native frame
-    // or maximized goes opaque: native wants the OS frame to abut a solid backdrop, and rounded
-    // corners on an edge-to-edge window clip against the screen edge.
-    background: (!root.frameless || WindowChrome.is-maximized)
-        ? Theme.mantle
-        : Colors.transparent;
+    // The rounded shell gets a transparent ARGB surface, so the compositor blends the mantle with
+    // the desktop and the alpha=0 corners read as "not our window". A native frame or maximized goes
+    // opaque: native wants the OS frame to abut a solid backdrop.
+    background: root.rounded-shell ? Colors.transparent : Theme.mantle;
 
     // What the native miniplayer leaves transparent around itself: the invisible borders the frame
     // it dropped kept outside its visible edges, which the client takes over when the frame goes. Left
     // painted, the window grows by them on every swap in and shrinks by them on every swap out.
     // Zero off Win32, where Rust writes none.
-    property <bool> keeps-frame-margins: Theme.use-native-titlebar && root.frameless
-        && !WindowChrome.is-maximized;
+    property <bool> keeps-frame-margins: Theme.use-native-titlebar && root.rounded-shell;
     property <length> margin-left: root.keeps-frame-margins ? WindowChrome.frame-margin-left : 0px;
     property <length> margin-right: root.keeps-frame-margins ? WindowChrome.frame-margin-right : 0px;
     property <length> margin-bottom: root.keeps-frame-margins ? WindowChrome.frame-margin-bottom : 0px;
@@ -379,9 +378,7 @@ export component AppWindow inherits Window {
         y: 0px;
         width: root.content-width;
         height: root.content-height;
-        border-radius: (!root.frameless || WindowChrome.is-maximized)
-            ? 0px
-            : Theme.window-radius;
+        border-radius: root.rounded-shell ? Theme.window-radius : 0px;
         clip: true;
 
         Rectangle {
@@ -643,7 +640,7 @@ export component AppWindow inherits Window {
         // The outline an OS draws round its own frames, which a frameless window has to draw for
         // itself. Last, so nothing in the window paints over the edge, a dialog's scrim included.
         // One physical pixel at every scale, as the OS draws it.
-        if root.frameless && !WindowChrome.is-maximized && Settings.window-border-shown: EdgeOutline {
+        if root.rounded-shell && Settings.window-border-shown: EdgeOutline {
             width: 100%;
             height: 100%;
             radius: Theme.window-radius;
@@ -661,7 +658,7 @@ export component AppWindow inherits Window {
     ResizeRing {
         width: 100%;
         height: 100%;
-        active: root.frameless && !WindowChrome.is-maximized;
+        active: root.rounded-shell;
         band: root.resize-band;
         radius: Theme.window-radius;
     }

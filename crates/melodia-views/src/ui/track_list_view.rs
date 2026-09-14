@@ -3,21 +3,25 @@
 //! Every consumer of the reusable `TrackList` component owns a per-view Slint global holding one
 //! `TrackColumns` value, and the hydrate-on-startup / snapshot-on-shutdown body is identical across
 //! all of them. What varies is the global type, the view-id, the columns a first launch hides and,
-//! for a detail view, the one column the UI can no longer toggle. `impl_track_list_column_state!`
-//! generates the `TrackListColumnState` impl and its two shorthand functions from those
-//! parameters, so a new view is a global, a `view_id::*` const, one invocation and two calls.
+//! for a detail view, the one column the UI can no longer toggle. `track_list_views!` takes one row
+//! of those per view and generates each `TrackListColumnState` impl plus [`hydrate_all`] and
+//! [`snapshot_all`], so a new view is a global, a `view_id::*` const and one row.
 //!
 //! Persistence rides on `views.json`'s `view_column_widths` and `view_columns`, both keyed by an
 //! arbitrary view-id, so a new view needs no schema change. **The defaults are Rust's**, each
 //! view's visible set here and the widths in `ColumnWidths::default()`: the globals declare none,
-//! so [`hydrate`] writes every view whether or not the file holds an entry for it.
+//! so a view left out of [`hydrate_all`] would have no columns at all. One table feeding both
+//! passes is what keeps that from happening.
 
 use std::collections::HashSet;
 
 use slint::ComponentHandle;
 
+use crate::ui::callbacks::macros::spawn_blocking_logged;
+use melodia_app::library;
 use melodia_app::services::settings::ColumnWidths;
 use melodia_app::services::view_state::ViewStateData;
+use melodia_app::state::AppState;
 use melodia_ui::{
     AlbumDetail, ArtistDetail, Browse, Favorites, GenreDetail, PlaylistDetail, RecentlyPlayed,
     Search, Tracks,
@@ -29,10 +33,12 @@ use melodia_ui::{AppWindow, TrackColumns};
 /// the `show_*` fields in this order.
 const TOGGLEABLE: [&str; 6] = ["number", "artwork", "artist", "album", "genre", "year"];
 
-/// The Slint-side surface of a per-view track-list global, so the hydrate and snapshot
-/// helpers drive any number of views down one path. Each generated global gets its own
-/// `impl` from `impl_track_list_column_state!`, routing through the accessors.
+/// The Slint-side surface of a per-view track-list global, so the hydrate, snapshot and toggle
+/// paths drive any number of views down one path. Each generated global gets its own `impl` from
+/// `track_list_views!`, routing through the accessors.
 pub trait TrackListColumnState {
+    /// The key both `views.json` maps hold this view under.
+    const VIEW_ID: &'static str;
     /// The toggleable column ids a first launch hides.
     const HIDDEN_BY_DEFAULT: &'static [&'static str];
     /// The column a detail view hides for good, every row sharing its value.
@@ -64,12 +70,25 @@ pub trait TrackListColumnState {
     }
 }
 
-/// Write `view_id`'s columns to the handle: `views.json`'s widths and visibility where it has
+/// Persist the visible columns after the toggle popup flipped one. The popup has already
+/// repainted, so what is left is the write.
+pub fn persist_visible<T: TrackListColumnState>(state: &AppState, h: &T) {
+    let view_id = T::VIEW_ID;
+    let columns = h.snapshot_visible();
+    let s = state.clone();
+    spawn_blocking_logged!(
+        s,
+        "track_list_view::persist_visible",
+        library::settings::update_view_columns(&s, view_id.to_owned(), columns)
+    );
+}
+
+/// Write the view's columns to the handle: `views.json`'s widths and visibility where it has
 /// them, the defaults where it doesn't.
-pub fn hydrate<T: TrackListColumnState>(view_id: &str, vs: &ViewStateData, h: &T) {
-    let widths = vs.view_column_widths.get(view_id).cloned().unwrap_or_default();
+fn hydrate<T: TrackListColumnState>(vs: &ViewStateData, h: &T) {
+    let widths = vs.view_column_widths.get(T::VIEW_ID).cloned().unwrap_or_default();
     let saved: Option<HashSet<&str>> =
-        vs.view_columns.get(view_id).map(|ids| ids.iter().map(String::as_str).collect());
+        vs.view_columns.get(T::VIEW_ID).map(|ids| ids.iter().map(String::as_str).collect());
     let shown = |id: &str| match &saved {
         Some(visible) => visible.contains(id),
         None => !T::HIDDEN_BY_DEFAULT.contains(&id),
@@ -77,15 +96,11 @@ pub fn hydrate<T: TrackListColumnState>(view_id: &str, vs: &ViewStateData, h: &T
     h.write_columns(columns_from(&widths, shown, T::LOCKED));
 }
 
-/// Snapshot both widths and visibility into `view_id`'s `views.json` entries, mutating
-/// `vs` in place — the caller writes it back to disk.
-pub fn snapshot_into_view_state<T: TrackListColumnState>(
-    view_id: &str,
-    vs: &mut ViewStateData,
-    h: &T,
-) {
-    vs.view_column_widths.insert(view_id.to_owned(), widths_from(&h.read_columns()));
-    vs.view_columns.insert(view_id.to_owned(), h.snapshot_visible());
+/// Snapshot both widths and visibility into the view's `views.json` entries, mutating `vs` in
+/// place. The caller writes it back to disk.
+fn snapshot<T: TrackListColumnState>(vs: &mut ViewStateData, h: &T) {
+    vs.view_column_widths.insert(T::VIEW_ID.to_owned(), widths_from(&h.read_columns()));
+    vs.view_columns.insert(T::VIEW_ID.to_owned(), h.snapshot_visible());
 }
 
 /// The columns for `widths`, each toggleable one shown as `shown` answers for its id. A locked
@@ -164,112 +179,56 @@ macro_rules! locked_column {
     };
 }
 
-/// Generate the [`TrackListColumnState`] impl for a Slint global plus its
-/// `hydrate_*_view` / `snapshot_*_view` shorthands. `hidden` names the toggleable columns a first
-/// launch hides, and a detail view's `locked = <column>` is excluded from the persisted set and
-/// forced off on hydrate.
-macro_rules! impl_track_list_column_state {
-    (
-        $global:ident, $view_id:ident, $hydrate:ident, $snapshot:ident,
-        hidden = [$($hidden:ident),*]
-        $(, locked = $locked:ident)?
-    ) => {
-        impl TrackListColumnState for $global<'_> {
-            const HIDDEN_BY_DEFAULT: &'static [&'static str] = &[$(stringify!($hidden)),*];
-            const LOCKED: Option<&'static str> = locked_column!($($locked)?);
+/// Generate the [`TrackListColumnState`] impl for every listed Slint global, plus [`hydrate_all`]
+/// and [`snapshot_all`] over the same list. `hidden` names the toggleable columns a first launch
+/// hides, and a detail view's `locked = <column>` is excluded from the persisted set and forced
+/// off on hydrate.
+macro_rules! track_list_views {
+    ($(
+        $global:ident => $view_id:ident, hidden = [$($hidden:ident),*] $(, locked = $locked:ident)?;
+    )*) => {
+        $(
+            impl TrackListColumnState for $global<'_> {
+                const VIEW_ID: &'static str = view_id::$view_id;
+                const HIDDEN_BY_DEFAULT: &'static [&'static str] = &[$(stringify!($hidden)),*];
+                const LOCKED: Option<&'static str> = locked_column!($($locked)?);
 
-            fn read_columns(&self) -> TrackColumns {
-                self.get_track_columns()
-            }
+                fn read_columns(&self) -> TrackColumns {
+                    self.get_track_columns()
+                }
 
-            fn write_columns(&self, columns: TrackColumns) {
-                self.set_track_columns(columns);
+                fn write_columns(&self, columns: TrackColumns) {
+                    self.set_track_columns(columns);
+                }
             }
+        )*
+
+        /// Hydrate every track list's column widths and visibility from `views.json`.
+        pub fn hydrate_all(app: &AppWindow, vs: &ViewStateData) {
+            $(hydrate(vs, &app.global::<$global>());)*
         }
 
-        /// Hydrate this view's column widths + visibility from `views.json`.
-        /// Generated by `impl_track_list_column_state!`.
-        pub fn $hydrate(app: &AppWindow, vs: &ViewStateData) {
-            hydrate(view_id::$view_id, vs, &app.global::<$global>());
-        }
-
-        /// Snapshot this view's column widths + visibility into the matching
-        /// `views.json` entries. The caller writes `vs` back to disk.
-        /// Generated by `impl_track_list_column_state!`.
-        pub fn $snapshot(app: &AppWindow, vs: &mut ViewStateData) {
-            snapshot_into_view_state(view_id::$view_id, vs, &app.global::<$global>());
+        /// Snapshot every track list's column widths and visibility into `vs`. The caller writes
+        /// it back to disk.
+        pub fn snapshot_all(app: &AppWindow, vs: &mut ViewStateData) {
+            $(snapshot(vs, &app.global::<$global>());)*
         }
     };
 }
 
-impl_track_list_column_state!(
-    Tracks,
-    TRACKS,
-    hydrate_tracks_view,
-    snapshot_tracks_view,
-    hidden = []
-);
-impl_track_list_column_state!(
-    Browse,
-    BROWSE,
-    hydrate_browse_view,
-    snapshot_browse_view,
-    hidden = []
-);
-impl_track_list_column_state!(
-    AlbumDetail,
-    ALBUM_DETAIL,
-    hydrate_album_detail_view,
-    snapshot_album_detail_view,
-    hidden = [],
-    locked = album
-);
-// The number column is off on the two details whose tracks span albums, where a row's position
-// in the list is incidental rather than a tracklist position.
-impl_track_list_column_state!(
-    ArtistDetail,
-    ARTIST_DETAIL,
-    hydrate_artist_detail_view,
-    snapshot_artist_detail_view,
-    hidden = [number],
-    locked = artist
-);
-impl_track_list_column_state!(
-    GenreDetail,
-    GENRE_DETAIL,
-    hydrate_genre_detail_view,
-    snapshot_genre_detail_view,
-    hidden = [number],
-    locked = genre
-);
-impl_track_list_column_state!(
-    PlaylistDetail,
-    PLAYLIST_DETAIL,
-    hydrate_playlist_detail_view,
-    snapshot_playlist_detail_view,
-    hidden = [genre]
-);
-impl_track_list_column_state!(
-    Favorites,
-    FAVORITES,
-    hydrate_favorites_view,
-    snapshot_favorites_view,
-    hidden = [number, genre, year]
-);
-impl_track_list_column_state!(
-    RecentlyPlayed,
-    RECENTLY_PLAYED,
-    hydrate_recently_played_view,
-    snapshot_recently_played_view,
-    hidden = [number, genre, year]
-);
-impl_track_list_column_state!(
-    Search,
-    SEARCH,
-    hydrate_search_view,
-    snapshot_search_view,
-    hidden = [genre, year]
-);
+track_list_views! {
+    Tracks => TRACKS, hidden = [];
+    Browse => BROWSE, hidden = [];
+    AlbumDetail => ALBUM_DETAIL, hidden = [], locked = album;
+    // The number column is off on the two details whose tracks span albums, where a row's position
+    // in the list is incidental rather than a tracklist position.
+    ArtistDetail => ARTIST_DETAIL, hidden = [number], locked = artist;
+    GenreDetail => GENRE_DETAIL, hidden = [number], locked = genre;
+    PlaylistDetail => PLAYLIST_DETAIL, hidden = [genre];
+    Favorites => FAVORITES, hidden = [number, genre, year];
+    RecentlyPlayed => RECENTLY_PLAYED, hidden = [number, genre, year];
+    Search => SEARCH, hidden = [genre, year];
+}
 
 /// Narrow a persisted f64 column width (`views.json`) to the f32 Slint uses.
 /// Column widths are tens-to-hundreds of pixels; f32 has ample precision.

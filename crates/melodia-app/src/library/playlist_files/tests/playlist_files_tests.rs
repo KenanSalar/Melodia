@@ -211,10 +211,10 @@ fn names(entries: &[archive::Entry]) -> Vec<&str> {
 }
 
 /// The counts of an archive export that was written, failing the test when it was refused.
-fn written(export: ArchiveExport) -> Result<ExportPlaylistsResult, AppError> {
+fn written(export: ExportOutcome) -> Result<ExportPlaylistsResult, AppError> {
     match export {
-        ArchiveExport::Exported(result) => Ok(result),
-        ArchiveExport::TooLarge => {
+        ExportOutcome::Exported(result) => Ok(result),
+        ExportOutcome::TooLarge => {
             Err(AppError::Validation("export refused as too large".to_owned()))
         }
     }

@@ -49,7 +49,7 @@ export component SongsSection inherits VerticalLayout {
         horizontal-stretch: 1;
         vertical-stretch: 0;
         // Sized to the row count so the outer scroller drives the strips and the list
-        // together; the floor keeps the column header rendering with zero rows.
+        // together.
         //
         // **Uncapped, unlike the composite views**, which pin this to the viewport so
         // their inner list keeps virtualizing. Here the *backend* is the cap — the query
@@ -58,11 +58,7 @@ export component SongsSection inherits VerticalLayout {
         // a nested `ListView` swallows the wheel at its scroll edge rather than bubbling,
         // which is why those views need `CompositeScrollbars` and this one doesn't.
         // **Raising that SQL limit is what would make the trade wrong.**
-        height: max(1, Search.tracks.length)
-            * (Search.track-columns.show_artwork
-                ? Theme.row-h
-                : Theme.row-h-compact)
-            + Theme.track-header-h + Theme.pad-xs;
+        height: self.content-height;
         // A column inside the page's own inset, beside the Top Result and under the page's
         // scrollbar rather than one at its own edge.
         inset-left: 0px;
@@ -70,7 +66,6 @@ export component SongsSection inherits VerticalLayout {
 
         rows: Search.tracks;
         columns <=> Search.track-columns;
-        number-mode: "index";
 
         sort-field: Search.sort-field;
         sort-dir:   Search.sort-dir;

@@ -117,9 +117,10 @@ pub fn split_shape(rows: &[Vec<SharedString>]) -> Vec<usize> {
     rows.iter().map(Vec::len).collect()
 }
 
-/// `Vec<Vec<SharedString>>` → the `[[string]]` model a `MetaChipStrip` reads.
-pub fn rows_to_model(rows: Vec<Vec<SharedString>>) -> ModelRc<ModelRc<SharedString>> {
-    let outer: Vec<ModelRc<SharedString>> =
+/// Rows → the nested model a wrapped strip reads, `[[string]]` for a `MetaChipStrip` and `[[int]]`
+/// for an index strip.
+pub fn rows_to_model<T: Clone + 'static>(rows: Vec<Vec<T>>) -> ModelRc<ModelRc<T>> {
+    let outer: Vec<ModelRc<T>> =
         rows.into_iter().map(|row| ModelRc::from(Rc::new(VecModel::from(row)))).collect();
     ModelRc::from(Rc::new(VecModel::from(outer)))
 }
@@ -169,13 +170,7 @@ impl IndexRows {
         self.by_shape
             .borrow_mut()
             .entry(shape)
-            .or_insert_with(|| {
-                let rows: Vec<ModelRc<i32>> = chunk_indices(shape.0, shape.1)
-                    .into_iter()
-                    .map(|row| ModelRc::from(Rc::new(VecModel::from(row))))
-                    .collect();
-                ModelRc::from(Rc::new(VecModel::from(rows)))
-            })
+            .or_insert_with(|| rows_to_model(chunk_indices(shape.0, shape.1)))
             .clone()
     }
 }

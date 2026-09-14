@@ -19,7 +19,7 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use melodia_app::library;
 use melodia_app::services::settings::{WINDOW_BORDER_SYSTEM_COLOR, WindowBorder, WindowFlags};
 use melodia_app::state::AppState;
-use melodia_core::themes::{self, SYSTEM_VARIANT_ID, SystemColorState, ThemeDef};
+use melodia_core::themes::{self, SystemColorState, ThemeDef};
 use melodia_ui::{AppWindow, Settings, Theme, WindowChrome};
 
 use super::theme_apply::{accent_brushes, brush, brush_to_rgb};
@@ -51,11 +51,7 @@ pub(super) fn republish_for_palette(
     system: &SystemColorState,
 ) {
     let theme = themes::get(theme_id);
-    let shade = if variant_id == SYSTEM_VARIANT_ID && theme.supports_system_mode {
-        theme.resolve_system_variant(&system.theme).id
-    } else {
-        theme.resolved_variant(variant_id).id
-    };
+    let shade = theme.shade_for(variant_id, &system.theme).id;
     let neutral = palette_neutral(ui);
     let os_accent = os_accent();
 

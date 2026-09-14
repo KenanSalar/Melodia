@@ -287,24 +287,14 @@ fn set_repeat(
 /// `wire_sync!` spawn returns immediately. A failed write only logs: the
 /// in-memory state already changed and persistence is best-effort.
 fn persist_shuffle(state: &AppState, enabled: bool) {
-    let paths = state.paths.clone();
-    state.runtime.spawn_blocking(move || {
-        if let Err(e) = mutate_settings(&paths, |s| {
-            s.queue.shuffle_enabled = enabled;
-        }) {
-            log::warn!("persist shuffle_enabled: {e}");
-        }
+    state.persist_blocking("persist shuffle_enabled", move |state| {
+        mutate_settings(&state.paths, |s| s.queue.shuffle_enabled = enabled)
     });
 }
 
 fn persist_repeat(state: &AppState, mode: RepeatMode) {
-    let paths = state.paths.clone();
-    state.runtime.spawn_blocking(move || {
-        if let Err(e) = mutate_settings(&paths, |s| {
-            s.queue.repeat_mode = mode;
-        }) {
-            log::warn!("persist repeat_mode: {e}");
-        }
+    state.persist_blocking("persist repeat_mode", move |state| {
+        mutate_settings(&state.paths, |s| s.queue.repeat_mode = mode)
     });
 }
 

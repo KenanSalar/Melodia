@@ -11,12 +11,12 @@ use super::NAV_SEARCH;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::ArtistsUi;
 use crate::ui::callbacks::cross_tab_nav;
-use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
+use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
 use crate::ui::callbacks::{
     collect_track_ids, model_track_ids, next_sort, persist_view_sort, play_row_start,
 };
 use crate::ui::search::{self as search_ui_mod, SearchUi, apply, fetch};
-use crate::ui::track_list_view::{TrackListColumnState, view_id};
+use crate::ui::track_list_view::{self, view_id};
 use melodia_app::library;
 use melodia_app::services::settings::ViewSort;
 use melodia_app::state::AppState;
@@ -184,17 +184,7 @@ pub(super) fn wire(
         let weak = weak.clone();
         g.on_toggle_column(move |_id| {
             let Some(ui) = weak.upgrade() else { return };
-            let columns = ui.global::<Search>().snapshot_visible();
-            let s_disk = s.clone();
-            spawn_blocking_logged!(
-                s,
-                "search::toggle_column",
-                library::settings::update_view_columns(
-                    &s_disk,
-                    view_id::SEARCH.to_owned(),
-                    columns
-                )
-            );
+            track_list_view::persist_visible(&s, &ui.global::<Search>());
         });
     }
     {

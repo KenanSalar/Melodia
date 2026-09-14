@@ -11,9 +11,7 @@ use slint::ComponentHandle;
 
 use crate::ui::file_dialog;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
-use crate::ui::shell::notifications::{
-    NotificationParams, NotificationsUi, RowText, TOAST_AUTO_DISMISS_MS,
-};
+use crate::ui::shell::notifications::{Completion, NotificationsUi, RowText};
 use crate::ui::util::count_as_i32;
 use melodia_app::library::playlist_files::{self, ImportFileResult};
 use melodia_app::state::AppState;
@@ -75,9 +73,8 @@ pub(super) fn wire(
             }
 
             let Some(ui) = weak.upgrade() else { return };
-            let settings = ui.global::<Settings>();
             if result.imported == 0 {
-                notifications.show_localized(&ui, "error", "", |ui| {
+                notifications.show_failure(&ui, |ui| {
                     let g = ui.global::<Settings>();
                     RowText::plain(
                         g.invoke_playlist_import_failed_title(),
@@ -85,18 +82,14 @@ pub(super) fn wire(
                     )
                 });
             } else {
-                let variant =
-                    if result.missing > 0 || result.failed > 0 { "warning" } else { "success" };
-                notifications.show_auto_dismiss(
-                    NotificationParams::plain(
-                        variant,
-                        settings.invoke_playlist_import_title(count_as_i32(result.imported)),
-                        settings.invoke_playlist_import_message(
-                            count_as_i32(result.matched),
-                            count_as_i32(result.missing),
-                        ),
+                let settings = ui.global::<Settings>();
+                notifications.show_completion(
+                    Completion::partial_if(result.missing > 0 || result.failed > 0),
+                    settings.invoke_playlist_import_title(count_as_i32(result.imported)),
+                    settings.invoke_playlist_import_message(
+                        count_as_i32(result.matched),
+                        count_as_i32(result.missing),
                     ),
-                    TOAST_AUTO_DISMISS_MS,
                 );
             }
         }));

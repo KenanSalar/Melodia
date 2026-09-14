@@ -377,12 +377,11 @@ impl QueueState {
     }
 
     pub fn cycle_repeat_mode(&mut self) {
-        self.repeat_mode = match self.repeat_mode {
+        self.set_repeat_mode(match self.repeat_mode {
             RepeatMode::Off => RepeatMode::All,
             RepeatMode::All => RepeatMode::One,
             RepeatMode::One => RepeatMode::Off,
-        };
-        self.version += 1;
+        });
     }
 
     /// Bumps `version` only on a move, so a panel re-sending the mode already set re-publishes

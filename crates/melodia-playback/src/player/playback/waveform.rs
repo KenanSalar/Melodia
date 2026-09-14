@@ -145,7 +145,14 @@ pub fn write_path_commands(columns: &[Column], out: &mut String) {
     write_path(columns, &prefixes, out);
 }
 
-/// Bytes one entry of [`XPrefixes`] takes: `"0.1234 "`.
+/// Fractional digits each vertex's `x` is written with.
+const X_DECIMALS: u32 = 4;
+
+/// Fractional digits each vertex's `y` is written with.
+const Y_DECIMALS: u32 = 3;
+
+/// Bytes one entry of [`XPrefixes`] takes: `"0.1234 "`, a lead digit and point, [`X_DECIMALS`]
+/// digits and the space.
 const X_PREFIX_BYTES: usize = 7;
 
 /// What every vertex but the first opens with. Kept out of the cached entry so the opening `M`
@@ -189,7 +196,7 @@ impl XPrefixes {
         // A lone column has no span to normalize against; it lands at x = 0.
         let span = index_to_f32(columns.saturating_sub(1)).max(1.0);
         for i in 0..columns {
-            push_fixed::<4>(&mut self.text, index_to_f32(i) / span);
+            push_fixed::<X_DECIMALS>(&mut self.text, index_to_f32(i) / span);
             self.text.push(' ');
             self.ends.push(self.text.len());
         }
@@ -224,13 +231,13 @@ fn write_path(columns: &[Column], prefixes: &XPrefixes, out: &mut String) {
         let y = edges(*column).1;
         out.push_str(if i == 0 { "M" } else { LINE_TO });
         out.push_str(prefixes.get(i));
-        push_fixed::<3>(out, y);
+        push_fixed::<Y_DECIMALS>(out, y);
     }
     for (i, column) in columns.iter().enumerate().rev() {
         let y = edges(*column).0;
         out.push_str(LINE_TO);
         out.push_str(prefixes.get(i));
-        push_fixed::<3>(out, y);
+        push_fixed::<Y_DECIMALS>(out, y);
     }
     out.push('Z');
 }

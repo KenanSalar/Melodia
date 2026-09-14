@@ -7,6 +7,7 @@ import { ArtworkImage } from "../components/artwork-image.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { Checkbox } from "../components/checkbox.slint";
 import { TrackContextMenu } from "../components/track-list/track-context-menu.slint";
+import { SelectionPill } from "../components/track-list/selection-pill.slint";
 
 // One fixed-height queue row: number-or-checkbox, artwork, title, duration, delete.
 //
@@ -105,21 +106,21 @@ export component QueueRowItem inherits Rectangle {
         x: 8px;
         width: parent.width - 16px;
         height: parent.height;
-        // Merge contiguous selected rows into one pill; `TrackListRowItem` has the same
-        // gating.
-        border-top-left-radius: (root.selected && root.prev-selected) ? 0 : Theme.radius-md;
-        border-top-right-radius: (root.selected && root.prev-selected) ? 0 : Theme.radius-md;
-        border-bottom-left-radius: (root.selected && root.next-selected) ? 0 : Theme.radius-md;
-        border-bottom-right-radius: (root.selected && root.next-selected) ? 0 : Theme.radius-md;
-        background: root.selected
-            ? (touch.has-hover
-                ? Theme.accent.with-alpha(0.14)
-                : Theme.accent.with-alpha(0.08))
-            : (touch.has-hover ? Theme.surface0 : transparent);
         // The drag ghost: dim enough that the still-painted source doesn't read as a
         // live row, but not invisible — the faint silhouette is what tells the user
         // which song they grabbed.
         opacity: root.is-drag-source ? 0.4 : 1.0;
+
+        if root.selected || touch.has-hover: SelectionPill {
+            x: 0;
+            y: 0;
+            width: 100%;
+            height: 100%;
+            selected: root.selected;
+            hovered: touch.has-hover;
+            prev-selected: root.prev-selected;
+            next-selected: root.next-selected;
+        }
 
         // Grabbing only while actually pressing, not on idle hover.
         touch := TouchArea {

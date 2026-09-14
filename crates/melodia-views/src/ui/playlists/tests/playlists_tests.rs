@@ -7,7 +7,7 @@
 
 use super::detail::is_manual_order;
 use super::*;
-use melodia_testkit::{normalize_ws, strip_line_comments};
+use melodia_testkit::code_tokens;
 
 const DRAGGABLE_LIST: &str =
     include_str!("../../../../../melodia-ui/ui/components/track-list/draggable-track-list.slint");
@@ -101,14 +101,14 @@ fn every_draggable_list_opts_out_of_drag_panning() {
     // The binding rather than the token: the property reads as an *enable*, so
     // `mouse-drag-pan-enabled: true` is the likeliest wrong edit and a bare
     // occurrence count can't fail on it.
-    let list = normalize_ws(&strip_line_comments(DRAGGABLE_LIST));
+    let list = code_tokens(DRAGGABLE_LIST);
     assert_eq!(
         list.matches("mouse-drag-pan-enabled: false").count(),
         1,
         "`inner-list` must opt out, the only scroller the rows sit in"
     );
     assert!(
-        normalize_ws(&strip_line_comments(QUEUE_SHEET)).contains("mouse-drag-pan-enabled: false"),
+        code_tokens(QUEUE_SHEET).contains("mouse-drag-pan-enabled: false"),
         "every row in the queue sheet is draggable, so its ListView never gets the gesture"
     );
 }
@@ -124,7 +124,7 @@ fn every_draggable_list_opts_out_of_drag_panning() {
 /// nothing on release, which is worse than a list that never armed.
 #[test]
 fn the_reorder_gate_reads_every_term_the_drag_depends_on() {
-    let src = normalize_ws(&strip_line_comments(DETAIL_VIEW));
+    let src = code_tokens(DETAIL_VIEW);
     assert!(
         src.contains(
             "reorder-enabled: PlaylistDetail.sort-field == \"position\" \
@@ -143,7 +143,7 @@ fn the_reorder_gate_reads_every_term_the_drag_depends_on() {
 /// persisted, so it survives a restart.
 #[test]
 fn the_sort_cycle_still_offers_a_way_back_to_the_curated_order() {
-    let src = normalize_ws(&strip_line_comments(DETAIL_CALLBACKS));
+    let src = code_tokens(DETAIL_CALLBACKS);
     assert!(
         src.contains("next_sort_with_natural"),
         "the plain `next_sort` has two states and cannot reach `\"position\"`"
@@ -167,7 +167,7 @@ fn the_sort_cycle_still_offers_a_way_back_to_the_curated_order() {
 /// can't see either.
 #[test]
 fn the_optimistic_reorder_refuses_a_filtered_list() {
-    let src = normalize_ws(&strip_line_comments(DETAIL));
+    let src = code_tokens(DETAIL);
     let body = src.split_once("pub fn apply_optimistic_reorder").map_or("", |(_, rest)| rest);
     let guard = body.split_once("let saved =").map_or("", |(head, _)| head);
     assert!(

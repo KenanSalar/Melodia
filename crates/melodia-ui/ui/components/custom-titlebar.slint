@@ -103,6 +103,30 @@ component TitleBarButton inherits Rectangle {
     }
 }
 
+// The three standard captions, fixed but for where the bar mounts them.
+component MinimizeCaption inherits TitleBarButton {
+    glyph: CaptionGlyph.minimize;
+    tooltip-text: @tr("Minimize");
+    clicked => { WindowChrome.minimize(); }
+}
+
+component MaximizeCaption inherits TitleBarButton {
+    glyph: WindowChrome.is-maximized ? CaptionGlyph.restore : CaptionGlyph.maximize;
+    tooltip-text: WindowChrome.is-maximized ? @tr("Restore") : @tr("Maximize");
+    clicked => { WindowChrome.toggle-maximize(); }
+}
+
+component CloseCaption inherits TitleBarButton {
+    glyph: CaptionGlyph.close;
+    tooltip-text: @tr("Close");
+    hover-bg: Theme.danger;
+    // **The on-danger ink, not a chrome token.** `Theme.mantle` stood in here once and it tracks
+    // the theme's *background* rather than the red, so GNOME Dark put a dark glyph on a dark red at
+    // ~2:1.
+    hover-fg: Theme.danger-text;
+    clicked => { WindowChrome.close-window(); }
+}
+
 // The brand on one side, a drag region in the middle, the decoration cluster opposite.
 //
 // **Drag handling is split**: Slint tracks only *hover* over the drag region, plus double-click to
@@ -120,39 +144,25 @@ export component CustomTitleBar inherits Rectangle {
     vertical-stretch: 0;
     background: Theme.mantle;
 
+    property <bool> captions-left: Theme.titlebar-button-side == 1;
+    property <bool> mac-style: Theme.titlebar-button-style == 1;
+
     HorizontalLayout {
         spacing: 0;
         alignment: stretch;
         // Inset on the brand side so the logo doesn't kiss the window edge, flush on the
         // cluster side so close sits at the corner.
-        padding-left: Theme.titlebar-button-side == 1 ? 0 : 12px;
-        padding-right: Theme.titlebar-button-side == 1 ? 12px : 0;
+        padding-left: root.captions-left ? 0 : 12px;
+        padding-right: root.captions-left ? 12px : 0;
 
         // Left cluster: traffic lights.
-        if Theme.titlebar-button-side == 1 && Theme.titlebar-button-style == 1: MacOsTitleBarCluster {}
+        if root.captions-left && root.mac-style: MacOsTitleBarCluster {}
 
         // Standard icons on the left, close at the *corner* so "click corner = close"
         // still holds. Three siblings rather than a wrapper, per the header.
-        if Theme.titlebar-button-side == 1 && Theme.titlebar-button-style == 0: TitleBarButton {
-            glyph: CaptionGlyph.close;
-            tooltip-text: @tr("Close");
-            hover-bg: Theme.danger;
-            // **The on-danger ink, not a chrome token.** `Theme.mantle` stood in here
-            // once and it tracks the theme's *background* rather than the red, so GNOME
-            // Dark put a dark glyph on a dark red at ~2:1.
-            hover-fg: Theme.danger-text;
-            clicked => { WindowChrome.close-window(); }
-        }
-        if Theme.titlebar-button-side == 1 && Theme.titlebar-button-style == 0: TitleBarButton {
-            glyph: WindowChrome.is-maximized ? CaptionGlyph.restore : CaptionGlyph.maximize;
-            tooltip-text: WindowChrome.is-maximized ? @tr("Restore") : @tr("Maximize");
-            clicked => { WindowChrome.toggle-maximize(); }
-        }
-        if Theme.titlebar-button-side == 1 && Theme.titlebar-button-style == 0: TitleBarButton {
-            glyph: CaptionGlyph.minimize;
-            tooltip-text: @tr("Minimize");
-            clicked => { WindowChrome.minimize(); }
-        }
+        if root.captions-left && !root.mac-style: CloseCaption {}
+        if root.captions-left && !root.mac-style: MaximizeCaption {}
+        if root.captions-left && !root.mac-style: MinimizeCaption {}
 
         // Wraps the brand plus the middle stretch, so everything but the cluster is draggable. The
         // TouchArea tracks only `has-hover`; Rust reads it and intercepts the press at the winit
@@ -173,7 +183,7 @@ export component CustomTitleBar inherits Rectangle {
                 alignment: stretch;
 
                 // Buttons left ⇒ leading spacer ⇒ brand pins right.
-                if Theme.titlebar-button-side == 1: Rectangle { horizontal-stretch: 1; }
+                if root.captions-left: Rectangle { horizontal-stretch: 1; }
 
                 VerticalLayout {
                     alignment: center;
@@ -202,31 +212,17 @@ export component CustomTitleBar inherits Rectangle {
                 }
 
                 // Buttons right ⇒ trailing spacer ⇒ brand pins left.
-                if Theme.titlebar-button-side == 0: Rectangle { horizontal-stretch: 1; }
+                if !root.captions-left: Rectangle { horizontal-stretch: 1; }
             }
         }
 
         // Right cluster: traffic lights.
-        if Theme.titlebar-button-side == 0 && Theme.titlebar-button-style == 1: MacOsTitleBarCluster {}
+        if !root.captions-left && root.mac-style: MacOsTitleBarCluster {}
 
         // Standard icons in Windows / KDE order, close at the corner.
-        if Theme.titlebar-button-side == 0 && Theme.titlebar-button-style == 0: TitleBarButton {
-            glyph: CaptionGlyph.minimize;
-            tooltip-text: @tr("Minimize");
-            clicked => { WindowChrome.minimize(); }
-        }
-        if Theme.titlebar-button-side == 0 && Theme.titlebar-button-style == 0: TitleBarButton {
-            glyph: WindowChrome.is-maximized ? CaptionGlyph.restore : CaptionGlyph.maximize;
-            tooltip-text: WindowChrome.is-maximized ? @tr("Restore") : @tr("Maximize");
-            clicked => { WindowChrome.toggle-maximize(); }
-        }
-        if Theme.titlebar-button-side == 0 && Theme.titlebar-button-style == 0: TitleBarButton {
-            glyph: CaptionGlyph.close;
-            tooltip-text: @tr("Close");
-            hover-bg: Theme.danger;
-            hover-fg: Theme.danger-text;
-            clicked => { WindowChrome.close-window(); }
-        }
+        if !root.captions-left && !root.mac-style: MinimizeCaption {}
+        if !root.captions-left && !root.mac-style: MaximizeCaption {}
+        if !root.captions-left && !root.mac-style: CloseCaption {}
     }
 
     // **No resize affordance here.** The whole-window ring lives in `app-window.slint`,

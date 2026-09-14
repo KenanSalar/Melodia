@@ -92,11 +92,13 @@ fn the_sortable_flag_reaches_every_header_cell() {
         "TrackList must forward `sortable` to its TrackListHeader mount"
     );
 
-    let cells = HEADER.matches("HeaderCell {").count();
+    // The columns forward to their one cell, so the count is every column mount plus that cell.
+    let mounts = HEADER.matches("HeaderColumn {").count() + HEADER.matches("HeaderCell {").count();
     let forwards = HEADER.matches("sortable: root.sortable;").count();
     assert_eq!(
-        forwards, cells,
-        "every one of the {cells} HeaderCell mounts must pass `sortable: root.sortable;`"
+        forwards, mounts,
+        "every one of the {mounts} HeaderColumn and HeaderCell mounts must pass \
+         `sortable: root.sortable;`"
     );
 
     // The gate itself: `enabled: false` is what forces `has-hover` off and

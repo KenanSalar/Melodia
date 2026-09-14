@@ -9,8 +9,12 @@ component ResizeCorner {
     in property <bool> bottom;
     in property <length> band;
     in property <length> elbow;
-    in property <MouseCursor> cursor;
     out property <bool> hovered: along-x.has-hover || along-y.has-hover || inner.has-hover;
+
+    // Top-left and bottom-right resize along one diagonal, the other two along the other.
+    private property <MouseCursor> cursor: root.right == root.bottom
+        ? MouseCursor.nwse-resize
+        : MouseCursor.nesw-resize;
 
     along-x := TouchArea {
         x: 0;
@@ -118,7 +122,6 @@ export component ResizeRing {
         active: root.active;
         band: root.band;
         elbow: root.elbow;
-        cursor: MouseCursor.nwse-resize;
     }
     top-right := ResizeCorner {
         x: root.width - root.reach;
@@ -129,7 +132,6 @@ export component ResizeRing {
         right: true;
         band: root.band;
         elbow: root.elbow;
-        cursor: MouseCursor.nesw-resize;
     }
     bottom-left := ResizeCorner {
         x: 0;
@@ -140,7 +142,6 @@ export component ResizeRing {
         bottom: true;
         band: root.band;
         elbow: root.elbow;
-        cursor: MouseCursor.nesw-resize;
     }
     bottom-right := ResizeCorner {
         x: root.width - root.reach;
@@ -152,6 +153,5 @@ export component ResizeRing {
         bottom: true;
         band: root.band;
         elbow: root.elbow;
-        cursor: MouseCursor.nwse-resize;
     }
 }

@@ -32,11 +32,6 @@ const CARD_CHILDREN: [(&str, &str, &str); 3] = [
     ),
 ];
 
-/// Comments stripped and whitespace collapsed, so a pin reads tokens rather than one layout.
-fn tokens(src: &str) -> String {
-    melodia_testkit::normalize_ws(&melodia_testkit::strip_line_comments(src))
-}
-
 /// One tab page per tab, by name so a failure says which file.
 const PAGES: [(&str, &str); 5] = [
     (
@@ -231,7 +226,7 @@ fn every_mounted_section_carries_its_tab_name() {
 /// stuttering through the miniplayer swap. It also blurs the card's text on `HiDPI`.
 #[test]
 fn no_section_card_clips_its_rounded_surface() {
-    let card = tokens(SECTION_CARD);
+    let card = melodia_testkit::code_tokens(SECTION_CARD);
 
     let clips = card.matches("clip: true").count();
 
@@ -245,7 +240,7 @@ fn no_section_card_clips_its_rounded_surface() {
 fn every_card_child_insets_its_content_from_the_rounded_edge() {
     let flush: Vec<&str> = CARD_CHILDREN
         .into_iter()
-        .filter(|(_, src, inset)| !tokens(src).contains(inset))
+        .filter(|(_, src, inset)| !melodia_testkit::code_tokens(src).contains(inset))
         .map(|(name, _, _)| name)
         .collect();
 

@@ -147,19 +147,11 @@ export component ArtistDetailBody inherits Rectangle {
                         // **Capped at the outer viewport**: a small list keeps the
                         // content-tall layout, a large one pins to the visible region
                         // so the inner list virtualizes instead of instantiating every
-                        // row. The content-fit arm is a hand-sum of what the list
-                        // holds: rows, header and spacing.
-                        height: min(
-                            max(1, ArtistDetail.tracks.length)
-                                * (ArtistDetail.track-columns.show_artwork
-                                    ? Theme.row-h
-                                    : Theme.row-h-compact)
-                                + Theme.track-header-h + Theme.pad-xs,
-                            below-sv.visible-height);
+                        // row.
+                        height: min(self.content-height, below-sv.visible-height);
 
                         rows: ArtistDetail.tracks;
                         columns <=> ArtistDetail.track-columns;
-                        number-mode: "index";
 
                         sort-field: ArtistDetail.sort-field;
                         sort-dir: ArtistDetail.sort-dir;

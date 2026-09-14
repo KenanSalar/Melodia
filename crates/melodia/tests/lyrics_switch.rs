@@ -281,7 +281,7 @@ fn nothing_in_the_lyrics_panel_watches_a_property() {
 /// decision. A pair that stops agreeing mounts two panels into one slot or none at all.
 #[test]
 fn the_now_playing_column_mounts_exactly_one_arm() {
-    let source = melodia_testkit::normalize_ws(&strip_line_comments(NOW_PLAYING_VIEW));
+    let source = melodia_testkit::code_tokens(NOW_PLAYING_VIEW);
 
     let arms = [
         "if !Player.vm.has_station && !Lyrics.enabled: UpNextList {",
@@ -313,7 +313,7 @@ fn the_now_playing_column_mounts_exactly_one_arm() {
 /// so the wrap estimate and the drawn text disagree by exactly a scrollbar down a whole sheet.
 #[test]
 fn the_lyrics_panel_reserves_its_scrollbar_lane_everywhere_it_matters() {
-    let source = melodia_testkit::normalize_ws(&strip_line_comments(LYRICS_PANEL));
+    let source = melodia_testkit::code_tokens(LYRICS_PANEL);
 
     let roles = [
         ("the column's own padding", "padding-right: Theme.scrollbar-slot;"),

@@ -397,28 +397,25 @@ async fn renumber_playlist_positions_tx(
 
 /// Batch UPDATE positions from (id, position) pairs using a CASE expression.
 ///
-/// Chunked because a reorder can hand over the whole playlist, and a pair spends three binds: the
-/// `WHEN ? THEN ?` of the `CASE`, then the id again in the `IN` list. Splitting is safe here, the
+/// Chunked because a reorder can hand over the whole playlist. Splitting is safe here, the
 /// positions being absolute and each chunk touching a disjoint id set.
 async fn batch_update_positions_pairs(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     pairs: &[(i64, i32)],
 ) -> Result<(), AppError> {
-    const BINDS_PER_PAIR: usize = 3;
-    const CHUNK_SIZE: usize = crate::database::MAX_BINDS_PER_STATEMENT / BINDS_PER_PAIR;
+    const CHUNK_SIZE: usize =
+        crate::database::MAX_BINDS_PER_STATEMENT / crate::database::CASE_BINDS_PER_ROW;
 
     if pairs.is_empty() {
         return Ok(());
     }
 
     for chunk in pairs.chunks(CHUNK_SIZE) {
-        let mut sql = String::from("UPDATE playlist_items SET position = CASE id ");
-        for _ in chunk {
-            sql.push_str("WHEN ? THEN ? ");
-        }
-        sql.push_str("END WHERE id IN (");
-        sql.push_str(&crate::database::placeholders(chunk.len()));
-        sql.push(')');
+        let sql = format!(
+            "UPDATE playlist_items SET position = {} WHERE id IN ({})",
+            crate::database::case_by_id(chunk.len()),
+            crate::database::placeholders(chunk.len()),
+        );
 
         let mut query = sqlx::query(AssertSqlSafe(sql));
         for &(id, pos) in chunk {

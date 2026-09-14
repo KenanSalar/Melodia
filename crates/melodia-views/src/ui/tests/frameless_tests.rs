@@ -7,7 +7,7 @@
 //! Win32 and macOS. The kept margins matter on Win32 alone, the one frame with invisible edges. The
 //! Rust half of the frame reading is pinned beside `window_chrome::geometry` and its `Resized` arm.
 
-use melodia_testkit::{binding_value, blocks_named, normalize_ws, strip_line_comments};
+use melodia_testkit::{binding_value, blocks_named, code_tokens};
 
 const APP_WINDOW: &str = include_str!("../../../../melodia-ui/ui/app-window.slint");
 const MINI_SWITCH: &str =
@@ -20,22 +20,18 @@ const EDGE_OUTLINE: &str = include_str!("../../../../melodia-ui/ui/components/ed
 const CONTENT_RECT: &str =
     "x: root.margin-left; y: 0px; width: root.content-width; height: root.content-height;";
 
-/// Comments stripped and whitespace collapsed, so a pin reads tokens rather than one layout.
-fn tokens(src: &str) -> String {
-    normalize_ws(&strip_line_comments(src))
-}
-
 /// Reading the setting at any of these leaves the native miniplayer with an OS frame over it, a
 /// transparent window with square corners, or no resize edge to grow it back out through.
 #[test]
 fn every_frame_question_in_the_shell_reads_frameless() {
-    const BINDINGS: [&str; 4] = [
+    const BINDINGS: [&str; 5] = [
         "no-frame: root.frameless;",
-        "background: (!root.frameless || WindowChrome.is-maximized) ? Theme.mantle : Colors.transparent;",
-        "border-radius: (!root.frameless || WindowChrome.is-maximized) ? 0px : Theme.window-radius;",
-        "active: root.frameless && !WindowChrome.is-maximized;",
+        "property <bool> rounded-shell: root.frameless && !WindowChrome.is-maximized;",
+        "background: root.rounded-shell ? Colors.transparent : Theme.mantle;",
+        "border-radius: root.rounded-shell ? Theme.window-radius : 0px;",
+        "active: root.rounded-shell;",
     ];
-    let shell = tokens(APP_WINDOW);
+    let shell = code_tokens(APP_WINDOW);
 
     let missing: Vec<&str> = BINDINGS.into_iter().filter(|b| !shell.contains(b)).collect();
 
@@ -47,12 +43,12 @@ fn every_frame_question_in_the_shell_reads_frameless() {
 /// and a maximized window fills the work area edge to edge.
 #[test]
 fn the_frame_margins_are_kept_only_by_the_native_miniplayer() {
-    let shell = tokens(APP_WINDOW);
+    let shell = code_tokens(APP_WINDOW);
 
     let keeps = binding_value(&shell, "property <bool> keeps-frame-margins:").trim();
 
     assert_eq!(
-        keeps, "Theme.use-native-titlebar && root.frameless && !WindowChrome.is-maximized",
+        keeps, "Theme.use-native-titlebar && root.rounded-shell",
         "the shell keeps the frame's margins for a window that never dropped one"
     );
 }
@@ -69,7 +65,7 @@ fn the_content_rect_gives_up_each_kept_margin_on_its_own_side() {
         "property <length> content-width: root.width - root.margin-left - root.margin-right;",
         "property <length> content-height: root.height - root.margin-bottom;",
     ];
-    let shell = tokens(APP_WINDOW);
+    let shell = code_tokens(APP_WINDOW);
 
     let missing: Vec<&str> = BINDINGS.into_iter().filter(|b| !shell.contains(b)).collect();
 
@@ -87,9 +83,9 @@ fn the_shell_and_every_overlay_over_it_sit_inside_the_kept_margins()
         "if Onboarding.mounted: OnboardingOverlay {",
         "DialogOverlay {",
         "NotificationStack {",
-        "if root.frameless && !WindowChrome.is-maximized && Settings.window-border-shown: EdgeOutline {",
+        "if root.rounded-shell && Settings.window-border-shown: EdgeOutline {",
     ];
-    let shell = tokens(APP_WINDOW);
+    let shell = code_tokens(APP_WINDOW);
     let shell_body = blocks_named(&shell, "Rectangle")
         .into_iter()
         .find(|body| body.trim_start().starts_with(CONTENT_RECT))
@@ -109,12 +105,10 @@ fn the_shell_and_every_overlay_over_it_sit_inside_the_kept_margins()
 /// native titlebar, and along the screen edge of a maximized window.
 #[test]
 fn the_outline_mounts_only_where_no_frame_draws_one() {
-    let shell = tokens(APP_WINDOW);
+    let shell = code_tokens(APP_WINDOW);
 
     let gated = shell
-        .matches(
-            "if root.frameless && !WindowChrome.is-maximized && Settings.window-border-shown: EdgeOutline {",
-        )
+        .matches("if root.rounded-shell && Settings.window-border-shown: EdgeOutline {")
         .count();
 
     assert_eq!(gated, 1, "the window outline no longer mounts under the frameless gate");
@@ -130,8 +124,8 @@ fn the_outline_is_one_physical_pixel() {
         "x: -root.bleed; y: -root.bleed; width: parent.width + 2 * root.bleed; height: parent.height + 2 * root.bleed;",
         "border-width: root.stroke-width + root.bleed;",
     ];
-    let shell = tokens(APP_WINDOW);
-    let outline = tokens(EDGE_OUTLINE);
+    let shell = code_tokens(APP_WINDOW);
+    let outline = code_tokens(EDGE_OUTLINE);
 
     let asked: Vec<bool> = blocks_named(&shell, "EdgeOutline")
         .iter()
@@ -151,8 +145,8 @@ fn the_outline_is_one_physical_pixel() {
 /// shell's. Any other leaves its corners cutting across the shell's or standing off it inside.
 #[test]
 fn the_outline_rounds_with_the_shell() {
-    let shell = tokens(APP_WINDOW);
-    let outline = tokens(EDGE_OUTLINE);
+    let shell = code_tokens(APP_WINDOW);
+    let outline = code_tokens(EDGE_OUTLINE);
 
     let handed: Vec<bool> = blocks_named(&shell, "EdgeOutline")
         .iter()
@@ -170,7 +164,7 @@ fn the_outline_rounds_with_the_shell() {
 /// Swapped, System paints the Windows accent round every window but the focused one.
 #[test]
 fn the_outline_takes_the_unfocused_colour_only_on_an_unfocused_window() {
-    let shell = tokens(APP_WINDOW);
+    let shell = code_tokens(APP_WINDOW);
 
     let color = binding_value(&shell, "stroke-color: Theme.window-focused").trim();
 
@@ -185,7 +179,7 @@ fn the_outline_takes_the_unfocused_colour_only_on_an_unfocused_window() {
 /// click and does nothing.
 #[test]
 fn the_resize_band_covers_every_kept_margin() {
-    let shell = tokens(APP_WINDOW);
+    let shell = code_tokens(APP_WINDOW);
 
     let band = binding_value(&shell, "property <length> resize-band:").trim();
 
@@ -199,7 +193,7 @@ fn the_resize_band_covers_every_kept_margin() {
 /// a band of its own, the margin strip past it takes the click and does nothing.
 #[test]
 fn the_resize_ring_is_handed_the_windows_band() {
-    let shell = tokens(APP_WINDOW);
+    let shell = code_tokens(APP_WINDOW);
 
     let handed = shell.matches("band: root.resize-band;").count();
 
@@ -210,7 +204,7 @@ fn the_resize_ring_is_handed_the_windows_band() {
 /// was handed, and the strip between the two widths drifts exactly as a band of its own would.
 #[test]
 fn the_resize_ring_reads_no_band_but_the_one_it_is_handed() {
-    let ring = tokens(RESIZE_RING);
+    let ring = code_tokens(RESIZE_RING);
 
     let own = ring.matches("Theme.resize-border").count();
 
@@ -222,7 +216,7 @@ fn the_resize_ring_reads_no_band_but_the_one_it_is_handed() {
 /// something else: no diagonal anywhere on a rounded corner, and a thinner edge on a scaled display.
 #[test]
 fn the_shell_leaves_every_resize_press_to_the_ring() {
-    let shell = tokens(APP_WINDOW);
+    let shell = code_tokens(APP_WINDOW);
 
     let bound = shell.matches("resize-border-width").count();
 
@@ -233,7 +227,7 @@ fn the_shell_leaves_every_resize_press_to_the_ring() {
 /// stays armed in Rust and the next click anywhere, a maximized window's included, resizes.
 #[test]
 fn the_resize_ring_is_never_behind_an_if() {
-    let shell = tokens(APP_WINDOW);
+    let shell = code_tokens(APP_WINDOW);
 
     let mounts = blocks_named(&shell, "ResizeRing").len();
     let conditional = shell.matches(": ResizeRing {").count();
@@ -245,7 +239,7 @@ fn the_resize_ring_is_never_behind_an_if() {
 /// square window's corner, whose diagonal sits in the transparent cut-out outside a rounded one.
 #[test]
 fn the_resize_ring_is_handed_the_windows_radius() {
-    let shell = tokens(APP_WINDOW);
+    let shell = code_tokens(APP_WINDOW);
     let mounts = blocks_named(&shell, "ResizeRing");
 
     let handed: Vec<bool> =
@@ -259,7 +253,7 @@ fn the_resize_ring_is_handed_the_windows_radius() {
 #[test]
 fn the_resize_ring_mounts_above_every_overlay() -> Result<(), Box<dyn std::error::Error>> {
     const OVERLAYS: [&str; 3] = ["OnboardingOverlay {", "DialogOverlay {", "NotificationStack {"];
-    let shell = tokens(APP_WINDOW);
+    let shell = code_tokens(APP_WINDOW);
     let (under_ring, _) = shell
         .split_once("ResizeRing {")
         .ok_or("no `ResizeRing {` mount found: the walk is broken, not the shell")?;
@@ -279,7 +273,7 @@ fn the_resize_ring_mounts_above_every_overlay() -> Result<(), Box<dyn std::error
 /// maximized window's close button or a native frame's content, for a press nothing acts on.
 #[test]
 fn every_grab_in_the_ring_switches_off_with_it() {
-    let ring = tokens(RESIZE_RING);
+    let ring = code_tokens(RESIZE_RING);
 
     let touch_areas = ring.matches("TouchArea {").count();
     let enabled = ring.matches("enabled: root.active;").count();
@@ -296,7 +290,7 @@ fn every_grab_in_the_ring_switches_off_with_it() {
 /// maximize by keyboard with the cursor on an edge being the usual way.
 #[test]
 fn the_resize_zone_is_none_whenever_the_ring_is_off() {
-    let ring = tokens(RESIZE_RING);
+    let ring = code_tokens(RESIZE_RING);
 
     let zone = binding_value(&ring, "property <ResizeZone> zone:").trim();
 
@@ -319,7 +313,7 @@ fn the_resize_zone_names_every_direction_a_grab_can_take() {
         "ResizeZone.south-west :",
         "ResizeZone.south-east :",
     ];
-    let ring = tokens(RESIZE_RING);
+    let ring = code_tokens(RESIZE_RING);
     let zone = binding_value(&ring, "property <ResizeZone> zone:");
 
     let missing: Vec<&str> = DIRECTIONS.into_iter().filter(|d| !zone.contains(d)).collect();
@@ -330,7 +324,7 @@ fn the_resize_zone_names_every_direction_a_grab_can_take() {
 /// Without the callback the ring still sets every cursor, and no press ever resizes.
 #[test]
 fn the_resize_zone_reaches_the_window_chrome() {
-    let ring = tokens(RESIZE_RING);
+    let ring = code_tokens(RESIZE_RING);
 
     let handed = ring.matches("changed zone => { WindowChrome.resize-zone-changed(root.zone); }");
 
@@ -341,7 +335,7 @@ fn the_resize_zone_reaches_the_window_chrome() {
 /// arm they share with an edge resizes along that edge's one axis.
 #[test]
 fn the_corners_are_declared_after_the_edges() -> Result<(), Box<dyn std::error::Error>> {
-    let ring = tokens(RESIZE_RING);
+    let ring = code_tokens(RESIZE_RING);
     let (_, from_first_corner) = ring
         .split_once(":= ResizeCorner {")
         .ok_or("no corner mount found: the walk is broken, not the ring")?;
@@ -357,7 +351,7 @@ fn the_corners_are_declared_after_the_edges() -> Result<(), Box<dyn std::error::
 /// window's corner shrinks to nothing.
 #[test]
 fn the_corner_arms_run_the_curve_and_a_band_past_it() {
-    let ring = tokens(RESIZE_RING);
+    let ring = code_tokens(RESIZE_RING);
 
     let reach = binding_value(&ring, "private property <length> reach:").trim();
 
@@ -368,7 +362,7 @@ fn the_corner_arms_run_the_curve_and_a_band_past_it() {
 /// only. The ring argues the half radius.
 #[test]
 fn the_corner_elbow_follows_the_curve_inward() {
-    let ring = tokens(RESIZE_RING);
+    let ring = code_tokens(RESIZE_RING);
 
     let elbow = binding_value(&ring, "private property <length> elbow:").trim();
 
@@ -383,7 +377,7 @@ fn the_corner_elbow_follows_the_curve_inward() {
 /// host's: the frame's rounding one tick, Melodia's the next.
 #[test]
 fn the_native_miniplayer_rounds_like_the_frame_it_replaced() {
-    let theme = tokens(THEME);
+    let theme = code_tokens(THEME);
 
     let radius = binding_value(&theme, "out property <length> window-radius:").trim();
 
@@ -400,7 +394,7 @@ fn the_native_miniplayer_rounds_like_the_frame_it_replaced() {
 /// borders while the miniplayer is still on screen, which is what taking it early looked like.
 #[test]
 fn the_frame_drops_with_the_mounted_miniplayer_not_the_threshold() {
-    let shell = tokens(APP_WINDOW);
+    let shell = code_tokens(APP_WINDOW);
 
     let frameless = binding_value(&shell, "property <bool> frameless:").trim();
 
@@ -420,7 +414,7 @@ fn the_framed_window_minimum_gives_up_the_frame_the_miniplayer_drops() {
         "min-width: 350px - (root.frameless ? 0px : WindowChrome.frame-allowance-w);",
         "min-height: 90px - (root.frameless ? 0px : WindowChrome.frame-allowance-h);",
     ];
-    let shell = tokens(APP_WINDOW);
+    let shell = code_tokens(APP_WINDOW);
 
     let missing: Vec<&str> = BINDINGS.into_iter().filter(|b| !shell.contains(b)).collect();
 
@@ -436,7 +430,7 @@ fn the_framed_window_minimum_gives_up_the_frame_the_miniplayer_drops() {
 fn the_exit_edge_widens_by_the_frame_allowance() {
     const TERMS: [&str; 3] =
         ["root.render-active ?", "root.exit-allowance-w", "root.exit-allowance-h"];
-    let switch = tokens(MINI_SWITCH);
+    let switch = code_tokens(MINI_SWITCH);
     let active = binding_value(&switch, "out property <bool> active:");
 
     let missing: Vec<&str> = TERMS.into_iter().filter(|t| !active.contains(t)).collect();
@@ -454,7 +448,7 @@ fn the_shell_hands_the_switch_the_measured_frame() {
         "exit-allowance-w: WindowChrome.frame-allowance-w;",
         "exit-allowance-h: WindowChrome.frame-allowance-h;",
     ];
-    let shell = tokens(APP_WINDOW);
+    let shell = code_tokens(APP_WINDOW);
 
     let missing: Vec<&str> = BINDINGS.into_iter().filter(|b| !shell.contains(b)).collect();
 

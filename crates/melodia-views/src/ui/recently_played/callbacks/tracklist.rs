@@ -13,11 +13,10 @@ use std::sync::Arc;
 
 use slint::ComponentHandle;
 
-use super::VIEW_ID;
-use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
+use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
 use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::recently_played::{self as recently_played_ui_mod, RecentlyPlayedUi};
-use crate::ui::track_list_view::TrackListColumnState;
+use crate::ui::track_list_view;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, RecentlyPlayed};
@@ -138,13 +137,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
         let weak = weak.clone();
         g.on_toggle_column(move |_id| {
             let Some(ui) = weak.upgrade() else { return };
-            let columns = ui.global::<RecentlyPlayed>().snapshot_visible();
-            let s_disk = s.clone();
-            spawn_blocking_logged!(
-                s,
-                "recently_played::toggle_column",
-                library::settings::update_view_columns(&s_disk, VIEW_ID.to_owned(), columns)
-            );
+            track_list_view::persist_visible(&s, &ui.global::<RecentlyPlayed>());
         });
     }
 

@@ -175,16 +175,8 @@ fn the_station_form_resets_every_property_it_declares() {
     const FORMS: &str = include_str!("../../../../../melodia-ui/ui/globals/dialog-forms.slint");
     let src = melodia_testkit::strip_line_comments(FORMS);
 
-    let global = src
-        .find("export global RadioForm")
-        .and_then(|at| src[at..].find('{').map(|rel| at + rel))
-        .and_then(|open| melodia_testkit::block_body(&src, open))
-        .unwrap_or_default();
-    let reset = global
-        .find("public function reset()")
-        .and_then(|at| global[at..].find('{').map(|rel| at + rel))
-        .and_then(|open| melodia_testkit::block_body(global, open))
-        .unwrap_or_default();
+    let global = melodia_testkit::block_after(&src, "export global RadioForm");
+    let reset = melodia_testkit::block_after(global, "public function reset()");
     assert!(!reset.is_empty(), "RadioForm must keep a reset() for both openers to share");
 
     let declared: Vec<&str> = global

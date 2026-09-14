@@ -11,12 +11,10 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel, Weak};
 
 use super::{refresh_export_selection_meta, set_all_picks, toggle_pick};
 use crate::ui::file_dialog;
-use crate::ui::shell::notifications::{
-    NotificationParams, NotificationsUi, RowText, TOAST_AUTO_DISMISS_MS,
-};
+use crate::ui::shell::notifications::{Completion, NotificationsUi, RowText};
 use crate::ui::util::count_as_i32;
 use melodia_app::library;
-use melodia_app::library::playlist_files::{self, ArchiveExport};
+use melodia_app::library::playlist_files::{self, ExportOutcome, ExportPlaylistsResult};
 use melodia_app::state::AppState;
 use melodia_core::error::AppError;
 use melodia_ui::{
@@ -170,47 +168,26 @@ impl Selection {
 
     /// Runs on the runtime: awaited from the UI thread, every playlist's rows would be decoded and
     /// serialized there between awaits.
-    async fn write(self, state: AppState, dest: PathBuf) -> Result<Written, AppError> {
+    async fn write(self, state: AppState, dest: PathBuf) -> Result<ExportOutcome, AppError> {
         let runtime = state.runtime.clone();
         runtime
             .spawn(async move {
                 match self {
                     Self::One { id, .. } => {
-                        playlist_files::export_playlist_to_file(&state, id, &dest)
-                            .await
-                            .map(|()| Written::Playlists { count: 1, partial: false })
+                        playlist_files::export_playlist_to_file(&state, id, &dest).await.map(|()| {
+                            ExportOutcome::Exported(ExportPlaylistsResult {
+                                exported: 1,
+                                failed: 0,
+                            })
+                        })
                     }
                     Self::Many(ids) => {
-                        playlist_files::export_playlists_to_archive(&state, &ids, &dest)
-                            .await
-                            .map(Written::from)
+                        playlist_files::export_playlists_to_archive(&state, &ids, &dest).await
                     }
                 }
             })
             .await
             .map_err(AppError::io_source)?
-    }
-}
-
-/// What reached the disk, in the terms the toast states it.
-enum Written {
-    Playlists {
-        count: u32,
-        /// Some ticked playlists were left out beside the ones written.
-        partial: bool,
-    },
-    /// Nothing did: the playlists hold more than an archive import reads back.
-    TooLarge,
-}
-
-impl From<ArchiveExport> for Written {
-    fn from(export: ArchiveExport) -> Self {
-        match export {
-            ArchiveExport::Exported(result) => {
-                Self::Playlists { count: result.exported, partial: result.failed > 0 }
-            }
-            ArchiveExport::TooLarge => Self::TooLarge,
-        }
     }
 }
 
@@ -227,22 +204,21 @@ async fn export(
 
     let Some(ui) = weak.upgrade() else { return };
     match result {
-        Ok(Written::Playlists { count, partial }) if count > 0 => {
+        Ok(ExportOutcome::Exported(written)) if written.exported > 0 => {
             let settings = ui.global::<Settings>();
-            let variant = if partial { "warning" } else { "success" };
-            notifications.show_auto_dismiss(
-                NotificationParams::plain(
-                    variant,
-                    settings.invoke_playlist_export_title(count_as_i32(count)),
-                    settings.invoke_playlist_export_message(SharedString::from(
-                        dest.display().to_string(),
-                    )),
-                ),
-                TOAST_AUTO_DISMISS_MS,
+            notifications.show_completion(
+                Completion::partial_if(written.failed > 0),
+                settings.invoke_playlist_export_title(count_as_i32(written.exported)),
+                settings
+                    .invoke_playlist_export_message(SharedString::from(dest.display().to_string())),
             );
         }
-        Ok(Written::Playlists { .. }) => show_export_failed(&ui, &notifications, Unwritten::Failed),
-        Ok(Written::TooLarge) => show_export_failed(&ui, &notifications, Unwritten::TooLarge),
+        Ok(ExportOutcome::Exported(_)) => {
+            show_export_failed(&ui, &notifications, Unwritten::Failed);
+        }
+        Ok(ExportOutcome::TooLarge) => {
+            show_export_failed(&ui, &notifications, Unwritten::TooLarge);
+        }
         Err(e) => {
             log::warn!("playlists: export: {}", melodia_core::error::describe(&e));
             show_export_failed(&ui, &notifications, Unwritten::Failed);
@@ -261,7 +237,7 @@ enum Unwritten {
 }
 
 fn show_export_failed(ui: &AppWindow, notifications: &NotificationsUi, reason: Unwritten) {
-    notifications.show_localized(ui, "error", "", move |ui| {
+    notifications.show_failure(ui, move |ui| {
         let g = ui.global::<Settings>();
         let message = match reason {
             Unwritten::Failed => g.invoke_playlist_export_failed_message(),

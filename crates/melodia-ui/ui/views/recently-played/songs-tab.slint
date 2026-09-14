@@ -21,7 +21,6 @@ export component RecentlyPlayedSongsTab inherits Rectangle {
 
         rows: RecentlyPlayed.tracks;
         columns <=> RecentlyPlayed.track-columns;
-        number-mode: "index";
 
         sortable: false;
         playing-track-id: Player.vm.track.id;

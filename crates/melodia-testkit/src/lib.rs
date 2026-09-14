@@ -407,6 +407,16 @@ pub fn block_body(src: &str, open: usize) -> Option<&str> {
     None
 }
 
+/// The body of the first block opening after `needle`, braces excluded, for a pin on one named
+/// function, arm or global. `""` when the needle or its block is missing, [`binding_value`]'s
+/// convention: no pin expects an empty block, so the caller asserts that apart as a broken walk.
+pub fn block_after<'a>(src: &'a str, needle: &str) -> &'a str {
+    src.find(needle)
+        .and_then(|at| src[at..].find('{').map(|rel| at + rel))
+        .and_then(|open| block_body(src, open))
+        .unwrap_or_default()
+}
+
 /// A wrapped condition joined back onto the `if` it belongs to, so a per-line walk sees one
 /// statement.
 ///
@@ -448,6 +458,12 @@ pub fn tab_body_branches(sheet: &str, global: &str) -> Vec<String> {
 /// comment would otherwise run into the code after it.
 pub fn normalize_ws(src: &str) -> String {
     src.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// `src` as a token sequence with its comments gone: [`strip_line_comments`] then
+/// [`normalize_ws`], the pairing each of them asks for.
+pub fn code_tokens(src: &str) -> String {
+    normalize_ws(&strip_line_comments(src))
 }
 
 /// The value of a `name:` binding in `src`, up to its terminating `;`, or `""` when `name`

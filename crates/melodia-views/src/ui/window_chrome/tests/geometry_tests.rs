@@ -1,5 +1,5 @@
 use super::*;
-use melodia_testkit::{block_body, strip_line_comments};
+use melodia_testkit::{block_after, strip_line_comments};
 
 /// Sub-pixel slack for a length divided back out of physical pixels.
 const TOLERANCE: f32 = 0.001;
@@ -16,15 +16,6 @@ fn assert_allowance(got: WinitLogicalSize<f32>, width: f32, height: f32) {
 /// `geometry.rs`, comments stripped, for the walks below.
 fn geometry_source() -> String {
     strip_line_comments(include_str!("../geometry.rs"))
-}
-
-/// The body of the first block opening after `needle`, or empty when the walk found no such
-/// block, which every caller asserts apart from the code being wrong.
-fn block_after<'a>(code: &'a str, needle: &str) -> &'a str {
-    code.find(needle)
-        .and_then(|at| code[at..].find('{').map(|rel| at + rel))
-        .and_then(|open| block_body(code, open))
-        .unwrap_or_default()
 }
 
 // The Win32 case the miniplayer's exit edge exists for: undecorated, the client area takes the

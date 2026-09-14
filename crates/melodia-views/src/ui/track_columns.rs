@@ -133,9 +133,7 @@ fn sized(columns: &Columns, avail: f32, gap: f32) -> [f32; COLUMN_COUNT] {
     if flex_room >= flex_floors {
         share_by_weight(columns, &mut widths, flex_room);
     } else {
-        for i in flex_shown(columns) {
-            widths[i] = SPECS[i].floor;
-        }
+        pin_flex_to_floors(columns, &mut widths);
         shrink_rigid(columns, &mut widths, flex_floors - flex_room);
     }
     widths
@@ -183,6 +181,10 @@ fn share_by_weight(columns: &Columns, widths: &mut [f32; COLUMN_COUNT], room: f3
         }
     }
 
+    pin_flex_to_floors(columns, widths);
+}
+
+fn pin_flex_to_floors(columns: &Columns, widths: &mut [f32; COLUMN_COUNT]) {
     for i in flex_shown(columns) {
         widths[i] = SPECS[i].floor;
     }

@@ -135,6 +135,16 @@ impl ThemeDef {
         };
         self.resolved_variant(id)
     }
+
+    /// The real variant `variant_id` paints with: [`SYSTEM_VARIANT_ID`] resolved against
+    /// `system_theme`, anything else through [`Self::resolved_variant`].
+    pub fn shade_for(&self, variant_id: &str, system_theme: &str) -> &'static Variant {
+        if variant_id == SYSTEM_VARIANT_ID {
+            self.resolve_system_variant(system_theme)
+        } else {
+            self.resolved_variant(variant_id)
+        }
+    }
 }
 
 /// sRGB luma weights, applied to the gamma-encoded channels rather than to

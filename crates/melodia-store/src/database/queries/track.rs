@@ -358,6 +358,56 @@ pub async fn update_skip_count(db: &DbPool, id: i64) -> Result<(), AppError> {
     Ok(())
 }
 
+/// [`update_play_count`] over many tracks at once: each `(track id, plays)` adds its plays, and
+/// every one of them is stamped `last_played = now`.
+pub async fn add_play_counts(
+    db: &DbPool,
+    increments: &[(i64, u32)],
+    now: &str,
+) -> Result<(), AppError> {
+    add_counts(db, "play_count", increments, Some(now)).await
+}
+
+/// [`update_skip_count`] over many tracks at once.
+pub async fn add_skip_counts(db: &DbPool, increments: &[(i64, u32)]) -> Result<(), AppError> {
+    add_counts(db, "skip_count", increments, None).await
+}
+
+/// One `UPDATE` per chunk adding each row's increment to `column`, plus the `last_played` stamp
+/// when there is one.
+async fn add_counts(
+    db: &DbPool,
+    column: &'static str,
+    increments: &[(i64, u32)],
+    last_played: Option<&str>,
+) -> Result<(), AppError> {
+    // The stamp is the one bind that is not part of a row.
+    let max_rows = (crate::database::MAX_BINDS_PER_STATEMENT - usize::from(last_played.is_some()))
+        / crate::database::CASE_BINDS_PER_ROW;
+    let stamp = if last_played.is_some() { ", last_played = ?" } else { "" };
+
+    for chunk in increments.chunks(max_rows) {
+        let sql = format!(
+            "UPDATE tracks SET {column} = {column} + {}{stamp} WHERE id IN ({})",
+            crate::database::case_by_id(chunk.len()),
+            crate::database::placeholders(chunk.len()),
+        );
+
+        let mut query = sqlx::query(AssertSqlSafe(sql));
+        for &(id, n) in chunk {
+            query = query.bind(id).bind(i64::from(n));
+        }
+        if let Some(now) = last_played {
+            query = query.bind(now);
+        }
+        for &(id, _) in chunk {
+            query = query.bind(id);
+        }
+        query.persistent(false).execute(db.write()).await?;
+    }
+    Ok(())
+}
+
 pub async fn update_last_position(db: &DbPool, id: i64, position_ms: i64) -> Result<(), AppError> {
     sqlx::query("UPDATE tracks SET last_position = ? WHERE id = ?")
         .bind(position_ms)

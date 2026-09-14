@@ -176,11 +176,7 @@ pub(super) fn wire_variant_changed(
 
         // Against the resolved *real* variant, which matters on a switch to "System":
         // the swatches render dark or light off the OS signal.
-        let accent_variant = if variant_id == themes::SYSTEM_VARIANT_ID {
-            theme.resolve_system_variant(&snapshot.theme).id
-        } else {
-            variant_id
-        };
+        let accent_variant = theme.shade_for(variant_id, &snapshot.theme).id;
         let (brushes, labels, _) = accent_swatches_with_my(theme, accent_variant, &snapshot);
         let g_swatches = ui.global::<Settings>();
         g_swatches.set_accent_colors(ModelRc::from(Rc::new(VecModel::from(brushes))));

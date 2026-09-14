@@ -88,7 +88,7 @@ pub fn hydrate_ui_from_settings(
     };
     // Ahead of anything that can bail: the column defaults are Rust's, so a list left unhydrated
     // has no columns at all rather than the stock set.
-    hydrate_track_columns(app, vs);
+    ui::track_list_view::hydrate_all(app, vs);
 
     let owned_settings;
     let settings: &services::settings::SettingsData = match cached_settings {
@@ -109,18 +109,6 @@ pub fn hydrate_ui_from_settings(
     apply_startup_animation_suppression(app, settings);
     app.global::<ArtistDetail>().set_albums_collapsed(vs.artist_albums_collapsed);
     ui::settings::settings_page::seed_tab(app, vs.settings_tab);
-}
-
-fn hydrate_track_columns(app: &AppWindow, vs: &services::view_state::ViewStateData) {
-    ui::track_list_view::hydrate_tracks_view(app, vs);
-    ui::track_list_view::hydrate_browse_view(app, vs);
-    ui::track_list_view::hydrate_album_detail_view(app, vs);
-    ui::track_list_view::hydrate_artist_detail_view(app, vs);
-    ui::track_list_view::hydrate_genre_detail_view(app, vs);
-    ui::track_list_view::hydrate_playlist_detail_view(app, vs);
-    ui::track_list_view::hydrate_favorites_view(app, vs);
-    ui::track_list_view::hydrate_recently_played_view(app, vs);
-    ui::track_list_view::hydrate_search_view(app, vs);
 }
 
 /// `sidebar.slint` already clamps `Nav.sidebar-width` at the use site, so no

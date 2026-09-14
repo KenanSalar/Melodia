@@ -1,5 +1,5 @@
 use melodia_core::error::AppError;
-use melodia_testkit::{binding_value, block_body, normalize_ws, strip_line_comments};
+use melodia_testkit::{binding_value, block_body, code_tokens};
 
 use super::*;
 
@@ -14,11 +14,6 @@ const COLOR_ROW: &str = "if root.show-border-color: SettingRowStacked {";
 /// A shipped theme, so the slots are the real grid rather than a fixture that could drift from it.
 fn theme() -> &'static ThemeDef {
     themes::get("macos")
-}
-
-/// Comments stripped and whitespace collapsed, so a pin reads tokens rather than one layout.
-fn tokens(src: &str) -> String {
-    normalize_ws(&strip_line_comments(src))
 }
 
 /// The body of the row `mount` opens, `mount` ending on its `{`.
@@ -130,7 +125,7 @@ fn clicking_past_the_grid_picks_nothing() {
 /// the one outline that mode draws out of reach.
 #[test]
 fn no_border_row_greys_out_under_the_native_titlebar() -> Result<(), AppError> {
-    let section = tokens(CHROME_SECTION);
+    let section = code_tokens(CHROME_SECTION);
     let (Some(toggle), Some(color)) =
         (row_body(&section, TOGGLE_ROW), row_body(&section, COLOR_ROW))
     else {
@@ -149,7 +144,7 @@ fn no_border_row_greys_out_under_the_native_titlebar() -> Result<(), AppError> {
 /// whole window there describes an outline the toggle never draws.
 #[test]
 fn the_border_description_names_only_the_miniplayer_under_the_native_titlebar() {
-    let section = tokens(CHROME_SECTION);
+    let section = code_tokens(CHROME_SECTION);
 
     let desc = binding_value(&section, "property <string> window-border-desc:").trim();
 
@@ -165,7 +160,7 @@ fn the_border_description_names_only_the_miniplayer_under_the_native_titlebar() 
 /// has to name it or the swatch's tooltip is blank.
 #[test]
 fn the_system_swatch_is_named_at_the_mount() {
-    let section = tokens(CHROME_SECTION);
+    let section = code_tokens(CHROME_SECTION);
 
     let named = section.matches(r#"first-label: @tr("System");"#).count();
 
@@ -175,7 +170,7 @@ fn the_system_swatch_is_named_at_the_mount() {
 /// The grid's half: a `first-label` it never reads names nothing.
 #[test]
 fn the_grid_names_its_first_swatch_by_first_label_when_given_one() {
-    let grid = tokens(DOT_GRID);
+    let grid = code_tokens(DOT_GRID);
 
     let label = binding_value(&grid, "label: i == 0 &&").trim();
 

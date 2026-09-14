@@ -12,9 +12,7 @@ use slint::{ComponentHandle, SharedString};
 
 use crate::ui::file_dialog;
 use crate::ui::radio::{RadioUi, kept};
-use crate::ui::shell::notifications::{
-    NotificationParams, NotificationsUi, RowText, TOAST_AUTO_DISMISS_MS,
-};
+use crate::ui::shell::notifications::{Completion, NotificationsUi, RowText};
 use crate::ui::util::count_as_i32;
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -82,7 +80,7 @@ pub fn wire(
                 // Nothing added and something refused to parse is the only outright failure; a
                 // file of stations already kept is a successful no-op and says so.
                 if imported == 0 && failures > 0 {
-                    notifications.show_localized(&ui, "error", "", |ui| {
+                    notifications.show_failure(&ui, |ui| {
                         let g = ui.global::<Settings>();
                         RowText::plain(
                             g.invoke_station_import_failed_title(),
@@ -91,14 +89,10 @@ pub fn wire(
                     });
                     return;
                 }
-                let variant = if failures > 0 { "warning" } else { "success" };
-                notifications.show_auto_dismiss(
-                    NotificationParams::plain(
-                        variant,
-                        settings.invoke_station_import_title(count_as_i32(imported)),
-                        settings.invoke_station_import_message(count_as_i32(skipped)),
-                    ),
-                    TOAST_AUTO_DISMISS_MS,
+                notifications.show_completion(
+                    Completion::partial_if(failures > 0),
+                    settings.invoke_station_import_title(count_as_i32(imported)),
+                    settings.invoke_station_import_message(count_as_i32(skipped)),
                 );
                 kept::refresh(&ui, &s, &ru);
             }));
@@ -127,20 +121,17 @@ pub fn wire(
                 let settings = ui.global::<Settings>();
                 match outcome {
                     Ok(exported) => {
-                        notifications.show_auto_dismiss(
-                            NotificationParams::plain(
-                                "success",
-                                settings.invoke_station_export_title(count_as_i32(exported)),
-                                settings.invoke_station_export_message(SharedString::from(
-                                    path.display().to_string(),
-                                )),
-                            ),
-                            TOAST_AUTO_DISMISS_MS,
+                        notifications.show_completion(
+                            Completion::Complete,
+                            settings.invoke_station_export_title(count_as_i32(exported)),
+                            settings.invoke_station_export_message(SharedString::from(
+                                path.display().to_string(),
+                            )),
                         );
                     }
                     Err(e) => {
                         log::warn!("radio: export: {}", melodia_core::error::describe(&e));
-                        notifications.show_localized(&ui, "error", "", |ui| {
+                        notifications.show_failure(&ui, |ui| {
                             let g = ui.global::<Settings>();
                             RowText::plain(
                                 g.invoke_station_export_failed_title(),

@@ -29,11 +29,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use slint::ComponentHandle;
-use slint::winit_030::WinitWindowAccessor;
+use slint::winit_030::winit::error::ExternalError;
 use slint::winit_030::winit::event::{
     ElementState, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent,
 };
 use slint::winit_030::winit::window::{ResizeDirection, Window as WinitWindow};
+use slint::winit_030::{EventResult, WinitWindowAccessor};
 
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, CompositeScroll, PlaylistDetail, PopupHighlight, Queue, Theme};
@@ -107,6 +108,27 @@ fn route_wheel(
     WheelRoute::Native
 }
 
+/// Hands a left press to the OS as a window move or resize. A failure is logged and left at that:
+/// macOS answers `NotSupported` for a resize and resizes a borderless window at its own edges, and
+/// an unsupported move leaves the window where it is.
+fn start_os_drag(
+    w: &slint::Window,
+    what: &str,
+    op: impl FnOnce(&WinitWindow) -> Result<(), ExternalError>,
+) {
+    let _ = w.with_winit_window(|ww| {
+        if let Err(e) = op(ww) {
+            log::debug!("{what} unsupported on this platform: {e}");
+        }
+    });
+}
+
+/// Takes down both drop banners, whichever of the two a drop would have landed in.
+fn clear_drop_hover(ui: &AppWindow) {
+    ui.global::<Queue>().set_is_drop_hovered(false);
+    ui.global::<PlaylistDetail>().set_is_drop_hovered(false);
+}
+
 /// What the pointer is over that turns a left press into an OS window operation, each kept in
 /// step with Slint hover by a `WindowChrome` callback.
 pub(super) struct PressTargets {
@@ -131,27 +153,16 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                 button: MouseButton::Left,
                 ..
             } if let Some(direction) = resize.get() => {
-                // macOS answers `NotSupported` and resizes a borderless window at its own edges.
-                let _ = w.with_winit_window(|ww| {
-                    if let Err(e) = ww.drag_resize_window(direction) {
-                        log::debug!("drag_resize_window unsupported on this platform: {e}");
-                    }
-                });
-                slint::winit_030::EventResult::PreventDefault
+                start_os_drag(w, "drag_resize_window", |ww| ww.drag_resize_window(direction));
+                EventResult::PreventDefault
             }
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
                 button: MouseButton::Left,
                 ..
             } if drag_hover.load(Ordering::Relaxed) => {
-                // Errors are non-fatal: an unsupported backend leaves the cursor where
-                // it is, and every desktop platform succeeds.
-                let _ = w.with_winit_window(|ww| {
-                    if let Err(e) = ww.drag_window() {
-                        log::debug!("drag_window unsupported on this platform: {e}");
-                    }
-                });
-                slint::winit_030::EventResult::PreventDefault
+                start_os_drag(w, "drag_window", WinitWindow::drag_window);
+                EventResult::PreventDefault
             }
             // Above the `Released` cleanup arm because the press is what wants
             // `PreventDefault`. With an overlay up we `Propagate` instead, so Slint
@@ -163,14 +174,14 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                 ..
             } => {
                 let Some(ui) = weak.upgrade() else {
-                    return slint::winit_030::EventResult::Propagate;
+                    return EventResult::Propagate;
                 };
                 if crate::ui::nav_history::overlay_open(&ui) {
-                    return slint::winit_030::EventResult::Propagate;
+                    return EventResult::Propagate;
                 }
                 let going_back = matches!(button, MouseButton::Back);
                 crate::ui::nav_history::replay(&state, &ui, going_back);
-                slint::winit_030::EventResult::PreventDefault
+                EventResult::PreventDefault
             }
             // Popup-trigger highlight cleanup. `PopupWindow` has no `closed` callback,
             // and while one is open the dispatcher stops routing mouse events to
@@ -195,7 +206,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                         ph.set_queue_ctx_index(-1);
                     }
                 }
-                slint::winit_030::EventResult::Propagate
+                EventResult::Propagate
             }
             WindowEvent::Resized(_) => {
                 // Into the live mirror while the winit window is still alive: shutdown
@@ -206,7 +217,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                         let reading = geometry::WindowReading::take(ww);
                         geometry::record(ww, reading);
                         // One-shot, on the first (synthetic, post-map) `Resized` only.
-                        geometry::ensure_on_screen(ww);
+                        geometry::ensure_on_screen(ww, reading);
                         (
                             reading.is_maximized(),
                             geometry::frame_allowance(ww, reading),
@@ -230,7 +241,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                     // that re-derives them — see the handler in `boot::ui_setup`.
                     chrome.invoke_display_changed();
                 });
-                slint::winit_030::EventResult::Propagate
+                EventResult::Propagate
             }
             // X11/Win32/macOS deliver these; a Wayland client doesn't know its own
             // position, so `Moved` rarely fires there — fine, position restore is a
@@ -243,7 +254,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                 // `WM_PAINT` starts the redraw chain the arm below rides.
                 #[cfg(target_os = "windows")]
                 parked_loop::pump();
-                slint::winit_030::EventResult::Propagate
+                EventResult::Propagate
             }
             WindowEvent::Focused(focused) => {
                 let focused = *focused;
@@ -265,7 +276,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                         crate::ui::appearance::window_border::refresh_system_color(&ui);
                     }
                 });
-                slint::winit_030::EventResult::Propagate
+                EventResult::Propagate
             }
             // The coalescer batches multi-file drops and re-checks both gates at flush
             // time. Wayland delivery depends on the vendored winit patch.
@@ -273,11 +284,8 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                 drop_coalescer::schedule_drop_flush(&state, path.clone());
                 // Both banners, whichever gate accepted — otherwise one sticks until the
                 // next pointer event.
-                let _ = weak.upgrade_in_event_loop(|ui| {
-                    ui.global::<Queue>().set_is_drop_hovered(false);
-                    ui.global::<PlaylistDetail>().set_is_drop_hovered(false);
-                });
-                slint::winit_030::EventResult::Propagate
+                let _ = weak.upgrade_in_event_loop(|ui| clear_drop_hover(&ui));
+                EventResult::Propagate
             }
             // OS-level file hover, driving the queue sheet's banner or Playlist Detail's.
             // Queue takes precedence, and `drop_coalescer`'s flush-side routing applies
@@ -289,14 +297,11 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                     // Only when the queue sheet isn't the active drop target.
                     ui.global::<PlaylistDetail>().set_is_drop_hovered(!queue_open);
                 });
-                slint::winit_030::EventResult::Propagate
+                EventResult::Propagate
             }
             WindowEvent::HoveredFileCancelled => {
-                let _ = weak.upgrade_in_event_loop(|ui| {
-                    ui.global::<Queue>().set_is_drop_hovered(false);
-                    ui.global::<PlaylistDetail>().set_is_drop_hovered(false);
-                });
-                slint::winit_030::EventResult::Propagate
+                let _ = weak.upgrade_in_event_loop(|ui| clear_drop_hover(&ui));
+                EventResult::Propagate
             }
             // The OS / WM close path — the custom-titlebar button routes through
             // `WindowChrome.on_close_window` instead. Always `PreventDefault` and act
@@ -315,14 +320,14 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                 } else if let Err(e) = slint::quit_event_loop() {
                     log::warn!("close-window: quit_event_loop: {e}");
                 }
-                slint::winit_030::EventResult::PreventDefault
+                EventResult::PreventDefault
             }
             // The same conversion the Slint backend does for its own copy, so the two
             // can't disagree.
             WindowEvent::CursorMoved { position, .. } => {
                 let l = position.to_logical::<f32>(f64::from(w.scale_factor()));
                 cursor_pos = slint::LogicalPosition::new(l.x, l.y);
-                slint::winit_030::EventResult::Propagate
+                EventResult::Propagate
             }
             // Routing argued at `route_wheel`; the delta conversion mirrors the Slint
             // winit backend exactly.
@@ -335,7 +340,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                     }
                 };
                 let Some(ui) = weak.upgrade() else {
-                    return slint::winit_030::EventResult::Propagate;
+                    return EventResult::Propagate;
                 };
                 let cs = ui.global::<CompositeScroll>();
                 // `hovered` can be stale-true where an overlay opened over a composite
@@ -354,7 +359,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                         // Nothing paints either property, so nothing else asks for the
                         // frame whose `new_events` runs the handler that applies them.
                         ui.window().request_redraw();
-                        slint::winit_030::EventResult::PreventDefault
+                        EventResult::PreventDefault
                     }
                     // `PointerScrolled` lands as a one-shot `TouchPhase::Cancelled`
                     // wheel, the direction-aware arm. Re-sent rather than dropped so
@@ -368,9 +373,9 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                         if let Err(e) = ui.window().try_dispatch_event(scrolled) {
                             log::warn!("touchpad scroll: dispatch: {e}");
                         }
-                        slint::winit_030::EventResult::PreventDefault
+                        EventResult::PreventDefault
                     }
-                    WheelRoute::Native => slint::winit_030::EventResult::Propagate,
+                    WheelRoute::Native => EventResult::Propagate,
                 }
             }
             // The filter runs ahead of Slint's own dispatch, so the last `Resized` has already
@@ -379,9 +384,9 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
             WindowEvent::RedrawRequested => {
                 #[cfg(target_os = "windows")]
                 parked_loop::pump();
-                slint::winit_030::EventResult::Propagate
+                EventResult::Propagate
             }
-            _ => slint::winit_030::EventResult::Propagate,
+            _ => EventResult::Propagate,
         }
     });
 }

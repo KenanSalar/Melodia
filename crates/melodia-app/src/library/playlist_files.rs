@@ -57,9 +57,9 @@ pub struct ExportPlaylistsResult {
     pub failed: u32,
 }
 
-/// What exporting several playlists came to.
+/// What an export came to.
 #[derive(Debug)]
-pub enum ArchiveExport {
+pub enum ExportOutcome {
     Exported(ExportPlaylistsResult),
     /// Nothing was written: together the playlists hold more text than an import reads back.
     TooLarge,
@@ -133,10 +133,7 @@ pub async fn export_playlist_to_file(
 /// it off a bare pool.
 async fn write_playlist(db: &DbPool, playlist_id: i64, dest: &Path) -> Result<(), AppError> {
     let (_, text) = prepare_export(db, playlist_id).await?;
-    let path = dest.to_path_buf();
-    tokio::task::spawn_blocking(move || atomic_file::write_text_sync(&path, &text))
-        .await
-        .map_err(AppError::io_source)?
+    atomic_file::write_text(dest.to_path_buf(), text).await
 }
 
 /// Write each requested playlist as `<sanitized-name>.m3u8` inside one zip at `dest`.
@@ -149,7 +146,7 @@ pub async fn export_playlists_to_archive(
     state: &AppState,
     playlist_ids: &[i64],
     dest: &Path,
-) -> Result<ArchiveExport, AppError> {
+) -> Result<ExportOutcome, AppError> {
     write_archive(&state.db, playlist_ids, dest, Local::now().naive_local()).await
 }
 
@@ -160,7 +157,7 @@ async fn write_archive(
     playlist_ids: &[i64],
     dest: &Path,
     modified: NaiveDateTime,
-) -> Result<ArchiveExport, AppError> {
+) -> Result<ExportOutcome, AppError> {
     let mut entries = Vec::with_capacity(playlist_ids.len());
     let mut used = HashSet::new();
     let mut budget = archive::TextBudget::default();
@@ -169,7 +166,7 @@ async fn write_archive(
         match prepare_export(db, id).await {
             Ok((name, mut text)) => {
                 let Ok(()) = budget.charge(text.len()) else {
-                    return Ok(ArchiveExport::TooLarge);
+                    return Ok(ExportOutcome::TooLarge);
                 };
                 // Held beside every other playlist's until the archive is written.
                 text.shrink_to_fit();
@@ -183,18 +180,16 @@ async fn write_archive(
     }
 
     let exported = u32::try_from(entries.len()).unwrap_or(u32::MAX);
-    if entries.is_empty() {
-        return Ok(ArchiveExport::Exported(ExportPlaylistsResult { exported, failed }));
+    if !entries.is_empty() {
+        let path = dest.to_path_buf();
+        tokio::task::spawn_blocking(move || {
+            atomic_file::write_with_sync(&path, |out| archive::write(out, &entries, modified))
+        })
+        .await
+        .map_err(AppError::io_source)??;
     }
 
-    let path = dest.to_path_buf();
-    tokio::task::spawn_blocking(move || {
-        atomic_file::write_with_sync(&path, |out| archive::write(out, &entries, modified))
-    })
-    .await
-    .map_err(AppError::io_source)??;
-
-    Ok(ArchiveExport::Exported(ExportPlaylistsResult { exported, failed }))
+    Ok(ExportOutcome::Exported(ExportPlaylistsResult { exported, failed }))
 }
 
 /// Fetch a playlist's name + ordered tracks and render them to M3U8 text.

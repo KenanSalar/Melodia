@@ -46,11 +46,7 @@ pub fn apply(
         let accent_hex = if accent_id == MATERIAL_YOU_ACCENT_ID {
             *dyn_accent
         } else {
-            let real_variant = if variant_id == SYSTEM_VARIANT_ID {
-                theme.resolve_system_variant(&system.theme).id
-            } else {
-                variant_id
-            };
+            let real_variant = theme.shade_for(variant_id, &system.theme).id;
             theme.accent_hex(accent_id, real_variant).unwrap_or(*dyn_accent)
         };
         // A palette generated from artwork has no OS inactive-titlebar colour

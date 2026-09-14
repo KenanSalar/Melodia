@@ -294,7 +294,7 @@ fn dim_i32(v: u32) -> i32 {
 ///
 /// No-op on Wayland, where `outer_position()` errors and the compositor never places a
 /// window off-screen, and while maximized, the WM remapping those itself.
-pub fn ensure_on_screen(w: &WinitWindow) {
+pub fn ensure_on_screen(w: &WinitWindow, reading: WindowReading) {
     static DONE: Once = Once::new();
     let mut first = false;
     DONE.call_once(|| first = true);
@@ -302,7 +302,7 @@ pub fn ensure_on_screen(w: &WinitWindow) {
         return;
     }
 
-    if w.is_maximized() {
+    if reading.is_maximized() {
         return;
     }
     let Ok(pos) = w.outer_position() else {

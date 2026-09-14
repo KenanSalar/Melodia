@@ -1,5 +1,5 @@
 use super::*;
-use melodia_testkit::{block_body, strip_line_comments};
+use melodia_testkit::{block_after, strip_line_comments};
 
 // Every mouse wheel on every platform, and a touchpad on X11 and Win32.
 #[test]
@@ -44,15 +44,6 @@ fn filter_source() -> String {
     strip_line_comments(include_str!("../winit_filter.rs"))
 }
 
-/// The body of one `WindowEvent` arm, or empty when the walk found no such arm — which is a
-/// broken walk rather than a broken arm, and every caller asserts that apart.
-fn arm_body<'a>(code: &'a str, arm: &str) -> &'a str {
-    code.find(arm)
-        .and_then(|at| code[at..].find('{').map(|rel| at + rel))
-        .and_then(|open| block_body(code, open))
-        .unwrap_or_default()
-}
-
 /// The guard the resize press arm is found by.
 const RESIZE_ARM: &str = "if let Some(direction) = resize.get() =>";
 
@@ -75,7 +66,7 @@ fn the_resize_press_arm_is_matched_before_the_drag_arm() -> Result<(), Box<dyn s
 fn the_resize_press_arm_starts_the_os_resize() {
     let code = filter_source();
 
-    let arm = arm_body(&code, RESIZE_ARM);
+    let arm = block_after(&code, RESIZE_ARM);
 
     assert!(
         arm.contains("drag_resize_window(direction)"),
@@ -89,7 +80,7 @@ fn the_resize_press_arm_starts_the_os_resize() {
 fn the_resize_press_arm_keeps_the_press_from_slint() {
     let code = filter_source();
 
-    let arm = arm_body(&code, RESIZE_ARM);
+    let arm = block_after(&code, RESIZE_ARM);
 
     assert!(
         arm.contains("EventResult::PreventDefault") && !arm.contains("EventResult::Propagate"),
@@ -106,7 +97,7 @@ fn the_resize_press_arm_keeps_the_press_from_slint() {
 fn the_resize_arm_retunes_the_cover_tiers() {
     const ARM: &str = "WindowEvent::Resized(_) =>";
     let code = filter_source();
-    let arm = arm_body(&code, ARM);
+    let arm = block_after(&code, ARM);
 
     assert!(!arm.is_empty(), "no `{ARM}` block found — the walk is broken, not the code");
     assert!(
@@ -125,7 +116,7 @@ fn the_resize_arm_retunes_the_cover_tiers() {
 fn the_redraw_arm_ticks_the_loop_win32_parked() {
     const ARM: &str = "WindowEvent::RedrawRequested =>";
     let code = filter_source();
-    let arm = arm_body(&code, ARM);
+    let arm = block_after(&code, ARM);
 
     assert!(!arm.is_empty(), "no `{ARM}` block found — the walk is broken, not the code");
     assert!(
@@ -148,7 +139,7 @@ fn the_redraw_arm_ticks_the_loop_win32_parked() {
 fn the_move_arm_ticks_the_loop_win32_parked() {
     const ARM: &str = "WindowEvent::Moved(_) =>";
     let code = filter_source();
-    let arm = arm_body(&code, ARM);
+    let arm = block_after(&code, ARM);
 
     assert!(!arm.is_empty(), "no `{ARM}` block found — the walk is broken, not the code");
     assert!(
@@ -166,8 +157,8 @@ fn the_resize_arm_writes_the_frame_only_when_one_was_measured() {
     const ARM: &str = "WindowEvent::Resized(_) =>";
     const GATE: &str = "if let Some(frame) = frame";
     let code = filter_source();
-    let arm = arm_body(&code, ARM);
-    let gated = arm_body(arm, GATE);
+    let arm = block_after(&code, ARM);
+    let gated = block_after(arm, GATE);
 
     assert!(!arm.is_empty(), "no `{ARM}` block found: the walk is broken, not the code");
     assert!(
@@ -192,8 +183,8 @@ fn the_resize_arm_writes_the_margins_only_when_they_were_measured() {
     const SETTERS: [&str; 3] =
         ["set_frame_margin_left(", "set_frame_margin_right(", "set_frame_margin_bottom("];
     let code = filter_source();
-    let arm = arm_body(&code, ARM);
-    let gated = arm_body(arm, GATE);
+    let arm = block_after(&code, ARM);
+    let gated = block_after(arm, GATE);
 
     let outside: Vec<&str> = SETTERS.into_iter().filter(|s| !gated.contains(s)).collect();
 
@@ -211,12 +202,8 @@ fn the_resize_arm_writes_the_margins_only_when_they_were_measured() {
 #[test]
 fn the_composite_wheel_arm_asks_for_a_frame() {
     const ARM: &str = "WheelRoute::Composite =>";
-    let code = strip_line_comments(include_str!("../winit_filter.rs"));
-    let arm = code
-        .find(ARM)
-        .and_then(|at| code[at..].find('{').map(|rel| at + rel))
-        .and_then(|open| block_body(&code, open))
-        .unwrap_or_default();
+    let code = filter_source();
+    let arm = block_after(&code, ARM);
 
     assert!(!arm.is_empty(), "no `{ARM}` block found — the walk is broken, not the code");
     assert!(

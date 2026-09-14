@@ -10,7 +10,7 @@ use slint::{ComponentHandle, Model};
 
 use super::{add_pick_disabled, refresh_add_selection_meta, set_all_picks, toggle_pick};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
-use crate::ui::shell::notifications::{NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS};
+use crate::ui::shell::notifications::{Completion, NotificationsUi};
 use crate::ui::util::len_as_i32;
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -124,14 +124,10 @@ pub(super) fn wire(
                 }
                 let Some(ui) = weak.upgrade() else { return };
                 let settings = ui.global::<Settings>();
-                let variant = if ok < requested { "warning" } else { "success" };
-                notifications.show_auto_dismiss(
-                    NotificationParams::plain(
-                        variant,
-                        settings.invoke_add_to_playlist_title(len_as_i32(ok)),
-                        settings.invoke_add_to_playlist_message(len_as_i32(track_count)),
-                    ),
-                    TOAST_AUTO_DISMISS_MS,
+                notifications.show_completion(
+                    Completion::partial_if(ok < requested),
+                    settings.invoke_add_to_playlist_title(len_as_i32(ok)),
+                    settings.invoke_add_to_playlist_message(len_as_i32(track_count)),
                 );
             }));
         });
