@@ -95,11 +95,13 @@ export global Theme {
     out property <length> sidebar-min-w: 105px;
     out property <length> sidebar-max-w: 400px;
     out property <length> now-playing-h: 72px;
-    // Track-row content height; the header's is independent, pinned in its own file.
+    // Track-row content height.
     out property <length> row-h: 46px;
     // Compact height when the thumbnail is hidden, sized to clear the hover swap-in.
     out property <length> row-h-compact: 34px;
     out property <length> row-gap: 0px;
+    // The column header over every track list, read too by the hosts that hand-sum a list's height.
+    out property <length> track-header-h: 36px;
 
     // Radii / spacing
     out property <length> radius-sm: 4px;

@@ -59,13 +59,14 @@ component HeaderCell inherits Rectangle {
     // corners nothing reaches.
     clip: true;
 
-    // The hover fill. Binding `x` and `y` keeps it out of the cell's layout info.
+    // The hover fill, in the track rows' hover colour. Binding `x` and `y` keeps it out of the
+    // cell's layout info.
     Rectangle {
         x: 0;
-        y: 0;
+        y: Theme.pad-xs;
         width: 100%;
-        height: 100%;
-        background: touch.has-hover ? Theme.surface1 : transparent;
+        height: parent.height - 2 * Theme.pad-xs;
+        background: touch.has-hover ? Theme.surface0 : transparent;
         animate background { duration: Theme.dur-fast; easing: ease-in-out; }
         border-radius: Theme.radius-md;
     }
@@ -80,11 +81,11 @@ component HeaderCell inherits Rectangle {
             alignment: center;
             Text {
                 text: root.label;
-                // The same rung as the rows beneath it: size and weight already read as
-                // a header, so it needn't give up contrast to separate itself — and on
+                // The same size and rung as the rows beneath it: weight alone reads as a
+                // header, so it needn't give up contrast to separate itself, and on
                 // `subtext0` it was the dimmest text on the app's densest screen.
                 color: root.active-field == root.field ? Theme.accent : Theme.text;
-                font-size: Theme.font-size-sm;
+                font-size: Theme.font-size-row;
                 font-weight: 600;
                 overflow: elide;
             }
@@ -146,8 +147,8 @@ export component TrackListHeader inherits Rectangle {
 
     // A bound `height` is one the solver may treat as merely preferred; the min/max pair
     // pins it in a way the column solver respects, as Slint's own `ListItem` does.
-    min-height: 32px;
-    max-height: 32px;
+    min-height: Theme.track-header-h;
+    max-height: Theme.track-header-h;
     vertical-stretch: 0;
 
     if root.columns.show_number: HeaderCell {

@@ -62,7 +62,7 @@ export component SongsSection inherits VerticalLayout {
             * (Search.track-columns.show_artwork
                 ? Theme.row-h
                 : Theme.row-h-compact)
-            + 32px + Theme.pad-xs;
+            + Theme.track-header-h + Theme.pad-xs;
 
         rows: Search.tracks;
         columns <=> Search.track-columns;
