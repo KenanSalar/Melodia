@@ -1,4 +1,4 @@
-import { PlaylistRow, PlaylistGridRow, TrackListRow } from "../models.slint";
+import { PlaylistRow, PlaylistGridRow, TrackListRow, TrackColumns } from "../models.slint";
 
 // The Playlist grid view, on the `Albums` / `Artists` ownership contract: Rust owns the flat list
 // and `apply-filter` re-derives `grid-rows` with no DB hit. Sorted by most-recently-updated and
@@ -116,22 +116,8 @@ export global PlaylistDetail {
     // typed needle survives a scan finishing.
     in-out property <string> filter;
 
-    // Per-column widths, edited by the resize handles.
-    in-out property <length> w-number: 56px;
-    in-out property <length> w-title: 320px;
-    in-out property <length> w-artist: 200px;
-    in-out property <length> w-album: 220px;
-    in-out property <length> w-genre: 140px;
-    in-out property <length> w-year: 72px;
-    in-out property <length> w-length: 88px;
-
-    // Per-column visibility. Hydrated from `settings.view_columns["playlist_detail"]`.
-    in-out property <bool> show-number: true;
-    in-out property <bool> show-artist: true;
-    in-out property <bool> show-album: true;
-    in-out property <bool> show-genre: false;
-    in-out property <bool> show-year: true;
-    in-out property <bool> show-artwork: true;
+    // Hydrated from `views.json` under `playlist_detail`.
+    in-out property <TrackColumns> track-columns;
 
     in-out property <string> sort-field: "position";
     in-out property <string> sort-dir: "asc";

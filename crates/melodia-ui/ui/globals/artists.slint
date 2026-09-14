@@ -1,4 +1,4 @@
-import { ArtistRow, ArtistGridRow, AlbumRow, TrackListRow } from "../models.slint";
+import { ArtistRow, ArtistGridRow, AlbumRow, TrackListRow, TrackColumns } from "../models.slint";
 
 // The Artist grid, on the `Albums` ownership contract — Rust owns the flat list and
 // neither the filter nor the sort hits the DB.
@@ -23,9 +23,8 @@ export global Artists {
 
 // The Artist Detail view, on the `AlbumDetail` shape plus an `albums` list driving the
 // horizontal sub-section above the track list, and an `open-album` that navigates
-// cross-tab. **The column defaults invert Album Detail's** — `show-album` on because
-// tracks span albums, `show-artist` off because every row is the same artist — and the
-// default sort is by album, so tracks group naturally.
+// cross-tab. **The column defaults invert Album Detail's** (`ui::track_list_view` has them) and
+// the default sort is by album, so tracks group naturally.
 export global ArtistDetail {
     in-out property <int> artist-id: -1;
     // See `AlbumDetail.restoring`.
@@ -34,20 +33,7 @@ export global ArtistDetail {
     in-out property <[AlbumRow]> albums;
     in-out property <[TrackListRow]> tracks;
 
-    in-out property <length> w-number: 56px;
-    in-out property <length> w-title: 320px;
-    in-out property <length> w-artist: 200px;
-    in-out property <length> w-album: 220px;
-    in-out property <length> w-genre: 140px;
-    in-out property <length> w-year: 72px;
-    in-out property <length> w-length: 88px;
-
-    in-out property <bool> show-number: false;
-    in-out property <bool> show-artist: false;
-    in-out property <bool> show-album: true;
-    in-out property <bool> show-genre: true;
-    in-out property <bool> show-year: true;
-    in-out property <bool> show-artwork: true;
+    in-out property <TrackColumns> track-columns;
 
     // Sorted in memory, as Album Detail is.
     in-out property <string> sort-field: "album";

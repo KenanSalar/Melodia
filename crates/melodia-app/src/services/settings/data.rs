@@ -69,6 +69,10 @@ pub struct ViewSort {
     pub dir: SortDir,
 }
 
+/// One track list's stored column widths. `number`, `year` and `length` are pixels; the other
+/// four are the width each had when last sized, read as weights against whatever room the list
+/// has, so a saved layout keeps its proportions at any window size. `melodia-views`'
+/// `ui::track_columns` is the only reader of either meaning.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ColumnWidths {
@@ -83,8 +87,7 @@ pub struct ColumnWidths {
 
 impl Default for ColumnWidths {
     fn default() -> Self {
-        // Mirrors the initial values in `crates/melodia-ui/ui/globals/tracks.slint`;
-        // the fixed column model needs `title` to carry a real width.
+        // Every track list's first-launch widths; the Slint globals declare none.
         Self {
             number: 56.0,
             title: 320.0,

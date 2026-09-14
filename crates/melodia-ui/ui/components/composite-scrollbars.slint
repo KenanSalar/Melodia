@@ -2,14 +2,14 @@ import { Theme } from "../theme.slint";
 import { OverlayScrollbar } from "overlay-scrollbar.slint";
 import { CompositeScroll } from "../globals/shell.slint";
 
-// The scrollbar pair and wheel routing every composite view mounts: an outer `ScrollView` scrolls
+// The scrollbar and wheel routing every composite view mounts: an outer `ScrollView` scrolls
 // the sections while a height-capped, still-virtualizing inner `TrackList` scrolls the rows, and
 // **one vertical bar spans both travels**, splitting drags at the boundary. It also owns the
 // `CompositeScroll` wheel-tick watch — one composite view is mounted at a time, so there is exactly
 // one live watcher, applying one composite step through the same split the drag uses.
 //
 // Slint can't pass element handles into a component, so the host mirrors its named elements through
-// properties plus two setters forwarding to the list's own clamping ones. `outer-viewport-y` is
+// properties plus a setter forwarding to the list's own clamping one. `outer-viewport-y` is
 // two-way so drags write back — an identity binding, so the sign-flip pitfall doesn't apply.
 //
 // **Mount contract**: the *last* child of the view root, at full size and zero offset — the bars
@@ -26,23 +26,9 @@ export component CompositeScrollbars inherits Rectangle {
     in property <length> inner-visible-height;
     callback set-inner-offset(length);
 
-    // Inner TrackList horizontal (column-pan) mirror.
-    in property <length> h-offset;
-    in property <length> h-viewport-width;
-    in property <length> h-visible-width;
-    callback set-h-offset(length);
-
     // The below-hero region within the host root, so the bar starts under the banner.
     in property <length> v-region-y;
     in property <length> v-region-height;
-
-    // Horizontal-bar band: the TrackList's x + width within the host root.
-    in property <length> h-region-x;
-    in property <length> h-region-width;
-
-    // Both bars' hit thickness; the horizontal one reserves this much at its right end so it never
-    // runs under the vertical one.
-    property <length> bar-thickness: Theme.scrollbar-slot;
 
     // The outer travel covers the sections, the inner one the rows, and the bar spans both — a drag
     // splits its offset at the boundary.
@@ -76,7 +62,7 @@ export component CompositeScrollbars inherits Rectangle {
         horizontal: false;
         x: parent.width - self.width;
         y: root.v-region-y;
-        width: root.bar-thickness;
+        width: Theme.scrollbar-slot;
         height: root.v-region-height;
         visible-size: root.outer-visible-height;
         content-size: root.outer-visible-height + root.v-outer-max + root.v-inner-max;
@@ -85,19 +71,5 @@ export component CompositeScrollbars inherits Rectangle {
             root.outer-viewport-y = -min(o, root.v-outer-max);
             root.set-inner-offset(max(0px, o - root.v-outer-max));
         }
-    }
-
-    // Drives the list's column pan only: the strips have their own horizontal scrollbars, at
-    // different content widths and independent positions, so a unified bar would mean nothing.
-    OverlayScrollbar {
-        horizontal: true;
-        x: root.h-region-x;
-        y: parent.height - self.height;
-        width: root.h-region-width - root.bar-thickness;
-        height: root.bar-thickness;
-        visible-size: root.h-visible-width;
-        content-size: root.h-viewport-width;
-        offset: root.h-offset;
-        scroll-to(o) => { root.set-h-offset(o); }
     }
 }

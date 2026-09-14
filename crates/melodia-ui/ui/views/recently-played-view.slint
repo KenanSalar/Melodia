@@ -118,12 +118,7 @@ export component RecentlyPlayedView inherits Rectangle {
                     }
                     PillDivider { }
                     ColumnTogglePopup {
-                        show-number  <=> RecentlyPlayed.show-number;
-                        show-artwork <=> RecentlyPlayed.show-artwork;
-                        show-artist  <=> RecentlyPlayed.show-artist;
-                        show-album   <=> RecentlyPlayed.show-album;
-                        show-genre   <=> RecentlyPlayed.show-genre;
-                        show-year    <=> RecentlyPlayed.show-year;
+                        columns <=> RecentlyPlayed.track-columns;
                         toggled(id) => { RecentlyPlayed.toggle-column(id); }
                     }
                     if RecentlyPlayed.selected-ids.length > 0: SelectionPills {

@@ -8,7 +8,7 @@ import { TrackListScrollbars } from "../../components/track-list-scrollbars.slin
 // The genre's track list under the shared band, on Album Detail's shape exactly. What is
 // particular to genres lives elsewhere now: the name-hashed tile gradient is a ternary on
 // the mount sheet, and the backdrop pair is written into `HeroBackdrop.floor-*` by Rust's
-// `open_genre`, which measures it and solves the scrim against it. `show-genre` is forced
+// `open_genre`, which measures it and solves the scrim against it. `show_genre` is forced
 // off for the reason each sibling forces its own column off.
 export component GenreDetailBody inherits Rectangle {
     // Catches any click no inner TouchArea consumes and gives the band's box up.
@@ -26,24 +26,9 @@ export component GenreDetailBody inherits Rectangle {
         tl := TrackList {
             horizontal-stretch: 1;
             vertical-stretch: 1;
-            reserve-scrollbar-lane: true;
 
             rows: GenreDetail.tracks;
-
-            w-number <=> GenreDetail.w-number;
-            w-title <=> GenreDetail.w-title;
-            w-artist <=> GenreDetail.w-artist;
-            w-album <=> GenreDetail.w-album;
-            w-genre <=> GenreDetail.w-genre;
-            w-year <=> GenreDetail.w-year;
-            w-length <=> GenreDetail.w-length;
-
-            show-number <=> GenreDetail.show-number;
-            show-artwork <=> GenreDetail.show-artwork;
-            show-artist <=> GenreDetail.show-artist;
-            show-album <=> GenreDetail.show-album;
-            show-genre <=> GenreDetail.show-genre;
-            show-year <=> GenreDetail.show-year;
+            columns <=> GenreDetail.track-columns;
             number-mode: "index";
 
             sort-field: GenreDetail.sort-field;
@@ -71,18 +56,12 @@ export component GenreDetailBody inherits Rectangle {
     // its position comes through `absolute-position`.
     TrackListScrollbars {
         x: 0; y: 0; width: 100%; height: 100%;
-        list-x: tl.absolute-position.x - root.absolute-position.x;
         list-y: tl.absolute-position.y - root.absolute-position.y;
-        list-width: tl.width;
         body-y: tl.body-y;
         body-height: tl.body-height;
         v-visible-height: tl.v-visible-height;
         v-viewport-height: tl.v-viewport-height;
         v-offset: tl.v-offset;
-        h-visible-width: tl.h-visible-width;
-        h-viewport-width: tl.h-viewport-width;
-        h-offset: tl.h-offset;
         set-v-offset(o) => { tl.set-v-offset(o); }
-        set-h-offset(o) => { tl.set-h-offset(o); }
     }
 }

@@ -29,7 +29,7 @@ fn track_list_mount() -> Option<&'static str> {
 
 /// The `TrackListHeader { … }` property block inside `TrackList`.
 fn header_mount() -> Option<&'static str> {
-    block_body(LIST, "TrackListHeader {", "\n            }")
+    block_body(LIST, "TrackListHeader {", "\n        }")
 }
 
 /// The `RecentlyPlayed` global's body.

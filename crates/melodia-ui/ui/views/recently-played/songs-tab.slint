@@ -24,24 +24,9 @@ export component RecentlyPlayedSongsTab inherits Rectangle {
         tl := TrackList {
             horizontal-stretch: 1;
             vertical-stretch: 1;
-            reserve-scrollbar-lane: true;
 
             rows: RecentlyPlayed.tracks;
-
-            w-number <=> RecentlyPlayed.w-number;
-            w-title <=> RecentlyPlayed.w-title;
-            w-artist <=> RecentlyPlayed.w-artist;
-            w-album <=> RecentlyPlayed.w-album;
-            w-genre <=> RecentlyPlayed.w-genre;
-            w-year <=> RecentlyPlayed.w-year;
-            w-length <=> RecentlyPlayed.w-length;
-
-            show-number <=> RecentlyPlayed.show-number;
-            show-artwork <=> RecentlyPlayed.show-artwork;
-            show-artist <=> RecentlyPlayed.show-artist;
-            show-album <=> RecentlyPlayed.show-album;
-            show-genre <=> RecentlyPlayed.show-genre;
-            show-year <=> RecentlyPlayed.show-year;
+            columns <=> RecentlyPlayed.track-columns;
             number-mode: "index";
 
             sortable: false;
@@ -64,18 +49,12 @@ export component RecentlyPlayedSongsTab inherits Rectangle {
 
     TrackListScrollbars {
         x: 0; y: 0; width: 100%; height: 100%;
-        list-x: tl.absolute-position.x - root.absolute-position.x;
         list-y: tl.absolute-position.y - root.absolute-position.y;
-        list-width: tl.width;
         body-y: tl.body-y;
         body-height: tl.body-height;
         v-visible-height: tl.v-visible-height;
         v-viewport-height: tl.v-viewport-height;
         v-offset: tl.v-offset;
-        h-visible-width: tl.h-visible-width;
-        h-viewport-width: tl.h-viewport-width;
-        h-offset: tl.h-offset;
         set-v-offset(o) => { tl.set-v-offset(o); }
-        set-h-offset(o) => { tl.set-h-offset(o); }
     }
 }

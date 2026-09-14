@@ -83,13 +83,13 @@ enum WheelRoute {
 ///
 /// `Composite` is the nested-`ListView`-swallows-the-wheel one, argued at `CompositeScroll`
 /// in `globals/shell.slint`. Horizontal-dominant wheel stays native there, that axis
-/// belonging to the column pan.
+/// belonging to the strips' own scrollers.
 ///
 /// `Unphased` is the touchpad one. `Flickable` intercepts `TouchPhase::Started`
 /// unconditionally and sets its capture flag without checking the delta's axis, so the
 /// outermost one under the pointer owns the whole gesture where its `Moved` and
 /// `Cancelled` arms check direction first — and only a precision device sends the phase,
-/// which is why a plain `TrackList` page scrolls under a wheel and not two fingers.
+/// which is why a scroller nested inside another scrolls under a wheel and not two fingers.
 /// Re-sending unphased leaves the capture flag unset, costing Slint's kinetic fling.
 fn route_wheel(
     composite_hovered: bool,

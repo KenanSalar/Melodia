@@ -49,6 +49,7 @@ pub mod signal;
 pub mod sleep_timer;
 pub mod support;
 pub mod tab_bar;
+pub mod track_columns;
 pub mod track_list_cache;
 pub mod track_list_view;
 pub mod track_sort;

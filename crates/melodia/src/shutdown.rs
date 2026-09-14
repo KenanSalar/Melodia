@@ -54,9 +54,9 @@ pub fn save_state_on_exit(app: &AppWindow, state: &AppState, runtime: &tokio::ru
         Err(e) => log::warn!("save_state_on_exit: read settings.json: {e}"),
     }
 
-    // Column widths and visibility into views.json. The drag clamps to
-    // per-column min/max in `track-list-header.slint`, so persisted values are
-    // always in range. Every other view-state field is written eagerly by its
+    // Column widths and visibility into views.json. `ui::track_columns` clamps
+    // whatever it reads, so a persisted width can't lay out out of range. Every
+    // other view-state field is written eagerly by its
     // own callback; only column state needs a shutdown snapshot — plus the one
     // retired key below.
     match services::view_state::read_view_state(&state.paths) {

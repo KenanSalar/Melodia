@@ -1,4 +1,4 @@
-import { TrackListRow, EntityStripRow, EntityGridRow } from "../models.slint";
+import { TrackListRow, TrackColumns, EntityStripRow, EntityGridRow } from "../models.slint";
 
 // The two curated pages, both wearing `MosaicTabHero` over their sub-views. Two globals rather
 // than one because a Slint component can't be parameterised over a global — the wall
@@ -71,20 +71,7 @@ export global Favorites {
 
     // The Songs tab's `TrackList` columns, the shape `Tracks` / `AlbumDetail` /
     // `ArtistDetail` share, hydrated from `views.json` under its own key.
-    in-out property <length> w-number: 56px;
-    in-out property <length> w-title: 320px;
-    in-out property <length> w-artist: 200px;
-    in-out property <length> w-album: 220px;
-    in-out property <length> w-genre: 140px;
-    in-out property <length> w-year: 72px;
-    in-out property <length> w-length: 88px;
-
-    in-out property <bool> show-number: false;
-    in-out property <bool> show-artist: true;
-    in-out property <bool> show-album: true;
-    in-out property <bool> show-genre: false;
-    in-out property <bool> show-year: false;
-    in-out property <bool> show-artwork: true;
+    in-out property <TrackColumns> track-columns;
 
     in-out property <[int]> selected-ids;
     in-out property <int>   selection-anchor: -1;
@@ -185,20 +172,7 @@ export global RecentlyPlayed {
     in-out property <int> track-count: -1;
 
     // The `Favorites` / `Tracks` column shape, hydrated from `views.json` under its own key.
-    in-out property <length> w-number: 56px;
-    in-out property <length> w-title: 320px;
-    in-out property <length> w-artist: 200px;
-    in-out property <length> w-album: 220px;
-    in-out property <length> w-genre: 140px;
-    in-out property <length> w-year: 72px;
-    in-out property <length> w-length: 88px;
-
-    in-out property <bool> show-number: false;
-    in-out property <bool> show-artist: true;
-    in-out property <bool> show-album: true;
-    in-out property <bool> show-genre: false;
-    in-out property <bool> show-year: false;
-    in-out property <bool> show-artwork: true;
+    in-out property <TrackColumns> track-columns;
 
     in-out property <[int]> selected-ids;
     in-out property <int>   selection-anchor: -1;

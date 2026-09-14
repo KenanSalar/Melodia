@@ -49,12 +49,7 @@ export component MyLibraryTabPills inherits Rectangle {
                 }
             }
             ColumnTogglePopup {
-                show-number <=> Tracks.show-number;
-                show-artwork <=> Tracks.show-artwork;
-                show-artist <=> Tracks.show-artist;
-                show-album <=> Tracks.show-album;
-                show-genre <=> Tracks.show-genre;
-                show-year <=> Tracks.show-year;
+                columns <=> Tracks.track-columns;
                 toggled(id) => { Tracks.toggle-column(id); }
             }
         }
@@ -110,12 +105,7 @@ export component MyLibraryTabPills inherits Rectangle {
             }
             PillDivider { }
             ColumnTogglePopup {
-                show-number  <=> AlbumDetail.show-number;
-                show-artwork <=> AlbumDetail.show-artwork;
-                show-artist  <=> AlbumDetail.show-artist;
-                show-album   <=> AlbumDetail.show-album;
-                show-genre   <=> AlbumDetail.show-genre;
-                show-year    <=> AlbumDetail.show-year;
+                columns <=> AlbumDetail.track-columns;
                 // Meaningless here: every row is the same album.
                 hide-album: true;
                 toggled(id) => { AlbumDetail.toggle-column(id); }
@@ -134,12 +124,7 @@ export component MyLibraryTabPills inherits Rectangle {
             }
             PillDivider { }
             ColumnTogglePopup {
-                show-number  <=> ArtistDetail.show-number;
-                show-artwork <=> ArtistDetail.show-artwork;
-                show-artist  <=> ArtistDetail.show-artist;
-                show-album   <=> ArtistDetail.show-album;
-                show-genre   <=> ArtistDetail.show-genre;
-                show-year    <=> ArtistDetail.show-year;
+                columns <=> ArtistDetail.track-columns;
                 // Meaningless here: every row is the same artist.
                 hide-artist: true;
                 toggled(id) => { ArtistDetail.toggle-column(id); }
@@ -158,12 +143,7 @@ export component MyLibraryTabPills inherits Rectangle {
             }
             PillDivider { }
             ColumnTogglePopup {
-                show-number  <=> GenreDetail.show-number;
-                show-artwork <=> GenreDetail.show-artwork;
-                show-artist  <=> GenreDetail.show-artist;
-                show-album   <=> GenreDetail.show-album;
-                show-genre   <=> GenreDetail.show-genre;
-                show-year    <=> GenreDetail.show-year;
+                columns <=> GenreDetail.track-columns;
                 // Meaningless here: every row is the same genre.
                 hide-genre: true;
                 toggled(id) => { GenreDetail.toggle-column(id); }
@@ -231,12 +211,7 @@ export component MyLibraryTabPills inherits Rectangle {
             }
             PillDivider { }
             ColumnTogglePopup {
-                show-number  <=> PlaylistDetail.show-number;
-                show-artwork <=> PlaylistDetail.show-artwork;
-                show-artist  <=> PlaylistDetail.show-artist;
-                show-album   <=> PlaylistDetail.show-album;
-                show-genre   <=> PlaylistDetail.show-genre;
-                show-year    <=> PlaylistDetail.show-year;
+                columns <=> PlaylistDetail.track-columns;
                 toggled(id) => { PlaylistDetail.toggle-column(id); }
             }
             // Selection slots — appended when multi-select is active.

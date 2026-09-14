@@ -89,8 +89,8 @@ fn compute_indices_default_sort_is_most_recently_updated_first() {
 
 /// A row drag and the list's own drag-pan are one gesture, and whichever element
 /// owns it the other gets nothing: a pan intercepts the row's grab mid-drag, so
-/// the drop never commits. Both scrollers around the rows opt out, and so does
-/// the queue sheet's list. Nothing else catches a regression here — it compiles,
+/// the drop never commits. The list around the rows opts out, and so does the
+/// queue sheet's. Nothing else catches a regression here — it compiles,
 /// reads clean, and only misbehaves on a list long enough to scroll.
 ///
 /// The value was `!reorder-enabled`, which reads as leaving a `true` default alone
@@ -104,9 +104,8 @@ fn every_draggable_list_opts_out_of_drag_panning() {
     let list = normalize_ws(&strip_line_comments(DRAGGABLE_LIST));
     assert_eq!(
         list.matches("mouse-drag-pan-enabled: false").count(),
-        2,
-        "both `outer-scroll` and `inner-list` must opt out — a diagonal drag steals the \
-         grab on either axis once the columns overflow"
+        1,
+        "`inner-list` must opt out, the only scroller the rows sit in"
     );
     assert!(
         normalize_ws(&strip_line_comments(QUEUE_SHEET)).contains("mouse-drag-pan-enabled: false"),

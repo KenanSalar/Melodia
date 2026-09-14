@@ -5,17 +5,13 @@ import { Theme } from "../../theme.slint";
 // whatever the script's direction. Title, number, year and length are structurally different and
 // stay inline in `track-list-row.slint`.
 //
-// **Two things here are load-bearing.** Visibility is gated at the *call site*, matching the
-// header: a cell hidden from inside is still a child of the row's layout and reserves a `spacing`
-// slot `total-w` doesn't account for, so every cell after it drifts off the header. And the wrapper
-// must bind `width: cell-width`, or resizing a sibling column bleeds this text over its neighbour.
+// **The host places it**, `x` and `width` both: left to size itself, the cell takes its text's full
+// width and paints over the next column instead of eliding.
 export component DataCell inherits Rectangle {
-    in property <length> cell-width;
     in property <string> text-content;
     // The row's `ink`, so every cell answers playing and dimmed in one place.
     in property <brush> ink;
 
-    width: root.cell-width;
     clip: true;
     VerticalLayout {
         alignment: center;

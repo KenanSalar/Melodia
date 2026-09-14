@@ -158,40 +158,21 @@ export component ArtistDetailBody inherits Rectangle {
                         tl := TrackList {
                             horizontal-stretch: 1;
                             vertical-stretch: 0;
-                            // The composite's hbar takes this list's x and width, so at
-                            // the cap — where the list reaches the view's bottom edge —
-                            // it lands on the last row. The content-fit arm carries the
-                            // lane too, that arm being a hand-sum of what the list holds:
-                            // rows, header, spacing, and now the reserve.
-                            reserve-scrollbar-lane: true;
                             // **Capped at the outer viewport**: a small list keeps the
                             // content-tall layout, a large one pins to the visible region
                             // so the inner list virtualizes instead of instantiating every
-                            // row.
+                            // row. The content-fit arm is a hand-sum of what the list
+                            // holds: rows, header and spacing.
                             height: min(
                                 max(1, ArtistDetail.tracks.length)
-                                    * (ArtistDetail.show-artwork
+                                    * (ArtistDetail.track-columns.show_artwork
                                         ? Theme.row-h
                                         : Theme.row-h-compact)
-                                    + 32px + Theme.pad-xs + Theme.scrollbar-slot,
+                                    + 32px + Theme.pad-xs,
                                 below-sv.visible-height);
 
                             rows: ArtistDetail.tracks;
-
-                            w-number <=> ArtistDetail.w-number;
-                            w-title <=> ArtistDetail.w-title;
-                            w-artist <=> ArtistDetail.w-artist;
-                            w-album <=> ArtistDetail.w-album;
-                            w-genre <=> ArtistDetail.w-genre;
-                            w-year <=> ArtistDetail.w-year;
-                            w-length <=> ArtistDetail.w-length;
-
-                            show-number <=> ArtistDetail.show-number;
-                            show-artwork <=> ArtistDetail.show-artwork;
-                            show-artist <=> ArtistDetail.show-artist;
-                            show-album <=> ArtistDetail.show-album;
-                            show-genre <=> ArtistDetail.show-genre;
-                            show-year <=> ArtistDetail.show-year;
+                            columns <=> ArtistDetail.track-columns;
                             number-mode: "index";
 
                             sort-field: ArtistDetail.sort-field;
@@ -219,8 +200,8 @@ export component ArtistDetailBody inherits Rectangle {
         }
     }
 
-    // The unified vbar over the sub-section and the list, the column-pan hbar and the
-    // wheel routing, all owned by the shared component.
+    // The unified vbar over the sub-section and the list, and the wheel routing, both owned
+    // by the shared component.
     CompositeScrollbars {
         x: 0; y: 0;
         width: 100%; height: 100%;
@@ -231,13 +212,7 @@ export component ArtistDetailBody inherits Rectangle {
         inner-viewport-height: tl.v-viewport-height;
         inner-visible-height: tl.v-visible-height;
         set-inner-offset(o) => { tl.set-v-offset(o); }
-        h-offset: tl.h-offset;
-        h-viewport-width: tl.h-viewport-width;
-        h-visible-width: tl.h-visible-width;
-        set-h-offset(o) => { tl.set-h-offset(o); }
         v-region-y: below-hero.absolute-position.y - root.absolute-position.y;
         v-region-height: below-hero.height;
-        h-region-x: tl.absolute-position.x - root.absolute-position.x;
-        h-region-width: tl.width;
     }
 }

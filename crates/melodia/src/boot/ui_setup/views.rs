@@ -227,6 +227,7 @@ pub fn install_library_settings_and_friends(
     ui::settings::settings_page::install(app, state);
     ui::chips::install(app);
     ui::hero_chips::install(app);
+    ui::track_columns::install(app);
     // The stack is the one surface a language switch can't reach on its own: its rows carry
     // strings Rust resolved once, they outlive every navigation, and the file-watching
     // toggle two cards from the language picker raises one. Wired here rather than inline in
