@@ -113,6 +113,33 @@ fn live() -> &'static Mutex<Option<LiveGeometry>> {
     LIVE_GEOMETRY.get_or_init(|| Mutex::new(None))
 }
 
+/// The window state a `Resized` or `Moved` event consults more than once, read in one pass.
+///
+/// On X11 the client size and the maximized state are each a blocking round trip on the UI
+/// thread, and the readers below asked again for every answer they needed.
+#[derive(Debug, Clone, Copy)]
+pub struct WindowReading {
+    client: WinitPhysicalSize<u32>,
+    scale: f64,
+    maximized: bool,
+    decorated: bool,
+}
+
+impl WindowReading {
+    pub fn take(w: &WinitWindow) -> Self {
+        Self {
+            client: w.inner_size(),
+            scale: w.scale_factor(),
+            maximized: w.is_maximized(),
+            decorated: w.is_decorated(),
+        }
+    }
+
+    pub fn is_maximized(self) -> bool {
+        self.maximized
+    }
+}
+
 /// Update the live mirror from the current winit window state, called by the `Resized` and
 /// `Moved` handlers while the winit window is still alive.
 ///
@@ -123,13 +150,11 @@ fn live() -> &'static Mutex<Option<LiveGeometry>> {
 /// Skips size and position while maximized: winit's `inner_size` there is the maximized
 /// screen size, and persisting it would clobber the user's real restore geometry. The
 /// `maximized` flag itself is still recorded.
-pub fn record(w: &WinitWindow) {
-    let client = w.inner_size();
-    if is_minimized_client(client) {
+pub fn record(w: &WinitWindow, reading: WindowReading) {
+    if is_minimized_client(reading.client) {
         return;
     }
-    let scale = w.scale_factor();
-    let maximized = w.is_maximized();
+    let WindowReading { client, scale, maximized, .. } = reading;
     let inner: WinitLogicalSize<f64> = client.to_logical(scale);
     let outer: Option<WinitLogicalPosition<f64>> =
         w.outer_position().ok().map(|p| p.to_logical(scale));
@@ -160,9 +185,9 @@ pub fn record(w: &WinitWindow) {
 /// Returns what the OS frame adds to the client area, in logical pixels.
 ///
 /// `None` wherever [`measurable_client`] finds no frame to read.
-pub fn frame_allowance(w: &WinitWindow) -> Option<WinitLogicalSize<f32>> {
-    let inner = measurable_client(w)?;
-    Some(allowance_between(w.outer_size(), inner, w.scale_factor()))
+pub fn frame_allowance(w: &WinitWindow, reading: WindowReading) -> Option<WinitLogicalSize<f32>> {
+    let inner = measurable_client(reading)?;
+    Some(allowance_between(w.outer_size(), inner, reading.scale))
 }
 
 /// Returns the part of the OS frame outside the edges it draws, in logical pixels: what the client
@@ -171,17 +196,17 @@ pub fn frame_allowance(w: &WinitWindow) -> Option<WinitLogicalSize<f32>> {
 /// Win32's left, right and bottom are invisible resize borders, and its top is the caption the user
 /// sees, so `top` is always zero. `None` wherever [`measurable_client`] finds no frame to read.
 #[cfg(target_os = "windows")]
-pub fn frame_margins(w: &WinitWindow) -> Option<WinitLogicalInsets<f32>> {
-    let inner = measurable_client(w)?;
+pub fn frame_margins(w: &WinitWindow, reading: WindowReading) -> Option<WinitLogicalInsets<f32>> {
+    let inner = measurable_client(reading)?;
     let outer = ScreenRect { at: w.outer_position().ok()?, size: w.outer_size() };
     let client = ScreenRect { at: w.inner_position().ok()?, size: inner };
-    Some(margins_between(outer, client, w.scale_factor()))
+    Some(margins_between(outer, client, reading.scale))
 }
 
 /// No invisible frame to hand over off Win32: X11 takes a dropped frame out of the window rather
 /// than giving it to the client, and a macOS or Wayland frame has no undrawn edge beside it.
 #[cfg(not(target_os = "windows"))]
-pub fn frame_margins(_: &WinitWindow) -> Option<WinitLogicalInsets<f32>> {
+pub fn frame_margins(_: &WinitWindow, _: WindowReading) -> Option<WinitLogicalInsets<f32>> {
     None
 }
 
@@ -190,10 +215,9 @@ pub fn frame_margins(_: &WinitWindow) -> Option<WinitLogicalInsets<f32>> {
 /// `None` while undecorated, there being no frame; while maximized, where a WM may strip the frame
 /// without the window ever learning it lost one; and while minimized, the outer rect then being the
 /// minimized one.
-fn measurable_client(w: &WinitWindow) -> Option<WinitPhysicalSize<u32>> {
-    let inner = w.inner_size();
-    let framed = w.is_decorated() && !w.is_maximized() && !is_minimized_client(inner);
-    framed.then_some(inner)
+fn measurable_client(reading: WindowReading) -> Option<WinitPhysicalSize<u32>> {
+    let framed = reading.decorated && !reading.maximized && !is_minimized_client(reading.client);
+    framed.then_some(reading.client)
 }
 
 /// Whether a client size is Win32's reading of a minimized window: empty, inside a small outer

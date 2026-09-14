@@ -590,20 +590,27 @@ pub fn write_bar_path(levels: &[f32], strip: StripGeometry, anchor: BarAnchor, o
         let (top, bottom) = (vertical.normalize(top), vertical.normalize(bottom));
         // Lower edge first, then the upper edge back — the winding `waveform::write_path` emits
         // for the same reason, femtovg reading a subpath's signed area to decide solid from hole.
+        // Every edge is axis-aligned, so `H` and `V` name the one coordinate that moves: the
+        // string is formatted every tick and parsed again on every frame it is drawn.
         push_vertex(out, "M", left, bottom);
-        push_vertex(out, " L", right, bottom);
-        push_vertex(out, " L", right, top);
-        push_vertex(out, " L", left, top);
+        push_coordinate(out, " H", right);
+        push_coordinate(out, " V", top);
+        push_coordinate(out, " H", left);
         out.push('Z');
     }
 }
 
 /// One `"<cmd><x> <y>"` vertex.
 fn push_vertex(out: &mut String, command: &str, x: f32, y: f32) {
-    out.push_str(command);
-    push_fixed::<COORD_DECIMALS>(out, x);
+    push_coordinate(out, command, x);
     out.push(' ');
     push_fixed::<COORD_DECIMALS>(out, y);
+}
+
+/// One `"<cmd><value>"` command taking a single coordinate.
+fn push_coordinate(out: &mut String, command: &str, value: f32) {
+    out.push_str(command);
+    push_fixed::<COORD_DECIMALS>(out, value);
 }
 
 #[cfg(test)]

@@ -180,6 +180,50 @@ impl IndexRows {
     }
 }
 
+/// The `[[string]]` model `Wrap.pack-labels` last handed out, kept while a resize leaves the split
+/// as it was, for [`IndexRows`]' reason.
+///
+/// One entry rather than a map: there is one caller, and its labels change only with the history.
+#[derive(Default)]
+struct PackedLabels {
+    last: RefCell<Option<Packed>>,
+}
+
+struct Packed {
+    labels: Vec<SharedString>,
+    shape: Vec<usize>,
+    model: ModelRc<ModelRc<SharedString>>,
+}
+
+impl PackedLabels {
+    fn rows(
+        &self,
+        labels: Vec<SharedString>,
+        avail_width: f32,
+        chrome: f32,
+    ) -> ModelRc<ModelRc<SharedString>> {
+        // Wraps freely: the one caller is a page that scrolls, so there is no band height to
+        // drop a row against.
+        let rows = pack_rows(&labels, avail_width, None, |l: &SharedString| {
+            estimated_chip_width(l, chrome)
+        });
+        let shape = split_shape(&rows);
+
+        // Labels by content, not by model: the history arrives as a fresh model on every change,
+        // and a reorder keeps both the length and the shape.
+        if let Some(last) = self.last.borrow().as_ref()
+            && last.labels == labels
+            && last.shape == shape
+        {
+            return last.model.clone();
+        }
+
+        let model = rows_to_model(rows);
+        *self.last.borrow_mut() = Some(Packed { labels, shape, model: model.clone() });
+        model
+    }
+}
+
 /// Wire the two row splits. Call once during startup.
 pub fn install(ui: &AppWindow) {
     let wrap = ui.global::<Wrap>();
@@ -187,14 +231,9 @@ pub fn install(ui: &AppWindow) {
     let index_rows = IndexRows::default();
     wrap.on_chunk_indices(move |count, per_row| index_rows.rows(count, per_row));
 
-    // Wraps freely: the one caller is a page that scrolls, so there is no band height to
-    // drop a row against.
-    wrap.on_pack_labels(|labels, avail_width, chrome| {
-        let labels: Vec<SharedString> = labels.iter().collect();
-        let rows = pack_rows(&labels, avail_width, None, |l: &SharedString| {
-            estimated_chip_width(l, chrome)
-        });
-        rows_to_model(rows)
+    let packed_labels = PackedLabels::default();
+    wrap.on_pack_labels(move |labels, avail_width, chrome| {
+        packed_labels.rows(labels.iter().collect(), avail_width, chrome)
     });
 }
 

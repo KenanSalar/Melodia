@@ -203,13 +203,14 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                 // `app.run()` has returned.
                 let (maximized, frame, margins) = w
                     .with_winit_window(|ww| {
-                        geometry::record(ww);
+                        let reading = geometry::WindowReading::take(ww);
+                        geometry::record(ww, reading);
                         // One-shot, on the first (synthetic, post-map) `Resized` only.
                         geometry::ensure_on_screen(ww);
                         (
-                            ww.is_maximized(),
-                            geometry::frame_allowance(ww),
-                            geometry::frame_margins(ww),
+                            reading.is_maximized(),
+                            geometry::frame_allowance(ww, reading),
+                            geometry::frame_margins(ww, reading),
                         )
                     })
                     .unwrap_or((false, None, None));
@@ -235,7 +236,9 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
             // position, so `Moved` rarely fires there — fine, position restore is a
             // no-op on Wayland anyway.
             WindowEvent::Moved(_) => {
-                let _ = w.with_winit_window(geometry::record);
+                let _ = w.with_winit_window(|ww| {
+                    geometry::record(ww, geometry::WindowReading::take(ww));
+                });
                 // A move drag resizes nothing, so the client area is never invalidated and no
                 // `WM_PAINT` starts the redraw chain the arm below rides.
                 #[cfg(target_os = "windows")]

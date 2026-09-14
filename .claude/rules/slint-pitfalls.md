@@ -58,8 +58,8 @@ this file is what builds, looks right, and is wrong.
   rebuilds the whole repeater, trackers and tooltip layers included. Symptom: a page that stutters
   through a resize drag while nothing on it visibly changes, because every width feeding an argument
   re-ran the call. Cure: hand back the *same* `ModelRc` for the same answer. `ui::chips::IndexRows`
-  memoizes the settings strips by row shape. `Wrap.pack-labels`, behind Recent Searches, still
-  builds a fresh model per call.
+  memoizes the settings strips by row shape, and `ui::chips::PackedLabels` does the same for
+  `Wrap.pack-labels` behind Recent Searches, keyed on the labels and the split they packed into.
 
 - **A shared component may not `animate` a brush its host hands it — it cannot tell an eased
   input from a stepped one, so it eases a *float* and lets the brush track its source.** A host
@@ -546,6 +546,11 @@ this file is what builds, looks right, and is wrong.
   at the paint. `Rectangle` already defaults to transparent, so the binding is pure cost; delete
   it rather than spelling out the default. Only matters at scale, a repeater's worth of them per
   frame; noise on a one-off container.
+  **A fill that is only sometimes transparent pays too, and a rounded one pays twice**:
+  `draw_border_rectangle` builds its fill path and its border path before it checks either paint,
+  so a per-row fill painted only on hover or selection belongs behind an `if`, not a ternary ending
+  in `transparent` (the track row's pill). Only where nothing eases the brush, since an `if` has no
+  fade-out to play.
 
 - **A gradient stop inset from the extents drops FemtoVG's two-stop path and costs a slab of the
   GPU driver's buffer pool.** `femtovg`'s `GradientColors::from_stops` answers the cheap `TwoStop`

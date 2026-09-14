@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use sqlx::AssertSqlSafe;
 
 use crate::database::DbPool;
-use melodia_core::entities::{playlist, playlist_item, track};
+use melodia_core::entities::{playlist, track};
 use melodia_core::error::AppError;
 
 pub async fn create_playlist(
@@ -289,8 +289,8 @@ pub async fn reorder_playlist_track(
 ) -> Result<(), AppError> {
     let mut tx = db.write().begin().await?;
 
-    let items = sqlx::query_as::<_, playlist_item::PlaylistItem>(
-        "SELECT * FROM playlist_items WHERE playlist_id = ? ORDER BY position ASC",
+    let mut items: Vec<(i64, i32)> = sqlx::query_as(
+        "SELECT id, position FROM playlist_items WHERE playlist_id = ? ORDER BY position, id",
     )
     .bind(playlist_id)
     .fetch_all(&mut *tx)
@@ -305,12 +305,21 @@ pub async fn reorder_playlist_track(
         return Err(AppError::NotFound("Invalid position index".to_owned()));
     }
 
-    let mut ids: Vec<i64> = items.iter().map(|i| i.id).collect();
-    let moved = ids.remove(from_idx);
-    ids.insert(to_idx, moved);
+    let moved = items.remove(from_idx);
+    items.insert(to_idx, moved);
 
-    // Batch UPDATE with CASE expression — single query instead of N
-    batch_update_positions(&mut tx, &ids).await?;
+    // Only the rows whose index moved, so a drag writes the span it crossed rather than the whole
+    // playlist. A gap left under a hard-deleted track makes every row after it differ, and the
+    // rewrite closes it.
+    let changed: Vec<(i64, i32)> = items
+        .iter()
+        .enumerate()
+        .filter_map(|(index, &(id, position))| {
+            let index = i32::try_from(index).unwrap_or(i32::MAX);
+            (position != index).then_some((id, index))
+        })
+        .collect();
+    batch_update_positions_pairs(&mut tx, &changed).await?;
 
     tx.commit().await?;
     Ok(())
@@ -337,27 +346,9 @@ async fn renumber_playlist_positions_tx(
     Ok(())
 }
 
-/// Batch UPDATE positions using a CASE expression — single query instead of N.
-/// `ids` contains item IDs in their desired position order (index = new position).
-async fn batch_update_positions(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    ids: &[i64],
-) -> Result<(), AppError> {
-    if ids.is_empty() {
-        return Ok(());
-    }
-
-    let pairs: Vec<(i64, i32)> = ids
-        .iter()
-        .enumerate()
-        .map(|(pos, &id)| (id, i32::try_from(pos).unwrap_or(i32::MAX)))
-        .collect();
-    batch_update_positions_pairs(tx, &pairs).await
-}
-
 /// Batch UPDATE positions from (id, position) pairs using a CASE expression.
 ///
-/// Chunked because a reorder hands over the whole playlist, and a pair spends three binds: the
+/// Chunked because a reorder can hand over the whole playlist, and a pair spends three binds: the
 /// `WHEN ? THEN ?` of the `CASE`, then the id again in the `IN` list. Splitting is safe here, the
 /// positions being absolute and each chunk touching a disjoint id set.
 async fn batch_update_positions_pairs(

@@ -251,8 +251,8 @@ async fn positions(db: &crate::database::DbPool, playlist_id: i64) -> Result<Vec
     Ok(rows.into_iter().map(|(p,)| p).collect())
 }
 
-/// **Nothing in this tree reads `playlist_items.position` directly**, so the renumber that runs
-/// after a removal was pinned only by the *order* rows come back in — which a gapped sequence
+/// **The reads order by `playlist_items.position` rather than showing it**, so the renumber that
+/// runs after a removal was pinned only by the *order* rows come back in — which a gapped sequence
 /// satisfies exactly as well. A gap is invisible until an insert lands on a position two rows
 /// already share.
 #[tokio::test]

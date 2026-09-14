@@ -255,6 +255,9 @@ export component PlaylistMosaicPicker inherits Rectangle {
                                 property <float> hover-t:
                                     cand-touch.has-hover && cand.slot < 0 ? 1.0 : 0.0;
                                 animate hover-t { duration: Theme.dur-fast; easing: ease-out; }
+                                // The selection ring's fade, the same way for the same reason.
+                                property <float> ring-t: cand.slot >= 0 ? 1.0 : 0.0;
+                                animate ring-t { duration: Theme.dur-fast; easing: ease-out; }
 
                                 ArtworkImage {
                                     artwork-path: path;
@@ -276,21 +279,19 @@ export component PlaylistMosaicPicker inherits Rectangle {
                                     stroke-color: Theme.overlay1.transparentize(1.0 - cand.hover-t);
                                 }
 
-                                // Selection ring + badge, always mounted for the
-                                // same reason — an `if` would unmount on
-                                // deselect and skip the fade out.
-                                Rectangle {
+                                // Selection ring + badge, mounted until the fade-out
+                                // lands rather than for as long as the tile is shown:
+                                // gated on `slot`, the ring would vanish on deselect.
+                                if cand.ring-t > 0: Rectangle {
                                     width: 100%;
                                     height: 100%;
-                                    opacity: cand.slot >= 0 ? 1.0 : 0.0;
-                                    animate opacity { duration: Theme.dur-fast; easing: ease-out; }
 
                                     Rectangle {
                                         x: 0;
                                         y: 0;
                                         width: 100%;
                                         height: 100%;
-                                        background: Theme.accent.with-alpha(0.18);
+                                        background: Theme.accent.with-alpha(0.18 * cand.ring-t);
                                     }
 
                                     EdgeOutline {
@@ -298,7 +299,7 @@ export component PlaylistMosaicPicker inherits Rectangle {
                                         height: 100%;
                                         radius: Theme.radius-sm;
                                         stroke-width: 2px;
-                                        stroke-color: Theme.accent;
+                                        stroke-color: Theme.accent.transparentize(1.0 - cand.ring-t);
                                     }
 
                                     Rectangle {
@@ -307,12 +308,12 @@ export component PlaylistMosaicPicker inherits Rectangle {
                                         x: 4px;
                                         y: 4px;
                                         border-radius: 11px;
-                                        background: Theme.accent;
+                                        background: Theme.accent.transparentize(1.0 - cand.ring-t);
                                         // Empty when deselected; only ever seen
                                         // during the ring's fade-out.
                                         Text {
                                             text: cand.slot >= 0 ? (cand.slot + 1) + "" : "";
-                                            color: Theme.accent-text;
+                                            color: Theme.accent-text.transparentize(1.0 - cand.ring-t);
                                             font-size: 12px;
                                             font-weight: 700;
                                             horizontal-alignment: center;

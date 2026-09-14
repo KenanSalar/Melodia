@@ -154,7 +154,6 @@ export component TrackListRowItem inherits Rectangle {
     min-height: (root.columns.show_artwork ? Theme.row-h : Theme.row-h-compact) + Theme.row-gap;
     max-height: (root.columns.show_artwork ? Theme.row-h : Theme.row-h-compact) + Theme.row-gap;
     vertical-stretch: 0;
-    background: transparent;
 
     // Owns the cross-axis sizing of `chrome`, with `padding-bottom` carving off the inter-row gap.
     // Without the layout, a free-positioned `width: 100%` chrome under a free Rectangle forms the
@@ -179,8 +178,9 @@ export component TrackListRowItem inherits Rectangle {
         // The pill. Per-corner radii merge contiguous selected rows into one; an unselected row
         // always rounds both ends, so a hover-only pill keeps the shape of a single-row one.
         // Selection is a faint accent overlay that brightens on hover; an unselected row hovers to
-        // `surface0`.
-        Rectangle {
+        // `surface0`. Mounted only while it paints, since a transparent rounded rectangle still
+        // builds its paths on every frame, and a list at rest is almost all such rows.
+        if root.selected || touch.has-hover: Rectangle {
             x: 0;
             y: 0;
             width: 100%;
@@ -193,7 +193,7 @@ export component TrackListRowItem inherits Rectangle {
                 ? (touch.has-hover
                     ? Theme.accent.with-alpha(0.14)
                     : Theme.accent.with-alpha(0.08))
-                : (touch.has-hover ? Theme.surface0 : transparent);
+                : Theme.surface0;
         }
 
         // `touch` **wraps** the cells so `cb-touch` and `fav-touch` are real descendants.

@@ -134,7 +134,7 @@ fn an_undecorated_window_gives_no_reading() {
 
     assert!(!body.is_empty(), "no `{FN}` found: the walk is broken, not the code");
     assert!(
-        body.contains("is_decorated()"),
+        body.contains("reading.decorated"),
         "`measurable_client` passes an undecorated window, whose zero reading replaces the frame \
          the miniplayer's exit edge allows for:\n{body}"
     );
@@ -150,7 +150,7 @@ fn every_frame_reading_goes_through_the_one_gate() {
 
     let ungated: Vec<&str> = READERS
         .into_iter()
-        .filter(|reader| !block_after(&code, reader).contains("measurable_client(w)?"))
+        .filter(|reader| !block_after(&code, reader).contains("measurable_client(reading)?"))
         .collect();
 
     assert!(ungated.is_empty(), "these frame readings skip `measurable_client`: {ungated:?}");
