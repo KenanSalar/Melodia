@@ -149,10 +149,6 @@ export component TrackListHeader inherits Rectangle {
     min-height: 32px;
     max-height: 32px;
     vertical-stretch: 0;
-    background: Theme.base;
-    border-width: 1px;
-    border-color: Theme.border;
-    border-radius: Theme.radius-md;
 
     if root.columns.show_number: HeaderCell {
         x: root.layout.number_x;
@@ -286,5 +282,15 @@ export component TrackListHeader inherits Rectangle {
         active-dir: root.sort-dir;
         sortable: root.sortable;
         clicked => { root.sort-clicked(self.field); }
+    }
+
+    // Slint borders are all-or-nothing, so the one edge kept is its own element; last, so no
+    // cell's hover fill covers it.
+    Rectangle {
+        x: 0;
+        y: root.height - self.height;
+        width: root.width;
+        height: 1px;
+        background: Theme.border;
     }
 }

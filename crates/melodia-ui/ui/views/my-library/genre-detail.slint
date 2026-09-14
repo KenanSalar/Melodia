@@ -16,12 +16,11 @@ export component GenreDetailBody inherits Rectangle {
         clicked => { MyLibrary.blur-search-tick += 1; }
     }
 
-    // Left/right/top only — a root bottom pad sits outside the list's viewport and reads
-    // as a dead strip.
+    // Sides only: the header sits flush under the band, and a root bottom pad sits outside
+    // the list's viewport and reads as a dead strip.
     VerticalLayout {
         padding-left: Theme.pad-lg;
         padding-right: Theme.pad-lg;
-        padding-top: Theme.pad-lg;
 
         tl := TrackList {
             horizontal-stretch: 1;

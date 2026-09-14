@@ -149,11 +149,6 @@ export component ArtistDetailBody inherits Rectangle {
                         vertical-stretch: 0;
                         padding-left: Theme.pad-lg;
                         padding-right: Theme.pad-lg;
-                        // Only contributed **when the sub-section is absent** — the user
-                        // having filtered every album out, say. It supplies its own bottom
-                        // padding when mounted, and doubling the gap disconnects the table
-                        // from its header.
-                        padding-top: ArtistDetail.albums.length > 0 ? 0px : Theme.pad-lg;
 
                         tl := TrackList {
                             horizontal-stretch: 1;

@@ -15,13 +15,11 @@ export component AlbumDetailBody inherits Rectangle {
         clicked => { MyLibrary.blur-search-tick += 1; }
     }
 
-    // Insets left/right/top and never the bottom — a root bottom pad sits *outside* the
-    // list's viewport and reads as a dead strip. Uniform on the three sides it can be,
-    // now that the full-bleed hero has moved into the band.
+    // Insets the sides only: the header sits flush under the band, and a root bottom pad sits
+    // *outside* the list's viewport and reads as a dead strip.
     VerticalLayout {
         padding-left: Theme.pad-lg;
         padding-right: Theme.pad-lg;
-        padding-top: Theme.pad-lg;
 
         tl := TrackList {
             horizontal-stretch: 1;

@@ -73,6 +73,8 @@ a divider.
   reads `layout` (header and row both report item-intrinsic or constant info).
 - [ ] **Manual test** (Kenan): resize from maximized to the miniplayer threshold with the sidebar
   collapsed and wide; drag every divider both ways; toggle columns; restart; Playlist Detail
-  reorder; Artist Detail and Browse scrolling; Search's Songs section.
+  reorder; Artist Detail and Browse scrolling; Search's Songs section. The header is frameless
+  now, a bottom rule only, and sits flush under the band on all four details (Artist with and
+  without album credits) and under the Favorites and Recently Played heroes.
 - [ ] **Phase 2**: `resolve`/`drag` unit tests, pins against the scroller and layout coming back,
   and the `CLAUDE.md` / `ui-patterns.md` / `slint-pitfalls.md` updates.
