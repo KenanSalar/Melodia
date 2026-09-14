@@ -3,7 +3,9 @@
 //! Lets a user back up playlists to portable `.m3u8` files so they survive a
 //! database wipe (OS reinstall), and import them back into a fresh library.
 //! One playlist exports as a bare `.m3u8`; several as one zip holding a
-//! `.m3u8` per playlist, which import reads back whole. Interoperates with
+//! `.m3u8` per playlist, which import reads back whole. Never several in one
+//! `.m3u8`: the format carries one `#PLAYLIST:` per file, so every other player
+//! and our own parser would read them as one merged list. Interoperates with
 //! other players: our writer emits standard Extended-M3U8 plus a
 //! `#MELODIA-HASH` extension, and our parser tolerantly reads foreign M3U/M3U8
 //! files.
@@ -18,7 +20,6 @@ use std::ffi::OsStr;
 use std::path::Path;
 
 use chrono::{DateTime, Local, NaiveDateTime};
-use serde::Serialize;
 
 use crate::state::AppState;
 use melodia_core::error::{AppError, describe};
@@ -48,14 +49,14 @@ const WINDOWS_RESERVED: &[&str] = &[
     "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
 ];
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Debug)]
 pub struct ExportPlaylistsResult {
     pub exported: u32,
     /// Ticked playlists that couldn't be read, left out so the rest still export.
     pub failed: u32,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Debug)]
 pub struct ImportPlaylistResult {
     pub playlist_id: i64,
     pub playlist_name: String,
@@ -66,7 +67,7 @@ pub struct ImportPlaylistResult {
 }
 
 /// What one picked file added. A playlist file adds one playlist, an archive as many as it holds.
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Debug, Default)]
 pub struct ImportFileResult {
     pub imported: u32,
     /// Entries matched to a library track, by path or by hash.
@@ -188,7 +189,8 @@ async fn prepare_export(db: &DbPool, playlist_id: i64) -> Result<(String, String
 /// tracks, and filled in file order. A playlist with no entries at all is refused rather than
 /// created empty from a garbage file; one whose entries simply don't match any library track still
 /// lands and reports the misses. For an archive that refusal is one skipped playlist, and only an
-/// archive that won't open or expands past [`archive::MAX_TEXT_BYTES`] fails whole.
+/// archive that won't open, holds no playlist files, or expands past [`archive::MAX_TEXT_BYTES`]
+/// fails whole.
 pub async fn import_playlists_from_file(
     state: &AppState,
     src: &Path,
@@ -214,6 +216,9 @@ async fn read_archive(db: &DbPool, src: &Path) -> Result<ImportFileResult, AppEr
     let contents = tokio::task::spawn_blocking(move || archive::read(std::fs::File::open(&path)?))
         .await
         .map_err(AppError::io_source)??;
+    if contents.entries.is_empty() && contents.unreadable == 0 {
+        return Err(AppError::Validation("No playlist files found in archive".to_owned()));
+    }
 
     let beside = src.parent().unwrap_or_else(|| Path::new(""));
     let mut result =

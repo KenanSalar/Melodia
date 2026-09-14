@@ -74,16 +74,11 @@ pub fn read<R: Read + Seek>(reader: R) -> Result<Contents, AppError> {
             continue;
         }
 
-        let (name, bytes) = match read_entry(&mut archive, index, remaining) {
-            Ok(Some(entry)) => entry,
-            Ok(None) => continue,
-            Err(e) => {
-                log::warn!("playlist archive: entry {index} won't read: {}", describe(&e));
-                contents.unreadable = contents.unreadable.saturating_add(1);
-                continue;
-            }
-        };
+        let mut bytes = Vec::new();
+        let entry = read_entry(&mut archive, index, remaining, &mut bytes);
 
+        // Charged before the result is looked at: an entry that inflates and then fails its
+        // checksum has cost the work all the same.
         let read = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
         if read > remaining {
             return Err(AppError::Validation(format!(
@@ -91,6 +86,16 @@ pub fn read<R: Read + Seek>(reader: R) -> Result<Contents, AppError> {
             )));
         }
         remaining -= read;
+
+        let name = match entry {
+            Ok(Some(name)) => name,
+            Ok(None) => continue,
+            Err(e) => {
+                log::warn!("playlist archive: entry {index} won't read: {}", describe(&e));
+                contents.unreadable = contents.unreadable.saturating_add(1);
+                continue;
+            }
+        };
 
         match String::from_utf8(bytes) {
             Ok(text) => contents.entries.push(Entry { name, text }),
@@ -103,25 +108,27 @@ pub fn read<R: Read + Seek>(reader: R) -> Result<Contents, AppError> {
     Ok(contents)
 }
 
-/// Reads one entry through one byte past `limit`, so the caller can tell an entry that stops on
-/// the budget from one that runs over it.
+/// Reads one entry into `bytes` through one byte past `limit`, so the caller can tell an entry that
+/// stops on the budget from one that runs over it. A read failing partway leaves what it got in
+/// `bytes`.
 ///
-/// `None` for a directory, and for a name that climbs out of the archive or is absolute: that
-/// name would otherwise pick the folder its playlist's relative paths resolve against.
+/// `None` for a directory. A name that climbs out of the archive or is absolute is an error, so it
+/// is counted like any unreadable entry: used, it would pick the folder its playlist's relative
+/// paths resolve against.
 fn read_entry<R: Read + Seek>(
     archive: &mut ZipArchive<R>,
     index: usize,
     limit: u64,
-) -> Result<Option<(String, Vec<u8>)>, AppError> {
+    bytes: &mut Vec<u8>,
+) -> Result<Option<String>, AppError> {
     let file = archive.by_index(index).map_err(AppError::io_source)?;
     if file.is_dir() {
         return Ok(None);
     }
     let Some(name) = file.enclosed_name() else {
-        return Ok(None);
+        return Err(AppError::Validation(format!("Entry {index} is named outside the archive")));
     };
 
-    let mut bytes = Vec::new();
-    file.take(limit.saturating_add(1)).read_to_end(&mut bytes)?;
-    Ok(Some((name.to_string_lossy().into_owned(), bytes)))
+    file.take(limit.saturating_add(1)).read_to_end(bytes)?;
+    Ok(Some(name.to_string_lossy().into_owned()))
 }
