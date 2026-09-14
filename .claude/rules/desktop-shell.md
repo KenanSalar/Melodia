@@ -140,8 +140,13 @@ the OS owns has to be attached late or not at all on at least one platform.
   ground's brush. A surface spelling the ternary again, or `Theme.mantle` where the chrome shows,
   leaves a strip that stays dark on an unfocused window.
 
-- **Always-on-top (Linux)** — D-Bus to KWin or GNOME (`window-calls` ext.); bare GNOME falls back
-  to native decorations.
+- **Always-on-top** is winit's window level on Windows, macOS and X11, and D-Bus to KWin or GNOME
+  (`window-calls` ext.) on Wayland; bare GNOME falls back to native decorations.
+  **Nothing done through `with_winit_window` before `app.show()` reaches the OS.** Slint creates
+  the winit window only once the loop runs, the accessor answers `None` until then, and a
+  `let _ =` swallows that. The restored pin went that way and painted an active icon over an
+  unpinned window. Wait with `winit_window().await`, as `window_chrome::seed_always_on_top` does,
+  or ride the attributes hook, as maximized does.
 
 - **OS file drag-and-drop rides the vendored winit fork** — stock 0.30.13 has no `wl_data_device`.
   `winit/` is 0.30.13 + 3 commits (PR #4009, `WindowId` fix, URI percent-decoding, cfg-gated to

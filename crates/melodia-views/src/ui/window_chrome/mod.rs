@@ -181,9 +181,11 @@ pub fn install(app: &AppWindow, state: &AppState) -> Result<(), AppError> {
 }
 
 /// Push the cached capability and persisted pinned state into `WindowChrome`, and
-/// re-apply at the OS level if the window was pinned last time. The Linux re-apply
-/// waits, so `KWin` / GNOME have registered the window — `MakeAbove` against a
-/// not-yet-shown one quietly fails on bare `window-calls`.
+/// re-apply at the OS level if the window was pinned last time. Both re-applies wait.
+/// This runs before `app.show()`, and the winit window only exists once the event loop
+/// creates it, so the native one waits for that. The Linux one waits so `KWin` / GNOME
+/// have registered the window: `MakeAbove` against a not-yet-shown one quietly fails on
+/// bare `window-calls`.
 fn seed_always_on_top(app: &AppWindow, state: &AppState, persisted_pinned: bool) {
     let chrome = app.global::<melodia_ui::WindowChrome>();
     chrome.set_always_on_top_supported(state.always_on_top.supported);
@@ -195,9 +197,16 @@ fn seed_always_on_top(app: &AppWindow, state: &AppState, persisted_pinned: bool)
 
     match state.always_on_top.method {
         AlwaysOnTopMethod::Native => {
-            let _ = app.window().with_winit_window(|w| {
-                w.set_window_level(WindowLevel::AlwaysOnTop);
-            });
+            let weak = app.as_weak();
+            if let Err(e) = slint::spawn_local(async move {
+                let Some(ui) = weak.upgrade() else { return };
+                match ui.window().winit_window().await {
+                    Ok(window) => window.set_window_level(WindowLevel::AlwaysOnTop),
+                    Err(e) => log::warn!("startup always_on_top re-apply: {e}"),
+                }
+            }) {
+                log::warn!("startup always_on_top re-apply: schedule: {e}");
+            }
         }
         #[cfg(target_os = "linux")]
         AlwaysOnTopMethod::KwinDbus | AlwaysOnTopMethod::GnomeExtension => {
@@ -223,6 +232,9 @@ fn seed_always_on_top(app: &AppWindow, state: &AppState, persisted_pinned: bool)
     }
 }
 
+#[cfg(test)]
+#[path = "tests/always_on_top_tests.rs"]
+mod always_on_top_tests;
 #[cfg(test)]
 #[path = "tests/respawn_tests.rs"]
 mod tests;

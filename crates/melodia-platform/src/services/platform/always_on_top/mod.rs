@@ -110,7 +110,7 @@ fn detect_capability_linux() -> AlwaysOnTopCapability {
 
 /// Apply the user's pinned choice. The `Native` branch is intentionally a
 /// no-op here — winit's `Window::set_window_level` must run on the UI
-/// thread, so callbacks.rs handles that synchronously before invoking this.
+/// thread, so `window_chrome::controls` handles that synchronously before invoking this.
 /// The Linux branches do D-Bus work via the per-backend modules (each one
 /// already drops to `spawn_blocking`, so calling this from the runtime is
 /// fine). `Unsupported` returns an error so the UI can revert its
