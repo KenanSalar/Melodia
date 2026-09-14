@@ -125,7 +125,7 @@ export global Dialog {
         } else if (root.kind == "remove-playlist-selected") {
             PlaylistDetail.remove-selected();
         } else if (root.kind == "export-playlists") {
-            // Rust reads the ticked rows, asks where to write them, writes the files.
+            // Rust reads the ticked rows, asks where to save them, writes them.
             Playlists.export-selected-playlists();
         } else if (root.kind == "add-to-playlist") {
             // Rust adds `pending-track-ids` into every ticked enabled row, then toasts.

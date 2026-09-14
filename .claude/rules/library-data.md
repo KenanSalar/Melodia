@@ -190,7 +190,11 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   re-ingest of any of them puts it back. Select the whole release, or expect it back.
 
 - **Playlist import/export = Extended M3U8** (`crates/melodia-app/src/library/playlist_files.rs` + the pure `m3u`
-  submodule; hand-rolled writer/parser, no crate). One `.m3u8` per playlist; writer emits
+  submodule, hand-rolled writer/parser, and the `archive` submodule, the one place the `zip` crate
+  is named). Each playlist is its own `.m3u8`: one ticked playlist saves bare, several as a single
+  `.zip` of them, both through a save dialog, and import takes either without the zip being
+  extracted. **Never several playlists in one `.m3u8`**: the format has one `#PLAYLIST:` per file,
+  so every other player and our own parser read that as one merged list. Writer emits
   `#EXTM3U`/`#PLAYLIST:`/`#EXTINF:` + a custom `#MELODIA-HASH:<blake3>` line + an absolute native
   path, parser tolerantly ignores unknown `#` comments and a leading BOM. Import is
   **skip-and-report**: re-match each entry by `file_path` then BLAKE3 `file_hash`, always **create

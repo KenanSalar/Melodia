@@ -1240,6 +1240,9 @@ msgstr "Επιλέξτε λίστες για εξαγωγή."
 msgid "No playlists to export"
 msgstr "Δεν υπάρχουν λίστες για εξαγωγή"
 
+msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
+msgstr "Πολλές λίστες αποθηκεύονται ως ένα αρχείο .zip, το οποίο μπορείτε να εισαγάγετε απευθείας χωρίς αποσυμπίεση."
+
 msgid "Select all"
 msgstr "Επιλογή όλων"
 

@@ -58,6 +58,11 @@ pub fn write_json_sync<T: Serialize>(path: &Path, value: &T) -> AppResult<()> {
 /// [`write_json_sync`]'s plain-text sibling, for M3U export. Bytes go out verbatim — the caller
 /// owns line endings and the trailing newline.
 pub fn write_text_sync(path: &Path, text: &str) -> AppResult<()> {
+    write_bytes_sync(path, text.as_bytes())
+}
+
+/// [`write_text_sync`] for a payload that isn't text, such as a playlist archive built in memory.
+pub fn write_bytes_sync(path: &Path, bytes: &[u8]) -> AppResult<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -65,7 +70,7 @@ pub fn write_text_sync(path: &Path, text: &str) -> AppResult<()> {
     let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
     {
         let mut writer = BufWriter::new(tmp.as_file_mut());
-        writer.write_all(text.as_bytes())?;
+        writer.write_all(bytes)?;
         writer.flush()?;
     }
     tmp.persist(path).map_err(|e| AppError::Io(e.error))?;

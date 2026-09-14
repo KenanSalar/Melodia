@@ -1240,6 +1240,9 @@ msgstr "Dışa aktarılacak çalma listelerini seçin."
 msgid "No playlists to export"
 msgstr "Dışa aktarılacak çalma listesi yok"
 
+msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
+msgstr "Birden fazla çalma listesi tek bir .zip dosyası olarak kaydedilir; bu dosyayı arşivden çıkarmadan doğrudan içe aktarabilirsiniz."
+
 msgid "Select all"
 msgstr "Tümünü seç"
 

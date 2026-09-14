@@ -159,22 +159,11 @@ fn sanitize_stem_caps_length() {
 }
 
 #[test]
-fn unique_filename_disambiguates_collisions() -> Result<(), AppError> {
-    let dir = tempfile::tempdir()?;
+fn unique_entry_name_disambiguates_collisions() {
     let mut used: HashSet<String> = HashSet::new();
-    assert_eq!(unique_filename(dir.path(), "Road", &mut used), "Road.m3u8");
-    assert_eq!(unique_filename(dir.path(), "Road", &mut used), "Road (2).m3u8");
-    assert_eq!(unique_filename(dir.path(), "Road", &mut used), "Road (3).m3u8");
-    Ok(())
-}
-
-#[test]
-fn unique_filename_avoids_existing_files() -> Result<(), AppError> {
-    let dir = tempfile::tempdir()?;
-    std::fs::write(dir.path().join("Mix.m3u8"), b"x")?;
-    let mut used: HashSet<String> = HashSet::new();
-    assert_eq!(unique_filename(dir.path(), "Mix", &mut used), "Mix (2).m3u8");
-    Ok(())
+    assert_eq!(unique_entry_name("Road", &mut used), "Road.m3u8");
+    assert_eq!(unique_entry_name("Road", &mut used), "Road (2).m3u8");
+    assert_eq!(unique_entry_name("Road", &mut used), "Road (3).m3u8");
 }
 
 /// A pool whose three rows live under `dir`, joined rather than spelled.
@@ -212,22 +201,30 @@ async fn titles_in(db: &DbPool, playlist_id: i64) -> Result<Vec<String>, AppErro
         .collect())
 }
 
+/// The playlist entries an archive at `path` holds, in archive order.
+fn archived(path: &Path) -> Result<Vec<archive::Entry>, AppError> {
+    Ok(archive::read(std::fs::File::open(path)?)?.entries)
+}
+
+fn names(entries: &[archive::Entry]) -> Vec<&str> {
+    entries.iter().map(|entry| entry.name.as_str()).collect()
+}
+
 #[tokio::test]
 async fn an_exported_playlist_lands_under_a_sanitized_name() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
     let (db, ids) = seed_under(tmp.path()).await?;
     let playlist_id = playlist_with_tracks(&db, "Rock/Roll: Best?", &ids).await?;
 
-    let out = tmp.path().join("exported");
-    std::fs::create_dir(&out)?;
-    let result = write_playlists(&db, &[playlist_id], &out).await?;
+    let out = tmp.path().join("exported.zip");
+    let result = write_archive(&db, &[playlist_id], &out, NaiveDateTime::default()).await?;
 
     assert_eq!(result.exported, 1);
-    assert!(result.failed.is_empty(), "got: {:?}", result.failed);
-    let written = out.join("Rock_Roll_ Best_.m3u8");
-    assert!(written.exists(), "expected {}", written.display());
+    assert_eq!(result.failed, 0);
+    let entries = archived(&out)?;
+    assert_eq!(names(&entries), ["Rock_Roll_ Best_.m3u8"]);
 
-    let text = std::fs::read_to_string(&written)?;
+    let text = &entries[0].text;
     assert!(text.starts_with("#EXTM3U\n"));
     assert!(
         text.contains("#PLAYLIST:Rock/Roll: Best?"),
@@ -236,8 +233,8 @@ async fn an_exported_playlist_lands_under_a_sanitized_name() -> Result<(), AppEr
     Ok(())
 }
 
-/// The batch de-duplicates against itself, not just against what is already on disk, so two
-/// playlists the user named differently cannot end up as one file that only holds the second.
+/// The batch de-duplicates against itself, so two playlists the user named differently cannot
+/// end up as one entry that only holds the second.
 #[tokio::test]
 async fn two_playlists_that_sanitize_alike_get_separate_files() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
@@ -245,18 +242,16 @@ async fn two_playlists_that_sanitize_alike_get_separate_files() -> Result<(), Ap
     let first = playlist_with_tracks(&db, "A/B", &ids).await?;
     let second = playlist_with_tracks(&db, "A:B", &ids).await?;
 
-    let out = tmp.path().join("exported");
-    std::fs::create_dir(&out)?;
-    let result = write_playlists(&db, &[first, second], &out).await?;
+    let out = tmp.path().join("exported.zip");
+    let result = write_archive(&db, &[first, second], &out, NaiveDateTime::default()).await?;
 
     assert_eq!(result.exported, 2);
-    assert!(out.join("A_B.m3u8").exists());
-    assert!(out.join("A_B (2).m3u8").exists());
+    assert_eq!(names(&archived(&out)?), ["A_B.m3u8", "A_B (2).m3u8"]);
     Ok(())
 }
 
-/// Export is a batch over a multi-select, so one bad id is a line in the report rather than a
-/// reason to lose the playlists beside it.
+/// Export is a batch over a multi-select, so one bad id is counted rather than a reason to lose
+/// the playlists beside it.
 #[tokio::test]
 async fn a_playlist_that_cannot_be_read_is_reported_without_stopping_the_batch()
 -> Result<(), AppError> {
@@ -264,18 +259,12 @@ async fn a_playlist_that_cannot_be_read_is_reported_without_stopping_the_batch()
     let (db, ids) = seed_under(tmp.path()).await?;
     let playlist_id = playlist_with_tracks(&db, "Kept", &ids).await?;
 
-    let out = tmp.path().join("exported");
-    std::fs::create_dir(&out)?;
-    let result = write_playlists(&db, &[playlist_id, 9_999], &out).await?;
+    let out = tmp.path().join("exported.zip");
+    let result = write_archive(&db, &[playlist_id, 9_999], &out, NaiveDateTime::default()).await?;
 
     assert_eq!(result.exported, 1, "the readable playlist still writes");
-    assert_eq!(result.failed.len(), 1);
-    assert!(
-        result.failed[0].0.contains("9999"),
-        "the report has to name which one failed: {:?}",
-        result.failed
-    );
-    assert!(out.join("Kept.m3u8").exists());
+    assert_eq!(result.failed, 1);
+    assert_eq!(names(&archived(&out)?), ["Kept.m3u8"]);
     Ok(())
 }
 
@@ -381,11 +370,10 @@ async fn an_exported_playlist_imports_back_with_the_same_tracks() -> Result<(), 
     let (db, ids) = seed_under(tmp.path()).await?;
     let playlist_id = playlist_with_tracks(&db, "Round Trip", &ids).await?;
 
-    let out = tmp.path().join("exported");
-    std::fs::create_dir(&out)?;
-    assert_eq!(write_playlists(&db, &[playlist_id], &out).await?.exported, 1);
+    let out = tmp.path().join("Round Trip.m3u8");
+    write_playlist(&db, playlist_id, &out).await?;
 
-    let result = read_playlist_file(&db, &out.join("Round Trip.m3u8")).await?;
+    let result = read_playlist_file(&db, &out).await?;
 
     assert_eq!(result.playlist_name, "Round Trip");
     assert_eq!(result.matched_by_path, 3);

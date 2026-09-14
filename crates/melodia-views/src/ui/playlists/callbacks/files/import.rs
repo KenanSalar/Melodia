@@ -1,5 +1,6 @@
-//! The Import pill: native multi-file picker → import each file into a new
-//! playlist → refresh the grid → summary toast.
+//! The Import pill: native multi-file picker → import each playlist file, or
+//! each playlist in an archive, into a new playlist → refresh the grid →
+//! summary toast.
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -7,14 +8,13 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::ComponentHandle;
 
-use super::PLAYLIST_EXTENSIONS;
 use crate::ui::file_dialog;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::shell::notifications::{
     NotificationParams, NotificationsUi, RowText, TOAST_AUTO_DISMISS_MS,
 };
 use crate::ui::util::count_as_i32;
-use melodia_app::library;
+use melodia_app::library::playlist_files;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Playlists, Settings};
 
@@ -36,8 +36,14 @@ pub(super) fn wire(
         let weak = weak.clone();
         let notifications = notifications.clone();
         let _ = slint::spawn_local(Compat::new(async move {
+            // One filter rather than two, which a picker offers as alternatives and so hides
+            // whichever isn't selected.
+            let extensions: Vec<&str> = playlist_files::PLAYLIST_EXTENSIONS
+                .into_iter()
+                .chain([playlist_files::ARCHIVE_EXTENSION])
+                .collect();
             let dialog = file_dialog::parented(&weak, "Import Playlists")
-                .add_filter("Playlists", &PLAYLIST_EXTENSIONS);
+                .add_filter("Playlists", &extensions);
             let Some(handles) = dialog.pick_files().await else {
                 return;
             };
@@ -51,15 +57,20 @@ pub(super) fn wire(
             let mut missing: u32 = 0;
             let mut failures: u32 = 0;
             for handle in &handles {
-                match library::playlist_files::import_playlist_from_file(&s, handle.path()).await {
+                match playlist_files::import_playlists_from_file(&s, handle.path()).await {
                     Ok(r) => {
-                        imported = imported.saturating_add(1);
-                        tracks = tracks.saturating_add(r.matched_by_path + r.matched_by_hash);
+                        imported = imported.saturating_add(r.imported);
+                        tracks = tracks.saturating_add(r.matched);
                         missing = missing.saturating_add(r.missing);
+                        failures = failures.saturating_add(r.failed);
                     }
                     Err(e) => {
                         failures = failures.saturating_add(1);
-                        log::warn!("import_playlist_from_file {}: {e}", handle.path().display());
+                        log::warn!(
+                            "playlist import: {}: {}",
+                            handle.path().display(),
+                            melodia_core::error::describe(&e)
+                        );
                     }
                 }
             }

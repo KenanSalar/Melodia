@@ -1235,6 +1235,9 @@ msgstr "Scegli le playlist da esportare."
 msgid "No playlists to export"
 msgstr "Nessuna playlist da esportare"
 
+msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
+msgstr "Più playlist vengono salvate in un unico file .zip, che puoi importare direttamente senza estrarlo."
+
 msgid "Select all"
 msgstr "Seleziona tutto"
 
