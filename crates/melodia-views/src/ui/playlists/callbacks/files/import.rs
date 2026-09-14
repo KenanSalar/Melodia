@@ -2,6 +2,7 @@
 //! each playlist in an archive, into a new playlist → refresh the grid →
 //! summary toast.
 
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -14,7 +15,7 @@ use crate::ui::shell::notifications::{
     NotificationParams, NotificationsUi, RowText, TOAST_AUTO_DISMISS_MS,
 };
 use crate::ui::util::count_as_i32;
-use melodia_app::library::playlist_files;
+use melodia_app::library::playlist_files::{self, ImportFileResult};
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Playlists, Settings};
 
@@ -51,31 +52,23 @@ pub(super) fn wire(
                 return;
             }
 
-            // Aggregate across every picked file.
-            let mut imported: u32 = 0; // playlists actually created
-            let mut tracks: u32 = 0; // matched (path + hash)
-            let mut missing: u32 = 0;
-            let mut failures: u32 = 0;
-            for handle in &handles {
-                match playlist_files::import_playlists_from_file(&s, handle.path()).await {
-                    Ok(r) => {
-                        imported = imported.saturating_add(r.imported);
-                        tracks = tracks.saturating_add(r.matched);
-                        missing = missing.saturating_add(r.missing);
-                        failures = failures.saturating_add(r.failed);
-                    }
-                    Err(e) => {
-                        failures = failures.saturating_add(1);
-                        log::warn!(
-                            "playlist import: {}: {}",
-                            handle.path().display(),
-                            melodia_core::error::describe(&e)
-                        );
-                    }
-                }
-            }
+            let paths: Vec<PathBuf> =
+                handles.iter().map(|handle| handle.path().to_path_buf()).collect();
 
-            if imported > 0
+            // Off the UI thread: every playlist's parse and track matching happens in there.
+            let import_state = s.clone();
+            let result = s
+                .runtime
+                .spawn(async move {
+                    playlist_files::import_playlists_from_files(&import_state, &paths).await
+                })
+                .await
+                .unwrap_or_else(|e| {
+                    log::warn!("playlist import: task ended early: {e}");
+                    ImportFileResult::default()
+                });
+
+            if result.imported > 0
                 && let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak.clone()).await
             {
                 log::warn!("fetch_grid after playlist import: {e}");
@@ -83,7 +76,7 @@ pub(super) fn wire(
 
             let Some(ui) = weak.upgrade() else { return };
             let settings = ui.global::<Settings>();
-            if imported == 0 {
+            if result.imported == 0 {
                 notifications.show_localized(&ui, "error", "", |ui| {
                     let g = ui.global::<Settings>();
                     RowText::plain(
@@ -92,14 +85,15 @@ pub(super) fn wire(
                     )
                 });
             } else {
-                let variant = if missing > 0 || failures > 0 { "warning" } else { "success" };
+                let variant =
+                    if result.missing > 0 || result.failed > 0 { "warning" } else { "success" };
                 notifications.show_auto_dismiss(
                     NotificationParams::plain(
                         variant,
-                        settings.invoke_playlist_import_title(count_as_i32(imported)),
+                        settings.invoke_playlist_import_title(count_as_i32(result.imported)),
                         settings.invoke_playlist_import_message(
-                            count_as_i32(tracks),
-                            count_as_i32(missing),
+                            count_as_i32(result.matched),
+                            count_as_i32(result.missing),
                         ),
                     ),
                     TOAST_AUTO_DISMISS_MS,

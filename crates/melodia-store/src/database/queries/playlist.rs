@@ -11,6 +11,19 @@ pub async fn create_playlist(
     name: &str,
     description: Option<&str>,
 ) -> Result<playlist::Playlist, AppError> {
+    create_playlist_on(db.write(), name, description).await
+}
+
+/// [`create_playlist`] against any executor, so [`create_playlist_with_tracks`] can run it inside
+/// its transaction without a second copy of the statement.
+async fn create_playlist_on<'e, E>(
+    executor: E,
+    name: &str,
+    description: Option<&str>,
+) -> Result<playlist::Playlist, AppError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     let now = melodia_core::utils::now_rfc3339();
 
     let result = sqlx::query_as::<_, playlist::Playlist>(
@@ -22,9 +35,31 @@ pub async fn create_playlist(
     .bind(description)
     .bind(&now)
     .bind(&now)
-    .fetch_one(db.write())
+    .fetch_one(executor)
     .await?;
     Ok(result)
+}
+
+/// Creates a playlist already holding `track_ids` in order, and returns its id.
+///
+/// One transaction, so an insert that fails leaves no empty playlist behind.
+pub async fn create_playlist_with_tracks(
+    db: &DbPool,
+    name: &str,
+    track_ids: &[i64],
+) -> Result<i64, AppError> {
+    let mut tx = db.write().begin().await?;
+    let playlist_id = create_playlist_on(&mut *tx, name, None).await?.id;
+
+    let inserted = insert_items_tx(&mut tx, playlist_id, 0, track_ids).await?;
+    // Only a repeated track leaves a gap: the unique index keeps its first slot and drops the rest.
+    if inserted < u64::try_from(track_ids.len()).unwrap_or(u64::MAX) {
+        renumber_playlist_positions_tx(&mut tx, playlist_id).await?;
+    }
+    update_playlist_thumbnail_and_timestamp_tx(&mut tx, playlist_id).await?;
+
+    tx.commit().await?;
+    Ok(playlist_id)
 }
 
 /// Create a smart (dynamic) playlist. Identical to [`create_playlist`] except
@@ -205,10 +240,6 @@ pub async fn add_tracks_to_playlist(
     playlist_id: i64,
     track_ids: &[i64],
 ) -> Result<(), AppError> {
-    // Batch INSERT — 4 columns per row, chunked within one statement's bind budget
-    const COLS_PER_ROW: usize = 4;
-    const CHUNK_SIZE: usize = crate::database::MAX_BINDS_PER_STATEMENT / COLS_PER_ROW;
-
     if track_ids.is_empty() {
         return Ok(());
     }
@@ -223,9 +254,31 @@ pub async fn add_tracks_to_playlist(
     .fetch_one(&mut *tx)
     .await?;
 
-    let now = melodia_core::utils::now_rfc3339();
     let start_position = max_pos.unwrap_or(-1) + 1;
+    insert_items_tx(&mut tx, playlist_id, start_position, track_ids).await?;
 
+    // Renumber positions to close gaps from ignored duplicates
+    renumber_playlist_positions_tx(&mut tx, playlist_id).await?;
+    update_playlist_thumbnail_and_timestamp_tx(&mut tx, playlist_id).await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Inserts `track_ids` from `start_position` on, skipping any the playlist already holds, and
+/// returns how many rows landed.
+async fn insert_items_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    playlist_id: i64,
+    start_position: i32,
+    track_ids: &[i64],
+) -> Result<u64, AppError> {
+    // Batch INSERT — 4 columns per row, chunked within one statement's bind budget
+    const COLS_PER_ROW: usize = 4;
+    const CHUNK_SIZE: usize = crate::database::MAX_BINDS_PER_STATEMENT / COLS_PER_ROW;
+
+    let now = melodia_core::utils::now_rfc3339();
+    let mut inserted: u64 = 0;
     for (chunk_idx, chunk) in track_ids.chunks(CHUNK_SIZE).enumerate() {
         let chunk_offset = start_position
             .checked_add(i32::try_from(chunk_idx * CHUNK_SIZE).map_err(|_| {
@@ -239,15 +292,10 @@ pub async fn add_tracks_to_playlist(
             let position = chunk_offset.saturating_add(i32::try_from(i).unwrap_or(i32::MAX));
             b.push_bind(playlist_id).push_bind(*track_id).push_bind(position).push_bind(&now);
         });
-        query_builder.build().persistent(false).execute(&mut *tx).await?;
+        let result = query_builder.build().persistent(false).execute(&mut **tx).await?;
+        inserted += result.rows_affected();
     }
-
-    // Renumber positions to close gaps from ignored duplicates
-    renumber_playlist_positions_tx(&mut tx, playlist_id).await?;
-    update_playlist_thumbnail_and_timestamp_tx(&mut tx, playlist_id).await?;
-
-    tx.commit().await?;
-    Ok(())
+    Ok(inserted)
 }
 
 pub async fn remove_tracks_from_playlist_batch(

@@ -13,7 +13,9 @@
 //! `slint::spawn_local(Compat::new(...))` (`Compat` supplies a tokio reactor
 //! so the awaited sqlx calls work); after each `.await` the future resumes on
 //! the UI thread, so pushing toasts through the `Rc<NotificationsUi>` and
-//! reading/writing `Dialog.*` is safe without an extra event-loop hop.
+//! reading/writing `Dialog.*` is safe without an extra event-loop hop. Import
+//! and export await the file work on the runtime instead, since it parses or
+//! serializes every playlist and would otherwise do so on the UI thread.
 //!
 //! Wired separately from [`super::wire`] (in `main.rs`, after the
 //! notifications stack exists) because these handlers need the

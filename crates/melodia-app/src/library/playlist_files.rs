@@ -17,7 +17,7 @@
 
 use std::collections::HashSet;
 use std::ffi::OsStr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Local, NaiveDateTime};
 
@@ -66,14 +66,15 @@ pub struct ImportPlaylistResult {
     pub missing: u32,
 }
 
-/// What one picked file added. A playlist file adds one playlist, an archive as many as it holds.
+/// What picked files added. A playlist file adds one playlist, an archive as many as it holds.
 #[derive(Debug, Default)]
 pub struct ImportFileResult {
     pub imported: u32,
     /// Entries matched to a library track, by path or by hash.
     pub matched: u32,
     pub missing: u32,
-    /// Playlists inside an archive that couldn't be imported, skipped so the rest still land.
+    /// Files, or playlists inside an archive, that couldn't be imported, skipped so the rest
+    /// still land.
     pub failed: u32,
 }
 
@@ -85,6 +86,13 @@ impl ImportFileResult {
             .saturating_add(playlist.matched_by_path)
             .saturating_add(playlist.matched_by_hash);
         self.missing = self.missing.saturating_add(playlist.missing);
+    }
+
+    fn merge(&mut self, file: &Self) {
+        self.imported = self.imported.saturating_add(file.imported);
+        self.matched = self.matched.saturating_add(file.matched);
+        self.missing = self.missing.saturating_add(file.missing);
+        self.failed = self.failed.saturating_add(file.failed);
     }
 }
 
@@ -148,7 +156,9 @@ async fn write_archive(
     let mut failed: u32 = 0;
     for &id in playlist_ids {
         match prepare_export(db, id).await {
-            Ok((name, text)) => {
+            Ok((name, mut text)) => {
+                // Held beside every other playlist's until the archive is written.
+                text.shrink_to_fit();
                 entries.push(archive::Entry { name: unique_entry_name(&name, &mut used), text });
             }
             Err(e) => {
@@ -165,8 +175,7 @@ async fn write_archive(
 
     let path = dest.to_path_buf();
     tokio::task::spawn_blocking(move || {
-        let bytes = archive::write(&entries, modified)?;
-        atomic_file::write_bytes_sync(&path, &bytes)
+        atomic_file::write_with_sync(&path, |out| archive::write(out, &entries, modified))
     })
     .await
     .map_err(AppError::io_source)??;
@@ -182,8 +191,23 @@ async fn prepare_export(db: &DbPool, playlist_id: i64) -> Result<(String, String
     Ok((stats.name, text))
 }
 
-/// Import every playlist in `src`: the one a playlist file holds, or each one in an archive, each
-/// into a NEW playlist. Returns per-category counts for the completion toast.
+/// Import every playlist in each of `paths`, each into a NEW playlist, totalled for the completion
+/// toast. A file that fails whole counts as one failure, so the files beside it still land.
+pub async fn import_playlists_from_files(state: &AppState, paths: &[PathBuf]) -> ImportFileResult {
+    let mut total = ImportFileResult::default();
+    for path in paths {
+        match import_playlists_from_file(&state.db, path).await {
+            Ok(file) => total.merge(&file),
+            Err(e) => {
+                log::warn!("playlist import: {}: {}", path.display(), describe(&e));
+                total.failed = total.failed.saturating_add(1);
+            }
+        }
+    }
+    total
+}
+
+/// Import every playlist in `src`: the one a playlist file holds, or each one in an archive.
 ///
 /// Each playlist is named from `#PLAYLIST:` or its file stem, re-matched entry by entry to library
 /// tracks, and filled in file order. A playlist with no entries at all is refused rather than
@@ -191,15 +215,12 @@ async fn prepare_export(db: &DbPool, playlist_id: i64) -> Result<(String, String
 /// lands and reports the misses. For an archive that refusal is one skipped playlist, and only an
 /// archive that won't open, holds no playlist files, or expands past [`archive::MAX_TEXT_BYTES`]
 /// fails whole.
-pub async fn import_playlists_from_file(
-    state: &AppState,
-    src: &Path,
-) -> Result<ImportFileResult, AppError> {
+async fn import_playlists_from_file(db: &DbPool, src: &Path) -> Result<ImportFileResult, AppError> {
     if has_extension(src, &[ARCHIVE_EXTENSION]) {
-        return read_archive(&state.db, src).await;
+        return read_archive(db, src).await;
     }
     let mut result = ImportFileResult::default();
-    result.add(&read_playlist_file(&state.db, src).await?);
+    result.add(&read_playlist_file(db, src).await?);
     Ok(result)
 }
 
@@ -265,11 +286,11 @@ async fn import_text(
 
     let outcome = match_entries(db, &parsed.entries, origin.parent()).await?;
 
-    let playlist = queries::playlist::create_playlist(db, &name, None).await?;
-    queries::playlist::add_tracks_to_playlist(db, playlist.id, &outcome.ordered_ids).await?;
+    let playlist_id =
+        queries::playlist::create_playlist_with_tracks(db, &name, &outcome.ordered_ids).await?;
 
     Ok(ImportPlaylistResult {
-        playlist_id: playlist.id,
+        playlist_id,
         playlist_name: name,
         total_entries: u32::try_from(parsed.entries.len()).unwrap_or(u32::MAX),
         matched_by_path: outcome.matched_by_path,

@@ -2,7 +2,7 @@
 //! selection to one named `.m3u8` or a zip of them, and the picker's
 //! selection plumbing (single-row toggle + "Select all").
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use async_compat::Compat;
@@ -163,15 +163,27 @@ impl Selection {
         dialog.save_file().await.map(|target| target.path().to_path_buf())
     }
 
-    async fn write(self, state: &AppState, dest: &Path) -> Result<Written, AppError> {
-        match self {
-            Self::One { id, .. } => playlist_files::export_playlist_to_file(state, id, dest)
-                .await
-                .map(|()| Written { playlists: 1, partial: false }),
-            Self::Many(ids) => playlist_files::export_playlists_to_archive(state, &ids, dest)
-                .await
-                .map(|res| Written { playlists: res.exported, partial: res.failed > 0 }),
-        }
+    /// Runs on the runtime: awaited from the UI thread, every playlist's rows would be decoded and
+    /// serialized there between awaits.
+    async fn write(self, state: AppState, dest: PathBuf) -> Result<Written, AppError> {
+        let runtime = state.runtime.clone();
+        runtime
+            .spawn(async move {
+                match self {
+                    Self::One { id, .. } => {
+                        playlist_files::export_playlist_to_file(&state, id, &dest)
+                            .await
+                            .map(|()| Written { playlists: 1, partial: false })
+                    }
+                    Self::Many(ids) => {
+                        playlist_files::export_playlists_to_archive(&state, &ids, &dest)
+                            .await
+                            .map(|res| Written { playlists: res.exported, partial: res.failed > 0 })
+                    }
+                }
+            })
+            .await
+            .map_err(AppError::io_source)?
     }
 }
 
@@ -191,7 +203,7 @@ async fn export(
     let Some(dest) = selection.ask_destination(&weak).await else {
         return;
     };
-    let result = selection.write(&state, &dest).await;
+    let result = selection.write(state, dest.clone()).await;
 
     let Some(ui) = weak.upgrade() else { return };
     match result {

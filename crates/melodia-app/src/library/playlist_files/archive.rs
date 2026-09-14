@@ -5,7 +5,7 @@
 //! matters only as the name its playlist falls back to and the folder its relative paths
 //! resolve against.
 
-use std::io::{Cursor, Read, Seek, Write};
+use std::io::{Read, Seek, Write};
 
 use chrono::NaiveDateTime;
 use zip::write::SimpleFileOptions;
@@ -38,21 +38,26 @@ pub struct Contents {
     pub unreadable: u32,
 }
 
-/// Zips `entries` into an archive held in memory, each dated `modified`.
+/// Zips `entries` into `out`, each dated `modified`.
 ///
 /// A date the format can't hold (before 1980 or past 2107) takes the format's own epoch rather
 /// than failing an export over a clock.
-pub fn write(entries: &[Entry], modified: NaiveDateTime) -> Result<Vec<u8>, AppError> {
+pub fn write<W: Write + Seek>(
+    out: W,
+    entries: &[Entry],
+    modified: NaiveDateTime,
+) -> Result<(), AppError> {
     let options = SimpleFileOptions::default()
         .compression_method(CompressionMethod::Deflated)
         .last_modified_time(zip::DateTime::try_from(modified).unwrap_or_default());
 
-    let mut archive = ZipWriter::new(Cursor::new(Vec::new()));
+    let mut archive = ZipWriter::new(out);
     for entry in entries {
         archive.start_file(entry.name.as_str(), options).map_err(AppError::io_source)?;
         archive.write_all(entry.text.as_bytes())?;
     }
-    Ok(archive.finish().map_err(AppError::io_source)?.into_inner())
+    archive.finish().map_err(AppError::io_source)?;
+    Ok(())
 }
 
 /// Reads every `.m3u8` and `.m3u` entry out of an archive. Anything else in it is ignored.
@@ -98,7 +103,12 @@ pub fn read<R: Read + Seek>(reader: R) -> Result<Contents, AppError> {
         };
 
         match String::from_utf8(bytes) {
-            Ok(text) => contents.entries.push(Entry { name, text }),
+            Ok(mut text) => {
+                // Held beside every other entry until the import reaches it, and `read_to_end`
+                // grows by doubling, so without this the budget could cost twice itself.
+                text.shrink_to_fit();
+                contents.entries.push(Entry { name, text });
+            }
             Err(e) => {
                 log::warn!("playlist archive: {name} is not UTF-8: {e}");
                 contents.unreadable = contents.unreadable.saturating_add(1);
