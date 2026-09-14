@@ -240,7 +240,7 @@ async fn set_artwork(db: &crate::database::DbPool, id: i64, path: &str) -> Resul
     Ok(())
 }
 
-/// The positions a playlist's rows actually hold, in id order.
+/// The positions a playlist's rows actually hold, in position order.
 async fn positions(db: &crate::database::DbPool, playlist_id: i64) -> Result<Vec<i64>, AppError> {
     let rows: Vec<(i64,)> = sqlx::query_as(
         "SELECT position FROM playlist_items WHERE playlist_id = ? ORDER BY position",

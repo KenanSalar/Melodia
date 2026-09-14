@@ -116,7 +116,7 @@ fn live() -> &'static Mutex<Option<LiveGeometry>> {
 /// The window state a `Resized` or `Moved` event consults more than once, read in one pass.
 ///
 /// On X11 the client size and the maximized state are each a blocking round trip on the UI
-/// thread, and the readers below asked again for every answer they needed.
+/// thread, so the readers below share one reading rather than asking per answer.
 #[derive(Debug, Clone, Copy)]
 pub struct WindowReading {
     client: WinitPhysicalSize<u32>,

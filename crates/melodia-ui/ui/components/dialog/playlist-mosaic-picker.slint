@@ -270,8 +270,8 @@ export component PlaylistMosaicPicker inherits Rectangle {
                                     cover-scale: cand-touch.has-hover ? 1.06 : 1.0;
                                 }
 
-                                // Always mounted, so the hairline fades instead of popping.
-                                EdgeOutline {
+                                // Mounted until its fade-out lands, for the ring's reason below.
+                                if cand.hover-t > 0: EdgeOutline {
                                     width: 100%;
                                     height: 100%;
                                     radius: Theme.radius-sm;

@@ -549,8 +549,10 @@ this file is what builds, looks right, and is wrong.
   **A fill that is only sometimes transparent pays too, and a rounded one pays twice**:
   `draw_border_rectangle` builds its fill path and its border path before it checks either paint,
   so a per-row fill painted only on hover or selection belongs behind an `if`, not a ternary ending
-  in `transparent` (the track row's pill). Only where nothing eases the brush, since an `if` has no
-  fade-out to play.
+  in `transparent` (the track row's pill). Where something eases it, gate on the eased float rather
+  than its target (`if ring-t > 0`, the mosaic picker's selection ring), so the branch outlives the
+  fade-out. That predicate is animated, so the branch may carry no layout-watching `changed`
+  tracker (the entry on a `changed` handler inside an `if`).
 
 - **A gradient stop inset from the extents drops FemtoVG's two-stop path and costs a slab of the
   GPU driver's buffer pool.** `femtovg`'s `GradientColors::from_stops` answers the cheap `TwoStop`
