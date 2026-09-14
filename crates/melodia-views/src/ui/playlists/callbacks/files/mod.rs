@@ -4,8 +4,9 @@
 //!
 //! * [`import`] — the Import pill (native multi-file picker → per-file
 //!   import aggregation → grid refresh → summary toast).
-//! * [`export`] — the Export pill (fill picker → folder picker → write
-//!   files → toast) and the export picker's selection plumbing.
+//! * [`export`] — the Export pill (fill picker → a save dialog for one
+//!   playlist, a folder picker for several → write → toast) and the export
+//!   picker's selection plumbing.
 //! * [`add_picker`] — the Add-to-Playlist picker's selection plumbing and
 //!   the add-tracks commit.
 //!
@@ -33,6 +34,10 @@ use crate::ui::shell::notifications::NotificationsUi;
 use crate::ui::util::len_as_i32;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Dialog};
+
+/// The extensions a playlist file arrives in. The export's save filter takes the same list, so a
+/// name retyped without an extension can't land where the import picker then hides it.
+const PLAYLIST_EXTENSIONS: [&str; 2] = ["m3u8", "m3u"];
 
 /// Wire the `Playlists.*` import/export callbacks. Call once after both the
 /// `playlists_ui` handle and the notifications stack exist.

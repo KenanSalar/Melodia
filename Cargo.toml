@@ -238,6 +238,12 @@ rand = "0.10.2"
 lru = "0.18.2"
 # Atomic file writes (settings/queue/search-history persistence)
 tempfile = "3.27.0"
+# Several playlists export as one archive of `.m3u8` files. Deflate is the one method an
+# archive zipped elsewhere reliably uses; the defaults add AES, bzip2, lzma, xz, zstd,
+# PPMd and zopfli for nothing we write or expect to read. `deflate-flate2` names no
+# backend of its own: `lofty` already builds `flate2` with its pure-Rust one, and a tree
+# that lost that would fail to compile rather than misbehave.
+zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2"] }
 # Test-only: the rules pin expands each `.claude/rules` `paths:` glob.
 glob = "0.3.4"
 

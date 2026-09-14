@@ -1234,8 +1234,8 @@ msgstr "Εισαγωγή λιστών από αρχεία .m3u8"
 msgid "Export playlists to .m3u8 files"
 msgstr "Εξαγωγή λιστών σε αρχεία .m3u8"
 
-msgid "Choose playlists to export, then pick a folder."
-msgstr "Επιλέξτε λίστες για εξαγωγή και έπειτα έναν φάκελο."
+msgid "Choose playlists to export."
+msgstr "Επιλέξτε λίστες για εξαγωγή."
 
 msgid "No playlists to export"
 msgstr "Δεν υπάρχουν λίστες για εξαγωγή"

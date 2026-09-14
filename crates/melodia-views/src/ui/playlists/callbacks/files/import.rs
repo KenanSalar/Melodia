@@ -7,6 +7,7 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::ComponentHandle;
 
+use super::PLAYLIST_EXTENSIONS;
 use crate::ui::file_dialog;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::shell::notifications::{
@@ -36,7 +37,7 @@ pub(super) fn wire(
         let notifications = notifications.clone();
         let _ = slint::spawn_local(Compat::new(async move {
             let dialog = file_dialog::parented(&weak, "Import Playlists")
-                .add_filter("Playlists", &["m3u8", "m3u"]);
+                .add_filter("Playlists", &PLAYLIST_EXTENSIONS);
             let Some(handles) = dialog.pick_files().await else {
                 return;
             };

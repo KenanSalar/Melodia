@@ -1,13 +1,13 @@
 //! The Export pill: fetch playlists into the selectable picker, commit the
-//! selection to a folder of `.m3u8` files, and the picker's selection
-//! plumbing (single-row toggle + "Select all").
+//! selection to one named `.m3u8` or a folder of them, and the picker's
+//! selection plumbing (single-row toggle + "Select all").
 
 use std::rc::Rc;
 
 use async_compat::Compat;
-use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel, Weak};
 
-use super::{refresh_export_selection_meta, set_all_picks, toggle_pick};
+use super::{PLAYLIST_EXTENSIONS, refresh_export_selection_meta, set_all_picks, toggle_pick};
 use crate::ui::file_dialog;
 use crate::ui::shell::notifications::{
     NotificationParams, NotificationsUi, RowText, TOAST_AUTO_DISMISS_MS,
@@ -72,64 +72,23 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, notifications: &Rc<Notifica
     }
 
     // export-selected-playlists: fired by the accept dispatcher. Read the
-    // selected ids synchronously (the dialog closes + clears its model right
-    // after this returns), then pick a folder and write the files.
+    // ticked rows synchronously (the dialog closes + clears its model right
+    // after this returns), then ask where to write them.
     {
         let s = state.clone();
         let weak = weak.clone();
         let notifications = notifications.clone();
         playlists.on_export_selected_playlists(move || {
             let Some(ui) = weak.upgrade() else { return };
-            let ids: Vec<i64> = ui
-                .global::<Dialog>()
-                .get_export_pick_rows()
-                .iter()
-                .filter(|r| r.selected)
-                .map(|r| i64::from(r.id))
-                .collect();
-            if ids.is_empty() {
+            let Some(selection) = Selection::ticked(&ui.global::<Dialog>()) else {
                 return;
-            }
-
-            let s = s.clone();
-            let weak = weak.clone();
-            let notifications = notifications.clone();
-            let _ = slint::spawn_local(Compat::new(async move {
-                let dialog = file_dialog::parented(&weak, "Export Playlists To Folder");
-                let Some(folder) = dialog.pick_folder().await else {
-                    return;
-                };
-                let folder_path = folder.path().to_path_buf();
-
-                let result =
-                    library::playlist_files::export_playlists_to_folder(&s, &ids, &folder_path)
-                        .await;
-
-                let Some(ui) = weak.upgrade() else { return };
-                let settings = ui.global::<Settings>();
-                match result {
-                    Ok(res) if res.exported > 0 => {
-                        let variant = if res.failed.is_empty() { "success" } else { "warning" };
-                        notifications.show_auto_dismiss(
-                            NotificationParams::plain(
-                                variant,
-                                settings.invoke_playlist_export_title(count_as_i32(res.exported)),
-                                settings.invoke_playlist_export_message(SharedString::from(
-                                    res.folder.as_str(),
-                                )),
-                            ),
-                            TOAST_AUTO_DISMISS_MS,
-                        );
-                    }
-                    Ok(_) => {
-                        show_export_failed(&ui, &notifications);
-                    }
-                    Err(e) => {
-                        log::warn!("export_playlists_to_folder: {e}");
-                        show_export_failed(&ui, &notifications);
-                    }
-                }
-            }));
+            };
+            let _ = slint::spawn_local(Compat::new(export(
+                s.clone(),
+                weak.clone(),
+                notifications.clone(),
+                selection,
+            )));
         });
     }
 
@@ -166,6 +125,92 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, notifications: &Rc<Notifica
             );
             refresh_export_selection_meta(&dlg);
         });
+    }
+}
+
+/// What the ticked rows ask for. One playlist is a file the user names, the way a station list
+/// is; several can only be a folder of files named after their playlists.
+enum Selection {
+    One { id: i64, name: String },
+    Many(Vec<i64>),
+}
+
+impl Selection {
+    /// `None` when nothing is ticked.
+    fn ticked(dlg: &Dialog) -> Option<Self> {
+        let rows: Vec<UiPlaylistExportPickRow> =
+            dlg.get_export_pick_rows().iter().filter(|r| r.selected).collect();
+        match rows.as_slice() {
+            [] => None,
+            [row] => Some(Self::One { id: i64::from(row.id), name: row.name.to_string() }),
+            _ => Some(Self::Many(rows.iter().map(|r| i64::from(r.id)).collect())),
+        }
+    }
+}
+
+/// What reached the disk, in the terms the toast states it.
+struct Written {
+    count: u32,
+    /// The file for one playlist, the folder for several.
+    destination: String,
+    /// Some playlists failed beside the ones that were written.
+    partial: bool,
+}
+
+async fn export(
+    state: AppState,
+    weak: Weak<AppWindow>,
+    notifications: Rc<NotificationsUi>,
+    selection: Selection,
+) {
+    let result = match selection {
+        Selection::One { id, name } => {
+            let dialog = file_dialog::parented(&weak, "Export Playlist")
+                .set_file_name(library::playlist_files::suggested_file_name(&name))
+                .add_filter("Playlists", &PLAYLIST_EXTENSIONS);
+            let Some(target) = dialog.save_file().await else {
+                return;
+            };
+            let path = target.path();
+            library::playlist_files::export_playlist_to_file(&state, id, path).await.map(|()| {
+                Written { count: 1, destination: path.display().to_string(), partial: false }
+            })
+        }
+        Selection::Many(ids) => {
+            let dialog = file_dialog::parented(&weak, "Export Playlists To Folder");
+            let Some(folder) = dialog.pick_folder().await else {
+                return;
+            };
+            library::playlist_files::export_playlists_to_folder(&state, &ids, folder.path())
+                .await
+                .map(|res| Written {
+                    count: res.exported,
+                    destination: res.folder,
+                    partial: !res.failed.is_empty(),
+                })
+        }
+    };
+
+    let Some(ui) = weak.upgrade() else { return };
+    match result {
+        Ok(written) if written.count > 0 => {
+            let settings = ui.global::<Settings>();
+            let variant = if written.partial { "warning" } else { "success" };
+            notifications.show_auto_dismiss(
+                NotificationParams::plain(
+                    variant,
+                    settings.invoke_playlist_export_title(count_as_i32(written.count)),
+                    settings
+                        .invoke_playlist_export_message(SharedString::from(written.destination)),
+                ),
+                TOAST_AUTO_DISMISS_MS,
+            );
+        }
+        Ok(_) => show_export_failed(&ui, &notifications),
+        Err(e) => {
+            log::warn!("playlists: export: {}", melodia_core::error::describe(&e));
+            show_export_failed(&ui, &notifications);
+        }
     }
 }
 

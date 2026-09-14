@@ -114,6 +114,35 @@ async fn write_playlists(
     Ok(ExportPlaylistsResult { exported, folder: folder.display().to_string(), failed })
 }
 
+/// What to pre-fill the save dialog with for one playlist. Sanitized for the dialog as much as for
+/// the disk: a `/` in the name would otherwise be read as a folder to save into.
+pub fn suggested_file_name(playlist_name: &str) -> String {
+    format!("{}.m3u8", sanitize_stem(playlist_name))
+}
+
+/// Write one playlist to exactly `dest`.
+///
+/// No collision suffix, unlike [`export_playlists_to_folder`]: the path came out of a save
+/// dialog, which has already asked before overwriting.
+pub async fn export_playlist_to_file(
+    state: &AppState,
+    playlist_id: i64,
+    dest: &Path,
+) -> Result<(), AppError> {
+    write_playlist(&state.db, playlist_id, dest).await
+}
+
+/// [`export_playlist_to_file`]'s body, narrowed the same way [`write_playlists`] is.
+async fn write_playlist(db: &DbPool, playlist_id: i64, dest: &Path) -> Result<(), AppError> {
+    let (_, text) = prepare_export(db, playlist_id).await?;
+    let path = dest.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        melodia_core::utils::atomic_file::write_text_sync(&path, &text)
+    })
+    .await
+    .map_err(AppError::io_source)?
+}
+
 /// Fetch a playlist's name + ordered tracks and render them to M3U8 text.
 async fn prepare_export(db: &DbPool, playlist_id: i64) -> Result<(String, String), AppError> {
     let stats = queries::playlist::get_playlist_by_id(db, playlist_id).await?;

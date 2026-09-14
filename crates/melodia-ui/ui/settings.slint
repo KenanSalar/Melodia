@@ -428,9 +428,9 @@ export global Settings {
     playlist-export-title(exported) => {
         return @tr("{n} playlist exported" | "{n} playlists exported" % exported);
     }
-    pure callback playlist-export-message(string /*folder*/) -> string;
-    playlist-export-message(folder) => {
-        return @tr("Saved to {}", folder);
+    pure callback playlist-export-message(string /*path*/) -> string;
+    playlist-export-message(path) => {
+        return @tr("Saved to {}", path);
     }
     pure callback playlist-export-failed-title() -> string;
     playlist-export-failed-title => {

@@ -85,7 +85,8 @@ export global Playlists {
     // exporting is opt-in.
     callback request-export-playlists();
 
-    // Rust reads the ticked rows, opens a folder picker, writes one file per playlist.
+    // Rust reads the ticked rows, opens a save dialog for one or a folder picker for several,
+    // writes one file per playlist.
     callback export-selected-playlists();
 
     // Rust mutates the model, as above.

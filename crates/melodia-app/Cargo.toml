@@ -60,6 +60,7 @@ open.workspace = true
 minisign-verify.workspace = true
 semver.workspace = true
 futures-util.workspace = true
+zip.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys.workspace = true
