@@ -102,6 +102,9 @@ export global Theme {
     out property <length> row-gap: 0px;
     // The column header over every track list, read too by the hosts that hand-sum a list's height.
     out property <length> track-header-h: 36px;
+    // A track list's inset from the content panel's left edge, before the column solver's own
+    // `pad-sm`. Left only: the right keeps `pad-lg`, which clears the overlay scrollbar's slot.
+    out property <length> track-list-inset: 7px;
 
     // Radii / spacing
     out property <length> radius-sm: 4px;

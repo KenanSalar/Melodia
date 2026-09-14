@@ -143,11 +143,11 @@ export component ArtistDetailBody inherits Rectangle {
 
                     // Inset per child rather than on the root, so `below-hero` stays
                     // full-bleed for the composite scroll region while the list's edges
-                    // still match the Tracks and Browse views.
+                    // still match the Songs tabs and the other details.
                     HorizontalLayout {
                         horizontal-stretch: 1;
                         vertical-stretch: 0;
-                        padding-left: Theme.pad-lg;
+                        padding-left: Theme.track-list-inset;
                         padding-right: Theme.pad-lg;
 
                         tl := TrackList {
