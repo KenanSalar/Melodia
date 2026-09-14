@@ -53,7 +53,7 @@ export component EntityCard inherits Rectangle {
     in property <bool> overlay-hovered: false;
 
     // Browse's card view draws disk-only files — present inside a library folder but
-    // not in the DB — and dims them inert, as the disabled `TrackListRow` is. Defaulted
+    // not in the DB — and dims them inert, as the disabled `TrackListRowItem` is. Defaulted
     // `true`, so every other mount is unaffected; `touch` is gated on it, which drops the
     // hover fill, the zoom and the pointer cursor together rather than leaving a card that
     // looks live and does nothing.

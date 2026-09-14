@@ -88,7 +88,7 @@ async fn save_report(state: AppState, weak: Weak<AppWindow>, notifications: Rc<N
             );
         }
         Err(e) => {
-            log::warn!("save-diagnostics-report: {e}");
+            log::warn!("save-diagnostics-report: {}", melodia_core::error::describe(&e));
             notifications.show_failure(&ui, |ui| {
                 let g = ui.global::<Settings>();
                 RowText::plain(

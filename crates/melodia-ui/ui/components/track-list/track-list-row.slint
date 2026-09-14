@@ -12,8 +12,9 @@ import { SelectionPill } from "selection-pill.slint";
 
 // One body row in a track table. The outer Rectangle is the virtualizer slot the ListView measures
 // — `Theme.row-h` plus `Theme.row-gap` of transparent space, so a row leaves a gap under itself
-// without painting over the next one. **Anything deriving a row pitch has to sum both.** The inner
-// `chrome` Rectangle is the visible pill and owns the TouchArea, cell layout and context popup.
+// without painting over the next one. **Anything deriving a row pitch reads
+// `Theme.track-row-pitch`.** The inner `chrome` Rectangle is the visible pill and owns the
+// TouchArea, cell layout and context popup.
 //
 // Column widths, visibility and the playing track id arrive as `in` properties; the one global
 // left is `PopupHighlight`, which the right-click arm writes. The menu's own four went with it
@@ -93,9 +94,7 @@ export component TrackListRowItem inherits Rectangle {
     property <length> drag-press-abs-y;
     property <bool> drag-started: false;
     property <length> drag-cur-abs-y: 0px;
-    // The whole virtualizer slot, pill plus the gap under it. Slot math that leaves the gap out
-    // drifts further with every row down the list.
-    property <length> pitch: Theme.track-row-h(root.columns.show_artwork) + Theme.row-gap;
+    property <length> pitch: Theme.track-row-pitch(root.columns.show_artwork);
     // Slot math: list-relative pointer Y → row index → upper/lower half → slot in
     // `0..=row-count`.
     property <length> drag-cur-list-y:

@@ -85,7 +85,7 @@ export component TrackList inherits Rectangle {
     // header, the spacing under it, and the rows, floored at one so a header still shows over none.
     // Reads no geometry, so the list's own `height` may bind to it.
     out property <length> content-height: Theme.track-header-h + Theme.pad-xs
-        + max(1, root.rows.length) * (Theme.track-row-h(root.columns.show_artwork) + Theme.row-gap);
+        + max(1, root.rows.length) * Theme.track-row-pitch(root.columns.show_artwork);
 
     callback set-v-offset(length);
 

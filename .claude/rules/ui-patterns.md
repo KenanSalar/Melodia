@@ -474,9 +474,9 @@ three components that answer it, and each argues its geometry at its own file.
   both sides, being a column inside the page's own inset beside the Top Result. Overlay scrollbars
   stay at `parent.width - self.width`, and bottom padding is never on the root (the dead-strip
   pitfall).
-  **Three hosts hand-sum a list's height** from its rows, `Theme.track-header-h` and its `pad-xs`
-  spacing: Browse's and Artist Detail's viewport caps, and Search's Songs section outright. A
-  change to the list's own chrome owes all three.
+  **Three hosts size a list to what it holds** through `TrackList.content-height`: Browse's and
+  Artist Detail's capped at the viewport, Search's Songs section outright. The sum lives there, so
+  a change to the list's own chrome is one edit.
 
 - **The Now Playing right column is one column with three arms, not a place two things share.**
   Up Next, the lyrics panel and the station panel, swapped on `Player.vm.has_station` and
@@ -1081,9 +1081,9 @@ edit would otherwise reverse.
 - **Recently Played** (two tabs) — **neither has a sort, and that is a decision rather than an
   omission**: the order **is** the page, so the synthetic-field cycle above is deliberately *not*
   what it took, and there is no sort state at all (nothing on the global, no `ViewSort`, no
-  `view_sort` key). `sortable: false` runs `TrackList` → `TrackListHeader` → `HeaderCell` and
-  defaults `true`, so the other eight mounts opt in by omission — **the middle link is the one
-  worth pinning**, since dropping the forward leaves the mount still reading `sortable: false`
+  `view_sort` key). `sortable: false` runs `TrackList` → `TrackListHeader` → `HeaderColumn` →
+  `HeaderCell` and defaults `true`, so the other eight mounts opt in by omission — **the middle
+  links are the ones worth pinning**, since dropping a forward leaves the mount still reading `sortable: false`
   while the page sorts again. **The band states the recency set, not the mounted tab's**, a
   play-count ranking under this banner naming the wrong page. Its filter walk is **the one apply
   path that may not run on the UI thread**, and what deferring costs is ordering — the signature

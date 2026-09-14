@@ -38,7 +38,7 @@ export component DraggableTrackList inherits Rectangle {
     in property <bool> reorder-enabled: false;
 
     // The row's own pitch, fed to the drop-indicator overlay and the auto-scroll gate.
-    property <length> row-height: Theme.track-row-h(root.columns.show_artwork) + Theme.row-gap;
+    property <length> row-height: Theme.track-row-pitch(root.columns.show_artwork);
 
     // Every row `<=>`s into these, so all of them share one source of truth.
     in-out property <int> drag-source: -1;

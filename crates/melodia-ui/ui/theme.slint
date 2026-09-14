@@ -104,10 +104,14 @@ export global Theme {
     // Compact height when the thumbnail is hidden, sized to clear the hover swap-in.
     out property <length> row-h-compact: 34px;
     out property <length> row-gap: 0px;
-    // A track row's pill, which the thumbnail column decides between. The slot a row takes in its
-    // list is this plus `row-gap`.
+    // A track row's pill, which the thumbnail column decides between.
     public pure function track-row-h(show-artwork: bool) -> length {
         return show-artwork ? root.row-h : root.row-h-compact;
+    }
+    // The slot a row takes in its list, pill plus the gap under it. Slot math that leaves the gap
+    // out drifts further with every row down the list.
+    public pure function track-row-pitch(show-artwork: bool) -> length {
+        return root.track-row-h(show-artwork) + root.row-gap;
     }
     // The column header over every track list.
     out property <length> track-header-h: 36px;

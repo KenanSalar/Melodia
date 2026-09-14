@@ -238,7 +238,7 @@ fn the_natural_arm_orders_ties_the_same_with_one_key_as_with_two() {
 /// Every field a `TrackList` header cell can ask for has to be one the
 /// comparator has an arm for.
 ///
-/// The token is a bare string on both sides — a `field:` on a `HeaderCell`
+/// The token is a bare string on both sides — a `field:` on a `HeaderColumn`
 /// mount, a `match` arm in [`sort_track_rows_by`] — so a rename on either side
 /// compiles and the column quietly sorts by the natural-order default while
 /// painting its arrow as though it had worked. This is the `SortPillRow` pin
