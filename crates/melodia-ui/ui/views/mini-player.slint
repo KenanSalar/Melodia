@@ -304,34 +304,43 @@ export component MiniPlayerView inherits Rectangle {
             }
         }
 
+        // Play sits between two wings of equal width, so the right wing's extra volume
+        // button can't pull the transport off the column's centre. A centred row places
+        // each cell at its preferred width, hence the left wing borrowing the right's.
         HorizontalLayout {
             alignment: center;
             spacing: Theme.pad-xs;
             vertical-stretch: 0;
 
-            VerticalLayout {
-                alignment: center;
-                IconButton {
-                    icon: "shuffle";
-                    press-shrink: true;
-                    diameter: 32px;
-                    icon-size: 20px;
-                    active: Player.queue.shuffle;
-                    tooltip-text: Player.queue.shuffle
-                        ? @tr("Shuffle: on") : @tr("Shuffle: off");
-                    clicked => { Player.toggle-shuffle(); }
+            HorizontalLayout {
+                alignment: end;
+                spacing: Theme.pad-xs;
+                min-width: trailing-wing.preferred-width;
+
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: "shuffle";
+                        press-shrink: true;
+                        diameter: 32px;
+                        icon-size: 20px;
+                        active: Player.queue.shuffle;
+                        tooltip-text: Player.queue.shuffle
+                            ? @tr("Shuffle: on") : @tr("Shuffle: off");
+                        clicked => { Player.toggle-shuffle(); }
+                    }
                 }
-            }
-            VerticalLayout {
-                alignment: center;
-                IconButton {
-                    icon: "chevron_left";
-                    press-shrink: true;
-                    diameter: 32px;
-                    icon-size: 20px;
-                    button-enabled: Player.vm.has_previous;
-                    tooltip-text: @tr("Previous");
-                    clicked => { Player.previous(); }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: "chevron_left";
+                        press-shrink: true;
+                        diameter: 32px;
+                        icon-size: 20px;
+                        button-enabled: Player.vm.has_previous;
+                        tooltip-text: @tr("Previous");
+                        clicked => { Player.previous(); }
+                    }
                 }
             }
             VerticalLayout {
@@ -344,39 +353,44 @@ export component MiniPlayerView inherits Rectangle {
                     clicked => { Player.play-pause(); }
                 }
             }
-            VerticalLayout {
-                alignment: center;
-                IconButton {
-                    icon: "chevron_right";
-                    press-shrink: true;
-                    diameter: 32px;
-                    icon-size: 20px;
-                    button-enabled: Player.vm.has_next;
-                    tooltip-text: @tr("Next");
-                    clicked => { Player.next(); }
+            trailing-wing := HorizontalLayout {
+                alignment: start;
+                spacing: Theme.pad-xs;
+
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: "chevron_right";
+                        press-shrink: true;
+                        diameter: 32px;
+                        icon-size: 20px;
+                        button-enabled: Player.vm.has_next;
+                        tooltip-text: @tr("Next");
+                        clicked => { Player.next(); }
+                    }
                 }
-            }
-            VerticalLayout {
-                alignment: center;
-                IconButton {
-                    icon: Player.queue.repeat_mode == "one" ? "repeat_one" : "repeat";
-                    press-shrink: true;
-                    diameter: 32px;
-                    icon-size: 20px;
-                    active: Player.queue.repeat_mode != "off";
-                    tooltip-text: Player.queue.repeat_mode == "off"
-                        ? @tr("Repeat: off")
-                        : (Player.queue.repeat_mode == "one"
-                            ? @tr("Repeat: one")
-                            : @tr("Repeat: all"));
-                    clicked => { Player.cycle-repeat(); }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: Player.queue.repeat_mode == "one" ? "repeat_one" : "repeat";
+                        press-shrink: true;
+                        diameter: 32px;
+                        icon-size: 20px;
+                        active: Player.queue.repeat_mode != "off";
+                        tooltip-text: Player.queue.repeat_mode == "off"
+                            ? @tr("Repeat: off")
+                            : (Player.queue.repeat_mode == "one"
+                                ? @tr("Repeat: one")
+                                : @tr("Repeat: all"));
+                        clicked => { Player.cycle-repeat(); }
+                    }
                 }
-            }
-            VerticalLayout {
-                alignment: center;
-                VolumePopup {
-                    diameter: 32px;
-                    icon-size: 20px;
+                VerticalLayout {
+                    alignment: center;
+                    VolumePopup {
+                        diameter: 32px;
+                        icon-size: 20px;
+                    }
                 }
             }
         }
