@@ -91,8 +91,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         });
     }
 
-    // create-playlist: dispatcher hands us `(name, pending_track_ids)`.
-    // Create the playlist; if pending ids are non-empty, add them too.
+    // create-playlist: dispatcher hands us `(name, description, pending_track_ids)`.
+    // The playlist and its pending tracks land together or not at all.
     {
         let s = state.clone();
         let pu = playlists_ui.clone();
@@ -113,16 +113,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let pu = pu.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
-                match library::playlists::create_playlist(&s, name_str.clone(), description_opt)
-                    .await
+                match library::playlists::create_playlist(
+                    &s,
+                    name_str.clone(),
+                    description_opt,
+                    pending_vec,
+                )
+                .await
                 {
-                    Ok(p) => {
-                        if !pending_vec.is_empty()
-                            && let Err(e) =
-                                library::playlists::add_to_playlist(&s, p.id, pending_vec).await
-                        {
-                            log::warn!("playlists::create_playlist add pending: {e}");
-                        }
+                    Ok(_) => {
                         if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak).await {
                             log::warn!("playlists::create_playlist refetch: {e}");
                         }

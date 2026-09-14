@@ -47,7 +47,7 @@ pub fn write_json_sync<T: Serialize>(path: &Path, value: &T) -> AppResult<()> {
     })
 }
 
-/// [`write_json_sync`]'s plain-text sibling, for M3U export. Bytes go out verbatim — the caller
+/// [`write_json_sync`]'s plain-text sibling. Bytes go out verbatim — the caller
 /// owns line endings and the trailing newline.
 pub fn write_text_sync(path: &Path, text: &str) -> AppResult<()> {
     write_with_sync(path, |writer| Ok(writer.write_all(text.as_bytes())?))

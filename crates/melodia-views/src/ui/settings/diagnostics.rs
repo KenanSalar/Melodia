@@ -106,8 +106,7 @@ async fn save_report(state: AppState, weak: Weak<AppWindow>, notifications: Rc<N
     }
 }
 
-/// `atomic_file::write_text_sync` is not async, unlike the playlist export this
-/// otherwise mirrors — hence the hop off the UI thread for one file write.
+/// `atomic_file::write_text_sync` blocks, and [`save_report`] awaits this on the UI thread.
 async fn write_report(path: PathBuf, text: String) -> AppResult<()> {
     tokio::task::spawn_blocking(move || {
         melodia_core::utils::atomic_file::write_text_sync(&path, &text)

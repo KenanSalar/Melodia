@@ -22,6 +22,7 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, Local, NaiveDateTime};
 
 use crate::state::AppState;
+use melodia_core::entities::smart_criteria::SmartCriteria;
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::atomic_file;
 use melodia_store::database::{DbPool, queries};
@@ -184,9 +185,17 @@ async fn write_archive(
 }
 
 /// Fetch a playlist's name + ordered tracks and render them to M3U8 text.
+///
+/// A smart playlist has no stored tracks, so it writes the ones its rules match now and imports
+/// back as a regular playlist: M3U has nowhere to keep the rules.
 async fn prepare_export(db: &DbPool, playlist_id: i64) -> Result<(String, String), AppError> {
     let stats = queries::playlist::get_playlist_by_id(db, playlist_id).await?;
-    let tracks = queries::playlist::get_playlist_tracks_for_export(db, playlist_id).await?;
+    let tracks = if stats.is_smart {
+        let criteria = SmartCriteria::from_json_opt(stats.smart_criteria.as_deref());
+        queries::smart_playlist::get_smart_playlist_tracks_for_export(db, &criteria).await?
+    } else {
+        queries::playlist::get_playlist_tracks_for_export(db, playlist_id).await?
+    };
     let text = m3u::serialize(&stats.name, &tracks);
     Ok((stats.name, text))
 }
@@ -224,8 +233,7 @@ async fn import_playlists_from_file(db: &DbPool, src: &Path) -> Result<ImportFil
     Ok(result)
 }
 
-/// A plain playlist file's half of [`import_playlists_from_file`], narrowed the same way
-/// [`write_playlist`] is.
+/// A plain playlist file's half of [`import_playlists_from_file`].
 async fn read_playlist_file(db: &DbPool, src: &Path) -> Result<ImportPlaylistResult, AppError> {
     let content = tokio::fs::read_to_string(src).await?;
     import_text(db, &content, src).await
@@ -287,7 +295,8 @@ async fn import_text(
     let outcome = match_entries(db, &parsed.entries, origin.parent()).await?;
 
     let playlist_id =
-        queries::playlist::create_playlist_with_tracks(db, &name, &outcome.ordered_ids).await?;
+        queries::playlist::create_playlist_with_tracks(db, &name, None, &outcome.ordered_ids)
+            .await?;
 
     Ok(ImportPlaylistResult {
         playlist_id,
@@ -312,8 +321,7 @@ struct MatchOutcome {
 /// BLAKE3 `file_hash`. Relative entry paths are resolved against `base` (the
 /// playlist file's directory) before path matching.
 ///
-/// Factored out of [`import_text`] so it can be tested against a
-/// bare [`DbPool`] without constructing a full [`AppState`].
+/// Factored out of [`import_text`] so matching can be tested without creating a playlist.
 async fn match_entries(
     db: &DbPool,
     entries: &[m3u::ParsedEntry],

@@ -3926,7 +3926,6 @@ version = "0.13.0"
 dependencies = [
  "async-compat",
  "chrono",
- "futures-util",
  "image",
  "log",
  "lru",

@@ -47,7 +47,6 @@ log.workspace = true
 rfd.workspace = true
 # `ui::launcher`, and `open::that_detached` rather than `that`.
 open.workspace = true
-futures-util.workspace = true
 
 [dev-dependencies]
 melodia-testkit = { path = "../melodia-testkit" }

@@ -497,7 +497,8 @@ three components that answer it, and each argues its geometry at its own file.
   Both the Export and Add-to-Playlist pickers are thin wiring over it, toolkit components staying
   data-agnostic. Both commit through the `Dialog.accepted` dispatcher gated on a selected count;
   Add-to-Playlist disables fully-contained playlists and counts only enabled rows. Toggles and
-  commit live in `files.rs` (commit needs `Rc<NotificationsUi>`), the opener in `dialog.rs`.
+  commit live in `files/export.rs` and `files/add_picker.rs` (commit needs
+  `Rc<NotificationsUi>`). Export opens from `export.rs`, Add-to-Playlist from `dialog.rs`.
 
 - **Notifications stack** mirrors `Dialog`'s `kind`-routing — a new action is one branch plus one
   `show_localized(…)` call. Cap 5. Per-card props use `data:` not `row:` (Slint reserves `row` as

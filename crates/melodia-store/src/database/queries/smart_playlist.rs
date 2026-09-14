@@ -24,8 +24,29 @@ pub async fn get_smart_playlist_tracks(
     db: &DbPool,
     criteria: &SmartCriteria,
 ) -> Result<Vec<track::TrackListRow>, AppError> {
-    let cols = track::track_list_columns();
-    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(format!("SELECT {cols} FROM tracks"));
+    let mut qb = membership_query(track::track_list_columns(), criteria);
+    let rows =
+        qb.build_query_as::<track::TrackListRow>().persistent(false).fetch_all(db.read()).await?;
+    Ok(rows)
+}
+
+/// [`get_smart_playlist_tracks`] as M3U export rows, in the same order and under the same cap.
+pub async fn get_smart_playlist_tracks_for_export(
+    db: &DbPool,
+    criteria: &SmartCriteria,
+) -> Result<Vec<track::PlaylistExportRow>, AppError> {
+    let mut qb = membership_query(track::playlist_export_columns_prefixed("tracks"), criteria);
+    let rows = qb
+        .build_query_as::<track::PlaylistExportRow>()
+        .persistent(false)
+        .fetch_all(db.read())
+        .await?;
+    Ok(rows)
+}
+
+/// `SELECT columns FROM tracks` over the criteria's membership, ordered and capped.
+fn membership_query(columns: &str, criteria: &SmartCriteria) -> QueryBuilder<Sqlite> {
+    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(format!("SELECT {columns} FROM tracks"));
     push_where(&mut qb, criteria);
     if let Some(limit) = &criteria.limit {
         push_order_and_limit(&mut qb, limit);
@@ -33,9 +54,7 @@ pub async fn get_smart_playlist_tracks(
         // Unlimited: fall back to the natural display order.
         qb.push(order_by_fragment(None));
     }
-    let rows =
-        qb.build_query_as::<track::TrackListRow>().persistent(false).fetch_all(db.read()).await?;
-    Ok(rows)
+    qb
 }
 
 /// `(track_count, total_duration_ms)` for a smart playlist without projecting

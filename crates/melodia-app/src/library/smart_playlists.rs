@@ -4,10 +4,10 @@
 //! nothing is ever materialized into `playlist_items`.
 
 use crate::state::AppState;
-use melodia_core::entities::playlist::Playlist;
+use melodia_core::entities::playlist::{Playlist, PlaylistStats};
 use melodia_core::entities::smart_criteria::SmartCriteria;
 use melodia_core::entities::track::TrackListRow;
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 use melodia_store::database::queries;
 
 /// Resolve a smart playlist's current membership from its criteria (ordered and
@@ -19,10 +19,36 @@ pub async fn evaluate(
     queries::smart_playlist::get_smart_playlist_tracks(&state.db, criteria).await
 }
 
-/// `(track_count, total_duration_ms)` for a smart playlist — used by the grid
-/// card, whose stats can't come from the `playlist_items` triggers.
+/// `(track_count, total_duration_ms)` for a smart playlist, whose stats can't come from the
+/// `playlist_items` triggers.
 pub async fn count(state: &AppState, criteria: &SmartCriteria) -> Result<(i64, i64), AppError> {
     queries::smart_playlist::count_smart_playlist(&state.db, criteria).await
+}
+
+/// Replaces the stats of the smart playlists at `rows` with what their rules match now, the
+/// stored ones being the junction triggers' and so always 0. A row whose count fails keeps its
+/// stats and is logged.
+pub async fn recount(state: &AppState, playlists: &mut [PlaylistStats], rows: &[usize]) {
+    // WAL lets these run side by side across the read pool.
+    let parsed: Vec<(usize, SmartCriteria)> = rows
+        .iter()
+        .map(|&i| (i, SmartCriteria::from_json_opt(playlists[i].smart_criteria.as_deref())))
+        .collect();
+    let counts = futures_util::future::join_all(
+        parsed.iter().map(|(i, criteria)| async move { (*i, count(state, criteria).await) }),
+    )
+    .await;
+    for (i, result) in counts {
+        match result {
+            Ok((track_count, duration_ms)) => {
+                playlists[i].track_count = i32::try_from(track_count).unwrap_or(i32::MAX);
+                playlists[i].total_duration_ms = duration_ms;
+            }
+            Err(e) => {
+                log::warn!("smart playlist {} count failed: {}", playlists[i].id, describe(&e));
+            }
+        }
+    }
 }
 
 /// Serialize a rule set to the JSON stored in `playlists.smart_criteria`,

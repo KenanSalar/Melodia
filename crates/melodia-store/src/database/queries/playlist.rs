@@ -46,10 +46,11 @@ where
 pub async fn create_playlist_with_tracks(
     db: &DbPool,
     name: &str,
+    description: Option<&str>,
     track_ids: &[i64],
 ) -> Result<i64, AppError> {
     let mut tx = db.write().begin().await?;
-    let playlist_id = create_playlist_on(&mut *tx, name, None).await?.id;
+    let playlist_id = create_playlist_on(&mut *tx, name, description).await?.id;
 
     let inserted = insert_items_tx(&mut tx, playlist_id, 0, track_ids).await?;
     // Only a repeated track leaves a gap: the unique index keeps its first slot and drops the rest.

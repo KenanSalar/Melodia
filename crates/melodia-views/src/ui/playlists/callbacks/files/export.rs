@@ -36,10 +36,14 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, notifications: &Rc<Notifica
             let s = s.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
-                let stats = library::playlists::get_playlists(&s).await.unwrap_or_else(|e| {
+                let mut stats = library::playlists::get_playlists(&s).await.unwrap_or_else(|e| {
                     log::warn!("request_export_playlists get_playlists: {e}");
                     Vec::new()
                 });
+                // A smart playlist exports what its rules match, which its stored count isn't.
+                let smart: Vec<usize> =
+                    stats.iter().enumerate().filter(|(_, p)| p.is_smart).map(|(i, _)| i).collect();
+                library::smart_playlists::recount(&s, &mut stats, &smart).await;
                 let _ = weak.upgrade_in_event_loop(move |ui| {
                     let rows: Vec<UiPlaylistExportPickRow> = stats
                         .into_iter()

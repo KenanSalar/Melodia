@@ -13,7 +13,6 @@ use crate::ui::row_match;
 use crate::ui::util::len_as_i32;
 use melodia_app::library;
 use melodia_app::state::AppState;
-use melodia_core::entities::smart_criteria::SmartCriteria;
 use melodia_core::error::AppResult;
 use melodia_ui::{
     AppWindow, PlaylistGridRow as UiPlaylistGridRow, PlaylistRow as UiPlaylistRow, Playlists,
@@ -63,11 +62,8 @@ async fn fetch_grid_inner(
 ) -> AppResult<()> {
     let mut playlists = library::playlists::get_playlists(state).await?;
 
-    // Smart playlists have no `playlist_items` rows, so the trigger-maintained
-    // `track_count` / `total_duration_ms` stay 0 — resolve them from the stored
-    // criteria. On a `StatsOnly` refresh only the stat-dependent rows can have
-    // changed, so the rest carry their previous counts forward (the previous
-    // grid data is the source, cloned once up front — a cheap `Arc` bump).
+    // On a `StatsOnly` refresh only the stat-dependent smart rows can have moved, so the rest
+    // carry their previous counts forward from the prior grid data (one `Arc` clone up front).
     //
     // Transient-staleness note: `prev` is snapshotted and the counts computed
     // before `section.gate()` is acquired, so the gate serializes only the final
@@ -102,27 +98,7 @@ async fn fetch_grid_inner(
         }
     }
 
-    // Parse each selected row's criteria once, then fan the COUNT/SUM queries
-    // out across the read pool (WAL allows concurrent readers) instead of
-    // awaiting them serially. Results are written back by index — order-
-    // independent — so `join_all` completion order doesn't matter.
-    let parsed: Vec<(usize, SmartCriteria)> = to_count
-        .iter()
-        .map(|&i| (i, SmartCriteria::from_json_opt(playlists[i].smart_criteria.as_deref())))
-        .collect();
-    let counts = futures_util::future::join_all(parsed.iter().map(|(i, criteria)| async move {
-        (*i, library::smart_playlists::count(state, criteria).await)
-    }))
-    .await;
-    for (i, result) in counts {
-        match result {
-            Ok((count, duration)) => {
-                playlists[i].track_count = i32::try_from(count).unwrap_or(i32::MAX);
-                playlists[i].total_duration_ms = duration;
-            }
-            Err(e) => log::warn!("smart playlist {} count failed: {e}", playlists[i].id),
-        }
-    }
+    library::smart_playlists::recount(state, &mut playlists, &to_count).await;
 
     let data = Arc::new(GridData::new(playlists));
     {

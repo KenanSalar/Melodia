@@ -290,7 +290,7 @@ pub const PLAYLIST_EXPORT_COLUMNS: &[&str] =
     &["file_path", "file_hash", "title", "artist", "duration_ms"];
 
 /// Comma-separated form of `PLAYLIST_EXPORT_COLUMNS` with a table-alias
-/// prefix (the export query joins `tracks t` to `playlist_items`). Cached
+/// prefix (a manual playlist's export joins `tracks t` to `playlist_items`). Cached
 /// per alias, same pattern as `track_list_columns_prefixed`.
 pub fn playlist_export_columns_prefixed(alias: &str) -> &'static str {
     use std::sync::{Mutex, OnceLock};
