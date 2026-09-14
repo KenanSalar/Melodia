@@ -68,10 +68,21 @@ component HeaderCell inherits Rectangle {
     // unbounded space. A `min-height` keeps the cell tall enough and the layout fills
     // the cross axis.
     min-height: 32px;
+    // Radius-less, as in the rows: a rounded clip would render the cell into a texture to cut
+    // corners nothing reaches.
     clip: true;
-    background: touch.has-hover ? Theme.surface1 : transparent;
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-    border-radius: Theme.radius-md;
+
+    // The hover fill. Binding `x` and `y` keeps it out of the cell's layout info, so the `100%`
+    // here forms none of the cycle above.
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        background: touch.has-hover ? Theme.surface1 : transparent;
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        border-radius: Theme.radius-md;
+    }
 
     HorizontalLayout {
         padding-left: Theme.pad-sm;

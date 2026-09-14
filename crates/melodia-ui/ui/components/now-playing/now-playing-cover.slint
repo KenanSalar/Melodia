@@ -18,12 +18,19 @@ export component NowPlayingCover inherits Rectangle {
     width: tile-size;
     height: tile-size;
     border-radius: Theme.radius-lg;
+    clip: true;
+
     // Backdrop-solved rather than a theme surface: this tile sits on the artwork
     // blur, where a light theme's surface reads as a white square through the
     // cross-fade. The low alpha keeps it a recess in the backdrop, not a slab
-    // on it.
-    background: Player.np-on-backdrop.transparentize(0.92);
-    clip: true;
+    // on it. Square inside the clip, as in `ArtworkImage`.
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        background: Player.np-on-backdrop.transparentize(0.92);
+    }
 
     // Under the slots, faded out once a cover is there.
     Rectangle {

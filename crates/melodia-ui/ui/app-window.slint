@@ -56,6 +56,8 @@ import { QueueSheet } from "views/queue-sheet.slint";
 import { DialogOverlay } from "components/dialog/dialog.slint";
 import { OnboardingOverlay } from "components/onboarding/onboarding-overlay.slint";
 import { CustomTitleBar } from "components/custom-titlebar.slint";
+import { EdgeOutline } from "components/edge-outline.slint";
+import { RoundedFrame } from "components/rounded-frame.slint";
 import { NotificationStack } from "components/dialog/notification-stack.slint";
 import { MiniPlayerSwitch } from "components/mini-player-switch.slint";
 import { SectionActiveGate } from "components/section-active-gate.slint";
@@ -413,20 +415,21 @@ export component AppWindow inherits Window {
 
                 sidebar := Sidebar {}
 
-                // Rounded content panel: one Rectangle with a real rounded stroke, the
-                // `popup-surface.slint` pattern, so the border follows the corner curve. **One radius
-                // on all four corners, under either titlebar.** The clip insets every corner by the
-                // border without clamping at zero, so a square corner beside rounded ones folds back
-                // on itself and paints the page over the border's last pixel.
+                // Content panel. **Rounded by `RoundedFrame`, not by a rounded clip**: that clip
+                // would hold the whole view as a texture and render it again on every change inside,
+                // so this one has no radius and only keeps a sliding view off the sidebar and the
+                // bar. The fill is square; the frame's corner masks round it.
                 Rectangle {
                     horizontal-stretch: 1;
-                    background: Theme.base;
-                    border-color: Theme.border;
-                    border-width: 1px;
-                    // The radius the mantle shell rounds with when frameless: concentric arcs under
-                    // the custom titlebar, the host's corners under the native one.
-                    border-radius: Theme.window-radius;
                     clip: true;
+
+                    Rectangle {
+                        x: 0;
+                        y: 0;
+                        width: 100%;
+                        height: 100%;
+                        background: Theme.base;
+                    }
 
                     // One branch per nav index, `if` rather than `visible: false` so the
                     // unselected ones leave the layout tree. Every regular branch is also gated
@@ -517,6 +520,22 @@ export component AppWindow inherits Window {
                         y: 0;
                         width: parent.width;
                         height: parent.height;
+                    }
+
+                    // Last, so the corners and the border sit over every view and the sheet. The
+                    // shell's ground is all that shows around the panel, so it's the mask colour.
+                    // The radius is the one the mantle shell rounds with when frameless:
+                    // concentric arcs under the custom titlebar, the host's corners under the
+                    // native one.
+                    RoundedFrame {
+                        x: 0;
+                        y: 0;
+                        width: 100%;
+                        height: 100%;
+                        radius: Theme.window-radius;
+                        stroke-width: 1px;
+                        stroke-color: Theme.border;
+                        ground: WindowChrome.mantle;
                     }
                 }
             }
@@ -618,19 +637,15 @@ export component AppWindow inherits Window {
             height: 100%;
         }
 
-        // The 1 px outline an OS draws round its own frames, which a frameless window has to draw
-        // for itself. Last, so nothing in the window paints over the edge, a dialog's scrim
-        // included, and a childless element is no layer. Two physical pixels centred on the shell's
-        // edge, so the clip cuts the outer one away through solid colour: one physical pixel
-        // survives, as the OS draws it, and the clip stays the corner's only antialiased pass.
-        if root.frameless && !WindowChrome.is-maximized && Settings.window-border-shown: Rectangle {
-            x: -1phx;
-            y: -1phx;
-            width: parent.width + 2phx;
-            height: parent.height + 2phx;
-            border-radius: Theme.window-radius + 1phx;
-            border-width: 2phx;
-            border-color: Theme.window-focused
+        // The outline an OS draws round its own frames, which a frameless window has to draw for
+        // itself. Last, so nothing in the window paints over the edge, a dialog's scrim included.
+        // One physical pixel at every scale, as the OS draws it.
+        if root.frameless && !WindowChrome.is-maximized && Settings.window-border-shown: EdgeOutline {
+            width: 100%;
+            height: 100%;
+            radius: Theme.window-radius;
+            stroke-width: 1phx;
+            stroke-color: Theme.window-focused
                 ? WindowChrome.border-color
                 : WindowChrome.border-color-unfocused;
         }

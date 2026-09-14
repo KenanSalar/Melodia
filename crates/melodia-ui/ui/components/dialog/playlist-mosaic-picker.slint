@@ -4,6 +4,7 @@ import { Dialog } from "../../globals/dialog.slint";
 import { Playlists } from "../../globals/playlists.slint";
 import { ArtworkImage } from "../artwork-image.slint";
 import { CoverMosaic } from "../grid/cover-mosaic.slint";
+import { EdgeOutline } from "../edge-outline.slint";
 import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 import { SectionButton } from "../settings/section-button.slint";
 
@@ -43,14 +44,21 @@ export component PlaylistMosaicPicker inherits Rectangle {
             alignment: center;
             vertical-stretch: 0;
 
+            // The fill is square and the border an `EdgeOutline`, so the clip is the only
+            // antialiased pass on the curve a cover fills to.
             preview := Rectangle {
                 width: 220px;
                 height: 220px;
-                background: Theme.surface1;
                 border-radius: Theme.radius-lg;
-                border-width: 1px;
-                border-color: Theme.border;
                 clip: true;
+
+                Rectangle {
+                    x: 0;
+                    y: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: Theme.surface1;
+                }
 
                 // The saved cover, shown until the first pick or Clear flips
                 // `mosaic-touched` and unmounts this branch.
@@ -101,6 +109,14 @@ export component PlaylistMosaicPicker inherits Rectangle {
                     request-cover(p) => {
                         return Playlists.request-cover(p, Playlists.covers-generation);
                     }
+                }
+
+                EdgeOutline {
+                    width: 100%;
+                    height: 100%;
+                    radius: Theme.radius-lg;
+                    stroke-width: 1px;
+                    stroke-color: Theme.border;
                 }
             }
         }
@@ -217,6 +233,8 @@ export component PlaylistMosaicPicker inherits Rectangle {
                                 y: Math.floor(i / root.cand-cols) * root.cand-stride;
                                 width: root.cand-tile;
                                 height: root.cand-tile;
+                                // The tile's one rounded clip. Everything inside is square or
+                                // an `EdgeOutline`, so this is the curve's only antialiased pass.
                                 clip: true;
                                 border-radius: Theme.radius-sm;
 
@@ -232,28 +250,30 @@ export component PlaylistMosaicPicker inherits Rectangle {
                                         && Dialog.mosaic-selection[2] == path) ? 2 :
                                     (Dialog.mosaic-selection.length >= 4
                                         && Dialog.mosaic-selection[3] == path) ? 3 : -1;
+                                // The hairline's fade. Through its brush, since `opacity` on an
+                                // element with children renders it into a texture.
+                                property <float> hover-t:
+                                    cand-touch.has-hover && cand.slot < 0 ? 1.0 : 0.0;
+                                animate hover-t { duration: Theme.dur-fast; easing: ease-out; }
 
                                 ArtworkImage {
                                     artwork-path: path;
                                     cover: Playlists.request-row-cover(path);
                                     tile-size: root.cand-tile;
-                                    tile-radius: Theme.radius-sm;
+                                    // Square, so its own clip is a plain one: `cand` rounds it.
+                                    tile-radius: 0px;
                                     // Hover pop, as on the album grid card.
                                     // `ArtworkImage` animates the scale itself.
                                     cover-scale: cand-touch.has-hover ? 1.06 : 1.0;
                                 }
 
-                                // Always mounted and opacity-animated, so the
-                                // hairline fades instead of popping.
-                                Rectangle {
+                                // Always mounted, so the hairline fades instead of popping.
+                                EdgeOutline {
                                     width: 100%;
                                     height: 100%;
-                                    border-radius: Theme.radius-sm;
-                                    border-width: 1px;
-                                    border-color: Theme.overlay1;
-                                    background: transparent;
-                                    opacity: cand-touch.has-hover && cand.slot < 0 ? 1.0 : 0.0;
-                                    animate opacity { duration: Theme.dur-fast; easing: ease-out; }
+                                    radius: Theme.radius-sm;
+                                    stroke-width: 1px;
+                                    stroke-color: Theme.overlay1.transparentize(1.0 - cand.hover-t);
                                 }
 
                                 // Selection ring + badge, always mounted for the
@@ -262,12 +282,24 @@ export component PlaylistMosaicPicker inherits Rectangle {
                                 Rectangle {
                                     width: 100%;
                                     height: 100%;
-                                    border-radius: Theme.radius-sm;
-                                    border-width: 2px;
-                                    border-color: Theme.accent;
-                                    background: Theme.accent.with-alpha(0.18);
                                     opacity: cand.slot >= 0 ? 1.0 : 0.0;
                                     animate opacity { duration: Theme.dur-fast; easing: ease-out; }
+
+                                    Rectangle {
+                                        x: 0;
+                                        y: 0;
+                                        width: 100%;
+                                        height: 100%;
+                                        background: Theme.accent.with-alpha(0.18);
+                                    }
+
+                                    EdgeOutline {
+                                        width: 100%;
+                                        height: 100%;
+                                        radius: Theme.radius-sm;
+                                        stroke-width: 2px;
+                                        stroke-color: Theme.accent;
+                                    }
 
                                     Rectangle {
                                         width: 22px;

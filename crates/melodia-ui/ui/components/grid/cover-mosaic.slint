@@ -14,9 +14,8 @@ component MosaicSlot inherits Rectangle {
     in property <brush>    tile-icon-color;
     pure callback request-cover(string) -> image;
 
-    clip: true;
-    border-radius: tile-radius;
-
+    // No clip of its own: the tile clips itself at this radius, and a second rounded clip over it
+    // is another texture and another antialiased pass on the same curve.
     if root.artwork-paths.length > root.idx: ArtworkImage {
         width: parent.width;
         height: parent.height;

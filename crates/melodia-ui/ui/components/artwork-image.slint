@@ -68,8 +68,17 @@ export component ArtworkImage inherits Rectangle {
     width: tile-size;
     height: tile-size;
     border-radius: tile-radius;
-    background: tile-bg.transparentize(1.0 - root.fade);
     clip: true;
+
+    // Square, inside the clip. Painted on the root, the fill's rounded edge and the clip's both
+    // antialias the same curve under a cover, and the corner reads harder than its radius.
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        background: root.tile-bg.transparentize(1.0 - root.fade);
+    }
 
     if root.shows-cover && !root.insets-cover: Image {
         // Derived from the animating source, so size and centring track per frame with no lag.

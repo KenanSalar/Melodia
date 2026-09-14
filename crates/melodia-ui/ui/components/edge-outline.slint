@@ -1,0 +1,22 @@
+// A stroke along the inside edge of a rounded `clip: true`, mounted as its last child at the full
+// size of the clip. FemtoVG antialiases every rounded shape on its own and the coverages stack, so
+// a stroke ending on the clip's edge paints that curve harder than its radius. This one straddles
+// the edge by a physical pixel instead, the clip cuts that pixel away through solid colour, and
+// exactly `stroke-width` survives inside with the clip as the curve's only antialiased pass.
+export component EdgeOutline inherits Rectangle {
+    in property <length> radius;
+    in property <length> stroke-width;
+    in property <brush> stroke-color;
+
+    private property <length> bleed: 1phx;
+
+    Rectangle {
+        x: -root.bleed;
+        y: -root.bleed;
+        width: parent.width + 2 * root.bleed;
+        height: parent.height + 2 * root.bleed;
+        border-radius: root.radius + root.bleed;
+        border-width: root.stroke-width + root.bleed;
+        border-color: root.stroke-color;
+    }
+}

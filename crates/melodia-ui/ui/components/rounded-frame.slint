@@ -1,0 +1,74 @@
+// A rounded edge for a panel over an opaque ground, drawn without a rounded clip: a stroke, and
+// the corners outside it painted in the ground's colour. A rounded clip holds everything under it
+// as a texture and renders it again whenever anything beneath changes, which for a whole content
+// panel is every scroll and visualizer frame. Mount it last, at full size, over a `clip: true`
+// with no radius, and only where `ground` is exactly what shows around the panel.
+export component RoundedFrame inherits Rectangle {
+    in property <length> radius;
+    in property <length> stroke-width;
+    in property <brush> stroke-color;
+    in property <brush> ground;
+
+    // Each mask's arc runs down the middle of the stroke, so its antialiased edge lies under solid
+    // stroke, the way the renderer tucks a bordered rectangle's own fill. Path units are logical
+    // pixels: the viewbox matches the box, and a fill-only path isn't inset by a stroke.
+    private property <float> side: root.radius / 1px;
+    private property <float> inset: root.stroke-width / 2px;
+    private property <float> arc: root.side - root.inset;
+    private property <string> arc-to: " A " + root.arc + " " + root.arc + " 0 0 0 ";
+
+    if root.arc > 0: Rectangle {
+        Path {
+            x: 0;
+            y: 0;
+            width: root.radius;
+            height: root.radius;
+            viewbox-width: root.side;
+            viewbox-height: root.side;
+            fill: root.ground;
+            commands: "M 0 0 H " + root.side + " V " + root.inset + root.arc-to
+                + root.inset + " " + root.side + " H 0 Z";
+        }
+        Path {
+            x: parent.width - self.width;
+            y: 0;
+            width: root.radius;
+            height: root.radius;
+            viewbox-width: root.side;
+            viewbox-height: root.side;
+            fill: root.ground;
+            commands: "M " + root.side + " 0 V " + root.side + " H " + root.arc + root.arc-to
+                + "0 " + root.inset + " V 0 Z";
+        }
+        Path {
+            x: 0;
+            y: parent.height - self.height;
+            width: root.radius;
+            height: root.radius;
+            viewbox-width: root.side;
+            viewbox-height: root.side;
+            fill: root.ground;
+            commands: "M 0 " + root.side + " V 0 H " + root.inset + root.arc-to
+                + root.side + " " + root.arc + " V " + root.side + " Z";
+        }
+        Path {
+            x: parent.width - self.width;
+            y: parent.height - self.height;
+            width: root.radius;
+            height: root.radius;
+            viewbox-width: root.side;
+            viewbox-height: root.side;
+            fill: root.ground;
+            commands: "M " + root.side + " " + root.side + " H 0 V " + root.arc + root.arc-to
+                + root.arc + " 0 H " + root.side + " Z";
+        }
+    }
+
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        border-radius: root.radius;
+        border-width: root.stroke-width;
+        border-color: root.stroke-color;
+    }
+}

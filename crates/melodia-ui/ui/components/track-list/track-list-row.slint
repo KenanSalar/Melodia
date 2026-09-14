@@ -175,13 +175,6 @@ export component TrackListRowItem inherits Rectangle {
         padding-bottom: Theme.row-gap;
 
         chrome := Rectangle {
-            // Per-corner radii merge contiguous selected rows into one pill. An
-            // unselected row always rounds both ends, so a hover-only pill keeps the
-            // shape of a single-row one.
-            border-top-left-radius: (root.selected && root.prev-selected) ? 0 : Theme.radius-md;
-            border-top-right-radius: (root.selected && root.prev-selected) ? 0 : Theme.radius-md;
-            border-bottom-left-radius: (root.selected && root.next-selected) ? 0 : Theme.radius-md;
-            border-bottom-right-radius: (root.selected && root.next-selected) ? 0 : Theme.radius-md;
             // Pinned so the pill always fills the slot. Left to size from its content, chrome grows
             // on hover as the checkbox and fav button swap in, reading as a row expanding under the
             // cursor. Mirrors the outer slot's `show-artwork` ternary.
@@ -193,14 +186,29 @@ export component TrackListRowItem inherits Rectangle {
             ? 0.45
             : ((root.enable-drag && root.drag-source == root.row-index) ? 0.4 : 1.0);
         animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
-        // Selection is a faint accent overlay that brightens on hover; an unselected
-        // row hovers to `surface0`.
-        background: root.selected
-            ? (touch.has-hover
-                ? Theme.accent.with-alpha(0.14)
-                : Theme.accent.with-alpha(0.08))
-            : (touch.has-hover ? Theme.surface0 : transparent);
+        // No radius here: a clip copies its element's radius, and a rounded one renders the whole
+        // row into a texture. Nothing reaches the corners, so a plain clip cuts the same overflow.
         clip: true;
+
+        // The pill. Per-corner radii merge contiguous selected rows into one; an unselected row
+        // always rounds both ends, so a hover-only pill keeps the shape of a single-row one.
+        // Selection is a faint accent overlay that brightens on hover; an unselected row hovers to
+        // `surface0`.
+        Rectangle {
+            x: 0;
+            y: 0;
+            width: 100%;
+            height: 100%;
+            border-top-left-radius: (root.selected && root.prev-selected) ? 0 : Theme.radius-md;
+            border-top-right-radius: (root.selected && root.prev-selected) ? 0 : Theme.radius-md;
+            border-bottom-left-radius: (root.selected && root.next-selected) ? 0 : Theme.radius-md;
+            border-bottom-right-radius: (root.selected && root.next-selected) ? 0 : Theme.radius-md;
+            background: root.selected
+                ? (touch.has-hover
+                    ? Theme.accent.with-alpha(0.14)
+                    : Theme.accent.with-alpha(0.08))
+                : (touch.has-hover ? Theme.surface0 : transparent);
+        }
 
         // `touch` **wraps** the cell layout so `cb-touch` and `fav-touch` are real descendants.
         // Slint propagates `has-hover` up to a TouchArea's ancestors but not across cousins, so

@@ -14,6 +14,7 @@ const MINI_SWITCH: &str =
     include_str!("../../../../melodia-ui/ui/components/mini-player-switch.slint");
 const THEME: &str = include_str!("../../../../melodia-ui/ui/theme.slint");
 const RESIZE_RING: &str = include_str!("../../../../melodia-ui/ui/layout/resize-ring.slint");
+const EDGE_OUTLINE: &str = include_str!("../../../../melodia-ui/ui/components/edge-outline.slint");
 
 /// The rect the shell takes inside the client, as tokens.
 const CONTENT_RECT: &str =
@@ -86,7 +87,7 @@ fn the_shell_and_every_overlay_over_it_sit_inside_the_kept_margins()
         "if Onboarding.mounted: OnboardingOverlay {",
         "DialogOverlay {",
         "NotificationStack {",
-        "if root.frameless && !WindowChrome.is-maximized && Settings.window-border-shown: Rectangle {",
+        "if root.frameless && !WindowChrome.is-maximized && Settings.window-border-shown: EdgeOutline {",
     ];
     let shell = tokens(APP_WINDOW);
     let shell_body = blocks_named(&shell, "Rectangle")
@@ -112,7 +113,7 @@ fn the_outline_mounts_only_where_no_frame_draws_one() {
 
     let gated = shell
         .matches(
-            "if root.frameless && !WindowChrome.is-maximized && Settings.window-border-shown: Rectangle {",
+            "if root.frameless && !WindowChrome.is-maximized && Settings.window-border-shown: EdgeOutline {",
         )
         .count();
 
@@ -120,21 +121,29 @@ fn the_outline_mounts_only_where_no_frame_draws_one() {
 }
 
 /// A logical pixel is two physical ones at 200 % and a blurred one and a half at 150 %, where the
-/// OS draws exactly one at every scale. The outline strokes two centred on the shell's edge and the
-/// clip keeps the inner one, so a stroke not pushed out by one shows both.
+/// OS draws exactly one at every scale. The outline asks for one, and `EdgeOutline` strokes it
+/// pushed out by a physical pixel the clip cuts away, so a stroke not pushed out shows both.
 #[test]
 fn the_outline_is_one_physical_pixel() {
-    const BINDINGS: [&str; 2] = [
-        "x: -1phx; y: -1phx; width: parent.width + 2phx; height: parent.height + 2phx;",
-        "border-width: 2phx;",
+    const OUTLINE_BINDINGS: [&str; 3] = [
+        "private property <length> bleed: 1phx;",
+        "x: -root.bleed; y: -root.bleed; width: parent.width + 2 * root.bleed; height: parent.height + 2 * root.bleed;",
+        "border-width: root.stroke-width + root.bleed;",
     ];
     let shell = tokens(APP_WINDOW);
+    let outline = tokens(EDGE_OUTLINE);
 
-    let missing: Vec<&str> = BINDINGS.into_iter().filter(|b| !shell.contains(b)).collect();
+    let asked: Vec<bool> = blocks_named(&shell, "EdgeOutline")
+        .iter()
+        .map(|mount| mount.contains("stroke-width: 1phx;"))
+        .collect();
+    let missing: Vec<&str> =
+        OUTLINE_BINDINGS.into_iter().filter(|b| !outline.contains(b)).collect();
 
+    assert_eq!(asked, [true], "the window outline no longer asks for one physical pixel");
     assert!(
         missing.is_empty(),
-        "the window outline no longer leaves one physical pixel:\n{missing:#?}"
+        "`EdgeOutline` no longer leaves exactly the stroke it is asked for:\n{missing:#?}"
     );
 }
 
@@ -143,12 +152,18 @@ fn the_outline_is_one_physical_pixel() {
 #[test]
 fn the_outline_rounds_with_the_shell() {
     let shell = tokens(APP_WINDOW);
+    let outline = tokens(EDGE_OUTLINE);
 
-    let radius = binding_value(&shell, "height: parent.height + 2phx; border-radius:").trim();
+    let handed: Vec<bool> = blocks_named(&shell, "EdgeOutline")
+        .iter()
+        .map(|mount| mount.contains("radius: Theme.window-radius;"))
+        .collect();
+    let radius = binding_value(&outline, "border-radius:").trim();
 
+    assert_eq!(handed, [true], "the window outline's mount no longer hands it the shell's radius");
     assert_eq!(
-        radius, "Theme.window-radius + 1phx",
-        "the outline's corners no longer follow the shell's"
+        radius, "root.radius + root.bleed",
+        "`EdgeOutline`'s corners no longer take the pixel it is pushed out by"
     );
 }
 
@@ -157,7 +172,7 @@ fn the_outline_rounds_with_the_shell() {
 fn the_outline_takes_the_unfocused_colour_only_on_an_unfocused_window() {
     let shell = tokens(APP_WINDOW);
 
-    let color = binding_value(&shell, "border-color: Theme.window-focused").trim();
+    let color = binding_value(&shell, "stroke-color: Theme.window-focused").trim();
 
     assert_eq!(
         color, "? WindowChrome.border-color : WindowChrome.border-color-unfocused",
