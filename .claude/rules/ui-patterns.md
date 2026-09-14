@@ -464,17 +464,19 @@ three components that answer it, and each argues its geometry at its own file.
   `most_played_matches`, the same predicate the model build uses, so the cards and the queue can't
   disagree about what's on screen.
 
-- **Detail-page inset.** The band is full-bleed, so a detail *body* may inset on its root like any
-  grid page — **Album and Genre do; Artist and Playlist can't**, Artist's `below-hero` being the
-  region `CompositeScrollbars` measures and Playlist's empty state and drop banner filling `body`.
-  Overlay scrollbars stay at `parent.width - self.width` either way; bottom padding is never on the
-  root (the dead-strip pitfall). **The horizontal bar's clearance is a lane inside the list
-  instead** — `reserve-scrollbar-lane` on `TrackList` / `DraggableTrackList`, which pads the column
-  *inside* `outer-scroll` by `Theme.scrollbar-slot`. **All eight bar-pair hosts set it, composite
-  ones included** — that bar takes the list's `x`/`width` and the view's bottom, which is the list's
-  own edge the moment it hits the `below-sv.visible-height` cap. A composite host owes the lane a
-  second time as a term in that cap's content-fit arm, which hand-sums rows + header + spacing.
-  Search's songs section is the one opt-out, its bar being a layout sibling with a slot already.
+- **Track-list insets belong to the list, not the page.** `TrackList` and `DraggableTrackList`
+  take `inset-left` and `inset-right`, defaulting to `Theme.track-list-inset` and
+  `Theme.scrollbar-slot`, and resolve their columns inside them. So the Songs tabs and the four
+  detail bodies mount the list at full width with no side padding of their own, a detail's header
+  sitting flush under its band, and the right edge stops at the bar's slot so a row's pill never
+  runs under the track. Two hosts differ: Browse keeps a `page-inset` for its header strip and card
+  grid, its folder rows following the list's column, and Search's Songs section passes `0px` on
+  both sides, being a column inside the page's own inset beside the Top Result. Overlay scrollbars
+  stay at `parent.width - self.width`, and bottom padding is never on the root (the dead-strip
+  pitfall).
+  **Three hosts hand-sum a list's height** from its rows, `Theme.track-header-h` and its `pad-xs`
+  spacing: Browse's and Artist Detail's viewport caps, and Search's Songs section outright. A
+  change to the list's own chrome owes all three.
 
 - **The Now Playing right column is one column with three arms, not a place two things share.**
   Up Next, the lyrics panel and the station panel, swapped on `Player.vm.has_station` and

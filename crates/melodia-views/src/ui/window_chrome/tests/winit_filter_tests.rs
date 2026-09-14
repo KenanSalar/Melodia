@@ -9,8 +9,8 @@ fn a_wheel_is_left_to_slint() {
 }
 
 // Only the phase decides. Gating on the delta too would leave the horizontal
-// half — a column pan under Search's and Browse's vertical outer scroller —
-// captured and ignored exactly as before.
+// half, a card strip under Search's vertical outer scroller, captured and
+// ignored exactly as before.
 #[test]
 fn a_touchpad_gesture_start_is_unphased_on_both_axes() {
     assert_eq!(route_wheel(false, false, TouchPhase::Started, 0.0, -8.0), WheelRoute::Unphased);

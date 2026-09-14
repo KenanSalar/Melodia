@@ -162,8 +162,8 @@ this file is what builds, looks right, and is wrong.
   every event until `Ended` — its `Moved`/`Cancelled` arms do check direction, which is the whole
   of why a wheel behaves. **Only a precision device sends the phase**: Wayland folds a discrete
   axis to `Moved`, X11 and Win32 send nothing else — Wayland and macOS only, invisible to a mouse.
-  Bit every page whose body is a plain `TrackList`, which wraps its vertical `ListView` in a
-  horizontal-only `ScrollView` for the column pan. Cure in `winit_filter.rs`'s `route_wheel`:
+  Bites any scroller nested in another on a crossing axis: a card strip under Search's vertical
+  outer scroller never sees a sideways swipe. Cure in `winit_filter.rs`'s `route_wheel`:
   swallow the native `Started` and re-send its delta through
   `Window::try_dispatch_event(PointerScrolled)`, which lands as a one-shot `Cancelled` and leaves
   the capture flag unset for the rest of the gesture. **Ungated on purpose** — it reads no view
@@ -195,8 +195,8 @@ this file is what builds, looks right, and is wrong.
   occasional, and at 4–8 px of travel the computed slot is still the source's own, so no drop
   indicator paints either. It still reads as intermittent, both escapes being real: a list shorter
   than its viewport can't flick, and a press held past 500 ms before moving is never intercepted.
-  Both draggable lists opt out outright, `draggable-track-list.slint` on both axes (a diagonal
-  drag steals sideways once the columns overflow) and `queue-sheet.slint`, pinned by
+  Both draggable lists opt out outright, `draggable-track-list.slint`'s `inner-list` and
+  `queue-sheet.slint`'s, pinned by
   `ui::playlists::tests::every_draggable_list_opts_out_of_drag_panning`, since it only misbehaves
   under a pointer; the click-to-act grids and lists are pinned by `crates/melodia/tests/scrollbars.rs`.
   **`!reorder-enabled` is what that binding used to say, and is the trap worth keeping**: it reads
@@ -303,14 +303,10 @@ this file is what builds, looks right, and is wrong.
   strip rather than as breathing room.** `padding: Theme.pad-lg` on a root `VerticalLayout` whose
   stretchy child is a list/grid/ScrollView pads all four sides, and the bottom one shortens the
   viewport instead of the content: the last row is clipped mid-glyph and a band of bare
-  `Theme.base` sits between it and the panel border at every scroll position. Easy to mistake for
-  the horizontal `OverlayScrollbar` at the same `y` — the tell is colour: that track is `surface0`
-  at half alpha, rounded and inset, where the strip is flat full-bleed `base`. Inset
+  `Theme.base` sits between it and the panel border at every scroll position. Inset
   **left/right/top only**; for clearance at the end, put `padding-bottom` on the column *inside*
-  the viewport — which is exactly what `reserve-scrollbar-lane` does for the horizontal bar's own
-  slot, so the two read alike on screen and are opposite in the tree. Artist and Playlist can't inset on the root at all — Artist's `below-hero` must
-  run full-bleed for `CompositeScrollbars` and the hover sentinel, and Playlist's empty state and
-  drop banner deliberately fill `body`.
+  the viewport. A track list page pads no sides at all, the list owning its own insets
+  (`ui-patterns.md`'s track-list inset entry).
 
 - **`changed` doesn't accept path expressions on globals — mirror via local property.**
   `changed Nav.selected-index => {}` fails to parse. Use

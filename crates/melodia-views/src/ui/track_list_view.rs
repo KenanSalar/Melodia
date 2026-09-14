@@ -8,9 +8,9 @@
 //! parameters, so a new view is a global, a `view_id::*` const, one invocation and two calls.
 //!
 //! Persistence rides on `views.json`'s `view_column_widths` and `view_columns`, both keyed by an
-//! arbitrary view-id, so a new view needs no schema change. **The defaults live here and nowhere
-//! else**: the globals declare none, so [`hydrate`] writes every view whether or not the file
-//! holds an entry for it.
+//! arbitrary view-id, so a new view needs no schema change. **The defaults are Rust's**, each
+//! view's visible set here and the widths in `ColumnWidths::default()`: the globals declare none,
+//! so [`hydrate`] writes every view whether or not the file holds an entry for it.
 
 use std::collections::HashSet;
 

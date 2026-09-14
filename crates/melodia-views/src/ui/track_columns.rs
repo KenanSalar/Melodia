@@ -27,7 +27,7 @@ const LENGTH: usize = 6;
 /// Past this a rigid column's content is padding; the room belongs to the flex columns.
 const RIGID_MAX: f32 = 200.0;
 
-/// Below this a rigid column's width moved by float error, not by the drag.
+/// Under this, two rigid widths differ only by float error.
 const RESIZE_EPSILON: f32 = 0.01;
 
 #[derive(Clone, Copy)]
@@ -247,6 +247,10 @@ fn give_up(
 /// it had, since a width squeezed by a narrow window is not one the user chose. Every visible flex
 /// column keeps its width as its weight, and a hidden flex weight scales with them so the column
 /// comes back in the same proportion.
+///
+/// **Unless the list was already squeezing the rigid columns at the press.** Then every visible
+/// one keeps what the drag left: [`resolve`] seats rigid widths first, so restoring theirs hands
+/// them back the room the drag gave a flex column, and a different column grows under the pointer.
 fn stored_after(
     pressed: &Columns,
     before: &[f32; COLUMN_COUNT],
@@ -255,11 +259,15 @@ fn stored_after(
     let old_weight: f32 = flex_shown(pressed).map(|i| stored_width(pressed, i)).sum();
     let new_weight: f32 = flex_shown(pressed).map(|i| after[i]).sum();
     let hidden_scale = if old_weight > 0.0 { new_weight / old_weight } else { 1.0 };
+    let rigid_squeezed = rigid_shown(pressed)
+        .any(|i| before[i] + RESIZE_EPSILON < stored_width(pressed, i).min(RIGID_MAX));
 
     let mut stored = *pressed;
     for i in 0..COLUMN_COUNT {
         match (SPECS[i].kind, pressed.visible[i]) {
-            (Kind::Rigid, true) if (after[i] - before[i]).abs() > RESIZE_EPSILON => {
+            (Kind::Rigid, true)
+                if rigid_squeezed || (after[i] - before[i]).abs() > RESIZE_EPSILON =>
+            {
                 stored.widths[i] = after[i];
             }
             (Kind::Rigid, _) => {}

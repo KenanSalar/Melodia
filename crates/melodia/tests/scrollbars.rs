@@ -11,8 +11,8 @@
 //!
 //! Two checks, because the two failures are different shapes. A wrong *value* is the one
 //! you can grep for. An *omitted* policy is what only the per-block walk sees: a flat
-//! search would let a scroller borrow the opt-out of the `TrackList` nested inside it,
-//! which is exactly the arrangement every composite view has.
+//! search would let a scroller borrow the opt-out of a scroller nested inside it, which
+//! is exactly the arrangement both composite views have.
 
 use melodia_testkit::{
     MIN_SLINT_SOURCES, UI_DIR, blocks_named, normalize_ws as normalized, stripped_sources,
