@@ -111,6 +111,22 @@ silently miss the other.
   empty string — so both pins check lengths through `melodia_testkit::sort_mount_arrays`. `labels`
   stays an inline `[@tr("…"), …]` literal.
 
+### Rounded edges
+
+The one-pass-per-curve rule and what a rounded clip costs are `slint-pitfalls.md`'s. These are the
+two components that answer it, and each argues its geometry at its own file.
+
+- **`EdgeOutline`** (`components/edge-outline.slint`) is the stroke along a rounded clip's inside
+  edge: the window outline, the artwork dialog's preview, and a candidate tile's hover hairline and
+  selection ring. Mounted last inside the clip, at its full size. Its root has a child, so a fade
+  goes through `stroke-color` rather than `opacity`, which would layer it.
+
+- **`RoundedFrame`** (`components/rounded-frame.slint`) draws a panel's border and corners without a
+  rounded clip, the corners masked in a `ground` colour over a radius-less `clip: true`. One mount,
+  the content panel. **Only over an opaque ground that is exactly `ground`**: over a hero, a blur or
+  anything the corners can't name in one brush it paints them visibly, and a rounded clip over a
+  square fill with an `EdgeOutline` is the answer there, texture and all.
+
 ### Grids, strips, cards
 
 - **Every grid is `EntityCard` in a virtualized chunked-row `ListView`**: Rust chunks the flat

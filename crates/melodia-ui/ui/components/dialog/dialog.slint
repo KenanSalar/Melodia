@@ -111,7 +111,7 @@ export component DialogOverlay inherits Rectangle {
         // edges of a short window rather than overflowing downward where a scroll would find it.
         //
         // **Only a kind whose body scrolls may be capped.** Nothing here clips — a rounded clip
-        // over text costs an upscaled layer — so a body squeezed below what its children need
+        // renders the whole card into a texture — so a body squeezed below what its children need
         // paints the remainder, action buttons included, outside the card and onto the backdrop.
         // A kind joining this list owes a scroller; `AddStationBody` is the worked example.
         property <bool> body-scrolls:

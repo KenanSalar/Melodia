@@ -419,12 +419,32 @@ this file is what builds, looks right, and is wrong.
   a pair is only ever right where nothing fades *into* the new source and no mounted element reads
   it; `ui::now_playing::source_change` is the one such site, and argues it there.
 
-- **A rounded `clip: true` (or a `border`) on an element that *contains text/children* blurs +
-  upscales that subtree on HiDPI.** FemtoVG renders it into an offscreen texture at logical size,
-  then upscales by the display scale factor on blit. Don't wrap a scrolling text list in a
-  bordered/rounded-clipped card: let the `ScrollView` clip its viewport rectangularly (cheap
-  scissor, no layer) and paint the rounded border with a **childless overlay `Rectangle`**
-  sibling. Canonical: `components/dialog/selectable-picker.slint::PickerListCard`.
+- **A rounded `clip: true` renders everything under it into a texture, and a clip on a rounded
+  element is always a rounded one.** `passes/clip.rs` copies the element's radius onto the `Clip`
+  it creates, and `visit_clip` sends any non-zero radius through `render_layer`: the children draw
+  into a texture at physical size, drawn again whenever anything they read changes (the texture's
+  tracker registers with the one around it, so a nested one dirties its parent too), then filled
+  back through an antialiased path. A radius-less clip is a scissor with no texture, and **a
+  `border` never makes one** (`draw_border_rectangle` draws directly). Two costs follow. The
+  texture is sampled linearly on the way back, so one landing on a fractional pixel softens the
+  text in it; and a clip around a whole view renders that view into its texture again on every
+  scroll and visualizer frame. Where the clip only guards overflow, keep `clip` on an element with
+  no radius and move the rounded fill into a child pinned at `x: 0; y: 0` (the track rows, the
+  header cells); where the content has to read rounded over an opaque ground, `RoundedFrame` masks
+  the corners instead (the content panel). A scrolling list in a card clips its viewport with the
+  `ScrollView` and keeps its fill and border on the card, inset from the border
+  (`components/dialog/selectable-picker.slint::PickerListCard`).
+
+- **FemtoVG antialiases every rounded fill, stroke and clip on its own, and the coverages of one
+  curve stack.** A pixel the arc half covers is painted past half by each further shape on the
+  same curve, so the corner reads harder than its radius, as if the rounding started later.
+  Nothing warns, and a single shape never shows it. The stacks this tree had: a `background` under
+  a rounded clip whose content fills to the edge (every cover tile), a border element laid over a
+  separately rounded fill, a stroke ending on a clip's edge, and a fill drawn over a whole track
+  of the same shape. Cures: the fill as a **square** child inside the clip (`ArtworkImage`, the
+  window shell); fill and border on **one** element, where the renderer tucks the fill under the
+  stroke; a stroke inside a rounded clip as an `EdgeOutline`, which argues its straddle; and a
+  track drawn only beside its fill (`ProgressBar`, `EqBandSlider`).
 
 - **Nothing that draws text may be cut to its layout box — the box is a line box and the ink is
   not. Two mechanisms cut, and both are invisible in Latin.** The shipped Vazirmatn faces are
@@ -500,7 +520,7 @@ this file is what builds, looks right, and is wrong.
   content panel under the native titlebar, rounded on the left and oversized past a square wrapper
   to meet the OS frame flush on the right. **Safe shapes are one radius on every corner, or zero on
   all four** (a scissor with no layer). Where an edge has to look square, give the element a gutter
-  rather than clipping a square corner; `app-window.slint`'s panel is the worked example.
+  rather than clipping a square corner.
 
 - **An explicit `background: transparent` costs a discarded path per element per frame.**
   `resolve_native_classes` picks an element's native class from *which properties have bindings*,
@@ -535,9 +555,13 @@ this file is what builds, looks right, and is wrong.
   the viewbox**: without one Slint fits the path's *own* bounding box to the element,
   renormalising every frame — a whisper draws as loud as a chorus. And `fit` must be `fill`, not
   the default `contain`, which preserves aspect ratio and letterboxes a tall narrow box into a
-  sliver. Finally, emit a closed figure **lower-edge-first** so its signed area is positive:
-  femtovg reads the winding to decide solid vs `Solidity::Hole`. All four bit
-  `waveform-trace.slint`; `player::waveform::write_path_commands` is the writer.
+  sliver. Finally, **wind every closed figure counter-clockwise on screen** (a waveform:
+  lower-edge-first) so its signed area is positive. `draw_path` marks a negative one
+  `Solidity::Hole`, which femtovg enforces by reversing the winding, and a concave fill draws its
+  antialiased fringe only outside the fill, so a hole's edges come out stepped with nothing else
+  wrong. The sum skips the closing segment, so where the figure starts matters too: close along a
+  vertical edge or one at `y = 0`. All four bit `waveform-trace.slint`, whose writer is
+  `player::waveform::write_path_commands`; the winding bit `rounded-frame.slint` too.
 
 - **A `<=>` on a `Flickable`'s `viewport-y` silently disables Slint's own out-of-bounds correction
   — a one-way binding doesn't.** `Flickable::init` installs a change handler that pulls a

@@ -8,11 +8,10 @@ import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 // Export-playlists). Everything arrives as plain `in` properties, so neither picker's globals reach
 // in here and both share one implementation.
 //
-// **Load-bearing: nothing containing the rows carries a `border` or a `clip`.** Either one promotes
-// that subtree to a FemtoVG compositing layer whose offscreen texture is allocated at logical size
-// and upscaled by the display scale on blit, so the row text reads blurry beside the header. The
-// tonal fill and the filled indicator carry the selection, and `PickerListCard` paints its border
-// with a childless overlay, which needs no layer.
+// **Load-bearing: nothing containing the rows carries a rounded `clip`.** It renders them into a
+// texture that is sampled linearly on the way back, so row text landing on a fractional pixel
+// reads soft beside the header. A border costs no texture, so `PickerListCard` carries its own.
+// The tonal fill and the filled indicator carry the selection.
 
 // Tri-state M3 indicator: a filled disc with a check when checked, with a dash
 // for the header's some-but-not-all state, a hollow ring otherwise.
@@ -56,8 +55,7 @@ export component SelectableRow inherits Rectangle {
     height: 60px;
     border-radius: Theme.radius-md;
     opacity: root.disabled ? 0.5 : 1.0;
-    // Tonal accent when selected, flat with a soft hover fill otherwise — and
-    // no border, per the note above.
+    // Tonal accent when selected, flat with a soft hover fill otherwise.
     background: root.selected
         ? Theme.accent.with-alpha(0.16)
         : (touch.has-hover && !root.disabled ? Theme.surface1 : transparent);

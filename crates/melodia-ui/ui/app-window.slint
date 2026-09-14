@@ -407,8 +407,8 @@ export component AppWindow inherits Window {
             if !Theme.use-native-titlebar: CustomTitleBar { }
 
             // Only the right side needs a gutter: the titlebar, the sidebar and the bar frame the
-            // panel's other three. The native titlebar gets one too rather than a flush edge, for
-            // the reason the panel gives.
+            // panel's other three. The native titlebar gets one too rather than a flush edge, since
+            // the panel rounds all four corners and a flush one would sit against the OS frame.
             HorizontalLayout {
                 vertical-stretch: 1;
                 padding-right: Theme.pad-xs;

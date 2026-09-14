@@ -108,18 +108,23 @@ the OS owns has to be attached late or not at all on at least one platform.
   under the custom titlebar and the host's (`native-content-radius`) under the native one, so the
   native miniplayer keeps the frame's corners when it drops the frame.
 
-- **The shell's clip is the only antialiased pass the corner may get.** FemtoVG antialiases every
-  rounded fill and stroke separately and their coverages stack, so a second rounded shape on the
-  silhouette paints the arc visibly harder than the OS frame's at the same radius. That is why the
-  shell has no `background` of its own (its mantle is a square child), why the three overlays
-  mount inside it (their scrims otherwise square off the corners over the desktop), and why the
-  outline straddles the edge. `app-window.slint` argues each at its mount; a new element reaching
-  the window's edge goes inside the shell too.
+- **The shell's clip is the only antialiased pass the corner may get.** The general rule is
+  `slint-pitfalls.md`'s; beside the OS frame the harder arc is plain to see at the same radius.
+  That is why the shell has no `background` of its own (its mantle is a square child), why the three
+  overlays mount inside it (their scrims otherwise square off the corners over the desktop), and why
+  the outline is an `EdgeOutline`. `app-window.slint` argues each at its mount; a new element
+  reaching the window's edge goes inside the shell too.
 
-- **A frameless window draws its own 1 px outline**, the edge every OS frame has, as the shell's
-  last child under the same `frameless && !is-maximized` gate, so it outlines the whole window
-  under the custom titlebar and only the miniplayer under the native one. The Settings rows stay
-  live in both modes for that reason. `ui::appearance::window_border` paints
+- **The content panel inside the shell is rounded without a clip.** A rounded one held the whole
+  view as a texture, rendered again on every scroll and visualizer frame, and under the custom
+  titlebar nested inside the shell's own. The panel's clip has no radius and `RoundedFrame` masks
+  its corners in `WindowChrome.mantle`, which is right only because the shell's ground is all that
+  shows around the panel. Something painted there later needs the masks rethought, not recoloured.
+
+- **A frameless window draws its own 1 px outline**, the edge every OS frame has, as an
+  `EdgeOutline` mounted last in the shell under the same `frameless && !is-maximized` gate, so it
+  outlines the whole window under the custom titlebar and only the miniplayer under the native one.
+  The Settings rows stay live in both modes for that reason. `ui::appearance::window_border` paints
   `WindowChrome.border-color{,-unfocused}` from the palette republish; its System colour is the
   Windows accent while the user has it on window borders (`platform::window_border`, the registry),
   and Windows says nothing when that switch moves, so the winit `Focused` arm asks again on a
@@ -130,9 +135,10 @@ the OS owns has to be attached late or not at all on at least one platform.
   off-KDE, disabled in custom-titlebar. `Theme.window-focused` mirrors winit `Focused(bool)` raw.
   **The gate is one brush, `WindowChrome.mantle`, which argues its three terms and the missing
   `animate`**, and every surface the tint covers reads it: the sidebar, the now-playing bar, the
-  shell's ground showing through the gutter beside the content panel, and the swap's crossfade,
-  which has to paint that ground's brush. A surface spelling the ternary again, or `Theme.mantle`
-  where the chrome shows, leaves a strip that stays dark on an unfocused window.
+  shell's ground showing through the gutter beside the content panel, the panel's corner masks,
+  which paint that ground over the panel, and the swap's crossfade, which has to paint that
+  ground's brush. A surface spelling the ternary again, or `Theme.mantle` where the chrome shows,
+  leaves a strip that stays dark on an unfocused window.
 
 - **Always-on-top (Linux)** — D-Bus to KWin or GNOME (`window-calls` ext.); bare GNOME falls back
   to native decorations.
