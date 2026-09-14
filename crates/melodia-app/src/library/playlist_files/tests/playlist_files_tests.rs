@@ -1,7 +1,10 @@
 use std::collections::HashSet;
 
+use chrono::TimeZone;
+
 #[allow(clippy::wildcard_imports)]
 use super::*;
+use melodia_core::entities::smart_criteria::{Rule, RuleField, RuleOp, RuleValue};
 use melodia_core::error::AppError;
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
@@ -164,6 +167,48 @@ fn unique_entry_name_disambiguates_collisions() {
     assert_eq!(unique_entry_name("Road", &mut used), "Road.m3u8");
     assert_eq!(unique_entry_name("Road", &mut used), "Road (2).m3u8");
     assert_eq!(unique_entry_name("Road", &mut used), "Road (3).m3u8");
+}
+
+/// The archive may be extracted onto a filesystem that folds case, where two entries differing
+/// only in case are one file.
+#[test]
+fn unique_entry_name_treats_names_differing_only_in_case_as_one() {
+    let mut used: HashSet<String> = HashSet::new();
+    assert_eq!(unique_entry_name("Road", &mut used), "Road.m3u8");
+    assert_eq!(unique_entry_name("road", &mut used), "road (2).m3u8");
+}
+
+#[test]
+fn unique_entry_name_steps_past_a_name_already_carrying_a_suffix() {
+    let mut used: HashSet<String> = HashSet::new();
+    assert_eq!(unique_entry_name("Road (2)", &mut used), "Road (2).m3u8");
+    assert_eq!(unique_entry_name("Road", &mut used), "Road.m3u8");
+    assert_eq!(unique_entry_name("Road", &mut used), "Road (3).m3u8");
+}
+
+#[test]
+fn a_suggested_file_name_has_no_folder_for_a_save_dialog_to_read_into() {
+    assert_eq!(suggested_file_name("Rock/Roll"), "Rock_Roll.m3u8");
+}
+
+#[test]
+fn a_suggested_archive_name_is_dated_from_the_instant_passed_in() {
+    let named = Local.with_ymd_and_hms(2026, 3, 7, 12, 0, 0).single().map(suggested_archive_name);
+    assert_eq!(named.as_deref(), Some("melodia-playlists-2026-03-07.zip"));
+}
+
+#[test]
+fn a_playlist_counts_its_path_and_hash_matches_together_toward_the_total() {
+    let mut total = ImportFileResult::default();
+    total.add(&ImportPlaylistResult {
+        playlist_id: 1,
+        playlist_name: "Mixed".to_owned(),
+        total_entries: 6,
+        matched_by_path: 2,
+        matched_by_hash: 3,
+        missing: 1,
+    });
+    assert_eq!((total.imported, total.matched, total.missing, total.failed), (1, 5, 1, 0));
 }
 
 /// A pool whose three rows live under `dir`, joined rather than spelled.
@@ -399,5 +444,215 @@ async fn an_exported_playlist_imports_back_with_the_same_tracks() -> Result<(), 
             .map(|t| t.id)
             .collect();
     assert_eq!(restored, ids);
+    Ok(())
+}
+
+/// Zips `entries` as `(name, text)` into a file at `path`, through the writer export uses.
+fn archive_at(path: &Path, entries: &[(&str, &str)]) -> Result<(), AppError> {
+    let entries: Vec<archive::Entry> = entries
+        .iter()
+        .map(|&(name, text)| archive::Entry { name: name.to_owned(), text: text.to_owned() })
+        .collect();
+    archive::write(std::fs::File::create(path)?, &entries, NaiveDateTime::default())
+}
+
+/// A playlist file's text holding one entry, `line` being the path as the file spells it.
+fn playlist_text(name: Option<&str>, line: &str) -> String {
+    let tag = name.map(|name| format!("#PLAYLIST:{name}\n")).unwrap_or_default();
+    format!("#EXTM3U\n{tag}#EXTINF:-1,Alpha Song\n{line}\n")
+}
+
+/// Every playlist in the pool as `(name, titles)`, oldest first.
+async fn playlists_by_age(db: &DbPool) -> Result<Vec<(String, Vec<String>)>, AppError> {
+    let mut playlists = queries::playlist::get_all_playlists(db).await?;
+    playlists.sort_by_key(|playlist| playlist.id);
+    let mut named = Vec::with_capacity(playlists.len());
+    for playlist in playlists {
+        named.push((playlist.name, titles_in(db, playlist.id).await?));
+    }
+    Ok(named)
+}
+
+#[tokio::test]
+async fn an_exported_archive_imports_back_as_the_same_playlists() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (db, ids) = seed_under(tmp.path()).await?;
+    let road = playlist_with_tracks(&db, "Road", &ids).await?;
+    let short = playlist_with_tracks(&db, "Short", &[ids[2], ids[0]]).await?;
+    let out = tmp.path().join("backup.zip");
+    written(write_archive(&db, &[road, short], &out, NaiveDateTime::default()).await?)?;
+
+    let result = import_playlists_from_file(&db, &out).await?;
+
+    assert_eq!((result.imported, result.matched, result.missing, result.failed), (2, 5, 0, 0));
+    let road_titles =
+        vec!["Alpha Song".to_owned(), "Beta Song".to_owned(), "Gamma Song".to_owned()];
+    let short_titles = vec!["Gamma Song".to_owned(), "Alpha Song".to_owned()];
+    assert_eq!(
+        playlists_by_age(&db).await?[2..],
+        [("Road".to_owned(), road_titles), ("Short".to_owned(), short_titles)],
+        "each playlist comes back under its own name, holding its own tracks in its own order"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_archive_export_with_nothing_readable_writes_no_file() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (db, _) = seed_under(tmp.path()).await?;
+    let out = tmp.path().join("backup.zip");
+
+    let result = written(write_archive(&db, &[9_999], &out, NaiveDateTime::default()).await?)?;
+
+    assert_eq!((result.exported, result.failed), (0, 1));
+    assert!(!out.exists(), "an archive with nothing in it would import back as a refusal");
+    Ok(())
+}
+
+/// Import refuses an archive expanding past its budget whole, so an export that wrote one would
+/// hand the user a backup that can never be restored. Refusing has to leave what the save dialog
+/// was about to replace alone.
+#[tokio::test]
+async fn playlists_too_large_to_import_back_write_nothing_and_leave_the_old_file()
+-> Result<(), AppError> {
+    // One track whose path alone spends a sixteenth of the budget, exported seventeen times.
+    const PATH_BYTES: usize = 4 * 1024 * 1024;
+    const COPIES: usize = 17;
+
+    let tmp = tempfile::tempdir()?;
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, &tmp.path().to_string_lossy(), true).await?;
+    let long = tmp.path().join("x".repeat(PATH_BYTES));
+    let track =
+        insert_test_track(&db, &long.to_string_lossy(), "Long", "A", "Album", "Rock").await?;
+    let playlist = playlist_with_tracks(&db, "Long", &[track]).await?;
+    let out = tmp.path().join("backup.zip");
+    std::fs::write(&out, "an earlier backup")?;
+
+    let export = write_archive(&db, &[playlist; COPIES], &out, NaiveDateTime::default()).await?;
+
+    assert!(matches!(export, ExportOutcome::TooLarge));
+    assert_eq!(std::fs::read_to_string(&out)?, "an earlier backup");
+    Ok(())
+}
+
+/// A smart playlist has no stored tracks, so exporting what it stores wrote a header and nothing
+/// else, which import then refuses.
+#[tokio::test]
+async fn a_smart_playlist_exports_the_tracks_its_rules_match() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (db, _) = seed_under(tmp.path()).await?;
+    let criteria = SmartCriteria {
+        rules: vec![Rule {
+            field: RuleField::Title,
+            op: RuleOp::NotContains,
+            value: Some(RuleValue::Text("Beta".to_owned())),
+        }],
+        ..SmartCriteria::default()
+    };
+    let json = criteria.to_json().map_err(AppError::io_source)?;
+    let smart = queries::playlist::create_smart_playlist(&db, "No Beta", None, &json).await?;
+    let out = tmp.path().join("No Beta.m3u8");
+
+    write_playlist(&db, smart.id, &out).await?;
+
+    let result = read_playlist_file(&db, &out).await?;
+    assert_eq!(titles_in(&db, result.playlist_id).await?, ["Alpha Song", "Gamma Song"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_archive_holding_no_playlist_files_is_refused() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (db, _) = seed_under(tmp.path()).await?;
+    let src = tmp.path().join("photos.zip");
+    archive_at(&src, &[("README.txt", "holiday photos")])?;
+
+    let refused = import_playlists_from_file(&db, &src).await;
+
+    assert!(matches!(refused, Err(AppError::Validation(_))));
+    Ok(())
+}
+
+/// An archive whose every playlist failed still held playlists, so the toast reports them as
+/// failures rather than as a file that isn't a playlist archive at all.
+#[tokio::test]
+async fn an_archive_whose_every_playlist_is_unreadable_reports_them_rather_than_failing()
+-> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (db, _) = seed_under(tmp.path()).await?;
+    let src = tmp.path().join("backup.zip");
+    let a = tmp.path().join("a.mp3");
+    archive_at(&src, &[("../escaped.m3u8", &playlist_text(None, &a.to_string_lossy()))])?;
+
+    let result = import_playlists_from_file(&db, &src).await?;
+
+    assert_eq!((result.imported, result.failed), (0, 1));
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_empty_playlist_in_an_archive_is_counted_and_its_siblings_still_land()
+-> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (db, _) = seed_under(tmp.path()).await?;
+    let src = tmp.path().join("backup.zip");
+    let a = tmp.path().join("a.mp3");
+    archive_at(
+        &src,
+        &[
+            ("Empty.m3u8", "#EXTM3U\n#PLAYLIST:Empty\n"),
+            ("Full.m3u8", &playlist_text(Some("Full"), &a.to_string_lossy())),
+        ],
+    )?;
+
+    let result = import_playlists_from_file(&db, &src).await?;
+
+    assert_eq!((result.imported, result.matched, result.failed), (1, 1, 1));
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_archive_playlist_without_a_name_tag_is_named_after_its_entry() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (db, _) = seed_under(tmp.path()).await?;
+    let src = tmp.path().join("backup.zip");
+    let a = tmp.path().join("a.mp3");
+    archive_at(&src, &[("sub/Road Trip.m3u8", &playlist_text(None, &a.to_string_lossy()))])?;
+
+    import_playlists_from_file(&db, &src).await?;
+
+    let names: Vec<String> =
+        playlists_by_age(&db).await?.into_iter().map(|(name, _)| name).collect();
+    assert_eq!(names, ["Road Trip"]);
+    Ok(())
+}
+
+/// Nothing is extracted, so a relative entry resolves against where its file would land beside
+/// the archive: the archive's folder, then the entry's own folder inside it.
+#[tokio::test]
+async fn relative_entries_resolve_against_the_archive_and_entry_folders() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (db, _) = seed_under(&tmp.path().join("sub")).await?;
+    let src = tmp.path().join("backup.zip");
+    archive_at(&src, &[("sub/Relative.m3u8", &playlist_text(Some("Relative"), "a.mp3"))])?;
+
+    let result = import_playlists_from_file(&db, &src).await?;
+
+    assert_eq!((result.imported, result.matched, result.missing), (1, 1, 0));
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_archive_extension_is_recognised_in_any_case() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (db, ids) = seed_under(tmp.path()).await?;
+    let road = playlist_with_tracks(&db, "Road", &ids).await?;
+    let out = tmp.path().join("BACKUP.ZIP");
+    written(write_archive(&db, &[road], &out, NaiveDateTime::default()).await?)?;
+
+    let result = import_playlists_from_file(&db, &out).await?;
+
+    assert_eq!((result.imported, result.matched), (1, 3));
     Ok(())
 }

@@ -526,7 +526,8 @@ impl GridAxis {
 /// figure.
 ///
 /// Coordinates are normalized — x across `0..1`, y down `0..1` — so the `Path`'s viewbox is a
-/// constant and the band count never crosses the language boundary.
+/// constant and the band count never crosses the language boundary. `out` is left empty while the
+/// strip has fewer whole device pixels across than there are bands.
 ///
 /// **One figure rather than one element per band is the point.** `FemtoVG` builds and tessellates a
 /// path per drawn element and caches none of it between frames, and the strip rewrites every band
@@ -553,20 +554,13 @@ pub fn write_bar_path(levels: &[f32], strip: StripGeometry, anchor: BarAnchor, o
     // rhythm uneven, and it shows there first, the gap being the smaller quantity by several
     // times. So neither: the pitch is whole, every bar matches every other bar and every gap
     // every other gap, and the remainder goes to the two ends where it is backdrop either way.
-    // The gap is fixed in logical pixels, so on a narrow strip it stops being a separator and
-    // starts being most of the pitch: at three pixels a band it left one for the bar and took two,
-    // and sixty-four bands degraded into hairlines with more space than mark. Held to half the
-    // pitch, so a bar is never thinner than the gap beside it, and dropped outright below two
-    // pixels a band, where there is nothing to separate.
-    let pitch = ((horizontal.pixels() + BAR_GAP_PX * strip.scale) / count).floor().max(1.0);
-    let gap = if pitch < 2.0 {
-        0.0
-    } else {
-        (BAR_GAP_PX * strip.scale).round().clamp(1.0, (pitch * 0.5).floor())
+    let Some((pitch, gap)) = band_pitch(horizontal.pixels(), count, BAR_GAP_PX * strip.scale)
+    else {
+        return;
     };
-    let bar_width = (pitch - gap).max(1.0);
-    let span = pitch * index_to_f32(levels.len() - 1) + bar_width;
-    let origin = horizontal.first + ((horizontal.pixels() - span) * 0.5).max(0.0).round();
+    let bar_width = pitch - gap;
+    let span = pitch * count - gap;
+    let origin = horizontal.first + ((horizontal.pixels() - span) * 0.5).round();
     // "At least as tall as it is wide", so a silent band rests as a square mark rather than
     // vanishing. Derived from the column rather than fixed, the column following the strip.
     let floor = bar_width.min(vertical.pixels());
@@ -584,7 +578,7 @@ pub fn write_bar_path(levels: &[f32], strip: StripGeometry, anchor: BarAnchor, o
         // A band at the floor can round both edges onto one row, which would draw nothing at all.
         let bottom = bottom.round().max(top + 1.0);
         let left = origin + index_to_f32(i) * pitch;
-        let right = (left + bar_width).min(horizontal.last);
+        let right = left + bar_width;
 
         let (left, right) = (horizontal.normalize(left), horizontal.normalize(right));
         let (top, bottom) = (vertical.normalize(top), vertical.normalize(bottom));
@@ -598,6 +592,29 @@ pub fn write_bar_path(levels: &[f32], strip: StripGeometry, anchor: BarAnchor, o
         push_coordinate(out, " H", left);
         out.push('Z');
     }
+}
+
+/// The whole-pixel pitch and gap `count` bands share across `pixels`, the widest pitch whose last
+/// band still ends inside the strip. `None` with fewer pixels than bands, where none does.
+///
+/// The gap is fixed in logical pixels, so on a narrow strip it stops being a separator and starts
+/// being most of the pitch: at three pixels a band it left one for the bar and took two, and
+/// sixty-four bands degraded into hairlines with more space than mark. Held to half the pitch, so a
+/// bar is never thinner than the gap beside it, and dropped outright below two pixels a band, where
+/// there is nothing to separate. A held gap spends less of the strip than the preferred one the
+/// first pitch was sized against, which is why the pitch is checked again against the gap it got.
+fn band_pitch(pixels: f32, count: f32, preferred_gap: f32) -> Option<(f32, f32)> {
+    if pixels < count {
+        return None;
+    }
+    let gap_at = |pitch: f32| {
+        if pitch < 2.0 { 0.0 } else { preferred_gap.round().clamp(1.0, (pitch * 0.5).floor()) }
+    };
+    let mut pitch = ((pixels + preferred_gap.round().max(1.0)) / count).floor();
+    while pitch * count - gap_at(pitch) > pixels {
+        pitch -= 1.0;
+    }
+    Some((pitch, gap_at(pitch)))
 }
 
 /// One `"<cmd><x> <y>"` vertex.

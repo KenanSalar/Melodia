@@ -83,3 +83,7 @@ pub fn write_with_sync(
     tmp.persist(path).map_err(|e| AppError::Io(e.error))?;
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "tests/atomic_file_tests.rs"]
+mod tests;

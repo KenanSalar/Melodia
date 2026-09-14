@@ -244,3 +244,7 @@ const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<SearchUi>();
 };
+
+#[cfg(test)]
+#[path = "tests/search_ui_tests.rs"]
+mod tests;

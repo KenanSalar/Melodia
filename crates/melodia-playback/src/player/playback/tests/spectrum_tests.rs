@@ -623,6 +623,214 @@ fn the_bars_decay_once_the_signal_stops() {
     assert!(quiet[loud.0] > 0.0, "it should fall gently, not cut out");
 }
 
+// --- write_bar_path ----------------------------------------------------------
+
+/// Far inside the half pixel an edge may drift before it crosses a coverage threshold, yet wider
+/// than the four-decimal quantization costs on the strips these tests draw (under 0.005 px).
+const GRID_TOLERANCE_PX: f32 = 0.01;
+
+fn strip_at(x: f32, y: f32, width: f32, height: f32, scale: f32) -> StripGeometry {
+    StripGeometry { x, y, width, height, scale }
+}
+
+/// A strip anchored on the window's origin, so a normalized edge times the extent is a pixel.
+fn strip(width: f32, height: f32, scale: f32) -> StripGeometry {
+    strip_at(0.0, 0.0, width, height, scale)
+}
+
+fn bar_path(levels: &[f32], strip: StripGeometry, anchor: BarAnchor) -> String {
+    let mut out = String::new();
+    write_bar_path(levels, strip, anchor, &mut out);
+    out
+}
+
+/// One bar as the path carries it, every edge normalized into the unit viewbox.
+struct PathBar {
+    left: f32,
+    right: f32,
+    top: f32,
+    bottom: f32,
+}
+
+/// Reads `M{left} {bottom} H{right} V{top} H{left}Z` back, one bar per figure. A token that
+/// isn't a number reads as NaN, which fails whatever assertion reads it.
+fn path_bars(path: &str) -> Vec<PathBar> {
+    path.split_terminator('Z')
+        .map(|figure| {
+            let values: Vec<f32> = figure
+                .split(' ')
+                .map(|token| token.trim_start_matches(['M', 'H', 'V']).parse().unwrap_or(f32::NAN))
+                .collect();
+            match values[..] {
+                [left, bottom, right, top, _] => PathBar { left, right, top, bottom },
+                _ => PathBar { left: f32::NAN, right: f32::NAN, top: f32::NAN, bottom: f32::NAN },
+            }
+        })
+        .collect()
+}
+
+/// The horizontal rhythm of a figure drawn on a strip anchored at the origin, in whole device
+/// pixels.
+#[derive(Debug, PartialEq)]
+struct Rhythm {
+    widths: Vec<f32>,
+    gaps: Vec<f32>,
+    left_margin: f32,
+    right_margin: f32,
+}
+
+fn rhythm(path: &str, strip: StripGeometry) -> Rhythm {
+    let extent = strip.width * strip.scale;
+    let edges: Vec<(f32, f32)> = path_bars(path)
+        .iter()
+        .map(|bar| ((bar.left * extent).round(), (bar.right * extent).round()))
+        .collect();
+    Rhythm {
+        widths: edges.iter().map(|&(left, right)| right - left).collect(),
+        gaps: edges
+            .windows(2)
+            .map(|pair| match pair {
+                [(_, right), (next_left, _)] => next_left - right,
+                _ => f32::NAN,
+            })
+            .collect(),
+        left_margin: edges.first().map_or(f32::NAN, |&(left, _)| left),
+        right_margin: edges.last().map_or(f32::NAN, |&(_, right)| extent - right),
+    }
+}
+
+/// Each bar's `(top, bottom)` row on a strip anchored at the origin.
+fn rows(path: &str, strip: StripGeometry) -> Vec<(f32, f32)> {
+    let extent = strip.height * strip.scale;
+    path_bars(path)
+        .iter()
+        .map(|bar| ((bar.top * extent).round(), (bar.bottom * extent).round()))
+        .collect()
+}
+
+/// A narrow strip caps the gap at half the pitch, and a capped gap spends less of the strip than
+/// the pitch was sized against: before the pitch was checked again, the last band ran off the
+/// end and drew at zero width at 126 px, or one pixel short at 190.
+#[test]
+fn every_band_is_as_wide_as_every_other_and_ends_inside_the_strip() {
+    let silent = [0.0; NUM_BANDS];
+    // (logical width, scale, bar, gap, left margin, right margin), in device pixels.
+    let cases = [
+        (126.0, 1.0, 1.0, 0.0, 31.0, 31.0),
+        (127.0, 1.0, 1.0, 1.0, 0.0, 0.0),
+        (190.0, 1.0, 1.0, 1.0, 32.0, 31.0),
+        (191.0, 1.0, 2.0, 1.0, 0.0, 0.0),
+        (640.0, 1.0, 8.0, 2.0, 1.0, 1.0),
+        (126.0, 2.0, 2.0, 1.0, 31.0, 30.0),
+        (127.0, 2.0, 2.0, 2.0, 0.0, 0.0),
+    ];
+    for (width, scale, bar, gap, left_margin, right_margin) in cases {
+        let geometry = strip(width, 56.0, scale);
+        let path = bar_path(&silent, geometry, BarAnchor::Baseline);
+        assert_eq!(
+            rhythm(&path, geometry),
+            Rhythm {
+                widths: vec![bar; NUM_BANDS],
+                gaps: vec![gap; NUM_BANDS - 1],
+                left_margin,
+                right_margin,
+            },
+            "a {width} px strip at scale {scale}"
+        );
+    }
+}
+
+#[test]
+fn a_strip_with_fewer_pixels_than_bands_draws_nothing() {
+    let silent = [0.0; NUM_BANDS];
+    assert_eq!(bar_path(&silent, strip(63.0, 56.0, 1.0), BarAnchor::Baseline), "");
+}
+
+#[test]
+fn a_strip_with_a_pixel_per_band_draws_every_band_a_pixel_wide() {
+    let silent = [0.0; NUM_BANDS];
+    let geometry = strip(64.0, 56.0, 1.0);
+    let path = bar_path(&silent, geometry, BarAnchor::Baseline);
+    assert_eq!(
+        rhythm(&path, geometry),
+        Rhythm {
+            widths: vec![1.0; NUM_BANDS],
+            gaps: vec![0.0; NUM_BANDS - 1],
+            left_margin: 0.0,
+            right_margin: 0.0,
+        }
+    );
+}
+
+#[test]
+fn an_undrawable_strip_empties_a_path_it_was_handed() {
+    // The tick hands the same buffer back every frame, so a figure it isn't cleared of stays on
+    // screen after the strip stops being measurable.
+    let unmeasurable =
+        [strip(0.0, 56.0, 1.0), strip(600.0, 0.0, 1.0), strip(600.0, 56.0, f32::NAN)];
+    for geometry in unmeasurable {
+        let mut out = "M0.0000 1.0000 H1.0000 V0.0000 H0.0000Z".to_owned();
+        write_bar_path(&[0.5; NUM_BANDS], geometry, BarAnchor::Baseline, &mut out);
+        assert_eq!(out, "", "{geometry:?}");
+    }
+}
+
+#[test]
+fn every_edge_lands_on_the_device_pixel_grid() {
+    let levels = [0.0, 0.3, 0.55, 1.0, 0.8, 0.1, 0.45, 0.9];
+    let fractional = [
+        strip_at(0.5, 0.25, 80.0, 40.0, 1.0),
+        strip_at(100.3, 7.7, 80.0, 40.0, 1.25),
+        strip_at(0.4, 0.4, 60.0, 30.0, 1.5),
+    ];
+    for geometry in fractional {
+        let on_grid = |origin: f32, extent: f32, edge: f32| {
+            let window_px = origin * geometry.scale + edge * extent;
+            (window_px - window_px.round()).abs() < GRID_TOLERANCE_PX
+        };
+        let (width, height) = (geometry.width * geometry.scale, geometry.height * geometry.scale);
+        for bar in path_bars(&bar_path(&levels, geometry, BarAnchor::Baseline)) {
+            assert!(on_grid(geometry.x, width, bar.left), "left edge off the grid: {geometry:?}");
+            assert!(on_grid(geometry.x, width, bar.right), "right edge off the grid: {geometry:?}");
+            assert!(on_grid(geometry.y, height, bar.top), "top edge off the grid: {geometry:?}");
+            assert!(on_grid(geometry.y, height, bar.bottom), "bottom off the grid: {geometry:?}");
+        }
+    }
+}
+
+#[test]
+fn a_silent_band_rests_as_a_square_mark() {
+    let geometry = strip(640.0, 56.0, 1.0);
+    let path = bar_path(&[0.0; NUM_BANDS], geometry, BarAnchor::Baseline);
+    // The 8 px bars a 640 px strip seats.
+    assert_eq!(rows(&path, geometry), vec![(48.0, 56.0); NUM_BANDS]);
+}
+
+#[test]
+fn a_level_outside_zero_to_one_is_clamped() {
+    // Four 8 px bars on a 56 px column: below zero and NaN rest at the floor, above one fills it.
+    let geometry = strip(40.0, 56.0, 1.0);
+    let path = bar_path(&[-1.0, f32::NAN, 2.0, f32::INFINITY], geometry, BarAnchor::Baseline);
+    assert_eq!(rows(&path, geometry), vec![(48.0, 56.0), (48.0, 56.0), (0.0, 56.0), (0.0, 56.0)]);
+}
+
+#[test]
+fn a_centred_bar_splits_its_height_about_the_middle() {
+    // A bar's height is its total in both anchorings, half of it either side of row 28.
+    let geometry = strip(40.0, 56.0, 1.0);
+    let path = bar_path(&[0.5, 0.0, 1.0, 0.25], geometry, BarAnchor::Centre);
+    assert_eq!(rows(&path, geometry), vec![(14.0, 42.0), (24.0, 32.0), (0.0, 56.0), (21.0, 35.0)]);
+}
+
+#[test]
+fn one_band_fills_the_strip() {
+    // Lower edge first, then back along the top: the winding femtovg reads as solid.
+    assert_eq!(
+        bar_path(&[1.0], strip(600.0, 56.0, 1.0), BarAnchor::Baseline),
+        "M0.0000 1.0000 H1.0000 V0.0000 H0.0000Z"
+    );
+}
+
 #[test]
 fn changing_the_sample_rate_rebuilds_the_band_edges() {
     let mut analyzer = SpectrumAnalyzer::new(FFT_SIZE, NUM_BANDS);

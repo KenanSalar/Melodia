@@ -142,6 +142,21 @@ pub async fn insert_tagged_track(
     Ok(id)
 }
 
+/// A pool holding `count` tracks, in insert order, for the suites that need more rows than one
+/// statement's bind budget covers. Each is titled by its index, so no two share a hash.
+#[cfg(test)]
+pub(crate) async fn numbered_library(count: usize) -> Result<(DbPool, Vec<i64>), AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    let mut ids = Vec::with_capacity(count);
+    for index in 0..count {
+        let path = format!("/music/{index:04}.mp3");
+        let title = format!("Track {index:04}");
+        ids.push(insert_test_track(&db, &path, &title, "Artist", "Album", "Rock").await?);
+    }
+    Ok((db, ids))
+}
+
 /// Create a test pool pre-seeded with a folder and 3 tracks.
 pub async fn setup_seeded_db() -> Result<DbPool, AppError> {
     let db = DbPool::test_pool().await?;

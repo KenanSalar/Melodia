@@ -239,3 +239,7 @@ track_list_views! {
 fn px_to_slint(v: f64) -> f32 {
     v as f32
 }
+
+#[cfg(test)]
+#[path = "tests/track_list_view_tests.rs"]
+mod tests;

@@ -71,6 +71,14 @@ fn the_window_border_persists_as_a_token() -> Result<(), AppError> {
 }
 
 #[test]
+fn a_hidden_window_border_reads_back_from_its_token() -> Result<(), AppError> {
+    let border: WindowBorder = serde_json::from_str(r#""hidden""#).map_err(|e| json_err(&e))?;
+
+    assert_eq!(border, WindowBorder::Hidden);
+    Ok(())
+}
+
+#[test]
 fn test_unknown_fields_silently_ignored() -> Result<(), AppError> {
     // Forward compatibility: future settings versions may add new fields.
     // Without deny_unknown_fields, old code should deserialize them fine.
@@ -555,6 +563,29 @@ fn the_lyrics_switches_take_their_defaults_from_a_file_that_predates_them() -> R
     assert!(!settings.lyrics.lyrics_enabled);
     assert!(!settings.lyrics.lyrics_online_enabled);
     assert!(settings.lyrics.lyrics_romanization_shown);
+    Ok(())
+}
+
+/// v0.13.0 saved the switch as the column preference it grew out of, and an install that had
+/// lyrics showing must not upgrade to Up Next.
+#[test]
+fn a_settings_file_from_0_13_keeps_lyrics_switched_on() -> Result<(), AppError> {
+    let json = r#"{"theme_id": "catppuccin", "lyrics_panel_shown": true}"#;
+    let settings: SettingsData =
+        reading_env(|| serde_json::from_str(json)).map_err(|e| json_err(&e))?;
+
+    assert!(settings.lyrics.lyrics_enabled);
+    Ok(())
+}
+
+#[test]
+fn the_lyrics_switch_is_saved_under_its_current_name() -> Result<(), AppError> {
+    let flags = LyricsFlags { lyrics_enabled: true, ..LyricsFlags::default() };
+
+    let saved = serde_json::to_value(&flags).map_err(|e| json_err(&e))?;
+
+    assert_eq!(saved.get("lyrics_enabled"), Some(&serde_json::Value::Bool(true)));
+    assert_eq!(saved.get("lyrics_panel_shown"), None);
     Ok(())
 }
 

@@ -382,3 +382,7 @@ pub fn install(ui: &AppWindow) {
         with_widths(&pressed, &dragged.widths)
     });
 }
+
+#[cfg(test)]
+#[path = "tests/track_columns_tests.rs"]
+mod tests;

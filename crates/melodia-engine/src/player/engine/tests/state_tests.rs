@@ -510,6 +510,20 @@ fn the_light_view_model_carries_the_queues_shuffle_and_repeat() {
     assert_eq!(light.repeat_mode, RepeatMode::One, "repeat");
 }
 
+/// The other side of each, so a builder answering with the constants the test above sets still
+/// fails somewhere.
+#[test]
+fn the_light_view_model_carries_shuffle_off_and_the_third_repeat_mode() {
+    let mut state = PlayerState::default();
+    state.queue.shuffle_enabled = false;
+    state.queue.repeat_mode = RepeatMode::All;
+
+    let light = state.to_view_model_light();
+
+    assert!(!light.shuffle_enabled, "shuffle");
+    assert_eq!(light.repeat_mode, RepeatMode::All, "repeat");
+}
+
 // ── QueueViewModel tests ──
 
 #[test]

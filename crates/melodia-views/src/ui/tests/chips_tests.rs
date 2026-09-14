@@ -1,4 +1,6 @@
-use super::{IndexRows, chunk_chips_to_rows, chunk_indices, rows_to_model};
+use super::{
+    IndexRows, META_CHIP_CHROME, PackedLabels, chunk_chips_to_rows, chunk_indices, rows_to_model,
+};
 use slint::{Model, SharedString};
 
 /// `estimated_chip_width` is `chars * 6.5 + 24`, so a 4-char chip measures
@@ -190,4 +192,40 @@ fn a_shared_model_still_mirrors_its_shape() {
     let widths: Vec<usize> = model.iter().map(|row| row.row_count()).collect();
 
     assert_eq!(widths, vec![3, 3, 1]);
+}
+
+/// Recent Searches re-packs on every width change of a resize drag, and a fresh model for the same
+/// rows rebuilds every chip under it.
+#[test]
+fn the_same_labels_kept_in_their_rows_hand_back_the_model_already_mounted() {
+    let packed = PackedLabels::default();
+
+    let wide = packed.rows(chips(&["FLAC", "2020"]), 500.0, META_CHIP_CHROME);
+    let narrower = packed.rows(chips(&["FLAC", "2020"]), 108.0, META_CHIP_CHROME);
+
+    assert_eq!(wide, narrower, "a width that moved no label rebuilt the strip");
+}
+
+/// A search moves to the front of the history, which keeps both the count and the row shape. Keyed
+/// on either alone, the strip kept showing the order from before.
+#[test]
+fn a_reordered_history_of_the_same_shape_gets_a_model_in_its_new_order() {
+    let packed = PackedLabels::default();
+    let before = packed.rows(chips(&["FLAC", "2020"]), 500.0, META_CHIP_CHROME);
+
+    let after = packed.rows(chips(&["2020", "FLAC"]), 500.0, META_CHIP_CHROME);
+
+    assert_ne!(after, before);
+    let first = after.row_data(0).and_then(|row| row.row_data(0));
+    assert_eq!(first.as_ref().map(SharedString::as_str), Some("2020"));
+}
+
+#[test]
+fn a_width_that_moves_a_label_to_another_row_gets_a_model_of_its_own() {
+    let packed = PackedLabels::default();
+    let one_row = packed.rows(chips(&["FLAC", "2020"]), 108.0, META_CHIP_CHROME);
+
+    let two_rows = packed.rows(chips(&["FLAC", "2020"]), 107.0, META_CHIP_CHROME);
+
+    assert_ne!(two_rows, one_row, "a strip that wrapped was handed the unwrapped rows");
 }

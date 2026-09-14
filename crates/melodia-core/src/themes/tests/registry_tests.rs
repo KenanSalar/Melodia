@@ -199,6 +199,27 @@ fn resolve_system_variant_picks_dark_or_light_pair() {
 }
 
 #[test]
+fn the_system_shade_follows_the_os_theme() {
+    let cat = get("catppuccin");
+    assert_eq!(cat.shade_for(SYSTEM_VARIANT_ID, "light").id, "latte");
+    assert_eq!(cat.shade_for(SYSTEM_VARIANT_ID, "dark").id, "mocha");
+}
+
+#[test]
+fn a_named_shade_ignores_the_os_theme() {
+    assert_eq!(get("catppuccin").shade_for("latte", "dark").id, "latte");
+}
+
+/// A variant id a later build dropped, or a hand edit mistyped, paints the theme's default. Every
+/// swatch and brush reads its shade through here, so none of them can fall back somewhere else.
+#[test]
+fn an_unknown_shade_paints_the_default_variant() {
+    let cat = get("catppuccin");
+    assert_eq!(cat.shade_for("bogus", "light").id, cat.default_variant);
+    assert_eq!(cat.shade_for("", "light").id, cat.default_variant);
+}
+
+#[test]
 fn every_theme_default_variant_and_accent_resolve() {
     for theme in registry() {
         assert!(

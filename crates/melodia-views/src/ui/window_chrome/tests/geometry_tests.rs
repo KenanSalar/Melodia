@@ -77,6 +77,33 @@ fn a_client_empty_on_one_axis_is_a_minimized_window() {
     );
 }
 
+/// Every term alone has to withhold the client: a frame measured off an undecorated, a maximized
+/// or a minimized window is one the miniplayer's exit edge then widens by for no frame at all.
+#[test]
+fn only_a_decorated_restored_window_has_a_frame_to_measure_around() {
+    const LIVE: WinitPhysicalSize<u32> = WinitPhysicalSize::new(800, 600);
+    const MINIMIZED: WinitPhysicalSize<u32> = WinitPhysicalSize::new(0, 0);
+    // (decorated, maximized, client, measurable)
+    let table = [
+        (true, false, LIVE, Some(LIVE)),
+        (false, false, LIVE, None),
+        (true, true, LIVE, None),
+        (true, false, MINIMIZED, None),
+        (false, true, LIVE, None),
+        (false, false, MINIMIZED, None),
+        (true, true, MINIMIZED, None),
+        (false, true, MINIMIZED, None),
+    ];
+    for (decorated, maximized, client, measurable) in table {
+        let reading = WindowReading { client, scale: 1.0, maximized, decorated };
+        assert_eq!(
+            measurable_client(reading),
+            measurable,
+            "decorated {decorated}, maximized {maximized}, client {client:?}"
+        );
+    }
+}
+
 // The step past the edge: any client with area is a window the user can see.
 #[test]
 fn a_one_pixel_client_is_a_live_window() {

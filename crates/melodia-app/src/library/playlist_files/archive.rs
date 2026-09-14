@@ -167,3 +167,7 @@ fn read_entry<R: Read + Seek>(
     file.take(limit.saturating_add(1)).read_to_end(bytes)?;
     Ok(Some(name.to_string_lossy().into_owned()))
 }
+
+#[cfg(test)]
+#[path = "tests/archive_tests.rs"]
+mod tests;

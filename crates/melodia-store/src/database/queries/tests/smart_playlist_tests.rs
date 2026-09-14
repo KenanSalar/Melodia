@@ -656,3 +656,79 @@ async fn a_set_valued_rule_composes_with_a_column_rule() -> Result<(), AppError>
     assert_eq!(ids(&resolve(&s.db, &any).await?), HashSet::from([s.both, s.rock]));
     Ok(())
 }
+
+// --- get_smart_playlist_tracks_for_export ---
+
+async fn exported_paths(db: &DbPool, c: &SmartCriteria) -> Result<Vec<String>, AppError> {
+    Ok(queries::smart_playlist::get_smart_playlist_tracks_for_export(db, c)
+        .await?
+        .into_iter()
+        .map(|row| row.file_path)
+        .collect())
+}
+
+/// A smart playlist exports what its page shows, so the two queries have to agree on membership
+/// and on order.
+#[tokio::test]
+async fn the_export_holds_the_tracks_the_list_shows_in_the_same_order() -> Result<(), AppError> {
+    let s = seed().await?;
+    let c = one(RuleField::Rating, RuleOp::Gte, Some(RuleValue::Number(2.0)));
+    let listed: Vec<String> =
+        resolve(&s.db, &c).await?.into_iter().map(|row| row.file_path).collect();
+    assert_eq!(listed.len(), 3, "test setup: the rule matches three of the four tracks");
+
+    assert_eq!(exported_paths(&s.db, &c).await?, listed);
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_export_holds_to_a_limit_and_its_order() -> Result<(), AppError> {
+    let s = seed().await?;
+    let c = SmartCriteria {
+        limit: Some(SmartLimit { count: 2, order: LimitOrder::PlayCountDesc }),
+        ..SmartCriteria::default()
+    };
+
+    // t1 has 10 plays, t3 has 5.
+    assert_eq!(exported_paths(&s.db, &c).await?, ["/music/1.mp3", "/music/3.mp3"]);
+    Ok(())
+}
+
+/// The export names its columns against `tracks` so the correlated `EXISTS` a set-valued rule
+/// renders can't make one ambiguous.
+#[tokio::test]
+async fn the_export_resolves_a_set_valued_rule() -> Result<(), AppError> {
+    let s = multi_seed().await?;
+    let c = one(RuleField::Genre, RuleOp::Is, Some(RuleValue::Text("Rock".to_owned())));
+
+    assert_eq!(exported_paths(&s.db, &c).await?, ["/music/1.mp3", "/music/2.mp3"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_export_with_no_rules_is_the_whole_library_in_sort_order() -> Result<(), AppError> {
+    let s = seed().await?;
+
+    assert_eq!(
+        exported_paths(&s.db, &SmartCriteria::default()).await?,
+        ["/music/4.mp3", "/music/1.mp3", "/music/3.mp3", "/music/2.mp3"],
+        "Four, One, Three, Two"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_exported_row_carries_what_its_entry_is_written_from() -> Result<(), AppError> {
+    let s = seed().await?;
+    let c = one(RuleField::Title, RuleOp::Is, Some(RuleValue::Text("One".to_owned())));
+
+    let rows = queries::smart_playlist::get_smart_playlist_tracks_for_export(&s.db, &c).await?;
+
+    let written: Vec<_> = rows
+        .into_iter()
+        .map(|row| (row.title, row.artist, row.duration_ms, row.file_hash))
+        .collect();
+    let hash = blake3::hash(b"One").to_hex().to_string();
+    assert_eq!(written, [("One".to_owned(), Some("Artist A".to_owned()), 180_000, Some(hash))]);
+    Ok(())
+}
