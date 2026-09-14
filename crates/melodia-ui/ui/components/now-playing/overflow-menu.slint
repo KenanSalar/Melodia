@@ -263,11 +263,13 @@ export component OverflowMenu inherits Rectangle {
                 // Inline, so unlike the dialog rows it neither closes the popup nor
                 // opens a flyout: a star applies immediately and re-asserts the
                 // highlight id.
-                Rectangle {
+                rating-row := Rectangle {
                     // Not an `OverflowRow`, so it has to take the shared row
                     // height itself — `menu-h` above reserves one for it.
                     height: FlyoutMetrics.menu-row-h;
-                    opacity: Player.vm.has_track ? 1 : 0.5;
+                    // `OverflowRow`'s dimming, through the brushes rather than `opacity`, which
+                    // would hold a texture for as long as the menu is open with nothing to rate.
+                    property <float> fade: Player.vm.has_track ? 1.0 : 0.5;
                     HorizontalLayout {
                         padding-left: Theme.pad-sm;
                         padding-right: Theme.pad-sm;
@@ -280,6 +282,7 @@ export component OverflowMenu inherits Rectangle {
                                 icon-size: 20px;
                                 icon-color: Player.vm.track.rating > 0 ? Theme.accent : Theme.text;
                                 filled: Player.vm.track.rating > 0;
+                                fade: rating-row.fade;
                             }
                         }
                         VerticalLayout {
@@ -287,7 +290,7 @@ export component OverflowMenu inherits Rectangle {
                             horizontal-stretch: 1;
                             Text {
                                 text: @tr("Rating");
-                                color: Theme.text;
+                                color: Theme.text.transparentize(1.0 - rating-row.fade);
                                 font-size: Theme.font-size-md;
                             }
                         }
@@ -297,6 +300,8 @@ export component OverflowMenu inherits Rectangle {
                                 rating: Player.vm.track.rating;
                                 star-size: 18px;
                                 enabled: Player.vm.has_track;
+                                filled-color: Theme.yellow.transparentize(1.0 - rating-row.fade);
+                                empty-color: Theme.subtext0.transparentize(1.0 - rating-row.fade);
                                 rated(n) => {
                                     Player.set-current-rating(n);
                                     PopupHighlight.id = "overflow";

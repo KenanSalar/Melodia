@@ -14,11 +14,14 @@ component ColumnToggleRow inherits Rectangle {
 
     callback toggled();
 
+    // Dimmed through the brushes rather than `opacity`, which would hold a texture per locked row
+    // for as long as the popup is open. A locked row takes no hover, so the fill needs none.
+    private property <float> fade: root.locked ? 0.5 : 1.0;
+
     height: 32px;
     border-radius: Theme.radius-sm;
     background: !root.locked && touch.has-hover ? Theme.surface2 : transparent;
     animate background { duration: 100ms; easing: ease-in-out; }
-    opacity: root.locked ? 0.5 : 1.0;
 
     HorizontalLayout {
         padding-left: Theme.pad-sm;
@@ -28,14 +31,17 @@ component ColumnToggleRow inherits Rectangle {
 
         VerticalLayout {
             alignment: center;
-            Checkbox { checked: root.checked; }
+            Checkbox {
+                checked: root.checked;
+                fade: root.fade;
+            }
         }
 
         VerticalLayout {
             alignment: center;
             Text {
                 text: root.label;
-                color: Theme.text;
+                color: Theme.text.transparentize(1.0 - root.fade);
                 font-size: Theme.font-size-md;
             }
         }

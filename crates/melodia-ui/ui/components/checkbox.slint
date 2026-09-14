@@ -14,12 +14,14 @@ export component Checkbox inherits Rectangle {
     // and the track row want it as present as the text beside them, where the popup
     // and queue boxes stay quiet.
     in property <brush> unchecked-border: Theme.surface1;
+    // A dimmed host's fade, handed down so the host needs no `opacity`.
+    in property <float> fade: 1.0;
 
     width: 16px;
     height: 16px;
     border-radius: 4px;
-    background: root.checked ? Theme.accent : transparent;
-    border-color: root.checked ? Theme.accent : root.unchecked-border;
+    background: (root.checked ? Theme.accent : transparent).transparentize(1.0 - root.fade);
+    border-color: (root.checked ? Theme.accent : root.unchecked-border).transparentize(1.0 - root.fade);
     border-width: 1px;
     animate background { duration: Theme.dur-fast; easing: ease-in-out; }
     animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }
@@ -30,5 +32,6 @@ export component Checkbox inherits Rectangle {
         name: "check";
         icon-size: 14px;
         icon-color: Theme.crust;
+        fade: root.fade;
     }
 }
