@@ -1264,6 +1264,9 @@ msgstr "Dışa aktarma başarısız"
 msgid "Couldn't write the playlist files."
 msgstr "Çalma listesi dosyaları yazılamadı."
 
+msgid "These playlists are too large for one .zip file. Export fewer at a time."
+msgstr "Bu çalma listeleri tek bir .zip dosyası için çok büyük. Tek seferde daha azını dışa aktarın."
+
 msgid "Add"
 msgstr "Ekle"
 

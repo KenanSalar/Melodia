@@ -210,6 +210,16 @@ fn names(entries: &[archive::Entry]) -> Vec<&str> {
     entries.iter().map(|entry| entry.name.as_str()).collect()
 }
 
+/// The counts of an archive export that was written, failing the test when it was refused.
+fn written(export: ArchiveExport) -> Result<ExportPlaylistsResult, AppError> {
+    match export {
+        ArchiveExport::Exported(result) => Ok(result),
+        ArchiveExport::TooLarge => {
+            Err(AppError::Validation("export refused as too large".to_owned()))
+        }
+    }
+}
+
 #[tokio::test]
 async fn an_exported_playlist_lands_under_a_sanitized_name() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
@@ -217,7 +227,8 @@ async fn an_exported_playlist_lands_under_a_sanitized_name() -> Result<(), AppEr
     let playlist_id = playlist_with_tracks(&db, "Rock/Roll: Best?", &ids).await?;
 
     let out = tmp.path().join("exported.zip");
-    let result = write_archive(&db, &[playlist_id], &out, NaiveDateTime::default()).await?;
+    let result =
+        written(write_archive(&db, &[playlist_id], &out, NaiveDateTime::default()).await?)?;
 
     assert_eq!(result.exported, 1);
     assert_eq!(result.failed, 0);
@@ -243,7 +254,8 @@ async fn two_playlists_that_sanitize_alike_get_separate_files() -> Result<(), Ap
     let second = playlist_with_tracks(&db, "A:B", &ids).await?;
 
     let out = tmp.path().join("exported.zip");
-    let result = write_archive(&db, &[first, second], &out, NaiveDateTime::default()).await?;
+    let result =
+        written(write_archive(&db, &[first, second], &out, NaiveDateTime::default()).await?)?;
 
     assert_eq!(result.exported, 2);
     assert_eq!(names(&archived(&out)?), ["A_B.m3u8", "A_B (2).m3u8"]);
@@ -260,7 +272,8 @@ async fn a_playlist_that_cannot_be_read_is_reported_without_stopping_the_batch()
     let playlist_id = playlist_with_tracks(&db, "Kept", &ids).await?;
 
     let out = tmp.path().join("exported.zip");
-    let result = write_archive(&db, &[playlist_id, 9_999], &out, NaiveDateTime::default()).await?;
+    let result =
+        written(write_archive(&db, &[playlist_id, 9_999], &out, NaiveDateTime::default()).await?)?;
 
     assert_eq!(result.exported, 1, "the readable playlist still writes");
     assert_eq!(result.failed, 1);

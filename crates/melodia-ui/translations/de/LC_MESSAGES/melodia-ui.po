@@ -1266,6 +1266,9 @@ msgstr "Export fehlgeschlagen"
 msgid "Couldn't write the playlist files."
 msgstr "Die Playlist-Dateien konnten nicht geschrieben werden."
 
+msgid "These playlists are too large for one .zip file. Export fewer at a time."
+msgstr "Diese Playlists sind zu groß für eine .zip-Datei. Exportieren Sie weniger auf einmal."
+
 msgid "Add"
 msgstr "Hinzufügen"
 

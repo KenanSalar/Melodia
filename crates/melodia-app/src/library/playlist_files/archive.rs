@@ -19,8 +19,37 @@ use melodia_core::error::{AppError, describe};
 /// A plain playlist file is bounded by its own size on disk and an archive is not, deflate being
 /// built to expand. The budget counts bytes actually read rather than the sizes the archive
 /// declares, which it is free to lie about. Set far past any real library, since landing on it
-/// refuses the whole import.
+/// refuses the whole import, and export refuses the whole archive rather than write one past it.
 pub const MAX_TEXT_BYTES: u64 = 64 * 1024 * 1024;
+
+/// What is left of [`MAX_TEXT_BYTES`] for one archive. Export spends it the way import does, so
+/// the app never writes an archive it would refuse to read back.
+pub struct TextBudget {
+    remaining: u64,
+}
+
+/// The playlists expand past [`MAX_TEXT_BYTES`].
+#[derive(Debug)]
+pub struct TooLarge;
+
+impl Default for TextBudget {
+    fn default() -> Self {
+        Self { remaining: MAX_TEXT_BYTES }
+    }
+}
+
+impl TextBudget {
+    /// Spends `bytes` of playlist text, leaving the budget untouched when they don't fit.
+    pub fn charge(&mut self, bytes: usize) -> Result<(), TooLarge> {
+        let bytes = u64::try_from(bytes).unwrap_or(u64::MAX);
+        self.remaining = self.remaining.checked_sub(bytes).ok_or(TooLarge)?;
+        Ok(())
+    }
+
+    pub fn remaining(&self) -> u64 {
+        self.remaining
+    }
+}
 
 /// One playlist file inside an archive.
 pub struct Entry {
@@ -69,7 +98,7 @@ pub fn write<W: Write + Seek>(
 pub fn read<R: Read + Seek>(reader: R) -> Result<Contents, AppError> {
     let mut archive = ZipArchive::new(reader).map_err(AppError::io_source)?;
     let mut contents = Contents::default();
-    let mut remaining = MAX_TEXT_BYTES;
+    let mut budget = TextBudget::default();
 
     for index in 0..archive.len() {
         let is_playlist = archive
@@ -80,17 +109,13 @@ pub fn read<R: Read + Seek>(reader: R) -> Result<Contents, AppError> {
         }
 
         let mut bytes = Vec::new();
-        let entry = read_entry(&mut archive, index, remaining, &mut bytes);
+        let entry = read_entry(&mut archive, index, budget.remaining(), &mut bytes);
 
         // Charged before the result is looked at: an entry that inflates and then fails its
         // checksum has cost the work all the same.
-        let read = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
-        if read > remaining {
-            return Err(AppError::Validation(format!(
-                "Playlist archive expands past {MAX_TEXT_BYTES} bytes"
-            )));
-        }
-        remaining -= read;
+        budget.charge(bytes.len()).map_err(|TooLarge| {
+            AppError::Validation(format!("Playlist archive expands past {MAX_TEXT_BYTES} bytes"))
+        })?;
 
         let name = match entry {
             Ok(Some(name)) => name,

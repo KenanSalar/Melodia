@@ -57,6 +57,14 @@ pub struct ExportPlaylistsResult {
     pub failed: u32,
 }
 
+/// What exporting several playlists came to.
+#[derive(Debug)]
+pub enum ArchiveExport {
+    Exported(ExportPlaylistsResult),
+    /// Nothing was written: together the playlists hold more text than an import reads back.
+    TooLarge,
+}
+
 #[derive(Debug)]
 pub struct ImportPlaylistResult {
     pub playlist_id: i64,
@@ -135,12 +143,13 @@ async fn write_playlist(db: &DbPool, playlist_id: i64, dest: &Path) -> Result<()
 ///
 /// A playlist that can't be read (deleted since it was ticked) is left out and counted rather than
 /// failing the batch, and nothing is written when none can. Entry names are de-duplicated within
-/// the archive with ` (2)`, ` (3)`, … suffixes.
+/// the archive with ` (2)`, ` (3)`, … suffixes. Playlists holding more text than
+/// [`archive::MAX_TEXT_BYTES`] write nothing at all, import being bound to refuse the archive.
 pub async fn export_playlists_to_archive(
     state: &AppState,
     playlist_ids: &[i64],
     dest: &Path,
-) -> Result<ExportPlaylistsResult, AppError> {
+) -> Result<ArchiveExport, AppError> {
     write_archive(&state.db, playlist_ids, dest, Local::now().naive_local()).await
 }
 
@@ -151,13 +160,17 @@ async fn write_archive(
     playlist_ids: &[i64],
     dest: &Path,
     modified: NaiveDateTime,
-) -> Result<ExportPlaylistsResult, AppError> {
+) -> Result<ArchiveExport, AppError> {
     let mut entries = Vec::with_capacity(playlist_ids.len());
     let mut used = HashSet::new();
+    let mut budget = archive::TextBudget::default();
     let mut failed: u32 = 0;
     for &id in playlist_ids {
         match prepare_export(db, id).await {
             Ok((name, mut text)) => {
+                let Ok(()) = budget.charge(text.len()) else {
+                    return Ok(ArchiveExport::TooLarge);
+                };
                 // Held beside every other playlist's until the archive is written.
                 text.shrink_to_fit();
                 entries.push(archive::Entry { name: unique_entry_name(&name, &mut used), text });
@@ -171,7 +184,7 @@ async fn write_archive(
 
     let exported = u32::try_from(entries.len()).unwrap_or(u32::MAX);
     if entries.is_empty() {
-        return Ok(ExportPlaylistsResult { exported, failed });
+        return Ok(ArchiveExport::Exported(ExportPlaylistsResult { exported, failed }));
     }
 
     let path = dest.to_path_buf();
@@ -181,7 +194,7 @@ async fn write_archive(
     .await
     .map_err(AppError::io_source)??;
 
-    Ok(ExportPlaylistsResult { exported, failed })
+    Ok(ArchiveExport::Exported(ExportPlaylistsResult { exported, failed }))
 }
 
 /// Fetch a playlist's name + ordered tracks and render them to M3U8 text.

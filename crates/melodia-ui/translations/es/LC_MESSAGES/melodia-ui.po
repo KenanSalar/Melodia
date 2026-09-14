@@ -1260,6 +1260,9 @@ msgstr "Error al exportar"
 msgid "Couldn't write the playlist files."
 msgstr "No se pudieron escribir los archivos de lista."
 
+msgid "These playlists are too large for one .zip file. Export fewer at a time."
+msgstr "Estas listas son demasiado grandes para un solo archivo .zip. Exporta menos a la vez."
+
 msgid "Add"
 msgstr "Añadir"
 

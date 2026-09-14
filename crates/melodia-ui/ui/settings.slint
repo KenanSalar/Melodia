@@ -440,6 +440,10 @@ export global Settings {
     playlist-export-failed-message => {
         return @tr("Couldn't write the playlist files.");
     }
+    pure callback playlist-export-too-large-message() -> string;
+    playlist-export-too-large-message => {
+        return @tr("These playlists are too large for one .zip file. Export fewer at a time.");
+    }
 
     // The station list's own pair. Separate msgids rather than a shared "{n} items imported":
     // a station is not a playlist, and the skipped line has no playlist equivalent.

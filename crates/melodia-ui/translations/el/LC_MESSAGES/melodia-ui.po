@@ -1264,6 +1264,9 @@ msgstr "Η εξαγωγή απέτυχε"
 msgid "Couldn't write the playlist files."
 msgstr "Δεν ήταν δυνατή η εγγραφή των αρχείων λίστας."
 
+msgid "These playlists are too large for one .zip file. Export fewer at a time."
+msgstr "Αυτές οι λίστες είναι πολύ μεγάλες για ένα αρχείο .zip. Εξαγάγετε λιγότερες κάθε φορά."
+
 msgid "Add"
 msgstr "Προσθήκη"
 

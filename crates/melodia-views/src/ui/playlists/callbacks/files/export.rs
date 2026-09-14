@@ -15,7 +15,8 @@ use crate::ui::shell::notifications::{
     NotificationParams, NotificationsUi, RowText, TOAST_AUTO_DISMISS_MS,
 };
 use crate::ui::util::count_as_i32;
-use melodia_app::library::{self, playlist_files};
+use melodia_app::library;
+use melodia_app::library::playlist_files::{self, ArchiveExport};
 use melodia_app::state::AppState;
 use melodia_core::error::AppError;
 use melodia_ui::{
@@ -177,12 +178,12 @@ impl Selection {
                     Self::One { id, .. } => {
                         playlist_files::export_playlist_to_file(&state, id, &dest)
                             .await
-                            .map(|()| Written { playlists: 1, partial: false })
+                            .map(|()| Written::Playlists { count: 1, partial: false })
                     }
                     Self::Many(ids) => {
                         playlist_files::export_playlists_to_archive(&state, &ids, &dest)
                             .await
-                            .map(|res| Written { playlists: res.exported, partial: res.failed > 0 })
+                            .map(Written::from)
                     }
                 }
             })
@@ -192,10 +193,25 @@ impl Selection {
 }
 
 /// What reached the disk, in the terms the toast states it.
-struct Written {
-    playlists: u32,
-    /// Some ticked playlists were left out beside the ones written.
-    partial: bool,
+enum Written {
+    Playlists {
+        count: u32,
+        /// Some ticked playlists were left out beside the ones written.
+        partial: bool,
+    },
+    /// Nothing did: the playlists hold more than an archive import reads back.
+    TooLarge,
+}
+
+impl From<ArchiveExport> for Written {
+    fn from(export: ArchiveExport) -> Self {
+        match export {
+            ArchiveExport::Exported(result) => {
+                Self::Playlists { count: result.exported, partial: result.failed > 0 }
+            }
+            ArchiveExport::TooLarge => Self::TooLarge,
+        }
+    }
 }
 
 async fn export(
@@ -211,13 +227,13 @@ async fn export(
 
     let Some(ui) = weak.upgrade() else { return };
     match result {
-        Ok(written) if written.playlists > 0 => {
+        Ok(Written::Playlists { count, partial }) if count > 0 => {
             let settings = ui.global::<Settings>();
-            let variant = if written.partial { "warning" } else { "success" };
+            let variant = if partial { "warning" } else { "success" };
             notifications.show_auto_dismiss(
                 NotificationParams::plain(
                     variant,
-                    settings.invoke_playlist_export_title(count_as_i32(written.playlists)),
+                    settings.invoke_playlist_export_title(count_as_i32(count)),
                     settings.invoke_playlist_export_message(SharedString::from(
                         dest.display().to_string(),
                     )),
@@ -225,23 +241,32 @@ async fn export(
                 TOAST_AUTO_DISMISS_MS,
             );
         }
-        Ok(_) => show_export_failed(&ui, &notifications),
+        Ok(Written::Playlists { .. }) => show_export_failed(&ui, &notifications, Unwritten::Failed),
+        Ok(Written::TooLarge) => show_export_failed(&ui, &notifications, Unwritten::TooLarge),
         Err(e) => {
             log::warn!("playlists: export: {}", melodia_core::error::describe(&e));
-            show_export_failed(&ui, &notifications);
+            show_export_failed(&ui, &notifications, Unwritten::Failed);
         }
     }
 }
 
-/// Nothing was written. The two ways that happens — an `Ok` reporting zero
-/// exports, and an outright failure — say the same thing to the user and differ
-/// only in whether there is an error worth logging.
-fn show_export_failed(ui: &AppWindow, notifications: &NotificationsUi) {
-    notifications.show_localized(ui, "error", "", |ui| {
+/// Why nothing reached the disk, in the terms the toast states it.
+#[derive(Clone, Copy)]
+enum Unwritten {
+    /// An outright failure, or an `Ok` exporting nothing: the same to the user, differing only in
+    /// whether there is an error worth logging.
+    Failed,
+    /// Named, since exporting fewer at a time is the way out.
+    TooLarge,
+}
+
+fn show_export_failed(ui: &AppWindow, notifications: &NotificationsUi, reason: Unwritten) {
+    notifications.show_localized(ui, "error", "", move |ui| {
         let g = ui.global::<Settings>();
-        RowText::plain(
-            g.invoke_playlist_export_failed_title(),
-            g.invoke_playlist_export_failed_message(),
-        )
+        let message = match reason {
+            Unwritten::Failed => g.invoke_playlist_export_failed_message(),
+            Unwritten::TooLarge => g.invoke_playlist_export_too_large_message(),
+        };
+        RowText::plain(g.invoke_playlist_export_failed_title(), message)
     });
 }
