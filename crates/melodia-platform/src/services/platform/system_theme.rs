@@ -316,7 +316,7 @@ fn xdg_data_dirs() -> Vec<PathBuf> {
 /// How far a light scheme's `surface0` sits from the view background toward the text. Its own knob
 /// because the settings cards, dialogs and tooltips all paint that slot, and a light scheme gives
 /// them no colour of its own to take.
-const LIGHT_SURFACE0_STEP: f32 = 0.18;
+const LIGHT_SURFACE0_STEP: f32 = 0.09;
 
 /// Map a parsed kdeglobals section tree to a `KdeColorPalette`. Split out
 /// from `get_kde_colors()` so unit tests can verify the slot mapping
