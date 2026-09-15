@@ -29,6 +29,17 @@ async fn apply_then_persist(
 ) -> Result<(), AppError> {
     melodia_platform::services::platform::always_on_top::apply(method, &paths.data_dir, pinned)
         .await?;
+    persist_always_on_top(paths, pinned).await
+}
+
+/// Persist a pin the window manager changed on its own, `KWin`'s keep-above titlebar button among
+/// them, so a launch restores the last choice wherever it was made. There is nothing to apply: the
+/// window already carries it.
+pub async fn record_always_on_top(state: &AppState, pinned: bool) -> Result<(), AppError> {
+    persist_always_on_top(&state.paths, pinned).await
+}
+
+async fn persist_always_on_top(paths: &Arc<Paths>, pinned: bool) -> Result<(), AppError> {
     let paths = Arc::clone(paths);
     tokio::task::spawn_blocking(move || {
         services::settings::mutate_settings(&paths, |s| {
@@ -36,7 +47,7 @@ async fn apply_then_persist(
         })
     })
     .await
-    .map_err(|e| AppError::Settings(format!("set_always_on_top join: {e}")))?
+    .map_err(|e| AppError::Settings(format!("persist always_on_top join: {e}")))?
 }
 
 /// Persist the user's titlebar choice. This only commits the new value to disk; the

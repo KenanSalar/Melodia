@@ -147,6 +147,17 @@ the OS owns has to be attached late or not at all on at least one platform.
   `let _ =` swallows that. The restored pin went that way and painted an active icon over an
   unpinned window. Wait with `winit_window().await`, as `window_chrome::seed_always_on_top` does,
   or ride the attributes hook, as maximized does.
+  **On KWin the pin is read back as well as written**, because the window manager's own keep-above
+  titlebar button moves it without telling the client. `always_on_top::kwin::watch_keep_above`
+  leaves a script loaded for the session that calls `Changed(b)` on Melodia's connection, and
+  `window_chrome::follow_reported_pin` mirrors each report into `WindowChrome.always-on-top-active`
+  and `library::window::record_always_on_top`. A report matching the button is Melodia's own
+  toggle coming back and writes nothing. Three things hold it together, each argued at its
+  definition: the receiver is sequential (`spawn = false`), the script tracks windows added later
+  under both Plasma signal names, and it is named per data root so a relaunch replaces its
+  predecessor. `kwin_tests` pins the script against the interface it calls. GNOME's `window-calls`
+  and the winit arm report nothing, so there a pin moved from the titlebar still leaves the button
+  behind.
 
 - **OS file drag-and-drop rides the vendored winit fork** — stock 0.30.13 has no `wl_data_device`.
   `winit/` is 0.30.13 + 3 commits (PR #4009, `WindowId` fix, URI percent-decoding, cfg-gated to

@@ -47,6 +47,8 @@ use slint::winit_030::winit::window::WindowLevel;
 use melodia_app::state::AppState;
 use melodia_core::error::AppError;
 use melodia_core::utils::toast::{self, ToastKind};
+#[cfg(target_os = "linux")]
+use melodia_platform::services::platform::always_on_top;
 use melodia_platform::services::platform::always_on_top::AlwaysOnTopMethod;
 use melodia_ui::{AppWindow, Theme};
 
@@ -185,18 +187,22 @@ pub fn install(app: &AppWindow, state: &AppState) -> Result<(), AppError> {
 /// This runs before `app.show()`, and the winit window only exists once the event loop
 /// creates it, so the native one waits for that. The Linux one waits so `KWin` / GNOME
 /// have registered the window: `MakeAbove` against a not-yet-shown one quietly fails on
-/// bare `window-calls`.
+/// bare `window-calls`. On Linux it then watches for the pin moving outside Melodia,
+/// pinned or not.
 fn seed_always_on_top(app: &AppWindow, state: &AppState, persisted_pinned: bool) {
     let chrome = app.global::<melodia_ui::WindowChrome>();
     chrome.set_always_on_top_supported(state.always_on_top.supported);
     chrome.set_always_on_top_active(persisted_pinned);
 
-    if !state.always_on_top.supported || !persisted_pinned {
+    if !state.always_on_top.supported {
         return;
     }
 
     match state.always_on_top.method {
         AlwaysOnTopMethod::Native => {
+            if !persisted_pinned {
+                return;
+            }
             let weak = app.as_weak();
             if let Err(e) = slint::spawn_local(async move {
                 let Some(ui) = weak.upgrade() else { return };
@@ -210,25 +216,63 @@ fn seed_always_on_top(app: &AppWindow, state: &AppState, persisted_pinned: bool)
         }
         #[cfg(target_os = "linux")]
         AlwaysOnTopMethod::KwinDbus | AlwaysOnTopMethod::GnomeExtension => {
+            let (reports, reported) = tokio::sync::watch::channel(persisted_pinned);
+            follow_reported_pin(app, state, reported);
+
             let state = state.clone();
             // `Handle::clone()` releases the borrow on `state.runtime` so the same
             // `state` can be moved into the async block.
             state.runtime.clone().spawn(async move {
-                // KWin enumerates `workspace.stackingOrder` by PID, so the window has to
-                // be mapped by the compositor first.
-                tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-                if let Err(e) = melodia_platform::services::platform::always_on_top::apply(
-                    state.always_on_top.method,
-                    &state.paths.data_dir,
-                    true,
-                )
-                .await
-                {
-                    log::warn!("startup always_on_top re-apply: {e}");
+                let method = state.always_on_top.method;
+                let data_dir = &state.paths.data_dir;
+                if persisted_pinned {
+                    // KWin enumerates `workspace.stackingOrder` by PID, so the window has to
+                    // be mapped by the compositor first.
+                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                    if let Err(e) = always_on_top::apply(method, data_dir, true).await {
+                        log::warn!("startup always_on_top re-apply: {e}");
+                    }
+                }
+                if let Err(e) = always_on_top::watch_changes(method, data_dir, reports).await {
+                    log::warn!("always_on_top watch: {e}");
                 }
             });
         }
         AlwaysOnTopMethod::Unsupported => {}
+    }
+}
+
+/// Mirror each pin the window manager reports into `WindowChrome` and the persisted setting, so
+/// `KWin`'s keep-above titlebar button moves Melodia's pin button too. A report matching the
+/// button is a toggle of Melodia's own coming back, and changes nothing.
+#[cfg(target_os = "linux")]
+fn follow_reported_pin(
+    app: &AppWindow,
+    state: &AppState,
+    mut reported: tokio::sync::watch::Receiver<bool>,
+) {
+    let weak = app.as_weak();
+    let state = state.clone();
+    // One loop, so a burst of reports persists in the order the window manager sent them.
+    let followed = slint::spawn_local(async_compat::Compat::new(async move {
+        while reported.changed().await.is_ok() {
+            let pinned = *reported.borrow();
+            {
+                let Some(ui) = weak.upgrade() else { return };
+                let chrome = ui.global::<melodia_ui::WindowChrome>();
+                if chrome.get_always_on_top_active() == pinned {
+                    continue;
+                }
+                chrome.set_always_on_top_active(pinned);
+            }
+            if let Err(e) = melodia_app::library::window::record_always_on_top(&state, pinned).await
+            {
+                log::warn!("record always_on_top: {e}");
+            }
+        }
+    }));
+    if let Err(e) = followed {
+        log::warn!("always_on_top follower: spawn_local: {e}");
     }
 }
 

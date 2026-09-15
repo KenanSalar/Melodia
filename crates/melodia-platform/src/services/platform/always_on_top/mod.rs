@@ -145,6 +145,23 @@ pub async fn apply(
     }
 }
 
+/// Send every change the window manager makes to the pin to `reports`, whoever makes it. Only
+/// `KWin` can say; elsewhere nothing is watched and `reports` is dropped, which ends a receiver's
+/// loop.
+#[cfg(target_os = "linux")]
+pub async fn watch_changes(
+    method: AlwaysOnTopMethod,
+    data_dir: &std::path::Path,
+    reports: tokio::sync::watch::Sender<bool>,
+) -> Result<(), AppError> {
+    match method {
+        AlwaysOnTopMethod::KwinDbus => kwin::watch_keep_above(data_dir, reports).await,
+        AlwaysOnTopMethod::Native
+        | AlwaysOnTopMethod::GnomeExtension
+        | AlwaysOnTopMethod::Unsupported => Ok(()),
+    }
+}
+
 /// Lazily-initialized, shared D-Bus session connection used by the Linux
 /// backends. `zbus::blocking::Connection` is internally Arc-backed so the
 /// clone is cheap. Held behind a `parking_lot::Mutex` rather than an
