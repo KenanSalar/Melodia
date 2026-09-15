@@ -7,7 +7,7 @@
 [![Platforms](https://img.shields.io/badge/platforms-Linux%20%C2%B7%20Windows-success.svg)](#installation)
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust%20%2B%20Slint-orange.svg)](https://www.rust-lang.org/)
 
-Melodia is a Slint rewrite of a former Tauri + SolidJS application. Dropping the embedded WebKitGTK browser engine took the real-world footprint from a combined **~900 MB** to 87 MB idle on Linux (PSS) and 105 MiB on Windows (commit); the [full numbers](#footprint) are below.
+Melodia is a Slint rewrite of a former Tauri + SolidJS application. Dropping the embedded WebKitGTK browser engine took the real-world footprint from a combined **~900 MB** to 87 MiB idle on Linux (PSS) and 105 MiB on Windows (commit); the [full numbers](#footprint) are below.
 
 ---
 
@@ -117,28 +117,39 @@ Seven locales (English, German, French, Spanish, Turkish, Greek, Italian), switc
 - A system-tray icon with playback controls, on by default, and an optional close-to-tray; both under Settings ▸ Interface
 - A daily update check, named on first run and switchable under Settings ▸ Updates. It asks GitHub for a signed manifest and nothing else; package-managed installs skip it entirely
 - Set Melodia as your default player and double-click a track; it runs as a single instance, so files open in the window you already have
-- Always-on-top on KDE and GNOME, a self-deploying desktop entry, and AppStream metadata for KDE Discover and GNOME Software
+- Always-on-top on Windows, on any X11 desktop, and on Wayland under KDE, or GNOME with the Window Calls extension
+- On Linux, a self-deploying desktop entry and AppStream metadata for KDE Discover and GNOME Software
 - Window, queue, and navigation state persisted across sessions
 
 ## Footprint
 
-Release builds against the same 512-track library on one dual-boot PC, a Ryzen 7 9800X3D (8 cores, 16 threads) with an RTX 3080 and the window on a 144 Hz display, measured after the process had settled. Each platform's table uses what its own kernel accounts for, so the columns differ between the two.
+Release builds against the same 512-track library on one dual-boot PC, a Ryzen 7 9800X3D (8 cores, 16 threads) with an RTX 3080 and the window on a 144 Hz display. On both platforms Melodia opened on the same playlist, its detail view showing the hero banner, and the visualizer ran in the Mirrored style. After 30 s to settle, each scenario is sampled every second for 60 s: memory is the median sample, CPU and GPU the total over that minute. Each platform's table uses what its own kernel accounts for, so the columns differ between the two.
 
 ### Linux (Fedora)
 
-| Scenario | RSS | PSS | Heap | Mapped | CPU |
-| --- | --- | --- | --- | --- | --- |
-| Idle | 158 MB | 87 MB | 33 MB | 125 MB | 0.1% |
-| Playing, list view | 158 MB | 89 MB | 34 MB | 124 MB | 0.5% |
-| Playing, visualizer live | 158 MB | 89 MB | 34 MB | 124 MB | 3.8% |
+Measured with [`scripts/measure-linux-footprint.sh`](scripts/measure-linux-footprint.sh) on KDE Plasma under Wayland.
 
-CPU is a share of **one** core.
+#### Custom titlebar
 
-**Heap** is what the application itself allocates, and it is the number that stays flat: grids and track lists are virtualized and the cover caches are capped against the display, so a larger library barely moves it. **Mapped** is the file-backed remainder, mostly the binary and the shared graphics stack rather than anything Melodia allocated, which is why **PSS** is the fairer whole-process figure on a desktop already running other GL applications.
+| Scenario | Anonymous | PSS | USS | RSS | GPU memory | CPU (1 core) | CPU (all cores) | GPU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Idle | 32 MiB | 87 MiB | 81 MiB | 157 MiB | 39 MiB | 0.08% | 0.01% | 0.00% |
+| Playing, list view | 33 MiB | 89 MiB | 84 MiB | 157 MiB | 35 MiB | 0.67% | 0.04% | 1.21% |
+| Playing, visualizer live | 33 MiB | 90 MiB | 85 MiB | 158 MiB | 35 MiB | 3.88% | 0.24% | 1.86% |
+
+#### Native titlebar
+
+| Scenario | Anonymous | PSS | USS | RSS | GPU memory | CPU (1 core) | CPU (all cores) | GPU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Idle | 32 MiB | 87 MiB | 81 MiB | 157 MiB | 24 MiB | 0.08% | 0.01% | 0.00% |
+| Playing, list view | 33 MiB | 90 MiB | 84 MiB | 156 MiB | 24 MiB | 0.57% | 0.04% | 0.00% |
+| Playing, visualizer live | 33 MiB | 91 MiB | 86 MiB | 157 MiB | 29 MiB | 3.92% | 0.24% | 0.78% |
+
+Linux keeps no commit charge per process, so **Anonymous** is the figure to compare: the memory Melodia allocated itself, in RAM or in swap, which nothing another process does can move. It is also the number that stays flat, since grids and track lists are virtualized and the cover caches are capped against the display, so a larger library barely moves it. **PSS** is KDE System Monitor's Memory column. It adds a share of the file-backed pages, mostly the binary and the shared graphics stack rather than anything Melodia allocated, and that share shrinks whenever another program maps the same libraries. **USS** is the part no other process maps, what closing Melodia gives back, and System Monitor's Private column. **RSS** counts every shared page in full. **GPU memory** is the video memory the NVIDIA driver charges to Melodia, where FemtoVG keeps its textures and framebuffers, counted apart from the rest. **CPU (1 core)** counts one full core as 100%, and **CPU (all cores)** spreads that across all 16 threads, as System Monitor's CPU column does. **GPU** is the utilization the NVIDIA driver reports for Melodia, in whole percents each second.
 
 ### Windows
 
-Measured with [`scripts/measure-windows-footprint.ps1`](scripts/measure-windows-footprint.ps1), with Melodia opening on a playlist. After 30 s to settle, each scenario is sampled every second for 60 s: memory is the median sample, CPU and GPU the total over that minute.
+Measured with [`scripts/measure-windows-footprint.ps1`](scripts/measure-windows-footprint.ps1).
 
 #### Custom titlebar
 
