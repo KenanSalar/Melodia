@@ -99,18 +99,9 @@ fn the_packed_key_and_track_matches_agree_field_for_field() {
 
     for r in [row(1), nul] {
         let key = RowSearchKey::from_row(&r);
-        for needle in [
-            "ghost",
-            "specials",
-            "various",
-            "more",
-            "ska",
-            "1981",
-            "198",
-            "queen david",
-            "zzz",
-            "",
-        ] {
+        for needle in
+            ["ghost", "specials", "various", "more", "ska", "1981", "198", "queen david", "zzz", ""]
+        {
             let folded = row_match::fold_needle(needle);
             assert_eq!(
                 key.matches(&folded),
@@ -155,16 +146,8 @@ fn sortable_rows() -> Vec<RsTrackListRow> {
 
 /// The seven tokens a header cell can emit, plus the unrecognised one that
 /// must fall through to the natural-order arm.
-const FIELDS: [&str; 8] = [
-    "title",
-    "artist",
-    "album",
-    "genre",
-    "year",
-    "length",
-    "track_number",
-    "bogus",
-];
+const FIELDS: [&str; 8] =
+    ["title", "artist", "album", "genre", "year", "length", "track_number", "bogus"];
 
 #[test]
 fn the_cache_sorts_exactly_as_the_db_rows_do() {

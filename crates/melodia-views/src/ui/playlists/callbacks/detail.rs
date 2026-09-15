@@ -6,10 +6,10 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
-use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
+use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
 use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
-use crate::ui::track_list_view::{TrackListColumnState, view_id};
+use crate::ui::track_list_view::{self, view_id};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Dialog, PlaylistDetail};
@@ -199,17 +199,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         let weak = weak.clone();
         detail.on_toggle_column(move |_id| {
             let Some(ui) = weak.upgrade() else { return };
-            let columns = ui.global::<PlaylistDetail>().snapshot_visible();
-            let s_disk = s.clone();
-            spawn_blocking_logged!(
-                s,
-                "playlists::toggle_column",
-                library::settings::update_view_columns(
-                    &s_disk,
-                    view_id::PLAYLIST_DETAIL.to_owned(),
-                    columns
-                )
-            );
+            track_list_view::persist_visible(&s, &ui.global::<PlaylistDetail>());
         });
     }
 

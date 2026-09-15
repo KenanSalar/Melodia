@@ -6,11 +6,12 @@
 //! is [`super::top_result`].
 
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use slint::{ComponentHandle, Model, SharedString, VecModel, Weak};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 
 use super::SearchUi;
 use super::apply::{apply_results_to_slint, clear_results_on_ui, set_loading_on_ui};
@@ -168,17 +169,17 @@ pub fn schedule_history_add(
 /// Push a freshly-loaded recent-searches list into `Search.recent-rows`.
 /// Called from `callbacks::recent` on initial hydrate, after a successful
 /// history-add, and after `recent-remove` / `recent-clear`.
+/// A **fresh** model rather than `set_vec` on the one already there, which the rest of the
+/// tree prefers: the chip strip packs its rows through a `pure callback` reading this
+/// property, and a cached pure result is only re-evaluated when a property it read is
+/// dirtied. Writing through the existing model leaves the property untouched, so a
+/// reorder — or an add at the history cap, both of which keep the length — would paint the
+/// previous terms. Nothing here holds a `ListView` delegate cache worth the reuse.
 pub fn push_recent_rows_to_slint(weak: &Weak<AppWindow>, rows: Vec<String>) {
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
-        let g = ui.global::<Search>();
-        let model = g.get_recent_rows();
-        let Some(vm) = model.as_any().downcast_ref::<VecModel<SharedString>>() else {
-            log::warn!("Search.recent-rows: VecModel<SharedString> downcast failed");
-            return;
-        };
         let ss: Vec<SharedString> = rows.into_iter().map(SharedString::from).collect();
-        vm.set_vec(ss);
+        ui.global::<Search>().set_recent_rows(ModelRc::from(Rc::new(VecModel::from(ss))));
     });
 }

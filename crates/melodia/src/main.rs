@@ -126,8 +126,8 @@ fn main() -> AppResult<()> {
     }
 
     // Two workers: the async work is event-driven (queries, watch publishes,
-    // position ticks, souvlaki) and CPU-bound work goes to Rayon or
-    // `spawn_blocking`, neither of which draws on this pool. The `num_cpus`
+    // position ticks, media-control events) and CPU-bound work goes to Rayon
+    // or `spawn_blocking`, neither of which draws on this pool. The `num_cpus`
     // default leaves 6+ idle threads on a desktop, each with a 2 MB stack.
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
@@ -148,11 +148,7 @@ fn main() -> AppResult<()> {
 
     log::info!(
         "AppState initialized: db ok, watcher built, media controls = {}",
-        if state.media_controls.is_some() {
-            "ready"
-        } else {
-            "no-op"
-        }
+        if state.media_controls.is_some() { "ready" } else { "no-op" }
     );
 
     let spawner = tasks::TaskSpawner::from_state(&state);
@@ -183,14 +179,10 @@ fn main() -> AppResult<()> {
         ui::window_chrome::geometry::PersistedGeometry::from_settings,
     );
     let restore_maximized = geometry.maximized;
-    slint::BackendSelector::new()
+    let backend = slint::BackendSelector::new()
         .backend_name("winit".into())
         .with_winit_window_attributes_hook(move |attrs| {
-            let attrs = if restore_maximized {
-                attrs.with_maximized(true)
-            } else {
-                attrs
-            };
+            let attrs = if restore_maximized { attrs.with_maximized(true) } else { attrs };
             // Pin the window identity so the compositor resolves our icon and
             // label. X11 matches `WM_CLASS` against the desktop file's
             // `StartupWMClass=Melodia`, falling back to the binary basename when
@@ -210,9 +202,12 @@ fn main() -> AppResult<()> {
                 )
             };
             attrs
-        })
-        .select()
-        .map_err(|e| AppError::Window(format!("backend selector: {e}")))?;
+        });
+    // Counts the loop's `NewEvents`, which is how the pump tells a Win32 drag's modal loop apart.
+    #[cfg(target_os = "windows")]
+    let backend =
+        backend.with_winit_custom_application_handler(ui::window_chrome::parked_loop::LoopTicks);
+    backend.select().map_err(|e| AppError::Window(format!("backend selector: {e}")))?;
 
     let app = AppWindow::new().map_err(|e| AppError::Window(e.to_string()))?;
 
@@ -521,9 +516,8 @@ fn main() -> AppResult<()> {
     shutdown::respawn_if_requested();
 
     // Returning normally would linger until every non-daemon thread exits, and
-    // three never do: souvlaki's MPRIS thread, accesskit's a11y thread, and any
-    // tokio worker parked on a blocking call. State is flushed and the rest is
-    // OS-managed.
+    // two never do: accesskit's a11y thread and any tokio worker parked on a
+    // blocking call. State is flushed and the rest is OS-managed.
     std::process::exit(0);
 }
 

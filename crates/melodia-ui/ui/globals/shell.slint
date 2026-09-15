@@ -1,15 +1,48 @@
+import { Theme } from "../theme.slint";
+import { Settings } from "../settings.slint";
+
 // Window-shell plumbing: the chrome the OS frame doesn't draw, the responsive miniplayer swap, and
 // the two globals keeping pointer state coherent when a view switch unmounts what was under it.
 
+// Which of the frameless window's resize grabs the pointer is over, named by the edge or corner it
+// moves. `ResizeRing` is the only writer.
+export enum ResizeZone { none, north, south, west, east, north-west, north-east, south-west, south-east }
+
 // The custom titlebar, owned by `ui/window_chrome/` with Slint as the dumb renderer.
 // `is-maximized` comes off a winit `Resized` subscription, so the icon stays right under tiling
-// shortcuts that bypass our buttons. **Window dragging is not handled inside Slint** — a
+// shortcuts that bypass our buttons. **Window dragging and resizing are not handled inside Slint** — a
 // `TouchArea` calling `drag_window()` leaks its mouse grab and wedges the window; Rust intercepts
-// the press at the winit layer. `restart-app` persists then respawns, Slint reading `no-frame` only
-// at first show; `restart-tray` and `restart-backdrop` mirror it so the startup gates each reads
+// the press at the winit layer. `restart-app` persists then respawns for the titlebar toggle;
+// `restart-tray` and `restart-backdrop` mirror it so the startup gates each reads
 // once — `main.rs`'s tray install, and `boot::ui_setup::apply_backdrop_style` — re-evaluate.
 export global WindowChrome {
     in property <bool> is-maximized;
+
+    // What the OS frame adds to the client area on each axis. Rust writes it only while a frame is
+    // up, so the reading from before the miniplayer dropped the frame survives for its exit edge.
+    // The window's minimum reads it too, while the frame stands.
+    in property <length> frame-allowance-w;
+    in property <length> frame-allowance-h;
+
+    // The part of that frame outside the edges it draws: Win32's invisible resize borders, which a
+    // dropped frame hands to the client. Zero elsewhere, and written only while a frame stands.
+    in property <length> frame-margin-left;
+    in property <length> frame-margin-right;
+    in property <length> frame-margin-bottom;
+
+    // The frameless outline's colour, resolved from the Window Border Color pick. Unfocused is its
+    // own brush because Windows' accent borders go neutral on an inactive window; for any other pick
+    // the two are the same.
+    in property <brush> border-color;
+    in property <brush> border-color-unfocused;
+
+    // The mantle behind the full UI's chrome: the sidebar, the now-playing bar and the gutter
+    // beside the content panel, so they swap together. The KDE-only unfocused tint mirrors the fade
+    // an OS-drawn titlebar does, which is why it also gates on `use-native-titlebar`: under our own
+    // chrome there is nothing to match, and the toggle is kept across a titlebar disable so it
+    // survives a re-enable. No `animate` on any reader, since the OS swaps its colour instantly.
+    out property <brush> mantle: (Settings.match-unfocused-bg && Theme.use-native-titlebar
+        && !Theme.window-focused) ? Theme.mantle-unfocused : Theme.mantle;
 
     // `supported` gates the pin button so bare-Wayland and GNOME-without-window-calls users don't
     // see a dead control. `active` is written optimistically on click; Rust reverts it on failure.
@@ -23,6 +56,9 @@ export global WindowChrome {
     // Mirrored into an atomic the winit `MouseInput` filter checks before starting an
     // OS-level window move.
     callback drag-region-hover-changed(bool);
+    // The same for `ResizeRing`'s grabs, kept in a cell the filter checks first, before an OS-level
+    // resize.
+    callback resize-zone-changed(ResizeZone);
     callback restart-app();
     callback restart-tray();
     callback restart-backdrop();
@@ -34,6 +70,11 @@ export global WindowChrome {
     // read once after `app.show()` — so a window maximized afterwards mounted more cards than
     // its tier could hold and left the overflow on placeholders.
     callback display-changed();
+    // Windows only, the same Rust-to-Rust shape: fired by the winit `ThemeChanged` and focus-gain
+    // arms, handled in `ui::appearance`, which re-reads the default app mode and repaints a System
+    // variant painted for the other one. Focus gain too, as the border colour's refresh does, so an
+    // event winit never sent costs no more than a click back into the window.
+    callback recheck-system-theme();
 }
 
 // The compact player replacing the full UI once the window shrinks past a threshold, and the

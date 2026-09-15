@@ -56,10 +56,7 @@ impl Origin {
     /// Read the current position off the globals. UI thread only.
     pub(in crate::ui) fn read(ui: &AppWindow) -> Self {
         let nav = ui.global::<Nav>().get_selected_index();
-        Self {
-            nav,
-            tab: tab_of_section(ui, nav),
-        }
+        Self { nav, tab: tab_of_section(ui, nav) }
     }
 
     /// What the destination stamps as its `origin-nav-index`. See [`origin_stamp`].

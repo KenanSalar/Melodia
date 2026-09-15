@@ -50,11 +50,7 @@ impl ApiStation {
             // Names arrive padded often enough to matter: a leading tab sorts
             // ahead of every letter and paints as a gap down the card column.
             name: self.name.trim().to_owned(),
-            stream_url: if self.url_resolved.is_empty() {
-                self.url
-            } else {
-                self.url_resolved
-            },
+            stream_url: if self.url_resolved.is_empty() { self.url } else { self.url_resolved },
             homepage: non_empty(self.homepage),
             favicon_url: non_empty(self.favicon),
             tags: self.tags,

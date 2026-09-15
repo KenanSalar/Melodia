@@ -57,21 +57,6 @@ const _: () = assert!(
     "the save cadence must span at least one poll, or its modulus is zero"
 );
 
-/// How often the OS media controls are handed a position. Their widgets advance on their own
-/// between updates, so this only has to keep the two from visibly diverging.
-#[cfg(any(target_os = "windows", target_os = "macos"))]
-const MEDIA_POSITION_INTERVAL_MS: u64 = 5_000;
-
-/// Polls spanning [`MEDIA_POSITION_INTERVAL_MS`], for [`SAVE_EVERY_N_TICKS`]' reason.
-#[cfg(any(target_os = "windows", target_os = "macos"))]
-const MEDIA_POSITION_EVERY_N_TICKS: u64 = MEDIA_POSITION_INTERVAL_MS / POLL_INTERVAL_MS;
-
-#[cfg(any(target_os = "windows", target_os = "macos"))]
-const _: () = assert!(
-    MEDIA_POSITION_EVERY_N_TICKS > 0,
-    "the media-controls cadence must span at least one poll, or its modulus is zero"
-);
-
 /// Rate limiter on the position publish, admitting one tick per whole second.
 ///
 /// The monitor wakes at [`POLL_INTERVAL_MS`] so the crossfade and gapless windows stay tight,
@@ -133,32 +118,20 @@ pub fn evaluate_playing_tick(
     state: &mut PlayerState,
     backend: BackendSnapshot,
 ) -> Option<PlayingTick> {
-    let BackendSnapshot {
-        position_ms,
-        already_preloaded,
-        crossfading,
-        xf,
-    } = backend;
+    let BackendSnapshot { position_ms, already_preloaded, crossfading, xf } = backend;
 
     if state.status != PlaybackStatus::Playing {
         return None;
     }
     state.position_ms = position_ms;
-    let tick = PositionTick {
-        position_ms,
-        duration_ms: state.duration_ms,
-    };
+    let tick = PositionTick { position_ms, duration_ms: state.duration_ms };
 
     // A live source has no track end, which is the only thing the two decisions below are about:
     // a crossfade ramps between two tracks and a gapless preload stages the next one. The position
     // published above is elapsed listening time, since the silence the prebuffer emits while
     // starved still advances the deck's clock.
     if !state.source_allows(PlaybackSource::advances_queue) {
-        return Some(PlayingTick {
-            tick,
-            late_preload: None,
-            crossfade: None,
-        });
+        return Some(PlayingTick { tick, late_preload: None, crossfade: None });
     }
 
     let next = state.queue.peek_next();
@@ -229,11 +202,7 @@ pub fn evaluate_playing_tick(
         None
     };
 
-    Some(PlayingTick {
-        tick,
-        late_preload,
-        crossfade,
-    })
+    Some(PlayingTick { tick, late_preload, crossfade })
 }
 
 /// Tell the user a station gave up, which is otherwise a silence with no explanation.
@@ -320,19 +289,10 @@ pub struct PlaybackMonitorContext {
 /// Spawns a single background task that handles position polling,
 /// gapless transition detection, and end-of-stream detection.
 pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext) {
-    let PlaybackMonitorContext {
-        shutdown_token,
-        player_state,
-        engine,
-        sinks,
-        position_tx,
-        save,
-    } = ctx;
+    let PlaybackMonitorContext { shutdown_token, player_state, engine, sinks, position_tx, save } =
+        ctx;
     tracker.spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_millis(POLL_INTERVAL_MS));
-
-        #[cfg(any(target_os = "windows", target_os = "macos"))]
-        let mut media_tick_counter: u64 = 0;
 
         let mut save_tick_counter: u64 = 0;
         let mut publish = SecondGate::default();
@@ -360,10 +320,6 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                 == PlaybackStatus::Playing as u8;
 
             if !is_playing {
-                #[cfg(any(target_os = "windows", target_os = "macos"))]
-                {
-                    media_tick_counter = 0;
-                }
                 continue;
             }
 
@@ -427,17 +383,17 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                         let mut state = lock_state(&player_state);
                         evaluate_playing_tick(&mut state, backend)
                     };
-                    let Some(PlayingTick {
-                        tick,
-                        late_preload,
-                        crossfade: crossfade_now,
-                    }) = decided
+                    let Some(PlayingTick { tick, late_preload, crossfade: crossfade_now }) =
+                        decided
                     else {
                         continue;
                     };
 
                     if publish.admits(tick.position_ms) {
                         let _ = position_tx.send(Some(tick.clone()));
+                    }
+                    if let Some(mc) = sinks.media_controls.as_ref() {
+                        mc.update_position(tick.position_ms);
                     }
 
                     if let Some(stream) = engine.stream_shared() {
@@ -461,17 +417,6 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                         });
                     } else if let Some((path, rg)) = late_preload {
                         engine.preload_gapless(Some(&path), rg);
-                    }
-
-                    #[cfg(any(target_os = "windows", target_os = "macos"))]
-                    {
-                        media_tick_counter =
-                            (media_tick_counter + 1) % MEDIA_POSITION_EVERY_N_TICKS;
-                        if media_tick_counter == 0
-                            && let Some(mc) = sinks.media_controls.as_ref()
-                        {
-                            mc.update_position(tick.position_ms);
-                        }
                     }
                 }
             }

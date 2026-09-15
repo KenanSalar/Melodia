@@ -76,11 +76,7 @@ impl Effort {
     /// same stations a second time, and re-asking there would spend a request per re-entry for an
     /// answer this session already has.
     pub fn for_result(fresh: bool, results: usize) -> Self {
-        if fresh && results <= EXPLICIT_RESULT_MAX {
-            Self::Explicit
-        } else {
-            Self::Page
-        }
+        if fresh && results <= EXPLICIT_RESULT_MAX { Self::Explicit } else { Self::Page }
     }
 }
 
@@ -102,9 +98,7 @@ pub struct LogoMemo {
 
 impl LogoMemo {
     pub fn new() -> Self {
-        Self {
-            answers: Mutex::new(LruCache::new(LOGO_MEMO_CAP)),
-        }
+        Self { answers: Mutex::new(LruCache::new(LOGO_MEMO_CAP)) }
     }
 
     /// The stored path for a URL, if this session found one.

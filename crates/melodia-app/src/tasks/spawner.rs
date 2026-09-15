@@ -26,10 +26,7 @@ impl TaskSpawner {
     /// Build a spawner from the live `AppState` — the single place where tasks couple
     /// to the global state.
     pub fn from_state(state: &AppState) -> Self {
-        Self {
-            tracker: state.task_tracker.clone(),
-            shutdown: state.shutdown_token.clone(),
-        }
+        Self { tracker: state.task_tracker.clone(), shutdown: state.shutdown_token.clone() }
     }
 
     /// Spawn a tracked task that runs to completion on its own. The shutdown token is

@@ -197,11 +197,7 @@ fn extract(
 
     let file_hash = compute_file_hash(path)?;
 
-    let scope = if skip_artwork {
-        TagScope::NoArtwork
-    } else {
-        TagScope::Full
-    };
+    let scope = if skip_artwork { TagScope::NoArtwork } else { TagScope::Full };
     let tagged_file = match read_tags(path, scope) {
         Ok(tagged) => Some(tagged),
         Err(e) => match on_unreadable {
@@ -349,9 +345,7 @@ fn extract(
 /// what the filename-row fallback needs — every field below is one line rather than a slot in a
 /// tuple whose `else` arm has to spell the same count of `None`s.
 fn text(tag: Option<&Tag>, key: ItemKey) -> Option<String> {
-    tag.and_then(|tag| tag.get_string(key))
-        .map(|s| s.trim().to_owned())
-        .filter(|s| !s.is_empty())
+    tag.and_then(|tag| tag.get_string(key)).map(|s| s.trim().to_owned()).filter(|s| !s.is_empty())
 }
 
 /// [`text`] parsed as a whole number, for the counts that have no [`Accessor`] getter.
@@ -450,11 +444,7 @@ fn read_credit_mbids(tag: Option<&Tag>, key: ItemKey, credited: usize) -> Vec<St
         return Vec::new();
     };
     let ids = trimmed_values(tag, key);
-    if ids.len() == credited {
-        ids
-    } else {
-        Vec::new()
-    }
+    if ids.len() == credited { ids } else { Vec::new() }
 }
 
 /// A file's two artist credits, over a tag already in hand.

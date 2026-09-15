@@ -111,13 +111,13 @@ fn shuffle_unshuffle_roundtrip() {
     assert_eq!(restored, original_ids);
 }
 
-// --- The three transport doors ---------------------------------------------
+// --- The transport doors ---------------------------------------------------
 //
-// Driven through the workers under `queue_{set_shuffle,toggle_shuffle,cycle_repeat}` rather than
-// by rebuilding their bodies over a bare `PlayerState`, which is what the tests these replaced
-// did: none of the three ever called the door it was named after, so an instrumented run reported
-// all three doors never executed while all three tests passed. What the doors add over the queue
-// methods `melodia-engine` already pins is the branch they pick and the value they hand
+// Driven through the workers under `queue_{set_shuffle,toggle_shuffle,cycle_repeat,set_repeat}`
+// rather than by rebuilding their bodies over a bare `PlayerState`, which is what the tests these
+// replaced did: none of the three ever called the door it was named after, so an instrumented run
+// reported all three doors never executed while all three tests passed. What the doors add over
+// the queue methods `melodia-engine` already pins is the branch they pick and the value they hand
 // `persist_{shuffle,repeat}`, so that is what these assert.
 
 fn seated_queue(count: i64) -> (PlayerStateHandle, PlayerSinks) {
@@ -206,6 +206,36 @@ fn a_repeat_press_answers_with_the_mode_it_landed_on() {
     assert_eq!(announced, lock_state(&player_state).queue.repeat_mode);
 }
 
+/// The answer to `set_repeat` from `start`, over a queue already holding that mode.
+fn repeat_set_from(start: RepeatMode, requested: RepeatMode) -> RepeatMode {
+    let (player_state, sinks) = seated_queue(3);
+    with_state_emit(&player_state, &sinks, |s| s.queue.repeat_mode = start);
+
+    set_repeat(&player_state, &sinks, requested)
+}
+
+/// An OS panel names the mode it wants, `playerctl loop Track` among them. Each row pairs a start
+/// with a request that one press from it would not reach, so a door that stepped instead of
+/// setting fails every row rather than the one that happens to coincide.
+#[test]
+fn a_repeat_request_lands_on_the_mode_it_names_rather_than_the_next_one() {
+    assert_eq!(
+        repeat_set_from(RepeatMode::Off, RepeatMode::One),
+        RepeatMode::One,
+        "a press off `Off` would land on `All`"
+    );
+    assert_eq!(
+        repeat_set_from(RepeatMode::One, RepeatMode::All),
+        RepeatMode::All,
+        "a press off `One` would land on `Off`"
+    );
+    assert_eq!(
+        repeat_set_from(RepeatMode::All, RepeatMode::Off),
+        RepeatMode::Off,
+        "a press off `All` would land on `One`"
+    );
+}
+
 // --- The restart -----------------------------------------------------------
 //
 // `queue.json` holds the queue and the station over it in one file, because a station leaves the
@@ -226,13 +256,7 @@ fn persisted(
     current_index: i32,
     station_id: Option<i64>,
 ) -> PersistedPlayback {
-    PersistedPlayback {
-        queue: PersistableQueue {
-            track_ids,
-            current_index,
-        },
-        station_id,
-    }
+    PersistedPlayback { queue: PersistableQueue { track_ids, current_index }, station_id }
 }
 
 fn plan_of(
@@ -410,11 +434,7 @@ fn titled(id: i64, title: &str) -> Arc<TrackSummary> {
 /// `natord` is what puts "Track 2" ahead of "Track 10".
 #[test]
 fn a_dropped_batch_is_ordered_the_way_a_list_is() {
-    let mut batch = vec![
-        titled(1, "Track 10"),
-        titled(2, "Track 9"),
-        titled(3, "Track 1"),
-    ];
+    let mut batch = vec![titled(1, "Track 10"), titled(2, "Track 9"), titled(3, "Track 1")];
 
     sort_for_queue(&mut batch);
 
@@ -429,11 +449,7 @@ fn a_dropped_batch_is_ordered_the_way_a_list_is() {
 /// handed it over in rather than an arbitrary one.
 #[test]
 fn equal_titles_keep_the_order_the_drop_handed_over() {
-    let mut batch = vec![
-        titled(7, "Untitled"),
-        titled(3, "Untitled"),
-        titled(5, "Untitled"),
-    ];
+    let mut batch = vec![titled(7, "Untitled"), titled(3, "Untitled"), titled(5, "Untitled")];
 
     sort_for_queue(&mut batch);
 
@@ -517,10 +533,7 @@ fn opened_file(dir: &std::path::Path, file_name: &str, title: &str) -> Result<St
         std::path::PathBuf::from(melodia_testkit::ASSETS_DIR).join("silence.mp3"),
         &dest,
     )?;
-    let edit = TagEdit {
-        title: FieldEdit::Set(title.to_owned()),
-        ..TagEdit::default()
-    };
+    let edit = TagEdit { title: FieldEdit::Set(title.to_owned()), ..TagEdit::default() };
     melodia_store::media::ingest::tag_writer::apply_to_file(&dest, &edit, None)?;
     Ok(dest.to_string_lossy().into_owned())
 }
@@ -561,10 +574,7 @@ async fn opened_files_reach_the_queue_in_natural_title_order() -> Result<(), App
 async fn opening_a_batch_starts_at_the_first_track_in_order() -> Result<(), AppError> {
     let fx = TestPlayback::empty().await?;
     let dir = fx.tmp.path();
-    let opened = vec![
-        opened_file(dir, "b.mp3", "Second")?,
-        opened_file(dir, "a.mp3", "First")?,
-    ];
+    let opened = vec![opened_file(dir, "b.mp3", "Second")?, opened_file(dir, "a.mp3", "First")?];
 
     open_as_queue(&fx.ctx, &new_cover_cache(), &opened).await?;
 

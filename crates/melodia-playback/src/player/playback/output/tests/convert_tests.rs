@@ -19,10 +19,7 @@ fn drain(source: Vec<f32>, channels: u16, from: u32, to: u32, speed: f64) -> (Ve
     let mut converter = Converter::new(shape(channels, from), device);
 
     let mut out = vec![0.0; 4096];
-    let Filled {
-        samples,
-        source_frames,
-    } = converter.fill(&mut out, &mut src, speed);
+    let Filled { samples, source_frames } = converter.fill(&mut out, &mut src, speed);
     out.truncate(samples);
     (out, source_frames)
 }
@@ -211,11 +208,5 @@ fn a_drained_converter_stays_drained() {
     assert!(converter.is_done());
 
     let second = converter.fill(&mut out, &mut src, 1.0);
-    assert_eq!(
-        second,
-        Filled {
-            samples: 0,
-            source_frames: 0
-        }
-    );
+    assert_eq!(second, Filled { samples: 0, source_frames: 0 });
 }

@@ -14,6 +14,7 @@ mod repaint;
 mod system_watcher;
 pub mod theme_apply;
 mod theme_picker;
+pub mod window_border;
 mod window_settings;
 
 use std::rc::Rc;
@@ -25,7 +26,7 @@ use tokio::sync::watch;
 use melodia_app::library;
 use melodia_app::state::{AppState, Signal};
 use melodia_core::themes::{self, SystemColorState, ThemeDef};
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 use melodia_platform::services::platform;
 use melodia_ui::{AppWindow, Settings};
 
@@ -56,9 +57,9 @@ pub struct AppearanceHandles {
 /// without going through `library::settings::get_settings`.
 pub(super) type PersistedAccent = Arc<parking_lot::Mutex<String>>;
 
-/// Read the OS appearance state once at startup. Linux: XDG portal +
-/// `kdeglobals`. Other platforms: an `unknown()` placeholder so `apply()`'s
-/// system-variant branch defaults to dark.
+/// Read the OS appearance state once at startup, ahead of the first frame, so a System variant
+/// never paints the wrong brightness first. Linux: XDG portal + `kdeglobals`. Windows: the default
+/// app mode. Elsewhere: an `unknown()` placeholder, which a System variant paints as dark.
 pub(super) fn read_initial_system_state() -> SystemColorState {
     #[cfg(target_os = "linux")]
     {
@@ -68,7 +69,11 @@ pub(super) fn read_initial_system_state() -> SystemColorState {
             material_you: None,
         }
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "windows")]
+    {
+        SystemColorState { theme: platform::color_mode::app_theme().to_owned(), material_you: None }
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     {
         SystemColorState::unknown()
     }
@@ -87,14 +92,16 @@ pub(super) fn seed_theme_names(ui: &AppWindow) {
 pub(super) fn read_last_static_accent(state: &AppState, theme_id: &str) -> Option<String> {
     library::settings::get_settings(state)
         .ok()
-        .and_then(|s| s.theme_preferences.get(theme_id).and_then(|p| p.last_static_accent.clone()))
+        .and_then(|s| s.last_static_accent(theme_id).map(str::to_owned))
 }
 
-/// Write the palette, then re-solve the two artwork-derived tiers against it.
+/// Write the palette, then re-solve the two artwork-derived tiers and the window border against it.
 ///
 /// **The only place `theme_apply::apply` may be called from.** Both tiers are snapshots taken when a
 /// hero or a track landed, so a palette change reaches neither on its own — visibly, since the
 /// aurora's whole tier set is the theme's own and Now Playing republishes only on the next track.
+/// The border's swatches are shaded per variant and its System colour is mixed from the palette, so
+/// it owes the same.
 pub(super) fn apply_palette(
     ui: &AppWindow,
     theme_id: &str,
@@ -105,21 +112,17 @@ pub(super) fn apply_palette(
     theme_apply::apply(ui, theme_id, variant_id, accent_id, system);
     crate::ui::hero_backdrop::republish_for_palette(ui);
     crate::ui::now_playing::republish_for_palette(ui);
+    window_border::republish_for_palette(ui, theme_id, variant_id, system);
 }
 
-/// Persist the user's pick on tokio's blocking pool — `set_appearance`
-/// is sync `std::fs` I/O and must not block the Slint event loop. Any
-/// write failure (disk full, permissions) surfaces as a `log::warn!`
-/// instead of being silently dropped.
+/// Persist the user's pick without waking the Material You coordinator; [`persist_and_kick`] is
+/// the one that does.
 pub(super) fn persist(state: &AppState, theme_id: &str, variant_id: &str, accent_id: &str) {
-    let s = state.clone();
     let theme_id = theme_id.to_owned();
     let variant_id = variant_id.to_owned();
     let accent_id = accent_id.to_owned();
-    state.runtime.spawn_blocking(move || {
-        if let Err(e) = library::settings::set_appearance(&s, theme_id, variant_id, accent_id) {
-            log::warn!("persist appearance: {e}");
-        }
+    state.persist_blocking("persist appearance", move |s| {
+        library::settings::set_appearance(s, theme_id, variant_id, accent_id)
     });
 }
 

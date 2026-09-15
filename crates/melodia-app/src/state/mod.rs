@@ -1,6 +1,5 @@
 use std::sync::{Arc, OnceLock};
 
-use souvlaki::MediaControlEvent;
 use tokio::runtime::Handle;
 use tokio::sync::{mpsc, watch};
 use tokio_util::sync::CancellationToken;
@@ -20,7 +19,7 @@ use melodia_core::config::Paths;
 use melodia_core::error::{AppError, AppResult};
 use melodia_core::utils::self_writes::SelfWrites;
 use melodia_engine::player::engine::backend::PlaybackEngine;
-use melodia_engine::player::engine::event_sink::{MediaControlsSync, PlayerSinks};
+use melodia_engine::player::engine::event_sink::{MediaControlsSync, PlayerEvent, PlayerSinks};
 use melodia_engine::player::engine::state::{
     PlayerStateHandle, PlayerViewModelLight, PositionTick, QueueViewModel, lock_state,
 };
@@ -131,6 +130,10 @@ pub struct AppState {
     /// Whether playing a station reports a click back to the directory. Read on
     /// the play path, which is already on a worker.
     pub radio_send_clicks: SharedFlag,
+    /// Whether lyrics run at all, on [`Self::radio_enabled`]'s terms: `library::lyrics`
+    /// refuses on it from a worker, and the Now Playing switch and the Settings card
+    /// both write it.
+    pub lyrics_enabled: SharedFlag,
     /// Whether the lyrics panel may look a sheet up online, on the same terms as
     /// [`Self::radio_enabled`]: `library::lyrics`'s guard runs on a worker once per
     /// track change, where a `settings.json` read would be a file read on the path a
@@ -173,7 +176,7 @@ pub struct AppState {
 /// Holding them on `AppState` would force a `Mutex<Option<…>>` shape nothing
 /// needs; returning them keeps the struct stable.
 pub struct StartupChannels {
-    pub media_control_rx: Option<mpsc::Receiver<MediaControlEvent>>,
+    pub media_control_rx: Option<mpsc::Receiver<PlayerEvent>>,
     pub file_event_rx: mpsc::Receiver<FileEvent>,
 }
 
@@ -284,6 +287,7 @@ impl AppState {
             radio_enabled: SharedFlag::new(settings.radio.radio_enabled),
             radio_hide_segmented: SharedFlag::new(settings.radio.radio_hide_segmented),
             radio_send_clicks: SharedFlag::new(settings.radio.radio_send_clicks),
+            lyrics_enabled: SharedFlag::new(settings.lyrics.lyrics_enabled),
             lyrics_online_enabled: SharedFlag::new(settings.lyrics.lyrics_online_enabled),
             lyrics_romanization_shown: SharedFlag::new(settings.lyrics.lyrics_romanization_shown),
             lyrics_pacer: Arc::new(crate::library::lyrics::pacer()),
@@ -294,10 +298,7 @@ impl AppState {
             shutdown_token: CancellationToken::new(),
         };
 
-        let channels = StartupChannels {
-            media_control_rx: Some(mc_rx),
-            file_event_rx: file_rx,
-        };
+        let channels = StartupChannels { media_control_rx: Some(mc_rx), file_event_rx: file_rx };
 
         Ok((state, channels))
     }

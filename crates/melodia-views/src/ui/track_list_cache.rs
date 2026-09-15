@@ -61,10 +61,7 @@ impl RowSearchKey {
             }
             melodia_core::utils::fold::push_folded(&mut buf, field);
         }
-        Self {
-            packed: buf.into_boxed_str(),
-            year: r.year,
-        }
+        Self { packed: buf.into_boxed_str(), year: r.year }
     }
 
     /// A plain `str::contains` on the packed text, both sides already folded — the one
@@ -191,11 +188,7 @@ impl CacheData {
     /// nothing cheap predicts the survivor count, and reserving a library-sized `Vec` to
     /// put three rows in is the worse wrong.
     fn reserve_for(&self, needle: &Needle) -> usize {
-        if needle.is_empty() {
-            self.rows.len()
-        } else {
-            0
-        }
+        if needle.is_empty() { self.rows.len() } else { 0 }
     }
 
     /// Unique artwork paths in **display** order, capped, so that on a library with more
@@ -242,9 +235,7 @@ impl Default for TrackListCache {
 
 impl TrackListCache {
     pub fn new() -> Self {
-        Self {
-            data: Mutex::new(Arc::new(CacheData::empty())),
-        }
+        Self { data: Mutex::new(Arc::new(CacheData::empty())) }
     }
 
     /// A consistent view of all four vectors, for a rebuild that must not hold the lock

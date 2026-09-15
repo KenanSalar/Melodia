@@ -1,10 +1,11 @@
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use tokio::sync::watch;
 
 use crate::player::engine::backend::PlayerBackend;
-use crate::player::engine::event_sink::PlayerSinks;
-use crate::player::engine::state::{PlayerAction, PlayerStateHandle};
+use crate::player::engine::event_sink::{MediaControlsSync, PlayerSinks};
+use crate::player::engine::state::{PlayerAction, PlayerStateHandle, PlayerViewModelLight};
+use crate::player::engine::types::PlaybackStatus;
 use melodia_core::error::AppError;
 use melodia_playback::player::playback::replaygain::TrackReplayGain;
 
@@ -41,9 +42,7 @@ struct MockBackend {
 
 impl MockBackend {
     fn new() -> Self {
-        Self {
-            inner: Mutex::new(MockBackendInner::default()),
-        }
+        Self { inner: Mutex::new(MockBackendInner::default()) }
     }
 
     fn with_play_failure() -> Self {
@@ -153,11 +152,7 @@ impl PlayerBackend for MockBackend {
 fn make_test_sinks() -> PlayerSinks {
     let (view_model, _) = watch::channel(None);
     let (queue, _) = watch::channel(None);
-    PlayerSinks {
-        view_model,
-        queue,
-        media_controls: None,
-    }
+    PlayerSinks { view_model, queue, media_controls: None }
 }
 
 /// Bundles every fixture the `execute_actions` tests need. The temp dir is
@@ -285,10 +280,7 @@ async fn execute_stop_forwards_the_fade_length() -> Result<(), AppError> {
     let fx = fixture()?;
     let mock = MockBackend::new();
 
-    let actions = vec![
-        PlayerAction::Stop { fade_ms: 250 },
-        PlayerAction::Stop { fade_ms: 0 },
-    ];
+    let actions = vec![PlayerAction::Stop { fade_ms: 250 }, PlayerAction::Stop { fade_ms: 0 }];
 
     crate::player::engine::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
@@ -304,10 +296,7 @@ async fn execute_pause_forwards_the_fade_length() -> Result<(), AppError> {
     let fx = fixture()?;
     let mock = MockBackend::new();
 
-    let actions = vec![
-        PlayerAction::Pause { fade_ms: 250 },
-        PlayerAction::Pause { fade_ms: 0 },
-    ];
+    let actions = vec![PlayerAction::Pause { fade_ms: 250 }, PlayerAction::Pause { fade_ms: 0 }];
 
     crate::player::engine::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
@@ -400,6 +389,48 @@ async fn execute_seek_calls_backend() -> Result<(), AppError> {
 
     let inner = mock.inner();
     assert_eq!(inner.seek_calls, vec![("/music/a.flac".to_owned(), 30_000)]);
+    Ok(())
+}
+
+/// The seeks the OS media controls were told about. `sync` records nothing: it belongs to the
+/// emit before `execute_actions`, so only what this layer sends itself is worth watching.
+#[derive(Default)]
+struct SeekRecorder {
+    seeks: Mutex<Vec<u64>>,
+}
+
+impl SeekRecorder {
+    fn seeks(&self) -> Vec<u64> {
+        self.seeks.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
+    }
+}
+
+impl MediaControlsSync for SeekRecorder {
+    fn sync(&self, _vm: &PlayerViewModelLight, _status: PlaybackStatus) {}
+
+    fn seeked(&self, position_ms: u64) {
+        self.seeks.lock().unwrap_or_else(std::sync::PoisonError::into_inner).push(position_ms);
+    }
+}
+
+/// An MPRIS client advances its bar on its own between reads and learns of a jump only through
+/// `Seeked`, so a seek that told nobody leaves an open panel drawing the old position.
+#[test]
+fn a_seek_tells_the_media_controls_where_it_landed() -> Result<(), AppError> {
+    let fx = fixture()?;
+    let mock = MockBackend::new();
+    let recorder = Arc::new(SeekRecorder::default());
+    let media_controls: Arc<dyn MediaControlsSync> = recorder.clone();
+    let sinks = PlayerSinks { media_controls: Some(media_controls), ..make_test_sinks() };
+    let actions = vec![PlayerAction::Seek {
+        position_ms: 30_000,
+        file_path: "/music/a.flac".to_owned(),
+        replaygain: TrackReplayGain::default(),
+    }];
+
+    crate::player::engine::actions::execute_actions(actions, &mock, &fx.player_state, &sinks);
+
+    assert_eq!(recorder.seeks(), vec![30_000]);
     Ok(())
 }
 
@@ -496,10 +527,7 @@ async fn execute_play_stream_reaches_the_backend_without_a_path() -> Result<(), 
     let mock = MockBackend::new();
     let generation = tune_in(&fx.player_state);
 
-    let actions = vec![PlayerAction::PlayStream {
-        generation,
-        volume: 0.8,
-    }];
+    let actions = vec![PlayerAction::PlayStream { generation, volume: 0.8 }];
     crate::player::engine::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     let inner = mock.inner();
@@ -516,10 +544,7 @@ async fn execute_play_stream_failure_clears_the_station() -> Result<(), AppError
     let mock = MockBackend::with_stream_failure();
     let generation = tune_in(&fx.player_state);
 
-    let actions = vec![PlayerAction::PlayStream {
-        generation,
-        volume: 1.0,
-    }];
+    let actions = vec![PlayerAction::PlayStream { generation, volume: 1.0 }];
     crate::player::engine::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     let state = crate::player::engine::state::lock_state(&fx.player_state);

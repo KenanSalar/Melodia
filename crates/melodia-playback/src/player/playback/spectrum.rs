@@ -14,7 +14,7 @@ use std::sync::Arc;
 use realfft::num_complex::Complex;
 use realfft::{RealFftPlanner, RealToComplex};
 
-use super::dsp::{VISUALIZER_DECAY, db_to_linear, index_to_f32, linear_to_db};
+use super::dsp::{VISUALIZER_DECAY, db_to_linear, index_to_f32, linear_to_db, push_fixed};
 
 /// Samples per analysis window. At 44.1 kHz this is ~46 ms — long enough to resolve bass, short
 /// enough to keep the bars in step with what you hear. A power of two hits the FFT planner's
@@ -23,7 +23,7 @@ pub const FFT_SIZE: usize = 2048;
 
 /// Samples per analysis window for the bands below the crossover. ~186 ms at 44.1 kHz — far too
 /// laggy for treble, but the only way to separate bars a few Hz apart, and bass is slow enough
-/// not to mind. CAVA pairs the same two sizes.
+/// not to mind.
 pub const BASS_FFT_SIZE: usize = 8192;
 
 /// Bars drawn across the display.
@@ -31,7 +31,7 @@ pub const NUM_BANDS: usize = 64;
 
 /// Bottom edge of the lowest band. Below this is inaudible rumble and, at bin 0, any DC offset.
 /// 50 rather than 20 Hz because a 20 Hz bar is near-always silent *and* wider than an octave on
-/// its own at this transform size. CAVA and `DeaDBeeF` settle on the same floor.
+/// its own at this transform size.
 const MIN_HZ: f32 = 50.0;
 
 /// Top edge of the highest band, before the Nyquist clamp. Matches the equalizer's top ISO octave
@@ -54,7 +54,7 @@ const CEILING_DB: f32 = -15.0;
 ///
 /// **The correction on top of the one [`band_magnitude`] already applies**, and so smaller than
 /// the 3–5 dB/octave analyzers usually quote: RSS across a band whose width grows with frequency
-/// is itself ~3 dB/octave, and it is the *total* that has to land beside CAVA's 5.1.
+/// is itself ~3 dB/octave, and it is the *total* that has to land in that range.
 const TILT_DB_PER_OCTAVE: f32 = 2.0;
 
 /// The one frequency the tilt leaves alone.
@@ -130,7 +130,7 @@ pub fn coherent_gain_scale(window: &[f32]) -> f32 {
 /// Deliberately **not** rounded to whole bins: a bin is wider than any of the bottom bands, so
 /// snapping each to its own would march the low end up the spectrum one bin per bar, giving a
 /// linear ramp whose bars span wildly uneven slices of an octave. Fractional edges let
-/// [`bands_from_spectrum`] interpolate down there — Audacious's and `DeaDBeeF`'s choice.
+/// [`bands_from_spectrum`] interpolate down there instead.
 ///
 /// Every edge lands in `1.0..=max_bin`, bin 0 being DC. Degenerate arguments answer with no edges
 /// at all.
@@ -321,7 +321,7 @@ impl Transform {
 /// responsive leaves the lowest bands — a few Hz wide against a bin that isn't — interpolating
 /// the same handful of bins and moving as one block, while a window long enough to separate them
 /// smears every cymbal. So the bass reads [`BASS_FFT_SIZE`] and everything above the crossover
-/// reads [`FFT_SIZE`], as CAVA does.
+/// reads [`FFT_SIZE`].
 ///
 /// The join needs no correction factor, which is a property of the RSS in [`band_magnitude`]:
 /// per-bin magnitude falls as `1/√N` under [`coherent_gain_scale`] while a band of fixed width
@@ -434,6 +434,200 @@ impl SpectrumAnalyzer {
             high,
         );
     }
+}
+
+/// Where a bar grows from.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum BarAnchor {
+    /// Up from the strip's bottom edge.
+    Baseline,
+    /// Both ways from its centre line, which is the "Mirrored" style.
+    Centre,
+}
+
+/// Where the strip is drawn and how large, in logical pixels.
+///
+/// The figure normalizes into a unit viewbox, but three of its terms are pixel facts and mean
+/// nothing until they are measured against a real strip: the gap between bars, the floor that keeps
+/// a silent band visible, and where the window's pixel grid falls under the strip.
+#[derive(Clone, Copy, Debug)]
+pub struct StripGeometry {
+    /// Left edge, measured from the window's.
+    pub x: f32,
+    /// Top edge, measured from the window's.
+    pub y: f32,
+    /// Logical pixels across.
+    pub width: f32,
+    /// Logical pixels down.
+    pub height: f32,
+    /// Device pixels per logical pixel. [`write_bar_path`] lays the figure out in device pixels so
+    /// every edge lands on a whole one, which is the same as a whole logical pixel only at integer
+    /// scaling.
+    pub scale: f32,
+}
+
+/// Gap between neighbouring bars, in logical pixels. Kept tight because at [`NUM_BANDS`] a wider
+/// one starts eating the bars themselves on a narrow window.
+const BAR_GAP_PX: f32 = 2.0;
+
+/// Fractional digits each coordinate is written with, and the most [`push_fixed`]'s `u16` scale
+/// can carry.
+///
+/// The figure's edges are whole device pixels normalized into a unit viewbox, so what this has to
+/// buy is that the round trip lands nearer the pixel it came from than the half-pixel either side
+/// of it — otherwise an edge crosses the rasterizer's coverage threshold and the bar it belongs to
+/// changes width. One part in ten thousand holds that well past any strip this panel can seat.
+const COORD_DECIMALS: u32 = 4;
+
+/// One axis of the strip, measured on the window's device-pixel grid, which is the grid the bars
+/// rasterize against.
+///
+/// The renderer places the strip at its logical origin times the scale factor and rounds neither,
+/// so the strip's own edge is rarely a pixel boundary. With anti-aliasing off a pixel is painted
+/// only when its centre is inside a bar, and an edge a whole number of pixels from a half-pixel
+/// origin sits exactly on those centres, where float noise picks a side edge by edge. Laid out
+/// between grid lines instead, every edge is half a pixel clear of the nearest centre.
+struct GridAxis {
+    /// How far past a grid line the strip starts, in device pixels.
+    phase: f32,
+    /// The first grid line inside the strip.
+    first: f32,
+    /// The last grid line inside the strip.
+    last: f32,
+    /// The strip's device-pixel length, which the viewbox normalizes against.
+    extent: f32,
+}
+
+impl GridAxis {
+    fn new(origin: f32, length: f32, scale: f32) -> Self {
+        let phase = (origin * scale).rem_euclid(1.0);
+        let extent = length * scale;
+        Self { phase, first: phase.ceil(), last: (phase + extent).floor(), extent }
+    }
+
+    /// Whole device pixels between the first grid line and the last.
+    fn pixels(&self) -> f32 {
+        self.last - self.first
+    }
+
+    /// Whether there is a whole pixel to draw into. False for a strip no layout pass has sized
+    /// yet, and for any geometry that isn't a number.
+    fn is_drawable(&self) -> bool {
+        self.pixels().is_finite() && self.pixels() >= 1.0
+    }
+
+    /// A grid line as a fraction of the strip, which `fit: fill` maps back onto that line.
+    fn normalize(&self, line: f32) -> f32 {
+        (line - self.phase) / self.extent
+    }
+}
+
+/// Write `levels` into `out` as SVG path commands: one closed rectangle per band, all of them one
+/// figure.
+///
+/// Coordinates are normalized — x across `0..1`, y down `0..1` — so the `Path`'s viewbox is a
+/// constant and the band count never crosses the language boundary. `out` is left empty while the
+/// strip has fewer whole device pixels across than there are bands.
+///
+/// **One figure rather than one element per band is the point.** `FemtoVG` builds and tessellates a
+/// path per drawn element and caches none of it between frames, and the strip rewrites every band
+/// every tick, so a bar that is its own element is a path built, tessellated and filled on its own
+/// every frame. It costs the same to say all of them once.
+pub fn write_bar_path(levels: &[f32], strip: StripGeometry, anchor: BarAnchor, out: &mut String) {
+    out.clear();
+    if levels.is_empty() {
+        return;
+    }
+    let count = index_to_f32(levels.len());
+
+    // The seed tick can land before the strip's first layout pass. With nothing to measure there
+    // is no figure to draw rather than a degenerate one, and the next tick has a size.
+    let horizontal = GridAxis::new(strip.x, strip.width, strip.scale);
+    let vertical = GridAxis::new(strip.y, strip.height, strip.scale);
+    if !horizontal.is_drawable() || !vertical.is_drawable() {
+        return;
+    }
+
+    // **One whole pitch for every band.** Anti-aliasing is off, so there is no drawing a fraction
+    // of a pixel and something has to absorb the remainder of dividing the strip by the band
+    // count. In the widths it makes neighbouring bars different sizes; in the gaps it makes the
+    // rhythm uneven, and it shows there first, the gap being the smaller quantity by several
+    // times. So neither: the pitch is whole, every bar matches every other bar and every gap
+    // every other gap, and the remainder goes to the two ends where it is backdrop either way.
+    let Some((pitch, gap)) = band_pitch(horizontal.pixels(), count, BAR_GAP_PX * strip.scale)
+    else {
+        return;
+    };
+    let bar_width = pitch - gap;
+    let span = pitch * count - gap;
+    let origin = horizontal.first + ((horizontal.pixels() - span) * 0.5).round();
+    // "At least as tall as it is wide", so a silent band rests as a square mark rather than
+    // vanishing. Derived from the column rather than fixed, the column following the strip.
+    let floor = bar_width.min(vertical.pixels());
+    let middle = (vertical.first + vertical.last) * 0.5;
+
+    for (i, &level) in levels.iter().enumerate() {
+        let height = (level.clamp(0.0, 1.0) * vertical.pixels()).max(floor);
+        let (top, bottom) = match anchor {
+            BarAnchor::Baseline => (vertical.last - height, vertical.last),
+            // Height is the total in both anchorings, so a centred bar puts half either side of
+            // the axis rather than a full bar each way.
+            BarAnchor::Centre => (middle - height * 0.5, middle + height * 0.5),
+        };
+        let top = top.round();
+        // A band at the floor can round both edges onto one row, which would draw nothing at all.
+        let bottom = bottom.round().max(top + 1.0);
+        let left = origin + index_to_f32(i) * pitch;
+        let right = left + bar_width;
+
+        let (left, right) = (horizontal.normalize(left), horizontal.normalize(right));
+        let (top, bottom) = (vertical.normalize(top), vertical.normalize(bottom));
+        // Lower edge first, then the upper edge back — the winding `waveform::write_path` emits
+        // for the same reason, femtovg reading a subpath's signed area to decide solid from hole.
+        // Every edge is axis-aligned, so `H` and `V` name the one coordinate that moves: the
+        // string is formatted every tick and parsed again on every frame it is drawn.
+        push_vertex(out, "M", left, bottom);
+        push_coordinate(out, " H", right);
+        push_coordinate(out, " V", top);
+        push_coordinate(out, " H", left);
+        out.push('Z');
+    }
+}
+
+/// The whole-pixel pitch and gap `count` bands share across `pixels`, the widest pitch whose last
+/// band still ends inside the strip. `None` with fewer pixels than bands, where none does.
+///
+/// The gap is fixed in logical pixels, so on a narrow strip it stops being a separator and starts
+/// being most of the pitch: at three pixels a band it left one for the bar and took two, and
+/// sixty-four bands degraded into hairlines with more space than mark. Held to half the pitch, so a
+/// bar is never thinner than the gap beside it, and dropped outright below two pixels a band, where
+/// there is nothing to separate. A held gap spends less of the strip than the preferred one the
+/// first pitch was sized against, which is why the pitch is checked again against the gap it got.
+fn band_pitch(pixels: f32, count: f32, preferred_gap: f32) -> Option<(f32, f32)> {
+    if pixels < count {
+        return None;
+    }
+    let gap_at = |pitch: f32| {
+        if pitch < 2.0 { 0.0 } else { preferred_gap.round().clamp(1.0, (pitch * 0.5).floor()) }
+    };
+    let mut pitch = ((pixels + preferred_gap.round().max(1.0)) / count).floor();
+    while pitch * count - gap_at(pitch) > pixels {
+        pitch -= 1.0;
+    }
+    Some((pitch, gap_at(pitch)))
+}
+
+/// One `"<cmd><x> <y>"` vertex.
+fn push_vertex(out: &mut String, command: &str, x: f32, y: f32) {
+    push_coordinate(out, command, x);
+    out.push(' ');
+    push_fixed::<COORD_DECIMALS>(out, y);
+}
+
+/// One `"<cmd><value>"` command taking a single coordinate.
+fn push_coordinate(out: &mut String, command: &str, value: f32) {
+    out.push_str(command);
+    push_fixed::<COORD_DECIMALS>(out, value);
 }
 
 #[cfg(test)]

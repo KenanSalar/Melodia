@@ -95,11 +95,7 @@ impl SegmentReader {
             let Some(payload) = payload(packet) else {
                 continue;
             };
-            let body = if is_unit_start(packet) {
-                pes_body(payload)
-            } else {
-                Some(payload)
-            };
+            let body = if is_unit_start(packet) { pes_body(payload) } else { Some(payload) };
             if let Some(body) = body {
                 out.extend_from_slice(body);
             }

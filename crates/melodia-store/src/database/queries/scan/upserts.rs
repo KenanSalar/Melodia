@@ -115,10 +115,7 @@ pub async fn replace_track_joins(
 /// The identity tags behind a track's own artist credit.
 #[must_use]
 pub fn track_credit_details(meta: &ExtractedMetadata) -> CreditDetails<'_> {
-    CreditDetails {
-        sort_name: meta.sort.artist.as_deref(),
-        mbids: &meta.artist_mbids,
-    }
+    CreditDetails { sort_name: meta.sort.artist.as_deref(), mbids: &meta.artist_mbids }
 }
 
 /// The identity tags behind the credit an album files under.
@@ -130,10 +127,7 @@ pub fn album_credit_details(meta: &ExtractedMetadata) -> CreditDetails<'_> {
     if meta.album_artist.is_empty() {
         return track_credit_details(meta);
     }
-    CreditDetails {
-        sort_name: meta.sort.album_artist.as_deref(),
-        mbids: &meta.album_artist_mbids,
-    }
+    CreditDetails { sort_name: meta.sort.album_artist.as_deref(), mbids: &meta.album_artist_mbids }
 }
 
 /// One row per role credit, upserting the names it hasn't seen.
@@ -177,11 +171,7 @@ async fn write_genres(
     names: &mut NameCache,
 ) -> Result<(), AppError> {
     for (position, name) in meta.genres.names().iter().enumerate() {
-        let resolved = if position == 0 {
-            primary_genre_id
-        } else {
-            names.genre(tx, name).await?
-        };
+        let resolved = if position == 0 { primary_genre_id } else { names.genre(tx, name).await? };
         let Some(genre_id) = resolved else {
             continue;
         };

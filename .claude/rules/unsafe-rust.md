@@ -26,8 +26,8 @@ effect would be to move every allow into a `build.rs`-shaped workaround.
 ## The one sanctioned category: platform FFI
 
 Every `unsafe` in production is a call into an OS the type system can't reach. There is
-no other kind, and the list is short enough to keep here. **Ten calls, in eight `unsafe`
-blocks, across five files, under seven `#[allow(unsafe_code)]` attributes.** Say which of
+no other kind, and the list is short enough to keep here. **Eleven calls, in nine `unsafe`
+blocks, across six files, under eight `#[allow(unsafe_code)]` attributes.** Say which of
 the four you mean when you quote a number, and re-derive it the same way — they differ,
 and none of them is the count of rows below. (The attributes fall one short of the blocks
 because `dwm_titlebar.rs`'s first `#[allow]` sits on a function holding two of them.)
@@ -37,6 +37,7 @@ because `dwm_titlebar.rs`'s first `#[allow]` sits on a function holding two of t
 | `crates/melodia/src/main.rs` | `env::set_var` for `PIPEWIRE_ALSA` |
 | `crates/melodia-platform/…/allocator.rs` | `libc::mallopt` ×3 (the glibc arena / mmap / trim knobs), `libc::malloc_trim` |
 | `crates/melodia-platform/…/dwm_titlebar.rs` | `DwmSetWindowAttribute` ×3 |
+| `crates/melodia-platform/…/registry.rs` | `RegGetValueW` (the DWM accent a window border takes, and the Windows app mode) |
 | `crates/melodia-app/…/settings/data.rs` | `GetUserDefaultLocaleName` |
 | `crates/melodia-app/…/updater/install/swap.rs` | `MoveFileExW` |
 
@@ -98,7 +99,7 @@ copy at some point, and the restore is the one that goes first.
   however careful each is on its own — glibc's `setenv` can realloc `environ` out from
   under another thread's `getenv`. The variables aren't independent either: the readers
   overlap through code neither caller owns, `SettingsData::default()` reaching
-  `XDG_CURRENT_DESKTOP` via `is_kde_desktop()` *and* all four locale variables via
+  `XDG_CURRENT_DESKTOP` via `host_desktop()` *and* all four locale variables via
   `default_locale()`, and `install_target()` reaching `$APPIMAGE` via
   `target::current_target_key()`. Three separate mutexes sat here (`ENV_LOCK`,
   `APPIMAGE_ENV_LOCK`, `PATH_ENV_LOCK`), each correct in isolation and collectively
@@ -157,9 +158,9 @@ bounds-check problem. Read these before proposing anything:
   and asking `core::fmt` for an exactly-rounded decimal at a fixed precision is a far
   harder question than the coordinates need — Grisu's `format_exact` with a bignum
   fallback, to print a sign, one digit and a zero-padded remainder. The fix was
-  `waveform::push_fixed::<N>` — integer scale, integer print — in safe code, with the
+  `dsp::push_fixed::<N>` — integer scale, integer print — in safe code, with the
   width a const parameter so an unrepresentable scale is a build failure rather than a
-  runtime clamp.
+  runtime clamp. Both drawn styles write their figure through it now.
 - **The backdrop solve's cost was a transcendental with a 256-value domain.** `linearized`
   takes a `u8`; three calls per pixel became three loads from a `LazyLock<[f64; 256]>`
   in `ui/backdrop.rs`.

@@ -129,11 +129,7 @@ pub(super) fn facet_list_is_capped(kind: FacetKind, received: usize) -> bool {
 /// Reachable from the sending half because it is also what a full page *is*:
 /// `search` reads its `has_more` off the raw response length against this.
 pub(super) fn page_limit(requested: u32) -> u32 {
-    if requested == 0 {
-        DEFAULT_PAGE_LIMIT
-    } else {
-        requested
-    }
+    if requested == 0 { DEFAULT_PAGE_LIMIT } else { requested }
 }
 
 /// Add a filter, or leave it out entirely. A blank value is not a filter for the

@@ -118,6 +118,10 @@ export component SearchBar inherits Rectangle {
 
         // Rest matches the `ActionPill` chip's fill, so adjacent bars and pills read as
         // one family; engagement closes it to opaque, as a hovered `PillButton` does.
+        // **Out to the edge, not a `TuckedFill`**, although the focus ring is translucent: the focus
+        // shadow sits under the whole bar, and a fill stopping at the ring's middle lets it darken
+        // the rim. Under a translucent border the renderer runs the fill out to the edge for exactly
+        // that, at the price of a second antialiased pass while the bar has focus.
         background: root.engaged
             ? Theme.surface0
             : Theme.floating-chrome-bg;

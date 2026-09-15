@@ -57,10 +57,7 @@ fn disconnected_service(dir: &std::path::Path) -> Arc<ScrobbleService> {
 async fn armed_service(dir: &std::path::Path) -> Result<Arc<ScrobbleService>, AnyError> {
     let paths = Paths::rooted_at(dir.to_path_buf());
     let _ = paths.create_dirs();
-    let flags = ScrobbleFlags {
-        listenbrainz_enabled: true,
-        ..ScrobbleFlags::default()
-    };
+    let flags = ScrobbleFlags { listenbrainz_enabled: true, ..ScrobbleFlags::default() };
     let service = Arc::new(ScrobbleService::init(&paths, &flags, Arc::new(OnceLock::new())));
     service
         .set_listenbrainz_credentials(Some(ListenBrainzCredentials {
@@ -271,10 +268,7 @@ async fn a_scrobble_effect_queues_the_listen() -> TestResult {
     let service = armed_service(dir.path()).await?;
     let mut cached = None;
 
-    let effect = Effect::Scrobble {
-        track_id: ids[0],
-        timestamp: 1_700_000_000,
-    };
+    let effect = Effect::Scrobble { track_id: ids[0], timestamp: 1_700_000_000 };
     process_effects(vec![effect], &service, &db, &mut cached).await;
 
     assert_eq!(service.queued_len(), 1);
@@ -292,10 +286,7 @@ async fn a_finalize_effect_queues_a_listen_too() -> TestResult {
     let service = armed_service(dir.path()).await?;
     let mut cached = None;
 
-    let effect = Effect::Finalize {
-        track_id: ids[0],
-        timestamp: 1_700_000_000,
-    };
+    let effect = Effect::Finalize { track_id: ids[0], timestamp: 1_700_000_000 };
     process_effects(vec![effect], &service, &db, &mut cached).await;
 
     assert_eq!(service.queued_len(), 1);
@@ -313,10 +304,7 @@ async fn a_row_no_provider_can_scrobble_queues_nothing() -> TestResult {
     let service = armed_service(dir.path()).await?;
     let mut cached = None;
 
-    let effect = Effect::Scrobble {
-        track_id: ids[0],
-        timestamp: 1_700_000_000,
-    };
+    let effect = Effect::Scrobble { track_id: ids[0], timestamp: 1_700_000_000 };
     process_effects(vec![effect], &service, &db, &mut cached).await;
 
     assert_eq!(service.queued_len(), 0);

@@ -9,6 +9,7 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 use super::accent_picker::{accent_idx_in_grid, accent_swatches_with_my, effective_accent_id};
 use super::{apply_and_seed_to_i32, theme_picker};
 use melodia_app::library;
+use melodia_app::services::settings::SettingsData;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::material_you::SchemeStyle;
 use melodia_core::themes::{self, SystemColorState};
@@ -19,24 +20,21 @@ use melodia_ui::{AppWindow, Settings};
 /// Used by the Material You coordinator after it writes a fresh dynamic
 /// palette into `system.material_you` — must run on the UI thread.
 pub fn repaint_from_settings(ui: &AppWindow, state: &AppState, system: &SystemColorState) {
-    let settings = match library::settings::get_settings(state) {
-        Ok(s) => s,
-        Err(e) => {
-            log::warn!("material_you repaint: read settings: {e}");
-            return;
-        }
-    };
-    let last_static = settings
-        .theme_preferences
-        .get(&settings.theme_id)
-        .and_then(|p| p.last_static_accent.clone());
+    match library::settings::get_settings(state) {
+        Ok(settings) => apply_settings(ui, &settings, system),
+        Err(e) => log::warn!("material_you repaint: read settings: {e}"),
+    }
+}
+
+/// [`apply_and_seed`] with every argument taken from the persisted `settings`.
+pub(super) fn apply_settings(ui: &AppWindow, settings: &SettingsData, system: &SystemColorState) {
     apply_and_seed(
         ui,
         &settings.theme_id,
         &settings.theme_variant,
         &settings.accent_color,
         &settings.dynamic_color_style,
-        last_static.as_deref(),
+        settings.last_static_accent(&settings.theme_id),
         system,
     );
 }
@@ -74,11 +72,7 @@ pub fn apply_and_seed(
 
     // Accent swatches use the resolved real variant so the dots render
     // in the correct shade even when the user is on "System".
-    let accent_variant_for_swatches = if variant_id == themes::SYSTEM_VARIANT_ID {
-        theme.resolve_system_variant(&system.theme).id
-    } else {
-        super::resolved_variant_id(theme, variant_idx)
-    };
+    let accent_variant_for_swatches = theme.shade_for(resolved_variant, &system.theme).id;
     let (brushes, labels, my_active) =
         accent_swatches_with_my(theme, accent_variant_for_swatches, system);
     let g_swatches = ui.global::<Settings>();

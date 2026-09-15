@@ -48,32 +48,23 @@ fn album_mode_falls_back_to_track_gain() {
 
 #[test]
 fn track_mode_falls_back_to_album_gain() {
-    let baked = TrackReplayGain {
-        track_gain: None,
-        album_gain: Some(-6.020_6),
-        ..Default::default()
-    };
+    let baked =
+        TrackReplayGain { track_gain: None, album_gain: Some(-6.020_6), ..Default::default() };
     approx(compute_linear_gain(baked, RgMode::Track, 0.0, false), 0.5);
 }
 
 #[test]
 fn preamp_adds_to_gain() {
     // -6.02 dB gain + 6.02 dB preamp = 0 dB total = unity.
-    let baked = TrackReplayGain {
-        album_gain: Some(-6.020_6),
-        ..Default::default()
-    };
+    let baked = TrackReplayGain { album_gain: Some(-6.020_6), ..Default::default() };
     approx(compute_linear_gain(baked, RgMode::Album, 6.020_6, false), 1.0);
 }
 
 #[test]
 fn prevent_clipping_clamps_boost_by_peak() {
     // +6.02 dB gain would be ×2, but peak 0.8 caps the boost at 1/0.8 = 1.25.
-    let baked = TrackReplayGain {
-        album_gain: Some(6.020_6),
-        album_peak: Some(0.8),
-        ..Default::default()
-    };
+    let baked =
+        TrackReplayGain { album_gain: Some(6.020_6), album_peak: Some(0.8), ..Default::default() };
     approx(compute_linear_gain(baked, RgMode::Album, 0.0, true), 1.25);
     // With prevent-clipping off, the full ×2 boost applies.
     approx(compute_linear_gain(baked, RgMode::Album, 0.0, false), 2.0);
@@ -82,11 +73,8 @@ fn prevent_clipping_clamps_boost_by_peak() {
 #[test]
 fn prevent_clipping_no_clamp_when_peak_absent() {
     // No peak → no static clamp; rely on the downstream limiter. Full ×2 boost.
-    let baked = TrackReplayGain {
-        album_gain: Some(6.020_6),
-        album_peak: None,
-        ..Default::default()
-    };
+    let baked =
+        TrackReplayGain { album_gain: Some(6.020_6), album_peak: None, ..Default::default() };
     approx(compute_linear_gain(baked, RgMode::Album, 0.0, true), 2.0);
 }
 

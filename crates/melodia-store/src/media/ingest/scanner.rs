@@ -65,10 +65,7 @@ pub fn scan_files_parallel(
             // a full extract — embedded artwork included — is always
             // warranted. Unchanged files never get here.
             match extract_or_filename_row(path, artwork_dir, cover_cache, false) {
-                Ok(metadata) => Some(ScannedFile {
-                    path: path.clone(),
-                    metadata,
-                }),
+                Ok(metadata) => Some(ScannedFile { path: path.clone(), metadata }),
                 // Only an unreadable file gets this far now; unparseable tags come back
                 // as a filename-derived row rather than a `None`.
                 Err(e) => {

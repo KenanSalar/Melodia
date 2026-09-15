@@ -283,7 +283,7 @@ clean, playback behaves identically. No user-visible change.
 1. Add `sample_rate`, `channels`, `bit_depth` to `TrackSummary` (`Option<i32>`,
    `#[serde(default)]` — the queue round-trip persists it).
 2. Carry them through the projection queries in
-   `crates/melodia-store/src/database/queries/track.rs` and
+   `crates/melodia-store/src/database/queries/track/` and
    whatever else builds a `TrackSummary`. Follow the ReplayGain columns exactly.
 3. Surface the negotiated-vs-source pair in the UI as read-only text (Now Playing
    detail, or Settings → Playback). It reads "FLAC 44.1 kHz / 24-bit → device 48 kHz"
@@ -322,7 +322,7 @@ end of the phase).
 
 ### Phase 4 — The bit-perfect contract · settings + the truth panel
 
-1. `BitPerfectFlags` in `crates/melodia-app/src/services/settings/data.rs` — `#[serde(default)]`,
+1. `BitPerfectFlags` in `crates/melodia-app/src/services/settings/playback.rs` — `#[serde(default)]`,
    `#[serde(flatten)]`'d like `PlaybackFlags`. Fields: `enabled`, `mode`
    (`shared` / `exclusive`), `device_id`, `period_ms`, `resync_delay_ms`.
    Ships **off**, per the new-visible-behaviour default.

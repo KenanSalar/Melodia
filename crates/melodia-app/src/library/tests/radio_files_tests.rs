@@ -215,10 +215,7 @@ fn a_bare_m3u_needs_no_tags_at_all() {
                 https://example.test/two\n";
     assert_eq!(
         parse(text),
-        vec![
-            entry(None, "https://example.test/one"),
-            entry(None, "https://example.test/two")
-        ]
+        vec![entry(None, "https://example.test/one"), entry(None, "https://example.test/two")]
     );
 }
 
@@ -267,10 +264,7 @@ fn an_m3u_url_with_a_query_string_is_not_read_as_a_pls_key() {
     let text = "#EXTM3U\n#EXTINF:-1,Tokened\nhttps://example.test/live?token=abc&x=1\n";
     assert_eq!(
         parse(text),
-        vec![entry(
-            Some("Tokened"),
-            "https://example.test/live?token=abc&x=1"
-        )]
+        vec![entry(Some("Tokened"), "https://example.test/live?token=abc&x=1")]
     );
 }
 
@@ -326,10 +320,7 @@ async fn a_re_import_stars_the_row_a_leftover_play_kept() -> Result<(), AppError
 
     assert_eq!(
         import_text(&db, &text).await?,
-        ImportStationsResult {
-            imported: 1,
-            skipped: 0
-        },
+        ImportStationsResult { imported: 1, skipped: 0 },
         "putting the star back is what an import is for"
     );
     let kept = queries::radio::get_favorite_stations(&db).await?;
@@ -338,10 +329,7 @@ async fn a_re_import_stars_the_row_a_leftover_play_kept() -> Result<(), AppError
 
     assert_eq!(
         import_text(&db, &text).await?,
-        ImportStationsResult {
-            imported: 0,
-            skipped: 1
-        },
+        ImportStationsResult { imported: 0, skipped: 1 },
         "a second pass has nothing to do and reports that rather than adding a duplicate"
     );
     Ok(())
@@ -365,10 +353,7 @@ async fn a_file_naming_one_station_twice_imports_it_once() -> Result<(), AppErro
 
     assert_eq!(
         import_text(&db, text).await?,
-        ImportStationsResult {
-            imported: 1,
-            skipped: 1
-        },
+        ImportStationsResult { imported: 1, skipped: 1 },
         "the second entry is the first one's row, already starred, so it is skipped"
     );
     let kept = queries::radio::get_favorite_stations(&db).await?;
@@ -402,13 +387,7 @@ async fn an_import_restores_each_station_as_the_kind_it_was_exported_as() -> Res
     queries::radio::delete_station(&db, from_browse.id).await?;
     queries::radio::delete_station(&db, hand_typed.id).await?;
 
-    assert_eq!(
-        import_text(&db, &text).await?,
-        ImportStationsResult {
-            imported: 2,
-            skipped: 0
-        }
-    );
+    assert_eq!(import_text(&db, &text).await?, ImportStationsResult { imported: 2, skipped: 0 });
 
     // Name-ordered, so "Listed" precedes "Typed".
     let rows = queries::radio::get_favorite_stations(&db).await?;
@@ -465,13 +444,7 @@ async fn a_re_import_leaves_the_columns_the_file_says_nothing_about() -> Result<
     .await?;
     queries::radio::set_favorite(&db, saved.id, false).await?;
 
-    assert_eq!(
-        import_text(&db, &text).await?,
-        ImportStationsResult {
-            imported: 1,
-            skipped: 0
-        }
-    );
+    assert_eq!(import_text(&db, &text).await?, ImportStationsResult { imported: 1, skipped: 0 });
 
     let back = queries::radio::get_station_by_id(&db, saved.id).await?;
     assert!(back.is_favorite, "the star is what a re-import is for");
@@ -481,10 +454,7 @@ async fn a_re_import_leaves_the_columns_the_file_says_nothing_about() -> Result<
 
     assert_eq!(
         import_text(&db, &text).await?,
-        ImportStationsResult {
-            imported: 0,
-            skipped: 1
-        },
+        ImportStationsResult { imported: 0, skipped: 1 },
         "starred already, so there is nothing left to put back"
     );
     let again = queries::radio::get_station_by_id(&db, saved.id).await?;
@@ -508,13 +478,7 @@ async fn an_unreadable_station_block_still_imports_the_station() -> Result<(), A
         "https://example.test/one\n",
     );
 
-    assert_eq!(
-        import_text(&db, text).await?,
-        ImportStationsResult {
-            imported: 1,
-            skipped: 0
-        }
-    );
+    assert_eq!(import_text(&db, text).await?, ImportStationsResult { imported: 1, skipped: 0 });
 
     let rows = queries::radio::get_favorite_stations(&db).await?;
     let [back] = rows.as_slice() else {
@@ -545,13 +509,7 @@ async fn blank_uuids_in_a_blob_do_not_collapse_onto_one_row() -> Result<(), AppE
         "https://example.test/two\n",
     );
 
-    assert_eq!(
-        import_text(&db, text).await?,
-        ImportStationsResult {
-            imported: 2,
-            skipped: 0
-        }
-    );
+    assert_eq!(import_text(&db, text).await?, ImportStationsResult { imported: 2, skipped: 0 });
 
     let rows = queries::radio::get_favorite_stations(&db).await?;
     assert_eq!(rows.len(), 2, "two stations, not one overwritten by the other: {rows:?}");
@@ -583,10 +541,7 @@ async fn an_export_writes_a_file_the_import_reads_back() -> Result<(), AppError>
 
     assert_eq!(
         read_station_list(&db, &path).await?,
-        ImportStationsResult {
-            imported: 0,
-            skipped: 2
-        },
+        ImportStationsResult { imported: 0, skipped: 2 },
         "both rows are still starred, so the round trip has nothing to do"
     );
     Ok(())

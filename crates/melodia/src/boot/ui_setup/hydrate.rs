@@ -66,7 +66,7 @@ pub fn seed_initial_view_model(
 
 /// Apply every UI-visible persisted section to the Slint globals — sidebar
 /// geometry from `settings.json`, per-view columns and collapse state from
-/// `views.json`. Missing entries leave the Slint defaults, which is first-launch
+/// `views.json`. Missing entries leave the defaults, which is first-launch
 /// behaviour. A `None` snapshot re-reads from disk; `main()` passes what it
 /// already read to avoid a second parse.
 pub fn hydrate_ui_from_settings(
@@ -75,6 +75,21 @@ pub fn hydrate_ui_from_settings(
     cached_settings: Option<&services::settings::SettingsData>,
     cached_view_state: Option<&services::view_state::ViewStateData>,
 ) {
+    let owned_view_state;
+    let vs: &services::view_state::ViewStateData = if let Some(v) = cached_view_state {
+        v
+    } else {
+        owned_view_state =
+            services::view_state::read_view_state(&state.paths).unwrap_or_else(|e| {
+                log::warn!("hydrate_ui_from_settings: read view state failed: {e}");
+                services::view_state::ViewStateData::default()
+            });
+        &owned_view_state
+    };
+    // Ahead of anything that can bail: the column defaults are Rust's, so a list left unhydrated
+    // has no columns at all rather than the stock set.
+    ui::track_list_view::hydrate_all(app, vs);
+
     let owned_settings;
     let settings: &services::settings::SettingsData = match cached_settings {
         Some(s) => s,
@@ -89,32 +104,9 @@ pub fn hydrate_ui_from_settings(
             }
         },
     };
-    let owned_view_state;
-    let vs: &services::view_state::ViewStateData = match cached_view_state {
-        Some(v) => v,
-        None => match services::view_state::read_view_state(&state.paths) {
-            Ok(v) => {
-                owned_view_state = v;
-                &owned_view_state
-            }
-            Err(e) => {
-                log::warn!("hydrate_ui_from_settings: read view state failed: {e}");
-                return;
-            }
-        },
-    };
     apply_sidebar_width(app, settings);
     apply_sidebar_collapsed(app, settings);
     apply_startup_animation_suppression(app, settings);
-    ui::track_list_view::hydrate_tracks_view(app, vs);
-    ui::track_list_view::hydrate_browse_view(app, vs);
-    ui::track_list_view::hydrate_album_detail_view(app, vs);
-    ui::track_list_view::hydrate_artist_detail_view(app, vs);
-    ui::track_list_view::hydrate_genre_detail_view(app, vs);
-    ui::track_list_view::hydrate_playlist_detail_view(app, vs);
-    ui::track_list_view::hydrate_favorites_view(app, vs);
-    ui::track_list_view::hydrate_recently_played_view(app, vs);
-    ui::track_list_view::hydrate_search_view(app, vs);
     app.global::<ArtistDetail>().set_albums_collapsed(vs.artist_albums_collapsed);
     ui::settings::settings_page::seed_tab(app, vs.settings_tab);
 }

@@ -31,12 +31,8 @@ pub(super) struct GridData {
 
 impl GridData {
     pub(super) fn new(artists: Vec<ArtistStats>) -> Self {
-        let keys = artists
-            .iter()
-            .map(|a| ArtistSortKey {
-                name_lc: a.name.to_lowercase(),
-            })
-            .collect();
+        let keys =
+            artists.iter().map(|a| ArtistSortKey { name_lc: a.name.to_lowercase() }).collect();
         Self { artists, keys }
     }
 }

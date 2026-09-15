@@ -303,11 +303,7 @@ impl QueueState {
             RepeatMode::All => self.track_at(next_from(self.current_index) % len),
             RepeatMode::Off => {
                 let next = next_from(self.current_index);
-                if next >= len {
-                    None
-                } else {
-                    self.track_at(next)
-                }
+                if next >= len { None } else { self.track_at(next) }
             }
         }
     }
@@ -381,11 +377,20 @@ impl QueueState {
     }
 
     pub fn cycle_repeat_mode(&mut self) {
-        self.repeat_mode = match self.repeat_mode {
+        self.set_repeat_mode(match self.repeat_mode {
             RepeatMode::Off => RepeatMode::All,
             RepeatMode::All => RepeatMode::One,
             RepeatMode::One => RepeatMode::Off,
-        };
+        });
+    }
+
+    /// Bumps `version` only on a move, so a panel re-sending the mode already set re-publishes
+    /// no queue.
+    pub fn set_repeat_mode(&mut self, mode: RepeatMode) {
+        if self.repeat_mode == mode {
+            return;
+        }
+        self.repeat_mode = mode;
         self.version += 1;
     }
 
@@ -475,20 +480,14 @@ impl QueueState {
         self.tracks = new_tracks;
         self.version += 1;
 
-        PruneOutcome {
-            removed,
-            current_was_removed,
-        }
+        PruneOutcome { removed, current_was_removed }
     }
 
     pub fn to_persistable(&self) -> PersistableQueue {
         let mut track_ids: Vec<i64> = Vec::with_capacity(self.play_order.len());
         track_ids
             .extend(self.play_order.iter().filter_map(|&ti| self.tracks.get(ti).map(|t| t.id)));
-        PersistableQueue {
-            track_ids,
-            current_index: current_index_to_i32(self.current_index),
-        }
+        PersistableQueue { track_ids, current_index: current_index_to_i32(self.current_index) }
     }
 
     /// Return tracks in current play order for `ViewModel` emission.

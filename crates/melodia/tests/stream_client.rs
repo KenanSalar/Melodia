@@ -15,11 +15,8 @@ use melodia_testkit::rust_sources;
 /// module that currently gets it right.
 #[test]
 fn nothing_reaches_the_convenience_constructors() {
-    let forbidden = [
-        "StreamDownload::new_http",
-        "StreamDownload::new(",
-        "new_http_with_middleware",
-    ];
+    let forbidden =
+        ["StreamDownload::new_http", "StreamDownload::new(", "new_http_with_middleware"];
 
     let mut offenders = Vec::new();
     for (path, source) in rust_sources() {

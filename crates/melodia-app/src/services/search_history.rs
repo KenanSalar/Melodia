@@ -32,10 +32,7 @@ impl SearchHistoryState {
         let path = paths.search_history_path.clone();
         let history: SearchHistory =
             melodia_core::utils::atomic_file::load_json_or_default(&path).await.unwrap_or_default();
-        Self {
-            inner: Mutex::new(history),
-            path,
-        }
+        Self { inner: Mutex::new(history), path }
     }
 
     pub fn get(&self) -> Vec<String> {

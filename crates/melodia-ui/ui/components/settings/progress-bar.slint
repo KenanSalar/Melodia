@@ -6,17 +6,35 @@ export component ProgressBar inherits Rectangle {
     in property <float> value;
 
     height: 4px;
-    border-radius: self.height / 2;
-    background: Theme.surface1;
-    clip: true;
+
+    // Eased here rather than on either piece, both of which derive from it: a width derived from
+    // an animated one lags it.
+    private property <length> fill-w: root.width * clamp(root.value, 0, 1);
+    animate fill-w { duration: Theme.dur-fast; easing: ease-in-out; }
+    private property <length> cap: root.height / 2;
+
+    // The track only where the fill isn't, starting under the fill's rounded end. Laid under the
+    // whole fill, the two would antialias the same edges twice.
+    Rectangle {
+        x: max(0px, root.fill-w - root.cap);
+        y: 0;
+        width: parent.width - self.x;
+        height: parent.height;
+        visible: root.fill-w < parent.width;
+        border-top-left-radius: root.fill-w > root.cap ? 0 : root.cap;
+        border-bottom-left-radius: root.fill-w > root.cap ? 0 : root.cap;
+        border-top-right-radius: root.cap;
+        border-bottom-right-radius: root.cap;
+        background: Theme.surface1;
+    }
 
     Rectangle {
         x: 0;
         y: 0;
-        width: parent.width * clamp(root.value, 0, 1);
+        width: root.fill-w;
         height: parent.height;
-        border-radius: self.height / 2;
+        // Both axes, so a fill still narrower than the bar is tall stays a pill, not a lens.
+        border-radius: min(self.width, self.height) / 2;
         background: Theme.accent;
-        animate width { duration: Theme.dur-fast; easing: ease-in-out; }
     }
 }

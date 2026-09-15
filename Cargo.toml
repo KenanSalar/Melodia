@@ -19,7 +19,7 @@ exclude = ["winit"]
 # `build-{rpm,appimage,tarball}.sh`) anchor on this table by name and take the
 # first `version = ` inside it, so that entry stays first.
 [workspace.package]
-version = "0.13.0"
+version = "0.14.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 # Lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
@@ -185,7 +185,7 @@ material-colors = "0.4.2"
 color-thief = "0.2.2"
 
 # HTTP (Deezer artist images, scrobbling, the radio directory and its streams)
-reqwest = { version = "0.13.4", default-features = false, features = [
+reqwest = { version = "0.13.5", default-features = false, features = [
     "form",
     "json",
     "query",
@@ -197,7 +197,7 @@ reqwest = { version = "0.13.4", default-features = false, features = [
 # rewindable. `default-features = false` is load-bearing: the default set pulls
 # `reqwest/default-tls`, a second TLS stack (OpenSSL) landing in cargo-deb's `$auto`
 # deps, and turning it off also drops `system-proxy`, so this path ignores `HTTP_PROXY`.
-stream-download = { version = "0.24.3", default-features = false, features = ["reqwest-rustls"] }
+stream-download = { version = "0.24.4", default-features = false, features = ["reqwest-rustls"] }
 # Icecast in-band metadata: the request header, the `icy-*` response headers, and the
 # reader that strips the interleaved blocks so the decoder sees audio only.
 icy-metadata = "0.6.0"
@@ -225,7 +225,6 @@ minisign-verify = "0.2.5"
 semver = "1.0.28"
 
 # OS integrations
-souvlaki = "0.8.3"
 rfd = "0.17.2"
 # Hands a path to the OS default handler, for "Open Containing Folder".
 open = "5.4.0"
@@ -239,6 +238,13 @@ rand = "0.10.2"
 lru = "0.18.2"
 # Atomic file writes (settings/queue/search-history persistence)
 tempfile = "3.27.0"
+# Several playlists export as one archive of `.m3u8` files. Deflate is the one method an
+# archive zipped elsewhere reliably uses; the defaults add AES, bzip2, lzma, xz, zstd,
+# PPMd and zopfli for nothing we write or expect to read. `deflate-flate2` names no
+# backend of its own: `lofty` already builds `flate2` with its pure-Rust one, and a tree
+# that lost that would fail to compile rather than misbehave. `chrono` is the conversion
+# that dates each entry, without which every extracted file reads 1980; it adds no crate.
+zip = { version = "8.6.0", default-features = false, features = ["chrono", "deflate-flate2"] }
 # Test-only: the rules pin expands each `.claude/rules` `paths:` glob.
 glob = "0.3.4"
 
@@ -249,7 +255,8 @@ glob = "0.3.4"
 # Linux
 # Do NOT enable the `tokio` feature: cargo unifies it onto Slint's accesskit_unix →
 # atspi → zbus chain, whose a11y thread has no tokio context and panics at startup.
-# Always-on-top uses `zbus::blocking::*` inside `spawn_blocking`.
+# Always-on-top uses `zbus::blocking::*` inside `spawn_blocking`; MPRIS serves on a
+# blocking connection and signals from a thread of its own.
 zbus = "5.18.0"
 # Linux tray (StatusNotifierItem, no GTK); Windows/macOS take `tray-icon` below.
 # Defaults off: ksni's default `tokio` feature turns on `zbus/tokio` and walks into
@@ -264,13 +271,15 @@ libc = "0.2.189"
 
 # Windows
 # `MoveFileExW(MOVEFILE_DELAY_UNTIL_REBOOT)` in `updater/install/swap.rs`, for when
-# `Melodia.exe.old` is still loaded, and `GetUserDefaultLocaleName`. Declarations
-# from here rather than a hand-rolled `extern` block only review can keep true.
+# `Melodia.exe.old` is still loaded, `GetUserDefaultLocaleName`, and the DWM accent
+# values `window_border` reads out of the registry. Declarations from here rather
+# than a hand-rolled `extern` block only review can keep true.
 windows-sys = { version = "0.61.2", features = [
     "Win32_Storage_FileSystem",
     "Win32_Graphics_Dwm",
     "Win32_Foundation",
     "Win32_Globalization",
+    "Win32_System_Registry",
 ] }
 # `canonicalize` returns the extended-length form (`\\?\C:\...`), which lands in
 # `folders.path` and then fails to match the plain paths `read_dir` yields, greying
@@ -284,6 +293,9 @@ winresource = "0.1.31"
 # Defaults off to drop `gtk` and `libxdo`, the Linux paths `ksni` covers. The icon is
 # created on the main thread, its menu events pumped from Slint's winit loop.
 tray-icon = { version = "0.24.2", default-features = false }
+# SMTC and `MediaPlayer`. Linux serves MPRIS over `zbus` instead: souvlaki's `Position`
+# is whatever it was last pushed, and each push re-announces the playback status.
+souvlaki = "0.8.3"
 
 [workspace.lints.rust]
 unused = { level = "warn", priority = -1 }

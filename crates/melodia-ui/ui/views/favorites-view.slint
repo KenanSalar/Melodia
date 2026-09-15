@@ -127,12 +127,7 @@ export component FavoritesView inherits Rectangle {
                     }
                     PillDivider { }
                     ColumnTogglePopup {
-                        show-number  <=> Favorites.show-number;
-                        show-artwork <=> Favorites.show-artwork;
-                        show-artist  <=> Favorites.show-artist;
-                        show-album   <=> Favorites.show-album;
-                        show-genre   <=> Favorites.show-genre;
-                        show-year    <=> Favorites.show-year;
+                        columns <=> Favorites.track-columns;
                         toggled(id) => { Favorites.toggle-column(id); }
                     }
                     if Favorites.selected-ids.length > 0: SelectionPills {

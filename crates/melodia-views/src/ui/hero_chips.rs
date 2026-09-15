@@ -606,11 +606,7 @@ fn most_played_chips(labels: &impl ChipLabels, totals: MostPlayedTotals) -> Vec<
 /// `1994` for a single year, `1994–2003` for a span — an en dash, the range
 /// punctuation, not a hyphen.
 fn format_year_span((first, last): (i32, i32)) -> String {
-    if first == last {
-        first.to_string()
-    } else {
-        format!("{first}\u{2013}{last}")
-    }
+    if first == last { first.to_string() } else { format!("{first}\u{2013}{last}") }
 }
 
 /// The spread chips, in the order they'd be missed. A spread of one says nothing, so

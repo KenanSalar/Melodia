@@ -1,5 +1,5 @@
 //! `Player.toggle-favorite` and `Player.set-current-rating` fan-out into
-//! Tracks / Browse / `AlbumDetail` / `ArtistDetail` / `GenreDetail` rows.
+//! Tracks / Browse / `AlbumDetail` / `ArtistDetail` / `GenreDetail` / Search rows.
 
 use std::sync::Arc;
 
@@ -9,15 +9,19 @@ use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
 use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
 use crate::ui::browse::{self as browse_ui_mod, BrowseUi};
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
+use crate::ui::search::{self as search_ui_mod, SearchUi};
 use crate::ui::tracks::{self as tracks_ui_mod, TracksUi};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Player};
 
-/// The five view-side surfaces holding a per-row `is_favorite` / `rating`,
-/// bundled so the two Now-Playing fan-outs clone one handle instead of six.
+/// The six view-side surfaces holding a per-row `is_favorite` / `rating`,
+/// bundled so the two Now-Playing fan-outs clone one handle instead of seven.
 /// Each `apply_*` helper walks its `VecModel` and silently no-ops when the
-/// id isn't present, so mirroring into all five on every change is safe.
+/// id isn't present, so mirroring into all six on every change is safe.
+///
+/// Search is here because the bar's heart is on screen while its results are, and it is the
+/// one surface with no `library_changed` subscriber to correct a missed patch later.
 #[derive(Clone)]
 struct CurrentTrackMirrors {
     tracks: Arc<TracksUi>,
@@ -25,6 +29,7 @@ struct CurrentTrackMirrors {
     albums: Arc<AlbumsUi>,
     artists: Arc<ArtistsUi>,
     genres: Arc<GenresUi>,
+    search: Arc<SearchUi>,
     weak: slint::Weak<AppWindow>,
 }
 
@@ -40,6 +45,8 @@ impl CurrentTrackMirrors {
         artists_ui_mod::apply_detail_row_favorite(&self.weak, id, fav);
         self.genres.flip_detail_favorite(id, fav);
         genres_ui_mod::apply_detail_row_favorite(&self.weak, id, fav);
+        self.search.flip_favorite(id, fav);
+        search_ui_mod::apply_row_favorite(&self.weak, id, fav);
     }
 
     fn mirror_rating(&self, id: i64, rating: i32) {
@@ -53,25 +60,33 @@ impl CurrentTrackMirrors {
         artists_ui_mod::apply_detail_row_rating(&self.weak, id, rating);
         self.genres.flip_detail_rating(id, rating);
         genres_ui_mod::apply_detail_row_rating(&self.weak, id, rating);
+        self.search.flip_rating(id, rating);
+        search_ui_mod::apply_row_rating(&self.weak, id, rating);
     }
 }
 
-fn mirrors(
-    ui: &AppWindow,
-    tracks_ui: &Arc<TracksUi>,
-    browse_ui: &Arc<BrowseUi>,
-    albums_ui: &Arc<AlbumsUi>,
-    artists_ui: &Arc<ArtistsUi>,
-    genres_ui: &Arc<GenresUi>,
-) -> CurrentTrackMirrors {
+fn mirrors(ui: &AppWindow, handles: RowFlagHandles<'_>) -> CurrentTrackMirrors {
     CurrentTrackMirrors {
-        tracks: tracks_ui.clone(),
-        browse: browse_ui.clone(),
-        albums: albums_ui.clone(),
-        artists: artists_ui.clone(),
-        genres: genres_ui.clone(),
+        tracks: handles.tracks.clone(),
+        browse: handles.browse.clone(),
+        albums: handles.albums.clone(),
+        artists: handles.artists.clone(),
+        genres: handles.genres.clone(),
+        search: handles.search.clone(),
         weak: ui.as_weak(),
     }
+}
+
+/// The six handles both fan-outs take, borrowed rather than cloned — a parameter list this
+/// long reads as an ordering nobody can check at the call site.
+#[derive(Clone, Copy)]
+pub struct RowFlagHandles<'a> {
+    pub tracks: &'a Arc<TracksUi>,
+    pub browse: &'a Arc<BrowseUi>,
+    pub albums: &'a Arc<AlbumsUi>,
+    pub artists: &'a Arc<ArtistsUi>,
+    pub genres: &'a Arc<GenresUi>,
+    pub search: &'a Arc<SearchUi>,
 }
 
 /// Wire `Player.toggle-favorite` (heart in the Now Playing view, the
@@ -80,19 +95,10 @@ fn mirrors(
 /// per-row `is_favorite`, so a row showing the currently-playing track
 /// updates instantly regardless of which view it sits in.
 ///
-/// Call once after `tracks::install`, `browse::install`, `albums::install`,
-/// `artists::install` and `genres::install`.
-pub fn wire_now_playing_favorite(
-    ui: &AppWindow,
-    state: &AppState,
-    tracks_ui: &Arc<TracksUi>,
-    browse_ui: &Arc<BrowseUi>,
-    albums_ui: &Arc<AlbumsUi>,
-    artists_ui: &Arc<ArtistsUi>,
-    genres_ui: &Arc<GenresUi>,
-) {
+/// Call once after every `install` whose handle [`RowFlagHandles`] carries.
+pub fn wire_now_playing_favorite(ui: &AppWindow, state: &AppState, handles: RowFlagHandles<'_>) {
     let s = state.clone();
-    let m = mirrors(ui, tracks_ui, browse_ui, albums_ui, artists_ui, genres_ui);
+    let m = mirrors(ui, handles);
     ui.global::<Player>().on_toggle_favorite(move || {
         let s = s.clone();
         let m = m.clone();
@@ -112,17 +118,9 @@ pub fn wire_now_playing_favorite(
 /// every view-side surface that holds a per-row `rating`.
 ///
 /// Call once after the per-view wires, alongside `wire_now_playing_favorite`.
-pub fn wire_now_playing_rating(
-    ui: &AppWindow,
-    state: &AppState,
-    tracks_ui: &Arc<TracksUi>,
-    browse_ui: &Arc<BrowseUi>,
-    albums_ui: &Arc<AlbumsUi>,
-    artists_ui: &Arc<ArtistsUi>,
-    genres_ui: &Arc<GenresUi>,
-) {
+pub fn wire_now_playing_rating(ui: &AppWindow, state: &AppState, handles: RowFlagHandles<'_>) {
     let s = state.clone();
-    let m = mirrors(ui, tracks_ui, browse_ui, albums_ui, artists_ui, genres_ui);
+    let m = mirrors(ui, handles);
     ui.global::<Player>().on_set_current_rating(move |rating| {
         let s = s.clone();
         let m = m.clone();

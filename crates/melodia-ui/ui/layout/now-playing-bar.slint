@@ -20,15 +20,7 @@ export component NowPlayingBar inherits Rectangle {
     min-height: Theme.now-playing-h;
     max-height: Theme.now-playing-h;
     vertical-stretch: 0;
-    // The sidebar carries the same three-term gate, so both surfaces swap to the OS
-    // inactive titlebar colour in lock step; its comment says why all three terms are
-    // needed. **Named rather than inlined** because the play button punches its glyph
-    // out in exactly this colour, and spelling the ternary twice would let the two drift
-    // apart in the unfocused case.
-    out property <brush> surface-bg:
-        (Settings.match-unfocused-bg && Theme.use-native-titlebar && !Theme.window-focused)
-            ? Theme.mantle-unfocused : Theme.mantle;
-    background: root.surface-bg;
+    background: WindowChrome.mantle;
 
     // Written imperatively from `changed width`, so the child intrinsic sizes derived
     // from it — tile, button diameters, padding — don't bind to `root.width` and form a
@@ -61,7 +53,7 @@ export component NowPlayingBar inherits Rectangle {
     // whatever the user routed to it through `Settings.overflow-*`.
 
     // No divider here: the content panel's own bottom border draws the seam, so it
-    // follows the rounded bottom-left curve cleanly.
+    // follows the panel's rounded corners cleanly.
 
     // Each section wraps in a centring `VerticalLayout`, so its content sits centred
     // against the bar height whatever its intrinsic size — the sidebar's row pattern.
@@ -231,7 +223,7 @@ export component NowPlayingBar inherits Rectangle {
                     PlayButton {
                         wrapper-d: clamp(root.bar-w * 0.055, 30px, 38px);
                         icon-size: clamp(root.bar-w * 0.025, 14px, 20px);
-                        icon-color: root.surface-bg;
+                        icon-color: WindowChrome.mantle;
                         is-playing: Player.vm.is_playing;
                         animation-mode: Settings.play-button-animation-idx;
                         clicked => { Player.play-pause(); }
@@ -291,9 +283,8 @@ export component NowPlayingBar inherits Rectangle {
                             : clamp(Player.position-ms / Player.duration-ms, 0, 1))
                         : 0;
                     is-disabled: !Player.vm.has_track || Player.duration-ms <= 0;
-                    // Reads the bar's own fill rather than restating the focus-aware
-                    // ternary, so the mask disappears against it either way.
-                    seam-mask-color: root.surface-bg;
+                    // The bar's own fill, so the mask disappears against it focused or not.
+                    seam-mask-color: WindowChrome.mantle;
 
                     committed(v) => {
                         if (Player.duration-ms > 0) {

@@ -4,7 +4,7 @@
 //! modules need — `apply_detail_artwork` for the cover and hero-blur pair,
 //! `replace_tracks_model` for the `tracks` `VecModel`, and the curated pages'
 //! `publish_hero_artwork` / `republish_chips` — can't be generic functions. This stamps the
-//! typed body once per module, as `impl_track_list_column_state!` does.
+//! typed body once per module, as `track_list_views!` does once per track-list global.
 
 /// Generate the per-view hero helpers for a Slint global.
 ///

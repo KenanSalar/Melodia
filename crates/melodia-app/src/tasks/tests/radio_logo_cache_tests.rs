@@ -36,11 +36,7 @@ impl Store {
         let tmp = TempDir::new()?;
         let paths = Paths::rooted_at(tmp.path().to_path_buf());
         paths.create_dirs()?;
-        Ok(Self {
-            db: DbPool::test_pool().await?,
-            paths,
-            _tmp: tmp,
-        })
+        Ok(Self { db: DbPool::test_pool().await?, paths, _tmp: tmp })
     }
 
     /// A cached logo on disk plus the answer row naming it, `answered_at` deciding whether the

@@ -1,94 +1,107 @@
-//! Wrapping a strip of metadata chips into rows.
+//! Wrapping a strip of chips into rows.
 //!
 //! Slint 1.16 has no `Flow` and can't build a nested array, so anything that wraps splits
-//! here and hands the view two real arrays to walk — the same shape as
-//! `settings::settings_page::chunk_indices`, which wraps by *index* because its chips are
-//! measured Slint-side. These wrap by *width*, the chip texts being built in Rust.
+//! here and hands the view two real arrays to walk. Two splits, and which one a surface
+//! takes follows where its chips are measured: [`chunk_indices`] wraps by *index*, for a
+//! host that measures real chips with a hidden ruler and can size every row off the widest;
+//! [`chunk_chips_to_rows`] wraps by *width*, the chip texts being built here.
 //!
-//! The two consumers differ in one thing, and that is the whole of `max_rows`: Now Playing
-//! has the column height to grow downward, where a hero band is sized by its artwork tile
-//! and wraps only as far as the slack above its action pill.
+//! The width form's consumers differ in one thing, and that is the whole of `max_rows`: Now
+//! Playing has the column height to grow downward, where a hero band is sized by its artwork
+//! tile and wraps only as far as the slack above its action pill.
 
-use slint::{ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
+
+use melodia_ui::{AppWindow, Wrap};
 
 /// Gap between chips within a row — `Theme.pad-sm`, restated because the wrap
 /// has to know it and Slint tokens don't cross the boundary. The gap *between*
 /// rows is `pad-xs` and is Slint's alone; nothing here measures vertically.
 const SPACING: f32 = 8.0;
 
-/// Estimated rendered chip width — Vazirmatn at `font-size-sm` with
-/// `MetaChip`'s `pad-md` left+right padding.
+/// `MetaChip`'s fixed width: its `pad-md` left and right, with no close affordance.
+const META_CHIP_CHROME: f32 = 24.0;
+
+/// Estimated rendered chip width — Vazirmatn at `font-size-sm`, plus whatever of the chip
+/// isn't glyphs (`chrome`, which differs per chip shape).
 ///
 /// **The two error directions are not symmetric**, because this packs a row as full as the
 /// estimate allows — unlike `ChipGroup`, which sizes every row off its widest chip and so
-/// is never full. Over-shoot only wraps early; under-shoot truncates, and it truncates the
-/// whole *row* rather than the chip that didn't fit, `MetaChip`'s label carrying
+/// is never full. Over-shoot only wraps early; under-shoot compresses, and on `MetaChip` it
+/// compresses the whole *row* rather than the chip that didn't fit, its label carrying
 /// `overflow: elide` and so lowering each chip's layout *minimum* to one `…`. Hence a
 /// generous `CHAR_W`, a little over half an em where Vazirmatn's digits sit near 0.55.
 /// Both spacings are exact; only the glyph term estimates.
-fn estimated_chip_width(text: &str) -> f32 {
+fn estimated_chip_width(text: &str, chrome: f32) -> f32 {
     const CHAR_W: f32 = 6.5;
-    const PAD: f32 = 24.0;
     // Saturating to `u16` is ample headroom for a chip text, and `f32::from(u16)` avoids
     // the `cast_precision_loss` a direct `as f32` would trip.
     let chars = u16::try_from(text.chars().count()).unwrap_or(u16::MAX);
-    f32::from(chars) * CHAR_W + PAD
+    f32::from(chars) * CHAR_W + chrome
 }
 
-/// Chunk chips into rows fitting `avail_width`, always at least one per row so an
-/// oversized single chip gets its own rather than none.
+/// Greedily pack items into rows fitting `avail_width`, always at least one per row so an
+/// oversized single item gets its own rather than none.
 ///
 /// `max_rows` caps the result and **drops** the overflow; `None` wraps freely. Dropping is
-/// what a fixed-height band wants: a chip that can't fit is less important than the ones
+/// what a fixed-height band wants: an item that can't fit is less important than the ones
 /// before it, the builders ordering them that way, and growing the band under a resize
 /// drag reads as the layout thrashing.
-pub fn chunk_chips_to_rows(
-    chips: &[SharedString],
+fn pack_rows<T: Clone>(
+    items: &[T],
     avail_width: f32,
     max_rows: Option<usize>,
-) -> Vec<Vec<SharedString>> {
-    if chips.is_empty() || max_rows == Some(0) {
+    width_of: impl Fn(&T) -> f32,
+) -> Vec<Vec<T>> {
+    if items.is_empty() || max_rows == Some(0) {
         return Vec::new();
     }
-    // `<= 0` means no layout pass yet, so collapse to one row; the strip's mount Timer
-    // fires a real width immediately after.
+    // `<= 0` means no layout pass yet, so collapse to one row; a real width lands on the
+    // frame after and re-packs.
     if avail_width <= 0.0 {
-        return vec![chips.to_vec()];
+        return vec![items.to_vec()];
     }
 
-    let mut rows: Vec<Vec<SharedString>> = Vec::with_capacity(2);
-    let mut current: Vec<SharedString> = Vec::with_capacity(chips.len());
+    let mut rows: Vec<Vec<T>> = Vec::with_capacity(2);
+    let mut current: Vec<T> = Vec::with_capacity(items.len());
     let mut current_w = 0.0_f32;
 
-    for chip in chips {
-        let cw = estimated_chip_width(chip);
-        let candidate = if current.is_empty() {
-            cw
-        } else {
-            current_w + SPACING + cw
-        };
+    for item in items {
+        let w = width_of(item);
+        let candidate = if current.is_empty() { w } else { current_w + SPACING + w };
         if !current.is_empty() && candidate > avail_width {
             if max_rows == Some(rows.len() + 1) {
                 // The row being closed is the last one allowed, so the rest is overflow.
                 return finish(rows, current);
             }
             rows.push(std::mem::take(&mut current));
-            current.push(chip.clone());
-            current_w = cw;
+            current.push(item.clone());
+            current_w = w;
         } else {
-            current.push(chip.clone());
+            current.push(item.clone());
             current_w = candidate;
         }
     }
     finish(rows, current)
 }
 
-fn finish(mut rows: Vec<Vec<SharedString>>, current: Vec<SharedString>) -> Vec<Vec<SharedString>> {
+fn finish<T>(mut rows: Vec<Vec<T>>, current: Vec<T>) -> Vec<Vec<T>> {
     if !current.is_empty() {
         rows.push(current);
     }
     rows
+}
+
+/// [`pack_rows`] over `MetaChip`s, which is what the two `MetaChipStrip` hosts want.
+pub fn chunk_chips_to_rows(
+    chips: &[SharedString],
+    avail_width: f32,
+    max_rows: Option<usize>,
+) -> Vec<Vec<SharedString>> {
+    pack_rows(chips, avail_width, max_rows, |chip| estimated_chip_width(chip, META_CHIP_CHROME))
 }
 
 /// A split's row lengths — enough to tell two splits of the *same* chips apart.
@@ -104,11 +117,119 @@ pub fn split_shape(rows: &[Vec<SharedString>]) -> Vec<usize> {
     rows.iter().map(Vec::len).collect()
 }
 
-/// `Vec<Vec<SharedString>>` → the `[[string]]` model a `MetaChipStrip` reads.
-pub fn rows_to_model(rows: Vec<Vec<SharedString>>) -> ModelRc<ModelRc<SharedString>> {
-    let outer: Vec<ModelRc<SharedString>> =
+/// Rows → the nested model a wrapped strip reads, `[[string]]` for a `MetaChipStrip` and `[[int]]`
+/// for an index strip.
+pub fn rows_to_model<T: Clone + 'static>(rows: Vec<Vec<T>>) -> ModelRc<ModelRc<T>> {
+    let outer: Vec<ModelRc<T>> =
         rows.into_iter().map(|row| ModelRc::from(Rc::new(VecModel::from(row)))).collect();
     ModelRc::from(Rc::new(VecModel::from(outer)))
+}
+
+/// Split `0..count` into rows of at most `per_row`. Indices rather than the items themselves,
+/// so a wrapped item still knows which option it is.
+///
+/// `per_row` is floored at 1: it comes from a measured width, which is zero for the frame
+/// before the first layout reports one.
+fn chunk_indices(count: i32, per_row: i32) -> Vec<Vec<i32>> {
+    let count = count.max(0);
+    let per_row = per_row.max(1);
+
+    let row_count =
+        usize::try_from(count).unwrap_or(0).div_ceil(usize::try_from(per_row).unwrap_or(1));
+    let mut rows = Vec::with_capacity(row_count);
+    let mut start = 0;
+    while start < count {
+        let end = start.saturating_add(per_row).min(count);
+        rows.push((start..end).collect());
+        start = end;
+    }
+    rows
+}
+
+/// The `[[int]]` models `Wrap.chunk-indices` hands out, built once per row shape.
+///
+/// Slint re-runs a strip's model binding whenever a width feeding its `per-row` moves, whether or
+/// not `per-row` did, and a repeater compares its model by pointer. A fresh model per call rebuilds
+/// every chip and swatch under it, tooltips and all, on every frame of a window resize. Nothing
+/// writes these models, so strips of one shape can share one.
+#[derive(Default)]
+struct IndexRows {
+    /// Keyed on `(count, per_row)`.
+    by_shape: RefCell<HashMap<(i32, i32), IndexRowsModel>>,
+}
+
+/// What a `[[int]]` binding reads.
+type IndexRowsModel = ModelRc<ModelRc<i32>>;
+
+impl IndexRows {
+    fn rows(&self, count: i32, per_row: i32) -> IndexRowsModel {
+        let count = count.max(0);
+        // Any row width seating every item lays out the same single row. Folding them onto one
+        // entry also bounds the map by the option counts rather than by the widths a drag passes.
+        let shape = (count, per_row.clamp(1, count.max(1)));
+        self.by_shape
+            .borrow_mut()
+            .entry(shape)
+            .or_insert_with(|| rows_to_model(chunk_indices(shape.0, shape.1)))
+            .clone()
+    }
+}
+
+/// The `[[string]]` model `Wrap.pack-labels` last handed out, kept while a resize leaves the split
+/// as it was, for [`IndexRows`]' reason.
+///
+/// One entry rather than a map: there is one caller, and its labels change only with the history.
+#[derive(Default)]
+struct PackedLabels {
+    last: RefCell<Option<Packed>>,
+}
+
+struct Packed {
+    labels: Vec<SharedString>,
+    shape: Vec<usize>,
+    model: ModelRc<ModelRc<SharedString>>,
+}
+
+impl PackedLabels {
+    fn rows(
+        &self,
+        labels: Vec<SharedString>,
+        avail_width: f32,
+        chrome: f32,
+    ) -> ModelRc<ModelRc<SharedString>> {
+        // Wraps freely: the one caller is a page that scrolls, so there is no band height to
+        // drop a row against.
+        let rows = pack_rows(&labels, avail_width, None, |l: &SharedString| {
+            estimated_chip_width(l, chrome)
+        });
+        let shape = split_shape(&rows);
+
+        // Labels by content, not by model: the history arrives as a fresh model on every change,
+        // and a reorder keeps both the length and the shape.
+        if let Some(last) = self.last.borrow().as_ref()
+            && last.labels == labels
+            && last.shape == shape
+        {
+            return last.model.clone();
+        }
+
+        let model = rows_to_model(rows);
+        *self.last.borrow_mut() = Some(Packed { labels, shape, model: model.clone() });
+        model
+    }
+}
+
+/// Wire the two row splits. Call once during startup.
+pub fn install(ui: &AppWindow) {
+    let wrap = ui.global::<Wrap>();
+
+    let index_rows = IndexRows::default();
+    wrap.on_chunk_indices(move |count, per_row| index_rows.rows(count, per_row));
+
+    let packed_labels = PackedLabels::default();
+    wrap.on_pack_labels(move |labels, avail_width, chrome| {
+        packed_labels.rows(labels.iter().collect(), avail_width, chrome)
+    });
 }
 
 #[cfg(test)]

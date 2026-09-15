@@ -57,11 +57,7 @@ pub struct NavHistory {
 
 impl NavHistory {
     pub fn new() -> Self {
-        Self {
-            entries: VecDeque::with_capacity(HISTORY_CAP),
-            cursor: 0,
-            suppress: false,
-        }
+        Self { entries: VecDeque::with_capacity(HISTORY_CAP), cursor: 0, suppress: false }
     }
 
     /// Push a new entry at `cursor + 1`, truncating any forward history. A no-op while a
@@ -199,11 +195,7 @@ pub fn record_current(ui: &AppWindow) {
     let detail_id = current_detail_id_for(ui, section, tab);
     // Only what the history took: the eleven hooks fire two or three deep for one click,
     // and logging each reads as a stutter rather than a navigation.
-    if nav().history().record(NavEntry {
-        section,
-        tab,
-        detail_id,
-    }) {
+    if nav().history().record(NavEntry { section, tab, detail_id }) {
         view_tag::log_current(ui);
     }
 }
@@ -217,11 +209,7 @@ pub fn record_current(ui: &AppWindow) {
 pub fn replay(state: &AppState, ui: &AppWindow, going_back: bool) {
     let target = {
         let mut hist = nav().history();
-        if going_back {
-            hist.back()
-        } else {
-            hist.forward()
-        }
+        if going_back { hist.back() } else { hist.forward() }
     };
     let Some(target) = target else {
         return;
@@ -230,11 +218,7 @@ pub fn replay(state: &AppState, ui: &AppWindow, going_back: bool) {
     let current_section = ui.global::<Nav>().get_selected_index();
     let current_tab = tab_of_section(ui, current_section);
     let current_detail = current_detail_id_for(ui, current_section, current_tab);
-    let direction = if going_back {
-        NavEnterFrom::Left
-    } else {
-        NavEnterFrom::Right
-    };
+    let direction = if going_back { NavEnterFrom::Left } else { NavEnterFrom::Right };
 
     // Its own line because a replay suppresses recording, so this is otherwise
     // the one navigation leaving no trace.
@@ -411,11 +395,7 @@ fn spawn_open_detail(
     let weak: Weak<AppWindow> = ui.as_weak();
     let fallback: Weak<AppWindow> = ui.as_weak();
     let s = state.clone();
-    let expected = NavEntry {
-        section,
-        tab,
-        detail_id: Some(id),
-    };
+    let expected = NavEntry { section, tab, detail_id: Some(id) };
     if section == NAV_RADIO {
         let Some(ru) = nav().handles().radio.lock().clone() else {
             land_pending(pending, &fallback);
@@ -423,10 +403,7 @@ fn spawn_open_detail(
         };
         // Only a kept station is ever recorded, so the id is the whole handle: `StationRef::is_kept`
         // splits on it, and `open_station_with` fills the uuid in off the row it resolves.
-        let station = crate::ui::radio::StationRef {
-            id,
-            uuid: String::new(),
-        };
+        let station = crate::ui::radio::StationRef { id, uuid: String::new() };
         state.runtime.clone().spawn(async move {
             if nav().history().current() != Some(expected) {
                 return;

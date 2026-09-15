@@ -109,9 +109,8 @@ component TabBarCell inherits Rectangle {
             }
 
             // **Always mounted** — an `if` here makes the compact flip a pop — and closed by
-            // shrinking its width to nothing. Rectangular and borderless so it lowers to a scissor,
-            // a rounded clip over text costing a layer and an upscale on HiDPI; left-aligned, so
-            // the clip eats the tail first.
+            // shrinking its width to nothing. Rectangular so it lowers to a scissor, a rounded clip
+            // rendering the text into a texture; left-aligned, so the clip eats the tail first.
             Rectangle {
                 clip: true;
                 horizontal-stretch: 0;

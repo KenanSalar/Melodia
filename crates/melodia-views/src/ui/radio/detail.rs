@@ -59,10 +59,7 @@ pub struct StationRef {
 
 impl StationRef {
     pub fn from_row(row: &RadioStationRow) -> Self {
-        Self {
-            id: i64::from(row.id),
-            uuid: row.uuid.to_string(),
-        }
+        Self { id: i64::from(row.id), uuid: row.uuid.to_string() }
     }
 
     /// Whether this station has a database row, which decides where it resolves from and whether
@@ -253,10 +250,7 @@ where
     // Completed off whatever resolved: two of the three ways in know only the id, and an empty
     // uuid here silently costs the vote pill, the directory refresh behind it, and the seat
     // equality a later vote is found by.
-    let station = StationRef {
-        id: station.id,
-        uuid: source.uuid().to_owned(),
-    };
+    let station = StationRef { id: station.id, uuid: source.uuid().to_owned() };
     let facts = source.facts();
     let votes = source.votes();
     let pair =
@@ -716,10 +710,7 @@ pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, radio_ui: &Ar
     state.runtime.clone().spawn(async move {
         // Id-only: `views.json` names nothing else, and `open_station_with` fills the uuid in off
         // the row it resolves.
-        let station = StationRef {
-            id,
-            uuid: String::new(),
-        };
+        let station = StationRef { id, uuid: String::new() };
         if let Err(e) =
             open_station(&state, &radio_ui, weak.clone(), station, NavEnterFrom::Below).await
         {

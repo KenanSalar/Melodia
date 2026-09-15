@@ -60,10 +60,7 @@ fn every_join_phrase_the_picker_offers_round_trips() {
 
         assert_eq!(
             spelled(&credit),
-            vec![
-                ("Alice".to_owned(), rendered.to_owned()),
-                ("Bob".to_owned(), String::new()),
-            ],
+            vec![("Alice".to_owned(), rendered.to_owned()), ("Bob".to_owned(), String::new()),],
             "the {label} phrase came back as something else"
         );
         assert_eq!(credit.line(), Some(printed.as_str()));

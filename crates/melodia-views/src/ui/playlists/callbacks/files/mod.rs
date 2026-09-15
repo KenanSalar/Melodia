@@ -2,10 +2,10 @@
 //! tab's four action pills — plus the Add-to-Playlist picker's multi-select
 //! toggles + commit, split by concern:
 //!
-//! * [`import`] — the Import pill (native multi-file picker → per-file
-//!   import aggregation → grid refresh → summary toast).
-//! * [`export`] — the Export pill (fill picker → folder picker → write
-//!   files → toast) and the export picker's selection plumbing.
+//! * [`import`] — the Import pill (native multi-file picker, archives
+//!   included → per-file import aggregation → grid refresh → summary toast).
+//! * [`export`] — the Export pill (fill picker → save dialog → one `.m3u8`,
+//!   or a zip of several → toast) and the export picker's selection plumbing.
 //! * [`add_picker`] — the Add-to-Playlist picker's selection plumbing and
 //!   the add-tracks commit.
 //!
@@ -13,7 +13,9 @@
 //! `slint::spawn_local(Compat::new(...))` (`Compat` supplies a tokio reactor
 //! so the awaited sqlx calls work); after each `.await` the future resumes on
 //! the UI thread, so pushing toasts through the `Rc<NotificationsUi>` and
-//! reading/writing `Dialog.*` is safe without an extra event-loop hop.
+//! reading/writing `Dialog.*` is safe without an extra event-loop hop. Import
+//! and export await the file work on the runtime instead, since it parses or
+//! serializes every playlist and would otherwise do so on the UI thread.
 //!
 //! Wired separately from [`super::wire`] (in `main.rs`, after the
 //! notifications stack exists) because these handlers need the

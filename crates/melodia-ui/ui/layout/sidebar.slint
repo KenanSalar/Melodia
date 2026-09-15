@@ -2,6 +2,7 @@ import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { Settings } from "../settings.slint";
 import { Nav, NavEnterFrom } from "../globals/nav.slint";
+import { WindowChrome } from "../globals/shell.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 
@@ -130,17 +131,7 @@ export component Sidebar inherits Rectangle {
         : clamp(Nav.sidebar-width, Theme.sidebar-min-w, Theme.sidebar-max-w);
     animate width { duration: is-dragging ? 0ms : Theme.dur-med; easing: ease-in-out; }
 
-    // The KDE-only unfocused tint gates on **three** terms: the user toggle, the OS
-    // focus state, and `use-native-titlebar`. The titlebar term is required because the
-    // feature mirrors an OS-drawn decoration fade — with our own chrome the analogy
-    // doesn't apply — and the toggle is *preserved* rather than cleared across a
-    // native-titlebar disable so it survives a re-enable. Without it a KDE user in
-    // custom-titlebar mode still sees the tint, the toggle defaulting on there.
-    //
-    // **No `animate`**: the OS titlebar swaps colour instantly on focus loss, so a fade
-    // desyncs our painted surfaces from the OS-drawn frame.
-    background: (Settings.match-unfocused-bg && Theme.use-native-titlebar && !Theme.window-focused)
-        ? Theme.mantle-unfocused : Theme.mantle;
+    background: WindowChrome.mantle;
 
     VerticalLayout {
         padding: Theme.pad-sm;

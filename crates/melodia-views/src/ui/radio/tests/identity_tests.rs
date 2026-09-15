@@ -59,11 +59,7 @@ fn a_name_with_nothing_alphanumeric_takes_no_letters() {
 /// station would be a different colour in Browse and in Favorites.
 #[test]
 fn the_same_name_always_hashes_to_the_same_tile() {
-    let StationTile {
-        color_1,
-        color_2,
-        monogram,
-    } = station_tile("Radio Paradise");
+    let StationTile { color_1, color_2, monogram } = station_tile("Radio Paradise");
     for _ in 0..4 {
         let again = station_tile("Radio Paradise");
         assert_eq!(again.color_1, color_1);
@@ -76,14 +72,7 @@ fn the_same_name_always_hashes_to_the_same_tile() {
 /// jitter, which is what keeps one ink readable over both without being solved per station.
 #[test]
 fn the_two_stops_are_never_the_same_colour() {
-    for name in [
-        "WDR 2",
-        "Radio Paradise",
-        "Deutschlandfunk",
-        "!!!",
-        "özgür radyo",
-        "1LIVE",
-    ] {
+    for name in ["WDR 2", "Radio Paradise", "Deutschlandfunk", "!!!", "özgür radyo", "1LIVE"] {
         let tile = station_tile(name);
         assert_ne!(tile.color_1, tile.color_2, "{name} paints a flat tile rather than a gradient");
     }
@@ -93,14 +82,7 @@ fn the_two_stops_are_never_the_same_colour() {
 /// every logo-less station one house colour, which is the look this replaced.
 #[test]
 fn different_names_land_on_different_tiles() {
-    let names = [
-        "WDR 2",
-        "WDR 5",
-        "Radio Paradise",
-        "Deutschlandfunk",
-        "N-JOY",
-        "1LIVE",
-    ];
+    let names = ["WDR 2", "WDR 5", "Radio Paradise", "Deutschlandfunk", "N-JOY", "1LIVE"];
     let mut seen: Vec<(u8, u8, u8)> = Vec::with_capacity(names.len());
     for name in names {
         let c = station_tile(name).color_1;

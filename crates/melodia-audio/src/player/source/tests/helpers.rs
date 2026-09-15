@@ -25,8 +25,5 @@ pub(crate) fn nz_u32(v: u32) -> SampleRate {
 
 /// A [`Shape`] from the plain integers a test spells, over the two above.
 pub(crate) fn shape(channels: u16, rate: u32) -> Shape {
-    Shape {
-        channels: nz_u16(channels),
-        rate: nz_u32(rate),
-    }
+    Shape { channels: nz_u16(channels), rate: nz_u32(rate) }
 }

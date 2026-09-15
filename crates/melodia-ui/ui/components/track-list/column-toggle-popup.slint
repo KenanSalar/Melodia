@@ -1,4 +1,5 @@
 import { Theme } from "../../theme.slint";
+import { TrackColumns } from "../../models.slint";
 import { PopupHighlight } from "../../globals/shell.slint";
 import { PillButton } from "../action-pill.slint";
 import { Checkbox } from "../checkbox.slint";
@@ -14,11 +15,14 @@ component ColumnToggleRow inherits Rectangle {
 
     callback toggled();
 
+    // Dimmed through the brushes rather than `opacity`, which would hold a texture per locked row
+    // for as long as the popup is open. A locked row takes no hover, so the fill needs none.
+    private property <float> fade: root.locked ? 0.5 : 1.0;
+
     height: 32px;
     border-radius: Theme.radius-sm;
     background: !root.locked && touch.has-hover ? Theme.surface2 : transparent;
     animate background { duration: 100ms; easing: ease-in-out; }
-    opacity: root.locked ? 0.5 : 1.0;
 
     HorizontalLayout {
         padding-left: Theme.pad-sm;
@@ -28,14 +32,17 @@ component ColumnToggleRow inherits Rectangle {
 
         VerticalLayout {
             alignment: center;
-            Checkbox { checked: root.checked; }
+            Checkbox {
+                checked: root.checked;
+                fade: root.fade;
+            }
         }
 
         VerticalLayout {
             alignment: center;
             Text {
                 text: root.label;
-                color: Theme.text;
+                color: Theme.text.transparentize(1.0 - root.fade);
                 font-size: Theme.font-size-md;
             }
         }
@@ -60,17 +67,12 @@ component ColumnToggleRow inherits Rectangle {
 // A labelled pill opening a PopupWindow of per-column toggles, on the
 // volume-popup pattern — right-aligned, close-on-click-outside, fade-in.
 //
-// Globals-free: the six flags come in as `in-out` so the host's bound state
+// Globals-free: the columns come in as `in-out` so the host's bound state
 // flips synchronously, and `toggled` lets it persist the list under its own
 // per-view key. Title and Length are listed but locked, so it's visible *why*
 // they can't be hidden.
 export component ColumnTogglePopup inherits Rectangle {
-    in-out property <bool> show-number;
-    in-out property <bool> show-artwork;
-    in-out property <bool> show-artist;
-    in-out property <bool> show-album;
-    in-out property <bool> show-genre;
-    in-out property <bool> show-year;
+    in-out property <TrackColumns> columns;
 
     // Each drops its row outright on the detail view where every track shares
     // that field, and the column says nothing.
@@ -127,17 +129,17 @@ export component ColumnTogglePopup inherits Rectangle {
                 ColumnToggleRow {
                     // `#` is a numeric column glyph, not a word — left as-is.
                     label: "#";
-                    checked: root.show-number;
+                    checked: root.columns.show_number;
                     toggled => {
-                        root.show-number = !root.show-number;
+                        root.columns.show_number = !root.columns.show_number;
                         root.toggled("number");
                     }
                 }
                 ColumnToggleRow {
                     label: @tr("Artwork");
-                    checked: root.show-artwork;
+                    checked: root.columns.show_artwork;
                     toggled => {
-                        root.show-artwork = !root.show-artwork;
+                        root.columns.show_artwork = !root.columns.show_artwork;
                         root.toggled("artwork");
                     }
                 }
@@ -148,33 +150,33 @@ export component ColumnTogglePopup inherits Rectangle {
                 }
                 if !root.hide-artist: ColumnToggleRow {
                     label: @tr("Artist");
-                    checked: root.show-artist;
+                    checked: root.columns.show_artist;
                     toggled => {
-                        root.show-artist = !root.show-artist;
+                        root.columns.show_artist = !root.columns.show_artist;
                         root.toggled("artist");
                     }
                 }
                 if !root.hide-album: ColumnToggleRow {
                     label: @tr("Album");
-                    checked: root.show-album;
+                    checked: root.columns.show_album;
                     toggled => {
-                        root.show-album = !root.show-album;
+                        root.columns.show_album = !root.columns.show_album;
                         root.toggled("album");
                     }
                 }
                 if !root.hide-genre: ColumnToggleRow {
                     label: @tr("Genre");
-                    checked: root.show-genre;
+                    checked: root.columns.show_genre;
                     toggled => {
-                        root.show-genre = !root.show-genre;
+                        root.columns.show_genre = !root.columns.show_genre;
                         root.toggled("genre");
                     }
                 }
                 ColumnToggleRow {
                     label: @tr("Year");
-                    checked: root.show-year;
+                    checked: root.columns.show_year;
                     toggled => {
-                        root.show-year = !root.show-year;
+                        root.columns.show_year = !root.columns.show_year;
                         root.toggled("year");
                     }
                 }

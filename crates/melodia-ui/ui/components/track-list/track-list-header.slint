@@ -1,21 +1,16 @@
 import { Theme } from "../../theme.slint";
+import { TrackColumns, TrackColumnLayout, TrackColumn } from "../../models.slint";
+import { TrackColumnSizing } from "../../globals/track-columns.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
-// The column divider, sized so it doubles as the visual gap between cells — it matches
-// the body row's own spacing, which is what keeps header and row cells in lockstep. A
-// hairline sits in its middle, brightening on hover and again while dragging.
-//
-// **Pure natural drag**: right grows the target column, left shrinks it, and no other column is
-// touched. Grown past the visible area, the parent's horizontal `ScrollView` picks up the overflow.
-// Works in **absolute** coordinates, so the handle doesn't trail the cursor as its cell resizes.
+// The column divider, as wide as the gap between two cells, with a hairline in its middle that
+// brightens on hover and again while dragging. It reports how far the pointer has travelled since
+// the press and leaves what that means to the header. Works in **absolute** coordinates, so the
+// handle doesn't trail the cursor as the cells around it resize.
 component ResizeHandle inherits Rectangle {
-    in property <length> start-w;
-    in property <length> min-w;
-    in property <length> max-w;
+    callback grabbed();
+    callback dragged(length /*delta*/);
 
-    callback resized(length);
-
-    property <length> press-w: 0px;
     property <length> press-abs-x: 0px;
 
     width: Theme.pad-sm;
@@ -35,16 +30,13 @@ component ResizeHandle inherits Rectangle {
         mouse-cursor: ew-resize;
         pointer-event(ev) => {
             if (ev.kind == PointerEventKind.down) {
-                root.press-w = root.start-w;
                 root.press-abs-x = self.absolute-position.x + self.pressed-x;
+                root.grabbed();
             }
         }
         moved => {
             if (self.pressed) {
-                root.resized(clamp(
-                    root.press-w + (self.absolute-position.x + self.mouse-x - root.press-abs-x),
-                    root.min-w, root.max-w
-                ));
+                root.dragged(self.absolute-position.x + self.mouse-x - root.press-abs-x);
             }
         }
     }
@@ -63,15 +55,21 @@ component HeaderCell inherits Rectangle {
 
     callback clicked();
 
-    // **Never `height: 100%`** — Slint resolves that as a binding to the parent height,
-    // which against the row's own `min-height` is a cycle the solver resolves to
-    // unbounded space. A `min-height` keeps the cell tall enough and the layout fills
-    // the cross axis.
-    min-height: 32px;
+    // Radius-less, as in the rows: a rounded clip would render the cell into a texture to cut
+    // corners nothing reaches.
     clip: true;
-    background: touch.has-hover ? Theme.surface1 : transparent;
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-    border-radius: Theme.radius-md;
+
+    // The hover fill, in the track rows' hover colour. Binding `x` and `y` keeps it out of the
+    // cell's layout info.
+    Rectangle {
+        x: 0;
+        y: Theme.pad-xs;
+        width: 100%;
+        height: parent.height - 2 * Theme.pad-xs;
+        background: touch.has-hover ? Theme.surface0 : transparent;
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        border-radius: Theme.radius-md;
+    }
 
     HorizontalLayout {
         padding-left: Theme.pad-sm;
@@ -83,11 +81,11 @@ component HeaderCell inherits Rectangle {
             alignment: center;
             Text {
                 text: root.label;
-                // The same rung as the rows beneath it: size and weight already read as
-                // a header, so it needn't give up contrast to separate itself — and on
+                // The same size and rung as the rows beneath it: weight alone reads as a
+                // header, so it needn't give up contrast to separate itself, and on
                 // `subtext0` it was the dimmest text on the app's densest screen.
                 color: root.active-field == root.field ? Theme.accent : Theme.text;
-                font-size: Theme.font-size-sm;
+                font-size: Theme.font-size-row;
                 font-weight: 600;
                 overflow: elide;
             }
@@ -112,33 +110,60 @@ component HeaderCell inherits Rectangle {
     }
 }
 
-// The header row, fixed at the cumulative width the parent computes, inside a horizontal
-// `ScrollView` that supplies the scrollbar once it exceeds the container.
+// One column's cell and the divider in the gap after it. The host sizes it to span both, so the
+// cell takes all but the gap and the divider sits in the gap. Both are placed rather than laid out,
+// for the header's reason below, and the divider is the cell's sibling so `sortable: false` leaves
+// it grabbable.
+component HeaderColumn inherits Rectangle {
+    in property <string> label;
+    in property <string> field;
+    in property <string> active-field;
+    in property <string> active-dir;
+    in property <bool> sortable: true;
+    // Off for the last column, which has no gap after it.
+    in property <bool> resizable: true;
+
+    callback sort-clicked(string /*field*/);
+    callback grabbed();
+    callback dragged(length /*delta*/);
+
+    private property <length> cell-w: root.resizable ? root.width - Theme.pad-sm : root.width;
+
+    HeaderCell {
+        x: 0;
+        y: 0;
+        width: root.cell-w;
+        height: root.height;
+        label: root.label;
+        field: root.field;
+        active-field: root.active-field;
+        active-dir: root.active-dir;
+        sortable: root.sortable;
+        clicked => { root.sort-clicked(self.field); }
+    }
+    if root.resizable: ResizeHandle {
+        x: root.cell-w;
+        y: 0;
+        height: root.height;
+        grabbed => { root.grabbed(); }
+        dragged(delta) => { root.dragged(delta); }
+    }
+}
+
+// The header row: a cell per visible column where `layout` puts it, and a divider in the gap after
+// every column but the last.
 //
-// **`spacing: 0`, because the handles *between* cells supply the gap** — the one that
-// matches the body row's own spacing, which is what keeps header and row cells at the
-// same cumulative x. Every divider drives the column on its **left**, and no other.
+// **Cells are placed, never laid out.** `layout` comes off the list's own width, and a size derived
+// from that width inside a layout folds into the list's `layout_info`, which is what the host sizes
+// the list from: a loop. A child that binds `x` contributes nothing to it. The rows place their
+// cells for the same reason.
 //
-// The per-column ranges are generous, horizontal overflow being supported. Globals-free:
-// a resize writes the caller's bound state through `<=>`, and a click emits the field.
+// A drag resolves against this element's width, the header spanning the list. Globals-free apart
+// from the sizing arithmetic: the result writes the caller's bound `columns` through `<=>`, and a
+// click emits the field.
 export component TrackListHeader inherits Rectangle {
-    in-out property <length> w-number;
-    in-out property <length> w-title;
-    in-out property <length> w-artist;
-    in-out property <length> w-album;
-    in-out property <length> w-genre;
-    in-out property <length> w-year;
-    in-out property <length> w-length;
-
-    // Title and length are always visible.
-    in property <bool> show-number;
-    in property <bool> show-artist;
-    in property <bool> show-album;
-    in property <bool> show-genre;
-    in property <bool> show-year;
-
-    // Bound by `TrackList`, so header and rows share one width source of truth.
-    in property <length> total-w;
+    in-out property <TrackColumns> columns;
+    in property <TrackColumnLayout> layout;
 
     // Active sort indicator state.
     in property <string> sort-field;
@@ -152,130 +177,134 @@ export component TrackListHeader inherits Rectangle {
 
     callback sort-clicked(string /*field*/);
 
+    // What `columns` held when the current drag began.
+    property <TrackColumns> pressed-columns;
+
+    function drag(column: TrackColumn, delta: length) {
+        root.columns = TrackColumnSizing.drag(root.pressed-columns, root.width, Theme.pad-sm,
+            column, delta);
+    }
+
     // A bound `height` is one the solver may treat as merely preferred; the min/max pair
     // pins it in a way the column solver respects, as Slint's own `ListItem` does.
-    min-height: 32px;
-    max-height: 32px;
+    min-height: Theme.track-header-h;
+    max-height: Theme.track-header-h;
     vertical-stretch: 0;
-    width: root.total-w;
-    background: Theme.base;
-    border-width: 1px;
-    border-color: Theme.border;
-    border-radius: Theme.radius-md;
 
-    HorizontalLayout {
-        padding-left: Theme.pad-sm;
-        padding-right: Theme.pad-sm;
-        spacing: 0;
+    // Reaches back over the leading gap, which holds no divider, so its label starts where the
+    // numbers do.
+    if root.columns.show_number: HeaderColumn {
+        x: root.layout.number_x - Theme.pad-sm;
+        y: 0;
+        width: root.layout.number_w + 2 * Theme.pad-sm;
+        height: root.height;
+        label: "#";
+        field: "track_number";
+        active-field: root.sort-field;
+        active-dir: root.sort-dir;
+        sortable: root.sortable;
+        sort-clicked(f) => { root.sort-clicked(f); }
+        grabbed => { root.pressed-columns = root.columns; }
+        dragged(delta) => { root.drag(TrackColumn.number, delta); }
+    }
 
-        // Each toggleable column owns its **trailing** handle, both on the same flag.
-        // `if` rather than `visible`, so a hidden column vacates its layout space.
-        if root.show-number: HeaderCell {
-            width: root.w-number;
-            label: "#";
-            field: "track_number";
-            active-field: root.sort-field;
-            active-dir: root.sort-dir;
-            sortable: root.sortable;
-            clicked => { root.sort-clicked(self.field); }
-        }
-        if root.show-number: ResizeHandle {
-            start-w: root.w-number;
-            min-w: 40px;
-            max-w: 200px;
-            resized(w) => { root.w-number = w; }
-        }
+    HeaderColumn {
+        x: root.layout.title_x;
+        y: 0;
+        width: root.layout.title_w + Theme.pad-sm;
+        height: root.height;
+        label: @tr("Title");
+        field: "title";
+        active-field: root.sort-field;
+        active-dir: root.sort-dir;
+        sortable: root.sortable;
+        sort-clicked(f) => { root.sort-clicked(f); }
+        grabbed => { root.pressed-columns = root.columns; }
+        dragged(delta) => { root.drag(TrackColumn.title, delta); }
+    }
 
-        HeaderCell {
-            width: root.w-title;
-            label: @tr("Title");
-            field: "title";
-            active-field: root.sort-field;
-            active-dir: root.sort-dir;
-            sortable: root.sortable;
-            clicked => { root.sort-clicked(self.field); }
-        }
-        ResizeHandle {
-            start-w: root.w-title;
-            min-w: 150px;
-            max-w: 1000px;
-            resized(w) => { root.w-title = w; }
-        }
+    if root.columns.show_artist: HeaderColumn {
+        x: root.layout.artist_x;
+        y: 0;
+        width: root.layout.artist_w + Theme.pad-sm;
+        height: root.height;
+        label: @tr("Artist");
+        field: "artist";
+        active-field: root.sort-field;
+        active-dir: root.sort-dir;
+        sortable: root.sortable;
+        sort-clicked(f) => { root.sort-clicked(f); }
+        grabbed => { root.pressed-columns = root.columns; }
+        dragged(delta) => { root.drag(TrackColumn.artist, delta); }
+    }
 
-        if root.show-artist: HeaderCell {
-            width: root.w-artist;
-            label: @tr("Artist");
-            field: "artist";
-            active-field: root.sort-field;
-            active-dir: root.sort-dir;
-            sortable: root.sortable;
-            clicked => { root.sort-clicked(self.field); }
-        }
-        if root.show-artist: ResizeHandle {
-            start-w: root.w-artist;
-            min-w: 60px;
-            max-w: 1000px;
-            resized(w) => { root.w-artist = w; }
-        }
+    if root.columns.show_album: HeaderColumn {
+        x: root.layout.album_x;
+        y: 0;
+        width: root.layout.album_w + Theme.pad-sm;
+        height: root.height;
+        label: @tr("Album");
+        field: "album";
+        active-field: root.sort-field;
+        active-dir: root.sort-dir;
+        sortable: root.sortable;
+        sort-clicked(f) => { root.sort-clicked(f); }
+        grabbed => { root.pressed-columns = root.columns; }
+        dragged(delta) => { root.drag(TrackColumn.album, delta); }
+    }
 
-        if root.show-album: HeaderCell {
-            width: root.w-album;
-            label: @tr("Album");
-            field: "album";
-            active-field: root.sort-field;
-            active-dir: root.sort-dir;
-            sortable: root.sortable;
-            clicked => { root.sort-clicked(self.field); }
-        }
-        if root.show-album: ResizeHandle {
-            start-w: root.w-album;
-            min-w: 60px;
-            max-w: 1000px;
-            resized(w) => { root.w-album = w; }
-        }
+    if root.columns.show_genre: HeaderColumn {
+        x: root.layout.genre_x;
+        y: 0;
+        width: root.layout.genre_w + Theme.pad-sm;
+        height: root.height;
+        label: @tr("Genre");
+        field: "genre";
+        active-field: root.sort-field;
+        active-dir: root.sort-dir;
+        sortable: root.sortable;
+        sort-clicked(f) => { root.sort-clicked(f); }
+        grabbed => { root.pressed-columns = root.columns; }
+        dragged(delta) => { root.drag(TrackColumn.genre, delta); }
+    }
 
-        if root.show-genre: HeaderCell {
-            width: root.w-genre;
-            label: @tr("Genre");
-            field: "genre";
-            active-field: root.sort-field;
-            active-dir: root.sort-dir;
-            sortable: root.sortable;
-            clicked => { root.sort-clicked(self.field); }
-        }
-        if root.show-genre: ResizeHandle {
-            start-w: root.w-genre;
-            min-w: 60px;
-            max-w: 1000px;
-            resized(w) => { root.w-genre = w; }
-        }
+    if root.columns.show_year: HeaderColumn {
+        x: root.layout.year_x;
+        y: 0;
+        width: root.layout.year_w + Theme.pad-sm;
+        height: root.height;
+        label: @tr("Year");
+        field: "year";
+        active-field: root.sort-field;
+        active-dir: root.sort-dir;
+        sortable: root.sortable;
+        sort-clicked(f) => { root.sort-clicked(f); }
+        grabbed => { root.pressed-columns = root.columns; }
+        dragged(delta) => { root.drag(TrackColumn.year, delta); }
+    }
 
-        if root.show-year: HeaderCell {
-            width: root.w-year;
-            label: @tr("Year");
-            field: "year";
-            active-field: root.sort-field;
-            active-dir: root.sort-dir;
-            sortable: root.sortable;
-            clicked => { root.sort-clicked(self.field); }
-        }
-        if root.show-year: ResizeHandle {
-            start-w: root.w-year;
-            min-w: 50px;
-            max-w: 200px;
-            resized(w) => { root.w-year = w; }
-        }
+    // Always last, so it is resized from the divider on its left.
+    HeaderColumn {
+        x: root.layout.length_x;
+        y: 0;
+        width: root.layout.length_w;
+        height: root.height;
+        label: @tr("Length");
+        field: "length";
+        active-field: root.sort-field;
+        active-dir: root.sort-dir;
+        sortable: root.sortable;
+        resizable: false;
+        sort-clicked(f) => { root.sort-clicked(f); }
+    }
 
-        HeaderCell {
-            width: root.w-length;
-            label: @tr("Length");
-            field: "length";
-            active-field: root.sort-field;
-            active-dir: root.sort-dir;
-            sortable: root.sortable;
-            clicked => { root.sort-clicked(self.field); }
-        }
-        // None after the last column; it is still resizable through its own bounds, and
-        // Audacious leaves its last column handle-less too.
+    // Slint borders are all-or-nothing, so the one edge kept is its own element; last, so no
+    // cell's hover fill covers it.
+    Rectangle {
+        x: 0;
+        y: root.height - self.height;
+        width: root.width;
+        height: 1px;
+        background: Theme.border;
     }
 }

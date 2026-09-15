@@ -154,21 +154,14 @@ fn pixel_lstar(r: u8, g: u8, b: u8) -> f64 {
 /// byte mid-calculation and quantize its own answer.
 fn linear_from_byte(byte: f64) -> f64 {
     let n = (byte / 255.0).clamp(0.0, 1.0);
-    if n <= 0.040_449_936 {
-        n / 12.92 * 100.0
-    } else {
-        ((n + 0.055) / 1.055).powf(2.4) * 100.0
-    }
+    if n <= 0.040_449_936 { n / 12.92 * 100.0 } else { ((n + 0.055) / 1.055).powf(2.4) * 100.0 }
 }
 
 /// Inverse of [`linear_from_byte`], staying fractional for the same reason.
 fn byte_from_linear(linear: f64) -> f64 {
     let n = (linear / 100.0).clamp(0.0, 1.0);
-    let encoded = if n <= 0.003_130_8 {
-        n * 12.92
-    } else {
-        1.055f64.mul_add(n.powf(1.0 / 2.4), -0.055)
-    };
+    let encoded =
+        if n <= 0.003_130_8 { n * 12.92 } else { 1.055f64.mul_add(n.powf(1.0 / 2.4), -0.055) };
     encoded * 255.0
 }
 
@@ -301,11 +294,7 @@ impl BackdropSample {
             *slot = Some(seed);
         }
 
-        Self {
-            accent_argb: seeds[0],
-            seeds,
-            luma: None,
-        }
+        Self { accent_argb: seeds[0], seeds, luma: None }
     }
 
     /// [`Self::quantize`] plus the brightness a scrim is solved against — **the blur arm's, and
@@ -317,10 +306,7 @@ impl BackdropSample {
     /// [`TARGET_BACKDROP_TONE`], so measuring anything but the painted layer lands the surface
     /// somewhere else. Both are RGB8 bytes on [`Self::quantize`]'s contract.
     pub(crate) fn measure(sharp: &[u8], painted: &[u8]) -> Self {
-        Self {
-            luma: luma_p90(painted),
-            ..Self::quantize(sharp)
-        }
+        Self { luma: luma_p90(painted), ..Self::quantize(sharp) }
     }
 
     /// The whole colour set for whichever surface is mounted.
@@ -363,10 +349,7 @@ fn gradient_luma_lstar(start_lstar: f64, end_lstar: f64) -> f64 {
 
 /// Perceptual lightness of a packed `0x00RR_GGBB` colour.
 fn rgb_lstar(rgb: u32) -> f64 {
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "each shift-and-mask isolates one byte"
-    )]
+    #[expect(clippy::cast_possible_truncation, reason = "each shift-and-mask isolates one byte")]
     pixel_lstar((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8)
 }
 
@@ -561,11 +544,7 @@ pub(crate) fn idle_backdrop(theme: &ThemeTokens, kind: BackdropKind) -> Backdrop
 /// than a threshold on either, the same reason `Theme.is-light` exists: two of the six palettes are
 /// generated at runtime with no variant id to match on.
 fn neutral_ink(theme: &ThemeTokens) -> u32 {
-    if rgb_lstar(theme.text) > rgb_lstar(theme.base) {
-        0x00ff_ffff
-    } else {
-        0x0000_0000
-    }
+    if rgb_lstar(theme.text) > rgb_lstar(theme.base) { 0x00ff_ffff } else { 0x0000_0000 }
 }
 
 /// Which backdrop is painted, and the only place that asks — so no publisher can solve for one

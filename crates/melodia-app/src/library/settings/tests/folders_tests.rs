@@ -156,8 +156,3 @@ fn validate_canonicalizes_symlinks() -> Result<(), AppError> {
     assert!(msg.contains("already in your library"), "got: {msg}");
     Ok(())
 }
-
-// `corner_radius_by_desktop_environment` was moved alongside
-// `get_os_corner_radius` to `src/services/tests/settings_tests.rs`
-// when those OS / desktop helpers moved from `library` to `services`
-// (services owns serde defaults, library shouldn't know about env vars).

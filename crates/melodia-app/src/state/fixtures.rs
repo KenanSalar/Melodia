@@ -57,11 +57,7 @@ const CALLBACK_IDLE: Duration = Duration::from_millis(1);
 pub(crate) fn test_sinks() -> PlayerSinks {
     let (view_model, _) = watch::channel(None);
     let (queue, _) = watch::channel(None);
-    PlayerSinks {
-        view_model,
-        queue,
-        media_controls: None,
-    }
+    PlayerSinks { view_model, queue, media_controls: None }
 }
 
 /// A data root nothing else writes to, with `settings.json` already on disk.

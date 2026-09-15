@@ -13,6 +13,10 @@ use melodia_core::error::AppError;
 
 use super::session_connection;
 
+pub(super) const SHELL_SERVICE: &str = "org.gnome.Shell";
+pub(super) const WINDOWS_PATH: &str = "/org/gnome/Shell/Extensions/Windows";
+pub(super) const WINDOWS_INTERFACE: &str = "org.gnome.Shell.Extensions.Windows";
+
 pub async fn set_always_on_top(pinned: bool) -> Result<(), AppError> {
     let pid = std::process::id();
 
@@ -20,13 +24,7 @@ pub async fn set_always_on_top(pinned: bool) -> Result<(), AppError> {
         let conn = session_connection()?;
 
         let reply = conn
-            .call_method(
-                Some("org.gnome.Shell"),
-                "/org/gnome/Shell/Extensions/Windows",
-                Some("org.gnome.Shell.Extensions.Windows"),
-                "List",
-                &(),
-            )
+            .call_method(Some(SHELL_SERVICE), WINDOWS_PATH, Some(WINDOWS_INTERFACE), "List", &())
             .map_err(|e| AppError::Window(format!("Failed to list windows: {e}")))?;
 
         let windows_json: String = reply
@@ -64,9 +62,9 @@ pub async fn set_always_on_top(pinned: bool) -> Result<(), AppError> {
         let method = if pinned { "MakeAbove" } else { "UnmakeAbove" };
 
         conn.call_method(
-            Some("org.gnome.Shell"),
-            "/org/gnome/Shell/Extensions/Windows",
-            Some("org.gnome.Shell.Extensions.Windows"),
+            Some(SHELL_SERVICE),
+            WINDOWS_PATH,
+            Some(WINDOWS_INTERFACE),
             method,
             &(window_id,),
         )

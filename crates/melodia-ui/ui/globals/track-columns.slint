@@ -1,0 +1,15 @@
+import { TrackColumns, TrackColumnLayout, TrackColumn } from "../models.slint";
+
+// Column geometry for every track list, answered in Rust by `ui::track_columns`: the floors, the
+// weighted split and a drag's cascade are arithmetic Slint can't loop over, and one home keeps the
+// header, the rows and the stored widths agreeing.
+export global TrackColumnSizing {
+    // Where `columns` sits across a list `avail` wide. `gap` is the padding at each end and the
+    // space between two cells.
+    pure callback resolve(TrackColumns, length /*avail*/, length /*gap*/) -> TrackColumnLayout;
+
+    // The columns left stored once the divider on `column`'s right edge has moved `delta` since
+    // the press. Always handed the columns as they were at the press, so a drag never compounds.
+    pure callback drag(TrackColumns /*pressed*/, length /*avail*/, length /*gap*/,
+                       TrackColumn, length /*delta*/) -> TrackColumns;
+}

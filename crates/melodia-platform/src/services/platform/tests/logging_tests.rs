@@ -18,10 +18,9 @@ use super::{NORMAL_LEVEL, VERBOSE_LEVEL, newest_first, spec_for};
 /// without `SPEC_TAIL` — that unmutes `layer3`, a warning per decoded frame.
 #[test]
 fn both_specs_parse_into_the_directives_they_spell() {
-    for (level, expected) in [
-        (NORMAL_LEVEL, LevelFilter::Info),
-        (VERBOSE_LEVEL, LevelFilter::Debug),
-    ] {
+    for (level, expected) in
+        [(NORMAL_LEVEL, LevelFilter::Info), (VERBOSE_LEVEL, LevelFilter::Debug)]
+    {
         let spec_str = spec_for(level);
         let parsed = LogSpecification::parse(&spec_str);
         assert!(parsed.is_ok(), "the {level} spec does not parse: {spec_str}");
@@ -71,11 +70,8 @@ fn the_rotated_files_follow_the_live_one_newest_first() {
     let path = |name: &str| PathBuf::from("/logs").join(name);
     // What the handle hands back: ascending, and under `Naming::Numbers` a
     // higher index is the newer file.
-    let rotated = vec![
-        path("melodia_r00000.log"),
-        path("melodia_r00001.log"),
-        path("melodia_r00002.log"),
-    ];
+    let rotated =
+        vec![path("melodia_r00000.log"), path("melodia_r00001.log"), path("melodia_r00002.log")];
 
     let ordered = newest_first(vec![path("melodia_rCURRENT.log")], rotated);
 

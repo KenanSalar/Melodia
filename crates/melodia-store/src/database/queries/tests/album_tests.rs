@@ -234,10 +234,7 @@ async fn a_column_the_edit_did_not_clear_keeps_its_value() -> Result<(), AppErro
     queries::album::clear_release_tags(
         &mut tx,
         &[album_id],
-        ClearedReleaseTags {
-            label: true,
-            ..ClearedReleaseTags::default()
-        },
+        ClearedReleaseTags { label: true, ..ClearedReleaseTags::default() },
     )
     .await?;
     tx.commit().await?;
@@ -261,10 +258,7 @@ async fn an_edit_that_cleared_nothing_touches_no_row() -> Result<(), AppError> {
     queries::album::clear_release_tags(
         &mut tx,
         &[],
-        ClearedReleaseTags {
-            label: true,
-            ..ClearedReleaseTags::default()
-        },
+        ClearedReleaseTags { label: true, ..ClearedReleaseTags::default() },
     )
     .await?;
     tx.commit().await?;

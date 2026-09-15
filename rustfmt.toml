@@ -4,11 +4,16 @@
 edition = "2024"
 style_edition = "2024"
 
-# Sub-widths, not line lengths — `max_width` stays at its 100 default. These gate
-# when a call's arguments or a chain get broken up, and their 60% defaults split
-# code that already fits the 100 columns this tree was hand-written to.
+# Every width heuristic tracks `max_width`, which stays at its 100 default, rather
+# than the percentage defaults that split code already fitting the 100 columns
+# this tree was hand-written to.
 #
-# 91 rather than 100 because `cargo fmt` warns twice per target above it. The two
-# settings disagree at seven sites tree-wide, so the noise costs nothing to dodge.
-fn_call_width = 91
-chain_width = 91
+# The mode rather than per-setting numbers, and that part is load-bearing: rustfmt
+# re-validates an *explicitly set* width against a throwaway config it builds for
+# a `macro_rules!` body, whose `max_width` is only what that body's shape leaves.
+# Anything above the narrowest macro in the tree then prints a "cannot have a
+# value that exceeds `max_width`" warning on every run, and that threshold is a
+# property of the macro rather than of the config, so hand-picked numbers re-trip
+# it as code moves. Derived widths skip the check.
+# rust-lang/rustfmt#4919 and #6074, both closed as not planned.
+use_small_heuristics = "Max"

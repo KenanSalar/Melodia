@@ -28,12 +28,7 @@ pub(super) struct GridData {
 impl GridData {
     /// Build the keys alongside the genres. Runs on a tokio worker, never on the UI thread.
     pub(super) fn new(genres: Vec<GenreStats>) -> Self {
-        let keys = genres
-            .iter()
-            .map(|g| GenreSortKey {
-                name_lc: g.name.to_lowercase(),
-            })
-            .collect();
+        let keys = genres.iter().map(|g| GenreSortKey { name_lc: g.name.to_lowercase() }).collect();
         Self { genres, keys }
     }
 }

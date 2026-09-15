@@ -4,6 +4,7 @@ use super::{Presence, PresenceState, Update, clamp_field};
 use melodia_core::entities::integrations::DiscordFlags;
 use melodia_core::entities::track::TrackSummary;
 use melodia_engine::player::engine::state::PlayerViewModelLight;
+use melodia_engine::player::engine::types::RepeatMode;
 
 /// A fixed UNIX-seconds "now" for anchor arithmetic.
 const NOW: i64 = 1_700_000_000;
@@ -56,6 +57,8 @@ fn vm(
         radio: None,
         has_next: false,
         has_previous: false,
+        shuffle_enabled: false,
+        repeat_mode: RepeatMode::Off,
     }
 }
 

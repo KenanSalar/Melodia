@@ -5,8 +5,8 @@
 /// The theme-dependent brush slots that come from a palette table. Stored as
 /// packed `0x00RRGGBB` so the data tables stay readable next to the
 /// Tauri-source hex strings. `apply()` writes three more that don't:
-/// `mantle_unfocused` (an OS signal), and `accent` / `accent_text` (picked
-/// independently of the variant).
+/// `mantle_unfocused` (an OS signal, which a [`Variant`] may snapshot), and
+/// `accent` / `accent_text` (picked independently of the variant).
 #[derive(Clone, Copy, Debug)]
 pub struct Palette {
     // 13 base / structure
@@ -39,6 +39,9 @@ pub struct Variant {
     pub id: &'static str,
     pub name: &'static str,
     pub palette: Palette,
+    /// The inactive titlebar of the OS scheme this variant copies, which an unfocused window's
+    /// chrome fades to. `None` where no scheme is copied, and the chrome takes `base`.
+    pub mantle_unfocused: Option<u32>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -76,6 +79,11 @@ pub const SYSTEM_VARIANT_ID: &str = "system";
 /// not in any theme's `accents` list, and `apply()` resolves it at paint
 /// time to the dynamic accent that lives on `SystemColorState`.
 pub const MATERIAL_YOU_ACCENT_ID: &str = "material_you";
+
+/// The Melodia mark's two gradient stops on a light surface, as `0x00RRGGBB`: Catppuccin Latte's
+/// blue and teal. `theme.slint`'s `brand-mark` spells the same pair for the titlebar, and the tray
+/// icon paints it on a light taskbar or panel, which no Slint brush reaches.
+pub const BRAND_MARK_ON_LIGHT: [u32; 2] = [0x001e_66f5, 0x0017_9299];
 
 #[derive(Clone, Copy, Debug)]
 pub struct ThemeDef {
@@ -135,6 +143,16 @@ impl ThemeDef {
         };
         self.resolved_variant(id)
     }
+
+    /// The real variant `variant_id` paints with: [`SYSTEM_VARIANT_ID`] resolved against
+    /// `system_theme`, anything else through [`Self::resolved_variant`].
+    pub fn shade_for(&self, variant_id: &str, system_theme: &str) -> &'static Variant {
+        if variant_id == SYSTEM_VARIANT_ID {
+            self.resolve_system_variant(system_theme)
+        } else {
+            self.resolved_variant(variant_id)
+        }
+    }
 }
 
 /// sRGB luma weights, applied to the gamma-encoded channels rather than to
@@ -155,23 +173,23 @@ pub const LUMA_B: f64 = 0.0722;
 /// Above this, `fill` is light enough to take dark ink.
 pub const LUMA_THRESHOLD: f64 = 0.5;
 
+/// Returns whether `fill_hex` is light enough to take dark ink. f64 keeps clippy happy on the
+/// u8 → float lift (channel values are 0..=255, well inside f64's range).
+pub fn is_light_hex(fill_hex: u32) -> bool {
+    let r = f64::from((fill_hex >> 16) & 0xff) / 255.0;
+    let g = f64::from((fill_hex >> 8) & 0xff) / 255.0;
+    let b = f64::from(fill_hex & 0xff) / 255.0;
+    LUMA_R * r + LUMA_G * g + LUMA_B * b > LUMA_THRESHOLD
+}
+
 /// Pick a contrast colour for text/icons rendered on top of `accent_hex`:
 /// dark `#1e1e2e` for light accents, white for dark accents. Fast enough that
-/// we don't bother caching per accent. f64 keeps clippy happy on the
-/// u8 → float lift (channel values are 0..=255, well inside f64's range).
+/// we don't bother caching per accent.
 ///
 /// `theme.slint`'s `Theme.ink-on(brush)` is the Slint-side twin, for the
 /// surfaces whose fill isn't the accent (`danger`, the traffic-light hues).
 /// Same weights, same threshold, same pair — keep them in step.
 ///
 pub fn on_accent_hex(accent_hex: u32) -> u32 {
-    let r = f64::from((accent_hex >> 16) & 0xff) / 255.0;
-    let g = f64::from((accent_hex >> 8) & 0xff) / 255.0;
-    let b = f64::from(accent_hex & 0xff) / 255.0;
-    let lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
-    if lum > LUMA_THRESHOLD {
-        0x001e_1e2e
-    } else {
-        0x00ff_ffff
-    }
+    if is_light_hex(accent_hex) { 0x001e_1e2e } else { 0x00ff_ffff }
 }

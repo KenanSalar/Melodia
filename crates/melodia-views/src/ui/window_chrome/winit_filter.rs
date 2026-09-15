@@ -1,15 +1,17 @@
 //! Winit `WindowEvent` filter installed by `window_chrome::install`.
 //!
-//! Seven reasons to subscribe:
+//! Eight reasons to subscribe:
 //!
-//! 1. **`MouseInput { Pressed, Left }`** over the titlebar drag area — an OS-level window
-//!    move plus `PreventDefault`, bypassing the TouchArea-grab issue the parent module's
-//!    docs describe.
+//! 1. **`MouseInput { Pressed, Left }`** over a `ResizeRing` grab or a drag region: an
+//!    OS-level resize or window move plus `PreventDefault`, bypassing the TouchArea-grab
+//!    issue the parent module's docs describe.
 //! 2. **`MouseInput { Pressed, Back | Forward }`** — Mouse-4 / Mouse-5 into the nav
 //!    history, gated on no overlay being open so the buttons don't fight its input
 //!    context.
 //! 3. **`Resized`** — re-read `is_maximized`, so the maximize/restore icon stays in sync
-//!    with Win+↑ and window-tile shortcuts that bypass our buttons.
+//!    with Win+↑ and window-tile shortcuts that bypass our buttons. Also measures the OS
+//!    frame, which the miniplayer's exit edge allows for once it drops the frame, and on
+//!    Win32 the invisible borders it keeps transparent so the window's edges stay put.
 //! 4. **`Focused(bool)`** — mirror OS focus into `Theme.window-focused`, and use the
 //!    transition to reconcile the tray-bridge's visibility shadow: raise on focus, ask
 //!    the OS about a minimize on focus loss (see [`schedule_minimize_probe`]).
@@ -18,22 +20,30 @@
 //! 6. **`MouseWheel`**, for two unrelated `Flickable` defects — see [`route_wheel`].
 //!    `CursorMoved` is mirrored for the same arm, a wheel event carrying no position.
 //! 7. **`RedrawRequested`** and **`Moved`** — the Slint tick Win32's modal resize-and-move
-//!    loop parks winit out of; see [`pump_parked_loop`].
+//!    loop parks winit out of; see `parked_loop`.
+//! 8. **`ThemeChanged`**, Windows only: a light/dark flip for a theme on its System
+//!    variant, re-read by `ui::appearance` rather than taken from the event, whose theme
+//!    also folds in high contrast, and a cue for the tray icon to re-read its taskbar.
 
+use std::cell::Cell;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use slint::ComponentHandle;
-use slint::winit_030::WinitWindowAccessor;
+use slint::winit_030::winit::error::ExternalError;
 use slint::winit_030::winit::event::{
     ElementState, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent,
 };
-use slint::winit_030::winit::window::Window as WinitWindow;
+use slint::winit_030::winit::window::{ResizeDirection, Window as WinitWindow};
+use slint::winit_030::{EventResult, WinitWindowAccessor};
 
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, CompositeScroll, PlaylistDetail, PopupHighlight, Queue, Theme};
 
+#[cfg(target_os = "windows")]
+use super::parked_loop;
 use super::{drop_coalescer, geometry};
 
 /// How long to wait after a focus loss before asking whether it was a minimize.
@@ -61,27 +71,6 @@ fn schedule_minimize_probe(weak: slint::Weak<AppWindow>) {
     });
 }
 
-/// Run the Slint tick winit's own loop is parked out of.
-///
-/// Win32 pumps its own message loop for the whole of a resize or move drag, so winit sits inside
-/// `DefWindowProcW` and never reaches the wait point that emits `NewEvents` — the one place the
-/// backend calls `update_timers_and_animations`. Sizes and paints keep arriving, so the layout
-/// tracks the pointer and only the *decisions* stall: every `Timer` and every `changed` handler
-/// is frozen until the button comes up, which is the whole responsive layer — the miniplayer
-/// swap, `GridColumnsSync`'s column count, each `changed width` mirror.
-///
-/// One call keeps the drag turning, because the Windows frame throttle is itself a Slint `Timer`:
-/// pumping it asks winit for a redraw, whose `WM_PAINT` the modal loop delivers straight back
-/// here. It retires on its own once nothing is dirty and the throttle stops itself.
-#[cfg(target_os = "windows")]
-fn pump_parked_loop() {
-    slint::platform::update_timers_and_animations();
-}
-
-/// No modal loop off Win32 — every other platform ticks Slint from its own loop iteration.
-#[cfg(not(target_os = "windows"))]
-fn pump_parked_loop() {}
-
 /// What the `MouseWheel` arm does with one event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum WheelRoute {
@@ -98,13 +87,13 @@ enum WheelRoute {
 ///
 /// `Composite` is the nested-`ListView`-swallows-the-wheel one, argued at `CompositeScroll`
 /// in `globals/shell.slint`. Horizontal-dominant wheel stays native there, that axis
-/// belonging to the column pan.
+/// belonging to the strips' own scrollers.
 ///
 /// `Unphased` is the touchpad one. `Flickable` intercepts `TouchPhase::Started`
 /// unconditionally and sets its capture flag without checking the delta's axis, so the
 /// outermost one under the pointer owns the whole gesture where its `Moved` and
 /// `Cancelled` arms check direction first — and only a precision device sends the phase,
-/// which is why a plain `TrackList` page scrolls under a wheel and not two fingers.
+/// which is why a scroller nested inside another scrolls under a wheel and not two fingers.
 /// Re-sending unphased leaves the capture flag unset, costing Slint's kinetic fling.
 fn route_wheel(
     composite_hovered: bool,
@@ -122,26 +111,61 @@ fn route_wheel(
     WheelRoute::Native
 }
 
-pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool>) {
+/// Hands a left press to the OS as a window move or resize. A failure is logged and left at that:
+/// macOS answers `NotSupported` for a resize and resizes a borderless window at its own edges, and
+/// an unsupported move leaves the window where it is.
+fn start_os_drag(
+    w: &slint::Window,
+    what: &str,
+    op: impl FnOnce(&WinitWindow) -> Result<(), ExternalError>,
+) {
+    let _ = w.with_winit_window(|ww| {
+        if let Err(e) = op(ww) {
+            log::debug!("{what} unsupported on this platform: {e}");
+        }
+    });
+}
+
+/// Takes down both drop banners, whichever of the two a drop would have landed in.
+fn clear_drop_hover(ui: &AppWindow) {
+    ui.global::<Queue>().set_is_drop_hovered(false);
+    ui.global::<PlaylistDetail>().set_is_drop_hovered(false);
+}
+
+/// What the pointer is over that turns a left press into an OS window operation, each kept in
+/// step with Slint hover by a `WindowChrome` callback.
+pub(super) struct PressTargets {
+    /// Over a titlebar or miniplayer drag region.
+    pub(super) drag_hover: Arc<AtomicBool>,
+    /// Over one of `ResizeRing`'s grabs, and which way it resizes.
+    pub(super) resize: Rc<Cell<Option<ResizeDirection>>>,
+}
+
+pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) {
+    let PressTargets { drag_hover, resize } = targets;
     let weak = app.as_weak();
     let state = state.clone();
     // Where the pointer is, for the synthetic scroll below.
     let mut cursor_pos = slint::LogicalPosition::default();
     app.window().on_winit_window_event(move |w, event| {
         match event {
+            // Ahead of the drag arm: the miniplayer's drag region runs right up to the edge, and its
+            // hover can still read true for a tick after the pointer reaches a grab.
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Left,
+                ..
+            } if let Some(direction) = resize.get() => {
+                start_os_drag(w, "drag_resize_window", |ww| ww.drag_resize_window(direction));
+                EventResult::PreventDefault
+            }
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
                 button: MouseButton::Left,
                 ..
             } if drag_hover.load(Ordering::Relaxed) => {
-                // Errors are non-fatal: an unsupported backend leaves the cursor where
-                // it is, and every desktop platform succeeds.
-                let _ = w.with_winit_window(|ww| {
-                    if let Err(e) = ww.drag_window() {
-                        log::debug!("drag_window unsupported on this platform: {e}");
-                    }
-                });
-                slint::winit_030::EventResult::PreventDefault
+                start_os_drag(w, "drag_window", WinitWindow::drag_window);
+                EventResult::PreventDefault
             }
             // Above the `Released` cleanup arm because the press is what wants
             // `PreventDefault`. With an overlay up we `Propagate` instead, so Slint
@@ -153,14 +177,14 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                 ..
             } => {
                 let Some(ui) = weak.upgrade() else {
-                    return slint::winit_030::EventResult::Propagate;
+                    return EventResult::Propagate;
                 };
                 if crate::ui::nav_history::overlay_open(&ui) {
-                    return slint::winit_030::EventResult::Propagate;
+                    return EventResult::Propagate;
                 }
                 let going_back = matches!(button, MouseButton::Back);
                 crate::ui::nav_history::replay(&state, &ui, going_back);
-                slint::winit_030::EventResult::PreventDefault
+                EventResult::PreventDefault
             }
             // Popup-trigger highlight cleanup. `PopupWindow` has no `closed` callback,
             // and while one is open the dispatcher stops routing mouse events to
@@ -170,10 +194,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
             // highlight re-set `PopupHighlight.id` from their own `pointer-event(up)`,
             // which runs after this filter. Both writes are sentinel-gated so a random
             // click doesn't churn the property.
-            WindowEvent::MouseInput {
-                state: ElementState::Released,
-                ..
-            } => {
+            WindowEvent::MouseInput { state: ElementState::Released, .. } => {
                 // Synchronous rather than `upgrade_in_event_loop`: a deferred clear lands
                 // after those `pointer-event(up)` handlers and wipes the re-set.
                 if let Some(ui) = weak.upgrade() {
@@ -188,38 +209,55 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                         ph.set_queue_ctx_index(-1);
                     }
                 }
-                slint::winit_030::EventResult::Propagate
+                EventResult::Propagate
             }
             WindowEvent::Resized(_) => {
                 // Into the live mirror while the winit window is still alive: shutdown
                 // reads the mirror, `with_winit_window` answering `None` once
                 // `app.run()` has returned.
-                let maximized = w
+                let (maximized, frame, margins) = w
                     .with_winit_window(|ww| {
-                        geometry::record(ww);
+                        let reading = geometry::WindowReading::take(ww);
+                        geometry::record(ww, reading);
                         // One-shot, on the first (synthetic, post-map) `Resized` only.
-                        geometry::ensure_on_screen(ww);
-                        ww.is_maximized()
+                        geometry::ensure_on_screen(ww, reading);
+                        (
+                            reading.is_maximized(),
+                            geometry::frame_allowance(ww, reading),
+                            geometry::frame_margins(ww, reading),
+                        )
                     })
-                    .unwrap_or(false);
+                    .unwrap_or((false, None, None));
                 let _ = weak.upgrade_in_event_loop(move |ui| {
                     let chrome = ui.global::<melodia_ui::WindowChrome>();
                     chrome.set_is_maximized(maximized);
+                    if let Some(frame) = frame {
+                        chrome.set_frame_allowance_w(frame.width);
+                        chrome.set_frame_allowance_h(frame.height);
+                    }
+                    if let Some(margins) = margins {
+                        chrome.set_frame_margin_left(margins.left);
+                        chrome.set_frame_margin_right(margins.right);
+                        chrome.set_frame_margin_bottom(margins.bottom);
+                    }
                     // The cover tiers size themselves against the window, so this is the edge
                     // that re-derives them — see the handler in `boot::ui_setup`.
                     chrome.invoke_display_changed();
                 });
-                slint::winit_030::EventResult::Propagate
+                EventResult::Propagate
             }
             // X11/Win32/macOS deliver these; a Wayland client doesn't know its own
             // position, so `Moved` rarely fires there — fine, position restore is a
             // no-op on Wayland anyway.
             WindowEvent::Moved(_) => {
-                let _ = w.with_winit_window(geometry::record);
+                let _ = w.with_winit_window(|ww| {
+                    geometry::record(ww, geometry::WindowReading::take(ww));
+                });
                 // A move drag resizes nothing, so the client area is never invalidated and no
                 // `WM_PAINT` starts the redraw chain the arm below rides.
-                pump_parked_loop();
-                slint::winit_030::EventResult::Propagate
+                #[cfg(target_os = "windows")]
+                parked_loop::pump();
+                EventResult::Propagate
             }
             WindowEvent::Focused(focused) => {
                 let focused = *focused;
@@ -237,9 +275,26 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                     // callbacks, so the shadow would stay stuck `false`.
                     if focused {
                         crate::ui::shell::tray_bridge::set_window_visible(&ui, true);
+                        // The theme first: its repaint moves the palette the border's neutral is
+                        // mixed from.
+                        #[cfg(target_os = "windows")]
+                        {
+                            ui.global::<melodia_ui::WindowChrome>().invoke_recheck_system_theme();
+                            crate::ui::appearance::window_border::refresh_system_color(&ui);
+                        }
+                        #[cfg(any(target_os = "windows", target_os = "linux"))]
+                        crate::ui::shell::tray_bridge::refresh_icon();
                     }
                 });
-                slint::winit_030::EventResult::Propagate
+                EventResult::Propagate
+            }
+            #[cfg(target_os = "windows")]
+            WindowEvent::ThemeChanged(_) => {
+                let _ = weak.upgrade_in_event_loop(|ui| {
+                    ui.global::<melodia_ui::WindowChrome>().invoke_recheck_system_theme();
+                    crate::ui::shell::tray_bridge::refresh_icon();
+                });
+                EventResult::Propagate
             }
             // The coalescer batches multi-file drops and re-checks both gates at flush
             // time. Wayland delivery depends on the vendored winit patch.
@@ -247,11 +302,8 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                 drop_coalescer::schedule_drop_flush(&state, path.clone());
                 // Both banners, whichever gate accepted — otherwise one sticks until the
                 // next pointer event.
-                let _ = weak.upgrade_in_event_loop(|ui| {
-                    ui.global::<Queue>().set_is_drop_hovered(false);
-                    ui.global::<PlaylistDetail>().set_is_drop_hovered(false);
-                });
-                slint::winit_030::EventResult::Propagate
+                let _ = weak.upgrade_in_event_loop(|ui| clear_drop_hover(&ui));
+                EventResult::Propagate
             }
             // OS-level file hover, driving the queue sheet's banner or Playlist Detail's.
             // Queue takes precedence, and `drop_coalescer`'s flush-side routing applies
@@ -263,14 +315,11 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                     // Only when the queue sheet isn't the active drop target.
                     ui.global::<PlaylistDetail>().set_is_drop_hovered(!queue_open);
                 });
-                slint::winit_030::EventResult::Propagate
+                EventResult::Propagate
             }
             WindowEvent::HoveredFileCancelled => {
-                let _ = weak.upgrade_in_event_loop(|ui| {
-                    ui.global::<Queue>().set_is_drop_hovered(false);
-                    ui.global::<PlaylistDetail>().set_is_drop_hovered(false);
-                });
-                slint::winit_030::EventResult::Propagate
+                let _ = weak.upgrade_in_event_loop(|ui| clear_drop_hover(&ui));
+                EventResult::Propagate
             }
             // The OS / WM close path — the custom-titlebar button routes through
             // `WindowChrome.on_close_window` instead. Always `PreventDefault` and act
@@ -289,14 +338,14 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                 } else if let Err(e) = slint::quit_event_loop() {
                     log::warn!("close-window: quit_event_loop: {e}");
                 }
-                slint::winit_030::EventResult::PreventDefault
+                EventResult::PreventDefault
             }
             // The same conversion the Slint backend does for its own copy, so the two
             // can't disagree.
             WindowEvent::CursorMoved { position, .. } => {
                 let l = position.to_logical::<f32>(f64::from(w.scale_factor()));
                 cursor_pos = slint::LogicalPosition::new(l.x, l.y);
-                slint::winit_030::EventResult::Propagate
+                EventResult::Propagate
             }
             // Routing argued at `route_wheel`; the delta conversion mirrors the Slint
             // winit backend exactly.
@@ -309,7 +358,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                     }
                 };
                 let Some(ui) = weak.upgrade() else {
-                    return slint::winit_030::EventResult::Propagate;
+                    return EventResult::Propagate;
                 };
                 let cs = ui.global::<CompositeScroll>();
                 // `hovered` can be stale-true where an overlay opened over a composite
@@ -328,7 +377,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                         // Nothing paints either property, so nothing else asks for the
                         // frame whose `new_events` runs the handler that applies them.
                         ui.window().request_redraw();
-                        slint::winit_030::EventResult::PreventDefault
+                        EventResult::PreventDefault
                     }
                     // `PointerScrolled` lands as a one-shot `TouchPhase::Cancelled`
                     // wheel, the direction-aware arm. Re-sent rather than dropped so
@@ -342,19 +391,20 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                         if let Err(e) = ui.window().try_dispatch_event(scrolled) {
                             log::warn!("touchpad scroll: dispatch: {e}");
                         }
-                        slint::winit_030::EventResult::PreventDefault
+                        EventResult::PreventDefault
                     }
-                    WheelRoute::Native => slint::winit_030::EventResult::Propagate,
+                    WheelRoute::Native => EventResult::Propagate,
                 }
             }
             // The filter runs ahead of Slint's own dispatch, so the last `Resized` has already
             // landed its size and `draw()` has not run yet: a handler firing here sees the frame
             // it is about to be painted into.
             WindowEvent::RedrawRequested => {
-                pump_parked_loop();
-                slint::winit_030::EventResult::Propagate
+                #[cfg(target_os = "windows")]
+                parked_loop::pump();
+                EventResult::Propagate
             }
-            _ => slint::winit_030::EventResult::Propagate,
+            _ => EventResult::Propagate,
         }
     });
 }

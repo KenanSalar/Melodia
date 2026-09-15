@@ -290,7 +290,7 @@ pub const PLAYLIST_EXPORT_COLUMNS: &[&str] =
     &["file_path", "file_hash", "title", "artist", "duration_ms"];
 
 /// Comma-separated form of `PLAYLIST_EXPORT_COLUMNS` with a table-alias
-/// prefix (the export query joins `tracks t` to `playlist_items`). Cached
+/// prefix (a manual playlist's export joins `tracks t` to `playlist_items`). Cached
 /// per alias, same pattern as `track_list_columns_prefixed`.
 pub fn playlist_export_columns_prefixed(alias: &str) -> &'static str {
     use std::sync::{Mutex, OnceLock};
@@ -334,16 +334,8 @@ pub struct TrackMeta {
 /// The explicit SELECT columns for `TrackMeta` queries. Listed in
 /// `TrackMeta`'s field order for legibility — sqlx's derived `FromRow`
 /// matches by column name, so the order isn't load-bearing.
-pub const TRACK_META_COLUMNS: &[&str] = &[
-    "id",
-    "codec",
-    "bitrate",
-    "sample_rate",
-    "bit_depth",
-    "channels",
-    "year",
-    "genre",
-];
+pub const TRACK_META_COLUMNS: &[&str] =
+    &["id", "codec", "bitrate", "sample_rate", "bit_depth", "channels", "year", "genre"];
 
 /// Comma-separated form of `TRACK_META_COLUMNS` for direct `SELECT` usage.
 /// Built once on first access and reused (same `OnceLock` pattern as
@@ -694,6 +686,29 @@ pub struct MostPlayedFavorite {
     pub artwork_path: Option<String>,
     pub play_count: i32,
     pub duration_ms: i64,
+}
+
+/// Explicit SELECT columns for `MostPlayedFavorite` queries, in field order for
+/// legibility (sqlx `FromRow` matches by name, so order isn't load-bearing).
+pub const MOST_PLAYED_COLUMNS: &[&str] = &[
+    "id",
+    "title",
+    "artist",
+    "album_artist",
+    "album",
+    "genre",
+    "year",
+    "artwork_path",
+    "play_count",
+    "duration_ms",
+];
+
+/// Comma-separated form of `MOST_PLAYED_COLUMNS` for direct `SELECT` usage,
+/// built once and reused (same `OnceLock` pattern as `track_summary_columns`).
+pub fn most_played_columns() -> &'static str {
+    use std::sync::OnceLock;
+    static CACHED: OnceLock<String> = OnceLock::new();
+    CACHED.get_or_init(|| MOST_PLAYED_COLUMNS.join(", "))
 }
 
 #[cfg(test)]

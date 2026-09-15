@@ -24,15 +24,7 @@ fn chips(t: &TrackMeta) -> Vec<String> {
 fn a_full_row_renders_every_chip_in_the_order_the_view_declares_them() {
     assert_eq!(
         chips(&meta()),
-        [
-            "FLAC",
-            "1024 kbps",
-            "44.1 kHz",
-            "16-bit",
-            "Stereo",
-            "1959",
-            "Jazz"
-        ]
+        ["FLAC", "1024 kbps", "44.1 kHz", "16-bit", "Stereo", "1959", "Jazz"]
     );
 }
 
@@ -62,22 +54,14 @@ fn a_field_the_track_has_nothing_for_renders_as_an_empty_string() {
 /// stating it reads as a fact the file never carried.
 #[test]
 fn a_year_of_zero_is_not_a_year() {
-    let unyeared = TrackMeta {
-        year: Some(0),
-        ..meta()
-    };
+    let unyeared = TrackMeta { year: Some(0), ..meta() };
 
     assert_eq!(to_slint_track_meta(&unyeared).year.as_str(), "");
 }
 
 #[test]
 fn only_the_fields_a_track_carries_reach_the_strip() {
-    let partial = TrackMeta {
-        bitrate: None,
-        bit_depth: None,
-        genre: None,
-        ..meta()
-    };
+    let partial = TrackMeta { bitrate: None, bit_depth: None, genre: None, ..meta() };
 
     assert_eq!(chips(&partial), ["FLAC", "44.1 kHz", "Stereo", "1959"]);
 }

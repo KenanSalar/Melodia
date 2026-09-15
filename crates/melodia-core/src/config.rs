@@ -90,11 +90,7 @@ impl Paths {
         if let Some(root) = std::env::var_os(DATA_DIR_ENV).filter(|root| !root.is_empty()) {
             return Ok(std::path::absolute(root)?.components().collect());
         }
-        let name = if is_dev {
-            DEV_DATA_DIR_NAME
-        } else {
-            DATA_DIR_NAME
-        };
+        let name = if is_dev { DEV_DATA_DIR_NAME } else { DATA_DIR_NAME };
         Ok(dirs::data_dir()
             .ok_or_else(|| AppError::Settings("could not resolve user data directory".into()))?
             .join(name))

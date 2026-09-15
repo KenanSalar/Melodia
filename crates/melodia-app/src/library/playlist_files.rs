@@ -1,26 +1,43 @@
 //! Playlist import/export to Extended-M3U8 files.
 //!
-//! Lets a user back up playlists to portable `.m3u8` files (one per playlist)
-//! so they survive a database wipe (OS reinstall), and import them back into
-//! a fresh library. Interoperates with other players: our writer emits
-//! standard Extended-M3U8 plus a `#MELODIA-HASH` extension, and our parser
-//! tolerantly reads foreign M3U/M3U8 files.
+//! Lets a user back up playlists to portable `.m3u8` files so they survive a
+//! database wipe (OS reinstall), and import them back into a fresh library.
+//! One playlist exports as a bare `.m3u8`; several as one zip holding a
+//! `.m3u8` per playlist, which import reads back whole. Never several in one
+//! `.m3u8`: the format carries one `#PLAYLIST:` per file, so every other player
+//! and our own parser would read them as one merged list. Interoperates with
+//! other players: our writer emits standard Extended-M3U8 plus a
+//! `#MELODIA-HASH` extension, and our parser tolerantly reads foreign M3U/M3U8
+//! files.
 //!
 //! Import is **skip-and-report**: each entry is re-matched to a library track
 //! by exact `file_path`, then by BLAKE3 `file_hash`; anything unmatched is
 //! counted as *missing* (the user is expected to have re-scanned their music
-//! first). Pure format handling lives in [`m3u`].
+//! first). Pure format handling lives in [`m3u`], the zip in [`archive`].
 
 use std::collections::HashSet;
-use std::path::Path;
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
 
-use serde::Serialize;
+use chrono::{DateTime, Local, NaiveDateTime};
 
 use crate::state::AppState;
-use melodia_core::error::AppError;
+use melodia_core::entities::smart_criteria::SmartCriteria;
+use melodia_core::error::{AppError, describe};
+use melodia_core::utils::atomic_file;
 use melodia_store::database::{DbPool, queries};
 
+mod archive;
 mod m3u;
+
+/// What a playlist is exported as.
+const PLAYLIST_EXTENSION: &str = "m3u8";
+
+/// What a single playlist file is read back from, the export's own extension included.
+pub const PLAYLIST_EXTENSIONS: [&str; 2] = [PLAYLIST_EXTENSION, "m3u"];
+
+/// What several playlists export as together.
+pub const ARCHIVE_EXTENSION: &str = "zip";
 
 /// Maximum sanitized stem length (chars) before the `.m3u8` extension, well
 /// under common 255-byte filename limits even for multi-byte names.
@@ -33,16 +50,22 @@ const WINDOWS_RESERVED: &[&str] = &[
     "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
 ];
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Debug)]
 pub struct ExportPlaylistsResult {
     pub exported: u32,
-    /// Display path of the destination folder (for the completion toast).
-    pub folder: String,
-    /// `(playlist name, error message)` for playlists that failed to write.
-    pub failed: Vec<(String, String)>,
+    /// Ticked playlists that couldn't be read, left out so the rest still export.
+    pub failed: u32,
 }
 
-#[derive(Clone, Debug, Serialize)]
+/// What an export came to.
+#[derive(Debug)]
+pub enum ExportOutcome {
+    Exported(ExportPlaylistsResult),
+    /// Nothing was written: together the playlists hold more text than an import reads back.
+    TooLarge,
+}
+
+#[derive(Debug)]
 pub struct ImportPlaylistResult {
     pub playlist_id: i64,
     pub playlist_name: String,
@@ -52,99 +75,219 @@ pub struct ImportPlaylistResult {
     pub missing: u32,
 }
 
-/// Write each requested playlist to `<sanitized-name>.m3u8` inside `folder`.
-///
-/// Per-playlist failures (missing playlist, write error) are collected into
-/// the result's `failed` list rather than aborting the whole batch. Filenames
-/// are sanitized and de-duplicated both within the batch and against files
-/// already in `folder` (` (2)`, ` (3)`, … suffixes).
-pub async fn export_playlists_to_folder(
-    state: &AppState,
-    playlist_ids: &[i64],
-    folder: &Path,
-) -> Result<ExportPlaylistsResult, AppError> {
-    write_playlists(&state.db, playlist_ids, folder).await
+/// What picked files added. A playlist file adds one playlist, an archive as many as it holds.
+#[derive(Debug, Default)]
+pub struct ImportFileResult {
+    pub imported: u32,
+    /// Entries matched to a library track, by path or by hash.
+    pub matched: u32,
+    pub missing: u32,
+    /// Files, or playlists inside an archive, that couldn't be imported, skipped so the rest
+    /// still land.
+    pub failed: u32,
 }
 
-/// [`export_playlists_to_folder`]'s body, narrowed to what it actually reaches so the tests can
-/// drive it off a bare pool.
-async fn write_playlists(
+impl ImportFileResult {
+    fn add(&mut self, playlist: &ImportPlaylistResult) {
+        self.imported = self.imported.saturating_add(1);
+        self.matched = self
+            .matched
+            .saturating_add(playlist.matched_by_path)
+            .saturating_add(playlist.matched_by_hash);
+        self.missing = self.missing.saturating_add(playlist.missing);
+    }
+
+    fn merge(&mut self, file: &Self) {
+        self.imported = self.imported.saturating_add(file.imported);
+        self.matched = self.matched.saturating_add(file.matched);
+        self.missing = self.missing.saturating_add(file.missing);
+        self.failed = self.failed.saturating_add(file.failed);
+    }
+}
+
+/// What to pre-fill the save dialog with for one playlist. Sanitized for the dialog as much as for
+/// the disk: a `/` in the name would otherwise be read as a folder to save into.
+pub fn suggested_file_name(playlist_name: &str) -> String {
+    format!("{}.{PLAYLIST_EXTENSION}", sanitize_stem(playlist_name))
+}
+
+/// What to pre-fill the save dialog with for several playlists. Dated, so a second backup doesn't
+/// open on the first one's name.
+pub fn suggested_archive_name(now: DateTime<Local>) -> String {
+    format!("melodia-playlists-{}.{ARCHIVE_EXTENSION}", now.format("%Y-%m-%d"))
+}
+
+/// Write one playlist to exactly `dest`.
+///
+/// No collision suffix: the path came out of a save dialog, which has already asked before
+/// overwriting.
+pub async fn export_playlist_to_file(
+    state: &AppState,
+    playlist_id: i64,
+    dest: &Path,
+) -> Result<(), AppError> {
+    write_playlist(&state.db, playlist_id, dest).await
+}
+
+/// [`export_playlist_to_file`]'s body, narrowed to what it actually reaches so the tests can drive
+/// it off a bare pool.
+async fn write_playlist(db: &DbPool, playlist_id: i64, dest: &Path) -> Result<(), AppError> {
+    let (_, text) = prepare_export(db, playlist_id).await?;
+    atomic_file::write_text(dest.to_path_buf(), text).await
+}
+
+/// Write each requested playlist as `<sanitized-name>.m3u8` inside one zip at `dest`.
+///
+/// A playlist that can't be read (deleted since it was ticked) is left out and counted rather than
+/// failing the batch, and nothing is written when none can. Entry names are de-duplicated within
+/// the archive with ` (2)`, ` (3)`, … suffixes. Playlists holding more text than
+/// [`archive::MAX_TEXT_BYTES`] write nothing at all, import being bound to refuse the archive.
+pub async fn export_playlists_to_archive(
+    state: &AppState,
+    playlist_ids: &[i64],
+    dest: &Path,
+) -> Result<ExportOutcome, AppError> {
+    write_archive(&state.db, playlist_ids, dest, Local::now().naive_local()).await
+}
+
+/// [`export_playlists_to_archive`]'s body, narrowed the same way [`write_playlist`] is, with the
+/// instant its entries are dated passed in.
+async fn write_archive(
     db: &DbPool,
     playlist_ids: &[i64],
-    folder: &Path,
-) -> Result<ExportPlaylistsResult, AppError> {
-    let mut failed: Vec<(String, String)> = Vec::new();
-    let mut prepared: Vec<(String, String)> = Vec::with_capacity(playlist_ids.len());
-
+    dest: &Path,
+    modified: NaiveDateTime,
+) -> Result<ExportOutcome, AppError> {
+    let mut entries = Vec::with_capacity(playlist_ids.len());
+    let mut used = HashSet::new();
+    let mut budget = archive::TextBudget::default();
+    let mut failed: u32 = 0;
     for &id in playlist_ids {
         match prepare_export(db, id).await {
-            Ok((name, text)) => prepared.push((name, text)),
-            Err(e) => failed.push((format!("playlist {id}"), e.to_string())),
-        }
-    }
-
-    // Resolve collision-free filenames (sync, cheap) before writing.
-    let mut used: HashSet<String> = HashSet::new();
-    let mut to_write: Vec<(std::path::PathBuf, String)> = Vec::with_capacity(prepared.len());
-    for (name, text) in prepared {
-        let filename = unique_filename(folder, &name, &mut used);
-        to_write.push((folder.join(filename), text));
-    }
-
-    let (exported, write_errs) = tokio::task::spawn_blocking(move || {
-        let mut ok: u32 = 0;
-        let mut errs: Vec<(String, String)> = Vec::new();
-        for (path, text) in to_write {
-            match melodia_core::utils::atomic_file::write_text_sync(&path, &text) {
-                Ok(()) => ok += 1,
-                Err(e) => {
-                    let label =
-                        path.file_name().and_then(|f| f.to_str()).unwrap_or("playlist").to_owned();
-                    errs.push((label, e.to_string()));
-                }
+            Ok((name, mut text)) => {
+                let Ok(()) = budget.charge(text.len()) else {
+                    return Ok(ExportOutcome::TooLarge);
+                };
+                // Held beside every other playlist's until the archive is written.
+                text.shrink_to_fit();
+                entries.push(archive::Entry { name: unique_entry_name(&name, &mut used), text });
+            }
+            Err(e) => {
+                log::warn!("playlist export: left out playlist {id}: {}", describe(&e));
+                failed = failed.saturating_add(1);
             }
         }
-        (ok, errs)
-    })
-    .await
-    .map_err(AppError::io_source)?;
+    }
 
-    failed.extend(write_errs);
+    let exported = u32::try_from(entries.len()).unwrap_or(u32::MAX);
+    if !entries.is_empty() {
+        let path = dest.to_path_buf();
+        tokio::task::spawn_blocking(move || {
+            atomic_file::write_with_sync(&path, |out| archive::write(out, &entries, modified))
+        })
+        .await
+        .map_err(AppError::io_source)??;
+    }
 
-    Ok(ExportPlaylistsResult {
-        exported,
-        folder: folder.display().to_string(),
-        failed,
-    })
+    Ok(ExportOutcome::Exported(ExportPlaylistsResult { exported, failed }))
 }
 
 /// Fetch a playlist's name + ordered tracks and render them to M3U8 text.
+///
+/// A smart playlist has no stored tracks, so it writes the ones its rules match now and imports
+/// back as a regular playlist: M3U has nowhere to keep the rules.
 async fn prepare_export(db: &DbPool, playlist_id: i64) -> Result<(String, String), AppError> {
     let stats = queries::playlist::get_playlist_by_id(db, playlist_id).await?;
-    let tracks = queries::playlist::get_playlist_tracks_for_export(db, playlist_id).await?;
+    let tracks = if stats.is_smart {
+        let criteria = SmartCriteria::from_json_opt(stats.smart_criteria.as_deref());
+        queries::smart_playlist::get_smart_playlist_tracks_for_export(db, &criteria).await?
+    } else {
+        queries::playlist::get_playlist_tracks_for_export(db, playlist_id).await?
+    };
     let text = m3u::serialize(&stats.name, &tracks);
     Ok((stats.name, text))
 }
 
-/// Parse `src`, create a NEW playlist (named from `#PLAYLIST:` or the file
-/// stem), re-match every entry to a library track, and add the resolved ids
-/// in file order. Returns per-category counts for the completion toast.
-///
-/// Errors only when the file has no entries at all (so we never create a
-/// phantom empty playlist from a garbage file). A file whose entries simply
-/// don't match any library track still creates the playlist and reports the
-/// misses.
-pub async fn import_playlist_from_file(
-    state: &AppState,
-    src: &Path,
-) -> Result<ImportPlaylistResult, AppError> {
-    read_playlist_file(&state.db, src).await
+/// Import every playlist in each of `paths`, each into a NEW playlist, totalled for the completion
+/// toast. A file that fails whole counts as one failure, so the files beside it still land.
+pub async fn import_playlists_from_files(state: &AppState, paths: &[PathBuf]) -> ImportFileResult {
+    let mut total = ImportFileResult::default();
+    for path in paths {
+        match import_playlists_from_file(&state.db, path).await {
+            Ok(file) => total.merge(&file),
+            Err(e) => {
+                log::warn!("playlist import: {}: {}", path.display(), describe(&e));
+                total.failed = total.failed.saturating_add(1);
+            }
+        }
+    }
+    total
 }
 
-/// [`import_playlist_from_file`]'s body, narrowed the same way [`write_playlists`] is.
+/// Import every playlist in `src`: the one a playlist file holds, or each one in an archive.
+///
+/// Each playlist is named from `#PLAYLIST:` or its file stem, re-matched entry by entry to library
+/// tracks, and filled in file order. A playlist with no entries at all is refused rather than
+/// created empty from a garbage file; one whose entries simply don't match any library track still
+/// lands and reports the misses. For an archive that refusal is one skipped playlist, and only an
+/// archive that won't open, holds no playlist files, or expands past [`archive::MAX_TEXT_BYTES`]
+/// fails whole.
+async fn import_playlists_from_file(db: &DbPool, src: &Path) -> Result<ImportFileResult, AppError> {
+    if has_extension(src, &[ARCHIVE_EXTENSION]) {
+        return read_archive(db, src).await;
+    }
+    let mut result = ImportFileResult::default();
+    result.add(&read_playlist_file(db, src).await?);
+    Ok(result)
+}
+
+/// A plain playlist file's half of [`import_playlists_from_file`].
 async fn read_playlist_file(db: &DbPool, src: &Path) -> Result<ImportPlaylistResult, AppError> {
     let content = tokio::fs::read_to_string(src).await?;
-    let parsed = m3u::parse(&content);
+    import_text(db, &content, src).await
+}
+
+/// The archive's half, which imports what it can and counts the rest.
+async fn read_archive(db: &DbPool, src: &Path) -> Result<ImportFileResult, AppError> {
+    let path = src.to_path_buf();
+    let contents = tokio::task::spawn_blocking(move || archive::read(std::fs::File::open(&path)?))
+        .await
+        .map_err(AppError::io_source)??;
+    if contents.entries.is_empty() && contents.unreadable == 0 {
+        return Err(AppError::Validation("No playlist files found in archive".to_owned()));
+    }
+
+    let beside = src.parent().unwrap_or_else(|| Path::new(""));
+    let mut result =
+        ImportFileResult { failed: contents.unreadable, ..ImportFileResult::default() };
+    for entry in contents.entries {
+        match import_text(db, &entry.text, &beside.join(&entry.name)).await {
+            Ok(playlist) => result.add(&playlist),
+            Err(e) => {
+                log::warn!(
+                    "playlist import: {} in {}: {}",
+                    entry.name,
+                    src.display(),
+                    describe(&e)
+                );
+                result.failed = result.failed.saturating_add(1);
+            }
+        }
+    }
+    Ok(result)
+}
+
+/// Create a playlist from one playlist file's text.
+///
+/// `origin` is where that file sits, or would once extracted beside its archive: its stem names a
+/// playlist whose text carries no `#PLAYLIST:` tag, and its folder is what relative entries
+/// resolve against.
+async fn import_text(
+    db: &DbPool,
+    content: &str,
+    origin: &Path,
+) -> Result<ImportPlaylistResult, AppError> {
+    let parsed = m3u::parse(content);
 
     if parsed.entries.is_empty() {
         return Err(AppError::Validation("No playlist entries found in file".to_owned()));
@@ -153,17 +296,18 @@ async fn read_playlist_file(db: &DbPool, src: &Path) -> Result<ImportPlaylistRes
     let name = parsed
         .playlist_name
         .clone()
-        .or_else(|| src.file_stem().and_then(|s| s.to_str()).map(ToOwned::to_owned))
+        .or_else(|| origin.file_stem().and_then(OsStr::to_str).map(ToOwned::to_owned))
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| "Imported Playlist".to_owned());
 
-    let outcome = match_entries(db, &parsed.entries, src.parent()).await?;
+    let outcome = match_entries(db, &parsed.entries, origin.parent()).await?;
 
-    let playlist = queries::playlist::create_playlist(db, &name, None).await?;
-    queries::playlist::add_tracks_to_playlist(db, playlist.id, &outcome.ordered_ids).await?;
+    let playlist_id =
+        queries::playlist::create_playlist_with_tracks(db, &name, None, &outcome.ordered_ids)
+            .await?;
 
     Ok(ImportPlaylistResult {
-        playlist_id: playlist.id,
+        playlist_id,
         playlist_name: name,
         total_entries: u32::try_from(parsed.entries.len()).unwrap_or(u32::MAX),
         matched_by_path: outcome.matched_by_path,
@@ -185,8 +329,7 @@ struct MatchOutcome {
 /// BLAKE3 `file_hash`. Relative entry paths are resolved against `base` (the
 /// playlist file's directory) before path matching.
 ///
-/// Factored out of [`import_playlist_from_file`] so it can be tested against a
-/// bare [`DbPool`] without constructing a full [`AppState`].
+/// Factored out of [`import_text`] so matching can be tested without creating a playlist.
 async fn match_entries(
     db: &DbPool,
     entries: &[m3u::ParsedEntry],
@@ -230,12 +373,7 @@ async fn match_entries(
     let missing = u32::try_from(ids.iter().filter(|id| id.is_none()).count()).unwrap_or(u32::MAX);
     let ordered_ids: Vec<i64> = ids.into_iter().flatten().collect();
 
-    Ok(MatchOutcome {
-        ordered_ids,
-        matched_by_path,
-        matched_by_hash,
-        missing,
-    })
+    Ok(MatchOutcome { ordered_ids, matched_by_path, matched_by_hash, missing })
 }
 
 /// Resolve a (possibly relative) entry path to a string for path matching.
@@ -288,19 +426,28 @@ fn sanitize_stem(name: &str) -> String {
     s
 }
 
-/// A collision-free `.m3u8` filename within `folder`. Tracks chosen names in
-/// `used` (lowercased) and also checks the filesystem, appending ` (2)`,
-/// ` (3)`, … before the extension on collision.
-fn unique_filename(folder: &Path, name: &str, used: &mut HashSet<String>) -> String {
+/// A `.m3u8` entry name no earlier entry in the archive holds, appending ` (2)`,
+/// ` (3)`, … before the extension on collision. Names are compared lowercased
+/// in `used`, since the archive may be extracted onto a filesystem that folds
+/// case.
+fn unique_entry_name(name: &str, used: &mut HashSet<String>) -> String {
     let stem = sanitize_stem(name);
-    let mut candidate = format!("{stem}.m3u8");
+    let mut candidate = format!("{stem}.{PLAYLIST_EXTENSION}");
     let mut n: u32 = 2;
-    while used.contains(&candidate.to_ascii_lowercase()) || folder.join(&candidate).exists() {
-        candidate = format!("{stem} ({n}).m3u8");
+    while used.contains(&candidate.to_ascii_lowercase()) {
+        candidate = format!("{stem} ({n}).{PLAYLIST_EXTENSION}");
         n = n.saturating_add(1);
     }
     used.insert(candidate.to_ascii_lowercase());
     candidate
+}
+
+/// Whether `path` ends in one of `extensions`, ignoring case: a picker hands back `.M3U8` as
+/// readily as `.m3u8`.
+fn has_extension(path: &Path, extensions: &[&str]) -> bool {
+    path.extension()
+        .and_then(OsStr::to_str)
+        .is_some_and(|ext| extensions.iter().any(|known| known.eq_ignore_ascii_case(ext)))
 }
 
 #[cfg(test)]

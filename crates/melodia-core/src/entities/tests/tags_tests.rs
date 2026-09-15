@@ -29,45 +29,27 @@ fn an_edit_that_emptied_nothing_names_no_column() {
 fn each_cleared_field_names_its_own_column() {
     let table: [(TagEdit, [bool; 7]); 6] = [
         (
-            TagEdit {
-                label: FieldEdit::Clear,
-                ..TagEdit::default()
-            },
+            TagEdit { label: FieldEdit::Clear, ..TagEdit::default() },
             [true, false, false, false, false, false, false],
         ),
         (
-            TagEdit {
-                catalog_number: FieldEdit::Clear,
-                ..TagEdit::default()
-            },
+            TagEdit { catalog_number: FieldEdit::Clear, ..TagEdit::default() },
             [false, true, false, false, false, false, false],
         ),
         (
-            TagEdit {
-                barcode: FieldEdit::Clear,
-                ..TagEdit::default()
-            },
+            TagEdit { barcode: FieldEdit::Clear, ..TagEdit::default() },
             [false, false, true, false, false, false, false],
         ),
         (
-            TagEdit {
-                media: FieldEdit::Clear,
-                ..TagEdit::default()
-            },
+            TagEdit { media: FieldEdit::Clear, ..TagEdit::default() },
             [false, false, false, true, false, false, false],
         ),
         (
-            TagEdit {
-                release_type: FieldEdit::Clear,
-                ..TagEdit::default()
-            },
+            TagEdit { release_type: FieldEdit::Clear, ..TagEdit::default() },
             [false, false, false, false, true, false, false],
         ),
         (
-            TagEdit {
-                release_country: FieldEdit::Clear,
-                ..TagEdit::default()
-            },
+            TagEdit { release_country: FieldEdit::Clear, ..TagEdit::default() },
             [false, false, false, false, false, true, false],
         ),
     ];
@@ -83,20 +65,13 @@ fn each_cleared_field_names_its_own_column() {
 #[test]
 fn an_unticked_compilation_switch_clears_the_column_like_an_emptied_field() {
     for edit in [FieldEdit::Clear, FieldEdit::Set(false)] {
-        let cleared = TagEdit {
-            compilation: edit,
-            ..TagEdit::default()
-        }
-        .cleared_release_tags();
+        let cleared = TagEdit { compilation: edit, ..TagEdit::default() }.cleared_release_tags();
 
         assert_eq!(flags(cleared), [false, false, false, false, false, false, true]);
     }
 
-    let ticked = TagEdit {
-        compilation: FieldEdit::Set(true),
-        ..TagEdit::default()
-    }
-    .cleared_release_tags();
+    let ticked =
+        TagEdit { compilation: FieldEdit::Set(true), ..TagEdit::default() }.cleared_release_tags();
     assert!(ticked.is_empty());
 }
 
@@ -106,18 +81,9 @@ fn an_unticked_compilation_switch_clears_the_column_like_an_emptied_field() {
 #[test]
 fn only_the_tags_a_recording_is_identified_by_rename_it() {
     let renaming = [
-        TagEdit {
-            title: FieldEdit::Set("New".into()),
-            ..TagEdit::default()
-        },
-        TagEdit {
-            artist: FieldEdit::Clear,
-            ..TagEdit::default()
-        },
-        TagEdit {
-            album: FieldEdit::Set("New".into()),
-            ..TagEdit::default()
-        },
+        TagEdit { title: FieldEdit::Set("New".into()), ..TagEdit::default() },
+        TagEdit { artist: FieldEdit::Clear, ..TagEdit::default() },
+        TagEdit { album: FieldEdit::Set("New".into()), ..TagEdit::default() },
     ];
     for edit in renaming {
         assert!(edit.renames_recording());
@@ -125,14 +91,8 @@ fn only_the_tags_a_recording_is_identified_by_rename_it() {
 
     let leaving_it_alone = [
         TagEdit::default(),
-        TagEdit {
-            comment: FieldEdit::Set("New".into()),
-            ..TagEdit::default()
-        },
-        TagEdit {
-            rating: FieldEdit::Set(4),
-            ..TagEdit::default()
-        },
+        TagEdit { comment: FieldEdit::Set("New".into()), ..TagEdit::default() },
+        TagEdit { rating: FieldEdit::Set(4), ..TagEdit::default() },
     ];
     for edit in leaving_it_alone {
         assert!(!edit.renames_recording());

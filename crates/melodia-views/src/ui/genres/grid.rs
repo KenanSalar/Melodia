@@ -75,12 +75,7 @@ pub fn rebuild_grid(ui: &AppWindow, genres_ui: &GenresUi) {
             !matches!(cache.as_ref(), Some(c) if c.matches(&filter, &sort_field, &sort_dir));
         if stale {
             let indices = compute_indices(&data, &sort_field, &sort_dir, &filter);
-            *cache = Some(GridIndexCache {
-                filter,
-                sort_field,
-                sort_dir,
-                indices,
-            });
+            *cache = Some(GridIndexCache { filter, sort_field, sort_dir, indices });
         }
         // `cache` is now `Some` either way — a stale entry was just
         // recomputed, a fresh one was left in place.

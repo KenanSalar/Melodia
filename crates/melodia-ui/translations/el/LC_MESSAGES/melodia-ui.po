@@ -494,6 +494,24 @@ msgstr "Χρωμάτισε την πλευρική γραμμή και τη γρ
 msgid "Window Corner Radius"
 msgstr "Ακτίνα γωνίας παραθύρου"
 
+msgid "Window Border"
+msgstr "Περίγραμμα παραθύρου"
+
+msgid "Draw a thin outline around the miniplayer. The full window keeps the border of its system frame."
+msgstr "Σχεδιάζει ένα λεπτό περίγραμμα γύρω από τον μίνι αναπαραγωγέα. Το πλήρες παράθυρο διατηρεί το περίγραμμα του πλαισίου συστήματος."
+
+msgid "Draw a thin outline around the whole window, the miniplayer included."
+msgstr "Σχεδιάζει ένα λεπτό περίγραμμα γύρω από ολόκληρο το παράθυρο, μαζί με τον μίνι αναπαραγωγέα."
+
+msgid "Window Border Color"
+msgstr "Χρώμα περιγράμματος παραθύρου"
+
+msgid "System follows the color the operating system draws its own window borders in."
+msgstr "Το Σύστημα ακολουθεί το χρώμα με το οποίο το λειτουργικό σύστημα σχεδιάζει τα δικά του περιγράμματα παραθύρων."
+
+msgid "Available only while the window border is shown."
+msgstr "Διαθέσιμο μόνο όταν εμφανίζεται το περίγραμμα παραθύρου."
+
 msgid "Managed by the operating system"
 msgstr "Διαχειρίζεται από το λειτουργικό σύστημα"
 
@@ -1216,11 +1234,14 @@ msgstr "Εισαγωγή λιστών από αρχεία .m3u8"
 msgid "Export playlists to .m3u8 files"
 msgstr "Εξαγωγή λιστών σε αρχεία .m3u8"
 
-msgid "Choose playlists to export, then pick a folder."
-msgstr "Επιλέξτε λίστες για εξαγωγή και έπειτα έναν φάκελο."
+msgid "Choose playlists to export."
+msgstr "Επιλέξτε λίστες για εξαγωγή."
 
 msgid "No playlists to export"
 msgstr "Δεν υπάρχουν λίστες για εξαγωγή"
+
+msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
+msgstr "Πολλές λίστες αποθηκεύονται ως ένα αρχείο .zip, το οποίο μπορείτε να εισαγάγετε απευθείας χωρίς αποσυμπίεση."
 
 msgid "Select all"
 msgstr "Επιλογή όλων"
@@ -1242,6 +1263,9 @@ msgstr "Η εξαγωγή απέτυχε"
 
 msgid "Couldn't write the playlist files."
 msgstr "Δεν ήταν δυνατή η εγγραφή των αρχείων λίστας."
+
+msgid "These playlists are too large for one .zip file. Export fewer at a time."
+msgstr "Αυτές οι λίστες είναι πολύ μεγάλες για ένα αρχείο .zip. Εξαγάγετε λιγότερες κάθε φορά."
 
 msgid "Add"
 msgstr "Προσθήκη"
@@ -1782,6 +1806,14 @@ msgstr "Διαδικτυακό ραδιόφωνο"
 msgid "Browse and play live stations from radio-browser.info"
 msgstr "Περιήγηση και αναπαραγωγή ζωντανών σταθμών από το radio-browser.info"
 
+# The lyrics switch, which turns lyrics on in place of Up Next. Named on the Services card and
+# again as the tooltip of the Now Playing header's switch, so both read from this one label.
+msgid "Show lyrics"
+msgstr "Εμφάνιση στίχων"
+
+msgid "Show the playing track's words in Now Playing instead of Up Next"
+msgstr "Εμφάνιση των στίχων του κομματιού που παίζει στην οθόνη «Αναπαράγεται τώρα» αντί για τα «Επόμενα»"
+
 # The online-lyrics switch. Named in the Services card and again on the welcome card, so both
 # read from this one pair.
 msgid "Look up lyrics online"
@@ -2094,12 +2126,6 @@ msgstr "Εισαγωγή στίχων που βρέθηκαν"
 # The Now Playing lyrics menu. "Look up again" forgets what the directory said about this
 # track and asks once more, for a sheet matched off tags that have since been corrected;
 # "Save to file" writes the sheet on screen into the track's own lyrics tag.
-msgid "Hide lyrics"
-msgstr "Απόκρυψη στίχων"
-
-msgid "Show lyrics"
-msgstr "Εμφάνιση στίχων"
-
 msgid "Look up again"
 msgstr "Νέα αναζήτηση"
 

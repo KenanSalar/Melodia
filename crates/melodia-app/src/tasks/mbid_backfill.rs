@@ -218,10 +218,9 @@ fn summarize(outcome: &SweepOutcome) -> String {
         SweepOutcome { looked_up: 0, .. } => {
             "All eligible tracks already have a MusicBrainz ID".to_owned()
         }
-        SweepOutcome {
-            tagged: 0,
-            looked_up,
-        } => format!("No matches — {looked_up} track(s) had tags MusicBrainz couldn't identify"),
+        SweepOutcome { tagged: 0, looked_up } => {
+            format!("No matches — {looked_up} track(s) had tags MusicBrainz couldn't identify")
+        }
         SweepOutcome { tagged, looked_up } => {
             format!("Tagged {tagged} of {looked_up} track(s)")
         }
@@ -243,10 +242,7 @@ async fn backfill(
         .filter(|(id, ..)| !attempted.contains(id))
         .collect();
     if pending.is_empty() {
-        return Ok(SweepOutcome {
-            looked_up: 0,
-            tagged: 0,
-        });
+        return Ok(SweepOutcome { looked_up: 0, tagged: 0 });
     }
     log::info!("MBID backfill: {} track(s) to look up", pending.len());
 
@@ -328,10 +324,7 @@ async fn backfill(
         }
     }
 
-    Ok(SweepOutcome {
-        looked_up: progress.looked_up,
-        tagged: written,
-    })
+    Ok(SweepOutcome { looked_up: progress.looked_up, tagged: written })
 }
 
 /// Load the persisted attempted-id set, defaulting to empty on a missing or

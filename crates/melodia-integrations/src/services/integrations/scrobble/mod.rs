@@ -119,10 +119,7 @@ impl ScrobbleService {
         let queue = ScrobbleQueue::load(&paths.scrobble_queue_path).unwrap_or_default();
         let (status_tx, _) = watch::channel(build_status(&credentials, flags));
         Self {
-            runtime: RwLock::new(ScrobbleRuntime {
-                credentials,
-                flags: flags.clone(),
-            }),
+            runtime: RwLock::new(ScrobbleRuntime { credentials, flags: flags.clone() }),
             queue: Mutex::new(queue),
             creds_path: paths.scrobble_credentials_path.clone(),
             queue_path: paths.scrobble_queue_path.clone(),

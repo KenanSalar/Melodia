@@ -141,10 +141,8 @@ fn retain_pending_drops_fully_submitted_loves() {
     done.lastfm_remaining = false;
     done.listenbrainz_remaining = false; // both false → dropped
 
-    let mut queue = ScrobbleQueue {
-        items: VecDeque::new(),
-        loves: VecDeque::from(vec![pending, done]),
-    };
+    let mut queue =
+        ScrobbleQueue { items: VecDeque::new(), loves: VecDeque::from(vec![pending, done]) };
     queue.retain_pending();
 
     let titles: Vec<&str> = queue.loves.iter().map(|it| it.track.track.as_str()).collect();

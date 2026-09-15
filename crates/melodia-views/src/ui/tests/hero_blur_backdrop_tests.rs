@@ -118,13 +118,7 @@ fn the_stack_defaults_to_shown_and_drains_every_layer() {
 /// half of this lives in `aurora_backdrop_tests`, with the rest of its pins.
 #[test]
 fn the_blur_stack_names_no_global() {
-    for global in [
-        "Player.",
-        "HeroBackdrop.",
-        "Theme.base",
-        "Theme.text",
-        "Theme.accent",
-    ] {
+    for global in ["Player.", "HeroBackdrop.", "Theme.base", "Theme.text", "Theme.accent"] {
         assert!(
             !code(HERO_BLUR).contains(global),
             "`hero-blur-backdrop.slint` reads `{global}` directly — every colour is an input \

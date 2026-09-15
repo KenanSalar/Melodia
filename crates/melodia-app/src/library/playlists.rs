@@ -10,12 +10,20 @@ use melodia_core::entities::{playlist, track};
 use melodia_core::error::AppError;
 use melodia_store::database::{DbPool, queries};
 
+/// Creates a playlist already holding `track_ids`, and returns its id.
 pub async fn create_playlist(
     state: &AppState,
     name: String,
     description: Option<String>,
-) -> Result<playlist::Playlist, AppError> {
-    queries::playlist::create_playlist(&state.db, &name, description.as_deref()).await
+    track_ids: Vec<i64>,
+) -> Result<i64, AppError> {
+    queries::playlist::create_playlist_with_tracks(
+        &state.db,
+        &name,
+        description.as_deref(),
+        &track_ids,
+    )
+    .await
 }
 
 pub async fn get_playlists(state: &AppState) -> Result<Vec<playlist::PlaylistStats>, AppError> {

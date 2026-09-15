@@ -38,14 +38,28 @@ export component EqBandSlider inherits Rectangle {
     property <length> centre-cy: (1 - root.centre-frac) * root.usable-h + 2px;
     property <length> fill-top: min(root.thumb-cy, root.centre-cy);
     property <length> fill-h: abs(root.thumb-cy - root.centre-cy);
+    // How far each inactive segment reaches under the fill: the depth of the fill's rounded end.
+    property <length> tuck: min(root.track-w, root.fill-h) / 2;
 
-    // Inactive full-height track.
+    // The inactive track, either side of the fill and never under it, where the two would
+    // antialias the same edges twice. Each reaches under the fill's rounded end; at 0 dB the
+    // square ends meet under the centre tick.
     Rectangle {
         x: root.track-cx - root.track-w / 2;
         y: 0;
         width: root.track-w;
-        height: root.height;
-        border-radius: self.width / 2;
+        height: root.fill-top + root.tuck;
+        border-top-left-radius: min(self.width, self.height) / 2;
+        border-top-right-radius: min(self.width, self.height) / 2;
+        background: Theme.surface1;
+    }
+    Rectangle {
+        x: root.track-cx - root.track-w / 2;
+        y: root.fill-top + root.fill-h - root.tuck;
+        width: root.track-w;
+        height: root.height - self.y;
+        border-bottom-left-radius: min(self.width, self.height) / 2;
+        border-bottom-right-radius: min(self.width, self.height) / 2;
         background: Theme.surface1;
     }
 

@@ -15,9 +15,25 @@ export component MiniPlayerSwitch {
     in property <length> host-width;
     in property <length> host-height;
 
+    // What the OS frame adds to the client area, for a host that drops the frame in miniplayer mode.
+    in property <length> exit-allowance-w;
+    in property <length> exit-allowance-h;
+
+    private property <length> enter-w: 550px;
+    private property <length> enter-h: 250px;
+    // Absorbs physical-to-logical rounding, so a frame toggle can't land the size exactly on an edge.
+    private property <length> exit-slack: 4px;
+
     // Flips the instant the threshold is crossed. **`render-active` is what a host
     // branches on**; this is only the decision.
-    out property <bool> active: root.host-width < 550px || root.host-height < 250px;
+    //
+    // Leaving takes more room than entering: dropping the frame grows the client area by the
+    // allowance, so one shared edge would bounce a window parked just inside it straight back out.
+    // Keyed on `render-active`, which only the timers write, so the binding can't loop on itself.
+    out property <bool> active: root.render-active
+        ? (root.host-width < root.enter-w + root.exit-allowance-w + root.exit-slack
+            || root.host-height < root.enter-h + root.exit-allowance-h + root.exit-slack)
+        : (root.host-width < root.enter-w || root.host-height < root.enter-h);
 
     // Which branch is mounted right now: `active`, delayed by one fade so the
     // outgoing layout can reach opacity 0 before it is destroyed.
@@ -38,10 +54,9 @@ export component MiniPlayerSwitch {
     private property <bool> watched-active: root.active;
     changed watched-active => {
         MiniPlayer.active = root.watched-active;
-        // **Lateral, and owed twice.** The swap destroys the whole full UI, so the content branch
-        // is a fresh `ViewTransition` mount on the way back; and the line below closes Now Playing,
-        // which remounts the branch underneath it. Unconditional because the first is owed in both
-        // directions — an unwritten edge is whatever the last drill or back left behind.
+        // **Lateral.** The line below closes Now Playing, which remounts the branch underneath it.
+        // Written in both directions anyway: the way back mounts under the swap timer's suppression
+        // and never reads it, but an unwritten edge is whatever the last drill or back left behind.
         Nav.pending-enter-from = NavEnterFrom.below;
         if (root.watched-active && Nav.now-playing-open) {
             Nav.now-playing-open = false;
@@ -87,6 +102,12 @@ export component MiniPlayerSwitch {
         interval: 100ms;
         running: false;
         triggered => {
+            // The page returning under the crossfade skips its own entrance, as the launch mount
+            // does: a slide played over a whole rebuilt UI is a second full-window layer at the
+            // moment that UI is most expensive. The mounted `ViewTransition` hands the flag back.
+            if (!root.active) {
+                Nav.suppress-enter-animation = true;
+            }
             root.render-active = root.active;
             root.fade-opacity = 1.0;
             self.running = false;

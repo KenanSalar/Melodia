@@ -133,16 +133,7 @@ pub(super) fn wire_request_edit(
             populate(
                 &ui,
                 &session,
-                Fetched {
-                    rows,
-                    credits,
-                    roles,
-                    genre_lists,
-                    release,
-                    lyrics,
-                    resident,
-                    cover,
-                },
+                Fetched { rows, credits, roles, genre_lists, release, lyrics, resident, cover },
             );
             // After `populate`, which resets to Tags: the request's tab is the last word. Only a
             // single selection can honour it, Lyrics and Summary being unmounted in batch mode, so
@@ -175,11 +166,7 @@ fn by_row<T: Clone + Default>(rows: &[TagEditRow], by_id: &HashMap<i64, T>) -> V
 
 /// The ‹multiple values› sentinel where the selection disagrees, the normal hint otherwise.
 fn placeholder(disagrees: bool, sentinel: &SharedString) -> SharedString {
-    if disagrees {
-        sentinel.clone()
-    } else {
-        SharedString::default()
-    }
+    if disagrees { sentinel.clone() } else { SharedString::default() }
 }
 
 /// Everything one open of the dialog fetched, before any of it reaches a property.
@@ -200,16 +187,7 @@ struct Fetched {
 
 /// Fill the `TagEditor` global from the fetched rows and record the snapshot.
 fn populate(ui: &AppWindow, session: &Rc<RefCell<TagSession>>, fetched: Fetched) {
-    let Fetched {
-        rows,
-        credits,
-        roles,
-        genre_lists,
-        release,
-        lyrics,
-        resident,
-        cover,
-    } = fetched;
+    let Fetched { rows, credits, roles, genre_lists, release, lyrics, resident, cover } = fetched;
     let (rows, credits, roles, release) =
         (rows.as_slice(), credits.as_slice(), roles.as_slice(), release.as_slice());
 
@@ -409,11 +387,7 @@ fn populate(ui: &AppWindow, session: &Rc<RefCell<TagSession>>, fetched: Fetched)
         rows,
         Baseline {
             originals,
-            lists: ListFields {
-                credits: [artist, album_artist],
-                genres,
-                roles: role_edit,
-            },
+            lists: ListFields { credits: [artist, album_artist], genres, roles: role_edit },
             join_phrases: phrases,
         },
         resident,

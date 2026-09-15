@@ -1,4 +1,4 @@
-import { TrackListRow, BrowseFolderRow, BrowseCardGridRow, BreadcrumbRow } from "../models.slint";
+import { TrackListRow, TrackColumns, BrowseFolderRow, BrowseCardGridRow, BreadcrumbRow } from "../models.slint";
 
 // The two flat track-list views, plus the shared row-cover lookup that every
 // `TrackListRow` consumer in the tree resolves its thumbnail through.
@@ -15,25 +15,9 @@ export global Tracks {
     in-out property <[int]> selected-ids;
     in-out property <int> selection-anchor: -1;
 
-    // **Every column is fixed-width** — the GTK-TreeView model, as Audacious, foobar2000 and file
-    // managers use: each independently resizable, with a horizontal scrollbar once the cumulative
-    // width passes the container. Not flex-with-cap.
-    in-out property <length> w-number: 56px;
-    in-out property <length> w-title: 320px;
-    in-out property <length> w-artist: 200px;
-    in-out property <length> w-album: 220px;
-    in-out property <length> w-genre: 140px;
-    in-out property <length> w-year: 72px;
-    in-out property <length> w-length: 88px;
-
-    // `title` and `length` aren't toggleable. `show-artwork` is a pseudo-toggle
-    // controlling only the thumbnail inside the title cell, not the cell.
-    in-out property <bool> show-number: true;
-    in-out property <bool> show-artist: true;
-    in-out property <bool> show-album: true;
-    in-out property <bool> show-genre: true;
-    in-out property <bool> show-year: true;
-    in-out property <bool> show-artwork: true;
+    // No default here: Rust writes it before the window shows, `ui::track_list_view` owning every
+    // page's defaults.
+    in-out property <TrackColumns> track-columns;
 
     callback request-sort(string /*field*/);
     callback apply-filter(string);
@@ -56,7 +40,7 @@ export global Tracks {
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     callback clear-selection();
 
-    // Slint flips the matching `show-*` synchronously, then Rust persists the visible-column list.
+    // Slint flips the matching `show_*` synchronously, then Rust persists the visible-column list.
     callback toggle-column(string /*column_id*/);
 }
 
@@ -81,20 +65,7 @@ export global Browse {
     in-out property <bool> has-library-folders;        // false → root empty-state CTA
 
     // Separate from `Tracks` so Browse keeps its own column layout, under its own `views.json` key.
-    in-out property <length> w-number: 56px;
-    in-out property <length> w-title: 320px;
-    in-out property <length> w-artist: 200px;
-    in-out property <length> w-album: 220px;
-    in-out property <length> w-genre: 140px;
-    in-out property <length> w-year: 72px;
-    in-out property <length> w-length: 88px;
-
-    in-out property <bool> show-number: true;
-    in-out property <bool> show-artist: true;
-    in-out property <bool> show-album: true;
-    in-out property <bool> show-genre: true;
-    in-out property <bool> show-year: true;
-    in-out property <bool> show-artwork: true;
+    in-out property <TrackColumns> track-columns;
 
     // Sorted in memory rather than re-queried: the list mixes disk-only and DB files, so
     // there is no query that returns it.

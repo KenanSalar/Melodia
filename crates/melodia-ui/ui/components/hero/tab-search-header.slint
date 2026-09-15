@@ -124,19 +124,23 @@ export component TabSearchHeader inherits HorizontalLayout {
     // Padded to the band the bar keeps clear for its divider, so the input centres on the
     // tab labels' line rather than on the row's.
     //
-    // **Collapsed rather than unmounted when `search-shown` is false**, the shape
-    // `my-library/tab-pills.slint`'s Playlists cell takes: `Clip` swallows every event outside an
-    // empty rect, so the box is as unreachable as a dropped branch, while `search := ` stays
-    // readable from the budget above — an id declared inside an `if` is not. The three width
-    // constraints are spelled out because an explicit `min-width` is what *replaces* the
+    // **Collapsed rather than unmounted when `search-shown` is false**, so `search := ` stays
+    // readable from the budget above — an id declared inside an `if` is not. A hidden element draws
+    // nothing and takes no events, so the box is as unreachable as a dropped branch. The three
+    // width constraints are spelled out because an explicit `min-width` is what *replaces* the
     // constraint the bar's own bound width would otherwise merge in.
+    //
+    // **`visible`, never `clip`.** The cell is exactly as wide as the bar, and the bar's focus
+    // swell and shadow reach past it; a clip shaved the swollen ends flat and cut the glow into a
+    // box. Slint lowers `visible` to a clip that only applies while hidden, which is the whole
+    // collapse this needs.
     //
     // **The budget above is deliberately not gated with it.** `search-w` still reserves, so
     // `TabBar.avail-width` does not move and the bar does not play its 350 ms compact morph on a
     // frame the box merely went away on. What is freed is dead strip at the row's trailing edge,
     // which on the one host that hides it is under the action pills anyway.
     Rectangle {
-        clip: true;
+        visible: root.search-shown;
         min-width: 0px;
         preferred-width: root.search-shown ? search.preferred-width : 0px;
         max-width: root.search-shown ? search.preferred-width : 0px;

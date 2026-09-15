@@ -10,14 +10,7 @@ fn registry_lists_six_themes_in_display_order() {
     let ids: Vec<_> = registry().iter().map(|t| t.id).collect();
     assert_eq!(
         ids,
-        vec![
-            "catppuccin",
-            "gnome-adwaita",
-            "kde-breeze",
-            "macos",
-            "material3",
-            "windows-fluent"
-        ],
+        vec!["catppuccin", "gnome-adwaita", "kde-breeze", "macos", "material3", "windows-fluent"],
     );
 }
 
@@ -69,11 +62,9 @@ fn every_variant_defines_three_distinct_semantic_colours() {
             let p = &variant.palette;
             let where_ = format!("{}/{}", theme.id, variant.id);
             for (name, semantic) in [("red", p.red), ("green", p.green), ("yellow", p.yellow)] {
-                for (neutral_name, neutral) in [
-                    ("overlay0", p.overlay0),
-                    ("overlay1", p.overlay1),
-                    ("overlay2", p.overlay2),
-                ] {
+                for (neutral_name, neutral) in
+                    [("overlay0", p.overlay0), ("overlay1", p.overlay1), ("overlay2", p.overlay2)]
+                {
                     assert_ne!(
                         semantic, neutral,
                         "{where_}: {name} must not be the {neutral_name} neutral",
@@ -161,6 +152,20 @@ fn theme_slint_ink_on_picks_the_same_inks_as_on_accent_hex() {
     );
 }
 
+/// The tray paints the mark on a light taskbar or panel from `BRAND_MARK_ON_LIGHT`, which no Slint
+/// brush reaches, so the titlebar's light arm has to name the same stops at the same angle.
+#[test]
+fn theme_slint_brand_mark_light_arm_matches_brand_mark_on_light() {
+    let [from, to] = BRAND_MARK_ON_LIGHT;
+    let expected = format!("? @linear-gradient(135deg, #{from:06x} 0%, #{to:06x} 100%) :");
+
+    assert!(
+        theme_slint_flat().contains(&expected),
+        "theme.slint's `brand-mark` light arm drifted from `BRAND_MARK_ON_LIGHT`, so the titlebar \
+         and the tray paint the mark differently on a light surface. Update both or neither"
+    );
+}
+
 /// `accent_hex` has cases and this ladder over it had none, which is the wrong way round:
 /// `ui::appearance::theme_apply` calls the resolver twice and the raw lookup never. A first
 /// rung that fell through would repaint every theme in its default accent, and every existing
@@ -205,6 +210,27 @@ fn resolve_system_variant_picks_dark_or_light_pair() {
     let kde = get("kde-breeze");
     assert_eq!(kde.resolve_system_variant("dark").id, "dark");
     assert_eq!(kde.resolve_system_variant("light").id, "light");
+}
+
+#[test]
+fn the_system_shade_follows_the_os_theme() {
+    let cat = get("catppuccin");
+    assert_eq!(cat.shade_for(SYSTEM_VARIANT_ID, "light").id, "latte");
+    assert_eq!(cat.shade_for(SYSTEM_VARIANT_ID, "dark").id, "mocha");
+}
+
+#[test]
+fn a_named_shade_ignores_the_os_theme() {
+    assert_eq!(get("catppuccin").shade_for("latte", "dark").id, "latte");
+}
+
+/// A variant id a later build dropped, or a hand edit mistyped, paints the theme's default. Every
+/// swatch and brush reads its shade through here, so none of them can fall back somewhere else.
+#[test]
+fn an_unknown_shade_paints_the_default_variant() {
+    let cat = get("catppuccin");
+    assert_eq!(cat.shade_for("bogus", "light").id, cat.default_variant);
+    assert_eq!(cat.shade_for("", "light").id, cat.default_variant);
 }
 
 #[test]

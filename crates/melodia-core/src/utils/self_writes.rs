@@ -63,10 +63,7 @@ struct Inner {
 
 impl Default for Inner {
     fn default() -> Self {
-        Self {
-            map: HashMap::new(),
-            sweep_at: MIN_SWEEP_AT,
-        }
+        Self { map: HashMap::new(), sweep_at: MIN_SWEEP_AT }
     }
 }
 

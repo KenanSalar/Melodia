@@ -113,11 +113,7 @@ pub(super) fn wire(
             // flag is what keeps a pick back and forth from re-querying a cache
             // nothing has invalidated. See `lifecycle::kick_full_refresh`.
             let songs = entering == favorites_ui_mod::FavoritesTab::Songs;
-            let needs_fetch = if songs {
-                fu.take_songs_dirty()
-            } else {
-                fu.take_grids_dirty()
-            };
+            let needs_fetch = if songs { fu.take_songs_dirty() } else { fu.take_grids_dirty() };
 
             // The entering tier was cleared when its tab was last left, so the
             // cards mount cold: hold the lookups at cache-only until the

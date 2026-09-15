@@ -212,11 +212,7 @@ fn handle_outcome(
             log::info!("updater_daily: unsupported manifest schema {schema}");
             persist_success(state, now, None, etag);
         }
-        CheckOutcome::Available {
-            manifest,
-            asset,
-            etag,
-        } => {
+        CheckOutcome::Available { manifest, asset, etag } => {
             let version = manifest.version.clone();
             let notes_short = manifest.notes_short.clone();
             let critical = manifest.critical;
@@ -242,11 +238,8 @@ fn handle_outcome(
             persist_success(state, now, Some(version.clone()), etag);
 
             if verdict.notify {
-                let _ = event_tx.send(Some(UpdaterEvent::Available {
-                    version,
-                    notes_short,
-                    critical,
-                }));
+                let _ =
+                    event_tx.send(Some(UpdaterEvent::Available { version, notes_short, critical }));
             }
         }
     }
@@ -266,33 +259,21 @@ struct SkipVerdict {
 /// a release the publisher flagged critical must surface even where the user has muted it. Split
 /// from [`handle_outcome`], which takes an `AppState` and a live window a test cannot hand it.
 fn skip_verdict(skipped_release: &str, version: &str, critical: bool) -> SkipVerdict {
-    let unmuted = SkipVerdict {
-        notify: true,
-        clear_skip: false,
-    };
+    let unmuted = SkipVerdict { notify: true, clear_skip: false };
     if skipped_release.is_empty() {
         return unmuted;
     }
 
     match is_upgrade(skipped_release, version) {
         // Strictly newer than what was skipped, so the skip is spent.
-        Ok(true) => SkipVerdict {
-            notify: true,
-            clear_skip: true,
-        },
-        Ok(false) => SkipVerdict {
-            notify: critical,
-            clear_skip: false,
-        },
+        Ok(true) => SkipVerdict { notify: true, clear_skip: true },
+        Ok(false) => SkipVerdict { notify: critical, clear_skip: false },
         Err(e) => {
             log::warn!(
                 "updater_daily: stored skipped_release {skipped_release:?} not valid semver \
                  ({e}); clearing rather than muting every future notification"
             );
-            SkipVerdict {
-                notify: true,
-                clear_skip: true,
-            }
+            SkipVerdict { notify: true, clear_skip: true }
         }
     }
 }

@@ -1,79 +1,157 @@
 import { Theme } from "../theme.slint";
+import { ResizeZone, WindowChrome } from "../globals/shell.slint";
 
-// The window's resize perimeter — eight overlays that do nothing but set a
-// cursor. No `clicked` handler on purpose: the winit backend processes the
-// resize off the Window's `resize-border-width` before the press ever reaches a
-// TouchArea. So these exist for the visual cue and to *steal* hover from what
-// sits underneath — without that theft, aiming at the band flashes the close
-// button red and paints scrollbar hover.
+// One corner's diagonal grab, anchored at the corner `right` and `bottom` name: an arm along each
+// edge, `band` deep and as long as the host sizes it, and a square elbow where they meet.
+component ResizeCorner {
+    in property <bool> active;
+    in property <bool> right;
+    in property <bool> bottom;
+    in property <length> band;
+    in property <length> elbow;
+    out property <bool> hovered: along-x.has-hover || along-y.has-hover || inner.has-hover;
+
+    // Top-left and bottom-right resize along one diagonal, the other two along the other.
+    private property <MouseCursor> cursor: root.right == root.bottom
+        ? MouseCursor.nwse-resize
+        : MouseCursor.nesw-resize;
+
+    along-x := TouchArea {
+        x: 0;
+        y: root.bottom ? root.height - root.band : 0;
+        width: root.width;
+        height: root.band;
+        enabled: root.active;
+        mouse-cursor: root.cursor;
+    }
+    along-y := TouchArea {
+        x: root.right ? root.width - root.band : 0;
+        y: 0;
+        width: root.band;
+        height: root.height;
+        enabled: root.active;
+        mouse-cursor: root.cursor;
+    }
+    inner := TouchArea {
+        x: root.right ? root.width - root.elbow : 0;
+        y: root.bottom ? root.height - root.elbow : 0;
+        width: root.elbow;
+        height: root.elbow;
+        enabled: root.active;
+        mouse-cursor: root.cursor;
+    }
+}
+
+// The frameless window's resize grabs, and the only geometry they have: hover here sets the cursor
+// and names the zone, and the winit filter starts the OS resize from that zone, so what the cursor
+// shows is what the press does. Nothing here handles the press: a `TouchArea` that starts an OS
+// drag leaks its grab. The overlays also steal hover from what sits underneath, or aiming at the
+// band flashes the close button red and paints scrollbar hover.
 //
-// The caller mounts it full-size and owns the decision to mount at all: one
-// condition at the mount site instead of eight repeated here.
+// The caller mounts it full-size and for good, switching it with `active`: an unmounted ring would
+// leave its last zone standing, and the next click anywhere would resize the window.
 export component ResizeRing {
-    // Order matters: edges first, corners after. Slint gives hover to the
-    // last-declared item under the cursor, so the diagonal wins at the corners
-    // and the edges win everywhere else.
+    in property <bool> active;
+    // The Window's own resize band, handed over by the one host that knows its kept frame margins.
+    in property <length> band: Theme.resize-border;
+    in property <length> radius;
 
-    // Top.
-    TouchArea {
+    // Measured from the band, so a band widened to the margins still reaches past the visible
+    // corner. The arms cover the rounded run and a band beyond it. The curve sits about 0.3 of the
+    // radius in at 45°, so an elbow of half the radius past the band keeps roughly a band of grab
+    // inside the visible outline all the way round.
+    private property <length> reach: root.band * 2 + root.radius;
+    private property <length> elbow: root.band + max(root.band, root.radius / 2);
+
+    property <ResizeZone> zone: !root.active ? ResizeZone.none
+        : top-left.hovered ? ResizeZone.north-west
+        : top-right.hovered ? ResizeZone.north-east
+        : bottom-left.hovered ? ResizeZone.south-west
+        : bottom-right.hovered ? ResizeZone.south-east
+        : top-edge.has-hover ? ResizeZone.north
+        : bottom-edge.has-hover ? ResizeZone.south
+        : left-edge.has-hover ? ResizeZone.west
+        : right-edge.has-hover ? ResizeZone.east
+        : ResizeZone.none;
+    changed zone => {
+        WindowChrome.resize-zone-changed(root.zone);
+    }
+
+    // Order matters: edges first, corners after. Slint gives hover to the last-declared item under
+    // the cursor, so the diagonal wins where they overlap.
+
+    top-edge := TouchArea {
         x: 0;
         y: 0;
         width: root.width;
-        height: Theme.resize-border;
+        height: root.band;
+        enabled: root.active;
         mouse-cursor: ns-resize;
     }
-    // Bottom.
-    TouchArea {
+    bottom-edge := TouchArea {
         x: 0;
-        y: root.height - Theme.resize-border;
+        y: root.height - root.band;
         width: root.width;
-        height: Theme.resize-border;
+        height: root.band;
+        enabled: root.active;
         mouse-cursor: ns-resize;
     }
-    // Left.
-    TouchArea {
+    left-edge := TouchArea {
         x: 0;
         y: 0;
-        width: Theme.resize-border;
+        width: root.band;
         height: root.height;
+        enabled: root.active;
         mouse-cursor: ew-resize;
     }
-    // Right — this is the one that overlaps a scrollbar.
-    TouchArea {
-        x: root.width - Theme.resize-border;
+    // The one that overlaps a scrollbar.
+    right-edge := TouchArea {
+        x: root.width - root.band;
         y: 0;
-        width: Theme.resize-border;
+        width: root.band;
         height: root.height;
+        enabled: root.active;
         mouse-cursor: ew-resize;
     }
 
-    // Corners.
-    TouchArea {
+    top-left := ResizeCorner {
         x: 0;
         y: 0;
-        width: Theme.resize-corner;
-        height: Theme.resize-corner;
-        mouse-cursor: nwse-resize;
+        width: root.reach;
+        height: root.reach;
+        active: root.active;
+        band: root.band;
+        elbow: root.elbow;
     }
-    TouchArea {
-        x: root.width - Theme.resize-corner;
+    top-right := ResizeCorner {
+        x: root.width - root.reach;
         y: 0;
-        width: Theme.resize-corner;
-        height: Theme.resize-corner;
-        mouse-cursor: nesw-resize;
+        width: root.reach;
+        height: root.reach;
+        active: root.active;
+        right: true;
+        band: root.band;
+        elbow: root.elbow;
     }
-    TouchArea {
+    bottom-left := ResizeCorner {
         x: 0;
-        y: root.height - Theme.resize-corner;
-        width: Theme.resize-corner;
-        height: Theme.resize-corner;
-        mouse-cursor: nesw-resize;
+        y: root.height - root.reach;
+        width: root.reach;
+        height: root.reach;
+        active: root.active;
+        bottom: true;
+        band: root.band;
+        elbow: root.elbow;
     }
-    TouchArea {
-        x: root.width - Theme.resize-corner;
-        y: root.height - Theme.resize-corner;
-        width: Theme.resize-corner;
-        height: Theme.resize-corner;
-        mouse-cursor: nwse-resize;
+    bottom-right := ResizeCorner {
+        x: root.width - root.reach;
+        y: root.height - root.reach;
+        width: root.reach;
+        height: root.reach;
+        active: root.active;
+        right: true;
+        bottom: true;
+        band: root.band;
+        elbow: root.elbow;
     }
 }

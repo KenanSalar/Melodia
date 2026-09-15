@@ -67,11 +67,21 @@ pub struct RowText {
 impl RowText {
     /// A row with no action button — most of them.
     pub fn plain(title: SharedString, message: SharedString) -> Self {
-        Self {
-            title,
-            message,
-            action_label: SharedString::default(),
-        }
+        Self { title, message, action_label: SharedString::default() }
+    }
+}
+
+/// How much of an action landed, which is what colours its completion toast.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Completion {
+    Complete,
+    /// Something was left out beside what landed.
+    Partial,
+}
+
+impl Completion {
+    pub fn partial_if(left_out_any: bool) -> Self {
+        if left_out_any { Self::Partial } else { Self::Complete }
     }
 }
 
@@ -162,6 +172,32 @@ impl NotificationsUi {
         });
         self.recipes.borrow_mut().insert(id, Box::new(relabel));
         id
+    }
+
+    /// The transient toast for an action that landed, whole or in part.
+    pub fn show_completion(
+        &self,
+        completion: Completion,
+        title: SharedString,
+        message: SharedString,
+    ) -> i32 {
+        // A `let variant` binding, which is the shape `view_model_strings`' variant walk reads.
+        let variant = match completion {
+            Completion::Complete => "success",
+            Completion::Partial => "warning",
+        };
+        self.show_auto_dismiss(
+            NotificationParams::plain(variant, title, message),
+            TOAST_AUTO_DISMISS_MS,
+        )
+    }
+
+    /// The sticky error for an action that landed nothing.
+    pub fn show_failure<F>(&self, ui: &AppWindow, relabel: F) -> i32
+    where
+        F: Fn(&AppWindow) -> RowText + 'static,
+    {
+        self.show_localized(ui, "error", "", relabel)
     }
 
     /// Re-render every row carrying a recipe. The switch itself reaches only live `@tr`

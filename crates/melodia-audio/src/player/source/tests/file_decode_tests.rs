@@ -77,13 +77,7 @@ fn every_scanned_extension_reaches_a_decoder() -> Result<(), AppError> {
 /// succeeding is exactly what a length check alone would have believed.
 #[test]
 fn a_seek_past_the_end_saturates_rather_than_failing() -> Result<(), AppError> {
-    for fixture in [
-        "silence.wav",
-        "silence.mp3",
-        "silence.m4a",
-        "silence.ogg",
-        "silence.flac",
-    ] {
+    for fixture in ["silence.wav", "silence.mp3", "silence.m4a", "silence.ogg", "silence.flac"] {
         let mut decoder = FileDecoder::open(&asset(fixture))?;
         let Some(length) = decoder.total_duration() else {
             return Err(AppError::Player(format!("{fixture} states no length to clamp to")));
@@ -322,10 +316,7 @@ fn write_smpb(path: &Path, value: &str) -> Result<(), AppError> {
 
     let mut ilst = Ilst::new();
     ilst.insert(Atom::new(
-        AtomIdent::Freeform {
-            mean: "com.apple.iTunes".into(),
-            name: "iTunSMPB".into(),
-        },
+        AtomIdent::Freeform { mean: "com.apple.iTunes".into(), name: "iTunSMPB".into() },
         AtomData::UTF8(value.to_owned()),
     ));
     ilst.save_to_path(path, WriteOptions::default())

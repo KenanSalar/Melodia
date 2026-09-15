@@ -109,10 +109,7 @@ fn classify_remove_any() {
 #[test]
 fn classify_rename_both() {
     let kind = EventKind::Modify(ModifyKind::Name(RenameMode::Both));
-    let paths = vec![
-        PathBuf::from("/music/old.mp3"),
-        PathBuf::from("/music/new.mp3"),
-    ];
+    let paths = vec![PathBuf::from("/music/old.mp3"), PathBuf::from("/music/new.mp3")];
     let events = super::classify_event(kind, &paths);
     assert_eq!(events.len(), 1);
     assert!(matches!(
@@ -185,10 +182,7 @@ fn classify_remove_non_audio_skipped() {
 #[test]
 fn classify_rename_audio_to_non_audio_as_removed() {
     let kind = EventKind::Modify(ModifyKind::Name(RenameMode::Both));
-    let paths = vec![
-        PathBuf::from("/music/song.mp3"),
-        PathBuf::from("/music/song.bak"),
-    ];
+    let paths = vec![PathBuf::from("/music/song.mp3"), PathBuf::from("/music/song.bak")];
     let events = super::classify_event(kind, &paths);
     assert_eq!(events.len(), 1);
     assert!(
@@ -199,10 +193,7 @@ fn classify_rename_audio_to_non_audio_as_removed() {
 #[test]
 fn classify_rename_non_audio_to_audio_as_created() {
     let kind = EventKind::Modify(ModifyKind::Name(RenameMode::Both));
-    let paths = vec![
-        PathBuf::from("/music/song.bak"),
-        PathBuf::from("/music/song.mp3"),
-    ];
+    let paths = vec![PathBuf::from("/music/song.bak"), PathBuf::from("/music/song.mp3")];
     let events = super::classify_event(kind, &paths);
     assert_eq!(events.len(), 1);
     assert!(
@@ -213,10 +204,7 @@ fn classify_rename_non_audio_to_audio_as_created() {
 #[test]
 fn classify_rename_non_audio_to_non_audio_skipped() {
     let kind = EventKind::Modify(ModifyKind::Name(RenameMode::Both));
-    let paths = vec![
-        PathBuf::from("/music/readme.txt"),
-        PathBuf::from("/music/readme.bak"),
-    ];
+    let paths = vec![PathBuf::from("/music/readme.txt"), PathBuf::from("/music/readme.bak")];
     let events = super::classify_event(kind, &paths);
     assert!(events.is_empty());
 }

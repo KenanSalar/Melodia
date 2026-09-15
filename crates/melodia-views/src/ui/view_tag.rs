@@ -38,11 +38,7 @@ fn detail_tag(kind: &str, id: i32, name: &SharedString) -> Option<String> {
     if id < 0 {
         return None;
     }
-    Some(if name.is_empty() {
-        format!("{kind}({id})")
-    } else {
-        format!("{kind}({id} {name:?})")
-    })
+    Some(if name.is_empty() { format!("{kind}({id})") } else { format!("{kind}({id} {name:?})") })
 }
 
 /// The My Library half of [`format_view`] — which tab, and the detail it has open.

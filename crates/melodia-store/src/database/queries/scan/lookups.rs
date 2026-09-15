@@ -81,13 +81,7 @@ pub async fn get_existing_track_summaries_for_folder(
 
     let mut out = std::collections::HashMap::with_capacity(rows.len());
     for (path, size, mtime) in rows {
-        out.insert(
-            path,
-            ExistingTrackSummary {
-                file_size: size,
-                date_modified: mtime,
-            },
-        );
+        out.insert(path, ExistingTrackSummary { file_size: size, date_modified: mtime });
     }
     Ok(out)
 }

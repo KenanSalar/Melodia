@@ -6,8 +6,9 @@
 //! the previous file entire or the new one entire, and a crash mid-write leaves the previous one
 //! intact.
 
+use std::fs::File;
 use std::io::{BufWriter, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -41,6 +42,34 @@ pub async fn load_json_or_default<T: DeserializeOwned + Default>(path: &Path) ->
 /// Write `value` as pretty JSON through a temp file in the same directory, renaming on success.
 /// Nothing allocates the whole payload as a `String` first.
 pub fn write_json_sync<T: Serialize>(path: &Path, value: &T) -> AppResult<()> {
+    write_with_sync(path, |writer| {
+        serde_json::to_writer_pretty(writer, value).map_err(AppError::io_source)
+    })
+}
+
+/// [`write_json_sync`]'s plain-text sibling. Bytes go out verbatim — the caller
+/// owns line endings and the trailing newline.
+pub fn write_text_sync(path: &Path, text: &str) -> AppResult<()> {
+    write_with_sync(path, |writer| Ok(writer.write_all(text.as_bytes())?))
+}
+
+/// [`write_text_sync`] on the blocking pool, for a caller that must not block the thread it
+/// awaits on.
+pub async fn write_text(path: PathBuf, text: String) -> AppResult<()> {
+    tokio::task::spawn_blocking(move || write_text_sync(&path, &text))
+        .await
+        .map_err(AppError::io_source)?
+}
+
+/// Hands `write` the temp file the other writers go through, renaming it over `path` only once
+/// `write` succeeds. For a payload streamed out rather than held whole, such as a playlist archive.
+///
+/// The writer seeks as well as writes, which is what a zip needs to go back and fill in each
+/// entry's header.
+pub fn write_with_sync(
+    path: &Path,
+    write: impl FnOnce(&mut BufWriter<&mut File>) -> AppResult<()>,
+) -> AppResult<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -48,26 +77,13 @@ pub fn write_json_sync<T: Serialize>(path: &Path, value: &T) -> AppResult<()> {
     let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
     {
         let mut writer = BufWriter::new(tmp.as_file_mut());
-        serde_json::to_writer_pretty(&mut writer, value).map_err(AppError::io_source)?;
+        write(&mut writer)?;
         writer.flush()?;
     }
     tmp.persist(path).map_err(|e| AppError::Io(e.error))?;
     Ok(())
 }
 
-/// [`write_json_sync`]'s plain-text sibling, for M3U export. Bytes go out verbatim — the caller
-/// owns line endings and the trailing newline.
-pub fn write_text_sync(path: &Path, text: &str) -> AppResult<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let dir = path.parent().unwrap_or_else(|| Path::new("."));
-    let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
-    {
-        let mut writer = BufWriter::new(tmp.as_file_mut());
-        writer.write_all(text.as_bytes())?;
-        writer.flush()?;
-    }
-    tmp.persist(path).map_err(|e| AppError::Io(e.error))?;
-    Ok(())
-}
+#[cfg(test)]
+#[path = "tests/atomic_file_tests.rs"]
+mod tests;

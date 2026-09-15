@@ -82,11 +82,7 @@ pub async fn insert_test_track(
 ) -> Result<i64, AppError> {
     let mut meta = make_test_metadata(title);
     meta.artist = ArtistCredit::from_name(artist_name);
-    meta.album = if album_name.is_empty() {
-        None
-    } else {
-        Some(album_name.to_owned())
-    };
+    meta.album = if album_name.is_empty() { None } else { Some(album_name.to_owned()) };
     meta.genres = GenreList::from_name(genre_name);
 
     insert_tagged_track(db, file_path, &meta).await
@@ -144,6 +140,21 @@ pub async fn insert_tagged_track(
             .await?;
     tx.commit().await?;
     Ok(id)
+}
+
+/// A pool holding `count` tracks, in insert order, for the suites that need more rows than one
+/// statement's bind budget covers. Each is titled by its index, so no two share a hash.
+#[cfg(test)]
+pub(crate) async fn numbered_library(count: usize) -> Result<(DbPool, Vec<i64>), AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    let mut ids = Vec::with_capacity(count);
+    for index in 0..count {
+        let path = format!("/music/{index:04}.mp3");
+        let title = format!("Track {index:04}");
+        ids.push(insert_test_track(&db, &path, &title, "Artist", "Album", "Rock").await?);
+    }
+    Ok((db, ids))
 }
 
 /// Create a test pool pre-seeded with a folder and 3 tracks.

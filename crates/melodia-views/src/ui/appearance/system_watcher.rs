@@ -1,7 +1,7 @@
-//! XDG portal subscription + UI-thread consumer that repaints when the
-//! persisted variant is `"system"`. On non-Linux platforms the OS doesn't
-//! surface live appearance changes through this code path, so the watcher
-//! is a no-op and the cache stays at its `unknown()` initial value.
+//! Keeps the OS appearance cache current and repaints a theme on its System variant when the OS
+//! flips between light and dark. Linux hears it from the XDG portal; Windows re-reads its default
+//! app mode whenever `WindowChrome.recheck-system-theme` fires. Elsewhere nothing reports a change,
+//! and the cache keeps its startup reading.
 
 use std::sync::Arc;
 
@@ -11,27 +11,24 @@ use melodia_app::state::{AppState, Signal};
 use melodia_core::themes::SystemColorState;
 use melodia_ui::AppWindow;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 use slint::ComponentHandle;
 #[cfg(target_os = "linux")]
 use tokio::sync::watch;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 use melodia_app::library;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 use melodia_core::themes;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 use melodia_platform::services::platform;
 
-#[cfg(target_os = "linux")]
-use super::apply_and_seed;
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+use super::repaint::apply_settings;
 
-/// On Linux: spawn the portal watcher and the UI-thread consumer that
-/// repaints when the persisted variant is `"system"`. On other platforms
-/// the OS doesn't surface live appearance changes through this code path,
-/// so the cache stays at its `unknown()` initial value.
+/// Spawn the portal watcher and the UI-thread consumer that applies each reading it sends.
 #[cfg(target_os = "linux")]
-pub(super) fn spawn_os_state_watcher(
+pub(super) fn watch_os_state(
     ui: &AppWindow,
     state: &AppState,
     os_state: Arc<RwLock<SystemColorState>>,
@@ -45,64 +42,83 @@ pub(super) fn spawn_os_state_watcher(
     let s = state.clone();
     if let Err(e) = slint::spawn_local(async_compat::Compat::new(async move {
         while rx.changed().await.is_ok() {
-            let new_state = rx.borrow_and_update().clone();
-            // Preserve the dynamic Material You palette across OS theme
-            // flips — only the OS-owned fields move. The coordinator
-            // will overwrite `material_you` after it regenerates for the
-            // new `is_dark`, but until then the previously generated
-            // palette stays painted.
-            {
-                let mut guard = os_state.write();
-                guard.theme.clone_from(&new_state.theme);
-                guard.kde_palette.clone_from(&new_state.kde_palette);
-            }
-
-            // Kick the Material You coordinator so it re-evaluates
-            // `is_dark` (matters when the user's variant is "system" and
-            // the OS just flipped dark/light) and regenerates the
-            // palette.
-            kick.bump();
-
+            let reading = rx.borrow_and_update().clone();
             let Some(ui) = weak.upgrade() else { return };
-            // Only repaint when the *persisted* variant is "system" —
-            // static variants don't care about OS changes. Re-reading
-            // `settings.json` here is fine: it's a few KB and only fires
-            // on a desktop event (user toggling Plasma's colour scheme).
-            let settings = match library::settings::get_settings(&s) {
-                Ok(s) => s,
-                Err(e) => {
-                    log::warn!("system theme repaint: read settings: {e}");
-                    continue;
-                }
-            };
-            if settings.theme_variant == themes::SYSTEM_VARIANT_ID {
-                let snapshot = os_state.read().clone();
-                let last_static = settings
-                    .theme_preferences
-                    .get(&settings.theme_id)
-                    .and_then(|p| p.last_static_accent.clone());
-                apply_and_seed(
-                    &ui,
-                    &settings.theme_id,
-                    &settings.theme_variant,
-                    &settings.accent_color,
-                    &settings.dynamic_color_style,
-                    last_static.as_deref(),
-                    &snapshot,
-                );
-            }
+            apply_reading(&ui, &s, &os_state, &reading, &kick);
+            // A Plasma panel without a style of its own moves with the scheme.
+            crate::ui::shell::tray_bridge::refresh_icon();
         }
     })) {
         log::warn!("system theme subscriber spawn_local: {e}");
     }
 }
 
-#[cfg(not(target_os = "linux"))]
-pub(super) fn spawn_os_state_watcher(
+/// Answer `WindowChrome.recheck-system-theme` with a fresh reading of the default app mode. The
+/// recheck fires on every focus gain, so a reading matching the cache is dropped before it costs a
+/// settings read and a Material You wake.
+#[cfg(target_os = "windows")]
+pub(super) fn watch_os_state(
+    ui: &AppWindow,
+    state: &AppState,
+    os_state: Arc<RwLock<SystemColorState>>,
+    _initial: SystemColorState,
+    kick: Signal,
+) {
+    let weak = ui.as_weak();
+    let s = state.clone();
+    ui.global::<melodia_ui::WindowChrome>().on_recheck_system_theme(move || {
+        let theme = platform::color_mode::app_theme();
+        if os_state.read().theme == theme {
+            return;
+        }
+        let Some(ui) = weak.upgrade() else { return };
+        let reading = SystemColorState { theme: theme.to_owned(), material_you: None };
+        apply_reading(&ui, &s, &os_state, &reading, &kick);
+    });
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
+pub(super) fn watch_os_state(
     _ui: &AppWindow,
     _state: &AppState,
     _os_state: Arc<RwLock<SystemColorState>>,
     _initial: SystemColorState,
     _kick: Signal,
 ) {
+}
+
+/// Fold an OS reading into the shared cache, wake the Material You coordinator, and repaint when
+/// the persisted variant is the one following the OS.
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+fn apply_reading(
+    ui: &AppWindow,
+    state: &AppState,
+    os_state: &RwLock<SystemColorState>,
+    reading: &SystemColorState,
+    kick: &Signal,
+) {
+    // Only the OS-owned fields move. A generated Material You palette stays painted until the
+    // coordinator, woken below, regenerates it for the new brightness.
+    {
+        let mut cache = os_state.write();
+        cache.theme.clone_from(&reading.theme);
+        #[cfg(target_os = "linux")]
+        cache.kde_palette.clone_from(&reading.kde_palette);
+    }
+    kick.bump();
+
+    // Read from disk rather than shadowed: this runs on a desktop event, not per frame.
+    let settings = match library::settings::get_settings(state) {
+        Ok(settings) => settings,
+        Err(e) => {
+            log::warn!("system theme repaint: read settings: {e}");
+            return;
+        }
+    };
+    if settings.theme_variant != themes::SYSTEM_VARIANT_ID {
+        return;
+    }
+
+    let snapshot = os_state.read().clone();
+    apply_settings(ui, &settings, &snapshot);
 }

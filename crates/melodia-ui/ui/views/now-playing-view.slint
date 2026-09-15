@@ -16,7 +16,7 @@ import { Lyrics } from "../globals/lyrics.slint";
 import { StationFacts, StationHistory } from "../components/station-facts.slint";
 import { NpOverlayScrollbar } from "../components/now-playing/np-overlay-scrollbar.slint";
 import { TooltipSide } from "../components/tooltip.slint";
-import { LyricsMenu } from "../components/now-playing/lyrics-menu.slint";
+import { LyricsControls } from "../components/now-playing/lyrics-controls.slint";
 import { VisualizerPicker } from "../components/now-playing/visualizer-picker.slint";
 import { VisualizerStrip } from "../components/now-playing/visualizer-strip.slint";
 import { AuroraBackdrop } from "../components/aurora-backdrop.slint";
@@ -64,14 +64,22 @@ export component NowPlayingView inherits Rectangle {
 
     // **A band's column pitch is the ceiling, not the strip's.** The band count is fixed, so a
     // strip that keeps widening divides the same bars into ever-fatter columns whatever height it
-    // is drawn at. Ten pixels, the 2px gap included, is where a resting dot stops reading as a bead.
-    // Reading the model's length beats restating `spectrum::NUM_BANDS`; the `max` covers boot.
-    property <length> strip-w-max: 10px * max(1, Visualizer.bars.length);
+    // is drawn at. Ten pixels, the 2px gap included, is where a resting mark stops reading as one.
+    // Reading the published count beats restating `spectrum::NUM_BANDS`; the `max` covers boot.
+    property <length> strip-w-max: 10px * max(1, Visualizer.band-count);
 
     // Three quarters of that column, so the strip reads as the base of the whole cover → title →
     // chips group. **The floor is not cosmetic**: at the window's own minimum `content-width` goes
     // negative.
-    property <length> strip-w: max(root.cover-size, min(root.content-width * 0.75, root.strip-w-max));
+    //
+    // Capped at the column *less both scrollbar lanes* besides. `cover-size` floors at 200px and
+    // only grows past it on a panel wider than ~900px, so on every narrower one the floor is wider
+    // than the whole column and the strip overhung both edges. Both lanes because the group is
+    // centred: clearing only the bar's own side would move the strip off the column's axis.
+    property <length> strip-w: max(0px, min(
+        root.content-width - 2 * Theme.scrollbar-slot,
+        max(root.cover-size, min(root.content-width * 0.75, root.strip-w-max))
+    ));
 
     // Which of the two backdrops this view paints — a process constant, the setting being
     // restart-gated, so only the live arm is mounted: a hidden stack is not free,
@@ -193,9 +201,7 @@ export component NowPlayingView inherits Rectangle {
                 }
             }
 
-            // **The two toggles the view menu held, each on its own glyph.** They were the whole
-            // of that menu, so reaching either cost a popup and a read of it; what they lose
-            // with it is its labels, which come back as tooltips.
+            // The visualizer's style on its own glyph, its label a tooltip.
             //
             // Not gated on `vm.has_track` — a style means something with an empty queue.
             VerticalLayout {
@@ -204,11 +210,11 @@ export component NowPlayingView inherits Rectangle {
             }
 
             // **Gone rather than disabled on a station**, the vote's rule directly above: the
-            // column keeps its panel whatever the toggle says, a stream having no track to look a
+            // column keeps its panel whatever the switch says, a stream having no track to look a
             // sheet up for, so here it could only ever swap nothing for nothing.
             if !Player.vm.has_station: VerticalLayout {
                 alignment: center;
-                LyricsMenu { }
+                LyricsControls { }
             }
         }
 
@@ -403,7 +409,7 @@ export component NowPlayingView inherits Rectangle {
                     // slot on a track, the column being one column with three arms rather than a
                     // place two things share.
                     text: Player.vm.has_station ? @tr("Station")
-                        : Lyrics.shown ? @tr("Lyrics")
+                        : Lyrics.enabled ? @tr("Lyrics")
                         : @tr("Up Next");
                     // Accent-tinted like the divider under it but solid: a heading carries it at
                     // full alpha where a hairline can't. The rows below keep the list palette.
@@ -419,15 +425,15 @@ export component NowPlayingView inherits Rectangle {
                 }
 
                 // The mini-player mounts the same component with `compact: true`.
-                if !Player.vm.has_station && !Lyrics.shown: UpNextList {
+                if !Player.vm.has_station && !Lyrics.enabled: UpNextList {
                     vertical-stretch: 1;
                     compact: false;
                 }
 
-                // **A station keeps its panel whatever the toggle says.** A stream has no track to
+                // **A station keeps its panel whatever the switch says.** A stream has no track to
                 // look a sheet up for, so the switch would be offering something that could only
                 // ever be empty; what a station has instead is the description below.
-                if !Player.vm.has_station && Lyrics.shown: LyricsPanel {
+                if !Player.vm.has_station && Lyrics.enabled: LyricsPanel {
                     vertical-stretch: 1;
                 }
                 // **The station page's own body, on this view's palette.** What a stream has

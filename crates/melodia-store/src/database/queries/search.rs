@@ -167,12 +167,7 @@ pub async fn search_all(db: &DbPool, query: &str) -> Result<SearchResults, AppEr
     let (tracks, albums, artists, genres) =
         tokio::try_join!(tracks_fut, albums_fut, artists_fut, genres_fut)?;
 
-    Ok(SearchResults {
-        tracks,
-        albums,
-        artists,
-        genres,
-    })
+    Ok(SearchResults { tracks, albums, artists, genres })
 }
 
 #[cfg(test)]

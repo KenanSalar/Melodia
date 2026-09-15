@@ -59,9 +59,7 @@ pub use folders::{
     add_folder, get_folders, reconcile_watched_folders, remove_folder, scan_folder,
     scan_folder_internal, set_folder_watching_enabled, toggle_folder_watching,
 };
-pub use lyrics::{
-    set_lyrics_online_enabled, set_lyrics_panel_shown, set_lyrics_romanization_shown,
-};
+pub use lyrics::{set_lyrics_enabled, set_lyrics_online_enabled, set_lyrics_romanization_shown};
 pub use motion::set_skip_startup_animation;
 pub use onboarding::set_onboarding_seen;
 pub use playback::{
@@ -105,31 +103,6 @@ pub fn get_settings(state: &AppState) -> Result<SettingsData, AppError> {
 pub fn get_view_state(state: &AppState) -> Result<ViewStateData, AppError> {
     services::view_state::read_view_state(&state.paths)
 }
-
-/// Returns "dark" or "light" based on the OS color scheme preference.
-#[cfg_attr(
-    not(target_os = "linux"),
-    allow(
-        clippy::unused_async,
-        reason = "signature mirrors the Linux variant (which awaits the XDG portal); non-Linux returns the fallback synchronously"
-    )
-)]
-pub async fn get_system_theme() -> String {
-    #[cfg(target_os = "linux")]
-    {
-        melodia_platform::services::platform::system_theme::get_system_theme().await
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        "dark".to_owned()
-    }
-}
-
-// Note: `is_kde_desktop` and `get_os_corner_radius` moved to
-// `services::settings` so the layer dependency (library → services)
-// stays unidirectional; the services layer needs them for serde
-// `default = "..."` helpers. UI code calls them via
-// `services::settings::*` directly.
 
 #[cfg(target_os = "linux")]
 pub fn get_kde_colors() -> Option<melodia_core::themes::kde::KdeColorPalette> {

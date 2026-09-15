@@ -5,12 +5,12 @@
 //! `ui/` — and a `cfg(test)` item cannot cross a crate boundary. `DbPool::test_pool` is the same
 //! shape for the same reason. The cheaper fixtures each tier can spell for itself stayed
 //! `cfg(test)` beside their tests; these three could not, `RadioNowPlaying` having thirteen
-//! fields and `PlayerViewModelLight` thirteen more.
+//! fields and `PlayerViewModelLight` fifteen.
 
 use std::sync::Arc;
 
 use crate::player::engine::state::PlayerViewModelLight;
-use crate::player::engine::types::RadioNowPlaying;
+use crate::player::engine::types::{RadioNowPlaying, RepeatMode};
 use melodia_core::entities::track::TrackSummary;
 
 /// A station for the transport tests, with only what they assert on filled in.
@@ -85,5 +85,7 @@ pub fn test_view_model(
         radio,
         has_next: false,
         has_previous: false,
+        shuffle_enabled: false,
+        repeat_mode: RepeatMode::Off,
     }
 }

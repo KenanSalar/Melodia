@@ -38,9 +38,7 @@ pub(super) struct DeferredOnce {
 
 impl DeferredOnce {
     fn new(work: impl FnOnce() + 'static) -> Rc<Self> {
-        Rc::new(Self {
-            work: RefCell::new(Some(Box::new(work))),
-        })
+        Rc::new(Self { work: RefCell::new(Some(Box::new(work))) })
     }
 
     /// Run the held work. Every call after the first is a no-op.

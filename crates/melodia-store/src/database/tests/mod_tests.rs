@@ -1,14 +1,14 @@
 use crate::database::queries;
 use crate::database::queries::fixtures::insert_test_track;
-use crate::database::{DbPool, SQLITE_BIND_LIMIT, chunked_in_query};
+use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query};
 use melodia_core::error::AppError;
 
 // Private to `database/mod.rs`; reachable from this child test module via `super::`.
 use super::{FTS_OPTIMIZE, strip_windows_verbatim_paths};
 
 #[test]
-fn sqlite_bind_limit_is_999() {
-    assert_eq!(SQLITE_BIND_LIMIT, 999);
+fn max_binds_per_statement_is_999() {
+    assert_eq!(MAX_BINDS_PER_STATEMENT, 999);
 }
 
 #[tokio::test]
@@ -97,7 +97,7 @@ async fn chunked_in_query_large_set_splits_correctly() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/test", true).await?;
 
-    // Insert more tracks than SQLITE_BIND_LIMIT to test chunking
+    // Insert more tracks than MAX_BINDS_PER_STATEMENT to test chunking
     // Use a smaller number that still validates the chunking logic
     let count = 50;
     let mut track_ids = Vec::with_capacity(count);

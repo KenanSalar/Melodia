@@ -10,8 +10,15 @@ use std::time::Duration;
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 
-/// `SQLite` bind variable limit — queries with more placeholders will fail.
-pub const SQLITE_BIND_LIMIT: usize = 999;
+/// Bind-variable budget for one statement, divided by a query's columns-per-row to size its chunks.
+///
+/// A bound we choose, not one the engine gives us: the bundled `SQLite` has allowed 32766 bind
+/// variables since 3.32, and 999 is the older default this value kept. The arithmetic settles
+/// nothing, because moving it trades in both directions: a larger chunk buys fewer prepares,
+/// every bulk site running `.persistent(false)` and so re-preparing per chunk, and costs a
+/// proportionally larger parameter array and bind set resident per statement. Move it against
+/// a profile of a first scan on a large library.
+pub const MAX_BINDS_PER_STATEMENT: usize = 999;
 
 /// sqlx's default migrations-tracking table; the 0.9 `Migrate` trait methods
 /// take it explicitly (it became configurable via `sqlx.toml`).
@@ -45,7 +52,23 @@ pub(crate) fn placeholders(n: usize) -> String {
     s
 }
 
-/// Execute a chunked single-column IN-clause query inside `SQLite`'s bind limit,
+/// What one row spends in an `UPDATE … SET col = CASE id WHEN ? THEN ? … END WHERE id IN (…)`: the
+/// `WHEN ? THEN ?` pair, then its id again in the `IN` list.
+pub(crate) const CASE_BINDS_PER_ROW: usize = 3;
+
+/// `CASE id WHEN ? THEN ? … END` over `rows` pairs, each bound id first.
+pub(crate) fn case_by_id(rows: usize) -> String {
+    const WHEN_THEN: &str = " WHEN ? THEN ?";
+    let mut s = String::with_capacity("CASE id END".len() + rows * WHEN_THEN.len());
+    s.push_str("CASE id");
+    for _ in 0..rows {
+        s.push_str(WHEN_THEN);
+    }
+    s.push_str(" END");
+    s
+}
+
+/// Execute a chunked single-column IN-clause query inside [`MAX_BINDS_PER_STATEMENT`],
 /// concatenating the results.
 ///
 /// Each item binds exactly one placeholder. **Not** for a tuple-IN clause — the
@@ -65,7 +88,7 @@ where
 
     let mut all_results: Vec<T> = Vec::new();
 
-    for chunk in items.chunks(SQLITE_BIND_LIMIT) {
+    for chunk in items.chunks(MAX_BINDS_PER_STATEMENT) {
         let sql = build_sql(&placeholders(chunk.len()));
 
         let mut query = sqlx::query_as::<_, T>(AssertSqlSafe(sql));
@@ -292,10 +315,7 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
 
     log::info!("Database initialized successfully (read pool: {read_conns} connections)");
 
-    Ok(DbPool {
-        read: read_pool,
-        write: write_pool,
-    })
+    Ok(DbPool { read: read_pool, write: write_pool })
 }
 
 #[doc(hidden)]
@@ -312,10 +332,7 @@ impl DbPool {
 
         sqlx::migrate!("../../migrations").run(&pool).await?;
 
-        Ok(DbPool {
-            read: pool.clone(),
-            write: pool,
-        })
+        Ok(DbPool { read: pool.clone(), write: pool })
     }
 }
 

@@ -52,10 +52,7 @@ fn repeat_mode_serde_roundtrip() -> Result<(), AppError> {
 
 #[test]
 fn persistable_queue_serde_roundtrip() -> Result<(), AppError> {
-    let queue = PersistableQueue {
-        track_ids: vec![10, 20, 30],
-        current_index: 1,
-    };
+    let queue = PersistableQueue { track_ids: vec![10, 20, 30], current_index: 1 };
     let json = serde_json::to_string(&queue).map_err(|e| json_err(&e))?;
     let deserialized: PersistableQueue = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
     assert_eq!(queue, deserialized);
@@ -64,10 +61,7 @@ fn persistable_queue_serde_roundtrip() -> Result<(), AppError> {
 
 #[test]
 fn persistable_queue_empty() -> Result<(), AppError> {
-    let queue = PersistableQueue {
-        track_ids: vec![],
-        current_index: -1,
-    };
+    let queue = PersistableQueue { track_ids: vec![], current_index: -1 };
     let json = serde_json::to_string(&queue).map_err(|e| json_err(&e))?;
     let deserialized: PersistableQueue = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
     assert_eq!(queue, deserialized);
@@ -85,10 +79,7 @@ fn playback_status_equality() {
 fn persisted_playback_serde_roundtrip_with_and_without_a_station() -> Result<(), AppError> {
     for station_id in [Some(42_i64), None] {
         let persisted = PersistedPlayback {
-            queue: PersistableQueue {
-                track_ids: vec![1, 2, 3],
-                current_index: 1,
-            },
+            queue: PersistableQueue { track_ids: vec![1, 2, 3], current_index: 1 },
             station_id,
         };
 
@@ -183,10 +174,7 @@ fn a_station_with_no_overrides_states_what_the_directory_said() {
 /// codec chip rather than no chip.
 #[test]
 fn a_station_with_no_codec_carries_none_rather_than_an_empty_one() {
-    let station = RadioStation {
-        codec: String::new(),
-        ..directory_station()
-    };
+    let station = RadioStation { codec: String::new(), ..directory_station() };
 
     assert_eq!(RadioNowPlaying::from(&station).codec, None);
 }

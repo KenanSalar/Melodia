@@ -63,10 +63,7 @@ pub async fn fetch_and_apply(
         let browse_folders: Vec<BrowseFolder> = folders
             .iter()
             .filter(|f| f.is_enabled)
-            .map(|f| BrowseFolder {
-                name: folder_basename(&f.path),
-                path: f.path.clone(),
-            })
+            .map(|f| BrowseFolder { name: folder_basename(&f.path), path: f.path.clone() })
             .collect();
         let has_library_folders = !browse_folders.is_empty();
         let ui_folders = to_ui_folder_rows(&browse_folders);

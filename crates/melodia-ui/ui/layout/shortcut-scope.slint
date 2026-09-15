@@ -108,8 +108,8 @@ export component ShortcutScope inherits FocusScope {
         }
     }
 
-    // The VLC / YouTube convention: 0–9 seeks to that tenth of the track. `pct` stays
-    // an integer so the arithmetic does; the rounding bias is negligible at ms scale.
+    // 0–9 seeks to that tenth of the track, the digit row's usual job in a player. `pct`
+    // stays an integer so the arithmetic does; the rounding bias is negligible at ms scale.
     function seek-to-percent(pct: int) {
         if (Player.duration-ms > 0) {
             Player.seek-to(round(Player.duration-ms * pct / 100));
@@ -163,8 +163,8 @@ export component ShortcutScope inherits FocusScope {
         }
 
         // Bare seeks or steps the volume, Shift takes a bigger seek, Ctrl skips tracks
-        // or steps the volume finely — Spotify's track skip over VLC's scrub. Slint
-        // maps `modifiers.control` to Cmd on macOS automatically.
+        // or steps the volume finely. Slint maps `modifiers.control` to Cmd on macOS
+        // automatically.
         if (ev.text == Key.LeftArrow) {
             if (ev.modifiers.control) {
                 Player.previous();

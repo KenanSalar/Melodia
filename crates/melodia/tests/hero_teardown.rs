@@ -89,10 +89,9 @@ fn the_palette_is_never_written_without_re_solving_the_backdrops() {
         env!("MELODIA_REPO_ROOT"),
         "crates/melodia-views/src/ui/appearance/mod.rs"
     ));
-    for republish in [
-        "hero_backdrop::republish_for_palette(ui)",
-        "now_playing::republish_for_palette(ui)",
-    ] {
+    for republish in
+        ["hero_backdrop::republish_for_palette(ui)", "now_playing::republish_for_palette(ui)"]
+    {
         assert!(
             wrapper.contains(republish),
             "`apply_palette` no longer calls `{republish}` — the tier it feeds holds the previous \

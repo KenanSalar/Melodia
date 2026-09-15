@@ -237,18 +237,9 @@ impl PrebufferSource {
     /// The source and the writer that feeds it, plus the shared cell both report through.
     pub fn new(shared: Arc<StreamShared>, shape: Shape) -> (Self, RingWriter) {
         let ring = Arc::new(SampleRing::for_format(shape.channels, shape.rate));
-        let writer = RingWriter {
-            ring: ring.clone(),
-            shared: shared.clone(),
-        };
-        let source = Self {
-            ring,
-            shared,
-            shape,
-            frame_phase: 0,
-            frame_starved: false,
-            starved: false,
-        };
+        let writer = RingWriter { ring: ring.clone(), shared: shared.clone() };
+        let source =
+            Self { ring, shared, shape, frame_phase: 0, frame_starved: false, starved: false };
         (source, writer)
     }
 
@@ -316,9 +307,7 @@ impl AudioSource for PrebufferSource {
     }
 
     fn try_seek(&mut self, _pos: Duration) -> Result<(), SeekError> {
-        Err(SeekError::NotSupported {
-            underlying_source: "live stream",
-        })
+        Err(SeekError::NotSupported { underlying_source: "live stream" })
     }
 
     /// A live socket is the kind of claim this exists for, and the flag is one the drop already

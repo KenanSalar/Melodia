@@ -21,9 +21,12 @@
 use std::sync::{Once, OnceLock};
 
 use parking_lot::Mutex;
+#[cfg(target_os = "windows")]
+use slint::winit_030::winit::dpi::PhysicalInsets as WinitPhysicalInsets;
 use slint::winit_030::winit::dpi::{
-    LogicalPosition as WinitLogicalPosition, LogicalSize as WinitLogicalSize,
-    PhysicalPosition as WinitPhysicalPosition,
+    LogicalInsets as WinitLogicalInsets, LogicalPosition as WinitLogicalPosition,
+    LogicalSize as WinitLogicalSize, PhysicalPosition as WinitPhysicalPosition,
+    PhysicalSize as WinitPhysicalSize,
 };
 use slint::winit_030::winit::window::Window as WinitWindow;
 use slint::{ComponentHandle, LogicalPosition, LogicalSize};
@@ -31,8 +34,8 @@ use slint::{ComponentHandle, LogicalPosition, LogicalSize};
 use melodia_app::services::settings::SettingsData;
 use melodia_ui::AppWindow;
 
-/// Lower bound for a restored window size, mirroring `app-window.slint`'s own — a guard
-/// against a corrupt `settings.json` producing a 0×0 window.
+/// Lower bound for a restored window size, a guard against a corrupt `settings.json`
+/// producing a 0×0 window.
 const MIN_RESTORE_WIDTH: f64 = 640.0;
 const MIN_RESTORE_HEIGHT: f64 = 420.0;
 
@@ -110,16 +113,49 @@ fn live() -> &'static Mutex<Option<LiveGeometry>> {
     LIVE_GEOMETRY.get_or_init(|| Mutex::new(None))
 }
 
+/// The window state a `Resized` or `Moved` event consults more than once, read in one pass.
+///
+/// On X11 the client size and the maximized state are each a blocking round trip on the UI
+/// thread, so the readers below share one reading rather than asking per answer.
+#[derive(Debug, Clone, Copy)]
+pub struct WindowReading {
+    client: WinitPhysicalSize<u32>,
+    scale: f64,
+    maximized: bool,
+    decorated: bool,
+}
+
+impl WindowReading {
+    pub fn take(w: &WinitWindow) -> Self {
+        Self {
+            client: w.inner_size(),
+            scale: w.scale_factor(),
+            maximized: w.is_maximized(),
+            decorated: w.is_decorated(),
+        }
+    }
+
+    pub fn is_maximized(self) -> bool {
+        self.maximized
+    }
+}
+
 /// Update the live mirror from the current winit window state, called by the `Resized` and
 /// `Moved` handlers while the winit window is still alive.
 ///
+/// Skips everything while minimized, the maximized flag included: winit clears it on a Win32
+/// minimize, so closing from the taskbar would otherwise persist an un-maximized, empty rect at
+/// the parked position, which the next launch can only clamp and re-centre.
+///
 /// Skips size and position while maximized: winit's `inner_size` there is the maximized
 /// screen size, and persisting it would clobber the user's real restore geometry. The
-/// `maximized` flag itself is always recorded.
-pub fn record(w: &WinitWindow) {
-    let scale = w.scale_factor();
-    let maximized = w.is_maximized();
-    let inner: WinitLogicalSize<f64> = w.inner_size().to_logical(scale);
+/// `maximized` flag itself is still recorded.
+pub fn record(w: &WinitWindow, reading: WindowReading) {
+    if is_minimized_client(reading.client) {
+        return;
+    }
+    let WindowReading { client, scale, maximized, .. } = reading;
+    let inner: WinitLogicalSize<f64> = client.to_logical(scale);
     let outer: Option<WinitLogicalPosition<f64>> =
         w.outer_position().ok().map(|p| p.to_logical(scale));
 
@@ -146,6 +182,105 @@ pub fn record(w: &WinitWindow) {
     }
 }
 
+/// Returns what the OS frame adds to the client area, in logical pixels.
+///
+/// `None` wherever [`measurable_client`] finds no frame to read.
+pub fn frame_allowance(w: &WinitWindow, reading: WindowReading) -> Option<WinitLogicalSize<f32>> {
+    let inner = measurable_client(reading)?;
+    Some(allowance_between(w.outer_size(), inner, reading.scale))
+}
+
+/// Returns the part of the OS frame outside the edges it draws, in logical pixels: what the client
+/// takes over when the frame drops, without the visible window having moved.
+///
+/// Win32's left, right and bottom are invisible resize borders, and its top is the caption the user
+/// sees, so `top` is always zero. `None` wherever [`measurable_client`] finds no frame to read.
+#[cfg(target_os = "windows")]
+pub fn frame_margins(w: &WinitWindow, reading: WindowReading) -> Option<WinitLogicalInsets<f32>> {
+    let inner = measurable_client(reading)?;
+    let outer = ScreenRect { at: w.outer_position().ok()?, size: w.outer_size() };
+    let client = ScreenRect { at: w.inner_position().ok()?, size: inner };
+    Some(margins_between(outer, client, reading.scale))
+}
+
+/// No invisible frame to hand over off Win32: X11 takes a dropped frame out of the window rather
+/// than giving it to the client, and a macOS or Wayland frame has no undrawn edge beside it.
+#[cfg(not(target_os = "windows"))]
+pub fn frame_margins(_: &WinitWindow, _: WindowReading) -> Option<WinitLogicalInsets<f32>> {
+    None
+}
+
+/// The client size while there is a frame to measure around it.
+///
+/// `None` while undecorated, there being no frame; while maximized, where a WM may strip the frame
+/// without the window ever learning it lost one; and while minimized, the outer rect then being the
+/// minimized one.
+fn measurable_client(reading: WindowReading) -> Option<WinitPhysicalSize<u32>> {
+    let framed = reading.decorated && !reading.maximized && !is_minimized_client(reading.client);
+    framed.then_some(reading.client)
+}
+
+/// Whether a client size is Win32's reading of a minimized window: empty, inside a small outer
+/// rect parked at −32000, −32000, so nothing measured off it describes the window the user will
+/// restore. Read off the size rather than asked of `is_minimized`, which costs X11 a round trip
+/// on every resize and move event these run for.
+fn is_minimized_client(client: WinitPhysicalSize<u32>) -> bool {
+    client.width == 0 || client.height == 0
+}
+
+fn allowance_between(
+    outer: WinitPhysicalSize<u32>,
+    inner: WinitPhysicalSize<u32>,
+    scale: f64,
+) -> WinitLogicalSize<f32> {
+    WinitPhysicalSize::new(
+        outer.width.saturating_sub(inner.width),
+        outer.height.saturating_sub(inner.height),
+    )
+    .to_logical(scale)
+}
+
+/// A rectangle on screen in physical pixels, winit reporting its corner and its size apart.
+#[cfg(target_os = "windows")]
+#[derive(Clone, Copy)]
+struct ScreenRect {
+    at: WinitPhysicalPosition<i32>,
+    size: WinitPhysicalSize<u32>,
+}
+
+#[cfg(target_os = "windows")]
+impl ScreenRect {
+    fn left(self) -> i64 {
+        i64::from(self.at.x)
+    }
+
+    fn right(self) -> i64 {
+        i64::from(self.at.x) + i64::from(self.size.width)
+    }
+
+    fn bottom(self) -> i64 {
+        i64::from(self.at.y) + i64::from(self.size.height)
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn margins_between(outer: ScreenRect, client: ScreenRect, scale: f64) -> WinitLogicalInsets<f32> {
+    WinitPhysicalInsets::new(
+        0,
+        gap(outer.left(), client.left()),
+        gap(client.bottom(), outer.bottom()),
+        gap(client.right(), outer.right()),
+    )
+    .to_logical(scale)
+}
+
+/// The distance from `near` to `far`, floored at zero rather than wrapped: a wrapped `u32` is a
+/// margin wider than any window, and the miniplayer would inset itself out of existence.
+#[cfg(target_os = "windows")]
+fn gap(near: i64, far: i64) -> u32 {
+    u32::try_from(far - near).unwrap_or(0)
+}
+
 /// A `u32` monitor or window dimension as `i32`, saturating rather than wrapping — real
 /// display dimensions sit far below `i32::MAX`, so that branch is unreachable.
 fn dim_i32(v: u32) -> i32 {
@@ -159,7 +294,7 @@ fn dim_i32(v: u32) -> i32 {
 ///
 /// No-op on Wayland, where `outer_position()` errors and the compositor never places a
 /// window off-screen, and while maximized, the WM remapping those itself.
-pub fn ensure_on_screen(w: &WinitWindow) {
+pub fn ensure_on_screen(w: &WinitWindow, reading: WindowReading) {
     static DONE: Once = Once::new();
     let mut first = false;
     DONE.call_once(|| first = true);
@@ -167,7 +302,7 @@ pub fn ensure_on_screen(w: &WinitWindow) {
         return;
     }
 
-    if w.is_maximized() {
+    if reading.is_maximized() {
         return;
     }
     let Ok(pos) = w.outer_position() else {
@@ -218,3 +353,7 @@ pub fn snapshot_into(settings: &mut SettingsData) {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/geometry_tests.rs"]
+mod tests;

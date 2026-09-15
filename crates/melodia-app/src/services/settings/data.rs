@@ -1,29 +1,23 @@
-//! `settings.json` data model: every serde struct that makes up
-//! [`SettingsData`], their first-launch defaults, and the OS / desktop probes
-//! those defaults depend on. The load / save / mutate I/O is [`super::io`].
-//!
-//! Every `*Flags` substruct here follows one shape: `#[serde(flatten)]`'d into
-//! [`SettingsData`] so its fields still serialize at the top level of the file,
-//! and carrying a whole-struct `#[serde(default)]` so an install written before
-//! the feature loads anyway. The grouping exists to keep each struct under
-//! clippy's `struct_excessive_bools` budget; the flatten is what keeps that
-//! free of on-disk consequences. Per the shipped-app rule, anything with new
-//! visible behavior defaults off; [`TrayFlags`] is the one deliberate exception.
-//! Flipping a default costs no existing install either way — nothing here is
-//! `skip_serializing_if`, so a file written by any previous build already spells
-//! every key and keeps its own value, and the new default reaches fresh installs
-//! alone.
+//! `settings.json`'s root model, [`SettingsData`], with the view primitives it stores and the
+//! first-launch defaults no flag struct owns: the host's theme and the OS locale.
 
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use super::about::{DiagnosticsFlags, OnboardingFlags, SupportFlags, UpdateFlags};
+use super::interface::{BackdropFlags, LayoutFlags, MotionFlags, TrayFlags, WindowFlags};
+use super::library::LibraryFlags;
+use super::playback::{
+    CrossfadeFlags, EqualizerFlags, PlaybackFlags, QueueFlags, ReplayGainFlags, VisualizerFlags,
+};
+use super::services::{LyricsFlags, RadioFlags};
 use melodia_core::entities::integrations::{DiscordFlags, ScrobbleFlags};
 use melodia_core::entities::locale::SUPPORTED_LOCALES;
-use melodia_engine::player::engine::types::RepeatMode;
-use melodia_playback::player::playback::crossfade::DEFAULT_CROSSFADE_MS;
-use melodia_playback::player::playback::equalizer::{DEFAULT_PRESET, NUM_BANDS};
-use melodia_playback::player::playback::replaygain::{DEFAULT_MODE, RG_DEFAULT_PREAMP_DB};
+use melodia_core::themes::{self, SYSTEM_VARIANT_ID, ThemeDef};
+use melodia_platform::services::platform::desktop::{
+    HostDesktop, get_os_corner_radius, host_desktop,
+};
 
 pub const MAX_CORNER_RADIUS: u32 = 15;
 
@@ -59,11 +53,7 @@ impl SortDir {
     /// Parse a Slint `sort-dir` token; anything other than `"desc"` is `Asc`.
     #[must_use]
     pub fn from_token(token: &str) -> Self {
-        if token == "desc" {
-            SortDir::Desc
-        } else {
-            SortDir::Asc
-        }
+        if token == "desc" { SortDir::Desc } else { SortDir::Asc }
     }
 }
 
@@ -73,6 +63,10 @@ pub struct ViewSort {
     pub dir: SortDir,
 }
 
+/// One track list's stored column widths. `number`, `year` and `length` are pixels; the other
+/// four are the width each had when last sized, read as weights against whatever room the list
+/// has, so a saved layout keeps its proportions at any window size. `melodia-views`'
+/// `ui::track_columns` is the only reader of either meaning.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ColumnWidths {
@@ -87,8 +81,7 @@ pub struct ColumnWidths {
 
 impl Default for ColumnWidths {
     fn default() -> Self {
-        // Mirrors the initial values in `crates/melodia-ui/ui/globals/tracks.slint`;
-        // the fixed column model needs `title` to carry a real width.
+        // Every track list's first-launch widths; the Slint globals declare none.
         Self {
             number: 56.0,
             title: 320.0,
@@ -97,600 +90,6 @@ impl Default for ColumnWidths {
             genre: 140.0,
             year: 72.0,
             length: 88.0,
-        }
-    }
-}
-
-/// Audio-playback preferences.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct PlaybackFlags {
-    pub gapless_playback: bool,
-    pub resume_on_startup: bool,
-    pub is_muted: bool,
-    /// Rate multiplier, clamped to the player's `MIN_SPEED..=MAX_SPEED` when
-    /// applied or persisted.
-    pub playback_speed: f64,
-}
-
-impl Default for PlaybackFlags {
-    fn default() -> Self {
-        Self {
-            gapless_playback: true,
-            resume_on_startup: false,
-            is_muted: false,
-            playback_speed: 1.0,
-        }
-    }
-}
-
-/// Graphic-equalizer preferences. Ships **off** with a flat curve, so a fresh
-/// install sounds bit-identical to no EQ until the user opts in. Gains are in
-/// dB and go through `equalizer::normalize_gains` on read, so a hand-edited or
-/// wrong-length array can't pin a bad value.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct EqualizerFlags {
-    pub eq_enabled: bool,
-    pub eq_band_gains: Vec<f32>,
-    pub eq_selected_preset: String,
-    /// Master gain in dB, clamped to `MIN_PREAMP_DB..=MAX_PREAMP_DB`.
-    pub eq_preamp: f32,
-}
-
-impl Default for EqualizerFlags {
-    fn default() -> Self {
-        Self {
-            eq_enabled: false,
-            eq_band_gains: vec![0.0; NUM_BANDS],
-            eq_selected_preset: DEFAULT_PRESET.to_owned(),
-            eq_preamp: 0.0,
-        }
-    }
-}
-
-/// `ReplayGain` (loudness normalization) preferences. Ships **off**, so a fresh
-/// install plays at the raw recorded level until the user opts in; the
-/// `rg_prevent_clipping` guard then defaults **on** so a boosted track can't
-/// clip. `rg_mode` is a lowercase token, falling back to Album on an unknown
-/// value.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct ReplayGainFlags {
-    pub rg_enabled: bool,
-    pub rg_mode: String,
-    /// Extra preamp in dB, clamped to `RG_MIN_PREAMP_DB..=RG_MAX_PREAMP_DB`.
-    pub rg_preamp: f32,
-    pub rg_prevent_clipping: bool,
-}
-
-impl Default for ReplayGainFlags {
-    fn default() -> Self {
-        Self {
-            rg_enabled: false,
-            rg_mode: DEFAULT_MODE.to_owned(),
-            rg_preamp: RG_DEFAULT_PREAMP_DB,
-            rg_prevent_clipping: true,
-        }
-    }
-}
-
-/// Crossfade preferences. Ships **off**, so an install keeps the gapless
-/// behaviour it already has. Once enabled, `crossfade_skip_same_album` defaults
-/// **on** so continuous-mix albums stay gapless — Strawberry's and Clementine's
-/// default too. `crossfade_duration_ms` is clamped to
-/// `MIN_CROSSFADE_MS..=MAX_CROSSFADE_MS`.
-#[allow(
-    clippy::struct_excessive_bools,
-    reason = "one serde field per independent user-facing toggle; each must round-trip through settings.json by name"
-)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct CrossfadeFlags {
-    pub crossfade_enabled: bool,
-    pub crossfade_duration_ms: u32,
-    pub crossfade_manual: bool,
-    pub crossfade_skip_same_album: bool,
-    pub crossfade_fade_on_pause: bool,
-}
-
-impl Default for CrossfadeFlags {
-    fn default() -> Self {
-        Self {
-            crossfade_enabled: false,
-            crossfade_duration_ms: DEFAULT_CROSSFADE_MS,
-            crossfade_manual: false,
-            crossfade_skip_same_album: true,
-            crossfade_fade_on_pause: false,
-        }
-    }
-}
-
-/// Audio-visualizer preferences — the one feature here that ships **on**, being
-/// a presentation flourish confined to the Now-Playing view rather than
-/// something that alters what you hear.
-///
-/// `viz_enabled` decides whether the strip *mounts* and nothing more: the
-/// audio-thread tap is armed by the view being on screen, so leaving this on
-/// costs nothing while the view is closed.
-///
-/// `viz_style` is a **key**, not an index into the picker — an index would
-/// silently repoint every existing install the day the style list is reordered.
-/// An unrecognized key resolves back to the default.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct VisualizerFlags {
-    pub viz_enabled: bool,
-    pub viz_style: String,
-}
-
-/// The style key a fresh install starts on, and the one an unrecognized key
-/// resolves back to. `melodia-views`' `ui/visualizer/`'s style table must *head with the
-/// same key* — its own fallbacks land on index 0 — which its tests pin.
-pub const DEFAULT_VIZ_STYLE: &str = "bars";
-
-impl Default for VisualizerFlags {
-    fn default() -> Self {
-        Self {
-            viz_enabled: true,
-            viz_style: DEFAULT_VIZ_STYLE.to_owned(),
-        }
-    }
-}
-
-/// Queue-behavior preferences.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct QueueFlags {
-    pub shuffle_enabled: bool,
-    pub repeat_mode: RepeatMode,
-}
-
-impl Default for QueueFlags {
-    fn default() -> Self {
-        Self {
-            shuffle_enabled: false,
-            repeat_mode: RepeatMode::Off,
-        }
-    }
-}
-
-/// Style of the custom titlebar's decoration buttons: `Standard` paints
-/// Material Symbols bar icons, `Macos` the three traffic-light circles.
-/// Persisted as a token so a future style needs no schema change.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TitlebarButtonStyle {
-    #[default]
-    Standard,
-    Macos,
-}
-
-/// Which window edge the decoration buttons sit on. Independent of
-/// [`TitlebarButtonStyle`]; close stays at the outer corner either way, so
-/// "click corner = close" holds.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TitlebarButtonSide {
-    #[default]
-    Right,
-    Left,
-}
-
-/// Window-chrome toggles. The two `titlebar_button_*` fields only take effect
-/// under `use_native_titlebar == false`; otherwise the OS paints its own.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct WindowFlags {
-    pub is_maximized: bool,
-    #[serde(alias = "mini_player_pinned")]
-    pub always_on_top: bool,
-    pub use_native_titlebar: bool,
-    pub titlebar_button_style: TitlebarButtonStyle,
-    pub titlebar_button_side: TitlebarButtonSide,
-}
-
-impl Default for WindowFlags {
-    fn default() -> Self {
-        Self {
-            is_maximized: false,
-            always_on_top: false,
-            // On Windows the DWM caption attributes paint the OS titlebar in
-            // the app mantle, so the native chrome looks near-identical and
-            // brings real Aero Snap and hover-peek with it. Elsewhere the
-            // custom titlebar is the only chrome that carries the playback
-            // controls without losing rows to a separate OS frame.
-            use_native_titlebar: cfg!(target_os = "windows"),
-            titlebar_button_style: TitlebarButtonStyle::Standard,
-            titlebar_button_side: TitlebarButtonSide::Right,
-        }
-    }
-}
-
-/// System-tray toggles. The icon ships on; hiding the window into it is opt-in.
-///
-/// With `tray_enabled` off, `ui::shell::tray_bridge::install` is skipped
-/// entirely — no D-Bus connection, no service thread, no action tasks — so
-/// toggling it needs a restart (the `restart-tray` `Dialog` flow). A session
-/// with no tray host still pays that install and leaves `Settings.tray-active`
-/// false, which is what greys `close_to_tray` out: with no icon the close
-/// handlers quit regardless, so it can never strand the window.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct TrayFlags {
-    pub tray_enabled: bool,
-    pub close_to_tray: bool,
-}
-
-impl Default for TrayFlags {
-    fn default() -> Self {
-        Self {
-            tray_enabled: true,
-            close_to_tray: false,
-        }
-    }
-}
-
-/// The Radio section's master switch, off by default. An upgrade has to be silent
-/// for an install that never asked for a network feature, which is the reason
-/// `discord_rpc_enabled` ships off and what the shipped package description
-/// promises of every online feature.
-///
-/// The live answers are the shadows on [`crate::state::AppState`] this seeds at
-/// boot — every reader of all three is either on a tokio worker or in the boot
-/// path, where a settings read is disk I/O for one bool.
-///
-/// Click reporting is the one field the derive would get wrong, so the `Default`
-/// below is written by hand: it describes what the feature does rather than
-/// whether it runs, and `false` there ships a directory nobody's plays are
-/// counted for.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct RadioFlags {
-    pub radio_enabled: bool,
-    /// Whether to drop segmented stations from directory results.
-    ///
-    /// Off by default: they play. It survives its own obsolescence because a
-    /// segment playlist still starts several seconds slower than a direct
-    /// mount, which is a reason to skip them and not one to hide the choice.
-    ///
-    /// **Renamed rather than re-defaulted.** The key it replaced shipped
-    /// defaulting to `true`, so every install that has ever written this file
-    /// carries that value; flipping the default alone would reach nobody who
-    /// already had it.
-    pub radio_hide_segmented: bool,
-    /// Whether playing a station tells the directory so.
-    ///
-    /// Opt-out rather than opt-in: the click is what popularity ordering is
-    /// built from, so a user who leaves it on is paying for the ordering every
-    /// other user browses by. It carries no identity beyond the request itself.
-    pub radio_send_clicks: bool,
-}
-
-impl Default for RadioFlags {
-    fn default() -> Self {
-        Self {
-            radio_enabled: false,
-            radio_hide_segmented: false,
-            radio_send_clicks: true,
-        }
-    }
-}
-
-/// The Now Playing lyrics panel, whether it may look a sheet up online, and how it draws a line.
-///
-/// **Three switches because they sell different things.** The panel is a view preference and reads
-/// whatever is already on disk or in the file; the lookup is traffic. Turning the lookup off
-/// leaves a sheet already in the store perfectly readable, which is what "no traffic" means and
-/// what "no lyrics" would not. Romanization is neither: it is how a line the panel already has is
-/// drawn, so it costs nothing and reaches nothing.
-///
-/// **The first two are off and the third is on**, which is why the `Default` is written out rather
-/// than derived. A panel nobody asked for should not take the Up Next column on upgrade, and the
-/// shipped package description promises that every online feature is a setting the user controls;
-/// but a reader who has turned the panel on and is looking at a script they cannot sound out
-/// wanted this before they knew to ask. It draws nothing at all for a Latin sheet, so "on" costs
-/// the other libraries nothing.
-///
-/// **The three are independent, and the third one especially.** Turning the panel off and on again
-/// says nothing about romanization, so a reader who switched it off gets it back off.
-///
-/// `settings.json` rather than `views.json` for the panel too, for `VisualizerFlags::viz_enabled`'s
-/// reason: it is the other Now Playing preference flipped from that view's own overflow menu, and
-/// a `views.json` flag may not be a bool.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct LyricsFlags {
-    pub lyrics_panel_shown: bool,
-    pub lyrics_online_enabled: bool,
-    pub lyrics_romanization_shown: bool,
-}
-
-impl Default for LyricsFlags {
-    fn default() -> Self {
-        Self {
-            lyrics_panel_shown: false,
-            lyrics_online_enabled: false,
-            lyrics_romanization_shown: true,
-        }
-    }
-}
-
-/// Library-management toggles.
-///
-/// Two default-on switches, both because the off state is the surprising one.
-/// `folder_watching_enabled`: every consumer player auto-watches with no toggle at
-/// all, and watching off lands in a stale-UI failure mode a user can't diagnose —
-/// the toggle survives as an escape valve for the inotify watch budget on huge
-/// libraries. `write_ratings_to_tags`: a star that lives only in this database is
-/// one a library rebuild loses and no other player can see.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "six independent settings.json keys, four of them one-shot markers; any grouping would be a container invented for the lint rather than one describing something"
-)]
-pub struct LibraryFlags {
-    pub folder_watching_enabled: bool,
-    pub music_folder_auto_added: bool,
-    /// Whether the artwork store has been brought inside its size bounds once.
-    ///
-    /// Normalization happens at the writer, so it only ever reaches newly-scanned files —
-    /// `scanner::track_is_current` guarantees an unchanged track's artwork is never re-derived.
-    /// A pass over what is already there is therefore one-shot rather than continuous, and
-    /// marked here rather than inferred, there being no cheap way to ask the store whether it
-    /// has been swept short of reading every file in it.
-    pub artwork_store_normalized: bool,
-    /// Whether a star set here is also written into the file's own tag.
-    ///
-    /// On, the rating is portable — other players read it, and it survives a library rebuild or
-    /// a move to another machine, which is the whole reason the column alone was not enough.
-    /// The cost is that a one-click action rewrites the file, so it is a switch rather than an
-    /// assumption.
-    pub write_ratings_to_tags: bool,
-    /// Whether the ratings already sitting in this library's files have been read in once.
-    ///
-    /// `scanner::track_is_current` skips an unchanged file outright, so a library scanned before
-    /// ratings were read stays unrated no matter how many times it is rescanned. The sweep that
-    /// fixes that is one-shot, and marked here rather than inferred — an unrated row is
-    /// indistinguishable from one the user deliberately cleared.
-    pub ratings_imported_from_tags: bool,
-    /// Whether the tags this library's files carry have been re-read once since the ingest
-    /// widened.
-    ///
-    /// The migrations seed what the database already knew — one artist credit per track, one
-    /// genre, a composer — and that is every name a library indexed before them holds. Everything
-    /// the reader gained since is in the files, and `scanner::track_is_current` will never re-read
-    /// them on its own.
-    pub tags_backfilled: bool,
-}
-
-impl Default for LibraryFlags {
-    fn default() -> Self {
-        Self {
-            folder_watching_enabled: true,
-            music_folder_auto_added: false,
-            artwork_store_normalized: false,
-            write_ratings_to_tags: true,
-            ratings_imported_from_tags: false,
-            tags_backfilled: false,
-        }
-    }
-}
-
-/// What the diagnostics surfaces record.
-///
-/// `verbose_logging` is a debugging mode, and against a fixed rotation budget
-/// leaving it on costs a reporter the older history. Persisted rather than
-/// session-scoped so `logging::install` can start a boot at it.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
-pub struct DiagnosticsFlags {
-    pub verbose_logging: bool,
-}
-
-/// What the one-time Ko-fi prompt remembers. `launch_count` stops advancing
-/// once `support_prompt_seen` is set, so a settled install stops rewriting
-/// `settings.json` at boot rather than counting forever.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
-pub struct SupportFlags {
-    pub launch_count: u32,
-    pub support_prompt_seen: bool,
-}
-
-/// The onboarding revision this install has been shown, `0` meaning never.
-///
-/// A revision rather than a bool so a later feature that belongs in the welcome card can bump
-/// [`ONBOARDING_VERSION`] and reach installs that already ran the flow, instead of owing a
-/// separate what's-new surface. While the constant never moves this behaves exactly as a bool
-/// would have.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
-pub struct OnboardingFlags {
-    pub onboarding_version: u32,
-}
-
-/// The revision [`OnboardingFlags::onboarding_version`] lands on once the card has been seen.
-pub const ONBOARDING_VERSION: u32 = 1;
-
-impl OnboardingFlags {
-    /// Whether the welcome card is owed on this launch.
-    pub fn needs_onboarding(&self) -> bool {
-        self.onboarding_version < ONBOARDING_VERSION
-    }
-}
-
-/// Auto-updater state persisted between launches.
-///
-/// `last_check_unix` and `last_manifest_etag` drive the daily-check loop's
-/// elapsed gate and `If-None-Match` short-circuit; `consecutive_failures` is
-/// what lengthens its re-arm against flaky-network thrash. `skipped_release` is
-/// set *only* by the "Skip this version" affordance — dismissing the toast
-/// deliberately doesn't, since a dismissed toast returns next launch while a
-/// skipped version stays suppressed until a strictly-newer one lands.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct UpdateFlags {
-    pub auto_check_enabled: bool,
-    pub last_check_unix: i64,
-    pub last_known_release: String,
-    pub skipped_release: String,
-    pub last_manifest_etag: String,
-    pub consecutive_failures: u8,
-}
-
-impl UpdateFlags {
-    /// A manifest fetch that came back. `latest_version` is `None` on a `304`, where the cached
-    /// value is still the most recent thing seen and overwriting it would lose it.
-    pub fn record_success(
-        &mut self,
-        now_unix: i64,
-        latest_version: Option<String>,
-        etag: Option<String>,
-    ) {
-        self.last_check_unix = now_unix;
-        self.consecutive_failures = 0;
-        if let Some(version) = latest_version {
-            self.last_known_release = version;
-        }
-        if let Some(tag) = etag {
-            self.last_manifest_etag = tag;
-        }
-    }
-
-    /// A fetch that didn't. Advancing `last_check_unix` is what the counter depends on: the daily
-    /// loop's 24h gate reads it, and a failure that left it alone would re-fire every iteration
-    /// rather than backing off.
-    pub fn record_failure(&mut self, now_unix: i64) {
-        self.last_check_unix = now_unix;
-        self.consecutive_failures = self.consecutive_failures.saturating_add(1);
-    }
-}
-
-impl Default for UpdateFlags {
-    fn default() -> Self {
-        Self {
-            auto_check_enabled: true,
-            last_check_unix: 0,
-            last_known_release: String::new(),
-            skipped_release: String::new(),
-            last_manifest_etag: String::new(),
-            consecutive_failures: 0,
-        }
-    }
-}
-
-/// In-app layout / visual toggles.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct LayoutFlags {
-    pub sidebar_collapsed: bool,
-    pub progress_state_layer: bool,
-    /// KDE-only: under the native titlebar, tint the sidebar and now-playing
-    /// bar toward `Theme.base` while unfocused, mirroring KDE's own
-    /// window-decoration fade. The field default seeds it per-desktop for a
-    /// file that predates the key; `LayoutFlags::default()` stays `false` so a
-    /// fresh non-KDE install boots with the row hidden.
-    #[serde(default = "default_match_unfocused_to_system_bg")]
-    pub match_unfocused_to_system_bg: bool,
-}
-
-impl Default for LayoutFlags {
-    fn default() -> Self {
-        Self {
-            sidebar_collapsed: false,
-            progress_state_layer: true,
-            match_unfocused_to_system_bg: false,
-        }
-    }
-}
-
-fn default_match_unfocused_to_system_bg() -> bool {
-    is_kde_desktop()
-}
-
-/// Motion the shell plays for its own sake.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
-pub struct MotionFlags {
-    /// Drop the entrance animation of the view mounted at launch, so the window
-    /// opens with its content already in place. `boot::ui_setup` turns it into
-    /// `Nav.suppress-enter-animation` before the window is shown and the mount
-    /// hands that back once settled; later navigation animates either way.
-    pub skip_startup_animation: bool,
-}
-
-/// Which backdrop the artwork-derived surfaces paint.
-///
-/// Its own struct rather than a fourth bool on [`LayoutFlags`], which is already at clippy's
-/// `struct_excessive_bools` budget. Read once at boot into `Theme.aurora-backdrop` — the toggle is
-/// restart-gated, so the artwork tiers can decide whether to build a blur half at all.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct BackdropFlags {
-    /// On, and `theme.slint` declares the same value so a failed settings read lands on the
-    /// shipped look. Flipping it only reaches a `settings.json` predating the key: the struct
-    /// serializes whole, so an install that has saved settings since the toggle shipped carries
-    /// its own answer.
-    pub aurora_backdrop: bool,
-}
-
-impl Default for BackdropFlags {
-    fn default() -> Self {
-        Self {
-            aurora_backdrop: true,
-        }
-    }
-}
-
-// OS / desktop-environment probes behind the defaults above. They sit in
-// `services/` rather than `library/` because that is the dependency direction;
-// `melodia-views`' `ui/appearance/` imports them from `services::settings::` directly.
-
-/// Whether the active session is KDE Plasma. Seeds
-/// `LayoutFlags.match_unfocused_to_system_bg` and hides the matching Appearance
-/// row elsewhere, the behaviour it drives being KDE's own.
-#[cfg(target_os = "linux")]
-pub fn is_kde_desktop() -> bool {
-    std::env::var("XDG_CURRENT_DESKTOP")
-        .ok()
-        .is_some_and(|val| val.split(':').any(|seg| seg == "KDE"))
-}
-
-#[cfg(not(target_os = "linux"))]
-pub fn is_kde_desktop() -> bool {
-    false
-}
-
-/// The host desktop's window corner radius, in pixels. Values mirror the chip
-/// presets in the Appearance section, so a first launch lights up the chip
-/// matching the environment.
-#[must_use]
-pub fn get_os_corner_radius() -> u32 {
-    #[cfg(target_os = "macos")]
-    {
-        10
-    }
-    #[cfg(target_os = "windows")]
-    {
-        8
-    }
-    #[cfg(target_os = "linux")]
-    {
-        match std::env::var("XDG_CURRENT_DESKTOP") {
-            Ok(val) => {
-                for segment in val.split(':') {
-                    if segment == "GNOME" {
-                        return 15;
-                    }
-                    if segment == "KDE" {
-                        return 6;
-                    }
-                }
-                6
-            }
-            Err(_) => 6,
         }
     }
 }
@@ -758,12 +157,21 @@ pub struct SettingsData {
     pub onboarding: OnboardingFlags,
 }
 
+impl SettingsData {
+    /// The static accent `theme_id` last had, if one was ever recorded.
+    pub fn last_static_accent(&self, theme_id: &str) -> Option<&str> {
+        self.theme_preferences.get(theme_id)?.last_static_accent.as_deref()
+    }
+}
+
 impl Default for SettingsData {
     fn default() -> Self {
+        let desktop = host_desktop();
+        let (theme, variant) = first_launch_theme(desktop);
         Self {
-            theme_id: "catppuccin".to_owned(),
-            theme_variant: "mocha".to_owned(),
-            accent_color: "mauve".to_owned(),
+            theme_id: theme.id.to_owned(),
+            theme_variant: variant.to_owned(),
+            accent_color: theme.default_accent.to_owned(),
             sidebar_width: 180.0,
             window_width: 1200.0,
             window_height: 800.0,
@@ -784,20 +192,36 @@ impl Default for SettingsData {
             crossfade: CrossfadeFlags::default(),
             visualizer: VisualizerFlags::default(),
             queue: QueueFlags::default(),
-            window: WindowFlags::default(),
+            window: WindowFlags::first_launch(desktop),
             tray: TrayFlags::default(),
             scrobble: ScrobbleFlags::default(),
             discord: DiscordFlags::default(),
             radio: RadioFlags::default(),
             lyrics: LyricsFlags::default(),
             library: LibraryFlags::default(),
-            layout: LayoutFlags::default(),
+            layout: LayoutFlags::first_launch(desktop),
             motion: MotionFlags::default(),
             backdrop: BackdropFlags::default(),
             updates: UpdateFlags::default(),
             diagnostics: DiagnosticsFlags::default(),
             support: SupportFlags::default(),
             onboarding: OnboardingFlags::default(),
+        }
+    }
+}
+
+/// The theme and variant a fresh install opens with, its accent being the theme's own default.
+/// Windows, KDE and GNOME each open on their own theme under the System variant, so the first
+/// window matches the desktop around it. A desktop with no theme of its own gets Catppuccin.
+fn first_launch_theme(desktop: HostDesktop) -> (&'static ThemeDef, &'static str) {
+    if cfg!(target_os = "windows") {
+        return (&themes::windows::WINDOWS, SYSTEM_VARIANT_ID);
+    }
+    match desktop {
+        HostDesktop::Kde => (&themes::kde::KDE, SYSTEM_VARIANT_ID),
+        HostDesktop::Gnome => (&themes::gnome::GNOME, SYSTEM_VARIANT_ID),
+        HostDesktop::Other => {
+            (&themes::catppuccin::CATPPUCCIN, themes::catppuccin::CATPPUCCIN.default_variant)
         }
     }
 }
@@ -809,11 +233,7 @@ fn default_locale() -> String {
 fn detect_os_locale() -> Option<String> {
     let raw = detect_system_locale_raw()?;
     let lang = parse_language_code(&raw)?;
-    if SUPPORTED_LOCALES.contains(&lang.as_str()) {
-        Some(lang)
-    } else {
-        None
-    }
+    if SUPPORTED_LOCALES.contains(&lang.as_str()) { Some(lang) } else { None }
 }
 
 fn detect_system_locale_raw() -> Option<String> {
@@ -879,11 +299,7 @@ fn parse_language_code(locale_str: &str) -> Option<String> {
     let without_encoding = locale_str.split('.').next()?;
     let lang = without_encoding.split(['_', '-']).next()?;
     let lang = lang.to_lowercase();
-    if lang.len() == 2 && lang.chars().all(|c| c.is_ascii_alphabetic()) {
-        Some(lang)
-    } else {
-        None
-    }
+    if lang.len() == 2 && lang.chars().all(|c| c.is_ascii_alphabetic()) { Some(lang) } else { None }
 }
 
 #[cfg(test)]

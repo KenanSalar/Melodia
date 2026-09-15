@@ -2,27 +2,34 @@
 //! property to the persisted setting, the `slint::Window` API, and
 //! winit (via Slint's `unstable-winit-030` accessor).
 //!
-//! Six reasons it exists: hydrating `Theme.use-native-titlebar` (Slint reads
-//! `Window.no-frame` once at first show, so it has to land in the gap between
-//! `AppWindow::new()` and `app.run()` — exactly where `main.rs` calls [`install`]), the
-//! window control callbacks ([`controls`]), window dragging ([`winit_filter`]), file-drop
-//! coalescing ([`drop_coalescer`]), geometry ([`geometry`]) and the restart flow.
+//! Seven reasons it exists: hydrating `Theme.use-native-titlebar` (in the gap between
+//! `AppWindow::new()` and `app.run()`, where `main.rs` calls [`install`], so the window maps
+//! with its frame decided rather than swapping it on screen), the
+//! window control callbacks ([`controls`]), window dragging and resizing ([`winit_filter`],
+//! [`resize_grab`]), the Slint tick a Win32 drag parks (`parked_loop`), file-drop coalescing
+//! ([`drop_coalescer`]), geometry ([`geometry`]) and the restart flow.
 //!
-//! **Dragging belongs at the winit layer.** `drag_window()` from a `TouchArea`'s
+//! **Dragging and resizing belong at the winit layer.** `drag_window()` from a `TouchArea`'s
 //! `pointer-event` leaks the grab: the compositor takes pointer ownership for the move and
 //! the matching `Released` never reaches Slint, so a `TouchArea` that returned `GrabMouse`
-//! stays pressed forever and every later click routes back to it. Slint's own resize-border
-//! handler dodges this by intercepting `MouseInput { Pressed, Left }` before dispatch, and
-//! this mirrors it against an atomic a Slint callback keeps in step with drag-area hover.
+//! stays pressed forever and every later click routes back to it. A resize drag is the same
+//! handover. So the filter intercepts `MouseInput { Pressed, Left }` before dispatch, against
+//! cells Slint callbacks keep in step with drag-region and resize-grab hover.
 //!
-//! **`no-frame` is sticky after first show**, so toggling the native titlebar needs a
-//! fresh process: persist, then hand off to [`request_respawn_and_quit`], which arms
+//! **A restart persists, then hands off to [`request_respawn_and_quit`]**, which arms
 //! [`RESPAWN_AFTER_EXIT`] and quits the loop so `main()` falls through to shutdown before
 //! the new process takes over. One function rather than three, since it owns the refusal.
+//! The native titlebar toggle takes this path because boot is the only writer of
+//! `Theme.use-native-titlebar`, and of `Settings.match-unfocused-bg`, which a KDE enable turns
+//! on alongside. The frame itself needs no restart: Slint applies `no-frame` live, which is how
+//! the miniplayer drops the native one.
 
 mod controls;
 mod drop_coalescer;
 pub mod geometry;
+#[cfg(target_os = "windows")]
+pub mod parked_loop;
+mod resize_grab;
 mod winit_filter;
 
 pub use drop_coalescer::{
@@ -40,6 +47,8 @@ use slint::winit_030::winit::window::WindowLevel;
 use melodia_app::state::AppState;
 use melodia_core::error::AppError;
 use melodia_core::utils::toast::{self, ToastKind};
+#[cfg(target_os = "linux")]
+use melodia_platform::services::platform::always_on_top;
 use melodia_platform::services::platform::always_on_top::AlwaysOnTopMethod;
 use melodia_ui::{AppWindow, Theme};
 
@@ -161,8 +170,12 @@ pub fn install(app: &AppWindow, state: &AppState) -> Result<(), AppError> {
     app.global::<Theme>().set_use_native_titlebar(use_native);
 
     let drag_hover = Arc::new(AtomicBool::new(false));
+    let press_targets = winit_filter::PressTargets {
+        drag_hover: Arc::clone(&drag_hover),
+        resize: resize_grab::wire(app),
+    };
 
-    winit_filter::install(app, state, drag_hover.clone());
+    winit_filter::install(app, state, press_targets);
     controls::wire(app, state, drag_hover);
     seed_always_on_top(app, state, settings.window.always_on_top);
 
@@ -170,41 +183,58 @@ pub fn install(app: &AppWindow, state: &AppState) -> Result<(), AppError> {
 }
 
 /// Push the cached capability and persisted pinned state into `WindowChrome`, and
-/// re-apply at the OS level if the window was pinned last time. The Linux re-apply
-/// waits, so `KWin` / GNOME have registered the window — `MakeAbove` against a
-/// not-yet-shown one quietly fails on bare `window-calls`.
+/// re-apply at the OS level if the window was pinned last time. Both re-applies wait.
+/// This runs before `app.show()`, and the winit window only exists once the event loop
+/// creates it, so the native one waits for that. The Linux one waits so `KWin` / GNOME
+/// have registered the window: `MakeAbove` against a not-yet-shown one quietly fails on
+/// bare `window-calls`. On Linux it then watches for the pin moving outside Melodia,
+/// pinned or not.
 fn seed_always_on_top(app: &AppWindow, state: &AppState, persisted_pinned: bool) {
     let chrome = app.global::<melodia_ui::WindowChrome>();
     chrome.set_always_on_top_supported(state.always_on_top.supported);
     chrome.set_always_on_top_active(persisted_pinned);
 
-    if !state.always_on_top.supported || !persisted_pinned {
+    if !state.always_on_top.supported {
         return;
     }
 
     match state.always_on_top.method {
         AlwaysOnTopMethod::Native => {
-            let _ = app.window().with_winit_window(|w| {
-                w.set_window_level(WindowLevel::AlwaysOnTop);
-            });
+            if !persisted_pinned {
+                return;
+            }
+            let weak = app.as_weak();
+            if let Err(e) = slint::spawn_local(async move {
+                let Some(ui) = weak.upgrade() else { return };
+                match ui.window().winit_window().await {
+                    Ok(window) => window.set_window_level(WindowLevel::AlwaysOnTop),
+                    Err(e) => log::warn!("startup always_on_top re-apply: {e}"),
+                }
+            }) {
+                log::warn!("startup always_on_top re-apply: schedule: {e}");
+            }
         }
         #[cfg(target_os = "linux")]
         AlwaysOnTopMethod::KwinDbus | AlwaysOnTopMethod::GnomeExtension => {
+            let (reports, reported) = tokio::sync::watch::channel(persisted_pinned);
+            follow_reported_pin(app, state, reported);
+
             let state = state.clone();
             // `Handle::clone()` releases the borrow on `state.runtime` so the same
             // `state` can be moved into the async block.
             state.runtime.clone().spawn(async move {
-                // KWin enumerates `workspace.stackingOrder` by PID, so the window has to
-                // be mapped by the compositor first.
-                tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-                if let Err(e) = melodia_platform::services::platform::always_on_top::apply(
-                    state.always_on_top.method,
-                    &state.paths.data_dir,
-                    true,
-                )
-                .await
-                {
-                    log::warn!("startup always_on_top re-apply: {e}");
+                let method = state.always_on_top.method;
+                let data_dir = &state.paths.data_dir;
+                if persisted_pinned {
+                    // KWin enumerates `workspace.stackingOrder` by PID, so the window has to
+                    // be mapped by the compositor first.
+                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                    if let Err(e) = always_on_top::apply(method, data_dir, true).await {
+                        log::warn!("startup always_on_top re-apply: {e}");
+                    }
+                }
+                if let Err(e) = always_on_top::watch_changes(method, data_dir, reports).await {
+                    log::warn!("always_on_top watch: {e}");
                 }
             });
         }
@@ -212,6 +242,43 @@ fn seed_always_on_top(app: &AppWindow, state: &AppState, persisted_pinned: bool)
     }
 }
 
+/// Mirror each pin the window manager reports into `WindowChrome` and the persisted setting, so
+/// `KWin`'s keep-above titlebar button moves Melodia's pin button too. A report matching the
+/// button is a toggle of Melodia's own coming back, and changes nothing.
+#[cfg(target_os = "linux")]
+fn follow_reported_pin(
+    app: &AppWindow,
+    state: &AppState,
+    mut reported: tokio::sync::watch::Receiver<bool>,
+) {
+    let weak = app.as_weak();
+    let state = state.clone();
+    // One loop, so a burst of reports persists in the order the window manager sent them.
+    let followed = slint::spawn_local(async_compat::Compat::new(async move {
+        while reported.changed().await.is_ok() {
+            let pinned = *reported.borrow();
+            {
+                let Some(ui) = weak.upgrade() else { return };
+                let chrome = ui.global::<melodia_ui::WindowChrome>();
+                if chrome.get_always_on_top_active() == pinned {
+                    continue;
+                }
+                chrome.set_always_on_top_active(pinned);
+            }
+            if let Err(e) = melodia_app::library::window::record_always_on_top(&state, pinned).await
+            {
+                log::warn!("record always_on_top: {e}");
+            }
+        }
+    }));
+    if let Err(e) = followed {
+        log::warn!("always_on_top follower: spawn_local: {e}");
+    }
+}
+
+#[cfg(test)]
+#[path = "tests/always_on_top_tests.rs"]
+mod always_on_top_tests;
 #[cfg(test)]
 #[path = "tests/respawn_tests.rs"]
 mod tests;

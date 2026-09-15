@@ -43,10 +43,7 @@ const SIGNATURE_MAX_BYTES: u64 = 8 * 1024;
 #[derive(Debug)]
 pub enum FetchOutcome {
     NotModified,
-    Fresh {
-        manifest: LatestManifest,
-        etag: Option<String>,
-    },
+    Fresh { manifest: LatestManifest, etag: Option<String> },
 }
 
 pub async fn fetch_latest_manifest(

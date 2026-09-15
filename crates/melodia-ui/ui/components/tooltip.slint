@@ -55,7 +55,10 @@ export component Tooltip inherits Rectangle {
     border-radius: 6px;
     opacity: (shown || root.force-shown) ? 1.0 : 0.0;
     animate opacity { duration: 150ms; easing: ease-out; }
-    visible: root.text != "";
+    // Hidden once faded out, not only transparent: an element with children under any opacity
+    // short of 1.0 renders into a layer of its own, so every idle tooltip in the tree held a texture
+    // and composited it each frame. `self.opacity` keeps the fade-out visible until it lands.
+    visible: root.text != "" && (root.shown || root.force-shown || self.opacity > 0);
 
     reveal-timer := Timer {
         interval: 500ms;

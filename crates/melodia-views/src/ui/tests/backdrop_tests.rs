@@ -18,19 +18,11 @@ const SEED: u32 = 0x00cb_a6f7;
 /// is *argued* against, so a palette edit should fail here and be re-derived
 /// rather than silently move every bound.
 fn mocha() -> ThemeTokens {
-    ThemeTokens {
-        base: 0x001e_1e2e,
-        text: 0x00cd_d6f4,
-        accent: SEED,
-    }
+    ThemeTokens { base: 0x001e_1e2e, text: 0x00cd_d6f4, accent: SEED }
 }
 
 fn latte() -> ThemeTokens {
-    ThemeTokens {
-        base: 0x00ef_f1f5,
-        text: 0x004c_4f69,
-        accent: 0x0088_39ef,
-    }
+    ThemeTokens { base: 0x00ef_f1f5, text: 0x004c_4f69, accent: 0x0088_39ef }
 }
 
 /// Build a `BLUR_TARGET`-ish square buffer from a per-pixel closure.
@@ -70,11 +62,7 @@ fn measured(buf: &SharedPixelBuffer<Rgb8Pixel>) -> BackdropSample {
 fn relative_luminance(r: u8, g: u8, b: u8) -> f64 {
     let lin = |c: u8| {
         let n = f64::from(c) / 255.0;
-        if n <= 0.040_449_936 {
-            n / 12.92
-        } else {
-            ((n + 0.055) / 1.055).powf(2.4)
-        }
+        if n <= 0.040_449_936 { n / 12.92 } else { ((n + 0.055) / 1.055).powf(2.4) }
     };
     0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
 }
@@ -144,13 +132,7 @@ fn luma_p90_reads_a_black_buffer_as_near_zero() {
 fn luma_p90_sees_a_bright_mark_a_mean_would_miss() {
     // 20% of the buffer is white, the rest black.
     let side = 40;
-    let buf = buffer_from(side, |_, y| {
-        if y < side / 5 {
-            [255, 255, 255]
-        } else {
-            [0, 0, 0]
-        }
-    });
+    let buf = buffer_from(side, |_, y| if y < side / 5 { [255, 255, 255] } else { [0, 0, 0] });
     let luma = p90(&buf);
 
     // The mean lightness of this buffer is low — that is the statistic being
@@ -168,13 +150,8 @@ fn luma_p90_steps_over_a_tail_smaller_than_the_percentile() {
     // 2% white — inside the 10% tail, so the percentile should report the
     // black body, not the speck.
     let side = 50;
-    let buf = buffer_from(side, |x, y| {
-        if y == 0 && x < side / 2 {
-            [255, 255, 255]
-        } else {
-            [0, 0, 0]
-        }
-    });
+    let buf =
+        buffer_from(side, |x, y| if y == 0 && x < side / 2 { [255, 255, 255] } else { [0, 0, 0] });
     let luma = p90(&buf);
     assert!(luma < 10.0, "a 1% speck must not drive the scrim, got L*{luma}");
 }
@@ -408,17 +385,10 @@ fn floor_luma_is_dark_enough_to_need_no_extra_scrim() {
 #[test]
 fn solve_keeps_the_scrim_and_floor_dark_whatever_the_seed() {
     for seed in [SEED, 0x00ff_ffff, 0x0000_0000, 0x0000_ff00] {
-        let BackdropColors {
-            scrim,
-            floor_start,
-            floor_end,
-            ..
-        } = solve(seed, 100.0);
-        for (name, rgb) in [
-            ("scrim", scrim),
-            ("floor_start", floor_start),
-            ("floor_end", floor_end),
-        ] {
+        let BackdropColors { scrim, floor_start, floor_end, .. } = solve(seed, 100.0);
+        for (name, rgb) in
+            [("scrim", scrim), ("floor_start", floor_start), ("floor_end", floor_end)]
+        {
             let (r, g, b) = unpack(rgb);
             let y = relative_luminance(r, g, b);
             assert!(y < 0.06, "{name} for seed {seed:#08x} is not dark (Y={y}), rgb={rgb:#08x}");
@@ -533,10 +503,9 @@ fn the_aurora_arm_publishes_the_theme_and_the_blur_arm_solves() {
 /// runtime and have none to match on.
 #[test]
 fn the_auroras_chrome_is_neutral_ink_the_wash_reads_through() {
-    for (name, theme, expected) in [
-        ("mocha", mocha(), 0x00ff_ffff),
-        ("latte", latte(), 0x0000_0000),
-    ] {
+    for (name, theme, expected) in
+        [("mocha", mocha(), 0x00ff_ffff), ("latte", latte(), 0x0000_0000)]
+    {
         let colors =
             measured(&buffer_from(32, |_, _| [220, 30, 30])).solve(&theme, BackdropKind::Aurora);
 
@@ -660,13 +629,7 @@ fn the_aurora_tiers_ignore_what_the_cover_measured() {
 
 #[test]
 fn gradient_luma_of_one_repeated_stop_is_that_stop() {
-    for rgb in [
-        0x0000_0000,
-        0x0080_8080,
-        0x00ff_ffff,
-        0x00cb_a6f7,
-        0x0000_66ff,
-    ] {
+    for rgb in [0x0000_0000, 0x0080_8080, 0x00ff_ffff, 0x00cb_a6f7, 0x0000_66ff] {
         let stop = rgb_lstar(rgb);
         let gradient = gradient_luma(rgb, rgb);
         assert!(

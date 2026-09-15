@@ -143,11 +143,7 @@ fn restore_one(path: &Path) -> Step {
     let source_len = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
     let saved =
         std::fs::metadata(&stored).ok().map_or(0, |meta| source_len.saturating_sub(meta.len()));
-    Step::Shrunk {
-        from,
-        to: stored,
-        saved,
-    }
+    Step::Shrunk { from, to: stored, saved }
 }
 
 #[cfg(test)]

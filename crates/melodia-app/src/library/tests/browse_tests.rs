@@ -113,13 +113,7 @@ async fn a_dot_entry_is_not_browsed() -> Result<(), AppError> {
 async fn only_audio_files_and_folders_are_listed() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let tmp = TempDir::new()?;
-    for name in [
-        "song.mp3",
-        "track.flac",
-        "clip.ogg",
-        "cover.jpg",
-        "notes.txt",
-    ] {
+    for name in ["song.mp3", "track.flac", "clip.ogg", "cover.jpg", "notes.txt"] {
         std::fs::write(tmp.path().join(name), "data")?;
     }
     std::fs::create_dir(tmp.path().join("Rock"))?;
@@ -178,10 +172,7 @@ async fn a_file_carries_its_row_only_when_the_library_holds_one() -> Result<(), 
         .collect();
     assert_eq!(
         listed,
-        [
-            ("known.mp3", true, 1, "Known Song"),
-            ("unknown.mp3", false, 0, "unknown.mp3")
-        ],
+        [("known.mp3", true, 1, "Known Song"), ("unknown.mp3", false, 0, "unknown.mp3")],
         "a disk-only file must be titled by its name and carry no id"
     );
     Ok(())

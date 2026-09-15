@@ -130,14 +130,9 @@ pub async fn export_stations(state: &AppState, dest: &Path) -> Result<u32, AppEr
 async fn write_station_list(db: &DbPool, dest: &Path) -> Result<u32, AppError> {
     let stations = queries::radio::get_favorite_stations(db).await?;
     let text = serialize(&stations);
-    let path = dest.to_path_buf();
 
     let written = u32::try_from(stations.len()).unwrap_or(u32::MAX);
-    tokio::task::spawn_blocking(move || {
-        melodia_core::utils::atomic_file::write_text_sync(&path, &text)
-    })
-    .await
-    .map_err(AppError::io_source)??;
+    melodia_core::utils::atomic_file::write_text(dest.to_path_buf(), text).await?;
     Ok(written)
 }
 

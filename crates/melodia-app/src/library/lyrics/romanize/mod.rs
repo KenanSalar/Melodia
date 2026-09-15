@@ -66,11 +66,7 @@ fn romanize_line(line: &str, sheet_is_japanese: bool) -> Option<String> {
         return None;
     }
 
-    let romanized = if sheet_is_japanese {
-        japanese::romanize(line)
-    } else {
-        other_scripts(line)
-    };
+    let romanized = if sheet_is_japanese { japanese::romanize(line) } else { other_scripts(line) };
     let romanized = romanized.trim();
     (!romanized.is_empty() && romanized != line.trim()).then(|| romanized.to_owned())
 }

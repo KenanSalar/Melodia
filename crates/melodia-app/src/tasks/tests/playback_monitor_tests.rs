@@ -31,12 +31,7 @@ impl Fixture {
         queries::folder::insert_folder(&db, "/music", true).await?;
         let track_id =
             insert_test_track(&db, "/music/song.mp3", "Song", "Artist", "Album", "Rock").await?;
-        Ok(Self {
-            db,
-            queue_path: tmp.path().join("queue.json"),
-            track_id,
-            _tmp: tmp,
-        })
+        Ok(Self { db, queue_path: tmp.path().join("queue.json"), track_id, _tmp: tmp })
     }
 
     async fn last_position(&self) -> Result<i64, AppError> {
@@ -58,10 +53,7 @@ impl Fixture {
 /// A queue of one, over the fixture's own row.
 fn playback(station_id: Option<i64>, track_id: i64) -> PersistedPlayback {
     PersistedPlayback {
-        queue: PersistableQueue {
-            track_ids: vec![track_id],
-            current_index: 0,
-        },
+        queue: PersistableQueue { track_ids: vec![track_id], current_index: 0 },
         station_id,
     }
 }
@@ -96,10 +88,7 @@ async fn a_snapshot_with_nothing_playing_still_writes_the_queue_file() -> TestRe
     persist(
         &fixture.db,
         &fixture.queue_path,
-        PlaybackSnapshot {
-            track: None,
-            playback: playback(None, fixture.track_id),
-        },
+        PlaybackSnapshot { track: None, playback: playback(None, fixture.track_id) },
     )
     .await;
 
@@ -118,10 +107,7 @@ async fn the_station_seated_under_the_queue_is_written_with_it() -> TestResult {
     persist(
         &fixture.db,
         &fixture.queue_path,
-        PlaybackSnapshot {
-            track: None,
-            playback: playback(Some(7), fixture.track_id),
-        },
+        PlaybackSnapshot { track: None, playback: playback(Some(7), fixture.track_id) },
     )
     .await;
 

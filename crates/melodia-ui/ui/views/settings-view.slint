@@ -94,14 +94,18 @@ export component SettingsView inherits Rectangle {
     property <bool> watched-searching: root.searching;
     changed watched-searching => { sv.viewport-y = 0px; }
 
+    // How far under the tab bar's divider a scrolled card is cut off. Everything between the two
+    // hides content, so it stays tight and the rest of the header's clearance scrolls with the cards.
+    property <length> clip-gap: Theme.pad-sm;
+
     VerticalLayout {
         padding-top: Theme.pad-lg;
         padding-left: Theme.pad-lg;
         padding-right: Theme.pad-lg;
         // **No `padding-bottom`** — reserved out here it sits *outside* the viewport and reads as a
         // dead strip between the last card and the panel border; it belongs to the scrolling column
-        // below. The spacing is the header's clearance, clear of the gaps *inside* the header row.
-        spacing: 2 * Theme.pad-lg;
+        // below. The header's clearance splits the same way, only `clip-gap` of it sitting out here.
+        spacing: root.clip-gap;
 
         // **The same row the two hero bands wear**, on a flat page — so this is the mount taking
         // its `Theme.*` brush defaults, there being no blur under it. The page hands it no leading
@@ -146,8 +150,9 @@ export component SettingsView inherits Rectangle {
 
                     VerticalLayout {
                         spacing: Theme.pad-lg;
-                        // In here so it scrolls with the cards rather than being
-                        // reserved outside the viewport — see the root layout above.
+                        // In here so both scroll with the cards rather than being
+                        // reserved outside the viewport, see the root layout above.
+                        padding-top: 2 * Theme.pad-lg - root.clip-gap;
                         padding-bottom: Theme.pad-lg;
 
                         SettingsTabs {

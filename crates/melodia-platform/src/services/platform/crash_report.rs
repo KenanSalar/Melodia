@@ -216,9 +216,7 @@ pub fn take_unseen(logs_dir: &Path) -> Option<PathBuf> {
         return None;
     }
 
-    let record = LastSeen {
-        newest: Some(newest.format(FILE_TS_FORMAT).to_string()),
-    };
+    let record = LastSeen { newest: Some(newest.format(FILE_TS_FORMAT).to_string()) };
     if let Err(e) = melodia_core::utils::atomic_file::write_json_sync(&marker, &record) {
         // Hand the report over anyway. The hook wrote into this same directory
         // moments before, so a failure here is close to impossible — and a

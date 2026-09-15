@@ -24,13 +24,17 @@
 
 #[cfg(target_os = "linux")]
 mod ksni_backend;
+mod light_taskbar;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 mod tray_icon_backend;
 
 #[cfg(target_os = "linux")]
 pub use ksni_backend::{LinuxTray, init as init_tray};
 #[cfg(any(target_os = "windows", target_os = "macos"))]
-pub use tray_icon_backend::{init as init_tray, shutdown as shutdown_tray, update as update_tray};
+pub use tray_icon_backend::{
+    init as init_tray, refresh_icon as refresh_tray_icon, shutdown as shutdown_tray,
+    update as update_tray,
+};
 
 /// Bounded capacity of the `TrayAction` channel. The tray callback thread
 /// (ksni's D-Bus thread / tray-icon's event handler) `try_send`s into it; a

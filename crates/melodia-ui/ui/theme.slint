@@ -6,9 +6,9 @@ export global Theme {
     // Surfaces / structure
     in-out property <brush> base: #1e1e2e;
     in-out property <brush> mantle: #181825;
-    // The sidebar and now-playing bar when the window is unfocused *and* the KDE-only "Match
-    // Unfocused Window Background" toggle is on; from `[WM] inactiveBackground` under KDE Breeze
-    // and System, falling back to `base` everywhere else.
+    // What `WindowChrome.mantle` resolves to when the window is unfocused *and* the KDE-only "Match
+    // Unfocused Window Background" toggle is on; Breeze's inactive titlebar under KDE, read off
+    // `kdeglobals` on its System variant, falling back to `base` everywhere else.
     in-out property <brush> mantle-unfocused: #1e1e2e;
     in-out property <brush> crust: #11111b;
     in-out property <brush> surface0: #313244;
@@ -32,6 +32,10 @@ export global Theme {
     // state it once. No further than unavailable — starting from `text-muted` the two dims compound.
     out property <float> dim-disabled: 0.4;
 
+    // How much of its weight a disk-only Browse file keeps, present in a library folder but not in
+    // the database. One value, since the list row and the card draw the same file.
+    out property <float> fade-disk-only: 0.45;
+
     // Where a lit control rests while nothing is pointing at it, as an alpha. Full weight belongs
     // to the pointer, so a control already at it has nothing left to answer a hover with. Shared
     // rather than spelled per component because the Now-Playing star row and the glyph family
@@ -43,7 +47,7 @@ export global Theme {
     in-out property <brush> accent-text: #1e1e2e;
 
     // sRGB luma over gamma-encoded channels — **not** the relative luminance `ui/backdrop.rs`
-    // solves scrims against. A hand-copy of `themes::apply::on_accent_hex`, pinned from both ends
+    // solves scrims against. A hand-copy of `themes::on_accent_hex`, pinned from both ends
     // by `themes::tests::theme_slint_is_light_matches_on_accent_hex`. It answers the polarity
     // question the palette can't, `Palette` carrying no light/dark flag and the two *generated*
     // palettes no variant id to match on.
@@ -95,11 +99,25 @@ export global Theme {
     out property <length> sidebar-min-w: 105px;
     out property <length> sidebar-max-w: 400px;
     out property <length> now-playing-h: 72px;
-    // Track-row content height; the header's is independent, pinned in its own file.
+    // Track-row content height.
     out property <length> row-h: 46px;
     // Compact height when the thumbnail is hidden, sized to clear the hover swap-in.
     out property <length> row-h-compact: 34px;
     out property <length> row-gap: 0px;
+    // A track row's pill, which the thumbnail column decides between.
+    public pure function track-row-h(show-artwork: bool) -> length {
+        return show-artwork ? root.row-h : root.row-h-compact;
+    }
+    // The slot a row takes in its list, pill plus the gap under it. Slot math that leaves the gap
+    // out drifts further with every row down the list.
+    public pure function track-row-pitch(show-artwork: bool) -> length {
+        return root.track-row-h(show-artwork) + root.row-gap;
+    }
+    // The column header over every track list.
+    out property <length> track-header-h: 36px;
+    // A track list's inset from the content panel's left edge, before the column solver's own
+    // `pad-sm`. The right edge stops at `scrollbar-slot` instead.
+    out property <length> track-list-inset: 7px;
 
     // Radii / spacing
     out property <length> radius-sm: 4px;
@@ -108,26 +126,20 @@ export global Theme {
     // The rounded mantle shell — the visible window outline in custom-frame windowed mode.
     // Deliberately decoupled from `radius-md` so component radii stay put when it moves.
     in-out property <length> shell-radius: 6px;
-    // Concentric-ring helper: the border rectangle takes `shell-radius` and the base rectangle
-    // this, keeping the 1 px ring even around each corner.
-    out property <length> shell-radius-inner: max(0px, shell-radius - 1px);
-    // The content panel's left-side rounding under a native titlebar, seeded once from
-    // `get_os_corner_radius()` so it matches the host desktop regardless of the persisted pick —
-    // that pick governs custom mode, which the user opted into. Hence the greyed-out "Managed by
-    // the operating system" row in Settings.
+    // The host desktop's corner radius, seeded once from `get_os_corner_radius()` so native mode
+    // matches it regardless of the persisted pick — that pick governs custom mode, which the user
+    // opted into. Hence the greyed-out "Managed by the operating system" row in Settings. Read
+    // through `window-radius`.
     in-out property <length> native-content-radius: 6px;
-    out property <length> native-content-radius-inner: max(0px, native-content-radius - 1px);
 
-    // Read by **both** the `Window`'s `resize-border-width` and the `ResizeRing` overlays setting
-    // the cursor over it, so a drift leaves a band that resizes with no cursor or the reverse.
-    // Corners are deliberately larger for a forgiving diagonal grab.
+    // The floor of `AppWindow`'s `resize-band`, the depth of a frameless window's resize grab along
+    // each edge. `ResizeRing` sizes its corners off the band it is handed, never off this directly.
     out property <length> resize-border: 4px;
-    out property <length> resize-corner: 8px;
 
-    // The `OverlayScrollbar` *element's* slot, distinct from the 8 px it paints inside it. Four
-    // sides agree on it: both bar pairs size their elements by it, the horizontal bar subtracts it
-    // at its right end so the two don't meet in the corner, a `TrackList` reserves it as a lane,
-    // and every hand-mounted bar takes its width from here rather than restating the number.
+    // The `OverlayScrollbar` *element's* slot, distinct from the 8 px it paints inside it. Both bar
+    // components size their bar by it, a track list's right edge stops at it so a row's pill never
+    // runs under the always-painted track, and every hand-mounted bar takes its width from here
+    // rather than restating the number.
     out property <length> scrollbar-slot: 10px;
 
     // The air a menu or flyout leaves between itself and the control that opened it, on whichever
@@ -177,11 +189,16 @@ export global Theme {
     out property <duration> dur-med: 250ms;
     out property <duration> dur-spatial: 400ms;
 
-    // **`window_chrome` must hydrate this between `AppWindow::new()` and `app.run()`** — Slint reads
-    // `Window.no-frame` once at first show. Defaults false, matching `WindowFlags::default()`.
+    // **`window_chrome` must hydrate this between `AppWindow::new()` and `app.run()`**: Slint applies
+    // `no-frame` live, so a later write maps the window with the wrong frame and swaps it on screen.
     in-out property <bool> use-native-titlebar: false;
 
-    // 0 = Standard (Material bar icons), 1 = macOS (traffic lights). `custom-titlebar.slint` reads
+    // The corner radius for the titlebar mode in force: the user's pick under the custom titlebar,
+    // the host's under the native one. The miniplayer draws its own outline once it drops the OS
+    // frame, and on `shell-radius` it changed shape the moment the frame went.
+    out property <length> window-radius: use-native-titlebar ? native-content-radius : shell-radius;
+
+    // 0 = Standard (Windows caption glyphs), 1 = macOS (traffic lights). `custom-titlebar.slint` reads
     // it through `Theme` rather than reaching into `Settings`, the `shell-radius` precedent.
     in-out property <int> titlebar-button-style: 0;
 

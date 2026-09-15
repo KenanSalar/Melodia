@@ -5,21 +5,11 @@ use melodia_core::entities::track::TrackLinks;
 use melodia_ui::QueueRow;
 
 fn links(album: Option<i64>, artist: Option<i64>, genre: Option<i64>) -> TrackLinks {
-    TrackLinks {
-        id: 1,
-        album_id: album,
-        artist_id: artist,
-        genre_id: genre,
-    }
+    TrackLinks { id: 1, album_id: album, artist_id: artist, genre_id: genre }
 }
 
 fn row(album: i32, artist: i32, genre: i32) -> QueueRow {
-    QueueRow {
-        album_id: album,
-        artist_id: artist,
-        genre_id: genre,
-        ..QueueRow::default()
-    }
+    QueueRow { album_id: album, artist_id: artist, genre_id: genre, ..QueueRow::default() }
 }
 
 /// **Zero is "we don't know".** The menu gates each entry on `album-id != 0`, so a linkage the

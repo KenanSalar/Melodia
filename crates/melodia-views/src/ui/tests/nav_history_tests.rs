@@ -19,29 +19,17 @@ const RADIO_BROWSE: i32 = 0;
 const RADIO_RECENT: i32 = 2;
 
 fn tab(tab: i32, detail: Option<i64>) -> NavEntry {
-    NavEntry {
-        section: NAV_MY_LIBRARY,
-        tab,
-        detail_id: detail,
-    }
+    NavEntry { section: NAV_MY_LIBRARY, tab, detail_id: detail }
 }
 
 fn section(section: i32) -> NavEntry {
-    NavEntry {
-        section,
-        tab: NO_TAB,
-        detail_id: None,
-    }
+    NavEntry { section, tab: NO_TAB, detail_id: None }
 }
 
 /// Radio is the one section `forget_section` is written for, and its entries carry a tab
 /// like My Library's — so two of them differ without a detail id between them.
 fn radio(tab: i32) -> NavEntry {
-    NavEntry {
-        section: NAV_RADIO,
-        tab,
-        detail_id: None,
-    }
+    NavEntry { section: NAV_RADIO, tab, detail_id: None }
 }
 
 #[test]

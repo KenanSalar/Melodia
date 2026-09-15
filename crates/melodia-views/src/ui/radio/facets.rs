@@ -351,17 +351,14 @@ fn codec_label(codec: &str) -> Cow<'_, str> {
     }
     // A comma means the checker found a picture track beside the audio, and the directory writes
     // the pair with no space.
-    let spelled: Vec<&str> = codec
-        .split(',')
-        .map(str::trim)
-        .map(|part| {
-            if part.eq_ignore_ascii_case(UNKNOWN_CODEC) {
-                SEGMENTED_CODEC_LABEL
-            } else {
-                part
-            }
-        })
-        .collect();
+    let spelled: Vec<&str> =
+        codec
+            .split(',')
+            .map(str::trim)
+            .map(|part| {
+                if part.eq_ignore_ascii_case(UNKNOWN_CODEC) { SEGMENTED_CODEC_LABEL } else { part }
+            })
+            .collect();
     Cow::Owned(spelled.join(", "))
 }
 
@@ -417,11 +414,7 @@ pub(super) fn apply_pick(chip: ChipFilter, name: &str, code: &str, search: &mut 
         ChipFilter::Tag => {
             // The parameter takes a list and means "all of these", where the chip offers one; an
             // empty vector is no tag filter rather than a filter for the empty tag.
-            search.tags = if name.is_empty() {
-                Vec::new()
-            } else {
-                vec![name.to_owned()]
-            };
+            search.tags = if name.is_empty() { Vec::new() } else { vec![name.to_owned()] };
         }
         // The label is what a row hands back, so the value the parameter takes rides in `code` —
         // see [`drawn_as`]. Empty on both is the clear, which either branch spells the same way.

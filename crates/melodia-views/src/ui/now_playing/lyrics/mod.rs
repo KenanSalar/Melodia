@@ -22,9 +22,8 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use super::NowPlayingState;
 use crate::ui::settings::lyrics_settings;
-use crate::ui::settings_bind;
-use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_app::tasks;
 use melodia_core::entities::lyrics::LyricLine;
 use melodia_ui::{AppWindow, LyricRow, Lyrics};
 
@@ -239,34 +238,33 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
     ly
 }
 
-/// The three rows of the panel's own menu: which column is shown, and the two the Settings card
-/// carries as well.
+/// The header's switch and the two menu rows the Settings card carries as well.
 fn wire_toggles(ui: &AppWindow, state: &AppState, ly: &Rc<LyricsUi>) {
     let global = ui.global::<Lyrics>();
 
-    // Seeded off `settings.json` the way the visualizer's own toggle is. The menu row has already
-    // flipped the property by the time the callback runs, so the property half is done.
-    let flags = settings_bind::read_or_default(state, "lyrics").lyrics;
-    global.set_shown(flags.lyrics_panel_shown);
+    // Off the shadows rather than off `settings.json`, because the Settings card writes the same
+    // fields and may have moved them since this view last mounted. Every handler is the card's,
+    // which is what keeps the two controls of each switch from drifting; what is left here is the
+    // extra each owes the panel standing behind it.
+    global.set_enabled(state.lyrics_enabled.get());
     {
+        let persist = lyrics_settings::enabled_handler(ui, state);
         let state = state.clone();
         let ly_toggle = ly.clone();
-        global.on_set_shown(move |shown| {
-            state.persist_blocking("set_lyrics_panel_shown", move |s| {
-                library::settings::set_lyrics_panel_shown(s, shown)
-            });
-            // **Switching the panel on is a reason to look a sheet up**, and until this line it
-            // was not one: the fetch hung off a track change alone, so turning it on mid-song
-            // showed an empty panel until the next track — or until a restart, which is the
-            // *seed* path and does run.
+        global.on_set_enabled(move |on| {
+            persist(on);
+            // **Switching on is a reason to look a sheet up**, where the fetch would otherwise
+            // wait for the next track; switching off is what hands the sheet back, the reseed
+            // releasing whatever it holds once the door is shut.
             ly_toggle.kick();
+            // The store stops growing here just as it does on a close, which skips its own prune
+            // while lyrics are off.
+            if !on {
+                tasks::lyrics_cache::spawn(&tasks::TaskSpawner::from_state(&state), &state);
+            }
         });
     }
 
-    // Off the shadow rather than off `flags`, because the Settings card writes the same field and
-    // may have moved it since this view last mounted. Both handlers are the card's, which is what
-    // keeps the two rows of each switch from drifting; what is left here is the extra each row
-    // owes the panel standing behind it.
     global.set_romanization_shown(state.lyrics_romanization_shown.get());
     {
         let persist = lyrics_settings::romanization_handler(ui, state);

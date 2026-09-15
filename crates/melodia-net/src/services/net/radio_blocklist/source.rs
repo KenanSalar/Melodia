@@ -282,12 +282,7 @@ pub fn parse_source(text: &str) -> Result<Terms, ParseError> {
     pattern_lengths.sort_unstable();
     pattern_lengths.dedup();
 
-    Ok(Terms {
-        key,
-        fingerprints,
-        patterns,
-        pattern_lengths,
-    })
+    Ok(Terms { key, fingerprints, patterns, pattern_lengths })
 }
 
 /// First line of a pre-hashed source, and the whole of how the two shapes are told

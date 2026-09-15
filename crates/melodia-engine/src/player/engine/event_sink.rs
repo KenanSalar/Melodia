@@ -3,9 +3,9 @@ use std::sync::Arc;
 use tokio::sync::watch;
 
 use super::state::{PlayerViewModelLight, QueueViewModel};
-use super::types::PlaybackStatus;
+use super::types::{PlaybackStatus, RepeatMode};
 
-/// Events that come *from* OS media controls (souvlaki) into the player.
+/// Events that come *from* OS media controls (MPRIS, SMTC, `MediaPlayer`) into the player.
 #[derive(Debug, Clone)]
 pub enum PlayerEvent {
     Play,
@@ -16,6 +16,8 @@ pub enum PlayerEvent {
     Stop,
     SeekTo(u64),
     SetVolume(u32),
+    SetShuffle(bool),
+    SetRepeat(RepeatMode),
 }
 
 pub trait EventSink: Send + Sync + 'static {
@@ -29,12 +31,18 @@ impl EventSink for NoopEventSink {
 
 /// Push direction of OS media controls — `with_state_emit` calls `sync` after
 /// every state mutation so MPRIS / SMTC stay in lockstep with the player.
-/// `update_position` is the lighter periodic position refresh the playback
-/// monitor uses on macOS / Windows. Implemented by `MediaControlsHandle`;
-/// `PlayerSinks` holds `None` on platforms where no handle could be created.
+/// Implemented by `MediaControlsHandle`; `PlayerSinks` holds `None` on platforms
+/// where no handle could be created.
 pub trait MediaControlsSync: Send + Sync + 'static {
     fn sync(&self, vm: &PlayerViewModelLight, status: PlaybackStatus);
+
+    /// The playing position, on every poll. Cheap by contract: a backend that pays per push
+    /// throttles itself, since only it knows what a push costs.
     fn update_position(&self, _position_ms: u64) {}
+
+    /// The position jumped rather than advanced. MPRIS clients extrapolate between reads and
+    /// learn of a jump only through this.
+    fn seeked(&self, _position_ms: u64) {}
 }
 
 /// Sinks consumed by `with_state_emit`. The two watch senders carry the

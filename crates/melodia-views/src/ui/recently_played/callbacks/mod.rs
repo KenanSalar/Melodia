@@ -19,12 +19,6 @@ use crate::ui::recently_played::RecentlyPlayedUi;
 use melodia_app::state::AppState;
 use melodia_ui::AppWindow;
 
-/// The settings view-id under which this view's column state persists. Unlike
-/// its sortable siblings there is no `view_sort` entry — the Songs list is
-/// mounted non-sortable, so recency is the only order it has, and the Most
-/// Played tab's title names its own.
-const VIEW_ID: &str = crate::ui::track_list_view::view_id::RECENTLY_PLAYED;
-
 /// Wire every `RecentlyPlayed.*` callback.
 ///
 /// Called by [`super::install`], which is what guarantees the models are in place first — a

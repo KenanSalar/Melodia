@@ -1,10 +1,11 @@
 use melodia_core::error::AppError;
 use melodia_testkit::{reading_env, with_env_set};
-// The corner-radius probe is the only caller and only Linux has a desktop to ask.
-#[cfg(target_os = "linux")]
+// Only the desktop probes need it, and Windows has no desktop to ask.
+#[cfg(not(target_os = "windows"))]
 use melodia_testkit::with_env_var;
 
 use super::*;
+use crate::services::settings::{ONBOARDING_VERSION, WINDOW_BORDER_SYSTEM_COLOR, WindowBorder};
 
 fn json_err(e: &serde_json::Error) -> AppError {
     AppError::Validation(format!("json error: {e}"))
@@ -31,11 +32,187 @@ fn test_settings_deserializes_volume_fields() -> Result<(), AppError> {
 #[test]
 fn test_empty_json_uses_defaults() -> Result<(), AppError> {
     let json = "{}";
-    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let settings: SettingsData =
+        reading_env(|| serde_json::from_str(json)).map_err(|e| json_err(&e))?;
     assert_eq!(settings.volume, 100);
     assert!(!settings.playback.is_muted);
-    assert_eq!(settings.theme_id, "catppuccin");
     assert!(settings.playback.gapless_playback);
+    Ok(())
+}
+
+// The theme ids below are spelled as literals rather than read off the registry: they are what
+// `settings.json` stores, so renaming one strands every install that saved it.
+
+#[cfg(target_os = "windows")]
+#[test]
+fn a_fresh_windows_install_opens_on_fluent_following_the_app_mode() {
+    let settings = reading_env(SettingsData::default);
+
+    assert_eq!(
+        (
+            settings.theme_id.as_str(),
+            settings.theme_variant.as_str(),
+            settings.accent_color.as_str()
+        ),
+        ("windows-fluent", "system", "blue"),
+    );
+}
+
+#[cfg(not(target_os = "windows"))]
+#[test]
+fn a_fresh_install_on_a_desktop_without_a_theme_opens_on_catppuccin_mocha() {
+    let settings = with_env_var("XDG_CURRENT_DESKTOP", None, SettingsData::default);
+
+    assert_eq!(
+        (
+            settings.theme_id.as_str(),
+            settings.theme_variant.as_str(),
+            settings.accent_color.as_str()
+        ),
+        ("catppuccin", "mocha", "mauve"),
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn a_fresh_kde_install_opens_on_breeze_following_the_system_scheme() {
+    let settings = with_env_var("XDG_CURRENT_DESKTOP", Some("KDE"), SettingsData::default);
+
+    assert_eq!(
+        (
+            settings.theme_id.as_str(),
+            settings.theme_variant.as_str(),
+            settings.accent_color.as_str()
+        ),
+        ("kde-breeze", "system", "blue"),
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn a_fresh_gnome_install_opens_on_adwaita_following_the_system_scheme() {
+    let settings = with_env_var("XDG_CURRENT_DESKTOP", Some("GNOME"), SettingsData::default);
+
+    assert_eq!(
+        (
+            settings.theme_id.as_str(),
+            settings.theme_variant.as_str(),
+            settings.accent_color.as_str()
+        ),
+        ("gnome-adwaita", "system", "blue"),
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn only_a_fresh_kde_install_opens_on_the_native_titlebar() {
+    let native_titlebar_under = |desktop| {
+        with_env_var("XDG_CURRENT_DESKTOP", desktop, SettingsData::default)
+            .window
+            .use_native_titlebar
+    };
+
+    assert_eq!(
+        [
+            native_titlebar_under(Some("KDE")),
+            native_titlebar_under(Some("GNOME")),
+            native_titlebar_under(None)
+        ],
+        [true, false, false],
+    );
+}
+
+/// The tint's field default is per-desktop too, but it reaches only a file missing the key, so a
+/// fresh KDE install opened on the native titlebar with the tint off.
+#[cfg(target_os = "linux")]
+#[test]
+fn only_a_fresh_kde_install_tints_its_chrome_while_unfocused() {
+    let tint_under = |desktop| {
+        with_env_var("XDG_CURRENT_DESKTOP", desktop, SettingsData::default)
+            .layout
+            .match_unfocused_to_system_bg
+    };
+
+    assert_eq!(
+        [tint_under(Some("KDE")), tint_under(Some("GNOME")), tint_under(None)],
+        [true, false, false],
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn a_fresh_install_takes_its_desktops_corner_radius() {
+    let radius_under =
+        |desktop| with_env_var("XDG_CURRENT_DESKTOP", desktop, SettingsData::default).corner_radius;
+
+    assert_eq!(
+        [radius_under(Some("KDE")), radius_under(Some("GNOME")), radius_under(None)],
+        [6, 15, 6]
+    );
+}
+
+/// Only a fresh install asks the desktop. A settings file without the key reads as
+/// `WindowFlags::default()`, so an existing KDE install keeps the titlebar it has.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_kde_settings_file_without_the_titlebar_key_keeps_the_custom_titlebar() -> Result<(), AppError>
+{
+    let settings: SettingsData = with_env_var("XDG_CURRENT_DESKTOP", Some("KDE"), || {
+        serde_json::from_str(r#"{"volume": 80}"#)
+    })
+    .map_err(|e| json_err(&e))?;
+
+    assert!(!settings.window.use_native_titlebar);
+    Ok(())
+}
+
+/// Every saved install carries this key, so renaming the field without an alias would reset each
+/// of them to the custom titlebar.
+#[test]
+fn a_saved_native_titlebar_reads_back() -> Result<(), AppError> {
+    let window: WindowFlags =
+        serde_json::from_str(r#"{"use_native_titlebar": true}"#).map_err(|e| json_err(&e))?;
+
+    assert!(window.use_native_titlebar);
+    Ok(())
+}
+
+#[test]
+fn a_fresh_install_draws_the_window_border() {
+    assert_eq!(WindowFlags::default().window_border, WindowBorder::Shown);
+}
+
+#[test]
+fn a_fresh_install_draws_the_window_border_in_the_system_color() {
+    assert_eq!(WindowFlags::default().window_border_color, WINDOW_BORDER_SYSTEM_COLOR);
+}
+
+/// A `settings.json` written before the border existed carries no key for it, and has to read as
+/// the default rather than as an install that turned the border off.
+#[test]
+fn a_settings_file_from_before_the_border_draws_it() -> Result<(), AppError> {
+    let window: WindowFlags =
+        serde_json::from_str(r#"{"use_native_titlebar": true}"#).map_err(|e| json_err(&e))?;
+
+    assert_eq!(window.window_border, WindowBorder::Shown);
+    Ok(())
+}
+
+/// Persisted as a name, the way the titlebar button tokens are, so a third state needs no schema
+/// change and a hand-edited file reads the way it is spelled.
+#[test]
+fn the_window_border_persists_as_a_token() -> Result<(), AppError> {
+    let hidden = serde_json::to_string(&WindowBorder::Hidden).map_err(|e| json_err(&e))?;
+
+    assert_eq!(hidden, r#""hidden""#);
+    Ok(())
+}
+
+#[test]
+fn a_hidden_window_border_reads_back_from_its_token() -> Result<(), AppError> {
+    let border: WindowBorder = serde_json::from_str(r#""hidden""#).map_err(|e| json_err(&e))?;
+
+    assert_eq!(border, WindowBorder::Hidden);
     Ok(())
 }
 
@@ -63,10 +240,7 @@ fn test_volume_clamped_to_max() -> Result<(), AppError> {
 fn test_settings_roundtrip_volume_mute() -> Result<(), AppError> {
     let settings = SettingsData {
         volume: 42,
-        playback: PlaybackFlags {
-            is_muted: true,
-            ..PlaybackFlags::default()
-        },
+        playback: PlaybackFlags { is_muted: true, ..PlaybackFlags::default() },
         // `SettingsData::default()` reads the environment through its serde
         // defaults, so it takes the same lock the mutating tests below do.
         ..reading_env(SettingsData::default)
@@ -81,10 +255,7 @@ fn test_settings_roundtrip_volume_mute() -> Result<(), AppError> {
 #[test]
 fn test_settings_roundtrip_playback_speed() -> Result<(), AppError> {
     let settings = SettingsData {
-        playback: PlaybackFlags {
-            playback_speed: 1.5,
-            ..PlaybackFlags::default()
-        },
+        playback: PlaybackFlags { playback_speed: 1.5, ..PlaybackFlags::default() },
         ..reading_env(SettingsData::default)
     };
     let json = serde_json::to_string(&settings).map_err(|e| json_err(&e))?;
@@ -114,19 +285,8 @@ fn test_corner_radius_clamped_to_max() -> Result<(), AppError> {
 
 #[test]
 fn test_corner_radius_default_is_an_os_preset() -> Result<(), AppError> {
-    // `SettingsData::default()` now seeds `corner_radius` from
-    // `library::settings::get_os_corner_radius()`, which returns one of
-    // the chip presets (KDE=6, Win11=8, macOS=10, GNOME=15) keyed off
-    // the host OS / desktop. Asserting set-membership (not a specific
-    // value) makes the test platform-independent and dodges the
-    // parallel-execution race against
-    // `library::tests::settings_tests::corner_radius_by_desktop_environment`,
-    // which mutates `XDG_CURRENT_DESKTOP` at runtime — both halves of an
-    // equality assertion would have to read the same env snapshot, and
-    // we can't guarantee that without a serialising mutex. Per-DE value
-    // mapping is covered by that sibling test; this one only verifies
-    // the wiring (default uses an OS-aware preset, not some hardcoded
-    // legacy value).
+    // Set membership rather than one value, so the test holds on every host OS; which desktop
+    // gets which preset is `desktop`'s own test.
     let json = "{}";
     let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
     assert!(
@@ -161,10 +321,7 @@ fn test_skip_startup_animation_defaults_false_and_reads_a_top_level_key() -> Res
 
 #[test]
 fn test_view_sort_roundtrip() -> Result<(), AppError> {
-    let sort = ViewSort {
-        field: "title".to_owned(),
-        dir: SortDir::Desc,
-    };
+    let sort = ViewSort { field: "title".to_owned(), dir: SortDir::Desc };
     let json = serde_json::to_string(&sort).map_err(|e| json_err(&e))?;
     let deserialized: ViewSort = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
     assert_eq!(deserialized.field, "title");
@@ -362,25 +519,6 @@ fn test_locale_roundtrip() -> Result<(), AppError> {
     Ok(())
 }
 
-// The desktop cases share one test because they share one variable, and each
-// goes through `with_env_var` for the same reason every locale case does: a
-// sibling reading `XDG_CURRENT_DESKTOP` — `SettingsData::default()` does, via
-// `is_kde_desktop()` — would otherwise see whatever this test last set.
-// Lives in services/tests/ rather than library/tests/ because
-// `get_os_corner_radius` now lives in services::settings (it's used by
-// `SettingsData::default()` for the corner_radius serde default).
-#[test]
-#[cfg(target_os = "linux")]
-fn corner_radius_by_desktop_environment() {
-    let radius_under = |desktop| with_env_var("XDG_CURRENT_DESKTOP", desktop, get_os_corner_radius);
-
-    assert_eq!(radius_under(Some("GNOME")), 15, "GNOME should return 15");
-    assert_eq!(radius_under(Some("ubuntu:GNOME")), 15, "ubuntu:GNOME should return 15");
-    assert_eq!(radius_under(Some("KDE")), 6, "KDE should return 6");
-    assert_eq!(radius_under(Some("i3")), 6, "unknown DE should return 6");
-    assert_eq!(radius_under(None), 6, "missing env should return 6");
-}
-
 #[test]
 fn test_replaygain_defaults_when_absent() -> Result<(), AppError> {
     // An older settings.json (written before ReplayGain existed) deserializes to
@@ -477,24 +615,9 @@ fn test_radio_sub_toggles_survive_an_older_settings_file() -> Result<(), AppErro
 /// than shown a card it has already seen.
 #[test]
 fn the_welcome_card_is_owed_only_below_the_current_revision() {
-    assert!(
-        OnboardingFlags {
-            onboarding_version: 0
-        }
-        .needs_onboarding()
-    );
-    assert!(
-        !OnboardingFlags {
-            onboarding_version: ONBOARDING_VERSION
-        }
-        .needs_onboarding()
-    );
-    assert!(
-        !OnboardingFlags {
-            onboarding_version: ONBOARDING_VERSION + 1
-        }
-        .needs_onboarding()
-    );
+    assert!(OnboardingFlags { onboarding_version: 0 }.needs_onboarding());
+    assert!(!OnboardingFlags { onboarding_version: ONBOARDING_VERSION }.needs_onboarding());
+    assert!(!OnboardingFlags { onboarding_version: ONBOARDING_VERSION + 1 }.needs_onboarding());
 }
 
 /// The field is flattened, so an install written before the card existed has no key at all — and
@@ -526,13 +649,13 @@ fn the_tray_ships_on_but_never_overrides_a_saved_answer() -> Result<(), AppError
 }
 
 /// Two of the three ship off and one ships on, so a derived `Default` would be right about the
-/// panel and the lookup and silently wrong about the romanization. A sheet in a script the reader
-/// cannot sound out is the whole reason that one is on.
+/// feature and the lookup and silently wrong about the romanization. A sheet in a script the
+/// reader cannot sound out is the whole reason that one is on.
 #[test]
 fn the_lyrics_switches_ship_as_two_off_and_one_on() {
     let lyrics = reading_env(SettingsData::default).lyrics;
 
-    assert!(!lyrics.lyrics_panel_shown, "the column opens on Up Next");
+    assert!(!lyrics.lyrics_enabled, "the column opens on Up Next");
     assert!(!lyrics.lyrics_online_enabled, "an outbound feature is opt-in");
     assert!(lyrics.lyrics_romanization_shown);
 }
@@ -545,9 +668,32 @@ fn the_lyrics_switches_take_their_defaults_from_a_file_that_predates_them() -> R
     let json = r#"{"theme_id": "catppuccin"}"#;
     let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
 
-    assert!(!settings.lyrics.lyrics_panel_shown);
+    assert!(!settings.lyrics.lyrics_enabled);
     assert!(!settings.lyrics.lyrics_online_enabled);
     assert!(settings.lyrics.lyrics_romanization_shown);
+    Ok(())
+}
+
+/// v0.13.0 saved the switch as the column preference it grew out of, and an install that had
+/// lyrics showing must not upgrade to Up Next.
+#[test]
+fn a_settings_file_from_0_13_keeps_lyrics_switched_on() -> Result<(), AppError> {
+    let json = r#"{"theme_id": "catppuccin", "lyrics_panel_shown": true}"#;
+    let settings: SettingsData =
+        reading_env(|| serde_json::from_str(json)).map_err(|e| json_err(&e))?;
+
+    assert!(settings.lyrics.lyrics_enabled);
+    Ok(())
+}
+
+#[test]
+fn the_lyrics_switch_is_saved_under_its_current_name() -> Result<(), AppError> {
+    let flags = LyricsFlags { lyrics_enabled: true, ..LyricsFlags::default() };
+
+    let saved = serde_json::to_value(&flags).map_err(|e| json_err(&e))?;
+
+    assert_eq!(saved.get("lyrics_enabled"), Some(&serde_json::Value::Bool(true)));
+    assert_eq!(saved.get("lyrics_panel_shown"), None);
     Ok(())
 }
 

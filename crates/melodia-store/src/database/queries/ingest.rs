@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use rayon::prelude::*;
 use sqlx::AssertSqlSafe;
 
-use crate::database::SQLITE_BIND_LIMIT;
+use crate::database::MAX_BINDS_PER_STATEMENT;
 use crate::database::queries;
 use crate::database::queries::scan::NameCache;
 use melodia_core::entities::scan::ScannedFile;
@@ -100,7 +100,7 @@ pub async fn ingest_scanned_files(
     // file held resident for the whole function (~1 MiB on a 10k-track scan).
     let mut existing_tracks: HashMap<String, ExistingTrackInfo> =
         HashMap::with_capacity(scanned_files.len());
-    for chunk in scanned_files.chunks(SQLITE_BIND_LIMIT) {
+    for chunk in scanned_files.chunks(MAX_BINDS_PER_STATEMENT) {
         let placeholders = crate::database::placeholders(chunk.len());
         let sql = format!(
             "SELECT file_path, file_size, date_modified FROM tracks WHERE file_path IN ({placeholders})"
@@ -113,13 +113,8 @@ pub async fn ingest_scanned_files(
         }
         let rows = query.persistent(false).fetch_all(&mut **tx).await?;
         for (path, size, mtime) in rows {
-            existing_tracks.insert(
-                path,
-                ExistingTrackInfo {
-                    file_size: size,
-                    date_modified: mtime,
-                },
-            );
+            existing_tracks
+                .insert(path, ExistingTrackInfo { file_size: size, date_modified: mtime });
         }
     }
 
@@ -177,12 +172,7 @@ pub async fn ingest_scanned_files(
                 continue;
             };
 
-            let ids = queries::ResolvedIds {
-                artist_id,
-                album_id,
-                genre_id,
-                folder_id,
-            };
+            let ids = queries::ResolvedIds { artist_id, album_id, genre_id, folder_id };
 
             queries::scan::update_track_metadata(tx, file_path_str, meta, &ids, &mut caches.names)
                 .await?;
@@ -237,12 +227,7 @@ pub async fn ingest_scanned_files(
             continue;
         };
 
-        let ids = queries::ResolvedIds {
-            artist_id,
-            album_id,
-            genre_id,
-            folder_id,
-        };
+        let ids = queries::ResolvedIds { artist_id, album_id, genre_id, folder_id };
 
         let file_name = file.path.file_name().and_then(|f| f.to_str()).unwrap_or("").to_string();
 
@@ -291,12 +276,7 @@ pub async fn ingest_scanned_files(
     // group, instead of one per affected track.
     flush_artwork_backfill(tx, artwork_backfill).await?;
 
-    Ok(IngestResult {
-        inserted_count,
-        moved_count,
-        updated_count,
-        inserted_track_ids,
-    })
+    Ok(IngestResult { inserted_count, moved_count, updated_count, inserted_track_ids })
 }
 
 /// Chunked `WHERE file_hash IN (…)` lookup, deduped to the lowest-id row per
@@ -313,7 +293,7 @@ async fn batch_lookup_by_hash(
     let unique: HashSet<&str> = hashes.iter().copied().collect();
     let unique: Vec<&str> = unique.into_iter().collect();
 
-    for chunk in unique.chunks(SQLITE_BIND_LIMIT) {
+    for chunk in unique.chunks(MAX_BINDS_PER_STATEMENT) {
         let placeholders = crate::database::placeholders(chunk.len());
         // ORDER BY id ASC + entry().or_insert keeps the lowest-id row per
         // hash, matching the singleton query's behaviour.
@@ -372,7 +352,7 @@ async fn flush_artwork_backfill(
     by_artwork: HashMap<String, Vec<String>>,
 ) -> Result<(), AppError> {
     const COLS_PER_ROW: usize = 2;
-    let chunk_size = SQLITE_BIND_LIMIT / COLS_PER_ROW;
+    let chunk_size = MAX_BINDS_PER_STATEMENT / COLS_PER_ROW;
 
     let mut pairs: Vec<(String, String)> = Vec::new();
     for (art_path, paths) in by_artwork {

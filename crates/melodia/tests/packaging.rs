@@ -502,10 +502,9 @@ fn the_debian_copyright_quotes_the_licences_it_ships() {
          second, contradictory declaration"
     );
 
-    for (source, licence) in [
-        ("LICENSE", "AGPL-3.0-or-later"),
-        ("licenses/Vazirmatn-OFL-1.1.txt", "OFL-1.1"),
-    ] {
+    for (source, licence) in
+        [("LICENSE", "AGPL-3.0-or-later"), ("licenses/Vazirmatn-OFL-1.1.txt", "OFL-1.1")]
+    {
         let text = std::fs::read_to_string(root.join(source)).unwrap_or_default();
         assert!(!text.is_empty(), "{source} won't read");
         assert!(

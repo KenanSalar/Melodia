@@ -101,10 +101,8 @@ pub struct DiscordPresenceService {
 impl DiscordPresenceService {
     /// Seed the shadow from `settings.json`. Infallible — nothing to load.
     pub fn init(flags: &DiscordFlags, http: Arc<OnceLock<reqwest::Client>>) -> Self {
-        let (tx, _) = watch::channel(DiscordStatus {
-            enabled: flags.discord_rpc_enabled,
-            connected: false,
-        });
+        let (tx, _) =
+            watch::channel(DiscordStatus { enabled: flags.discord_rpc_enabled, connected: false });
         let status = Arc::new(StatusCell {
             enabled: AtomicBool::new(flags.discord_rpc_enabled),
             connected: AtomicBool::new(false),

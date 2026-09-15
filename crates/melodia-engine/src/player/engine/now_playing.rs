@@ -28,8 +28,8 @@ pub enum SourceId<'a> {
 
 /// What a Now-Playing surface states about whatever is on the deck.
 ///
-/// Shaped after the fields souvlaki, the tray tooltip and a Discord activity all want, since those
-/// three agree on the questions and only disagree on which to draw.
+/// Shaped after the fields the OS media controls, the tray tooltip and a Discord activity all want,
+/// since those three agree on the questions and only disagree on which to draw.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceSummary<'a> {
     pub id: SourceId<'a>,

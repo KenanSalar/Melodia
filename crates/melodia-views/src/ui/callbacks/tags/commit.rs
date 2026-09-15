@@ -208,11 +208,7 @@ fn diff_multi<T: MultiValue>(cur: &T, orig: &T) -> FieldEdit<T> {
 /// Tri-state for a switch. `Set(false)` and `Clear` mean the same thing to the writer, so an
 /// un-ticked box is `Set(false)` and removes the tag.
 fn diff_flag(cur: bool, orig: bool) -> FieldEdit<bool> {
-    if cur == orig {
-        FieldEdit::Keep
-    } else {
-        FieldEdit::Set(cur)
-    }
+    if cur == orig { FieldEdit::Keep } else { FieldEdit::Set(cur) }
 }
 
 /// Tri-state for a numeric field that crosses the Slint boundary as its decimal

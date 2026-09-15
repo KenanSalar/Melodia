@@ -391,9 +391,7 @@ pub struct SeedCache {
 
 impl SeedCache {
     pub fn new() -> Self {
-        Self {
-            inner: LruCache::new(SEED_CACHE_CAP),
-        }
+        Self { inner: LruCache::new(SEED_CACHE_CAP) }
     }
 
     /// Look up `path`'s cached seed, invoking `f` on a miss and storing only a

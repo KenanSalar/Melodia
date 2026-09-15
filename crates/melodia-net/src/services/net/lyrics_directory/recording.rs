@@ -52,9 +52,8 @@ const VERSION_MARKERS: [&str; 9] = [
 /// class of miss for another: a `" and "` here would cut `Florence and the Machine` down to
 /// `Florence`. A credit that lists its artists needs no guess at all, which is what
 /// [`Recording::from_credit`] and [`search_artist`] read instead.
-const ARTIST_SPLITS: [&str; 9] = [
-    " feat ", " feat. ", " ft ", " ft. ", " with ", " & ", " x ", ",", ";",
-];
+const ARTIST_SPLITS: [&str; 9] =
+    [" feat ", " feat. ", " ft ", " ft. ", " with ", " & ", " x ", ",", ";"];
 
 /// One recording, reduced to what two of them can be compared by.
 pub(super) struct Recording {
@@ -161,12 +160,10 @@ pub(super) fn query_title(title: &str) -> &str {
     // bytes to three: past one of those, the cut lands to the right of where it was found, taking
     // the marker with it and eventually landing inside a character.
     let lower = title.to_ascii_lowercase();
-    let cut = [
-        " feat ", " feat. ", " ft ", " ft. ", "(feat", "[feat", "(ft", "[ft",
-    ]
-    .into_iter()
-    .filter_map(|mark| lower.find(mark))
-    .min();
+    let cut = [" feat ", " feat. ", " ft ", " ft. ", "(feat", "[feat", "(ft", "[ft"]
+        .into_iter()
+        .filter_map(|mark| lower.find(mark))
+        .min();
 
     match cut {
         Some(at) => title[..at].trim_end(),

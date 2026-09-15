@@ -36,7 +36,7 @@ const FALLBACK_VARIANT: &str = "info";
 /// two halves of one ternary, so anything but 1 is a floor that fails on an ordinary edit.
 const MIN_REPEAT_SITES: usize = 6;
 const MIN_STATUS_SITES: usize = 1;
-const MIN_VARIANT_PRODUCERS: usize = 15;
+const MIN_VARIANT_PRODUCERS: usize = 10;
 
 /// The literal `src` compares `.field` against at `at`, where `at` is the offset of the `.`.
 ///
@@ -173,10 +173,10 @@ fn call_arg_literals<'a>(src: &'a str, anchor: &str, commas: usize) -> Vec<&'a s
 
 /// The literals a `let variant = …;` statement can settle on.
 ///
-/// Five `NotificationParams::plain` call sites take the variant as an identifier bound just
-/// above, so the call itself carries no literal to read. Its caller scopes this to files naming
-/// that constructor, which is what keeps `ui::appearance`'s theme-variant bindings out: those are
-/// the same statement about a different `variant`.
+/// `NotificationsUi::show_completion` hands `NotificationParams::plain` the variant as an
+/// identifier bound just above, so the call itself carries no literal to read. Its caller scopes
+/// this to files naming that constructor, which is what keeps `ui::appearance`'s theme-variant
+/// bindings out: those are the same statement about a different `variant`.
 fn variant_literals_from_bindings(src: &str) -> Vec<&str> {
     const BINDING: &str = "let variant = ";
     let mut out = Vec::new();
@@ -208,8 +208,8 @@ fn quoted_literals(span: &str) -> Vec<&str> {
 /// Every notification variant the Rust tree can hand the card, paired with the file it came from.
 ///
 /// Three shapes, and all three are in the tree today: `show_localized`'s second argument,
-/// a `NotificationParams` struct literal's `variant` field, and the `let variant` ternary the
-/// `plain` constructor's callers bind above the call.
+/// a `NotificationParams` struct literal's `variant` field, and the `let variant` binding
+/// `show_completion` hands the `plain` constructor.
 fn rust_variant_literals() -> Vec<(String, String)> {
     let mut out = Vec::new();
     for (path, src) in rust_sources() {

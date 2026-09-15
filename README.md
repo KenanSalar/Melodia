@@ -7,7 +7,7 @@
 [![Platforms](https://img.shields.io/badge/platforms-Linux%20%C2%B7%20Windows-success.svg)](#installation)
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust%20%2B%20Slint-orange.svg)](https://www.rust-lang.org/)
 
-Melodia is a Slint rewrite of a former Tauri + SolidJS application. Dropping the embedded WebKitGTK browser engine took the real-world footprint from a combined **~900 MB** to 88 MB idle on Linux and 58 MB on Windows (PSS); the [full numbers](#footprint) are below.
+Melodia is a Slint rewrite of a former Tauri + SolidJS application. Dropping the embedded WebKitGTK browser engine took the real-world footprint from a combined **~900 MB** to 87 MiB idle on Linux (PSS) and 105 MiB on Windows (commit); the [full numbers](#footprint) are below.
 
 ---
 
@@ -19,31 +19,30 @@ Six theme families, light and dark variants, configurable accents, and Material 
 
 <table>
   <tr>
-    <td width="50%"><img src="assets/screenshots/albums.png" alt="My Library on the Albums tab"><br><sub><b>My Library</b>: one page and five tabs, here over a virtualized cover grid.</sub></td>
-    <td width="50%"><img src="assets/screenshots/playlist-detail.png" alt="A playlist opened inside My Library"><br><sub><b>Detail in place</b>: opening a playlist grows the band into its banner, tabs still in reach.</sub></td>
+    <td width="50%"><img src="assets/screenshots/songs.png" alt="My Library on the Songs tab"><br><sub><b>My Library</b>: one page and five tabs, here on Songs with sortable, toggleable columns.</sub></td>
+    <td width="50%"><img src="assets/screenshots/album.png" alt="My Library on the Albums tab"><br><sub><b>Albums</b>: a virtualized cover grid, sorted by name, year, or artist.</sub></td>
   </tr>
   <tr>
+    <td><img src="assets/screenshots/playlist-detail.png" alt="A playlist opened inside My Library"><br><sub><b>Detail in place</b>: opening a playlist grows the band into its banner, tabs still in reach.</sub></td>
     <td><img src="assets/screenshots/search.png" alt="Search view"><br><sub><b>Search</b>: a top-result card over songs, albums, artists, and genres.</sub></td>
-    <td><img src="assets/screenshots/browse.png" alt="File-system browse view"><br><sub><b>Browse</b>: navigate the library by folder, as a list or a grid of cards.</sub></td>
   </tr>
 </table>
 
-### Favorites
+### Now Playing
 
 <table>
   <tr>
-    <td><img src="assets/screenshots/favorites.png" alt="Favorites view"><br><sub><b>Favorites</b>: an artwork mosaic hero over tabs for songs, most played, and favorite artists. Recently Played is built the same way.</sub></td>
+    <td width="50%"><img src="assets/screenshots/nowplaying-upnext.png" alt="Now Playing with the Up Next list"><br><sub><b>Up Next</b>: the queue beside the artwork, the file's format, and the visualizer.</sub></td>
+    <td width="50%"><img src="assets/screenshots/nowplaying-lyrics.png" alt="Now Playing with a timed lyrics sheet"><br><sub><b>Lyrics</b>: the header switch trades Up Next for a timed sheet that follows the song line by line.</sub></td>
   </tr>
 </table>
 
-### Internet Radio
-
-Off until you switch it on, under Settings ▸ Services ▸ Radio.
+### Internet Radio and Settings
 
 <table>
   <tr>
-    <td width="50%"><img src="assets/screenshots/radio-browse.png" alt="Radio browse view"><br><sub><b>Browse</b>: a worldwide directory, narrowed by country, language, genre, codec, or bitrate.</sub></td>
-    <td width="50%"><img src="assets/screenshots/radio-detail.png" alt="Radio station page"><br><sub><b>Station page</b>: logo, homepage, format, bitrate, votes, and what the station has announced this session.</sub></td>
+    <td width="50%"><img src="assets/screenshots/radio-browse.png" alt="Radio browse view"><br><sub><b>Internet Radio</b>: a worldwide directory, narrowed by country, language, genre, codec, or bitrate. Off until you switch it on, under Settings ▸ Services ▸ Radio.</sub></td>
+    <td width="50%"><img src="assets/screenshots/settings.png" alt="Settings on the Interface tab"><br><sub><b>Settings</b>: five tabs and a search box, here on the theme, variant, accent, and backdrop.</sub></td>
   </tr>
 </table>
 
@@ -53,8 +52,8 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 
 <table>
   <tr>
-    <td width="60%" valign="top"><img src="assets/screenshots/miniplayer_rectangle.png" alt="Horizontal mini-player strip" width="360"><br><sub><b>Horizontal strip</b>: the most compact form.</sub></td>
-    <td width="40%" valign="top"><img src="assets/screenshots/miniplayer_square.png" alt="Square mini-player widget with up-next list" width="240"><br><sub><b>Square widget</b>: grows an up-next list when tall enough.</sub></td>
+    <td width="60%" valign="top"><img src="assets/screenshots/miniplayer-rectangle.png" alt="Horizontal mini-player strip" width="360"><br><sub><b>Horizontal strip</b>: the most compact form.</sub></td>
+    <td width="40%" valign="top"><img src="assets/screenshots/miniplayer-square.png" alt="Square mini-player widget with up-next list" width="240"><br><sub><b>Square widget</b>: grows an up-next list when tall enough.</sub></td>
   </tr>
 </table>
 
@@ -72,7 +71,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Browse by folder, as a detailed list or a grid of cards
 - Star ratings, play and skip counts, natural sort, resizable and toggleable columns
 - Tag editing for one track or many at once, cover art included, written straight back to the files. A track's artists, its genres and the ten studio credits (composer, lyricist, conductor, performer, producer and the rest) are each an editable list rather than one text box, beside the rest of what a file can carry: work and movement, key, mood, ISRC, and the release's own label, catalog number, barcode and medium
-- Manual and smart playlists, the latter rule-based and resolved live; `.m3u8` import and export, drag-and-drop import and reordering
+- Manual and smart playlists, the latter rule-based and resolved live; `.m3u8` import and export, several at once as a single `.zip` that imports back without extracting, drag-and-drop import and reordering
 - A database backup before every schema migration, three kept
 
 ### Playback
@@ -86,8 +85,9 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Responsive mini-player: shrink the window and the UI collapses to a strip or a square widget
 
 ### Lyrics
-- A panel in the Now Playing column, switched on from the lyrics menu in that view's header. A timed sheet follows the song line by line, and clicking a line seeks to it
-- Read from a `.lrc` beside the track or from the file's own lyrics tag, so a library that already carries them needs nothing switched on
+- A panel in the Now Playing column in place of Up Next, turned on from the switch in that view's header or under Settings ▸ Services ▸ Lyrics. A timed sheet follows the song line by line, and clicking a line seeks to it
+- **Off by default, and off means off**: while lyrics are switched off, Now Playing shows Up Next and nothing looks a sheet up or keeps one in memory
+- Read from a `.lrc` beside the track or from the file's own lyrics tag, so a library that already carries them needs no online lookup
 - **Online lookup is off until you switch it on**, from the lyrics menu or under Settings ▸ Services ▸ Lyrics. Nothing contacts **lrclib.net** until you do, and what it answers is cached under your data folder rather than written into your files
 - Romanization printed under a line written in a script you don't read. Korean and Japanese each get an engine matched to them; around a hundred scripts are covered in all, Chinese, Cyrillic and Arabic among them. On by default, and it draws nothing for a sheet already in Latin letters
 - A bilingual sheet's translation is drawn under the words it glosses
@@ -102,7 +102,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Segmented (HLS) stations play like any other
 
 ### Themes
-Six families, each with light and dark variants and configurable accents: **Catppuccin** (Latte, Frappé, Macchiato, Mocha), **Material 3**, **GNOME Adwaita**, **KDE Breeze**, **Windows Fluent**, and **macOS**. System dark/light is followed automatically, KDE color schemes are read from `kdeglobals`, and Material You derives a palette from the current artwork in seven color styles. Headers paint an aurora of the album's own colors by default, or a blurred cover instead. The titlebar is custom and transparent, with native decorations available.
+Six families, each with light and dark variants and configurable accents: **Catppuccin** (Latte, Frappé, Macchiato, Mocha), **Material 3**, **GNOME Adwaita**, **KDE Breeze**, **Windows Fluent**, and **macOS**. System dark/light is followed automatically, KDE color schemes are read from `kdeglobals`, and Material You derives a palette from the current artwork in seven color styles. Headers paint an aurora of the album's own colors by default, or a blurred cover instead. The titlebar is custom and transparent, with native decorations available, and KDE opens on its native one. A first launch picks the desktop's own theme too: Windows Fluent, KDE Breeze and GNOME Adwaita follow the system's light or dark mode, and any other desktop starts on Catppuccin Mocha.
 
 ### Formats and languages
 MP3, FLAC, M4A/M4B (AAC and ALAC), raw AAC (`.aac`), Ogg Vorbis (`.ogg`, `.oga`), WAV (PCM and ADPCM), AIFF/AIFF-C, Matroska (`.mka`), and CAF. Matroska and CAF carry no tags Melodia can read, so those tracks list under their filename, as does anything whose tags are too damaged to parse.
@@ -117,23 +117,57 @@ Seven locales (English, German, French, Spanish, Turkish, Greek, Italian), switc
 - A system-tray icon with playback controls, on by default, and an optional close-to-tray; both under Settings ▸ Interface
 - A daily update check, named on first run and switchable under Settings ▸ Updates. It asks GitHub for a signed manifest and nothing else; package-managed installs skip it entirely
 - Set Melodia as your default player and double-click a track; it runs as a single instance, so files open in the window you already have
-- Always-on-top on KDE and GNOME, a self-deploying desktop entry, and AppStream metadata for KDE Discover and GNOME Software
+- Always-on-top on Windows, on any X11 desktop, and on Wayland under KDE, or GNOME with the Window Calls extension
+- On Linux, a self-deploying desktop entry and AppStream metadata for KDE Discover and GNOME Software
 - Window, queue, and navigation state persisted across sessions
 
 ## Footprint
 
-| Scenario | RSS | PSS | Heap | Mapped | CPU |
-| --- | --- | --- | --- | --- | --- |
-| Idle (Fedora) | 158 MB | 88 MB | 33 MB | 125 MB | 0.1% |
-| Playing, list view (Fedora) | 158 MB | 89 MB | 34 MB | 124 MB | 0.6% |
-| Playing, visualizer live (Fedora) | 166 MB | 96 MB | 34 MB | 132 MB | 4.0% |
-| Idle (Windows) | 117 MB | 58 MB | 54 MB | 63 MB | 0.1–0.2% |
-| Playing, list view (Windows) | 125 MB | 65 MB | 61 MB | 64 MB | 0.8–1.0% |
-| Playing, visualizer live (Windows) | 132 MB | 71 MB | 67 MB | 65 MB | 9.6–9.9% |
+Release builds against the same 512-track library on one dual-boot PC, a Ryzen 7 9800X3D (8 cores, 16 threads) with an RTX 3080 and the window on a 144 Hz display. On both platforms Melodia opened on the same playlist, its detail view showing the hero banner, and the visualizer ran in the Mirrored style. After 30 s to settle, each scenario is sampled every second for 60 s: memory is the median sample, CPU and GPU the total over that minute. Each platform's table uses what its own kernel accounts for, so the columns differ between the two.
 
-Release builds against the same 512-track library, each on a 16-core machine with the window on the same 144 Hz display, measured after the process had settled. CPU is a share of **one** core.
+### Linux (Fedora)
 
-**Heap** is what the application itself allocates, and it is the number that stays flat: grids and track lists are virtualized and the cover caches are capped against the display, so a larger library barely moves it. **Mapped** is the file-backed remainder, mostly the binary and the shared graphics stack rather than anything Melodia allocated, which is why **PSS** is the fairer whole-process figure on a desktop already running other GL applications.
+Measured with [`scripts/measure-linux-footprint.sh`](scripts/measure-linux-footprint.sh) on KDE Plasma under Wayland.
+
+#### Custom titlebar
+
+| Scenario | Anonymous | PSS | USS | RSS | GPU memory | CPU (1 core) | CPU (all cores) | GPU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Idle | 32 MiB | 87 MiB | 81 MiB | 157 MiB | 39 MiB | 0.08% | 0.01% | 0.00% |
+| Playing, list view | 33 MiB | 89 MiB | 84 MiB | 157 MiB | 35 MiB | 0.67% | 0.04% | 1.21% |
+| Playing, visualizer live | 33 MiB | 90 MiB | 85 MiB | 158 MiB | 35 MiB | 3.88% | 0.24% | 1.86% |
+
+#### Native titlebar
+
+| Scenario | Anonymous | PSS | USS | RSS | GPU memory | CPU (1 core) | CPU (all cores) | GPU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Idle | 32 MiB | 87 MiB | 81 MiB | 157 MiB | 24 MiB | 0.08% | 0.01% | 0.00% |
+| Playing, list view | 33 MiB | 90 MiB | 84 MiB | 156 MiB | 24 MiB | 0.57% | 0.04% | 0.00% |
+| Playing, visualizer live | 33 MiB | 91 MiB | 86 MiB | 157 MiB | 29 MiB | 3.92% | 0.24% | 0.78% |
+
+Linux keeps no commit charge per process, so **Anonymous** is the figure to compare: the memory Melodia allocated itself, in RAM or in swap, which nothing another process does can move. It is also the number that stays flat, since grids and track lists are virtualized and the cover caches are capped against the display, so a larger library barely moves it. **PSS** is KDE System Monitor's Memory column. It adds a share of the file-backed pages, mostly the binary and the shared graphics stack rather than anything Melodia allocated, and that share shrinks whenever another program maps the same libraries. **USS** is the part no other process maps, what closing Melodia gives back, and System Monitor's Private column. **RSS** counts every shared page in full. **GPU memory** is the video memory the NVIDIA driver charges to Melodia, where FemtoVG keeps its textures and framebuffers, counted apart from the rest. **CPU (1 core)** counts one full core as 100%, and **CPU (all cores)** spreads that across all 16 threads, as System Monitor's CPU column does. **GPU** is the utilization the NVIDIA driver reports for Melodia, in whole percents each second.
+
+### Windows
+
+Measured with [`scripts/measure-windows-footprint.ps1`](scripts/measure-windows-footprint.ps1).
+
+#### Custom titlebar
+
+| Scenario | Commit | Private WS | Working set | GPU dedicated | GPU shared | CPU (1 core) | CPU (all cores) | GPU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Idle | 105 MiB | 60 MiB | 119 MiB | 26 MiB | 13 MiB | 0.13% | 0.01% | 0.00% |
+| Playing, list view | 112 MiB | 64 MiB | 123 MiB | 28 MiB | 17 MiB | 0.91% | 0.06% | 0.12% |
+| Playing, visualizer live | 116 MiB | 67 MiB | 126 MiB | 29 MiB | 17 MiB | 6.33% | 0.40% | 2.36% |
+
+#### Native titlebar
+
+| Scenario | Commit | Private WS | Working set | GPU dedicated | GPU shared | CPU (1 core) | CPU (all cores) | GPU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Idle | 102 MiB | 59 MiB | 118 MiB | 23 MiB | 13 MiB | 0.16% | 0.01% | 0.00% |
+| Playing, list view | 103 MiB | 59 MiB | 118 MiB | 24 MiB | 13 MiB | 0.89% | 0.06% | 0.10% |
+| Playing, visualizer live | 115 MiB | 67 MiB | 126 MiB | 27 MiB | 19 MiB | 9.06% | 0.57% | 2.17% |
+
+Windows keeps no PSS, so **Commit** is the figure to compare: the private memory Windows has set aside for Melodia, in RAM or paged out, which doesn't fall when Windows trims the process. **Private WS** is Task Manager's Memory column, the private memory in RAM at that moment. **Working set** adds the pages Melodia shares with other processes, mostly system DLLs. **GPU dedicated** and **GPU shared** are the video memory Task Manager lists per process, where FemtoVG keeps its textures and framebuffers, counted apart from commit. **CPU (1 core)** counts one full core as 100%, and **CPU (all cores)** spreads that across all 16 threads, as Task Manager's Details tab does. **GPU** is the busiest GPU engine, Task Manager's per-process figure.
 
 ## Keyboard Shortcuts
 

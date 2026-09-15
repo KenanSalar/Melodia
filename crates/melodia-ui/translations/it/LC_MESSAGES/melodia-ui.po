@@ -492,6 +492,24 @@ msgstr "Colora la barra laterale e la barra di riproduzione con lo sfondo del co
 msgid "Window Corner Radius"
 msgstr "Raggio degli angoli della finestra"
 
+msgid "Window Border"
+msgstr "Bordo della finestra"
+
+msgid "Draw a thin outline around the miniplayer. The full window keeps the border of its system frame."
+msgstr "Disegna un contorno sottile attorno al mini player. La finestra completa mantiene il bordo della sua cornice di sistema."
+
+msgid "Draw a thin outline around the whole window, the miniplayer included."
+msgstr "Disegna un contorno sottile attorno all'intera finestra, mini player incluso."
+
+msgid "Window Border Color"
+msgstr "Colore del bordo della finestra"
+
+msgid "System follows the color the operating system draws its own window borders in."
+msgstr "Sistema segue il colore con cui il sistema operativo disegna i bordi delle proprie finestre."
+
+msgid "Available only while the window border is shown."
+msgstr "Disponibile solo quando il bordo della finestra è visibile."
+
 msgid "Managed by the operating system"
 msgstr "Gestito dal sistema operativo"
 
@@ -1211,11 +1229,14 @@ msgstr "Importa playlist da file .m3u8"
 msgid "Export playlists to .m3u8 files"
 msgstr "Esporta playlist in file .m3u8"
 
-msgid "Choose playlists to export, then pick a folder."
-msgstr "Scegli le playlist da esportare, poi seleziona una cartella."
+msgid "Choose playlists to export."
+msgstr "Scegli le playlist da esportare."
 
 msgid "No playlists to export"
 msgstr "Nessuna playlist da esportare"
+
+msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
+msgstr "Più playlist vengono salvate in un unico file .zip, che puoi importare direttamente senza estrarlo."
 
 msgid "Select all"
 msgstr "Seleziona tutto"
@@ -1237,6 +1258,9 @@ msgstr "Esportazione non riuscita"
 
 msgid "Couldn't write the playlist files."
 msgstr "Impossibile scrivere i file di playlist."
+
+msgid "These playlists are too large for one .zip file. Export fewer at a time."
+msgstr "Queste playlist sono troppo grandi per un unico file .zip. Esportane meno alla volta."
 
 msgid "Add"
 msgstr "Aggiungi"
@@ -1777,6 +1801,14 @@ msgstr "Radio via internet"
 msgid "Browse and play live stations from radio-browser.info"
 msgstr "Esplora e riproduci stazioni in diretta da radio-browser.info"
 
+# The lyrics switch, which turns lyrics on in place of Up Next. Named on the Services card and
+# again as the tooltip of the Now Playing header's switch, so both read from this one label.
+msgid "Show lyrics"
+msgstr "Mostra il testo"
+
+msgid "Show the playing track's words in Now Playing instead of Up Next"
+msgstr "Mostra il testo del brano in corso nella schermata «In riproduzione» al posto di «In coda»"
+
 # The online-lyrics switch. Named in the Services card and again on the welcome card, so both
 # read from this one pair.
 msgid "Look up lyrics online"
@@ -2089,12 +2121,6 @@ msgstr "Inserisci il testo trovato"
 # The Now Playing lyrics menu. "Look up again" forgets what the directory said about this
 # track and asks once more, for a sheet matched off tags that have since been corrected;
 # "Save to file" writes the sheet on screen into the track's own lyrics tag.
-msgid "Hide lyrics"
-msgstr "Nascondi il testo"
-
-msgid "Show lyrics"
-msgstr "Mostra il testo"
-
 msgid "Look up again"
 msgstr "Cerca di nuovo"
 

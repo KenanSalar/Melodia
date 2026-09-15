@@ -18,11 +18,8 @@ use melodia_ui::{AppWindow, Settings, Theme};
 pub(super) fn wire_match_unfocused_bg_changed(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
     ui.global::<Settings>().on_match_unfocused_bg_changed(move |on| {
-        let s_clone = s.clone();
-        s.runtime.spawn_blocking(move || {
-            if let Err(e) = library::settings::set_match_unfocused_to_system_bg(&s_clone, on) {
-                log::warn!("persist match_unfocused_to_system_bg: {e}");
-            }
+        s.persist_blocking("persist match_unfocused_to_system_bg", move |state| {
+            library::settings::set_match_unfocused_to_system_bg(state, on)
         });
     });
 }
@@ -47,11 +44,8 @@ pub(super) fn wire_corner_radius_changed(ui: &AppWindow, state: &AppState) {
             reason = "snapped to {0,6,8,10,15}: exact f32 representation"
         )]
         ui.global::<Theme>().set_shell_radius(radius as f32);
-        let s_clone = s.clone();
-        s.runtime.spawn_blocking(move || {
-            if let Err(e) = library::settings::set_corner_radius(&s_clone, radius) {
-                log::warn!("persist corner_radius: {e}");
-            }
+        s.persist_blocking("persist corner_radius", move |state| {
+            library::settings::set_corner_radius(state, radius)
         });
     });
 }
@@ -63,11 +57,8 @@ pub(super) fn wire_close_to_tray_changed(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
     ui.global::<Settings>().on_close_to_tray_changed(move |on| {
         crate::ui::shell::tray_bridge::set_close_to_tray(on);
-        let s_clone = s.clone();
-        s.runtime.spawn_blocking(move || {
-            if let Err(e) = library::window::set_close_to_tray(&s_clone, on) {
-                log::warn!("persist close_to_tray: {e}");
-            }
+        s.persist_blocking("persist close_to_tray", move |state| {
+            library::window::set_close_to_tray(state, on)
         });
     });
 }
@@ -85,11 +76,8 @@ pub(super) fn wire_titlebar_button_style_changed(ui: &AppWindow, state: &AppStat
             _ => TitlebarButtonStyle::Standard,
         };
         ui.global::<Theme>().set_titlebar_button_style(idx_for(style));
-        let s_clone = s.clone();
-        s.runtime.spawn_blocking(move || {
-            if let Err(e) = library::window::set_titlebar_button_style(&s_clone, style) {
-                log::warn!("persist titlebar_button_style: {e}");
-            }
+        s.persist_blocking("persist titlebar_button_style", move |state| {
+            library::window::set_titlebar_button_style(state, style)
         });
     });
 }
@@ -106,11 +94,8 @@ pub(super) fn wire_titlebar_button_side_changed(ui: &AppWindow, state: &AppState
             _ => TitlebarButtonSide::Right,
         };
         ui.global::<Theme>().set_titlebar_button_side(idx_for_side(side));
-        let s_clone = s.clone();
-        s.runtime.spawn_blocking(move || {
-            if let Err(e) = library::window::set_titlebar_button_side(&s_clone, side) {
-                log::warn!("persist titlebar_button_side: {e}");
-            }
+        s.persist_blocking("persist titlebar_button_side", move |state| {
+            library::window::set_titlebar_button_side(state, side)
         });
     });
 }
@@ -138,12 +123,9 @@ pub(super) fn idx_for_side(side: TitlebarButtonSide) -> i32 {
 pub(super) fn wire_overflow_buttons_changed(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
     ui.global::<Settings>().on_overflow_buttons_changed(move |id, on| {
-        let s_clone = s.clone();
         let id_str = id.to_string();
-        s.runtime.spawn_blocking(move || {
-            if let Err(e) = library::settings::set_overflow_button(&s_clone, id_str, on) {
-                log::warn!("persist overflow_buttons: {e}");
-            }
+        s.persist_blocking("persist overflow_buttons", move |state| {
+            library::settings::set_overflow_button(state, id_str, on)
         });
     });
 }

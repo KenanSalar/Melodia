@@ -33,11 +33,7 @@ impl Staged {
 
         let lyrics_dir = tmp.path().join("lyrics");
         std::fs::create_dir_all(&lyrics_dir)?;
-        Ok(Self {
-            _tmp: tmp,
-            track,
-            lyrics_dir,
-        })
+        Ok(Self { _tmp: tmp, track, lyrics_dir })
     }
 
     /// The path as the store keys it, which is the track's own path and nothing else.
@@ -46,10 +42,7 @@ impl Staged {
     }
 
     fn write_tag(&self, text: &str) -> Result<(), AppError> {
-        let edit = TagEdit {
-            lyrics: FieldEdit::Set(text.to_owned()),
-            ..TagEdit::default()
-        };
+        let edit = TagEdit { lyrics: FieldEdit::Set(text.to_owned()), ..TagEdit::default() };
         tag_writer::apply_to_file(&self.track, &edit, None)?;
         Ok(())
     }

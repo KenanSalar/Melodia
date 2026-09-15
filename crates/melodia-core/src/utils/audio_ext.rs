@@ -9,9 +9,8 @@
 /// `crates/melodia/wix/main.wxs` rows (`crates/melodia/tests/packaging.rs`'s
 /// `the_msi_offers_every_audio_extension`) and, where freedesktop defines a type for it, a MIME
 /// entry in the four `.desktop` sources.
-pub const AUDIO_EXTENSIONS: &[&str] = &[
-    "mp3", "flac", "m4a", "m4b", "aac", "ogg", "oga", "wav", "aiff", "aif", "aifc", "mka", "caf",
-];
+pub const AUDIO_EXTENSIONS: &[&str] =
+    &["mp3", "flac", "m4a", "m4b", "aac", "ogg", "oga", "wav", "aiff", "aif", "aifc", "mka", "caf"];
 
 /// True when `ext` — a file extension without the dot, in any case — is one we
 /// scan. The single spelling of that question; every call site (library walk,

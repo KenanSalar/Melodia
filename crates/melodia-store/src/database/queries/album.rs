@@ -110,7 +110,7 @@ pub async fn set_album_artwork(
         return Ok(());
     }
     // Reserve 1 bind slot for the `artwork_path` parameter itself.
-    for chunk in album_ids.chunks(crate::database::SQLITE_BIND_LIMIT - 1) {
+    for chunk in album_ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 1) {
         let placeholders = crate::database::placeholders(chunk.len());
         let sql = format!("UPDATE albums SET artwork_path = ? WHERE id IN ({placeholders})");
         let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(artwork_path);
@@ -141,7 +141,7 @@ pub async fn clear_release_tags(
         return Ok(());
     }
     // Reserve the seven flag binds.
-    for chunk in album_ids.chunks(crate::database::SQLITE_BIND_LIMIT - 7) {
+    for chunk in album_ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 7) {
         let placeholders = crate::database::placeholders(chunk.len());
         let sql = format!(
             "UPDATE albums SET

@@ -1,4 +1,4 @@
-import { GenreRow, GenreGridRow, TrackListRow } from "../models.slint";
+import { GenreRow, GenreGridRow, TrackListRow, TrackColumns } from "../models.slint";
 
 // The Genre grid, on the `Albums` / `Artists` ownership contract.
 //
@@ -23,7 +23,7 @@ export global Genres {
 }
 
 // The Genre Detail view, on the `AlbumDetail` shape under its own persistence key.
-// `show-genre` defaults false — the column is redundant inside a single genre — and
+// The genre column is off and locked, redundant inside a single genre, and
 // **there are no image slots at all**, since a genre has no artwork: the band paints its
 // gradient floor and scrim alone, which is what `has-blur: false` on that arm asks for.
 export global GenreDetail {
@@ -42,22 +42,7 @@ export global GenreDetail {
     // tab records nothing at all.
     in-out property <int> origin-nav-index: -1;
 
-    in-out property <length> w-number: 56px;
-    in-out property <length> w-title: 320px;
-    in-out property <length> w-artist: 200px;
-    in-out property <length> w-album: 220px;
-    in-out property <length> w-genre: 140px;
-    in-out property <length> w-year: 72px;
-    in-out property <length> w-length: 88px;
-
-    // `show-number` defaults false: ordering inside a genre is incidental, tracks
-    // spanning many albums, not a tracklist position.
-    in-out property <bool> show-number: false;
-    in-out property <bool> show-artist: true;
-    in-out property <bool> show-album: true;
-    in-out property <bool> show-genre: false;
-    in-out property <bool> show-year: true;
-    in-out property <bool> show-artwork: true;
+    in-out property <TrackColumns> track-columns;
 
     // Sorted in memory, as the other details are; by album so rows group naturally.
     in-out property <string> sort-field: "album";

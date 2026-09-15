@@ -225,6 +225,14 @@ pub fn queue_cycle_repeat(state: &AppState) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Drive repeat to `mode`, for a caller naming the mode rather than stepping through them.
+pub fn queue_set_repeat(state: &AppState, mode: RepeatMode) -> Result<(), AppError> {
+    let new_mode = set_repeat(&state.player_state, &state.sinks, mode);
+    log::debug!("queue: repeat → {new_mode:?}");
+    persist_repeat(state, new_mode);
+    Ok(())
+}
+
 /// Answers with the shuffle state it settled in, which is *not* the request: an empty queue
 /// refuses to shuffle, so a caller persisting `enabled` writes a shuffle the next launch
 /// restores over a queue that was never reordered.
@@ -263,28 +271,30 @@ fn cycle_repeat(player_state: &PlayerStateHandle, sinks: &PlayerSinks) -> Repeat
     })
 }
 
+/// Set the repeat mode, answering with the one it landed on.
+fn set_repeat(
+    player_state: &PlayerStateHandle,
+    sinks: &PlayerSinks,
+    mode: RepeatMode,
+) -> RepeatMode {
+    with_state_emit(player_state, sinks, |s| {
+        s.queue.set_repeat_mode(mode);
+        s.queue.repeat_mode
+    })
+}
+
 /// Fire-and-forget settings.json write for shuffle, on the blocking pool so the
 /// `wire_sync!` spawn returns immediately. A failed write only logs: the
 /// in-memory state already changed and persistence is best-effort.
 fn persist_shuffle(state: &AppState, enabled: bool) {
-    let paths = state.paths.clone();
-    state.runtime.spawn_blocking(move || {
-        if let Err(e) = mutate_settings(&paths, |s| {
-            s.queue.shuffle_enabled = enabled;
-        }) {
-            log::warn!("persist shuffle_enabled: {e}");
-        }
+    state.persist_blocking("persist shuffle_enabled", move |state| {
+        mutate_settings(&state.paths, |s| s.queue.shuffle_enabled = enabled)
     });
 }
 
 fn persist_repeat(state: &AppState, mode: RepeatMode) {
-    let paths = state.paths.clone();
-    state.runtime.spawn_blocking(move || {
-        if let Err(e) = mutate_settings(&paths, |s| {
-            s.queue.repeat_mode = mode;
-        }) {
-            log::warn!("persist repeat_mode: {e}");
-        }
+    state.persist_blocking("persist repeat_mode", move |state| {
+        mutate_settings(&state.paths, |s| s.queue.repeat_mode = mode)
     });
 }
 
@@ -371,25 +381,13 @@ async fn plan_restore(
     .await
     .map_err(|e| AppError::Settings(format!("restore_persisted_playback join: {e}")))??;
 
-    Ok(RestorePlan {
-        persisted,
-        summaries,
-        station,
-        repeat_mode,
-        shuffle_enabled,
-    })
+    Ok(RestorePlan { persisted, summaries, station, repeat_mode, shuffle_enabled })
 }
 
 /// Seat a [`RestorePlan`]. The queue first and the station over it, which is the order the two
 /// halves of `queue.json` owe each other.
 fn apply_restore(state: &mut PlayerState, plan: RestorePlan) -> Vec<PlayerAction> {
-    let RestorePlan {
-        persisted,
-        summaries,
-        station,
-        repeat_mode,
-        shuffle_enabled,
-    } = plan;
+    let RestorePlan { persisted, summaries, station, repeat_mode, shuffle_enabled } = plan;
 
     if let Some(p) = persisted {
         restore_queue(state, summaries, &p.queue);

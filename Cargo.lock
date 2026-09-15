@@ -541,9 +541,9 @@ dependencies = [
 
 [[package]]
 name = "aws-lc-rs"
-version = "1.17.0"
+version = "1.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ec2f1fc3ec205783a5da9a7e6c1509cc69dedf09a1949e412c1e18469326d00"
+checksum = "b281d307588d634de920874890732659e2e7672f72b5e10e81badc1a8a83621e"
 dependencies = [
  "aws-lc-sys",
  "zeroize",
@@ -551,14 +551,15 @@ dependencies = [
 
 [[package]]
 name = "aws-lc-sys"
-version = "0.41.0"
+version = "0.45.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a2f9779ce85b93ab6170dd940ad0169b5766ff848247aff13bb788b832fe3f4"
+checksum = "9bff6c3b54fad79a2e60b8102caf565819711497c1f5f092f49508e2f5c31b27"
 dependencies = [
  "cc",
  "cmake",
  "dunce",
  "fs_extra",
+ "pkg-config",
 ]
 
 [[package]]
@@ -566,6 +567,12 @@ name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+
+[[package]]
+name = "base64"
+version = "0.23.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
 name = "bincode"
@@ -889,9 +896,9 @@ dependencies = [
 
 [[package]]
 name = "chacha20"
-version = "0.10.0"
+version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f8d983286843e49675a4b7a2d174efe136dc93a18d69130dd18198a6c167601"
+checksum = "65c35e4b699c7e15ccbe7ee35c005e4fc0a278d22238a2857e6ce2dadeda1b06"
 dependencies = [
  "cfg-if",
  "cpufeatures 0.3.0",
@@ -2516,7 +2523,7 @@ version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96547c2556ec9d12fb1578c4eaf448b04993e7fb79cbaad930a656880a6bdfa0"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "bytes",
  "futures-channel",
  "futures-util",
@@ -3651,7 +3658,7 @@ checksum = "0695a693e38d35838dd34bc3ab19911395f6837ccf55c7271189cfb12cb8b57f"
 
 [[package]]
 name = "melodia"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "async-compat",
  "glob",
@@ -3677,7 +3684,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-app"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "async-compat",
  "blake3",
@@ -3710,7 +3717,6 @@ dependencies = [
  "serde",
  "serde_json",
  "slint",
- "souvlaki",
  "sqlx",
  "tempfile",
  "thiserror 2.0.19",
@@ -3720,11 +3726,12 @@ dependencies = [
  "unicode-script",
  "uroman",
  "windows-sys 0.61.2",
+ "zip",
 ]
 
 [[package]]
 name = "melodia-artwork"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "blake3",
  "color-thief",
@@ -3745,7 +3752,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-audio"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "icy-metadata",
  "lofty",
@@ -3764,7 +3771,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-core"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "chrono",
  "dirs",
@@ -3783,7 +3790,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-engine"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "log",
  "melodia-audio",
@@ -3800,7 +3807,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-integrations"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "log",
  "lru",
@@ -3818,11 +3825,12 @@ dependencies = [
  "thiserror 2.0.19",
  "tokio",
  "tokio-util",
+ "zbus",
 ]
 
 [[package]]
 name = "melodia-net"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "blake3",
  "futures-util",
@@ -3841,7 +3849,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-platform"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "blake3",
  "chrono",
@@ -3866,7 +3874,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-playback"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "biquad",
  "cpal",
@@ -3881,7 +3889,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-store"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "blake3",
  "chrono",
@@ -3905,7 +3913,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-testkit"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "image",
  "tempfile",
@@ -3913,7 +3921,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-ui"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "slint",
  "slint-build",
@@ -3921,11 +3929,10 @@ dependencies = [
 
 [[package]]
 name = "melodia-views"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "async-compat",
  "chrono",
- "futures-util",
  "image",
  "log",
  "lru",
@@ -5601,11 +5608,11 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.13.4"
+version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "219c5811de6525e5416c7d5d53bb656d3afdbc6c5af816e0802bcfa42dbdc1c3"
+checksum = "16a1cfa75cc186dd73d5818e510e042e40927bccc9c236b061cea97e1eb08029"
 dependencies = [
- "base64",
+ "base64 0.23.1",
  "bytes",
  "futures-core",
  "futures-util",
@@ -5834,9 +5841,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.40"
+version = "0.23.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef86cd5876211988985292b91c96a8f2d298df24e75989a43a3c73f2d4d8168b"
+checksum = "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634"
 dependencies = [
  "aws-lc-rs",
  "once_cell",
@@ -5897,9 +5904,9 @@ checksum = "f87165f0995f63a9fbeea62b64d10b4d9d8e78ec6d7d51fb2125fda7bb36788f"
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.13"
+version = "0.103.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61c429a8649f110dddef65e2a5ad240f747e85f7758a6bccc7e5777bd33f756e"
+checksum = "f3c3cf1d8b1e7d4927e2d154c3fcb02979afb9939629c62cd9048d4f07b60ac2"
 dependencies = [
  "aws-lc-rs",
  "ring",
@@ -6461,7 +6468,7 @@ version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5855c8f31521af07d896b852eaa9eca974ddd3211fc2ae292e58dda8eb129bc8"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "block",
  "cocoa",
  "core-graphics 0.22.3",
@@ -6510,7 +6517,7 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05b44e85bf579a8eeb4ceaa77a3a523baf2bf0e9bac7e40f405d537b5d2d5ccb"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "bytes",
  "cfg-if",
  "crc",
@@ -6608,7 +6615,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "87a2bdd6e83f6b3ea525ca9fee568030508b58355a43d0b2c1674d5f79dcd65e"
 dependencies = [
  "atoi",
- "base64",
+ "base64 0.22.1",
  "bitflags 2.13.0",
  "byteorder",
  "crc",
@@ -6674,9 +6681,9 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "stream-download"
-version = "0.24.3"
+version = "0.24.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4395274fb9883301eab75d32928c328b26c6b1a53d5042bf4fa7b7256204bb14"
+checksum = "3838c412a6dbb469e857b5148043dbb54d01dce49cace8d46709b795cc7697a3"
 dependencies = [
  "bytes",
  "educe",
@@ -7482,6 +7489,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "typed-path"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e28f89b80c87b8fb0cf04ab448d5dd0dd0ade2f8891bae878de66a75a28600e"
+
+[[package]]
 name = "typenum"
 version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7665,7 +7678,7 @@ version = "0.47.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d46cf96c5f498d36b7a9693bc6a7075c0bb9303189d61b2249b0dc3d309c07de"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "data-url",
  "flate2",
  "fontdb",
@@ -8099,7 +8112,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -9106,6 +9119,20 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.118",
+]
+
+[[package]]
+name = "zip"
+version = "8.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d04a6b5381502aa6087c94c669499eb1602eb9c5e8198e534de571f7154809b"
+dependencies = [
+ "chrono",
+ "crc32fast",
+ "flate2",
+ "indexmap",
+ "memchr",
+ "typed-path",
 ]
 
 [[package]]

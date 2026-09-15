@@ -30,13 +30,7 @@ const FLOOR: Duration = Duration::from_millis(350);
 fn sent_ago(ago: Duration) -> Option<(Inner, Instant)> {
     let now = Instant::now();
     let last = now.checked_sub(ago)?;
-    Some((
-        Inner {
-            closed_until: None,
-            last_sent: Some(last),
-        },
-        now,
-    ))
+    Some((Inner { closed_until: None, last_sent: Some(last) }, now))
 }
 
 #[test]
@@ -63,10 +57,7 @@ fn a_caller_arriving_inside_the_floor_waits_out_what_is_left() {
 #[test]
 fn an_open_stop_refuses_with_the_time_left_on_it() {
     let now = Instant::now();
-    let state = Inner {
-        closed_until: Some(now + STOP),
-        last_sent: None,
-    };
+    let state = Inner { closed_until: Some(now + STOP), last_sent: None };
     assert_eq!(verdict(&state, FLOOR, now), Verdict::Stopped(STOP));
 }
 
@@ -78,10 +69,7 @@ fn a_stop_outranks_a_floor_that_is_already_satisfied() {
     let Some(last) = now.checked_sub(FLOOR) else {
         return;
     };
-    let state = Inner {
-        closed_until: Some(now + STOP),
-        last_sent: Some(last),
-    };
+    let state = Inner { closed_until: Some(now + STOP), last_sent: Some(last) };
     assert_eq!(verdict(&state, FLOOR, now), Verdict::Stopped(STOP));
 }
 
@@ -90,10 +78,7 @@ fn a_stop_expiring_on_this_instant_is_no_longer_a_stop() {
     // The guard is strict, so the instant a stop names is the first one that may send. Read the
     // other way it would hold every window a tick longer than the host asked for.
     let now = Instant::now();
-    let state = Inner {
-        closed_until: Some(now),
-        last_sent: None,
-    };
+    let state = Inner { closed_until: Some(now), last_sent: None };
     assert_eq!(verdict(&state, FLOOR, now), Verdict::Send);
 }
 

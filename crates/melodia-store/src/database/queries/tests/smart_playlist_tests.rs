@@ -71,10 +71,7 @@ async fn seed() -> Result<Seed, AppError> {
 }
 
 fn one(field: RuleField, op: RuleOp, value: Option<RuleValue>) -> SmartCriteria {
-    SmartCriteria {
-        rules: vec![Rule { field, op, value }],
-        ..SmartCriteria::default()
-    }
+    SmartCriteria { rules: vec![Rule { field, op, value }], ..SmartCriteria::default() }
 }
 
 fn ids(rows: &[TrackListRow]) -> HashSet<i64> {
@@ -154,11 +151,7 @@ async fn match_all_is_intersection() -> Result<(), AppError> {
                 op: RuleOp::Contains,
                 value: Some(RuleValue::Text("Rock".to_owned())),
             },
-            Rule {
-                field: RuleField::Rating,
-                op: RuleOp::Gte,
-                value: Some(RuleValue::Number(4.0)),
-            },
+            Rule { field: RuleField::Rating, op: RuleOp::Gte, value: Some(RuleValue::Number(4.0)) },
         ],
         ..SmartCriteria::default()
     };
@@ -178,11 +171,7 @@ async fn match_any_is_union() -> Result<(), AppError> {
                 op: RuleOp::Is,
                 value: Some(RuleValue::Text("Pop".to_owned())),
             },
-            Rule {
-                field: RuleField::Rating,
-                op: RuleOp::Gte,
-                value: Some(RuleValue::Number(4.0)),
-            },
+            Rule { field: RuleField::Rating, op: RuleOp::Gte, value: Some(RuleValue::Number(4.0)) },
         ],
         ..SmartCriteria::default()
     };
@@ -200,10 +189,7 @@ async fn limit_caps_and_orders() -> Result<(), AppError> {
             op: RuleOp::Gt,
             value: Some(RuleValue::Number(0.0)),
         }],
-        limit: Some(SmartLimit {
-            count: 2,
-            order: LimitOrder::PlayCountDesc,
-        }),
+        limit: Some(SmartLimit { count: 2, order: LimitOrder::PlayCountDesc }),
         ..SmartCriteria::default()
     };
     let rows = resolve(&s.db, &c).await?;
@@ -242,10 +228,7 @@ async fn count_respects_limit() -> Result<(), AppError> {
             op: RuleOp::Gt,
             value: Some(RuleValue::Number(0.0)),
         }],
-        limit: Some(SmartLimit {
-            count: 2,
-            order: LimitOrder::PlayCountDesc,
-        }),
+        limit: Some(SmartLimit { count: 2, order: LimitOrder::PlayCountDesc }),
         ..SmartCriteria::default()
     };
     let (count, _) = queries::smart_playlist::count_smart_playlist(&s.db, &c).await?;
@@ -263,10 +246,7 @@ async fn count_random_limit_caps_without_ordering() -> Result<(), AppError> {
     // deterministic regardless of which 2 the LIMIT keeps.
     let c = SmartCriteria {
         rules: Vec::new(),
-        limit: Some(SmartLimit {
-            count: 2,
-            order: LimitOrder::Random,
-        }),
+        limit: Some(SmartLimit { count: 2, order: LimitOrder::Random }),
         ..SmartCriteria::default()
     };
     let (count, duration) = queries::smart_playlist::count_smart_playlist(&s.db, &c).await?;
@@ -281,12 +261,7 @@ async fn duration_rule_value_is_seconds() -> Result<(), AppError> {
     // Give each track a distinct duration in ms. The editor presents Duration
     // in whole seconds ("Duration (sec)"), so a `Duration > 150` rule must
     // compare against 150_000 ms — not the raw 150 ms (which would match all).
-    for (id, ms) in [
-        (s.t1, 60_000_i64),
-        (s.t2, 120_000),
-        (s.t3, 240_000),
-        (s.t4, 360_000),
-    ] {
+    for (id, ms) in [(s.t1, 60_000_i64), (s.t2, 120_000), (s.t3, 240_000), (s.t4, 360_000)] {
         sqlx::query("UPDATE tracks SET duration_ms = ? WHERE id = ?")
             .bind(ms)
             .bind(id)
@@ -321,10 +296,7 @@ async fn set_album_artist(db: &DbPool, id: i64, album_artist: &str) -> Result<()
 
 /// Leave a row with no album at all, which the seed has no other way to produce.
 async fn clear_album(db: &DbPool, id: i64) -> Result<(), AppError> {
-    sqlx::query("UPDATE tracks SET album = NULL WHERE id = ?")
-        .bind(id)
-        .execute(db.write())
-        .await?;
+    sqlx::query("UPDATE tracks SET album = NULL WHERE id = ?").bind(id).execute(db.write()).await?;
     Ok(())
 }
 
@@ -354,11 +326,7 @@ async fn a_null_tolerant_rule_does_not_widen_the_rules_beside_it() -> Result<(),
                 op: RuleOp::NotContains,
                 value: Some(RuleValue::Text("Album A".to_owned())),
             },
-            Rule {
-                field: RuleField::Rating,
-                op: RuleOp::Gte,
-                value: Some(RuleValue::Number(4.0)),
-            },
+            Rule { field: RuleField::Rating, op: RuleOp::Gte, value: Some(RuleValue::Number(4.0)) },
         ],
         ..SmartCriteria::default()
     };
@@ -531,11 +499,7 @@ fn every_rule_the_editor_can_build_renders_a_real_predicate() {
     for &field in FIELDS {
         let value_type = field.value_type();
         for &op in ops_for(value_type) {
-            let rule = Rule {
-                field,
-                op,
-                value: RuleValue::from_input(value_type, op, "5"),
-            };
+            let rule = Rule { field, op, value: RuleValue::from_input(value_type, op, "5") };
             assert!(
                 super::rule_is_renderable(&rule),
                 "{field:?} {op:?} is dropped by the gate, and a criteria of only dropped \
@@ -555,11 +519,8 @@ fn every_rule_the_editor_can_build_renders_a_real_predicate() {
 /// everything would turn an internal inconsistency into a playlist holding the library.
 #[test]
 fn a_rule_whose_value_shape_is_wrong_renders_as_matching_nothing() {
-    let text_field_holding_a_number = Rule {
-        field: RuleField::Genre,
-        op: RuleOp::Is,
-        value: Some(RuleValue::Number(5.0)),
-    };
+    let text_field_holding_a_number =
+        Rule { field: RuleField::Genre, op: RuleOp::Is, value: Some(RuleValue::Number(5.0)) };
     assert!(
         !super::rule_is_renderable(&text_field_holding_a_number),
         "the gate is what keeps the fallback below unreachable"
@@ -602,20 +563,11 @@ async fn multi_seed() -> Result<MultiSeed, AppError> {
     third.genres = GenreList::from_name("Pop");
     let pop = insert_tagged_track(&db, "/music/3.mp3", &third).await?;
 
-    Ok(MultiSeed {
-        db,
-        both,
-        rock,
-        pop,
-    })
+    Ok(MultiSeed { db, both, rock, pop })
 }
 
 fn role(role: CreditRole, name: &str) -> RoleCredit {
-    RoleCredit {
-        role,
-        name: name.to_owned(),
-        detail: String::new(),
-    }
+    RoleCredit { role, name: name.to_owned(), detail: String::new() }
 }
 
 /// **The correlation is the whole rule.** These fields render as `EXISTS (SELECT 1 FROM …)`, and a
@@ -700,10 +652,83 @@ async fn a_set_valued_rule_composes_with_a_column_rule() -> Result<(), AppError>
     };
     assert_eq!(ids(&resolve(&s.db, &all).await?), HashSet::from([s.both]));
 
-    let any = SmartCriteria {
-        match_mode: MatchMode::Any,
-        ..all
-    };
+    let any = SmartCriteria { match_mode: MatchMode::Any, ..all };
     assert_eq!(ids(&resolve(&s.db, &any).await?), HashSet::from([s.both, s.rock]));
+    Ok(())
+}
+
+// --- get_smart_playlist_tracks_for_export ---
+
+async fn exported_paths(db: &DbPool, c: &SmartCriteria) -> Result<Vec<String>, AppError> {
+    Ok(queries::smart_playlist::get_smart_playlist_tracks_for_export(db, c)
+        .await?
+        .into_iter()
+        .map(|row| row.file_path)
+        .collect())
+}
+
+/// A smart playlist exports what its page shows, so the two queries have to agree on membership
+/// and on order.
+#[tokio::test]
+async fn the_export_holds_the_tracks_the_list_shows_in_the_same_order() -> Result<(), AppError> {
+    let s = seed().await?;
+    let c = one(RuleField::Rating, RuleOp::Gte, Some(RuleValue::Number(2.0)));
+    let listed: Vec<String> =
+        resolve(&s.db, &c).await?.into_iter().map(|row| row.file_path).collect();
+    assert_eq!(listed.len(), 3, "test setup: the rule matches three of the four tracks");
+
+    assert_eq!(exported_paths(&s.db, &c).await?, listed);
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_export_holds_to_a_limit_and_its_order() -> Result<(), AppError> {
+    let s = seed().await?;
+    let c = SmartCriteria {
+        limit: Some(SmartLimit { count: 2, order: LimitOrder::PlayCountDesc }),
+        ..SmartCriteria::default()
+    };
+
+    // t1 has 10 plays, t3 has 5.
+    assert_eq!(exported_paths(&s.db, &c).await?, ["/music/1.mp3", "/music/3.mp3"]);
+    Ok(())
+}
+
+/// The export names its columns against `tracks` so the correlated `EXISTS` a set-valued rule
+/// renders can't make one ambiguous.
+#[tokio::test]
+async fn the_export_resolves_a_set_valued_rule() -> Result<(), AppError> {
+    let s = multi_seed().await?;
+    let c = one(RuleField::Genre, RuleOp::Is, Some(RuleValue::Text("Rock".to_owned())));
+
+    assert_eq!(exported_paths(&s.db, &c).await?, ["/music/1.mp3", "/music/2.mp3"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_export_with_no_rules_is_the_whole_library_in_sort_order() -> Result<(), AppError> {
+    let s = seed().await?;
+
+    assert_eq!(
+        exported_paths(&s.db, &SmartCriteria::default()).await?,
+        ["/music/4.mp3", "/music/1.mp3", "/music/3.mp3", "/music/2.mp3"],
+        "Four, One, Three, Two"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_exported_row_carries_what_its_entry_is_written_from() -> Result<(), AppError> {
+    let s = seed().await?;
+    let c = one(RuleField::Title, RuleOp::Is, Some(RuleValue::Text("One".to_owned())));
+
+    let rows = queries::smart_playlist::get_smart_playlist_tracks_for_export(&s.db, &c).await?;
+
+    let written: Vec<_> = rows
+        .into_iter()
+        .map(|row| (row.title, row.artist, row.duration_ms, row.file_hash))
+        .collect();
+    let hash = blake3::hash(b"One").to_hex().to_string();
+    assert_eq!(written, [("One".to_owned(), Some("Artist A".to_owned()), 180_000, Some(hash))]);
     Ok(())
 }

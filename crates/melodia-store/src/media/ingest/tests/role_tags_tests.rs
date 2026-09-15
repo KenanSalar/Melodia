@@ -19,20 +19,12 @@ fn vorbis(values: &[(ItemKey, &str)]) -> Tag {
 }
 
 fn credit(role: CreditRole, name: &str, detail: &str) -> RoleCredit {
-    RoleCredit {
-        role,
-        name: name.to_owned(),
-        detail: detail.to_owned(),
-    }
+    RoleCredit { role, name: name.to_owned(), detail: detail.to_owned() }
 }
 
 /// Every credit as (role, name, detail), which is the whole of what one holds.
 fn spelled(credits: &RoleCredits) -> Vec<(&'static str, &str, &str)> {
-    credits
-        .all()
-        .iter()
-        .map(|c| (c.role.as_db_str(), c.name.as_str(), c.detail.as_str()))
-        .collect()
+    credits.all().iter().map(|c| (c.role.as_db_str(), c.name.as_str(), c.detail.as_str())).collect()
 }
 
 /// **Only the last parenthesised group, and only when it closes the value.** A name can contain
@@ -190,14 +182,7 @@ fn each_format_names_exactly_the_roles_it_has_no_key_for() {
         (TagType::Mp4Ilst, &["arranger", "performer"][..]),
         (
             TagType::Id3v2,
-            &[
-                "arranger",
-                "producer",
-                "engineer",
-                "mixer",
-                "dj_mixer",
-                "performer",
-            ][..],
+            &["arranger", "producer", "engineer", "mixer", "dj_mixer", "performer"][..],
         ),
     ];
 

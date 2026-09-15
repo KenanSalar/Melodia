@@ -1,9 +1,10 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use tokio::sync::watch;
 use zbus::MatchRule;
 
+use melodia_core::themes::is_light_hex;
 use melodia_core::themes::kde::KdeColorPalette;
 
 /// Color scheme values from the XDG Desktop Portal specification.
@@ -18,11 +19,7 @@ const APPEARANCE_NAMESPACE: &str = "org.freedesktop.appearance";
 const COLOR_SCHEME_KEY: &str = "color-scheme";
 
 pub(crate) fn color_scheme_to_str(value: u32) -> &'static str {
-    if value == COLOR_SCHEME_PREFER_LIGHT {
-        "light"
-    } else {
-        "dark"
-    }
+    if value == COLOR_SCHEME_PREFER_LIGHT { "light" } else { "dark" }
 }
 
 fn unwrap_variant_u32(value: zbus::zvariant::Value<'_>) -> Option<u32> {
@@ -47,23 +44,10 @@ fn extract_color_scheme(reply: &zbus::Message) -> Option<u32> {
     unwrap_variant_u32(outer)
 }
 
-/// Query the XDG Desktop Portal for the current system color scheme.
-/// Returns "dark" or "light".
-///
-/// Runs the blocking zbus call inside `spawn_blocking` so it never enters the
-/// tokio reactor (the project keeps zbus's tokio feature off — see CLAUDE.md).
-pub async fn get_system_theme() -> String {
-    tokio::task::spawn_blocking(query_portal_color_scheme_blocking)
-        .await
-        .ok()
-        .flatten()
-        .map(color_scheme_to_str)
-        .map_or_else(|| "dark".to_owned(), str::to_owned)
-}
-
-/// Synchronous variant of [`get_system_theme`] for startup paths that run
-/// before the Slint event loop and don't have a future to await on. Same
-/// `"dark"` fallback when the portal is unreachable.
+/// Query the XDG Desktop Portal for the current system color scheme, returning
+/// `"dark"` or `"light"`, and `"dark"` when the portal is unreachable. Blocks on
+/// the D-Bus call, so it belongs to startup paths that run before the Slint
+/// event loop.
 pub fn get_system_theme_blocking() -> String {
     query_portal_color_scheme_blocking()
         .map(color_scheme_to_str)
@@ -152,7 +136,7 @@ fn watch_color_changes(
             // must survive OS theme flips. The coordinator subscribes to
             // both the kick channel *and* `view_model_rx`, so when the
             // user's variant is "system" and the OS dark/light flips,
-            // `appearance::spawn_os_state_watcher` triggers a kick and
+            // `appearance::watch_os_state` triggers a kick and
             // the coordinator regenerates the dynamic palette for the
             // new `is_dark`. Until then, the previously generated
             // palette stays painted — that's a fine transient.
@@ -181,8 +165,11 @@ fn owned_value_to_u32(value: &zbus::zvariant::OwnedValue) -> u32 {
 // KDE color scheme reading from ~/.config/kdeglobals
 // ---------------------------------------------------------------------------
 
-fn kdeglobals_path() -> PathBuf {
-    dirs::config_dir().unwrap_or_else(|| PathBuf::from("~/.config")).join("kdeglobals")
+/// A `KConfig` file's groups, each mapping its keys to their raw values.
+type KConfig = HashMap<String, HashMap<String, String>>;
+
+fn kde_config_path(name: &str) -> Option<PathBuf> {
+    Some(dirs::config_dir()?.join(name))
 }
 
 /// Parse an "R,G,B" string into (u8, u8, u8).
@@ -218,16 +205,16 @@ pub(crate) fn blend(a: (u8, u8, u8), b: (u8, u8, u8), factor: f32) -> (u8, u8, u
     (mix(a.0, b.0), mix(a.1, b.1), mix(a.2, b.2))
 }
 
-fn read_kdeglobals() -> Option<HashMap<String, HashMap<String, String>>> {
-    let content = std::fs::read_to_string(kdeglobals_path()).ok()?;
+fn read_kconfig(path: &Path) -> Option<KConfig> {
+    let content = std::fs::read_to_string(path).ok()?;
     Some(parse_kdeglobals(&content))
 }
 
 /// Split from the read for the same reason [`kde_palette_from_sections`] is split from it: the
 /// mapping's suites hand-build the section tree, so nothing otherwise says the parser produces the
 /// shape they assume.
-fn parse_kdeglobals(content: &str) -> HashMap<String, HashMap<String, String>> {
-    let mut sections: HashMap<String, HashMap<String, String>> = HashMap::new();
+fn parse_kdeglobals(content: &str) -> KConfig {
+    let mut sections = KConfig::new();
     let mut current_section = String::new();
 
     for line in content.lines() {
@@ -250,11 +237,7 @@ fn parse_kdeglobals(content: &str) -> HashMap<String, HashMap<String, String>> {
     sections
 }
 
-fn get_color(
-    sections: &HashMap<String, HashMap<String, String>>,
-    section: &str,
-    key: &str,
-) -> Option<(u8, u8, u8)> {
+fn get_color(sections: &KConfig, section: &str, key: &str) -> Option<(u8, u8, u8)> {
     sections.get(section)?.get(key).and_then(|v| parse_rgb(v))
 }
 
@@ -262,9 +245,7 @@ fn get_color(
 /// Returns `None` if the section is missing or its `Color` /
 /// `ColorAmount` keys are unparseable. `ColorAmount` is clamped to
 /// `[0.0, 1.0]` so a malformed value can't produce nonsense blends.
-fn get_inactive_color_effect(
-    sections: &HashMap<String, HashMap<String, String>>,
-) -> Option<((u8, u8, u8), f32)> {
+fn get_inactive_color_effect(sections: &KConfig) -> Option<((u8, u8, u8), f32)> {
     let section = sections.get("ColorEffects:Inactive")?;
     let tint = parse_rgb(section.get("Color")?)?;
     let amount: f32 = section.get("ColorAmount")?.trim().parse().ok()?;
@@ -273,9 +254,63 @@ fn get_inactive_color_effect(
 
 /// Read the KDE color scheme from `~/.config/kdeglobals` and map it to our theme slots.
 pub fn get_kde_colors() -> Option<KdeColorPalette> {
-    let sections = read_kdeglobals()?;
+    let sections = read_kconfig(&kde_config_path("kdeglobals")?)?;
     kde_palette_from_sections(&sections)
 }
+
+/// The Plasma style a `plasmarc` naming none is on, and the one that ships no `colors` of its own.
+const DEFAULT_PLASMA_STYLE: &str = "default";
+
+/// Breeze Light's window background, which `KColorScheme` falls back to when no file names one.
+const PLASMA_DEFAULT_WINDOW_BG: (u8, u8, u8) = (239, 240, 241);
+
+/// Whether the Plasma panel paints light. Read off the panel's own colours rather than the portal,
+/// because the panel follows the Plasma *style*: one shipping a `colors` file paints from it, so
+/// Breeze Twilight puts a dark panel over a light app scheme. A key that file leaves out falls
+/// through to `kdeglobals`, as Plasma's config does.
+///
+/// **Fails light**: a colour no file names is Breeze Light's, what Plasma paints without one.
+pub fn plasma_panel_is_light() -> bool {
+    let window_bg = [plasma_style_colors_path(), kde_config_path("kdeglobals")]
+        .into_iter()
+        .flatten()
+        .find_map(|path| get_color(&read_kconfig(&path)?, "Colors:Window", "BackgroundNormal"))
+        .unwrap_or(PLASMA_DEFAULT_WINDOW_BG);
+    rgb_is_light(window_bg)
+}
+
+fn rgb_is_light((r, g, b): (u8, u8, u8)) -> bool {
+    is_light_hex((u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b))
+}
+
+/// The active Plasma style's `colors` file, searched in `QStandardPaths`' order. `None` for a style
+/// that ships none, the default among them.
+fn plasma_style_colors_path() -> Option<PathBuf> {
+    let style = kde_config_path("plasmarc")
+        .and_then(|path| read_kconfig(&path))
+        .and_then(|mut sections| sections.get_mut("Theme")?.remove("name"))
+        .unwrap_or_else(|| DEFAULT_PLASMA_STYLE.to_owned());
+    let relative = Path::new("plasma/desktoptheme").join(style).join("colors");
+    xdg_data_dirs().into_iter().map(|dir| dir.join(&relative)).find(|path| path.is_file())
+}
+
+/// `XDG_DATA_HOME`, then each of `XDG_DATA_DIRS` under the spec's default. The spec calls a relative
+/// entry invalid, and joined it would resolve against the working directory.
+fn xdg_data_dirs() -> Vec<PathBuf> {
+    let system = std::env::var_os("XDG_DATA_DIRS")
+        .filter(|dirs| !dirs.is_empty())
+        .unwrap_or_else(|| "/usr/local/share:/usr/share".into());
+    dirs::data_dir()
+        .into_iter()
+        .chain(std::env::split_paths(&system))
+        .filter(|dir| dir.is_absolute())
+        .collect()
+}
+
+/// How far a light scheme's `surface0` sits from the view background toward the text. Its own knob
+/// because the settings cards, dialogs and tooltips all paint that slot, and a light scheme gives
+/// them no colour of its own to take.
+const LIGHT_SURFACE0_STEP: f32 = 0.09;
 
 /// Map a parsed kdeglobals section tree to a `KdeColorPalette`. Split out
 /// from `get_kde_colors()` so unit tests can verify the slot mapping
@@ -291,6 +326,7 @@ pub fn get_kde_colors() -> Option<KdeColorPalette> {
 /// * `base   ← view_bg`     (content area)
 /// * `mantle ← header_bg`   (chrome — falls back to `[WM] activeBackground` then `window_bg`)
 /// * `crust  ← window_bg_alt` (deepest chrome layer)
+/// * `surface0 ← button_bg` on a dark scheme; stepped off `view_bg` on a light one
 ///
 /// The intermediate surface ramp (`surface1/2`, `overlay0..2`) is then
 /// reconstructed by linearly blending `button_bg` toward `text` at
@@ -298,9 +334,7 @@ pub fn get_kde_colors() -> Option<KdeColorPalette> {
 /// Sapphire to land within one byte per channel of the static palette;
 /// degrades coherently on other Plasma schemes because `text` is
 /// always the maximum-contrast colour against the surface ramp.
-pub(crate) fn kde_palette_from_sections(
-    sections: &HashMap<String, HashMap<String, String>>,
-) -> Option<KdeColorPalette> {
+pub(crate) fn kde_palette_from_sections(sections: &KConfig) -> Option<KdeColorPalette> {
     let window_bg = get_color(sections, "Colors:Window", "BackgroundNormal")?;
     let view_bg = get_color(sections, "Colors:View", "BackgroundNormal")?;
     // Window/alt is the deepest chrome shade in every Plasma scheme
@@ -312,26 +346,21 @@ pub(crate) fn kde_palette_from_sections(
     let header_bg = get_color(sections, "Colors:Header", "BackgroundNormal")
         .or_else(|| get_color(sections, "WM", "activeBackground"))
         .unwrap_or(window_bg);
-    // Modern KDE Plasma (6.x) computes the inactive titlebar by
-    // applying `[ColorEffects:Inactive]` to the *active titlebar*
-    // colour — which Breeze sources from `[WM] activeBackground`,
-    // NOT from `[Colors:Header] BackgroundNormal` (the latter drives
-    // QML headers inside apps and frequently disagrees with the
-    // window decoration's own palette). `header_bg` lands in our
-    // `mantle` slot, but matching the OS titlebar requires the
-    // `[WM]` source. `[WM] inactiveBackground` is mostly legacy and
-    // frequently points at `crust` (way too dark), so we prefer the
-    // computed blend and only fall back to it when the effects group
-    // is missing entirely. Final fallback blends `wm_active` toward
-    // `window_bg` for colour schemes with neither piece.
+    // KWin paints an inactive titlebar from `[Colors:Header][Inactive]` whenever the scheme ships
+    // that subgroup, as every Breeze scheme does; a colour effect is only applied without it. The
+    // rest of the chain is for schemes that don't. `[WM] inactiveBackground` is mostly legacy and
+    // frequently points at `crust`, way too dark, so the effect over the active colour goes first,
+    // and the last fallback blends toward `window_bg` for a scheme with neither piece.
     //
     // ColorEffect=3 in Breeze is technically an HCY-luma-preserving
     // tint, but a linear RGB `blend(active, tint, amount)` matches
     // the painted output to within a pixel for every preset we've
     // checked.
     let wm_active = get_color(sections, "WM", "activeBackground").unwrap_or(header_bg);
-    let inactive_titlebar = get_inactive_color_effect(sections)
-        .map(|(tint, amount)| blend(wm_active, tint, amount))
+    let inactive_titlebar = get_color(sections, "Colors:Header][Inactive", "BackgroundNormal")
+        .or_else(|| {
+            get_inactive_color_effect(sections).map(|(tint, amount)| blend(wm_active, tint, amount))
+        })
         .or_else(|| get_color(sections, "WM", "inactiveBackground"))
         .unwrap_or_else(|| blend(wm_active, window_bg, 0.5));
 
@@ -350,7 +379,12 @@ pub(crate) fn kde_palette_from_sections(
     let green = get_color(sections, "Colors:View", "ForegroundPositive").unwrap_or((39, 174, 96));
     let yellow = get_color(sections, "Colors:View", "ForegroundNeutral").unwrap_or((246, 116, 0));
 
-    // Surface ramp from `button_bg` (= surface0 in Catppuccin) toward
+    // A light scheme draws its buttons to lift off the window, level with the view, so there the
+    // Button colour would put every card on the page in the page's own colour.
+    let surface0 =
+        if rgb_is_light(view_bg) { blend(view_bg, text, LIGHT_SURFACE0_STEP) } else { button_bg };
+
+    // Surface ramp from `button_bg` toward
     // `text` at the ratios that match Catppuccin Mocha exactly when
     // fed Catppuccin-encoded kdeglobals.
     let surface1 = blend(button_bg, text, 0.125);
@@ -368,7 +402,7 @@ pub(crate) fn kde_palette_from_sections(
         rgb_to_hex(inactive_titlebar.0, inactive_titlebar.1, inactive_titlebar.2),
     );
     colors.insert("crust".into(), rgb_to_hex(window_bg_alt.0, window_bg_alt.1, window_bg_alt.2));
-    colors.insert("surface0".into(), rgb_to_hex(button_bg.0, button_bg.1, button_bg.2));
+    colors.insert("surface0".into(), rgb_to_hex(surface0.0, surface0.1, surface0.2));
     colors.insert("surface1".into(), rgb_to_hex(surface1.0, surface1.1, surface1.2));
     colors.insert("surface2".into(), rgb_to_hex(surface2.0, surface2.1, surface2.2));
     colors.insert("overlay0".into(), rgb_to_hex(overlay0.0, overlay0.1, overlay0.2));
@@ -379,7 +413,7 @@ pub(crate) fn kde_palette_from_sections(
     colors.insert("subtext1".into(), rgb_to_hex(subtext1.0, subtext1.1, subtext1.2));
     // `border == surface0` matches Catppuccin's intent — one fewer
     // free parameter, one fewer place to drift on non-Catppuccin schemes.
-    colors.insert("border".into(), rgb_to_hex(button_bg.0, button_bg.1, button_bg.2));
+    colors.insert("border".into(), rgb_to_hex(surface0.0, surface0.1, surface0.2));
 
     Some(KdeColorPalette {
         colors,

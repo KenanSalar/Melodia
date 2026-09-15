@@ -140,14 +140,7 @@ fn scripts_melodia_desktop_preserves_mime_block() {
     // `Exec`/`Icon`/`StartupWMClass`, and `Keywords=` drift.
     const SCRIPTS_DESKTOP: &str = include_str!("../../../../../../scripts/Melodia.desktop");
 
-    for mime in &[
-        "audio/mpeg",
-        "audio/flac",
-        "audio/mp4",
-        "audio/ogg",
-        "audio/wav",
-        "audio/aac",
-    ] {
+    for mime in &["audio/mpeg", "audio/flac", "audio/mp4", "audio/ogg", "audio/wav", "audio/aac"] {
         assert!(
             SCRIPTS_DESKTOP.contains(mime),
             "scripts/Melodia.desktop missing MIME `{mime}`; got:\n{SCRIPTS_DESKTOP}"

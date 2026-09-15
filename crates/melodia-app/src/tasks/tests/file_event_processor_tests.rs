@@ -218,10 +218,8 @@ fn a_rescan_does_not_spend_the_marks_it_never_needed() {
     let self_writes = SelfWrites::default();
     self_writes.mark(Path::new("/music/edited.mp3"));
 
-    let batch = vec![
-        FileEvent::RescanNeeded,
-        FileEvent::Modified(PathBuf::from("/music/edited.mp3")),
-    ];
+    let batch =
+        vec![FileEvent::RescanNeeded, FileEvent::Modified(PathBuf::from("/music/edited.mp3"))];
     assert!(matches!(plan_batch(batch, &self_writes), BatchPlan::Rescan));
 
     assert!(

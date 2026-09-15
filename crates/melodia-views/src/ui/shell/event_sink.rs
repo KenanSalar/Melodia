@@ -1,7 +1,7 @@
-//! `SlintEventSink` translates OS media-control events (souvlaki) into
+//! `SlintEventSink` translates OS media-control events into
 //! `library::*` calls on the tokio runtime. It does **not** import Slint —
 //! the name reflects "where it ships to" (the UI binary), not what it
-//! depends on. Keeping souvlaki decoupled from Slint matters for the
+//! depends on. Keeping the media controls decoupled from Slint matters for the
 //! `EventSink` trait contract in `services::integrations::media_controls`.
 
 use melodia_app::library;
@@ -35,9 +35,11 @@ impl EventSink for SlintEventSink {
                         r
                     }
                 }
+                PlayerEvent::SetShuffle(enabled) => library::queue::queue_set_shuffle(&s, enabled),
+                PlayerEvent::SetRepeat(mode) => library::queue::queue_set_repeat(&s, mode),
             };
             if let Err(e) = r {
-                log::warn!("souvlaki -> library error: {e}");
+                log::warn!("media controls -> library error: {e}");
             }
         });
     }

@@ -26,10 +26,7 @@ fn png(side: u32) -> Result<Vec<u8>, image::ImageError> {
 /// between a directory row and a request the app would never otherwise make.
 #[test]
 fn only_http_and_https_urls_are_fetched() {
-    for url in [
-        "http://example.test/logo.png",
-        "https://example.test/logo.png",
-    ] {
+    for url in ["http://example.test/logo.png", "https://example.test/logo.png"] {
         assert!(fetchable_url(url).is_ok(), "{url} should be fetched");
     }
     for url in [

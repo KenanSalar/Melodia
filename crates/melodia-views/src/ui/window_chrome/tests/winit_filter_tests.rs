@@ -1,5 +1,5 @@
 use super::*;
-use melodia_testkit::{block_body, strip_line_comments};
+use melodia_testkit::{block_after, strip_line_comments};
 
 // Every mouse wheel on every platform, and a touchpad on X11 and Win32.
 #[test]
@@ -9,8 +9,8 @@ fn a_wheel_is_left_to_slint() {
 }
 
 // Only the phase decides. Gating on the delta too would leave the horizontal
-// half — a column pan under Search's and Browse's vertical outer scroller —
-// captured and ignored exactly as before.
+// half, a card strip under Search's vertical outer scroller, captured and
+// ignored exactly as before.
 #[test]
 fn a_touchpad_gesture_start_is_unphased_on_both_axes() {
     assert_eq!(route_wheel(false, false, TouchPhase::Started, 0.0, -8.0), WheelRoute::Unphased);
@@ -44,13 +44,48 @@ fn filter_source() -> String {
     strip_line_comments(include_str!("../winit_filter.rs"))
 }
 
-/// The body of one `WindowEvent` arm, or empty when the walk found no such arm — which is a
-/// broken walk rather than a broken arm, and every caller asserts that apart.
-fn arm_body<'a>(code: &'a str, arm: &str) -> &'a str {
-    code.find(arm)
-        .and_then(|at| code[at..].find('{').map(|rel| at + rel))
-        .and_then(|open| block_body(code, open))
-        .unwrap_or_default()
+/// The guard the resize press arm is found by.
+const RESIZE_ARM: &str = "if let Some(direction) = resize.get() =>";
+
+/// The drag and resize cells move in separate `changed` handlers, and the miniplayer's drag region
+/// runs right up to the edge, so the drag cell can still read true on a press that lands on a grab.
+/// Matched first, that press moves the window the user meant to resize.
+#[test]
+fn the_resize_press_arm_is_matched_before_the_drag_arm() -> Result<(), Box<dyn std::error::Error>> {
+    let code = filter_source();
+    let (before_resize, _) =
+        code.split_once(RESIZE_ARM).ok_or("no resize press arm found: the walk is broken")?;
+
+    let drag_arms_before = before_resize.matches("drag_hover.load(").count();
+
+    assert_eq!(drag_arms_before, 0, "the drag arm is matched ahead of the resize arm");
+    Ok(())
+}
+
+#[test]
+fn the_resize_press_arm_starts_the_os_resize() {
+    let code = filter_source();
+
+    let arm = block_after(&code, RESIZE_ARM);
+
+    assert!(
+        arm.contains("drag_resize_window(direction)"),
+        "the resize press arm no longer starts a resize:\n{arm}"
+    );
+}
+
+/// Propagated, the press reaches the ring's `TouchArea` under the pointer, which grabs the mouse
+/// while the OS takes the pointer for the resize, and the release never comes back to free it.
+#[test]
+fn the_resize_press_arm_keeps_the_press_from_slint() {
+    let code = filter_source();
+
+    let arm = block_after(&code, RESIZE_ARM);
+
+    assert!(
+        arm.contains("EventResult::PreventDefault") && !arm.contains("EventResult::Propagate"),
+        "the resize press arm hands its press on to Slint:\n{arm}"
+    );
 }
 
 /// Every cover tier sizes its capacity and its decode size against the window, and both are read
@@ -62,7 +97,7 @@ fn arm_body<'a>(code: &'a str, arm: &str) -> &'a str {
 fn the_resize_arm_retunes_the_cover_tiers() {
     const ARM: &str = "WindowEvent::Resized(_) =>";
     let code = filter_source();
-    let arm = arm_body(&code, ARM);
+    let arm = block_after(&code, ARM);
 
     assert!(!arm.is_empty(), "no `{ARM}` block found — the walk is broken, not the code");
     assert!(
@@ -81,15 +116,18 @@ fn the_resize_arm_retunes_the_cover_tiers() {
 fn the_redraw_arm_ticks_the_loop_win32_parked() {
     const ARM: &str = "WindowEvent::RedrawRequested =>";
     let code = filter_source();
-    let arm = arm_body(&code, ARM);
+    let arm = block_after(&code, ARM);
 
     assert!(!arm.is_empty(), "no `{ARM}` block found — the walk is broken, not the code");
     assert!(
-        arm.contains("pump_parked_loop()"),
+        arm.contains("parked_loop::pump()"),
         "a paint is what the Win32 modal loop still delivers, so this arm is where the tick it \
          parked winit out of gets run:\n{arm}"
     );
-    assert!(code.contains("fn pump_parked_loop"), "the arm calls a pump that no longer exists");
+    assert!(
+        include_str!("../parked_loop.rs").contains("pub fn pump()"),
+        "the arm calls a pump that no longer exists"
+    );
 }
 
 /// The redraw arm's sibling, and not redundant with it: a **move** drag resizes nothing, so the
@@ -101,12 +139,59 @@ fn the_redraw_arm_ticks_the_loop_win32_parked() {
 fn the_move_arm_ticks_the_loop_win32_parked() {
     const ARM: &str = "WindowEvent::Moved(_) =>";
     let code = filter_source();
-    let arm = arm_body(&code, ARM);
+    let arm = block_after(&code, ARM);
 
     assert!(!arm.is_empty(), "no `{ARM}` block found — the walk is broken, not the code");
     assert!(
-        arm.contains("pump_parked_loop()"),
+        arm.contains("parked_loop::pump()"),
         "a move drag invalidates nothing, so this arm is the only tick it gets:\n{arm}"
+    );
+}
+
+/// The frame reading has to outlive the frame it measured. Once the miniplayer drops the frame
+/// `frame_allowance` answers `None`, and an arm writing a default there hands `MiniPlayerSwitch`
+/// a zero allowance while the client area is still grown by the real one, so a window parked just
+/// inside the threshold bounces straight back out.
+#[test]
+fn the_resize_arm_writes_the_frame_only_when_one_was_measured() {
+    const ARM: &str = "WindowEvent::Resized(_) =>";
+    const GATE: &str = "if let Some(frame) = frame";
+    let code = filter_source();
+    let arm = block_after(&code, ARM);
+    let gated = block_after(arm, GATE);
+
+    assert!(!arm.is_empty(), "no `{ARM}` block found: the walk is broken, not the code");
+    assert!(
+        gated.contains("set_frame_allowance_w(") && gated.contains("set_frame_allowance_h("),
+        "the frame reading is written outside its `Some` gate, so a frameless resize can zero \
+         it:\n{arm}"
+    );
+    assert_eq!(
+        arm.matches("set_frame_allowance_").count(),
+        2,
+        "the arm writes the frame reading somewhere besides the gated pair:\n{arm}"
+    );
+}
+
+/// The margins have the allowance's reason to outlive their frame, with a worse failure: zeroed by
+/// a frameless resize, the native miniplayer paints into the invisible borders again and the
+/// window grows by them at its next layout.
+#[test]
+fn the_resize_arm_writes_the_margins_only_when_they_were_measured() {
+    const ARM: &str = "WindowEvent::Resized(_) =>";
+    const GATE: &str = "if let Some(margins) = margins";
+    const SETTERS: [&str; 3] =
+        ["set_frame_margin_left(", "set_frame_margin_right(", "set_frame_margin_bottom("];
+    let code = filter_source();
+    let arm = block_after(&code, ARM);
+    let gated = block_after(arm, GATE);
+
+    let outside: Vec<&str> = SETTERS.into_iter().filter(|s| !gated.contains(s)).collect();
+
+    assert!(!arm.is_empty(), "no `{ARM}` block found: the walk is broken, not the code");
+    assert!(
+        outside.is_empty() && arm.matches("set_frame_margin_").count() == SETTERS.len(),
+        "the frame margins are written outside their `Some` gate: {outside:?}\n{arm}"
     );
 }
 
@@ -117,12 +202,8 @@ fn the_move_arm_ticks_the_loop_win32_parked() {
 #[test]
 fn the_composite_wheel_arm_asks_for_a_frame() {
     const ARM: &str = "WheelRoute::Composite =>";
-    let code = strip_line_comments(include_str!("../winit_filter.rs"));
-    let arm = code
-        .find(ARM)
-        .and_then(|at| code[at..].find('{').map(|rel| at + rel))
-        .and_then(|open| block_body(&code, open))
-        .unwrap_or_default();
+    let code = filter_source();
+    let arm = block_after(&code, ARM);
 
     assert!(!arm.is_empty(), "no `{ARM}` block found — the walk is broken, not the code");
     assert!(

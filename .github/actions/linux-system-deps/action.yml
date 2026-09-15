@@ -1,7 +1,7 @@
 name: Linux system deps
 description: >-
   Install Melodia's Linux build/test system dependencies (Slint femtovg fonts,
-  ALSA, xkbcommon, Wayland, D-Bus, OpenSSL) with Azure apt-mirror failover and
+  ALSA, xkbcommon, Wayland, OpenSSL) with Azure apt-mirror failover and
   a time-bounded retry loop. `extra-packages` is what a packaging slot adds on
   top; the base set is the same everywhere so a gate and a release can't
   provision differently.
@@ -44,7 +44,7 @@ runs:
         # whitespace is the whole point.
         packages=(
           libasound2-dev libxkbcommon-dev libfontconfig1-dev libfreetype-dev
-          libwayland-dev libdbus-1-dev libssl-dev pkg-config
+          libwayland-dev libssl-dev pkg-config
           $EXTRA_PACKAGES
         )
         for attempt in 1 2 3; do

@@ -161,6 +161,11 @@ export global Settings {
     in-out property <bool> radio-send-clicks: true;
     callback radio-send-clicks-changed(bool);
 
+    // Whether lyrics run at all, the Now Playing header's switch being its twin. Declared false so a
+    // settings read that fails does not hand the Up Next column to a panel nobody asked for.
+    in-out property <bool> lyrics-enabled: false;
+    callback lyrics-enabled-changed(bool);
+
     // Whether a track carrying no words of its own may be looked up online. Declared false so a
     // settings read that fails leaves a local-only install local-only, which is the radio switch's
     // reason. **Nothing in Slint gates on it either**: `library::lyrics` refuses on the Rust
@@ -197,7 +202,7 @@ export global Settings {
     in-out property <int> corner-radius: 6;
     callback corner-radius-changed(int);
 
-    // 0 = Standard (Material bar icons), 1 = macOS (traffic lights with hover-reveal glyphs).
+    // 0 = Standard (Windows caption glyphs), 1 = macOS (traffic lights with hover-reveal glyphs).
     // Mirrored into `Theme.titlebar-button-style` so `custom-titlebar.slint` reads it through
     // `Theme`, the `shell-radius` precedent. Inert under the native titlebar.
     in-out property <int> titlebar-button-style: 0;
@@ -207,6 +212,20 @@ export global Settings {
     // combinations render with close always at the outer window corner.
     in-out property <int> titlebar-button-side: 0;
     callback titlebar-button-side-changed(int);
+
+    // The outline a frameless window draws where an OS frame would: under the custom titlebar
+    // always, and for the miniplayer under the native one. The outline reads the switch directly,
+    // so Rust only persists it.
+    in-out property <bool> window-border-shown: true;
+    callback window-border-shown-changed(bool);
+
+    // The System swatch followed by the theme's accents in the live variant's shade, re-seeded on
+    // every palette change, since a variant reshades both. 1:1 with `window-border-names`, whose
+    // first entry is empty: the grid names the System swatch itself, so it stays translated.
+    in property <[brush]> window-border-colors;
+    in property <[string]> window-border-names;
+    in-out property <int> window-border-color-idx;
+    callback window-border-color-changed(int);
 
     // Mirrors `SettingsData.overflow_buttons`, a `Vec<String>` of ids. Discrete bools
     // rather than a `[string]` model so the callback can name which button toggled
@@ -409,9 +428,9 @@ export global Settings {
     playlist-export-title(exported) => {
         return @tr("{n} playlist exported" | "{n} playlists exported" % exported);
     }
-    pure callback playlist-export-message(string /*folder*/) -> string;
-    playlist-export-message(folder) => {
-        return @tr("Saved to {}", folder);
+    pure callback playlist-export-message(string /*path*/) -> string;
+    playlist-export-message(path) => {
+        return @tr("Saved to {}", path);
     }
     pure callback playlist-export-failed-title() -> string;
     playlist-export-failed-title => {
@@ -420,6 +439,10 @@ export global Settings {
     pure callback playlist-export-failed-message() -> string;
     playlist-export-failed-message => {
         return @tr("Couldn't write the playlist files.");
+    }
+    pure callback playlist-export-too-large-message() -> string;
+    playlist-export-too-large-message => {
+        return @tr("These playlists are too large for one .zip file. Export fewer at a time.");
     }
 
     // The station list's own pair. Separate msgids rather than a shared "{n} items imported":

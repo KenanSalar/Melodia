@@ -240,16 +240,8 @@ async fn a_narrow_retag_reindexes_the_new_fts_columns() -> Result<(), AppError> 
 /// confined to this test.
 #[tokio::test]
 async fn bm25_weights_cover_every_indexed_column() -> Result<(), AppError> {
-    const INDEXED: [&str; 8] = [
-        "title",
-        "artist",
-        "album_artist",
-        "album",
-        "genre",
-        "credits",
-        "year",
-        "file_name",
-    ];
+    const INDEXED: [&str; 8] =
+        ["title", "artist", "album_artist", "album", "genre", "credits", "year", "file_name"];
 
     let db = DbPool::test_pool().await?;
 

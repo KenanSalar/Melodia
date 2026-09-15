@@ -45,10 +45,10 @@ silently miss the other.
 
 - **An anchor crossing a component boundary has three answers**, a frame reading only ids in its
   own file: `out` properties (the hero bands), a global (the sidebar rail, whose boundary the
-  frame's file doesn't contain), and a zero-width `clip: true` collapse rather than an `if`
-  (`tab-pills.slint` — an id inside an `if` is unreadable from outside, and `Clip` swallows every
-  event outside its empty rect, so the row is as unreachable as an unmounted branch while its ids
-  stay readable).
+  frame's file doesn't contain), and a zero-width collapse rather than an `if` (`tab-pills.slint`:
+  an id inside an `if` is unreadable from outside, and a collapsed box takes no events, so the row
+  is as unreachable as an unmounted branch while its ids stay readable). Collapse through
+  `visible` wherever the contents draw past the box: `slint-pitfalls.md` has why a `clip` doesn't.
 
 - **The rail's tooltip needs a hold the tab bar doesn't**, its rows sitting 4 px apart so a
   travelling pointer is over nothing for a frame or two: a `held` bool cleared by a 150 ms
@@ -110,6 +110,30 @@ silently miss the other.
   the *mount* still owes is the two arrays lining up — a label with no matching field sorts by the
   empty string — so both pins check lengths through `melodia_testkit::sort_mount_arrays`. `labels`
   stays an inline `[@tr("…"), …]` literal.
+
+### Rounded edges
+
+The one-pass-per-curve rule and what a rounded clip costs are `slint-pitfalls.md`'s. These are the
+three components that answer it, and each argues its geometry at its own file.
+
+- **`EdgeOutline`** (`components/edge-outline.slint`) is the stroke along a rounded clip's inside
+  edge: the window outline, the artwork dialog's preview, and a candidate tile's hover hairline and
+  selection ring. Mounted last inside the clip, at its full size. Its root has a child, so a fade
+  goes through `stroke-color` rather than `opacity`, which would layer it.
+
+- **`RoundedFrame`** (`components/rounded-frame.slint`) draws a panel's border and corners without a
+  rounded clip, the corners masked in a `ground` colour over a radius-less `clip: true`. One mount,
+  the content panel. **Only over an opaque ground that is exactly `ground`**: over a hero, a blur or
+  anything the corners can't name in one brush it paints them visibly, and a rounded clip over a
+  square fill with an `EdgeOutline` is the answer there, texture and all.
+
+- **`TuckedFill`** (`components/tucked-fill.slint`) is the fill for a host stroking its own rounded
+  border, inset to the stroke's middle: where the renderer puts a fill under an *opaque* border,
+  and where it doesn't under a translucent one. Mounted first, at full size. Two mounts: the lyrics
+  pill, whose border is translucent, and the toast, whose accent bar has to sit between the fill
+  and the border. **Not under a drop shadow**: the search bar keeps its `background` out to the
+  edge, since a fill stopping half a pixel in lets its focus shadow darken the rim, and
+  `search-bar.slint` argues that at the binding.
 
 ### Grids, strips, cards
 
@@ -440,22 +464,25 @@ silently miss the other.
   `most_played_matches`, the same predicate the model build uses, so the cards and the queue can't
   disagree about what's on screen.
 
-- **Detail-page inset.** The band is full-bleed, so a detail *body* may inset on its root like any
-  grid page — **Album and Genre do; Artist and Playlist can't**, Artist's `below-hero` being the
-  region `CompositeScrollbars` measures and Playlist's empty state and drop banner filling `body`.
-  Overlay scrollbars stay at `parent.width - self.width` either way; bottom padding is never on the
-  root (the dead-strip pitfall). **The horizontal bar's clearance is a lane inside the list
-  instead** — `reserve-scrollbar-lane` on `TrackList` / `DraggableTrackList`, which pads the column
-  *inside* `outer-scroll` by `Theme.scrollbar-slot`. **All eight bar-pair hosts set it, composite
-  ones included** — that bar takes the list's `x`/`width` and the view's bottom, which is the list's
-  own edge the moment it hits the `below-sv.visible-height` cap. A composite host owes the lane a
-  second time as a term in that cap's content-fit arm, which hand-sums rows + header + spacing.
-  Search's songs section is the one opt-out, its bar being a layout sibling with a slot already.
+- **Track-list insets belong to the list, not the page.** `TrackList` and `DraggableTrackList`
+  take `inset-left` and `inset-right`, defaulting to `Theme.track-list-inset` and
+  `Theme.scrollbar-slot`, and resolve their columns inside them. So the Songs tabs and the four
+  detail bodies mount the list at full width with no side padding of their own, a detail's header
+  sitting flush under its band, and the right edge stops at the bar's slot so a row's pill never
+  runs under the track. Two hosts differ: Browse keeps a `page-inset` for its header strip and card
+  grid, its folder rows following the list's column, and Search's Songs section passes `0px` on
+  both sides, being a column inside the page's own inset beside the Top Result. Overlay scrollbars
+  stay at `parent.width - self.width`, and bottom padding is never on the root (the dead-strip
+  pitfall).
+  **Three hosts size a list to what it holds** through `TrackList.content-height`: Browse's and
+  Artist Detail's capped at the viewport, Search's Songs section outright. The sum lives there, so
+  a change to the list's own chrome is one edit.
 
 - **The Now Playing right column is one column with three arms, not a place two things share.**
   Up Next, the lyrics panel and the station panel, swapped on `Player.vm.has_station` and
-  `Lyrics.shown`; a station keeps its panel whatever the toggle says, and the toggle's own control
-  is gone rather than disabled there, a stream having no track to look a sheet up for.
+  `Lyrics.enabled`; a station keeps its panel whatever the switch says, and the header's lyrics
+  pill (`LyricsControls`, the switch and the menu glyph together) is gone rather than disabled
+  there, a stream having no track to look a sheet up for.
   **Don't answer a fourth thing with a fourth column.** `content-width` is what the chip wrap, the
   strip width and the cover slot all derive from, so another region reflows the artwork column
   every time a track without lyrics comes on, which is the worst property a panel can have when
@@ -470,7 +497,8 @@ silently miss the other.
   Both the Export and Add-to-Playlist pickers are thin wiring over it, toolkit components staying
   data-agnostic. Both commit through the `Dialog.accepted` dispatcher gated on a selected count;
   Add-to-Playlist disables fully-contained playlists and counts only enabled rows. Toggles and
-  commit live in `files.rs` (commit needs `Rc<NotificationsUi>`), the opener in `dialog.rs`.
+  commit live in `files/export.rs` and `files/add_picker.rs` (commit needs
+  `Rc<NotificationsUi>`). Export opens from `export.rs`, Add-to-Playlist from `dialog.rs`.
 
 - **Notifications stack** mirrors `Dialog`'s `kind`-routing — a new action is one branch plus one
   `show_localized(…)` call. Cap 5. Per-card props use `data:` not `row:` (Slint reserves `row` as
@@ -751,8 +779,9 @@ silently miss the other.
   - **An unwritten edge is not a default — it is whatever the last navigation left in the global**,
     and `mark_drill_back` fires on every detail close, so the value sitting there is reliably
     `left`. *Every* Slint-side mount writes its own, `below` by construction, the two non-lateral
-    directions being Rust's; the pin **walks** the tree. The miniplayer's mark isn't about a closer
-    — the swap destroys the whole full UI, so the content branch remounts on the way *back*.
+    directions being Rust's; the pin **walks** the tree. The miniplayer's mark is for the Now Playing
+    close it performs. The full UI it rebuilds on the way *back* mounts under the suppression below
+    and never reads the edge.
   - **Two inputs turn parts of it off and answer different questions**: `enabled: false` is "does
     this view animate at all", `slide: false` is "is anything *else* already translating it" —
     fade, don't move. Both default on, so a mount that owns its motion says nothing.
@@ -768,6 +797,10 @@ silently miss the other.
     the hand-back can't be Rust's. Gated on **`enabled`**, since a nested body mounted at boot runs
     the same `Timer` and would otherwise drop the flag for the page above it. Pinned by
     `ui::startup_motion_tests`.
+    **`MiniPlayerSwitch`'s swap timer raises the same flag** on the way out of the miniplayer, ahead
+    of the flip that rebuilds the full UI. That rebuild is already crossfading, and a page sliding in
+    under it put a second full-window layer over the most expensive frames of the swap. The setting
+    has no say there.
   - **A page with sub-views nests a second one and must disarm it at mount**, the page's own enter
     still playing when the first tab body mounts and a horizontal slide composed with a fade-up
     reading as a diagonal. The host arms it in the tab bar's `selected` handler; starting `false`
@@ -1048,9 +1081,9 @@ edit would otherwise reverse.
 - **Recently Played** (two tabs) — **neither has a sort, and that is a decision rather than an
   omission**: the order **is** the page, so the synthetic-field cycle above is deliberately *not*
   what it took, and there is no sort state at all (nothing on the global, no `ViewSort`, no
-  `view_sort` key). `sortable: false` runs `TrackList` → `TrackListHeader` → `HeaderCell` and
-  defaults `true`, so the other eight mounts opt in by omission — **the middle link is the one
-  worth pinning**, since dropping the forward leaves the mount still reading `sortable: false`
+  `view_sort` key). `sortable: false` runs `TrackList` → `TrackListHeader` → `HeaderColumn` →
+  `HeaderCell` and defaults `true`, so the other eight mounts opt in by omission — **the middle
+  links are the ones worth pinning**, since dropping a forward leaves the mount still reading `sortable: false`
   while the page sorts again. **The band states the recency set, not the mounted tab's**, a
   play-count ranking under this banner naming the wrong page. Its filter walk is **the one apply
   path that may not run on the UI thread**, and what deferring costs is ordering — the signature
@@ -1147,4 +1180,7 @@ edit would otherwise reverse.
   parent layout's spacing. `wrap-per-row` and `wrap-height` sit beside it. **How many fit is
   measured, not estimated** — `ChipGroup` mounts a hidden ruler of real `Chip`s, `TabBar`'s idiom,
   and **`min-width: 0px` on the root is load-bearing**, stopping that ruler leaking a floor into
-  the card.
+  the card. **`chunk-indices` hands back one model per row shape** (`ui::chips::IndexRows`), and
+  that is what keeps a resize cheap. Every width change re-runs the strip's binding through
+  `SettingsPage.page-w`, and a repeater handed a model it can't match by pointer rebuilds every chip
+  and swatch under it, tooltips included; see the repeater entry in `slint-pitfalls.md`.

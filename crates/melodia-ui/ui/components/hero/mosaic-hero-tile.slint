@@ -24,13 +24,21 @@ export component MosaicHeroTile inherits Rectangle {
 
     width: Theme.hero-artwork;
     height: Theme.hero-artwork;
-    // The tinted fallback fill mirrors the tracklist placeholder, so a coverless hero
-    // reads as one giant placeholder tile rather than as a bare surface.
-    background: root.shows-cover
-        ? HeroBackdrop.floor-start
-        : HeroBackdrop.placeholder.transparentize(0.85);
     border-radius: Theme.radius-lg;
     clip: true;
+
+    // The tinted fallback fill mirrors the tracklist placeholder, so a coverless hero
+    // reads as one giant placeholder tile rather than as a bare surface. Square inside the
+    // clip, which stays the corner's only antialiased pass, as in `ArtworkImage`.
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        background: root.shows-cover
+            ? HeroBackdrop.floor-start
+            : HeroBackdrop.placeholder.transparentize(0.85);
+    }
 
     if root.shows-cover: Image {
         width: 100%;

@@ -10,11 +10,7 @@ const GRID_GEOMETRY: &str =
 /// leaves the grid's overflow on placeholders.
 #[test]
 fn the_card_constants_are_the_ones_the_component_declares() {
-    for (name, value) in [
-        ("min-card-w", MIN_CARD_W),
-        ("gap", GAP),
-        ("card-text-h", CARD_TEXT_H),
-    ] {
+    for (name, value) in [("min-card-w", MIN_CARD_W), ("gap", GAP), ("card-text-h", CARD_TEXT_H)] {
         let declared = format!("in property <length> {name}: {value}px;");
         assert!(
             GRID_GEOMETRY.contains(&declared),
@@ -47,16 +43,8 @@ fn missing_and_empty_paths_are_skipped() {
 fn the_cap_counts_kept_paths_not_input_items() {
     // Five inputs, three of which are duplicates of the first: a cap of 2
     // has to yield two *distinct* covers, not stop after the second input.
-    let out = paths(
-        &[
-            Some("a.jpg"),
-            Some("a.jpg"),
-            Some("a.jpg"),
-            Some("b.jpg"),
-            Some("c.jpg"),
-        ],
-        2,
-    );
+    let out =
+        paths(&[Some("a.jpg"), Some("a.jpg"), Some("a.jpg"), Some("b.jpg"), Some("c.jpg")], 2);
     assert_eq!(out, vec!["a.jpg", "b.jpg"]);
 }
 

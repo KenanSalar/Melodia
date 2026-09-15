@@ -1,14 +1,21 @@
 import { Theme } from "../theme.slint";
 
-// One of the three sweeps: album colour along one edge of the surface, gone by 70.71% of the
-// gradient line. The headings are near-orthogonal, so each owns a different edge and one corner is
-// left showing the floor — that asymmetry is the whole effect, four symmetric corner washes
-// averaging to one flat tone whatever the record was. They are CSS-convention degrees needing no
-// conversion, Slint's `line_for_angle` taking the same magic-corner construction.
+// One of the three sweeps: album colour along one edge of the surface, thinning to nothing by the
+// far end of its gradient line. The headings are near-orthogonal, so each owns a different edge and
+// one corner is left showing the floor — that asymmetry is the whole effect, four symmetric corner
+// washes averaging to one flat tone whatever the record was. They are CSS-convention degrees
+// needing no conversion, Slint's `line_for_angle` taking the same magic-corner construction.
 //
 // **Two stops, the far one this tint at zero alpha — never the `transparent` keyword.** FemtoVG
 // interpolates stops in straight RGBA, so fading to rgba(0,0,0,0) drags the colour toward black and
 // the ramp darkens instead of thinning.
+//
+// **And both stops sit at the extents, which is a memory constraint rather than a taste one.**
+// FemtoVG fills a two-stop gradient from shader uniforms only while the near stop is at or before 0
+// and the far one at or past 1; inset either and the brush falls through to the multi-stop path,
+// which synthesizes a gradient texture per distinct stop set through its `GradientStore`. Three
+// sweeps on that path grow the driver's buffer pool by a whole slab, and it never shrinks. An
+// earlier falloff is one number away and brings the slab back with it.
 component AuroraSweep inherits Rectangle {
     in property <color> tint;
     in property <angle> heading;
@@ -18,8 +25,8 @@ component AuroraSweep inherits Rectangle {
     // Both arms one type at one stop count, the only shape `Brush::interpolate` blends stop-for-stop.
     // Safe to `animate`: Rust writes the tint discretely, so nothing can restart the binding.
     background: root.shown
-        ? @linear-gradient(root.heading, root.tint.transparentize(0.45) 0%, root.tint.transparentize(1.0) 70.71%)
-        : @linear-gradient(root.heading, root.tint.transparentize(1.0) 0%, root.tint.transparentize(1.0) 70.71%);
+        ? @linear-gradient(root.heading, root.tint.transparentize(0.45) 0%, root.tint.transparentize(1.0) 100%)
+        : @linear-gradient(root.heading, root.tint.transparentize(1.0) 0%, root.tint.transparentize(1.0) 100%);
     animate background { duration: Theme.dur-med; easing: ease-in-out; }
 }
 

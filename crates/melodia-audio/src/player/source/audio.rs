@@ -97,10 +97,7 @@ pub trait AudioSource: Iterator<Item = Sample> + Send {
 
     /// The two above together, which is what a converter is built against.
     fn shape(&self) -> Shape {
-        Shape {
-            channels: self.channels(),
-            rate: self.sample_rate(),
-        }
+        Shape { channels: self.channels(), rate: self.sample_rate() }
     }
 
     /// How long the source runs for, when it is the kind of thing that ends.

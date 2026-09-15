@@ -9,6 +9,9 @@ import { SelectableRow, SelectAllHeader, PickerListCard } from "selectable-picke
 // both the per-row toggle and the select-all, and the visuals are the shared
 // `selectable-picker.slint` toolkit — so this file is wiring and one empty state.
 export component ExportPlaylistPicker inherits Rectangle {
+    property <float> zip-hint-t: Dialog.export-selected-count > 1 ? 1.0 : 0.0;
+    animate zip-hint-t { duration: Theme.dur-fast; }
+
     VerticalLayout {
         spacing: Theme.pad-sm;
 
@@ -59,6 +62,15 @@ export component ExportPlaylistPicker inherits Rectangle {
                 selected: r.selected;
                 toggled => { Playlists.toggle-export-pick(r.id); }
             }
+        }
+
+        // Laid out while hidden rather than mounted on the second tick: the card is centred, so a
+        // line arriving would move every row, the one under the pointer included.
+        Text {
+            text: @tr("Several playlists are saved as one .zip file, which you can import directly without extracting it.");
+            color: Theme.subtext0.transparentize(1.0 - root.zip-hint-t);
+            font-size: Theme.font-size-sm;
+            wrap: word-wrap;
         }
     }
 }

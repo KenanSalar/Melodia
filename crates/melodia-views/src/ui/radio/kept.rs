@@ -179,11 +179,8 @@ pub fn apply(ui: &AppWindow, radio_ui: &RadioUi, tab: RadioTab) {
         g.set_recent_count(count);
     }
 
-    let model = if tab == RadioTab::Favorites {
-        g.get_favorites_rows()
-    } else {
-        g.get_recent_rows()
-    };
+    let model =
+        if tab == RadioTab::Favorites { g.get_favorites_rows() } else { g.get_recent_rows() };
     // `browse::apply`'s reason: a refetch that moved one row must not reset a grid the pointer is
     // sitting on. Recently Played is the tab that genuinely reshapes — a play moves its station to
     // the front — and there the full write is what the reorder asks for anyway.

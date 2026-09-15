@@ -111,22 +111,15 @@ fn lookup_remembered(state: &AppState, theme: &ThemeDef) -> (String, String) {
     // synthetic "system" id passes through even though it isn't in `theme.variants`.
     let variant_known = theme.variant(&pref.variant).is_some()
         || (pref.variant == themes::SYSTEM_VARIANT_ID && theme.supports_system_mode);
-    let variant = if variant_known {
-        pref.variant.clone()
-    } else {
-        theme.default_variant.to_owned()
-    };
+    let variant =
+        if variant_known { pref.variant.clone() } else { theme.default_variant.to_owned() };
     // Material 3 alone accepts the synthetic `MATERIAL_YOU_ACCENT_ID`: it is in no
     // `theme.accents`, having no static swatch, but is a legitimate persisted value the
     // dynamic-colour pipeline resolves at paint time. Without this, switching themes
     // through material3 forgets the user's pick on every round trip.
     let accent_known = theme.accent(&pref.accent).is_some()
         || (theme.id == "material3" && pref.accent == MATERIAL_YOU_ACCENT_ID);
-    let accent = if accent_known {
-        pref.accent.clone()
-    } else {
-        theme.default_accent.to_owned()
-    };
+    let accent = if accent_known { pref.accent.clone() } else { theme.default_accent.to_owned() };
     (variant, accent)
 }
 
@@ -183,11 +176,7 @@ pub(super) fn wire_variant_changed(
 
         // Against the resolved *real* variant, which matters on a switch to "System":
         // the swatches render dark or light off the OS signal.
-        let accent_variant = if variant_id == themes::SYSTEM_VARIANT_ID {
-            theme.resolve_system_variant(&snapshot.theme).id
-        } else {
-            variant_id
-        };
+        let accent_variant = theme.shade_for(variant_id, &snapshot.theme).id;
         let (brushes, labels, _) = accent_swatches_with_my(theme, accent_variant, &snapshot);
         let g_swatches = ui.global::<Settings>();
         g_swatches.set_accent_colors(ModelRc::from(Rc::new(VecModel::from(brushes))));

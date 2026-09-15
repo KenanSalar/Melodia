@@ -37,12 +37,7 @@ pub fn dither_tile() -> SharedPixelBuffer<Rgba8Pixel> {
     let levels = blue_noise_levels();
     let mut buf = SharedPixelBuffer::<Rgba8Pixel>::new(DITHER_TILE_SIDE, DITHER_TILE_SIDE);
     for (pixel, level) in buf.make_mut_slice().iter_mut().zip(levels) {
-        *pixel = Rgba8Pixel {
-            r: level,
-            g: level,
-            b: level,
-            a: DITHER_ALPHA,
-        };
+        *pixel = Rgba8Pixel { r: level, g: level, b: level, a: DITHER_ALPHA };
     }
     buf
 }

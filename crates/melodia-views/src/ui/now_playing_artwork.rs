@@ -23,10 +23,7 @@ const ARTWORK_CACHE_CAP: NonZeroUsize = match NonZeroUsize::new(8) {
 
 /// Square, at the full wash: this backdrop has nothing painted over it, and
 /// the view it fills is as tall as it is wide.
-const BLUR: BlurSpec = BlurSpec {
-    height: BLUR_TARGET,
-    sigma: BLUR_SIGMA,
-};
+const BLUR: BlurSpec = BlurSpec { height: BLUR_TARGET, sigma: BLUR_SIGMA };
 
 /// This tier's spec, or `None` under the aurora setting. Here rather than at the one call site
 /// so [`BLUR`] stays private — the two numbers are what makes this the Now Playing tier.

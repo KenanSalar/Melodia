@@ -216,10 +216,7 @@ fn a_rest_between_two_lines_is_drawn_at_the_longer_floor() {
     let sung_until = 1_000;
     let on_it = sung_until + i64::from(INTERLUDE_MS);
     assert_eq!(
-        gaps(&drawn_rows(vec![
-            line(0, Some(sung_until), "first"),
-            line(on_it, None, "second"),
-        ])),
+        gaps(&drawn_rows(vec![line(0, Some(sung_until), "first"), line(on_it, None, "second"),])),
         vec![None, Some((1_000, 6_000)), None],
         "a rest exactly on the floor is drawn"
     );
@@ -467,12 +464,7 @@ fn a_line_with_no_stamp_publishes_the_sentinel_rather_than_a_zero() {
 /// measuring the text again.
 #[test]
 fn a_row_publishes_the_line_counts_it_was_measured_at() {
-    let tall = Row {
-        lines: 3,
-        romanization_lines: 2,
-        translation_lines: 1,
-        ..glossed(Some(0))
-    };
+    let tall = Row { lines: 3, romanization_lines: 2, translation_lines: 1, ..glossed(Some(0)) };
 
     let published = published_row(&tall, true);
 

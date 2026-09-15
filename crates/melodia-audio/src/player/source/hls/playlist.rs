@@ -116,21 +116,13 @@ fn parse_renditions(body: &str, base: &Url) -> Vec<Variant> {
             pending = Some(stream_inf(list));
         } else if let Some(list) = line.strip_prefix(MEDIA_TAG) {
             if let Some(url) = audio_rendition(list, base) {
-                variants.push(Variant {
-                    url,
-                    bandwidth: 0,
-                    has_video: false,
-                });
+                variants.push(Variant { url, bandwidth: 0, has_video: false });
             }
         } else if !line.starts_with('#')
             && let Some((bandwidth, has_video)) = pending.take()
             && let Some(url) = joined(base, line)
         {
-            variants.push(Variant {
-                url,
-                bandwidth,
-                has_video,
-            });
+            variants.push(Variant { url, bandwidth, has_video });
         }
     }
     variants
@@ -209,9 +201,8 @@ fn attributes(list: &str) -> impl Iterator<Item = (&str, &str)> {
 }
 
 fn names_video(codecs: &str) -> bool {
-    const VIDEO_PREFIXES: [&str; 8] = [
-        "avc1", "avc3", "hvc1", "hev1", "dvh1", "dvhe", "av01", "vp09",
-    ];
+    const VIDEO_PREFIXES: [&str; 8] =
+        ["avc1", "avc3", "hvc1", "hev1", "dvh1", "dvhe", "av01", "vp09"];
     codecs
         .split(',')
         .map(str::trim)

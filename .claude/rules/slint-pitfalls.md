@@ -15,6 +15,16 @@ this file is what builds, looks right, and is wrong.
 - **`visible: false` doesn't remove from layout.** Hidden child still claims stretch.
   Fix: `if !collapsed: VerticalLayout { … }`. Ref: slint#7377.
 
+- **A box collapsed with `clip: true` cuts everything its contents draw past it, collapsed or not.**
+  A zero-width clip is a tempting way to hide something while keeping its ids readable, but the
+  clip applies while the box is open too, and a box sized to its content leaves no room for what a
+  control paints outside its own geometry: a focus swell, a drop shadow, a tooltip. It bit the
+  shared tab header's search box, whose swollen ends were shaved flat and whose focus shadow was
+  cut into a box. Collapse through `visible` instead: `passes/visible.rs` lowers it to a `Clip`
+  whose `clip` is `!visible`, so the element is clipped only while hidden, and hidden it draws
+  nothing and takes no events. Layouts are lowered before that pass, so the element's own width
+  constraints still collapse it (`tab-search-header.slint`).
+
 - **Don't `animate` a property driven by both toggle and continuous input** (drag micro-updates
   get full easing → spongy). Gate duration on bool:
   `animate width { duration: is-dragging ? 0ms : 250ms; }`. Boolean ternaries safe; #7999 only
@@ -40,6 +50,16 @@ this file is what builds, looks right, and is wrong.
   `change_time + duration` and adopts it in one frame. Hence `library-tab-band.slint`, whose
   tab-bar brushes cross to `HeroBackdrop` tiers solved from the artwork decode — it eases the four
   mirrors it crosses *to* on a short curve of their own and lets the transition follow.
+
+- **A `for` over a `pure callback`'s model rebuilds every instance whenever one of the call's
+  inputs is marked dirty, not when its answer changes.** The same structural dirt as the entry
+  above re-runs the binding, and `Repeater::model` (`i-slint-core/model/repeater.rs`) compares the
+  old and new `ModelRc` **by pointer**, so a callback building a fresh model per call drops and
+  rebuilds the whole repeater, trackers and tooltip layers included. Symptom: a page that stutters
+  through a resize drag while nothing on it visibly changes, because every width feeding an argument
+  re-ran the call. Cure: hand back the *same* `ModelRc` for the same answer. `ui::chips::IndexRows`
+  memoizes the settings strips by row shape, and `ui::chips::PackedLabels` does the same for
+  `Wrap.pack-labels` behind Recent Searches, keyed on the labels and the split they packed into.
 
 - **A shared component may not `animate` a brush its host hands it — it cannot tell an eased
   input from a stepped one, so it eases a *float* and lets the brush track its source.** A host
@@ -142,8 +162,8 @@ this file is what builds, looks right, and is wrong.
   every event until `Ended` — its `Moved`/`Cancelled` arms do check direction, which is the whole
   of why a wheel behaves. **Only a precision device sends the phase**: Wayland folds a discrete
   axis to `Moved`, X11 and Win32 send nothing else — Wayland and macOS only, invisible to a mouse.
-  Bit every page whose body is a plain `TrackList`, which wraps its vertical `ListView` in a
-  horizontal-only `ScrollView` for the column pan. Cure in `winit_filter.rs`'s `route_wheel`:
+  Bites any scroller nested in another on a crossing axis: a card strip under Search's vertical
+  outer scroller never sees a sideways swipe. Cure in `winit_filter.rs`'s `route_wheel`:
   swallow the native `Started` and re-send its delta through
   `Window::try_dispatch_event(PointerScrolled)`, which lands as a one-shot `Cancelled` and leaves
   the capture flag unset for the rest of the gesture. **Ungated on purpose** — it reads no view
@@ -175,8 +195,8 @@ this file is what builds, looks right, and is wrong.
   occasional, and at 4–8 px of travel the computed slot is still the source's own, so no drop
   indicator paints either. It still reads as intermittent, both escapes being real: a list shorter
   than its viewport can't flick, and a press held past 500 ms before moving is never intercepted.
-  Both draggable lists opt out outright, `draggable-track-list.slint` on both axes (a diagonal
-  drag steals sideways once the columns overflow) and `queue-sheet.slint`, pinned by
+  Both draggable lists opt out outright, `draggable-track-list.slint`'s `inner-list` and
+  `queue-sheet.slint`'s, pinned by
   `ui::playlists::tests::every_draggable_list_opts_out_of_drag_panning`, since it only misbehaves
   under a pointer; the click-to-act grids and lists are pinned by `crates/melodia/tests/scrollbars.rs`.
   **`!reorder-enabled` is what that binding used to say, and is the trap worth keeping**: it reads
@@ -283,14 +303,10 @@ this file is what builds, looks right, and is wrong.
   strip rather than as breathing room.** `padding: Theme.pad-lg` on a root `VerticalLayout` whose
   stretchy child is a list/grid/ScrollView pads all four sides, and the bottom one shortens the
   viewport instead of the content: the last row is clipped mid-glyph and a band of bare
-  `Theme.base` sits between it and the panel border at every scroll position. Easy to mistake for
-  the horizontal `OverlayScrollbar` at the same `y` — the tell is colour: that track is `surface0`
-  at half alpha, rounded and inset, where the strip is flat full-bleed `base`. Inset
+  `Theme.base` sits between it and the panel border at every scroll position. Inset
   **left/right/top only**; for clearance at the end, put `padding-bottom` on the column *inside*
-  the viewport — which is exactly what `reserve-scrollbar-lane` does for the horizontal bar's own
-  slot, so the two read alike on screen and are opposite in the tree. Artist and Playlist can't inset on the root at all — Artist's `below-hero` must
-  run full-bleed for `CompositeScrollbars` and the hover sentinel, and Playlist's empty state and
-  drop banner deliberately fill `body`.
+  the viewport. A track list page pads no sides at all, the list owning its own insets
+  (`ui-patterns.md`'s track-list inset entry).
 
 - **`changed` doesn't accept path expressions on globals — mirror via local property.**
   `changed Nav.selected-index => {}` fails to parse. Use
@@ -409,12 +425,39 @@ this file is what builds, looks right, and is wrong.
   a pair is only ever right where nothing fades *into* the new source and no mounted element reads
   it; `ui::now_playing::source_change` is the one such site, and argues it there.
 
-- **A rounded `clip: true` (or a `border`) on an element that *contains text/children* blurs +
-  upscales that subtree on HiDPI.** FemtoVG renders it into an offscreen texture at logical size,
-  then upscales by the display scale factor on blit. Don't wrap a scrolling text list in a
-  bordered/rounded-clipped card: let the `ScrollView` clip its viewport rectangularly (cheap
-  scissor, no layer) and paint the rounded border with a **childless overlay `Rectangle`**
-  sibling. Canonical: `components/dialog/selectable-picker.slint::PickerListCard`.
+- **A rounded `clip: true` renders everything under it into a texture, and a clip on a rounded
+  element is always a rounded one.** `passes/clip.rs` copies the element's radius onto the `Clip`
+  it creates, and `visit_clip` sends any non-zero radius through `render_layer`: the children draw
+  into a texture at physical size, drawn again whenever anything they read changes (the texture's
+  tracker registers with the one around it, so a nested one dirties its parent too), then filled
+  back through an antialiased path. A radius-less clip is a scissor with no texture, and **a
+  `border` never makes one** (`draw_border_rectangle` draws directly). Two costs follow. The
+  texture is sampled linearly on the way back, so one landing on a fractional pixel softens the
+  text in it; and a clip around a whole view renders that view into its texture again on every
+  scroll and visualizer frame. Where the clip only guards overflow, keep `clip` on an element with
+  no radius and move the rounded fill into a child pinned at `x: 0; y: 0` (the track rows, the
+  header cells); where the content has to read rounded over an opaque ground, `RoundedFrame` masks
+  the corners instead (the content panel). A scrolling list in a card clips its viewport with the
+  `ScrollView` and keeps its fill and border on the card, inset from the border
+  (`components/dialog/selectable-picker.slint::PickerListCard`).
+
+- **FemtoVG antialiases every rounded fill, stroke and clip on its own, and the coverages of one
+  curve stack.** A pixel the arc half covers is painted past half by each further shape on the
+  same curve, so the corner reads harder than its radius, as if the rounding started later.
+  Nothing warns, and a single shape never shows it. The stacks this tree had: a `background` under
+  a rounded clip whose content fills to the edge (every cover tile), a border element laid over a
+  separately rounded fill, a stroke ending on a clip's edge, and a fill drawn over a whole track
+  of the same shape. Cures: the fill as a **square** child inside the clip (`ArtworkImage`, the
+  window shell); fill and border on **one** element, where the renderer tucks the fill under the
+  stroke; a stroke inside a rounded clip as an `EdgeOutline`, which argues its straddle; and a
+  track drawn only beside its fill (`ProgressBar`, `EqBandSlider`).
+  **The one-element cure holds only for an opaque border.** `draw_border_rectangle` tucks the fill
+  under an opaque stroke and runs it out to the edge under a translucent one, so a translucent
+  border (the lyrics pill, a focus ring, a colour fading through `transparent`) stacks again. Tuck
+  the fill yourself with a `TuckedFill`, or keep the border opaque (the dropdown rests on its fill
+  colour). **Except over a drop shadow**: the shadow sits under the whole element, and a tucked fill
+  lets it show through the rim, which reads worse than the second pass. The search bar keeps its
+  fill out to the edge for that.
 
 - **Nothing that draws text may be cut to its layout box — the box is a line box and the ink is
   not. Two mechanisms cut, and both are invisible in Latin.** The shipped Vazirmatn faces are
@@ -430,6 +473,10 @@ this file is what builds, looks right, and is wrong.
     *fade* therefore crops the marks for its whole duration and hands them back on the settling
     frame. **The union decides who bleeds** — the block's first and last children, not every
     `Text` under the fade.
+    **A dimmed state is the long case**: a disabled button or a row outside the library holds its
+    texture for as long as it stays dimmed, not for the length of a fade. The dimmed row, card,
+    button and menu row carry a `fade` float into every brush instead, the track row folding it
+    into one `ink` its cells share.
     Three cures, in order of preference. **Fold the alpha into the brush**
     (`Theme.text.with-alpha(t)`): pixel-identical where elements don't overlap, no texture.
     **Where there is no brush, pass a `fade` float into the component** (`ArtworkImage` spends it
@@ -474,16 +521,57 @@ this file is what builds, looks right, and is wrong.
   (`rad.min(halfw)` / `rad.min(halfh)`) and Slint passes the radius straight through, so a short
   wide rect with a large radius has arcs spanning its half-width and pinches to a lens. Any radius
   on a **size-varying** element must be clamped on both axes —
-  `min(self.width / 2, self.height / 2, <cap>)`. Bit the spectrum bars at their resting floor and
-  the EQ band fill at 0 dB; a fixed-size pill is fine with the usual `self.height / 2`.
+  `min(self.width / 2, self.height / 2, <cap>)`. Bit the EQ band fill at 0 dB, and the spectrum
+  bars at their resting floor before they gave their radius up entirely; a fixed-size pill is fine
+  with the usual `self.height / 2`.
+
+- **A rounded `clip: true` with a square corner beside rounded ones paints its children over the
+  border at the square corner.** A clip with any radius renders its children into a layer and
+  fills it through `clip_path_for_rect_alike_item` (`i-slint-renderer-femtovg`'s
+  `itemrenderer.rs`), which subtracts `border_width * KAPPA90` from **every** radius, and
+  `BorderRadius`'s `SubAssign` doesn't clamp. The zero corner goes negative, `rounded_rect_varying`
+  skips its plain-rect path unless all four radii are under 0.1, and the negative corner makes the
+  path overshoot and double back, landing the page on the border's last pixel. Symptom: a border
+  that stops one pixel short of the square corner, with the content showing through, which reads as
+  a faint rounding and only against a contrasting child (a hero, the Now Playing backdrop). Bit the
+  content panel under the native titlebar, rounded on the left and oversized past a square wrapper
+  to meet the OS frame flush on the right. **Safe shapes are one radius on every corner, or zero on
+  all four** (a scissor with no layer). Where an edge has to look square, give the element a gutter
+  rather than clipping a square corner.
 
 - **An explicit `background: transparent` costs a discarded path per element per frame.**
   `resolve_native_classes` picks an element's native class from *which properties have bindings*,
   regardless of value, so binding `background` at all promotes it out of `Empty` (never visited by
   the renderer) into `Rectangle` — and the FemtoVG item renderer builds the path *before* it looks
   at the paint. `Rectangle` already defaults to transparent, so the binding is pure cost; delete
-  it rather than spelling out the default. Only matters at scale — 65 wasted paths a frame in
-  `spectrum-bars.slint` (root plus 64 bands); noise on a one-off container.
+  it rather than spelling out the default. Only matters at scale, a repeater's worth of them per
+  frame; noise on a one-off container.
+  **A fill that is only sometimes transparent pays too, and a rounded one pays twice**:
+  `draw_border_rectangle` builds its fill path and its border path before it checks either paint,
+  so a per-row fill painted only on hover or selection belongs behind an `if`, not a ternary ending
+  in `transparent` (the track row's pill). Where something eases it, gate on the eased float rather
+  than its target (`if ring-t > 0`, the mosaic picker's selection ring), so the branch outlives the
+  fade-out. That predicate is animated, so the branch may carry no layout-watching `changed`
+  tracker (the entry on a `changed` handler inside an `if`).
+
+- **A gradient stop inset from the extents drops FemtoVG's two-stop path and costs a slab of the
+  GPU driver's buffer pool.** `femtovg`'s `GradientColors::from_stops` answers the cheap `TwoStop`
+  variant, filled from shader uniforms with no texture at all, only when there are exactly two
+  stops **and** the near one sits at or before `0` with the far one at or past `1`. Everything
+  else falls through to `MultiStop`, which synthesizes a 256×1 gradient texture per distinct stop
+  set through `GradientStore` and allocates it out of the driver's pool. A *two*-stop gradient
+  whose far stop is inset is the case to watch, reading as the cheap shape at a glance.
+  **Source-level reasoning predicts the trigger and not the magnitude, which is the whole trap.**
+  The texture is a kilobyte and `GradientStore` migrates it across frames rather than
+  reallocating, so the cost reads as nothing until it is measured on the process, where the driver
+  turns out to back it with a whole slab that is never handed back. It surfaces only while
+  something animates over it: a static frame re-submits nothing, so a hero that merely *sits*
+  there costs the same either way and the bill arrives when a visualizer or a morph starts
+  repainting the window.
+  The aurora's three washes ended at `70.71%` and were the tree's only brushes on that path;
+  moving the stop to `100%` retired the slab. `aurora-backdrop.slint` argues why the stops sit at
+  the extents and `ui::aurora_backdrop_tests` pins them, an inset stop looking like nothing on
+  screen and only a measurement or that test catching one coming back.
 
 - **Generated `Path` geometry has to arrive as an SVG `commands` string, and needs an explicit
   viewbox with `fit: fill`.** `for`-`in` inside a `Path` is rejected outright (slint-ui/slint#754),
@@ -491,9 +579,13 @@ this file is what builds, looks right, and is wrong.
   the viewbox**: without one Slint fits the path's *own* bounding box to the element,
   renormalising every frame — a whisper draws as loud as a chorus. And `fit` must be `fill`, not
   the default `contain`, which preserves aspect ratio and letterboxes a tall narrow box into a
-  sliver. Finally, emit a closed figure **lower-edge-first** so its signed area is positive:
-  femtovg reads the winding to decide solid vs `Solidity::Hole`. All four bit
-  `waveform-trace.slint`; `player::waveform::write_path_commands` is the writer.
+  sliver. Finally, **wind every closed figure counter-clockwise on screen** (a waveform:
+  lower-edge-first) so its signed area is positive. `draw_path` marks a negative one
+  `Solidity::Hole`, which femtovg enforces by reversing the winding, and a concave fill draws its
+  antialiased fringe only outside the fill, so a hole's edges come out stepped with nothing else
+  wrong. The sum skips the closing segment, so where the figure starts matters too: close along a
+  vertical edge or one at `y = 0`. All four bit `waveform-trace.slint`, whose writer is
+  `player::waveform::write_path_commands`; the winding bit `rounded-frame.slint` too.
 
 - **A `<=>` on a `Flickable`'s `viewport-y` silently disables Slint's own out-of-bounds correction
   — a one-way binding doesn't.** `Flickable::init` installs a change handler that pulls a

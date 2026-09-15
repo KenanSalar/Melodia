@@ -1,4 +1,4 @@
-import { AlbumRow, AlbumGridRow, TrackListRow } from "../models.slint";
+import { AlbumRow, AlbumGridRow, TrackListRow, TrackColumns } from "../models.slint";
 
 // The Album grid. Rust owns `grid-rows`, installed once and rebuilt in place on every filter /
 // sort / column-count change; the canonical unfiltered list lives there too, so **neither
@@ -31,8 +31,8 @@ export global Albums {
 
 // The Album Detail view: `album-id == -1` shows the grid, `>= 0` swaps in the detail.
 // Its table is the shared `TrackList`, so the column / sort / selection shape mirrors
-// `Tracks` and `Browse` under its own persistence key. **`show-album` defaults false** —
-// the album column is redundant inside a single album.
+// `Tracks` and `Browse` under its own persistence key. **The album column is off and locked** —
+// redundant inside a single album.
 export global AlbumDetail {
     in-out property <int> album-id: -1;
     // A persisted detail is being reopened and its id has not landed yet. Raised before
@@ -46,20 +46,7 @@ export global AlbumDetail {
     // preserved across a library-changed refresh so a typed needle survives a scan finishing.
     in-out property <string> filter;
 
-    in-out property <length> w-number: 56px;
-    in-out property <length> w-title: 320px;
-    in-out property <length> w-artist: 200px;
-    in-out property <length> w-album: 220px;
-    in-out property <length> w-genre: 140px;
-    in-out property <length> w-year: 72px;
-    in-out property <length> w-length: 88px;
-
-    in-out property <bool> show-number: true;
-    in-out property <bool> show-artist: true;
-    in-out property <bool> show-album: false;
-    in-out property <bool> show-genre: true;
-    in-out property <bool> show-year: true;
-    in-out property <bool> show-artwork: true;
+    in-out property <TrackColumns> track-columns;
 
     // Sorted in memory — the query returns a fixed disc/track-number order.
     in-out property <string> sort-field: "track_number";

@@ -58,20 +58,11 @@ fn crossfade_off() -> CrossfadeSettings {
 }
 
 fn crossfade_on(duration_ms: u32) -> CrossfadeSettings {
-    CrossfadeSettings {
-        enabled: true,
-        duration_ms,
-        ..crossfade_off()
-    }
+    CrossfadeSettings { enabled: true, duration_ms, ..crossfade_off() }
 }
 
 fn backend(position_ms: u64, xf: CrossfadeSettings) -> BackendSnapshot {
-    BackendSnapshot {
-        position_ms,
-        already_preloaded: false,
-        crossfading: false,
-        xf,
-    }
+    BackendSnapshot { position_ms, already_preloaded: false, crossfading: false, xf }
 }
 
 /// The position at which `remaining_ms` of the 180 s fixture track are left.
@@ -324,11 +315,7 @@ fn seated(
     *lock_state(&handle) = state;
     let (view_model, published) = watch::channel(None);
     let (queue, _) = watch::channel(None);
-    let sinks = PlayerSinks {
-        view_model,
-        queue,
-        media_controls: None,
-    };
+    let sinks = PlayerSinks { view_model, queue, media_controls: None };
     (handle, sinks, published)
 }
 

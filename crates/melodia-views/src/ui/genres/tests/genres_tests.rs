@@ -3,12 +3,7 @@ use super::*;
 /// Minimal `GenreStats` builder — only the fields the grid filter / sort
 /// read matter.
 fn genre(id: i64, name: &str, track_count: i32, total_duration_ms: i64) -> GenreStats {
-    GenreStats {
-        id,
-        name: name.to_string(),
-        track_count,
-        total_duration_ms,
-    }
+    GenreStats { id, name: name.to_string(), track_count, total_duration_ms }
 }
 
 fn names(data: &GridData, indices: &[usize]) -> Vec<String> {

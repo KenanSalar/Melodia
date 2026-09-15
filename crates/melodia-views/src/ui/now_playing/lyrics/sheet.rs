@@ -1,7 +1,7 @@
 //! Getting a sheet for whatever is playing, and handing it back.
 //!
 //! **Three unrelated edges reach [`reseed`], and dropping any one of them shows an empty panel**:
-//! a track change, the view re-opening and the menu's own toggle. It is idempotent by
+//! a track change, the view re-opening and the header's switch. It is idempotent by
 //! [`super::LyricsUi::holds`], so they may overlap freely — whichever gets there first pays.
 
 use std::rc::Rc;
@@ -43,7 +43,7 @@ async fn fetch(state: &AppState, track: &TrackSummary) -> LyricsOutcome {
 /// sheet is handed back on every close, which is the trade this feature makes against holding a
 /// resident copy for the life of the process — so a re-open of the *same* track has nothing to
 /// paint, and the artwork's already-applied guard has no way to know that. The three are a track
-/// change, the view re-opening and the 3-dot toggle.
+/// change, the view re-opening and the header's switch.
 ///
 /// Idempotent by [`LyricsUi::holds`], so the edges may overlap freely: whichever gets there first
 /// pays, and the claim is taken before the first `.await` rather than after the last.
@@ -52,11 +52,11 @@ fn reseed(weak: &Weak<AppWindow>, state: &AppState, np_state: &Rc<NowPlayingStat
     let ly = &np_state.lyrics;
 
     let track = np_state.current_source.borrow().as_ref().and_then(|s| s.track.clone());
-    // **Both terms, and `open` is the one that is not obvious.** `shown` is the persisted panel
-    // preference rather than "the panel is mounted", so on its own it answers `true` for a closed
+    // **Both terms, and `open` is the one that is not obvious.** The switch is the persisted
+    // setting rather than "the panel is mounted", so on its own it answers `true` for a closed
     // view, and the square miniplayer keeps the source-change path running behind one. That would
     // spend a request per track on a panel nobody can see.
-    let wanted = np_state.open.get() && ui.global::<Lyrics>().get_shown();
+    let wanted = np_state.open.get() && library::lyrics::is_enabled(state);
     let Some(track) = track.filter(|_| wanted) else {
         // Closed, switched off, or a station, which has no words to look up. Either way the
         // previous song's sheet must not sit under it.
@@ -233,11 +233,7 @@ fn apply(
         LyricsOutcome::Absent => {
             clear(ui, ly);
             // The one state that names a setting, being the only one a reader can act on here.
-            global.set_state(if online_enabled {
-                LyricsState::Missing
-            } else {
-                LyricsState::Off
-            });
+            global.set_state(if online_enabled { LyricsState::Missing } else { LyricsState::Off });
         }
         // **The claim above is still recorded, deliberately.** Nothing retries on its own, so
         // without it every tick that reaches `reseed` would start another lookup against a service

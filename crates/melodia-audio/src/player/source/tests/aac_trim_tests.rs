@@ -97,13 +97,7 @@ fn the_walk_reads_the_edit_list_the_fixtures_carry() -> Result<(), AppError> {
 /// load-bearing as what it reads out of these.
 #[test]
 fn nothing_is_read_out_of_a_file_that_is_not_an_mp4() -> Result<(), AppError> {
-    for fixture in [
-        "silence.mp3",
-        "silence.flac",
-        "silence.aac",
-        "silence.ogg",
-        "silence.wav",
-    ] {
+    for fixture in ["silence.mp3", "silence.flac", "silence.aac", "silence.ogg", "silence.wav"] {
         let mut file = File::open(asset(fixture))?;
         assert!(edit_lists(&mut file).is_empty(), "{fixture}");
     }
@@ -201,16 +195,8 @@ fn an_implausible_priming_is_refused_rather_than_acted_on() {
 /// is empty so the edit list is what answers rather than an `iTunSMPB`.
 fn resolved(duration: Option<u64>, delay: u64, playable: Option<u64>) -> Option<super::Trim> {
     let rate = SampleRate::new(44_100)?;
-    let timing = super::Timing {
-        id: 1,
-        time_base: TimeBase::try_new(1, 44_100)?,
-        duration,
-    };
-    let edits = [super::Edit {
-        track_id: 1,
-        delay,
-        playable,
-    }];
+    let timing = super::Timing { id: 1, time_base: TimeBase::try_new(1, 44_100)?, duration };
+    let edits = [super::Edit { track_id: 1, delay, playable }];
     let mut log = MetadataLog::default();
     super::resolve(&timing, &log.metadata(), &edits, rate)
 }

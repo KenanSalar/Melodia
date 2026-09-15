@@ -34,10 +34,7 @@ impl GenreList {
         }
 
         let rendered = kept.join(GENRE_JOIN);
-        Self {
-            line: (!rendered.is_empty()).then_some(rendered),
-            names: kept,
-        }
+        Self { line: (!rendered.is_empty()).then_some(rendered), names: kept }
     }
 
     /// One typed name, which is what a plain text box means.

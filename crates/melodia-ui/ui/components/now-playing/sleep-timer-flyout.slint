@@ -14,18 +14,23 @@ component StepperButton inherits Rectangle {
     // `down == true` on press, `false` on release / cancel.
     callback pressed-changed(bool /*down*/);
 
+    // The bound's dimming, through the brushes rather than `opacity`, which would hold a texture for
+    // as long as the flyout sits at a bound.
+    private property <float> fade: root.at-bound ? 0.4 : 1.0;
+
     width: 26px;
     height: 26px;
     border-radius: self.height / 2;
     // The content views' darker page fill, lifting on hover.
-    background: touch.has-hover && !root.at-bound ? Theme.surface0 : Theme.base;
-    opacity: root.at-bound ? 0.4 : 1;
+    background: (touch.has-hover && !root.at-bound ? Theme.surface0 : Theme.base)
+        .transparentize(1.0 - root.fade);
     animate background { duration: Theme.dur-fast; easing: ease-in-out; }
 
     MaterialIcon {
         name: root.icon;
         icon-size: Theme.font-size-md;
         icon-color: Theme.text;
+        fade: root.fade;
     }
 
     touch := TouchArea {

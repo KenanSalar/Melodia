@@ -188,28 +188,19 @@ fn the_crash_block_cuts_a_report_from_the_backtrace_end() -> Result<(), AppError
 fn each_library_line_degrades_on_its_own() {
     let both = library_block(&LibraryFacts {
         tracks: Some(4211),
-        folders: Some(FolderCounts {
-            total: 3,
-            enabled: 2,
-        }),
+        folders: Some(FolderCounts { total: 3, enabled: 2 }),
     });
     assert!(both.contains("4211"), "lost the track count: {both}");
     assert!(both.contains("3 (2 enabled)"), "lost the folder counts: {both}");
 
-    let counted_tracks_only = library_block(&LibraryFacts {
-        tracks: Some(4211),
-        folders: None,
-    });
+    let counted_tracks_only = library_block(&LibraryFacts { tracks: Some(4211), folders: None });
     assert!(
         counted_tracks_only.contains("4211"),
         "a failed folder query took the track count with it: {counted_tracks_only}"
     );
     assert!(counted_tracks_only.contains("<unavailable>"));
 
-    let neither = library_block(&LibraryFacts {
-        tracks: None,
-        folders: None,
-    });
+    let neither = library_block(&LibraryFacts { tracks: None, folders: None });
     assert_eq!(neither.matches("<unavailable>").count(), 2);
 }
 
@@ -255,10 +246,7 @@ fn the_report_names_the_data_root_and_redacts_it() {
         return;
     };
     let paths = Paths::rooted_at(Path::new(&home).join("Melodia-dev"));
-    let facts = LibraryFacts {
-        tracks: None,
-        folders: None,
-    };
+    let facts = LibraryFacts { tracks: None, folders: None };
 
     let report = reading_env(|| assemble(&paths, &facts));
 
@@ -278,14 +266,7 @@ fn the_settings_block_is_an_allowlist() -> Result<(), AppError> {
 
     let block = reading_env(|| settings_block(&paths));
 
-    for expected in [
-        "theme",
-        "locale",
-        "titlebar",
-        "tray",
-        "crossfade",
-        "verbose",
-    ] {
+    for expected in ["theme", "locale", "titlebar", "tray", "crossfade", "verbose"] {
         assert!(block.contains(expected), "block is missing {expected:?}");
     }
     for forbidden in [

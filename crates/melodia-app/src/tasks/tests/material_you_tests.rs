@@ -163,11 +163,9 @@ async fn a_second_wake_over_the_same_state_publishes_nothing() -> Result<(), App
 /// A deck with nothing on it at all takes the same arm.
 #[tokio::test]
 async fn a_wake_with_nothing_to_generate_from_clears_the_palette() -> Result<(), AppError> {
-    for (theme_id, style, cover_retired) in [
-        ("mocha", STYLE, false),
-        ("material3", "none", false),
-        ("material3", STYLE, true),
-    ] {
+    for (theme_id, style, cover_retired) in
+        [("mocha", STYLE, false), ("material3", "none", false), ("material3", STYLE, true)]
+    {
         let mut coordinator = Coordinator::new("material3", STYLE, "dark", "dark")?;
         coordinator.tick().await;
         assert!(coordinator.look().is_some(), "arrange: a palette to lose");

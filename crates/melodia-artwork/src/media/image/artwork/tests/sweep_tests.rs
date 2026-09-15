@@ -84,15 +84,7 @@ fn a_referenced_file_survives_and_an_orphan_does_not() -> Result<(), AppError> {
     assert!(dir.join("33fb807d1f1b7cbb.jpg").exists(), "a referenced composite must survive");
     assert!(!dir.join("4cccaf4d4b4cea11.jpg").exists(), "an unreferenced file must go");
     assert!(dir.join("notes.txt").exists(), "a name we never wrote is not ours to delete");
-    assert_eq!(
-        report,
-        SweepReport {
-            deleted: 1,
-            bytes: 9,
-            kept: 1,
-            failed: 0,
-        }
-    );
+    assert_eq!(report, SweepReport { deleted: 1, bytes: 9, kept: 1, failed: 0 });
     Ok(())
 }
 

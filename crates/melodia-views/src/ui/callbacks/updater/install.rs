@@ -87,14 +87,9 @@ pub(super) fn spawn_install(
         )
         .await;
         let cached = match outcome {
-            Ok(CheckOutcome::Available {
-                manifest, asset, ..
-            }) => {
+            Ok(CheckOutcome::Available { manifest, asset, .. }) => {
                 asset_cache::store(manifest.version.clone(), asset.clone());
-                asset_cache::CachedAsset {
-                    version: manifest.version,
-                    asset,
-                }
+                asset_cache::CachedAsset { version: manifest.version, asset }
             }
             Ok(CheckOutcome::NotModified) => {
                 // 304 — no fresh asset blob in the response. Use
@@ -127,9 +122,7 @@ pub(super) fn spawn_install(
                 let reason = format!("manifest schema {schema} is newer than this binary supports");
                 log::warn!("updater: install rejected — {reason}");
                 paint_error(&weak, reason);
-                let _ = event_tx.send(Some(UpdaterEvent::Failed {
-                    kind: FailureKind::Other,
-                }));
+                let _ = event_tx.send(Some(UpdaterEvent::Failed { kind: FailureKind::Other }));
                 return;
             }
             Ok(CheckOutcome::NoAssetForTarget { .. }) => {
@@ -137,9 +130,7 @@ pub(super) fn spawn_install(
                 let reason = "no installable asset for this platform".to_owned();
                 log::warn!("updater: install rejected — {reason}");
                 paint_error(&weak, reason);
-                let _ = event_tx.send(Some(UpdaterEvent::Failed {
-                    kind: FailureKind::Other,
-                }));
+                let _ = event_tx.send(Some(UpdaterEvent::Failed { kind: FailureKind::Other }));
                 return;
             }
             Err(e) => {

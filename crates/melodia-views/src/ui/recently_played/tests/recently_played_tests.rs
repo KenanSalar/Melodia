@@ -24,12 +24,12 @@ fn block_body(src: &'static str, open: &str, close: &str) -> Option<&'static str
 
 /// The `TrackList { … }` property block in `views/recently-played/songs-tab.slint`.
 fn track_list_mount() -> Option<&'static str> {
-    block_body(SONGS_TAB, "tl := TrackList {", "\n        }")
+    block_body(SONGS_TAB, "tl := TrackList {", "\n    }")
 }
 
 /// The `TrackListHeader { … }` property block inside `TrackList`.
 fn header_mount() -> Option<&'static str> {
-    block_body(LIST, "TrackListHeader {", "\n            }")
+    block_body(LIST, "TrackListHeader {", "\n        }")
 }
 
 /// The `RecentlyPlayed` global's body.
@@ -92,11 +92,13 @@ fn the_sortable_flag_reaches_every_header_cell() {
         "TrackList must forward `sortable` to its TrackListHeader mount"
     );
 
-    let cells = HEADER.matches("HeaderCell {").count();
+    // The columns forward to their one cell, so the count is every column mount plus that cell.
+    let mounts = HEADER.matches("HeaderColumn {").count() + HEADER.matches("HeaderCell {").count();
     let forwards = HEADER.matches("sortable: root.sortable;").count();
     assert_eq!(
-        forwards, cells,
-        "every one of the {cells} HeaderCell mounts must pass `sortable: root.sortable;`"
+        forwards, mounts,
+        "every one of the {mounts} HeaderColumn and HeaderCell mounts must pass \
+         `sortable: root.sortable;`"
     );
 
     // The gate itself: `enabled: false` is what forces `has-hover` off and

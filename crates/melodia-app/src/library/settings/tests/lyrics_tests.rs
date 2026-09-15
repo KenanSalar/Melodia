@@ -4,9 +4,7 @@
 //! whose other two fields have the opposite default. A copy that landed the wrong one persists a
 //! switch the user never touched and reads as the toggle they did touch not sticking.
 
-use super::{
-    write_lyrics_online_enabled, write_lyrics_panel_shown, write_lyrics_romanization_shown,
-};
+use super::{write_lyrics_enabled, write_lyrics_online_enabled, write_lyrics_romanization_shown};
 use crate::services;
 use crate::state::fixtures::seeded_root;
 use melodia_core::error::AppError;
@@ -14,14 +12,14 @@ use melodia_core::error::AppError;
 /// The three switches as they sit on disk, in declaration order.
 fn stored(paths: &melodia_core::config::Paths) -> Result<(bool, bool, bool), AppError> {
     let lyrics = services::settings::read_settings(paths)?.lyrics;
-    Ok((lyrics.lyrics_panel_shown, lyrics.lyrics_online_enabled, lyrics.lyrics_romanization_shown))
+    Ok((lyrics.lyrics_enabled, lyrics.lyrics_online_enabled, lyrics.lyrics_romanization_shown))
 }
 
 #[test]
-fn showing_the_panel_leaves_the_other_two_alone() -> Result<(), AppError> {
+fn enabling_lyrics_leaves_the_other_two_alone() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root()?;
 
-    write_lyrics_panel_shown(&paths, true)?;
+    write_lyrics_enabled(&paths, true)?;
 
     assert_eq!(stored(&paths)?, (true, false, true));
     Ok(())

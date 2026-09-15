@@ -499,11 +499,7 @@ async fn a_delete_and_create_of_the_same_bytes_keeps_the_original_row() -> Resul
 
         let removed = FileEvent::Removed(old.clone());
         let created = FileEvent::Created(new.clone());
-        let events = if delete_first {
-            vec![removed, created]
-        } else {
-            vec![created, removed]
-        };
+        let events = if delete_first { vec![removed, created] } else { vec![created, removed] };
         process_batch(&db, &paths, &cover_cache, events).await?;
 
         assert_eq!(

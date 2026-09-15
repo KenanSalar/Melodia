@@ -202,11 +202,7 @@ fn display_codec(codec: &str, hls: bool) -> &str {
         .split(',')
         .next()
         .is_some_and(|audio| audio.is_empty() || audio.eq_ignore_ascii_case(UNKNOWN_CODEC));
-    if hls && audio_unidentified {
-        facets::SEGMENTED_CODEC_LABEL
-    } else {
-        codec
-    }
+    if hls && audio_unidentified { facets::SEGMENTED_CODEC_LABEL } else { codec }
 }
 
 /// The directory's comma-separated tag field as one display line.

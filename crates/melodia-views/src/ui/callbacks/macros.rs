@@ -126,8 +126,7 @@ macro_rules! wire_sync_pb {
 /// and a multi-select batch share one path.
 ///
 /// `captures:` lists the local bindings `after` needs, each cloned once into the callback
-/// and once per invocation. Search stays hand-rolled, being deliberately non-optimistic —
-/// a shape this doesn't model.
+/// and once per invocation.
 macro_rules! wire_row_flag {
     (
         $target:expr, $method:ident, $state:expr, $label:literal,

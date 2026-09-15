@@ -105,11 +105,7 @@ impl NowPlayingSource {
             SourceId::Track(id) => (SourceKey::Track(id), vm.current_track.clone()),
             SourceId::Station(stream_url) => (SourceKey::Station(stream_url.to_owned()), None),
         };
-        Some(Self {
-            key,
-            track,
-            artwork_path: source.artwork_path.map(str::to_owned),
-        })
+        Some(Self { key, track, artwork_path: source.artwork_path.map(str::to_owned) })
     }
 }
 

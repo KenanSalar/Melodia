@@ -10,7 +10,7 @@ use parking_lot::RwLock;
 use slint::{Brush, ComponentHandle, SharedString};
 
 use super::theme_apply::{accent_brushes, brush};
-use melodia_app::state::{AppState, Signal};
+use melodia_app::state::AppState;
 use melodia_core::themes::{self, MATERIAL_YOU_ACCENT_ID, SystemColorState, ThemeDef};
 use melodia_ui::{AppWindow, Settings};
 
@@ -100,7 +100,6 @@ pub(super) fn wire_accent_changed(
     ui: &AppWindow,
     state: &AppState,
     os_state: Arc<RwLock<SystemColorState>>,
-    _kick: Signal,
     persisted_accent: PersistedAccent,
 ) {
     let weak = ui.as_weak();
@@ -134,9 +133,7 @@ pub(super) fn wire_accent_changed(
         // — a sibling `wire_variant_changed` that fires before the disk
         // commit will then read the new accent (not the previous one).
         accent_id.clone_into(&mut persisted_accent.lock());
+        // No kick: the coordinator's snapshot doesn't include the accent.
         persist(&s, theme.id, variant_id, accent_id);
-        // Accent picks don't regenerate the M3 surfaces — kick is not
-        // strictly required, but cheap and keeps the coordinator's
-        // last-applied tracking honest.
     });
 }

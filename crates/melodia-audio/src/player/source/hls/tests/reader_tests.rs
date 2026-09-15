@@ -18,13 +18,8 @@ use super::*;
 /// it. Reachable because this module is a child of `reader`; nothing outside it can seat one.
 fn reader_over(depth: usize) -> (HlsReader, mpsc::Sender<Vec<u8>>) {
     let (sender, chunks) = mpsc::channel(depth);
-    let reader = HlsReader {
-        chunks,
-        held: Vec::new(),
-        offset: 0,
-        position: 0,
-        shared: StreamShared::new(),
-    };
+    let reader =
+        HlsReader { chunks, held: Vec::new(), offset: 0, position: 0, shared: StreamShared::new() };
     (reader, sender)
 }
 

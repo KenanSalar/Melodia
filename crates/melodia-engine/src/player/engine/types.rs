@@ -179,7 +179,7 @@ impl PlaybackSource {
     ///
     /// False for a station, whose queue is left seated underneath rather than played from: skipping
     /// into it would be a silent change of source, and a station going off air stops rather than
-    /// advancing. Shortwave, Tuner and `RadioDroid` all disable both transports for the same reason.
+    /// advancing.
     pub fn advances_queue(&self) -> bool {
         matches!(self, Self::Track(_))
     }

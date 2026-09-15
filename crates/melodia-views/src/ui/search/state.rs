@@ -45,10 +45,7 @@ impl SearchUiState {
             // `"rank"` is synthetic: the FTS5 query already orders by it, so the first
             // apply is a no-op. Any column field re-sorts in memory through
             // `track_sort::sort_track_rows_by`.
-            sort: Mutex::new(ViewSort {
-                field: "rank".to_owned(),
-                dir: SortDir::Asc,
-            }),
+            sort: Mutex::new(ViewSort { field: "rank".to_owned(), dir: SortDir::Asc }),
             applied_selection: Mutex::new(HashSet::new()),
         }
     }

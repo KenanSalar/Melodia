@@ -52,6 +52,48 @@ export struct TrackListRow {
     genre_id: int,
 }
 
+// One page's track list columns, and what `views.json` keeps of them. `w_number`, `w_year` and
+// `w_length` are pixels; the other four are weights, read against whatever room the list has.
+// `ui::track_columns` is the only reader of either meaning. Title and Length are always shown, and
+// `show_artwork` is the thumbnail inside the title cell rather than a column.
+export struct TrackColumns {
+    w_number: length,
+    w_title: length,
+    w_artist: length,
+    w_album: length,
+    w_genre: length,
+    w_year: length,
+    w_length: length,
+    show_number: bool,
+    show_artwork: bool,
+    show_artist: bool,
+    show_album: bool,
+    show_genre: bool,
+    show_year: bool,
+}
+
+// Where each column sits across one list width, for the header and every row to share. A hidden
+// column carries zeros.
+export struct TrackColumnLayout {
+    number_x: length,
+    number_w: length,
+    title_x: length,
+    title_w: length,
+    artist_x: length,
+    artist_w: length,
+    album_x: length,
+    album_w: length,
+    genre_x: length,
+    genre_w: length,
+    year_x: length,
+    year_w: length,
+    length_x: length,
+    length_w: length,
+}
+
+// The column whose right-edge divider is being dragged.
+export enum TrackColumn { number, title, artist, album, genre, year, length }
+
 // One album card in the grid, and the Album Detail header. **No `cover_img`**: the cover is pulled
 // per visible card through `request-cover(artwork_path, generation) -> image`, so only on-screen
 // `EntityCard`s ever lock `CoverThumbs`. Every entity row below shares that contract.

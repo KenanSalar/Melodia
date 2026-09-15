@@ -65,10 +65,8 @@ async fn single_track_edit_updates_row_and_preserves_stats() -> Result<(), AppEr
     let cover_cache = artwork::new_cover_cache();
     let self_writes = Arc::new(SelfWrites::default());
 
-    let edit = TagEdit {
-        album: FieldEdit::Set("Brand New Album".to_owned()),
-        ..TagEdit::default()
-    };
+    let edit =
+        TagEdit { album: FieldEdit::Set("Brand New Album".to_owned()), ..TagEdit::default() };
     let (report, updated) =
         write_tag_edit(&db, &artwork_dir, &cover_cache, &self_writes, &[id], &edit, None).await?;
 
@@ -112,10 +110,7 @@ async fn batch_edit_reports_failure_and_commits_the_rest() -> Result<(), AppErro
     let cover_cache = artwork::new_cover_cache();
     let self_writes = Arc::new(SelfWrites::default());
 
-    let edit = TagEdit {
-        title: FieldEdit::Set("Renamed".to_owned()),
-        ..TagEdit::default()
-    };
+    let edit = TagEdit { title: FieldEdit::Set("Renamed".to_owned()), ..TagEdit::default() };
     let (report, updated) = write_tag_edit(
         &db,
         &artwork_dir,
@@ -191,10 +186,8 @@ async fn set_genre(
     id: i64,
     genre: &str,
 ) -> Result<(String, i64), AppError> {
-    let edit = TagEdit {
-        genres: FieldEdit::Set(GenreList::from_name(genre)),
-        ..TagEdit::default()
-    };
+    let edit =
+        TagEdit { genres: FieldEdit::Set(GenreList::from_name(genre)), ..TagEdit::default() };
     write_tag_edit(db, artwork_dir, cover_cache, self_writes, &[id], &edit, None).await?;
 
     let row: (String, i64) = sqlx::query_as("SELECT genre, genre_id FROM tracks WHERE id = ?")
@@ -240,10 +233,7 @@ async fn a_rating_only_edit_sweeps_nothing_and_keeps_its_cover() -> Result<(), A
         .await?;
     sqlx::query("INSERT INTO genres (name) VALUES ('Stray Genre')").execute(db.write()).await?;
 
-    let edit = TagEdit {
-        rating: FieldEdit::Set(4),
-        ..TagEdit::default()
-    };
+    let edit = TagEdit { rating: FieldEdit::Set(4), ..TagEdit::default() };
     let (report, _) =
         write_tag_edit(&db, &artwork_dir, &cover_cache, &self_writes, &[id], &edit, None).await?;
     assert_eq!(report.updated, 1);
@@ -393,10 +383,7 @@ async fn a_tag_edit_leaves_the_row_describing_the_file_it_wrote() -> Result<(), 
 
     let artwork_dir = tmp.path().join("artwork");
     std::fs::create_dir(&artwork_dir)?;
-    let edit = TagEdit {
-        title: FieldEdit::Set("Rewritten".to_owned()),
-        ..TagEdit::default()
-    };
+    let edit = TagEdit { title: FieldEdit::Set("Rewritten".to_owned()), ..TagEdit::default() };
     write_tag_edit(
         &db,
         &artwork_dir,
@@ -423,10 +410,7 @@ async fn a_tag_edit_leaves_the_row_describing_the_file_it_wrote() -> Result<(), 
     // one of the three being stale permanent rather than self-correcting.
     let existing = HashMap::from([(
         path_str,
-        ExistingTrackSummary {
-            file_size: Some(size),
-            date_modified: Some(mtime),
-        },
+        ExistingTrackSummary { file_size: Some(size), date_modified: Some(mtime) },
     )]);
     assert!(track_is_current(&path, &existing), "the next scan must have nothing left to do");
     Ok(())
@@ -451,10 +435,7 @@ async fn removing_a_cover_with_no_fallback_nulls_the_row() -> Result<(), AppErro
 
     let artwork_dir = tmp.path().join("artwork");
     std::fs::create_dir(&artwork_dir)?;
-    let edit = TagEdit {
-        artwork: ArtworkEdit::Remove,
-        ..TagEdit::default()
-    };
+    let edit = TagEdit { artwork: ArtworkEdit::Remove, ..TagEdit::default() };
     let (report, _) = write_tag_edit(
         &db,
         &artwork_dir,
@@ -490,10 +471,7 @@ async fn removing_a_cover_falls_back_to_the_one_beside_the_file() -> Result<(), 
 
     let artwork_dir = tmp.path().join("artwork");
     std::fs::create_dir(&artwork_dir)?;
-    let edit = TagEdit {
-        artwork: ArtworkEdit::Remove,
-        ..TagEdit::default()
-    };
+    let edit = TagEdit { artwork: ArtworkEdit::Remove, ..TagEdit::default() };
     write_tag_edit(
         &db,
         &artwork_dir,
@@ -532,10 +510,7 @@ async fn a_replace_with_no_source_touches_no_file() -> Result<(), AppError> {
 
     let artwork_dir = tmp.path().join("artwork");
     std::fs::create_dir(&artwork_dir)?;
-    let edit = TagEdit {
-        artwork: ArtworkEdit::Replace,
-        ..TagEdit::default()
-    };
+    let edit = TagEdit { artwork: ArtworkEdit::Replace, ..TagEdit::default() };
     let result = write_tag_edit(
         &db,
         &artwork_dir,
@@ -569,10 +544,7 @@ async fn a_track_outside_every_library_folder_is_reported() -> Result<(), AppErr
 
     let artwork_dir = tmp.path().join("artwork");
     std::fs::create_dir(&artwork_dir)?;
-    let edit = TagEdit {
-        title: FieldEdit::Set("Nowhere".to_owned()),
-        ..TagEdit::default()
-    };
+    let edit = TagEdit { title: FieldEdit::Set("Nowhere".to_owned()), ..TagEdit::default() };
     let (report, updated) = write_tag_edit(
         &db,
         &artwork_dir,

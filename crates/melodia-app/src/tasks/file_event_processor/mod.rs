@@ -81,11 +81,7 @@ fn plan_batch(mut batch: Vec<FileEvent>, self_writes: &SelfWrites) -> BatchPlan 
         log::debug!("Suppressed {suppressed} watcher event(s) from our own tag writes");
     }
 
-    if batch.is_empty() {
-        BatchPlan::Nothing
-    } else {
-        BatchPlan::Process(batch)
-    }
+    if batch.is_empty() { BatchPlan::Nothing } else { BatchPlan::Process(batch) }
 }
 
 /// Spawn the file-event-processor on the shared task lifecycle so the main

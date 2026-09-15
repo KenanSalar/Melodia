@@ -136,11 +136,7 @@ fn ground_colour(source: &RgbaImage) -> Option<Rgb<u8>> {
         return Some(ring);
     }
     let luma = mark_luma(source)?;
-    Some(if luma > WHITE_GROUND_MAX_LUMA {
-        GROUND_DARK
-    } else {
-        GROUND_LIGHT
-    })
+    Some(if luma > WHITE_GROUND_MAX_LUMA { GROUND_DARK } else { GROUND_LIGHT })
 }
 
 /// The most common opaque colour around the source's outermost pixels, or `None` when too few of

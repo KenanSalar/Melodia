@@ -33,11 +33,7 @@ fn variant(url: &str, bandwidth: u64, has_video: bool) -> Variant {
     let Ok(url) = base().join(url) else {
         unreachable!("the fixture URLs are joinable against the fixture base");
     };
-    Variant {
-        url,
-        bandwidth,
-        has_video,
-    }
+    Variant { url, bandwidth, has_video }
 }
 
 const MEDIA_PLAYLIST: &str = "\
@@ -90,10 +86,7 @@ fn a_media_playlist_resolves_its_segments_against_its_own_address() -> Result<()
     let urls: Vec<&str> = playlist.segments.iter().map(Url::as_str).collect();
     assert_eq!(
         urls,
-        [
-            "https://example.invalid/live/seg-42.aac",
-            "https://example.invalid/live/seg-43.aac"
-        ],
+        ["https://example.invalid/live/seg-42.aac", "https://example.invalid/live/seg-43.aac"],
         "a relative segment name resolved against anything else reaches nothing"
     );
     Ok(())
@@ -318,10 +311,7 @@ fn the_pick_takes_the_richest_audio_rung_and_the_poorest_video_one() {
     );
 
     assert_eq!(
-        picked(vec![
-            variant("unstated.m3u8", 0, true),
-            variant("lo.m3u8", 400_000, true),
-        ]),
+        picked(vec![variant("unstated.m3u8", 0, true), variant("lo.m3u8", 400_000, true),]),
         "https://example.invalid/live/lo.m3u8",
         "`BANDWIDTH` is mandatory, so a rung reading zero named none and is not the cheapest"
     );

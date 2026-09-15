@@ -80,11 +80,7 @@ pub struct TracksUi {
 
 impl TracksUi {
     fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
-        Self {
-            cache: TrackListCache::new(),
-            cover_thumbs,
-            section: SectionState::new(),
-        }
+        Self { cache: TrackListCache::new(), cover_thumbs, section: SectionState::new() }
     }
 
     /// IDs of the rows that pass `filter`, in the current sort order.
@@ -168,9 +164,5 @@ pub(crate) fn format_duration_ms(ms: i64) -> String {
     let hours = secs_total / 3600;
     let mins = (secs_total / 60) % 60;
     let secs = secs_total % 60;
-    if hours > 0 {
-        format!("{hours}:{mins:02}:{secs:02}")
-    } else {
-        format!("{mins}:{secs:02}")
-    }
+    if hours > 0 { format!("{hours}:{mins:02}:{secs:02}") } else { format!("{mins}:{secs:02}") }
 }

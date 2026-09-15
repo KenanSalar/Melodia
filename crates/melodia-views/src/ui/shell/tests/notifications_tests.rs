@@ -155,6 +155,25 @@ fn the_cap_eviction_drops_the_evicted_rows_recipe() {
     assert!(!ui.recipes.borrow().contains_key(&ids[0]));
 }
 
+#[test]
+fn an_action_that_left_something_out_is_partial() {
+    assert_eq!(Completion::partial_if(true), Completion::Partial);
+    assert_eq!(Completion::partial_if(false), Completion::Complete);
+}
+
+/// The colour is the only thing telling an import that dropped a file apart from one that didn't,
+/// the two toasts sharing a title.
+#[test]
+fn a_whole_completion_toasts_success_and_a_partial_one_warns() {
+    let ui = make_ui();
+
+    ui.show_completion(Completion::Complete, "Imported".into(), "3 playlists".into());
+    ui.show_completion(Completion::Partial, "Imported".into(), "2 of 3 playlists".into());
+
+    let variants: Vec<String> = ui.rows.iter().map(|row| row.variant.to_string()).collect();
+    assert_eq!(variants, ["success", "warning"]);
+}
+
 /// A row pushed without a recipe — every `show_auto_dismiss` — must stay untouched by the
 /// relabel walk rather than being skipped into an empty string.
 #[test]

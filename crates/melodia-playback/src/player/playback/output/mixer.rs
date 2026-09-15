@@ -101,9 +101,7 @@ pub fn pair(voices: usize, device: Shape) -> (Mixer, MixerPull) {
 
     let width = usize::from(device.channels.get());
     (
-        Mixer {
-            voices: controls.into_boxed_slice(),
-        },
+        Mixer { voices: controls.into_boxed_slice() },
         MixerPull {
             voices: pulls.into_boxed_slice(),
             device,

@@ -130,11 +130,9 @@ fn the_multiline_placeholder_is_bounded_and_wraps() {
 #[test]
 fn the_search_bar_negotiates_its_width() {
     let src = normalized(SEARCH_BAR);
-    for constraint in [
-        "min-width: root.min-w;",
-        "preferred-width: input-width;",
-        "max-width: input-width;",
-    ] {
+    for constraint in
+        ["min-width: root.min-w;", "preferred-width: input-width;", "max-width: input-width;"]
+    {
         assert!(src.contains(constraint), "search-bar.slint's root is missing `{constraint}`");
     }
     // Leading space so this doesn't read the tail of `max-width: input-width;`.
@@ -247,6 +245,21 @@ fn the_tooltip_pill_is_capped() {
     assert!(
         src.contains("width: root.width - 16px; wrap: word-wrap;"),
         "tooltip.slint's label is no longer bounded and wrapped, so the cap would clip it"
+    );
+}
+
+/// A pill with a child under any opacity short of 1.0 renders into a layer of its own, so a
+/// tooltip that is only transparent held a texture per mount, every idle one in the tree. Hidden
+/// on `shown` alone, the fade-out never plays: the pill vanishes on the frame the hover ends.
+#[test]
+fn an_idle_tooltip_is_hidden_once_its_fade_out_lands() {
+    let src = normalized(&code(TOOLTIP));
+
+    let visible = binding_value(&src, "visible:").trim();
+
+    assert_eq!(
+        visible, r#"root.text != "" && (root.shown || root.force-shown || self.opacity > 0)"#,
+        "tooltip.slint's pill is no longer hidden between fades the way its fade-out allows"
     );
 }
 

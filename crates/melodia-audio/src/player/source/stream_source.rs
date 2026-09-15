@@ -245,11 +245,7 @@ pub fn prepared_stream_for_test(shape: Shape) -> (PreparedStream, std::sync::Wea
 pub async fn open(client: &reqwest::Client, url: &str) -> Result<PreparedStream, AppError> {
     let url = Url::parse(url).map_err(|e| AppError::network("Invalid station URL", e))?;
     let shared = StreamShared::new();
-    let Resolved {
-        opened,
-        url,
-        reopen,
-    } = connect_following_playlist(client, url, &shared).await?;
+    let Resolved { opened, url, reopen } = connect_following_playlist(client, url, &shared).await?;
 
     let (source, writer) = PrebufferSource::new(shared.clone(), opened.shape);
     spawn_feed(FeedContext {
@@ -297,11 +293,7 @@ async fn connect_following_playlist(
     let url = if is_playlist_url(&url) {
         match follow_playlist(client, &url, shared).await? {
             Followed::Segments(opened) => {
-                return Ok(Resolved {
-                    opened: *opened,
-                    url,
-                    reopen: Reopen::Segments,
-                });
+                return Ok(Resolved { opened: *opened, url, reopen: Reopen::Segments });
             }
             Followed::Mount(mount) => mount,
         }
@@ -310,25 +302,17 @@ async fn connect_following_playlist(
     };
 
     match connect(client, &url, shared).await? {
-        Opened::Audio(opened) => Ok(Resolved {
-            opened: *opened,
-            url,
-            reopen: Reopen::Mount,
-        }),
+        Opened::Audio(opened) => Ok(Resolved { opened: *opened, url, reopen: Reopen::Mount }),
         // An extensionless mount that turned out to be a pointer. Depth stays at one: what it
         // names is opened as audio or not at all.
         Opened::Playlist => match follow_playlist(client, &url, shared).await? {
-            Followed::Segments(opened) => Ok(Resolved {
-                opened: *opened,
-                url,
-                reopen: Reopen::Segments,
-            }),
+            Followed::Segments(opened) => {
+                Ok(Resolved { opened: *opened, url, reopen: Reopen::Segments })
+            }
             Followed::Mount(mount) => match connect(client, &mount, shared).await? {
-                Opened::Audio(opened) => Ok(Resolved {
-                    opened: *opened,
-                    url: mount,
-                    reopen: Reopen::Mount,
-                }),
+                Opened::Audio(opened) => {
+                    Ok(Resolved { opened: *opened, url: mount, reopen: Reopen::Mount })
+                }
                 Opened::Playlist => {
                     Err(AppError::network_msg("Station playlist points at another playlist"))
                 }
@@ -384,11 +368,7 @@ async fn open_segments(
     .await
     .map_err(AppError::io_source)??;
 
-    Ok(OpenedStream {
-        shape: decoder.shape(),
-        decoder,
-        facts,
-    })
+    Ok(OpenedStream { shape: decoder.shape(), decoder, facts })
 }
 
 /// Open one URL: response, ICY headers, bounded download buffer, metadata reader, decoder.
@@ -448,11 +428,7 @@ async fn connect(
     .await
     .map_err(AppError::io_source)??;
 
-    Ok(Opened::Audio(Box::new(OpenedStream {
-        shape: decoder.shape(),
-        decoder,
-        facts,
-    })))
+    Ok(Opened::Audio(Box::new(OpenedStream { shape: decoder.shape(), decoder, facts })))
 }
 
 /// A trimmed header value, or `None` where the server sent the field empty.
@@ -568,11 +544,8 @@ fn first_stream_url(body: &str) -> Option<String> {
         if line.is_empty() || line.starts_with('#') || line.starts_with('[') {
             continue;
         }
-        let readings = [
-            quoted_href(line),
-            line.split_once('=').map(|(_, value)| value.trim()),
-            Some(line),
-        ];
+        let readings =
+            [quoted_href(line), line.split_once('=').map(|(_, value)| value.trim()), Some(line)];
         if let Some(url) =
             readings.into_iter().flatten().find(|c| melodia_net::services::net::is_http_url(c))
         {

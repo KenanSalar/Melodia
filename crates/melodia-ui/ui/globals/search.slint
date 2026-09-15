@@ -1,4 +1,4 @@
-import { TrackListRow, EntityStripRow } from "../models.slint";
+import { TrackListRow, TrackColumns, EntityStripRow } from "../models.slint";
 
 // The Search view: a Top Result card, a Songs list (compact until "Show all"), Albums and Artists
 // strips, and a recent-searches chip list while the input is empty. FTS5 for tracks, `LIKE` for
@@ -48,20 +48,7 @@ export global Search {
     in-out property <[string]> recent-rows;
 
     // Its `TrackList`'s columns, under view id "search".
-    in-out property <length> w-number: 56px;
-    in-out property <length> w-title: 320px;
-    in-out property <length> w-artist: 200px;
-    in-out property <length> w-album: 220px;
-    in-out property <length> w-genre: 140px;
-    in-out property <length> w-year: 72px;
-    in-out property <length> w-length: 88px;
-
-    in-out property <bool> show-number: true;
-    in-out property <bool> show-artwork: true;
-    in-out property <bool> show-artist: true;
-    in-out property <bool> show-album: true;
-    in-out property <bool> show-genre: false;
-    in-out property <bool> show-year: false;
+    in-out property <TrackColumns> track-columns;
 
     in-out property <string> sort-field: "rank"; // FTS5 rank order
     in-out property <string> sort-dir: "asc";

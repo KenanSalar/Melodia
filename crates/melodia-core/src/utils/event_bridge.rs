@@ -20,9 +20,7 @@ pub struct EventBridge<E> {
 
 impl<E> EventBridge<E> {
     pub const fn new() -> Self {
-        Self {
-            sender: OnceLock::new(),
-        }
+        Self { sender: OnceLock::new() }
     }
 
     /// Claim the bridge and hand back the receiver to drain.

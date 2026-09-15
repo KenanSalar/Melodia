@@ -60,12 +60,7 @@ fn cover_url_fills_large_image_and_shows_play_badge() {
 
 #[test]
 fn paused_activity_json_omits_timestamps_and_shows_badge() {
-    let paused = Presence {
-        paused: true,
-        start_ts: None,
-        end_ts: None,
-        ..playing_card()
-    };
+    let paused = Presence { paused: true, start_ts: None, end_ts: None, ..playing_card() };
     let value = parse(&set_activity_json(&paused, 1, "1-1"));
     let activity = &value["args"]["activity"];
     assert_eq!(activity["type"], 2);

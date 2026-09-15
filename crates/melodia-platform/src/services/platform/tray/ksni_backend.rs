@@ -93,6 +93,8 @@ impl ksni::Tray for MelodiaTray {
 /// Dropping it shuts the SNI service down, removing the icon.
 pub struct LinuxTray {
     handle: ksni::blocking::Handle<MelodiaTray>,
+    /// The panel the icon was last painted for, so a recheck that finds it unchanged sets nothing.
+    on_light_panel: bool,
 }
 
 impl LinuxTray {
@@ -102,6 +104,17 @@ impl LinuxTray {
         self.handle.update(move |tray| {
             tray.snapshot = snapshot;
         });
+    }
+
+    /// Repaint the icon for the panel it sits on, if that changed since it was last painted.
+    pub fn set_on_light_panel(&mut self, on_light_panel: bool) {
+        if self.on_light_panel == on_light_panel {
+            return;
+        }
+        let icon = icon_for(on_light_panel);
+        if self.handle.update(move |tray| tray.icon = icon).is_some() {
+            self.on_light_panel = on_light_panel;
+        }
     }
 }
 
@@ -122,13 +135,13 @@ fn rgba_to_argb(mut rgba: Vec<u8>) -> Vec<u8> {
     rgba
 }
 
-/// Spawn the `StatusNotifierItem` service. Returns `None` when the session has
-/// no SNI host (vanilla GNOME) or no D-Bus — the app then runs without a tray.
-pub fn init(action_tx: mpsc::Sender<TrayAction>) -> Option<LinuxTray> {
-    use ksni::blocking::TrayMethods;
-
-    let icon = super::decode_icon()
-        .and_then(|(w, h, rgba)| {
+/// The embedded icon, painted for the panel it sits on. Empty if the asset won't decode.
+fn icon_for(on_light_panel: bool) -> Vec<Icon> {
+    super::decode_icon()
+        .and_then(|(w, h, mut rgba)| {
+            if on_light_panel {
+                super::light_taskbar::paint(&mut rgba, w, h);
+            }
             Some(Icon {
                 width: i32::try_from(w).ok()?,
                 height: i32::try_from(h).ok()?,
@@ -136,18 +149,21 @@ pub fn init(action_tx: mpsc::Sender<TrayAction>) -> Option<LinuxTray> {
             })
         })
         .map(|icon| vec![icon])
-        .unwrap_or_default();
+        .unwrap_or_default()
+}
 
-    let tray = MelodiaTray {
-        snapshot: TraySnapshot::default(),
-        icon,
-        action_tx,
-    };
+/// Spawn the `StatusNotifierItem` service. Returns `None` when the session has
+/// no SNI host (vanilla GNOME) or no D-Bus — the app then runs without a tray.
+pub fn init(action_tx: mpsc::Sender<TrayAction>, on_light_panel: bool) -> Option<LinuxTray> {
+    use ksni::blocking::TrayMethods;
+
+    let icon = icon_for(on_light_panel);
+    let tray = MelodiaTray { snapshot: TraySnapshot::default(), icon, action_tx };
 
     match tray.spawn() {
         Ok(handle) => {
             log::info!("System tray registered (StatusNotifierItem)");
-            Some(LinuxTray { handle })
+            Some(LinuxTray { handle, on_light_panel })
         }
         Err(e) => {
             log::info!(

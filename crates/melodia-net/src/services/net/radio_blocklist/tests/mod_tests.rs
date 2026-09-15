@@ -38,11 +38,7 @@ fn refused_at(refused: Option<ParseError>) -> Option<(usize, Refusal)> {
 }
 
 fn facet(name: &str, code: Option<&str>) -> Facet {
-    Facet {
-        name: name.to_owned(),
-        code: code.map(str::to_owned),
-        station_count: 1,
-    }
+    Facet { name: name.to_owned(), code: code.map(str::to_owned), station_count: 1 }
 }
 
 #[test]
@@ -76,19 +72,8 @@ fn two_keys_disagree_about_one_term() {
 fn case_and_whitespace_fold_away() -> Result<(), ParseError> {
     let list = blocklist("tag: classic rock\n")?;
 
-    for spelling in [
-        "classic rock",
-        "Classic Rock",
-        "  CLASSIC   rock  ",
-        "classic\trock",
-    ] {
-        assert!(
-            list.blocks_station(&StationTerms {
-                tags: spelling,
-                ..station()
-            }),
-            "{spelling}"
-        );
+    for spelling in ["classic rock", "Classic Rock", "  CLASSIC   rock  ", "classic\trock"] {
+        assert!(list.blocks_station(&StationTerms { tags: spelling, ..station() }), "{spelling}");
     }
     Ok(())
 }
@@ -100,35 +85,16 @@ fn each_exact_axis_blocks_its_own_field() -> Result<(), ParseError> {
          name: Some Station\nurl: http://example.invalid/s\ntag: polka\n",
     )?;
 
-    assert!(list.blocks_station(&StationTerms {
-        country_code: "XX",
-        ..station()
-    }));
-    assert!(list.blocks_station(&StationTerms {
-        language: "klingon",
-        ..station()
-    }));
-    assert!(list.blocks_station(&StationTerms {
-        codec: "WMA",
-        ..station()
-    }));
-    assert!(list.blocks_station(&StationTerms {
-        station_uuid: Some("abc-123"),
-        ..station()
-    }));
-    assert!(list.blocks_station(&StationTerms {
-        name: "Some Station",
-        ..station()
-    }));
-    assert!(list.blocks_station(&StationTerms {
-        stream_url: "http://example.invalid/s",
-        ..station()
-    }));
+    assert!(list.blocks_station(&StationTerms { country_code: "XX", ..station() }));
+    assert!(list.blocks_station(&StationTerms { language: "klingon", ..station() }));
+    assert!(list.blocks_station(&StationTerms { codec: "WMA", ..station() }));
+    assert!(list.blocks_station(&StationTerms { station_uuid: Some("abc-123"), ..station() }));
+    assert!(list.blocks_station(&StationTerms { name: "Some Station", ..station() }));
+    assert!(
+        list.blocks_station(&StationTerms { stream_url: "http://example.invalid/s", ..station() })
+    );
     // One tag among several, which is how the directory serves them.
-    assert!(list.blocks_station(&StationTerms {
-        tags: "jazz,polka,folk",
-        ..station()
-    }));
+    assert!(list.blocks_station(&StationTerms { tags: "jazz,polka,folk", ..station() }));
     Ok(())
 }
 
@@ -136,14 +102,8 @@ fn each_exact_axis_blocks_its_own_field() -> Result<(), ParseError> {
 fn an_exact_term_does_not_match_a_value_containing_it() -> Result<(), ParseError> {
     let list = blocklist("name: Some Station\ntag: rock\n")?;
 
-    assert!(!list.blocks_station(&StationTerms {
-        name: "Some Station 100.5 FM",
-        ..station()
-    }));
-    assert!(!list.blocks_station(&StationTerms {
-        tags: "classic rock",
-        ..station()
-    }));
+    assert!(!list.blocks_station(&StationTerms { name: "Some Station 100.5 FM", ..station() }));
+    assert!(!list.blocks_station(&StationTerms { tags: "classic rock", ..station() }));
     Ok(())
 }
 
@@ -171,12 +131,7 @@ fn the_other_curated_facets_match_on_their_name() -> Result<(), ParseError> {
 fn a_station_level_term_matches_no_facet() -> Result<(), ParseError> {
     let list = blocklist("name: polka\nurl: polka\nstation: polka\n")?;
 
-    for kind in [
-        FacetKind::Countries,
-        FacetKind::Languages,
-        FacetKind::Tags,
-        FacetKind::Codecs,
-    ] {
+    for kind in [FacetKind::Countries, FacetKind::Languages, FacetKind::Tags, FacetKind::Codecs] {
         assert!(!list.blocks_facet(kind, &facet("polka", Some("polka"))), "{kind:?}");
     }
     Ok(())
@@ -186,10 +141,7 @@ fn a_station_level_term_matches_no_facet() -> Result<(), ParseError> {
 fn a_build_with_no_source_blocks_nothing() -> Result<(), ParseError> {
     let list = blocklist("")?;
 
-    assert!(!list.blocks_station(&StationTerms {
-        tags: "anything",
-        ..station()
-    }));
+    assert!(!list.blocks_station(&StationTerms { tags: "anything", ..station() }));
     assert!(!list.blocks_facet(FacetKind::Tags, &facet("anything", None)));
     Ok(())
 }
@@ -222,19 +174,10 @@ fn parsing_leaves_every_list_sorted() -> Result<(), ParseError> {
 fn a_pattern_matches_wherever_it_sits() -> Result<(), ParseError> {
     let list = blocklist("tag-contains: polka\n")?;
 
-    for tags in [
-        "polka",
-        "polka rock",
-        "old polka",
-        "very old polka music",
-        "a,polka,b",
-    ] {
+    for tags in ["polka", "polka rock", "old polka", "very old polka music", "a,polka,b"] {
         assert!(list.blocks_station(&StationTerms { tags, ..station() }), "{tags}");
     }
-    assert!(!list.blocks_station(&StationTerms {
-        tags: "pol ka",
-        ..station()
-    }));
+    assert!(!list.blocks_station(&StationTerms { tags: "pol ka", ..station() }));
     Ok(())
 }
 
@@ -242,10 +185,7 @@ fn a_pattern_matches_wherever_it_sits() -> Result<(), ParseError> {
 fn a_pattern_folds_like_an_exact_term() -> Result<(), ParseError> {
     let list = blocklist("tag-contains: classic rock\n")?;
 
-    assert!(list.blocks_station(&StationTerms {
-        tags: "Best CLASSIC   ROCK ever",
-        ..station()
-    }));
+    assert!(list.blocks_station(&StationTerms { tags: "Best CLASSIC   ROCK ever", ..station() }));
     Ok(())
 }
 
@@ -255,14 +195,8 @@ fn a_pattern_walks_characters_rather_than_bytes() -> Result<(), ParseError> {
     // panic on a multi-byte value or silently compare the wrong window.
     let list = blocklist("tag-contains: über\n")?;
 
-    assert!(list.blocks_station(&StationTerms {
-        tags: "schöne über musik",
-        ..station()
-    }));
-    assert!(!list.blocks_station(&StationTerms {
-        tags: "uber musik",
-        ..station()
-    }));
+    assert!(list.blocks_station(&StationTerms { tags: "schöne über musik", ..station() }));
+    assert!(!list.blocks_station(&StationTerms { tags: "uber musik", ..station() }));
     Ok(())
 }
 
@@ -270,10 +204,7 @@ fn a_pattern_walks_characters_rather_than_bytes() -> Result<(), ParseError> {
 fn a_pattern_reaches_the_name_and_url_axes_too() -> Result<(), ParseError> {
     let list = blocklist("name-contains: polka\nurl-contains: badhost\n")?;
 
-    assert!(list.blocks_station(&StationTerms {
-        name: "The Polka Hour",
-        ..station()
-    }));
+    assert!(list.blocks_station(&StationTerms { name: "The Polka Hour", ..station() }));
     assert!(list.blocks_station(&StationTerms {
         stream_url: "http://badhost.invalid/stream",
         ..station()
@@ -334,14 +265,8 @@ fn a_malformed_line_is_refused_rather_than_skipped() {
 fn comments_and_blank_lines_carry_nothing() -> Result<(), ParseError> {
     let list = blocklist("# a note\n\n   \ntag: polka\n# another\n")?;
 
-    assert!(list.blocks_station(&StationTerms {
-        tags: "polka",
-        ..station()
-    }));
-    assert!(!list.blocks_station(&StationTerms {
-        tags: "a note",
-        ..station()
-    }));
+    assert!(list.blocks_station(&StationTerms { tags: "polka", ..station() }));
+    assert!(!list.blocks_station(&StationTerms { tags: "a note", ..station() }));
     Ok(())
 }
 
@@ -385,18 +310,9 @@ fn a_hashed_source_blocks_what_the_list_it_came_from_blocked() -> Result<(), Par
     let hashed = source::render_hashed(&source::parse_source(&source)?);
     let list = Blocklist::from_terms(source::parse_any(&hashed)?);
 
-    assert!(list.blocks_station(&StationTerms {
-        tags: "polka",
-        ..station()
-    }));
-    assert!(list.blocks_station(&StationTerms {
-        tags: "well something else",
-        ..station()
-    }));
-    assert!(!list.blocks_station(&StationTerms {
-        tags: "jazz",
-        ..station()
-    }));
+    assert!(list.blocks_station(&StationTerms { tags: "polka", ..station() }));
+    assert!(list.blocks_station(&StationTerms { tags: "well something else", ..station() }));
+    assert!(!list.blocks_station(&StationTerms { tags: "jazz", ..station() }));
     Ok(())
 }
 

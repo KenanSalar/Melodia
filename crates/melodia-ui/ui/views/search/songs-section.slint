@@ -5,13 +5,9 @@ import { ActionPill } from "../../components/action-pill.slint";
 import { SelectionPills } from "../../components/selection-pills.slint";
 import { ColumnTogglePopup } from "../../components/track-list/column-toggle-popup.slint";
 import { TrackList } from "../../components/track-list/track-list.slint";
-import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
 
 // The matching tracks: a heading row carrying the column-toggle pill, the list itself,
-// and the show-all toggle under it. No inputs — everything is on `Search`. The horizontal
-// scrollbar lives here rather than at the mount site because Slint can't read an id
-// declared inside an `if` from outside it, which is what makes a per-section file the
-// natural boundary.
+// and the show-all toggle under it. No inputs — everything is on `Search`.
 export component SongsSection inherits VerticalLayout {
     horizontal-stretch: 1;
     spacing: Theme.pad-sm;
@@ -36,12 +32,7 @@ export component SongsSection inherits VerticalLayout {
         // Favorites does — the user picked a query, so play expectations are per-row.
         if Search.tracks.length > 0: ActionPill {
             ColumnTogglePopup {
-                show-number  <=> Search.show-number;
-                show-artwork <=> Search.show-artwork;
-                show-artist  <=> Search.show-artist;
-                show-album   <=> Search.show-album;
-                show-genre   <=> Search.show-genre;
-                show-year    <=> Search.show-year;
+                columns <=> Search.track-columns;
                 toggled(id) => { Search.toggle-column(id); }
             }
             if Search.selected-ids.length > 0: SelectionPills {
@@ -54,11 +45,11 @@ export component SongsSection inherits VerticalLayout {
         }
     }
 
-    tl := TrackList {
+    TrackList {
         horizontal-stretch: 1;
         vertical-stretch: 0;
         // Sized to the row count so the outer scroller drives the strips and the list
-        // together; the floor keeps the column header rendering with zero rows.
+        // together.
         //
         // **Uncapped, unlike the composite views**, which pin this to the viewport so
         // their inner list keeps virtualizing. Here the *backend* is the cap — the query
@@ -67,29 +58,14 @@ export component SongsSection inherits VerticalLayout {
         // a nested `ListView` swallows the wheel at its scroll edge rather than bubbling,
         // which is why those views need `CompositeScrollbars` and this one doesn't.
         // **Raising that SQL limit is what would make the trade wrong.**
-        height: max(1, Search.tracks.length)
-            * (Search.show-artwork
-                ? Theme.row-h
-                : Theme.row-h-compact)
-            + 32px + Theme.pad-xs;
+        height: self.content-height;
+        // A column inside the page's own inset, beside the Top Result and under the page's
+        // scrollbar rather than one at its own edge.
+        inset-left: 0px;
+        inset-right: 0px;
 
         rows: Search.tracks;
-
-        w-number <=> Search.w-number;
-        w-title  <=> Search.w-title;
-        w-artist <=> Search.w-artist;
-        w-album  <=> Search.w-album;
-        w-genre  <=> Search.w-genre;
-        w-year   <=> Search.w-year;
-        w-length <=> Search.w-length;
-
-        show-number  <=> Search.show-number;
-        show-artwork <=> Search.show-artwork;
-        show-artist  <=> Search.show-artist;
-        show-album   <=> Search.show-album;
-        show-genre   <=> Search.show-genre;
-        show-year    <=> Search.show-year;
-        number-mode: "index";
+        columns <=> Search.track-columns;
 
         sort-field: Search.sort-field;
         sort-dir:   Search.sort-dir;
@@ -110,20 +86,6 @@ export component SongsSection inherits VerticalLayout {
         go-to-album(aid) => { Search.open-album(aid); }
         go-to-artist(aid) => { Search.open-artist(aid); }
         go-to-genre(gid) => { Search.go-to-genre(gid); }
-    }
-
-    // **Always mounted, with a fixed slot.** Gating its `if` on the overflow would close
-    // a binding loop — the `if` affects layout, which changes the list's width, which
-    // changes the visible width, which re-evaluates the `if`. The bar's own visibility
-    // gate already hides the thumb with nothing to scroll, leaving a transparent slot: a
-    // small visual cost for always-correct overflow access.
-    OverlayScrollbar {
-        horizontal: true;
-        height: Theme.scrollbar-slot;
-        visible-size: tl.h-visible-width;
-        content-size: tl.h-viewport-width;
-        offset: tl.h-offset;
-        scroll-to(o) => { tl.set-h-offset(o); }
     }
 
     // Mounted only when the backend returned more than the compact cap; Rust re-derives

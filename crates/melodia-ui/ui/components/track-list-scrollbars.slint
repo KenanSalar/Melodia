@@ -1,25 +1,22 @@
 import { Theme } from "../theme.slint";
 import { OverlayScrollbar } from "overlay-scrollbar.slint";
 
-// The vertical + horizontal `OverlayScrollbar` pair every plain `TrackList` page mounts;
-// `CompositeScrollbars` is the sibling for a list nested *under* another scroller.
+// The vertical `OverlayScrollbar` every plain `TrackList` page mounts; `CompositeScrollbars` is the
+// sibling for a list nested *under* another scroller. There is no horizontal bar: the columns
+// always fit the list.
 //
 // **Mount contract**, the same as `CompositeScrollbars`': last child of the view root at
 // `x: 0; y: 0; width: 100%; height: 100%`, so `parent` inside resolves to the page. Everything else
 // the host mirrors off its `TrackList`, Slint having no way to hand an element over.
 //
-// **`list-x` / `list-y` are the reason this is a component rather than a snippet** — the bar is
-// placed in the *page's* coordinates, and the six copies had drifted into two spellings, each right
-// only at its own nesting depth. The thickness comes off `Theme.scrollbar-slot` for the same
-// reason: it is a *pair*, the horizontal bar's width subtracting exactly the vertical bar's so the
-// two don't overlap in the corner, and the host's list reserves the same slot as a lane.
+// **`list-y` is the reason this is a component rather than a snippet** — the bar is placed in the
+// *page's* coordinates, and the six copies had drifted into two spellings, each right only at its
+// own nesting depth.
 export component TrackListScrollbars inherits Rectangle {
-    // The list's origin in the *page's* coordinates. Pass
-    // `tl.absolute-position.x - root.absolute-position.x` (and the `y` twin) — correct at
-    // every depth, unlike a bare `tl.x`.
-    in property <length> list-x;
+    // The list's top in the *page's* coordinates. Pass
+    // `tl.absolute-position.y - root.absolute-position.y` — correct at every depth, unlike a
+    // bare `tl.y`.
     in property <length> list-y;
-    in property <length> list-width;
 
     // The scrolling region inside the list, below its column headers.
     in property <length> body-y;
@@ -28,18 +25,11 @@ export component TrackListScrollbars inherits Rectangle {
     in property <length> v-visible-height;
     in property <length> v-viewport-height;
     in property <length> v-offset;
-    in property <length> h-visible-width;
-    in property <length> h-viewport-width;
-    in property <length> h-offset;
 
-    // The host forwards these to its list's own clamping setters. A callback rather than a
+    // The host forwards this to its list's own clamping setter. A callback rather than a
     // two-way binding for `OverlayScrollbar`'s documented reason — the sign flip blocks
     // `<=>`, and the host stays the source of truth.
     callback set-v-offset(length);
-    callback set-h-offset(length);
-
-    // Thickness of both bars, and the gutter each leaves the other in the corner.
-    private property <length> thickness: Theme.scrollbar-slot;
 
     OverlayScrollbar {
         horizontal: false;
@@ -47,23 +37,11 @@ export component TrackListScrollbars inherits Rectangle {
         // Aligned with the inner ListView, so the bar stays clear of the header band.
         // `body-y` carries that offset; the list's own origin makes it page-relative.
         y: root.list-y + root.body-y;
-        width: root.thickness;
+        width: Theme.scrollbar-slot;
         height: root.body-height;
         visible-size: root.v-visible-height;
         content-size: root.v-viewport-height;
         offset: root.v-offset;
         scroll-to(o) => { root.set-v-offset(o); }
-    }
-
-    OverlayScrollbar {
-        horizontal: true;
-        x: root.list-x;
-        y: parent.height - self.height;
-        width: root.list-width - root.thickness;
-        height: root.thickness;
-        visible-size: root.h-visible-width;
-        content-size: root.h-viewport-width;
-        offset: root.h-offset;
-        scroll-to(o) => { root.set-h-offset(o); }
     }
 }

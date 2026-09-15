@@ -497,6 +497,24 @@ msgstr "Pencere odağı kaybettiğinde kenar çubuğunu ve çalma çubuğunu iç
 msgid "Window Corner Radius"
 msgstr "Pencere Köşe Yarıçapı"
 
+msgid "Window Border"
+msgstr "Pencere Kenarlığı"
+
+msgid "Draw a thin outline around the miniplayer. The full window keeps the border of its system frame."
+msgstr "Mini oynatıcının etrafına ince bir kenarlık çizer. Tam pencere, sistem çerçevesinin kenarlığını korur."
+
+msgid "Draw a thin outline around the whole window, the miniplayer included."
+msgstr "Mini oynatıcı dahil tüm pencerenin etrafına ince bir kenarlık çizer."
+
+msgid "Window Border Color"
+msgstr "Pencere Kenarlığı Rengi"
+
+msgid "System follows the color the operating system draws its own window borders in."
+msgstr "Sistem, işletim sisteminin kendi pencere kenarlıklarını çizdiği rengi izler."
+
+msgid "Available only while the window border is shown."
+msgstr "Yalnızca pencere kenarlığı gösterilirken kullanılabilir."
+
 msgid "Managed by the operating system"
 msgstr "İşletim sistemi tarafından yönetilir"
 
@@ -1216,11 +1234,14 @@ msgstr ".m3u8 dosyalarından çalma listelerini içe aktar"
 msgid "Export playlists to .m3u8 files"
 msgstr "Çalma listelerini .m3u8 dosyalarına dışa aktar"
 
-msgid "Choose playlists to export, then pick a folder."
-msgstr "Dışa aktarılacak çalma listelerini seçin, ardından bir klasör belirleyin."
+msgid "Choose playlists to export."
+msgstr "Dışa aktarılacak çalma listelerini seçin."
 
 msgid "No playlists to export"
 msgstr "Dışa aktarılacak çalma listesi yok"
+
+msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
+msgstr "Birden fazla çalma listesi tek bir .zip dosyası olarak kaydedilir; bu dosyayı arşivden çıkarmadan doğrudan içe aktarabilirsiniz."
 
 msgid "Select all"
 msgstr "Tümünü seç"
@@ -1242,6 +1263,9 @@ msgstr "Dışa aktarma başarısız"
 
 msgid "Couldn't write the playlist files."
 msgstr "Çalma listesi dosyaları yazılamadı."
+
+msgid "These playlists are too large for one .zip file. Export fewer at a time."
+msgstr "Bu çalma listeleri tek bir .zip dosyası için çok büyük. Tek seferde daha azını dışa aktarın."
 
 msgid "Add"
 msgstr "Ekle"
@@ -1784,6 +1808,14 @@ msgstr "İnternet radyosu"
 msgid "Browse and play live stations from radio-browser.info"
 msgstr "radio-browser.info üzerindeki canlı istasyonlara göz at ve dinle"
 
+# The lyrics switch, which turns lyrics on in place of Up Next. Named on the Services card and
+# again as the tooltip of the Now Playing header's switch, so both read from this one label.
+msgid "Show lyrics"
+msgstr "Şarkı sözlerini göster"
+
+msgid "Show the playing track's words in Now Playing instead of Up Next"
+msgstr "“Şimdi Çalıyor” ekranında “Sıradaki” yerine çalan parçanın sözlerini göster"
+
 # The online-lyrics switch. Named in the Services card and again on the welcome card, so both
 # read from this one pair.
 msgid "Look up lyrics online"
@@ -2098,12 +2130,6 @@ msgstr "Bulunan sözleri ekle"
 # The Now Playing lyrics menu. "Look up again" forgets what the directory said about this
 # track and asks once more, for a sheet matched off tags that have since been corrected;
 # "Save to file" writes the sheet on screen into the track's own lyrics tag.
-msgid "Hide lyrics"
-msgstr "Şarkı sözlerini gizle"
-
-msgid "Show lyrics"
-msgstr "Şarkı sözlerini göster"
-
 msgid "Look up again"
 msgstr "Yeniden ara"
 

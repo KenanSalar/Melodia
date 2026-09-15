@@ -188,13 +188,7 @@ pub async fn open(
     );
 
     Ok(HlsStream {
-        reader: HlsReader {
-            chunks,
-            held: Vec::new(),
-            offset: 0,
-            position: 0,
-            shared,
-        },
+        reader: HlsReader { chunks, held: Vec::new(), offset: 0, position: 0, shared },
         codec,
         bitrate_kbps: resolved.bitrate_kbps,
     })
@@ -211,11 +205,7 @@ struct Resolved {
 async fn resolve(client: &reqwest::Client, url: &Url, body: &str) -> Result<Resolved, AppError> {
     let variants = match playlist::parse(body, url)? {
         Playlist::Media(playlist) => {
-            return Ok(Resolved {
-                media_url: url.clone(),
-                playlist,
-                bitrate_kbps: 0,
-            });
+            return Ok(Resolved { media_url: url.clone(), playlist, bitrate_kbps: 0 });
         }
         Playlist::Master(variants) => variants,
     };
@@ -224,11 +214,8 @@ async fn resolve(client: &reqwest::Client, url: &Url, body: &str) -> Result<Reso
         .ok_or_else(|| AppError::network_msg("Station playlist named no stream"))?;
     // A picture's bits ride in `BANDWIDTH` too, so a simulcast's rung states nothing about its
     // audio. Blank is what every surface already draws for a server that named no bitrate.
-    let bitrate_kbps = if variant.has_video {
-        0
-    } else {
-        i32::try_from(variant.bandwidth / 1_000).unwrap_or(0)
-    };
+    let bitrate_kbps =
+        if variant.has_video { 0 } else { i32::try_from(variant.bandwidth / 1_000).unwrap_or(0) };
     let body = fetch_manifest(client, &variant.url).await?;
     Ok(Resolved {
         playlist: media_playlist(&body, &variant.url)?,

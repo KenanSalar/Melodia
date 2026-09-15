@@ -1,5 +1,6 @@
 import { Theme } from "../../theme.slint";
 import { SettingsPage } from "../../globals/settings-page.slint";
+import { Wrap } from "../../globals/wrap.slint";
 
 // One pill in a `ChipGroup`. Unexported — it's useful nowhere else.
 component Chip inherits Rectangle {
@@ -36,8 +37,8 @@ component Chip inherits Rectangle {
 // Pill-chip selector. A click writes `selected-index` and emits `selected(idx)`.
 //
 // Slint 1.16 has no wrapping layout and no `Flow`, so the group lays itself out as a column of
-// rows: it decides how many chips fit on a line and `SettingsPage.chunk-indices` splits the options
-// into index groups of that size. Iterating real arrays both times is what keeps it simple — Slint
+// rows: it decides how many chips fit on a line and `Wrap.chunk-indices` splits the options into
+// index groups of that size. Iterating real arrays both times is what keeps it simple — Slint
 // rejects an inline `for … : if …`, and a wrapper around a filtered-out chip still claims spacing.
 export component ChipGroup inherits Rectangle {
     in property <[string]> options;
@@ -68,8 +69,7 @@ export component ChipGroup inherits Rectangle {
         }
     }
     property <length> chip-w: measure.preferred-width;
-    property <int> per-row:
-        SettingsPage.wrap-per-row(root.avail-width, root.chip-w, Theme.pad-sm);
+    property <int> per-row: Wrap.per-row(root.avail-width, root.chip-w, Theme.pad-sm);
 
     // Pinned rather than derived, and it is what makes the wrap worth anything:
     // left to the children it merges in the hidden ruler's width, so the widest
@@ -77,12 +77,12 @@ export component ChipGroup inherits Rectangle {
     // incompressibility this lays itself out to avoid.
     min-width: 0px;
     horizontal-stretch: 0;
-    height: SettingsPage.wrap-height(root.options.length, root.per-row, 32px, Theme.pad-sm);
+    height: Wrap.rows-height(root.options.length, root.per-row, 32px, Theme.pad-sm);
 
     VerticalLayout {
         spacing: Theme.pad-sm;
 
-        for row in SettingsPage.chunk-indices(root.options.length, root.per-row):
+        for row in Wrap.chunk-indices(root.options.length, root.per-row):
             HorizontalLayout {
                 spacing: Theme.pad-sm;
                 alignment: start;

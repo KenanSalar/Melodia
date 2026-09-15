@@ -44,11 +44,7 @@ fn the_middle_field_of_a_popm_triple_is_taken_as_stars() {
 /// star count — the `1..=MAX_STARS` filter is what says so.
 #[test]
 fn a_popm_triple_outside_the_strips_range_is_no_rating_at_all() {
-    for raw in [
-        "someone@example.org|0|0",
-        "someone@example.org|6|0",
-        "x|-1|0",
-    ] {
+    for raw in ["someone@example.org|0|0", "someone@example.org|6|0", "x|-1|0"] {
         assert_eq!(stars(raw), None, "{raw} names no star the strip can draw");
     }
 }

@@ -526,11 +526,7 @@ async fn get_favorite_stats_orders_artwork_by_play_count() -> Result<(), AppErro
     // duplicate paths to reach 4, `compose_cover` having a layout per count.
     assert_eq!(
         stats.artwork_paths,
-        vec![
-            "/art/beta.jpg".to_owned(),
-            "/art/gamma.jpg".to_owned(),
-            "/art/alpha.jpg".to_owned(),
-        ],
+        vec!["/art/beta.jpg".to_owned(), "/art/gamma.jpg".to_owned(), "/art/alpha.jpg".to_owned(),],
         "artwork_paths must be the distinct set in play_count DESC order"
     );
     Ok(())
@@ -1142,5 +1138,92 @@ async fn a_genres_tracks_are_its_own_in_natural_order() -> Result<(), AppError> 
     let rows = queries::track::get_tracks_by_genre_for_list(&db, genre_id).await?;
 
     assert_eq!(titles(&rows), ["Alpha", "Beta", "Gamma"]);
+    Ok(())
+}
+
+// --- add_play_counts / add_skip_counts ---
+
+const FLUSHED_AT: &str = "2026-09-14T12:00:00+00:00";
+
+async fn seeded_ids(db: &DbPool) -> Result<Vec<i64>, AppError> {
+    Ok(queries::track::get_all_tracks(db).await?.into_iter().map(|t| t.id).collect())
+}
+
+/// How many rows hold exactly `count` in the counter `column`.
+async fn rows_counted(db: &DbPool, column: &str, count: i64) -> Result<i64, AppError> {
+    let sql = format!("SELECT COUNT(*) FROM tracks WHERE {column} = ?");
+    Ok(sqlx::query_scalar(sqlx::AssertSqlSafe(sql)).bind(count).fetch_one(db.read()).await?)
+}
+
+/// Every track's play count and `last_played`, in insert order, which [`seed_db`] makes its sort
+/// order too.
+async fn play_stats(db: &DbPool) -> Result<Vec<(i32, Option<String>)>, AppError> {
+    Ok(sqlx::query_as("SELECT play_count, last_played FROM tracks ORDER BY id")
+        .fetch_all(db.read())
+        .await?)
+}
+
+/// One statement carries every row's own increment, so a bind landing on the wrong row hands one
+/// track another's plays.
+#[tokio::test]
+async fn each_track_in_a_play_batch_gets_its_own_increment() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let ids = seeded_ids(&db).await?;
+
+    queries::track::add_play_counts(&db, &[(ids[0], 1), (ids[1], 4), (ids[2], 2)], FLUSHED_AT)
+        .await?;
+
+    let counts: Vec<i32> = play_stats(&db).await?.into_iter().map(|(plays, _)| plays).collect();
+    assert_eq!(counts, [1, 4, 2]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_play_batch_stamps_last_played_on_the_tracks_it_names_and_no_other()
+-> Result<(), AppError> {
+    let db = seed_db().await?;
+    let ids = seeded_ids(&db).await?;
+
+    queries::track::add_play_counts(&db, &[(ids[0], 1), (ids[2], 1)], FLUSHED_AT).await?;
+
+    let stamps: Vec<Option<String>> =
+        play_stats(&db).await?.into_iter().map(|(_, stamp)| stamp).collect();
+    assert_eq!(stamps, [Some(FLUSHED_AT.to_owned()), None, Some(FLUSHED_AT.to_owned())]);
+    Ok(())
+}
+
+/// A track deleted between a play and the flush is still in the batch.
+#[tokio::test]
+async fn a_batch_naming_a_track_the_library_lacks_still_counts_the_rest() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let ids = seeded_ids(&db).await?;
+
+    queries::track::add_skip_counts(&db, &[(9_999, 1), (ids[0], 2)]).await?;
+
+    assert_eq!(queries::track::get_track_by_id(&db, ids[0]).await?.skip_count, 2);
+    Ok(())
+}
+
+/// A play batch holds one row fewer per statement than a skip batch, its `last_played` stamp
+/// taking a bind of its own, so the two split at different sizes.
+#[tokio::test]
+async fn a_play_batch_one_row_past_a_statement_counts_every_track() -> Result<(), AppError> {
+    let (db, ids) = numbered_library(333).await?;
+    let increments: Vec<(i64, u32)> = ids.iter().map(|&id| (id, 1)).collect();
+
+    queries::track::add_play_counts(&db, &increments, FLUSHED_AT).await?;
+
+    assert_eq!(rows_counted(&db, "play_count", 1).await?, 333);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_skip_batch_one_row_past_a_statement_counts_every_track() -> Result<(), AppError> {
+    let (db, ids) = numbered_library(334).await?;
+    let increments: Vec<(i64, u32)> = ids.iter().map(|&id| (id, 1)).collect();
+
+    queries::track::add_skip_counts(&db, &increments).await?;
+
+    assert_eq!(rows_counted(&db, "skip_count", 1).await?, 334);
     Ok(())
 }

@@ -53,11 +53,8 @@ pub(super) fn spawn_up_next_subscriber(
             let ids_changed = *np_state.rendered_ids.borrow() != new_ids;
             // Before the rebuild overwrites them: needed only on a track change, to
             // look up the row that fell off the bottom for the outgoing overlay.
-            let old_rendered_ids: Vec<i64> = if track_changed {
-                np_state.rendered_ids.borrow().clone()
-            } else {
-                Vec::new()
-            };
+            let old_rendered_ids: Vec<i64> =
+                if track_changed { np_state.rendered_ids.borrow().clone() } else { Vec::new() };
             if ids_changed || track_changed {
                 let ids = rebuild_up_next(&ui, &up_next_model, &qvm);
                 *np_state.rendered_ids.borrow_mut() = ids;
@@ -136,15 +133,17 @@ pub(super) fn wire_now_playing_open(
             // The sheet and its offset table, which are the whole of what the lyrics panel
             // pinned: the model is the larger half and there is no reason to hold a closed
             // view's words. The store's own bounds are checked here for the same reason the
-            // radio logo cache checks its own on a section leave — this view is the only thing
-            // that writes to it, so its close is when it stops growing.
+            // radio logo cache checks its own on a section leave — this view, with lyrics on, is
+            // the only thing that writes to it, so its close is when it stops growing.
             if let Some(ui) = weak.upgrade() {
                 super::lyrics::release(&ui, &np_state.lyrics);
             }
-            melodia_app::tasks::lyrics_cache::spawn(
-                &melodia_app::tasks::TaskSpawner::from_state(&state),
-                &state,
-            );
+            if melodia_app::library::lyrics::is_enabled(&state) {
+                melodia_app::tasks::lyrics_cache::spawn(
+                    &melodia_app::tasks::TaskSpawner::from_state(&state),
+                    &state,
+                );
+            }
 
             // Drop the decoded cover and blur buffers and hand the pages back. The
             // displayed track's stay alive, the `Player` global still referencing its

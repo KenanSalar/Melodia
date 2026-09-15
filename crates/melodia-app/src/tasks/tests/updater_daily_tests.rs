@@ -66,23 +66,14 @@ fn backoff_delay_for_caps_at_seven_days() {
 
 #[test]
 fn nothing_skipped_means_nothing_muted() {
-    assert_eq!(
-        skip_verdict("", "0.3.0", false),
-        SkipVerdict {
-            notify: true,
-            clear_skip: false
-        }
-    );
+    assert_eq!(skip_verdict("", "0.3.0", false), SkipVerdict { notify: true, clear_skip: false });
 }
 
 #[test]
 fn a_skip_naming_this_very_version_mutes_it() {
     assert_eq!(
         skip_verdict("0.3.0", "0.3.0", false),
-        SkipVerdict {
-            notify: false,
-            clear_skip: false
-        }
+        SkipVerdict { notify: false, clear_skip: false }
     );
 }
 
@@ -92,10 +83,7 @@ fn a_skip_naming_this_very_version_mutes_it() {
 fn a_strictly_newer_version_clears_the_skip_and_notifies() {
     assert_eq!(
         skip_verdict("0.3.0", "0.4.0", false),
-        SkipVerdict {
-            notify: true,
-            clear_skip: true
-        }
+        SkipVerdict { notify: true, clear_skip: true }
     );
 }
 
@@ -105,10 +93,7 @@ fn a_strictly_newer_version_clears_the_skip_and_notifies() {
 fn a_critical_release_surfaces_through_a_matching_skip() {
     assert_eq!(
         skip_verdict("0.3.0", "0.3.0", true),
-        SkipVerdict {
-            notify: true,
-            clear_skip: false
-        }
+        SkipVerdict { notify: true, clear_skip: false }
     );
 }
 
@@ -119,10 +104,7 @@ fn a_skip_that_is_not_semver_clears_rather_than_muting_forever() {
     for stored in ["v0.3.0", "latest", "0.3"] {
         assert_eq!(
             skip_verdict(stored, "0.4.0", false),
-            SkipVerdict {
-                notify: true,
-                clear_skip: true
-            },
+            SkipVerdict { notify: true, clear_skip: true },
             "{stored:?} must not be able to mute notifications permanently"
         );
     }

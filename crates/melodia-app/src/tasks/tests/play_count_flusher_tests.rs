@@ -167,11 +167,7 @@ async fn the_shutdown_drain_writes_what_never_reached_the_map() -> Result<(), Ap
     let stats = Signal::new();
     let (tx, rx) = mpsc::unbounded_channel();
 
-    for event in [
-        PlayCountEvent::Play(id),
-        PlayCountEvent::Play(id),
-        PlayCountEvent::Skip(id),
-    ] {
+    for event in [PlayCountEvent::Play(id), PlayCountEvent::Play(id), PlayCountEvent::Skip(id)] {
         assert!(tx.send(event).is_ok(), "the receiver is alive until `run` takes it");
     }
 

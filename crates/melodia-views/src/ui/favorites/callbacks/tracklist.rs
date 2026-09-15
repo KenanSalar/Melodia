@@ -6,10 +6,10 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString};
 
-use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
+use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
 use crate::ui::callbacks::{collect_track_ids, next_sort, persist_view_sort, play_row_start};
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
-use crate::ui::track_list_view::{TrackListColumnState, view_id};
+use crate::ui::track_list_view::{self, view_id};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Favorites};
@@ -144,17 +144,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
         let weak = weak.clone();
         g.on_toggle_column(move |_id| {
             let Some(ui) = weak.upgrade() else { return };
-            let columns = ui.global::<Favorites>().snapshot_visible();
-            let s_disk = s.clone();
-            spawn_blocking_logged!(
-                s,
-                "favorites::toggle_column",
-                library::settings::update_view_columns(
-                    &s_disk,
-                    view_id::FAVORITES.to_owned(),
-                    columns
-                )
-            );
+            track_list_view::persist_visible(&s, &ui.global::<Favorites>());
         });
     }
     // select-row / clear-selection — modifier-aware selection with

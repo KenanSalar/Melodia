@@ -42,10 +42,7 @@ impl ArtistCredit {
     #[must_use]
     pub fn new(artists: Vec<CreditedArtist>) -> Self {
         let rendered = render(&artists);
-        Self {
-            line: (!rendered.is_empty()).then_some(rendered),
-            artists,
-        }
+        Self { line: (!rendered.is_empty()).then_some(rendered), artists }
     }
 
     /// The credit as printed, for the `artist` column and everything reading it.
@@ -121,10 +118,7 @@ fn credits_from(display: &str, names: &[String]) -> Vec<CreditedArtist> {
     if names.is_empty() {
         return match display.trim() {
             "" => Vec::new(),
-            name => vec![CreditedArtist {
-                name: name.to_owned(),
-                join_phrase: String::new(),
-            }],
+            name => vec![CreditedArtist { name: name.to_owned(), join_phrase: String::new() }],
         };
     }
     derive_phrases(display, names)
@@ -148,10 +142,7 @@ fn derive_phrases(display: &str, names: &[String]) -> Option<Vec<CreditedArtist>
             rest = tail;
             phrase.to_owned()
         };
-        credits.push(CreditedArtist {
-            name: name.clone(),
-            join_phrase,
-        });
+        credits.push(CreditedArtist { name: name.clone(), join_phrase });
     }
     Some(credits)
 }

@@ -10,12 +10,8 @@ use super::{
 };
 use melodia_core::entities::radio::{DEFAULT_PAGE_LIMIT, FacetKind, SearchOrder, StationSearch};
 
-const EVERY_FACET: [FacetKind; 4] = [
-    FacetKind::Countries,
-    FacetKind::Languages,
-    FacetKind::Tags,
-    FacetKind::Codecs,
-];
+const EVERY_FACET: [FacetKind; 4] =
+    [FacetKind::Countries, FacetKind::Languages, FacetKind::Tags, FacetKind::Codecs];
 
 fn get<'a>(params: &'a BTreeMap<&'static str, String>, key: &str) -> Option<&'a str> {
     params.get(key).map(String::as_str)
@@ -26,10 +22,7 @@ fn get<'a>(params: &'a BTreeMap<&'static str, String>, key: &str) -> Option<&'a 
 /// page of stations under the floor.
 #[test]
 fn the_minimum_bitrate_filter_is_camel_case() {
-    let search = StationSearch {
-        bitrate_min: 320,
-        ..StationSearch::default()
-    };
+    let search = StationSearch { bitrate_min: 320, ..StationSearch::default() };
     let params = search_params(&search);
 
     assert_eq!(get(&params, "bitrateMin"), Some("320"));
@@ -51,10 +44,7 @@ fn every_search_sends_a_limit() {
     let fallback = DEFAULT_PAGE_LIMIT.to_string();
     assert_eq!(get(&search_params(&StationSearch::default()), "limit"), Some(fallback.as_str()));
 
-    let paged = StationSearch {
-        limit: 25,
-        ..StationSearch::default()
-    };
+    let paged = StationSearch { limit: 25, ..StationSearch::default() };
     assert_eq!(get(&search_params(&paged), "limit"), Some("25"));
 }
 
@@ -76,10 +66,7 @@ fn several_tags_become_one_comma_joined_parameter() {
 /// working.
 #[test]
 fn a_single_tag_uses_the_same_parameter_as_several() {
-    let search = StationSearch {
-        tags: vec!["jazz".to_owned()],
-        ..StationSearch::default()
-    };
+    let search = StationSearch { tags: vec!["jazz".to_owned()], ..StationSearch::default() };
     assert_eq!(get(&search_params(&search), "tagList"), Some("jazz"));
 }
 
@@ -137,14 +124,7 @@ fn the_language_filter_is_keyed_by_name_and_the_country_one_by_code() {
 #[test]
 fn blank_filters_are_omitted_rather_than_sent_empty() {
     let params = search_params(&StationSearch::default());
-    for key in [
-        "name",
-        "countrycode",
-        "language",
-        "codec",
-        "tagList",
-        "offset",
-    ] {
+    for key in ["name", "countrycode", "language", "codec", "tagList", "offset"] {
         assert!(!params.contains_key(key), "{key} should be absent from an empty search");
     }
 }
@@ -213,11 +193,7 @@ fn the_tag_list_is_capped_looser_than_the_curated_ones() {
     assert_eq!(get(&facet_params(FacetKind::Tags), "limit"), Some(whole_tail.as_str()));
 
     let whole = FACET_LIMIT.to_string();
-    for kind in [
-        FacetKind::Countries,
-        FacetKind::Languages,
-        FacetKind::Codecs,
-    ] {
+    for kind in [FacetKind::Countries, FacetKind::Languages, FacetKind::Codecs] {
         assert_eq!(get(&facet_params(kind), "limit"), Some(whole.as_str()), "{kind:?}");
     }
 }
@@ -246,11 +222,7 @@ fn facet_paths_are_bare_segments() {
 #[test]
 fn a_facet_list_is_called_cut_short_from_its_own_ceiling_up() {
     let curated = FACET_LIMIT as usize;
-    for kind in [
-        FacetKind::Countries,
-        FacetKind::Languages,
-        FacetKind::Codecs,
-    ] {
+    for kind in [FacetKind::Countries, FacetKind::Languages, FacetKind::Codecs] {
         assert!(!facet_list_is_capped(kind, curated - 1), "{kind:?} one short of its ceiling");
         assert!(facet_list_is_capped(kind, curated), "{kind:?} sitting on its ceiling");
         assert!(facet_list_is_capped(kind, curated + 1), "{kind:?} past its ceiling");

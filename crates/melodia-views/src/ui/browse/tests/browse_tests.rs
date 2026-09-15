@@ -117,10 +117,7 @@ fn setting_the_path_directly_leaves_the_stack_alone() {
 /// the Browse page is dimmed and swallows every click, which is the page not working at all.
 #[test]
 fn a_file_the_library_knows_is_interactive_and_keeps_its_id() {
-    let file = BrowseFile {
-        row: library_row(42),
-        in_library: true,
-    };
+    let file = BrowseFile { row: library_row(42), in_library: true };
 
     let row = to_slint_browse_track_row(&file);
 
@@ -136,10 +133,7 @@ fn a_file_the_library_knows_is_interactive_and_keeps_its_id() {
 /// track, and the write lands on whatever row id 0 resolves to or on nothing at all.
 #[test]
 fn a_file_the_library_does_not_know_is_sparse_and_inert() {
-    let file = BrowseFile {
-        row: library_row(42),
-        in_library: false,
-    };
+    let file = BrowseFile { row: library_row(42), in_library: false };
 
     let row = to_slint_browse_track_row(&file);
 
@@ -153,10 +147,7 @@ fn a_file_the_library_does_not_know_is_sparse_and_inert() {
 /// any of them would state something about a track the library has never seen.
 #[test]
 fn a_sparse_row_states_nothing_it_cannot_know() {
-    let file = BrowseFile {
-        row: library_row(42),
-        in_library: false,
-    };
+    let file = BrowseFile { row: library_row(42), in_library: false };
 
     let row = to_slint_browse_track_row(&file);
 

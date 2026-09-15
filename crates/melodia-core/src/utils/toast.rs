@@ -74,10 +74,7 @@ pub fn init() -> Option<UnboundedReceiver<ToastRequest>> {
 /// Returns nothing, unlike its sibling in `tasks::play_count_flusher`: a failure worth toasting
 /// has no second way to reach the user, so there is nothing for a caller to branch on.
 pub fn notify(kind: ToastKind, detail: impl Into<String>) {
-    BRIDGE.send(ToastRequest {
-        kind,
-        detail: detail.into(),
-    });
+    BRIDGE.send(ToastRequest { kind, detail: detail.into() });
 }
 
 #[cfg(test)]

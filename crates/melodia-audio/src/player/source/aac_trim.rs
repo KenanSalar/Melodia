@@ -270,11 +270,7 @@ fn read_header(file: &mut File, pos: u64, end: u64) -> Option<BoxHeader> {
     let box_end = pos.checked_add(size)?;
     // The two bounds keep the walk moving forward and inside its parent, so a size field of the
     // file's own choosing can neither loop it nor send it reading past the end.
-    (box_end <= end && payload <= box_end).then_some(BoxHeader {
-        kind,
-        payload,
-        end: box_end,
-    })
+    (box_end <= end && payload <= box_end).then_some(BoxHeader { kind, payload, end: box_end })
 }
 
 /// The edit `trak` states, paired with the track it identifies itself as.
@@ -312,11 +308,7 @@ fn trak_edit(
         .zip(media_timescale)
         .and_then(|(movie, media)| exact_media_ticks(first.segment_duration, movie, media));
 
-    Some(Edit {
-        track_id: track_id?,
-        delay: first.media_time,
-        playable,
-    })
+    Some(Edit { track_id: track_id?, delay: first.media_time, playable })
 }
 
 /// Restates a movie-timescale count in media ticks, or `None` where the conversion would round.
@@ -394,10 +386,7 @@ fn first_edit(file: &mut File, elst: &BoxHeader) -> Option<ElstEntry> {
         } else {
             (u64::from(be_u32(&buf, at)?), i64::from(be_i32(&buf, at + 4)?))
         };
-        Some(ElstEntry {
-            media_time: u64::try_from(media_time).ok()?,
-            segment_duration,
-        })
+        Some(ElstEntry { media_time: u64::try_from(media_time).ok()?, segment_duration })
     })
 }
 

@@ -255,11 +255,7 @@ impl PlaybackEngine {
         // this same lock, so a preload that landed during the decode is visible
         // here. Downgrading to a hard cut is always safe — it clears both decks,
         // staged source included.
-        let fade_ms = if self.gapless_pending.load(Ordering::Acquire) {
-            0
-        } else {
-            fade_ms
-        };
+        let fade_ms = if self.gapless_pending.load(Ordering::Acquire) { 0 } else { fade_ms };
         // The deck primitives hand this closure the *target* deck under the one
         // lock they append through, so the ramp cell the source carries always
         // belongs to the deck it lands on. `EqSource::new` does no I/O, so
@@ -461,11 +457,7 @@ impl PlaybackEngine {
             // Armed unconditionally, not gated on the setting: a faded pause
             // leaves the deck holding silence and the setting may have been
             // turned off in between. A zero-length ramp snaps back to unity.
-            let ramp = if self.xf.fade_on_pause() {
-                crossfade::PAUSE_FADE_MS
-            } else {
-                0
-            };
+            let ramp = if self.xf.fade_on_pause() { crossfade::PAUSE_FADE_MS } else { 0 };
             decks.active().fade.arm(None, 1.0, ramp, false);
         }
     }

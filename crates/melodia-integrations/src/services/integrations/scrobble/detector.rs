@@ -92,9 +92,7 @@ impl DetectorState {
         // then begin the incoming.
         let mut effects = self.end_current(false);
         self.begin_play(incoming_id, incoming_duration, now_ts, 0);
-        effects.push(Effect::NowPlaying {
-            track_id: incoming_id,
-        });
+        effects.push(Effect::NowPlaying { track_id: incoming_id });
         effects
     }
 
@@ -113,10 +111,7 @@ impl DetectorState {
         if tick.position_ms <= RESTART_EPSILON_MS && self.last_position_ms >= RESTART_MIN_MS {
             let mut effects = Vec::new();
             if self.qualified() {
-                effects.push(Effect::Scrobble {
-                    track_id: id,
-                    timestamp: self.started_at,
-                });
+                effects.push(Effect::Scrobble { track_id: id, timestamp: self.started_at });
             }
             let duration = self.current_duration_ms;
             self.begin_play(id, duration, now_ts, tick.position_ms);
@@ -146,15 +141,9 @@ impl DetectorState {
         {
             let timestamp = self.started_at;
             effects.push(if terminal {
-                Effect::Finalize {
-                    track_id: id,
-                    timestamp,
-                }
+                Effect::Finalize { track_id: id, timestamp }
             } else {
-                Effect::Scrobble {
-                    track_id: id,
-                    timestamp,
-                }
+                Effect::Scrobble { track_id: id, timestamp }
             });
         }
         self.current_id = None;

@@ -2,12 +2,13 @@ use std::sync::Arc;
 
 use crate::services::{
     self,
-    settings::{TitlebarButtonSide, TitlebarButtonStyle},
+    settings::{TitlebarButtonSide, TitlebarButtonStyle, WindowBorder},
 };
 use crate::state::AppState;
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 use melodia_platform::services::platform::always_on_top::AlwaysOnTopMethod;
+use melodia_platform::services::platform::desktop;
 
 /// Apply the user's pinned choice and persist it. On Linux this drops
 /// into the `KWin` / GNOME D-Bus backends via
@@ -29,6 +30,17 @@ async fn apply_then_persist(
 ) -> Result<(), AppError> {
     melodia_platform::services::platform::always_on_top::apply(method, &paths.data_dir, pinned)
         .await?;
+    persist_always_on_top(paths, pinned).await
+}
+
+/// Persist a pin the window manager changed on its own, `KWin`'s keep-above titlebar button among
+/// them, so a launch restores the last choice wherever it was made. There is nothing to apply: the
+/// window already carries it.
+pub async fn record_always_on_top(state: &AppState, pinned: bool) -> Result<(), AppError> {
+    persist_always_on_top(&state.paths, pinned).await
+}
+
+async fn persist_always_on_top(paths: &Arc<Paths>, pinned: bool) -> Result<(), AppError> {
     let paths = Arc::clone(paths);
     tokio::task::spawn_blocking(move || {
         services::settings::mutate_settings(&paths, |s| {
@@ -36,13 +48,12 @@ async fn apply_then_persist(
         })
     })
     .await
-    .map_err(|e| AppError::Settings(format!("set_always_on_top join: {e}")))?
+    .map_err(|e| AppError::Settings(format!("persist always_on_top join: {e}")))?
 }
 
-/// Persist the user's titlebar choice. Slint reads `Window.no-frame` once
-/// at first show, so this only commits the new value to disk — the
-/// caller (`window_chrome::on_restart_app`) respawns the binary so the
-/// next process picks up the new setting at construction time.
+/// Persist the user's titlebar choice. This only commits the new value to disk; the
+/// caller (`window_chrome::on_restart_app`) respawns the binary, and the next process
+/// hydrates it before first show.
 ///
 /// On KDE, enabling the native titlebar also turns on
 /// `match_unfocused_to_system_bg` in the same write: the unfocused-tint
@@ -57,7 +68,7 @@ async fn apply_then_persist(
 /// in custom-titlebar mode while the persisted value survives for the
 /// next time the native titlebar is enabled.
 pub fn set_use_native_titlebar(state: &AppState, on: bool) -> Result<(), AppError> {
-    write_use_native_titlebar(&state.paths, on, services::settings::is_kde_desktop())
+    write_use_native_titlebar(&state.paths, on, desktop::is_kde_desktop())
 }
 
 /// [`set_use_native_titlebar`]'s body, with the desktop probe passed in rather than read: the
@@ -85,8 +96,8 @@ pub fn set_close_to_tray(state: &AppState, on: bool) -> Result<(), AppError> {
     })
 }
 
-/// Persist the user toggle for "System Tray Icon". When `false` (the
-/// default) `main.rs` skips `ui::shell::tray_bridge::install` at startup, so the
+/// Persist the user toggle for "System Tray Icon". When `false`
+/// `main.rs` skips `ui::shell::tray_bridge::install` at startup, so the
 /// tray subsystem — D-Bus connection, service thread, action tasks — never
 /// runs. The toggle is restart-gated through the `restart-tray` `Dialog`
 /// flow, so this write commits just before the process respawns and the new
@@ -97,7 +108,7 @@ pub fn set_tray_enabled(state: &AppState, on: bool) -> Result<(), AppError> {
     })
 }
 
-/// Persist the user toggle for "Aurora Backdrop". When `false` (the default) the
+/// Persist the user toggle for "Aurora Backdrop". When `false` the
 /// artwork-derived surfaces blur the cover behind them, and the two artwork tiers build a
 /// blurred half per decode; when `true` they wash the cover's own colours over `Theme.base`
 /// and no blur is built at all. Restart-gated through the `restart-backdrop` `Dialog` flow —
@@ -133,6 +144,22 @@ pub fn set_titlebar_button_side(
 ) -> Result<(), AppError> {
     services::settings::mutate_settings(&state.paths, move |s| {
         s.window.titlebar_button_side = side;
+    })
+}
+
+/// Persist whether the frameless window draws its outline. The Slint switch has already flipped
+/// `Settings.window-border-shown`, which the outline reads directly, so this only commits it.
+pub fn set_window_border(state: &AppState, border: WindowBorder) -> Result<(), AppError> {
+    services::settings::mutate_settings(&state.paths, move |s| {
+        s.window.window_border = border;
+    })
+}
+
+/// Persist the outline's colour: `WINDOW_BORDER_SYSTEM_COLOR`, or an accent id of the active
+/// theme. The UI callback has already painted the pick, so this only commits it.
+pub fn set_window_border_color(state: &AppState, color_id: String) -> Result<(), AppError> {
+    services::settings::mutate_settings(&state.paths, move |s| {
+        s.window.window_border_color = color_id;
     })
 }
 

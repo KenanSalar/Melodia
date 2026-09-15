@@ -17,6 +17,7 @@
 
 use super::*;
 use melodia_app::services::settings::{DEFAULT_VIZ_STYLE, VisualizerFlags};
+use melodia_playback::player::playback::visualizer::VisualizerShared;
 
 const PLAYBACK_SECTION: &str =
     include_str!("../../../../../melodia-ui/ui/views/settings/playback-section.slint");
@@ -120,25 +121,33 @@ fn the_resting_figure_is_what_a_decayed_trace_settles_to() {
 }
 
 #[test]
-fn resting_bars_put_every_band_back_where_the_model_was_seeded() {
-    // Rest is the seed `install_visualizer` builds the model with, the strip flooring
-    // each band at a dot. Its own literal rather than shared with `rest_bars`, so the
-    // two can actually disagree.
-    const SEEDED_LEVEL: f32 = 0.0;
+fn resting_bars_stand_at_their_floor_rather_than_collapsing() {
+    use melodia_playback::player::playback::spectrum::write_bar_path;
 
-    let model = VecModel::from(vec![SEEDED_LEVEL; NUM_BANDS]);
-    for band in 0..NUM_BANDS {
-        model.set_row_data(band, 0.9);
-    }
-    rest_bars(&model);
+    // Rest is every band at zero, and the floor is the only thing between that and a strip
+    // that draws nothing at all. It is also the one term needing a measured strip, so what
+    // has to hold is that a measured rest says something a sizeless one doesn't.
+    const MEASURED: StripGeometry =
+        StripGeometry { x: 0.0, y: 0.0, width: 600.0, height: 56.0, scale: 1.0 };
+    const UNMEASURED: StripGeometry =
+        StripGeometry { x: 0.0, y: 0.0, width: 0.0, height: 0.0, scale: 1.0 };
+    let rest = [0.0_f32; NUM_BANDS];
 
-    // Bit patterns rather than `==`: an exact-restore claim, and the crate denies a
-    // loose float comparison anyway. Reported as the first band that strayed — sixty-four
-    // levels side by side say nothing on failure.
-    let strayed =
-        model.iter().enumerate().find(|(_, level)| level.to_bits() != SEEDED_LEVEL.to_bits());
-    assert!(strayed.is_none(), "band left off the seed: {strayed:?}");
-    assert_eq!(model.row_count(), NUM_BANDS, "resting resized the model");
+    let mut measured = String::new();
+    write_bar_path(&rest, MEASURED, BarAnchor::Baseline, &mut measured);
+    let mut unmeasured = String::new();
+    write_bar_path(&rest, UNMEASURED, BarAnchor::Baseline, &mut unmeasured);
+
+    // One closed rectangle per band, so a band can't quietly drop out of the figure.
+    assert_eq!(
+        measured.matches('Z').count(),
+        NUM_BANDS,
+        "a band went missing from the resting figure"
+    );
+    assert_ne!(
+        measured, unmeasured,
+        "the resting bars no longer floor against the strip, so a silent strip draws nothing"
+    );
 }
 
 #[test]
@@ -153,18 +162,65 @@ fn the_strip_branches_on_a_key_the_table_knows() {
         STRIP.contains(&format!("Visualizer.style != \"{STYLE_WAVEFORM}\"")),
         "the strip lost its fallback branch"
     );
-    // Mirrored has no component of its own, riding the catch-all branch and only
-    // flipping the bars' anchor — so what has to hold is the whole binding, not the key
-    // appearing somewhere in the file. Both ends, the two files drifting independently.
+    // Mirrored has no component of its own, riding the catch-all branch and only flipping
+    // the anchor Rust writes the figure against. The key reaches that decision through
+    // `STYLES`, so a reordered table repoints it with nothing failing to compile.
     assert!(STYLES.contains(&STYLE_MIRRORED));
-    assert!(
-        STRIP.contains(&format!("centred: Visualizer.style == \"{STYLE_MIRRORED}\"")),
-        "the strip no longer anchors the bars off STYLE_MIRRORED"
+    assert_eq!(
+        bar_anchor(style_index(STYLE_MIRRORED)),
+        BarAnchor::Centre,
+        "STYLE_MIRRORED no longer resolves to the centred anchor"
     );
-    assert!(
-        SPECTRUM_BARS.contains("in property <bool> centred;"),
-        "SpectrumBars no longer takes the anchor flag the strip sets"
+    assert_eq!(
+        bar_anchor(style_index(STYLE_BARS)),
+        BarAnchor::Baseline,
+        "STYLE_BARS no longer resolves to the baseline anchor"
     );
+    // The figure is one path now, so the anchor never crosses into Slint and the strip must
+    // not grow a second opinion about it. The needle is the declaration rather than the word,
+    // which prose in the file is free to use.
+    assert!(
+        !SPECTRUM_BARS.contains("property <bool> centred"),
+        "SpectrumBars is taking an anchor flag again; the anchor is `bar_anchor`'s"
+    );
+}
+
+#[test]
+fn every_index_but_mirrored_grows_its_bars_from_the_baseline() {
+    // Bars is the catch-all, so an index past the table draws the default figure rather than
+    // nothing.
+    for index in [style_index(STYLE_BARS), style_index(STYLE_WAVEFORM), STYLES.len(), usize::MAX] {
+        assert_eq!(bar_anchor(index), BarAnchor::Baseline, "index {index}");
+    }
+}
+
+#[test]
+fn the_trace_is_laid_out_against_the_strips_width_alone() {
+    // The frame takes the whole strip since the bars need all of it, and the trace's columns
+    // follow the width. Any other term leaking in would re-lay the trace on a move or a
+    // monitor change that left the width alone.
+    let viz = VisualizerShared::new(false);
+    let narrow = StripGeometry { x: 0.0, y: 0.0, width: 240.0, height: 56.0, scale: 1.0 };
+    let moved = StripGeometry { x: 31.5, y: 412.25, width: 240.0, height: 128.0, scale: 2.0 };
+
+    let mut at_origin = String::new();
+    frame::waveform(
+        &viz,
+        &mut WaveformAnalyzer::new(RING_CAP, MAX_COLUMNS),
+        &mut at_origin,
+        0,
+        narrow,
+    );
+    let mut elsewhere = String::new();
+    frame::waveform(
+        &viz,
+        &mut WaveformAnalyzer::new(RING_CAP, MAX_COLUMNS),
+        &mut elsewhere,
+        0,
+        moved,
+    );
+
+    assert_eq!(at_origin, elsewhere);
 }
 
 #[test]
@@ -209,10 +265,7 @@ fn a_dormant_strip_polls_rather_than_running_at_frame_rate() {
 
 /// A watch that has never seen a frame, so a test controls the whole count.
 fn watch() -> FrameWatch {
-    FrameWatch {
-        last: 0,
-        stalled_ticks: 0,
-    }
+    FrameWatch { last: 0, stalled_ticks: 0 }
 }
 
 #[test]

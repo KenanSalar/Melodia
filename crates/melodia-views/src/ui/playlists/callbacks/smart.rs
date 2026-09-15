@@ -93,10 +93,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         let weak = weak.clone();
         se.on_set_rule_value(move |row, text| {
             let Some(ui) = weak.upgrade() else { return };
-            patch_rule_row(&ui, row, |old| SmartRuleRow {
-                value_text: text,
-                ..old
-            });
+            patch_rule_row(&ui, row, |old| SmartRuleRow { value_text: text, ..old });
         });
     }
 
@@ -151,12 +148,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let Some(draft) = collect_criteria(&ui) else {
                 return;
             };
-            let CriteriaDraft {
-                name,
-                description,
-                criteria,
-                target_id,
-            } = draft;
+            let CriteriaDraft { name, description, criteria, target_id } = draft;
 
             let s = state.clone();
             let pu = playlists_ui.clone();
@@ -203,11 +195,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
 
 /// Run `f` against the installed `VecModel<SmartRuleRow>` if present.
 fn with_rules_model<R>(ui: &AppWindow, f: impl FnOnce(&VecModel<SmartRuleRow>) -> R) -> Option<R> {
-    ui.global::<SmartEditor>()
-        .get_rules()
-        .as_any()
-        .downcast_ref::<VecModel<SmartRuleRow>>()
-        .map(f)
+    ui.global::<SmartEditor>().get_rules().as_any().downcast_ref::<VecModel<SmartRuleRow>>().map(f)
 }
 
 /// Patch the rule row at editor index `row` through `f`, if it exists. The
@@ -279,11 +267,7 @@ fn op_at(value_type: sc::ValueType, index: i32) -> sc::RuleOp {
 /// Keep the old value text when the input kind is unchanged; clear it otherwise
 /// (the remounted input then reads an empty value).
 fn keep_or_clear(new_kind: i32, old_kind: i32, old_text: &SharedString) -> SharedString {
-    if new_kind == old_kind {
-        old_text.clone()
-    } else {
-        SharedString::default()
-    }
+    if new_kind == old_kind { old_text.clone() } else { SharedString::default() }
 }
 
 /// Build an editor row from a stored rule.

@@ -28,12 +28,8 @@ use melodia_testkit::{MIN_SLINT_SOURCES, UI_DIR, stripped_sources};
 #[test]
 fn every_multi_caller_dialog_opens_through_its_own_function() {
     const OWNER: &str = "globals/dialog.slint";
-    const FOLDED_KINDS: [&str; 4] = [
-        "create-playlist",
-        "rename-playlist",
-        "delete-playlist",
-        "edit-tags",
-    ];
+    const FOLDED_KINDS: [&str; 4] =
+        ["create-playlist", "rename-playlist", "delete-playlist", "edit-tags"];
 
     let sources = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES);
     let owner =

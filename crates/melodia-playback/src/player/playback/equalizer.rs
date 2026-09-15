@@ -32,9 +32,8 @@ use melodia_audio::player::source::audio::{
 pub const NUM_BANDS: usize = 10;
 
 /// ISO octave centre frequencies (Hz) for the ten bands, low → high.
-pub const BAND_FREQS: [f32; NUM_BANDS] = [
-    31.0, 62.0, 125.0, 250.0, 500.0, 1_000.0, 2_000.0, 4_000.0, 8_000.0, 16_000.0,
-];
+pub const BAND_FREQS: [f32; NUM_BANDS] =
+    [31.0, 62.0, 125.0, 250.0, 500.0, 1_000.0, 2_000.0, 4_000.0, 8_000.0, 16_000.0];
 
 /// Per-band gain range, in decibels.
 pub const MIN_GAIN_DB: f32 = -12.0;
@@ -76,42 +75,15 @@ pub struct EqPreset {
 /// Built-in presets. `Flat` (index 0) is the neutral default; the UI appends a
 /// synthetic "Custom" entry after these for hand-tuned curves.
 pub const PRESETS: [EqPreset; 9] = [
-    EqPreset {
-        name: "Flat",
-        gains: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-    },
-    EqPreset {
-        name: "Rock",
-        gains: [4.0, 3.0, 2.0, 0.0, -1.0, -1.0, 1.0, 3.0, 4.0, 4.0],
-    },
-    EqPreset {
-        name: "Pop",
-        gains: [-1.0, 0.0, 1.0, 2.0, 3.0, 3.0, 2.0, 1.0, 0.0, -1.0],
-    },
-    EqPreset {
-        name: "Jazz",
-        gains: [3.0, 2.0, 1.0, 2.0, -1.0, -1.0, 0.0, 1.0, 2.0, 3.0],
-    },
-    EqPreset {
-        name: "Classical",
-        gains: [4.0, 3.0, 2.0, 1.0, -1.0, -1.0, 0.0, 2.0, 3.0, 4.0],
-    },
-    EqPreset {
-        name: "Bass Boost",
-        gains: [6.0, 5.0, 4.0, 2.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-    },
-    EqPreset {
-        name: "Treble Boost",
-        gains: [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 4.0, 5.0, 6.0],
-    },
-    EqPreset {
-        name: "Vocal",
-        gains: [-2.0, -1.0, 0.0, 2.0, 4.0, 4.0, 3.0, 1.0, 0.0, -1.0],
-    },
-    EqPreset {
-        name: "Electronic",
-        gains: [5.0, 4.0, 1.0, 0.0, -2.0, 1.0, 0.0, 1.0, 3.0, 5.0],
-    },
+    EqPreset { name: "Flat", gains: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] },
+    EqPreset { name: "Rock", gains: [4.0, 3.0, 2.0, 0.0, -1.0, -1.0, 1.0, 3.0, 4.0, 4.0] },
+    EqPreset { name: "Pop", gains: [-1.0, 0.0, 1.0, 2.0, 3.0, 3.0, 2.0, 1.0, 0.0, -1.0] },
+    EqPreset { name: "Jazz", gains: [3.0, 2.0, 1.0, 2.0, -1.0, -1.0, 0.0, 1.0, 2.0, 3.0] },
+    EqPreset { name: "Classical", gains: [4.0, 3.0, 2.0, 1.0, -1.0, -1.0, 0.0, 2.0, 3.0, 4.0] },
+    EqPreset { name: "Bass Boost", gains: [6.0, 5.0, 4.0, 2.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0] },
+    EqPreset { name: "Treble Boost", gains: [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 4.0, 5.0, 6.0] },
+    EqPreset { name: "Vocal", gains: [-2.0, -1.0, 0.0, 2.0, 4.0, 4.0, 3.0, 1.0, 0.0, -1.0] },
+    EqPreset { name: "Electronic", gains: [5.0, 4.0, 1.0, 0.0, -2.0, 1.0, 0.0, 1.0, 3.0, 5.0] },
 ];
 
 /// Number of built-in presets — also the index of the UI's synthetic "Custom"
@@ -129,21 +101,13 @@ pub const CUSTOM_PRESET: &str = "Custom";
 /// Clamp a single band gain into the supported range.
 #[must_use]
 pub fn clamp_gain(db: f32) -> f32 {
-    if db.is_nan() {
-        0.0
-    } else {
-        db.clamp(MIN_GAIN_DB, MAX_GAIN_DB)
-    }
+    if db.is_nan() { 0.0 } else { db.clamp(MIN_GAIN_DB, MAX_GAIN_DB) }
 }
 
 /// Clamp the preamp into the supported range.
 #[must_use]
 pub fn clamp_preamp(db: f32) -> f32 {
-    if db.is_nan() {
-        0.0
-    } else {
-        db.clamp(MIN_PREAMP_DB, MAX_PREAMP_DB)
-    }
+    if db.is_nan() { 0.0 } else { db.clamp(MIN_PREAMP_DB, MAX_PREAMP_DB) }
 }
 
 /// Coerce an arbitrary (possibly hand-edited / wrong-length) gain list into a
@@ -241,23 +205,13 @@ impl EqShared {
 /// Passthrough coefficients, only to construct the banks — [`EqSource::rebuild`]
 /// overwrites a band before it is ever run.
 fn identity_coeffs() -> Coefficients<f32> {
-    Coefficients {
-        a1: 0.0,
-        a2: 0.0,
-        b0: 1.0,
-        b1: 0.0,
-        b2: 0.0,
-    }
+    Coefficients { a1: 0.0, a2: 0.0, b0: 1.0, b1: 0.0, b2: 0.0 }
 }
 
 /// One-pole smoothing coefficient for a time constant at a given update rate:
 /// the smoothed value moves `(1 - coeff)` of the way to its target each update.
 fn smoothing_coeff(time_s: f32, rate: f32) -> f32 {
-    if rate > 0.0 && time_s > 0.0 {
-        (-1.0 / (time_s * rate)).exp()
-    } else {
-        0.0
-    }
+    if rate > 0.0 && time_s > 0.0 { (-1.0 / (time_s * rate)).exp() } else { 0.0 }
 }
 
 /// Soft-knee feed-forward peak limiter: one gain per frame from the frame's
@@ -322,11 +276,7 @@ impl Limiter {
     /// level rises, slow release as it falls.
     fn process(&mut self, peak: f32) -> f32 {
         let target = self.target_gain(peak);
-        let coeff = if target < self.gain {
-            self.attack_coeff
-        } else {
-            self.release_coeff
-        };
+        let coeff = if target < self.gain { self.attack_coeff } else { self.release_coeff };
         self.gain = coeff.mul_add(self.gain, (1.0 - coeff) * target);
         self.gain
     }

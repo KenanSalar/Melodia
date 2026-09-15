@@ -7,12 +7,12 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString};
 
-use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
+use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
 use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::callbacks::{next_sort, persist_view_sort};
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
 use crate::ui::my_library::return_to_section;
-use crate::ui::track_list_view::{TrackListColumnState, view_id};
+use crate::ui::track_list_view::{self, view_id};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, GenreDetail};
@@ -207,17 +207,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
         let weak = weak.clone();
         detail.on_toggle_column(move |_id| {
             let Some(ui) = weak.upgrade() else { return };
-            let columns = ui.global::<GenreDetail>().snapshot_visible();
-            let s = s.clone();
-            spawn_blocking_logged!(
-                s,
-                "genres::toggle_column",
-                library::settings::update_view_columns(
-                    &s,
-                    view_id::GENRE_DETAIL.to_owned(),
-                    columns
-                )
-            );
+            track_list_view::persist_visible(&s, &ui.global::<GenreDetail>());
         });
     }
 

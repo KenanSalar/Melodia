@@ -1,6 +1,8 @@
-//! The Import pill: native multi-file picker → import each file into a new
-//! playlist → refresh the grid → summary toast.
+//! The Import pill: native multi-file picker → import each playlist file, or
+//! each playlist in an archive, into a new playlist → refresh the grid →
+//! summary toast.
 
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -9,11 +11,9 @@ use slint::ComponentHandle;
 
 use crate::ui::file_dialog;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
-use crate::ui::shell::notifications::{
-    NotificationParams, NotificationsUi, RowText, TOAST_AUTO_DISMISS_MS,
-};
+use crate::ui::shell::notifications::{Completion, NotificationsUi, RowText};
 use crate::ui::util::count_as_i32;
-use melodia_app::library;
+use melodia_app::library::playlist_files::{self, ImportFileResult};
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Playlists, Settings};
 
@@ -35,8 +35,14 @@ pub(super) fn wire(
         let weak = weak.clone();
         let notifications = notifications.clone();
         let _ = slint::spawn_local(Compat::new(async move {
+            // One filter rather than two, which a picker offers as alternatives and so hides
+            // whichever isn't selected.
+            let extensions: Vec<&str> = playlist_files::PLAYLIST_EXTENSIONS
+                .into_iter()
+                .chain([playlist_files::ARCHIVE_EXTENSION])
+                .collect();
             let dialog = file_dialog::parented(&weak, "Import Playlists")
-                .add_filter("Playlists", &["m3u8", "m3u"]);
+                .add_filter("Playlists", &extensions);
             let Some(handles) = dialog.pick_files().await else {
                 return;
             };
@@ -44,35 +50,31 @@ pub(super) fn wire(
                 return;
             }
 
-            // Aggregate across every picked file.
-            let mut imported: u32 = 0; // playlists actually created
-            let mut tracks: u32 = 0; // matched (path + hash)
-            let mut missing: u32 = 0;
-            let mut failures: u32 = 0;
-            for handle in &handles {
-                match library::playlist_files::import_playlist_from_file(&s, handle.path()).await {
-                    Ok(r) => {
-                        imported = imported.saturating_add(1);
-                        tracks = tracks.saturating_add(r.matched_by_path + r.matched_by_hash);
-                        missing = missing.saturating_add(r.missing);
-                    }
-                    Err(e) => {
-                        failures = failures.saturating_add(1);
-                        log::warn!("import_playlist_from_file {}: {e}", handle.path().display());
-                    }
-                }
-            }
+            let paths: Vec<PathBuf> =
+                handles.iter().map(|handle| handle.path().to_path_buf()).collect();
 
-            if imported > 0
+            // Off the UI thread: every playlist's parse and track matching happens in there.
+            let import_state = s.clone();
+            let result = s
+                .runtime
+                .spawn(async move {
+                    playlist_files::import_playlists_from_files(&import_state, &paths).await
+                })
+                .await
+                .unwrap_or_else(|e| {
+                    log::warn!("playlist import: task ended early: {e}");
+                    ImportFileResult::default()
+                });
+
+            if result.imported > 0
                 && let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak.clone()).await
             {
                 log::warn!("fetch_grid after playlist import: {e}");
             }
 
             let Some(ui) = weak.upgrade() else { return };
-            let settings = ui.global::<Settings>();
-            if imported == 0 {
-                notifications.show_localized(&ui, "error", "", |ui| {
+            if result.imported == 0 {
+                notifications.show_failure(&ui, |ui| {
                     let g = ui.global::<Settings>();
                     RowText::plain(
                         g.invoke_playlist_import_failed_title(),
@@ -80,21 +82,14 @@ pub(super) fn wire(
                     )
                 });
             } else {
-                let variant = if missing > 0 || failures > 0 {
-                    "warning"
-                } else {
-                    "success"
-                };
-                notifications.show_auto_dismiss(
-                    NotificationParams::plain(
-                        variant,
-                        settings.invoke_playlist_import_title(count_as_i32(imported)),
-                        settings.invoke_playlist_import_message(
-                            count_as_i32(tracks),
-                            count_as_i32(missing),
-                        ),
+                let settings = ui.global::<Settings>();
+                notifications.show_completion(
+                    Completion::partial_if(result.missing > 0 || result.failed > 0),
+                    settings.invoke_playlist_import_title(count_as_i32(result.imported)),
+                    settings.invoke_playlist_import_message(
+                        count_as_i32(result.matched),
+                        count_as_i32(result.missing),
                     ),
-                    TOAST_AUTO_DISMISS_MS,
                 );
             }
         }));

@@ -35,11 +35,7 @@ use melodia_core::error::AppError;
 
 /// A queued listen with each provider's "still needs submitting" flag set as asked.
 fn item_flagged(lastfm: bool, listenbrainz: bool) -> QueuedItem {
-    QueuedItem {
-        lastfm_remaining: lastfm,
-        listenbrainz_remaining: listenbrainz,
-        ..sample_item()
-    }
+    QueuedItem { lastfm_remaining: lastfm, listenbrainz_remaining: listenbrainz, ..sample_item() }
 }
 
 /// A pending love for a track that may or may not carry the recording MBID `ListenBrainz`
@@ -47,10 +43,7 @@ fn item_flagged(lastfm: bool, listenbrainz: bool) -> QueuedItem {
 /// and so cannot produce the entry the drain's no-id arm exists for.
 fn love_flagged(mbid: Option<&str>, loved: bool) -> LoveItem {
     LoveItem {
-        track: ScrobbleTrack {
-            recording_mbid: mbid.map(str::to_owned),
-            ..sample_item().track
-        },
+        track: ScrobbleTrack { recording_mbid: mbid.map(str::to_owned), ..sample_item().track },
         loved,
         lastfm_remaining: false,
         listenbrainz_remaining: true,
@@ -150,19 +143,10 @@ fn only_a_rejected_lastfm_session_disconnects() {
 
     assert_eq!(lastfm_reaction(&LastfmError::InvalidSession), Reaction::Disconnect);
     assert_eq!(
-        lastfm_reaction(&LastfmError::Transient {
-            code: 11,
-            message: String::new()
-        }),
+        lastfm_reaction(&LastfmError::Transient { code: 11, message: String::new() }),
         deferred
     );
-    assert_eq!(
-        lastfm_reaction(&LastfmError::Api {
-            code: 10,
-            message: String::new()
-        }),
-        deferred
-    );
+    assert_eq!(lastfm_reaction(&LastfmError::Api { code: 10, message: String::new() }), deferred);
     assert_eq!(
         lastfm_reaction(&LastfmError::Transport(AppError::network_msg("no route"))),
         deferred
@@ -188,10 +172,7 @@ fn a_listenbrainz_rate_limit_is_honored_defaulted_and_clamped() {
 
     assert_eq!(listenbrainz_reaction(&ListenBrainzError::InvalidToken), Reaction::Disconnect);
     assert_eq!(
-        listenbrainz_reaction(&ListenBrainzError::Server {
-            status: 503,
-            message: String::new()
-        }),
+        listenbrainz_reaction(&ListenBrainzError::Server { status: 503, message: String::new() }),
         Reaction::Retry(Duration::ZERO)
     );
 }
@@ -278,10 +259,7 @@ async fn a_connected_provider_with_its_toggle_off_is_never_posted_to() -> TestRe
     let dir = tempfile::tempdir()?;
     let service = init_service(
         &paths_in(dir.path()),
-        &ScrobbleFlags {
-            listenbrainz_enabled: false,
-            ..Default::default()
-        },
+        &ScrobbleFlags { listenbrainz_enabled: false, ..Default::default() },
     )
     .with_listenbrainz_base(server.base_url());
     service

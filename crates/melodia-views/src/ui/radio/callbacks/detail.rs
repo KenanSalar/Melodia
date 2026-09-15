@@ -104,10 +104,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
             if uuid.is_empty() {
                 return;
             }
-            let station = detail::StationRef {
-                id: i64::from(station_id),
-                uuid: uuid.to_string(),
-            };
+            let station = detail::StationRef { id: i64::from(station_id), uuid: uuid.to_string() };
             let (s, ru, weak) = (s.clone(), ru.clone(), weak.clone());
             s.runtime.clone().spawn(async move {
                 if let Err(e) = library::radio::vote(&s, &station.uuid).await {

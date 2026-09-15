@@ -13,20 +13,16 @@
 //! action label — and does nothing when clicked, falling off the end of a
 //! dispatcher with no `else`. Pinned by `the_toast_kind_matches_its_dispatcher_branch`.
 
-use std::path::PathBuf;
 use std::rc::Rc;
 
 use async_compat::Compat;
 use chrono::Local;
 use slint::{ComponentHandle, SharedString, Weak};
 
-use crate::ui::shell::notifications::{
-    NotificationParams, NotificationsUi, RowText, TOAST_AUTO_DISMISS_MS,
-};
+use crate::ui::shell::notifications::{Completion, NotificationsUi, RowText};
 use crate::ui::{file_dialog, launcher};
 use melodia_app::state::AppState;
 use melodia_app::{library, services};
-use melodia_core::error::{AppError, AppResult};
 use melodia_platform::services::platform;
 use melodia_ui::{AppWindow, Settings};
 
@@ -73,8 +69,9 @@ async fn save_report(state: AppState, weak: Weak<AppWindow>, notifications: Rc<N
     };
     let path = target.path().to_path_buf();
 
+    // Written on the blocking pool: this future runs on the UI thread.
     let result = match services::diagnostics::build_report(&state).await {
-        Ok(text) => write_report(path.clone(), text).await,
+        Ok(text) => melodia_core::utils::atomic_file::write_text(path.clone(), text).await,
         Err(e) => Err(e),
     };
 
@@ -82,20 +79,17 @@ async fn save_report(state: AppState, weak: Weak<AppWindow>, notifications: Rc<N
     let settings = ui.global::<Settings>();
     match result {
         Ok(()) => {
-            notifications.show_auto_dismiss(
-                NotificationParams::plain(
-                    "success",
-                    settings.invoke_diagnostics_saved_title(),
-                    settings.invoke_diagnostics_saved_message(SharedString::from(
-                        path.display().to_string(),
-                    )),
-                ),
-                TOAST_AUTO_DISMISS_MS,
+            notifications.show_completion(
+                Completion::Complete,
+                settings.invoke_diagnostics_saved_title(),
+                settings.invoke_diagnostics_saved_message(SharedString::from(
+                    path.display().to_string(),
+                )),
             );
         }
         Err(e) => {
-            log::warn!("save-diagnostics-report: {e}");
-            notifications.show_localized(&ui, "error", "", |ui| {
+            log::warn!("save-diagnostics-report: {}", melodia_core::error::describe(&e));
+            notifications.show_failure(&ui, |ui| {
                 let g = ui.global::<Settings>();
                 RowText::plain(
                     g.invoke_diagnostics_failed_title(),
@@ -104,16 +98,6 @@ async fn save_report(state: AppState, weak: Weak<AppWindow>, notifications: Rc<N
             });
         }
     }
-}
-
-/// `atomic_file::write_text_sync` is not async, unlike the playlist export this
-/// otherwise mirrors — hence the hop off the UI thread for one file write.
-async fn write_report(path: PathBuf, text: String) -> AppResult<()> {
-    tokio::task::spawn_blocking(move || {
-        melodia_core::utils::atomic_file::write_text_sync(&path, &text)
-    })
-    .await
-    .map_err(AppError::io_source)?
 }
 
 /// Apply the Verbose Logging switch live, then persist it.
