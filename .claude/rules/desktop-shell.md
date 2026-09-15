@@ -131,8 +131,11 @@ the OS owns has to be attached late or not at all on at least one platform.
   focus gain.
 
 - **Match Unfocused Window Background (KDE-only)** tints the full UI's chrome to the OS unfocused
-  titlebar. `LayoutFlags.match_unfocused_to_system_bg`, serde default `is_kde_desktop()`; hidden
-  off-KDE, disabled in custom-titlebar. `Theme.window-focused` mirrors winit `Focused(bool)` raw.
+  titlebar. `LayoutFlags.match_unfocused_to_system_bg`; hidden off-KDE, disabled in
+  custom-titlebar. **A fresh KDE install opens on the native titlebar with the tint on, both set
+  at first launch** (`WindowFlags::first_launch`, `LayoutFlags::first_launch`); the field's serde
+  default `is_kde_desktop()` reaches only a file missing the key, never a fresh install.
+  `Theme.window-focused` mirrors winit `Focused(bool)` raw.
   **The gate is one brush, `WindowChrome.mantle`, which argues its three terms and the missing
   `animate`**, and every surface the tint covers reads it: the sidebar, the now-playing bar, the
   shell's ground showing through the gutter beside the content panel, the panel's corner masks,

@@ -302,13 +302,22 @@ pub struct WindowFlags {
     pub window_border_color: String,
 }
 
+impl WindowFlags {
+    /// A fresh install's chrome. Under Plasma the native titlebar is Breeze's own, keep-above
+    /// button and unfocused fade included, so a KDE install opens on it.
+    fn first_launch(desktop: HostDesktop) -> Self {
+        Self { use_native_titlebar: desktop == HostDesktop::Kde, ..Self::default() }
+    }
+}
+
 impl Default for WindowFlags {
     fn default() -> Self {
         Self {
             is_maximized: false,
             always_on_top: false,
-            // Windows too: the native frame, painted in the app mantle through the DWM caption
-            // attributes, stays a Settings toggle rather than the first-launch look.
+            // Also what a file without the key reads as, so it stays off here and
+            // `first_launch` answers KDE. On Windows the native frame, painted in the app mantle
+            // through the DWM caption attributes, stays a Settings toggle.
             use_native_titlebar: false,
             titlebar_button_style: TitlebarButtonStyle::Standard,
             titlebar_button_side: TitlebarButtonSide::Right,
@@ -595,11 +604,18 @@ pub struct LayoutFlags {
     pub progress_state_layer: bool,
     /// KDE-only: under the native titlebar, tint the sidebar and now-playing
     /// bar toward `Theme.base` while unfocused, mirroring KDE's own
-    /// window-decoration fade. The field default seeds it per-desktop for a
-    /// file that predates the key; `LayoutFlags::default()` stays `false` so a
-    /// fresh non-KDE install boots with the row hidden.
+    /// window-decoration fade. On under KDE both for a fresh install
+    /// ([`LayoutFlags::first_launch`]) and for a file that predates the key (the field default).
     #[serde(default = "default_match_unfocused_to_system_bg")]
     pub match_unfocused_to_system_bg: bool,
+}
+
+impl LayoutFlags {
+    /// A fresh install's layout. KDE opens on the native titlebar, and the tint is what makes that
+    /// titlebar's unfocused fade reach the chrome beside it.
+    fn first_launch(desktop: HostDesktop) -> Self {
+        Self { match_unfocused_to_system_bg: desktop == HostDesktop::Kde, ..Self::default() }
+    }
 }
 
 impl Default for LayoutFlags {
@@ -652,19 +668,45 @@ impl Default for BackdropFlags {
 // `services/` rather than `library/` because that is the dependency direction;
 // `melodia-views`' `ui/appearance/` imports them from `services::settings::` directly.
 
-/// Whether the active session is KDE Plasma. Seeds
-/// `LayoutFlags.match_unfocused_to_system_bg` and hides the matching Appearance
-/// row elsewhere, the behaviour it drives being KDE's own.
+/// The Linux desktop a fresh install dresses itself for. Windows and macOS read as `Other`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HostDesktop {
+    Kde,
+    Gnome,
+    Other,
+}
+
 #[cfg(target_os = "linux")]
-pub fn is_kde_desktop() -> bool {
-    std::env::var("XDG_CURRENT_DESKTOP")
-        .ok()
-        .is_some_and(|val| val.split(':').any(|seg| seg == "KDE"))
+#[must_use]
+pub fn host_desktop() -> HostDesktop {
+    std::env::var("XDG_CURRENT_DESKTOP").map_or(HostDesktop::Other, |value| desktop_named(&value))
 }
 
 #[cfg(not(target_os = "linux"))]
+#[must_use]
+pub fn host_desktop() -> HostDesktop {
+    HostDesktop::Other
+}
+
+/// `XDG_CURRENT_DESKTOP` is a colon-separated list (`ubuntu:GNOME`), and the first name Melodia
+/// knows decides.
+#[cfg(target_os = "linux")]
+fn desktop_named(value: &str) -> HostDesktop {
+    value
+        .split(':')
+        .find_map(|segment| match segment {
+            "KDE" => Some(HostDesktop::Kde),
+            "GNOME" => Some(HostDesktop::Gnome),
+            _ => None,
+        })
+        .unwrap_or(HostDesktop::Other)
+}
+
+/// Whether the active session is KDE Plasma. Seeds
+/// `LayoutFlags.match_unfocused_to_system_bg` and hides the matching Appearance
+/// row elsewhere, the behaviour it drives being KDE's own.
 pub fn is_kde_desktop() -> bool {
-    false
+    host_desktop() == HostDesktop::Kde
 }
 
 /// The host desktop's window corner radius, in pixels. Values mirror the chip
@@ -682,19 +724,9 @@ pub fn get_os_corner_radius() -> u32 {
     }
     #[cfg(target_os = "linux")]
     {
-        match std::env::var("XDG_CURRENT_DESKTOP") {
-            Ok(val) => {
-                for segment in val.split(':') {
-                    if segment == "GNOME" {
-                        return 15;
-                    }
-                    if segment == "KDE" {
-                        return 6;
-                    }
-                }
-                6
-            }
-            Err(_) => 6,
+        match host_desktop() {
+            HostDesktop::Gnome => 15,
+            HostDesktop::Kde | HostDesktop::Other => 6,
         }
     }
 }
@@ -764,7 +796,8 @@ pub struct SettingsData {
 
 impl Default for SettingsData {
     fn default() -> Self {
-        let (theme, variant) = first_launch_theme();
+        let desktop = host_desktop();
+        let (theme, variant) = first_launch_theme(desktop);
         Self {
             theme_id: theme.id.to_owned(),
             theme_variant: variant.to_owned(),
@@ -789,14 +822,14 @@ impl Default for SettingsData {
             crossfade: CrossfadeFlags::default(),
             visualizer: VisualizerFlags::default(),
             queue: QueueFlags::default(),
-            window: WindowFlags::default(),
+            window: WindowFlags::first_launch(desktop),
             tray: TrayFlags::default(),
             scrobble: ScrobbleFlags::default(),
             discord: DiscordFlags::default(),
             radio: RadioFlags::default(),
             lyrics: LyricsFlags::default(),
             library: LibraryFlags::default(),
-            layout: LayoutFlags::default(),
+            layout: LayoutFlags::first_launch(desktop),
             motion: MotionFlags::default(),
             backdrop: BackdropFlags::default(),
             updates: UpdateFlags::default(),
@@ -808,13 +841,18 @@ impl Default for SettingsData {
 }
 
 /// The theme and variant a fresh install opens with, its accent being the theme's own default.
-/// Windows opens on its native Fluent theme under the System variant, so the first window matches
-/// the desktop around it.
-fn first_launch_theme() -> (&'static ThemeDef, &'static str) {
+/// Windows, KDE and GNOME each open on their own theme under the System variant, so the first
+/// window matches the desktop around it. A desktop with no theme of its own gets Catppuccin.
+fn first_launch_theme(desktop: HostDesktop) -> (&'static ThemeDef, &'static str) {
     if cfg!(target_os = "windows") {
-        (&themes::windows::WINDOWS, SYSTEM_VARIANT_ID)
-    } else {
-        (&themes::catppuccin::CATPPUCCIN, themes::catppuccin::CATPPUCCIN.default_variant)
+        return (&themes::windows::WINDOWS, SYSTEM_VARIANT_ID);
+    }
+    match desktop {
+        HostDesktop::Kde => (&themes::kde::KDE, SYSTEM_VARIANT_ID),
+        HostDesktop::Gnome => (&themes::gnome::GNOME, SYSTEM_VARIANT_ID),
+        HostDesktop::Other => {
+            (&themes::catppuccin::CATPPUCCIN, themes::catppuccin::CATPPUCCIN.default_variant)
+        }
     }
 }
 

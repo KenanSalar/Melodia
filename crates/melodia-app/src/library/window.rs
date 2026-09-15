@@ -95,8 +95,8 @@ pub fn set_close_to_tray(state: &AppState, on: bool) -> Result<(), AppError> {
     })
 }
 
-/// Persist the user toggle for "System Tray Icon". When `false` (the
-/// default) `main.rs` skips `ui::shell::tray_bridge::install` at startup, so the
+/// Persist the user toggle for "System Tray Icon". When `false`
+/// `main.rs` skips `ui::shell::tray_bridge::install` at startup, so the
 /// tray subsystem — D-Bus connection, service thread, action tasks — never
 /// runs. The toggle is restart-gated through the `restart-tray` `Dialog`
 /// flow, so this write commits just before the process respawns and the new
@@ -107,7 +107,7 @@ pub fn set_tray_enabled(state: &AppState, on: bool) -> Result<(), AppError> {
     })
 }
 
-/// Persist the user toggle for "Aurora Backdrop". When `false` (the default) the
+/// Persist the user toggle for "Aurora Backdrop". When `false` the
 /// artwork-derived surfaces blur the cover behind them, and the two artwork tiers build a
 /// blurred half per decode; when `true` they wash the cover's own colours over `Theme.base`
 /// and no blur is built at all. Restart-gated through the `restart-backdrop` `Dialog` flow —

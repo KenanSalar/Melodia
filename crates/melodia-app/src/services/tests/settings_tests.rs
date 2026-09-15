@@ -1,7 +1,7 @@
 use melodia_core::error::AppError;
 use melodia_testkit::{reading_env, with_env_set};
-// The corner-radius probe is the only caller and only Linux has a desktop to ask.
-#[cfg(target_os = "linux")]
+// Only the desktop probes need it, and Windows has no desktop to ask.
+#[cfg(not(target_os = "windows"))]
 use melodia_testkit::with_env_var;
 
 use super::*;
@@ -39,8 +39,9 @@ fn test_empty_json_uses_defaults() -> Result<(), AppError> {
     Ok(())
 }
 
-/// Spelled as literals rather than read off the registry: these are the ids `settings.json`
-/// stores, so renaming one strands every install that saved it.
+// The theme ids below are spelled as literals rather than read off the registry: they are what
+// `settings.json` stores, so renaming one strands every install that saved it.
+
 #[cfg(target_os = "windows")]
 #[test]
 fn a_fresh_windows_install_opens_on_fluent_following_the_app_mode() {
@@ -58,8 +59,8 @@ fn a_fresh_windows_install_opens_on_fluent_following_the_app_mode() {
 
 #[cfg(not(target_os = "windows"))]
 #[test]
-fn a_fresh_install_off_windows_opens_on_catppuccin_mocha() {
-    let settings = reading_env(SettingsData::default);
+fn a_fresh_install_on_a_desktop_without_a_theme_opens_on_catppuccin_mocha() {
+    let settings = with_env_var("XDG_CURRENT_DESKTOP", None, SettingsData::default);
 
     assert_eq!(
         (
@@ -71,15 +72,106 @@ fn a_fresh_install_off_windows_opens_on_catppuccin_mocha() {
     );
 }
 
-/// Windows used to default to the native titlebar, so what matters beside the new default is that
-/// an install which saved the old one keeps it.
+#[cfg(target_os = "linux")]
 #[test]
-fn the_custom_titlebar_ships_by_default_but_never_overrides_a_saved_answer() -> Result<(), AppError>
-{
-    assert!(!WindowFlags::default().use_native_titlebar);
+fn a_fresh_kde_install_opens_on_breeze_following_the_system_scheme() {
+    let settings = with_env_var("XDG_CURRENT_DESKTOP", Some("KDE"), SettingsData::default);
 
+    assert_eq!(
+        (
+            settings.theme_id.as_str(),
+            settings.theme_variant.as_str(),
+            settings.accent_color.as_str()
+        ),
+        ("kde-breeze", "system", "blue"),
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn a_fresh_gnome_install_opens_on_adwaita_following_the_system_scheme() {
+    let settings = with_env_var("XDG_CURRENT_DESKTOP", Some("GNOME"), SettingsData::default);
+
+    assert_eq!(
+        (
+            settings.theme_id.as_str(),
+            settings.theme_variant.as_str(),
+            settings.accent_color.as_str()
+        ),
+        ("gnome-adwaita", "system", "blue"),
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn only_a_fresh_kde_install_opens_on_the_native_titlebar() {
+    let native_titlebar_under = |desktop| {
+        with_env_var("XDG_CURRENT_DESKTOP", desktop, SettingsData::default)
+            .window
+            .use_native_titlebar
+    };
+
+    assert_eq!(
+        [
+            native_titlebar_under(Some("KDE")),
+            native_titlebar_under(Some("GNOME")),
+            native_titlebar_under(None)
+        ],
+        [true, false, false],
+    );
+}
+
+/// The tint's field default is per-desktop too, but it reaches only a file missing the key, so a
+/// fresh KDE install opened on the native titlebar with the tint off.
+#[cfg(target_os = "linux")]
+#[test]
+fn only_a_fresh_kde_install_tints_its_chrome_while_unfocused() {
+    let tint_under = |desktop| {
+        with_env_var("XDG_CURRENT_DESKTOP", desktop, SettingsData::default)
+            .layout
+            .match_unfocused_to_system_bg
+    };
+
+    assert_eq!(
+        [tint_under(Some("KDE")), tint_under(Some("GNOME")), tint_under(None)],
+        [true, false, false],
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn a_fresh_install_takes_its_desktops_corner_radius() {
+    let radius_under =
+        |desktop| with_env_var("XDG_CURRENT_DESKTOP", desktop, SettingsData::default).corner_radius;
+
+    assert_eq!(
+        [radius_under(Some("KDE")), radius_under(Some("GNOME")), radius_under(None)],
+        [6, 15, 6]
+    );
+}
+
+/// Only a fresh install asks the desktop. A settings file without the key reads as
+/// `WindowFlags::default()`, so an existing KDE install keeps the titlebar it has.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_kde_settings_file_without_the_titlebar_key_keeps_the_custom_titlebar() -> Result<(), AppError>
+{
+    let settings: SettingsData = with_env_var("XDG_CURRENT_DESKTOP", Some("KDE"), || {
+        serde_json::from_str(r#"{"volume": 80}"#)
+    })
+    .map_err(|e| json_err(&e))?;
+
+    assert!(!settings.window.use_native_titlebar);
+    Ok(())
+}
+
+/// Every saved install carries this key, so renaming the field without an alias would reset each
+/// of them to the custom titlebar.
+#[test]
+fn a_saved_native_titlebar_reads_back() -> Result<(), AppError> {
     let window: WindowFlags =
         serde_json::from_str(r#"{"use_native_titlebar": true}"#).map_err(|e| json_err(&e))?;
+
     assert!(window.use_native_titlebar);
     Ok(())
 }
