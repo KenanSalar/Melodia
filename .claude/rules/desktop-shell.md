@@ -234,14 +234,23 @@ The other way paths arrive from outside, and the one that can arrive before ther
   `controls.rs::on_restart_tray` (`library::window::set_tray_enabled` + `request_respawn_and_quit`,
   which may decline — above).
 
-- **On Windows the tray icon follows the taskbar, not the app.** `tray.png` carries the mark's
-  dark-surface pastels, so on a light taskbar `tray/light_taskbar.rs` repaints it in
+- **The tray icon follows the surface it sits on, not the app.** `tray.png` carries the mark's
+  dark-surface pastels, so on a light taskbar or panel `tray/light_taskbar.rs` repaints it in
   `themes::BRAND_MARK_ON_LIGHT` through the raster's alpha, the pair `theme.slint`'s `brand-mark`
-  paints the titlebar mark in; `themes::tests` pins the two together. The taskbar sits in the
-  *Windows* mode (`color_mode::taskbar_theme`, `SystemUsesLightTheme`), which moves independently of
-  the app mode winit's `ThemeChanged` tracks, so `tray_bridge::refresh_icon` rides the focus-gain
-  arm as well as that one. A switch made while the window is hidden in the tray lands at the next
-  focus gain.
+  paints the titlebar mark in; `themes::tests` pins the two together. Neither surface moves with
+  the app theme, and neither OS announces every move, so `tray_bridge::refresh_icon` rides the
+  winit focus-gain arm on both platforms beside each one's own change event. A switch that event
+  misses, made while the window is hidden in the tray, lands at the next focus gain.
+  - **Windows** reads the *Windows* mode (`color_mode::taskbar_theme`, `SystemUsesLightTheme`),
+    which moves independently of the app mode winit's `ThemeChanged` tracks; that arm refreshes
+    too.
+  - **Linux reads a Plasma panel and nothing else** (`system_theme::plasma_panel_theme`, gated on
+    the session by `tray_bridge::on_light_panel`; each argues its half), so other desktops keep
+    the asset's colours. The portal consumer in `appearance/system_watcher.rs` refreshes on a
+    scheme flip, live even while hidden. A Plasma style switched on its own leaves the colour
+    scheme, and so the portal, untouched.
+  - **The Linux tray belongs to its subscriber task**, not the UI thread, so there `refresh_icon`
+    only bumps `PANEL_RECHECK` and the task re-reads the panel under `block_in_place`.
 
 - **Close-to-tray** (`TrayFlags.close_to_tray`, default off) — Slint `Window::hide/show` on
   `should_hide_to_tray()`, gated on the setting **and** a live tray (`SettingRow.disabled` when

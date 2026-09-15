@@ -79,7 +79,7 @@ pub const MATERIAL_YOU_ACCENT_ID: &str = "material_you";
 
 /// The Melodia mark's two gradient stops on a light surface, as `0x00RRGGBB`: Catppuccin Latte's
 /// blue and teal. `theme.slint`'s `brand-mark` spells the same pair for the titlebar, and the tray
-/// icon paints it on a light Windows taskbar, which no Slint brush reaches.
+/// icon paints it on a light taskbar or panel, which no Slint brush reaches.
 pub const BRAND_MARK_ON_LIGHT: [u32; 2] = [0x001e_66f5, 0x0017_9299];
 
 #[derive(Clone, Copy, Debug)]
@@ -170,19 +170,23 @@ pub const LUMA_B: f64 = 0.0722;
 /// Above this, `fill` is light enough to take dark ink.
 pub const LUMA_THRESHOLD: f64 = 0.5;
 
+/// Returns whether `fill_hex` is light enough to take dark ink. f64 keeps clippy happy on the
+/// u8 → float lift (channel values are 0..=255, well inside f64's range).
+pub fn is_light_hex(fill_hex: u32) -> bool {
+    let r = f64::from((fill_hex >> 16) & 0xff) / 255.0;
+    let g = f64::from((fill_hex >> 8) & 0xff) / 255.0;
+    let b = f64::from(fill_hex & 0xff) / 255.0;
+    LUMA_R * r + LUMA_G * g + LUMA_B * b > LUMA_THRESHOLD
+}
+
 /// Pick a contrast colour for text/icons rendered on top of `accent_hex`:
 /// dark `#1e1e2e` for light accents, white for dark accents. Fast enough that
-/// we don't bother caching per accent. f64 keeps clippy happy on the
-/// u8 → float lift (channel values are 0..=255, well inside f64's range).
+/// we don't bother caching per accent.
 ///
 /// `theme.slint`'s `Theme.ink-on(brush)` is the Slint-side twin, for the
 /// surfaces whose fill isn't the accent (`danger`, the traffic-light hues).
 /// Same weights, same threshold, same pair — keep them in step.
 ///
 pub fn on_accent_hex(accent_hex: u32) -> u32 {
-    let r = f64::from((accent_hex >> 16) & 0xff) / 255.0;
-    let g = f64::from((accent_hex >> 8) & 0xff) / 255.0;
-    let b = f64::from(accent_hex & 0xff) / 255.0;
-    let lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
-    if lum > LUMA_THRESHOLD { 0x001e_1e2e } else { 0x00ff_ffff }
+    if is_light_hex(accent_hex) { 0x001e_1e2e } else { 0x00ff_ffff }
 }

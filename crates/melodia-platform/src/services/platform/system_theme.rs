@@ -1,9 +1,10 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use tokio::sync::watch;
 use zbus::MatchRule;
 
+use melodia_core::themes::is_light_hex;
 use melodia_core::themes::kde::KdeColorPalette;
 
 /// Color scheme values from the XDG Desktop Portal specification.
@@ -164,8 +165,8 @@ fn owned_value_to_u32(value: &zbus::zvariant::OwnedValue) -> u32 {
 // KDE color scheme reading from ~/.config/kdeglobals
 // ---------------------------------------------------------------------------
 
-fn kdeglobals_path() -> PathBuf {
-    dirs::config_dir().unwrap_or_else(|| PathBuf::from("~/.config")).join("kdeglobals")
+fn kde_config_path(name: &str) -> PathBuf {
+    dirs::config_dir().unwrap_or_else(|| PathBuf::from("~/.config")).join(name)
 }
 
 /// Parse an "R,G,B" string into (u8, u8, u8).
@@ -201,8 +202,8 @@ pub(crate) fn blend(a: (u8, u8, u8), b: (u8, u8, u8), factor: f32) -> (u8, u8, u
     (mix(a.0, b.0), mix(a.1, b.1), mix(a.2, b.2))
 }
 
-fn read_kdeglobals() -> Option<HashMap<String, HashMap<String, String>>> {
-    let content = std::fs::read_to_string(kdeglobals_path()).ok()?;
+fn read_kconfig(path: &Path) -> Option<HashMap<String, HashMap<String, String>>> {
+    let content = std::fs::read_to_string(path).ok()?;
     Some(parse_kdeglobals(&content))
 }
 
@@ -256,8 +257,57 @@ fn get_inactive_color_effect(
 
 /// Read the KDE color scheme from `~/.config/kdeglobals` and map it to our theme slots.
 pub fn get_kde_colors() -> Option<KdeColorPalette> {
-    let sections = read_kdeglobals()?;
+    let sections = read_kconfig(&kde_config_path("kdeglobals"))?;
     kde_palette_from_sections(&sections)
+}
+
+/// The Plasma style a `plasmarc` naming none is on, and the one that ships no `colors` of its own.
+const DEFAULT_PLASMA_STYLE: &str = "default";
+
+/// Breeze Light's window background, which `KColorScheme` falls back to when no file names one.
+const PLASMA_DEFAULT_WINDOW_BG: (u8, u8, u8) = (239, 240, 241);
+
+/// Whether the Plasma panel paints light or dark, as `"light"` or `"dark"`. Read off the panel's own
+/// colours rather than the portal, because the panel follows the Plasma *style*: one shipping a
+/// `colors` file paints from it, so Breeze Twilight puts a dark panel over a light app scheme.
+/// A key that file leaves out falls through to `kdeglobals`, as Plasma's config does.
+///
+/// **Fails light**: a colour no file names is Breeze Light's, what Plasma paints without one.
+pub fn plasma_panel_theme() -> &'static str {
+    let window_bg = [plasma_style_colors_path(), Some(kde_config_path("kdeglobals"))]
+        .into_iter()
+        .flatten()
+        .find_map(|path| get_color(&read_kconfig(&path)?, "Colors:Window", "BackgroundNormal"))
+        .unwrap_or(PLASMA_DEFAULT_WINDOW_BG);
+    panel_theme_for(window_bg)
+}
+
+fn panel_theme_for((r, g, b): (u8, u8, u8)) -> &'static str {
+    let rgb = (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b);
+    if is_light_hex(rgb) { "light" } else { "dark" }
+}
+
+/// The active Plasma style's `colors` file, searched in `QStandardPaths`' order. `None` for a style
+/// that ships none, the default among them.
+fn plasma_style_colors_path() -> Option<PathBuf> {
+    let style = read_kconfig(&kde_config_path("plasmarc"))
+        .and_then(|mut sections| sections.get_mut("Theme")?.remove("name"))
+        .unwrap_or_else(|| DEFAULT_PLASMA_STYLE.to_owned());
+    let relative = Path::new("plasma/desktoptheme").join(style).join("colors");
+    xdg_data_dirs().into_iter().map(|dir| dir.join(&relative)).find(|path| path.is_file())
+}
+
+/// `XDG_DATA_HOME`, then each of `XDG_DATA_DIRS` under the spec's default. The spec calls a relative
+/// entry invalid, and joined it would resolve against the working directory.
+fn xdg_data_dirs() -> Vec<PathBuf> {
+    let system = std::env::var_os("XDG_DATA_DIRS")
+        .filter(|dirs| !dirs.is_empty())
+        .unwrap_or_else(|| "/usr/local/share:/usr/share".into());
+    dirs::data_dir()
+        .into_iter()
+        .chain(std::env::split_paths(&system))
+        .filter(|dir| dir.is_absolute())
+        .collect()
 }
 
 /// Map a parsed kdeglobals section tree to a `KdeColorPalette`. Split out

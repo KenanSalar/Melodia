@@ -45,6 +45,8 @@ pub(super) fn watch_os_state(
             let reading = rx.borrow_and_update().clone();
             let Some(ui) = weak.upgrade() else { return };
             apply_reading(&ui, &s, &os_state, &reading, &kick);
+            // A Plasma panel without a style of its own moves with the scheme.
+            crate::ui::shell::tray_bridge::refresh_icon();
         }
     })) {
         log::warn!("system theme subscriber spawn_local: {e}");

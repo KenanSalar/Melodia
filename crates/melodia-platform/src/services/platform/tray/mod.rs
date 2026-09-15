@@ -24,7 +24,6 @@
 
 #[cfg(target_os = "linux")]
 mod ksni_backend;
-#[cfg(any(target_os = "windows", target_os = "macos"))]
 mod light_taskbar;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 mod tray_icon_backend;

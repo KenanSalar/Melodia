@@ -281,8 +281,9 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                         {
                             ui.global::<melodia_ui::WindowChrome>().invoke_recheck_system_theme();
                             crate::ui::appearance::window_border::refresh_system_color(&ui);
-                            crate::ui::shell::tray_bridge::refresh_icon();
                         }
+                        #[cfg(any(target_os = "windows", target_os = "linux"))]
+                        crate::ui::shell::tray_bridge::refresh_icon();
                     }
                 });
                 EventResult::Propagate

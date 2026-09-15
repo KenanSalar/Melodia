@@ -13,16 +13,24 @@
 //!    whether a close hides or quits, plus the visibility shadow the tray's Show / Hide
 //!    toggles against, `winit::Window::is_visible()` being `None` on Wayland.
 
+#[cfg(target_os = "linux")]
+use std::sync::LazyLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use slint::ComponentHandle;
 
 use crate::ui::shell::event_sink::SlintEventSink;
+#[cfg(target_os = "linux")]
+use melodia_app::services;
 use melodia_app::state::AppState;
+#[cfg(target_os = "linux")]
+use melodia_app::state::Signal;
 use melodia_app::tasks::TaskSpawner;
 use melodia_engine::player::engine::event_sink::{EventSink, PlayerEvent};
 use melodia_engine::player::engine::state::PlayerViewModelLight;
+#[cfg(target_os = "linux")]
+use melodia_platform::services::platform::system_theme;
 use melodia_platform::services::platform::tray::{
     self, TRAY_ACTION_CHANNEL_CAP, TrayAction, TraySnapshot,
 };
@@ -50,6 +58,10 @@ static SAVED_WINDOW_GEOM: Mutex<Option<(slint::PhysicalSize, slint::PhysicalPosi
 /// How many times a tray-show re-asserts the saved geometry before giving up, one timer
 /// tick each.
 const RESTORE_ATTEMPTS: u8 = 8;
+
+/// Asks the Linux subscriber, which owns the tray, to re-read the panel under it.
+#[cfg(target_os = "linux")]
+static PANEL_RECHECK: LazyLock<Signal> = LazyLock::new(Signal::new);
 
 /// Update the close-to-tray preference — the Settings toggle, and one seed at startup.
 pub fn set_close_to_tray(on: bool) {
@@ -210,7 +222,7 @@ pub fn install(spawner: &TaskSpawner, state: &AppState, ui: &AppWindow) {
     #[cfg(target_os = "linux")]
     {
         // Linux: ksni runs on its own thread — create eagerly.
-        match tray::init_tray(tx) {
+        match tray::init_tray(tx, on_light_panel()) {
             Some(linux_tray) => {
                 TRAY_ACTIVE.store(true, Ordering::Relaxed);
                 ui.global::<Settings>().set_tray_active(true);
@@ -241,11 +253,23 @@ pub fn install(spawner: &TaskSpawner, state: &AppState, ui: &AppWindow) {
     }
 }
 
-/// Repaint the tray icon for the taskbar's current mode, on the UI thread. Windows says nothing
-/// when only the taskbar's mode moves, so a focus gain asks, as the window border's colour does.
-#[cfg(target_os = "windows")]
+/// Repaint the tray icon for the taskbar's or panel's current mode, on the UI thread. Neither OS
+/// says when only that surface moves (the Windows mode, a Plasma style), so a focus gain asks, as
+/// the window border's colour does.
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 pub fn refresh_icon() {
+    #[cfg(target_os = "windows")]
     tray::refresh_tray_icon();
+    #[cfg(target_os = "linux")]
+    PANEL_RECHECK.bump();
+}
+
+/// Whether the tray sits on a light panel. Gated on the session rather than on Plasma's files, which
+/// another desktop can leave behind and which describe no panel there, so elsewhere the icon keeps
+/// the asset's colours.
+#[cfg(target_os = "linux")]
+fn on_light_panel() -> bool {
+    services::settings::is_kde_desktop() && system_theme::plasma_panel_theme() == "light"
 }
 
 /// Tear the tray down, on the UI thread and before `process::exit` skips every
@@ -342,8 +366,13 @@ fn snapshot_from_vm(vm: Option<&PlayerViewModelLight>) -> TraySnapshot {
 /// Linux state subscriber: a tokio task owning the `Send` `LinuxTray`. Dropping the tray
 /// when the task ends removes the icon, so no explicit teardown is needed.
 #[cfg(target_os = "linux")]
-fn spawn_state_subscriber_linux(spawner: &TaskSpawner, state: &AppState, tray: tray::LinuxTray) {
+fn spawn_state_subscriber_linux(
+    spawner: &TaskSpawner,
+    state: &AppState,
+    mut tray: tray::LinuxTray,
+) {
     let mut rx = state.sinks.view_model.subscribe();
+    let mut panel_recheck = PANEL_RECHECK.subscribe();
     spawner.spawn_cancellable(move |shutdown| async move {
         // `update` is a blocking D-Bus round trip to ksni's service thread, so
         // `block_in_place` lends the worker out rather than stalling the runtime. The
@@ -364,6 +393,9 @@ fn spawn_state_subscriber_linux(spawner: &TaskSpawner, state: &AppState, tray: t
                     }
                     tokio::task::block_in_place(|| tray.update(&snapshot));
                     last = snapshot;
+                }
+                Ok(()) = panel_recheck.changed() => {
+                    tokio::task::block_in_place(|| tray.set_on_light_panel(on_light_panel()));
                 }
             }
         }

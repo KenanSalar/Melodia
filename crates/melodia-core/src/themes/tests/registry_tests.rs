@@ -152,7 +152,7 @@ fn theme_slint_ink_on_picks_the_same_inks_as_on_accent_hex() {
     );
 }
 
-/// The tray paints the mark on a light Windows taskbar from `BRAND_MARK_ON_LIGHT`, which no Slint
+/// The tray paints the mark on a light taskbar or panel from `BRAND_MARK_ON_LIGHT`, which no Slint
 /// brush reaches, so the titlebar's light arm has to name the same stops at the same angle.
 #[test]
 fn theme_slint_brand_mark_light_arm_matches_brand_mark_on_light() {

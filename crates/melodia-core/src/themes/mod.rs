@@ -33,7 +33,7 @@ pub mod system_color_state;
 
 pub use palette::{
     AccentDef, BRAND_MARK_ON_LIGHT, MATERIAL_YOU_ACCENT_ID, Palette, SYSTEM_VARIANT_ID, ThemeDef,
-    Variant, on_accent_hex,
+    Variant, is_light_hex, on_accent_hex,
 };
 pub use system_color_state::SystemColorState;
 
