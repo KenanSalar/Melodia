@@ -9,9 +9,9 @@ use parking_lot::RwLock;
 use slint::ComponentHandle;
 use tokio::sync::watch;
 
-use super::repaint::repaint_from_settings;
+use super::repaint::{apply_settings, repaint_from_settings};
 use super::{
-    AppearanceHandles, PersistedAccent, accent_picker, apply_and_seed, material_you_sync,
+    AppearanceHandles, PersistedAccent, accent_picker, material_you_sync,
     read_initial_system_state, seed_theme_names, system_watcher, theme_picker, window_border,
     window_settings,
 };
@@ -19,6 +19,7 @@ use melodia_app::library;
 use melodia_app::services;
 use melodia_app::state::{AppState, Signal};
 use melodia_core::error::AppError;
+use melodia_platform::services::platform::desktop;
 use melodia_ui::{AppWindow, Settings, Theme};
 
 /// Hydrate the Settings global from `settings.json`, paint the resolved
@@ -68,21 +69,9 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
     );
 
     seed_theme_names(ui);
-    // Ahead of `apply_and_seed`, whose palette apply resolves the border colour seeded here.
+    // Ahead of `apply_settings`, whose palette apply resolves the border colour seeded here.
     window_border::seed(ui, &settings.window);
-    let initial_last_static = settings
-        .theme_preferences
-        .get(&settings.theme_id)
-        .and_then(|p| p.last_static_accent.clone());
-    apply_and_seed(
-        ui,
-        &settings.theme_id,
-        &settings.theme_variant,
-        &settings.accent_color,
-        &settings.dynamic_color_style,
-        initial_last_static.as_deref(),
-        &initial_state,
-    );
+    apply_settings(ui, &settings, &initial_state);
 
     let persisted_accent: PersistedAccent =
         Arc::new(parking_lot::Mutex::new(settings.accent_color.clone()));
@@ -90,7 +79,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
     // Seed the Match Unfocused Window Background row.
     {
         let g = ui.global::<Settings>();
-        g.set_match_unfocused_supported(services::settings::is_kde_desktop());
+        g.set_match_unfocused_supported(desktop::is_kde_desktop());
         g.set_match_unfocused_bg(settings.layout.match_unfocused_to_system_bg);
     }
 
@@ -112,7 +101,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
         ui.global::<Settings>().set_corner_radius(radius as i32);
         let theme = ui.global::<Theme>();
         theme.set_shell_radius(radius as f32);
-        theme.set_native_content_radius(services::settings::get_os_corner_radius() as f32);
+        theme.set_native_content_radius(desktop::get_os_corner_radius() as f32);
     }
 
     // Seed the Decoration Button Style + Side rows. Same shape as the

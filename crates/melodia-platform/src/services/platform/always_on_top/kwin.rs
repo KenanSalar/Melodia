@@ -21,7 +21,7 @@ use zbus::zvariant::ObjectPath;
 use super::session_connection;
 use melodia_core::error::AppError;
 
-const KWIN_SERVICE: &str = "org.kde.KWin";
+pub(super) const KWIN_SERVICE: &str = "org.kde.KWin";
 const SCRIPTING_PATH: ObjectPath<'static> = ObjectPath::from_static_str_unchecked("/Scripting");
 const SCRIPTING_INTERFACE: &str = "org.kde.kwin.Scripting";
 const SCRIPT_INTERFACE: &str = "org.kde.kwin.Script";

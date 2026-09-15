@@ -8,6 +8,7 @@ use crate::state::AppState;
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 use melodia_platform::services::platform::always_on_top::AlwaysOnTopMethod;
+use melodia_platform::services::platform::desktop;
 
 /// Apply the user's pinned choice and persist it. On Linux this drops
 /// into the `KWin` / GNOME D-Bus backends via
@@ -67,7 +68,7 @@ async fn persist_always_on_top(paths: &Arc<Paths>, pinned: bool) -> Result<(), A
 /// in custom-titlebar mode while the persisted value survives for the
 /// next time the native titlebar is enabled.
 pub fn set_use_native_titlebar(state: &AppState, on: bool) -> Result<(), AppError> {
-    write_use_native_titlebar(&state.paths, on, services::settings::is_kde_desktop())
+    write_use_native_titlebar(&state.paths, on, desktop::is_kde_desktop())
 }
 
 /// [`set_use_native_titlebar`]'s body, with the desktop probe passed in rather than read: the

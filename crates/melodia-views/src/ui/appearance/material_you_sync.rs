@@ -121,8 +121,7 @@ pub(super) fn wire_color_style_changed(
                 let resolved_accent = if new_accent.is_empty() {
                     let last_static = library::settings::get_settings(&s_clone)
                         .ok()
-                        .and_then(|c| c.theme_preferences.get(theme_id).cloned())
-                        .and_then(|p| p.last_static_accent)
+                        .and_then(|c| c.last_static_accent(theme_id).map(str::to_owned))
                         .unwrap_or_else(|| default_accent.to_owned());
                     persisted_accent_for_blocking.lock().clone_from(&last_static);
                     last_static

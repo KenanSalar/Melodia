@@ -92,7 +92,7 @@ pub(super) fn seed_theme_names(ui: &AppWindow) {
 pub(super) fn read_last_static_accent(state: &AppState, theme_id: &str) -> Option<String> {
     library::settings::get_settings(state)
         .ok()
-        .and_then(|s| s.theme_preferences.get(theme_id).and_then(|p| p.last_static_accent.clone()))
+        .and_then(|s| s.last_static_accent(theme_id).map(str::to_owned))
 }
 
 /// Write the palette, then re-solve the two artwork-derived tiers and the window border against it.

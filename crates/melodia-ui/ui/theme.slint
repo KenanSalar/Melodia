@@ -47,7 +47,7 @@ export global Theme {
     in-out property <brush> accent-text: #1e1e2e;
 
     // sRGB luma over gamma-encoded channels — **not** the relative luminance `ui/backdrop.rs`
-    // solves scrims against. A hand-copy of `themes::apply::on_accent_hex`, pinned from both ends
+    // solves scrims against. A hand-copy of `themes::on_accent_hex`, pinned from both ends
     // by `themes::tests::theme_slint_is_light_matches_on_accent_hex`. It answers the polarity
     // question the palette can't, `Palette` carrying no light/dark flag and the two *generated*
     // palettes no variant id to match on.

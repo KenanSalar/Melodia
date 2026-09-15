@@ -21,19 +21,17 @@ use std::sync::{Arc, Mutex};
 use slint::ComponentHandle;
 
 use crate::ui::shell::event_sink::SlintEventSink;
-#[cfg(target_os = "linux")]
-use melodia_app::services;
 use melodia_app::state::AppState;
 #[cfg(target_os = "linux")]
 use melodia_app::state::Signal;
 use melodia_app::tasks::TaskSpawner;
 use melodia_engine::player::engine::event_sink::{EventSink, PlayerEvent};
 use melodia_engine::player::engine::state::PlayerViewModelLight;
-#[cfg(target_os = "linux")]
-use melodia_platform::services::platform::system_theme;
 use melodia_platform::services::platform::tray::{
     self, TRAY_ACTION_CHANNEL_CAP, TrayAction, TraySnapshot,
 };
+#[cfg(target_os = "linux")]
+use melodia_platform::services::platform::{desktop, system_theme};
 use melodia_ui::{AppWindow, Settings, Visualizer};
 
 /// Mirrors `settings.tray.close_to_tray`, so `window_chrome`'s close handlers
@@ -269,7 +267,7 @@ pub fn refresh_icon() {
 /// the asset's colours.
 #[cfg(target_os = "linux")]
 fn on_light_panel() -> bool {
-    services::settings::is_kde_desktop() && system_theme::plasma_panel_theme() == "light"
+    desktop::is_kde_desktop() && system_theme::plasma_panel_is_light()
 }
 
 /// Tear the tray down, on the UI thread and before `process::exit` skips every

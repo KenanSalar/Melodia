@@ -104,12 +104,6 @@ pub fn get_view_state(state: &AppState) -> Result<ViewStateData, AppError> {
     services::view_state::read_view_state(&state.paths)
 }
 
-// Note: `is_kde_desktop` and `get_os_corner_radius` moved to
-// `services::settings` so the layer dependency (library → services)
-// stays unidirectional; the services layer needs them for serde
-// `default = "..."` helpers. UI code calls them via
-// `services::settings::*` directly.
-
 #[cfg(target_os = "linux")]
 pub fn get_kde_colors() -> Option<melodia_core::themes::kde::KdeColorPalette> {
     melodia_platform::services::platform::system_theme::get_kde_colors()

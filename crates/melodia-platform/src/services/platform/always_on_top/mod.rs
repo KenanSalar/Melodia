@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 use melodia_core::error::AppError;
 
 #[cfg(target_os = "linux")]
+use super::desktop::{HostDesktop, host_desktop};
+
+#[cfg(target_os = "linux")]
 pub mod gnome;
 #[cfg(target_os = "linux")]
 pub mod kwin;
@@ -72,9 +75,6 @@ fn detect_capability_linux() -> AlwaysOnTopCapability {
         return AlwaysOnTopCapability::native();
     }
 
-    let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
-    let desktop_upper = desktop.to_uppercase();
-
     // Single blocking D-Bus connection shared across startup probes AND
     // every later apply call. Per CLAUDE.md, zbus's tokio feature must stay
     // off — the blocking API is fine here because detection runs once on
@@ -84,28 +84,26 @@ fn detect_capability_linux() -> AlwaysOnTopCapability {
         return AlwaysOnTopCapability::unsupported("D-Bus session bus not available");
     };
 
-    if desktop_upper.contains("KDE") {
-        if probe_dbus_service(&conn, "org.kde.KWin") {
-            return AlwaysOnTopCapability::supported(AlwaysOnTopMethod::KwinDbus);
+    match host_desktop() {
+        HostDesktop::Kde if probe_dbus_service(&conn, kwin::KWIN_SERVICE) => {
+            AlwaysOnTopCapability::supported(AlwaysOnTopMethod::KwinDbus)
         }
-        return AlwaysOnTopCapability::unsupported("KWin D-Bus service not available");
-    }
-
-    if desktop_upper.contains("GNOME") {
-        if probe_gnome_window_calls(&conn) {
-            return AlwaysOnTopCapability::supported(AlwaysOnTopMethod::GnomeExtension);
+        HostDesktop::Kde => AlwaysOnTopCapability::unsupported("KWin D-Bus service not available"),
+        HostDesktop::Gnome if probe_gnome_window_calls(&conn) => {
+            AlwaysOnTopCapability::supported(AlwaysOnTopMethod::GnomeExtension)
         }
         // No extension available — fall back to native decorations
         // so the user can right-click the title bar for "Always on Top"
-        return AlwaysOnTopCapability {
+        HostDesktop::Gnome => AlwaysOnTopCapability {
             supported: false,
             reason: None,
             method: AlwaysOnTopMethod::Unsupported,
             use_native_decorations: true,
-        };
+        },
+        HostDesktop::Other => AlwaysOnTopCapability::unsupported(
+            "Always-on-top is not supported on this Wayland compositor",
+        ),
     }
-
-    AlwaysOnTopCapability::unsupported("Always-on-top is not supported on this Wayland compositor")
 }
 
 /// Apply the user's pinned choice. The `Native` branch is intentionally a
@@ -198,9 +196,9 @@ fn probe_dbus_service(conn: &zbus::blocking::Connection, name: &str) -> bool {
 #[cfg(target_os = "linux")]
 fn probe_gnome_window_calls(conn: &zbus::blocking::Connection) -> bool {
     conn.call_method(
-        Some("org.gnome.Shell"),
-        "/org/gnome/Shell/Extensions/Windows",
-        Some("org.gnome.Shell.Extensions.Windows"),
+        Some(gnome::SHELL_SERVICE),
+        gnome::WINDOWS_PATH,
+        Some(gnome::WINDOWS_INTERFACE),
         "List",
         &(),
     )

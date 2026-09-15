@@ -5,6 +5,7 @@ use melodia_testkit::{reading_env, with_env_set};
 use melodia_testkit::with_env_var;
 
 use super::*;
+use crate::services::settings::{ONBOARDING_VERSION, WINDOW_BORDER_SYSTEM_COLOR, WindowBorder};
 
 fn json_err(e: &serde_json::Error) -> AppError {
     AppError::Validation(format!("json error: {e}"))

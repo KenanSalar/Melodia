@@ -258,7 +258,7 @@ The other way paths arrive from outside, and the one that can arrive before ther
   - **Windows** reads the *Windows* mode (`color_mode::taskbar_theme`, `SystemUsesLightTheme`),
     which moves independently of the app mode winit's `ThemeChanged` tracks; that arm refreshes
     too.
-  - **Linux reads a Plasma panel and nothing else** (`system_theme::plasma_panel_theme`, gated on
+  - **Linux reads a Plasma panel and nothing else** (`system_theme::plasma_panel_is_light`, gated on
     the session by `tray_bridge::on_light_panel`; each argues its half), so other desktops keep
     the asset's colours. The portal consumer in `appearance/system_watcher.rs` refreshes on a
     scheme flip, live even while hidden. A Plasma style switched on its own leaves the colour

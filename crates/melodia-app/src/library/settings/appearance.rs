@@ -85,8 +85,7 @@ fn write_appearance(
     accent_color: String,
 ) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |settings| {
-        let preserved_static =
-            settings.theme_preferences.get(&theme_id).and_then(|p| p.last_static_accent.clone());
+        let preserved_static = settings.last_static_accent(&theme_id).map(str::to_owned);
         let last_static_accent = if accent_color == melodia_core::themes::MATERIAL_YOU_ACCENT_ID {
             preserved_static
         } else {

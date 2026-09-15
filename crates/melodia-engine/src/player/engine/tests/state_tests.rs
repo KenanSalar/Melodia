@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use super::*;
+use crate::player::engine::types::{PersistableQueue, PersistedPlayback, RepeatMode};
 use melodia_core::error::AppError;
+use melodia_playback::player::playback::crossfade::CrossfadeDecision;
+use melodia_playback::player::playback::replaygain::TrackReplayGain;
 
 fn make_summary(id: i64, title: &str, duration_ms: i64) -> Arc<TrackSummary> {
     Arc::new(TrackSummary {

@@ -24,7 +24,7 @@ use melodia_core::themes;
 use melodia_platform::services::platform;
 
 #[cfg(any(target_os = "linux", target_os = "windows"))]
-use super::apply_and_seed;
+use super::repaint::apply_settings;
 
 /// Spawn the portal watcher and the UI-thread consumer that applies each reading it sends.
 #[cfg(target_os = "linux")]
@@ -120,17 +120,5 @@ fn apply_reading(
     }
 
     let snapshot = os_state.read().clone();
-    let last_static = settings
-        .theme_preferences
-        .get(&settings.theme_id)
-        .and_then(|p| p.last_static_accent.clone());
-    apply_and_seed(
-        ui,
-        &settings.theme_id,
-        &settings.theme_variant,
-        &settings.accent_color,
-        &settings.dynamic_color_style,
-        last_static.as_deref(),
-        &snapshot,
-    );
+    apply_settings(ui, &settings, &snapshot);
 }

@@ -9,7 +9,7 @@
 use slint::{Brush, Color, ComponentHandle};
 
 use melodia_core::themes::palette::{
-    MATERIAL_YOU_ACCENT_ID, Palette, SYSTEM_VARIANT_ID, ThemeDef, Variant, on_accent_hex,
+    MATERIAL_YOU_ACCENT_ID, Palette, ThemeDef, Variant, on_accent_hex,
 };
 use melodia_core::themes::system_color_state::SystemColorState;
 use melodia_ui::{AppWindow, Theme as ThemeGlobal};
@@ -55,35 +55,29 @@ pub fn apply(
         return;
     }
 
-    if variant_id == SYSTEM_VARIANT_ID && theme.supports_system_mode {
-        let resolved = theme.resolve_system_variant(&system.theme);
-
-        // The one branch that bypasses the static palette. Compiled out
-        // elsewhere, `KdeColorPalette` being Linux-only.
-        #[cfg(target_os = "linux")]
-        if theme_id == "kde-breeze"
-            && let Some(kde) = &system.kde_palette
-        {
-            let palette = melodia_core::themes::kde::palette_from_kde(kde);
-            let accent_hex =
-                melodia_core::themes::kde::parse_hex_color(&kde.accent).unwrap_or(0x003d_aee9);
-            // The one path reading the live OS inactive-titlebar colour, so
-            // our painted surfaces match the frame exactly on focus loss.
-            let mantle_unfocused_hex = kde
-                .colors
-                .get("mantle_unfocused")
-                .and_then(|s| melodia_core::themes::kde::parse_hex_color(s))
-                .unwrap_or(palette.base);
-            write_palette(ui, &palette, accent_hex, mantle_unfocused_hex);
-            return;
-        }
-
-        let accent_hex = theme.resolved_accent_hex(accent_id, resolved.id);
-        write_palette(ui, &resolved.palette, accent_hex, unfocused_mantle(resolved));
+    // The one branch that bypasses the static palette. Compiled out
+    // elsewhere, `KdeColorPalette` being Linux-only.
+    #[cfg(target_os = "linux")]
+    if variant_id == melodia_core::themes::palette::SYSTEM_VARIANT_ID
+        && theme.supports_system_mode
+        && theme_id == "kde-breeze"
+        && let Some(kde) = &system.kde_palette
+    {
+        let palette = melodia_core::themes::kde::palette_from_kde(kde);
+        let accent_hex =
+            melodia_core::themes::kde::parse_hex_color(&kde.accent).unwrap_or(0x003d_aee9);
+        // The one path reading the live OS inactive-titlebar colour, so
+        // our painted surfaces match the frame exactly on focus loss.
+        let mantle_unfocused_hex = kde
+            .colors
+            .get("mantle_unfocused")
+            .and_then(|s| melodia_core::themes::kde::parse_hex_color(s))
+            .unwrap_or(palette.base);
+        write_palette(ui, &palette, accent_hex, mantle_unfocused_hex);
         return;
     }
 
-    let variant = theme.resolved_variant(variant_id);
+    let variant = theme.shade_for(variant_id, &system.theme);
     let accent_hex = theme.resolved_accent_hex(accent_id, variant.id);
     write_palette(ui, &variant.palette, accent_hex, unfocused_mantle(variant));
 }
