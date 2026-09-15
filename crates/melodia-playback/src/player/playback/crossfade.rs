@@ -24,7 +24,7 @@ use melodia_core::entities::track::TrackSummary;
 pub const MIN_CROSSFADE_MS: u32 = 1_000;
 /// Longest crossfade the user can select.
 pub const MAX_CROSSFADE_MS: u32 = 12_000;
-/// Default crossfade length. Matches Strawberry's default.
+/// Default crossfade length.
 pub const DEFAULT_CROSSFADE_MS: u32 = 2_000;
 
 /// Below this much remaining media, don't start a crossfade at all — let the track drain to
@@ -44,7 +44,7 @@ pub const MIN_FADE_MS: u64 = 250;
 pub const ABORT_RAMP_MS: u64 = 40;
 
 /// Fade length for pause / resume / user-initiated stop when [`CrossfadeSettings::fade_on_pause`]
-/// is on. Matches Strawberry's default.
+/// is on.
 pub const PAUSE_FADE_MS: u64 = 250;
 
 /// A target gain this close to unity lets the source disengage the fade stage entirely and fall

@@ -37,9 +37,7 @@ component StatusLine inherits HorizontalLayout {
 // One station's page, under the band it morphed into that station's hero.
 //
 // **The band owns the title, the artwork, the chips and every action**; this file owns the facts.
-// That split is what both radio players with a station page settle on — Shortwave's dialog and
-// RadioDroid's detail are each a labelled list — and it is why nothing here grows a header of its
-// own, which `ui::hero_chips::tests` walks every band host for.
+// That split is why nothing here grows a header of its own.
 //
 // **No empty state.** The song history is a section that exists only once the station has
 // announced something, so a station that has never played shows its facts rather than a page
