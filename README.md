@@ -7,7 +7,7 @@
 [![Platforms](https://img.shields.io/badge/platforms-Linux%20%C2%B7%20Windows-success.svg)](#installation)
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust%20%2B%20Slint-orange.svg)](https://www.rust-lang.org/)
 
-Melodia is a Slint rewrite of a former Tauri + SolidJS application. Dropping the embedded WebKitGTK browser engine took the real-world footprint from a combined **~900 MB** to 87 MB idle on Linux and 62 MB on Windows (PSS); the [full numbers](#footprint) are below.
+Melodia is a Slint rewrite of a former Tauri + SolidJS application. Dropping the embedded WebKitGTK browser engine took the real-world footprint from a combined **~900 MB** to 87 MB idle on Linux (PSS) and 105 MiB on Windows (commit); the [full numbers](#footprint) are below.
 
 ---
 
@@ -122,18 +122,41 @@ Seven locales (English, German, French, Spanish, Turkish, Greek, Italian), switc
 
 ## Footprint
 
+Release builds against the same 512-track library on one dual-boot PC, a Ryzen 7 9800X3D (8 cores, 16 threads) with an RTX 3080 and the window on a 144 Hz display, measured after the process had settled. Each platform's table uses what its own kernel accounts for, so the columns differ between the two.
+
+### Linux (Fedora)
+
 | Scenario | RSS | PSS | Heap | Mapped | CPU |
 | --- | --- | --- | --- | --- | --- |
-| Idle (Fedora) | 158 MB | 87 MB | 33 MB | 125 MB | 0.1% |
-| Playing, list view (Fedora) | 158 MB | 89 MB | 34 MB | 124 MB | 0.5% |
-| Playing, visualizer live (Fedora) | 158 MB | 89 MB | 34 MB | 124 MB | 3.8% |
-| Idle (Windows) | 121 MB | 62 MB | 58 MB | 63 MB | 0.1% |
-| Playing, list view (Windows) | 122 MB | 63 MB | 59 MB | 64 MB | 0.7% |
-| Playing, visualizer live (Windows) | 128 MB | 68 MB | 64 MB | 64 MB | 6.1% |
+| Idle | 158 MB | 87 MB | 33 MB | 125 MB | 0.1% |
+| Playing, list view | 158 MB | 89 MB | 34 MB | 124 MB | 0.5% |
+| Playing, visualizer live | 158 MB | 89 MB | 34 MB | 124 MB | 3.8% |
 
-Release builds against the same 512-track library, each on a 16-core machine with the window on the same 144 Hz display, measured after the process had settled. CPU is a share of **one** core.
+CPU is a share of **one** core.
 
 **Heap** is what the application itself allocates, and it is the number that stays flat: grids and track lists are virtualized and the cover caches are capped against the display, so a larger library barely moves it. **Mapped** is the file-backed remainder, mostly the binary and the shared graphics stack rather than anything Melodia allocated, which is why **PSS** is the fairer whole-process figure on a desktop already running other GL applications.
+
+### Windows
+
+Measured with [`scripts/measure-windows-footprint.ps1`](scripts/measure-windows-footprint.ps1), with Melodia opening on a playlist. After 30 s to settle, each scenario is sampled every second for 60 s: memory is the median sample, CPU and GPU the total over that minute.
+
+#### Custom titlebar
+
+| Scenario | Commit | Private WS | Working set | GPU dedicated | GPU shared | CPU (1 core) | CPU (all cores) | GPU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Idle | 105 MiB | 60 MiB | 119 MiB | 26 MiB | 13 MiB | 0.13% | 0.01% | 0.00% |
+| Playing, list view | 112 MiB | 64 MiB | 123 MiB | 28 MiB | 17 MiB | 0.91% | 0.06% | 0.12% |
+| Playing, visualizer live | 116 MiB | 67 MiB | 126 MiB | 29 MiB | 17 MiB | 6.33% | 0.40% | 2.36% |
+
+#### Native titlebar
+
+| Scenario | Commit | Private WS | Working set | GPU dedicated | GPU shared | CPU (1 core) | CPU (all cores) | GPU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Idle | 102 MiB | 59 MiB | 118 MiB | 23 MiB | 13 MiB | 0.16% | 0.01% | 0.00% |
+| Playing, list view | 103 MiB | 59 MiB | 118 MiB | 24 MiB | 13 MiB | 0.89% | 0.06% | 0.10% |
+| Playing, visualizer live | 115 MiB | 67 MiB | 126 MiB | 27 MiB | 19 MiB | 9.06% | 0.57% | 2.17% |
+
+Windows keeps no PSS, so **Commit** is the figure to compare: the private memory Windows has set aside for Melodia, in RAM or paged out, which doesn't fall when Windows trims the process. **Private WS** is Task Manager's Memory column, the private memory in RAM at that moment. **Working set** adds the pages Melodia shares with other processes, mostly system DLLs. **GPU dedicated** and **GPU shared** are the video memory Task Manager lists per process, where FemtoVG keeps its textures and framebuffers, counted apart from commit. **CPU (1 core)** counts one full core as 100%, and **CPU (all cores)** spreads that across all 16 threads, as Task Manager's Details tab does. **GPU** is the busiest GPU engine, Task Manager's per-process figure.
 
 ## Keyboard Shortcuts
 
