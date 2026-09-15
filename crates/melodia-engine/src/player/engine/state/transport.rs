@@ -40,7 +40,7 @@ impl PlayerState {
     /// Pausing a station **drops its connection**: `stream-download` pauses its writer when the
     /// reader falls behind, so a held-open socket would back-pressure the server and come back
     /// playing audio that is seconds stale. The station stays on screen with a play button that
-    /// re-opens it, which is what Shortwave and `RadioDroid` do.
+    /// re-opens it.
     pub fn build_pause_actions(&mut self, fade_ms: u64) -> Vec<PlayerAction> {
         if self.is_radio() && self.status != PlaybackStatus::Stopped {
             self.status = PlaybackStatus::Paused;
@@ -220,7 +220,7 @@ impl PlayerState {
     /// one ramps up on the other deck.
     ///
     /// State advances at fade *start*, so Now-Playing switches to the incoming
-    /// track as the overlap begins — the behaviour Strawberry and mpd have.
+    /// track as the overlap begins.
     /// Returns an empty vec (no crossfade) when the queue has moved on and
     /// there is no longer a next track, or when the decision has gone stale.
     ///

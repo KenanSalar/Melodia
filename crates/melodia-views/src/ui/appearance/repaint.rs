@@ -72,11 +72,7 @@ pub fn apply_and_seed(
 
     // Accent swatches use the resolved real variant so the dots render
     // in the correct shade even when the user is on "System".
-    let accent_variant_for_swatches = if variant_id == themes::SYSTEM_VARIANT_ID {
-        theme.resolve_system_variant(&system.theme).id
-    } else {
-        super::resolved_variant_id(theme, variant_idx)
-    };
+    let accent_variant_for_swatches = theme.shade_for(resolved_variant, &system.theme).id;
     let (brushes, labels, my_active) =
         accent_swatches_with_my(theme, accent_variant_for_swatches, system);
     let g_swatches = ui.global::<Settings>();

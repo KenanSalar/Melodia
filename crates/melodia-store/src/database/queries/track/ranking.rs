@@ -7,8 +7,7 @@ use crate::database::DbPool;
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
 
-/// The `ORDER BY` body every "most played" surface ranks with — the Favorites grid tab and the
-/// hero mosaic that has to agree with it.
+/// The `ORDER BY` body every "most played" surface ranks with, the Favorites hero mosaic included.
 ///
 /// `play_count DESC` is the ranking; the three keys after it are what make it *total*. Without
 /// them `SQLite` may hand back tied rows in any order, so the grid could re-order between

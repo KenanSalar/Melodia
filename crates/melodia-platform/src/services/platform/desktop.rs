@@ -35,9 +35,7 @@ fn desktop_named(value: &str) -> HostDesktop {
         .unwrap_or(HostDesktop::Other)
 }
 
-/// Whether the active session is KDE Plasma. Seeds
-/// `LayoutFlags.match_unfocused_to_system_bg` and hides the matching Appearance
-/// row elsewhere, the behaviour it drives being KDE's own.
+/// Whether the session is KDE Plasma.
 pub fn is_kde_desktop() -> bool {
     host_desktop() == HostDesktop::Kde
 }

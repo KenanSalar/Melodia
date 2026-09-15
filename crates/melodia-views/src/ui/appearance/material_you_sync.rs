@@ -16,7 +16,7 @@ use melodia_artwork::media::image::material_you::SchemeStyle;
 use melodia_core::themes::{self, MATERIAL_YOU_ACCENT_ID, SystemColorState};
 use melodia_ui::{AppWindow, Settings};
 
-use super::{PersistedAccent, registry_get, usize_from};
+use super::{PersistedAccent, read_last_static_accent, registry_get, usize_from};
 
 pub(super) fn wire_color_style_changed(
     ui: &AppWindow,
@@ -119,9 +119,7 @@ pub(super) fn wire_color_style_changed(
                 // any in-flight accent write has been ordered against
                 // ours via the same `MUTATE_LOCK`.
                 let resolved_accent = if new_accent.is_empty() {
-                    let last_static = library::settings::get_settings(&s_clone)
-                        .ok()
-                        .and_then(|c| c.last_static_accent(theme_id).map(str::to_owned))
+                    let last_static = read_last_static_accent(&s_clone, theme_id)
                         .unwrap_or_else(|| default_accent.to_owned());
                     persisted_accent_for_blocking.lock().clone_from(&last_static);
                     last_static

@@ -83,8 +83,7 @@ impl Default for ReplayGainFlags {
 
 /// Crossfade preferences. Ships **off**, so an install keeps the gapless
 /// behaviour it already has. Once enabled, `crossfade_skip_same_album` defaults
-/// **on** so continuous-mix albums stay gapless — Strawberry's and Clementine's
-/// default too. `crossfade_duration_ms` is clamped to
+/// **on** so continuous-mix albums stay gapless. `crossfade_duration_ms` is clamped to
 /// `MIN_CROSSFADE_MS..=MAX_CROSSFADE_MS`.
 #[allow(
     clippy::struct_excessive_bools,
