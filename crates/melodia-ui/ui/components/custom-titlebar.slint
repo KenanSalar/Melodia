@@ -203,11 +203,12 @@ export component CustomTitleBar inherits Rectangle {
                 VerticalLayout {
                     alignment: center;
                     horizontal-stretch: 0;
+                    // Regular weight, as an OS caption sets its title: Medium beside the
+                    // native caption's Segoe UI reads as bold once focus darkens the ink.
                     Text {
                         text: "Melodia";
                         color: Theme.window-focused ? Theme.text : Theme.overlay2;
                         font-size: 12px;
-                        font-weight: 500;
                     }
                 }
 

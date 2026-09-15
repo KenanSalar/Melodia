@@ -13,7 +13,7 @@
 pub mod allocator;
 pub mod always_on_top;
 #[cfg(target_os = "windows")]
-pub mod app_mode;
+pub mod color_mode;
 pub mod crash_report;
 #[cfg(target_os = "linux")]
 pub mod desktop_integration;

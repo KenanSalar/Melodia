@@ -27,17 +27,19 @@ const DARK: Palette = Palette {
     green: 0x6ccb5f,
 };
 
+// `crust` stays between `mantle` and `surface0`: it is the scrollbar track on a `surface0` dialog
+// card, and level with the card the track vanishes.
 const LIGHT: Palette = Palette {
-    base: 0xf3f3f3,
-    mantle: 0xebebeb,
-    crust: 0xe0e0e0,
-    surface0: 0xd5d5d5,
+    base: 0xfdfdfd,
+    mantle: 0xf0f0f0,
+    crust: 0xe8e8e8,
+    surface0: 0xe0e0e0,
     surface1: 0xc9c9c9,
     surface2: 0xbdbdbd,
     overlay0: 0xc4c4c4,
     overlay1: 0x9e9e9e,
     overlay2: 0x757575,
-    text: 0x1b1b1b,
+    text: 0x1a1a1a,
     subtext0: 0x616161,
     subtext1: 0x424242,
     border: 0xc4c4c4,

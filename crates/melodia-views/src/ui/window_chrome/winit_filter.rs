@@ -23,7 +23,7 @@
 //!    loop parks winit out of; see `parked_loop`.
 //! 8. **`ThemeChanged`**, Windows only: a light/dark flip for a theme on its System
 //!    variant, re-read by `ui::appearance` rather than taken from the event, whose theme
-//!    also folds in high contrast.
+//!    also folds in high contrast, and a cue for the tray icon to re-read its taskbar.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -281,6 +281,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                         {
                             ui.global::<melodia_ui::WindowChrome>().invoke_recheck_system_theme();
                             crate::ui::appearance::window_border::refresh_system_color(&ui);
+                            crate::ui::shell::tray_bridge::refresh_icon();
                         }
                     }
                 });
@@ -290,6 +291,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
             WindowEvent::ThemeChanged(_) => {
                 let _ = weak.upgrade_in_event_loop(|ui| {
                     ui.global::<melodia_ui::WindowChrome>().invoke_recheck_system_theme();
+                    crate::ui::shell::tray_bridge::refresh_icon();
                 });
                 EventResult::Propagate
             }

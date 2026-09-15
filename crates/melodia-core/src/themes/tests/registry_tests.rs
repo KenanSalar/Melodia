@@ -152,6 +152,20 @@ fn theme_slint_ink_on_picks_the_same_inks_as_on_accent_hex() {
     );
 }
 
+/// The tray paints the mark on a light Windows taskbar from `BRAND_MARK_ON_LIGHT`, which no Slint
+/// brush reaches, so the titlebar's light arm has to name the same stops at the same angle.
+#[test]
+fn theme_slint_brand_mark_light_arm_matches_brand_mark_on_light() {
+    let [from, to] = BRAND_MARK_ON_LIGHT;
+    let expected = format!("? @linear-gradient(135deg, #{from:06x} 0%, #{to:06x} 100%) :");
+
+    assert!(
+        theme_slint_flat().contains(&expected),
+        "theme.slint's `brand-mark` light arm drifted from `BRAND_MARK_ON_LIGHT`, so the titlebar \
+         and the tray paint the mark differently on a light surface. Update both or neither"
+    );
+}
+
 /// `accent_hex` has cases and this ladder over it had none, which is the wrong way round:
 /// `ui::appearance::theme_apply` calls the resolver twice and the raw lookup never. A first
 /// rung that fell through would repaint every theme in its default accent, and every existing

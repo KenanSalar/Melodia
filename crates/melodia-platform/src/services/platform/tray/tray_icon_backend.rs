@@ -32,6 +32,8 @@ struct TrayState {
     play_pause_item: MenuItem,
     next_item: MenuItem,
     prev_item: MenuItem,
+    /// The taskbar the icon was last painted for, so a recheck that finds it unchanged sets nothing.
+    on_light_taskbar: bool,
 }
 
 thread_local! {
@@ -71,16 +73,9 @@ pub fn init(action_tx: mpsc::Sender<TrayAction>) -> bool {
         return false;
     }
 
-    let icon = super::decode_icon().and_then(|(w, h, rgba)| match Icon::from_rgba(rgba, w, h) {
-        Ok(icon) => Some(icon),
-        Err(e) => {
-            log::warn!("tray: embedded icon rejected: {e}");
-            None
-        }
-    });
-
+    let on_light_taskbar = taskbar_is_light();
     let mut builder = TrayIconBuilder::new().with_menu(Box::new(menu)).with_tooltip("Melodia");
-    if let Some(icon) = icon {
+    if let Some(icon) = icon_for(on_light_taskbar) {
         builder = builder.with_icon(icon);
     }
 
@@ -109,10 +104,60 @@ pub fn init(action_tx: mpsc::Sender<TrayAction>) -> bool {
     }));
 
     TRAY.with_borrow_mut(|slot| {
-        *slot = Some(TrayState { tray, track_item, play_pause_item, next_item, prev_item });
+        *slot = Some(TrayState {
+            tray,
+            track_item,
+            play_pause_item,
+            next_item,
+            prev_item,
+            on_light_taskbar,
+        });
     });
     log::info!("System tray registered");
     true
+}
+
+/// Repaint the icon if the taskbar changed mode since it was last painted. Must be called on the UI
+/// thread. No-op if the tray was never created or has been shut down.
+pub fn refresh_icon() {
+    TRAY.with_borrow_mut(|slot| {
+        let Some(state) = slot else { return };
+        let on_light_taskbar = taskbar_is_light();
+        if state.on_light_taskbar == on_light_taskbar {
+            return;
+        }
+        let Some(icon) = icon_for(on_light_taskbar) else { return };
+        match state.tray.set_icon(Some(icon)) {
+            Ok(()) => state.on_light_taskbar = on_light_taskbar,
+            Err(e) => log::debug!("tray: set_icon failed: {e}"),
+        }
+    });
+}
+
+/// The embedded icon, painted for the taskbar it sits on.
+fn icon_for(on_light_taskbar: bool) -> Option<Icon> {
+    let (width, height, mut rgba) = super::decode_icon()?;
+    if on_light_taskbar {
+        super::light_taskbar::paint(&mut rgba, width, height);
+    }
+    match Icon::from_rgba(rgba, width, height) {
+        Ok(icon) => Some(icon),
+        Err(e) => {
+            log::warn!("tray: embedded icon rejected: {e}");
+            None
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn taskbar_is_light() -> bool {
+    crate::services::platform::color_mode::taskbar_theme() == "light"
+}
+
+/// Nothing here reads the macOS menu bar's appearance, so the icon keeps the asset's colours.
+#[cfg(target_os = "macos")]
+fn taskbar_is_light() -> bool {
+    false
 }
 
 /// Push a fresh snapshot — relabels the play/pause + track rows, follows the transport on the

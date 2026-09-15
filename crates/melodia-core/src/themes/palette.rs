@@ -77,6 +77,11 @@ pub const SYSTEM_VARIANT_ID: &str = "system";
 /// time to the dynamic accent that lives on `SystemColorState`.
 pub const MATERIAL_YOU_ACCENT_ID: &str = "material_you";
 
+/// The Melodia mark's two gradient stops on a light surface, as `0x00RRGGBB`: Catppuccin Latte's
+/// blue and teal. `theme.slint`'s `brand-mark` spells the same pair for the titlebar, and the tray
+/// icon paints it on a light Windows taskbar, which no Slint brush reaches.
+pub const BRAND_MARK_ON_LIGHT: [u32; 2] = [0x001e_66f5, 0x0017_9299];
+
 #[derive(Clone, Copy, Debug)]
 pub struct ThemeDef {
     pub id: &'static str,

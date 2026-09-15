@@ -71,10 +71,7 @@ pub(super) fn read_initial_system_state() -> SystemColorState {
     }
     #[cfg(target_os = "windows")]
     {
-        SystemColorState {
-            theme: platform::app_mode::system_theme().to_owned(),
-            material_you: None,
-        }
+        SystemColorState { theme: platform::color_mode::app_theme().to_owned(), material_you: None }
     }
     #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     {

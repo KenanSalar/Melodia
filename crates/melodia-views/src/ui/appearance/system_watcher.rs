@@ -65,7 +65,7 @@ pub(super) fn watch_os_state(
     let weak = ui.as_weak();
     let s = state.clone();
     ui.global::<melodia_ui::WindowChrome>().on_recheck_system_theme(move || {
-        let theme = platform::app_mode::system_theme();
+        let theme = platform::color_mode::app_theme();
         if os_state.read().theme == theme {
             return;
         }

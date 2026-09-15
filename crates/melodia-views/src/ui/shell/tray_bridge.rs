@@ -241,6 +241,13 @@ pub fn install(spawner: &TaskSpawner, state: &AppState, ui: &AppWindow) {
     }
 }
 
+/// Repaint the tray icon for the taskbar's current mode, on the UI thread. Windows says nothing
+/// when only the taskbar's mode moves, so a focus gain asks, as the window border's colour does.
+#[cfg(target_os = "windows")]
+pub fn refresh_icon() {
+    tray::refresh_tray_icon();
+}
+
 /// Tear the tray down, on the UI thread and before `process::exit` skips every
 /// destructor. No-op on Linux, whose `LinuxTray` its subscriber drops.
 pub fn shutdown() {
