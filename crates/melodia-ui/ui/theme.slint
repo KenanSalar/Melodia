@@ -7,8 +7,8 @@ export global Theme {
     in-out property <brush> base: #1e1e2e;
     in-out property <brush> mantle: #181825;
     // What `WindowChrome.mantle` resolves to when the window is unfocused *and* the KDE-only "Match
-    // Unfocused Window Background" toggle is on; from `[WM] inactiveBackground` under KDE Breeze
-    // and System, falling back to `base` everywhere else.
+    // Unfocused Window Background" toggle is on; Breeze's inactive titlebar under KDE, read off
+    // `kdeglobals` on its System variant, falling back to `base` everywhere else.
     in-out property <brush> mantle-unfocused: #1e1e2e;
     in-out property <brush> crust: #11111b;
     in-out property <brush> surface0: #313244;

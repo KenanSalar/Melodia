@@ -282,9 +282,12 @@ pub fn plasma_panel_theme() -> &'static str {
     panel_theme_for(window_bg)
 }
 
-fn panel_theme_for((r, g, b): (u8, u8, u8)) -> &'static str {
-    let rgb = (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b);
-    if is_light_hex(rgb) { "light" } else { "dark" }
+fn panel_theme_for(window_bg: (u8, u8, u8)) -> &'static str {
+    if rgb_is_light(window_bg) { "light" } else { "dark" }
+}
+
+fn rgb_is_light((r, g, b): (u8, u8, u8)) -> bool {
+    is_light_hex((u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b))
 }
 
 /// The active Plasma style's `colors` file, searched in `QStandardPaths`' order. `None` for a style
@@ -310,6 +313,11 @@ fn xdg_data_dirs() -> Vec<PathBuf> {
         .collect()
 }
 
+/// How far a light scheme's `surface0` sits from the view background toward the text. Its own knob
+/// because the settings cards, dialogs and tooltips all paint that slot, and a light scheme gives
+/// them no colour of its own to take.
+const LIGHT_SURFACE0_STEP: f32 = 0.18;
+
 /// Map a parsed kdeglobals section tree to a `KdeColorPalette`. Split out
 /// from `get_kde_colors()` so unit tests can verify the slot mapping
 /// against an in-memory fixture without touching the user's config.
@@ -324,6 +332,7 @@ fn xdg_data_dirs() -> Vec<PathBuf> {
 /// * `base   ← view_bg`     (content area)
 /// * `mantle ← header_bg`   (chrome — falls back to `[WM] activeBackground` then `window_bg`)
 /// * `crust  ← window_bg_alt` (deepest chrome layer)
+/// * `surface0 ← button_bg` on a dark scheme; stepped off `view_bg` on a light one
 ///
 /// The intermediate surface ramp (`surface1/2`, `overlay0..2`) is then
 /// reconstructed by linearly blending `button_bg` toward `text` at
@@ -345,26 +354,21 @@ pub(crate) fn kde_palette_from_sections(
     let header_bg = get_color(sections, "Colors:Header", "BackgroundNormal")
         .or_else(|| get_color(sections, "WM", "activeBackground"))
         .unwrap_or(window_bg);
-    // Modern KDE Plasma (6.x) computes the inactive titlebar by
-    // applying `[ColorEffects:Inactive]` to the *active titlebar*
-    // colour — which Breeze sources from `[WM] activeBackground`,
-    // NOT from `[Colors:Header] BackgroundNormal` (the latter drives
-    // QML headers inside apps and frequently disagrees with the
-    // window decoration's own palette). `header_bg` lands in our
-    // `mantle` slot, but matching the OS titlebar requires the
-    // `[WM]` source. `[WM] inactiveBackground` is mostly legacy and
-    // frequently points at `crust` (way too dark), so we prefer the
-    // computed blend and only fall back to it when the effects group
-    // is missing entirely. Final fallback blends `wm_active` toward
-    // `window_bg` for colour schemes with neither piece.
+    // KWin paints an inactive titlebar from `[Colors:Header][Inactive]` whenever the scheme ships
+    // that subgroup, as every Breeze scheme does; a colour effect is only applied without it. The
+    // rest of the chain is for schemes that don't. `[WM] inactiveBackground` is mostly legacy and
+    // frequently points at `crust`, way too dark, so the effect over the active colour goes first,
+    // and the last fallback blends toward `window_bg` for a scheme with neither piece.
     //
     // ColorEffect=3 in Breeze is technically an HCY-luma-preserving
     // tint, but a linear RGB `blend(active, tint, amount)` matches
     // the painted output to within a pixel for every preset we've
     // checked.
     let wm_active = get_color(sections, "WM", "activeBackground").unwrap_or(header_bg);
-    let inactive_titlebar = get_inactive_color_effect(sections)
-        .map(|(tint, amount)| blend(wm_active, tint, amount))
+    let inactive_titlebar = get_color(sections, "Colors:Header][Inactive", "BackgroundNormal")
+        .or_else(|| {
+            get_inactive_color_effect(sections).map(|(tint, amount)| blend(wm_active, tint, amount))
+        })
         .or_else(|| get_color(sections, "WM", "inactiveBackground"))
         .unwrap_or_else(|| blend(wm_active, window_bg, 0.5));
 
@@ -383,7 +387,12 @@ pub(crate) fn kde_palette_from_sections(
     let green = get_color(sections, "Colors:View", "ForegroundPositive").unwrap_or((39, 174, 96));
     let yellow = get_color(sections, "Colors:View", "ForegroundNeutral").unwrap_or((246, 116, 0));
 
-    // Surface ramp from `button_bg` (= surface0 in Catppuccin) toward
+    // A light scheme draws its buttons to lift off the window, level with the view, so there the
+    // Button colour would put every card on the page in the page's own colour.
+    let surface0 =
+        if rgb_is_light(view_bg) { blend(view_bg, text, LIGHT_SURFACE0_STEP) } else { button_bg };
+
+    // Surface ramp from `button_bg` toward
     // `text` at the ratios that match Catppuccin Mocha exactly when
     // fed Catppuccin-encoded kdeglobals.
     let surface1 = blend(button_bg, text, 0.125);
@@ -401,7 +410,7 @@ pub(crate) fn kde_palette_from_sections(
         rgb_to_hex(inactive_titlebar.0, inactive_titlebar.1, inactive_titlebar.2),
     );
     colors.insert("crust".into(), rgb_to_hex(window_bg_alt.0, window_bg_alt.1, window_bg_alt.2));
-    colors.insert("surface0".into(), rgb_to_hex(button_bg.0, button_bg.1, button_bg.2));
+    colors.insert("surface0".into(), rgb_to_hex(surface0.0, surface0.1, surface0.2));
     colors.insert("surface1".into(), rgb_to_hex(surface1.0, surface1.1, surface1.2));
     colors.insert("surface2".into(), rgb_to_hex(surface2.0, surface2.1, surface2.2));
     colors.insert("overlay0".into(), rgb_to_hex(overlay0.0, overlay0.1, overlay0.2));
@@ -412,7 +421,7 @@ pub(crate) fn kde_palette_from_sections(
     colors.insert("subtext1".into(), rgb_to_hex(subtext1.0, subtext1.1, subtext1.2));
     // `border == surface0` matches Catppuccin's intent — one fewer
     // free parameter, one fewer place to drift on non-Catppuccin schemes.
-    colors.insert("border".into(), rgb_to_hex(button_bg.0, button_bg.1, button_bg.2));
+    colors.insert("border".into(), rgb_to_hex(surface0.0, surface0.1, surface0.2));
 
     Some(KdeColorPalette {
         colors,

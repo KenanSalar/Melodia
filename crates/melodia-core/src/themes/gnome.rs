@@ -46,8 +46,8 @@ const LIGHT: Palette = Palette {
 };
 
 const VARIANTS: &[Variant] = &[
-    Variant { id: "dark", name: "Dark", palette: DARK },
-    Variant { id: "light", name: "Light", palette: LIGHT },
+    Variant { id: "dark", name: "Dark", palette: DARK, mantle_unfocused: None },
+    Variant { id: "light", name: "Light", palette: LIGHT, mantle_unfocused: None },
 ];
 
 const ACCENTS: &[AccentDef] = &[

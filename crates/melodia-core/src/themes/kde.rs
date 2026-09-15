@@ -56,7 +56,7 @@ const DARK: Palette = Palette {
 
 const LIGHT: Palette = Palette {
     base: 0xeff0f1,
-    mantle: 0xe3e5e7,
+    mantle: 0xdee0e2,
     crust: 0xd3d5d8,
     surface0: 0xd3d4d6,
     surface1: 0xc7c9cb,
@@ -73,9 +73,10 @@ const LIGHT: Palette = Palette {
     green: 0x27ae60,
 };
 
+// Breeze's `[Colors:Header][Inactive]` backgrounds, what KWin paints an unfocused titlebar in.
 const VARIANTS: &[Variant] = &[
-    Variant { id: "dark", name: "Dark", palette: DARK },
-    Variant { id: "light", name: "Light", palette: LIGHT },
+    Variant { id: "dark", name: "Dark", palette: DARK, mantle_unfocused: Some(0x202326) },
+    Variant { id: "light", name: "Light", palette: LIGHT, mantle_unfocused: Some(0xeff0f1) },
 ];
 
 const ACCENTS: &[AccentDef] = &[

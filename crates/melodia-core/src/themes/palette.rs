@@ -5,8 +5,8 @@
 /// The theme-dependent brush slots that come from a palette table. Stored as
 /// packed `0x00RRGGBB` so the data tables stay readable next to the
 /// Tauri-source hex strings. `apply()` writes three more that don't:
-/// `mantle_unfocused` (an OS signal), and `accent` / `accent_text` (picked
-/// independently of the variant).
+/// `mantle_unfocused` (an OS signal, which a [`Variant`] may snapshot), and
+/// `accent` / `accent_text` (picked independently of the variant).
 #[derive(Clone, Copy, Debug)]
 pub struct Palette {
     // 13 base / structure
@@ -39,6 +39,9 @@ pub struct Variant {
     pub id: &'static str,
     pub name: &'static str,
     pub palette: Palette,
+    /// The inactive titlebar of the OS scheme this variant copies, which an unfocused window's
+    /// chrome fades to. `None` where no scheme is copied, and the chrome takes `base`.
+    pub mantle_unfocused: Option<u32>,
 }
 
 #[derive(Clone, Copy, Debug)]

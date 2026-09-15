@@ -9,7 +9,7 @@
 use slint::{Brush, Color, ComponentHandle};
 
 use melodia_core::themes::palette::{
-    MATERIAL_YOU_ACCENT_ID, Palette, SYSTEM_VARIANT_ID, ThemeDef, on_accent_hex,
+    MATERIAL_YOU_ACCENT_ID, Palette, SYSTEM_VARIANT_ID, ThemeDef, Variant, on_accent_hex,
 };
 use melodia_core::themes::system_color_state::SystemColorState;
 use melodia_ui::{AppWindow, Theme as ThemeGlobal};
@@ -67,7 +67,7 @@ pub fn apply(
             let palette = melodia_core::themes::kde::palette_from_kde(kde);
             let accent_hex =
                 melodia_core::themes::kde::parse_hex_color(&kde.accent).unwrap_or(0x003d_aee9);
-            // The *only* path pulling a real OS inactive-titlebar colour, so
+            // The one path reading the live OS inactive-titlebar colour, so
             // our painted surfaces match the frame exactly on focus loss.
             let mantle_unfocused_hex = kde
                 .colors
@@ -79,14 +79,17 @@ pub fn apply(
         }
 
         let accent_hex = theme.resolved_accent_hex(accent_id, resolved.id);
-        write_palette(ui, &resolved.palette, accent_hex, resolved.palette.base);
+        write_palette(ui, &resolved.palette, accent_hex, unfocused_mantle(resolved));
         return;
     }
 
     let variant = theme.resolved_variant(variant_id);
     let accent_hex = theme.resolved_accent_hex(accent_id, variant.id);
-    // A static variant has no OS source for an inactive titlebar either.
-    write_palette(ui, &variant.palette, accent_hex, variant.palette.base);
+    write_palette(ui, &variant.palette, accent_hex, unfocused_mantle(variant));
+}
+
+fn unfocused_mantle(variant: &Variant) -> u32 {
+    variant.mantle_unfocused.unwrap_or(variant.palette.base)
 }
 
 fn write_palette(ui: &AppWindow, p: &Palette, accent_hex: u32, mantle_unfocused_hex: u32) {
