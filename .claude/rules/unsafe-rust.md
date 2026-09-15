@@ -99,7 +99,7 @@ copy at some point, and the restore is the one that goes first.
   however careful each is on its own — glibc's `setenv` can realloc `environ` out from
   under another thread's `getenv`. The variables aren't independent either: the readers
   overlap through code neither caller owns, `SettingsData::default()` reaching
-  `XDG_CURRENT_DESKTOP` via `is_kde_desktop()` *and* all four locale variables via
+  `XDG_CURRENT_DESKTOP` via `host_desktop()` *and* all four locale variables via
   `default_locale()`, and `install_target()` reaching `$APPIMAGE` via
   `target::current_target_key()`. Three separate mutexes sat here (`ENV_LOCK`,
   `APPIMAGE_ENV_LOCK`, `PATH_ENV_LOCK`), each correct in isolation and collectively

@@ -63,3 +63,7 @@ pub fn get_os_corner_radius() -> u32 {
         }
     }
 }
+
+#[cfg(all(test, target_os = "linux"))]
+#[path = "tests/desktop_tests.rs"]
+mod tests;

@@ -285,19 +285,8 @@ fn test_corner_radius_clamped_to_max() -> Result<(), AppError> {
 
 #[test]
 fn test_corner_radius_default_is_an_os_preset() -> Result<(), AppError> {
-    // `SettingsData::default()` now seeds `corner_radius` from
-    // `library::settings::get_os_corner_radius()`, which returns one of
-    // the chip presets (KDE=6, Win11=8, macOS=10, GNOME=15) keyed off
-    // the host OS / desktop. Asserting set-membership (not a specific
-    // value) makes the test platform-independent and dodges the
-    // parallel-execution race against
-    // `library::tests::settings_tests::corner_radius_by_desktop_environment`,
-    // which mutates `XDG_CURRENT_DESKTOP` at runtime — both halves of an
-    // equality assertion would have to read the same env snapshot, and
-    // we can't guarantee that without a serialising mutex. Per-DE value
-    // mapping is covered by that sibling test; this one only verifies
-    // the wiring (default uses an OS-aware preset, not some hardcoded
-    // legacy value).
+    // Set membership rather than one value, so the test holds on every host OS; which desktop
+    // gets which preset is `desktop`'s own test.
     let json = "{}";
     let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
     assert!(
@@ -528,25 +517,6 @@ fn test_locale_roundtrip() -> Result<(), AppError> {
     let deserialized: SettingsData = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
     assert_eq!(deserialized.locale, "fr");
     Ok(())
-}
-
-// The desktop cases share one test because they share one variable, and each
-// goes through `with_env_var` for the same reason every locale case does: a
-// sibling reading `XDG_CURRENT_DESKTOP` — `SettingsData::default()` does, via
-// `is_kde_desktop()` — would otherwise see whatever this test last set.
-// Lives in services/tests/ rather than library/tests/ because
-// `get_os_corner_radius` now lives in services::settings (it's used by
-// `SettingsData::default()` for the corner_radius serde default).
-#[test]
-#[cfg(target_os = "linux")]
-fn corner_radius_by_desktop_environment() {
-    let radius_under = |desktop| with_env_var("XDG_CURRENT_DESKTOP", desktop, get_os_corner_radius);
-
-    assert_eq!(radius_under(Some("GNOME")), 15, "GNOME should return 15");
-    assert_eq!(radius_under(Some("ubuntu:GNOME")), 15, "ubuntu:GNOME should return 15");
-    assert_eq!(radius_under(Some("KDE")), 6, "KDE should return 6");
-    assert_eq!(radius_under(Some("i3")), 6, "unknown DE should return 6");
-    assert_eq!(radius_under(None), 6, "missing env should return 6");
 }
 
 #[test]

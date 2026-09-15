@@ -9,11 +9,10 @@
 //! the feature loads anyway. The grouping exists to keep each struct under
 //! clippy's `struct_excessive_bools` budget; the flatten is what keeps that
 //! free of on-disk consequences. Per the shipped-app rule, anything with new
-//! visible behavior defaults off; [`TrayFlags`] is the one deliberate exception.
-//! Flipping a default costs no existing install either way — nothing here is
-//! `skip_serializing_if`, so a file written by any previous build already spells
-//! every key and keeps its own value, and the new default reaches fresh installs
-//! alone.
+//! visible behavior defaults off. Flipping a default costs no existing install
+//! either way — nothing here is `skip_serializing_if`, so a file written by any
+//! previous build already spells every key and keeps its own value, and the new
+//! default reaches fresh installs alone.
 
 mod about;
 mod data;
