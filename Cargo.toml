@@ -185,7 +185,7 @@ material-colors = "0.4.2"
 color-thief = "0.2.2"
 
 # HTTP (Deezer artist images, scrobbling, the radio directory and its streams)
-reqwest = { version = "0.13.4", default-features = false, features = [
+reqwest = { version = "0.13.5", default-features = false, features = [
     "form",
     "json",
     "query",
@@ -197,7 +197,7 @@ reqwest = { version = "0.13.4", default-features = false, features = [
 # rewindable. `default-features = false` is load-bearing: the default set pulls
 # `reqwest/default-tls`, a second TLS stack (OpenSSL) landing in cargo-deb's `$auto`
 # deps, and turning it off also drops `system-proxy`, so this path ignores `HTTP_PROXY`.
-stream-download = { version = "0.24.3", default-features = false, features = ["reqwest-rustls"] }
+stream-download = { version = "0.24.4", default-features = false, features = ["reqwest-rustls"] }
 # Icecast in-band metadata: the request header, the `icy-*` response headers, and the
 # reader that strips the interleaved blocks so the decoder sees audio only.
 icy-metadata = "0.6.0"
