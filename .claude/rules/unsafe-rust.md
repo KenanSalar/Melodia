@@ -37,7 +37,7 @@ because `dwm_titlebar.rs`'s first `#[allow]` sits on a function holding two of t
 | `crates/melodia/src/main.rs` | `env::set_var` for `PIPEWIRE_ALSA` |
 | `crates/melodia-platform/…/allocator.rs` | `libc::mallopt` ×3 (the glibc arena / mmap / trim knobs), `libc::malloc_trim` |
 | `crates/melodia-platform/…/dwm_titlebar.rs` | `DwmSetWindowAttribute` ×3 |
-| `crates/melodia-platform/…/window_border.rs` | `RegGetValueW` (the DWM accent a window border takes) |
+| `crates/melodia-platform/…/registry.rs` | `RegGetValueW` (the DWM accent a window border takes, and the Windows app mode) |
 | `crates/melodia-app/…/settings/data.rs` | `GetUserDefaultLocaleName` |
 | `crates/melodia-app/…/updater/install/swap.rs` | `MoveFileExW` |
 

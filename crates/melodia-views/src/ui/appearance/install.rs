@@ -57,10 +57,9 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
         }
     }
 
-    // Spawn the watcher (fans portal `SettingChanged` signals into a
-    // `watch` channel) and a UI-thread consumer that repaints whenever
-    // the persisted variant is `"system"`.
-    system_watcher::spawn_os_state_watcher(
+    // Follow the OS's light/dark flips, repainting whenever the persisted
+    // variant is `"system"`.
+    system_watcher::watch_os_state(
         ui,
         state,
         os_state.clone(),

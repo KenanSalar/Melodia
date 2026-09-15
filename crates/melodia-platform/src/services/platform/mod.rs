@@ -12,6 +12,8 @@
 
 pub mod allocator;
 pub mod always_on_top;
+#[cfg(target_os = "windows")]
+pub mod app_mode;
 pub mod crash_report;
 #[cfg(target_os = "linux")]
 pub mod desktop_integration;
@@ -19,6 +21,8 @@ pub mod desktop_integration;
 pub mod dwm_titlebar;
 pub mod install_kind;
 pub mod logging;
+#[cfg(target_os = "windows")]
+mod registry;
 pub mod single_instance;
 #[cfg(target_os = "linux")]
 pub mod system_theme;

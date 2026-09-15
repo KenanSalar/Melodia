@@ -70,6 +70,11 @@ export global WindowChrome {
     // read once after `app.show()` — so a window maximized afterwards mounted more cards than
     // its tier could hold and left the overflow on placeholders.
     callback display-changed();
+    // Windows only, the same Rust-to-Rust shape: fired by the winit `ThemeChanged` and focus-gain
+    // arms, handled in `ui::appearance`, which re-reads the default app mode and repaints a System
+    // variant painted for the other one. Focus gain too, as the border colour's refresh does, so an
+    // event winit never sent costs no more than a click back into the window.
+    callback recheck-system-theme();
 }
 
 // The compact player replacing the full UI once the window shrinks past a threshold, and the

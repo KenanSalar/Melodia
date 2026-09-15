@@ -43,23 +43,10 @@ fn extract_color_scheme(reply: &zbus::Message) -> Option<u32> {
     unwrap_variant_u32(outer)
 }
 
-/// Query the XDG Desktop Portal for the current system color scheme.
-/// Returns "dark" or "light".
-///
-/// Runs the blocking zbus call inside `spawn_blocking` so it never enters the
-/// tokio reactor (the project keeps zbus's tokio feature off — see CLAUDE.md).
-pub async fn get_system_theme() -> String {
-    tokio::task::spawn_blocking(query_portal_color_scheme_blocking)
-        .await
-        .ok()
-        .flatten()
-        .map(color_scheme_to_str)
-        .map_or_else(|| "dark".to_owned(), str::to_owned)
-}
-
-/// Synchronous variant of [`get_system_theme`] for startup paths that run
-/// before the Slint event loop and don't have a future to await on. Same
-/// `"dark"` fallback when the portal is unreachable.
+/// Query the XDG Desktop Portal for the current system color scheme, returning
+/// `"dark"` or `"light"`, and `"dark"` when the portal is unreachable. Blocks on
+/// the D-Bus call, so it belongs to startup paths that run before the Slint
+/// event loop.
 pub fn get_system_theme_blocking() -> String {
     query_portal_color_scheme_blocking()
         .map(color_scheme_to_str)

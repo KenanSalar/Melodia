@@ -1,6 +1,6 @@
 //! Winit `WindowEvent` filter installed by `window_chrome::install`.
 //!
-//! Seven reasons to subscribe:
+//! Eight reasons to subscribe:
 //!
 //! 1. **`MouseInput { Pressed, Left }`** over a `ResizeRing` grab or a drag region: an
 //!    OS-level resize or window move plus `PreventDefault`, bypassing the TouchArea-grab
@@ -21,6 +21,9 @@
 //!    `CursorMoved` is mirrored for the same arm, a wheel event carrying no position.
 //! 7. **`RedrawRequested`** and **`Moved`** — the Slint tick Win32's modal resize-and-move
 //!    loop parks winit out of; see `parked_loop`.
+//! 8. **`ThemeChanged`**, Windows only: a light/dark flip for a theme on its System
+//!    variant, re-read by `ui::appearance` rather than taken from the event, whose theme
+//!    also folds in high contrast.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -272,9 +275,21 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                     // callbacks, so the shadow would stay stuck `false`.
                     if focused {
                         crate::ui::shell::tray_bridge::set_window_visible(&ui, true);
+                        // The theme first: its repaint moves the palette the border's neutral is
+                        // mixed from.
                         #[cfg(target_os = "windows")]
-                        crate::ui::appearance::window_border::refresh_system_color(&ui);
+                        {
+                            ui.global::<melodia_ui::WindowChrome>().invoke_recheck_system_theme();
+                            crate::ui::appearance::window_border::refresh_system_color(&ui);
+                        }
                     }
+                });
+                EventResult::Propagate
+            }
+            #[cfg(target_os = "windows")]
+            WindowEvent::ThemeChanged(_) => {
+                let _ = weak.upgrade_in_event_loop(|ui| {
+                    ui.global::<melodia_ui::WindowChrome>().invoke_recheck_system_theme();
                 });
                 EventResult::Propagate
             }

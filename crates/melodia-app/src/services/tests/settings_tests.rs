@@ -31,11 +31,56 @@ fn test_settings_deserializes_volume_fields() -> Result<(), AppError> {
 #[test]
 fn test_empty_json_uses_defaults() -> Result<(), AppError> {
     let json = "{}";
-    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let settings: SettingsData =
+        reading_env(|| serde_json::from_str(json)).map_err(|e| json_err(&e))?;
     assert_eq!(settings.volume, 100);
     assert!(!settings.playback.is_muted);
-    assert_eq!(settings.theme_id, "catppuccin");
     assert!(settings.playback.gapless_playback);
+    Ok(())
+}
+
+/// Spelled as literals rather than read off the registry: these are the ids `settings.json`
+/// stores, so renaming one strands every install that saved it.
+#[cfg(target_os = "windows")]
+#[test]
+fn a_fresh_windows_install_opens_on_fluent_following_the_app_mode() {
+    let settings = reading_env(SettingsData::default);
+
+    assert_eq!(
+        (
+            settings.theme_id.as_str(),
+            settings.theme_variant.as_str(),
+            settings.accent_color.as_str()
+        ),
+        ("windows-fluent", "system", "blue"),
+    );
+}
+
+#[cfg(not(target_os = "windows"))]
+#[test]
+fn a_fresh_install_off_windows_opens_on_catppuccin_mocha() {
+    let settings = reading_env(SettingsData::default);
+
+    assert_eq!(
+        (
+            settings.theme_id.as_str(),
+            settings.theme_variant.as_str(),
+            settings.accent_color.as_str()
+        ),
+        ("catppuccin", "mocha", "mauve"),
+    );
+}
+
+/// Windows used to default to the native titlebar, so what matters beside the new default is that
+/// an install which saved the old one keeps it.
+#[test]
+fn the_custom_titlebar_ships_by_default_but_never_overrides_a_saved_answer() -> Result<(), AppError>
+{
+    assert!(!WindowFlags::default().use_native_titlebar);
+
+    let window: WindowFlags =
+        serde_json::from_str(r#"{"use_native_titlebar": true}"#).map_err(|e| json_err(&e))?;
+    assert!(window.use_native_titlebar);
     Ok(())
 }
 

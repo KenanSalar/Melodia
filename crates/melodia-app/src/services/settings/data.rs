@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 
 use melodia_core::entities::integrations::{DiscordFlags, ScrobbleFlags};
 use melodia_core::entities::locale::SUPPORTED_LOCALES;
+use melodia_core::themes::{self, SYSTEM_VARIANT_ID, ThemeDef};
 use melodia_engine::player::engine::types::RepeatMode;
 use melodia_playback::player::playback::crossfade::DEFAULT_CROSSFADE_MS;
 use melodia_playback::player::playback::equalizer::{DEFAULT_PRESET, NUM_BANDS};
@@ -306,12 +307,9 @@ impl Default for WindowFlags {
         Self {
             is_maximized: false,
             always_on_top: false,
-            // On Windows the DWM caption attributes paint the OS titlebar in
-            // the app mantle, so the native chrome looks near-identical and
-            // brings real Aero Snap and hover-peek with it. Elsewhere the
-            // custom titlebar is the only chrome that carries the playback
-            // controls without losing rows to a separate OS frame.
-            use_native_titlebar: cfg!(target_os = "windows"),
+            // Windows too: the native frame, painted in the app mantle through the DWM caption
+            // attributes, stays a Settings toggle rather than the first-launch look.
+            use_native_titlebar: false,
             titlebar_button_style: TitlebarButtonStyle::Standard,
             titlebar_button_side: TitlebarButtonSide::Right,
             window_border: WindowBorder::Shown,
@@ -766,10 +764,11 @@ pub struct SettingsData {
 
 impl Default for SettingsData {
     fn default() -> Self {
+        let (theme, variant) = first_launch_theme();
         Self {
-            theme_id: "catppuccin".to_owned(),
-            theme_variant: "mocha".to_owned(),
-            accent_color: "mauve".to_owned(),
+            theme_id: theme.id.to_owned(),
+            theme_variant: variant.to_owned(),
+            accent_color: theme.default_accent.to_owned(),
             sidebar_width: 180.0,
             window_width: 1200.0,
             window_height: 800.0,
@@ -805,6 +804,17 @@ impl Default for SettingsData {
             support: SupportFlags::default(),
             onboarding: OnboardingFlags::default(),
         }
+    }
+}
+
+/// The theme and variant a fresh install opens with, its accent being the theme's own default.
+/// Windows opens on its native Fluent theme under the System variant, so the first window matches
+/// the desktop around it.
+fn first_launch_theme() -> (&'static ThemeDef, &'static str) {
+    if cfg!(target_os = "windows") {
+        (&themes::windows::WINDOWS, SYSTEM_VARIANT_ID)
+    } else {
+        (&themes::catppuccin::CATPPUCCIN, themes::catppuccin::CATPPUCCIN.default_variant)
     }
 }
 

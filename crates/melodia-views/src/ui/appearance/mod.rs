@@ -26,7 +26,7 @@ use tokio::sync::watch;
 use melodia_app::library;
 use melodia_app::state::{AppState, Signal};
 use melodia_core::themes::{self, SystemColorState, ThemeDef};
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 use melodia_platform::services::platform;
 use melodia_ui::{AppWindow, Settings};
 
@@ -57,9 +57,9 @@ pub struct AppearanceHandles {
 /// without going through `library::settings::get_settings`.
 pub(super) type PersistedAccent = Arc<parking_lot::Mutex<String>>;
 
-/// Read the OS appearance state once at startup. Linux: XDG portal +
-/// `kdeglobals`. Other platforms: an `unknown()` placeholder so `apply()`'s
-/// system-variant branch defaults to dark.
+/// Read the OS appearance state once at startup, ahead of the first frame, so a System variant
+/// never paints the wrong brightness first. Linux: XDG portal + `kdeglobals`. Windows: the default
+/// app mode. Elsewhere: an `unknown()` placeholder, which a System variant paints as dark.
 pub(super) fn read_initial_system_state() -> SystemColorState {
     #[cfg(target_os = "linux")]
     {
@@ -69,7 +69,14 @@ pub(super) fn read_initial_system_state() -> SystemColorState {
             material_you: None,
         }
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "windows")]
+    {
+        SystemColorState {
+            theme: platform::app_mode::system_theme().to_owned(),
+            material_you: None,
+        }
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     {
         SystemColorState::unknown()
     }

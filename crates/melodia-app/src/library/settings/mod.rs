@@ -104,25 +104,6 @@ pub fn get_view_state(state: &AppState) -> Result<ViewStateData, AppError> {
     services::view_state::read_view_state(&state.paths)
 }
 
-/// Returns "dark" or "light" based on the OS color scheme preference.
-#[cfg_attr(
-    not(target_os = "linux"),
-    allow(
-        clippy::unused_async,
-        reason = "signature mirrors the Linux variant (which awaits the XDG portal); non-Linux returns the fallback synchronously"
-    )
-)]
-pub async fn get_system_theme() -> String {
-    #[cfg(target_os = "linux")]
-    {
-        melodia_platform::services::platform::system_theme::get_system_theme().await
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        "dark".to_owned()
-    }
-}
-
 // Note: `is_kde_desktop` and `get_os_corner_radius` moved to
 // `services::settings` so the layer dependency (library → services)
 // stays unidirectional; the services layer needs them for serde
