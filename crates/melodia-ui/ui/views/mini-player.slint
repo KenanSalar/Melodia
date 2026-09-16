@@ -436,16 +436,6 @@ export component MiniPlayerView inherits Rectangle {
     // through a button still showing, which cuts a glyph that fills its box, the lyrics one.
     private property <float> captions-fade-end: 0.5;
 
-    // How far the controls have moved up onto the title's line. **Eased rather than following the
-    // window**: the two arrangements are a few pixels of height apart, so a drag crosses between
-    // them in a frame. Bound to the layout rather than a size, which the switch moves only on a real
-    // crossing, so a drag can't restart the ease on every frame of it. **Only the controls ride it**:
-    // the text follows the artwork, and anything else on the timer moves apart from the drag.
-    private property <float> inline-t: MiniPlayer.layout == MiniLayout.strip ? 1.0 : 0.0;
-    animate inline-t { duration: Theme.dur-med; easing: ease-in-out; }
-    // The title makes the controls' room over the first fifth of the move, before they reach the
-    // bottom of its line.
-    private property <float> title-lead: min(1.0, root.inline-t * 5);
     // The title's size steps rather than tracking the drag: FemtoVG keeps a glyph for every tenth of
     // a pixel it has drawn at in an atlas it never evicts.
     private property <length> title-size-step: 0.5px;
@@ -582,17 +572,24 @@ export component MiniPlayerView inherits Rectangle {
     //
     // **Each part opens into the height the one before it leaves**: the artwork up to its size,
     // then the captions row, then the panel. Nothing arrives or leaves with height of its own to
-    // claim, so the block never jumps, and it stays top-aligned for the same reason. The one move
-    // that isn't a height is the controls going up onto the title's line, which `inline-t` eases.
+    // claim, so the block never jumps, and it stays top-aligned for the same reason. Below the
+    // card the artwork's last stretch carries the controls up onto the title's line.
     stack := VerticalLayout {
         // What the artwork shares the window's height with: the edges and the timeline under it.
         property <length> art-rows: 2 * root.edge-pad + timeline-gap.preferred-height
             + timeline.preferred-height;
         // How far the text has grown from the strip's size to the card's, over the artwork's travel
         // from its floor to where the card takes over. Off the height the artwork is sized by, so
-        // the two change together, and the crossing, where this has already reached 1, moves no text.
+        // the two change together, and the crossing, where this has already reached 1, moves nothing.
         property <float> title-grow: clamp((root.height - self.art-rows - root.art-floor)
             / (MiniPlayer.card-min-height - self.art-rows - root.art-floor), 0, 1);
+        // How far the controls have come up onto the title's line, over the same travel. **Off the
+        // height rather than eased on the crossing**, so they move with the drag and at no other
+        // time.
+        property <float> inline-t: 1 - self.title-grow;
+        // The title makes the controls' room over the first fifth of their rise, before they reach
+        // the bottom of its line.
+        property <float> title-lead: min(1.0, self.inline-t * 5);
 
         // How far the captions row is open: what the artwork and the timeline leave, up to all of it.
         property <length> captions-shown: clamp(
@@ -751,16 +748,16 @@ export component MiniPlayerView inherits Rectangle {
                     // artwork.
                     preferred-width: 0px;
                     min-width: self.stacked-min-width
-                        + (self.inline-min-width - self.stacked-min-width) * root.title-lead;
+                        + (self.inline-min-width - self.stacked-min-width) * stack.title-lead;
                     min-height: self.stacked-min-height
-                        + (self.inline-min-height - self.stacked-min-height) * root.inline-t;
+                        + (self.inline-min-height - self.stacked-min-height) * stack.inline-t;
 
                     // No clip: bounded, the elide already stops the text, and a scissor at the
                     // line box cuts the marks above and below it.
                     titles := VerticalLayout {
                         x: 0;
                         y: parent.line-center - self.height / 2;
-                        width: parent.width - (cluster.width + Theme.pad-sm) * root.title-lead;
+                        width: parent.width - (cluster.width + Theme.pad-sm) * stack.title-lead;
                         height: self.preferred-height;
                         spacing: 2px;
 
@@ -789,7 +786,7 @@ export component MiniPlayerView inherits Rectangle {
                         property <length> inline-y: parent.line-center - self.height / 2;
 
                         x: parent.width - self.width;
-                        y: self.stacked-y + (self.inline-y - self.stacked-y) * root.inline-t;
+                        y: self.stacked-y + (self.inline-y - self.stacked-y) * stack.inline-t;
                         width: self.preferred-width;
                         height: self.preferred-height;
                         spacing: Theme.pad-sm;
