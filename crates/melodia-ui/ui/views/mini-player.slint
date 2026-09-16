@@ -436,9 +436,18 @@ export component MiniPlayerView inherits Rectangle {
     // through a button still showing, which cuts a glyph that fills its box, the lyrics one.
     private property <float> captions-fade-end: 0.5;
 
-    // The title's size steps rather than tracking the drag: FemtoVG keeps a glyph for every tenth of
+    // The text's size steps rather than tracking the drag: FemtoVG keeps a glyph for every tenth of
     // a pixel it has drawn at in an atlas it never evicts.
-    private property <length> title-size-step: 0.5px;
+    private property <length> text-size-step: 0.5px;
+    // The artist line's sizes in the card and on the strip. A pair of its own rather than the
+    // title's ratio, which shrinks a line this small past reading.
+    private property <length> subtitle-card-size: 11px;
+    private property <length> subtitle-strip-size: 10px;
+
+    pure function grown-size(strip: length, card: length) -> length {
+        return round((strip + (card - strip) * stack.title-grow) / root.text-size-step)
+            * root.text-size-step;
+    }
     // The highest the title's line sits down the artwork in the card, as a share of it. A centred
     // pair rides up to the window's top as the artwork shrinks, and the text stops reading as beside
     // the cover.
@@ -773,16 +782,15 @@ export component MiniPlayerView inherits Rectangle {
                         Text {
                             text: Player.source-title;
                             color: root.ink;
-                            font-size: round((Theme.font-size-sm
-                                + (Theme.font-size-md - Theme.font-size-sm) * stack.title-grow)
-                                / root.title-size-step) * root.title-size-step;
+                            font-size: root.grown-size(Theme.font-size-sm, Theme.font-size-md);
                             font-weight: 500;
                             overflow: elide;
                         }
                         Text {
                             text: Player.source-subtitle;
                             color: root.ink-muted;
-                            font-size: 11px;
+                            font-size: root.grown-size(
+                                root.subtitle-strip-size, root.subtitle-card-size);
                             overflow: elide;
                         }
                     }
