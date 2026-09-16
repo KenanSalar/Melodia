@@ -284,8 +284,8 @@ fn no_hero_tier_outlives_the_banner_it_was_solved_for() {
 
     // The backdrop is one mount carrying both stacks, so this is the single binding standing
     // between an artwork-less detail and a backdrop easing out of the previous tab's stops. The
-    // wrapper defaults `shown` true, for the two mosaic bands and Now Playing, which never stop
-    // painting a hero — so an omitted binding here is silently ungated.
+    // wrapper defaults `shown` true, for the two mosaic bands, which never stop painting a hero,
+    // so an omitted binding here is silently ungated.
     let mount = code
         .split_once("HeroBackdropStack {")
         .and_then(|(_, rest)| rest.split_once('}'))
@@ -294,7 +294,7 @@ fn no_hero_tier_outlives_the_banner_it_was_solved_for() {
         mount.contains("shown: root.detail-open;"),
         "the band must gate `HeroBackdropStack`'s `shown` on `detail-open` — the wrapper ANDs the \
          setting in itself, so this term is the band's whole half of the deal and covers both \
-         stacks at once. The wrapper owes the other half, pinned by `hero_blur_backdrop_tests`"
+         stacks at once. The wrapper owes the other half, pinned by `backdrop_mounts`"
     );
 }
 

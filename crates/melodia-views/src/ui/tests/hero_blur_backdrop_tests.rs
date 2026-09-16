@@ -1,13 +1,11 @@
-//! Source-level pins on the two backdrop stacks and the two sites that choose between them —
-//! Now Playing, and `HeroBackdropStack` on behalf of the six heroes.
+//! Source-level pins on the blur stack itself. Which sites mount it, and behind which branch, is
+//! `crates/melodia/tests/backdrop_mounts.rs`, a question about the whole tree.
 //!
 //! The blur's floor is the layer that shipped without an `animate`, and it is the layer
 //! that *is* the backdrop whenever the slots sit at 0: an art-less track, an artwork-less
 //! entity, Genre Detail's stops, the window between a hero opening and its decode landing.
 //! So the failure is invisible on anything with artwork. That reach is also why it takes a
 //! gate, the globals behind it outliving the My Library tab that filled them.
-//!
-//! The pairing is pinned here rather than under a host, being a property of no single site.
 
 // Comments dropped, so prose about a fix can neither satisfy a pin nor bound a region
 // early — every anchor here is a gradient literal, and the block above the floor's own
@@ -122,8 +120,8 @@ fn the_blur_stack_names_no_global() {
         assert!(
             !code(HERO_BLUR).contains(global),
             "`hero-blur-backdrop.slint` reads `{global}` directly — every colour is an input \
-             so that one component can paint from either tier, and a global here is what \
-             forced Now Playing to spell the whole stack inline"
+             so that one component can paint from either tier, and a global here would force \
+             the other tier's wrapper to spell the whole stack inline"
         );
     }
 }

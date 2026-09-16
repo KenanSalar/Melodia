@@ -2,9 +2,9 @@ import { Theme } from "../../theme.slint";
 import { Player } from "../../globals/player.slint";
 import { SliderTrack } from "../slider-track.slint";
 
-// Elapsed, the seek track, total: the timeline row of the now-playing bar and both miniplayer
-// variants. One component because the elapsed label is the part that is easy to get subtly wrong
-// and three copies would drift on it: it follows the thumb through a drag and holds a committed
+// Elapsed, the seek track, total: the timeline row of the now-playing bar and the miniplayer. One
+// component because the elapsed label is the part that is easy to get subtly wrong and two copies
+// would drift on it: it follows the thumb through a drag and holds a committed
 // seek until the engine reports it, the same two readings the track's own value takes.
 //
 // A stream has no timeline, so every host mounts this behind `!Player.vm.has_station` and puts its

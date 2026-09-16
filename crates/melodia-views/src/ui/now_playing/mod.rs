@@ -181,7 +181,7 @@ impl NowPlayingState {
     }
 
     /// Decode the current track's high-res cover, accent and chips into the `Player`
-    /// global, on the rectangle→square transition and on an entry straight into square.
+    /// global, for a miniplayer surface that has just started drawing them.
     /// A no-op before [`install`] returns, and when the current track is already applied.
     pub(crate) fn kick_artwork(&self) {
         if let Some(seeder) = self.artwork_seeder.borrow().as_ref() {
@@ -213,6 +213,18 @@ impl NowPlayingState {
     pub(crate) fn renders_panel(&self) -> bool {
         self.open.get() || (self.mini_visible.get() && self.mini_layout.get() == MiniLayout::Column)
     }
+}
+
+/// Drops the [`NowPlayingArtwork`] LRU and `malloc_trim`s the pages back, off the UI thread:
+/// `clear()` drops buffers and `trim()` walks arenas. The heavy `(cover, blur)` buffers are pinned
+/// only while a surface renders them, and the displayed track's stay alive regardless, the `Player`
+/// global still referencing its `Image`s.
+pub(crate) fn release_artwork_off_thread(state: &AppState, np_artwork: &Arc<NowPlayingArtwork>) {
+    let np_artwork = Arc::clone(np_artwork);
+    state.runtime.spawn_blocking(move || {
+        np_artwork.clear();
+        melodia_platform::services::platform::allocator::trim();
+    });
 }
 
 /// Install the Now Playing view's models + subscribers. Runs on the Slint

@@ -152,16 +152,10 @@ pub(super) fn wire_now_playing_open(
                 }
             }
 
-            // Drop the decoded cover and blur buffers and hand the pages back. The
-            // displayed track's stay alive, the `Player` global still referencing its
-            // `Image`s, so a same-track reopen needs no decode. Off the UI thread —
-            // `clear()` drops buffers and `trim()` walks arenas.
+            // A same-track reopen needs no decode, the displayed track's images outliving the
+            // release.
             if !np_state.renders_artwork() {
-                let np_artwork = np_artwork.clone();
-                state.runtime.spawn_blocking(move || {
-                    np_artwork.clear();
-                    melodia_platform::services::platform::allocator::trim();
-                });
+                super::release_artwork_off_thread(&state, &np_artwork);
             }
             return;
         }

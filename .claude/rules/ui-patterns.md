@@ -248,11 +248,12 @@ three components that answer it, and each argues its geometry at its own file.
 - **Two backdrop stacks, and neither knows which tier it is painting from.** `HeroBlurBackdrop`
   and `AuroraBackdrop` take every colour as a defaulted `in property` — `MetaChip`'s idiom — which
   is what lets one component serve `HeroBackdrop` on the six bands and `Player.np-*` on Now
-  Playing, two globals kept separate because a band stays mounted behind an open Now Playing.
-  Reading either global from inside a stack ties it to one tier and puts the other site's inline
-  copy back; `hero_blur_backdrop_tests` pins both directions. **Two mount sites, one
-  `aurora-shown` property, and only the live arm mounted at each** — each stack sits behind its own
-  branch of that property, the two conditions each other's negation.
+  Playing and the miniplayer, two globals kept separate because a band stays mounted behind an
+  open Now Playing. Reading either global from inside a stack ties it to one tier and puts the
+  other site's inline copy back; `hero_blur_backdrop_tests` pins both directions. **Two mount
+  sites, one wrapper per tier, each with one `aurora-shown` property and only the live arm
+  mounted**: each stack sits behind its own branch of that property, the two conditions each
+  other's negation.
   **The branch is safe because the condition is a process constant**: `Theme.aurora-backdrop` is an
   `in` property written once by `boot::ui_setup::apply_backdrop_style`, ahead of `install_views` and
   `app.show()`, so no frame sees it move and neither leaf carries a `changed` tracker. The pair was
@@ -266,21 +267,27 @@ three components that answer it, and each argues its geometry at its own file.
   through it (below), which is why each stack's `shown: false` arm stays a *gradient of the same
   shape* — `Brush::interpolate` blends stop-for-stop and only between matching types, so
   "simplifying" that arm to a solid `transparent` kills the drain.
-  `hero_blur_backdrop_tests::every_backdrop_site_mounts_only_the_live_arm` anchors each gate at the
+  `backdrop_mounts::every_backdrop_site_mounts_only_the_live_arm` anchors each gate at the
   head of its mount line, `if root.aurora-shown:` being a substring of the negation.
 
-- **The six bands reach that pair through `components/hero/hero-backdrop-stack.slint`, not
-  directly.** `HeroBackdropStack` is the pair plus the `aurora-shown` choice, bound to the
-  `HeroBackdrop` tier — the twenty-five lines `MosaicTabHero` and `LibraryTabBand` had each. Now
-  Playing stays a direct mount because it paints `Player.np-*`, which is the whole reason the two
-  leaves take their colours as inputs rather than naming a global. The wrapper's own `shown` is
-  the **host's** question — ungated for the two mosaic bands, which never stop painting a hero,
-  and `detail-open` for `LibraryTabBand`, whose globals outlive the tab that filled them. That
-  makes the gate a two-file deal and each half its own pin: the band passes the term
-  (`library_tab_band_tests::no_hero_tier_outlives_the_banner_it_was_solved_for`) and the wrapper
-  forwards it to each child
-  (`hero_blur_backdrop_tests::the_wrapper_forwards_its_hosts_gate_to_the_mounted_stack`) — drop
-  either and both files still read correctly while My Library paints a detail's backdrop flat.
+- **No view mounts that pair directly; each tier has a wrapper.** The six bands take
+  `components/hero/hero-backdrop-stack.slint`'s `HeroBackdropStack`, bound to `HeroBackdrop` and
+  replacing the twenty-five lines `MosaicTabHero` and `LibraryTabBand` had each. Now Playing and
+  the miniplayer take `components/now-playing/np-backdrop-stack.slint`'s `NpBackdropStack`, bound
+  to `Player.np-*`, which they can share because entering the miniplayer force-closes Now Playing.
+  Two wrappers rather than one parameterised by tier is the whole reason the leaves take their
+  colours as inputs. Each wrapper's `shown` is the **host's** question:
+  - **ungated** for the two mosaic bands and Now Playing, which never stop painting;
+  - **`detail-open`** for `LibraryTabBand`, whose globals outlive the tab that filled them;
+  - **the drain** for the miniplayer, whose `MiniBackdrop` fades the stack out through `shown`
+    and unmounts it once drained, the backdrop being off for every install that never presses
+    the button.
+
+  That makes the gate a two-file deal and each half its own pin: the band passes the term
+  (`library_tab_band_tests::no_hero_tier_outlives_the_banner_it_was_solved_for`) and both
+  wrappers forward it to each child
+  (`backdrop_mounts::the_wrapper_forwards_its_hosts_gate_to_the_mounted_stack`). Drop either and
+  both files still read correctly while My Library paints a detail's backdrop flat.
 
 - **Every hero has washes, so the mount gates on the setting and nothing else.** What differs is
   where the three colours come from: a cover's quantize, or — for the two heroes that have no
@@ -299,7 +306,7 @@ three components that answer it, and each argues its geometry at its own file.
   chroma; `WASH_MAX_TONE` is the one number here to tune by eye. This retired a `has-tints` /
   `np-has-tints` pair both mounts had to fold in; a term put back strands one site on the blur
   under a setting its sibling honours, which
-  `hero_blur_backdrop_tests::no_backdrop_site_gates_the_aurora_on_anything_but_the_setting` reads
+  `backdrop_mounts::no_backdrop_site_gates_the_aurora_on_anything_but_the_setting` reads
   off each binding's own text. **A genre publishes through `apply_gradient`, which picks its arm
   from `backdrop::kind` itself** — it has no `BackdropSample` for `solve` to pick from — and is in
   `republish_for_palette` for the first time, its tiers having been theme-independent only while it

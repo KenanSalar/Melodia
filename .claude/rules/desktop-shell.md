@@ -20,6 +20,7 @@ paths:
   - crates/melodia-ui/ui/views/settings/window-chrome-section.slint
   - crates/melodia-ui/ui/views/settings/mini-player-section.slint
   - crates/melodia-ui/ui/views/mini-player.slint
+  - crates/melodia-ui/ui/components/mini-player/*.slint
   - crates/melodia-views/src/ui/appearance/window_settings.rs
 ---
 

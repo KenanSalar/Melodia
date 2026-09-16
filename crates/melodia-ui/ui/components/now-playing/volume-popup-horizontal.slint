@@ -7,13 +7,13 @@ import { SliderTrack } from "../slider-track.slint";
 import { Tooltip, TooltipSide } from "../tooltip.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 
-// `VolumePopup` rotated 90°, for the rectangle miniplayer, whose wide-short
-// window clips the vertical one. Same `SliderTrack` in the same `PopupSurface`
-// chrome, laid along the bottom with the shared `Tooltip` pill reading the
-// percentage out above the thumb.
+// `VolumePopup` rotated 90°, for the miniplayer, whose short strip and card clip
+// the vertical one. Same `SliderTrack` in the same `PopupSurface` chrome, laid
+// along the bottom with the shared `Tooltip` pill reading the percentage out
+// above the thumb.
 //
 // It flies out to the *left* of the trigger disc, into the title area, centred
-// on it: that miniplayer is always wide enough, and vertical room is the whole
+// on it: the miniplayer is always wide enough, and vertical room is the whole
 // constraint being escaped.
 export component VolumePopupHorizontal inherits Rectangle {
     in property <length> diameter: 36px;

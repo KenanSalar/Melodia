@@ -1,0 +1,187 @@
+import { Player } from "../../globals/player.slint";
+import { MiniPlayer, WindowChrome } from "../../globals/shell.slint";
+import { TooltipSide } from "../tooltip.slint";
+import { MetaChip } from "../meta-chip.slint";
+import { SeekRow } from "../now-playing/seek-row.slint";
+import { VolumePopupHorizontal } from "../now-playing/volume-popup-horizontal.slint";
+import { PlayButton } from "../now-playing/play-button.slint";
+import { MiniIconButton, MiniGlyphs } from "mini-icon-button.slint";
+
+// Previous, play and next, leading the controls cluster every layout draws.
+export component MiniTransport inherits HorizontalLayout {
+    // The play disc and the glyph punched out of it, eased by the host with the rest of its surface.
+    in property <brush> disc-color;
+    in property <brush> disc-ink;
+
+    spacing: 2px;
+    horizontal-stretch: 0;
+    alignment: center;
+
+    VerticalLayout {
+        alignment: center;
+        MiniIconButton {
+            icon: "chevron_left";
+            button-enabled: Player.vm.has_previous;
+            tooltip-text: @tr("Previous");
+            clicked => { Player.previous(); }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        PlayButton {
+            wrapper-d: 30px;
+            icon-size: 16px;
+            is-playing: Player.vm.is_playing;
+            animation-mode: 0;
+            disc-color: root.disc-color;
+            icon-color: root.disc-ink;
+            clicked => { Player.play-pause(); }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        MiniIconButton {
+            icon: "chevron_right";
+            button-enabled: Player.vm.has_next;
+            tooltip-text: @tr("Next");
+            clicked => { Player.next(); }
+        }
+    }
+}
+
+// Volume, the pin, the backdrop switch and the heart, ending the controls cluster at the window's
+// right edge.
+export component MiniTrailingControls inherits HorizontalLayout {
+    // How long the volume trigger takes to repaint, the host's pace.
+    in property <duration> recolor;
+    // The host's, the switch fading through the view's backdrop, which only the view can reach.
+    callback toggle-backdrop();
+
+    spacing: 2px;
+    horizontal-stretch: 0;
+    alignment: end;
+    // Keeps the corner-resize TouchAreas' hit zone clear.
+    padding-right: 4px;
+
+    VerticalLayout {
+        alignment: center;
+        // The vertical `VolumePopup` is 180 px tall and clips against the top edge of a strip or a
+        // card; the horizontal sibling is the same slider rotated, flying out to the left of the
+        // disc.
+        //
+        // A step above the row's glyphs, as the bar sets its own: at one size the speaker reads
+        // smaller than the icons beside it.
+        VolumePopupHorizontal {
+            diameter: 28px;
+            icon-size: 20px;
+            trigger-fg: MiniGlyphs.idle;
+            trigger-hover-fg: MiniGlyphs.lit;
+            trigger-hover-bg: MiniGlyphs.hover-bg;
+            trigger-recolor-duration: root.recolor;
+        }
+    }
+    // Collapsed where the window manager gives no way to keep a window on top.
+    if WindowChrome.always-on-top-supported: VerticalLayout {
+        alignment: center;
+        MiniIconButton {
+            icon: "push_pin";
+            active: WindowChrome.always-on-top-active;
+            filled: WindowChrome.always-on-top-active;
+            tooltip-text: WindowChrome.always-on-top-active
+                ? @tr("Unpin from Top") : @tr("Pin on Top");
+            clicked => { WindowChrome.toggle-always-on-top(); }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        MiniIconButton {
+            icon: "tonality";
+            active: MiniPlayer.backdrop-shown;
+            filled: MiniPlayer.backdrop-shown;
+            tooltip-text: MiniPlayer.backdrop-shown
+                ? @tr("Album Backdrop: on") : @tr("Album Backdrop: off");
+            clicked => { root.toggle-backdrop(); }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        MiniIconButton {
+            icon: Player.vm.track.is_favorite ? "favorite" : "favorite_border";
+            active: Player.vm.track.is_favorite;
+            filled: Player.vm.track.is_favorite;
+            button-enabled: Player.vm.has_track;
+            tooltip-text: Player.vm.track.is_favorite
+                ? @tr("Unfavorite") : @tr("Favorite");
+            clicked => { Player.toggle-favorite(); }
+        }
+    }
+}
+
+// What sits under the controls in every layout: the seek row between shuffle and repeat, or for a
+// stream, which has no position to seek within, the bar's live pill in its slot.
+//
+// **The two queue modes flank the track rather than joining the transport**, whose row already
+// takes all the width the narrowest window can spare beside the artwork: two more buttons there
+// would come out of the artwork, and out of the strip's title.
+export component MiniTimeline inherits HorizontalLayout {
+    in property <brush> label-color;
+    in property <brush> fill-color;
+    in property <brush> track-color;
+    in property <brush> seam-mask-color;
+    in property <brush> chip-fill;
+    in property <brush> chip-label;
+
+    vertical-stretch: 0;
+    spacing: 2px;
+    // Keeps the corner-resize TouchAreas' hit zones clear at both ends.
+    padding-left: 4px;
+    padding-right: 4px;
+
+    // Both pills open inward: at the window's edge a centred one runs off it.
+    VerticalLayout {
+        alignment: center;
+        MiniIconButton {
+            icon: "shuffle";
+            active: Player.queue.shuffle;
+            tooltip-text: Player.queue.shuffle
+                ? @tr("Shuffle: on") : @tr("Shuffle: off");
+            tooltip-side: TooltipSide.right;
+            clicked => { Player.toggle-shuffle(); }
+        }
+    }
+
+    VerticalLayout {
+        horizontal-stretch: 1;
+        alignment: center;
+
+        if !Player.vm.has_station: SeekRow {
+            label-color: root.label-color;
+            fill-color: root.fill-color;
+            track-color: root.track-color;
+            seam-mask-color: root.seam-mask-color;
+        }
+        if Player.vm.has_station: HorizontalLayout {
+            alignment: center;
+            MetaChip {
+                text: Player.live-label;
+                fill: root.chip-fill;
+                label-color: root.chip-label;
+            }
+        }
+    }
+
+    VerticalLayout {
+        alignment: center;
+        MiniIconButton {
+            icon: Player.queue.repeat_mode == "one" ? "repeat_one" : "repeat";
+            active: Player.queue.repeat_mode != "off";
+            tooltip-text: Player.queue.repeat_mode == "off"
+                ? @tr("Repeat: off")
+                : (Player.queue.repeat_mode == "one"
+                    ? @tr("Repeat: one")
+                    : @tr("Repeat: all"));
+            tooltip-side: TooltipSide.left;
+            clicked => { Player.cycle-repeat(); }
+        }
+    }
+}

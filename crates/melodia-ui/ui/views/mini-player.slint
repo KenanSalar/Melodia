@@ -2,343 +2,12 @@ import { Theme } from "../theme.slint";
 import { Player } from "../globals/player.slint";
 import { Lyrics } from "../globals/lyrics.slint";
 import { DragRegion, MiniPlayer, MiniLayout, WindowChrome } from "../globals/shell.slint";
-import { IconButton } from "../components/icon-button.slint";
-import { TooltipSide } from "../components/tooltip.slint";
-import { CaptionButton, CaptionGlyph, CaptionStyle, MinimizeCaption, CloseCaption } from "../components/caption-buttons.slint";
-import { MacOsTitleBarCluster } from "../components/macos-titlebar-cluster.slint";
-import { MetaChip } from "../components/meta-chip.slint";
-import { SourceArtwork } from "../components/now-playing/source-artwork.slint";
-import { SeekRow } from "../components/now-playing/seek-row.slint";
-import { VolumePopupHorizontal } from "../components/now-playing/volume-popup-horizontal.slint";
-import { PlayButton } from "../components/now-playing/play-button.slint";
 import { UpNextList } from "../components/now-playing/up-next-list.slint";
 import { LyricsPanel } from "../components/now-playing/lyrics-panel.slint";
-import { AuroraBackdrop } from "../components/aurora-backdrop.slint";
-import { HeroBlurBackdrop } from "../components/hero-blur-backdrop.slint";
-
-// The view's own button, so the treatment is answered once rather than as the same bindings on
-// every `IconButton`. Private to this file and reading the switch straight off the global: the
-// rule that a shared leaf takes its colours as inputs is there so one component can serve both
-// tiers, and this one has a single host.
-//
-// **On the backdrop these are `AccentGlyphButton`'s**, the family Now Playing's header is made of:
-// no chrome in any state, the glyph resting at the dim tier and coming up to full under the
-// pointer, and a lit glyph lifting too so it still answers. Off it, the stock button. Not that
-// component mounted directly, which has no off arm to switch to.
-//
-// **`MiniPlayerView`'s `glyph` / `glyph-lit` / `glyph-hover-bg` restate the first three arms**,
-// for the volume trigger that is not this component, and that is forced rather than sloppy: a
-// component cannot read a property off the host it is mounted in. Move one and move the other.
-//
-// Every arm steps, and `IconButton` eases the step itself at the view's repaint pace: easing them
-// out here as well would restart its curve on every frame of this one.
-component MiniIconButton inherits IconButton {
-    private property <bool> on-backdrop: MiniPlayer.backdrop-shown;
-
-    recolor-duration: Theme.dur-med;
-    idle-fg: root.on-backdrop ? Player.np-accent-dim : Theme.text;
-    hover-fg: root.on-backdrop ? Player.np-accent-bright : Theme.text;
-    hover-bg: root.on-backdrop ? Colors.transparent : Theme.surface0;
-    active-fg: root.on-backdrop ? Player.np-accent-bright : Theme.accent;
-    hover-lift: root.on-backdrop;
-    disabled-fg: root.on-backdrop
-        ? Player.np-on-backdrop-muted.transparentize(0.55)
-        : Theme.overlay0;
-}
-
-// Minimize, full player and close for the captions row's corner, in the style the Settings card
-// picked. **The middle one restores rather than maximizes**: a miniplayer is a window size, so the
-// button that grows the window hands back the full player at the geometry it last settled at.
-//
-// A layout rather than a `Rectangle`, so the `if`-mounted captions size it. Every caption takes the
-// row's 28 px rather than a titlebar's 32.
-component MiniCaptions inherits HorizontalLayout {
-    // The drawn glyphs' ink, eased by the host with the rest of its surface. Hover and its fill
-    // stay stepped, the caption easing those itself.
-    in property <brush> ink;
-    in property <brush> ink-lit;
-    in property <brush> hover-fill;
-    // The glyph a KDE caption punches out of its `ink-lit` disc.
-    in property <brush> ink-on-lit;
-
-    private property <length> cell-width: 34px;
-    private property <length> cell-height: 28px;
-
-    out property <CaptionStyle> style: MiniPlayer.button-style == 2
-        ? CaptionStyle.kde
-        : CaptionStyle.standard;
-    // A standard caption lights its glyph over a fill, where a KDE one fills a disc with the lit ink.
-    private property <brush> caption-hover-fg:
-        root.style == CaptionStyle.kde ? root.ink-on-lit : root.ink-lit;
-    private property <brush> caption-hover-bg:
-        root.style == CaptionStyle.kde ? root.ink-lit : root.hover-fill;
-
-    horizontal-stretch: 0;
-    spacing: 0;
-
-    // The corner is fixed, so the cluster's side is too, whichever the titlebar's is set to.
-    if MiniPlayer.button-style == 1: MacOsTitleBarCluster {
-        captions-left: false;
-        cell-height: root.cell-height;
-        maximize-tooltip: @tr("Full Player");
-        maximize => { WindowChrome.restore-full-player(); }
-    }
-    if MiniPlayer.button-style != 1: MinimizeCaption {
-        style: root.style;
-        cell-width: root.cell-width;
-        cell-height: root.cell-height;
-        idle-fg: root.ink;
-        hover-fg: root.caption-hover-fg;
-        hover-bg: root.caption-hover-bg;
-    }
-    if MiniPlayer.button-style != 1: CaptionButton {
-        glyph: CaptionGlyph.maximize;
-        style: root.style;
-        tooltip-text: @tr("Full Player");
-        cell-width: root.cell-width;
-        cell-height: root.cell-height;
-        idle-fg: root.ink;
-        hover-fg: root.caption-hover-fg;
-        hover-bg: root.caption-hover-bg;
-        clicked => { WindowChrome.restore-full-player(); }
-    }
-    // Hover keeps the danger fill and its ink on either surface: closing is the one caption whose
-    // warning is the point.
-    if MiniPlayer.button-style != 1: CloseCaption {
-        style: root.style;
-        cell-width: root.cell-width;
-        cell-height: root.cell-height;
-        idle-fg: root.ink;
-    }
-}
-
-// The artwork beside the title and controls. The card and the column take the 384 px
-// `Player.np-cover-{a,b}` slot the Now Playing view uses, falling back to the 72 px row tier until
-// the seed lands and for tracks whose decode failed; `NowPlayingState::renders_artwork` gates that
-// decode on these two layouts.
-//
-// **The strip reads the row tier outright.** Rust releases the large decode there and stops writing
-// its slots, so they go on holding whatever played last.
-component MiniArtwork inherits SourceArtwork {
-    private property <bool> large: MiniPlayer.layout != MiniLayout.strip;
-
-    // Everything else about the tile is the shared track-or-station split. A station's large slot
-    // is its own, `np-cover-*` being the track cross-fade.
-    cover: Player.vm.has_station
-        ? (root.large && Player.np-station-logo.width > 0
-            ? Player.np-station-logo
-            : Player.vm.radio.logo_img)
-        : (root.large && Player.np-cover-has-image
-            ? (Player.np-cover-use-a ? Player.np-cover-a : Player.np-cover-b)
-            : Player.vm.track.cover_img);
-    // Written together with the slot above, so a `0` here means the row-tier fallback is what's
-    // drawing and there is nothing to measure.
-    native-size: root.large ? Player.np-station-logo-size * 1px : 0px;
-}
-
-// Previous, play and next, leading the controls cluster every layout draws.
-component MiniTransport inherits HorizontalLayout {
-    // The play disc and the glyph punched out of it, eased by the host with the rest of its surface.
-    in property <brush> disc-color;
-    in property <brush> disc-ink;
-
-    spacing: 2px;
-    horizontal-stretch: 0;
-    alignment: center;
-
-    VerticalLayout {
-        alignment: center;
-        MiniIconButton {
-            icon: "chevron_left";
-            press-shrink: true;
-            diameter: 28px;
-            icon-size: 18px;
-            button-enabled: Player.vm.has_previous;
-            tooltip-text: @tr("Previous");
-            clicked => { Player.previous(); }
-        }
-    }
-    VerticalLayout {
-        alignment: center;
-        PlayButton {
-            wrapper-d: 30px;
-            icon-size: 16px;
-            is-playing: Player.vm.is_playing;
-            animation-mode: 0;
-            disc-color: root.disc-color;
-            icon-color: root.disc-ink;
-            clicked => { Player.play-pause(); }
-        }
-    }
-    VerticalLayout {
-        alignment: center;
-        MiniIconButton {
-            icon: "chevron_right";
-            press-shrink: true;
-            diameter: 28px;
-            icon-size: 18px;
-            button-enabled: Player.vm.has_next;
-            tooltip-text: @tr("Next");
-            clicked => { Player.next(); }
-        }
-    }
-}
-
-// Volume, the pin, the backdrop switch and the heart, ending the controls cluster at the window's
-// right edge.
-component MiniTrailingControls inherits HorizontalLayout {
-    // The volume trigger's glyph family, stepped for its `IconButton` to ease at `recolor`.
-    in property <brush> glyph;
-    in property <brush> glyph-lit;
-    in property <brush> glyph-hover-bg;
-    in property <duration> recolor;
-    // The host's, the switch fading through `MiniPlayerView.set-backdrop`, which only the view can
-    // reach.
-    callback toggle-backdrop();
-
-    spacing: 2px;
-    horizontal-stretch: 0;
-    alignment: end;
-    // Keeps the corner-resize TouchAreas' hit zone clear.
-    padding-right: 4px;
-
-    VerticalLayout {
-        alignment: center;
-        // The vertical `VolumePopup` is 180 px tall and clips against the top edge of a strip or a
-        // card; the horizontal sibling is the same slider rotated, flying out to the left of the
-        // disc.
-        //
-        // A step above the row's glyphs, as the bar sets its own: at one size the speaker reads
-        // smaller than the icons beside it.
-        VolumePopupHorizontal {
-            diameter: 28px;
-            icon-size: 20px;
-            trigger-fg: root.glyph;
-            trigger-hover-fg: root.glyph-lit;
-            trigger-hover-bg: root.glyph-hover-bg;
-            trigger-recolor-duration: root.recolor;
-        }
-    }
-    // Collapsed where the window manager gives no way to keep a window on top.
-    if WindowChrome.always-on-top-supported: VerticalLayout {
-        alignment: center;
-        MiniIconButton {
-            icon: "push_pin";
-            press-shrink: true;
-            diameter: 28px;
-            icon-size: 18px;
-            active: WindowChrome.always-on-top-active;
-            filled: WindowChrome.always-on-top-active;
-            tooltip-text: WindowChrome.always-on-top-active
-                ? @tr("Unpin from Top") : @tr("Pin on Top");
-            clicked => { WindowChrome.toggle-always-on-top(); }
-        }
-    }
-    VerticalLayout {
-        alignment: center;
-        MiniIconButton {
-            icon: "tonality";
-            press-shrink: true;
-            diameter: 28px;
-            icon-size: 18px;
-            active: MiniPlayer.backdrop-shown;
-            filled: MiniPlayer.backdrop-shown;
-            tooltip-text: MiniPlayer.backdrop-shown
-                ? @tr("Album Backdrop: on") : @tr("Album Backdrop: off");
-            clicked => { root.toggle-backdrop(); }
-        }
-    }
-    VerticalLayout {
-        alignment: center;
-        MiniIconButton {
-            icon: Player.vm.track.is_favorite ? "favorite" : "favorite_border";
-            press-shrink: true;
-            diameter: 28px;
-            icon-size: 18px;
-            active: Player.vm.track.is_favorite;
-            filled: Player.vm.track.is_favorite;
-            button-enabled: Player.vm.has_track;
-            tooltip-text: Player.vm.track.is_favorite
-                ? @tr("Unfavorite") : @tr("Favorite");
-            clicked => { Player.toggle-favorite(); }
-        }
-    }
-}
-
-// What sits under the controls in every layout: the seek row between shuffle and repeat, or for a
-// stream, which has no position to seek within, the bar's live pill in its slot.
-//
-// **The two queue modes flank the track rather than joining the transport**, whose row already
-// takes all the width the narrowest window can spare beside the artwork: two more buttons there
-// would come out of the artwork, and out of the strip's title.
-component MiniTimeline inherits HorizontalLayout {
-    in property <brush> label-color;
-    in property <brush> fill-color;
-    in property <brush> track-color;
-    in property <brush> seam-mask-color;
-    in property <brush> chip-fill;
-    in property <brush> chip-label;
-
-    vertical-stretch: 0;
-    spacing: 2px;
-    // Keeps the corner-resize TouchAreas' hit zones clear at both ends.
-    padding-left: 4px;
-    padding-right: 4px;
-
-    // Both pills open inward: at the window's edge a centred one runs off it.
-    VerticalLayout {
-        alignment: center;
-        MiniIconButton {
-            icon: "shuffle";
-            press-shrink: true;
-            diameter: 28px;
-            icon-size: 18px;
-            active: Player.queue.shuffle;
-            tooltip-text: Player.queue.shuffle
-                ? @tr("Shuffle: on") : @tr("Shuffle: off");
-            tooltip-side: TooltipSide.right;
-            clicked => { Player.toggle-shuffle(); }
-        }
-    }
-
-    VerticalLayout {
-        horizontal-stretch: 1;
-        alignment: center;
-
-        if !Player.vm.has_station: SeekRow {
-            label-color: root.label-color;
-            fill-color: root.fill-color;
-            track-color: root.track-color;
-            seam-mask-color: root.seam-mask-color;
-        }
-        if Player.vm.has_station: HorizontalLayout {
-            alignment: center;
-            MetaChip {
-                text: Player.live-label;
-                fill: root.chip-fill;
-                label-color: root.chip-label;
-            }
-        }
-    }
-
-    VerticalLayout {
-        alignment: center;
-        MiniIconButton {
-            icon: Player.queue.repeat_mode == "one" ? "repeat_one" : "repeat";
-            press-shrink: true;
-            diameter: 28px;
-            icon-size: 18px;
-            active: Player.queue.repeat_mode != "off";
-            tooltip-text: Player.queue.repeat_mode == "off"
-                ? @tr("Repeat: off")
-                : (Player.queue.repeat_mode == "one"
-                    ? @tr("Repeat: one")
-                    : @tr("Repeat: all"));
-            tooltip-side: TooltipSide.left;
-            clicked => { Player.cycle-repeat(); }
-        }
-    }
-}
+import { MiniArtwork } from "../components/mini-player/mini-artwork.slint";
+import { MiniBackdrop } from "../components/mini-player/mini-backdrop.slint";
+import { MiniCaptionsRow } from "../components/mini-player/mini-captions.slint";
+import { MiniTransport, MiniTrailingControls, MiniTimeline } from "../components/mini-player/mini-controls.slint";
 
 // Compact miniplayer replacing the full UI once the window shrinks past the
 // responsive threshold. `MiniPlayer.active` (derived at the `AppWindow` root)
@@ -358,12 +27,6 @@ export component MiniPlayerView inherits Rectangle {
     // Doubles as resize-ring breathing room: the ring's TouchAreas sit above
     // this component, and the inset preserves their hit zones at all four edges.
     private property <length> edge-pad: 4px;
-
-    // Which stack the backdrop button paints, the same property Now Playing reads. *Whether* one
-    // is painted at all is `MiniPlayer.backdrop-shown`, and the two are deliberately separate
-    // questions: this one is the restart-gated setting deciding which tier every colour is solved
-    // for, that one is a live mount.
-    private property <bool> aurora-shown: Theme.aurora-backdrop;
 
     // The switch the whole view repaints on, and how long the repaint takes. **The pace is the
     // stacks' own**: both drain on `Theme.dur-med` with this easing, so a foreground crossing on
@@ -431,23 +94,10 @@ export component MiniPlayerView inherits Rectangle {
         easing: ease-in-out;
     }
 
-    // The glyph family, for the volume trigger, stepped for its `IconButton` to ease.
-    // `MiniIconButton` carries the same three arms and says why it has to.
-    private property <brush> glyph: root.on-backdrop ? Player.np-accent-dim : Theme.text;
-    private property <brush> glyph-lit: root.on-backdrop ? Player.np-accent-bright : Theme.text;
-    private property <brush> glyph-hover-bg: root.on-backdrop ? Colors.transparent : Theme.surface0;
-
     // The gap between the timeline and the column's panel, and the panel's whole floor: the list
     // comes in under the gap the moment there is room for it, rather than that room standing empty
     // until a row fits.
     private property <length> panel-gap: Theme.pad-sm;
-
-    // How small the captions row's buttons get on their way out: enough to read as leaving, not
-    // enough to read as a second size.
-    private property <float> captions-exit-scale: 0.8;
-    // How far open the captions row is when its buttons are gone. Any lower and the row closes
-    // through a button still showing, which cuts a glyph that fills its box, the lyrics one.
-    private property <float> captions-fade-end: 0.5;
 
     // The text's size steps rather than tracking the drag: FemtoVG keeps a glyph for every tenth of
     // a pixel it has drawn at in an atlas it never evicts.
@@ -470,107 +120,12 @@ export component MiniPlayerView inherits Rectangle {
     // than measured: the title's height it would come from is what that travel scales.
     private property <length> stacked-art: 70px;
 
-    // **Two flags rather than one, because a fade needs both of its ends on screen.** A stack
-    // mounted already painting has nothing to ease in from, and one that stops painting still has
-    // to be there for the length of its drain. So a press on mounts the stack unpainted and paints
-    // it a tick later, and a press off unpaints it and unmounts it once the drain has run.
-    //
-    // Seeded by the binding and owned by `set-backdrop`, `my-library-view.slint`'s latch idiom:
-    // `init` writes both to take them off the switch, which the function moves after them.
-    private property <bool> backdrop-mounted: MiniPlayer.backdrop-shown;
-    private property <bool> backdrop-painting: MiniPlayer.backdrop-shown;
-    init => {
-        root.backdrop-mounted = MiniPlayer.backdrop-shown;
-        root.backdrop-painting = MiniPlayer.backdrop-shown;
-    }
-
-    // The one way the switch moves, for both variants' buttons. **Imperative rather than a `changed`
-    // handler on the switch**: this view is mounted behind an `if`, and a tracker on a global
-    // outlives the branch that declared it, so the next miniplayer's press would fire the last
-    // one's and panic.
-    function set-backdrop(on: bool) {
-        backdrop-drain.running = false;
-        if (on) {
-            // Still mounted means mid-drain, with painted frames to ease back from. Otherwise the
-            // timer inside the mount paints it once its unpainted first frame is down.
-            root.backdrop-painting = root.backdrop-mounted;
-            root.backdrop-mounted = true;
-        } else {
-            root.backdrop-painting = false;
-            backdrop-drain.running = true;
-        }
-        MiniPlayer.backdrop-shown = on;
-        MiniPlayer.set-backdrop-shown(on);
-    }
-
-    // Unmounts the stack once it has drained, so nothing fills the surface with a backdrop faded to
-    // nothing. Reads the switch rather than clearing the flag, for a press back on that landed as
-    // it fired.
-    backdrop-drain := Timer {
-        interval: root.recolor;
-        running: false;
-        triggered => {
-            self.running = false;
-            root.backdrop-mounted = MiniPlayer.backdrop-shown;
-        }
-    }
-
-    // **Mounted as a pair behind the setting's two branches**, the contract every backdrop site
-    // keeps: an arm behind the wrong branch reads perfectly and paints the other setting's
-    // backdrop. Unmounted once drained rather than left drained to transparent, unlike the hero
-    // bands, which have an idle state to hold: `Brush::is_transparent()` answers false for every
-    // gradient whatever its stop alphas, so a hidden stack still fills the whole surface every
-    // frame, and this one is hidden for every install that leaves the button off.
-    //
-    // Safe to read `Player.np-*` here for the reason Now Playing does: entering the miniplayer
-    // force-closes `Nav.now-playing-open`, so the two readers of that tier are never on screen at
-    // once.
-    if root.backdrop-mounted: Rectangle {
+    backdrop := MiniBackdrop {
         x: 0;
         y: 0;
         width: 100%;
         height: 100%;
-
-        // Paints the stack a tick after it mounts, so the first frame is the unpainted one its
-        // drain eases in from. Reads the switch rather than setting `true`, for a press back off
-        // inside that tick.
-        Timer {
-            interval: 1ms;
-            running: true;
-            triggered => {
-                self.running = false;
-                root.backdrop-painting = MiniPlayer.backdrop-shown;
-            }
-        }
-
-        if !root.aurora-shown: HeroBlurBackdrop {
-            x: 0;
-            y: 0;
-            width: 100%;
-            height: 100%;
-            floor-start: Player.np-floor-start;
-            floor-end: Player.np-floor-end;
-            scrim: Player.np-scrim;
-            blur-a: Player.blur-img-a;
-            blur-b: Player.blur-img-b;
-            use-a: Player.blur-use-a;
-            has-blur: Player.blur-has-image;
-            shown: root.backdrop-painting;
-        }
-
-        if root.aurora-shown: AuroraBackdrop {
-            x: 0;
-            y: 0;
-            width: 100%;
-            height: 100%;
-            base-start: Player.np-floor-start;
-            base-end: Player.np-floor-end;
-            tint-1: Player.np-tint-1;
-            tint-2: Player.np-tint-2;
-            tint-3: Player.np-tint-3;
-            dither: Player.np-dither;
-            shown: root.backdrop-painting;
-        }
+        fade-duration: root.recolor;
     }
 
     // Window-move drag region. Mini hides the `CustomTitleBar`, so without this
@@ -617,11 +172,6 @@ export component MiniPlayerView inherits Rectangle {
         // How far the captions row is open: what the artwork and the timeline leave, up to all of it.
         property <length> captions-shown: clamp(
             root.height - self.art-rows - head.preferred-height, 0px, MiniPlayer.captions-height);
-        property <float> captions-t: self.captions-shown / MiniPlayer.captions-height;
-        property <float> captions-fade: clamp(
-            (self.captions-t - root.captions-fade-end) / (1 - root.captions-fade-end), 0, 1);
-        property <float> captions-scale:
-            root.captions-exit-scale + (1 - root.captions-exit-scale) * self.captions-fade;
 
         // Any room for the list under the block. Measured off the block rather than a fixed
         // height, a narrow window's artwork stopping short of its cap and freeing the room that
@@ -636,75 +186,11 @@ export component MiniPlayerView inherits Rectangle {
             vertical-stretch: 0;
             spacing: 0;
 
-            // The window's captions in the corner, where every titlebar puts them, and the lyrics
-            // switch opposite, fading and shrinking as the row closes.
-            Rectangle {
-                min-height: stack.captions-shown;
-                max-height: stack.captions-shown;
-
-                // **Unmounted once faded** rather than left at nothing: an opacity under 1 draws
-                // the row into a texture, 0 included. The row goes on closing without it.
-                if stack.captions-fade > 0: Rectangle {
-                    x: 0;
-                    y: 0;
-                    width: 100%;
-                    height: 100%;
-                    // Only a hover fill still reaches past the row while the buttons show.
-                    clip: true;
-                    opacity: stack.captions-fade;
-
-                    HorizontalLayout {
-                        x: 0;
-                        y: (parent.height - Theme.pad-xs * stack.captions-t - self.height) / 2;
-                        width: parent.width;
-                        height: MiniPlayer.captions-height - Theme.pad-xs;
-                        spacing: 2px;
-                        padding-left: 4px;
-                        // A KDE cluster reaches back over the stack's padding to sit where the
-                        // titlebar's does. Its close cell's outer 2 px then fall past the clip,
-                        // painting nothing and lying under the resize band.
-                        padding-right: captions.style == CaptionStyle.kde
-                            ? Theme.kde-caption-edge-pad - root.edge-pad
-                            : 4px;
-
-                        // Gone on a station, which has no track to look a sheet up for.
-                        if !Player.vm.has_station: VerticalLayout {
-                            alignment: center;
-                            MiniIconButton {
-                                icon: "lyrics";
-                                press-shrink: true;
-                                diameter: 28px;
-                                // **The glyph's own size rather than a `transform-scale`**, as
-                                // `press-shrink` does it: FemtoVG draws glyphs under a scaling
-                                // transform as paths rather than from its atlas, and this one comes
-                                // out filled there. The captions beside it draw no glyph at rest.
-                                icon-size: 18px * stack.captions-scale;
-                                active: Lyrics.enabled;
-                                filled: Lyrics.enabled;
-                                tooltip-text: Lyrics.enabled
-                                    ? @tr("Show Up Next") : @tr("Show lyrics");
-                                tooltip-side: TooltipSide.right;
-                                // Both halves, the full view's switch and the visualizer picker's
-                                // shape: the property so the panel swaps on the press, the
-                                // callback so it is still swapped next launch.
-                                clicked => {
-                                    Lyrics.enabled = !Lyrics.enabled;
-                                    Lyrics.set-enabled(Lyrics.enabled);
-                                }
-                            }
-                        }
-
-                        Rectangle { horizontal-stretch: 1; }
-
-                        captions := MiniCaptions {
-                            transform-scale: stack.captions-scale;
-                            ink: root.caption-ink;
-                            ink-lit: root.glyph-lit;
-                            hover-fill: root.glyph-hover-bg;
-                            ink-on-lit: root.disc-ink;
-                        }
-                    }
-                }
+            MiniCaptionsRow {
+                open-height: stack.captions-shown;
+                edge-pad: root.edge-pad;
+                ink: root.caption-ink;
+                ink-on-lit: root.disc-ink;
             }
 
             head := HorizontalLayout {
@@ -829,11 +315,8 @@ export component MiniPlayerView inherits Rectangle {
                         }
 
                         MiniTrailingControls {
-                            glyph: root.glyph;
-                            glyph-lit: root.glyph-lit;
-                            glyph-hover-bg: root.glyph-hover-bg;
                             recolor: root.recolor;
-                            toggle-backdrop => { root.set-backdrop(!MiniPlayer.backdrop-shown); }
+                            toggle-backdrop => { backdrop.set-shown(!MiniPlayer.backdrop-shown); }
                         }
                     }
                 }

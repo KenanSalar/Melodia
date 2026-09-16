@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 use slint::ComponentHandle;
 
-use crate::ui::now_playing::NowPlayingState;
+use crate::ui::now_playing::{NowPlayingState, release_artwork_off_thread};
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use melodia_app::state::AppState;
 use melodia_core::error::AppError;
@@ -34,15 +34,17 @@ fn sync_mini_layout(weak: &slint::Weak<AppWindow>, np_state: &NowPlayingState) {
     np_state.mini_layout.set(ui.global::<MiniPlayer>().get_layout());
 }
 
-/// Off-thread release of the [`NowPlayingArtwork`] LRU plus a `malloc_trim` to hand the
-/// pages back, mirroring `wire_now_playing_open`'s: the heavy `(cover, blur)` buffers
-/// are pinned only while a surface renders them.
-fn release_artwork_off_thread(state: &AppState, np_artwork: &Arc<NowPlayingArtwork>) {
-    let np = np_artwork.clone();
-    state.runtime.spawn_blocking(move || {
-        np.clear();
-        melodia_platform::services::platform::allocator::trim();
-    });
+/// Seeds the large artwork if anything on screen still draws from it, and hands it back otherwise.
+fn follow_artwork(
+    state: &AppState,
+    np_artwork: &Arc<NowPlayingArtwork>,
+    np_state: &NowPlayingState,
+) {
+    if np_state.renders_artwork() {
+        np_state.kick_artwork();
+    } else {
+        release_artwork_off_thread(state, np_artwork);
+    }
 }
 
 /// Wire the callbacks to the Up Next subscriber's `mini_visible` gate and the large artwork's
@@ -99,11 +101,7 @@ pub fn install(
             if !np_state.mini_visible.get() {
                 return;
             }
-            if np_state.renders_artwork() {
-                np_state.kick_artwork();
-            } else {
-                release_artwork_off_thread(&state, &np_artwork);
-            }
+            follow_artwork(&state, &np_artwork, &np_state);
             np_state.kick_lyrics();
         });
     }
@@ -119,11 +117,7 @@ pub fn install(
         mini.on_set_backdrop_shown(move |on| {
             np_state.mini_backdrop.set(on);
             if np_state.mini_visible.get() {
-                if np_state.renders_artwork() {
-                    np_state.kick_artwork();
-                } else {
-                    release_artwork_off_thread(&state, &np_artwork);
-                }
+                follow_artwork(&state, &np_artwork, &np_state);
             }
             state.persist_blocking("mini backdrop", move |s| {
                 melodia_app::library::window::set_mini_backdrop(s, on)

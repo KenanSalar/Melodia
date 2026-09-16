@@ -1,24 +1,19 @@
 //! Which views mount a backdrop stack, and on what.
 //!
-//! The stack is three layers written twice — once under the shared hero, once under Now Playing —
-//! so the question is about the whole Slint tree rather than either component.
+//! The stack is three layers written twice, once per colour tier, so the question is about the
+//! whole Slint tree rather than either component.
 
 use melodia_testkit::{MIN_SLINT_SOURCES, UI_DIR, stripped_sources};
 
 /// The two stacks, by the name a host mounts them under.
 const STACKS: [&str; 2] = ["HeroBlurBackdrop", "AuroraBackdrop"];
 
-/// The files that choose between them, and the only ones allowed to mount either. Three, not five:
-/// the two shared bands mount `HeroBackdropStack`, which owns the pair on their behalf. Now Playing
-/// and the miniplayer are here because they read `Player.np-*` rather than the `HeroBackdrop` tier
-/// the wrapper is bound to — that split is the whole reason the stacks take their colours as
-/// inputs. Those two are never on screen together, entering the miniplayer force-closing Now
-/// Playing, which is what lets one tier have two readers.
-const SITES: [&str; 3] = ["views/now-playing-view.slint", "views/mini-player.slint", WRAPPER];
-
-/// The tier-bound site, spelled apart from its sibling because one pin below is about this file
-/// alone — Now Playing is mounted directly and has no host gate to forward.
-const WRAPPER: &str = "components/hero/hero-backdrop-stack.slint";
+/// The files that choose between them, and the only ones allowed to mount either: one wrapper per
+/// tier. The six bands mount `HeroBackdropStack` on `HeroBackdrop`, Now Playing and the miniplayer
+/// `NpBackdropStack` on `Player.np-*`, and that split is the whole reason the stacks take their
+/// colours as inputs.
+const SITES: [&str; 2] =
+    ["components/hero/hero-backdrop-stack.slint", "components/now-playing/np-backdrop-stack.slint"];
 
 /// Each site mounts each stack exactly once, behind the branch of the setting that paints it.
 ///
@@ -67,32 +62,33 @@ fn every_backdrop_site_mounts_only_the_live_arm() {
     }
 }
 
-/// The wrapper forwards its host's `shown` to whichever stack is mounted — the half of
-/// `LibraryTabBand`'s `detail-open` gate that left the band when the pair became one mount, and the
-/// reason `shown` is still an input at all. Drop it and both files still read correctly,
-/// `library_tab_band_tests` seeing only the band, while My Library paints a detail's backdrop over
-/// its flat state.
+/// Each wrapper forwards its host's `shown` to whichever stack is mounted. That term is the host's
+/// half of the deal: `LibraryTabBand`'s `detail-open` gate and the miniplayer's drain. Drop it and
+/// both files still read correctly, while My Library paints a detail's backdrop over its flat
+/// state and the miniplayer's backdrop cuts out rather than fading.
 #[test]
 fn the_wrapper_forwards_its_hosts_gate_to_the_mounted_stack() {
     let tree = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES);
-    let src = tree
-        .iter()
-        .find(|(path, _)| path.ends_with(WRAPPER))
-        .map(|(_, src)| src.as_str())
-        .unwrap_or_default();
-
-    for stack in STACKS {
-        let mount = src
-            .split_once(&format!("{stack} {{"))
-            .and_then(|(_, rest)| rest.split_once("\n    }"))
-            .map(|(mount, _)| mount)
+    for site in SITES {
+        let src = tree
+            .iter()
+            .find(|(path, _)| path.ends_with(site))
+            .map(|(_, src)| src.as_str())
             .unwrap_or_default();
-        assert!(
-            mount.contains("shown: root.shown;"),
-            "`{stack}` must take the wrapper's own `shown` — that term is the host's whole half \
-             of the deal, and the two mosaic bands pass nothing, so a missing one is correct on \
-             the site it was written for and dead on My Library's"
-        );
+
+        for stack in STACKS {
+            let mount = src
+                .split_once(&format!("{stack} {{"))
+                .and_then(|(_, rest)| rest.split_once("\n    }"))
+                .map(|(mount, _)| mount)
+                .unwrap_or_default();
+            assert!(
+                mount.contains("shown: root.shown;"),
+                "{site}'s `{stack}` must take the wrapper's own `shown`: a host that passes \
+                 nothing leaves a missing one correct on the site it was written for and dead on \
+                 the one that gates"
+            );
+        }
     }
 }
 
