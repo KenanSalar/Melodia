@@ -1,0 +1,11 @@
+import { SettingsPage } from "../../globals/settings-page.slint";
+
+// Dims a disabled row's control by painting the card's fill over it, the same pixels as
+// `opacity: 1 - dim` over that ground. Not `opacity` itself: FemtoVG renders the control into a
+// layer clipped against the scroller when it is built, and scrolling doesn't re-measure it, so a
+// layer rebuilt while the row sits above the viewport draws cut off once it scrolls back.
+export component DisabledScrim inherits Rectangle {
+    in property <float> dim;
+
+    background: SettingsPage.card-fill.transparentize(1.0 - root.dim);
+}

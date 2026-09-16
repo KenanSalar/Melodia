@@ -132,8 +132,7 @@ export component PlaybackSection inherits Rectangle {
                     horizontal-stretch: 1;
                     SliderTrack {
                         value: root.secs-to-frac(Settings.crossfade-duration-secs);
-                        // Must match the card's fill or the track seam shows.
-                        seam-mask-color: Theme.surface0;
+                        seam-mask-color: SettingsPage.card-fill;
                         // Live during the drag, persist on release.
                         changed(v) => { Settings.crossfade-duration-changed(root.frac-to-secs(v)); }
                         committed(v) => { Settings.crossfade-duration-committed(root.frac-to-secs(v)); }

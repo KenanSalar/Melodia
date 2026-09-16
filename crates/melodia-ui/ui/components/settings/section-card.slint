@@ -9,7 +9,6 @@ export component SectionCard inherits Rectangle {
     // isn't a body column.
     in property <length> card-width: SettingsPage.card-w;
 
-    background: transparent;
     vertical-stretch: 0;
 
     // `preferred-width` and `max-width`, never `width` — Slint reports a bound `width` as the
@@ -48,7 +47,7 @@ export component SectionCard inherits Rectangle {
         // blurs the card's text on HiDPI. Nothing needs it: rows and dividers inset by `pad-lg`, so
         // nothing reaches the rounded corners.
         Rectangle {
-            background: Theme.surface0;
+            background: SettingsPage.card-fill;
             border-radius: Theme.radius-lg;
 
             VerticalLayout {
