@@ -28,7 +28,7 @@ export component MiniPlayerSwitch {
     //
     // Leaving takes more room than entering: dropping the frame grows the client area by the
     // allowance, so one shared edge would bounce a window parked just inside it straight back out.
-    // Keyed on `render-active`, which only the timers write, so the binding can't loop on itself.
+    // Keyed on `render-active`, which no binding writes, so this one can't loop on itself.
     out property <bool> active: root.render-active
         ? (root.host-width < root.enter-w + root.exit-allowance-w + root.exit-slack
             || root.host-height < root.enter-h + root.exit-allowance-h + root.exit-slack)
@@ -111,8 +111,16 @@ export component MiniPlayerSwitch {
         MiniPlayer.layout-changed(root.watched-layout);
     }
 
+    // Mounts the branch a restored size calls for before the window exists, which the seed below is
+    // too late for: the window is created with the frame it had at `show()`, and on Win32 dropping
+    // it afterwards keeps the outer size, so a miniplayer relaunched under the native titlebar would
+    // grow by the frame on every launch. The seed still owes the global and the callback.
+    public function adopt-restored-size() {
+        root.render-active = root.active;
+    }
+
     // The mount seed: `changed` doesn't fire when the first settle lands directly on the final
-    // value, so without it a launch straight into a mini-sized window paints the full UI first.
+    // value, so without it a window mapped straight at a mini size paints the full UI first.
     seed-timer := Timer {
         interval: 1ms;
         triggered => {

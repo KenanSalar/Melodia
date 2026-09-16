@@ -43,9 +43,9 @@ pub fn save_state_on_exit(app: &AppWindow, state: &AppState, runtime: &tokio::ru
             settings.playback.is_muted = is_muted;
             settings.sidebar_width = sidebar_width;
             settings.layout.sidebar_collapsed = sidebar_collapsed;
-            // For the next launch's `BackendSelector` attributes hook. Size and
-            // position are skipped while maximized, so the user's real restore
-            // geometry survives.
+            // For the next launch's `BackendSelector` attributes hook and
+            // `geometry::restore`. Size and position are skipped while maximized, so
+            // the user's real restore geometry survives.
             ui::window_chrome::geometry::snapshot_into(&mut settings);
             if let Err(e) = services::settings::write_settings(&state.paths, &settings) {
                 log::warn!("save_state_on_exit: write settings.json: {e}");

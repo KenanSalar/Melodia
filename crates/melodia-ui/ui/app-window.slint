@@ -89,8 +89,8 @@ export component AppWindow inherits Window {
     // of a resize drag, and adds the frame to it; the miniplayer drops that frame mid-drag, so a
     // drag begun in the full UI held it that much above the floor until the button came up. Framed,
     // the window only sits under the true floor for the swap's fade.
-    min-width: 350px - (root.frameless ? 0px : WindowChrome.frame-allowance-w);
-    min-height: 90px - (root.frameless ? 0px : WindowChrome.frame-allowance-h);
+    min-width: MiniPlayer.window-min-width - (root.frameless ? 0px : WindowChrome.frame-allowance-w);
+    min-height: MiniPlayer.window-min-height - (root.frameless ? 0px : WindowChrome.frame-allowance-h);
     // The custom titlebar never has an OS frame, and the native one drops it for the miniplayer,
     // which carries its own drag region. On `render-active`, so the frame changes on the tick the
     // branches swap, with the outgoing one faded out and the crossfade still opaque. Any earlier, the
@@ -267,6 +267,12 @@ export component AppWindow inherits Window {
         host-height: root.height;
         exit-allowance-w: WindowChrome.frame-allowance-w;
         exit-allowance-h: WindowChrome.frame-allowance-h;
+    }
+
+    // Here because Rust reaches only the root's functions. `geometry::restore` calls it once the
+    // restored size is in, before the window maps.
+    public function adopt-restored-size() {
+        mini-switch.adopt-restored-size();
     }
 
     // One gate per section in nav-index order, plus one per tab for a section built out of tabs.

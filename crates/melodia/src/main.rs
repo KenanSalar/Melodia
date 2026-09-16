@@ -213,9 +213,13 @@ fn main() -> AppResult<()> {
 
     // After `AppWindow::new()` (the adapter must exist) and before `app.run()`
     // (the window must not be shown). `set_size` sets winit's
-    // `has_explicit_size`, suppressing Slint's content-preferred resize on first
-    // show — without it the window snaps to the ~640×420 layout minimum.
-    ui::window_chrome::geometry::restore(&app, geometry);
+    // `has_explicit_size`, which stops Slint snapping the window to its
+    // content-preferred size on first show.
+    ui::window_chrome::geometry::restore(
+        &app,
+        geometry,
+        startup_settings.as_ref().and_then(|s| s.full_player_geometry),
+    );
 
     boot::ui_setup::install_locale(&app, &state, startup_settings.as_ref());
     boot::ui_setup::install_app_chrome(&app, &state);

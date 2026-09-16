@@ -48,7 +48,7 @@ Six theme families, light and dark variants, configurable accents, and Material 
 
 ### Mini-player
 
-Shrink the window past a threshold and the full UI collapses into a compact mini-player.
+Shrink the window past a threshold and the full UI collapses into a compact mini-player. Close Melodia from it and it opens as the mini-player next time, with its restore button still returning to the full-size window you had.
 
 <table>
   <tr>

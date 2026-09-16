@@ -77,6 +77,19 @@ the OS owns has to be attached late or not at all on at least one platform.
   transparent. The root's `resize-band` widens to cover them, so they still resize as the frame's
   borders did and the visible window keeps its edges across the swap.
 
+- **A close from the miniplayer reopens the miniplayer**, and the launch is where the frame
+  argument above bites hardest. `geometry::snapshot_into` persists the window as it closed plus
+  the held full player as `full_player_geometry`, and `geometry::restore` seeds the hold back so
+  the restore caption still has somewhere to go; `hold_full_player` keeps a hold already there,
+  since a relaunched miniplayer's settled placement is the miniplayer itself. **`restore` ends in
+  `adopt-restored-size()`, and removing it builds and looks right on Linux.** The window is created
+  with the `no-frame` it had at `show()`, while the seed `Timer`'s `render-active` only reaches it
+  a loop pass after `resumed` has built the window: framed, then dropped, and Win32 keeps the outer
+  rect when the frame goes, so a native-titlebar miniplayer grew by the frame on every launch.
+  **The window floor is spelled once, `MiniPlayer.window-min-*`**, read by the root's minimum and
+  by `restore`'s guard against a hand-edited size. The restore caption keeps its own higher floor,
+  which has to clear the miniplayer's exit edge.
+
 - **`"restart-backdrop"` is the third of these and the one whose deadline is earlier than
   `app.run()`** — `BackdropFlags.aurora_backdrop` decides whether the two artwork tiers hold a
   `BlurSpec` at all, so `boot::ui_setup::apply_backdrop_style` raises it ahead of `install_views`

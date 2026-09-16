@@ -411,8 +411,8 @@ fn the_frame_drops_with_the_mounted_miniplayer_not_the_threshold() {
 #[test]
 fn the_framed_window_minimum_gives_up_the_frame_the_miniplayer_drops() {
     const BINDINGS: [&str; 2] = [
-        "min-width: 350px - (root.frameless ? 0px : WindowChrome.frame-allowance-w);",
-        "min-height: 90px - (root.frameless ? 0px : WindowChrome.frame-allowance-h);",
+        "min-width: MiniPlayer.window-min-width - (root.frameless ? 0px : WindowChrome.frame-allowance-w);",
+        "min-height: MiniPlayer.window-min-height - (root.frameless ? 0px : WindowChrome.frame-allowance-h);",
     ];
     let shell = code_tokens(APP_WINDOW);
 

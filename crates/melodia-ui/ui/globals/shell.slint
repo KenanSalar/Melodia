@@ -53,7 +53,7 @@ export global WindowChrome {
     callback toggle-maximize();
     // The miniplayer's middle caption. A miniplayer is a window size, so leaving it is a resize
     // back to the geometry the full player last settled at, which Rust holds from the moment the
-    // miniplayer took over.
+    // miniplayer took over, across a relaunch included.
     callback restore-full-player();
     callback close-window();
     callback toggle-always-on-top();
@@ -104,6 +104,11 @@ export global MiniPlayer {
     // panel. The switch reads it too, handing the card over to the column only once the artwork
     // and the captions row above it have stopped growing.
     out property <length> art-cap: 180px;
+
+    // The strip's smallest footprint, which is the window's floor. Rust floors a restored window at
+    // it too, so a hand-edited `settings.json` can't open one smaller.
+    out property <length> window-min-width: 350px;
+    out property <length> window-min-height: 90px;
 
     // The column's window captions: 0 = Standard, 1 = macOS, `Theme.titlebar-button-style`'s
     // tokens. Its own setting rather than that one's, a miniplayer showing captions under the
