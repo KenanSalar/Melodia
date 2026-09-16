@@ -42,8 +42,8 @@ export component MiniPlayerSection inherits Rectangle {
         if has-matches: SectionCard {
             title: root.card-title;
 
-            // The titlebar's two styles, set apart from its row so a native titlebar, which draws
-            // its own, doesn't take the miniplayer's choice with it.
+            // The titlebar's styles, set apart from its row so a native titlebar, which draws its
+            // own, doesn't take the miniplayer's choice with it.
             if root.show-buttons: SettingRowStacked {
                 icon: "category";
                 label: root.buttons-label;
@@ -51,7 +51,7 @@ export component MiniPlayerSection inherits Rectangle {
 
                 ChipGroup {
                     // The brand-name rule the titlebar's style row keeps.
-                    options: [@tr("Standard"), "macOS"];
+                    options: [@tr("Standard"), "macOS", "KDE"];
                     selected-index <=> Settings.mini-player-button-style;
                     selected(i) => {
                         Settings.mini-player-button-style-changed(i);

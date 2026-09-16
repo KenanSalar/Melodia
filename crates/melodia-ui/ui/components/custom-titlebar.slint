@@ -1,7 +1,7 @@
 import { Theme } from "../theme.slint";
 import { WindowChrome } from "../globals/shell.slint";
 import { MacOsTitleBarCluster } from "macos-titlebar-cluster.slint";
-import { MinimizeCaption, MaximizeCaption, CloseCaption } from "caption-buttons.slint";
+import { CaptionStyle, MinimizeCaption, MaximizeCaption, CloseCaption } from "caption-buttons.slint";
 
 // The brand on one side, a drag region in the middle, the decoration cluster opposite.
 //
@@ -22,25 +22,33 @@ export component CustomTitleBar inherits Rectangle {
 
     property <bool> captions-left: Theme.titlebar-button-side == 1;
     property <bool> mac-style: Theme.titlebar-button-style == 1;
+    property <CaptionStyle> caption-style: Theme.titlebar-button-style == 2
+        ? CaptionStyle.kde
+        : CaptionStyle.standard;
+    // Breeze sits its buttons 4 px in from the window edge, and a KDE cell already carries 2 px of
+    // that either side of its button. The pad lies under the resize band, which a maximized window
+    // doesn't have, so there it goes and a throw at the screen corner still lands on close.
+    property <length> caption-edge-pad:
+        root.caption-style == CaptionStyle.kde && !WindowChrome.is-maximized ? 2px : 0px;
 
     HorizontalLayout {
         spacing: 0;
         alignment: stretch;
-        // Inset on the brand side so the logo doesn't kiss the window edge, flush on the
-        // cluster side so close sits at the corner.
-        padding-left: root.captions-left ? 0 : 12px;
-        padding-right: root.captions-left ? 12px : 0;
+        // Inset on the brand side so the logo doesn't kiss the window edge. The cluster side is
+        // flush, so close sits at the corner, but for the gap Breeze keeps.
+        padding-left: root.captions-left ? root.caption-edge-pad : 12px;
+        padding-right: root.captions-left ? 12px : root.caption-edge-pad;
 
         // Left cluster: traffic lights.
         if root.captions-left && root.mac-style: MacOsTitleBarCluster {
             maximize => { WindowChrome.toggle-maximize(); }
         }
 
-        // Standard icons on the left, close at the *corner* so "click corner = close"
+        // Drawn captions on the left, close at the *corner* so "click corner = close"
         // still holds. Three siblings rather than a wrapper, per the header.
-        if root.captions-left && !root.mac-style: CloseCaption {}
-        if root.captions-left && !root.mac-style: MaximizeCaption {}
-        if root.captions-left && !root.mac-style: MinimizeCaption {}
+        if root.captions-left && !root.mac-style: CloseCaption { style: root.caption-style; }
+        if root.captions-left && !root.mac-style: MaximizeCaption { style: root.caption-style; }
+        if root.captions-left && !root.mac-style: MinimizeCaption { style: root.caption-style; }
 
         // Wraps the brand plus the middle stretch, so everything but the cluster is draggable. The
         // TouchArea tracks only `has-hover`; Rust reads it and intercepts the press at the winit
@@ -100,10 +108,10 @@ export component CustomTitleBar inherits Rectangle {
             maximize => { WindowChrome.toggle-maximize(); }
         }
 
-        // Standard icons in Windows / KDE order, close at the corner.
-        if !root.captions-left && !root.mac-style: MinimizeCaption {}
-        if !root.captions-left && !root.mac-style: MaximizeCaption {}
-        if !root.captions-left && !root.mac-style: CloseCaption {}
+        // Drawn captions in Windows / KDE order, close at the corner.
+        if !root.captions-left && !root.mac-style: MinimizeCaption { style: root.caption-style; }
+        if !root.captions-left && !root.mac-style: MaximizeCaption { style: root.caption-style; }
+        if !root.captions-left && !root.mac-style: CloseCaption { style: root.caption-style; }
     }
 
     // **No resize affordance here.** The whole-window ring lives in `app-window.slint`,

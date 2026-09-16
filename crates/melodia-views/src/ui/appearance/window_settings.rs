@@ -117,6 +117,7 @@ pub(super) fn wire_titlebar_button_side_changed(ui: &AppWindow, state: &AppState
 fn style_for(idx: i32) -> TitlebarButtonStyle {
     match idx {
         1 => TitlebarButtonStyle::Macos,
+        2 => TitlebarButtonStyle::Kde,
         _ => TitlebarButtonStyle::Standard,
     }
 }
@@ -127,6 +128,7 @@ pub(super) fn idx_for(style: TitlebarButtonStyle) -> i32 {
     match style {
         TitlebarButtonStyle::Standard => 0,
         TitlebarButtonStyle::Macos => 1,
+        TitlebarButtonStyle::Kde => 2,
     }
 }
 

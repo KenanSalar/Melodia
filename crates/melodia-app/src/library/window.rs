@@ -131,7 +131,7 @@ pub fn set_mini_backdrop(state: &AppState, on: bool) -> Result<(), AppError> {
 }
 
 /// Persist the user's pick for the custom titlebar's decoration button
-/// style (Standard vs macOS traffic lights). The runtime effect lives in
+/// style (Standard, macOS traffic lights or KDE). The runtime effect lives in
 /// `Theme.titlebar-button-style`, mirrored synchronously by the UI
 /// callback before this fires, so the visual swap happens immediately;
 /// here we only commit the new value to disk.

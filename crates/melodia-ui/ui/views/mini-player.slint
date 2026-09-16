@@ -4,7 +4,7 @@ import { Lyrics } from "../globals/lyrics.slint";
 import { MiniPlayer, MiniLayout, WindowChrome } from "../globals/shell.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { TooltipSide } from "../components/tooltip.slint";
-import { CaptionButton, CaptionGlyph, MinimizeCaption, CloseCaption } from "../components/caption-buttons.slint";
+import { CaptionButton, CaptionGlyph, CaptionStyle, MinimizeCaption, CloseCaption } from "../components/caption-buttons.slint";
 import { MacOsTitleBarCluster } from "../components/macos-titlebar-cluster.slint";
 import { MetaChip } from "../components/meta-chip.slint";
 import { SourceArtwork } from "../components/now-playing/source-artwork.slint";
@@ -53,14 +53,25 @@ component MiniIconButton inherits IconButton {
 // A layout rather than a `Rectangle`, so the `if`-mounted captions size it. Every caption takes the
 // row's 28 px rather than a titlebar's 32.
 component MiniCaptions inherits HorizontalLayout {
-    // The standard glyphs' ink, eased by the host with the rest of its surface. Hover and its fill
+    // The drawn glyphs' ink, eased by the host with the rest of its surface. Hover and its fill
     // stay stepped, the caption easing those itself.
     in property <brush> ink;
     in property <brush> ink-lit;
     in property <brush> hover-fill;
+    // The glyph a KDE caption punches out of its `ink-lit` disc.
+    in property <brush> ink-on-lit;
 
     private property <length> cell-width: 34px;
     private property <length> cell-height: 28px;
+
+    private property <CaptionStyle> style: MiniPlayer.button-style == 2
+        ? CaptionStyle.kde
+        : CaptionStyle.standard;
+    // A standard caption lights its glyph over a fill, where a KDE one fills a disc with the lit ink.
+    private property <brush> caption-hover-fg:
+        root.style == CaptionStyle.kde ? root.ink-on-lit : root.ink-lit;
+    private property <brush> caption-hover-bg:
+        root.style == CaptionStyle.kde ? root.ink-lit : root.hover-fill;
 
     horizontal-stretch: 0;
     spacing: 0;
@@ -73,25 +84,28 @@ component MiniCaptions inherits HorizontalLayout {
         maximize => { WindowChrome.restore-full-player(); }
     }
     if MiniPlayer.button-style != 1: MinimizeCaption {
+        style: root.style;
         cell-width: root.cell-width;
         cell-height: root.cell-height;
         idle-fg: root.ink;
-        hover-fg: root.ink-lit;
-        hover-bg: root.hover-fill;
+        hover-fg: root.caption-hover-fg;
+        hover-bg: root.caption-hover-bg;
     }
     if MiniPlayer.button-style != 1: CaptionButton {
         glyph: CaptionGlyph.maximize;
+        style: root.style;
         tooltip-text: @tr("Full Player");
         cell-width: root.cell-width;
         cell-height: root.cell-height;
         idle-fg: root.ink;
-        hover-fg: root.ink-lit;
-        hover-bg: root.hover-fill;
+        hover-fg: root.caption-hover-fg;
+        hover-bg: root.caption-hover-bg;
         clicked => { WindowChrome.restore-full-player(); }
     }
     // Hover keeps the danger fill and its ink on either surface: closing is the one caption whose
     // warning is the point.
     if MiniPlayer.button-style != 1: CloseCaption {
+        style: root.style;
         cell-width: root.cell-width;
         cell-height: root.cell-height;
         idle-fg: root.ink;
@@ -399,9 +413,10 @@ export component MiniPlayerView inherits Rectangle {
     // resting track, the one track that view lays on the backdrop.
     private property <brush> track:
         root.on-backdrop ? Player.np-accent-bright.transparentize(0.76) : Theme.surface1;
-    // The play glyph, punched out of the disc above it. `ink-on` rather than the mantle the bar's
-    // copy uses: on the backdrop the disc is the solved accent, whose brightness is the cover's to
-    // decide, so the glyph has to be picked against it rather than against a surface.
+    // The play glyph, punched out of the disc above it, and a KDE caption's out of its lit disc, which
+    // lands on the same brush over the backdrop. `ink-on` rather than the mantle the bar's copy uses:
+    // on the backdrop the disc is the solved accent, whose brightness is the cover's to decide, so
+    // the glyph has to be picked against it rather than against a surface.
     private property <brush> disc-ink:
         root.on-backdrop ? Theme.ink-on(Player.np-accent-bright) : Theme.mantle;
     // The standard captions' glyph at rest. A caption eases only its hover, so this one is eased
@@ -683,6 +698,7 @@ export component MiniPlayerView inherits Rectangle {
                             ink: root.caption-ink;
                             ink-lit: root.glyph-lit;
                             hover-fill: root.glyph-hover-bg;
+                            ink-on-lit: root.disc-ink;
                         }
                     }
                 }
