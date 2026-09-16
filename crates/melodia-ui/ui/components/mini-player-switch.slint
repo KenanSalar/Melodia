@@ -62,9 +62,6 @@ export component MiniPlayerSwitch {
     // way to keep a window on top.
     private property <length> controls-min-width:
         WindowChrome.always-on-top-supported ? 220px : 190px;
-    // The shortest window the card seats its title and controls in beside an artwork as tall as
-    // they are, with the timeline under both.
-    private property <length> card-min-height: 110px;
 
     private property <length> card-art:
         min(MiniPlayer.art-cap, root.host-width - root.art-row-insets - root.controls-min-width);
@@ -73,7 +70,7 @@ export component MiniPlayerSwitch {
     private property <MiniLayout> layout:
         root.host-height >= root.column-rows + root.card-art
             ? MiniLayout.column
-            : (root.host-height >= root.card-min-height ? MiniLayout.card : MiniLayout.strip);
+            : (root.host-height >= MiniPlayer.card-min-height ? MiniLayout.card : MiniLayout.strip);
 
     // Mirrored locally because a `changed` handler can't watch a global's property. It publishes to
     // the global so children see the new value, schedules fade-out → swap → fade-in, closes any
