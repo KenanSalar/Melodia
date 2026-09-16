@@ -115,7 +115,7 @@ foundation only — watch, not yet usable.
   component name shadows the new built-in, which compiles fine but is confusing long-term.
   Twelve call sites in eleven files, all importing ours explicitly — five in-tree
   (`icon-button.slint:95`, `macos-traffic-light.slint:77`, `action-pill.slint:149`,
-  `settings/color-dot-grid.slint:44`, `custom-titlebar.slint:66`,
+  `settings/color-dot-grid.slint:44`, `caption-buttons.slint:131`,
   `now-playing/play-button.slint:149`) and six top-layer frames the host declares after
   whatever paints over the anchor (`my-library-view.slint:402` and `:416`,
   `favorites-view.slint:272`, `recently-played-view.slint:217`, `settings-view.slint:317`,
@@ -126,7 +126,7 @@ foundation only — watch, not yet usable.
 - **Blocked (was 🟢; re-checked 2026-07-23):** slint#12260 *"Tooltip is clipped when the anchor
   widget is near the edge of the window"* is **still open** (filed 2026-06-26). The 1.17.1
   popup-clipping fix (#12324) is a *different* bug — non-native popups — and does not resolve
-  it. Several of our call sites are edge-adjacent (`custom-titlebar.slint:66`,
+  it. Several of our call sites are edge-adjacent (`caption-buttons.slint:131`,
   `macos-traffic-light.slint:77`), so adopting today would regress them.
 - **Trigger:** #12260 closed and released.
 - **Migration:** swap call sites (IconButton `tooltip-text`, etc.), delete our component, drop

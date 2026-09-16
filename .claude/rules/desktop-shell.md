@@ -13,10 +13,13 @@ paths:
   - crates/melodia/src/boot/**/*.rs
   - crates/melodia-ui/ui/app-window.slint
   - crates/melodia-ui/ui/components/custom-titlebar.slint
+  - crates/melodia-ui/ui/components/caption-buttons.slint
   - crates/melodia-ui/ui/components/macos-titlebar-cluster.slint
   - crates/melodia-ui/ui/components/macos-traffic-light.slint
   - crates/melodia-ui/ui/layout/resize-ring.slint
   - crates/melodia-ui/ui/views/settings/window-chrome-section.slint
+  - crates/melodia-ui/ui/views/settings/mini-player-section.slint
+  - crates/melodia-views/src/ui/appearance/window_settings.rs
 ---
 
 # The desktop shell — window chrome, tray, media keys
@@ -44,6 +47,16 @@ the OS owns has to be attached late or not at all on at least one platform.
   sits in the transparent cut-out, and compares the logical band with a physical cursor, so beside
   the ring the press disagreed with the cursor. macOS answers `NotSupported` and keeps AppKit's own
   edge resizing.
+
+- **A caption style is a chip index on the Slint side, and nothing checks the files that spell
+  it.** `TitlebarButtonStyle` persists by name, but every Slint property carrying it holds the index
+  `window_settings::{idx_for, style_for}` maps to. The `options` order of each chip group *is* that
+  index, in `window-chrome-section.slint` and in `mini-player-section.slint`, and
+  `custom-titlebar.slint` and `MiniCaptions` pick their mounts by comparing against it. A new style
+  is a variant, both arms of the mapping, a chip in both groups and a case at both mounts; a
+  reordered array labels its chips with styles they don't select. A drawn style goes through
+  `CaptionButton`'s `CaptionStyle` and adds no mount, so only a cluster sharing nothing with it,
+  like the traffic lights, needs a branch of its own.
 
 - **On Win32 a resize or move drag parks winit's loop, and with it every Slint `Timer` and
   `changed` handler**, so the whole responsive layer — the miniplayer swap, grid column counts,
