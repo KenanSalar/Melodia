@@ -273,6 +273,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
             // position, so `Moved` rarely fires there — fine, position restore is a
             // no-op on Wayland anyway.
             WindowEvent::Moved(_) => {
+                double_press.moved();
                 let _ = w.with_winit_window(|ww| {
                     geometry::record(ww, geometry::WindowReading::take(ww));
                 });

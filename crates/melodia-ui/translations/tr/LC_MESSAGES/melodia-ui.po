@@ -2254,8 +2254,8 @@ msgstr "Mini oynatıcı"
 msgid "Window Buttons"
 msgstr "Pencere düğmeleri"
 
-msgid "The minimize, full player and close buttons in the square miniplayer's corner."
-msgstr "Kare mini oynatıcının köşesindeki simge durumuna küçültme, tam oynatıcı ve kapatma düğmeleri."
+msgid "The minimize, full player and close buttons in the miniplayer's corner."
+msgstr "Mini oynatıcının köşesindeki simge durumuna küçültme, tam oynatıcı ve kapatma düğmeleri."
 
 msgid "Album Backdrop"
 msgstr "Albüm arka planı"

@@ -2245,8 +2245,8 @@ msgstr "Mini player"
 msgid "Window Buttons"
 msgstr "Pulsanti della finestra"
 
-msgid "The minimize, full player and close buttons in the square miniplayer's corner."
-msgstr "I pulsanti per ridurre a icona, tornare al player completo e chiudere, nell'angolo del mini player quadrato."
+msgid "The minimize, full player and close buttons in the miniplayer's corner."
+msgstr "I pulsanti per ridurre a icona, tornare al player completo e chiudere, nell'angolo del mini player."
 
 msgid "Album Backdrop"
 msgstr "Sfondo dell'album"

@@ -2,9 +2,10 @@
 //! lifecycle, the backdrop switch's persistence and the window height a stopped resize settles at.
 //!
 //! **Resize-only trigger.** The miniplayer engages purely on the window being shrunk
-//! past the threshold `app-window.slint` derives; there is no entry or exit button
-//! anywhere, and the user grows the window again to leave. The backdrop switch is the one thing
-//! here a button does move, and it is a repaint rather than a mode.
+//! past the threshold `app-window.slint` derives, and leaves when the window grows again. Its
+//! Full Player caption is a button, but what it does is resize the window
+//! (`window_chrome::geometry::restore_full_player`). The backdrop switch is the one thing here a
+//! button moves directly, and it is a repaint rather than a mode.
 //!
 //! **Every arm below is the same two steps**: move the mirror `NowPlayingState` keeps, then seed
 //! or release against what that changes [`NowPlayingState::renders_artwork`] to. Which surface the

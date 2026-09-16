@@ -55,8 +55,8 @@ fn reseed(weak: &Weak<AppWindow>, state: &AppState, np_state: &Rc<NowPlayingStat
     // **Both terms, and the mount is the one that is not obvious.** The switch is the persisted
     // setting rather than "the panel is mounted", so on its own it answers `true` for a closed
     // view behind which the source-change path is still running. That would spend a request per
-    // track on a panel nobody can see. Two surfaces mount one, the full view and the square
-    // miniplayer; the strip has no slot for it whatever it is painted on.
+    // track on a panel nobody can see. Two surfaces mount one, the full view and the
+    // miniplayer's column; the card and the strip have no slot for it whatever they paint on.
     let wanted = np_state.renders_panel() && library::lyrics::is_enabled(state);
     let Some(track) = track.filter(|_| wanted) else {
         // Closed, switched off, or a station, which has no words to look up. Either way the

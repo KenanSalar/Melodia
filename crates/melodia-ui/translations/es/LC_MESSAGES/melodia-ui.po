@@ -2246,8 +2246,8 @@ msgstr "Minirreproductor"
 msgid "Window Buttons"
 msgstr "Botones de ventana"
 
-msgid "The minimize, full player and close buttons in the square miniplayer's corner."
-msgstr "Los botones de minimizar, reproductor completo y cerrar en la esquina del minirreproductor cuadrado."
+msgid "The minimize, full player and close buttons in the miniplayer's corner."
+msgstr "Los botones de minimizar, reproductor completo y cerrar en la esquina del minirreproductor."
 
 msgid "Album Backdrop"
 msgstr "Fondo del álbum"

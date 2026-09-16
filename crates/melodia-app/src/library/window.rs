@@ -144,7 +144,7 @@ pub fn set_titlebar_button_style(
     })
 }
 
-/// Persist the square miniplayer's caption style, in the same shape: `MiniPlayer.button-style` is
+/// Persist the miniplayer's caption style, in the same shape: `MiniPlayer.button-style` is
 /// mirrored synchronously by the UI callback, and this only commits the pick.
 pub fn set_mini_player_button_style(
     state: &AppState,

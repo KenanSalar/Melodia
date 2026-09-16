@@ -273,8 +273,8 @@ export component AppWindow inherits Window {
 
     // Here because Rust reaches only the root's functions. `geometry::restore` calls it once the
     // restored size is in, before the window maps.
-    public function adopt-restored-size() {
-        mini-switch.adopt-restored-size();
+    public function adopt-restored-size() -> bool {
+        return mini-switch.adopt-restored-size();
     }
 
     // The winit filter's word on where a resize begins and where it is let go, which only it can

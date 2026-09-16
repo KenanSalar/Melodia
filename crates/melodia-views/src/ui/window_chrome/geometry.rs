@@ -90,9 +90,13 @@ pub fn restore(app: &AppWindow, geom: PersistedGeometry, full_player: Option<Ful
     // this, so a window restored maximized paints square from the first frame.
     app.global::<melodia_ui::WindowChrome>().set_is_maximized(geom.maximized);
 
-    *held().lock() = full_player.map(Placement::from_persisted);
-    // Last, `set_size` being what hands the switch the size it decides on.
-    app.invoke_adopt_restored_size();
+    // After `set_size`, which is what hands the switch the size it decides on.
+    let opens_as_miniplayer = app.invoke_adopt_restored_size();
+    // A miniplayer closed before its full player was persisted reopens with nothing held, and the
+    // only placement `hold_full_player` could then take is the miniplayer's own.
+    *held().lock() = full_player
+        .map(Placement::from_persisted)
+        .or_else(|| opens_as_miniplayer.then(Placement::first_launch));
 }
 
 /// A geometry as the logical size and position Slint takes, the size floored against a corrupt
@@ -127,6 +131,11 @@ struct Placement {
 }
 
 impl Placement {
+    /// A fresh install's window, left where the window server puts it.
+    fn first_launch() -> Self {
+        Self { geom: PersistedGeometry::fallback(), position_known: false }
+    }
+
     fn from_persisted(full_player: FullPlayerGeometry) -> Self {
         let FullPlayerGeometry { width, height, position } = full_player;
         let WindowPosition { x, y } = position.unwrap_or(WindowPosition { x: 0.0, y: 0.0 });
@@ -273,14 +282,31 @@ pub fn release_full_player() {
 /// Placed only where winit ever reported a position, so Wayland keeps the compositor's placement.
 /// Nothing held falls back to the first-launch geometry.
 pub fn restore_full_player(app: &AppWindow) {
-    let placement = (*held().lock())
-        .unwrap_or(Placement { geom: PersistedGeometry::fallback(), position_known: false });
+    let placement = (*held().lock()).unwrap_or_else(Placement::first_launch);
     let (size, position) = logical_placement(placement.geom, MIN_FULL_PLAYER);
     let window = app.window();
-    window.set_size(size);
+    window.set_size(with_returning_frame(app, size));
     if placement.position_known {
         window.set_position(position);
     }
+}
+
+/// The miniplayer's size that leaves the full player at `client` once a native titlebar's frame
+/// is back. Win32 and macOS keep the outer rect when the frame returns, so it comes out of the
+/// client; the allowance is 0 wherever no frame was ever measured.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn with_returning_frame(app: &AppWindow, client: LogicalSize) -> LogicalSize {
+    let chrome = app.global::<melodia_ui::WindowChrome>();
+    LogicalSize::new(
+        client.width + chrome.get_frame_allowance_w(),
+        client.height + chrome.get_frame_allowance_h(),
+    )
+}
+
+/// Elsewhere the window manager adds the frame around the client.
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn with_returning_frame(_: &AppWindow, client: LogicalSize) -> LogicalSize {
+    client
 }
 
 /// Returns what the OS frame adds to the client area, in logical pixels.

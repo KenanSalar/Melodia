@@ -64,6 +64,12 @@ impl DoublePress {
             PressAction::Move
         }
     }
+
+    /// Forgets the press the window moved under. That press was a drag, and the pointer rides
+    /// along with the window, so a click straight after it would otherwise land within the slop.
+    pub(super) fn moved(&mut self) {
+        self.first = None;
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

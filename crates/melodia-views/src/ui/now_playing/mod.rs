@@ -160,8 +160,8 @@ pub struct NowPlayingState {
     /// `None` only between `Rc::new(…)` and [`install`]'s post-init writes. Captures a
     /// `Weak<NowPlayingState>` to avoid the `Rc → closure → Rc` cycle.
     up_next_seeder: RefCell<Option<Seeder>>,
-    /// The high-res cover, accent and chips, invoked by [`Self::kick_artwork`] when the
-    /// square miniplayer becomes visible so the sharp tile replaces the row-tier fallback
+    /// The high-res cover, accent and chips, invoked by [`Self::kick_artwork`] when a miniplayer
+    /// layout drawing them becomes visible, so the sharp tile replaces the row-tier fallback
     /// without waiting for the next source change.
     artwork_seeder: RefCell<Option<Seeder>>,
     /// The lyrics panel's rows, offset table and sung index. Lives here rather than beside the
@@ -171,7 +171,7 @@ pub struct NowPlayingState {
 }
 
 impl NowPlayingState {
-    /// Rebuild the Up Next list from the stashed queue snapshot, so the square miniplayer
+    /// Rebuild the Up Next list from the stashed queue snapshot, so the miniplayer's column
     /// doesn't render an empty list while the subscriber's snapshot is fresh. A no-op
     /// before [`install`] returns, and when nothing has been stashed.
     pub(crate) fn kick_up_next(&self) {
@@ -319,7 +319,7 @@ pub fn install(
 
     // `wire_now_playing_open`'s seed-on-open path: dedup against `applied_source`, then
     // an off-thread decode and UI-thread write. `animate = false` — the cover should
-    // already be there when the square miniplayer paints, not cross-fade in.
+    // already be there when the miniplayer paints, not cross-fade in.
     {
         let weak_ui = ui.as_weak();
         let state = state.clone();

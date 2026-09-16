@@ -157,9 +157,11 @@ export component MiniPlayerSwitch {
     // Mounts the branch a restored size calls for before the window exists, which the seed below is
     // too late for: the window is created with the frame it had at `show()`, and on Win32 dropping
     // it afterwards keeps the outer size, so a miniplayer relaunched under the native titlebar would
-    // grow by the frame on every launch. The seed still owes the global and the callback.
-    public function adopt-restored-size() {
+    // grow by the frame on every launch. The seed still owes the global and the callback. Answers
+    // whether the window opens as the miniplayer.
+    public function adopt-restored-size() -> bool {
         root.render-active = root.active;
+        return root.render-active;
     }
 
     // The mount seed: `changed` doesn't fire when the first settle lands directly on the final

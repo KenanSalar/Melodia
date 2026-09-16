@@ -2252,8 +2252,8 @@ msgstr "Miniplayer"
 msgid "Window Buttons"
 msgstr "Fensterschaltflächen"
 
-msgid "The minimize, full player and close buttons in the square miniplayer's corner."
-msgstr "Die Schaltflächen zum Minimieren, für den vollständigen Player und zum Schließen in der Ecke des quadratischen Miniplayers."
+msgid "The minimize, full player and close buttons in the miniplayer's corner."
+msgstr "Die Schaltflächen zum Minimieren, für den vollständigen Player und zum Schließen in der Ecke des Miniplayers."
 
 msgid "Album Backdrop"
 msgstr "Album-Hintergrund"

@@ -16,8 +16,8 @@ import { LyricsPanel } from "../components/now-playing/lyrics-panel.slint";
 import { AuroraBackdrop } from "../components/aurora-backdrop.slint";
 import { HeroBlurBackdrop } from "../components/hero-blur-backdrop.slint";
 
-// The view's own button, so the treatment is answered once rather than as five bindings on each of
-// a dozen `IconButton`s. Private to this file and reading the switch straight off the global: the
+// The view's own button, so the treatment is answered once rather than as the same bindings on
+// every `IconButton`. Private to this file and reading the switch straight off the global: the
 // rule that a shared leaf takes its colours as inputs is there so one component can serve both
 // tiers, and this one has a single host.
 //
@@ -345,13 +345,14 @@ component MiniTimeline inherits HorizontalLayout {
 // arms it; `MiniPlayer.layout` says how far its one layout has grown: the controls on the title's
 // line, under it, or with a panel below.
 //
-// Resize is the only way in *and* out — there are no buttons. Double-clicking
-// the bare drag region maximizes, so it also leaves mini.
+// A window size is the only way in *and* out. The Full Player caption leaves by resizing the
+// window, and a double press on the bare drag region only moves it.
 //
 // Every interactive control stays 8 px clear of the window edges, where
 // `ResizeRing`'s grabs sit above this view, so the cursor keeps showing the
 // resize affordance instead of flickering hover. The corner grabs grow with the
-// window radius and reach past that inset on the rounder presets.
+// window radius and reach past that inset on the rounder presets. The KDE captions are the
+// exception, sitting where Breeze's do, argued at their mount.
 export component MiniPlayerView inherits Rectangle {
     background: Theme.mantle;
     // Doubles as resize-ring breathing room: the ring's TouchAreas sit above

@@ -132,7 +132,7 @@ pub(super) fn wire_now_playing_open(
         if !is_open {
             // **Each half asks whether anything still renders what it would hand back, and the
             // two answers differ.** Entering the miniplayer force-closes this view, so both run on
-            // every entry, and releasing there costs the square variant the sheet and the cover it
+            // every entry, and releasing there costs the miniplayer the sheet and the cover it
             // is about to ask for again.
             //
             // The sheet and its offset table are the whole of what the lyrics panel pinned: the

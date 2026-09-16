@@ -2246,8 +2246,8 @@ msgstr "Mini-lecteur"
 msgid "Window Buttons"
 msgstr "Boutons de fenêtre"
 
-msgid "The minimize, full player and close buttons in the square miniplayer's corner."
-msgstr "Les boutons pour réduire, revenir au lecteur complet et fermer, dans le coin du mini-lecteur carré."
+msgid "The minimize, full player and close buttons in the miniplayer's corner."
+msgstr "Les boutons pour réduire, revenir au lecteur complet et fermer, dans le coin du mini-lecteur."
 
 msgid "Album Backdrop"
 msgstr "Arrière-plan de l'album"
