@@ -136,6 +136,10 @@ export global Theme {
     // each edge. `ResizeRing` sizes its corners off the band it is handed, never off this directly.
     out property <length> resize-border: 4px;
 
+    // How far in from the window edge a KDE caption cluster sits, in the titlebar and the
+    // miniplayer alike. Breeze keeps its buttons 4 px in, and a KDE cell carries 2 px of that.
+    out property <length> kde-caption-edge-pad: 2px;
+
     // The `OverlayScrollbar` *element's* slot, distinct from the 8 px it paints inside it. Both bar
     // components size their bar by it, a track list's right edge stops at it so a row's pill never
     // runs under the always-painted track, and every hand-mounted bar takes its width from here

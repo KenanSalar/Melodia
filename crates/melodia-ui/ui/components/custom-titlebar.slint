@@ -25,11 +25,12 @@ export component CustomTitleBar inherits Rectangle {
     property <CaptionStyle> caption-style: Theme.titlebar-button-style == 2
         ? CaptionStyle.kde
         : CaptionStyle.standard;
-    // Breeze sits its buttons 4 px in from the window edge, and a KDE cell already carries 2 px of
-    // that either side of its button. The pad lies under the resize band, which a maximized window
-    // doesn't have, so there it goes and a throw at the screen corner still lands on close.
+    // The pad lies under the resize band, which a maximized window doesn't have, so there it goes
+    // and a throw at the screen corner still lands on close.
     property <length> caption-edge-pad:
-        root.caption-style == CaptionStyle.kde && !WindowChrome.is-maximized ? 2px : 0px;
+        root.caption-style == CaptionStyle.kde && !WindowChrome.is-maximized
+            ? Theme.kde-caption-edge-pad
+            : 0px;
 
     HorizontalLayout {
         spacing: 0;

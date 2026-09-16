@@ -99,7 +99,8 @@ export component CaptionButton inherits Rectangle {
         commands: root.kde ? root.kde-commands : root.standard-commands;
         stroke: root.idle-fg;
         stroke-width: 1px;
-        stroke-line-cap: root.kde ? LineCap.round : LineCap.butt;
+        // Square where Breeze is round: FemtoVG draws no round cap this thin (`slint-pitfalls.md`).
+        stroke-line-cap: root.kde ? LineCap.square : LineCap.butt;
         stroke-line-join: round;
     }
 

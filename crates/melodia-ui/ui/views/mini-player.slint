@@ -64,7 +64,7 @@ component MiniCaptions inherits HorizontalLayout {
     private property <length> cell-width: 34px;
     private property <length> cell-height: 28px;
 
-    private property <CaptionStyle> style: MiniPlayer.button-style == 2
+    out property <CaptionStyle> style: MiniPlayer.button-style == 2
         ? CaptionStyle.kde
         : CaptionStyle.standard;
     // A standard caption lights its glyph over a fill, where a KDE one fills a disc with the lit ink.
@@ -662,7 +662,12 @@ export component MiniPlayerView inherits Rectangle {
                         height: MiniPlayer.captions-height - Theme.pad-xs;
                         spacing: 2px;
                         padding-left: 4px;
-                        padding-right: 4px;
+                        // A KDE cluster reaches back over the stack's padding to sit where the
+                        // titlebar's does. Its close cell's outer 2 px then fall past the clip,
+                        // painting nothing and lying under the resize band.
+                        padding-right: captions.style == CaptionStyle.kde
+                            ? Theme.kde-caption-edge-pad - root.edge-pad
+                            : 4px;
 
                         // Gone on a station, which has no track to look a sheet up for.
                         if !Player.vm.has_station: VerticalLayout {
@@ -693,7 +698,7 @@ export component MiniPlayerView inherits Rectangle {
 
                         Rectangle { horizontal-stretch: 1; }
 
-                        MiniCaptions {
+                        captions := MiniCaptions {
                             transform-scale: stack.captions-scale;
                             ink: root.caption-ink;
                             ink-lit: root.glyph-lit;
