@@ -5,7 +5,7 @@ import { MiniPlayer, WindowChrome } from "../globals/shell.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { MetaChip } from "../components/meta-chip.slint";
 import { SourceArtwork } from "../components/now-playing/source-artwork.slint";
-import { SliderTrack } from "../components/slider-track.slint";
+import { SeekRow } from "../components/now-playing/seek-row.slint";
 import { VolumePopup } from "../components/now-playing/volume-popup.slint";
 import { VolumePopupHorizontal } from "../components/now-playing/volume-popup-horizontal.slint";
 import { PlayButton } from "../components/now-playing/play-button.slint";
@@ -137,14 +137,12 @@ export component MiniPlayerView inherits Rectangle {
     // so neither panel mounts and the button that swaps them has nothing to swap.
     private property <bool> shows-panel: root.height >= 350px;
 
-    // Shared by both variants — applies the seek-pending hold the way the bar's
-    // slider does.
-    private property <float> slider-frac:
-        Player.duration-ms > 0
-            ? (Player.seek_pending_ms >= 0
-                ? clamp(Player.seek_pending_ms / Player.duration-ms, 0, 1)
-                : clamp(Player.position-ms / Player.duration-ms, 0, 1))
-            : 0;
+    // About two Up Next rows and the gap above them: where a panel stops being worth mounting.
+    private property <length> panel-min-height: 96px;
+
+    // The most the column's artwork draws, half the window's width under a ceiling that leaves the
+    // panel its room. The height it actually gets is whatever the rows leave it, up to this.
+    private property <length> art-cap: min(root.width * 0.5, 180px);
 
     // **Two flags rather than one, because a fade needs both of its ends on screen.** A stack
     // mounted already painting has nothing to ease in from, and one that stops painting still has
@@ -270,13 +268,15 @@ export component MiniPlayerView inherits Rectangle {
         }
     }
 
-    // Horizontal variant — wide and short.
+    // Strip variant, for a window too short for the column. The row and the timeline under it are
+    // centred as one block, so a strip taller than it needs keeps them together rather than pinning
+    // the track to the bottom edge. Centring is safe here: nothing in the strip wants the surplus.
     if !MiniPlayer.square: VerticalLayout {
         padding: root.edge-pad;
         spacing: 0;
+        alignment: center;
 
         HorizontalLayout {
-            vertical-stretch: 1;
             spacing: Theme.pad-sm;
             padding-left: Theme.pad-xs;
             padding-right: Theme.pad-xs;
@@ -410,26 +410,14 @@ export component MiniPlayerView inherits Rectangle {
             }
         }
 
-        // Hugs the bottom edge, no time labels — too cramped. `vertical-stretch:
-        // 0` is load-bearing: without it the surrounding layout steals the space
-        // and the slider floats mid-row. Leave `SliderTrack` its native 24 px
-        // min-height so the pill thumb clears the bottom edge; the track still
-        // reads slim at 4 px.
-        if !Player.vm.has_station: SliderTrack {
-            vertical-stretch: 0;
-            value: root.slider-frac;
-            is-disabled: !Player.vm.has_track || Player.duration-ms <= 0;
-            seam-mask-color: root.seam-mask;
+        if !Player.vm.has_station: SeekRow {
+            label-color: root.ink;
             fill-color: root.accent;
             track-color: root.track;
-            committed(v) => {
-                if (Player.duration-ms > 0) {
-                    Player.seek-to(round(v * Player.duration-ms));
-                }
-            }
+            seam-mask-color: root.seam-mask;
         }
-        // The bar's state pill, in the slot the seek track would have taken. No elapsed readout
-        // beside it — there are no time labels on this variant either.
+        // The bar's state pill, in the slot the timeline would have taken: a stream has no
+        // position to seek within.
         if Player.vm.has_station: HorizontalLayout {
             vertical-stretch: 0;
             alignment: center;
@@ -441,7 +429,12 @@ export component MiniPlayerView inherits Rectangle {
         }
     }
 
-    // Square variant — taller, optionally with Up Next.
+    // Square variant, the column: artwork over the controls, and a panel once there is room.
+    //
+    // **Left on the default `stretch` alignment.** Under any other, `solve_box_layout` places every
+    // row at its preferred height and positions the block without consulting stretch, so a tall
+    // window would hold the panel at its floor and float the group mid-window. Stretch is the one
+    // that hands the surplus to the panel and takes a shortfall from the artwork.
     if MiniPlayer.square: VerticalLayout {
         padding: root.edge-pad;
         spacing: Theme.pad-xs;
@@ -506,34 +499,43 @@ export component MiniPlayerView inherits Rectangle {
             }
         }
 
-        // `tile-size` clamps so the cover follows the window width but never
-        // balloons past 180 px or drops under 90 px, where the placeholder glyph
-        // stops reading. It draws from the 384 px `Player.np-cover-{a,b}` slot
-        // the Now Playing view uses, falling back to the 72 px row tier until
-        // the seed lands and for tracks whose decode failed; `mini_player.rs`
-        // gates that decode on `mini_square`.
-        VerticalLayout {
-            alignment: center;
+        // **The column's only slack, which is what keeps every control on screen.** Every other row
+        // asks for exactly the height it draws, so when the window runs short the layout's shrink
+        // pass has nowhere else to take height from: the artwork gives ground, down to nothing,
+        // rather than a row clipping off the bottom edge. `MiniPlayerSwitch` hands a window that
+        // short to the strip long before.
+        //
+        // **A plain `Rectangle` with the tile placed by `x` and `y`**, Now Playing's cover slot and
+        // for its reason: a centring layout folds the tile's fixed size into the slot's minimum,
+        // and the slot stops being able to give.
+        //
+        // It draws from the 384 px `Player.np-cover-{a,b}` slot the Now Playing view uses, falling
+        // back to the 72 px row tier until the seed lands and for tracks whose decode failed;
+        // `NowPlayingState::renders_artwork` gates that decode.
+        Rectangle {
             vertical-stretch: 0;
-            HorizontalLayout {
-                alignment: center;
-                SourceArtwork {
-                    tile-size: clamp(root.width * 0.5, 90px, 180px);
-                    track-tile-bg: root.tile-fill;
-                    track-tile-icon-color: root.tile-glyph;
-                    // Everything else about the tile is the shared track-or-station split. A
-                    // station's large slot is its own, `np-cover-*` being the track cross-fade.
-                    cover: Player.vm.has_station
-                        ? (Player.np-station-logo.width > 0
-                            ? Player.np-station-logo
-                            : Player.vm.radio.logo_img)
-                        : (Player.np-cover-has-image
-                            ? (Player.np-cover-use-a ? Player.np-cover-a : Player.np-cover-b)
-                            : Player.vm.track.cover_img);
-                    // Written together with the slot above, so a `0` here means the row-tier
-                    // fallback is what's drawing and there is nothing to measure.
-                    native-size: Player.np-station-logo-size * 1px;
-                }
+            min-height: 0px;
+            preferred-height: root.art-cap;
+            max-height: root.art-cap;
+
+            SourceArtwork {
+                tile-size: min(parent.width, parent.height);
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                track-tile-bg: root.tile-fill;
+                track-tile-icon-color: root.tile-glyph;
+                // Everything else about the tile is the shared track-or-station split. A
+                // station's large slot is its own, `np-cover-*` being the track cross-fade.
+                cover: Player.vm.has_station
+                    ? (Player.np-station-logo.width > 0
+                        ? Player.np-station-logo
+                        : Player.vm.radio.logo_img)
+                    : (Player.np-cover-has-image
+                        ? (Player.np-cover-use-a ? Player.np-cover-a : Player.np-cover-b)
+                        : Player.vm.track.cover_img);
+                // Written together with the slot above, so a `0` here means the row-tier
+                // fallback is what's drawing and there is nothing to measure.
+                native-size: Player.np-station-logo-size * 1px;
             }
         }
 
@@ -679,20 +681,11 @@ export component MiniPlayerView inherits Rectangle {
             }
         }
 
-        // Native 24 px height again, so the pill thumb clears the Up Next list
-        // above it and the bottom edge when that list isn't mounted.
-        if !Player.vm.has_station: SliderTrack {
-            vertical-stretch: 0;
-            value: root.slider-frac;
-            is-disabled: !Player.vm.has_track || Player.duration-ms <= 0;
-            seam-mask-color: root.seam-mask;
+        if !Player.vm.has_station: SeekRow {
+            label-color: root.ink;
             fill-color: root.accent;
             track-color: root.track;
-            committed(v) => {
-                if (Player.duration-ms > 0) {
-                    Player.seek-to(round(v * Player.duration-ms));
-                }
-            }
+            seam-mask-color: root.seam-mask;
         }
         if Player.vm.has_station: HorizontalLayout {
             vertical-stretch: 0;
@@ -711,7 +704,14 @@ export component MiniPlayerView inherits Rectangle {
         // **Two arms rather than three**: a station keeps Up Next here, where the full view swaps
         // in a panel describing the stream. There is no room for that panel under a 180 px tile,
         // and the queue underneath a station is still what the controls above act on.
+        //
+        // **Its preferred height is its floor on purpose.** The shrink pass takes height from every
+        // row with room between the two, so a panel asking for more would give ground alongside
+        // the artwork, where the artwork is meant to give first. Everything past the floor still
+        // comes to it through the stretch.
         if root.shows-panel: VerticalLayout {
+            min-height: root.panel-min-height;
+            preferred-height: root.panel-min-height;
             vertical-stretch: 1;
             padding-top: Theme.pad-xs;
 

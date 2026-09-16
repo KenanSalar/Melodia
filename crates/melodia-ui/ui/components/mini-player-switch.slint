@@ -3,9 +3,9 @@ import { MiniPlayer } from "../globals/shell.slint";
 
 // The responsive full-UI ↔ miniplayer swap, as a non-visual state machine: both `Timer`s are
 // pseudo-elements, so it occupies no layout space and can be mounted anywhere. Compact when the
-// window is either narrow *or* short, and the `square` variant — the one that can show an Up Next
-// list — once the aspect is roughly square or taller. The host passes its size in, a component's
-// root binding not reaching `parent`.
+// window is either narrow *or* short, and the `square` variant — the column with the large artwork,
+// the one that can show a panel — whenever the window is tall enough to lay that column out. The
+// host passes its size in, a component's root binding not reaching `parent`.
 //
 // **The swap is two-phase on purpose**: `render-active` lags `active` by the fade, so only *one*
 // branch is ever mounted — overlapping them holds the sidebar's grid covers and the mini's up-next
@@ -43,8 +43,18 @@ export component MiniPlayerSwitch {
     out property <float> fade-opacity: 1.0;
     animate fade-opacity { duration: 100ms; easing: ease-in-out; }
 
+    // The shortest window the column variant is used in: its fixed rows, with the artwork left at
+    // the size its placeholder glyph still reads at. **Keyed on height alone, never on aspect**.
+    // The column's artwork is the one part that gives when the window does, so a wide window that
+    // is tall enough lays it out fine; an aspect rule sent every window a little wider than it was
+    // tall to the strip, which centres one short row in all that height.
+    //
+    // Only where the swap lands, never whether anything fits: the column lets its artwork shrink to
+    // nothing before a row clips, so a locale setting taller text costs artwork, not controls.
+    private property <length> column-min-height: 232px;
+
     // Internal: nothing outside needs the variant, it only feeds the global.
-    private property <bool> square: root.host-height >= root.host-width * 0.8;
+    private property <bool> square: root.host-height >= root.column-min-height;
 
     // Mirrored locally because a `changed` handler can't watch a global's property. It publishes to
     // the global so children see the new value, schedules fade-out → swap → fade-in, closes any

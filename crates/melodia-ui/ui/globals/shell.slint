@@ -78,7 +78,8 @@ export global WindowChrome {
 }
 
 // The compact player replacing the full UI once the window shrinks past a threshold, and the
-// `square` variant for a window nearly as tall as it is wide. **Entry and exit are resize-only.**
+// `square` variant, the column with the large artwork, for a window tall enough to lay it out;
+// `MiniPlayerSwitch` owns both answers. **Entry and exit are resize-only.**
 export global MiniPlayer {
     in-out property <bool> active: false;
     in-out property <bool> square: false;
