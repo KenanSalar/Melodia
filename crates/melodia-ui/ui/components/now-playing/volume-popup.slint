@@ -18,6 +18,9 @@ export component VolumePopup inherits Rectangle {
     // a `PopupSurface` floating on `Theme.crust`, not part of the surface behind the button, so a
     // solved tier there would be the one chrome on screen tinted by a record.
     in property <brush> trigger-fg: Theme.text;
+    // Its own input rather than always `trigger-fg`: a glyph with no hover pill has only its colour
+    // to answer the pointer with.
+    in property <brush> trigger-hover-fg: root.trigger-fg;
     in property <brush> trigger-hover-bg: Theme.surface0;
 
     width: btn.width;
@@ -60,6 +63,7 @@ export component VolumePopup inherits Rectangle {
         icon-size: root.icon-size;
         filled: true;
         idle-fg: root.trigger-fg;
+        hover-fg: root.trigger-hover-fg;
         hover-bg: root.trigger-hover-bg;
         tooltip-text: round(Player.vm.volume) + "%";
         force-tooltip: root.tooltip-ticks-remaining > 0;

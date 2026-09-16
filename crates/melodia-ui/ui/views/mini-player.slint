@@ -14,21 +14,27 @@ import { LyricsPanel } from "../components/now-playing/lyrics-panel.slint";
 import { AuroraBackdrop } from "../components/aurora-backdrop.slint";
 import { HeroBlurBackdrop } from "../components/hero-blur-backdrop.slint";
 
-// The view's own button, so the tier is answered once rather than as four bindings on each of a
-// dozen `IconButton`s. Private to this file and reading the switch straight off the global: the
+// The view's own button, so the treatment is answered once rather than as five bindings on each of
+// a dozen `IconButton`s. Private to this file and reading the switch straight off the global: the
 // rule that a shared leaf takes its colours as inputs is there so one component can serve both
 // tiers, and this one has a single host.
 //
-// **The four arms below restate `MiniPlayerView`'s `ink` / `accent-pill` / `accent`, and that is
-// forced rather than sloppy** — a component cannot read a property off the host it is mounted in,
-// so the alternatives are these four lines or the same three threaded through every mount. Move
-// one and move the other: they are one answer to one flag, and nothing but this note connects them.
+// **On the backdrop these are `AccentGlyphButton`'s**, the family Now Playing's header is made of:
+// no chrome in any state, the glyph resting at the dim tier and coming up to full under the
+// pointer, and a lit glyph lifting too so it still answers. Off it, the stock button. Not that
+// component mounted directly, which has no off arm to switch to.
+//
+// **`MiniPlayerView`'s `glyph` / `glyph-lit` / `glyph-hover-bg` restate the first three arms**,
+// for the volume triggers that are not this component, and that is forced rather than sloppy: a
+// component cannot read a property off the host it is mounted in. Move one and move the other.
 component MiniIconButton inherits IconButton {
     private property <bool> on-backdrop: MiniPlayer.backdrop-shown;
 
-    idle-fg: root.on-backdrop ? Player.np-on-backdrop : Theme.text;
-    hover-bg: root.on-backdrop ? Player.np-accent-pill : Theme.surface0;
+    idle-fg: root.on-backdrop ? Player.np-accent-dim : Theme.text;
+    hover-fg: root.on-backdrop ? Player.np-accent-bright : Theme.text;
+    hover-bg: root.on-backdrop ? Colors.transparent : Theme.surface0;
     active-fg: root.on-backdrop ? Player.np-accent-bright : Theme.accent;
+    hover-lift: root.on-backdrop;
     disabled-fg: root.on-backdrop
         ? Player.np-on-backdrop-muted.transparentize(0.55)
         : Theme.overlay0;
@@ -57,30 +63,41 @@ export component MiniPlayerView inherits Rectangle {
     // for, that one is a live mount.
     private property <bool> aurora-shown: Theme.aurora-backdrop;
 
-    // Every leaf that would otherwise read a `Theme.*` brush takes one of these instead. Answered
-    // once rather than per site: on the blur arm the floor is solved dark under a solved-light
-    // foreground, so a site left on the theme's ink vanishes on a light palette, and one site
-    // answering differently from its neighbour is invisible until someone switches theme.
-    // `MiniIconButton` above carries the only other copy, and says why it has to.
+    // Every leaf that would otherwise read a `Theme.*` brush takes one of these instead, each on the
+    // backdrop matching what the same kind of element paints in Now Playing. Answered once rather
+    // than per site: on the blur arm the floor is solved dark under a solved-light foreground, so a
+    // site left on the theme's ink vanishes on a light palette, and one site answering differently
+    // from its neighbour is invisible until someone switches theme.
     private property <bool> on-backdrop: MiniPlayer.backdrop-shown;
     private property <brush> ink: root.on-backdrop ? Player.np-on-backdrop : Theme.text;
     private property <brush> ink-muted: root.on-backdrop ? Player.np-on-backdrop-muted : Theme.subtext0;
     private property <brush> accent: root.on-backdrop ? Player.np-accent-bright : Theme.accent;
-    private property <brush> accent-pill: root.on-backdrop ? Player.np-accent-pill : Theme.surface0;
-    // The artwork placeholder's fill, which is the accent at a wash rather than a surface colour,
-    // so it does not follow `accent-pill` off the backdrop.
+    // The glyph family, for the two volume triggers. `MiniIconButton` carries the same three arms
+    // and says why it has to.
+    private property <brush> glyph: root.on-backdrop ? Player.np-accent-dim : Theme.text;
+    private property <brush> glyph-lit: root.on-backdrop ? Player.np-accent-bright : Theme.text;
+    private property <brush> glyph-hover-bg: root.on-backdrop ? Colors.transparent : Theme.surface0;
+    // The artwork placeholder, as `NowPlayingCover` draws it on the backdrop: a faint recess and a
+    // quiet glyph rather than an accent slab, which a wash already carries colour enough for.
     private property <brush> tile-fill:
-        root.on-backdrop ? Player.np-accent-pill : Theme.accent.with-alpha(0.15);
-    // The live pill's fill, a shade heavier than the tile's so a chip on a busy wash keeps a shape.
+        root.on-backdrop ? Player.np-on-backdrop.transparentize(0.92) : Theme.accent.with-alpha(0.15);
+    private property <brush> tile-glyph:
+        root.on-backdrop ? Player.np-on-backdrop-muted.transparentize(0.5) : Theme.accent;
+    // The live pill, as Now Playing's chips paint it: their own fill tier and a lettering tier held
+    // to the text bar, rather than the chrome glyph colour.
     private property <brush> chip-fill:
         root.on-backdrop ? Player.np-chip-fill : Theme.accent.with-alpha(0.18);
+    private property <brush> chip-label: root.on-backdrop ? Player.np-chrome-text : Theme.accent;
     // The seam mask is a stadium painted in whatever sits *behind* the slider, so it only works
     // over a flat surface. A backdrop is washes over a gradient, or a blurred cover under a scrim,
     // and no one colour matches either — a mask there is a flat blob that moves with the thumb.
     // Transparent instead, which leaves the two bars meeting at their own rounded ends: the thumb
     // covers that join at rest, and the expressive gap is worth less than the blob costs.
     private property <brush> seam-mask: root.on-backdrop ? Colors.transparent : Theme.mantle;
-    private property <brush> track: root.on-backdrop ? Player.np-accent-pill : Theme.surface1;
+    // The seek track's unplayed half. Now Playing draws no slider, so this is the lyrics switch's
+    // resting track, the one track that view lays on the backdrop.
+    private property <brush> track:
+        root.on-backdrop ? Player.np-accent-bright.transparentize(0.76) : Theme.surface1;
     // The play glyph, punched out of the disc above it. `ink-on` rather than the mantle the bar's
     // copy uses: on the backdrop the disc is the solved accent, whose brightness is the cover's to
     // decide, so the glyph has to be picked against it rather than against a surface.
@@ -182,7 +199,7 @@ export component MiniPlayerView inherits Rectangle {
                 SourceArtwork {
                     tile-size: 48px;
                     track-tile-bg: root.tile-fill;
-                    track-tile-icon-color: root.accent;
+                    track-tile-icon-color: root.tile-glyph;
                 }
             }
 
@@ -266,8 +283,9 @@ export component MiniPlayerView inherits Rectangle {
                     VolumePopupHorizontal {
                         diameter: 28px;
                         icon-size: 18px;
-                        trigger-fg: root.ink;
-                        trigger-hover-bg: root.accent-pill;
+                        trigger-fg: root.glyph;
+                        trigger-hover-fg: root.glyph-lit;
+                        trigger-hover-bg: root.glyph-hover-bg;
                     }
                 }
                 if WindowChrome.always-on-top-supported: VerticalLayout {
@@ -332,7 +350,7 @@ export component MiniPlayerView inherits Rectangle {
             MetaChip {
                 text: Player.live-label;
                 fill: root.chip-fill;
-                label-color: root.accent;
+                label-color: root.chip-label;
             }
         }
     }
@@ -419,7 +437,7 @@ export component MiniPlayerView inherits Rectangle {
                 SourceArtwork {
                     tile-size: clamp(root.width * 0.5, 90px, 180px);
                     track-tile-bg: root.tile-fill;
-                    track-tile-icon-color: root.accent;
+                    track-tile-icon-color: root.tile-glyph;
                     // Everything else about the tile is the shared track-or-station split. A
                     // station's large slot is its own, `np-cover-*` being the track cross-fade.
                     cover: Player.vm.has_station
@@ -569,8 +587,9 @@ export component MiniPlayerView inherits Rectangle {
                     VolumePopup {
                         diameter: 32px;
                         icon-size: 20px;
-                        trigger-fg: root.ink;
-                        trigger-hover-bg: root.accent-pill;
+                        trigger-fg: root.glyph;
+                        trigger-hover-fg: root.glyph-lit;
+                        trigger-hover-bg: root.glyph-hover-bg;
                     }
                 }
             }
@@ -597,7 +616,7 @@ export component MiniPlayerView inherits Rectangle {
             MetaChip {
                 text: Player.live-label;
                 fill: root.chip-fill;
-                label-color: root.accent;
+                label-color: root.chip-label;
             }
         }
 

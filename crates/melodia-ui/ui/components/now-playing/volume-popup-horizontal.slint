@@ -21,6 +21,7 @@ export component VolumePopupHorizontal inherits Rectangle {
     // The trigger's ink only, its vertical sibling's argument: the flyout floats on `Theme.crust`
     // and is not part of the surface behind the button.
     in property <brush> trigger-fg: Theme.text;
+    in property <brush> trigger-hover-fg: root.trigger-fg;
     in property <brush> trigger-hover-bg: Theme.surface0;
 
     width: btn.width;
@@ -61,6 +62,7 @@ export component VolumePopupHorizontal inherits Rectangle {
         icon-size: root.icon-size;
         filled: true;
         idle-fg: root.trigger-fg;
+        hover-fg: root.trigger-hover-fg;
         hover-bg: root.trigger-hover-bg;
         tooltip-text: round(Player.vm.volume) + "%";
         force-tooltip: root.tooltip-ticks-remaining > 0;
