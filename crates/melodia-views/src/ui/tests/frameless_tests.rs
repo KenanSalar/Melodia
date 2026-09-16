@@ -7,7 +7,7 @@
 //! Win32 and macOS. The kept margins matter on Win32 alone, the one frame with invisible edges. The
 //! Rust half of the frame reading is pinned beside `window_chrome::geometry` and its `Resized` arm.
 
-use melodia_testkit::{binding_value, blocks_named, code_tokens};
+use melodia_testkit::{binding_value, block_after, blocks_named, code_tokens};
 
 const APP_WINDOW: &str = include_str!("../../../../melodia-ui/ui/app-window.slint");
 const MINI_SWITCH: &str =
@@ -432,12 +432,16 @@ fn the_exit_edge_widens_by_the_frame_allowance() {
         ["root.render-active ?", "root.exit-allowance-w", "root.exit-allowance-h"];
     let switch = code_tokens(MINI_SWITCH);
     let active = binding_value(&switch, "out property <bool> active:");
-
-    let missing: Vec<&str> = TERMS.into_iter().filter(|t| !active.contains(t)).collect();
+    let fits = block_after(&switch, "pure function fits-mini(");
 
     assert!(
+        active.contains("root.fits-mini(root.host-width, root.host-height)"),
+        "`active` no longer asks the one predicate the settle also asks:\n{active}"
+    );
+    let missing: Vec<&str> = TERMS.into_iter().filter(|t| !fits.contains(t)).collect();
+    assert!(
         missing.is_empty(),
-        "`active` no longer widens its exit edge by the frame, missing {missing:?}:\n{active}"
+        "`fits-mini` no longer widens its exit edge by the frame, missing {missing:?}:\n{fits}"
     );
 }
 

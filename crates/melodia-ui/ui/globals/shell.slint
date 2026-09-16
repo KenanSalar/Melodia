@@ -112,6 +112,12 @@ export global MiniPlayer {
     // the window gives the artwork more, where the view has already moved everything into place.
     out property <length> art-floor: 48px;
 
+    // The card's captions row with the gap under it, all the way open. Spelled rather than measured:
+    // the row is behind an `if`, and opens by what the rows under it leave rather than by its
+    // content. The switch reads it too, for where the column starts and where a resize settles the
+    // row.
+    out property <length> captions-height: 32px;
+
     // The strip's smallest footprint, which is the window's floor. Rust floors a restored window at
     // it too, so a hand-edited `settings.json` can't open one smaller.
     out property <length> window-min-width: 350px;
@@ -131,6 +137,9 @@ export global MiniPlayer {
 
     callback active-changed(bool);
     callback layout-changed(MiniLayout);
+    // The window takes this height and keeps its width: the switch settling a resize let go with the
+    // captions row part of the way open.
+    callback request-height(length);
     callback set-backdrop-shown(bool);
 }
 

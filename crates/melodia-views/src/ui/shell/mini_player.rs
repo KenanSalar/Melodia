@@ -1,5 +1,5 @@
 //! Wires the `MiniPlayer` global to the Up Next subscriber's visibility gate, the artwork cache's
-//! lifecycle and the backdrop switch's persistence.
+//! lifecycle, the backdrop switch's persistence and the window height a stopped resize settles at.
 //!
 //! **Resize-only trigger.** The miniplayer engages purely on the window being shrunk
 //! past the threshold `app-window.slint` derives; there is no entry or exit button
@@ -127,6 +127,18 @@ pub fn install(
             state.persist_blocking("mini backdrop", move |s| {
                 melodia_app::library::window::set_mini_backdrop(s, on)
             });
+        });
+    }
+
+    // request-height: the switch decides the height from a layout Rust can't see, and only Rust can
+    // resize the window. It asks from the winit filter's posted release, outside any dispatch.
+    {
+        let weak = app.as_weak();
+        mini.on_request_height(move |height| {
+            let Some(ui) = weak.upgrade() else { return };
+            let window = ui.window();
+            let width = window.size().to_logical(window.scale_factor()).width;
+            window.set_size(slint::LogicalSize::new(width, height));
         });
     }
 

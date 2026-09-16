@@ -265,6 +265,8 @@ export component AppWindow inherits Window {
     mini-switch := MiniPlayerSwitch {
         host-width: root.width;
         host-height: root.height;
+        view-width: root.content-width;
+        view-height: root.content-height;
         exit-allowance-w: WindowChrome.frame-allowance-w;
         exit-allowance-h: WindowChrome.frame-allowance-h;
     }
@@ -273,6 +275,15 @@ export component AppWindow inherits Window {
     // restored size is in, before the window maps.
     public function adopt-restored-size() {
         mini-switch.adopt-restored-size();
+    }
+
+    // The winit filter's word on where a resize begins and where it is let go, which only it can
+    // tell.
+    public function resize-began() {
+        mini-switch.resize-began();
+    }
+    public function resize-released() {
+        mini-switch.resize-released();
     }
 
     // One gate per section in nav-index order, plus one per tab for a section built out of tabs.

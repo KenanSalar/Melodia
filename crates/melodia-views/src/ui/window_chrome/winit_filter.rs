@@ -1,6 +1,6 @@
 //! Winit `WindowEvent` filter installed by `window_chrome::install`.
 //!
-//! Eight reasons to subscribe:
+//! Nine reasons to subscribe:
 //!
 //! 1. **`MouseInput { Pressed, Left }`** over a `ResizeRing` grab or a drag region: an
 //!    OS-level resize or window move plus `PreventDefault`, bypassing the TouchArea-grab
@@ -24,6 +24,9 @@
 //! 8. **`ThemeChanged`**, Windows only: a light/dark flip for a theme on its System
 //!    variant, re-read by `ui::appearance` rather than taken from the event, whose theme
 //!    also folds in high contrast, and a cue for the tray icon to re-read its taskbar.
+//! 9. **`Resized`**, **`CursorMoved`**, **`CursorEntered`** and **`MouseInput`** together, for
+//!    where a resize begins and where it is let go, which no one event reports. See
+//!    `resize_release`.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -44,6 +47,7 @@ use melodia_ui::{AppWindow, CompositeScroll, PlaylistDetail, PopupHighlight, Que
 
 #[cfg(target_os = "windows")]
 use super::parked_loop;
+use super::resize_release::ResizeWatch;
 use super::{drop_coalescer, geometry};
 
 /// How long to wait after a focus loss before asking whether it was a minimize.
@@ -147,7 +151,15 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
     let state = state.clone();
     // Where the pointer is, for the synthetic scroll below.
     let mut cursor_pos = slint::LogicalPosition::default();
+    let resize_watch = ResizeWatch::new(app.as_weak());
     app.window().on_winit_window_event(move |w, event| {
+        match event {
+            WindowEvent::Resized(size) => resize_watch.resized(w, *size),
+            WindowEvent::CursorMoved { .. }
+            | WindowEvent::CursorEntered { .. }
+            | WindowEvent::MouseInput { .. } => resize_watch.pointer(w),
+            _ => {}
+        }
         match event {
             // Ahead of the drag arm: the miniplayer's drag region runs right up to the edge, and its
             // hover can still read true for a tick after the pointer reaches a grab.

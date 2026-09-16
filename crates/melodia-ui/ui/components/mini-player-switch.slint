@@ -13,6 +13,10 @@ export component MiniPlayerSwitch {
     // The host window's live size.
     in property <length> host-width;
     in property <length> host-height;
+    // The rect the miniplayer lays out in: the window, less the invisible borders a native
+    // miniplayer keeps transparent on Win32.
+    in property <length> view-width;
+    in property <length> view-height;
 
     // What the OS frame adds to the client area, for a host that drops the frame in miniplayer mode.
     in property <length> exit-allowance-w;
@@ -25,14 +29,17 @@ export component MiniPlayerSwitch {
 
     // Flips the instant the threshold is crossed. **`render-active` is what a host
     // branches on**; this is only the decision.
-    //
+    out property <bool> active: root.fits-mini(root.host-width, root.host-height);
+
     // Leaving takes more room than entering: dropping the frame grows the client area by the
     // allowance, so one shared edge would bounce a window parked just inside it straight back out.
-    // Keyed on `render-active`, which no binding writes, so this one can't loop on itself.
-    out property <bool> active: root.render-active
-        ? (root.host-width < root.enter-w + root.exit-allowance-w + root.exit-slack
-            || root.host-height < root.enter-h + root.exit-allowance-h + root.exit-slack)
-        : (root.host-width < root.enter-w || root.host-height < root.enter-h);
+    // Keyed on `render-active`, which no binding writes, so `active` can't loop on itself.
+    pure function fits-mini(width: length, height: length) -> bool {
+        return root.render-active
+            ? (width < root.enter-w + root.exit-allowance-w + root.exit-slack
+                || height < root.enter-h + root.exit-allowance-h + root.exit-slack)
+            : (width < root.enter-w || height < root.enter-h);
+    }
 
     // Which branch is mounted right now: `active`, delayed by one fade so the
     // outgoing layout can reach opacity 0 before it is destroyed.
@@ -49,15 +56,16 @@ export component MiniPlayerSwitch {
     // comes off the width as well as the cap: a narrow window's stops short of the cap, the controls
     // taking the width, and keyed on the cap alone its panel held off long after there was room.
     //
-    // All of these are estimates of what the view lays out, and being off only moves where a swap
-    // lands: the artwork gives ground before a row clips.
+    // All of these restate what the view lays out rather than measure it. Being off moves where a
+    // swap lands, the artwork giving ground before a row clips, and leaves a settled captions row
+    // that far short of closed or open.
     //
     // The padding, the timeline and the gap over it, which is everything the card's height holds but
     // the artwork.
     private property <length> art-rows: 48px;
     // The same with the captions row all the way open, which is everything in the column but the
     // artwork and the panel.
-    private property <length> column-rows: root.art-rows + 32px;
+    private property <length> column-rows: root.art-rows + MiniPlayer.captions-height;
     // The same across the row the artwork shares with the controls: the padding either side, the
     // row's own inset and the gap to the title.
     private property <length> art-row-insets: 20px;
@@ -67,13 +75,13 @@ export component MiniPlayerSwitch {
         WindowChrome.always-on-top-supported ? 220px : 190px;
 
     private property <length> card-art:
-        min(MiniPlayer.art-cap, root.host-width - root.art-row-insets - root.controls-min-width);
+        min(MiniPlayer.art-cap, root.view-width - root.art-row-insets - root.controls-min-width);
 
     // Internal: nothing outside needs the layout, it only feeds the global.
     private property <MiniLayout> layout:
-        root.host-height >= root.column-rows + root.card-art
+        root.view-height >= root.column-rows + root.card-art
             ? MiniLayout.column
-            : (root.host-height > root.art-rows + MiniPlayer.art-floor
+            : (root.view-height > root.art-rows + MiniPlayer.art-floor
                 ? MiniLayout.card
                 : MiniLayout.strip);
 
@@ -112,6 +120,38 @@ export component MiniPlayerSwitch {
     changed watched-layout => {
         MiniPlayer.layout = root.watched-layout;
         MiniPlayer.layout-changed(root.watched-layout);
+    }
+
+    // How far the card's captions row is open: into what the artwork and the rows under it leave.
+    private property <length> captions-shown: clamp(
+        root.view-height - root.art-rows - root.card-art, 0px, MiniPlayer.captions-height);
+
+    // How far the row was open when the resize began, which the drag's direction is read against
+    // rather than its last step: a drag that overshoots and comes back a little still settles the
+    // way it was going.
+    private property <length> captions-at-resize;
+    private property <length> captions-open-height:
+        root.host-height + MiniPlayer.captions-height - root.captions-shown;
+    private property <length> captions-closed-height: root.host-height - root.captions-shown;
+
+    public function resize-began() {
+        root.captions-at-resize = root.captions-shown;
+    }
+
+    // **A resize never lets go of the captions row part of the way open**, its buttons shrunk and
+    // faded on their way in or out. The window takes the height that finishes the move: open if the
+    // row has opened since the resize began, closed if it has closed, and closed wherever opening
+    // would carry a wide window past the exit edge. On the release rather than on a pause, so the
+    // window never moves under a pointer still holding its edge.
+    public function resize-released() {
+        if (!root.active || root.captions-shown <= 0px
+            || root.captions-shown >= MiniPlayer.captions-height) {
+            return;
+        }
+        MiniPlayer.request-height(root.captions-shown > root.captions-at-resize
+                && root.fits-mini(root.host-width, root.captions-open-height)
+            ? root.captions-open-height
+            : root.captions-closed-height);
     }
 
     // Mounts the branch a restored size calls for before the window exists, which the seed below is

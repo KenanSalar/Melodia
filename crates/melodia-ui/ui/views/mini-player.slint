@@ -426,9 +426,6 @@ export component MiniPlayerView inherits Rectangle {
     // until a row fits.
     private property <length> panel-gap: Theme.pad-sm;
 
-    // The captions row with the gap under it, all the way open. Spelled rather than measured: the
-    // row is behind an `if`, and opens by what the rows under it leave rather than by its content.
-    private property <length> captions-height: 32px;
     // How small the captions row's buttons get on their way out: enough to read as leaving, not
     // enough to read as a second size.
     private property <float> captions-exit-scale: 0.8;
@@ -606,8 +603,8 @@ export component MiniPlayerView inherits Rectangle {
 
         // How far the captions row is open: what the artwork and the timeline leave, up to all of it.
         property <length> captions-shown: clamp(
-            root.height - self.art-rows - head.preferred-height, 0px, root.captions-height);
-        property <float> captions-t: self.captions-shown / root.captions-height;
+            root.height - self.art-rows - head.preferred-height, 0px, MiniPlayer.captions-height);
+        property <float> captions-t: self.captions-shown / MiniPlayer.captions-height;
         property <float> captions-fade: clamp(
             (self.captions-t - root.captions-fade-end) / (1 - root.captions-fade-end), 0, 1);
         property <float> captions-scale:
@@ -647,7 +644,7 @@ export component MiniPlayerView inherits Rectangle {
                         x: 0;
                         y: (parent.height - Theme.pad-xs * stack.captions-t - self.height) / 2;
                         width: parent.width;
-                        height: root.captions-height - Theme.pad-xs;
+                        height: MiniPlayer.captions-height - Theme.pad-xs;
                         spacing: 2px;
                         padding-left: 4px;
                         padding-right: 4px;

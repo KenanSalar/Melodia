@@ -6,8 +6,8 @@
 //! `AppWindow::new()` and `app.run()`, where `main.rs` calls [`install`], so the window maps
 //! with its frame decided rather than swapping it on screen), the
 //! window control callbacks ([`controls`]), window dragging and resizing ([`winit_filter`],
-//! [`resize_grab`]), the Slint tick a Win32 drag parks (`parked_loop`), file-drop coalescing
-//! ([`drop_coalescer`]), geometry ([`geometry`]) and the restart flow.
+//! [`resize_grab`], [`resize_release`]), the Slint tick a Win32 drag parks (`parked_loop`),
+//! file-drop coalescing ([`drop_coalescer`]), geometry ([`geometry`]) and the restart flow.
 //!
 //! **Dragging and resizing belong at the winit layer.** `drag_window()` from a `TouchArea`'s
 //! `pointer-event` leaks the grab: the compositor takes pointer ownership for the move and
@@ -30,6 +30,7 @@ pub mod geometry;
 #[cfg(target_os = "windows")]
 pub mod parked_loop;
 mod resize_grab;
+mod resize_release;
 mod winit_filter;
 
 pub use drop_coalescer::{
