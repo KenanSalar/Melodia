@@ -95,18 +95,6 @@ export global MiniPlayer {
     in-out property <bool> active: false;
     in-out property <MiniLayout> layout: MiniLayout.strip;
 
-    // The window height at which the column has room for a panel under its controls. Here because
-    // the switch hands a window this tall to the column whatever the card would draw, and the view
-    // mounts the panel at the same edge.
-    out property <length> panel-height: 350px;
-
-    // The most the column's artwork draws in a window this wide: half of it, under a ceiling that
-    // leaves the panel its room. Here because the switch weighs it against the card's before the
-    // column exists.
-    public pure function column-art-cap(width: length) -> length {
-        return min(width * 0.5, 180px);
-    }
-
     // Whether the miniplayer paints the artwork backdrop and its solved ink instead of flat chrome.
     // **Not `Theme.aurora-backdrop`**, which decides which of the two stacks every colour tier is
     // solved for and is restart-gated for exactly that reason; this only says whether this surface

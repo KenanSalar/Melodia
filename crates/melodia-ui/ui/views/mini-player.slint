@@ -291,14 +291,14 @@ export component MiniPlayerView inherits Rectangle {
 
     // Below this the column has no room for a couple of rows beside the artwork and the controls,
     // so neither panel mounts and the button that swaps them has nothing to swap.
-    private property <bool> shows-panel: root.height >= MiniPlayer.panel-height;
+    private property <bool> shows-panel: root.height >= 350px;
 
     // About two Up Next rows and the gap above them: where a panel stops being worth mounting.
     private property <length> panel-min-height: 96px;
 
-    // The most the column's artwork draws. The height it actually gets is whatever the rows leave
-    // it, up to this.
-    private property <length> art-cap: MiniPlayer.column-art-cap(root.width);
+    // The most the column's artwork draws, half the window's width under a ceiling that leaves the
+    // panel its room. The height it actually gets is whatever the rows leave it, up to this.
+    private property <length> art-cap: min(root.width * 0.5, 180px);
 
     // **Two flags rather than one, because a fade needs both of its ends on screen.** A stack
     // mounted already painting has nothing to ease in from, and one that stops painting still has
@@ -506,8 +506,8 @@ export component MiniPlayerView inherits Rectangle {
         Rectangle { vertical-stretch: 1; }
     }
 
-    // Card, for a window with height to spare that the column would draw a smaller artwork in: the
-    // artwork takes the window's height and the strip's controls stack beside it.
+    // Card, for a window too short for the column's artwork to read but tall enough to stack the
+    // strip's controls: the artwork takes the window's height and the controls sit beside it.
     //
     // **The artwork is the card's only slack across the row**, the column's slot turned on its side.
     // Its slot asks for the window's height as its width and can give all of it back, while the
