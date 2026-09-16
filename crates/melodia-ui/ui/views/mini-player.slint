@@ -1,7 +1,7 @@
 import { Theme } from "../theme.slint";
 import { Player } from "../globals/player.slint";
 import { Lyrics } from "../globals/lyrics.slint";
-import { MiniPlayer, MiniLayout, WindowChrome } from "../globals/shell.slint";
+import { DragRegion, MiniPlayer, MiniLayout, WindowChrome } from "../globals/shell.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { TooltipSide } from "../components/tooltip.slint";
 import { CaptionButton, CaptionGlyph, CaptionStyle, MinimizeCaption, CloseCaption } from "../components/caption-buttons.slint";
@@ -576,8 +576,8 @@ export component MiniPlayerView inherits Rectangle {
     // the window can't be moved at all. It covers the whole area at z-bottom
     // and every control sits above it — Slint dispatches to the topmost
     // TouchArea, so `has-hover` only goes true over empty space. Same
-    // `drag-region-hover-changed` → winit press-intercept path as
-    // `custom-titlebar.slint`.
+    // `drag-region-changed` → winit press-intercept path as
+    // `custom-titlebar.slint`, under its own name so a double press only moves it.
     drag-region := TouchArea {
         x: 0;
         y: 0;
@@ -585,11 +585,8 @@ export component MiniPlayerView inherits Rectangle {
         height: 100%;
         mouse-cursor: default;
         changed has-hover => {
-            WindowChrome.drag-region-hover-changed(self.has-hover);
-        }
-        double-clicked => {
-            // The size flip trips `mini-active = false` on its own.
-            WindowChrome.toggle-maximize();
+            WindowChrome.drag-region-changed(
+                self.has-hover ? DragRegion.miniplayer : DragRegion.none);
         }
     }
 

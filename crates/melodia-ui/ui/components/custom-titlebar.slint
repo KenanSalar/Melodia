@@ -1,14 +1,14 @@
 import { Theme } from "../theme.slint";
-import { WindowChrome } from "../globals/shell.slint";
+import { DragRegion, WindowChrome } from "../globals/shell.slint";
 import { MacOsTitleBarCluster } from "macos-titlebar-cluster.slint";
 import { CaptionStyle, MinimizeCaption, MaximizeCaption, CloseCaption } from "caption-buttons.slint";
 
 // The brand on one side, a drag region in the middle, the decoration cluster opposite.
 //
-// **Drag handling is split**: Slint tracks only *hover* over the drag region, plus double-click to
-// toggle maximize, and Rust intercepts the press at the winit layer — dragging from a `TouchArea`
-// strands its mouse grab. The maximize icon reads `WindowChrome.is-maximized`, fed from winit's
-// `Resized`, so tiling shortcuts update it too. Style and side come from
+// **Drag handling is split**: Slint tracks only *hover* over the drag region, and Rust intercepts
+// the press at the winit layer, where a double press toggles maximize too. Dragging from a
+// `TouchArea` strands its mouse grab. The maximize icon reads `WindowChrome.is-maximized`, fed from
+// winit's `Resized`, so tiling shortcuts update it too. Style and side come from
 // `Theme.titlebar-button-{style,side}`, and the four conditional branches mount the right cluster
 // on the right side. **The buttons are inlined into the outer layout rather than wrapped in a
 // sub-component**: a Rectangle-inheriting wrapper with conditional layout children reports 0 × 0.
@@ -52,17 +52,15 @@ export component CustomTitleBar inherits Rectangle {
         if root.captions-left && !root.mac-style: MinimizeCaption { style: root.caption-style; }
 
         // Wraps the brand plus the middle stretch, so everything but the cluster is draggable. The
-        // TouchArea tracks only `has-hover`; Rust reads it and intercepts the press at the winit
-        // layer. `double-clicked` stays here because it fires *after* release, by which point the
-        // press was intercepted. A stretch spacer before or after the brand pins it to its side.
+        // TouchArea tracks only `has-hover`, and no `double-clicked` here can fire: Rust takes
+        // every press at the winit layer, the double press included. A stretch spacer before or
+        // after the brand pins it to its side.
         drag-region := TouchArea {
             horizontal-stretch: 1;
             mouse-cursor: default;
             changed has-hover => {
-                WindowChrome.drag-region-hover-changed(self.has-hover);
-            }
-            double-clicked => {
-                WindowChrome.toggle-maximize();
+                WindowChrome.drag-region-changed(
+                    self.has-hover ? DragRegion.titlebar : DragRegion.none);
             }
 
             HorizontalLayout {

@@ -8,6 +8,11 @@ import { Settings } from "../settings.slint";
 // moves. `ResizeRing` is the only writer.
 export enum ResizeZone { none, north, south, west, east, north-west, north-east, south-west, south-east }
 
+// Which window-move region the pointer is over, named by the host because a double press on the
+// titlebar maximizes and one on the miniplayer only moves it. Each region is the only writer of its
+// own name.
+export enum DragRegion { none, titlebar, miniplayer }
+
 // The custom titlebar, owned by `ui/window_chrome/` with Slint as the dumb renderer.
 // `is-maximized` comes off a winit `Resized` subscription, so the icon stays right under tiling
 // shortcuts that bypass our buttons. **Window dragging and resizing are not handled inside Slint** — a
@@ -57,9 +62,9 @@ export global WindowChrome {
     callback restore-full-player();
     callback close-window();
     callback toggle-always-on-top();
-    // Mirrored into an atomic the winit `MouseInput` filter checks before starting an
-    // OS-level window move.
-    callback drag-region-hover-changed(bool);
+    // Kept in a cell the winit `MouseInput` filter checks before starting an OS-level window move,
+    // or on the titlebar's second press, a maximize toggle.
+    callback drag-region-changed(DragRegion);
     // The same for `ResizeRing`'s grabs, kept in a cell the filter checks first, before an OS-level
     // resize.
     callback resize-zone-changed(ResizeZone);

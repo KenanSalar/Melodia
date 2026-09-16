@@ -56,7 +56,7 @@ fn the_resize_press_arm_is_matched_before_the_drag_arm() -> Result<(), Box<dyn s
     let (before_resize, _) =
         code.split_once(RESIZE_ARM).ok_or("no resize press arm found: the walk is broken")?;
 
-    let drag_arms_before = before_resize.matches("drag_hover.load(").count();
+    let drag_arms_before = before_resize.matches("drag_region.get()").count();
 
     assert_eq!(drag_arms_before, 0, "the drag arm is matched ahead of the resize arm");
     Ok(())

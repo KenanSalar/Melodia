@@ -4,7 +4,8 @@
 //!
 //! 1. **`MouseInput { Pressed, Left }`** over a `ResizeRing` grab or a drag region: an
 //!    OS-level resize or window move plus `PreventDefault`, bypassing the TouchArea-grab
-//!    issue the parent module's docs describe.
+//!    issue the parent module's docs describe. The titlebar's double press toggles maximize
+//!    instead, Slint never seeing the pair (`drag_region`).
 //! 2. **`MouseInput { Pressed, Back | Forward }`** — Mouse-4 / Mouse-5 into the nav
 //!    history, gated on no overlay being open so the buttons don't fight its input
 //!    context.
@@ -30,9 +31,7 @@
 
 use std::cell::Cell;
 use std::rc::Rc;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use slint::ComponentHandle;
 use slint::winit_030::winit::error::ExternalError;
@@ -43,8 +42,12 @@ use slint::winit_030::winit::window::{ResizeDirection, Window as WinitWindow};
 use slint::winit_030::{EventResult, WinitWindowAccessor};
 
 use melodia_app::state::AppState;
-use melodia_ui::{AppWindow, CompositeScroll, PlaylistDetail, PopupHighlight, Queue, Theme};
+use melodia_ui::{
+    AppWindow, CompositeScroll, DragRegion, PlaylistDetail, PopupHighlight, Queue, Theme,
+    WindowChrome,
+};
 
+use super::drag_region::{DoublePress, PressAction};
 #[cfg(target_os = "windows")]
 use super::parked_loop;
 use super::resize_release::ResizeWatch;
@@ -139,18 +142,19 @@ fn clear_drop_hover(ui: &AppWindow) {
 /// What the pointer is over that turns a left press into an OS window operation, each kept in
 /// step with Slint hover by a `WindowChrome` callback.
 pub(super) struct PressTargets {
-    /// Over a titlebar or miniplayer drag region.
-    pub(super) drag_hover: Arc<AtomicBool>,
+    /// Which drag region, if any.
+    pub(super) drag_region: Rc<Cell<DragRegion>>,
     /// Over one of `ResizeRing`'s grabs, and which way it resizes.
     pub(super) resize: Rc<Cell<Option<ResizeDirection>>>,
 }
 
 pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) {
-    let PressTargets { drag_hover, resize } = targets;
+    let PressTargets { drag_region, resize } = targets;
     let weak = app.as_weak();
     let state = state.clone();
-    // Where the pointer is, for the synthetic scroll below.
+    // Where the pointer is, for the synthetic scroll and the titlebar's double press below.
     let mut cursor_pos = slint::LogicalPosition::default();
+    let mut double_press = DoublePress::default();
     let resize_watch = ResizeWatch::new(app.as_weak());
     app.window().on_winit_window_event(move |w, event| {
         match event {
@@ -175,8 +179,15 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                 state: ElementState::Pressed,
                 button: MouseButton::Left,
                 ..
-            } if drag_hover.load(Ordering::Relaxed) => {
-                start_os_drag(w, "drag_window", WinitWindow::drag_window);
+            } if drag_region.get() != DragRegion::None => {
+                match double_press.press(drag_region.get(), Instant::now(), cursor_pos) {
+                    PressAction::Move => start_os_drag(w, "drag_window", WinitWindow::drag_window),
+                    PressAction::ToggleMaximize => {
+                        if let Some(ui) = weak.upgrade() {
+                            ui.global::<WindowChrome>().invoke_toggle_maximize();
+                        }
+                    }
+                }
                 EventResult::PreventDefault
             }
             // Above the `Released` cleanup arm because the press is what wants

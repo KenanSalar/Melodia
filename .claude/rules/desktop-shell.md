@@ -19,6 +19,7 @@ paths:
   - crates/melodia-ui/ui/layout/resize-ring.slint
   - crates/melodia-ui/ui/views/settings/window-chrome-section.slint
   - crates/melodia-ui/ui/views/settings/mini-player-section.slint
+  - crates/melodia-ui/ui/views/mini-player.slint
   - crates/melodia-views/src/ui/appearance/window_settings.rs
 ---
 
@@ -34,9 +35,12 @@ the OS owns has to be attached late or not at all on at least one platform.
   cache stalls on Wayland: `WinitWindowAccessor::with_winit_window(|w| w.set_minimized(true))`.
 
 - **Window dragging belongs at the winit layer.** `drag_window()` from Slint `pointer-event(down)`
-  leaks the input grab. `TouchArea` reports `has-hover` via
-  `WindowChrome.drag-region-hover-changed`; `on_winit_window_event` intercepts
-  `MouseInput { Pressed, Left }` when that atomic is true → `drag_window()` → `PreventDefault`.
+  leaks the input grab. Each drag region's `TouchArea` reports its hover under its own name via
+  `WindowChrome.drag-region-changed(DragRegion)`; `on_winit_window_event` intercepts
+  `MouseInput { Pressed, Left }` over either → `drag_window()` → `PreventDefault`.
+  **So no `double-clicked` on a drag region can fire**, Slint never seeing the press: the
+  titlebar's double press is read in `window_chrome::drag_region`, and the miniplayer names itself
+  so its own only moves.
 
 - **Resizing a frameless window takes the same path, and the ring's hover is the whole geometry.**
   `ResizeRing` reports a `ResizeZone` via `WindowChrome.resize-zone-changed`, kept by

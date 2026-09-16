@@ -29,7 +29,7 @@ import { Queue, NowPlaying } from "globals/queue.slint";
 import { Radio } from "globals/radio.slint";
 import { Search } from "globals/search.slint";
 import { SettingsPage } from "globals/settings-page.slint";
-import { WindowChrome, MiniPlayer, CompositeScroll, PopupHighlight } from "globals/shell.slint";
+import { DragRegion, WindowChrome, MiniPlayer, CompositeScroll, PopupHighlight } from "globals/shell.slint";
 import { Tracks, Browse, RowCovers } from "globals/tracks.slint";
 import { TrackColumnSizing } from "globals/track-columns.slint";
 import { MelodiaUpdater, Notifications } from "globals/updater.slint";
@@ -229,7 +229,7 @@ export component AppWindow inherits Window {
         // titlebar's and the miniplayer's die with their branch, and one unmounted under the
         // pointer never reports it gone: the miniplayer's restore resizes the window under a still
         // pointer and swaps, leaving every press in either layout a window drag.
-        WindowChrome.drag-region-hover-changed(false);
+        WindowChrome.drag-region-changed(DragRegion.none);
         shortcut-scope.grab-focus();
     }
 

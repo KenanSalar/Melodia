@@ -163,10 +163,11 @@ foundation only — watch, not yet usable.
 ## 🔭 `WindowMoveArea` → retire the winit drag-window intercept
 
 - **Today:** dragging the custom titlebar goes through the winit layer because `drag_window()`
-  called from a Slint `pointer-event(down)` leaks the input grab. A `TouchArea` reports
-  `has-hover` via `WindowChrome.drag-region-hover-changed` into an atomic, and
-  `winit_filter.rs` intercepts `MouseInput { Pressed, Left }` when that atomic is true →
-  `drag_window()` → `PreventDefault`.
+  called from a Slint `pointer-event(down)` leaks the input grab. A `TouchArea` reports its
+  hover as a `DragRegion` via `WindowChrome.drag-region-changed` into a cell, and
+  `winit_filter.rs` intercepts `MouseInput { Pressed, Left }` over a region →
+  `drag_window()` → `PreventDefault`. Slint never sees those presses, so the titlebar's double
+  press to maximize is read in Rust too (`window_chrome/drag_region.rs`).
 - **Upstream:** `WindowMoveArea` element — landed on master **2026-07-07**, **not in 1.17.1**
   (verified against the `v1.17.1` tag), so it ships in 1.18. Its own docs target our exact
   case: *"such as a custom title bar in a window without native decorations (`no-frame: true`)
@@ -176,9 +177,11 @@ foundation only — watch, not yet usable.
   expressible declaratively.
 - **Trigger:** the 1.18 release (plus the two blockers above cleared).
 - **Migration:** wrap the titlebar drag region in `WindowMoveArea`; delete the
-  `drag-region-hover-changed` callback, its atomic, and the `MouseInput` arm in
-  `winit_filter.rs`. The DnD arms and the `MouseWheel`/`CompositeScroll` arm in that file are
-  unrelated and stay.
+  `drag-region-changed` callback, `DragRegion`, `window_chrome/drag_region.rs` and the
+  `MouseInput` arm in `winit_filter.rs`. The titlebar's double press moves back to a
+  `double-clicked` on its `TouchArea`, which fires once Slint sees the press; the miniplayer's
+  region gets none, since a double press there only moves the window. The DnD arms and the
+  `MouseWheel`/`CompositeScroll` arm in that file are unrelated and stay.
 - **Risk:** verify the drag threshold doesn't swallow clicks on titlebar buttons (traffic
   lights, window controls) — that's the whole reason we route through `has-hover` today.
 
