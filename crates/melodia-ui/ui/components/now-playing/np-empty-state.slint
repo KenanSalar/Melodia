@@ -8,10 +8,10 @@ import { MaterialIcon } from "../material-icon.slint";
 // the same block against the `np-*` tiers instead, shared so the column's arms cannot drift into
 // stating their emptiness in different weights.
 //
-// **Two flags, because the miniplayer needs them apart.** `compact` is how big the block draws,
-// which follows the panel it sits in; `on-backdrop` is whether there is a wash under it to take
-// the solved ink from, which follows the miniplayer's own backdrop switch. Bundled, a compact
-// block on a backdrop paints the page's ink over the album's colours.
+// `compact` is how big the block draws, which follows the panel it sits in. **The colours are
+// inputs rather than a second flag**, defaulting to the backdrop tiers the full view paints on: the
+// miniplayer takes the page's ink or those tiers off its own switch, and eases between them, which
+// a flag read in here could only step.
 export component NpEmptyState inherits VerticalLayout {
     in property <string> glyph;
     in property <string> heading;
@@ -19,7 +19,9 @@ export component NpEmptyState inherits VerticalLayout {
     // reader can do from here, which is most states.
     in property <string> hint;
     in property <bool> compact: false;
-    in property <bool> on-backdrop: true;
+    // The heading, and the hint at a step back from it.
+    in property <brush> ink: Player.np-on-backdrop-muted;
+    in property <brush> glyph-color: Player.np-on-backdrop-muted.transparentize(0.5);
     // Per caller rather than per tier: the lyrics arm writes a sentence and owes the break, where
     // Up Next writes three words and clipping is what keeps the miniplayer's column one line tall.
     in property <TextWrap> wrap: word-wrap;
@@ -37,15 +39,13 @@ export component NpEmptyState inherits VerticalLayout {
                 MaterialIcon {
                     name: root.glyph;
                     icon-size: root.compact ? 28px : 40px;
-                    icon-color: root.on-backdrop
-                        ? Player.np-on-backdrop-muted.transparentize(0.5)
-                        : Theme.surface2;
+                    icon-color: root.glyph-color;
                 }
             }
 
             Text {
                 text: root.heading;
-                color: root.on-backdrop ? Player.np-on-backdrop-muted : Theme.subtext0;
+                color: root.ink;
                 font-size: root.compact ? Theme.font-size-sm : Theme.font-size-md;
                 horizontal-alignment: center;
                 wrap: root.wrap;
@@ -53,9 +53,7 @@ export component NpEmptyState inherits VerticalLayout {
 
             if root.hint != "": Text {
                 text: root.hint;
-                color: root.on-backdrop
-                    ? Player.np-on-backdrop-muted.transparentize(0.35)
-                    : Theme.subtext0.transparentize(0.35);
+                color: root.ink.transparentize(0.35);
                 font-size: Theme.font-size-sm;
                 horizontal-alignment: center;
                 wrap: root.wrap;

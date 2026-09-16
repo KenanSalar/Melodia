@@ -27,9 +27,13 @@ import { HeroBlurBackdrop } from "../components/hero-blur-backdrop.slint";
 // **`MiniPlayerView`'s `glyph` / `glyph-lit` / `glyph-hover-bg` restate the first three arms**,
 // for the volume triggers that are not this component, and that is forced rather than sloppy: a
 // component cannot read a property off the host it is mounted in. Move one and move the other.
+//
+// Every arm steps, and `IconButton` eases the step itself at the view's repaint pace: easing them
+// out here as well would restart its curve on every frame of this one.
 component MiniIconButton inherits IconButton {
     private property <bool> on-backdrop: MiniPlayer.backdrop-shown;
 
+    recolor-duration: Theme.dur-med;
     idle-fg: root.on-backdrop ? Player.np-accent-dim : Theme.text;
     hover-fg: root.on-backdrop ? Player.np-accent-bright : Theme.text;
     hover-bg: root.on-backdrop ? Colors.transparent : Theme.surface0;
@@ -63,20 +67,31 @@ export component MiniPlayerView inherits Rectangle {
     // for, that one is a live mount.
     private property <bool> aurora-shown: Theme.aurora-backdrop;
 
+    // The switch the whole view repaints on, and how long the repaint takes. **The pace is the
+    // stacks' own**: both drain on `Theme.dur-med` with this easing, so a foreground crossing on
+    // anything else would land early or late against the backdrop behind it.
+    private property <bool> on-backdrop: MiniPlayer.backdrop-shown;
+    private property <duration> recolor: Theme.dur-med;
+
     // Every leaf that would otherwise read a `Theme.*` brush takes one of these instead, each on the
     // backdrop matching what the same kind of element paints in Now Playing. Answered once rather
     // than per site: on the blur arm the floor is solved dark under a solved-light foreground, so a
     // site left on the theme's ink vanishes on a light palette, and one site answering differently
     // from its neighbour is invisible until someone switches theme.
-    private property <bool> on-backdrop: MiniPlayer.backdrop-shown;
+    //
+    // **Each brush is eased exactly once, and this block is where for every leaf that paints it
+    // straight.** The two leaves that ease their own colours, `IconButton` and the scrollbar, take
+    // the stepped answer and `recolor` instead: a brush eased here that one of them eases too
+    // restarts its curve on every frame of this one, `slint-pitfalls.md`'s shared-brush entry.
     private property <brush> ink: root.on-backdrop ? Player.np-on-backdrop : Theme.text;
     private property <brush> ink-muted: root.on-backdrop ? Player.np-on-backdrop-muted : Theme.subtext0;
+    // Up Next's artist and duration, which off the backdrop take `Theme.text` like every row list
+    // rather than the muted line under a title.
+    private property <brush> list-muted: root.on-backdrop ? Player.np-on-backdrop-muted : Theme.text;
+    private property <brush> row-hover: root.on-backdrop ? Player.np-accent-pill : Theme.surface0;
+    private property <brush> empty-glyph:
+        root.on-backdrop ? Player.np-on-backdrop-muted.transparentize(0.5) : Theme.surface2;
     private property <brush> accent: root.on-backdrop ? Player.np-accent-bright : Theme.accent;
-    // The glyph family, for the two volume triggers. `MiniIconButton` carries the same three arms
-    // and says why it has to.
-    private property <brush> glyph: root.on-backdrop ? Player.np-accent-dim : Theme.text;
-    private property <brush> glyph-lit: root.on-backdrop ? Player.np-accent-bright : Theme.text;
-    private property <brush> glyph-hover-bg: root.on-backdrop ? Colors.transparent : Theme.surface0;
     // The artwork placeholder, as `NowPlayingCover` draws it on the backdrop: a faint recess and a
     // quiet glyph rather than an accent slab, which a wash already carries colour enough for.
     private property <brush> tile-fill:
@@ -91,9 +106,12 @@ export component MiniPlayerView inherits Rectangle {
     // The seam mask is a stadium painted in whatever sits *behind* the slider, so it only works
     // over a flat surface. A backdrop is washes over a gradient, or a blurred cover under a scrim,
     // and no one colour matches either — a mask there is a flat blob that moves with the thumb.
-    // Transparent instead, which leaves the two bars meeting at their own rounded ends: the thumb
-    // covers that join at rest, and the expressive gap is worth less than the blob costs.
-    private property <brush> seam-mask: root.on-backdrop ? Colors.transparent : Theme.mantle;
+    // Clear instead, which leaves the two bars meeting at their own rounded ends: the thumb covers
+    // that join at rest, and the expressive gap is worth less than the blob costs. **Mantle at no
+    // alpha rather than `transparent`**, the ease running in straight RGBA: toward rgba(0,0,0,0)
+    // the mask darkens on its way out.
+    private property <brush> seam-mask:
+        root.on-backdrop ? Theme.mantle.transparentize(1.0) : Theme.mantle;
     // The seek track's unplayed half. Now Playing draws no slider, so this is the lyrics switch's
     // resting track, the one track that view lays on the backdrop.
     private property <brush> track:
@@ -103,6 +121,17 @@ export component MiniPlayerView inherits Rectangle {
     // decide, so the glyph has to be picked against it rather than against a surface.
     private property <brush> disc-ink:
         root.on-backdrop ? Theme.ink-on(Player.np-accent-bright) : Theme.mantle;
+    animate ink, ink-muted, list-muted, row-hover, empty-glyph, accent, tile-fill, tile-glyph,
+        chip-fill, chip-label, seam-mask, track, disc-ink {
+        duration: root.recolor;
+        easing: ease-in-out;
+    }
+
+    // The glyph family, for the two volume triggers, stepped for their `IconButton` to ease.
+    // `MiniIconButton` carries the same three arms and says why it has to.
+    private property <brush> glyph: root.on-backdrop ? Player.np-accent-dim : Theme.text;
+    private property <brush> glyph-lit: root.on-backdrop ? Player.np-accent-bright : Theme.text;
+    private property <brush> glyph-hover-bg: root.on-backdrop ? Colors.transparent : Theme.surface0;
 
     // Below this the column has no room for a couple of rows beside the artwork and the controls,
     // so neither panel mounts and the button that swaps them has nothing to swap.
@@ -117,21 +146,78 @@ export component MiniPlayerView inherits Rectangle {
                 : clamp(Player.position-ms / Player.duration-ms, 0, 1))
             : 0;
 
+    // **Two flags rather than one, because a fade needs both of its ends on screen.** A stack
+    // mounted already painting has nothing to ease in from, and one that stops painting still has
+    // to be there for the length of its drain. So a press on mounts the stack unpainted and paints
+    // it a tick later, and a press off unpaints it and unmounts it once the drain has run.
+    //
+    // Seeded by the binding and owned by `set-backdrop`, `my-library-view.slint`'s latch idiom:
+    // `init` writes both to take them off the switch, which the function moves after them.
+    private property <bool> backdrop-mounted: MiniPlayer.backdrop-shown;
+    private property <bool> backdrop-painting: MiniPlayer.backdrop-shown;
+    init => {
+        root.backdrop-mounted = MiniPlayer.backdrop-shown;
+        root.backdrop-painting = MiniPlayer.backdrop-shown;
+    }
+
+    // The one way the switch moves, for both variants' buttons. **Imperative rather than a `changed`
+    // handler on the switch**: this view is mounted behind an `if`, and a tracker on a global
+    // outlives the branch that declared it, so the next miniplayer's press would fire the last
+    // one's and panic.
+    function set-backdrop(on: bool) {
+        backdrop-drain.running = false;
+        if (on) {
+            // Still mounted means mid-drain, with painted frames to ease back from. Otherwise the
+            // timer inside the mount paints it once its unpainted first frame is down.
+            root.backdrop-painting = root.backdrop-mounted;
+            root.backdrop-mounted = true;
+        } else {
+            root.backdrop-painting = false;
+            backdrop-drain.running = true;
+        }
+        MiniPlayer.backdrop-shown = on;
+        MiniPlayer.set-backdrop-shown(on);
+    }
+
+    // Unmounts the stack once it has drained, so nothing fills the surface with a backdrop faded to
+    // nothing. Reads the switch rather than clearing the flag, for a press back on that landed as
+    // it fired.
+    backdrop-drain := Timer {
+        interval: root.recolor;
+        running: false;
+        triggered => {
+            self.running = false;
+            root.backdrop-mounted = MiniPlayer.backdrop-shown;
+        }
+    }
+
     // **Mounted as a pair behind the setting's two branches**, the contract every backdrop site
     // keeps: an arm behind the wrong branch reads perfectly and paints the other setting's
-    // backdrop. Unmounted rather than drained to transparent, unlike the hero bands, which have an
-    // idle state to fade to: `Brush::is_transparent()` answers false for every gradient whatever
-    // its stop alphas, so a hidden stack still fills the whole surface every frame, and this one
-    // is hidden for every install that leaves the button off.
+    // backdrop. Unmounted once drained rather than left drained to transparent, unlike the hero
+    // bands, which have an idle state to hold: `Brush::is_transparent()` answers false for every
+    // gradient whatever its stop alphas, so a hidden stack still fills the whole surface every
+    // frame, and this one is hidden for every install that leaves the button off.
     //
     // Safe to read `Player.np-*` here for the reason Now Playing does: entering the miniplayer
     // force-closes `Nav.now-playing-open`, so the two readers of that tier are never on screen at
     // once.
-    if MiniPlayer.backdrop-shown: Rectangle {
+    if root.backdrop-mounted: Rectangle {
         x: 0;
         y: 0;
         width: 100%;
         height: 100%;
+
+        // Paints the stack a tick after it mounts, so the first frame is the unpainted one its
+        // drain eases in from. Reads the switch rather than setting `true`, for a press back off
+        // inside that tick.
+        Timer {
+            interval: 1ms;
+            running: true;
+            triggered => {
+                self.running = false;
+                root.backdrop-painting = MiniPlayer.backdrop-shown;
+            }
+        }
 
         if !root.aurora-shown: HeroBlurBackdrop {
             x: 0;
@@ -145,6 +231,7 @@ export component MiniPlayerView inherits Rectangle {
             blur-b: Player.blur-img-b;
             use-a: Player.blur-use-a;
             has-blur: Player.blur-has-image;
+            shown: root.backdrop-painting;
         }
 
         if root.aurora-shown: AuroraBackdrop {
@@ -158,6 +245,7 @@ export component MiniPlayerView inherits Rectangle {
             tint-2: Player.np-tint-2;
             tint-3: Player.np-tint-3;
             dither: Player.np-dither;
+            shown: root.backdrop-painting;
         }
     }
 
@@ -286,6 +374,7 @@ export component MiniPlayerView inherits Rectangle {
                         trigger-fg: root.glyph;
                         trigger-hover-fg: root.glyph-lit;
                         trigger-hover-bg: root.glyph-hover-bg;
+                        trigger-recolor-duration: root.recolor;
                     }
                 }
                 if WindowChrome.always-on-top-supported: VerticalLayout {
@@ -315,10 +404,7 @@ export component MiniPlayerView inherits Rectangle {
                         filled: MiniPlayer.backdrop-shown;
                         tooltip-text: MiniPlayer.backdrop-shown
                             ? @tr("Album Backdrop: on") : @tr("Album Backdrop: off");
-                        clicked => {
-                            MiniPlayer.backdrop-shown = !MiniPlayer.backdrop-shown;
-                            MiniPlayer.set-backdrop-shown(MiniPlayer.backdrop-shown);
-                        }
+                        clicked => { root.set-backdrop(!MiniPlayer.backdrop-shown); }
                     }
                 }
             }
@@ -396,10 +482,7 @@ export component MiniPlayerView inherits Rectangle {
                     filled: MiniPlayer.backdrop-shown;
                     tooltip-text: MiniPlayer.backdrop-shown
                         ? @tr("Album Backdrop: on") : @tr("Album Backdrop: off");
-                    clicked => {
-                        MiniPlayer.backdrop-shown = !MiniPlayer.backdrop-shown;
-                        MiniPlayer.set-backdrop-shown(MiniPlayer.backdrop-shown);
-                    }
+                    clicked => { root.set-backdrop(!MiniPlayer.backdrop-shown); }
                 }
             }
 
@@ -590,6 +673,7 @@ export component MiniPlayerView inherits Rectangle {
                         trigger-fg: root.glyph;
                         trigger-hover-fg: root.glyph-lit;
                         trigger-hover-bg: root.glyph-hover-bg;
+                        trigger-recolor-duration: root.recolor;
                     }
                 }
             }
@@ -634,12 +718,23 @@ export component MiniPlayerView inherits Rectangle {
             if !Player.vm.has_station && Lyrics.enabled: LyricsPanel {
                 vertical-stretch: 1;
                 compact: true;
-                on-backdrop: root.on-backdrop;
+                ink: root.ink;
+                ink-muted: root.ink-muted;
+                row-hover: root.row-hover;
+                empty-glyph: root.empty-glyph;
+                bar-on-backdrop: root.on-backdrop;
+                bar-recolor-duration: root.recolor;
             }
             if Player.vm.has_station || !Lyrics.enabled: UpNextList {
                 vertical-stretch: 1;
                 compact: true;
-                on-backdrop: root.on-backdrop;
+                ink: root.ink;
+                ink-muted: root.list-muted;
+                row-hover: root.row-hover;
+                empty-ink: root.ink-muted;
+                empty-glyph: root.empty-glyph;
+                bar-on-backdrop: root.on-backdrop;
+                bar-recolor-duration: root.recolor;
             }
         }
     }

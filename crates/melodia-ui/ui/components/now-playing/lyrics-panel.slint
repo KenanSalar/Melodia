@@ -16,19 +16,22 @@ import { MaterialIcon } from "../material-icon.slint";
 // on the scroll target is exactly. So the follow is driven imperatively from the timer below and
 // the easing is arithmetic rather than an `animate` block.
 export component LyricsPanel inherits Rectangle {
-    // Whether there is a wash under the sheet to take the solved ink from. The miniplayer's
-    // backdrop switch, and the full view's constant `true`.
-    in property <bool> on-backdrop: true;
     // Only the empty state draws at two sizes; the sheet's own scale is the `Lyrics` global's,
     // which both halves lay out against and neither host may restate.
     in property <bool> compact: false;
 
-    // **The three tiers every part of a sheet paints from, resolved once.** Seven leaves ask this
-    // one question, and seven ternaries is seven chances for one part of a row to answer it
-    // differently from the two under it.
-    property <brush> ink: root.on-backdrop ? Player.np-on-backdrop : Theme.text;
-    property <brush> ink-muted: root.on-backdrop ? Player.np-on-backdrop-muted : Theme.subtext0;
-    property <brush> row-hover: root.on-backdrop ? Player.np-accent-pill : Theme.surface0;
+    // **The three tiers every part of a sheet paints from**, as inputs defaulting to the backdrop
+    // the full view paints on. The miniplayer hands over the page's ink or these off its own
+    // switch and eases between them out there, which is the only place it can: the header above
+    // is why this file eases nothing, so a flag read in here could only ever step.
+    in property <brush> ink: Player.np-on-backdrop;
+    in property <brush> ink-muted: Player.np-on-backdrop-muted;
+    in property <brush> row-hover: Player.np-accent-pill;
+    in property <brush> empty-glyph: Player.np-on-backdrop-muted.transparentize(0.5);
+    // The bar's palette, stepped rather than handed over: `OverlayScrollbar` eases its own colours,
+    // so it takes the pace instead.
+    in property <bool> bar-on-backdrop: true;
+    in property <duration> bar-recolor-duration: Theme.dur-fast;
 
     // How far the panel closes on the target each tick. A quarter settles inside a third of a
     // second at this interval, which reads as a glide rather than a snap or a drift.
@@ -239,7 +242,8 @@ export component LyricsPanel inherits Rectangle {
         y: 0;
         width: Theme.scrollbar-slot;
         height: parent.height;
-        on-backdrop: root.on-backdrop;
+        on-backdrop: root.bar-on-backdrop;
+        recolor-duration: root.bar-recolor-duration;
         visible-size: sv.visible-height;
         content-size: sv.viewport-height;
         offset: -sv.viewport-y;
@@ -339,6 +343,7 @@ export component LyricsPanel inherits Rectangle {
             : Lyrics.state == LyricsState.unavailable ? @tr("Try again from the Lyrics menu")
             : "";
         compact: root.compact;
-        on-backdrop: root.on-backdrop;
+        ink: root.ink-muted;
+        glyph-color: root.empty-glyph;
     }
 }

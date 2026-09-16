@@ -23,6 +23,7 @@ export component VolumePopupHorizontal inherits Rectangle {
     in property <brush> trigger-fg: Theme.text;
     in property <brush> trigger-hover-fg: root.trigger-fg;
     in property <brush> trigger-hover-bg: Theme.surface0;
+    in property <duration> trigger-recolor-duration: Theme.dur-fast;
 
     width: btn.width;
     height: btn.height;
@@ -64,6 +65,7 @@ export component VolumePopupHorizontal inherits Rectangle {
         idle-fg: root.trigger-fg;
         hover-fg: root.trigger-hover-fg;
         hover-bg: root.trigger-hover-bg;
+        recolor-duration: root.trigger-recolor-duration;
         tooltip-text: round(Player.vm.volume) + "%";
         force-tooltip: root.tooltip-ticks-remaining > 0;
         force-bg: PopupHighlight.id == "volume";
