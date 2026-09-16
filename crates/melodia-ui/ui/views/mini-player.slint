@@ -268,15 +268,20 @@ export component MiniPlayerView inherits Rectangle {
         }
     }
 
-    // Strip variant, for a window too short for the column. The row and the timeline under it are
-    // centred as one block, so a strip taller than it needs keeps them together rather than pinning
-    // the track to the bottom edge. Centring is safe here: nothing in the strip wants the surplus.
+    // Strip variant, for a window too short for the column. The row and the timeline under it stay
+    // centred as a pair, and the timeline moves down off the artwork as the window gives it height.
+    //
+    // **Three spacers rather than an alignment**, since a non-stretch alignment never hands out
+    // surplus: under `stretch` the three split it evenly, the one between capped so the pair still
+    // reads as one block, and the outer two take the rest. Everything else pins its stretch to 0.
     if !MiniPlayer.square: VerticalLayout {
         padding: root.edge-pad;
         spacing: 0;
-        alignment: center;
+
+        Rectangle { vertical-stretch: 1; }
 
         HorizontalLayout {
+            vertical-stretch: 0;
             spacing: Theme.pad-sm;
             padding-left: Theme.pad-xs;
             padding-right: Theme.pad-xs;
@@ -410,6 +415,11 @@ export component MiniPlayerView inherits Rectangle {
             }
         }
 
+        Rectangle {
+            vertical-stretch: 1;
+            max-height: Theme.pad-md;
+        }
+
         if !Player.vm.has_station: SeekRow {
             label-color: root.ink;
             fill-color: root.accent;
@@ -427,6 +437,8 @@ export component MiniPlayerView inherits Rectangle {
                 label-color: root.chip-label;
             }
         }
+
+        Rectangle { vertical-stretch: 1; }
     }
 
     // Square variant, the column: artwork over the controls, and a panel once there is room.
