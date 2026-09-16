@@ -360,8 +360,8 @@ pub fn install(
     lyrics::wire_menu(ui, state, &np_state);
 
     // No artwork seed here: backdrop, cover and chips are decoded on demand by
-    // `wire_now_playing_open` on first open, or by `kick_artwork` when the square
-    // miniplayer first becomes visible.
+    // `wire_now_playing_open` on first open, or by `kick_artwork` when a miniplayer layout
+    // drawing them first becomes visible.
     Ok(np_state)
 }
 

@@ -26,8 +26,8 @@ import { HeroBlurBackdrop } from "../components/hero-blur-backdrop.slint";
 // bar stay visible — when `Nav.now-playing-open`. A large centred artwork, title / artist / album,
 // and metadata chips floating directly on a blurred album-art backdrop, with an "Up Next" list
 // beside it. **Transport and seek are deliberately not duplicated here**: they live in the bar,
-// which stays visible below. The list itself lives in the shared `UpNextList`, so the mini-player's
-// square variant reuses the same behaviour.
+// which stays visible below. The list itself lives in the shared `UpNextList`, so the miniplayer's
+// column reuses the same behaviour.
 export component NowPlayingView inherits Rectangle {
     // Ceiling on the square cover's edge. The tile takes this much when the column has the height
     // for it and less when it doesn't — the cover slot below is why the artwork gives ground.

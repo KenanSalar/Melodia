@@ -269,9 +269,9 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                 });
                 EventResult::Propagate
             }
-            // X11/Win32/macOS deliver these; a Wayland client doesn't know its own
-            // position, so `Moved` rarely fires there — fine, position restore is a
-            // no-op on Wayland anyway.
+            // X11/Win32/macOS deliver these. Wayland never does, a client there not knowing its
+            // own position: position restore is a no-op there anyway, but a drag pressed again
+            // inside the double-press interval still toggles maximize.
             WindowEvent::Moved(_) => {
                 double_press.moved();
                 let _ = w.with_winit_window(|ww| {

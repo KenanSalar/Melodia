@@ -91,9 +91,11 @@ pub fn restore(app: &AppWindow, geom: PersistedGeometry, full_player: Option<Ful
     app.global::<melodia_ui::WindowChrome>().set_is_maximized(geom.maximized);
 
     // After `set_size`, which is what hands the switch the size it decides on.
-    let opens_as_miniplayer = app.invoke_adopt_restored_size();
-    // A miniplayer closed before its full player was persisted reopens with nothing held, and the
-    // only placement `hold_full_player` could then take is the miniplayer's own.
+    app.invoke_adopt_restored_size();
+    // A size that opens the miniplayer with no full player saved beside it, as a hand-edited one
+    // can, would otherwise hold nothing, and the only placement `hold_full_player` could then take
+    // is the miniplayer's own.
+    let opens_as_miniplayer = app.invoke_miniplayer_mounted();
     *held().lock() = full_player
         .map(Placement::from_persisted)
         .or_else(|| opens_as_miniplayer.then(Placement::first_launch));
