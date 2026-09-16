@@ -428,6 +428,9 @@ export component MiniPlayerView inherits Rectangle {
     // How small the captions row's buttons get on their way out: enough to read as leaving, not
     // enough to read as a second size.
     private property <float> captions-exit-scale: 0.8;
+    // How far open the captions row is when its buttons are gone. Any lower and the row closes
+    // through a button still showing, which cuts a glyph that fills its box, the lyrics one.
+    private property <float> captions-fade-end: 0.5;
 
     // **Two flags rather than one, because a fade needs both of its ends on screen.** A stack
     // mounted already painting has nothing to ease in from, and one that stops painting still has
@@ -649,8 +652,10 @@ export component MiniPlayerView inherits Rectangle {
             - head.preferred-height - timeline-gap.preferred-height - timeline.preferred-height,
             0px, root.captions-height);
         property <float> captions-t: self.captions-shown / root.captions-height;
+        property <float> captions-fade: clamp(
+            (self.captions-t - root.captions-fade-end) / (1 - root.captions-fade-end), 0, 1);
         property <float> captions-scale:
-            root.captions-exit-scale + (1 - root.captions-exit-scale) * self.captions-t;
+            root.captions-exit-scale + (1 - root.captions-exit-scale) * self.captions-fade;
 
         // Any room for the list under the block. Measured off the block rather than a fixed
         // height, a narrow window's artwork stopping short of its cap and freeing the room that
@@ -666,57 +671,66 @@ export component MiniPlayerView inherits Rectangle {
             spacing: 0;
 
             // The window's captions in the corner, where every titlebar puts them, and the lyrics
-            // switch opposite, fading and shrinking as the row closes. **Unmounted once shut**
-            // rather than left at nothing: an opacity under 1 draws the row into a texture, 0
-            // included.
-            if stack.captions-t > 0: Rectangle {
+            // switch opposite, fading and shrinking as the row closes.
+            Rectangle {
                 min-height: stack.captions-shown;
                 max-height: stack.captions-shown;
-                // The buttons shrink less than the row closes, and would otherwise draw over the
-                // artwork on their way out.
-                clip: true;
-                opacity: stack.captions-t;
 
-                HorizontalLayout {
+                // **Unmounted once faded** rather than left at nothing: an opacity under 1 draws
+                // the row into a texture, 0 included. The row goes on closing without it.
+                if stack.captions-fade > 0: Rectangle {
                     x: 0;
-                    y: (parent.height - Theme.pad-xs * stack.captions-t - self.height) / 2;
-                    width: parent.width;
-                    height: root.captions-height - Theme.pad-xs;
-                    spacing: 2px;
-                    padding-left: 4px;
-                    padding-right: 4px;
+                    y: 0;
+                    width: 100%;
+                    height: 100%;
+                    // Only a hover fill still reaches past the row while the buttons show.
+                    clip: true;
+                    opacity: stack.captions-fade;
 
-                    // Gone on a station, which has no track to look a sheet up for.
-                    if !Player.vm.has_station: VerticalLayout {
-                        alignment: center;
-                        MiniIconButton {
-                            transform-scale: stack.captions-scale;
-                            icon: "lyrics";
-                            press-shrink: true;
-                            diameter: 28px;
-                            icon-size: 18px;
-                            active: Lyrics.enabled;
-                            filled: Lyrics.enabled;
-                            tooltip-text: Lyrics.enabled
-                                ? @tr("Show Up Next") : @tr("Show lyrics");
-                            tooltip-side: TooltipSide.right;
-                            // Both halves, the full view's switch and the visualizer picker's
-                            // shape: the property so the panel swaps on the press, the callback so
-                            // it is still swapped next launch.
-                            clicked => {
-                                Lyrics.enabled = !Lyrics.enabled;
-                                Lyrics.set-enabled(Lyrics.enabled);
+                    HorizontalLayout {
+                        x: 0;
+                        y: (parent.height - Theme.pad-xs * stack.captions-t - self.height) / 2;
+                        width: parent.width;
+                        height: root.captions-height - Theme.pad-xs;
+                        spacing: 2px;
+                        padding-left: 4px;
+                        padding-right: 4px;
+
+                        // Gone on a station, which has no track to look a sheet up for.
+                        if !Player.vm.has_station: VerticalLayout {
+                            alignment: center;
+                            MiniIconButton {
+                                icon: "lyrics";
+                                press-shrink: true;
+                                diameter: 28px;
+                                // **The glyph's own size rather than a `transform-scale`**, as
+                                // `press-shrink` does it: FemtoVG draws glyphs under a scaling
+                                // transform as paths rather than from its atlas, and this one comes
+                                // out filled there. The captions beside it draw no glyph at rest.
+                                icon-size: 18px * stack.captions-scale;
+                                active: Lyrics.enabled;
+                                filled: Lyrics.enabled;
+                                tooltip-text: Lyrics.enabled
+                                    ? @tr("Show Up Next") : @tr("Show lyrics");
+                                tooltip-side: TooltipSide.right;
+                                // Both halves, the full view's switch and the visualizer picker's
+                                // shape: the property so the panel swaps on the press, the
+                                // callback so it is still swapped next launch.
+                                clicked => {
+                                    Lyrics.enabled = !Lyrics.enabled;
+                                    Lyrics.set-enabled(Lyrics.enabled);
+                                }
                             }
                         }
-                    }
 
-                    Rectangle { horizontal-stretch: 1; }
+                        Rectangle { horizontal-stretch: 1; }
 
-                    MiniCaptions {
-                        transform-scale: stack.captions-scale;
-                        ink: root.caption-ink;
-                        ink-lit: root.glyph-lit;
-                        hover-fill: root.glyph-hover-bg;
+                        MiniCaptions {
+                            transform-scale: stack.captions-scale;
+                            ink: root.caption-ink;
+                            ink-lit: root.glyph-lit;
+                            hover-fill: root.glyph-hover-bg;
+                        }
                     }
                 }
             }
