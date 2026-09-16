@@ -12,7 +12,7 @@ import { MaterialIcon } from "../material-icon.slint";
 // inputs rather than a second flag**, defaulting to the backdrop tiers the full view paints on: the
 // miniplayer takes the page's ink or those tiers off its own switch, and eases between them, which
 // a flag read in here could only step.
-export component NpEmptyState inherits VerticalLayout {
+export component NpEmptyState inherits Rectangle {
     in property <string> glyph;
     in property <string> heading;
     // A second line naming the control that would fill the panel. Empty where there is nothing the
@@ -26,37 +26,75 @@ export component NpEmptyState inherits VerticalLayout {
     // Up Next writes three words and clipping is what keeps the miniplayer's column one line tall.
     in property <TextWrap> wrap: word-wrap;
 
-    alignment: center;
+    private property <length> glyph-size: root.compact ? 28px : 40px;
+    private property <length> heading-size: root.compact ? Theme.font-size-sm : Theme.font-size-md;
 
-    HorizontalLayout {
+    // **The words beside the glyph once the host is too short to stack them**, so a panel shrinking
+    // under the block cuts the glyph before the words. Measured off unwrapped copies of the lines
+    // rather than the lines drawn, whose wrap follows the width this decides.
+    private property <bool> beside: root.height < root.glyph-size + Theme.pad-sm
+        + heading-ruler.preferred-height
+        + (root.hint == "" ? 0px : Theme.pad-sm + hint-ruler.preferred-height);
+
+    heading-ruler := Text {
+        visible: false;
+        text: root.heading;
+        font-size: root.heading-size;
+    }
+
+    hint-ruler := Text {
+        visible: false;
+        text: root.hint;
+        font-size: Theme.font-size-sm;
+    }
+
+    VerticalLayout {
         alignment: center;
 
-        VerticalLayout {
-            spacing: Theme.pad-sm;
+        HorizontalLayout {
+            alignment: center;
 
-            HorizontalLayout {
-                alignment: center;
-                MaterialIcon {
-                    name: root.glyph;
-                    icon-size: root.compact ? 28px : 40px;
-                    icon-color: root.glyph-color;
+            // One cell per part, moved rather than remounted: `row`/`col` are read per layout pass.
+            GridLayout {
+                spacing: Theme.pad-sm;
+
+                HorizontalLayout {
+                    row: 0;
+                    col: 0;
+                    alignment: center;
+
+                    VerticalLayout {
+                        alignment: center;
+                        MaterialIcon {
+                            name: root.glyph;
+                            icon-size: root.glyph-size;
+                            icon-color: root.glyph-color;
+                        }
+                    }
                 }
-            }
 
-            Text {
-                text: root.heading;
-                color: root.ink;
-                font-size: root.compact ? Theme.font-size-sm : Theme.font-size-md;
-                horizontal-alignment: center;
-                wrap: root.wrap;
-            }
+                VerticalLayout {
+                    row: root.beside ? 0 : 1;
+                    col: root.beside ? 1 : 0;
+                    alignment: center;
+                    spacing: Theme.pad-sm;
 
-            if root.hint != "": Text {
-                text: root.hint;
-                color: root.ink.transparentize(0.35);
-                font-size: Theme.font-size-sm;
-                horizontal-alignment: center;
-                wrap: root.wrap;
+                    Text {
+                        text: root.heading;
+                        color: root.ink;
+                        font-size: root.heading-size;
+                        horizontal-alignment: root.beside ? left : center;
+                        wrap: root.wrap;
+                    }
+
+                    if root.hint != "": Text {
+                        text: root.hint;
+                        color: root.ink.transparentize(0.35);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: root.beside ? left : center;
+                        wrap: root.wrap;
+                    }
+                }
             }
         }
     }

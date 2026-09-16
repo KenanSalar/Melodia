@@ -1,5 +1,5 @@
 import { Nav, NavEnterFrom } from "../globals/nav.slint";
-import { MiniPlayer, MiniLayout } from "../globals/shell.slint";
+import { MiniPlayer, MiniLayout, WindowChrome } from "../globals/shell.slint";
 
 // The responsive full-UI ↔ miniplayer swap, as a non-visual state machine: both `Timer`s are
 // pseudo-elements, so it occupies no layout space and can be mounted anywhere. Compact when the
@@ -42,25 +42,35 @@ export component MiniPlayerSwitch {
     out property <float> fade-opacity: 1.0;
     animate fade-opacity { duration: 100ms; easing: ease-in-out; }
 
-    // **The column for as long as its artwork still reads, the card below that, and the strip for a
-    // window too short for either.** Keyed on height alone. The column is the fuller layout, so it
-    // holds on even where the card would set a larger cover beside the controls, and gives way only
-    // once its own has shrunk to where the placeholder glyph stops reading.
+    // **The column once its captions row fits above the artwork the card draws, the card below that,
+    // and the strip for a window too short for the card's title and controls.** The column is the
+    // card with that row above and a panel below. Crossing sooner shrinks the artwork on the way in.
+    // Crossing at the cap alone holds a narrow window's panel off long after there is room for it,
+    // its artwork stopping short of the cap where the controls take the width.
     //
-    // The rows are an estimate of what the view lays out, and being off only moves where a swap
-    // lands: every layout shrinks its artwork before a row clips, so a locale setting taller text
-    // costs artwork, never a control.
+    // All of these are estimates of what the view lays out, and being off only moves where a swap
+    // lands: the artwork gives ground before a row clips.
     //
-    // The column's fixed rows, gaps and padding, which is everything in it but the artwork.
-    private property <length> column-rows: 141px;
-    // The smallest artwork the column is kept for.
-    private property <length> column-art-floor: 90px;
-    // The shortest window the card stacks its title, controls and timeline in with room to spare.
-    private property <length> card-min-height: 120px;
+    // The column's padding, captions row, gaps and timeline, which is everything in it but the
+    // artwork and the panel.
+    private property <length> column-rows: 80px;
+    // The same across the row the artwork shares with the controls: the padding either side, the
+    // row's own inset and the gap to the title.
+    private property <length> art-row-insets: 20px;
+    // The controls' floor beside the artwork, the pin collapsing where the window manager gives no
+    // way to keep a window on top.
+    private property <length> controls-min-width:
+        WindowChrome.always-on-top-supported ? 212px : 182px;
+    // The shortest window the card seats its title and controls in beside an artwork as tall as
+    // they are, with the timeline under both.
+    private property <length> card-min-height: 110px;
+
+    private property <length> card-art:
+        min(MiniPlayer.art-cap, root.host-width - root.art-row-insets - root.controls-min-width);
 
     // Internal: nothing outside needs the layout, it only feeds the global.
     private property <MiniLayout> layout:
-        root.host-height >= root.column-rows + root.column-art-floor
+        root.host-height >= root.column-rows + root.card-art
             ? MiniLayout.column
             : (root.host-height >= root.card-min-height ? MiniLayout.card : MiniLayout.strip);
 

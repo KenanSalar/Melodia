@@ -87,9 +87,9 @@ export enum MiniLayout {
     // One row, the artwork a thumbnail beside the title and controls, the timeline under them. For
     // a window too short for either of the others.
     strip,
-    // The artwork at the window's height, the title, controls and timeline stacked beside it.
+    // The artwork beside the title and controls, the timeline under both.
     card,
-    // The artwork over the controls, and a panel under them once there is room.
+    // The card with the window's captions above it, and a panel under it once there is room.
     column,
 }
 
@@ -98,6 +98,11 @@ export enum MiniLayout {
 export global MiniPlayer {
     in-out property <bool> active: false;
     in-out property <MiniLayout> layout: MiniLayout.strip;
+
+    // The most the card's and the column's artwork draws, leaving a tall window's height to the
+    // panel. The switch reads it too, handing the card over to the column only once the artwork
+    // has stopped growing.
+    out property <length> art-cap: 180px;
 
     // The column's window captions: 0 = Standard, 1 = macOS, `Theme.titlebar-button-style`'s
     // tokens. Its own setting rather than that one's, a miniplayer showing captions under the
