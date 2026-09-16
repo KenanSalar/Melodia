@@ -144,6 +144,17 @@ pub fn set_titlebar_button_style(
     })
 }
 
+/// Persist the square miniplayer's caption style, in the same shape: `MiniPlayer.button-style` is
+/// mirrored synchronously by the UI callback, and this only commits the pick.
+pub fn set_mini_player_button_style(
+    state: &AppState,
+    style: TitlebarButtonStyle,
+) -> Result<(), AppError> {
+    services::settings::mutate_settings(&state.paths, move |s| {
+        s.window.mini_player_button_style = style;
+    })
+}
+
 /// Persist the user's pick for the custom titlebar's decoration button
 /// side (Right vs Left). Same async-only shape as
 /// `set_titlebar_button_style` — `Theme.titlebar-button-side` is mirrored

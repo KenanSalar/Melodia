@@ -3,6 +3,8 @@ import { Player } from "../globals/player.slint";
 import { Lyrics } from "../globals/lyrics.slint";
 import { MiniPlayer, MiniLayout, WindowChrome } from "../globals/shell.slint";
 import { IconButton } from "../components/icon-button.slint";
+import { CaptionButton, CaptionGlyph, MinimizeCaption, CloseCaption } from "../components/caption-buttons.slint";
+import { MacOsTitleBarCluster } from "../components/macos-titlebar-cluster.slint";
 import { MetaChip } from "../components/meta-chip.slint";
 import { SourceArtwork } from "../components/now-playing/source-artwork.slint";
 import { SeekRow } from "../components/now-playing/seek-row.slint";
@@ -42,6 +44,98 @@ component MiniIconButton inherits IconButton {
     disabled-fg: root.on-backdrop
         ? Player.np-on-backdrop-muted.transparentize(0.55)
         : Theme.overlay0;
+}
+
+// The three strip-scale buttons more than one layout mounts. The pin's host collapses it where the
+// window manager gives no way to keep a window on top.
+component MiniPinButton inherits MiniIconButton {
+    icon: "push_pin";
+    press-shrink: true;
+    diameter: 28px;
+    icon-size: 18px;
+    active: WindowChrome.always-on-top-active;
+    filled: WindowChrome.always-on-top-active;
+    tooltip-text: WindowChrome.always-on-top-active
+        ? @tr("Unpin from Top") : @tr("Pin on Top");
+    clicked => { WindowChrome.toggle-always-on-top(); }
+}
+
+// Its click is the host's: the switch fades through `MiniPlayerView.set-backdrop`, which only the
+// view can reach.
+component MiniBackdropButton inherits MiniIconButton {
+    icon: "tonality";
+    press-shrink: true;
+    diameter: 28px;
+    icon-size: 18px;
+    active: MiniPlayer.backdrop-shown;
+    filled: MiniPlayer.backdrop-shown;
+    tooltip-text: MiniPlayer.backdrop-shown
+        ? @tr("Album Backdrop: on") : @tr("Album Backdrop: off");
+}
+
+component MiniFavoriteButton inherits MiniIconButton {
+    icon: Player.vm.track.is_favorite ? "favorite" : "favorite_border";
+    press-shrink: true;
+    diameter: 28px;
+    icon-size: 18px;
+    active: Player.vm.track.is_favorite;
+    filled: Player.vm.track.is_favorite;
+    button-enabled: Player.vm.has_track;
+    tooltip-text: Player.vm.track.is_favorite
+        ? @tr("Unfavorite") : @tr("Favorite");
+    clicked => { Player.toggle-favorite(); }
+}
+
+// Minimize, full player and close for the column's corner, in the style the Settings card picked.
+// **The middle one restores rather than maximizes**: a miniplayer is a window size, so the button
+// that grows the window hands back the full player at the geometry it last settled at.
+//
+// A layout rather than a `Rectangle`, so the `if`-mounted captions size it. Every caption takes the
+// column's 28 px top row rather than a titlebar's 32.
+component MiniCaptions inherits HorizontalLayout {
+    // The standard glyphs' ink, eased by the host with the rest of its surface. Hover and its fill
+    // stay stepped, the caption easing those itself.
+    in property <brush> ink;
+    in property <brush> ink-lit;
+    in property <brush> hover-fill;
+
+    private property <length> cell-width: 34px;
+    private property <length> cell-height: 28px;
+
+    horizontal-stretch: 0;
+    spacing: 0;
+
+    // The corner is fixed, so the cluster's side is too, whichever the titlebar's is set to.
+    if MiniPlayer.button-style == 1: MacOsTitleBarCluster {
+        captions-left: false;
+        cell-height: root.cell-height;
+        maximize-tooltip: @tr("Full Player");
+        maximize => { WindowChrome.restore-full-player(); }
+    }
+    if MiniPlayer.button-style != 1: MinimizeCaption {
+        cell-width: root.cell-width;
+        cell-height: root.cell-height;
+        idle-fg: root.ink;
+        hover-fg: root.ink-lit;
+        hover-bg: root.hover-fill;
+    }
+    if MiniPlayer.button-style != 1: CaptionButton {
+        glyph: CaptionGlyph.maximize;
+        tooltip-text: @tr("Full Player");
+        cell-width: root.cell-width;
+        cell-height: root.cell-height;
+        idle-fg: root.ink;
+        hover-fg: root.ink-lit;
+        hover-bg: root.hover-fill;
+        clicked => { WindowChrome.restore-full-player(); }
+    }
+    // Hover keeps the danger fill and its ink on either surface: closing is the one caption whose
+    // warning is the point.
+    if MiniPlayer.button-style != 1: CloseCaption {
+        cell-width: root.cell-width;
+        cell-height: root.cell-height;
+        idle-fg: root.ink;
+    }
 }
 
 // The large artwork the card and the column draw. It takes the 384 px `Player.np-cover-{a,b}` slot
@@ -110,9 +204,9 @@ component MiniTransport inherits HorizontalLayout {
     }
 }
 
-// Volume, the pin and the backdrop switch at the strip's scale, for the two layouts that end a row
-// with them at the window's right edge.
-component MiniWindowControls inherits HorizontalLayout {
+// Volume, the pin, the backdrop switch and the heart at the strip's scale, for the two layouts that
+// end a row with them at the window's right edge. The column sets the last three in its own top row.
+component MiniTrailingControls inherits HorizontalLayout {
     // The volume trigger's glyph family, stepped for its `IconButton` to ease at `recolor`.
     in property <brush> glyph;
     in property <brush> glyph-lit;
@@ -142,33 +236,17 @@ component MiniWindowControls inherits HorizontalLayout {
     }
     if WindowChrome.always-on-top-supported: VerticalLayout {
         alignment: center;
-        MiniIconButton {
-            icon: "push_pin";
-            press-shrink: true;
-            diameter: 28px;
-            icon-size: 18px;
-            active: WindowChrome.always-on-top-active;
-            filled: WindowChrome.always-on-top-active;
-            tooltip-text: WindowChrome.always-on-top-active
-                ? @tr("Unpin from Top") : @tr("Pin on Top");
-            clicked => { WindowChrome.toggle-always-on-top(); }
-        }
+        MiniPinButton { }
     }
-    // Beside the pin, the rule every layout keeps: this is a window-appearance control like it, not
-    // a track action.
     VerticalLayout {
         alignment: center;
-        MiniIconButton {
-            icon: "tonality";
-            press-shrink: true;
-            diameter: 28px;
-            icon-size: 18px;
-            active: MiniPlayer.backdrop-shown;
-            filled: MiniPlayer.backdrop-shown;
-            tooltip-text: MiniPlayer.backdrop-shown
-                ? @tr("Album Backdrop: on") : @tr("Album Backdrop: off");
+        MiniBackdropButton {
             clicked => { root.toggle-backdrop(); }
         }
+    }
+    VerticalLayout {
+        alignment: center;
+        MiniFavoriteButton { }
     }
 }
 
@@ -277,8 +355,13 @@ export component MiniPlayerView inherits Rectangle {
     // decide, so the glyph has to be picked against it rather than against a surface.
     private property <brush> disc-ink:
         root.on-backdrop ? Theme.ink-on(Player.np-accent-bright) : Theme.mantle;
+    // The standard captions' glyph at rest. A caption eases only its hover, so this one is eased
+    // here. Off the backdrop it keeps the titlebar's own dimming on an unfocused window.
+    private property <brush> caption-ink: root.on-backdrop
+        ? Player.np-accent-dim
+        : (Theme.window-focused ? Theme.text : Theme.overlay1);
     animate ink, ink-muted, list-muted, row-hover, empty-glyph, accent, tile-fill, tile-glyph,
-        chip-fill, chip-label, seam-mask, track, disc-ink {
+        chip-fill, chip-label, seam-mask, track, disc-ink, caption-ink {
         duration: root.recolor;
         easing: ease-in-out;
     }
@@ -480,7 +563,7 @@ export component MiniPlayerView inherits Rectangle {
                 disc-ink: root.disc-ink;
             }
 
-            MiniWindowControls {
+            MiniTrailingControls {
                 glyph: root.glyph;
                 glyph-lit: root.glyph-lit;
                 glyph-hover-bg: root.glyph-hover-bg;
@@ -577,7 +660,7 @@ export component MiniPlayerView inherits Rectangle {
 
                 Rectangle { horizontal-stretch: 1; }
 
-                MiniWindowControls {
+                MiniTrailingControls {
                     glyph: root.glyph;
                     glyph-lit: root.glyph-lit;
                     glyph-hover-bg: root.glyph-hover-bg;
@@ -614,9 +697,10 @@ export component MiniPlayerView inherits Rectangle {
         padding: root.edge-pad;
         spacing: Theme.pad-xs;
 
-        // The row keeps its `min-height` even where always-on-top is
-        // unsupported and the pin wrapper collapses, so the artwork below sits
-        // at the same offset across desktops.
+        // The pin, the backdrop switch and the heart on the left, and the window's captions in the
+        // corner opposite, where every titlebar puts them. The row keeps its `min-height` even where
+        // always-on-top is unsupported and the pin collapses, so the artwork below sits at the same
+        // offset across desktops.
         HorizontalLayout {
             alignment: stretch;
             spacing: 2px;
@@ -628,49 +712,19 @@ export component MiniPlayerView inherits Rectangle {
             HorizontalLayout {
                 horizontal-stretch: 0;
                 alignment: start;
-                if WindowChrome.always-on-top-supported: MiniIconButton {
-                    icon: "push_pin";
-                    press-shrink: true;
-                    diameter: 28px;
-                    icon-size: 18px;
-                    active: WindowChrome.always-on-top-active;
-                    filled: WindowChrome.always-on-top-active;
-                    tooltip-text: WindowChrome.always-on-top-active
-                        ? @tr("Unpin from Top") : @tr("Pin on Top");
-                    clicked => { WindowChrome.toggle-always-on-top(); }
-                }
-                // Beside the pin rather than beside the heart: this row splits chrome left from
-                // track actions right, and painting the window is the pin's kind of question.
-                MiniIconButton {
-                    icon: "tonality";
-                    press-shrink: true;
-                    diameter: 28px;
-                    icon-size: 18px;
-                    active: MiniPlayer.backdrop-shown;
-                    filled: MiniPlayer.backdrop-shown;
-                    tooltip-text: MiniPlayer.backdrop-shown
-                        ? @tr("Album Backdrop: on") : @tr("Album Backdrop: off");
+                if WindowChrome.always-on-top-supported: MiniPinButton { }
+                MiniBackdropButton {
                     clicked => { root.set-backdrop(!MiniPlayer.backdrop-shown); }
                 }
+                MiniFavoriteButton { }
             }
 
             Rectangle { horizontal-stretch: 1; }
 
-            HorizontalLayout {
-                horizontal-stretch: 0;
-                alignment: end;
-                MiniIconButton {
-                    icon: Player.vm.track.is_favorite ? "favorite" : "favorite_border";
-                    press-shrink: true;
-                    diameter: 28px;
-                    icon-size: 18px;
-                    active: Player.vm.track.is_favorite;
-                    filled: Player.vm.track.is_favorite;
-                    button-enabled: Player.vm.has_track;
-                    tooltip-text: Player.vm.track.is_favorite
-                        ? @tr("Unfavorite") : @tr("Favorite");
-                    clicked => { Player.toggle-favorite(); }
-                }
+            MiniCaptions {
+                ink: root.caption-ink;
+                ink-lit: root.glyph-lit;
+                hover-fill: root.glyph-hover-bg;
             }
         }
 

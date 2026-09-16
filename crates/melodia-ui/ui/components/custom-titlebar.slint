@@ -1,131 +1,7 @@
 import { Theme } from "../theme.slint";
 import { WindowChrome } from "../globals/shell.slint";
-import { Tooltip } from "tooltip.slint";
 import { MacOsTitleBarCluster } from "macos-titlebar-cluster.slint";
-
-enum CaptionGlyph { minimize, maximize, restore, close }
-
-// One decoration button. Hover paints a rounded fill; the close button overrides both hover brushes
-// to flash the theme's danger red. Bespoke rather than an `IconButton` because these are
-// rectangular and need a `hover-bg` knob that component doesn't expose. Private to this file.
-//
-// Cell and glyph follow Windows 11's caption buttons: 46 × 32, with a 10 px glyph of 1 px strokes.
-// The glyphs are drawn because Segoe Fluent Icons isn't ours to ship, and Material Symbols' window
-// icons have proportions of their own, `minimize` sitting on the baseline like an underscore.
-component TitleBarButton inherits Rectangle {
-    in property <CaptionGlyph> glyph;
-    in property <string> tooltip-text;
-    in property <brush> hover-bg: Theme.surface0;
-    // Full ink on the focused window and dimmed otherwise, as Windows draws its own caption.
-    in property <brush> idle-fg: Theme.window-focused ? Theme.text : Theme.overlay1;
-    in property <brush> hover-fg: Theme.text;
-
-    callback clicked();
-
-    // Pinned on both axes as a layout child: `height: 100%` forms the unbounded-layout
-    // cycle and collapses the sibling buttons to zero width.
-    min-width: 46px;
-    max-width: 46px;
-    min-height: 32px;
-    max-height: 32px;
-    horizontal-stretch: 0;
-    vertical-stretch: 0;
-    background: transparent;
-
-    // Inset inside the cell, so the click target stays wide for aim while the painted
-    // highlight reads lighter than the full button would.
-    Rectangle {
-        x: 4px;
-        y: 4px;
-        width: parent.width - 8px;
-        height: parent.height - 8px;
-        // Tracks the window's outer radius, so every button reads as matched to the outline: the
-        // close button at the corner is genuinely concentric with the window's arc, and the other
-        // two take the same value. Floored at 0 for the Square preset, and only the preset chips
-        // populate `shell-radius`, so the subtraction never needs a piecewise floor. Maximized
-        // falls back to a pill — the outline goes square there, and 0 reads too sharp on a button.
-        border-radius: WindowChrome.is-maximized
-            ? 6px
-            : max(0px, Theme.shell-radius - 4px);
-        background: touch.has-hover ? root.hover-bg : transparent;
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-    }
-
-    property <length> glyph-size: 10px;
-
-    // Slint fits a path into its box inset by the stroke width and shifted half a stroke
-    // (`Path::fitted_path_events`), which scaled the glyph to 9 px and pushed the square's edges
-    // across two half-lit pixels. Growing the box by a stroke and starting the viewbox half a unit
-    // in cancels both, so path units are the glyph box's own pixels and the half-pixel coordinates
-    // put each stroke on one pixel row. The viewbox is required anyway: without it Slint fits the
-    // path's own bounds, and the minimize line has no height to fit.
-    glyph-path := Path {
-        x: (root.width - root.glyph-size) / 2;
-        y: (root.height - root.glyph-size) / 2;
-        width: root.glyph-size + self.stroke-width;
-        height: root.glyph-size + self.stroke-width;
-        viewbox-x: self.stroke-width / 2px;
-        viewbox-y: self.stroke-width / 2px;
-        viewbox-width: root.glyph-size / 1px;
-        viewbox-height: root.glyph-size / 1px;
-        commands: root.glyph == CaptionGlyph.minimize ? "M 0 5.5 H 10"
-            : root.glyph == CaptionGlyph.maximize ? "M 0.5 0.5 H 9.5 V 9.5 H 0.5 Z"
-            : root.glyph == CaptionGlyph.restore ? "M 0.5 2.5 H 7.5 V 9.5 H 0.5 Z M 2.5 2.5 V 0.5 H 9.5 V 7.5 H 7.5"
-            : "M 0.5 0.5 L 9.5 9.5 M 9.5 0.5 L 0.5 9.5";
-        stroke: root.idle-fg;
-        stroke-width: 1px;
-        stroke-line-join: round;
-    }
-
-    // A transition rather than `animate stroke`, so only a hover eases. A focus change then snaps
-    // together with the title text and the window outline, the way the OS repaints its caption.
-    states [
-        hover when touch.has-hover: {
-            glyph-path.stroke: root.hover-fg;
-            in {
-                animate glyph-path.stroke { duration: Theme.dur-fast; easing: ease-in-out; }
-            }
-            out {
-                animate glyph-path.stroke { duration: Theme.dur-fast; easing: ease-in-out; }
-            }
-        }
-    ]
-
-    Tooltip {
-        text: root.tooltip-text;
-        hovered: touch.has-hover;
-        host-width: root.width;
-    }
-
-    touch := TouchArea {
-        mouse-cursor: pointer;
-        clicked => { root.clicked(); }
-    }
-}
-
-// The three standard captions, fixed but for where the bar mounts them.
-component MinimizeCaption inherits TitleBarButton {
-    glyph: CaptionGlyph.minimize;
-    tooltip-text: @tr("Minimize");
-    clicked => { WindowChrome.minimize(); }
-}
-
-component MaximizeCaption inherits TitleBarButton {
-    glyph: WindowChrome.is-maximized ? CaptionGlyph.restore : CaptionGlyph.maximize;
-    tooltip-text: WindowChrome.is-maximized ? @tr("Restore") : @tr("Maximize");
-    clicked => { WindowChrome.toggle-maximize(); }
-}
-
-component CloseCaption inherits TitleBarButton {
-    glyph: CaptionGlyph.close;
-    tooltip-text: @tr("Close");
-    hover-bg: Theme.danger;
-    // **The on-danger ink, not a chrome token.** `Theme.mantle` stood in here once and it tracks
-    // the theme's *background* rather than the red, so GNOME Dark put a dark glyph on a dark red at
-    // ~2:1.
-    hover-fg: Theme.danger-text;
-    clicked => { WindowChrome.close-window(); }
-}
+import { MinimizeCaption, MaximizeCaption, CloseCaption } from "caption-buttons.slint";
 
 // The brand on one side, a drag region in the middle, the decoration cluster opposite.
 //
@@ -156,7 +32,9 @@ export component CustomTitleBar inherits Rectangle {
         padding-right: root.captions-left ? 12px : 0;
 
         // Left cluster: traffic lights.
-        if root.captions-left && root.mac-style: MacOsTitleBarCluster {}
+        if root.captions-left && root.mac-style: MacOsTitleBarCluster {
+            maximize => { WindowChrome.toggle-maximize(); }
+        }
 
         // Standard icons on the left, close at the *corner* so "click corner = close"
         // still holds. Three siblings rather than a wrapper, per the header.
@@ -218,7 +96,9 @@ export component CustomTitleBar inherits Rectangle {
         }
 
         // Right cluster: traffic lights.
-        if !root.captions-left && root.mac-style: MacOsTitleBarCluster {}
+        if !root.captions-left && root.mac-style: MacOsTitleBarCluster {
+            maximize => { WindowChrome.toggle-maximize(); }
+        }
 
         // Standard icons in Windows / KDE order, close at the corner.
         if !root.captions-left && !root.mac-style: MinimizeCaption {}

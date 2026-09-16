@@ -10,7 +10,7 @@ use melodia_app::library;
 use melodia_app::services;
 use melodia_app::services::settings::{TitlebarButtonSide, TitlebarButtonStyle};
 use melodia_app::state::AppState;
-use melodia_ui::{AppWindow, Settings, Theme};
+use melodia_ui::{AppWindow, MiniPlayer, Settings, Theme};
 
 /// Wire the KDE-only "Match Unfocused Window Background" toggle. The two-way binding
 /// has already flipped the property, and the sidebar and bar bindings read it directly,
@@ -71,13 +71,25 @@ pub(super) fn wire_titlebar_button_style_changed(ui: &AppWindow, state: &AppStat
     let s = state.clone();
     ui.global::<Settings>().on_titlebar_button_style_changed(move |idx| {
         let Some(ui) = weak.upgrade() else { return };
-        let style = match idx {
-            1 => TitlebarButtonStyle::Macos,
-            _ => TitlebarButtonStyle::Standard,
-        };
+        let style = style_for(idx);
         ui.global::<Theme>().set_titlebar_button_style(idx_for(style));
         s.persist_blocking("persist titlebar_button_style", move |state| {
             library::window::set_titlebar_button_style(state, style)
+        });
+    });
+}
+
+/// Wire the Miniplayer card's Window Buttons chip group, in `wire_titlebar_button_style_changed`'s
+/// shape, writing `MiniPlayer.button-style` where that one writes the titlebar's token.
+pub(super) fn wire_mini_player_button_style_changed(ui: &AppWindow, state: &AppState) {
+    let weak = ui.as_weak();
+    let s = state.clone();
+    ui.global::<Settings>().on_mini_player_button_style_changed(move |idx| {
+        let Some(ui) = weak.upgrade() else { return };
+        let style = style_for(idx);
+        ui.global::<MiniPlayer>().set_button_style(idx_for(style));
+        s.persist_blocking("persist mini_player_button_style", move |state| {
+            library::window::set_mini_player_button_style(state, style)
         });
     });
 }
@@ -98,6 +110,15 @@ pub(super) fn wire_titlebar_button_side_changed(ui: &AppWindow, state: &AppState
             library::window::set_titlebar_button_side(state, side)
         });
     });
+}
+
+/// The chip index back to a style, the inverse of [`idx_for`], shared by the titlebar's row and the
+/// miniplayer's so the two can't read one chip two ways.
+fn style_for(idx: i32) -> TitlebarButtonStyle {
+    match idx {
+        1 => TitlebarButtonStyle::Macos,
+        _ => TitlebarButtonStyle::Standard,
+    }
 }
 
 /// Slint stores the titlebar style as an int, so the enum-to-int mapping lives here and

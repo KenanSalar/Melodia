@@ -2236,3 +2236,21 @@ msgstr "Arrière-plan de l'album : activé"
 
 msgid "Album Backdrop: off"
 msgstr "Arrière-plan de l'album : désactivé"
+
+msgid "Full Player"
+msgstr "Lecteur complet"
+
+msgid "Miniplayer"
+msgstr "Mini-lecteur"
+
+msgid "Window Buttons"
+msgstr "Boutons de fenêtre"
+
+msgid "The minimize, full player and close buttons in the square miniplayer's corner."
+msgstr "Les boutons pour réduire, revenir au lecteur complet et fermer, dans le coin du mini-lecteur carré."
+
+msgid "Album Backdrop"
+msgstr "Arrière-plan de l'album"
+
+msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
+msgstr "Peint le mini-lecteur aux couleurs de l'album en cours de lecture, comme le fait la vue « Lecture en cours »."

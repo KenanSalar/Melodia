@@ -5,9 +5,10 @@ import { AppearanceSection } from "../appearance-section.slint";
 import { MotionSection } from "../motion-section.slint";
 import { WindowChromeSection } from "../window-chrome-section.slint";
 import { OverflowMenuSection } from "../overflow-menu-section.slint";
+import { MiniPlayerSection } from "../mini-player-section.slint";
 
-// How the app presents itself — language, palette, window chrome and tray, and
-// which transport buttons the bar hides. Named "Interface" rather than
+// How the app presents itself — language, palette, window chrome and tray,
+// which transport buttons the bar hides, and the miniplayer. Named "Interface" rather than
 // "Appearance" so the tab and the Appearance card inside it don't share a label;
 // no card had to be renamed for it.
 export component InterfacePage inherits Rectangle {
@@ -17,7 +18,7 @@ export component InterfacePage inherits Rectangle {
 
     out property <bool> has-matches:
         language.has-matches || appearance.has-matches || motion.has-matches
-        || window.has-matches || overflow.has-matches;
+        || window.has-matches || overflow.has-matches || mini.has-matches;
 
     // See `library-page.slint` for why the cards live in columns that place
     // themselves — this is the page that shows what it buys, five cards
@@ -42,6 +43,7 @@ export component InterfacePage inherits Rectangle {
 
             window := WindowChromeSection { tab-name: @tr("Interface"); }
             overflow := OverflowMenuSection { tab-name: @tr("Interface"); }
+            mini := MiniPlayerSection { tab-name: @tr("Interface"); }
         }
     }
 }

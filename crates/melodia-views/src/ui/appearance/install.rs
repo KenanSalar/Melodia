@@ -20,7 +20,7 @@ use melodia_app::services;
 use melodia_app::state::{AppState, Signal};
 use melodia_core::error::AppError;
 use melodia_platform::services::platform::desktop;
-use melodia_ui::{AppWindow, Settings, Theme};
+use melodia_ui::{AppWindow, MiniPlayer, Settings, Theme};
 
 /// Hydrate the Settings global from `settings.json`, paint the resolved
 /// palette, and wire chip-click callbacks. Call once during startup,
@@ -112,12 +112,15 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
     {
         let style_idx = window_settings::idx_for(settings.window.titlebar_button_style);
         let side_idx = window_settings::idx_for_side(settings.window.titlebar_button_side);
+        let mini_style_idx = window_settings::idx_for(settings.window.mini_player_button_style);
         let g = ui.global::<Settings>();
         g.set_titlebar_button_style(style_idx);
         g.set_titlebar_button_side(side_idx);
+        g.set_mini_player_button_style(mini_style_idx);
         let theme = ui.global::<Theme>();
         theme.set_titlebar_button_style(style_idx);
         theme.set_titlebar_button_side(side_idx);
+        ui.global::<MiniPlayer>().set_button_style(mini_style_idx);
     }
 
     // Seed the tray toggles. `tray_enabled` drives the "System Tray Icon"
@@ -178,6 +181,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
     window_settings::wire_corner_radius_changed(ui, state);
     window_settings::wire_titlebar_button_style_changed(ui, state);
     window_settings::wire_titlebar_button_side_changed(ui, state);
+    window_settings::wire_mini_player_button_style_changed(ui, state);
     window_settings::wire_overflow_buttons_changed(ui, state);
     window_settings::wire_close_to_tray_changed(ui, state);
     window_border::wire(ui, state);

@@ -51,6 +51,10 @@ export global WindowChrome {
 
     callback minimize();
     callback toggle-maximize();
+    // The miniplayer's middle caption. A miniplayer is a window size, so leaving it is a resize
+    // back to the geometry the full player last settled at, which Rust holds from the moment the
+    // miniplayer took over.
+    callback restore-full-player();
     callback close-window();
     callback toggle-always-on-top();
     // Mirrored into an atomic the winit `MouseInput` filter checks before starting an
@@ -94,6 +98,11 @@ export enum MiniLayout {
 export global MiniPlayer {
     in-out property <bool> active: false;
     in-out property <MiniLayout> layout: MiniLayout.strip;
+
+    // The column's window captions: 0 = Standard, 1 = macOS, `Theme.titlebar-button-style`'s
+    // tokens. Its own setting rather than that one's, a miniplayer showing captions under the
+    // native titlebar as well, where the titlebar's style has nothing to draw.
+    in property <int> button-style: 0;
 
     // Whether the miniplayer paints the artwork backdrop and its solved ink instead of flat chrome.
     // **Not `Theme.aurora-backdrop`**, which decides which of the two stacks every colour tier is

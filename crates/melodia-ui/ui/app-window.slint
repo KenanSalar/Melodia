@@ -225,6 +225,11 @@ export component AppWindow inherits Window {
         // Same class of stale sentinel one global over: the rail dies with the branch and its rows
         // get no leave event, so the tooltip frame reads the last index as a live hover on return.
         Nav.sidebar-tip-idx = -1;
+        // And the drag regions' hover, which the winit filter reads on every left press. Both the
+        // titlebar's and the miniplayer's die with their branch, and one unmounted under the
+        // pointer never reports it gone: the miniplayer's restore resizes the window under a still
+        // pointer and swaps, leaving every press in either layout a window drag.
+        WindowChrome.drag-region-hover-changed(false);
         shortcut-scope.grab-focus();
     }
 

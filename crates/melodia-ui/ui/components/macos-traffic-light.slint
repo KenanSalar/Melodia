@@ -17,6 +17,9 @@ export component MacOsTrafficLight inherits Rectangle {
     // hands the result back down.
     in property <bool> cluster-hovered: false;
 
+    // The cell's height, the titlebar's by default; a host with less room hands its own row's.
+    in property <length> cell-height: 32px;
+
     // Slint has no upward "child has-hover" channel, so each light publishes its own to be ORed.
     out property <bool> hovered: touch.has-hover;
 
@@ -30,11 +33,11 @@ export component MacOsTrafficLight inherits Rectangle {
     callback clicked();
 
     // 18 px gives the cluster macOS's ~20 px centre-to-centre cadence while staying
-    // Fitts-friendly; 32 px fills the titlebar's height, and the cluster's GridLayout centres it.
+    // Fitts-friendly; the height fills the host's row, and the cluster's GridLayout centres it.
     min-width: 18px;
     max-width: 18px;
-    min-height: 32px;
-    max-height: 32px;
+    min-height: root.cell-height;
+    max-height: root.cell-height;
     horizontal-stretch: 0;
     vertical-stretch: 0;
     background: transparent;

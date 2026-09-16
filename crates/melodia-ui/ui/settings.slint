@@ -213,6 +213,12 @@ export global Settings {
     in-out property <int> titlebar-button-side: 0;
     callback titlebar-button-side-changed(int);
 
+    // The miniplayer's captions, in `titlebar-button-style`'s tokens and mirrored into
+    // `MiniPlayer.button-style` the same way. Live under the native titlebar too, the miniplayer
+    // dropping the frame.
+    in-out property <int> mini-player-button-style: 0;
+    callback mini-player-button-style-changed(int);
+
     // The outline a frameless window draws where an OS frame would: under the custom titlebar
     // always, and for the miniplayer under the native one. The outline reads the switch directly,
     // so Rust only persists it.

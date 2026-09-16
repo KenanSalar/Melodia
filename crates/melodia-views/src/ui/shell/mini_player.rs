@@ -66,6 +66,7 @@ pub fn install(
         mini.on_active_changed(move |is_active| {
             np_state.mini_visible.set(is_active);
             if is_active {
+                crate::ui::window_chrome::geometry::hold_full_player();
                 sync_mini_layout(&weak, &np_state);
                 np_state.kick_up_next();
                 if np_state.renders_artwork() {
@@ -77,6 +78,7 @@ pub fn install(
                 // deduping on the claim it already holds.
                 np_state.kick_lyrics();
             } else {
+                crate::ui::window_chrome::geometry::release_full_player();
                 release_artwork_off_thread(&state, &np_artwork);
             }
         });

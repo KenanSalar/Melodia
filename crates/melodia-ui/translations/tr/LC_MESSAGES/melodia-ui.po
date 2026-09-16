@@ -2244,3 +2244,21 @@ msgstr "Albüm arka planı: açık"
 
 msgid "Album Backdrop: off"
 msgstr "Albüm arka planı: kapalı"
+
+msgid "Full Player"
+msgstr "Tam oynatıcı"
+
+msgid "Miniplayer"
+msgstr "Mini oynatıcı"
+
+msgid "Window Buttons"
+msgstr "Pencere düğmeleri"
+
+msgid "The minimize, full player and close buttons in the square miniplayer's corner."
+msgstr "Kare mini oynatıcının köşesindeki simge durumuna küçültme, tam oynatıcı ve kapatma düğmeleri."
+
+msgid "Album Backdrop"
+msgstr "Albüm arka planı"
+
+msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
+msgstr "Mini oynatıcıyı, “Şimdi Çalıyor” görünümünde olduğu gibi çalan albümün renkleriyle boyar."

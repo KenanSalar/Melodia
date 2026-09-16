@@ -2235,3 +2235,21 @@ msgstr "Sfondo dell'album: attivato"
 
 msgid "Album Backdrop: off"
 msgstr "Sfondo dell'album: disattivato"
+
+msgid "Full Player"
+msgstr "Player completo"
+
+msgid "Miniplayer"
+msgstr "Mini player"
+
+msgid "Window Buttons"
+msgstr "Pulsanti della finestra"
+
+msgid "The minimize, full player and close buttons in the square miniplayer's corner."
+msgstr "I pulsanti per ridurre a icona, tornare al player completo e chiudere, nell'angolo del mini player quadrato."
+
+msgid "Album Backdrop"
+msgstr "Sfondo dell'album"
+
+msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
+msgstr "Colora il mini player con i colori dell'album in riproduzione, come fa la vista «In riproduzione»."

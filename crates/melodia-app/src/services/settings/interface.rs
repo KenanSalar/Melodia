@@ -52,6 +52,9 @@ pub struct WindowFlags {
     pub use_native_titlebar: bool,
     pub titlebar_button_style: TitlebarButtonStyle,
     pub titlebar_button_side: TitlebarButtonSide,
+    /// The square miniplayer's captions. Its own field rather than `titlebar_button_style`, the
+    /// miniplayer drawing them under the native titlebar too, where that style is inert.
+    pub mini_player_button_style: TitlebarButtonStyle,
     /// Drawn wherever the window is frameless: always under the custom titlebar, and for the
     /// miniplayer under the native one.
     pub window_border: WindowBorder,
@@ -77,6 +80,7 @@ impl Default for WindowFlags {
             use_native_titlebar: false,
             titlebar_button_style: TitlebarButtonStyle::Standard,
             titlebar_button_side: TitlebarButtonSide::Right,
+            mini_player_button_style: TitlebarButtonStyle::Standard,
             window_border: WindowBorder::Shown,
             window_border_color: WINDOW_BORDER_SYSTEM_COLOR.to_owned(),
         }

@@ -56,6 +56,14 @@ pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool
 
     {
         let weak = app.as_weak();
+        chrome.on_restore_full_player(move || {
+            let Some(ui) = weak.upgrade() else { return };
+            super::geometry::restore_full_player(&ui);
+        });
+    }
+
+    {
+        let weak = app.as_weak();
         chrome.on_close_window(move || {
             // `should_hide_to_tray` is false with no tray, so this can't strand the
             // user with a hidden window. The hide is deferred because calling it

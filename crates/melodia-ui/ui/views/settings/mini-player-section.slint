@@ -1,0 +1,77 @@
+import { Theme } from "../../theme.slint";
+import { Settings } from "../../settings.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
+import { MiniPlayer } from "../../globals/shell.slint";
+import { SectionCard } from "../../components/settings/section-card.slint";
+import { SectionDivider } from "../../components/settings/section-divider.slint";
+import { SettingRow } from "../../components/settings/setting-row.slint";
+import { SettingRowStacked } from "../../components/settings/setting-row-stacked.slint";
+import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
+import { ChipGroup } from "../../components/settings/chip-group.slint";
+
+// What the compact player shows once the window shrinks into it. Its own card rather than rows in
+// Window's: these are about the miniplayer's own surface, and both hold whichever titlebar is on.
+//
+// Search visibility follows `window-chrome-section.slint`.
+export component MiniPlayerSection inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    in property <string> tab-name;
+
+    property <string> card-title: @tr("Miniplayer");
+
+    pure function row-visible(label: string, desc: string) -> bool {
+        return SettingsPage.row-visible(root.tab-name, root.card-title,
+                                        label + " " + desc,
+                                        SettingsPage.search-query);
+    }
+
+    property <string> buttons-label: @tr("Window Buttons");
+    property <string> buttons-desc: @tr("The minimize, full player and close buttons in the square miniplayer's corner.");
+    property <string> backdrop-label: @tr("Album Backdrop");
+    property <string> backdrop-desc: @tr("Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does.");
+
+    property <bool> show-buttons: row-visible(buttons-label, buttons-desc);
+    property <bool> show-backdrop: row-visible(backdrop-label, backdrop-desc);
+
+    out property <bool> has-matches: show-buttons || show-backdrop;
+
+    VerticalLayout {
+        if has-matches: SectionCard {
+            title: root.card-title;
+
+            // The titlebar's two styles, set apart from its row so a native titlebar, which draws
+            // its own, doesn't take the miniplayer's choice with it.
+            if root.show-buttons: SettingRowStacked {
+                icon: "category";
+                label: root.buttons-label;
+                description: root.buttons-desc;
+
+                ChipGroup {
+                    // The brand-name rule the titlebar's style row keeps.
+                    options: [@tr("Standard"), "macOS"];
+                    selected-index <=> Settings.mini-player-button-style;
+                    selected(i) => {
+                        Settings.mini-player-button-style-changed(i);
+                    }
+                }
+            }
+
+            if root.show-buttons && root.show-backdrop: SectionDivider {}
+
+            // The same switch as the miniplayer's own button, both writing the global and handing
+            // Rust the one callback that mirrors, seeds or releases the artwork, and persists.
+            if root.show-backdrop: SettingRow {
+                icon: "tonality";
+                label: root.backdrop-label;
+                description: root.backdrop-desc;
+                ToggleSwitch {
+                    checked <=> MiniPlayer.backdrop-shown;
+                    toggled(on) => { MiniPlayer.set-backdrop-shown(on); }
+                }
+            }
+        }
+    }
+}
