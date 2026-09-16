@@ -77,9 +77,10 @@ export component VolumePopup inherits Rectangle {
     }
 
     pop := PopupWindow {
-        // Right-aligned to the button, so the slider chrome sits above the icon and the
-        // badge extends leftward.
-        x: btn.width - self.width;
+        // The chrome centred on the button and the badge extending leftward. Not right-aligned:
+        // the chrome is wider than any disc it hangs over, so matching edges pulls it off the
+        // glyph's axis.
+        x: (btn.width + chrome.width) / 2 - self.width;
         y: -self.height - Theme.popup-gap;
         width: 92px;
         height: 180px;

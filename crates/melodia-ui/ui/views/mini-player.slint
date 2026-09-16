@@ -225,9 +225,12 @@ component MiniTrailingControls inherits HorizontalLayout {
         // The vertical `VolumePopup` is 180 px tall and clips against the top edge of a window this
         // short; the horizontal sibling is the same slider rotated, flying out to the left of the
         // disc.
+        //
+        // A step above the row's glyphs, as the bar sets its own: at one size the speaker reads
+        // smaller than the icons beside it.
         VolumePopupHorizontal {
             diameter: 28px;
-            icon-size: 18px;
+            icon-size: 20px;
             trigger-fg: root.glyph;
             trigger-hover-fg: root.glyph-lit;
             trigger-hover-bg: root.glyph-hover-bg;
@@ -883,9 +886,10 @@ export component MiniPlayerView inherits Rectangle {
                 }
                 VerticalLayout {
                     alignment: center;
+                    // A step above the row, for the reason `MiniTrailingControls` gives.
                     VolumePopup {
                         diameter: 32px;
-                        icon-size: 20px;
+                        icon-size: 22px;
                         trigger-fg: root.glyph;
                         trigger-hover-fg: root.glyph-lit;
                         trigger-hover-bg: root.glyph-hover-bg;
