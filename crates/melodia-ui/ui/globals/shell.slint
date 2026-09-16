@@ -82,9 +82,10 @@ export global WindowChrome {
 }
 
 // Which of the miniplayer's layouts is up. A state rather than a flag per layout, since they are
-// mutually exclusive and a pair of flags can spell a combination neither means.
+// mutually exclusive and a pair of flags can spell a combination neither means. All three are one
+// mount, grown or rearranged rather than swapped.
 export enum MiniLayout {
-    // One row, the artwork a thumbnail beside the title and controls, the timeline under them. For
+    // One row, the controls up on the title's line beside the artwork, the timeline under them. For
     // a window too short for either of the others.
     strip,
     // The artwork beside the title and controls, the timeline under both, and the window's captions

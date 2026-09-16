@@ -48,7 +48,7 @@ Six theme families, light and dark variants, configurable accents, and Material 
 
 ### Mini-player
 
-Shrink the window past a threshold and the full UI collapses into a compact mini-player. Close Melodia from it and it opens as the mini-player next time, with its restore button still returning to the full-size window you had.
+Shrink the window past a threshold and the full UI collapses into a compact mini-player. It grows with the window rather than switching between layouts: a one-line strip, then a card with the controls sliding under the title beside larger artwork, then a column that opens the window buttons above and Up Next or lyrics below. Close Melodia from it and it opens as the mini-player next time, with its restore button still returning to the full-size window you had.
 
 <table>
   <tr>
@@ -82,7 +82,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Queue with shuffle and repeat; playing from any list queues that list behind your pick
 - Full-screen Now Playing with an up-next list and a spectrum, mirrored, or waveform visualizer tinted to the album's own colors
 - Playback speed 0.25×–2.0×, a playback-linked sleep timer, resume on startup, media keys
-- Responsive mini-player: shrink the window and the UI collapses to a strip or a square widget
+- Responsive mini-player: shrink the window and the UI collapses to a strip, a card or a column with Up Next, one layout that rearranges as you resize instead of jumping between them
 
 ### Lyrics
 - A panel in the Now Playing column in place of Up Next, turned on from the switch in that view's header or under Settings ▸ Services ▸ Lyrics. A timed sheet follows the song line by line, and clicking a line seeks to it

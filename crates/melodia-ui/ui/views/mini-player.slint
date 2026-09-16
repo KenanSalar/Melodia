@@ -98,27 +98,31 @@ component MiniCaptions inherits HorizontalLayout {
     }
 }
 
-// The artwork the card and the column set beside the controls. It takes the 384 px
+// The artwork beside the title and controls. The card and the column take the 384 px
 // `Player.np-cover-{a,b}` slot the Now Playing view uses, falling back to the 72 px row tier until
 // the seed lands and for tracks whose decode failed; `NowPlayingState::renders_artwork` gates that
 // decode on these two layouts.
-component MiniLargeArtwork inherits SourceArtwork {
+//
+// **The strip reads the row tier outright.** Rust releases the large decode there and stops writing
+// its slots, so they go on holding whatever played last.
+component MiniArtwork inherits SourceArtwork {
+    private property <bool> large: MiniPlayer.layout != MiniLayout.strip;
+
     // Everything else about the tile is the shared track-or-station split. A station's large slot
     // is its own, `np-cover-*` being the track cross-fade.
     cover: Player.vm.has_station
-        ? (Player.np-station-logo.width > 0
+        ? (root.large && Player.np-station-logo.width > 0
             ? Player.np-station-logo
             : Player.vm.radio.logo_img)
-        : (Player.np-cover-has-image
+        : (root.large && Player.np-cover-has-image
             ? (Player.np-cover-use-a ? Player.np-cover-a : Player.np-cover-b)
             : Player.vm.track.cover_img);
     // Written together with the slot above, so a `0` here means the row-tier fallback is what's
     // drawing and there is nothing to measure.
-    native-size: Player.np-station-logo-size * 1px;
+    native-size: root.large ? Player.np-station-logo-size * 1px : 0px;
 }
 
-// Previous, play and next at the strip's scale, for the strip and the controls row the card and the
-// column share.
+// Previous, play and next, leading the controls cluster every layout draws.
 component MiniTransport inherits HorizontalLayout {
     // The play disc and the glyph punched out of it, eased by the host with the rest of its surface.
     in property <brush> disc-color;
@@ -166,8 +170,8 @@ component MiniTransport inherits HorizontalLayout {
     }
 }
 
-// Volume, the pin, the backdrop switch and the heart at the strip's scale, ending the controls row
-// at the window's right edge in every layout.
+// Volume, the pin, the backdrop switch and the heart, ending the controls cluster at the window's
+// right edge.
 component MiniTrailingControls inherits HorizontalLayout {
     // The volume trigger's glyph family, stepped for its `IconButton` to ease at `recolor`.
     in property <brush> glyph;
@@ -324,8 +328,8 @@ component MiniTimeline inherits HorizontalLayout {
 
 // Compact miniplayer replacing the full UI once the window shrinks past the
 // responsive threshold. `MiniPlayer.active` (derived at the `AppWindow` root)
-// arms it; `MiniPlayer.layout` picks the strip or the card, and whether the card has grown into the
-// column.
+// arms it; `MiniPlayer.layout` says how far its one layout has grown: the controls on the title's
+// line, under it, or with a panel below.
 //
 // Resize is the only way in *and* out — there are no buttons. Double-clicking
 // the bare drag region maximizes, so it also leaves mini.
@@ -431,6 +435,18 @@ export component MiniPlayerView inherits Rectangle {
     // How far open the captions row is when its buttons are gone. Any lower and the row closes
     // through a button still showing, which cuts a glyph that fills its box, the lyrics one.
     private property <float> captions-fade-end: 0.5;
+
+    // How far the controls have moved up onto the title's line. **Eased rather than following the
+    // window**: the two arrangements are a few pixels of height apart, so a drag crosses between
+    // them in a frame. Bound to the layout rather than a size, which the switch moves only on a real
+    // crossing, so a drag can't restart the ease on every frame of it.
+    private property <float> inline-t: MiniPlayer.layout == MiniLayout.strip ? 1.0 : 0.0;
+    animate inline-t { duration: Theme.dur-med; easing: ease-in-out; }
+    // The title makes the controls' room over the first third of the move, before they reach its
+    // line.
+    private property <float> title-lead: min(1.0, root.inline-t * 3);
+    // The artwork's smallest, the window floor's, where the timeline's gap gives instead.
+    private property <length> art-floor: 48px;
 
     // **Two flags rather than one, because a fade needs both of its ends on screen.** A stack
     // mounted already painting has nothing to ease in from, and one that stops painting still has
@@ -556,97 +572,15 @@ export component MiniPlayerView inherits Rectangle {
         }
     }
 
-    // Strip, for a window too short for the card. The row and the timeline under it stay centred as a
-    // pair, and the timeline moves down off the artwork as the window gives it height.
-    //
-    // **Spacers rather than an alignment**, here and in the card, since a non-stretch alignment
-    // never hands out surplus: under `stretch` they split it evenly, the ones between rows capped so
-    // the block still reads as one, and the outer two take the rest. Everything else pins its
-    // stretch to 0.
-    if MiniPlayer.layout == MiniLayout.strip: VerticalLayout {
-        padding: root.edge-pad;
-        spacing: 0;
-
-        Rectangle { vertical-stretch: 1; }
-
-        // No right inset of its own: the trailing controls carry the resize grabs' clearance, and
-        // end where the timeline's repeat button does.
-        HorizontalLayout {
-            vertical-stretch: 0;
-            spacing: Theme.pad-sm;
-            padding-left: Theme.pad-xs;
-            alignment: stretch;
-
-            VerticalLayout {
-                alignment: center;
-                SourceArtwork {
-                    tile-size: 48px;
-                    track-tile-bg: root.tile-fill;
-                    track-tile-icon-color: root.tile-glyph;
-                }
-            }
-
-            Rectangle {
-                clip: true;
-                horizontal-stretch: 1;
-                VerticalLayout {
-                    alignment: center;
-                    spacing: 2px;
-                    Text {
-                        text: Player.source-title;
-                        color: root.ink;
-                        font-size: Theme.font-size-sm;
-                        font-weight: 500;
-                        overflow: elide;
-                    }
-                    Text {
-                        text: Player.source-subtitle;
-                        color: root.ink-muted;
-                        font-size: 11px;
-                        overflow: elide;
-                    }
-                }
-            }
-
-            MiniTransport {
-                disc-color: root.accent;
-                disc-ink: root.disc-ink;
-            }
-
-            MiniTrailingControls {
-                glyph: root.glyph;
-                glyph-lit: root.glyph-lit;
-                glyph-hover-bg: root.glyph-hover-bg;
-                recolor: root.recolor;
-                toggle-backdrop => { root.set-backdrop(!MiniPlayer.backdrop-shown); }
-            }
-        }
-
-        Rectangle {
-            vertical-stretch: 1;
-            max-height: Theme.pad-md;
-        }
-
-        MiniTimeline {
-            label-color: root.ink;
-            fill-color: root.accent;
-            track-color: root.track;
-            seam-mask-color: root.seam-mask;
-            chip-fill: root.chip-fill;
-            chip-label: root.chip-label;
-        }
-
-        Rectangle { vertical-stretch: 1; }
-    }
-
-    // Card and column, **one mount that grows rather than two that swap**: the artwork beside the
-    // title and controls, the timeline under both, the window's captions above and, in the column,
-    // a panel below.
+    // Strip, card and column, **one mount that grows rather than three that swap**: the artwork
+    // beside the title and controls, the timeline under both, the window's captions above and, in
+    // the column, a panel below.
     //
     // **Each part opens into the height the one before it leaves**: the artwork up to its size,
     // then the captions row, then the panel. Nothing arrives or leaves with height of its own to
-    // claim, so the block never jumps, and it stays top-aligned for the same reason.
-    if MiniPlayer.layout != MiniLayout.strip: stack := VerticalLayout {
+    // claim, so the block never jumps, and it stays top-aligned for the same reason. The one move
+    // that isn't a height is the controls going up onto the title's line, which `inline-t` eases.
+    stack := VerticalLayout {
         // How far the captions row is open: what the artwork and the timeline leave, up to all of it.
         property <length> captions-shown: clamp(root.height - 2 * root.edge-pad
             - head.preferred-height - timeline-gap.preferred-height - timeline.preferred-height,
@@ -743,7 +677,7 @@ export component MiniPlayerView inherits Rectangle {
                 // **The block's only slack, which is what keeps every control on screen.** Sized
                 // to the smallest of the cap, the width the controls leave it and the height the
                 // timeline leaves it, so the tile fills the slot and sits flush with the title.
-                // `MiniPlayerSwitch` hands a window too short even for the controls to the strip.
+                // Floored at the strip's thumbnail, below which the timeline's gap gives instead.
                 //
                 // **A plain `Rectangle` with the tile placed by `x` and `y`**, Now Playing's cover
                 // slot and for its reason: a centring layout folds the tile's fixed size into the
@@ -752,8 +686,8 @@ export component MiniPlayerView inherits Rectangle {
                     property <length> size: max(0px, min(MiniPlayer.art-cap,
                         root.width - 2 * root.edge-pad - Theme.pad-xs - Theme.pad-sm
                             - info.min-width,
-                        root.height - 2 * root.edge-pad - timeline-gap.preferred-height
-                            - timeline.preferred-height));
+                        max(root.art-floor, root.height - 2 * root.edge-pad
+                            - timeline-gap.preferred-height - timeline.preferred-height)));
 
                     horizontal-stretch: 0;
                     vertical-stretch: 0;
@@ -764,7 +698,7 @@ export component MiniPlayerView inherits Rectangle {
                     max-width: self.size;
                     max-height: self.size;
 
-                    MiniLargeArtwork {
+                    MiniArtwork {
                         tile-size: min(parent.width, parent.height);
                         x: (parent.width - self.width) / 2;
                         y: (parent.height - self.height) / 2;
@@ -773,52 +707,78 @@ export component MiniPlayerView inherits Rectangle {
                     }
                 }
 
-                info := VerticalLayout {
+                // The title with the controls under it, or beside it on the strip. **Placed by `x`
+                // and `y` rather than laid out**, a layout only being able to jump between the two,
+                // so its bounds are spelled: hand-placed children fold nothing into them.
+                info := Rectangle {
+                    property <length> titles-h: titles.preferred-height;
+                    property <length> cluster-h: cluster.preferred-height;
+                    // Stacked, the pair is centred, the gap between taking a third of any surplus
+                    // up to `pad-md`.
+                    property <length> stacked-gap: clamp(Theme.pad-xs
+                        + (self.height - self.titles-h - Theme.pad-xs - self.cluster-h) / 3,
+                        Theme.pad-xs, Theme.pad-md);
+                    property <length> stacked-top:
+                        (self.height - self.titles-h - self.stacked-gap - self.cluster-h) / 2;
+                    property <length> stacked-min-width: max(titles.min-width, cluster.min-width);
+                    property <length> inline-min-width:
+                        titles.min-width + Theme.pad-sm + cluster.min-width;
+                    property <length> stacked-min-height:
+                        self.titles-h + Theme.pad-xs + self.cluster-h;
+                    property <length> inline-min-height: max(self.titles-h, self.cluster-h);
+
                     horizontal-stretch: 1;
                     // Its floor, clamped up to its real minimum by the layout: asking for more
                     // would have the shrink pass take width from these controls alongside the
                     // artwork.
                     preferred-width: 0px;
-                    spacing: 0;
+                    min-width: self.stacked-min-width
+                        + (self.inline-min-width - self.stacked-min-width) * root.title-lead;
+                    min-height: self.stacked-min-height
+                        + (self.inline-min-height - self.stacked-min-height) * root.inline-t;
 
-                    Rectangle { vertical-stretch: 1; }
+                    // No clip: bounded, the elide already stops the text, and a scissor at the
+                    // line box cuts the marks above and below it.
+                    titles := VerticalLayout {
+                        x: 0;
+                        y: parent.stacked-top
+                            + ((parent.height - self.height) / 2 - parent.stacked-top) * root.inline-t;
+                        width: parent.width - (cluster.width + Theme.pad-sm) * root.title-lead;
+                        height: self.preferred-height;
+                        spacing: 2px;
 
-                    Rectangle {
-                        clip: true;
-                        vertical-stretch: 0;
-                        VerticalLayout {
-                            spacing: 2px;
-                            Text {
-                                text: Player.source-title;
-                                color: root.ink;
-                                font-size: Theme.font-size-md;
-                                font-weight: 500;
-                                overflow: elide;
-                            }
-                            Text {
-                                text: Player.source-subtitle;
-                                color: root.ink-muted;
-                                font-size: 11px;
-                                overflow: elide;
-                            }
+                        Text {
+                            text: Player.source-title;
+                            color: root.ink;
+                            font-size: Theme.font-size-md
+                                + (Theme.font-size-sm - Theme.font-size-md) * root.inline-t;
+                            font-weight: 500;
+                            overflow: elide;
+                        }
+                        Text {
+                            text: Player.source-subtitle;
+                            color: root.ink-muted;
+                            font-size: 11px;
+                            overflow: elide;
                         }
                     }
 
-                    Rectangle {
-                        vertical-stretch: 1;
-                        min-height: Theme.pad-xs;
-                        max-height: Theme.pad-md;
-                    }
+                    // At the right edge in both arrangements, so only its `y` moves.
+                    cluster := HorizontalLayout {
+                        property <length> stacked-y:
+                            parent.stacked-top + parent.titles-h + parent.stacked-gap;
 
-                    HorizontalLayout {
-                        vertical-stretch: 0;
+                        x: parent.width - self.width;
+                        y: self.stacked-y
+                            + ((parent.height - self.height) / 2 - self.stacked-y) * root.inline-t;
+                        width: self.preferred-width;
+                        height: self.preferred-height;
+                        spacing: Theme.pad-sm;
 
                         MiniTransport {
                             disc-color: root.accent;
                             disc-ink: root.disc-ink;
                         }
-
-                        Rectangle { horizontal-stretch: 1; }
 
                         MiniTrailingControls {
                             glyph: root.glyph;
@@ -828,8 +788,6 @@ export component MiniPlayerView inherits Rectangle {
                             toggle-backdrop => { root.set-backdrop(!MiniPlayer.backdrop-shown); }
                         }
                     }
-
-                    Rectangle { vertical-stretch: 1; }
                 }
             }
 

@@ -43,7 +43,8 @@ export component MiniPlayerSwitch {
     animate fade-opacity { duration: 100ms; easing: ease-in-out; }
 
     // **The column once the card's captions row is all the way open above its artwork, the card
-    // below that, and the strip for a window too short for the card's title and controls.** Past
+    // below that, and the strip, the controls moved up onto the title's line, for a window too short
+    // to seat them under it.** Past
     // that height all that is left to grow is the panel, which only the column mounts. The artwork
     // comes off the width as well as the cap: a narrow window's stops short of the cap, the controls
     // taking the width, and keyed on the cap alone its panel held off long after there was room.
@@ -60,7 +61,7 @@ export component MiniPlayerSwitch {
     // The controls' floor beside the artwork, the pin collapsing where the window manager gives no
     // way to keep a window on top.
     private property <length> controls-min-width:
-        WindowChrome.always-on-top-supported ? 212px : 182px;
+        WindowChrome.always-on-top-supported ? 220px : 190px;
     // The shortest window the card seats its title and controls in beside an artwork as tall as
     // they are, with the timeline under both.
     private property <length> card-min-height: 110px;

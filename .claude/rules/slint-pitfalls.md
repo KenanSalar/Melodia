@@ -42,6 +42,11 @@ this file is what builds, looks right, and is wrong.
   `Property::set_animated_value`, replacing the animated binding, so only a real write restarts
   it. Keep the original expression as the declared *seed* so the first evaluation lands in
   `NotAnimating` and mount doesn't animate (`tab-bar.slint`'s `compact-t`).
+  **A binding needs no such write when nothing it reads moves except on a real change.**
+  `mini-player.slint`'s `inline-t` reads only `MiniPlayer.layout`, which the switch writes on a
+  crossing. Rederiving it from the window's size inside the view looks equivalent, but it puts the
+  restart back on every frame of a drag, and a `changed` handler there would outlive the view's
+  `if`.
   **`states`/`transitions` only half-fix it**: `StateInfoBinding::evaluate` *is* value-compared,
   so `change_time` survives the dirt and the timeline stays anchored, but `from_value` is still
   re-based every frame and the curve collapses to the target early. **That half is the whole cure

@@ -108,8 +108,8 @@ pub fn install(
     }
 
     // set-backdrop-shown: the button has already written the property, so this moves the mirror
-    // and answers what that changed. **The strip is why there is anything to do here**: it mounts
-    // the backdrop without mounting the large tile, so switching one on is the only thing that
+    // and answers what that changed. **The strip is why there is anything to do here**: it paints
+    // the backdrop without drawing the large tile, so switching one on is the only thing that
     // makes that variant need the decode at all.
     {
         let np_state = np_state.clone();
