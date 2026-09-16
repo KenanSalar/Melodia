@@ -7,9 +7,9 @@
 //! (`window_chrome::geometry::restore_full_player`). The backdrop switch is the one thing here a
 //! button moves directly, and it is a repaint rather than a mode.
 //!
-//! **Every arm below is the same two steps**: move the mirror `NowPlayingState` keeps, then seed
-//! or release against what that changes [`NowPlayingState::renders_artwork`] to. Which surface the
-//! answer came from is exactly what the callers must not have to know.
+//! **Every artwork arm below is the same two steps**: move the mirror `NowPlayingState` keeps, then
+//! seed or release against what that changes [`NowPlayingState::renders_artwork`] to. Which surface
+//! the answer came from is exactly what the callers must not have to know.
 //!
 //! Sibling to `window_chrome` rather than under it: that module owns OS-frame concerns —
 //! the titlebar, the drag region, the restart flow — where this is a responsive *layout*

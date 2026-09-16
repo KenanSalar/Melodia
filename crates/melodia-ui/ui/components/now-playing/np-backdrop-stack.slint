@@ -7,9 +7,9 @@ import { AuroraBackdrop } from "../aurora-backdrop.slint";
 // it: Now Playing and the miniplayer. `HeroBackdropStack`'s sibling, split from it by tier alone,
 // which is what the leaves taking their colours as inputs is for.
 //
-// Only the live arm is mounted, for the wrapper's reason. **Both floor stops come from Rust**, not a
-// `Theme.accent` mix: this is the surface an art-less track's title sits on, and the foreground is
-// solved light.
+// Only the live arm is mounted, for the reason `hero-backdrop-stack.slint` gives. **Both floor
+// stops come from Rust**, not a `Theme.accent` mix: this is the surface an art-less track's title
+// sits on, and the foreground is solved light.
 //
 // Two readers of one tier is safe because they are never on screen together: entering the
 // miniplayer force-closes `Nav.now-playing-open`.
