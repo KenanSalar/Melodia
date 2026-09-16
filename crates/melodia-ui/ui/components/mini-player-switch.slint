@@ -43,8 +43,8 @@ export component MiniPlayerSwitch {
     animate fade-opacity { duration: 100ms; easing: ease-in-out; }
 
     // **The column once the card's captions row is all the way open above its artwork, the card
-    // below that, and the strip, the controls moved up onto the title's line, for a window too short
-    // to seat them under it.** Past
+    // below that, and the strip once the artwork is down to its floor, the controls all the way up
+    // on the title's line.** Past
     // that height all that is left to grow is the panel, which only the column mounts. The artwork
     // comes off the width as well as the cap: a narrow window's stops short of the cap, the controls
     // taking the width, and keyed on the cap alone its panel held off long after there was room.
@@ -52,9 +52,12 @@ export component MiniPlayerSwitch {
     // All of these are estimates of what the view lays out, and being off only moves where a swap
     // lands: the artwork gives ground before a row clips.
     //
-    // The column's padding, captions row, gaps and timeline, which is everything in it but the
+    // The padding, the timeline and the gap over it, which is everything the card's height holds but
+    // the artwork.
+    private property <length> art-rows: 48px;
+    // The same with the captions row all the way open, which is everything in the column but the
     // artwork and the panel.
-    private property <length> column-rows: 80px;
+    private property <length> column-rows: root.art-rows + 32px;
     // The same across the row the artwork shares with the controls: the padding either side, the
     // row's own inset and the gap to the title.
     private property <length> art-row-insets: 20px;
@@ -70,7 +73,9 @@ export component MiniPlayerSwitch {
     private property <MiniLayout> layout:
         root.host-height >= root.column-rows + root.card-art
             ? MiniLayout.column
-            : (root.host-height >= MiniPlayer.card-min-height ? MiniLayout.card : MiniLayout.strip);
+            : (root.host-height > root.art-rows + MiniPlayer.art-floor
+                ? MiniLayout.card
+                : MiniLayout.strip);
 
     // Mirrored locally because a `changed` handler can't watch a global's property. It publishes to
     // the global so children see the new value, schedules fade-out → swap → fade-in, closes any

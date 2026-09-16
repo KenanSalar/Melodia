@@ -85,11 +85,12 @@ export global WindowChrome {
 // mutually exclusive and a pair of flags can spell a combination neither means. All three are one
 // mount, grown or rearranged rather than swapped.
 export enum MiniLayout {
-    // One row, the controls up on the title's line beside the artwork, the timeline under them. For
-    // a window too short for either of the others.
+    // One row, the artwork at its floor with the controls up on the title's line beside it, the
+    // timeline under them. For a window too short for either of the others.
     strip,
-    // The artwork beside the title and controls, the timeline under both, and the window's captions
-    // opening above them as there is room.
+    // The artwork beside the title and controls, the timeline under both, the controls coming down
+    // under the title as the artwork grows and the window's captions opening above them as there is
+    // room.
     card,
     // The card with its captions all the way open, and a panel under it once there is room.
     column,
@@ -106,10 +107,10 @@ export global MiniPlayer {
     // and the captions row above it have stopped growing.
     out property <length> art-cap: 180px;
 
-    // The shortest window the card seats its title and controls in beside an artwork as tall as
-    // they are, with the timeline under both. The view reads it too, the text and the controls
-    // reaching the card's arrangement there so the crossing moves nothing.
-    out property <length> card-min-height: 110px;
+    // The least the artwork draws, which is the strip's thumbnail: the size the row tier is decoded
+    // for, so the strip draws its cover unscaled. The switch hands the strip over to the card once
+    // the window gives the artwork more, where the view has already moved everything into place.
+    out property <length> art-floor: 48px;
 
     // The strip's smallest footprint, which is the window's floor. Rust floors a restored window at
     // it too, so a hand-edited `settings.json` can't open one smaller.

@@ -439,8 +439,14 @@ export component MiniPlayerView inherits Rectangle {
     // The title's size steps rather than tracking the drag: FemtoVG keeps a glyph for every tenth of
     // a pixel it has drawn at in an atlas it never evicts.
     private property <length> title-size-step: 0.5px;
-    // The artwork's smallest, the window floor's, where the timeline's gap gives instead.
-    private property <length> art-floor: 48px;
+    // The highest the title's line sits down the artwork in the card, as a share of it. A centred
+    // pair rides up to the window's top as the artwork shrinks, and the text stops reading as beside
+    // the cover.
+    private property <float> line-share: 0.3;
+    // The smallest artwork that seats the title at that share with the controls under it. Below it
+    // the controls rise onto the title's line, all the way by the artwork's floor. Spelled rather
+    // than measured: the title's height it would come from is what that travel scales.
+    private property <length> stacked-art: 70px;
 
     // **Two flags rather than one, because a fade needs both of its ends on screen.** A stack
     // mounted already painting has nothing to ease in from, and one that stops painting still has
@@ -578,18 +584,16 @@ export component MiniPlayerView inherits Rectangle {
         // What the artwork shares the window's height with: the edges and the timeline under it.
         property <length> art-rows: 2 * root.edge-pad + timeline-gap.preferred-height
             + timeline.preferred-height;
-        // How far the text has grown from the strip's size to the card's, over the artwork's travel
-        // from its floor to where the card takes over. Off the height the artwork is sized by, so
-        // the two change together, and the crossing, where this has already reached 1, moves nothing.
-        property <float> title-grow: clamp((root.height - self.art-rows - root.art-floor)
-            / (MiniPlayer.card-min-height - self.art-rows - root.art-floor), 0, 1);
-        // How far the controls have come up onto the title's line, over the same travel. **Off the
-        // height rather than eased on the crossing**, so they move with the drag and at no other
-        // time.
-        property <float> inline-t: 1 - self.title-grow;
-        // The title makes the controls' room over the first fifth of their rise, before they reach
+        // How far the controls have come up onto the title's line, over the artwork's travel from
+        // `stacked-art` down to its floor. **Off the height the artwork is sized by rather than
+        // eased**, so they move with the drag and at no other time.
+        property <float> inline-t: clamp((root.stacked-art - (root.height - self.art-rows))
+            / (root.stacked-art - MiniPlayer.art-floor), 0, 1);
+        // The text shrinks to the strip's size over the same travel.
+        property <float> title-grow: 1 - self.inline-t;
+        // The title makes the controls' room over the first eighth of their rise, before they reach
         // the bottom of its line.
-        property <float> title-lead: min(1.0, self.inline-t * 5);
+        property <float> title-lead: min(1.0, self.inline-t * 8);
 
         // How far the captions row is open: what the artwork and the timeline leave, up to all of it.
         property <length> captions-shown: clamp(
@@ -695,7 +699,7 @@ export component MiniPlayerView inherits Rectangle {
                     property <length> size: max(0px, min(MiniPlayer.art-cap,
                         root.width - 2 * root.edge-pad - Theme.pad-xs - Theme.pad-sm
                             - info.min-width,
-                        max(root.art-floor, root.height - stack.art-rows)));
+                        max(MiniPlayer.art-floor, root.height - stack.art-rows)));
 
                     horizontal-stretch: 0;
                     vertical-stretch: 0;
@@ -721,20 +725,25 @@ export component MiniPlayerView inherits Rectangle {
                 info := Rectangle {
                     property <length> titles-h: titles.preferred-height;
                     property <length> cluster-h: cluster.preferred-height;
-                    // Stacked, the pair is centred, the gap between taking a third of any surplus
-                    // up to `pad-md`. Held inside the row, since the strip's line starts from it
-                    // where the pair no longer fits.
+                    // The card centres the pair, the gap between taking a third of any surplus up
+                    // to `pad-md`.
                     property <length> stacked-gap: clamp(Theme.pad-xs
                         + (self.height - self.titles-h - Theme.pad-xs - self.cluster-h) / 3,
                         Theme.pad-xs, Theme.pad-md);
-                    property <length> stacked-top: max(0px,
-                        (self.height - self.titles-h - self.stacked-gap - self.cluster-h) / 2);
-                    // The middle of the title's line: the top of the stacked pair in the card,
-                    // coming down to the middle of the row as the artwork shrinks to its floor.
-                    // Height-driven like the title's size, so the controls meet it wherever it is.
-                    property <length> line-center: self.stacked-top + self.titles-h / 2
-                        + (self.height / 2 - self.stacked-top - self.titles-h / 2)
-                            * (1 - stack.title-grow);
+                    property <length> stacked-top:
+                        (self.height - self.titles-h - self.stacked-gap - self.cluster-h) / 2;
+                    // The middle of the card's title line, held down to `line-share` of the
+                    // artwork where the centred pair would lift it higher.
+                    property <length> card-line: max(self.stacked-top + self.titles-h / 2,
+                        self.height * root.line-share);
+                    // The controls under that title, pushed down by it and held inside the row.
+                    property <length> card-cluster-y: min(self.height - self.cluster-h,
+                        max(self.stacked-top + self.titles-h + self.stacked-gap,
+                            self.card-line + self.titles-h / 2 + Theme.pad-xs));
+                    // The middle of the title's line, coming down from the card's to the middle of
+                    // the row as the controls rise, so they meet it wherever it is.
+                    property <length> line-center: self.card-line
+                        + (self.height / 2 - self.card-line) * stack.inline-t;
                     property <length> stacked-min-width: max(titles.min-width, cluster.min-width);
                     property <length> inline-min-width:
                         titles.min-width + Theme.pad-sm + cluster.min-width;
@@ -781,12 +790,11 @@ export component MiniPlayerView inherits Rectangle {
                     // At the right edge in both arrangements, so only its `y` moves: from under the
                     // title up onto its line.
                     cluster := HorizontalLayout {
-                        property <length> stacked-y:
-                            parent.stacked-top + parent.titles-h + parent.stacked-gap;
                         property <length> inline-y: parent.line-center - self.height / 2;
 
                         x: parent.width - self.width;
-                        y: self.stacked-y + (self.inline-y - self.stacked-y) * stack.inline-t;
+                        y: parent.card-cluster-y
+                            + (self.inline-y - parent.card-cluster-y) * stack.inline-t;
                         width: self.preferred-width;
                         height: self.preferred-height;
                         spacing: Theme.pad-sm;
