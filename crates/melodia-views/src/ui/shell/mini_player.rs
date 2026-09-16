@@ -25,12 +25,12 @@ use melodia_app::state::AppState;
 use melodia_core::error::AppError;
 use melodia_ui::{AppWindow, MiniPlayer};
 
-/// Hydrate `np_state.mini_square` from the live global, because `square-changed` only
-/// fires on actual flips — a window already square before entering mini would leave the
-/// mirror stale and `kick_artwork()` skipped on entry.
-fn sync_mini_square(weak: &slint::Weak<AppWindow>, np_state: &NowPlayingState) {
+/// Hydrate `np_state.mini_layout` from the live global, because `layout-changed` only fires on
+/// actual changes — a window already in the column before entering mini would leave the mirror
+/// on the strip and `kick_artwork()` skipped on entry.
+fn sync_mini_layout(weak: &slint::Weak<AppWindow>, np_state: &NowPlayingState) {
     let Some(ui) = weak.upgrade() else { return };
-    np_state.mini_square.set(ui.global::<MiniPlayer>().get_square());
+    np_state.mini_layout.set(ui.global::<MiniPlayer>().get_layout());
 }
 
 /// Off-thread release of the [`NowPlayingArtwork`] LRU plus a `malloc_trim` to hand the
@@ -44,10 +44,9 @@ fn release_artwork_off_thread(state: &AppState, np_artwork: &Arc<NowPlayingArtwo
     });
 }
 
-/// Wire both callbacks to the Up Next subscriber's `mini_visible` gate and the square
-/// variant's artwork-cache lifecycle. Runs on the event-loop thread between
-/// `AppWindow::new()` and `app.run()`, the same window as `now_playing` and
-/// `window_chrome`.
+/// Wire the callbacks to the Up Next subscriber's `mini_visible` gate and the large artwork's
+/// cache lifecycle. Runs on the event-loop thread between `AppWindow::new()` and `app.run()`,
+/// the same window as `now_playing` and `window_chrome`.
 pub fn install(
     app: &AppWindow,
     state: &AppState,
@@ -56,10 +55,9 @@ pub fn install(
 ) -> Result<(), AppError> {
     let mini = app.global::<MiniPlayer>();
 
-    // active-changed: on enter, flip the gates, re-seed Up Next so the square variant
-    // doesn't render an empty list, and seed the high-res cover if anything on screen
-    // draws from it. On exit, release the artwork LRU — nothing in full-UI mode needs
-    // those buffers.
+    // active-changed: on enter, flip the gates, re-seed Up Next so the column doesn't render an
+    // empty list, and seed the high-res cover if anything on screen draws from it. On exit, release
+    // the artwork LRU — nothing in full-UI mode needs those buffers.
     {
         let np_state = np_state.clone();
         let state = state.clone();
@@ -68,9 +66,7 @@ pub fn install(
         mini.on_active_changed(move |is_active| {
             np_state.mini_visible.set(is_active);
             if is_active {
-                // `square-changed` only fires on actual flips, so a window already
-                // square before entry would leave the mirror at its `false` init.
-                sync_mini_square(&weak, &np_state);
+                sync_mini_layout(&weak, &np_state);
                 np_state.kick_up_next();
                 if np_state.renders_artwork() {
                     np_state.kick_artwork();
@@ -86,15 +82,17 @@ pub fn install(
         });
     }
 
-    // square-changed: the square variant renders the high-res cover where the strip takes the row
+    // layout-changed: the card and the column draw the high-res cover where the strip takes the row
     // tier's thumb — so seed on the way in, and on the way out release only if the backdrop isn't
-    // still solving its colours off that same decode.
+    // still solving its colours off that same decode. The sheet is asked too, the column being the
+    // one layout with a slot for it: a crossing into it would otherwise mount an empty sheet until
+    // the next track, and one out of it hands the sheet back.
     {
         let np_state = np_state.clone();
         let state = state.clone();
         let np_artwork = np_artwork.clone();
-        mini.on_square_changed(move |is_square| {
-            np_state.mini_square.set(is_square);
+        mini.on_layout_changed(move |layout| {
+            np_state.mini_layout.set(layout);
             if !np_state.mini_visible.get() {
                 return;
             }
@@ -103,6 +101,7 @@ pub fn install(
             } else {
                 release_artwork_off_thread(&state, &np_artwork);
             }
+            np_state.kick_lyrics();
         });
     }
 

@@ -77,12 +77,35 @@ export global WindowChrome {
     callback recheck-system-theme();
 }
 
-// The compact player replacing the full UI once the window shrinks past a threshold, and the
-// `square` variant, the column with the large artwork, for a window tall enough to lay it out;
-// `MiniPlayerSwitch` owns both answers. **Entry and exit are resize-only.**
+// Which of the miniplayer's layouts is up. A state rather than a flag per layout, since they are
+// mutually exclusive and a pair of flags can spell a combination neither means.
+export enum MiniLayout {
+    // One row, the artwork a thumbnail beside the title and controls, the timeline under them. For
+    // a window too short for either of the others.
+    strip,
+    // The artwork at the window's height, the title, controls and timeline stacked beside it.
+    card,
+    // The artwork over the controls, and a panel under them once there is room.
+    column,
+}
+
+// The compact player replacing the full UI once the window shrinks past a threshold, and which of
+// its layouts is up. `MiniPlayerSwitch` owns both answers. **Entry and exit are resize-only.**
 export global MiniPlayer {
     in-out property <bool> active: false;
-    in-out property <bool> square: false;
+    in-out property <MiniLayout> layout: MiniLayout.strip;
+
+    // The window height at which the column has room for a panel under its controls. Here because
+    // the switch hands a window this tall to the column whatever the card would draw, and the view
+    // mounts the panel at the same edge.
+    out property <length> panel-height: 350px;
+
+    // The most the column's artwork draws in a window this wide: half of it, under a ceiling that
+    // leaves the panel its room. Here because the switch weighs it against the card's before the
+    // column exists.
+    public pure function column-art-cap(width: length) -> length {
+        return min(width * 0.5, 180px);
+    }
 
     // Whether the miniplayer paints the artwork backdrop and its solved ink instead of flat chrome.
     // **Not `Theme.aurora-backdrop`**, which decides which of the two stacks every colour tier is
@@ -92,7 +115,7 @@ export global MiniPlayer {
     in-out property <bool> backdrop-shown: false;
 
     callback active-changed(bool);
-    callback square-changed(bool);
+    callback layout-changed(MiniLayout);
     callback set-backdrop-shown(bool);
 }
 

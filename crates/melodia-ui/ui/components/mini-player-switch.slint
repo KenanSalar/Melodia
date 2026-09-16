@@ -1,11 +1,10 @@
 import { Nav, NavEnterFrom } from "../globals/nav.slint";
-import { MiniPlayer } from "../globals/shell.slint";
+import { MiniPlayer, MiniLayout } from "../globals/shell.slint";
 
 // The responsive full-UI ↔ miniplayer swap, as a non-visual state machine: both `Timer`s are
 // pseudo-elements, so it occupies no layout space and can be mounted anywhere. Compact when the
-// window is either narrow *or* short, and the `square` variant — the column with the large artwork,
-// the one that can show a panel — whenever the window is tall enough to lay that column out. The
-// host passes its size in, a component's root binding not reaching `parent`.
+// window is either narrow *or* short, and which of the miniplayer's layouts fits the window once it
+// is. The host passes its size in, a component's root binding not reaching `parent`.
 //
 // **The swap is two-phase on purpose**: `render-active` lags `active` by the fade, so only *one*
 // branch is ever mounted — overlapping them holds the sidebar's grid covers and the mini's up-next
@@ -43,23 +42,38 @@ export component MiniPlayerSwitch {
     out property <float> fade-opacity: 1.0;
     animate fade-opacity { duration: 100ms; easing: ease-in-out; }
 
-    // The shortest window the column variant is used in: its fixed rows, with the artwork left at
-    // the size its placeholder glyph still reads at. **Keyed on height alone, never on aspect**.
-    // The column's artwork is the one part that gives when the window does, so a wide window that
-    // is tall enough lays it out fine; an aspect rule sent every window a little wider than it was
-    // tall to the strip, which centres one short row in all that height.
+    // **The layout that draws the artwork largest, except that the column takes any window with room
+    // for its panel.** The artwork is what every layout gives up first when the window runs short,
+    // so it is the fair measure of which one a window suits: the card sets it beside the controls
+    // and so pays in width, the column sets it over them and pays in height. The strip draws a
+    // thumbnail and takes whatever is too short for the card.
     //
-    // Only where the swap lands, never whether anything fits: the column lets its artwork shrink to
-    // nothing before a row clips, so a locale setting taller text costs artwork, not controls.
-    private property <length> column-min-height: 232px;
+    // Both sizes are estimates of what the view lays out, and being off only moves where a swap
+    // lands: every layout shrinks its artwork before a row clips, so a locale setting taller text
+    // costs artwork, never a control.
+    //
+    // The column's fixed rows, gaps and padding, which is everything in it but the artwork.
+    private property <length> column-rows: 141px;
+    // The card's controls at their narrowest, with the padding and the gap beside its artwork.
+    private property <length> card-controls-width: 202px;
+    // The shortest window the card stacks its title, controls and timeline in with room to spare.
+    private property <length> card-min-height: 120px;
 
-    // Internal: nothing outside needs the variant, it only feeds the global.
-    private property <bool> square: root.host-height >= root.column-min-height;
+    private property <length> column-art:
+        min(root.host-height - root.column-rows, MiniPlayer.column-art-cap(root.host-width));
+    private property <length> card-art:
+        min(root.host-height, root.host-width - root.card-controls-width);
+
+    // Internal: nothing outside needs the layout, it only feeds the global.
+    private property <MiniLayout> layout:
+        root.host-height >= MiniPlayer.panel-height || root.column-art >= root.card-art
+            ? MiniLayout.column
+            : (root.host-height >= root.card-min-height ? MiniLayout.card : MiniLayout.strip);
 
     // Mirrored locally because a `changed` handler can't watch a global's property. It publishes to
     // the global so children see the new value, schedules fade-out → swap → fade-in, closes any
     // open Now Playing view so its artwork release runs, and notifies Rust for the up-next gate.
-    // **`MiniPlayer.square` is `watched-square`'s to own** — Rust re-reads it from the global on
+    // **`MiniPlayer.layout` is `watched-layout`'s to own** — Rust re-reads it from the global on
     // entry, so no redundant write belongs here.
     private property <bool> watched-active: root.active;
     changed watched-active => {
@@ -83,13 +97,14 @@ export component MiniPlayerSwitch {
         MiniPlayer.active-changed(root.watched-active);
     }
 
-    // **A variant change inside mini deliberately doesn't fade**: it is an in-place re-layout of
-    // the same component, and a flash on every aspect wobble through a drag would be jarring. The
-    // callback drives the high-res cover cache — seed on rectangle→square, release on the way back.
-    private property <bool> watched-square: root.square;
-    changed watched-square => {
-        MiniPlayer.square = root.watched-square;
-        MiniPlayer.square-changed(root.watched-square);
+    // **A layout change inside mini deliberately doesn't fade**: it is an in-place re-layout of the
+    // same component, and a flash at every threshold crossed through a drag would be jarring. The
+    // callback drives the high-res cover cache — seeded for the two layouts that draw it large,
+    // released on the way back to the strip.
+    private property <MiniLayout> watched-layout: root.layout;
+    changed watched-layout => {
+        MiniPlayer.layout = root.watched-layout;
+        MiniPlayer.layout-changed(root.watched-layout);
     }
 
     // The mount seed: `changed` doesn't fire when the first settle lands directly on the final
@@ -98,7 +113,7 @@ export component MiniPlayerSwitch {
         interval: 1ms;
         triggered => {
             MiniPlayer.active = root.active;
-            MiniPlayer.square = root.square;
+            MiniPlayer.layout = root.layout;
             root.render-active = root.active;
             MiniPlayer.active-changed(root.active);
             self.running = false;
