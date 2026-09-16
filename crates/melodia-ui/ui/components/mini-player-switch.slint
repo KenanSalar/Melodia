@@ -42,11 +42,11 @@ export component MiniPlayerSwitch {
     out property <float> fade-opacity: 1.0;
     animate fade-opacity { duration: 100ms; easing: ease-in-out; }
 
-    // **The column once its captions row fits above the artwork the card draws, the card below that,
-    // and the strip for a window too short for the card's title and controls.** The column is the
-    // card with that row above and a panel below. Crossing sooner shrinks the artwork on the way in.
-    // Crossing at the cap alone holds a narrow window's panel off long after there is room for it,
-    // its artwork stopping short of the cap where the controls take the width.
+    // **The column once the card's captions row is all the way open above its artwork, the card
+    // below that, and the strip for a window too short for the card's title and controls.** Past
+    // that height all that is left to grow is the panel, which only the column mounts. The artwork
+    // comes off the width as well as the cap: a narrow window's stops short of the cap, the controls
+    // taking the width, and keyed on the cap alone its panel held off long after there was room.
     //
     // All of these are estimates of what the view lays out, and being off only moves where a swap
     // lands: the artwork gives ground before a row clips.

@@ -46,12 +46,12 @@ component MiniIconButton inherits IconButton {
         : Theme.overlay0;
 }
 
-// Minimize, full player and close for the column's corner, in the style the Settings card picked.
-// **The middle one restores rather than maximizes**: a miniplayer is a window size, so the button
-// that grows the window hands back the full player at the geometry it last settled at.
+// Minimize, full player and close for the captions row's corner, in the style the Settings card
+// picked. **The middle one restores rather than maximizes**: a miniplayer is a window size, so the
+// button that grows the window hands back the full player at the geometry it last settled at.
 //
 // A layout rather than a `Rectangle`, so the `if`-mounted captions size it. Every caption takes the
-// column's 28 px top row rather than a titlebar's 32.
+// row's 28 px rather than a titlebar's 32.
 component MiniCaptions inherits HorizontalLayout {
     // The standard glyphs' ink, eased by the host with the rest of its surface. Hover and its fill
     // stay stepped, the caption easing those itself.
@@ -422,9 +422,12 @@ export component MiniPlayerView inherits Rectangle {
     // until a row fits.
     private property <length> panel-gap: Theme.pad-sm;
 
-    // The column's captions row with the gap under it. Spelled rather than measured: the row is
-    // behind an `if`, and the artwork's height budget has to leave room for it from outside.
+    // The captions row with the gap under it, all the way open. Spelled rather than measured: the
+    // row is behind an `if`, and opens by what the rows under it leave rather than by its content.
     private property <length> captions-height: 32px;
+    // How small the captions row's buttons get on their way out: enough to read as leaving, not
+    // enough to read as a second size.
+    private property <float> captions-exit-scale: 0.8;
 
     // **Two flags rather than one, because a fade needs both of its ends on screen.** A stack
     // mounted already painting has nothing to ease in from, and one that stops painting still has
@@ -634,14 +637,21 @@ export component MiniPlayerView inherits Rectangle {
     }
 
     // Card and column, **one mount that grows rather than two that swap**: the artwork beside the
-    // title and controls, the timeline under both, and in the column the window's captions above
-    // and a panel below. Crossing between the two mounts or unmounts those rows and remounts
-    // nothing else, and the switch crosses where the artwork has already stopped growing, so it
-    // keeps its size across the swap.
+    // title and controls, the timeline under both, the window's captions above and, in the column,
+    // a panel below.
     //
-    // **Centred in the card, top-aligned in the column.** The column's surplus is where its panel
-    // mounts, so the block holds still as the window grows rather than jumping up to make room.
+    // **Each part opens into the height the one before it leaves**: the artwork up to its size,
+    // then the captions row, then the panel. Nothing arrives or leaves with height of its own to
+    // claim, so the block never jumps, and it stays top-aligned for the same reason.
     if MiniPlayer.layout != MiniLayout.strip: stack := VerticalLayout {
+        // How far the captions row is open: what the artwork and the timeline leave, up to all of it.
+        property <length> captions-shown: clamp(root.height - 2 * root.edge-pad
+            - head.preferred-height - timeline-gap.preferred-height - timeline.preferred-height,
+            0px, root.captions-height);
+        property <float> captions-t: self.captions-shown / root.captions-height;
+        property <float> captions-scale:
+            root.captions-exit-scale + (1 - root.captions-exit-scale) * self.captions-t;
+
         // Any room for the list under the block. Measured off the block rather than a fixed
         // height, a narrow window's artwork stopping short of its cap and freeing the room that
         // much sooner.
@@ -651,65 +661,74 @@ export component MiniPlayerView inherits Rectangle {
         padding: root.edge-pad;
         spacing: 0;
 
-        if MiniPlayer.layout == MiniLayout.card: Rectangle { vertical-stretch: 1; }
-
         block := VerticalLayout {
             vertical-stretch: 0;
             spacing: 0;
 
-            // The window's captions in the corner, where every titlebar puts them, and the panel's
-            // switch opposite.
-            if MiniPlayer.layout == MiniLayout.column: HorizontalLayout {
-                min-height: root.captions-height;
-                max-height: root.captions-height;
-                spacing: 2px;
-                padding-left: 4px;
-                padding-right: 4px;
-                padding-bottom: Theme.pad-xs;
+            // The window's captions in the corner, where every titlebar puts them, and the lyrics
+            // switch opposite, fading and shrinking as the row closes. **Unmounted once shut**
+            // rather than left at nothing: an opacity under 1 draws the row into a texture, 0
+            // included.
+            if stack.captions-t > 0: Rectangle {
+                min-height: stack.captions-shown;
+                max-height: stack.captions-shown;
+                // The buttons shrink less than the row closes, and would otherwise draw over the
+                // artwork on their way out.
+                clip: true;
+                opacity: stack.captions-t;
 
-                // **Hidden rather than unmounted**: gone on a station, which has no track to look a
-                // sheet up for, and wherever no panel is mounted for it to swap. `shows-panel`
-                // measures this row, so a branch here would read its own height.
-                VerticalLayout {
-                    alignment: center;
-                    MiniIconButton {
-                        visible: stack.shows-panel && !Player.vm.has_station;
-                        icon: "lyrics";
-                        press-shrink: true;
-                        diameter: 28px;
-                        icon-size: 18px;
-                        active: Lyrics.enabled;
-                        filled: Lyrics.enabled;
-                        tooltip-text: Lyrics.enabled
-                            ? @tr("Show Up Next") : @tr("Show lyrics");
-                        tooltip-side: TooltipSide.right;
-                        // Both halves, the full view's switch and the visualizer picker's shape:
-                        // the property so the panel swaps on the press, the callback so it is
-                        // still swapped next launch.
-                        clicked => {
-                            Lyrics.enabled = !Lyrics.enabled;
-                            Lyrics.set-enabled(Lyrics.enabled);
+                HorizontalLayout {
+                    x: 0;
+                    y: (parent.height - Theme.pad-xs * stack.captions-t - self.height) / 2;
+                    width: parent.width;
+                    height: root.captions-height - Theme.pad-xs;
+                    spacing: 2px;
+                    padding-left: 4px;
+                    padding-right: 4px;
+
+                    // Gone on a station, which has no track to look a sheet up for.
+                    if !Player.vm.has_station: VerticalLayout {
+                        alignment: center;
+                        MiniIconButton {
+                            transform-scale: stack.captions-scale;
+                            icon: "lyrics";
+                            press-shrink: true;
+                            diameter: 28px;
+                            icon-size: 18px;
+                            active: Lyrics.enabled;
+                            filled: Lyrics.enabled;
+                            tooltip-text: Lyrics.enabled
+                                ? @tr("Show Up Next") : @tr("Show lyrics");
+                            tooltip-side: TooltipSide.right;
+                            // Both halves, the full view's switch and the visualizer picker's
+                            // shape: the property so the panel swaps on the press, the callback so
+                            // it is still swapped next launch.
+                            clicked => {
+                                Lyrics.enabled = !Lyrics.enabled;
+                                Lyrics.set-enabled(Lyrics.enabled);
+                            }
                         }
                     }
-                }
 
-                Rectangle { horizontal-stretch: 1; }
+                    Rectangle { horizontal-stretch: 1; }
 
-                MiniCaptions {
-                    ink: root.caption-ink;
-                    ink-lit: root.glyph-lit;
-                    hover-fill: root.glyph-hover-bg;
+                    MiniCaptions {
+                        transform-scale: stack.captions-scale;
+                        ink: root.caption-ink;
+                        ink-lit: root.glyph-lit;
+                        hover-fill: root.glyph-hover-bg;
+                    }
                 }
             }
 
-            HorizontalLayout {
+            head := HorizontalLayout {
                 vertical-stretch: 0;
                 spacing: Theme.pad-sm;
                 padding-left: Theme.pad-xs;
 
                 // **The block's only slack, which is what keeps every control on screen.** Sized
                 // to the smallest of the cap, the width the controls leave it and the height the
-                // other rows leave it, so the tile fills the slot and sits flush with the title.
+                // timeline leaves it, so the tile fills the slot and sits flush with the title.
                 // `MiniPlayerSwitch` hands a window too short even for the controls to the strip.
                 //
                 // **A plain `Rectangle` with the tile placed by `x` and `y`**, Now Playing's cover
@@ -720,8 +739,7 @@ export component MiniPlayerView inherits Rectangle {
                         root.width - 2 * root.edge-pad - Theme.pad-xs - Theme.pad-sm
                             - info.min-width,
                         root.height - 2 * root.edge-pad - timeline-gap.preferred-height
-                            - timeline.preferred-height
-                            - (MiniPlayer.layout == MiniLayout.column ? root.captions-height : 0px)));
+                            - timeline.preferred-height));
 
                     horizontal-stretch: 0;
                     vertical-stretch: 0;
