@@ -2235,3 +2235,12 @@ msgstr "Yayın ülkesi"
 
 msgid "Part of a compilation"
 msgstr "Bir derlemenin parçası"
+
+msgid "Show Up Next"
+msgstr "Sıradakileri göster"
+
+msgid "Album Backdrop: on"
+msgstr "Albüm arka planı: açık"
+
+msgid "Album Backdrop: off"
+msgstr "Albüm arka planı: kapalı"

@@ -119,6 +119,17 @@ pub fn set_aurora_backdrop(state: &AppState, on: bool) -> Result<(), AppError> {
     })
 }
 
+/// Persist the miniplayer's own backdrop switch. **Not restart-gated, where its neighbour above
+/// is**: that one decides which stack every colour tier is solved for, so a live flip would leave
+/// one surface painting the other's colours, where this only mounts or unmounts the stack that
+/// setting already chose. The seed is `boot::ui_setup`'s and the runtime effect is the Slint
+/// property the button writes before this fires.
+pub fn set_mini_backdrop(state: &AppState, on: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(&state.paths, move |s| {
+        s.backdrop.mini_backdrop = on;
+    })
+}
+
 /// Persist the user's pick for the custom titlebar's decoration button
 /// style (Standard vs macOS traffic lights). The runtime effect lives in
 /// `Theme.titlebar-button-style`, mirrored synchronously by the UI

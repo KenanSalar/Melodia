@@ -1,5 +1,6 @@
 import { Theme } from "../theme.slint";
 import { Player } from "../globals/player.slint";
+import { Lyrics } from "../globals/lyrics.slint";
 import { MiniPlayer, WindowChrome } from "../globals/shell.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { MetaChip } from "../components/meta-chip.slint";
@@ -9,6 +10,29 @@ import { VolumePopup } from "../components/now-playing/volume-popup.slint";
 import { VolumePopupHorizontal } from "../components/now-playing/volume-popup-horizontal.slint";
 import { PlayButton } from "../components/now-playing/play-button.slint";
 import { UpNextList } from "../components/now-playing/up-next-list.slint";
+import { LyricsPanel } from "../components/now-playing/lyrics-panel.slint";
+import { AuroraBackdrop } from "../components/aurora-backdrop.slint";
+import { HeroBlurBackdrop } from "../components/hero-blur-backdrop.slint";
+
+// The view's own button, so the tier is answered once rather than as four bindings on each of a
+// dozen `IconButton`s. Private to this file and reading the switch straight off the global: the
+// rule that a shared leaf takes its colours as inputs is there so one component can serve both
+// tiers, and this one has a single host.
+//
+// **The four arms below restate `MiniPlayerView`'s `ink` / `accent-pill` / `accent`, and that is
+// forced rather than sloppy** — a component cannot read a property off the host it is mounted in,
+// so the alternatives are these four lines or the same three threaded through every mount. Move
+// one and move the other: they are one answer to one flag, and nothing but this note connects them.
+component MiniIconButton inherits IconButton {
+    private property <bool> on-backdrop: MiniPlayer.backdrop-shown;
+
+    idle-fg: root.on-backdrop ? Player.np-on-backdrop : Theme.text;
+    hover-bg: root.on-backdrop ? Player.np-accent-pill : Theme.surface0;
+    active-fg: root.on-backdrop ? Player.np-accent-bright : Theme.accent;
+    disabled-fg: root.on-backdrop
+        ? Player.np-on-backdrop-muted.transparentize(0.55)
+        : Theme.overlay0;
+}
 
 // Compact miniplayer replacing the full UI once the window shrinks past the
 // responsive threshold. `MiniPlayer.active` (derived at the `AppWindow` root)
@@ -26,6 +50,47 @@ export component MiniPlayerView inherits Rectangle {
     // Doubles as resize-ring breathing room: the ring's TouchAreas sit above
     // this component, and the inset preserves their hit zones at all four edges.
     private property <length> edge-pad: 4px;
+
+    // Which stack the backdrop button paints, the same property Now Playing reads. *Whether* one
+    // is painted at all is `MiniPlayer.backdrop-shown`, and the two are deliberately separate
+    // questions: this one is the restart-gated setting deciding which tier every colour is solved
+    // for, that one is a live mount.
+    private property <bool> aurora-shown: Theme.aurora-backdrop;
+
+    // Every leaf that would otherwise read a `Theme.*` brush takes one of these instead. Answered
+    // once rather than per site: on the blur arm the floor is solved dark under a solved-light
+    // foreground, so a site left on the theme's ink vanishes on a light palette, and one site
+    // answering differently from its neighbour is invisible until someone switches theme.
+    // `MiniIconButton` above carries the only other copy, and says why it has to.
+    private property <bool> on-backdrop: MiniPlayer.backdrop-shown;
+    private property <brush> ink: root.on-backdrop ? Player.np-on-backdrop : Theme.text;
+    private property <brush> ink-muted: root.on-backdrop ? Player.np-on-backdrop-muted : Theme.subtext0;
+    private property <brush> accent: root.on-backdrop ? Player.np-accent-bright : Theme.accent;
+    private property <brush> accent-pill: root.on-backdrop ? Player.np-accent-pill : Theme.surface0;
+    // The artwork placeholder's fill, which is the accent at a wash rather than a surface colour,
+    // so it does not follow `accent-pill` off the backdrop.
+    private property <brush> tile-fill:
+        root.on-backdrop ? Player.np-accent-pill : Theme.accent.with-alpha(0.15);
+    // The live pill's fill, a shade heavier than the tile's so a chip on a busy wash keeps a shape.
+    private property <brush> chip-fill:
+        root.on-backdrop ? Player.np-chip-fill : Theme.accent.with-alpha(0.18);
+    // The seam mask is a stadium painted in whatever sits *behind* the slider, so it only works
+    // over a flat surface. A backdrop is washes over a gradient, or a blurred cover under a scrim,
+    // and no one colour matches either — a mask there is a flat blob that moves with the thumb.
+    // Transparent instead, which leaves the two bars meeting at their own rounded ends: the thumb
+    // covers that join at rest, and the expressive gap is worth less than the blob costs.
+    private property <brush> seam-mask: root.on-backdrop ? Colors.transparent : Theme.mantle;
+    private property <brush> track: root.on-backdrop ? Player.np-accent-pill : Theme.surface1;
+    // The play glyph, punched out of the disc above it. `ink-on` rather than the mantle the bar's
+    // copy uses: on the backdrop the disc is the solved accent, whose brightness is the cover's to
+    // decide, so the glyph has to be picked against it rather than against a surface.
+    private property <brush> disc-ink:
+        root.on-backdrop ? Theme.ink-on(Player.np-accent-bright) : Theme.mantle;
+
+    // Below this the column has no room for a couple of rows beside the artwork and the controls,
+    // so neither panel mounts and the button that swaps them has nothing to swap.
+    private property <bool> shows-panel: root.height >= 350px;
+
     // Shared by both variants — applies the seek-pending hold the way the bar's
     // slider does.
     private property <float> slider-frac:
@@ -34,6 +99,50 @@ export component MiniPlayerView inherits Rectangle {
                 ? clamp(Player.seek_pending_ms / Player.duration-ms, 0, 1)
                 : clamp(Player.position-ms / Player.duration-ms, 0, 1))
             : 0;
+
+    // **Mounted as a pair behind the setting's two branches**, the contract every backdrop site
+    // keeps: an arm behind the wrong branch reads perfectly and paints the other setting's
+    // backdrop. Unmounted rather than drained to transparent, unlike the hero bands, which have an
+    // idle state to fade to: `Brush::is_transparent()` answers false for every gradient whatever
+    // its stop alphas, so a hidden stack still fills the whole surface every frame, and this one
+    // is hidden for every install that leaves the button off.
+    //
+    // Safe to read `Player.np-*` here for the reason Now Playing does: entering the miniplayer
+    // force-closes `Nav.now-playing-open`, so the two readers of that tier are never on screen at
+    // once.
+    if MiniPlayer.backdrop-shown: Rectangle {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+
+        if !root.aurora-shown: HeroBlurBackdrop {
+            x: 0;
+            y: 0;
+            width: 100%;
+            height: 100%;
+            floor-start: Player.np-floor-start;
+            floor-end: Player.np-floor-end;
+            scrim: Player.np-scrim;
+            blur-a: Player.blur-img-a;
+            blur-b: Player.blur-img-b;
+            use-a: Player.blur-use-a;
+            has-blur: Player.blur-has-image;
+        }
+
+        if root.aurora-shown: AuroraBackdrop {
+            x: 0;
+            y: 0;
+            width: 100%;
+            height: 100%;
+            base-start: Player.np-floor-start;
+            base-end: Player.np-floor-end;
+            tint-1: Player.np-tint-1;
+            tint-2: Player.np-tint-2;
+            tint-3: Player.np-tint-3;
+            dither: Player.np-dither;
+        }
+    }
 
     // Window-move drag region. Mini hides the `CustomTitleBar`, so without this
     // the window can't be moved at all. It covers the whole area at z-bottom
@@ -72,6 +181,8 @@ export component MiniPlayerView inherits Rectangle {
                 alignment: center;
                 SourceArtwork {
                     tile-size: 48px;
+                    track-tile-bg: root.tile-fill;
+                    track-tile-icon-color: root.accent;
                 }
             }
 
@@ -83,14 +194,14 @@ export component MiniPlayerView inherits Rectangle {
                     spacing: 2px;
                     Text {
                         text: Player.source-title;
-                        color: Theme.text;
+                        color: root.ink;
                         font-size: Theme.font-size-sm;
                         font-weight: 500;
                         overflow: elide;
                     }
                     Text {
                         text: Player.source-subtitle;
-                        color: Theme.subtext0;
+                        color: root.ink-muted;
                         font-size: 11px;
                         overflow: elide;
                     }
@@ -104,7 +215,7 @@ export component MiniPlayerView inherits Rectangle {
 
                 VerticalLayout {
                     alignment: center;
-                    IconButton {
+                    MiniIconButton {
                         icon: "chevron_left";
                         press-shrink: true;
                         diameter: 28px;
@@ -121,12 +232,14 @@ export component MiniPlayerView inherits Rectangle {
                         icon-size: 16px;
                         is-playing: Player.vm.is_playing;
                         animation-mode: 0;
+                        disc-color: root.accent;
+                        icon-color: root.disc-ink;
                         clicked => { Player.play-pause(); }
                     }
                 }
                 VerticalLayout {
                     alignment: center;
-                    IconButton {
+                    MiniIconButton {
                         icon: "chevron_right";
                         press-shrink: true;
                         diameter: 28px;
@@ -153,11 +266,13 @@ export component MiniPlayerView inherits Rectangle {
                     VolumePopupHorizontal {
                         diameter: 28px;
                         icon-size: 18px;
+                        trigger-fg: root.ink;
+                        trigger-hover-bg: root.accent-pill;
                     }
                 }
                 if WindowChrome.always-on-top-supported: VerticalLayout {
                     alignment: center;
-                    IconButton {
+                    MiniIconButton {
                         icon: "push_pin";
                         press-shrink: true;
                         diameter: 28px;
@@ -167,6 +282,25 @@ export component MiniPlayerView inherits Rectangle {
                         tooltip-text: WindowChrome.always-on-top-active
                             ? @tr("Unpin from Top") : @tr("Pin on Top");
                         clicked => { WindowChrome.toggle-always-on-top(); }
+                    }
+                }
+                // Beside the pin, the rule both variants keep: this is a window-appearance control
+                // like it, not a track action.
+                VerticalLayout {
+                    alignment: center;
+                    MiniIconButton {
+                        icon: "tonality";
+                        press-shrink: true;
+                        diameter: 28px;
+                        icon-size: 18px;
+                        active: MiniPlayer.backdrop-shown;
+                        filled: MiniPlayer.backdrop-shown;
+                        tooltip-text: MiniPlayer.backdrop-shown
+                            ? @tr("Album Backdrop: on") : @tr("Album Backdrop: off");
+                        clicked => {
+                            MiniPlayer.backdrop-shown = !MiniPlayer.backdrop-shown;
+                            MiniPlayer.set-backdrop-shown(MiniPlayer.backdrop-shown);
+                        }
                     }
                 }
             }
@@ -181,7 +315,9 @@ export component MiniPlayerView inherits Rectangle {
             vertical-stretch: 0;
             value: root.slider-frac;
             is-disabled: !Player.vm.has_track || Player.duration-ms <= 0;
-            seam-mask-color: Theme.mantle;
+            seam-mask-color: root.seam-mask;
+            fill-color: root.accent;
+            track-color: root.track;
             committed(v) => {
                 if (Player.duration-ms > 0) {
                     Player.seek-to(round(v * Player.duration-ms));
@@ -195,8 +331,8 @@ export component MiniPlayerView inherits Rectangle {
             alignment: center;
             MetaChip {
                 text: Player.live-label;
-                fill: Theme.accent.with-alpha(0.18);
-                label-color: Theme.accent;
+                fill: root.chip-fill;
+                label-color: root.accent;
             }
         }
     }
@@ -220,7 +356,7 @@ export component MiniPlayerView inherits Rectangle {
             HorizontalLayout {
                 horizontal-stretch: 0;
                 alignment: start;
-                if WindowChrome.always-on-top-supported: IconButton {
+                if WindowChrome.always-on-top-supported: MiniIconButton {
                     icon: "push_pin";
                     press-shrink: true;
                     diameter: 28px;
@@ -231,6 +367,22 @@ export component MiniPlayerView inherits Rectangle {
                         ? @tr("Unpin from Top") : @tr("Pin on Top");
                     clicked => { WindowChrome.toggle-always-on-top(); }
                 }
+                // Beside the pin rather than beside the heart: this row splits chrome left from
+                // track actions right, and painting the window is the pin's kind of question.
+                MiniIconButton {
+                    icon: "tonality";
+                    press-shrink: true;
+                    diameter: 28px;
+                    icon-size: 18px;
+                    active: MiniPlayer.backdrop-shown;
+                    filled: MiniPlayer.backdrop-shown;
+                    tooltip-text: MiniPlayer.backdrop-shown
+                        ? @tr("Album Backdrop: on") : @tr("Album Backdrop: off");
+                    clicked => {
+                        MiniPlayer.backdrop-shown = !MiniPlayer.backdrop-shown;
+                        MiniPlayer.set-backdrop-shown(MiniPlayer.backdrop-shown);
+                    }
+                }
             }
 
             Rectangle { horizontal-stretch: 1; }
@@ -238,7 +390,7 @@ export component MiniPlayerView inherits Rectangle {
             HorizontalLayout {
                 horizontal-stretch: 0;
                 alignment: end;
-                IconButton {
+                MiniIconButton {
                     icon: Player.vm.track.is_favorite ? "favorite" : "favorite_border";
                     press-shrink: true;
                     diameter: 28px;
@@ -266,9 +418,10 @@ export component MiniPlayerView inherits Rectangle {
                 alignment: center;
                 SourceArtwork {
                     tile-size: clamp(root.width * 0.5, 90px, 180px);
-                    // The only binding this site overrides: everything else about the tile is
-                    // the shared track-or-station split. A station's large slot is its own,
-                    // `np-cover-*` being the track cross-fade.
+                    track-tile-bg: root.tile-fill;
+                    track-tile-icon-color: root.accent;
+                    // Everything else about the tile is the shared track-or-station split. A
+                    // station's large slot is its own, `np-cover-*` being the track cross-fade.
                     cover: Player.vm.has_station
                         ? (Player.np-station-logo.width > 0
                             ? Player.np-station-logo
@@ -289,7 +442,7 @@ export component MiniPlayerView inherits Rectangle {
             spacing: 2px;
             Text {
                 text: Player.source-title;
-                color: Theme.text;
+                color: root.ink;
                 font-size: Theme.font-size-md;
                 font-weight: 500;
                 horizontal-alignment: center;
@@ -297,7 +450,7 @@ export component MiniPlayerView inherits Rectangle {
             }
             Text {
                 text: Player.source-subtitle;
-                color: Theme.subtext0;
+                color: root.ink-muted;
                 font-size: 11px;
                 horizontal-alignment: center;
                 overflow: elide;
@@ -317,9 +470,33 @@ export component MiniPlayerView inherits Rectangle {
                 spacing: Theme.pad-xs;
                 min-width: trailing-wing.preferred-width;
 
+                // **Gone rather than disabled on a station**, as the full view's lyrics pill is:
+                // a stream has no track to look a sheet up for. Gone below the panel threshold
+                // too, there being nothing on screen for it to swap. Either way the wing's
+                // borrowed `min-width` above is what keeps Play on the column's axis.
+                if root.shows-panel && !Player.vm.has_station: VerticalLayout {
+                    alignment: center;
+                    MiniIconButton {
+                        icon: "lyrics";
+                        press-shrink: true;
+                        diameter: 32px;
+                        icon-size: 20px;
+                        active: Lyrics.enabled;
+                        filled: Lyrics.enabled;
+                        tooltip-text: Lyrics.enabled
+                            ? @tr("Show Up Next") : @tr("Show lyrics");
+                        // Both halves, the full view's switch and the visualizer picker's shape:
+                        // the property so the panel swaps on the press, the callback so it is
+                        // still swapped next launch.
+                        clicked => {
+                            Lyrics.enabled = !Lyrics.enabled;
+                            Lyrics.set-enabled(Lyrics.enabled);
+                        }
+                    }
+                }
                 VerticalLayout {
                     alignment: center;
-                    IconButton {
+                    MiniIconButton {
                         icon: "shuffle";
                         press-shrink: true;
                         diameter: 32px;
@@ -332,7 +509,7 @@ export component MiniPlayerView inherits Rectangle {
                 }
                 VerticalLayout {
                     alignment: center;
-                    IconButton {
+                    MiniIconButton {
                         icon: "chevron_left";
                         press-shrink: true;
                         diameter: 32px;
@@ -350,6 +527,8 @@ export component MiniPlayerView inherits Rectangle {
                     icon-size: 18px;
                     is-playing: Player.vm.is_playing;
                     animation-mode: 0;
+                    disc-color: root.accent;
+                    icon-color: root.disc-ink;
                     clicked => { Player.play-pause(); }
                 }
             }
@@ -359,7 +538,7 @@ export component MiniPlayerView inherits Rectangle {
 
                 VerticalLayout {
                     alignment: center;
-                    IconButton {
+                    MiniIconButton {
                         icon: "chevron_right";
                         press-shrink: true;
                         diameter: 32px;
@@ -371,7 +550,7 @@ export component MiniPlayerView inherits Rectangle {
                 }
                 VerticalLayout {
                     alignment: center;
-                    IconButton {
+                    MiniIconButton {
                         icon: Player.queue.repeat_mode == "one" ? "repeat_one" : "repeat";
                         press-shrink: true;
                         diameter: 32px;
@@ -390,6 +569,8 @@ export component MiniPlayerView inherits Rectangle {
                     VolumePopup {
                         diameter: 32px;
                         icon-size: 20px;
+                        trigger-fg: root.ink;
+                        trigger-hover-bg: root.accent-pill;
                     }
                 }
             }
@@ -401,7 +582,9 @@ export component MiniPlayerView inherits Rectangle {
             vertical-stretch: 0;
             value: root.slider-frac;
             is-disabled: !Player.vm.has_track || Player.duration-ms <= 0;
-            seam-mask-color: Theme.mantle;
+            seam-mask-color: root.seam-mask;
+            fill-color: root.accent;
+            track-color: root.track;
             committed(v) => {
                 if (Player.duration-ms > 0) {
                     Player.seek-to(round(v * Player.duration-ms));
@@ -413,20 +596,31 @@ export component MiniPlayerView inherits Rectangle {
             alignment: center;
             MetaChip {
                 text: Player.live-label;
-                fill: Theme.accent.with-alpha(0.18);
-                label-color: Theme.accent;
+                fill: root.chip-fill;
+                label-color: root.accent;
             }
         }
 
-        // Only mounted when the window is tall enough for a couple of rows
-        // beside the artwork and controls. Shares `UpNextList` with the
-        // full-screen view, and `up_next.rs` keeps its rows fed while mini is up.
-        if root.height >= 350px: VerticalLayout {
+        // Only mounted when the window is tall enough for a couple of rows beside the artwork and
+        // controls. Both arms are shared with the full-screen view, and `up_next.rs` keeps the
+        // list's rows fed while mini is up.
+        //
+        // **Two arms rather than three**: a station keeps Up Next here, where the full view swaps
+        // in a panel describing the stream. There is no room for that panel under a 180 px tile,
+        // and the queue underneath a station is still what the controls above act on.
+        if root.shows-panel: VerticalLayout {
             vertical-stretch: 1;
             padding-top: Theme.pad-xs;
-            UpNextList {
+
+            if !Player.vm.has_station && Lyrics.enabled: LyricsPanel {
                 vertical-stretch: 1;
                 compact: true;
+                on-backdrop: root.on-backdrop;
+            }
+            if Player.vm.has_station || !Lyrics.enabled: UpNextList {
+                vertical-stretch: 1;
+                compact: true;
+                on-backdrop: root.on-backdrop;
             }
         }
     }

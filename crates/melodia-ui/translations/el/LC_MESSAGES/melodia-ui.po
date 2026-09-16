@@ -2231,3 +2231,12 @@ msgstr "Χώρα κυκλοφορίας"
 
 msgid "Part of a compilation"
 msgstr "Μέρος συλλογής"
+
+msgid "Show Up Next"
+msgstr "Εμφάνιση επόμενων"
+
+msgid "Album Backdrop: on"
+msgstr "Φόντο άλμπουμ: ενεργό"
+
+msgid "Album Backdrop: off"
+msgstr "Φόντο άλμπουμ: ανενεργό"

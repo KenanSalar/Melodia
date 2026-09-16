@@ -9,6 +9,11 @@ export component SliderTrack inherits Rectangle {
     in property <float> value;          // bound source-of-truth (0..1)
     in property <bool>  is-disabled: false;
     in property <brush> seam-mask-color: Theme.mantle;
+    // The filled bar, the thumb and the max-end dot, which are one colour. Taken as inputs for the
+    // seam mask's reason one line up: a host painting on an artwork backdrop has a solved accent of
+    // its own, and the theme's would be the only foreign colour on that surface.
+    in property <brush> fill-color: Theme.accent;
+    in property <brush> track-color: Theme.surface1;
     // Volume's max-end dot, mirroring the vertical popup's top-end one.
     in property <bool>  show-max-stop: false;
 
@@ -72,7 +77,7 @@ export component SliderTrack inherits Rectangle {
         width: root.active-w;
         height: root.track-h;
         border-radius: root.track-h / 2;
-        background: root.is-disabled ? Theme.overlay0 : Theme.accent;
+        background: root.is-disabled ? Theme.overlay0 : root.fill-color;
     }
 
     Rectangle {
@@ -81,7 +86,7 @@ export component SliderTrack inherits Rectangle {
         width: root.inactive-w;
         height: root.track-h;
         border-radius: root.track-h / 2;
-        background: Theme.surface1;
+        background: root.track-color;
     }
 
     // Never faded — the mask paints after it, so the dot simply disappears
@@ -92,7 +97,7 @@ export component SliderTrack inherits Rectangle {
         width: root.stop-d;
         height: root.stop-d;
         border-radius: self.width / 2;
-        background: root.is-disabled ? Theme.overlay0 : Theme.accent;
+        background: root.is-disabled ? Theme.overlay0 : root.fill-color;
     }
 
     // Parent-background stadium hiding the bar seam — after the bars, before
@@ -113,7 +118,7 @@ export component SliderTrack inherits Rectangle {
         width: root.thumb-w;
         height: root.thumb-h;
         border-radius: self.width / 2;
-        background: root.is-disabled ? Theme.overlay0 : Theme.accent;
+        background: root.is-disabled ? Theme.overlay0 : root.fill-color;
         // Snapped, not eased: easing a binding off the position ticks phase-lags
         // the source, and repaints the thumb plus everything it overlaps for the
         // length of the curve, once per tick.

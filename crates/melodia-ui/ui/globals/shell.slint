@@ -82,8 +82,17 @@ export global WindowChrome {
 export global MiniPlayer {
     in-out property <bool> active: false;
     in-out property <bool> square: false;
+
+    // Whether the miniplayer paints the artwork backdrop and its solved ink instead of flat chrome.
+    // **Not `Theme.aurora-backdrop`**, which decides which of the two stacks every colour tier is
+    // solved for and is restart-gated for exactly that reason; this only says whether this surface
+    // mounts the one already chosen, which is why it can move on a click. Off by default, so an
+    // install that never presses the button keeps the look it has.
+    in-out property <bool> backdrop-shown: false;
+
     callback active-changed(bool);
     callback square-changed(bool);
+    callback set-backdrop-shown(bool);
 }
 
 // Bridges the winit `MouseWheel` filter to whichever *composite* view is mounted — Artist Detail

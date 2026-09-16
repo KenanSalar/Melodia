@@ -1,9 +1,14 @@
-//! Wires the `MiniPlayer` global's `active-changed` and `square-changed` to the Up Next
-//! subscriber's visibility gate and the square variant's artwork-cache lifecycle.
+//! Wires the `MiniPlayer` global to the Up Next subscriber's visibility gate, the artwork cache's
+//! lifecycle and the backdrop switch's persistence.
 //!
 //! **Resize-only trigger.** The miniplayer engages purely on the window being shrunk
 //! past the threshold `app-window.slint` derives; there is no entry or exit button
-//! anywhere, and the user grows the window again to leave.
+//! anywhere, and the user grows the window again to leave. The backdrop switch is the one thing
+//! here a button does move, and it is a repaint rather than a mode.
+//!
+//! **Every arm below is the same two steps**: move the mirror `NowPlayingState` keeps, then seed
+//! or release against what that changes [`NowPlayingState::renders_artwork`] to. Which surface the
+//! answer came from is exactly what the callers must not have to know.
 //!
 //! Sibling to `window_chrome` rather than under it: that module owns OS-frame concerns —
 //! the titlebar, the drag region, the restart flow — where this is a responsive *layout*
@@ -52,9 +57,9 @@ pub fn install(
     let mini = app.global::<MiniPlayer>();
 
     // active-changed: on enter, flip the gates, re-seed Up Next so the square variant
-    // doesn't render an empty list, and seed the high-res cover if the entry is
-    // directly into square. On exit, release the artwork LRU — nothing in full-UI mode
-    // needs those buffers.
+    // doesn't render an empty list, and seed the high-res cover if anything on screen
+    // draws from it. On exit, release the artwork LRU — nothing in full-UI mode needs
+    // those buffers.
     {
         let np_state = np_state.clone();
         let state = state.clone();
@@ -67,18 +72,23 @@ pub fn install(
                 // square before entry would leave the mirror at its `false` init.
                 sync_mini_square(&weak, &np_state);
                 np_state.kick_up_next();
-                if np_state.mini_square.get() {
+                if np_state.renders_artwork() {
                     np_state.kick_artwork();
                 }
+                // **Beside the artwork kick rather than inside its guard.** Entering force-closes
+                // Now Playing, and whether that close ran before or after this arm decides whether
+                // the sheet is still there; asking for it either way costs nothing, `reseed`
+                // deduping on the claim it already holds.
+                np_state.kick_lyrics();
             } else {
                 release_artwork_off_thread(&state, &np_artwork);
             }
         });
     }
 
-    // square-changed: only the square variant renders the high-res cover, the rectangle
-    // one taking the row tier's thumb — so seed on the way in, release on the way out
-    // rather than leaving the large buffers behind a small tile.
+    // square-changed: the square variant renders the high-res cover where the strip takes the row
+    // tier's thumb — so seed on the way in, and on the way out release only if the backdrop isn't
+    // still solving its colours off that same decode.
     {
         let np_state = np_state.clone();
         let state = state.clone();
@@ -88,11 +98,34 @@ pub fn install(
             if !np_state.mini_visible.get() {
                 return;
             }
-            if is_square {
+            if np_state.renders_artwork() {
                 np_state.kick_artwork();
             } else {
                 release_artwork_off_thread(&state, &np_artwork);
             }
+        });
+    }
+
+    // set-backdrop-shown: the button has already written the property, so this moves the mirror
+    // and answers what that changed. **The strip is why there is anything to do here**: it mounts
+    // the backdrop without mounting the large tile, so switching one on is the only thing that
+    // makes that variant need the decode at all.
+    {
+        let np_state = np_state.clone();
+        let state = state.clone();
+        let np_artwork = np_artwork.clone();
+        mini.on_set_backdrop_shown(move |on| {
+            np_state.mini_backdrop.set(on);
+            if np_state.mini_visible.get() {
+                if np_state.renders_artwork() {
+                    np_state.kick_artwork();
+                } else {
+                    release_artwork_off_thread(&state, &np_artwork);
+                }
+            }
+            state.persist_blocking("mini backdrop", move |s| {
+                melodia_app::library::window::set_mini_backdrop(s, on)
+            });
         });
     }
 

@@ -85,11 +85,10 @@ pub(super) fn spawn_source_change_subscriber(
                 player.set_np_station_logo(Image::default());
                 player.set_np_station_logo_size(0);
             }
-            // The decode, blur and metadata read only produce something on screen while
-            // a surface renders them — the full view, or the square miniplayer, whose
-            // artwork reads the same dual slot. Otherwise `wire_now_playing_open` or
-            // `kick_artwork` seeds on the next open.
-            if np_state.open.get() || (np_state.mini_visible.get() && np_state.mini_square.get()) {
+            // The decode, blur and metadata read only produce something on screen while a surface
+            // renders them. Otherwise `wire_now_playing_open` or `kick_artwork` seeds on the next
+            // open.
+            if np_state.renders_artwork() {
                 apply_source_change(&weak, &state, &np_artwork, &np_state, new_source, true).await;
             }
         }

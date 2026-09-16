@@ -2226,3 +2226,12 @@ msgstr "Paese di pubblicazione"
 
 msgid "Part of a compilation"
 msgstr "Parte di una compilation"
+
+msgid "Show Up Next"
+msgstr "Mostra in coda"
+
+msgid "Album Backdrop: on"
+msgstr "Sfondo dell'album: attivato"
+
+msgid "Album Backdrop: off"
+msgstr "Sfondo dell'album: disattivato"

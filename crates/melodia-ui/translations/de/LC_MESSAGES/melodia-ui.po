@@ -2233,3 +2233,12 @@ msgstr "Veröffentlichungsland"
 
 msgid "Part of a compilation"
 msgstr "Teil einer Kompilation"
+
+msgid "Show Up Next"
+msgstr "Als Nächstes anzeigen"
+
+msgid "Album Backdrop: on"
+msgstr "Album-Hintergrund: An"
+
+msgid "Album Backdrop: off"
+msgstr "Album-Hintergrund: Aus"

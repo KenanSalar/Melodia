@@ -162,10 +162,17 @@ pub struct BackdropFlags {
     /// On, and `theme.slint` declares the same value so a failed settings read lands on the
     /// shipped look.
     pub aurora_backdrop: bool,
+    /// Whether the miniplayer paints that backdrop too, instead of flat chrome.
+    ///
+    /// **A different question from the one above, which is why it is not restart-gated.** That one
+    /// picks which of the two stacks every colour tier is solved for and so what the artwork tiers
+    /// build per decode; this only says whether one more surface mounts the stack already chosen.
+    /// Off, so an install that never presses the button keeps the miniplayer it has.
+    pub mini_backdrop: bool,
 }
 
 impl Default for BackdropFlags {
     fn default() -> Self {
-        Self { aurora_backdrop: true }
+        Self { aurora_backdrop: true, mini_backdrop: false }
     }
 }

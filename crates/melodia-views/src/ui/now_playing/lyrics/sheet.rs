@@ -52,11 +52,12 @@ fn reseed(weak: &Weak<AppWindow>, state: &AppState, np_state: &Rc<NowPlayingStat
     let ly = &np_state.lyrics;
 
     let track = np_state.current_source.borrow().as_ref().and_then(|s| s.track.clone());
-    // **Both terms, and `open` is the one that is not obvious.** The switch is the persisted
+    // **Both terms, and the mount is the one that is not obvious.** The switch is the persisted
     // setting rather than "the panel is mounted", so on its own it answers `true` for a closed
-    // view, and the square miniplayer keeps the source-change path running behind one. That would
-    // spend a request per track on a panel nobody can see.
-    let wanted = np_state.open.get() && library::lyrics::is_enabled(state);
+    // view behind which the source-change path is still running. That would spend a request per
+    // track on a panel nobody can see. Two surfaces mount one, the full view and the square
+    // miniplayer; the strip has no slot for it whatever it is painted on.
+    let wanted = np_state.renders_panel() && library::lyrics::is_enabled(state);
     let Some(track) = track.filter(|_| wanted) else {
         // Closed, switched off, or a station, which has no words to look up. Either way the
         // previous song's sheet must not sit under it.

@@ -8,11 +8,13 @@ use melodia_testkit::{MIN_SLINT_SOURCES, UI_DIR, stripped_sources};
 /// The two stacks, by the name a host mounts them under.
 const STACKS: [&str; 2] = ["HeroBlurBackdrop", "AuroraBackdrop"];
 
-/// The files that choose between them, and the only ones allowed to mount either. Two, not three:
+/// The files that choose between them, and the only ones allowed to mount either. Three, not five:
 /// the two shared bands mount `HeroBackdropStack`, which owns the pair on their behalf. Now Playing
-/// stays here because it reads `Player.np-*` rather than the `HeroBackdrop` tier the wrapper is
-/// bound to — that split is the whole reason the stacks take their colours as inputs.
-const SITES: [&str; 2] = ["views/now-playing-view.slint", WRAPPER];
+/// and the miniplayer are here because they read `Player.np-*` rather than the `HeroBackdrop` tier
+/// the wrapper is bound to — that split is the whole reason the stacks take their colours as
+/// inputs. Those two are never on screen together, entering the miniplayer force-closing Now
+/// Playing, which is what lets one tier have two readers.
+const SITES: [&str; 3] = ["views/now-playing-view.slint", "views/mini-player.slint", WRAPPER];
 
 /// The tier-bound site, spelled apart from its sibling because one pin below is about this file
 /// alone — Now Playing is mounted directly and has no host gate to forward.

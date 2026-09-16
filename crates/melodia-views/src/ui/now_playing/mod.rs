@@ -34,7 +34,7 @@ use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::track::TrackSummary;
 use melodia_engine::player::engine::now_playing::SourceId;
 use melodia_engine::player::engine::state::{PlayerViewModelLight, QueueViewModel, lock_state};
-use melodia_ui::{AppWindow, Nav, NowPlaying, Player, QueueRow};
+use melodia_ui::{AppWindow, MiniPlayer, Nav, NowPlaying, Player, QueueRow};
 
 use async_compat::Compat;
 
@@ -120,11 +120,13 @@ pub struct NowPlayingState {
     /// Up Next, but the broader flag keeps the gate simple and the wasted
     /// horizontal-variant rebuild is a handful of rows.
     pub(crate) mini_visible: Cell<bool>,
-    /// Mirrors `MiniPlayer.square`, the variant with the large artwork tile. The
-    /// source-change subscriber gates its high-res decode on
-    /// `open || (mini_visible && mini_square)`, so the rectangle variant — served from the
-    /// row tier — doesn't pay for a decode it can't display.
+    /// Mirrors `MiniPlayer.square`, the variant with the large artwork tile and the only one
+    /// that mounts a panel. See [`Self::renders_artwork`] and [`Self::renders_panel`].
     pub(crate) mini_square: Cell<bool>,
+    /// Mirrors `MiniPlayer.backdrop-shown`. Either variant paints the artwork backdrop under it,
+    /// and the backdrop is solved from the same decode the large tile is, so the strip needs that
+    /// decode while this is on even though its own tile comes off the row tier.
+    pub(crate) mini_backdrop: Cell<bool>,
     /// Latest queue snapshot, kept whether or not the view is open so opening it can
     /// rebuild Up Next immediately.
     pub(super) latest_qvm: RefCell<Option<QueueViewModel>>,
@@ -186,6 +188,31 @@ impl NowPlayingState {
             seeder();
         }
     }
+
+    /// Ask the lyrics sheet to catch up with the current track, for a surface that has just been
+    /// mounted. A no-op before [`install`] returns, and idempotent: `reseed` dedupes on the claim
+    /// it already holds. The third of these wrappers, and here for their reason — the seeder
+    /// itself is this module's, where the miniplayer's wiring is a sibling of it.
+    pub(crate) fn kick_lyrics(&self) {
+        self.lyrics.kick();
+    }
+
+    /// Whether anything draws what the source-change subscriber produces: the cover, the chips and
+    /// the solved colour tiers. The full view, the square miniplayer, or either miniplayer variant
+    /// painting the artwork backdrop, whose colours come off that same decode.
+    pub(crate) fn renders_artwork(&self) -> bool {
+        self.open.get()
+            || (self.mini_visible.get() && (self.mini_square.get() || self.mini_backdrop.get()))
+    }
+
+    /// Whether anything mounts the now-playing column's panels, Up Next and the lyrics sheet.
+    ///
+    /// **Deliberately narrower than [`Self::renders_artwork`].** Only the square variant has a slot
+    /// for either; the strip has none whatever it is painted on, so a sheet resolved for it would
+    /// spend a request per track on something nobody can see.
+    pub(crate) fn renders_panel(&self) -> bool {
+        self.open.get() || (self.mini_visible.get() && self.mini_square.get())
+    }
 }
 
 /// Install the Now Playing view's models + subscribers. Runs on the Slint
@@ -226,6 +253,11 @@ pub fn install(
         open: Cell::new(ui.global::<Nav>().get_now_playing_open()),
         mini_visible: Cell::new(false),
         mini_square: Cell::new(false),
+        // Off the global rather than off `settings.json`: `hydrate_ui_from_settings` has already
+        // seeded it and runs well before this, so a second read would answer the same question
+        // twice. The two miniplayer mirrors beside it start `false` because the switch writes
+        // both on entry.
+        mini_backdrop: Cell::new(ui.global::<MiniPlayer>().get_backdrop_shown()),
         latest_qvm: RefCell::new(None),
         rendered_ids: RefCell::new(Vec::new()),
         last_current_id: Cell::new(current_track_id(&qvm)),

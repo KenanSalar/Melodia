@@ -18,6 +18,10 @@ import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 export component VolumePopupHorizontal inherits Rectangle {
     in property <length> diameter: 36px;
     in property <length> icon-size: 22px;
+    // The trigger's ink only, its vertical sibling's argument: the flyout floats on `Theme.crust`
+    // and is not part of the surface behind the button.
+    in property <brush> trigger-fg: Theme.text;
+    in property <brush> trigger-hover-bg: Theme.surface0;
 
     width: btn.width;
     height: btn.height;
@@ -56,6 +60,8 @@ export component VolumePopupHorizontal inherits Rectangle {
         diameter: root.diameter;
         icon-size: root.icon-size;
         filled: true;
+        idle-fg: root.trigger-fg;
+        hover-bg: root.trigger-hover-bg;
         tooltip-text: round(Player.vm.volume) + "%";
         force-tooltip: root.tooltip-ticks-remaining > 0;
         force-bg: PopupHighlight.id == "volume";

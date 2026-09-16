@@ -14,6 +14,11 @@ import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 export component VolumePopup inherits Rectangle {
     in property <length> diameter: 36px;
     in property <length> icon-size: 22px;
+    // The trigger's ink only. **The popup keeps the theme palette whatever a host passes**: it is
+    // a `PopupSurface` floating on `Theme.crust`, not part of the surface behind the button, so a
+    // solved tier there would be the one chrome on screen tinted by a record.
+    in property <brush> trigger-fg: Theme.text;
+    in property <brush> trigger-hover-bg: Theme.surface0;
 
     width: btn.width;
     height: btn.height;
@@ -54,6 +59,8 @@ export component VolumePopup inherits Rectangle {
         diameter: root.diameter;
         icon-size: root.icon-size;
         filled: true;
+        idle-fg: root.trigger-fg;
+        hover-bg: root.trigger-hover-bg;
         tooltip-text: round(Player.vm.volume) + "%";
         force-tooltip: root.tooltip-ticks-remaining > 0;
         // Keeps the disc highlighted while the popup is open; the catcher below and the

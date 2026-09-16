@@ -14,6 +14,14 @@ import { ArtworkImage } from "../artwork-image.slint";
 // mounts this is 46, so a source can never be small enough for `ArtworkImage`'s inset arm to fire.
 // The full view's tile is where that question is real, and it asks it itself.
 export component SourceArtwork inherits ArtworkImage {
+    // The **track** placeholder's two colours, as inputs so a host painting on an artwork backdrop
+    // can hand over the accent solved against the cover. The station arm below stays the
+    // component's own either way: those colours belong to the station, not to the surface it is
+    // drawn on. Defaults restate `ArtworkImage`'s, a ternary having to answer both sides; they are
+    // the shared tile's, so change them there first.
+    in property <brush> track-tile-bg: Theme.accent.with-alpha(0.15);
+    in property <brush> track-tile-icon-color: Theme.accent;
+
     artwork-path: Player.vm.has_station
         ? Player.vm.radio.artwork_path
         : Player.vm.track.artwork_path;
@@ -21,10 +29,8 @@ export component SourceArtwork inherits ArtworkImage {
     fallback-text: Player.vm.has_station ? Player.vm.radio.monogram : "";
     // Still the last resort for a station, for a name with no letters to take initials from.
     fallback-icon: Player.vm.has_station ? "radio" : "music-note";
-    // The two track arms restate `ArtworkImage`'s own defaults, a ternary having to answer both
-    // sides; they are the shared tile's, not this component's, so change them there first.
     tile-bg: Player.vm.has_station
         ? @linear-gradient(135deg, Player.vm.radio.tile_color_1, Player.vm.radio.tile_color_2)
-        : Theme.accent.with-alpha(0.15);
-    tile-icon-color: Player.vm.has_station ? Theme.tile-ink : Theme.accent;
+        : root.track-tile-bg;
+    tile-icon-color: Player.vm.has_station ? Theme.tile-ink : root.track-tile-icon-color;
 }
