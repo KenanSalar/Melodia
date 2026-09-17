@@ -21,6 +21,10 @@ export component PlayButton inherits Rectangle {
     // overrides it with its own background expression, which is what carries
     // the KDE unfocused tint through.
     in property <brush>  icon-color: Theme.mantle;
+    // The disc itself. Its own input for `icon-color`'s reason: on an artwork backdrop the
+    // accent is solved against what the cover measured, and the theme's would be the one
+    // colour on that surface the record had no say in.
+    in property <brush>  disc-color: Theme.accent;
     callback clicked();
 
     width: wrapper-d;
@@ -68,7 +72,7 @@ export component PlayButton inherits Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         border-radius: self.width / 2;
-        background: Theme.accent;
+        background: root.disc-color;
         animate width, height {
             duration: pp-touch.pressed ? 100ms : Theme.dur-med;
             easing: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -150,6 +154,7 @@ export component PlayButton inherits Rectangle {
         text: root.is-playing ? @tr("Pause") : @tr("Play");
         hovered: pp-touch.has-hover;
         host-width: parent.width;
+        host-height: parent.height;
     }
 
     pp-touch := TouchArea {

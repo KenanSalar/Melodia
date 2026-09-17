@@ -14,6 +14,16 @@ import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 export component VolumePopup inherits Rectangle {
     in property <length> diameter: 36px;
     in property <length> icon-size: 22px;
+    // The trigger's ink only. **The popup keeps the theme palette whatever a host passes**: it is
+    // a `PopupSurface` floating on `Theme.crust`, not part of the surface behind the button, so a
+    // solved tier there would be the one chrome on screen tinted by a record.
+    in property <brush> trigger-fg: Theme.text;
+    // Its own input rather than always `trigger-fg`: a glyph with no hover pill has only its colour
+    // to answer the pointer with.
+    in property <brush> trigger-hover-fg: root.trigger-fg;
+    in property <brush> trigger-hover-bg: Theme.surface0;
+    // The trigger's `recolor-duration`, for a host repainting it in step with a longer fade.
+    in property <duration> trigger-recolor-duration: Theme.dur-fast;
 
     width: btn.width;
     height: btn.height;
@@ -54,6 +64,10 @@ export component VolumePopup inherits Rectangle {
         diameter: root.diameter;
         icon-size: root.icon-size;
         filled: true;
+        idle-fg: root.trigger-fg;
+        hover-fg: root.trigger-hover-fg;
+        hover-bg: root.trigger-hover-bg;
+        recolor-duration: root.trigger-recolor-duration;
         tooltip-text: round(Player.vm.volume) + "%";
         force-tooltip: root.tooltip-ticks-remaining > 0;
         // Keeps the disc highlighted while the popup is open; the catcher below and the
@@ -63,9 +77,10 @@ export component VolumePopup inherits Rectangle {
     }
 
     pop := PopupWindow {
-        // Right-aligned to the button, so the slider chrome sits above the icon and the
-        // badge extends leftward.
-        x: btn.width - self.width;
+        // The chrome centred on the button and the badge extending leftward. Not right-aligned:
+        // the chrome is wider than any disc it hangs over, so matching edges pulls it off the
+        // glyph's axis.
+        x: (btn.width + chrome.width) / 2 - self.width;
         y: -self.height - Theme.popup-gap;
         width: 92px;
         height: 180px;
@@ -268,6 +283,7 @@ export component VolumePopup inherits Rectangle {
                 host-height: 0px;
                 side: TooltipSide.left;
                 gap: 10px;
+                in-popup: true;
                 // No reveal delay — the readout has to be up on the frame the drag
                 // starts. Same hook the keyboard HUD above takes.
                 force-shown: vol-touch.has-hover || vol-touch.pressed;

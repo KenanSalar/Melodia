@@ -2233,3 +2233,30 @@ msgstr "Veröffentlichungsland"
 
 msgid "Part of a compilation"
 msgstr "Teil einer Kompilation"
+
+msgid "Show Up Next"
+msgstr "Als Nächstes anzeigen"
+
+msgid "Album Backdrop: on"
+msgstr "Album-Hintergrund: An"
+
+msgid "Album Backdrop: off"
+msgstr "Album-Hintergrund: Aus"
+
+msgid "Full Player"
+msgstr "Vollständiger Player"
+
+msgid "Miniplayer"
+msgstr "Miniplayer"
+
+msgid "Window Buttons"
+msgstr "Fensterschaltflächen"
+
+msgid "The minimize, full player and close buttons in the miniplayer's corner."
+msgstr "Die Schaltflächen zum Minimieren, für den vollständigen Player und zum Schließen in der Ecke des Miniplayers."
+
+msgid "Album Backdrop"
+msgstr "Album-Hintergrund"
+
+msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
+msgstr "Färbt den Miniplayer mit den Farben des laufenden Albums ein, wie es die Ansicht „Aktuelle Wiedergabe“ tut."

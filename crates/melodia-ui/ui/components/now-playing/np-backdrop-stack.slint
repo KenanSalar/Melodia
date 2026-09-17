@@ -1,0 +1,51 @@
+import { Theme } from "../../theme.slint";
+import { Player } from "../../globals/player.slint";
+import { HeroBlurBackdrop } from "../hero-blur-backdrop.slint";
+import { AuroraBackdrop } from "../aurora-backdrop.slint";
+
+// The two backdrop stacks as one mount on the `Player.np-*` tier, for the two surfaces painting off
+// it: Now Playing and the miniplayer. `HeroBackdropStack`'s sibling, split from it by tier alone,
+// which is what the leaves taking their colours as inputs is for.
+//
+// Only the live arm is mounted, for the reason `hero-backdrop-stack.slint` gives. **Both floor
+// stops come from Rust**, not a `Theme.accent` mix: this is the surface an art-less track's title
+// sits on, and the foreground is solved light.
+//
+// Two readers of one tier is safe because they are never on screen together: entering the
+// miniplayer force-closes `Nav.now-playing-open`.
+export component NpBackdropStack inherits Rectangle {
+    // The host's own question. Now Playing has no idle state to drain to and leaves it defaulted;
+    // the miniplayer drains through it before unmounting the stack.
+    in property <bool> shown: true;
+
+    // Named once, because both terms below read it and a second spelling of the condition can
+    // invert on its own.
+    property <bool> aurora-shown: Theme.aurora-backdrop;
+
+    if !root.aurora-shown: HeroBlurBackdrop {
+        x: 0; y: 0;
+        width: 100%; height: 100%;
+        floor-start: Player.np-floor-start;
+        floor-end: Player.np-floor-end;
+        scrim: Player.np-scrim;
+        blur-a: Player.blur-img-a;
+        blur-b: Player.blur-img-b;
+        use-a: Player.blur-use-a;
+        // **`shown` here too**: the slots fade on `has-blur` alone, so without it a drain eases the
+        // floor and scrim out from under a cover still at full strength, which pops off on unmount.
+        has-blur: Player.blur-has-image && root.shown;
+        shown: root.shown;
+    }
+
+    if root.aurora-shown: AuroraBackdrop {
+        x: 0; y: 0;
+        width: 100%; height: 100%;
+        base-start: Player.np-floor-start;
+        base-end: Player.np-floor-end;
+        tint-1: Player.np-tint-1;
+        tint-2: Player.np-tint-2;
+        tint-3: Player.np-tint-3;
+        dither: Player.np-dither;
+        shown: root.shown;
+    }
+}

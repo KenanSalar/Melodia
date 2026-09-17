@@ -5,7 +5,9 @@ use melodia_testkit::{reading_env, with_env_set};
 use melodia_testkit::with_env_var;
 
 use super::*;
-use crate::services::settings::{ONBOARDING_VERSION, WINDOW_BORDER_SYSTEM_COLOR, WindowBorder};
+use crate::services::settings::{
+    ONBOARDING_VERSION, TitlebarButtonStyle, WINDOW_BORDER_SYSTEM_COLOR, WindowBorder,
+};
 
 fn json_err(e: &serde_json::Error) -> AppError {
     AppError::Validation(format!("json error: {e}"))
@@ -213,6 +215,108 @@ fn a_hidden_window_border_reads_back_from_its_token() -> Result<(), AppError> {
     let border: WindowBorder = serde_json::from_str(r#""hidden""#).map_err(|e| json_err(&e))?;
 
     assert_eq!(border, WindowBorder::Hidden);
+    Ok(())
+}
+
+/// Its own field because the miniplayer draws captions under the native titlebar too, so an install
+/// that picked macOS lights for the titlebar keeps the miniplayer it already had.
+#[test]
+fn the_miniplayer_captions_do_not_inherit_the_titlebar_style() -> Result<(), AppError> {
+    let window: WindowFlags =
+        serde_json::from_str(r#"{"titlebar_button_style": "macos"}"#).map_err(|e| json_err(&e))?;
+
+    assert_eq!(window.mini_player_button_style, TitlebarButtonStyle::Standard);
+    Ok(())
+}
+
+/// Every caption style beside the token `settings.json` carries for it. A renamed variant changes
+/// its token, and a file holding the old one no longer parses.
+const CAPTION_STYLE_TOKENS: [(TitlebarButtonStyle, &str); 3] = [
+    (TitlebarButtonStyle::Standard, r#""standard""#),
+    (TitlebarButtonStyle::Macos, r#""macos""#),
+    (TitlebarButtonStyle::Kde, r#""kde""#),
+];
+
+#[test]
+fn every_caption_style_persists_as_its_token() -> Result<(), AppError> {
+    let written = CAPTION_STYLE_TOKENS
+        .iter()
+        .map(|(style, _)| serde_json::to_string(style))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| json_err(&e))?;
+
+    assert_eq!(written, CAPTION_STYLE_TOKENS.map(|(_, token)| token));
+    Ok(())
+}
+
+#[test]
+fn every_caption_style_reads_back_from_its_token() -> Result<(), AppError> {
+    let read = CAPTION_STYLE_TOKENS
+        .iter()
+        .map(|(_, token)| serde_json::from_str::<TitlebarButtonStyle>(token))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| json_err(&e))?;
+
+    assert_eq!(read, CAPTION_STYLE_TOKENS.map(|(style, _)| style));
+    Ok(())
+}
+
+#[test]
+fn a_fresh_install_keeps_the_miniplayer_on_flat_chrome() {
+    assert!(!BackdropFlags::default().mini_backdrop);
+}
+
+/// A shipped file carries the aurora key and not this one, and has to read as the miniplayer the
+/// install already had.
+#[test]
+fn a_settings_file_from_before_the_mini_backdrop_keeps_it_off() -> Result<(), AppError> {
+    let backdrop: BackdropFlags =
+        serde_json::from_str(r#"{"aurora_backdrop": false}"#).map_err(|e| json_err(&e))?;
+
+    assert!(!backdrop.mini_backdrop);
+    Ok(())
+}
+
+#[test]
+fn a_settings_file_from_before_the_hold_restores_no_full_player() -> Result<(), AppError> {
+    let settings: SettingsData =
+        reading_env(|| serde_json::from_str(r#"{"volume": 80}"#)).map_err(|e| json_err(&e))?;
+
+    assert_eq!(settings.full_player_geometry, None);
+    Ok(())
+}
+
+/// The names are what every `settings.json` closed from the miniplayer carries, so a renamed field
+/// drops the hold. A negative `x` is a window on a monitor left of the primary.
+#[test]
+fn a_held_full_player_reads_back_under_its_persisted_names() -> Result<(), AppError> {
+    // Integral values parse exactly; the slack only keeps the comparison honest about floats.
+    const TOLERANCE: f64 = 1e-9;
+    let json = r#"{"width": 1200, "height": 800, "position": {"x": -1920, "y": 40}}"#;
+
+    let held: FullPlayerGeometry = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+
+    let Some(position) = held.position else {
+        return Err(AppError::Validation("the hold lost its position".to_owned()));
+    };
+    assert!(
+        (held.width - 1200.0).abs() < TOLERANCE
+            && (held.height - 800.0).abs() < TOLERANCE
+            && (position.x + 1920.0).abs() < TOLERANCE
+            && (position.y - 40.0).abs() < TOLERANCE,
+        "the hold read back as {held:?}"
+    );
+    Ok(())
+}
+
+// What a close on Wayland writes, where the window never learned its position.
+#[test]
+fn a_held_full_player_with_a_null_position_reads_back_unplaced() -> Result<(), AppError> {
+    let json = r#"{"width": 1200, "height": 800, "position": null}"#;
+
+    let held: FullPlayerGeometry = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+
+    assert_eq!(held.position, None);
     Ok(())
 }
 

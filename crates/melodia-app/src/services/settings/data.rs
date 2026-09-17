@@ -94,6 +94,23 @@ impl Default for ColumnWidths {
     }
 }
 
+/// A window's top-left corner in logical pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct WindowPosition {
+    pub x: f64,
+    pub y: f64,
+}
+
+/// The full player the miniplayer's restore caption hands back, kept across a close from the
+/// miniplayer.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct FullPlayerGeometry {
+    pub width: f64,
+    pub height: f64,
+    /// `None` where the window never learned its own position, Wayland keeping it to itself.
+    pub position: Option<WindowPosition>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SettingsData {
@@ -101,10 +118,13 @@ pub struct SettingsData {
     pub theme_variant: String,
     pub accent_color: String,
     pub sidebar_width: f64,
+    /// The window as it closed, the miniplayer included.
     pub window_width: f64,
     pub window_height: f64,
     pub window_x: f64,
     pub window_y: f64,
+    /// `Some` only when the window closed as the miniplayer.
+    pub full_player_geometry: Option<FullPlayerGeometry>,
     pub volume: u32,
     pub corner_radius: u32,
     pub play_button_animation: String,
@@ -177,6 +197,7 @@ impl Default for SettingsData {
             window_height: 800.0,
             window_x: 100.0,
             window_y: 100.0,
+            full_player_geometry: None,
             volume: 100,
             // Tracks the host desktop so the window outline feels native out of
             // the box; a returning install already has the field written.

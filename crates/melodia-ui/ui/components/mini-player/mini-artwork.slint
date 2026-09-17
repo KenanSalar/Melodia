@@ -1,0 +1,27 @@
+import { Player } from "../../globals/player.slint";
+import { MiniPlayer, MiniLayout } from "../../globals/shell.slint";
+import { SourceArtwork } from "../now-playing/source-artwork.slint";
+
+// The artwork beside the title and controls. The card and the column take the 384 px
+// `Player.np-cover-{a,b}` slot the Now Playing view uses, falling back to the 72 px row tier until
+// the seed lands and for tracks whose decode failed; `NowPlayingState::renders_artwork` gates that
+// decode on these two layouts.
+//
+// **The strip reads the row tier outright.** Rust releases the large decode there and stops writing
+// its slots, so they go on holding whatever played last.
+export component MiniArtwork inherits SourceArtwork {
+    private property <bool> large: MiniPlayer.layout != MiniLayout.strip;
+
+    // Everything else about the tile is the shared track-or-station split. A station's large slot
+    // is its own, `np-cover-*` being the track cross-fade.
+    cover: Player.vm.has_station
+        ? (root.large && Player.np-station-logo.width > 0
+            ? Player.np-station-logo
+            : Player.vm.radio.logo_img)
+        : (root.large && Player.np-cover-has-image
+            ? (Player.np-cover-use-a ? Player.np-cover-a : Player.np-cover-b)
+            : Player.vm.track.cover_img);
+    // Written together with the slot above, so a `0` here means the row-tier fallback is what's
+    // drawing and there is nothing to measure.
+    native-size: root.large ? Player.np-station-logo-size * 1px : 0px;
+}

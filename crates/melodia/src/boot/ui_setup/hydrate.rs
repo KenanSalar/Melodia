@@ -5,7 +5,7 @@ use std::sync::Arc;
 use melodia_app::services;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image;
-use melodia_ui::{AppWindow, ArtistDetail, Nav, Player};
+use melodia_ui::{AppWindow, ArtistDetail, MiniPlayer, Nav, Player};
 use melodia_views::ui;
 use slint::ComponentHandle;
 
@@ -107,6 +107,7 @@ pub fn hydrate_ui_from_settings(
     apply_sidebar_width(app, settings);
     apply_sidebar_collapsed(app, settings);
     apply_startup_animation_suppression(app, settings);
+    apply_mini_backdrop(app, settings);
     app.global::<ArtistDetail>().set_albums_collapsed(vs.artist_albums_collapsed);
     ui::settings::settings_page::seed_tab(app, vs.settings_tab);
 }
@@ -135,6 +136,13 @@ fn apply_startup_animation_suppression(
     settings: &services::settings::SettingsData,
 ) {
     app.global::<Nav>().set_suppress_enter_animation(settings.motion.skip_startup_animation);
+}
+
+/// Seed the miniplayer's backdrop switch. Ordinary hydration, unlike its restart-gated neighbour
+/// `apply_backdrop_style`, which has to run ahead of `install_views` because the artwork tiers
+/// decide their shape from it: this one only mounts a stack that tier already fits.
+fn apply_mini_backdrop(app: &AppWindow, settings: &services::settings::SettingsData) {
+    app.global::<MiniPlayer>().set_backdrop_shown(settings.backdrop.mini_backdrop);
 }
 
 /// Kick off the initial Tracks fetch so the list is populated by the time the

@@ -2231,3 +2231,30 @@ msgstr "Χώρα κυκλοφορίας"
 
 msgid "Part of a compilation"
 msgstr "Μέρος συλλογής"
+
+msgid "Show Up Next"
+msgstr "Εμφάνιση επόμενων"
+
+msgid "Album Backdrop: on"
+msgstr "Φόντο άλμπουμ: ενεργό"
+
+msgid "Album Backdrop: off"
+msgstr "Φόντο άλμπουμ: ανενεργό"
+
+msgid "Full Player"
+msgstr "Πλήρης αναπαραγωγέας"
+
+msgid "Miniplayer"
+msgstr "Μίνι αναπαραγωγέας"
+
+msgid "Window Buttons"
+msgstr "Κουμπιά παραθύρου"
+
+msgid "The minimize, full player and close buttons in the miniplayer's corner."
+msgstr "Τα κουμπιά ελαχιστοποίησης, πλήρους αναπαραγωγέα και κλεισίματος στη γωνία του μίνι αναπαραγωγέα."
+
+msgid "Album Backdrop"
+msgstr "Φόντο άλμπουμ"
+
+msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
+msgstr "Βάφει τον μίνι αναπαραγωγέα με τα χρώματα του άλμπουμ που παίζει, όπως κάνει η προβολή «Αναπαράγεται τώρα»."

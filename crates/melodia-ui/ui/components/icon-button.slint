@@ -28,6 +28,11 @@ export component IconButton inherits Rectangle {
     // Independent of `active-fg`, which is the *toggled* colour: set this to recolour
     // the glyph on hover, as a destructive action does.
     in property <brush> hover-fg: root.idle-fg;
+    // How long the glyph, the disc and the lit rest take to cross to a new colour. **The only way
+    // to change that pace from outside**: this button eases every brush it is handed, so a host
+    // easing one as well restarts that curve on every frame of its own. A host repainting its
+    // buttons in step with a longer fade hands over the stepped brushes and this instead.
+    in property <duration> recolor-duration: Theme.dur-fast;
     in property <string> tooltip-text: "";
     // For a button sitting against the edge of something that clips: the pill is centred on the
     // host and runs well past it either way, so a scroller's own viewport cuts it.
@@ -77,7 +82,7 @@ export component IconButton inherits Rectangle {
     property <float> lit-level: root.hover-lift && root.active && !touch.has-hover
         ? Theme.lit-rest
         : 1.0;
-    animate lit-level { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate lit-level { duration: root.recolor-duration; easing: ease-in-out; }
 
     // The root keeps a fixed layout slot so siblings never reflow; the disc scales. **The glyph is
     // a sibling rather than a child, and that is what keeps `fade` free** — `need_layer` bails on a
@@ -99,7 +104,7 @@ export component IconButton inherits Rectangle {
         // the animated binding below and restart the crossfade every frame.
         opacity: root.fade;
 
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        animate background { duration: root.recolor-duration; easing: ease-in-out; }
     }
 
     // **Centred by hand rather than by a layout, and that is not a style preference.**
@@ -126,7 +131,7 @@ export component IconButton inherits Rectangle {
         // The disabled dim rides the same float rather than a second `opacity`: this root wraps a
         // `Text`, so an `opacity` here layered and cropped the glyph to its line box.
         fade: root.fade * (root.button-enabled ? 1.0 : root.disabled-fade) * root.lit-level;
-        animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
+        animate icon-color { duration: root.recolor-duration; easing: ease-in-out; }
     }
 
     Tooltip {

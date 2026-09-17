@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
-use super::{NowPlayingSource, SourceKey};
+use super::{NowPlayingSource, SourceKey, Surfaces};
 use melodia_engine::player::engine::fixtures::{test_station, test_track, test_view_model};
 use melodia_engine::player::engine::now_playing::SourceId;
+use melodia_ui::MiniLayout;
 
 /// The key the subscriber would have built for `id`, which is what `describes` answers without
 /// building. Spelled here so the tests below assert the equivalence rather than restate the match.
@@ -60,4 +61,46 @@ fn a_station_hands_the_chips_no_row_of_its_own() {
         projected,
         Some((SourceKey::Station(stream_url), None, Some("logo.png".to_owned())))
     );
+}
+
+const fn on_screen(
+    open: bool,
+    mini_visible: bool,
+    mini_layout: MiniLayout,
+    mini_backdrop: bool,
+) -> Surfaces {
+    Surfaces { open, mini_visible, mini_layout, mini_backdrop }
+}
+
+/// What is on screen beside what the two gates answer, `(surfaces, artwork, panel)`. The corners:
+/// Now Playing alone and open under the strip, a hidden miniplayer whose mirrors still name a
+/// layout, and every layout with its backdrop off and on.
+const RENDERED: [(Surfaces, bool, bool); 9] = [
+    (on_screen(true, false, MiniLayout::Strip, false), true, true),
+    (on_screen(true, true, MiniLayout::Strip, false), true, true),
+    (on_screen(false, false, MiniLayout::Column, true), false, false),
+    (on_screen(false, true, MiniLayout::Strip, false), false, false),
+    (on_screen(false, true, MiniLayout::Strip, true), true, false),
+    (on_screen(false, true, MiniLayout::Card, false), true, false),
+    (on_screen(false, true, MiniLayout::Card, true), true, false),
+    (on_screen(false, true, MiniLayout::Column, false), true, true),
+    (on_screen(false, true, MiniLayout::Column, true), true, true),
+];
+
+/// A `true` nothing paints spends a decode and a blur per track, and a `false` under a drawn layout
+/// leaves the row tier's thumb, or no backdrop colours at all, until the next track.
+#[test]
+fn only_a_surface_drawing_the_artwork_asks_for_its_decode() {
+    for (surfaces, artwork, _) in RENDERED {
+        assert_eq!(surfaces.renders_artwork(), artwork, "{surfaces:?}");
+    }
+}
+
+/// The strip on its backdrop is the row that tells this gate from the artwork one: it needs the
+/// decode and has no slot for a sheet, which would otherwise cost a lookup per track.
+#[test]
+fn only_now_playing_and_the_column_mount_a_panel() {
+    for (surfaces, _, panel) in RENDERED {
+        assert_eq!(surfaces.renders_panel(), panel, "{surfaces:?}");
+    }
 }

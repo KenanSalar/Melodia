@@ -2235,3 +2235,30 @@ msgstr "Yayın ülkesi"
 
 msgid "Part of a compilation"
 msgstr "Bir derlemenin parçası"
+
+msgid "Show Up Next"
+msgstr "Sıradakileri göster"
+
+msgid "Album Backdrop: on"
+msgstr "Albüm arka planı: açık"
+
+msgid "Album Backdrop: off"
+msgstr "Albüm arka planı: kapalı"
+
+msgid "Full Player"
+msgstr "Tam oynatıcı"
+
+msgid "Miniplayer"
+msgstr "Mini oynatıcı"
+
+msgid "Window Buttons"
+msgstr "Pencere düğmeleri"
+
+msgid "The minimize, full player and close buttons in the miniplayer's corner."
+msgstr "Mini oynatıcının köşesindeki simge durumuna küçültme, tam oynatıcı ve kapatma düğmeleri."
+
+msgid "Album Backdrop"
+msgstr "Albüm arka planı"
+
+msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
+msgstr "Mini oynatıcıyı, “Şimdi Çalıyor” görünümünde olduğu gibi çalan albümün renkleriyle boyar."

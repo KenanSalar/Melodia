@@ -1,6 +1,7 @@
 import { Theme } from "../../theme.slint";
 import { SettingsPage } from "../../globals/settings-page.slint";
 import { MaterialIcon } from "../material-icon.slint";
+import { DisabledScrim } from "disabled-scrim.slint";
 
 // The "icon · label · control" row inside a `SectionCard`; the host supplies the
 // control through `@children`.
@@ -21,11 +22,10 @@ export component SettingRow inherits Rectangle {
     // Folded into each brush rather than spent on the root's `opacity`: a row stays
     // disabled for as long as the setting it depends on is off, and an opacity layer
     // is sized to child geometry, so it would crop glyph ink outside the line box for
-    // that whole time. Only the control has no brush to reach, being `@children`.
+    // that whole time. Only the control has no brush to reach, being `@children`, so a
+    // `DisabledScrim` dims it instead.
     property <float> dim: root.disabled ? Theme.dim-disabled : 0.0;
     animate dim { duration: Theme.dur-fast; easing: ease-in-out; }
-
-    background: transparent;
 
     HorizontalLayout {
         padding: Theme.pad-lg;
@@ -68,13 +68,22 @@ export component SettingRow inherits Rectangle {
             }
         }
 
-        // The consumer's element sizes itself; this only centres it — and carries the
-        // disabled dim, having no brush of ours to fold it into.
-        VerticalLayout {
-            alignment: center;
-            spacing: Theme.pad-sm;
-            opacity: 1.0 - root.dim;
-            @children
+        // The consumer's element sizes itself and the layout only centres it. The wrapper is
+        // the scrim's box: as a conditional child it fills the wrapper without sizing it.
+        Rectangle {
+            VerticalLayout {
+                alignment: center;
+                spacing: Theme.pad-sm;
+                @children
+            }
+
+            if root.dim > 0: DisabledScrim {
+                x: 0;
+                y: 0;
+                width: 100%;
+                height: 100%;
+                dim: root.dim;
+            }
         }
     }
 

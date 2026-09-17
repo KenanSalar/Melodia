@@ -17,8 +17,15 @@
 //!
 //! Wayland forbids a client setting its own position, so `set_position` is a silent no-op
 //! there. Size still works.
+//!
+//! **The miniplayer is a window size, so the full player's geometry has to be held across it.**
+//! Entering it [`hold_full_player`]s the last placement that sat still, and its restore button
+//! hands that back through [`restore_full_player`]. A close while it is up persists the miniplayer
+//! as the window and the hold beside it, so the next launch reopens the miniplayer and its restore
+//! button still knows the player the user shrank away from.
 
 use std::sync::{Once, OnceLock};
+use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 #[cfg(target_os = "windows")]
@@ -31,13 +38,12 @@ use slint::winit_030::winit::dpi::{
 use slint::winit_030::winit::window::Window as WinitWindow;
 use slint::{ComponentHandle, LogicalPosition, LogicalSize};
 
-use melodia_app::services::settings::SettingsData;
-use melodia_ui::AppWindow;
+use melodia_app::services::settings::{FullPlayerGeometry, SettingsData, WindowPosition};
+use melodia_ui::{AppWindow, MiniPlayer};
 
-/// Lower bound for a restored window size, a guard against a corrupt `settings.json`
-/// producing a 0×0 window.
-const MIN_RESTORE_WIDTH: f64 = 640.0;
-const MIN_RESTORE_HEIGHT: f64 = 420.0;
+/// Lower bound for the full player the restore button lands on, past the miniplayer's exit edge so
+/// a corrupt hold can't leave the button resizing the miniplayer into itself.
+const MIN_FULL_PLAYER: LogicalSize = LogicalSize::new(640.0, 420.0);
 
 /// Window geometry persisted in `settings.json`. Built from `read_settings` at startup
 /// and from winit events into the live mirror ([`record`]).
@@ -68,40 +74,135 @@ impl PersistedGeometry {
     }
 }
 
-/// Restore the persisted window size and position, and seed `WindowChrome.is-maximized`.
-/// Must run after `AppWindow::new()`, the window adapter having to exist, and before
-/// `app.run()`.
-pub fn restore(app: &AppWindow, geom: PersistedGeometry) {
+/// Restore the persisted window size and position, the full player held behind a miniplayer it
+/// closed as, and seed `WindowChrome.is-maximized`. Must run after `AppWindow::new()`, the window
+/// adapter having to exist, and before `app.run()`.
+pub fn restore(app: &AppWindow, geom: PersistedGeometry, full_player: Option<FullPlayerGeometry>) {
+    let mini = app.global::<MiniPlayer>();
+    let floor = LogicalSize::new(mini.get_window_min_width(), mini.get_window_min_height());
+    let (size, position) = logical_placement(geom, floor);
+    let window = app.window();
+    window.set_size(size);
+    window.set_position(position);
+
+    // From persisted state, not the winit window, which doesn't exist yet.
+    // `app-window.slint` keys its transparent-rounded versus opaque-square background on
+    // this, so a window restored maximized paints square from the first frame.
+    app.global::<melodia_ui::WindowChrome>().set_is_maximized(geom.maximized);
+
+    // After `set_size`, which is what hands the switch the size it decides on.
+    app.invoke_adopt_restored_size();
+    let opens_as_miniplayer = app.invoke_miniplayer_mounted();
+    *held().lock() = hold_at_launch(full_player, opens_as_miniplayer);
+}
+
+/// The hold a launch starts with, the full player saved beside a miniplayer close if there is one.
+///
+/// A size that opens the miniplayer with none saved, as a hand-edited one can, holds the first
+/// launch's placement: holding nothing would leave `hold_full_player` only the miniplayer's own.
+fn hold_at_launch(
+    saved: Option<FullPlayerGeometry>,
+    opens_as_miniplayer: bool,
+) -> Option<Placement> {
+    saved
+        .map(Placement::from_persisted)
+        .or_else(|| opens_as_miniplayer.then(Placement::first_launch))
+}
+
+/// A geometry as the logical size and position Slint takes, the size floored against a corrupt
+/// source producing a window too small to use.
+fn logical_placement(
+    geom: PersistedGeometry,
+    floor: LogicalSize,
+) -> (LogicalSize, LogicalPosition) {
     // Persisted geometry is `f64`, Slint's logical types `f32` — window pixel coordinates
     // are small integers, well inside `f32`'s exact-integer range.
     #[allow(
         clippy::cast_possible_truncation,
         reason = "window pixel coordinates are small; f32 precision is sufficient"
     )]
-    let (w, h, x, y) = (
-        geom.width.max(MIN_RESTORE_WIDTH) as f32,
-        geom.height.max(MIN_RESTORE_HEIGHT) as f32,
-        geom.x as f32,
-        geom.y as f32,
-    );
-    let window = app.window();
-    window.set_size(LogicalSize::new(w, h));
-    window.set_position(LogicalPosition::new(x, y));
-
-    // From persisted state, not the winit window, which doesn't exist yet.
-    // `app-window.slint` keys its transparent-rounded versus opaque-square background on
-    // this, so a window restored maximized paints square from the first frame.
-    app.global::<melodia_ui::WindowChrome>().set_is_maximized(geom.maximized);
+    let (w, h, x, y) = (geom.width as f32, geom.height as f32, geom.x as f32, geom.y as f32);
+    (LogicalSize::new(w.max(floor.width), h.max(floor.height)), LogicalPosition::new(x, y))
 }
 
-/// Live-mirror payload: the geometry plus whether winit ever reported a real position.
+/// How long a window has to sit neither resized nor moved before its geometry is one the user kept
+/// rather than one a drag passed through. A drag reports a reading per pointer event, far inside
+/// this, so the placement before a drag's first reading is the one it started from.
+const SETTLE: Duration = Duration::from_millis(300);
+
+/// The geometry plus whether winit ever reported a real position.
 #[derive(Debug, Clone, Copy)]
-struct LiveGeometry {
+struct Placement {
     geom: PersistedGeometry,
     /// `true` once `outer_position()` has succeeded at least once. Stays `false` on
     /// Wayland, where a client may not read its own position, so [`snapshot_into`] skips
     /// persisting x/y rather than degrading `settings.json` to `0, 0`.
     position_known: bool,
+}
+
+impl Placement {
+    /// A fresh install's window, left where the window server puts it.
+    fn first_launch() -> Self {
+        Self { geom: PersistedGeometry::fallback(), position_known: false }
+    }
+
+    fn from_persisted(full_player: FullPlayerGeometry) -> Self {
+        let FullPlayerGeometry { width, height, position } = full_player;
+        let WindowPosition { x, y } = position.unwrap_or(WindowPosition { x: 0.0, y: 0.0 });
+        Self {
+            geom: PersistedGeometry { width, height, x, y, maximized: false },
+            position_known: position.is_some(),
+        }
+    }
+
+    fn to_persisted(self) -> FullPlayerGeometry {
+        let PersistedGeometry { width, height, x, y, .. } = self.geom;
+        FullPlayerGeometry {
+            width,
+            height,
+            position: self.position_known.then_some(WindowPosition { x, y }),
+        }
+    }
+}
+
+/// Live-mirror payload.
+#[derive(Debug, Clone, Copy)]
+struct LiveGeometry {
+    current: Placement,
+    recorded_at: Instant,
+    /// The last placement that sat still for [`SETTLE`] before a reading moved it. **What entering
+    /// the miniplayer holds, rather than `current`**: by then `current` is the drag that shrank the
+    /// window into it, a size just past the threshold rather than one the user ever used.
+    settled: Placement,
+}
+
+impl LiveGeometry {
+    /// The mirror a window's first reading starts, before that reading is taken.
+    fn first(seen: Placement, now: Instant) -> Self {
+        let unplaced = Placement { position_known: false, ..seen };
+        Self { current: unplaced, recorded_at: now, settled: unplaced }
+    }
+
+    /// Takes a reading, settling the placement it replaces if that one sat still for [`SETTLE`].
+    fn observe(&mut self, seen: Placement, now: Instant) {
+        if now.duration_since(self.recorded_at) >= SETTLE {
+            self.settled = self.current;
+        }
+        self.recorded_at = now;
+
+        let current = &mut self.current;
+        current.geom.maximized = seen.geom.maximized;
+        if seen.geom.maximized {
+            return;
+        }
+        current.geom.width = seen.geom.width;
+        current.geom.height = seen.geom.height;
+        if seen.position_known {
+            current.geom.x = seen.geom.x;
+            current.geom.y = seen.geom.y;
+            current.position_known = true;
+        }
+    }
 }
 
 /// Live in-memory mirror, fed by every winit `Resized` / `Moved` through [`record`].
@@ -111,6 +212,13 @@ static LIVE_GEOMETRY: OnceLock<Mutex<Option<LiveGeometry>>> = OnceLock::new();
 
 fn live() -> &'static Mutex<Option<LiveGeometry>> {
     LIVE_GEOMETRY.get_or_init(|| Mutex::new(None))
+}
+
+/// The full player's placement while the miniplayer is up, `None` otherwise.
+static HELD_FULL_PLAYER: OnceLock<Mutex<Option<Placement>>> = OnceLock::new();
+
+fn held() -> &'static Mutex<Option<Placement>> {
+    HELD_FULL_PLAYER.get_or_init(|| Mutex::new(None))
 }
 
 /// The window state a `Resized` or `Moved` event consults more than once, read in one pass.
@@ -158,9 +266,7 @@ pub fn record(w: &WinitWindow, reading: WindowReading) {
     let inner: WinitLogicalSize<f64> = client.to_logical(scale);
     let outer: Option<WinitLogicalPosition<f64>> =
         w.outer_position().ok().map(|p| p.to_logical(scale));
-
-    let mut guard = live().lock();
-    let entry = guard.get_or_insert(LiveGeometry {
+    let seen = Placement {
         geom: PersistedGeometry {
             width: inner.width,
             height: inner.height,
@@ -168,18 +274,60 @@ pub fn record(w: &WinitWindow, reading: WindowReading) {
             y: outer.map_or(0.0, |p| p.y),
             maximized,
         },
-        position_known: false,
-    });
-    entry.geom.maximized = maximized;
-    if !maximized {
-        entry.geom.width = inner.width;
-        entry.geom.height = inner.height;
-        if let Some(p) = outer {
-            entry.geom.x = p.x;
-            entry.geom.y = p.y;
-            entry.position_known = true;
-        }
+        position_known: outer.is_some(),
+    };
+
+    let now = Instant::now();
+    live().lock().get_or_insert_with(|| LiveGeometry::first(seen, now)).observe(seen, now);
+}
+
+/// Hold the placement the full player last settled at, the miniplayer having just taken over.
+///
+/// A hold already there is kept: it is the one [`restore`] brought back with a window relaunched as
+/// the miniplayer, whose settled placement is the miniplayer itself.
+pub fn hold_full_player() {
+    let settled = live().lock().map(|entry| entry.settled);
+    let mut held = held().lock();
+    if held.is_none() {
+        *held = settled;
     }
+}
+
+/// Let the held placement go, the full player being back.
+pub fn release_full_player() {
+    *held().lock() = None;
+}
+
+/// Size and place the window back where the full player was held, which leaves the miniplayer.
+///
+/// Placed only where winit ever reported a position, so Wayland keeps the compositor's placement.
+/// Nothing held falls back to the first-launch geometry.
+pub fn restore_full_player(app: &AppWindow) {
+    let placement = (*held().lock()).unwrap_or_else(Placement::first_launch);
+    let (size, position) = logical_placement(placement.geom, MIN_FULL_PLAYER);
+    let window = app.window();
+    window.set_size(with_returning_frame(app, size));
+    if placement.position_known {
+        window.set_position(position);
+    }
+}
+
+/// The miniplayer's size that leaves the full player at `client` once a native titlebar's frame
+/// is back. Win32 and macOS keep the outer rect when the frame returns, so it comes out of the
+/// client; the allowance is 0 wherever no frame was ever measured.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn with_returning_frame(app: &AppWindow, client: LogicalSize) -> LogicalSize {
+    let chrome = app.global::<melodia_ui::WindowChrome>();
+    LogicalSize::new(
+        client.width + chrome.get_frame_allowance_w(),
+        client.height + chrome.get_frame_allowance_h(),
+    )
+}
+
+/// Elsewhere the window manager adds the frame around the client.
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn with_returning_frame(_: &AppWindow, client: LogicalSize) -> LogicalSize {
+    client
 }
 
 /// Returns what the OS frame adds to the client area, in logical pixels.
@@ -338,18 +486,32 @@ pub fn ensure_on_screen(w: &WinitWindow, reading: WindowReading) {
 /// Snapshot the live geometry mirror into `settings`. A no-op if no `Resized` / `Moved`
 /// ever fired, which leaves the existing values untouched — correct, nothing having
 /// changed this session.
+///
+/// A close from the miniplayer persists the miniplayer as the window and the held full player
+/// beside it, which is what tells the next launch the restore button has somewhere to go.
 pub fn snapshot_into(settings: &mut SettingsData) {
-    let Some(entry) = *live().lock() else {
+    let Some(mirror) = *live().lock() else {
         return;
     };
-    settings.window.is_maximized = entry.geom.maximized;
-    if !entry.geom.maximized {
-        settings.window_width = entry.geom.width;
-        settings.window_height = entry.geom.height;
+    write_snapshot(settings, mirror, *held().lock());
+}
+
+/// [`snapshot_into`] past its two lock reads.
+fn write_snapshot(
+    settings: &mut SettingsData,
+    mirror: LiveGeometry,
+    full_player: Option<Placement>,
+) {
+    settings.full_player_geometry = full_player.map(Placement::to_persisted);
+    let Placement { geom, position_known } = mirror.current;
+    settings.window.is_maximized = geom.maximized;
+    if !geom.maximized {
+        settings.window_width = geom.width;
+        settings.window_height = geom.height;
         // Only when winit actually reported one — never on Wayland.
-        if entry.position_known {
-            settings.window_x = entry.geom.x;
-            settings.window_y = entry.geom.y;
+        if position_known {
+            settings.window_x = geom.x;
+            settings.window_y = geom.y;
         }
     }
 }

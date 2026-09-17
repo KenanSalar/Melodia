@@ -202,7 +202,8 @@ export global Settings {
     in-out property <int> corner-radius: 6;
     callback corner-radius-changed(int);
 
-    // 0 = Standard (Windows caption glyphs), 1 = macOS (traffic lights with hover-reveal glyphs).
+    // 0 = Standard (Windows caption glyphs), 1 = macOS (traffic lights with hover-reveal glyphs),
+    // 2 = KDE (Breeze's glyphs and hover disc).
     // Mirrored into `Theme.titlebar-button-style` so `custom-titlebar.slint` reads it through
     // `Theme`, the `shell-radius` precedent. Inert under the native titlebar.
     in-out property <int> titlebar-button-style: 0;
@@ -212,6 +213,12 @@ export global Settings {
     // combinations render with close always at the outer window corner.
     in-out property <int> titlebar-button-side: 0;
     callback titlebar-button-side-changed(int);
+
+    // The miniplayer's captions, in `titlebar-button-style`'s tokens and mirrored into
+    // `MiniPlayer.button-style` the same way. Live under the native titlebar too, the miniplayer
+    // dropping the frame.
+    in-out property <int> mini-player-button-style: 0;
+    callback mini-player-button-style-changed(int);
 
     // The outline a frameless window draws where an OS frame would: under the custom titlebar
     // always, and for the miniplayer under the native one. The outline reads the switch directly,

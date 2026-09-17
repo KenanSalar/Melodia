@@ -4,9 +4,6 @@
 //! Callback dispatch guarantees the UI thread, so the winit calls are safe directly
 //! without an event-loop hop. The persistence work goes to the tokio runtime.
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-
 use slint::ComponentHandle;
 use slint::winit_030::WinitWindowAccessor;
 use slint::winit_030::winit::window::WindowLevel;
@@ -16,7 +13,7 @@ use melodia_core::error::AppError;
 use melodia_platform::services::platform::always_on_top::AlwaysOnTopMethod;
 use melodia_ui::AppWindow;
 
-pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool>) {
+pub(super) fn wire(app: &AppWindow, state: &AppState) {
     let chrome = app.global::<melodia_ui::WindowChrome>();
 
     {
@@ -51,6 +48,14 @@ pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool
             let _ = ui.window().with_winit_window(|w| {
                 w.set_maximized(!w.is_maximized());
             });
+        });
+    }
+
+    {
+        let weak = app.as_weak();
+        chrome.on_restore_full_player(move || {
+            let Some(ui) = weak.upgrade() else { return };
+            super::geometry::restore_full_player(&ui);
         });
     }
 
@@ -122,10 +127,6 @@ pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool
             });
         });
     }
-
-    chrome.on_drag_region_hover_changed(move |hovered| {
-        drag_hover.store(hovered, Ordering::Relaxed);
-    });
 
     chrome.on_restart_app(restart_toggle(
         app,

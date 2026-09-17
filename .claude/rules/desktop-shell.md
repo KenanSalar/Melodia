@@ -13,10 +13,15 @@ paths:
   - crates/melodia/src/boot/**/*.rs
   - crates/melodia-ui/ui/app-window.slint
   - crates/melodia-ui/ui/components/custom-titlebar.slint
+  - crates/melodia-ui/ui/components/caption-buttons.slint
   - crates/melodia-ui/ui/components/macos-titlebar-cluster.slint
   - crates/melodia-ui/ui/components/macos-traffic-light.slint
   - crates/melodia-ui/ui/layout/resize-ring.slint
   - crates/melodia-ui/ui/views/settings/window-chrome-section.slint
+  - crates/melodia-ui/ui/views/settings/mini-player-section.slint
+  - crates/melodia-ui/ui/views/mini-player.slint
+  - crates/melodia-ui/ui/components/mini-player/*.slint
+  - crates/melodia-views/src/ui/appearance/window_settings.rs
 ---
 
 # The desktop shell — window chrome, tray, media keys
@@ -31,9 +36,12 @@ the OS owns has to be attached late or not at all on at least one platform.
   cache stalls on Wayland: `WinitWindowAccessor::with_winit_window(|w| w.set_minimized(true))`.
 
 - **Window dragging belongs at the winit layer.** `drag_window()` from Slint `pointer-event(down)`
-  leaks the input grab. `TouchArea` reports `has-hover` via
-  `WindowChrome.drag-region-hover-changed`; `on_winit_window_event` intercepts
-  `MouseInput { Pressed, Left }` when that atomic is true → `drag_window()` → `PreventDefault`.
+  leaks the input grab. Each drag region's `TouchArea` reports its hover under its own name via
+  `WindowChrome.drag-region-changed(DragRegion)`; `on_winit_window_event` intercepts
+  `MouseInput { Pressed, Left }` over either → `drag_window()` → `PreventDefault`.
+  **So no `double-clicked` on a drag region can fire**, Slint never seeing the press: the
+  titlebar's double press is read in `window_chrome::drag_region`, and the miniplayer names itself
+  so its own only moves.
 
 - **Resizing a frameless window takes the same path, and the ring's hover is the whole geometry.**
   `ResizeRing` reports a `ResizeZone` via `WindowChrome.resize-zone-changed`, kept by
@@ -44,6 +52,17 @@ the OS owns has to be attached late or not at all on at least one platform.
   sits in the transparent cut-out, and compares the logical band with a physical cursor, so beside
   the ring the press disagreed with the cursor. macOS answers `NotSupported` and keeps AppKit's own
   edge resizing.
+
+- **A caption style is a chip index on the Slint side, and `settings.json` never sees it.**
+  `TitlebarButtonStyle` persists by name, but every Slint property carrying it holds the index
+  `window_settings::{idx_for, style_for}` maps to. The `options` order of each chip group *is* that
+  index, in `window-chrome-section.slint` and in `mini-player-section.slint`, and
+  `custom-titlebar.slint` and `MiniCaptions` pick their mounts by comparing against it. A new style
+  is a variant, both arms of the mapping, a chip in both groups, a case at both mounts and a row in
+  `window_settings::tests`' `CHIPS`, which pins the chips and the mounts to the mapping; a reordered
+  array labels its chips with styles they don't select. A drawn style goes through
+  `CaptionButton`'s `CaptionStyle` and adds no mount, so only a cluster sharing nothing with it,
+  like the traffic lights, needs a branch of its own.
 
 - **On Win32 a resize or move drag parks winit's loop, and with it every Slint `Timer` and
   `changed` handler**, so the whole responsive layer — the miniplayer swap, grid column counts,
@@ -76,6 +95,19 @@ the OS owns has to be attached late or not at all on at least one platform.
   and the shell and its overlays inset by them under the native miniplayer, leaving them
   transparent. The root's `resize-band` widens to cover them, so they still resize as the frame's
   borders did and the visible window keeps its edges across the swap.
+
+- **A close from the miniplayer reopens the miniplayer**, and the launch is where the frame
+  argument above bites hardest. `geometry::snapshot_into` persists the window as it closed plus
+  the held full player as `full_player_geometry`, and `geometry::restore` seeds the hold back so
+  the restore caption still has somewhere to go; `hold_full_player` keeps a hold already there,
+  since a relaunched miniplayer's settled placement is the miniplayer itself. **`restore` ends in
+  `adopt-restored-size()`, and removing it builds and looks right on Linux.** The window is created
+  with the `no-frame` it had at `show()`, while the seed `Timer`'s `render-active` only reaches it
+  a loop pass after `resumed` has built the window: framed, then dropped, and Win32 keeps the outer
+  rect when the frame goes, so a native-titlebar miniplayer grew by the frame on every launch.
+  **The window floor is spelled once, `MiniPlayer.window-min-*`**, read by the root's minimum and
+  by `restore`'s guard against a hand-edited size. The restore caption keeps its own higher floor,
+  which has to clear the miniplayer's exit edge.
 
 - **`"restart-backdrop"` is the third of these and the one whose deadline is earlier than
   `app.run()`** — `BackdropFlags.aurora_backdrop` decides whether the two artwork tiers hold a

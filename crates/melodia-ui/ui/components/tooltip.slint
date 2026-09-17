@@ -1,18 +1,20 @@
 import { Theme } from "../theme.slint";
+import { WindowChrome } from "../globals/shell.slint";
 
-// Which side the pill clears. `below` is for hosts pinned near the top, where an above-tooltip
-// clips off-screen; `right` is for the collapsed sidebar rail, where the hidden label sat to the
-// icon's right anyway; `left` is the volume popup's percentage, beside a vertical slider.
+// Which side the pill clears, taking the opposite one where the window leaves it no room. `below`
+// is for hosts near the top of something else that clips, a band or a scroller, which the pill
+// can't see; `right` is for the collapsed sidebar rail, where the hidden label sat to the icon's
+// right anyway; `left` is the volume popup's percentage, beside a vertical slider.
 export enum TooltipSide { above, below, left, right }
 
 // A pill anchored on one side of its parent, fading in on hover — Slint has no native tooltip.
 // Place it inside the element it annotates, set `text`, and feed `hovered` from the host's
 // TouchArea; **the reveal delay lives here**, so a quick mouse-pass flashes nothing anywhere.
-export component Tooltip inherits Rectangle {
+export component Tooltip {
     in property <string> text;
     in property <bool>  hovered;
     // `parent` isn't reachable from a component's root binding, so the host passes both
-    // explicitly. The height is needed by every side but `above`.
+    // explicitly, whichever side it asks for: the pill can flip to any of them.
     in property <length> host-width;
     in property <length> host-height;
     in property <TooltipSide> side: TooltipSide.above;
@@ -26,39 +28,62 @@ export component Tooltip inherits Rectangle {
     // Bypasses the reveal delay, for a caller surfacing the pill without a real hover — a keyboard
     // volume change, say. It rides the same `animate`, so the fade matches.
     in property <bool> force-shown: false;
-    // **The pill is absolutely positioned, so nothing downstream stops it running off the window**
-    // — and a label that fits in English can be half again as long translated. Every English label
-    // clears this cap; the longest translations wrap to two lines rather than leaving the screen.
+    // **A cap rather than the window's width**, so the longest translations wrap to two lines
+    // instead of stretching the pill across it. Every English label clears it.
     // Not named `max-width`: that is the built-in constraint, which a bound `width` overrides.
     in property <length> max-pill-width: 240px;
+    // Inside a `PopupWindow`, `absolute-position` is measured from the popup's corner, so there is
+    // no window to fit the pill into and it keeps `side`.
+    in property <bool> in-popup: false;
 
     private property <bool> shown;
+    private property <length> edge-clearance: Theme.pad-xs;
 
-    width: min(tip-text.preferred-width + 16px, root.max-pill-width);
-    height: tip-text.preferred-height + 8px;
-    // The two horizontal sides clear the host horizontally and centre on it vertically; the two
-    // vertical sides do the mirror of that.
-    x: root.side == TooltipSide.right ? (root.host-width + root.gap)
-        : root.side == TooltipSide.left ? (-self.width - root.gap)
-        : root.align-end ? (root.host-width - self.width)
-        : (root.host-width - self.width) / 2;
-    y: root.side == TooltipSide.above ? (-self.height - root.gap)
-        : root.side == TooltipSide.below ? (root.host-height + root.gap)
-        : (root.host-height - self.height) / 2;
+    // **A zero-size anchor at the host's origin, with the pill as its child**: the pill's own `x`
+    // can't read its `absolute-position` without reading itself back, where the anchor's is the
+    // host's. Pinned here, a child with no `x`/`y` being centred in its parent.
+    x: 0;
+    y: 0;
+    width: 0;
+    height: 0;
 
-    // The `ActionPill` chrome, so a tooltip reads as part of the same family as what it annotates.
-    // **The fill is the one divergence**: the pill is translucent, but a tooltip is transient and
-    // its whole job is to be read, so it stays fully opaque wherever it lands.
-    background: Theme.surface0;
-    border-color: Theme.surface2;
-    border-width: 1px;
-    border-radius: 6px;
-    opacity: (shown || root.force-shown) ? 1.0 : 0.0;
-    animate opacity { duration: 150ms; easing: ease-out; }
     // Hidden once faded out, not only transparent: an element with children under any opacity
     // short of 1.0 renders into a layer of its own, so every idle tooltip in the tree held a texture
-    // and composited it each frame. `self.opacity` keeps the fade-out visible until it lands.
-    visible: root.text != "" && (root.shown || root.force-shown || self.opacity > 0);
+    // and composited it each frame. `pill.opacity` keeps the fade-out visible until it lands.
+    private property <bool> drawn: root.text != "" && (root.shown || root.force-shown || pill.opacity > 0);
+    // Gated on `drawn`, so an idle tooltip reads no position and depends on nothing that scrolls.
+    private property <bool> fits-window: !root.in-popup && root.drawn;
+
+    // The window's edges, in the host's coordinates.
+    private property <length> min-x: WindowChrome.shell-x + root.edge-clearance - root.absolute-position.x;
+    private property <length> max-x: WindowChrome.shell-x + WindowChrome.shell-width - root.edge-clearance
+        - root.absolute-position.x;
+    private property <length> min-y: root.edge-clearance - root.absolute-position.y;
+    private property <length> max-y: WindowChrome.shell-height - root.edge-clearance - root.absolute-position.y;
+
+    private property <length> above-y: -pill.height - root.gap;
+    private property <length> below-y: root.host-height + root.gap;
+    private property <length> left-x: -pill.width - root.gap;
+    private property <length> right-x: root.host-width + root.gap;
+    // Where the pill sits along the host's edge, before the window moves it.
+    private property <length> along-x: root.align-end
+        ? (root.host-width - pill.width)
+        : (root.host-width - pill.width) / 2;
+    private property <length> along-y: (root.host-height - pill.height) / 2;
+
+    private property <bool> room-above: root.above-y >= root.min-y;
+    private property <bool> room-below: root.below-y + pill.height <= root.max-y;
+    private property <bool> room-left: root.left-x >= root.min-x;
+    private property <bool> room-right: root.right-x + pill.width <= root.max-x;
+
+    // The opposite side only where it has the room `side` lacks, so a pill with none either way
+    // stays where the host asked.
+    private property <TooltipSide> placed-side: !root.fits-window ? root.side
+        : (root.side == TooltipSide.above && !root.room-above && root.room-below) ? TooltipSide.below
+        : (root.side == TooltipSide.below && !root.room-below && root.room-above) ? TooltipSide.above
+        : (root.side == TooltipSide.left && !root.room-left && root.room-right) ? TooltipSide.right
+        : (root.side == TooltipSide.right && !root.room-right && root.room-left) ? TooltipSide.left
+        : root.side;
 
     reveal-timer := Timer {
         interval: 500ms;
@@ -71,16 +96,42 @@ export component Tooltip inherits Rectangle {
         if (!root.hovered) { root.shown = false; }
     }
 
-    tip-text := Text {
-        text: root.text;
-        color: Theme.text;
-        font-size: 11px;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-        // Bounded, so the wrap has something to wrap against and the root's height follows for
-        // free: a wrapping Text reports its height against the width it was handed, while the width
-        // above comes from the *horizontal* layout info, intrinsic to the string — so it terminates.
-        width: root.width - 16px;
-        wrap: word-wrap;
+    pill := Rectangle {
+        width: min(tip-text.preferred-width + 16px, root.max-pill-width);
+        height: tip-text.preferred-height + 8px;
+        // The two horizontal sides clear the host horizontally and centre on it vertically; the two
+        // vertical sides do the mirror of that. The centred axis then slides inside the window.
+        x: root.placed-side == TooltipSide.right ? root.right-x
+            : root.placed-side == TooltipSide.left ? root.left-x
+            : root.fits-window ? clamp(root.along-x, root.min-x, root.max-x - self.width)
+            : root.along-x;
+        y: root.placed-side == TooltipSide.above ? root.above-y
+            : root.placed-side == TooltipSide.below ? root.below-y
+            : root.fits-window ? clamp(root.along-y, root.min-y, root.max-y - self.height)
+            : root.along-y;
+
+        // The `ActionPill` chrome, so a tooltip reads as part of the same family as what it annotates.
+        // **The fill is the one divergence**: the pill is translucent, but a tooltip is transient and
+        // its whole job is to be read, so it stays fully opaque wherever it lands.
+        background: Theme.surface0;
+        border-color: Theme.surface2;
+        border-width: 1px;
+        border-radius: 6px;
+        opacity: (root.shown || root.force-shown) ? 1.0 : 0.0;
+        animate opacity { duration: 150ms; easing: ease-out; }
+        visible: root.drawn;
+
+        tip-text := Text {
+            text: root.text;
+            color: Theme.text;
+            font-size: 11px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            // Bounded, so the wrap has something to wrap against and the pill's height follows for
+            // free: a wrapping Text reports its height against the width it was handed, while the width
+            // above comes from the *horizontal* layout info, intrinsic to the string — so it terminates.
+            width: parent.width - 16px;
+            wrap: word-wrap;
+        }
     }
 }

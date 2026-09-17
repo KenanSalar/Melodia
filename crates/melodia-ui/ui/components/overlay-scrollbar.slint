@@ -39,6 +39,10 @@ export component OverlayScrollbar inherits Rectangle {
     // bakes the alpha into its brushes instead.
     in property <float> track-opacity: 0.5;
     in property <float> track-opacity-active: 0.85;
+    // How long the track and thumb take to cross to a new colour or weight. `IconButton`'s knob,
+    // for its reason: every value above is eased here, so a host easing one too restarts that
+    // curve every frame, and one repainting in step with a longer fade hands over this instead.
+    in property <duration> recolor-duration: Theme.dur-fast;
 
     out property <bool> dragging: touch.pressed;
 
@@ -71,7 +75,9 @@ export component OverlayScrollbar inherits Rectangle {
         border-radius: root.bar-radius;
         background: root.track-color;
         opacity: root.active ? root.track-opacity-active : root.track-opacity;
-        animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
+        // The colour eases with the thumb's rather than snapping under it, so a host repainting
+        // the bar sees both halves cross together.
+        animate background, opacity { duration: root.recolor-duration; easing: ease-in-out; }
     }
 
     // Only the colour transitions. **The position is deliberately un-animated**: derived
@@ -83,7 +89,7 @@ export component OverlayScrollbar inherits Rectangle {
         height: root.horizontal ? root.bar-thickness : root.thumb-len;
         border-radius: root.bar-radius;
         background: root.active ? root.thumb-active-color : root.thumb-color;
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        animate background { duration: root.recolor-duration; easing: ease-in-out; }
     }
 
     touch := TouchArea {

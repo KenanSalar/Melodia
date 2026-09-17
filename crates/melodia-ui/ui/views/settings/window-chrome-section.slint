@@ -219,8 +219,8 @@ export component WindowChromeSection inherits Rectangle {
 
         if root.any-above-tb-style && root.show-titlebar-button-style: SectionDivider {}
 
-        // Windows caption glyphs vs macOS traffic lights. Disabled under the
-        // native titlebar, which owns its own buttons.
+        // Windows caption glyphs, macOS traffic lights or Breeze's glyphs. Disabled
+        // under the native titlebar, which owns its own buttons.
         if root.show-titlebar-button-style: SettingRowStacked {
             icon: "category";
             label: root.tb-style-label;
@@ -229,7 +229,7 @@ export component WindowChromeSection inherits Rectangle {
 
             if !root.native-titlebar: ChipGroup {
                 // Same brand-name rule as the corner-radius chips above.
-                options: [@tr("Standard"), "macOS"];
+                options: [@tr("Standard"), "macOS", "KDE"];
                 selected-index <=> Settings.titlebar-button-style;
                 selected(i) => {
                     Settings.titlebar-button-style-changed(i);

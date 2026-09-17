@@ -14,15 +14,15 @@ import { NpEmptyState } from "np-empty-state.slint";
 // and padding step down with it: the miniplayer sits tighter so more of the queue fits, but not so
 // much tighter that it becomes a different list.
 //
-// **Palette is the `compact` flag's real job.** The full-screen host paints on the artwork blur and
-// takes the backdrop-solved brushes; the miniplayer paints on ordinary chrome and takes the neutral
-// list palette, including the shared row hover — the Now-Playing accent is always solved *light*
-// for the blur, and a light tint on a light theme's mantle is no hover indication at all. Restated
-// per branch because Slint can't apply a property conditionally, and flipped without an `animate`
-// like the track rows, where an eased fade reads as lag when crossing rows.
+// **Palette is the host's, and deliberately not tied to the scale**: the list hands every row the
+// same three brushes, which `UpNextList` argues. Nothing here eases them, and the hover flips
+// without an `animate` like the track rows, where an eased fade reads as lag when crossing rows.
 component UpNextRow inherits Rectangle {
     in property <QueueRow> data;
     in property <bool> compact;
+    in property <brush> ink;
+    in property <brush> ink-muted;
+    in property <brush> row-hover;
     // Owned by the host so the row and the slide animation can't disagree
     // about how tall a row is.
     in property <length> row-height;
@@ -33,9 +33,7 @@ component UpNextRow inherits Rectangle {
     property <length> pad-v: compact ? Theme.pad-xs : Theme.pad-sm;
 
     Rectangle {
-        background: touch.has-hover
-            ? (compact ? Theme.surface0 : Player.np-accent-pill)
-            : transparent;
+        background: touch.has-hover ? root.row-hover : transparent;
         border-radius: Theme.radius-md;
 
         HorizontalLayout {
@@ -65,17 +63,13 @@ component UpNextRow inherits Rectangle {
                     spacing: 2px;
                     Text {
                         text: "‎" + root.data.title;
-                        color: compact ? Theme.text : Player.np-on-backdrop;
+                        color: root.ink;
                         font-size: Theme.font-size-row;
                         overflow: elide;
                     }
                     Text {
                         text: "‎" + root.data.artist;
-                        // Compact is body copy on a plain surface, so it takes
-                        // `Theme.text` like every other row list. The full view keeps
-                        // its solved muted tier: that one floats on the blurred cover,
-                        // where the two-tier split is what holds the hierarchy.
-                        color: compact ? Theme.text : Player.np-on-backdrop-muted;
+                        color: root.ink-muted;
                         font-size: Theme.font-size-sm;
                         overflow: elide;
                         visible: root.data.artist != "";
@@ -87,7 +81,7 @@ component UpNextRow inherits Rectangle {
                 alignment: center;
                 Text {
                     text: root.data.display_duration;
-                    color: compact ? Theme.text : Player.np-on-backdrop-muted;
+                    color: root.ink-muted;
                     font-size: Theme.font-size-sm;
                 }
             }
@@ -106,11 +100,28 @@ component UpNextRow inherits Rectangle {
 // **Two hosts mount it but never at once**: entering the miniplayer force-closes
 // `Nav.now-playing-open`, so only one local slide timer ever runs.
 //
-// Row height, scrollbar slot, list inset, the empty glyph and — the part that
-// matters — which palette the rows paint all key off the single `compact` flag, so a
-// caller threads one property rather than six.
+// Row height, scrollbar slot, list inset and the empty glyph all key off `compact`, so a caller
+// threads one property rather than five.
+//
+// **The palette is not the scale's, and every colour defaults to the backdrop tiers** the full view
+// paints on. The miniplayer is compact whether or not it paints its own backdrop, and hands over
+// either those tiers or the neutral list palette, easing between them. That includes the row
+// hover: the Now-Playing accent is always solved *light* for the blur, and a light tint on a light
+// theme's mantle is no hover indication at all.
 export component UpNextList inherits Rectangle {
     in property <bool> compact;
+    in property <brush> ink: Player.np-on-backdrop;
+    // The artist and the duration. Off a backdrop a host takes `Theme.text` here like every other
+    // row list; on one the muted tier is what holds the hierarchy against the artwork.
+    in property <brush> ink-muted: Player.np-on-backdrop-muted;
+    in property <brush> row-hover: Player.np-accent-pill;
+    in property <brush> empty-ink: Player.np-on-backdrop-muted;
+    in property <brush> empty-glyph: Player.np-on-backdrop-muted.transparentize(0.5);
+    // The bar's palette, stepped rather than handed over as brushes: `OverlayScrollbar` eases its own
+    // colours, so a host easing them too would restart that curve every frame. It takes the pace
+    // instead.
+    in property <bool> bar-on-backdrop: true;
+    in property <duration> bar-recolor-duration: Theme.dur-fast;
     // **Must exceed `scrollbar-width`**, else the list extent and the scrollbar slot
     // overlap and the row hover paints under the bar. The remaining gap also keeps the
     // row TouchAreas off the window's right-edge resize band.
@@ -160,6 +171,9 @@ export component UpNextList inherits Rectangle {
         for row[idx] in NowPlaying.up-next-rows: UpNextRow {
             data: row;
             compact: root.compact;
+            ink: root.ink;
+            ink-muted: root.ink-muted;
+            row-hover: root.row-hover;
             row-height: root.row-h;
             clicked => {
                 // Under repeat-all the list wraps past the end, so the play-order
@@ -181,6 +195,9 @@ export component UpNextList inherits Rectangle {
         x: 0;
         width: parent.width - root.list-inset-right;
         compact: root.compact;
+        ink: root.ink;
+        ink-muted: root.ink-muted;
+        row-hover: root.row-hover;
         row-height: root.row-h;
         y: NowPlaying.slide-direction == 1
             ? -root.slide-p * root.row-h
@@ -193,7 +210,8 @@ export component UpNextList inherits Rectangle {
         y: 0;
         width: root.scrollbar-width;
         height: parent.height;
-        compact: root.compact;
+        on-backdrop: root.bar-on-backdrop;
+        recolor-duration: root.bar-recolor-duration;
         visible-size: up-next-list.visible-height;
         content-size: up-next-list.viewport-height;
         offset: -up-next-list.viewport-y;
@@ -204,6 +222,8 @@ export component UpNextList inherits Rectangle {
         glyph: "queue_music";
         heading: @tr("No tracks up next");
         compact: root.compact;
+        ink: root.empty-ink;
+        glyph-color: root.empty-glyph;
         wrap: no-wrap;
     }
 }

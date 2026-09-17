@@ -404,6 +404,13 @@ this file is what builds, looks right, and is wrong.
   of the cursor on both its hosts. A wrapper meant to be a coordinate frame pins `x: 0px; y: 0px`
   **inside the component**, where a host cannot forget it.
 
+- **`absolute-position` inside a `PopupWindow` is measured from the popup's corner, not the
+  window's.** It lowers to `map_to_window`, which walks parents with `StopAtPopups` and never adds
+  where the popup was placed (`map_to_native_window` does, and a binding can't reach it). An
+  element comparing it against window geometry therefore sees every edge nearer than it is, off by
+  the popup's own offset, so it looks right wherever that offset happens to be small. `Tooltip`
+  takes `in-popup` for exactly this, set at both volume readouts.
+
 - **A flyout opens *inside* the overflow menu's single `PopupWindow` — no nesting.** The
   playback-speed row (`speed-flyout.slint`, presets in shared `flyout-presets.slint` globals) is
   the worked example. Fixed-reserve geometry, as with the volume popup: size the popup for
@@ -586,6 +593,20 @@ this file is what builds, looks right, and is wrong.
   wrong. The sum skips the closing segment, so where the figure starts matters too: close along a
   vertical edge or one at `y = 0`. All four bit `waveform-trace.slint`, whose writer is
   `player::waveform::write_path_commands`; the winding bit `rounded-frame.slint` too.
+
+- **A round cap on a 1 px stroke draws nothing, and the stroke's two ends come out different.**
+  femtovg's `expand_stroke` (`path/cache.rs`) tessellates a cap with `curve_divisions` over the
+  half-width, which for a line one physical pixel wide lands on its floor of two, so
+  `round_cap_start`/`round_cap_end` emit a semicircle of two rim points and no area. The stroke
+  stops on a hard edge at its endpoint, and where that edge runs through pixel centres, as it does
+  at the tip of a 45° line on integer coordinates, the rasterizer's tie-break keeps those pixels on
+  one side and drops them on the other: every left-hand tip fades out and every right-hand one is
+  cut off, whichever end the path starts from. **Only at a scale factor of 1.** Slint hands the
+  canvas a `ceil`ed scale as its dpi, which narrows the tessellation tolerance and doubles the
+  physical width together, so the same logical stroke gets a real cap on any HiDPI display and the
+  review there shows nothing. Cure: `LineCap.square`, whose `butt_cap_*` lays a one-pixel fringe
+  past the endpoint, so geometry lies on both sides of the edge and both tips fade alike. Bit
+  `caption-buttons.slint`'s KDE glyphs, copied from a decoration that draws round caps.
 
 - **A `<=>` on a `Flickable`'s `viewport-y` silently disables Slint's own out-of-bounds correction
   — a one-way binding doesn't.** `Flickable::init` installs a change handler that pulls a

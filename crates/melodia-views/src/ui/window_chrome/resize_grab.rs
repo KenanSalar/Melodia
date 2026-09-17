@@ -12,8 +12,8 @@ use melodia_ui::{AppWindow, ResizeZone, WindowChrome};
 
 /// Registers the ring's zone callback and returns the cell it keeps up to date.
 ///
-/// An `Rc<Cell>` rather than the drag region's atomic: the callback and the winit filter both run
-/// on the event-loop thread, and the value is `Copy`.
+/// An `Rc<Cell>`, as the drag region's is: the callback and the winit filter both run on the
+/// event-loop thread, and the value is `Copy`.
 pub(super) fn wire(app: &AppWindow) -> Rc<Cell<Option<ResizeDirection>>> {
     let grab = Rc::new(Cell::new(None));
     let writer = Rc::clone(&grab);

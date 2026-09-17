@@ -6,9 +6,9 @@ import { NpOverlayScrollbar } from "np-overlay-scrollbar.slint";
 import { NpEmptyState } from "np-empty-state.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
-// The Now Playing column's lyrics arm, mounted where Up Next otherwise is. The scroller,
+// The lyrics arm of a now-playing column, mounted where Up Next otherwise is. The scroller,
 // its bar and the palette are the station panel's, so the two columns sit into the backdrop
-// the same way.
+// the same way. Two hosts: the full view, and the miniplayer's column.
 //
 // **Nothing here carries a `changed` handler, and that is not a style choice.** This is mounted
 // behind an `if`, and a tracker in a dropped branch stays registered against whatever it watched;
@@ -16,6 +16,23 @@ import { MaterialIcon } from "../material-icon.slint";
 // on the scroll target is exactly. So the follow is driven imperatively from the timer below and
 // the easing is arithmetic rather than an `animate` block.
 export component LyricsPanel inherits Rectangle {
+    // Only the empty state draws at two sizes; the sheet's own scale is the `Lyrics` global's,
+    // which both halves lay out against and neither host may restate.
+    in property <bool> compact: false;
+
+    // **The three tiers every part of a sheet paints from**, as inputs defaulting to the backdrop
+    // the full view paints on. The miniplayer hands over the page's ink or these off its own
+    // switch and eases between them out there, which is the only place it can: the header above
+    // is why this file eases nothing, so a flag read in here could only ever step.
+    in property <brush> ink: Player.np-on-backdrop;
+    in property <brush> ink-muted: Player.np-on-backdrop-muted;
+    in property <brush> row-hover: Player.np-accent-pill;
+    in property <brush> empty-glyph: Player.np-on-backdrop-muted.transparentize(0.5);
+    // The bar's palette, stepped rather than handed over: `OverlayScrollbar` eases its own colours,
+    // so it takes the pace instead.
+    in property <bool> bar-on-backdrop: true;
+    in property <duration> bar-recolor-duration: Theme.dur-fast;
+
     // How far the panel closes on the target each tick. A quarter settles inside a third of a
     // second at this interval, which reads as a glide rather than a snap or a drift.
     property <float> follow-step: 0.25;
@@ -80,7 +97,7 @@ export component LyricsPanel inherits Rectangle {
                 // as lag when the pointer crosses rows. `has-hover` is what clears it — the index
                 // is only rewritten on a crossing, so nothing reports the pointer leaving.
                 background: touch.has-hover && i == Lyrics.hover-index
-                    ? Player.np-accent-pill
+                    ? root.row-hover
                     : transparent;
                 border-radius: Theme.radius-md;
 
@@ -100,8 +117,8 @@ export component LyricsPanel inherits Rectangle {
                     font-size: Lyrics.font-size;
                     font-weight: parent.is-sung ? 700 : 400;
                     color: parent.is-sung
-                        ? Player.np-on-backdrop
-                        : Player.np-on-backdrop-muted.transparentize(0.2);
+                        ? root.ink
+                        : root.ink-muted.transparentize(0.2);
                 }
 
                 // Empty for a Latin line and while the toggle is off, `romanization_line_count`
@@ -121,8 +138,8 @@ export component LyricsPanel inherits Rectangle {
                     // Sung along to rather than read, so it keeps the sung line's own colour and
                     // sits one step back from it while the line is not being sung.
                     color: parent.is-sung
-                        ? Player.np-on-backdrop.transparentize(0.15)
-                        : Player.np-on-backdrop-muted.transparentize(0.3);
+                        ? root.ink.transparentize(0.15)
+                        : root.ink-muted.transparentize(0.3);
                 }
 
                 // Empty where the sheet carries no gloss, and `translation_line_count` is 0 with
@@ -141,8 +158,8 @@ export component LyricsPanel inherits Rectangle {
                     // A gloss, so it follows the sung line without ever competing with it: no
                     // weight of its own, and a step further back while the line is not sung.
                     color: parent.is-sung
-                        ? Player.np-on-backdrop-muted
-                        : Player.np-on-backdrop-muted.transparentize(0.45);
+                        ? root.ink-muted
+                        : root.ink-muted.transparentize(0.45);
                 }
 
                 // The gap the sheet leaves between two lines. `row.text` is empty on these, so the
@@ -171,12 +188,12 @@ export component LyricsPanel inherits Rectangle {
                         MaterialIcon {
                             name: "music_note";
                             icon-size: root.note-size;
-                            icon-color: Player.np-on-backdrop-muted.transparentize(0.2);
+                            icon-color: root.ink-muted.transparentize(0.2);
                         }
                         MaterialIcon {
                             name: "music_note";
                             icon-size: root.note-size;
-                            icon-color: Player.np-on-backdrop;
+                            icon-color: root.ink;
                             fade: parent.lit;
                         }
                     }
@@ -225,6 +242,8 @@ export component LyricsPanel inherits Rectangle {
         y: 0;
         width: Theme.scrollbar-slot;
         height: parent.height;
+        on-backdrop: root.bar-on-backdrop;
+        recolor-duration: root.bar-recolor-duration;
         visible-size: sv.visible-height;
         content-size: sv.viewport-height;
         offset: -sv.viewport-y;
@@ -306,6 +325,9 @@ export component LyricsPanel inherits Rectangle {
     // carry `▸` or `⋮`, so a run holding one pulls a fallback whose taller metrics own the line
     // box, and where nothing on the system covers it the line draws as tofu. A Material Symbols
     // sibling is the other way out and buys nothing in a sentence that wraps.
+    //
+    // **Silent in the compact host**, which is the miniplayer: the menu both sentences name is the
+    // full view's header, so there it points at a control the reader cannot see.
     if !root.has-rows: NpEmptyState {
         glyph: Lyrics.state == LyricsState.instrumental ? "music_note"
             : Lyrics.state == LyricsState.unavailable ? "cloud_off"
@@ -316,8 +338,12 @@ export component LyricsPanel inherits Rectangle {
             : Lyrics.state == LyricsState.unavailable ? @tr("Couldn't reach the lyrics service")
             : Lyrics.state == LyricsState.off ? @tr("Lyrics lookup is off")
             : @tr("Play something to see its lyrics");
-        hint: Lyrics.state == LyricsState.off ? @tr("Turn it on in the Lyrics menu")
+        hint: root.compact ? ""
+            : Lyrics.state == LyricsState.off ? @tr("Turn it on in the Lyrics menu")
             : Lyrics.state == LyricsState.unavailable ? @tr("Try again from the Lyrics menu")
             : "";
+        compact: root.compact;
+        ink: root.ink-muted;
+        glyph-color: root.empty-glyph;
     }
 }

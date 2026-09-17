@@ -6,8 +6,9 @@
 //! `AppWindow::new()` and `app.run()`, where `main.rs` calls [`install`], so the window maps
 //! with its frame decided rather than swapping it on screen), the
 //! window control callbacks ([`controls`]), window dragging and resizing ([`winit_filter`],
-//! [`resize_grab`]), the Slint tick a Win32 drag parks (`parked_loop`), file-drop coalescing
-//! ([`drop_coalescer`]), geometry ([`geometry`]) and the restart flow.
+//! [`drag_region`], [`resize_grab`], [`resize_release`]), the Slint tick a Win32 drag parks
+//! (`parked_loop`), file-drop coalescing ([`drop_coalescer`]), geometry ([`geometry`]) and the
+//! restart flow.
 //!
 //! **Dragging and resizing belong at the winit layer.** `drag_window()` from a `TouchArea`'s
 //! `pointer-event` leaks the grab: the compositor takes pointer ownership for the move and
@@ -25,11 +26,13 @@
 //! the miniplayer drops the native one.
 
 mod controls;
+mod drag_region;
 mod drop_coalescer;
 pub mod geometry;
 #[cfg(target_os = "windows")]
 pub mod parked_loop;
 mod resize_grab;
+mod resize_release;
 mod winit_filter;
 
 pub use drop_coalescer::{
@@ -37,8 +40,8 @@ pub use drop_coalescer::{
 };
 
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
 
 use slint::ComponentHandle;
 use slint::winit_030::WinitWindowAccessor;
@@ -169,14 +172,13 @@ pub fn install(app: &AppWindow, state: &AppState) -> Result<(), AppError> {
 
     app.global::<Theme>().set_use_native_titlebar(use_native);
 
-    let drag_hover = Arc::new(AtomicBool::new(false));
     let press_targets = winit_filter::PressTargets {
-        drag_hover: Arc::clone(&drag_hover),
+        drag_region: drag_region::wire(app),
         resize: resize_grab::wire(app),
     };
 
     winit_filter::install(app, state, press_targets);
-    controls::wire(app, state, drag_hover);
+    controls::wire(app, state);
     seed_always_on_top(app, state, settings.window.always_on_top);
 
     Ok(())

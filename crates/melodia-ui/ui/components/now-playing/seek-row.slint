@@ -1,0 +1,75 @@
+import { Theme } from "../../theme.slint";
+import { Player } from "../../globals/player.slint";
+import { SliderTrack } from "../slider-track.slint";
+
+// Elapsed, the seek track, total: the timeline row of the now-playing bar and the miniplayer. One
+// component because the elapsed label is the part that is easy to get subtly wrong and two copies
+// would drift on it: it follows the thumb through a drag and holds a committed
+// seek until the engine reports it, the same two readings the track's own value takes.
+//
+// A stream has no timeline, so every host mounts this behind `!Player.vm.has_station` and puts its
+// own station row in the slot. Nothing here carries a `changed` handler, which is what makes that
+// branch safe to drop.
+//
+// **Every colour is an input**, `MetaChip`'s idiom: the bar paints on its mantle and the miniplayer
+// on either its chrome or the artwork backdrop, easing between the two from outside. Nothing here
+// eases a brush, so a host easing one is safe.
+export component SeekRow inherits HorizontalLayout {
+    // Both labels. A live readout tracked continuously, so it sits at body weight rather than a
+    // rung under it.
+    in property <brush> label-color: Theme.text;
+    in property <brush> fill-color: Theme.accent;
+    in property <brush> track-color: Theme.surface1;
+    // Has to match whatever is painted behind the row; `SliderTrack` says why.
+    in property <brush> seam-mask-color: Theme.mantle;
+
+    // Wide enough for an hour-long position, so the track does not shift as the readout grows.
+    private property <length> label-width: 40px;
+    private property <length> label-font-size: 11px;
+
+    // The seek-pending hold: a committed seek shows where it is going rather than the stale
+    // position the engine reports until it lands.
+    private property <int> settled-ms:
+        Player.seek_pending_ms >= 0 ? Player.seek_pending_ms : Player.position-ms;
+
+    spacing: Theme.pad-sm;
+    // A timeline never wants more height than its track draws. The track is a plain element, whose
+    // stretch defaults to 1, so left alone this row takes a column's surplus and floats the
+    // track mid-slot.
+    vertical-stretch: 0;
+
+    Text {
+        text: Theme.format-duration(slider.dragging
+            ? round(slider.drag-value * Player.duration-ms)
+            : root.settled-ms);
+        color: root.label-color;
+        font-size: root.label-font-size;
+        min-width: root.label-width;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+
+    slider := SliderTrack {
+        horizontal-stretch: 1;
+        value: Player.duration-ms > 0 ? clamp(root.settled-ms / Player.duration-ms, 0, 1) : 0;
+        is-disabled: !Player.vm.has_track || Player.duration-ms <= 0;
+        fill-color: root.fill-color;
+        track-color: root.track-color;
+        seam-mask-color: root.seam-mask-color;
+
+        committed(v) => {
+            if (Player.duration-ms > 0) {
+                Player.seek-to(round(v * Player.duration-ms));
+            }
+        }
+    }
+
+    Text {
+        text: Theme.format-duration(Player.duration-ms);
+        color: root.label-color;
+        font-size: root.label-font-size;
+        min-width: root.label-width;
+        horizontal-alignment: left;
+        vertical-alignment: center;
+    }
+}

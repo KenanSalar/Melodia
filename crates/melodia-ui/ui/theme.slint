@@ -136,6 +136,10 @@ export global Theme {
     // each edge. `ResizeRing` sizes its corners off the band it is handed, never off this directly.
     out property <length> resize-border: 4px;
 
+    // How far in from the window edge a KDE caption cluster sits, in the titlebar and the
+    // miniplayer alike. Breeze keeps its buttons 4 px in, and a KDE cell carries 2 px of that.
+    out property <length> kde-caption-edge-pad: 2px;
+
     // The `OverlayScrollbar` *element's* slot, distinct from the 8 px it paints inside it. Both bar
     // components size their bar by it, a track list's right edge stops at it so a row's pill never
     // runs under the always-painted track, and every hand-mounted bar takes its width from here
@@ -173,6 +177,11 @@ export global Theme {
     out property <length> font-size-md: 14px;
     out property <length> font-size-lg: 16px;
 
+    // What a size derived from a live dimension rounds to, so text drawn through a resize steps
+    // rather than tracking the drag: FemtoVG keeps a glyph for every tenth of a pixel it has drawn at,
+    // in an atlas it never evicts.
+    out property <length> text-size-step: 0.5px;
+
     // Shared by every view's header band; a subtitle reuses `font-size-sm` + `subtext0`.
     out property <length> page-title-size: 20px;
     out property <int> page-title-weight: 600;
@@ -198,8 +207,9 @@ export global Theme {
     // frame, and on `shell-radius` it changed shape the moment the frame went.
     out property <length> window-radius: use-native-titlebar ? native-content-radius : shell-radius;
 
-    // 0 = Standard (Windows caption glyphs), 1 = macOS (traffic lights). `custom-titlebar.slint` reads
-    // it through `Theme` rather than reaching into `Settings`, the `shell-radius` precedent.
+    // 0 = Standard (Windows caption glyphs), 1 = macOS (traffic lights), 2 = KDE (Breeze's glyphs).
+    // `custom-titlebar.slint` reads it through `Theme` rather than reaching into `Settings`, the
+    // `shell-radius` precedent.
     in-out property <int> titlebar-button-style: 0;
 
     // 0 = Right, 1 = Left. Same hydration shape.

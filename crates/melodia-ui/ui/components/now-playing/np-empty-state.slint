@@ -8,53 +8,93 @@ import { MaterialIcon } from "../material-icon.slint";
 // the same block against the `np-*` tiers instead, shared so the column's arms cannot drift into
 // stating their emptiness in different weights.
 //
-// `compact` is the miniplayer, which sits on no backdrop and takes the page's own ink.
-export component NpEmptyState inherits VerticalLayout {
+// `compact` is how big the block draws, which follows the panel it sits in. **The colours are
+// inputs rather than a second flag**, defaulting to the backdrop tiers the full view paints on: the
+// miniplayer takes the page's ink or those tiers off its own switch, and eases between them, which
+// a flag read in here could only step.
+export component NpEmptyState inherits Rectangle {
     in property <string> glyph;
     in property <string> heading;
     // A second line naming the control that would fill the panel. Empty where there is nothing the
     // reader can do from here, which is most states.
     in property <string> hint;
     in property <bool> compact: false;
+    // The heading, and the hint at a step back from it.
+    in property <brush> ink: Player.np-on-backdrop-muted;
+    in property <brush> glyph-color: Player.np-on-backdrop-muted.transparentize(0.5);
     // Per caller rather than per tier: the lyrics arm writes a sentence and owes the break, where
     // Up Next writes three words and clipping is what keeps the miniplayer's column one line tall.
     in property <TextWrap> wrap: word-wrap;
 
-    alignment: center;
+    private property <length> glyph-size: root.compact ? 28px : 40px;
+    private property <length> heading-size: root.compact ? Theme.font-size-sm : Theme.font-size-md;
 
-    HorizontalLayout {
+    // **The words beside the glyph once the host is too short to stack them**, so a panel shrinking
+    // under the block cuts the glyph before the words. Measured off unwrapped copies of the lines
+    // rather than the lines drawn, whose wrap follows the width this decides.
+    private property <bool> beside: root.height < root.glyph-size + Theme.pad-sm
+        + heading-ruler.preferred-height
+        + (root.hint == "" ? 0px : Theme.pad-sm + hint-ruler.preferred-height);
+
+    heading-ruler := Text {
+        visible: false;
+        text: root.heading;
+        font-size: root.heading-size;
+    }
+
+    hint-ruler := Text {
+        visible: false;
+        text: root.hint;
+        font-size: Theme.font-size-sm;
+    }
+
+    VerticalLayout {
         alignment: center;
 
-        VerticalLayout {
-            spacing: Theme.pad-sm;
+        HorizontalLayout {
+            alignment: center;
 
-            HorizontalLayout {
-                alignment: center;
-                MaterialIcon {
-                    name: root.glyph;
-                    icon-size: root.compact ? 28px : 40px;
-                    icon-color: root.compact
-                        ? Theme.surface2
-                        : Player.np-on-backdrop-muted.transparentize(0.5);
+            // One cell per part, moved rather than remounted: `row`/`col` are read per layout pass.
+            GridLayout {
+                spacing: Theme.pad-sm;
+
+                HorizontalLayout {
+                    row: 0;
+                    col: 0;
+                    alignment: center;
+
+                    VerticalLayout {
+                        alignment: center;
+                        MaterialIcon {
+                            name: root.glyph;
+                            icon-size: root.glyph-size;
+                            icon-color: root.glyph-color;
+                        }
+                    }
                 }
-            }
 
-            Text {
-                text: root.heading;
-                color: root.compact ? Theme.subtext0 : Player.np-on-backdrop-muted;
-                font-size: root.compact ? Theme.font-size-sm : Theme.font-size-md;
-                horizontal-alignment: center;
-                wrap: root.wrap;
-            }
+                VerticalLayout {
+                    row: root.beside ? 0 : 1;
+                    col: root.beside ? 1 : 0;
+                    alignment: center;
+                    spacing: Theme.pad-sm;
 
-            if root.hint != "": Text {
-                text: root.hint;
-                color: root.compact
-                    ? Theme.subtext0.transparentize(0.35)
-                    : Player.np-on-backdrop-muted.transparentize(0.35);
-                font-size: Theme.font-size-sm;
-                horizontal-alignment: center;
-                wrap: root.wrap;
+                    Text {
+                        text: root.heading;
+                        color: root.ink;
+                        font-size: root.heading-size;
+                        horizontal-alignment: root.beside ? left : center;
+                        wrap: root.wrap;
+                    }
+
+                    if root.hint != "": Text {
+                        text: root.hint;
+                        color: root.ink.transparentize(0.35);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: root.beside ? left : center;
+                        wrap: root.wrap;
+                    }
+                }
             }
         }
     }

@@ -1,46 +1,131 @@
 import { Theme } from "../theme.slint";
 import { Player } from "../globals/player.slint";
-import { MiniPlayer, WindowChrome } from "../globals/shell.slint";
-import { IconButton } from "../components/icon-button.slint";
-import { MetaChip } from "../components/meta-chip.slint";
-import { SourceArtwork } from "../components/now-playing/source-artwork.slint";
-import { SliderTrack } from "../components/slider-track.slint";
-import { VolumePopup } from "../components/now-playing/volume-popup.slint";
-import { VolumePopupHorizontal } from "../components/now-playing/volume-popup-horizontal.slint";
-import { PlayButton } from "../components/now-playing/play-button.slint";
+import { Lyrics } from "../globals/lyrics.slint";
+import { DragRegion, MiniPlayer, MiniLayout, WindowChrome } from "../globals/shell.slint";
 import { UpNextList } from "../components/now-playing/up-next-list.slint";
+import { LyricsPanel } from "../components/now-playing/lyrics-panel.slint";
+import { MiniArtwork } from "../components/mini-player/mini-artwork.slint";
+import { MiniBackdrop } from "../components/mini-player/mini-backdrop.slint";
+import { MiniCaptionsRow } from "../components/mini-player/mini-captions.slint";
+import { MiniTransport, MiniTrailingControls, MiniTimeline } from "../components/mini-player/mini-controls.slint";
 
 // Compact miniplayer replacing the full UI once the window shrinks past the
 // responsive threshold. `MiniPlayer.active` (derived at the `AppWindow` root)
-// arms it; `MiniPlayer.square` picks the strip or the square variant.
+// arms it; `MiniPlayer.layout` says how far its one layout has grown: the controls on the title's
+// line, under it, or with a panel below.
 //
-// Resize is the only way in *and* out — there are no buttons. Double-clicking
-// the bare drag region maximizes, so it also leaves mini.
+// A window size is the only way in *and* out. The Full Player caption leaves by resizing the
+// window, and a double press on the bare drag region only moves it.
 //
 // Every interactive control stays 8 px clear of the window edges, where
 // `ResizeRing`'s grabs sit above this view, so the cursor keeps showing the
 // resize affordance instead of flickering hover. The corner grabs grow with the
-// window radius and reach past that inset on the rounder presets.
+// window radius and reach past that inset on the rounder presets. The KDE captions are the
+// exception, sitting where Breeze's do, argued at their mount.
 export component MiniPlayerView inherits Rectangle {
     background: Theme.mantle;
     // Doubles as resize-ring breathing room: the ring's TouchAreas sit above
     // this component, and the inset preserves their hit zones at all four edges.
     private property <length> edge-pad: 4px;
-    // Shared by both variants — applies the seek-pending hold the way the bar's
-    // slider does.
-    private property <float> slider-frac:
-        Player.duration-ms > 0
-            ? (Player.seek_pending_ms >= 0
-                ? clamp(Player.seek_pending_ms / Player.duration-ms, 0, 1)
-                : clamp(Player.position-ms / Player.duration-ms, 0, 1))
-            : 0;
+
+    // The switch the whole view repaints on, and how long the repaint takes. **The pace is the
+    // stacks' own**: both drain on `Theme.dur-med` with this easing, so a foreground crossing on
+    // anything else would land early or late against the backdrop behind it.
+    private property <bool> on-backdrop: MiniPlayer.backdrop-shown;
+    private property <duration> recolor: Theme.dur-med;
+
+    // Every leaf that would otherwise read a `Theme.*` brush takes one of these instead, each on the
+    // backdrop matching what the same kind of element paints in Now Playing. Answered once rather
+    // than per site: on the blur arm the floor is solved dark under a solved-light foreground, so a
+    // site left on the theme's ink vanishes on a light palette, and one site answering differently
+    // from its neighbour is invisible until someone switches theme.
+    //
+    // **Each brush is eased exactly once, and this block is where for every leaf that paints it
+    // straight.** The two leaves that ease their own colours, `IconButton` and the scrollbar, take
+    // the stepped answer and `recolor` instead: a brush eased here that one of them eases too
+    // restarts its curve on every frame of this one, `slint-pitfalls.md`'s shared-brush entry.
+    private property <brush> ink: root.on-backdrop ? Player.np-on-backdrop : Theme.text;
+    private property <brush> ink-muted: root.on-backdrop ? Player.np-on-backdrop-muted : Theme.subtext0;
+    // Up Next's artist and duration, which off the backdrop take `Theme.text` like every row list
+    // rather than the muted line under a title.
+    private property <brush> list-muted: root.on-backdrop ? Player.np-on-backdrop-muted : Theme.text;
+    private property <brush> row-hover: root.on-backdrop ? Player.np-accent-pill : Theme.surface0;
+    private property <brush> empty-glyph:
+        root.on-backdrop ? Player.np-on-backdrop-muted.transparentize(0.5) : Theme.surface2;
+    private property <brush> accent: root.on-backdrop ? Player.np-accent-bright : Theme.accent;
+    // The artwork placeholder, as `NowPlayingCover` draws it on the backdrop: a faint recess and a
+    // quiet glyph rather than an accent slab, which a wash already carries colour enough for.
+    private property <brush> tile-fill:
+        root.on-backdrop ? Player.np-on-backdrop.transparentize(0.92) : Theme.accent.with-alpha(0.15);
+    private property <brush> tile-glyph:
+        root.on-backdrop ? Player.np-on-backdrop-muted.transparentize(0.5) : Theme.accent;
+    // The live pill, as Now Playing's chips paint it: their own fill tier and a lettering tier held
+    // to the text bar, rather than the chrome glyph colour.
+    private property <brush> chip-fill:
+        root.on-backdrop ? Player.np-chip-fill : Theme.accent.with-alpha(0.18);
+    private property <brush> chip-label: root.on-backdrop ? Player.np-chrome-text : Theme.accent;
+    // The seam mask is a stadium painted in whatever sits *behind* the slider, so it only works
+    // over a flat surface. A backdrop is washes over a gradient, or a blurred cover under a scrim,
+    // and no one colour matches either — a mask there is a flat blob that moves with the thumb.
+    // Clear instead, which leaves the two bars meeting at their own rounded ends: the thumb covers
+    // that join at rest, and the expressive gap is worth less than the blob costs. **Mantle at no
+    // alpha rather than `transparent`**, the ease running in straight RGBA: toward rgba(0,0,0,0)
+    // the mask darkens on its way out.
+    private property <brush> seam-mask:
+        root.on-backdrop ? Theme.mantle.transparentize(1.0) : Theme.mantle;
+    // The seek track's unplayed half. Now Playing draws no slider, so this is the lyrics switch's
+    // resting track, the one track that view lays on the backdrop.
+    private property <brush> track:
+        root.on-backdrop ? Player.np-accent-bright.transparentize(0.76) : Theme.surface1;
+    // The play glyph, punched out of the disc above it, and a KDE caption's out of its lit disc, which
+    // lands on the same brush over the backdrop. `ink-on` rather than the mantle the bar's copy uses:
+    // on the backdrop the disc is the solved accent, whose brightness is the cover's to decide, so
+    // the glyph has to be picked against it rather than against a surface.
+    private property <brush> disc-ink:
+        root.on-backdrop ? Theme.ink-on(Player.np-accent-bright) : Theme.mantle;
+    // The standard captions' glyph at rest. A caption eases only its hover, so this one is eased
+    // here. Off the backdrop it keeps the titlebar's own dimming on an unfocused window.
+    private property <brush> caption-ink: root.on-backdrop
+        ? Player.np-accent-dim
+        : (Theme.window-focused ? Theme.text : Theme.overlay1);
+    animate ink, ink-muted, list-muted, row-hover, empty-glyph, accent, tile-fill, tile-glyph,
+        chip-fill, chip-label, seam-mask, track, disc-ink, caption-ink {
+        duration: root.recolor;
+        easing: ease-in-out;
+    }
+
+    // The artist line's sizes in the card and on the strip. A pair of its own rather than the
+    // title's ratio, which shrinks a line this small past reading.
+    private property <length> subtitle-card-size: 11px;
+    private property <length> subtitle-strip-size: 10px;
+
+    pure function grown-size(strip: length, card: length) -> length {
+        return round((strip + (card - strip) * stack.title-grow) / Theme.text-size-step)
+            * Theme.text-size-step;
+    }
+    // The highest the title's line sits down the artwork in the card, as a share of it. A centred
+    // pair rides up to the window's top as the artwork shrinks, and the text stops reading as beside
+    // the cover.
+    private property <float> line-share: 0.3;
+    // The smallest artwork that seats the title at that share with the controls under it. Below it
+    // the controls rise onto the title's line, all the way by the artwork's floor. Spelled rather
+    // than measured: the title's height it would come from is what that travel scales.
+    private property <length> stacked-art: 70px;
+
+    backdrop := MiniBackdrop {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        fade-duration: root.recolor;
+    }
 
     // Window-move drag region. Mini hides the `CustomTitleBar`, so without this
     // the window can't be moved at all. It covers the whole area at z-bottom
     // and every control sits above it — Slint dispatches to the topmost
     // TouchArea, so `has-hover` only goes true over empty space. Same
-    // `drag-region-hover-changed` → winit press-intercept path as
-    // `custom-titlebar.slint`.
+    // `drag-region-changed` → winit press-intercept path as
+    // `custom-titlebar.slint`, under its own name so a double press only moves it.
     drag-region := TouchArea {
         x: 0;
         y: 0;
@@ -48,385 +133,252 @@ export component MiniPlayerView inherits Rectangle {
         height: 100%;
         mouse-cursor: default;
         changed has-hover => {
-            WindowChrome.drag-region-hover-changed(self.has-hover);
-        }
-        double-clicked => {
-            // The size flip trips `mini-active = false` on its own.
-            WindowChrome.toggle-maximize();
+            WindowChrome.drag-region-changed(
+                self.has-hover ? DragRegion.miniplayer : DragRegion.none);
         }
     }
 
-    // Horizontal variant — wide and short.
-    if !MiniPlayer.square: VerticalLayout {
+    // Strip, card and column, **one mount that grows rather than three that swap**: the artwork
+    // beside the title and controls, the timeline under both, the window's captions above and, in
+    // the column, a panel below.
+    //
+    // **Each part opens into the height the one before it leaves**: the artwork up to its size,
+    // then the captions row, then the panel. Nothing arrives or leaves with height of its own to
+    // claim, so the block never jumps, and it stays top-aligned for the same reason. Below the
+    // card the artwork's last stretch carries the controls up onto the title's line.
+    stack := VerticalLayout {
+        // What the artwork shares the window's height with: the edges and the timeline under it.
+        property <length> art-rows: 2 * root.edge-pad + timeline-gap.preferred-height
+            + timeline.preferred-height;
+        // How far the controls have come up onto the title's line, over the artwork's travel from
+        // `stacked-art` down to its floor. **Off the height the artwork is sized by rather than
+        // eased**, so they move with the drag and at no other time.
+        property <float> inline-t: clamp((root.stacked-art - (root.height - self.art-rows))
+            / (root.stacked-art - MiniPlayer.art-floor), 0, 1);
+        // The text shrinks to the strip's size over the same travel.
+        property <float> title-grow: 1 - self.inline-t;
+        // The title makes the controls' room over the first eighth of their rise, before they reach
+        // the bottom of its line.
+        property <float> title-lead: min(1.0, self.inline-t * 8);
+
+        // How far the captions row is open: what the artwork and the timeline leave, up to all of it.
+        property <length> captions-shown: clamp(
+            root.height - self.art-rows - head.preferred-height, 0px, MiniPlayer.captions-height);
+
+        // Any room for the list under the block. Measured off the block rather than a fixed
+        // height, a narrow window's artwork stopping short of its cap and freeing the room that
+        // much sooner.
+        property <bool> shows-panel: MiniPlayer.layout == MiniLayout.column
+            && root.height - 2 * root.edge-pad - block.preferred-height > MiniPlayer.panel-gap;
+
         padding: root.edge-pad;
         spacing: 0;
 
-        HorizontalLayout {
-            vertical-stretch: 1;
-            spacing: Theme.pad-sm;
-            padding-left: Theme.pad-xs;
-            padding-right: Theme.pad-xs;
-            alignment: stretch;
+        block := VerticalLayout {
+            vertical-stretch: 0;
+            spacing: 0;
 
-            VerticalLayout {
-                alignment: center;
-                SourceArtwork {
-                    tile-size: 48px;
+            // Over the head, so a caption's tooltip lands on the title rather than under it. The
+            // head's own pills never reach up here: the controls rise near the top only once the
+            // row has closed.
+            MiniCaptionsRow {
+                z: 2;
+                open-height: stack.captions-shown;
+                edge-pad: root.edge-pad;
+                ink: root.caption-ink;
+                ink-on-lit: root.disc-ink;
+            }
+
+            // Over the timeline, which a pill flips down onto when the controls sit near the top.
+            head := HorizontalLayout {
+                z: 1;
+                vertical-stretch: 0;
+                spacing: Theme.pad-sm;
+                padding-left: Theme.pad-xs;
+
+                // **The block's only slack, which is what keeps every control on screen.** Sized
+                // to the smallest of the cap, the width the controls leave it and the height the
+                // timeline leaves it, so the tile fills the slot and sits flush with the title.
+                // Floored at the strip's thumbnail, below which the timeline's gap gives instead.
+                //
+                // **A plain `Rectangle` with the tile placed by `x` and `y`**, Now Playing's cover
+                // slot and for its reason: a centring layout folds the tile's fixed size into the
+                // slot's minimum, and the slot stops being able to give.
+                Rectangle {
+                    property <length> size: max(0px, min(MiniPlayer.art-cap,
+                        root.width - 2 * root.edge-pad - Theme.pad-xs - Theme.pad-sm
+                            - info.min-width,
+                        max(MiniPlayer.art-floor, root.height - stack.art-rows)));
+
+                    horizontal-stretch: 0;
+                    vertical-stretch: 0;
+                    min-width: 0px;
+                    min-height: 0px;
+                    preferred-width: self.size;
+                    preferred-height: self.size;
+                    max-width: self.size;
+                    max-height: self.size;
+
+                    MiniArtwork {
+                        tile-size: min(parent.width, parent.height);
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        track-tile-bg: root.tile-fill;
+                        track-tile-icon-color: root.tile-glyph;
+                    }
+                }
+
+                // The title with the controls under it, or beside it on the strip. **Placed by `x`
+                // and `y` rather than laid out**, a layout only being able to jump between the two,
+                // so its bounds are spelled: hand-placed children fold nothing into them.
+                info := Rectangle {
+                    property <length> titles-h: titles.preferred-height;
+                    property <length> cluster-h: cluster.preferred-height;
+                    // The card centres the pair, the gap between taking a third of any surplus up
+                    // to `pad-md`.
+                    property <length> stacked-gap: clamp(Theme.pad-xs
+                        + (self.height - self.titles-h - Theme.pad-xs - self.cluster-h) / 3,
+                        Theme.pad-xs, Theme.pad-md);
+                    property <length> stacked-top:
+                        (self.height - self.titles-h - self.stacked-gap - self.cluster-h) / 2;
+                    // The middle of the card's title line, held down to `line-share` of the
+                    // artwork where the centred pair would lift it higher.
+                    property <length> card-line: max(self.stacked-top + self.titles-h / 2,
+                        self.height * root.line-share);
+                    // The controls under that title, pushed down by it and held inside the row.
+                    property <length> card-cluster-y: min(self.height - self.cluster-h,
+                        max(self.stacked-top + self.titles-h + self.stacked-gap,
+                            self.card-line + self.titles-h / 2 + Theme.pad-xs));
+                    // The middle of the title's line, coming down from the card's to the middle of
+                    // the row as the controls rise, so they meet it wherever it is.
+                    property <length> line-center: self.card-line
+                        + (self.height / 2 - self.card-line) * stack.inline-t;
+                    property <length> stacked-min-width: max(titles.min-width, cluster.min-width);
+                    property <length> inline-min-width:
+                        titles.min-width + Theme.pad-sm + cluster.min-width;
+                    property <length> stacked-min-height:
+                        self.titles-h + Theme.pad-xs + self.cluster-h;
+                    property <length> inline-min-height: max(self.titles-h, self.cluster-h);
+
+                    horizontal-stretch: 1;
+                    // Its floor, clamped up to its real minimum by the layout: asking for more
+                    // would have the shrink pass take width from these controls alongside the
+                    // artwork.
+                    preferred-width: 0px;
+                    min-width: self.stacked-min-width
+                        + (self.inline-min-width - self.stacked-min-width) * stack.title-lead;
+                    min-height: self.stacked-min-height
+                        + (self.inline-min-height - self.stacked-min-height) * stack.inline-t;
+
+                    // No clip: bounded, the elide already stops the text, and a scissor at the
+                    // line box cuts the marks above and below it.
+                    titles := VerticalLayout {
+                        x: 0;
+                        y: parent.line-center - self.height / 2;
+                        width: parent.width - (cluster.width + Theme.pad-sm) * stack.title-lead;
+                        height: self.preferred-height;
+                        spacing: 2px;
+
+                        Text {
+                            text: Player.source-title;
+                            color: root.ink;
+                            font-size: root.grown-size(Theme.font-size-sm, Theme.font-size-md);
+                            font-weight: 500;
+                            overflow: elide;
+                        }
+                        Text {
+                            text: Player.source-subtitle;
+                            color: root.ink-muted;
+                            font-size: root.grown-size(
+                                root.subtitle-strip-size, root.subtitle-card-size);
+                            overflow: elide;
+                        }
+                    }
+
+                    // At the right edge in both arrangements, so only its `y` moves: from under the
+                    // title up onto its line.
+                    cluster := HorizontalLayout {
+                        property <length> inline-y: parent.line-center - self.height / 2;
+
+                        x: parent.width - self.width;
+                        y: parent.card-cluster-y
+                            + (self.inline-y - parent.card-cluster-y) * stack.inline-t;
+                        width: self.preferred-width;
+                        height: self.preferred-height;
+                        spacing: Theme.pad-sm;
+
+                        MiniTransport {
+                            disc-color: root.accent;
+                            disc-ink: root.disc-ink;
+                        }
+
+                        MiniTrailingControls {
+                            recolor: root.recolor;
+                            toggle-backdrop => { backdrop.set-shown(!MiniPlayer.backdrop-shown); }
+                        }
+                    }
                 }
             }
 
-            Rectangle {
+            timeline-gap := Rectangle {
+                min-height: Theme.pad-xs;
+                preferred-height: Theme.pad-md;
+                max-height: Theme.pad-md;
+            }
+
+            timeline := MiniTimeline {
+                label-color: root.ink;
+                fill-color: root.accent;
+                track-color: root.track;
+                seam-mask-color: root.seam-mask;
+                chip-fill: root.chip-fill;
+                chip-label: root.chip-label;
+            }
+        }
+
+        if !stack.shows-panel: Rectangle { vertical-stretch: 1; }
+
+        // Both arms are shared with the full-screen view, and `up_next.rs` keeps the list's rows
+        // fed while mini is up.
+        //
+        // **Two arms rather than three**: a station keeps Up Next here, where the full view swaps
+        // in a panel describing the stream. There is no room for that panel under the artwork, and
+        // the queue underneath a station is still what the controls above act on.
+        //
+        // **Its preferred height is its floor on purpose.** The shrink pass takes height from every
+        // row with room between the two, so a panel asking for more would give ground alongside
+        // the artwork, where the artwork is meant to give first. Everything past the floor still
+        // comes to it through the stretch.
+        if stack.shows-panel: VerticalLayout {
+            min-height: MiniPlayer.panel-gap;
+            preferred-height: MiniPlayer.panel-gap;
+            vertical-stretch: 1;
+            padding-top: MiniPlayer.panel-gap;
+
+            // **Clipped here**, Up Next clipping itself: the sheet's empty state is centred on the
+            // panel rather than inside its scroller, so a panel shorter than the message would
+            // paint it over the timeline.
+            if !Player.vm.has_station && Lyrics.enabled: LyricsPanel {
                 clip: true;
-                horizontal-stretch: 1;
-                VerticalLayout {
-                    alignment: center;
-                    spacing: 2px;
-                    Text {
-                        text: Player.source-title;
-                        color: Theme.text;
-                        font-size: Theme.font-size-sm;
-                        font-weight: 500;
-                        overflow: elide;
-                    }
-                    Text {
-                        text: Player.source-subtitle;
-                        color: Theme.subtext0;
-                        font-size: 11px;
-                        overflow: elide;
-                    }
-                }
-            }
-
-            HorizontalLayout {
-                spacing: 2px;
-                horizontal-stretch: 0;
-                alignment: center;
-
-                VerticalLayout {
-                    alignment: center;
-                    IconButton {
-                        icon: "chevron_left";
-                        press-shrink: true;
-                        diameter: 28px;
-                        icon-size: 18px;
-                        button-enabled: Player.vm.has_previous;
-                        tooltip-text: @tr("Previous");
-                        clicked => { Player.previous(); }
-                    }
-                }
-                VerticalLayout {
-                    alignment: center;
-                    PlayButton {
-                        wrapper-d: 30px;
-                        icon-size: 16px;
-                        is-playing: Player.vm.is_playing;
-                        animation-mode: 0;
-                        clicked => { Player.play-pause(); }
-                    }
-                }
-                VerticalLayout {
-                    alignment: center;
-                    IconButton {
-                        icon: "chevron_right";
-                        press-shrink: true;
-                        diameter: 28px;
-                        icon-size: 18px;
-                        button-enabled: Player.vm.has_next;
-                        tooltip-text: @tr("Next");
-                        clicked => { Player.next(); }
-                    }
-                }
-            }
-
-            HorizontalLayout {
-                spacing: 2px;
-                horizontal-stretch: 0;
-                alignment: end;
-                // Keeps the corner-resize TouchAreas' hit zone clear.
-                padding-right: 4px;
-
-                VerticalLayout {
-                    alignment: center;
-                    // The vertical `VolumePopup` is 180 px tall and clips against
-                    // this variant's top edge; the horizontal sibling is the same
-                    // slider rotated, flying out to the left of the disc.
-                    VolumePopupHorizontal {
-                        diameter: 28px;
-                        icon-size: 18px;
-                    }
-                }
-                if WindowChrome.always-on-top-supported: VerticalLayout {
-                    alignment: center;
-                    IconButton {
-                        icon: "push_pin";
-                        press-shrink: true;
-                        diameter: 28px;
-                        icon-size: 18px;
-                        active: WindowChrome.always-on-top-active;
-                        filled: WindowChrome.always-on-top-active;
-                        tooltip-text: WindowChrome.always-on-top-active
-                            ? @tr("Unpin from Top") : @tr("Pin on Top");
-                        clicked => { WindowChrome.toggle-always-on-top(); }
-                    }
-                }
-            }
-        }
-
-        // Hugs the bottom edge, no time labels — too cramped. `vertical-stretch:
-        // 0` is load-bearing: without it the surrounding layout steals the space
-        // and the slider floats mid-row. Leave `SliderTrack` its native 24 px
-        // min-height so the pill thumb clears the bottom edge; the track still
-        // reads slim at 4 px.
-        if !Player.vm.has_station: SliderTrack {
-            vertical-stretch: 0;
-            value: root.slider-frac;
-            is-disabled: !Player.vm.has_track || Player.duration-ms <= 0;
-            seam-mask-color: Theme.mantle;
-            committed(v) => {
-                if (Player.duration-ms > 0) {
-                    Player.seek-to(round(v * Player.duration-ms));
-                }
-            }
-        }
-        // The bar's state pill, in the slot the seek track would have taken. No elapsed readout
-        // beside it — there are no time labels on this variant either.
-        if Player.vm.has_station: HorizontalLayout {
-            vertical-stretch: 0;
-            alignment: center;
-            MetaChip {
-                text: Player.live-label;
-                fill: Theme.accent.with-alpha(0.18);
-                label-color: Theme.accent;
-            }
-        }
-    }
-
-    // Square variant — taller, optionally with Up Next.
-    if MiniPlayer.square: VerticalLayout {
-        padding: root.edge-pad;
-        spacing: Theme.pad-xs;
-
-        // The row keeps its `min-height` even where always-on-top is
-        // unsupported and the pin wrapper collapses, so the artwork below sits
-        // at the same offset across desktops.
-        HorizontalLayout {
-            alignment: stretch;
-            spacing: 2px;
-            vertical-stretch: 0;
-            padding-left: 4px;
-            padding-right: 4px;
-            min-height: 28px;
-
-            HorizontalLayout {
-                horizontal-stretch: 0;
-                alignment: start;
-                if WindowChrome.always-on-top-supported: IconButton {
-                    icon: "push_pin";
-                    press-shrink: true;
-                    diameter: 28px;
-                    icon-size: 18px;
-                    active: WindowChrome.always-on-top-active;
-                    filled: WindowChrome.always-on-top-active;
-                    tooltip-text: WindowChrome.always-on-top-active
-                        ? @tr("Unpin from Top") : @tr("Pin on Top");
-                    clicked => { WindowChrome.toggle-always-on-top(); }
-                }
-            }
-
-            Rectangle { horizontal-stretch: 1; }
-
-            HorizontalLayout {
-                horizontal-stretch: 0;
-                alignment: end;
-                IconButton {
-                    icon: Player.vm.track.is_favorite ? "favorite" : "favorite_border";
-                    press-shrink: true;
-                    diameter: 28px;
-                    icon-size: 18px;
-                    active: Player.vm.track.is_favorite;
-                    filled: Player.vm.track.is_favorite;
-                    button-enabled: Player.vm.has_track;
-                    tooltip-text: Player.vm.track.is_favorite
-                        ? @tr("Unfavorite") : @tr("Favorite");
-                    clicked => { Player.toggle-favorite(); }
-                }
-            }
-        }
-
-        // `tile-size` clamps so the cover follows the window width but never
-        // balloons past 180 px or drops under 90 px, where the placeholder glyph
-        // stops reading. It draws from the 384 px `Player.np-cover-{a,b}` slot
-        // the Now Playing view uses, falling back to the 72 px row tier until
-        // the seed lands and for tracks whose decode failed; `mini_player.rs`
-        // gates that decode on `mini_square`.
-        VerticalLayout {
-            alignment: center;
-            vertical-stretch: 0;
-            HorizontalLayout {
-                alignment: center;
-                SourceArtwork {
-                    tile-size: clamp(root.width * 0.5, 90px, 180px);
-                    // The only binding this site overrides: everything else about the tile is
-                    // the shared track-or-station split. A station's large slot is its own,
-                    // `np-cover-*` being the track cross-fade.
-                    cover: Player.vm.has_station
-                        ? (Player.np-station-logo.width > 0
-                            ? Player.np-station-logo
-                            : Player.vm.radio.logo_img)
-                        : (Player.np-cover-has-image
-                            ? (Player.np-cover-use-a ? Player.np-cover-a : Player.np-cover-b)
-                            : Player.vm.track.cover_img);
-                    // Written together with the slot above, so a `0` here means the row-tier
-                    // fallback is what's drawing and there is nothing to measure.
-                    native-size: Player.np-station-logo-size * 1px;
-                }
-            }
-        }
-
-        VerticalLayout {
-            alignment: center;
-            vertical-stretch: 0;
-            spacing: 2px;
-            Text {
-                text: Player.source-title;
-                color: Theme.text;
-                font-size: Theme.font-size-md;
-                font-weight: 500;
-                horizontal-alignment: center;
-                overflow: elide;
-            }
-            Text {
-                text: Player.source-subtitle;
-                color: Theme.subtext0;
-                font-size: 11px;
-                horizontal-alignment: center;
-                overflow: elide;
-            }
-        }
-
-        // Play sits between two wings of equal width, so the right wing's extra volume
-        // button can't pull the transport off the column's centre. A centred row places
-        // each cell at its preferred width, hence the left wing borrowing the right's.
-        HorizontalLayout {
-            alignment: center;
-            spacing: Theme.pad-xs;
-            vertical-stretch: 0;
-
-            HorizontalLayout {
-                alignment: end;
-                spacing: Theme.pad-xs;
-                min-width: trailing-wing.preferred-width;
-
-                VerticalLayout {
-                    alignment: center;
-                    IconButton {
-                        icon: "shuffle";
-                        press-shrink: true;
-                        diameter: 32px;
-                        icon-size: 20px;
-                        active: Player.queue.shuffle;
-                        tooltip-text: Player.queue.shuffle
-                            ? @tr("Shuffle: on") : @tr("Shuffle: off");
-                        clicked => { Player.toggle-shuffle(); }
-                    }
-                }
-                VerticalLayout {
-                    alignment: center;
-                    IconButton {
-                        icon: "chevron_left";
-                        press-shrink: true;
-                        diameter: 32px;
-                        icon-size: 20px;
-                        button-enabled: Player.vm.has_previous;
-                        tooltip-text: @tr("Previous");
-                        clicked => { Player.previous(); }
-                    }
-                }
-            }
-            VerticalLayout {
-                alignment: center;
-                PlayButton {
-                    wrapper-d: 36px;
-                    icon-size: 18px;
-                    is-playing: Player.vm.is_playing;
-                    animation-mode: 0;
-                    clicked => { Player.play-pause(); }
-                }
-            }
-            trailing-wing := HorizontalLayout {
-                alignment: start;
-                spacing: Theme.pad-xs;
-
-                VerticalLayout {
-                    alignment: center;
-                    IconButton {
-                        icon: "chevron_right";
-                        press-shrink: true;
-                        diameter: 32px;
-                        icon-size: 20px;
-                        button-enabled: Player.vm.has_next;
-                        tooltip-text: @tr("Next");
-                        clicked => { Player.next(); }
-                    }
-                }
-                VerticalLayout {
-                    alignment: center;
-                    IconButton {
-                        icon: Player.queue.repeat_mode == "one" ? "repeat_one" : "repeat";
-                        press-shrink: true;
-                        diameter: 32px;
-                        icon-size: 20px;
-                        active: Player.queue.repeat_mode != "off";
-                        tooltip-text: Player.queue.repeat_mode == "off"
-                            ? @tr("Repeat: off")
-                            : (Player.queue.repeat_mode == "one"
-                                ? @tr("Repeat: one")
-                                : @tr("Repeat: all"));
-                        clicked => { Player.cycle-repeat(); }
-                    }
-                }
-                VerticalLayout {
-                    alignment: center;
-                    VolumePopup {
-                        diameter: 32px;
-                        icon-size: 20px;
-                    }
-                }
-            }
-        }
-
-        // Native 24 px height again, so the pill thumb clears the Up Next list
-        // above it and the bottom edge when that list isn't mounted.
-        if !Player.vm.has_station: SliderTrack {
-            vertical-stretch: 0;
-            value: root.slider-frac;
-            is-disabled: !Player.vm.has_track || Player.duration-ms <= 0;
-            seam-mask-color: Theme.mantle;
-            committed(v) => {
-                if (Player.duration-ms > 0) {
-                    Player.seek-to(round(v * Player.duration-ms));
-                }
-            }
-        }
-        if Player.vm.has_station: HorizontalLayout {
-            vertical-stretch: 0;
-            alignment: center;
-            MetaChip {
-                text: Player.live-label;
-                fill: Theme.accent.with-alpha(0.18);
-                label-color: Theme.accent;
-            }
-        }
-
-        // Only mounted when the window is tall enough for a couple of rows
-        // beside the artwork and controls. Shares `UpNextList` with the
-        // full-screen view, and `up_next.rs` keeps its rows fed while mini is up.
-        if root.height >= 350px: VerticalLayout {
-            vertical-stretch: 1;
-            padding-top: Theme.pad-xs;
-            UpNextList {
                 vertical-stretch: 1;
                 compact: true;
+                ink: root.ink;
+                ink-muted: root.ink-muted;
+                row-hover: root.row-hover;
+                empty-glyph: root.empty-glyph;
+                bar-on-backdrop: root.on-backdrop;
+                bar-recolor-duration: root.recolor;
+            }
+            if Player.vm.has_station || !Lyrics.enabled: UpNextList {
+                vertical-stretch: 1;
+                compact: true;
+                ink: root.ink;
+                ink-muted: root.list-muted;
+                row-hover: root.row-hover;
+                empty-ink: root.ink-muted;
+                empty-glyph: root.empty-glyph;
+                bar-on-backdrop: root.on-backdrop;
+                bar-recolor-duration: root.recolor;
             }
         }
     }

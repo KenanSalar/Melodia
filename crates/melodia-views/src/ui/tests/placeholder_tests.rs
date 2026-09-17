@@ -232,9 +232,8 @@ fn an_inset_bar_neither_lifts_nor_swells() {
     );
 }
 
-/// The pill is absolutely positioned against its host, so nothing downstream stops it
-/// leaving the window — the cap does, and the wrap is what makes the cap render a label
-/// instead of clipping one.
+/// The pill slides inside the window but never narrows to fit it, so a long translation is
+/// held by the cap, and the wrap is what makes the cap render a label instead of clipping one.
 #[test]
 fn the_tooltip_pill_is_capped() {
     let src = normalized(TOOLTIP);
@@ -243,7 +242,7 @@ fn the_tooltip_pill_is_capped() {
         "tooltip.slint's pill is unbounded again"
     );
     assert!(
-        src.contains("width: root.width - 16px; wrap: word-wrap;"),
+        src.contains("width: parent.width - 16px; wrap: word-wrap;"),
         "tooltip.slint's label is no longer bounded and wrapped, so the cap would clip it"
     );
 }
@@ -255,12 +254,14 @@ fn the_tooltip_pill_is_capped() {
 fn an_idle_tooltip_is_hidden_once_its_fade_out_lands() {
     let src = normalized(&code(TOOLTIP));
 
+    let drawn = binding_value(&src, "drawn:").trim();
     let visible = binding_value(&src, "visible:").trim();
 
     assert_eq!(
-        visible, r#"root.text != "" && (root.shown || root.force-shown || self.opacity > 0)"#,
+        drawn, r#"root.text != "" && (root.shown || root.force-shown || pill.opacity > 0)"#,
         "tooltip.slint's pill is no longer hidden between fades the way its fade-out allows"
     );
+    assert_eq!(visible, "root.drawn", "tooltip.slint's pill no longer hides on `drawn`");
 }
 
 /// All four sides, and the `x` arm that makes the fourth one mean anything: a variant with
@@ -275,7 +276,7 @@ fn the_tooltip_clears_its_host_on_all_four_sides() {
         "tooltip.slint no longer declares all four sides"
     );
     assert!(
-        src.contains("root.side == TooltipSide.left ? (-self.width - root.gap)"),
+        src.contains("root.placed-side == TooltipSide.left ? root.left-x"),
         "TooltipSide.left has no `x` arm of its own, so it falls through to the centred one"
     );
 }

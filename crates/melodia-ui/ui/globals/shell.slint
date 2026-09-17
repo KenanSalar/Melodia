@@ -8,6 +8,11 @@ import { Settings } from "../settings.slint";
 // moves. `ResizeRing` is the only writer.
 export enum ResizeZone { none, north, south, west, east, north-west, north-east, south-west, south-east }
 
+// Which window-move region the pointer is over, named by the host because a double press on the
+// titlebar maximizes and one on the miniplayer only moves it. Each region is the only writer of its
+// own name.
+export enum DragRegion { none, titlebar, miniplayer }
+
 // The custom titlebar, owned by `ui/window_chrome/` with Slint as the dumb renderer.
 // `is-maximized` comes off a winit `Resized` subscription, so the icon stays right under tiling
 // shortcuts that bypass our buttons. **Window dragging and resizing are not handled inside Slint** — a
@@ -30,6 +35,12 @@ export global WindowChrome {
     in property <length> frame-margin-right;
     in property <length> frame-margin-bottom;
 
+    // The shell's rect in window coordinates, its top always at 0. `AppWindow` mirrors it here
+    // because a tooltip keeps its pill inside it and cannot reach the root's geometry.
+    in-out property <length> shell-x;
+    in-out property <length> shell-width;
+    in-out property <length> shell-height;
+
     // The frameless outline's colour, resolved from the Window Border Color pick. Unfocused is its
     // own brush because Windows' accent borders go neutral on an inactive window; for any other pick
     // the two are the same.
@@ -51,11 +62,15 @@ export global WindowChrome {
 
     callback minimize();
     callback toggle-maximize();
+    // The miniplayer's middle caption. A miniplayer is a window size, so leaving it is a resize
+    // back to the geometry the full player last settled at, which Rust holds from the moment the
+    // miniplayer took over, across a relaunch included.
+    callback restore-full-player();
     callback close-window();
     callback toggle-always-on-top();
-    // Mirrored into an atomic the winit `MouseInput` filter checks before starting an
-    // OS-level window move.
-    callback drag-region-hover-changed(bool);
+    // Kept in a cell the winit `MouseInput` filter checks before starting an OS-level window move,
+    // or on the titlebar's second press, a maximize toggle.
+    callback drag-region-changed(DragRegion);
     // The same for `ResizeRing`'s grabs, kept in a cell the filter checks first, before an OS-level
     // resize.
     callback resize-zone-changed(ResizeZone);
@@ -77,13 +92,72 @@ export global WindowChrome {
     callback recheck-system-theme();
 }
 
-// The compact player replacing the full UI once the window shrinks past a threshold, and the
-// `square` variant for a window nearly as tall as it is wide. **Entry and exit are resize-only.**
+// Which of the miniplayer's layouts is up. A state rather than a flag per layout, since they are
+// mutually exclusive and a pair of flags can spell a combination neither means. All three are one
+// mount, grown or rearranged rather than swapped.
+export enum MiniLayout {
+    // One row, the artwork at its floor with the controls up on the title's line beside it, the
+    // timeline under them. For a window too short for either of the others.
+    strip,
+    // The artwork beside the title and controls, the timeline under both, the controls coming down
+    // under the title as the artwork grows and the window's captions opening above them as there is
+    // room.
+    card,
+    // The card with its captions all the way open and room for a panel under it.
+    column,
+}
+
+// The compact player replacing the full UI once the window shrinks past a threshold, and which of
+// its layouts is up. `MiniPlayerSwitch` owns both answers. **Entry and exit are resize-only.**
 export global MiniPlayer {
     in-out property <bool> active: false;
-    in-out property <bool> square: false;
+    in-out property <MiniLayout> layout: MiniLayout.strip;
+
+    // The most the card's and the column's artwork draws, leaving a tall window's height to the
+    // panel. The switch reads it too, handing the card over to the column only once the artwork
+    // and the captions row above it have stopped growing and the panel has room.
+    out property <length> art-cap: 180px;
+
+    // The least the artwork draws, which is the strip's thumbnail: the size the row tier is decoded
+    // for, so the strip draws its cover unscaled. The switch hands the strip over to the card once
+    // the window gives the artwork more, where the view has already moved everything into place.
+    out property <length> art-floor: 48px;
+
+    // The card's captions row with the gap under it, all the way open. Spelled rather than measured:
+    // the row is behind an `if`, and opens by what the rows under it leave rather than by its
+    // content. The switch reads it too, for where the column starts and where a resize settles the
+    // row.
+    out property <length> captions-height: 32px;
+
+    // The gap between the timeline and the column's panel, and the panel's whole floor: the list
+    // comes in under the gap the moment there is room for it, rather than that room standing empty
+    // until a row fits. The switch reads it too, for where the column starts.
+    out property <length> panel-gap: Theme.pad-sm;
+
+    // The strip's smallest footprint, which is the window's floor. Rust floors a restored window at
+    // it too, so a hand-edited `settings.json` can't open one smaller.
+    out property <length> window-min-width: 350px;
+    out property <length> window-min-height: 90px;
+
+    // The column's window captions: 0 = Standard, 1 = macOS, 2 = KDE,
+    // `Theme.titlebar-button-style`'s tokens. Its own setting rather than that one's, a miniplayer
+    // showing captions under the native titlebar as well, where the titlebar's style has nothing
+    // to draw.
+    in property <int> button-style: 0;
+
+    // Whether the miniplayer paints the artwork backdrop and its solved ink instead of flat chrome.
+    // **Not `Theme.aurora-backdrop`**, which decides which of the two stacks every colour tier is
+    // solved for and is restart-gated for exactly that reason; this only says whether this surface
+    // mounts the one already chosen, which is why it can move on a click. Off by default, so an
+    // install that never presses the button keeps the look it has.
+    in-out property <bool> backdrop-shown: false;
+
     callback active-changed(bool);
-    callback square-changed(bool);
+    callback layout-changed(MiniLayout);
+    // The window takes this height and keeps its width: the switch settling a resize let go with the
+    // captions row part of the way open.
+    callback request-height(length);
+    callback set-backdrop-shown(bool);
 }
 
 // Bridges the winit `MouseWheel` filter to whichever *composite* view is mounted — Artist Detail

@@ -7,7 +7,7 @@ import { Settings } from "../settings.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { MetaChip } from "../components/meta-chip.slint";
 import { SourceArtwork } from "../components/now-playing/source-artwork.slint";
-import { SliderTrack } from "../components/slider-track.slint";
+import { SeekRow } from "../components/now-playing/seek-row.slint";
 import { VolumePopup } from "../components/now-playing/volume-popup.slint";
 import { OverflowMenu } from "../components/now-playing/overflow-menu.slint";
 import { PlayButton } from "../components/now-playing/play-button.slint";
@@ -252,55 +252,9 @@ export component NowPlayingBar inherits Rectangle {
             min-width: 140px;
             horizontal-stretch: 2;
 
-            // Two rows rather than one with the slider swapped out: the elapsed label reads
-            // `slider.dragging` and `slider.drag-value`, and an id declared inside an `if` is
-            // unreadable from outside it. Safe to branch — `SliderTrack` carries no `changed`
-            // handler, so dropping it strands no tracker.
-            if !Player.vm.has_station: HorizontalLayout {
-                spacing: Theme.pad-sm;
-
-                Text {
-                    text: Theme.format-duration(slider.dragging
-                        ? round(slider.drag-value * Player.duration-ms)
-                        : (Player.seek_pending_ms >= 0
-                            ? Player.seek_pending_ms
-                            : Player.position-ms));
-                    // Both ends are `Theme.text`: unlike the track block these are a
-                    // live readout the user tracks continuously, so they sit at body
-                    // weight rather than a rung under it.
-                    color: Theme.text;
-                    font-size: 11px;
-                    min-width: 40px;
-                    horizontal-alignment: right;
-                    vertical-alignment: center;
-                }
-
-                slider := SliderTrack {
-                    horizontal-stretch: 1;
-                    value: Player.duration-ms > 0
-                        ? (Player.seek_pending_ms >= 0
-                            ? clamp(Player.seek_pending_ms / Player.duration-ms, 0, 1)
-                            : clamp(Player.position-ms / Player.duration-ms, 0, 1))
-                        : 0;
-                    is-disabled: !Player.vm.has_track || Player.duration-ms <= 0;
-                    // The bar's own fill, so the mask disappears against it focused or not.
-                    seam-mask-color: WindowChrome.mantle;
-
-                    committed(v) => {
-                        if (Player.duration-ms > 0) {
-                            Player.seek-to(round(v * Player.duration-ms));
-                        }
-                    }
-                }
-
-                Text {
-                    text: Theme.format-duration(Player.duration-ms);
-                    color: Theme.text;
-                    font-size: 11px;
-                    min-width: 40px;
-                    horizontal-alignment: left;
-                    vertical-alignment: center;
-                }
+            // The bar's own fill as the mask, so it disappears against it focused or not.
+            if !Player.vm.has_station: SeekRow {
+                seam-mask-color: WindowChrome.mantle;
             }
 
             // A stream has no timeline to seek within, so there is no slider and no total. What

@@ -121,7 +121,7 @@ export component ArtworkImage inherits Rectangle {
         text: root.fallback-text;
         color: root.tile-icon-color;
         // Two letters at this fraction fill about as much of the tile as the glyphs' 0.55 box.
-        font-size: parent.height * 0.3;
+        font-size: round(parent.height * 0.3 / Theme.text-size-step) * Theme.text-size-step;
         font-weight: 700;
         opacity: root.fade;
     }

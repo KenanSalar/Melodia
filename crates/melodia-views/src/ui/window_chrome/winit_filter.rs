@@ -1,10 +1,11 @@
 //! Winit `WindowEvent` filter installed by `window_chrome::install`.
 //!
-//! Eight reasons to subscribe:
+//! Nine reasons to subscribe:
 //!
 //! 1. **`MouseInput { Pressed, Left }`** over a `ResizeRing` grab or a drag region: an
 //!    OS-level resize or window move plus `PreventDefault`, bypassing the TouchArea-grab
-//!    issue the parent module's docs describe.
+//!    issue the parent module's docs describe. The titlebar's double press toggles maximize
+//!    instead, Slint never seeing the pair (`drag_region`).
 //! 2. **`MouseInput { Pressed, Back | Forward }`** — Mouse-4 / Mouse-5 into the nav
 //!    history, gated on no overlay being open so the buttons don't fight its input
 //!    context.
@@ -24,12 +25,13 @@
 //! 8. **`ThemeChanged`**, Windows only: a light/dark flip for a theme on its System
 //!    variant, re-read by `ui::appearance` rather than taken from the event, whose theme
 //!    also folds in high contrast, and a cue for the tray icon to re-read its taskbar.
+//! 9. **`Resized`**, **`CursorMoved`**, **`CursorEntered`** and **`MouseInput`** together, for
+//!    where a resize begins and where it is let go, which no one event reports. See
+//!    `resize_release`.
 
 use std::cell::Cell;
 use std::rc::Rc;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use slint::ComponentHandle;
 use slint::winit_030::winit::error::ExternalError;
@@ -40,10 +42,15 @@ use slint::winit_030::winit::window::{ResizeDirection, Window as WinitWindow};
 use slint::winit_030::{EventResult, WinitWindowAccessor};
 
 use melodia_app::state::AppState;
-use melodia_ui::{AppWindow, CompositeScroll, PlaylistDetail, PopupHighlight, Queue, Theme};
+use melodia_ui::{
+    AppWindow, CompositeScroll, DragRegion, PlaylistDetail, PopupHighlight, Queue, Theme,
+    WindowChrome,
+};
 
+use super::drag_region::{DoublePress, PressAction};
 #[cfg(target_os = "windows")]
 use super::parked_loop;
+use super::resize_release::ResizeWatch;
 use super::{drop_coalescer, geometry};
 
 /// How long to wait after a focus loss before asking whether it was a minimize.
@@ -135,19 +142,28 @@ fn clear_drop_hover(ui: &AppWindow) {
 /// What the pointer is over that turns a left press into an OS window operation, each kept in
 /// step with Slint hover by a `WindowChrome` callback.
 pub(super) struct PressTargets {
-    /// Over a titlebar or miniplayer drag region.
-    pub(super) drag_hover: Arc<AtomicBool>,
+    /// Which drag region, if any.
+    pub(super) drag_region: Rc<Cell<DragRegion>>,
     /// Over one of `ResizeRing`'s grabs, and which way it resizes.
     pub(super) resize: Rc<Cell<Option<ResizeDirection>>>,
 }
 
 pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) {
-    let PressTargets { drag_hover, resize } = targets;
+    let PressTargets { drag_region, resize } = targets;
     let weak = app.as_weak();
     let state = state.clone();
-    // Where the pointer is, for the synthetic scroll below.
+    // Where the pointer is, for the synthetic scroll and the titlebar's double press below.
     let mut cursor_pos = slint::LogicalPosition::default();
+    let mut double_press = DoublePress::default();
+    let resize_watch = ResizeWatch::new(app.as_weak());
     app.window().on_winit_window_event(move |w, event| {
+        match event {
+            WindowEvent::Resized(size) => resize_watch.resized(w, *size),
+            WindowEvent::CursorMoved { .. }
+            | WindowEvent::CursorEntered { .. }
+            | WindowEvent::MouseInput { .. } => resize_watch.pointer(w),
+            _ => {}
+        }
         match event {
             // Ahead of the drag arm: the miniplayer's drag region runs right up to the edge, and its
             // hover can still read true for a tick after the pointer reaches a grab.
@@ -163,8 +179,15 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                 state: ElementState::Pressed,
                 button: MouseButton::Left,
                 ..
-            } if drag_hover.load(Ordering::Relaxed) => {
-                start_os_drag(w, "drag_window", WinitWindow::drag_window);
+            } if drag_region.get() != DragRegion::None => {
+                match double_press.press(drag_region.get(), Instant::now(), cursor_pos) {
+                    PressAction::Move => start_os_drag(w, "drag_window", WinitWindow::drag_window),
+                    PressAction::ToggleMaximize => {
+                        if let Some(ui) = weak.upgrade() {
+                            ui.global::<WindowChrome>().invoke_toggle_maximize();
+                        }
+                    }
+                }
                 EventResult::PreventDefault
             }
             // Above the `Released` cleanup arm because the press is what wants
@@ -246,10 +269,11 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                 });
                 EventResult::Propagate
             }
-            // X11/Win32/macOS deliver these; a Wayland client doesn't know its own
-            // position, so `Moved` rarely fires there — fine, position restore is a
-            // no-op on Wayland anyway.
+            // X11/Win32/macOS deliver these. Wayland never does, a client there not knowing its
+            // own position: position restore is a no-op there anyway, but a drag pressed again
+            // inside the double-press interval still toggles maximize.
             WindowEvent::Moved(_) => {
+                double_press.moved();
                 let _ = w.with_winit_window(|ww| {
                     geometry::record(ww, geometry::WindowReading::take(ww));
                 });

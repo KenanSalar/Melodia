@@ -6,14 +6,16 @@ use serde::{Deserialize, Serialize};
 use melodia_platform::services::platform::desktop::{HostDesktop, is_kde_desktop};
 
 /// Style of the custom titlebar's decoration buttons: `Standard` paints
-/// Windows 11's caption glyphs, `Macos` the three traffic-light circles.
-/// Persisted as a token so a future style needs no schema change.
+/// Windows 11's caption glyphs, `Macos` the three traffic-light circles,
+/// `Kde` Breeze's glyphs. Persisted as a token so a future style needs no
+/// schema change.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TitlebarButtonStyle {
     #[default]
     Standard,
     Macos,
+    Kde,
 }
 
 /// Which window edge the decoration buttons sit on. Independent of
@@ -52,6 +54,9 @@ pub struct WindowFlags {
     pub use_native_titlebar: bool,
     pub titlebar_button_style: TitlebarButtonStyle,
     pub titlebar_button_side: TitlebarButtonSide,
+    /// The miniplayer's captions. Its own field rather than `titlebar_button_style`, the
+    /// miniplayer drawing them under the native titlebar too, where that style is inert.
+    pub mini_player_button_style: TitlebarButtonStyle,
     /// Drawn wherever the window is frameless: always under the custom titlebar, and for the
     /// miniplayer under the native one.
     pub window_border: WindowBorder,
@@ -77,6 +82,7 @@ impl Default for WindowFlags {
             use_native_titlebar: false,
             titlebar_button_style: TitlebarButtonStyle::Standard,
             titlebar_button_side: TitlebarButtonSide::Right,
+            mini_player_button_style: TitlebarButtonStyle::Standard,
             window_border: WindowBorder::Shown,
             window_border_color: WINDOW_BORDER_SYSTEM_COLOR.to_owned(),
         }
@@ -162,10 +168,17 @@ pub struct BackdropFlags {
     /// On, and `theme.slint` declares the same value so a failed settings read lands on the
     /// shipped look.
     pub aurora_backdrop: bool,
+    /// Whether the miniplayer paints that backdrop too, instead of flat chrome.
+    ///
+    /// **A different question from the one above, which is why it is not restart-gated.** That one
+    /// picks which of the two stacks every colour tier is solved for and so what the artwork tiers
+    /// build per decode; this only says whether one more surface mounts the stack already chosen.
+    /// Off, so an install that never presses the button keeps the miniplayer it has.
+    pub mini_backdrop: bool,
 }
 
 impl Default for BackdropFlags {
     fn default() -> Self {
-        Self { aurora_backdrop: true }
+        Self { aurora_backdrop: true, mini_backdrop: false }
     }
 }

@@ -1,0 +1,47 @@
+import { Theme } from "../../theme.slint";
+import { Player } from "../../globals/player.slint";
+import { MiniPlayer } from "../../globals/shell.slint";
+import { IconButton } from "../icon-button.slint";
+
+// The miniplayer's stepped glyph tiers, read off its backdrop switch: at rest, lit, and the hover
+// fill behind them. A global because the controls that aren't a `MiniIconButton` (the volume
+// trigger, the window captions) paint the same three, and a component can't read a property off
+// the view it is mounted in.
+//
+// **Stepped, never eased here**: every reader eases its own colours, and a brush eased twice
+// restarts its curve on every frame of the outer ease.
+export global MiniGlyphs {
+    out property <brush> idle: MiniPlayer.backdrop-shown ? Player.np-accent-dim : Theme.text;
+    out property <brush> lit: MiniPlayer.backdrop-shown ? Player.np-accent-bright : Theme.text;
+    out property <brush> hover-bg: MiniPlayer.backdrop-shown ? Colors.transparent : Theme.surface0;
+}
+
+// The miniplayer's button, so the treatment is answered once rather than as the same bindings on
+// every `IconButton`. It reads the switch straight off the global: the rule that a shared leaf
+// takes its colours as inputs is there so one component can serve both tiers, and this one has a
+// single host.
+//
+// **On the backdrop these are `AccentGlyphButton`'s**, the family Now Playing's header is made of:
+// no chrome in any state, the glyph resting at the dim tier and coming up to full under the
+// pointer, and a lit glyph lifting too so it still answers. Off it, the stock button. Not that
+// component mounted directly, which has no off arm to switch to.
+//
+// Every arm steps, and `IconButton` eases the step itself at the view's repaint pace: easing them
+// out here as well would restart its curve on every frame of this one.
+export component MiniIconButton inherits IconButton {
+    private property <bool> on-backdrop: MiniPlayer.backdrop-shown;
+
+    press-shrink: true;
+    diameter: 28px;
+    icon-size: 18px;
+
+    recolor-duration: Theme.dur-med;
+    idle-fg: MiniGlyphs.idle;
+    hover-fg: MiniGlyphs.lit;
+    hover-bg: MiniGlyphs.hover-bg;
+    active-fg: root.on-backdrop ? Player.np-accent-bright : Theme.accent;
+    hover-lift: root.on-backdrop;
+    disabled-fg: root.on-backdrop
+        ? Player.np-on-backdrop-muted.transparentize(0.55)
+        : Theme.overlay0;
+}

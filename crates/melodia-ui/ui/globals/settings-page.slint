@@ -68,6 +68,10 @@ export global SettingsPage {
             : root.body-avail,
         root.card-cap);
 
+    // What a card is filled with. Anything painting to match the card reads it here, since a brush
+    // one shade off shows as a box or a seam.
+    out property <brush> card-fill: Theme.surface0;
+
     // The glyph column both settings rows lead with. Here rather than in the rows because
     // `row-content-w` has to subtract it, and two copies could drift with nothing failing.
     out property <length> row-icon-w: 22px;
