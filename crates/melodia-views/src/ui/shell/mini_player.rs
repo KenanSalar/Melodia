@@ -60,15 +60,15 @@ pub fn install(
 
     // active-changed: on enter, flip the gates, re-seed Up Next so the column doesn't render an
     // empty list, and seed the high-res cover if anything on screen draws from it. On exit, release
-    // the artwork LRU and the lyrics sheet: nothing in full-UI mode needs either, and with Now
-    // Playing closed no track change comes back to hand the sheet over.
+    // the artwork LRU and the lyrics sheet unless Now Playing is open to draw them: with the view
+    // closed nothing needs either, and no track change comes back to hand the sheet over.
     {
         let np_state = np_state.clone();
         let state = state.clone();
         let np_artwork = np_artwork.clone();
         let weak = app.as_weak();
         mini.on_active_changed(move |is_active| {
-            np_state.mini_visible.set(is_active);
+            let was_visible = np_state.mini_visible.replace(is_active);
             if is_active {
                 crate::ui::window_chrome::geometry::hold_full_player();
                 sync_mini_layout(&weak, &np_state);
@@ -83,8 +83,18 @@ pub fn install(
                 np_state.kick_lyrics();
             } else {
                 crate::ui::window_chrome::geometry::release_full_player();
-                release_artwork_off_thread(&state, &np_artwork);
-                if let Some(ui) = weak.upgrade() {
+                // A launch settles through an exit too, with nothing to hand back, and `f` opens Now
+                // Playing under the miniplayer, where the swap mounts it with no edge left to reseed
+                // what was released.
+                if !was_visible {
+                    return;
+                }
+                if !np_state.renders_artwork() {
+                    release_artwork_off_thread(&state, &np_artwork);
+                }
+                if !np_state.renders_panel()
+                    && let Some(ui) = weak.upgrade()
+                {
                     release_lyrics(&ui, &state, &np_state);
                 }
             }

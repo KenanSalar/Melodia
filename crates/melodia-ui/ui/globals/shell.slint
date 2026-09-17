@@ -125,8 +125,7 @@ export global MiniPlayer {
 
     // The gap between the timeline and the column's panel, and the panel's whole floor: the list
     // comes in under the gap the moment there is room for it, rather than that room standing empty
-    // until a row fits. The switch reads it too, so the column starts where the panel mounts and
-    // Rust never looks up a sheet for a panel that isn't there.
+    // until a row fits. The switch reads it too, for where the column starts.
     out property <length> panel-gap: Theme.pad-sm;
 
     // The strip's smallest footprint, which is the window's floor. Rust floors a restored window at
