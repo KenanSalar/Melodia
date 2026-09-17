@@ -134,22 +134,10 @@ pub(super) fn wire_now_playing_open(
             // two answers differ.** Entering the miniplayer force-closes this view, so both run on
             // every entry, and releasing there costs the miniplayer the sheet and the cover it
             // is about to ask for again.
-            //
-            // The sheet and its offset table are the whole of what the lyrics panel pinned: the
-            // model is the larger half and there is no reason to hold a closed view's words. The
-            // store's own bounds are checked beside it for the same reason the radio logo cache
-            // checks its own on a section leave — a mounted panel with lyrics on is the only thing
-            // that writes to it, so the last one closing is when it stops growing.
-            if !np_state.renders_panel() {
-                if let Some(ui) = weak.upgrade() {
-                    super::lyrics::release(&ui, &np_state.lyrics);
-                }
-                if melodia_app::library::lyrics::is_enabled(&state) {
-                    melodia_app::tasks::lyrics_cache::spawn(
-                        &melodia_app::tasks::TaskSpawner::from_state(&state),
-                        &state,
-                    );
-                }
+            if !np_state.renders_panel()
+                && let Some(ui) = weak.upgrade()
+            {
+                super::release_lyrics(&ui, &state, &np_state);
             }
 
             // A same-track reopen needs no decode, the displayed track's images outliving the

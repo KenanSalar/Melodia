@@ -97,7 +97,7 @@ export enum MiniLayout {
     // under the title as the artwork grows and the window's captions opening above them as there is
     // room.
     card,
-    // The card with its captions all the way open, and a panel under it once there is room.
+    // The card with its captions all the way open and room for a panel under it.
     column,
 }
 
@@ -109,7 +109,7 @@ export global MiniPlayer {
 
     // The most the card's and the column's artwork draws, leaving a tall window's height to the
     // panel. The switch reads it too, handing the card over to the column only once the artwork
-    // and the captions row above it have stopped growing.
+    // and the captions row above it have stopped growing and the panel has room.
     out property <length> art-cap: 180px;
 
     // The least the artwork draws, which is the strip's thumbnail: the size the row tier is decoded
@@ -122,6 +122,12 @@ export global MiniPlayer {
     // content. The switch reads it too, for where the column starts and where a resize settles the
     // row.
     out property <length> captions-height: 32px;
+
+    // The gap between the timeline and the column's panel, and the panel's whole floor: the list
+    // comes in under the gap the moment there is room for it, rather than that room standing empty
+    // until a row fits. The switch reads it too, so the column starts where the panel mounts and
+    // Rust never looks up a sheet for a panel that isn't there.
+    out property <length> panel-gap: Theme.pad-sm;
 
     // The strip's smallest footprint, which is the window's floor. Rust floors a restored window at
     // it too, so a hand-edited `settings.json` can't open one smaller.

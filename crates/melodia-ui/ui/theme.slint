@@ -177,6 +177,11 @@ export global Theme {
     out property <length> font-size-md: 14px;
     out property <length> font-size-lg: 16px;
 
+    // What a size derived from a live dimension rounds to, so text drawn through a resize steps
+    // rather than tracking the drag: FemtoVG keeps a glyph for every tenth of a pixel it has drawn at,
+    // in an atlas it never evicts.
+    out property <length> text-size-step: 0.5px;
+
     // Shared by every view's header band; a subtitle reuses `font-size-sm` + `subtext0`.
     out property <length> page-title-size: 20px;
     out property <int> page-title-weight: 600;

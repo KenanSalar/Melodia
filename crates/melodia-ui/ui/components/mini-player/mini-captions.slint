@@ -132,7 +132,8 @@ export component MiniCaptionsRow inherits Rectangle {
                     // does it: FemtoVG draws glyphs under a scaling transform as paths rather than
                     // from its atlas, and this one comes out filled there. The captions beside it
                     // draw no glyph at rest.
-                    icon-size: 18px * root.button-scale;
+                    icon-size: round(18px * root.button-scale / Theme.text-size-step)
+                        * Theme.text-size-step;
                     active: Lyrics.enabled;
                     filled: Lyrics.enabled;
                     tooltip-text: Lyrics.enabled

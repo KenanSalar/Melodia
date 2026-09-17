@@ -31,7 +31,9 @@ export component NpBackdropStack inherits Rectangle {
         blur-a: Player.blur-img-a;
         blur-b: Player.blur-img-b;
         use-a: Player.blur-use-a;
-        has-blur: Player.blur-has-image;
+        // **`shown` here too**: the slots fade on `has-blur` alone, so without it a drain eases the
+        // floor and scrim out from under a cover still at full strength, which pops off on unmount.
+        has-blur: Player.blur-has-image && root.shown;
         shown: root.shown;
     }
 

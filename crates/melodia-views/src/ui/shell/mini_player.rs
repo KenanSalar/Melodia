@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 use slint::ComponentHandle;
 
-use crate::ui::now_playing::{NowPlayingState, release_artwork_off_thread};
+use crate::ui::now_playing::{NowPlayingState, release_artwork_off_thread, release_lyrics};
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use melodia_app::state::AppState;
 use melodia_core::error::AppError;
@@ -60,7 +60,8 @@ pub fn install(
 
     // active-changed: on enter, flip the gates, re-seed Up Next so the column doesn't render an
     // empty list, and seed the high-res cover if anything on screen draws from it. On exit, release
-    // the artwork LRU — nothing in full-UI mode needs those buffers.
+    // the artwork LRU and the lyrics sheet: nothing in full-UI mode needs either, and with Now
+    // Playing closed no track change comes back to hand the sheet over.
     {
         let np_state = np_state.clone();
         let state = state.clone();
@@ -83,6 +84,9 @@ pub fn install(
             } else {
                 crate::ui::window_chrome::geometry::release_full_player();
                 release_artwork_off_thread(&state, &np_artwork);
+                if let Some(ui) = weak.upgrade() {
+                    release_lyrics(&ui, &state, &np_state);
+                }
             }
         });
     }

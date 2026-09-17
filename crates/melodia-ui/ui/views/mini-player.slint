@@ -94,22 +94,14 @@ export component MiniPlayerView inherits Rectangle {
         easing: ease-in-out;
     }
 
-    // The gap between the timeline and the column's panel, and the panel's whole floor: the list
-    // comes in under the gap the moment there is room for it, rather than that room standing empty
-    // until a row fits.
-    private property <length> panel-gap: Theme.pad-sm;
-
-    // The text's size steps rather than tracking the drag: FemtoVG keeps a glyph for every tenth of
-    // a pixel it has drawn at in an atlas it never evicts.
-    private property <length> text-size-step: 0.5px;
     // The artist line's sizes in the card and on the strip. A pair of its own rather than the
     // title's ratio, which shrinks a line this small past reading.
     private property <length> subtitle-card-size: 11px;
     private property <length> subtitle-strip-size: 10px;
 
     pure function grown-size(strip: length, card: length) -> length {
-        return round((strip + (card - strip) * stack.title-grow) / root.text-size-step)
-            * root.text-size-step;
+        return round((strip + (card - strip) * stack.title-grow) / Theme.text-size-step)
+            * Theme.text-size-step;
     }
     // The highest the title's line sits down the artwork in the card, as a share of it. A centred
     // pair rides up to the window's top as the artwork shrinks, and the text stops reading as beside
@@ -177,7 +169,7 @@ export component MiniPlayerView inherits Rectangle {
         // height, a narrow window's artwork stopping short of its cap and freeing the room that
         // much sooner.
         property <bool> shows-panel: MiniPlayer.layout == MiniLayout.column
-            && root.height - 2 * root.edge-pad - block.preferred-height > root.panel-gap;
+            && root.height - 2 * root.edge-pad - block.preferred-height > MiniPlayer.panel-gap;
 
         padding: root.edge-pad;
         spacing: 0;
@@ -352,10 +344,10 @@ export component MiniPlayerView inherits Rectangle {
         // the artwork, where the artwork is meant to give first. Everything past the floor still
         // comes to it through the stretch.
         if stack.shows-panel: VerticalLayout {
-            min-height: root.panel-gap;
-            preferred-height: root.panel-gap;
+            min-height: MiniPlayer.panel-gap;
+            preferred-height: MiniPlayer.panel-gap;
             vertical-stretch: 1;
-            padding-top: root.panel-gap;
+            padding-top: MiniPlayer.panel-gap;
 
             // **Clipped here**, Up Next clipping itself: the sheet's empty state is centred on the
             // panel rather than inside its scroller, so a panel shorter than the message would

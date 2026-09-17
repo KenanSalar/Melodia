@@ -227,6 +227,22 @@ pub(crate) fn release_artwork_off_thread(state: &AppState, np_artwork: &Arc<NowP
     });
 }
 
+/// Hands back the lyrics sheet and checks the store's bounds, once the caller knows no panel is left.
+///
+/// The sheet and its offset table are the whole of what a panel pinned, the model being the larger
+/// half. The store is pruned beside them for the radio logo cache's reason: a mounted panel with
+/// lyrics on is the only thing that writes to it, so the last one going is when it stops growing.
+/// Now Playing's close and the miniplayer's exit can each be that one.
+pub(crate) fn release_lyrics(ui: &AppWindow, state: &AppState, np_state: &NowPlayingState) {
+    lyrics::release(ui, &np_state.lyrics);
+    if melodia_app::library::lyrics::is_enabled(state) {
+        melodia_app::tasks::lyrics_cache::spawn(
+            &melodia_app::tasks::TaskSpawner::from_state(state),
+            state,
+        );
+    }
+}
+
 /// Install the Now Playing view's models + subscribers. Runs on the Slint
 /// event-loop thread, between `AppWindow::new()` and `app.run()`.
 pub fn install(
