@@ -48,12 +48,16 @@ Six theme families, light and dark variants, configurable accents, and Material 
 
 ### Mini-player
 
-Shrink the window past a threshold and the full UI collapses into a compact mini-player. It grows with the window rather than switching between layouts: a one-line strip, then a card with the controls sliding under the title beside larger artwork, then a column that opens the window buttons above and Up Next or lyrics below. Close Melodia from it and it opens as the mini-player next time, with its restore button still returning to the full-size window you had.
+Shrink the window past a threshold and the full UI collapses into a compact mini-player. It grows with the window rather than switching between layouts: a one-line strip, then a card with the controls sliding under the title beside larger artwork and the window buttons opening above, then a column with Up Next or lyrics below. Close Melodia from it and it opens as the mini-player next time, with its restore button still returning to the full-size window you had.
 
 <table>
   <tr>
-    <td width="60%" valign="top"><img src="assets/screenshots/miniplayer-rectangle.png" alt="Horizontal mini-player strip" width="360"><br><sub><b>Horizontal strip</b>: the most compact form.</sub></td>
-    <td width="40%" valign="top"><img src="assets/screenshots/miniplayer-square.png" alt="Square mini-player widget with up-next list" width="240"><br><sub><b>Square widget</b>: grows an up-next list when tall enough.</sub></td>
+    <td width="50%" valign="top"><img src="assets/screenshots/miniplayer-onestrip-aurora.png" alt="Mini-player as a one-line strip"><br><sub><b>Strip</b>: the most compact form, the controls on the title's line.</sub></td>
+    <td width="50%" valign="top"><img src="assets/screenshots/miniplayer-nolist.png" alt="Mini-player as a card with window buttons"><br><sub><b>Card</b>: the controls under the title beside larger artwork, the window buttons above.</sub></td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="assets/screenshots/miniplayer-upnext-aurora.png" alt="Mini-player column with the Up Next list"><br><sub><b>Up Next</b>: taller still, the column opens the queue under the card.</sub></td>
+    <td valign="top"><img src="assets/screenshots/miniplayer-lyrics-aurora.png" alt="Mini-player column with a timed lyrics sheet"><br><sub><b>Lyrics</b>: the switch in the corner trades Up Next for the timed sheet.</sub></td>
   </tr>
 </table>
 
@@ -82,7 +86,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Queue with shuffle and repeat; playing from any list queues that list behind your pick
 - Full-screen Now Playing with an up-next list and a spectrum, mirrored, or waveform visualizer tinted to the album's own colors
 - Playback speed 0.25×–2.0×, a playback-linked sleep timer, resume on startup, media keys
-- Responsive mini-player: shrink the window and the UI collapses to a strip, a card or a column with Up Next, one layout that rearranges as you resize instead of jumping between them
+- Responsive mini-player: shrink the window and the UI collapses to a strip, a card or a column with Up Next or lyrics, one layout that rearranges as you resize instead of jumping between them
 
 ### Lyrics
 - A panel in the Now Playing column in place of Up Next, turned on from the switch in that view's header or under Settings ▸ Services ▸ Lyrics. A timed sheet follows the song line by line, and clicking a line seeks to it
