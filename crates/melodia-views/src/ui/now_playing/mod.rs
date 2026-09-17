@@ -197,21 +197,52 @@ impl NowPlayingState {
         self.lyrics.kick();
     }
 
-    /// Whether anything draws what the source-change subscriber produces: the cover, the chips and
-    /// the solved colour tiers. The full view, a miniplayer layout drawing the large artwork, or any
-    /// miniplayer layout painting the artwork backdrop, whose colours come off that same decode.
+    /// Whether anything draws what the source-change subscriber produces; see
+    /// [`Surfaces::renders_artwork`].
     pub(crate) fn renders_artwork(&self) -> bool {
-        let large_artwork = self.mini_layout.get() != MiniLayout::Strip;
-        self.open.get() || (self.mini_visible.get() && (large_artwork || self.mini_backdrop.get()))
+        self.surfaces().renders_artwork()
     }
 
-    /// Whether anything mounts the now-playing column's panels, Up Next and the lyrics sheet.
+    /// Whether anything mounts the now-playing column's panels; see [`Surfaces::renders_panel`].
+    pub(crate) fn renders_panel(&self) -> bool {
+        self.surfaces().renders_panel()
+    }
+
+    fn surfaces(&self) -> Surfaces {
+        Surfaces {
+            open: self.open.get(),
+            mini_visible: self.mini_visible.get(),
+            mini_layout: self.mini_layout.get(),
+            mini_backdrop: self.mini_backdrop.get(),
+        }
+    }
+}
+
+/// The mirrors of what is on screen, read together by the two render gates.
+#[derive(Debug, Clone, Copy)]
+struct Surfaces {
+    open: bool,
+    mini_visible: bool,
+    mini_layout: MiniLayout,
+    mini_backdrop: bool,
+}
+
+impl Surfaces {
+    /// Whether anything draws the cover, the chips and the solved colour tiers. The full view, a
+    /// miniplayer layout drawing the large artwork, or any miniplayer layout painting the artwork
+    /// backdrop, whose colours come off that same decode.
+    fn renders_artwork(self) -> bool {
+        let large_artwork = self.mini_layout != MiniLayout::Strip;
+        self.open || (self.mini_visible && (large_artwork || self.mini_backdrop))
+    }
+
+    /// Whether anything mounts Up Next and the lyrics sheet.
     ///
     /// **Deliberately narrower than [`Self::renders_artwork`].** Only the miniplayer's column has a
     /// slot for either; the card and the strip have none whatever they are painted on, so a sheet
     /// resolved for them would spend a request per track on something nobody can see.
-    pub(crate) fn renders_panel(&self) -> bool {
-        self.open.get() || (self.mini_visible.get() && self.mini_layout.get() == MiniLayout::Column)
+    fn renders_panel(self) -> bool {
+        self.open || (self.mini_visible && self.mini_layout == MiniLayout::Column)
     }
 }
 

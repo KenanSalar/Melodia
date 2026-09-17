@@ -153,3 +153,7 @@ pub fn install(
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "tests/mini_player_tests.rs"]
+mod tests;

@@ -92,13 +92,21 @@ pub fn restore(app: &AppWindow, geom: PersistedGeometry, full_player: Option<Ful
 
     // After `set_size`, which is what hands the switch the size it decides on.
     app.invoke_adopt_restored_size();
-    // A size that opens the miniplayer with no full player saved beside it, as a hand-edited one
-    // can, would otherwise hold nothing, and the only placement `hold_full_player` could then take
-    // is the miniplayer's own.
     let opens_as_miniplayer = app.invoke_miniplayer_mounted();
-    *held().lock() = full_player
+    *held().lock() = hold_at_launch(full_player, opens_as_miniplayer);
+}
+
+/// The hold a launch starts with, the full player saved beside a miniplayer close if there is one.
+///
+/// A size that opens the miniplayer with none saved, as a hand-edited one can, holds the first
+/// launch's placement: holding nothing would leave `hold_full_player` only the miniplayer's own.
+fn hold_at_launch(
+    saved: Option<FullPlayerGeometry>,
+    opens_as_miniplayer: bool,
+) -> Option<Placement> {
+    saved
         .map(Placement::from_persisted)
-        .or_else(|| opens_as_miniplayer.then(Placement::first_launch));
+        .or_else(|| opens_as_miniplayer.then(Placement::first_launch))
 }
 
 /// A geometry as the logical size and position Slint takes, the size floored against a corrupt
@@ -168,6 +176,35 @@ struct LiveGeometry {
     settled: Placement,
 }
 
+impl LiveGeometry {
+    /// The mirror a window's first reading starts, before that reading is taken.
+    fn first(seen: Placement, now: Instant) -> Self {
+        let unplaced = Placement { position_known: false, ..seen };
+        Self { current: unplaced, recorded_at: now, settled: unplaced }
+    }
+
+    /// Takes a reading, settling the placement it replaces if that one sat still for [`SETTLE`].
+    fn observe(&mut self, seen: Placement, now: Instant) {
+        if now.duration_since(self.recorded_at) >= SETTLE {
+            self.settled = self.current;
+        }
+        self.recorded_at = now;
+
+        let current = &mut self.current;
+        current.geom.maximized = seen.geom.maximized;
+        if seen.geom.maximized {
+            return;
+        }
+        current.geom.width = seen.geom.width;
+        current.geom.height = seen.geom.height;
+        if seen.position_known {
+            current.geom.x = seen.geom.x;
+            current.geom.y = seen.geom.y;
+            current.position_known = true;
+        }
+    }
+}
+
 /// Live in-memory mirror, fed by every winit `Resized` / `Moved` through [`record`].
 /// `None` until the first fires — winit emits a synthetic `Resized` on first map, so it is
 /// populated before the user can close the window.
@@ -229,10 +266,7 @@ pub fn record(w: &WinitWindow, reading: WindowReading) {
     let inner: WinitLogicalSize<f64> = client.to_logical(scale);
     let outer: Option<WinitLogicalPosition<f64>> =
         w.outer_position().ok().map(|p| p.to_logical(scale));
-
-    let now = Instant::now();
-    let mut guard = live().lock();
-    let first = Placement {
+    let seen = Placement {
         geom: PersistedGeometry {
             width: inner.width,
             height: inner.height,
@@ -240,26 +274,11 @@ pub fn record(w: &WinitWindow, reading: WindowReading) {
             y: outer.map_or(0.0, |p| p.y),
             maximized,
         },
-        position_known: false,
+        position_known: outer.is_some(),
     };
-    let entry =
-        guard.get_or_insert(LiveGeometry { current: first, recorded_at: now, settled: first });
-    if now.duration_since(entry.recorded_at) >= SETTLE {
-        entry.settled = entry.current;
-    }
-    entry.recorded_at = now;
 
-    let current = &mut entry.current;
-    current.geom.maximized = maximized;
-    if !maximized {
-        current.geom.width = inner.width;
-        current.geom.height = inner.height;
-        if let Some(p) = outer {
-            current.geom.x = p.x;
-            current.geom.y = p.y;
-            current.position_known = true;
-        }
-    }
+    let now = Instant::now();
+    live().lock().get_or_insert_with(|| LiveGeometry::first(seen, now)).observe(seen, now);
 }
 
 /// Hold the placement the full player last settled at, the miniplayer having just taken over.
@@ -471,11 +490,20 @@ pub fn ensure_on_screen(w: &WinitWindow, reading: WindowReading) {
 /// A close from the miniplayer persists the miniplayer as the window and the held full player
 /// beside it, which is what tells the next launch the restore button has somewhere to go.
 pub fn snapshot_into(settings: &mut SettingsData) {
-    let Some(entry) = *live().lock() else {
+    let Some(mirror) = *live().lock() else {
         return;
     };
-    settings.full_player_geometry = (*held().lock()).map(Placement::to_persisted);
-    let Placement { geom, position_known } = entry.current;
+    write_snapshot(settings, mirror, *held().lock());
+}
+
+/// [`snapshot_into`] past its two lock reads.
+fn write_snapshot(
+    settings: &mut SettingsData,
+    mirror: LiveGeometry,
+    full_player: Option<Placement>,
+) {
+    settings.full_player_geometry = full_player.map(Placement::to_persisted);
+    let Placement { geom, position_known } = mirror.current;
     settings.window.is_maximized = geom.maximized;
     if !geom.maximized {
         settings.window_width = geom.width;

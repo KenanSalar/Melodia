@@ -186,3 +186,7 @@ impl ResizeWatch {
 fn post_release(weak: &slint::Weak<AppWindow>) {
     let _ = weak.upgrade_in_event_loop(|ui| ui.invoke_resize_released());
 }
+
+#[cfg(test)]
+#[path = "tests/resize_release_tests.rs"]
+mod tests;

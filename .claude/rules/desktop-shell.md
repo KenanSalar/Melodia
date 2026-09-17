@@ -53,13 +53,14 @@ the OS owns has to be attached late or not at all on at least one platform.
   the ring the press disagreed with the cursor. macOS answers `NotSupported` and keeps AppKit's own
   edge resizing.
 
-- **A caption style is a chip index on the Slint side, and nothing checks the files that spell
-  it.** `TitlebarButtonStyle` persists by name, but every Slint property carrying it holds the index
+- **A caption style is a chip index on the Slint side, and the file never sees it.**
+  `TitlebarButtonStyle` persists by name, but every Slint property carrying it holds the index
   `window_settings::{idx_for, style_for}` maps to. The `options` order of each chip group *is* that
   index, in `window-chrome-section.slint` and in `mini-player-section.slint`, and
   `custom-titlebar.slint` and `MiniCaptions` pick their mounts by comparing against it. A new style
-  is a variant, both arms of the mapping, a chip in both groups and a case at both mounts; a
-  reordered array labels its chips with styles they don't select. A drawn style goes through
+  is a variant, both arms of the mapping, a chip in both groups, a case at both mounts and a row in
+  `window_settings::tests`' `CHIPS`, which pins the chips and the mounts to the mapping; a reordered
+  array labels its chips with styles they don't select. A drawn style goes through
   `CaptionButton`'s `CaptionStyle` and adds no mount, so only a cluster sharing nothing with it,
   like the traffic lights, needs a branch of its own.
 

@@ -152,3 +152,7 @@ pub(super) fn wire_overflow_buttons_changed(ui: &AppWindow, state: &AppState) {
         });
     });
 }
+
+#[cfg(test)]
+#[path = "tests/window_settings_tests.rs"]
+mod tests;

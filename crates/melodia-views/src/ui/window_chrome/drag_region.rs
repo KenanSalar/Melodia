@@ -86,3 +86,7 @@ impl Press {
             && dx * dx + dy * dy < DOUBLE_PRESS_SLOP * DOUBLE_PRESS_SLOP
     }
 }
+
+#[cfg(test)]
+#[path = "tests/drag_region_tests.rs"]
+mod tests;
