@@ -20,8 +20,8 @@ import { MiniTransport, MiniTrailingControls, MiniTimeline } from "../components
 // Every interactive control stays 8 px clear of the window edges, where
 // `ResizeRing`'s grabs sit above this view, so the cursor keeps showing the
 // resize affordance instead of flickering hover. The corner grabs grow with the
-// window radius and reach past that inset on the rounder presets. The KDE captions are the
-// exception, sitting where Breeze's do, argued at their mount.
+// window radius and reach past that inset on the rounder presets. The window captions are the
+// exception, sitting where the titlebar's do, argued at their mount.
 export component MiniPlayerView inherits Rectangle {
     background: Theme.mantle;
     // Doubles as resize-ring breathing room: the ring's TouchAreas sit above

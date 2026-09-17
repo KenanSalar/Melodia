@@ -31,8 +31,10 @@ export component CaptionButton inherits Rectangle {
     // KDE only. Breeze holds the disc 30 % of the way from the titlebar to the ink while pressed, and
     // the glyph keeps its hover colour.
     in property <brush> pressed-bg: root.hover-bg.transparentize(0.7);
-    // The standard cell, which only a host with less room than a titlebar changes. A KDE cell is
-    // Breeze's button pitch in every host, narrower than any of them. The glyph keeps its size.
+    // The standard cell. **The width is the style's pitch and no host changes it**: a narrower
+    // cluster reads as a different decoration beside the titlebar's. The height is what a host with
+    // a shorter row than a titlebar changes. A KDE cell is Breeze's button pitch in every host,
+    // narrower than any of them, and the glyph keeps its size either way.
     in property <length> cell-width: 46px;
     in property <length> cell-height: 32px;
 

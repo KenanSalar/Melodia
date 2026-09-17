@@ -12,7 +12,8 @@ import { MiniIconButton, MiniGlyphs } from "mini-icon-button.slint";
 // button that grows the window hands back the full player at the geometry it last settled at.
 //
 // A layout rather than a `Rectangle`, so the `if`-mounted captions size it. Every caption takes the
-// row's 28 px rather than a titlebar's 32.
+// row's 28 px rather than a titlebar's 32 and keeps its width: the height is the room this row has,
+// where the width is the pitch the style is drawn to.
 export component MiniCaptions inherits HorizontalLayout {
     // The drawn glyphs' ink, eased by the host with the rest of its surface. Hover and its fill
     // stay stepped, the caption easing those itself.
@@ -20,7 +21,6 @@ export component MiniCaptions inherits HorizontalLayout {
     // The glyph a KDE caption punches out of its lit disc.
     in property <brush> ink-on-lit;
 
-    private property <length> cell-width: 34px;
     private property <length> cell-height: 28px;
 
     out property <CaptionStyle> style: MiniPlayer.button-style == 2
@@ -44,7 +44,6 @@ export component MiniCaptions inherits HorizontalLayout {
     }
     if MiniPlayer.button-style != 1: MinimizeCaption {
         style: root.style;
-        cell-width: root.cell-width;
         cell-height: root.cell-height;
         idle-fg: root.ink;
         hover-fg: root.caption-hover-fg;
@@ -54,7 +53,6 @@ export component MiniCaptions inherits HorizontalLayout {
         glyph: CaptionGlyph.maximize;
         style: root.style;
         tooltip-text: @tr("Full Player");
-        cell-width: root.cell-width;
         cell-height: root.cell-height;
         idle-fg: root.ink;
         hover-fg: root.caption-hover-fg;
@@ -65,7 +63,6 @@ export component MiniCaptions inherits HorizontalLayout {
     // warning is the point.
     if MiniPlayer.button-style != 1: CloseCaption {
         style: root.style;
-        cell-width: root.cell-width;
         cell-height: root.cell-height;
         idle-fg: root.ink;
     }
@@ -117,12 +114,12 @@ export component MiniCaptionsRow inherits Rectangle {
             height: MiniPlayer.captions-height - Theme.pad-xs;
             spacing: 2px;
             padding-left: 4px;
-            // A KDE cluster reaches back over the host's padding to sit where the titlebar's does.
-            // Its close cell's outer 2 px then fall past the clip, painting nothing and lying under
-            // the resize band.
-            padding-right: captions.style == CaptionStyle.kde
-                ? Theme.kde-caption-edge-pad - root.edge-pad
-                : 4px;
+            // The cluster reaches back over the host's padding to the inset the titlebar gives its
+            // style, flush for all but KDE, where Breeze keeps a gap. What falls past the clip is
+            // the close cell's own outer padding: it paints nothing and lies under the resize band.
+            padding-right: (captions.style == CaptionStyle.kde
+                ? Theme.kde-caption-edge-pad
+                : 0px) - root.edge-pad;
 
             // Gone on a station, which has no track to look a sheet up for.
             if !Player.vm.has_station: VerticalLayout {
