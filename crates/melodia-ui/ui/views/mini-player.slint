@@ -103,14 +103,16 @@ export component MiniPlayerView inherits Rectangle {
         return round((strip + (card - strip) * stack.title-grow) / Theme.text-size-step)
             * Theme.text-size-step;
     }
+    // The card end of that travel, itself grown over `MiniPlayer.room-grow`: the two are
+    // continuous, `title-grow` reaching 1 exactly where the artwork's remaining travel begins, so
+    // a line reads `grown-size(strip, roomy-size(card, roomy))` and steps once from end to end.
+    pure function roomy-size(card: length, roomy: length) -> length {
+        return card + (roomy - card) * MiniPlayer.room-grow;
+    }
     // The highest the title's line sits down the artwork in the card, as a share of it. A centred
     // pair rides up to the window's top as the artwork shrinks, and the text stops reading as beside
     // the cover.
     private property <float> line-share: 0.3;
-    // The smallest artwork that seats the title at that share with the controls under it. Below it
-    // the controls rise onto the title's line, all the way by the artwork's floor. Spelled rather
-    // than measured: the title's height it would come from is what that travel scales.
-    private property <length> stacked-art: 70px;
 
     backdrop := MiniBackdrop {
         x: 0;
@@ -153,8 +155,8 @@ export component MiniPlayerView inherits Rectangle {
         // How far the controls have come up onto the title's line, over the artwork's travel from
         // `stacked-art` down to its floor. **Off the height the artwork is sized by rather than
         // eased**, so they move with the drag and at no other time.
-        property <float> inline-t: clamp((root.stacked-art - (root.height - self.art-rows))
-            / (root.stacked-art - MiniPlayer.art-floor), 0, 1);
+        property <float> inline-t: clamp((MiniPlayer.stacked-art - (root.height - self.art-rows))
+            / (MiniPlayer.stacked-art - MiniPlayer.art-floor), 0, 1);
         // The text shrinks to the strip's size over the same travel.
         property <float> title-grow: 1 - self.inline-t;
         // The title makes the controls' room over the first eighth of their rise, before they reach
@@ -282,15 +284,16 @@ export component MiniPlayerView inherits Rectangle {
                         Text {
                             text: Player.source-title;
                             color: root.ink;
-                            font-size: root.grown-size(Theme.font-size-sm, Theme.font-size-md);
+                            font-size: root.grown-size(Theme.font-size-sm,
+                                root.roomy-size(Theme.font-size-md, Theme.font-size-lg));
                             font-weight: 500;
                             overflow: elide;
                         }
                         Text {
                             text: Player.source-subtitle;
                             color: root.ink-muted;
-                            font-size: root.grown-size(
-                                root.subtitle-strip-size, root.subtitle-card-size);
+                            font-size: root.grown-size(root.subtitle-strip-size,
+                                root.roomy-size(root.subtitle-card-size, Theme.font-size-sm));
                             overflow: elide;
                         }
                     }

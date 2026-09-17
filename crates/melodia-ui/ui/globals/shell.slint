@@ -139,6 +139,40 @@ export global MiniPlayer {
     out property <length> window-min-width: 350px;
     out property <length> window-min-height: 90px;
 
+    // **The thresholds below restate what the view lays out rather than measure it**, and
+    // `room-grow` is why they sit here rather than in the switch that used to hold them: the
+    // controls are sized by it and the artwork by the width they leave, so a reading back of
+    // either closes that loop. The switch had already spelled its own for its own reason, that it
+    // decides where a swap lands before the view exists to be asked.
+    //
+    // The padding, the timeline and the gap over it, which is everything the card's height holds
+    // but the artwork.
+    out property <length> art-rows: 48px;
+    // The same across the row the artwork shares with the controls: the padding either side, the
+    // row's own inset and the gap to the title.
+    out property <length> art-row-insets: 20px;
+    // The smallest artwork that seats the title with the controls under it. Below it they rise
+    // onto the title's line, all the way by the artwork's floor.
+    out property <length> stacked-art: 70px;
+    // The controls' width beside the artwork, at the sizes the strip holds them at and at the
+    // ones a card with room to spare opens them to. The pin collapses where the window manager
+    // gives no way to keep a window on top.
+    out property <length> controls-min-width: WindowChrome.always-on-top-supported ? 220px : 190px;
+    out property <length> controls-max-width: WindowChrome.always-on-top-supported ? 276px : 238px;
+
+    // How far a card with room to spare has opened the controls and the title past the strip's
+    // sizes. **Both axes, whichever has less to give**: the height picks up where the controls
+    // finish rising onto the title's line, over the artwork's remaining travel, and the width
+    // starts where a capped artwork and the controls at their floor stop competing for it and
+    // ends where they still both fit grown. So the growth spends exactly the surplus the artwork
+    // has no use for, and the cover stays at its cap the whole way along.
+    out property <float> room-grow: min(
+        clamp((WindowChrome.shell-height - root.art-rows - root.stacked-art)
+            / (root.art-cap - root.stacked-art), 0, 1),
+        clamp((WindowChrome.shell-width - root.art-cap - root.art-row-insets
+            - root.controls-min-width) / (root.controls-max-width - root.controls-min-width),
+            0, 1));
+
     // The column's window captions: 0 = Standard, 1 = macOS, 2 = KDE,
     // `Theme.titlebar-button-style`'s tokens. Its own setting rather than that one's, a miniplayer
     // showing captions under the native titlebar as well, where the titlebar's style has nothing

@@ -16,6 +16,31 @@ export global MiniGlyphs {
     out property <brush> hover-bg: MiniPlayer.backdrop-shown ? Colors.transparent : Theme.surface0;
 }
 
+// The head row's control sizes, stepped from the strip's up to what a card with room to spare
+// opens them to. A global for `MiniGlyphs`' reason: the two controls in that row that aren't a
+// `MiniIconButton` take the same travel, and a component can't read a property off the view it is
+// mounted in.
+//
+// **The far ends are the now-playing bar's own**, so a miniplayer given the room lands on the full
+// player's sizes rather than a second set beside them. `MiniPlayer.controls-max-width` is these
+// added up and has to move with them.
+//
+// The timeline's own buttons are deliberately not here: its height is what the card's artwork is
+// sized against, so growing them would take the room the growth is spending back off the cover.
+export global MiniSizes {
+    pure function between(strip: length, roomy: length) -> length {
+        return strip + (roomy - strip) * MiniPlayer.room-grow;
+    }
+
+    out property <length> button-d: root.between(28px, 36px);
+    out property <length> button-icon: root.between(18px, 20px);
+    out property <length> play-d: root.between(30px, 38px);
+    out property <length> play-icon: root.between(16px, 20px);
+    // A step above the row's glyphs at either end, as the bar sets its own: at one size the
+    // speaker reads smaller than the icons beside it.
+    out property <length> volume-icon: root.between(20px, 22px);
+}
+
 // The miniplayer's button, so the treatment is answered once rather than as the same bindings on
 // every `IconButton`. It reads the switch straight off the global: the rule that a shared leaf
 // takes its colours as inputs is there so one component can serve both tiers, and this one has a

@@ -1,5 +1,5 @@
 import { Nav, NavEnterFrom } from "../globals/nav.slint";
-import { MiniPlayer, MiniLayout, WindowChrome } from "../globals/shell.slint";
+import { MiniPlayer, MiniLayout } from "../globals/shell.slint";
 
 // The responsive full-UI ↔ miniplayer swap, as a non-visual state machine: both `Timer`s are
 // pseudo-elements, so it occupies no layout space and can be mounted anywhere. Compact when the
@@ -57,32 +57,22 @@ export component MiniPlayerSwitch {
     // short of the cap, the controls taking the width, and keyed on the cap alone its panel held off
     // long after there was room.
     //
-    // All of these restate what the view lays out rather than measure it. Being off moves where a
-    // swap lands, the artwork giving ground before a row clips, and leaves a settled captions row
-    // that far short of closed or open.
+    // The thresholds themselves are `MiniPlayer`'s, restating what the view lays out rather than
+    // measuring it. Being off moves where a swap lands, the artwork giving ground before a row
+    // clips, and leaves a settled captions row that far short of closed or open.
     //
-    // The padding, the timeline and the gap over it, which is everything the card's height holds but
-    // the artwork.
-    private property <length> art-rows: 48px;
-    // The same with the captions row all the way open, which is everything in the column but the
-    // artwork and the panel.
-    private property <length> column-rows: root.art-rows + MiniPlayer.captions-height;
-    // The same across the row the artwork shares with the controls: the padding either side, the
-    // row's own inset and the gap to the title.
-    private property <length> art-row-insets: 20px;
-    // The controls' floor beside the artwork, the pin collapsing where the window manager gives no
-    // way to keep a window on top.
-    private property <length> controls-min-width:
-        WindowChrome.always-on-top-supported ? 220px : 190px;
+    // Everything in the column but the artwork and the panel: the card's rows with the captions
+    // row all the way open above them.
+    private property <length> column-rows: MiniPlayer.art-rows + MiniPlayer.captions-height;
 
-    private property <length> card-art:
-        min(MiniPlayer.art-cap, root.view-width - root.art-row-insets - root.controls-min-width);
+    private property <length> card-art: min(MiniPlayer.art-cap,
+        root.view-width - MiniPlayer.art-row-insets - MiniPlayer.controls-min-width);
 
     // Internal: nothing outside needs the layout, it only feeds the global.
     private property <MiniLayout> layout:
         root.view-height > root.column-rows + root.card-art + MiniPlayer.panel-gap
             ? MiniLayout.column
-            : (root.view-height > root.art-rows + MiniPlayer.art-floor
+            : (root.view-height > MiniPlayer.art-rows + MiniPlayer.art-floor
                 ? MiniLayout.card
                 : MiniLayout.strip);
 
@@ -125,7 +115,7 @@ export component MiniPlayerSwitch {
 
     // How far the card's captions row is open: into what the artwork and the rows under it leave.
     private property <length> captions-shown: clamp(
-        root.view-height - root.art-rows - root.card-art, 0px, MiniPlayer.captions-height);
+        root.view-height - MiniPlayer.art-rows - root.card-art, 0px, MiniPlayer.captions-height);
 
     // How far the row was open when the resize began, which the drag's direction is read against
     // rather than its last step: a drag that overshoots and comes back a little still settles the
