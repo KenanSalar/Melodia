@@ -1,6 +1,6 @@
 import { Theme } from "../../theme.slint";
 import { Player } from "../../globals/player.slint";
-import { PopupHighlight } from "../../globals/shell.slint";
+import { PopupHighlight, WindowChrome } from "../../globals/shell.slint";
 import { IconButton } from "../icon-button.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { SliderTrack } from "../slider-track.slint";
@@ -13,8 +13,8 @@ import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 // above the thumb.
 //
 // It flies out to the *left* of the trigger disc, into the title area, centred
-// on it: the miniplayer is always wide enough, and vertical room is the whole
-// constraint being escaped.
+// on it: vertical room is the whole constraint being escaped, and the strip has
+// none of it to give.
 export component VolumePopupHorizontal inherits Rectangle {
     in property <length> diameter: 36px;
     in property <length> icon-size: 22px;
@@ -33,6 +33,13 @@ export component VolumePopupHorizontal inherits Rectangle {
     // current percentage. A drag doesn't bump it — it raises the chrome itself.
     property <int> hud-tick-mirror: Player.volume-hud-tick;
     property <int> tooltip-ticks-remaining: 0;
+
+    // How long the flyout can be and still clear the window's own left edge, holding the gap it
+    // keeps from the disc on that side too. Slint answers an overhang by sliding the popup back
+    // inside the window rather than shortening it, so anything longer lands over the disc it flew
+    // out of, and a tiling window manager can hand the miniplayer less than its minimum width.
+    private property <length> max-flyout-width:
+        root.absolute-position.x - WindowChrome.shell-x - 2 * Theme.popup-gap;
 
     changed hud-tick-mirror => {
         root.tooltip-ticks-remaining = 15;
@@ -78,7 +85,8 @@ export component VolumePopupHorizontal inherits Rectangle {
         // leaves the badge floating above.
         x: -self.width - Theme.popup-gap;
         y: (btn.height - self.height) / 2;
-        width: 220px;
+        // The vertical popup's slider length rotated, so one travel serves both.
+        width: min(180px, root.max-flyout-width);
         height: 72px;
         close-policy: close-on-click-outside;
 
@@ -161,7 +169,6 @@ export component VolumePopupHorizontal inherits Rectangle {
                 host-width: 0px;
                 host-height: 0px;
                 side: TooltipSide.above;
-                gap: 10px;
                 in-popup: true;
                 // No reveal delay — the readout has to be up on the frame the
                 // drag starts. Same hook the keyboard HUD above takes.
