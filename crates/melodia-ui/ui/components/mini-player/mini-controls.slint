@@ -137,8 +137,10 @@ export component MiniTimeline inherits HorizontalLayout {
     padding-left: 4px;
     padding-right: 4px;
 
-    // Both pills open inward: at the window's edge a centred one runs off it.
+    // Both pills open beside: the controls paint over this row, so one above lands under them.
+    // Shuffle's opens onto the seek row, declared after it, hence lifted over it.
     VerticalLayout {
+        z: 1;
         alignment: center;
         MiniIconButton {
             icon: "shuffle";

@@ -154,6 +154,7 @@ export component PlayButton inherits Rectangle {
         text: root.is-playing ? @tr("Pause") : @tr("Play");
         hovered: pp-touch.has-hover;
         host-width: parent.width;
+        host-height: parent.height;
     }
 
     pp-touch := TouchArea {

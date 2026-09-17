@@ -1,6 +1,6 @@
 import { Theme } from "../theme.slint";
 import { WindowChrome } from "../globals/shell.slint";
-import { Tooltip } from "tooltip.slint";
+import { Tooltip, TooltipSide } from "tooltip.slint";
 
 export enum CaptionGlyph { minimize, maximize, restore, close }
 
@@ -129,10 +129,13 @@ export component CaptionButton inherits Rectangle {
         }
     ]
 
+    // Below, a caption always sitting on the window's top edge.
     Tooltip {
         text: root.tooltip-text;
         hovered: touch.has-hover;
         host-width: root.width;
+        host-height: root.height;
+        side: TooltipSide.below;
     }
 
     touch := TouchArea {

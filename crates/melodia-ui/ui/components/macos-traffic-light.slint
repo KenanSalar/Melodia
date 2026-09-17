@@ -1,6 +1,6 @@
 import { Theme } from "../theme.slint";
 import { MaterialIcon } from "material-icon.slint";
-import { Tooltip } from "tooltip.slint";
+import { Tooltip, TooltipSide } from "tooltip.slint";
 
 // One of the three macOS traffic-light decoration buttons: a 14 px circle with a hover-reveal glyph
 // inside. The reveal is gated on `cluster-hovered` rather than on this button's own hover, because
@@ -69,10 +69,13 @@ export component MacOsTrafficLight inherits Rectangle {
         }
     }
 
+    // Below, the lights always sitting on the window's top edge.
     Tooltip {
         text: root.tooltip-text;
         hovered: touch.has-hover;
         host-width: root.width;
+        host-height: root.height;
+        side: TooltipSide.below;
     }
 
     touch := TouchArea {

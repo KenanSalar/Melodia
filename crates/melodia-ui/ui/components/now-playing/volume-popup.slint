@@ -283,6 +283,7 @@ export component VolumePopup inherits Rectangle {
                 host-height: 0px;
                 side: TooltipSide.left;
                 gap: 10px;
+                in-popup: true;
                 // No reveal delay — the readout has to be up on the frame the drag
                 // starts. Same hook the keyboard HUD above takes.
                 force-shown: vol-touch.has-hover || vol-touch.pressed;

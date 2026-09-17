@@ -404,6 +404,13 @@ this file is what builds, looks right, and is wrong.
   of the cursor on both its hosts. A wrapper meant to be a coordinate frame pins `x: 0px; y: 0px`
   **inside the component**, where a host cannot forget it.
 
+- **`absolute-position` inside a `PopupWindow` is measured from the popup's corner, not the
+  window's.** It lowers to `map_to_window`, which walks parents with `StopAtPopups` and never adds
+  where the popup was placed (`map_to_native_window` does, and a binding can't reach it). An
+  element comparing it against window geometry therefore sees every edge nearer than it is, off by
+  the popup's own offset, so it looks right wherever that offset happens to be small. `Tooltip`
+  takes `in-popup` for exactly this, set at both volume readouts.
+
 - **A flyout opens *inside* the overflow menu's single `PopupWindow` — no nesting.** The
   playback-speed row (`speed-flyout.slint`, presets in shared `flyout-presets.slint` globals) is
   the worked example. Fixed-reserve geometry, as with the volume popup: size the popup for

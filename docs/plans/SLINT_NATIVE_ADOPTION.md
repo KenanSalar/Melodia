@@ -401,14 +401,14 @@ foundation only, watch but not yet usable.
 - **Today:** `crates/melodia-ui/ui/components/tooltip.slint`, whose name shadows the built-in. It
   compiles silently on 1.18 (trial) but is confusing long-term. Seventeen mounts:
   - **Nine anchored in-tree:** `action-pill.slint:146`, `icon-button.slint:137`,
-    `macos-traffic-light.slint:72`, `caption-buttons.slint:132`,
+    `macos-traffic-light.slint:73`, `caption-buttons.slint:133`,
     `now-playing/play-button.slint:153`, `now-playing/lyrics-controls.slint:71`,
     `settings/color-dot-grid.slint:45`, `now-playing/volume-popup.slint:280`,
     `now-playing/volume-popup-horizontal.slint:159`.
   - **Eight top-layer:** seven `TooltipFrame` mounts (`radio-view.slint:280`,
     `browse-view.slint:340`, `recently-played-view.slint:197`, `settings-view.slint:193`,
     `favorites-view.slint:239`, `my-library-view.slint:463` and `:472`) plus the collapsed
-    rail's tip (`app-window.slint:607`).
+    rail's tip (`app-window.slint:626`).
 
   The top-layer ones are the awkward half of any migration: they exist precisely because the pill
   has to be drawn somewhere other than on its anchor, which a built-in anchored element can't
@@ -420,13 +420,14 @@ foundation only, watch but not yet usable.
 - **Upstream in 1.17:** native `Tooltip` element.
 - **Blocked (re-checked 2026-09-17):** slint#12260 *"Tooltip is clipped when the anchor widget is
   near the edge of the window"* is **still open**, with no activity since 2026-06-29. The 1.17.1
-  popup-clipping fix (#12324) is a different bug. Several of our call sites are edge-adjacent
-  (`caption-buttons.slint:132`, `macos-traffic-light.slint:72`), so adopting today would regress
-  them.
+  popup-clipping fix (#12324) is a different bug. Ours flips and slides its pill inside the window
+  at every mount, so adopting today would regress each edge-adjacent one: the captions
+  (`caption-buttons.slint:133`, `macos-traffic-light.slint:73`) and the miniplayer's whole cluster.
 - **Trigger:** #12260 closed and released.
 - **Migration:** swap call sites (IconButton `tooltip-text`, etc.), delete our component, drop
   the name shadowing.
-- **Risk:** styling parity with our popup chrome (`PopupSurface` look); reveal-delay behavior.
+- **Risk:** styling parity with our popup chrome (`PopupSurface` look); reveal-delay behavior;
+  placement parity, ours taking the opposite side where the window leaves no room.
 
 ## 🟡 `Window.minimized`/`maximized` + `close()`/`hide()` → drop winit accessors?
 

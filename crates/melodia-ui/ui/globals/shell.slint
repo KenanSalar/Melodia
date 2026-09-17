@@ -35,6 +35,12 @@ export global WindowChrome {
     in property <length> frame-margin-right;
     in property <length> frame-margin-bottom;
 
+    // The shell's rect in window coordinates, its top always at 0. `AppWindow` mirrors it here
+    // because a tooltip keeps its pill inside it and cannot reach the root's geometry.
+    in-out property <length> shell-x;
+    in-out property <length> shell-width;
+    in-out property <length> shell-height;
+
     // The frameless outline's colour, resolved from the Window Border Color pick. Unfocused is its
     // own brush because Windows' accent borders go neutral on an inactive window; for any other pick
     // the two are the same.

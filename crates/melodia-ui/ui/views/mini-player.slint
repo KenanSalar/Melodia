@@ -178,14 +178,20 @@ export component MiniPlayerView inherits Rectangle {
             vertical-stretch: 0;
             spacing: 0;
 
+            // Over the head, so a caption's tooltip lands on the title rather than under it. The
+            // head's own pills never reach up here: the controls rise near the top only once the
+            // row has closed.
             MiniCaptionsRow {
+                z: 2;
                 open-height: stack.captions-shown;
                 edge-pad: root.edge-pad;
                 ink: root.caption-ink;
                 ink-on-lit: root.disc-ink;
             }
 
+            // Over the timeline, which a pill flips down onto when the controls sit near the top.
             head := HorizontalLayout {
+                z: 1;
                 vertical-stretch: 0;
                 spacing: Theme.pad-sm;
                 padding-left: Theme.pad-xs;

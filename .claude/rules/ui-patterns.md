@@ -23,15 +23,33 @@ silently miss the other.
 ### Tooltips
 
 - **`Tooltip`** (`components/tooltip.slint`) — an absolutely-positioned pill, not a
-  `PopupWindow`, so it captures no input and the host keeps its hover. Takes
-  `host-width`/`host-height` explicitly, a component root having no `parent`. **A variant is only
-  half of a side**: the `x`/`y` ternaries fall through to the *centred* arm, so a new `side`
-  without its own arm puts the pill on the host and looks deliberate.
+  `PopupWindow`, so it captures no input and the host keeps its hover; a popup would also take
+  keyboard focus off `ShortcutScope` on every show. Takes `host-width`/`host-height` explicitly, a
+  component root having no `parent`, and **both on every mount whatever its `side`**, since the
+  pill can flip to any of them. **A variant is only half of a side**: the `x`/`y` ternaries fall
+  through to the *centred* arm, so a new `side` without its own arm puts the pill on the host and
+  looks deliberate.
 
-- **A host at the panel's own edge aligns its pill rather than centring it** — `align-end`, reached
-  through `IconButton.tooltip-align-end`, pins the pill's trailing edge to the host's, the centred
-  arm's overhang having nothing to hang over there. Both Now-Playing view toggles take it, and what
-  decides is a translated label: the English one fits and says nothing about the six that follow.
+- **`side` is a preference, and the window's edge is the component's to handle, never the
+  host's.** The pill flips to the opposite side where only that one has room, and slides along the
+  host's edge to stay inside the shell rect `AppWindow` mirrors into `WindowChrome.shell-*`. So no
+  host picks a side to dodge the window. What a host still owns is the two things the pill can't
+  see: **a clip between it and the window**, and **a sibling painted after it**.
+
+- **A host at the content panel's edge aligns its pill rather than centring it**, the panel
+  clipping inside the window where the slide can't see it. `align-end`, reached through
+  `IconButton.tooltip-align-end`, pins the pill's trailing edge to the host's. Both Now-Playing view
+  toggles take it, and what decides is a translated label: the English one fits and says nothing
+  about the six that follow.
+
+- **A pill landing on a later-declared sibling is lifted with a constant `z`**, on the host's
+  branch at the level where it and the occluder are siblings, where lifting it overlaps nothing
+  that takes a press. `z` re-sorts siblings after
+  `lower_layouts`, so a layout keeps its order. The miniplayer stacks three that way
+  (`mini-player.slint`'s captions row over the head over the timeline, and `MiniTimeline`'s
+  shuffle slot over the seek row), and `CustomTitleBar` sits over the sidebar and panel. The clip
+  half is `MiniCaptionsRow`'s, which clips only while it opens or closes so an open row's captions
+  can hang their pills below it.
 
 - **Two mount shapes.** In-tree is the default. **Top-layer** is for hosts whose pill lands where
   Slint paints later (bands, header strips): `components/tooltip-frame.slint`'s `TooltipFrame`,
@@ -60,7 +78,9 @@ silently miss the other.
 - **The volume readouts anchor to a *point***, so each mounts the pill in a zero-size `Rectangle`
   with `0px` host dimensions and drives it off **`force-shown` rather than `hovered`** — a value
   readout is up on the frame the drag starts, where the reveal delay is for a label you linger
-  for.
+  for. **Both pass `in-popup: true`**, being the only mounts inside a `PopupWindow`, whose
+  `absolute-position` would have the pill fit a window that isn't there (`slint-pitfalls.md`). A
+  third mount inside a popup owes the same.
 
 ### Pills, chips, sort rows
 

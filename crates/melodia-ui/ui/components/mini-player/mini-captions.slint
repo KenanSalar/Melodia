@@ -105,8 +105,9 @@ export component MiniCaptionsRow inherits Rectangle {
         y: 0;
         width: 100%;
         height: 100%;
-        // Only a hover fill still reaches past the row while the buttons show.
-        clip: true;
+        // Only while the row opens or closes, where a hover fill reaches past it. A resize settles
+        // it open, and open a caption's tooltip hangs below it.
+        clip: root.open-t < 1;
         opacity: root.row-fade;
 
         HorizontalLayout {

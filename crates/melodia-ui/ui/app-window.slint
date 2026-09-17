@@ -118,6 +118,24 @@ export component AppWindow inherits Window {
     property <length> content-width: root.width - root.margin-left - root.margin-right;
     property <length> content-height: root.height - root.margin-bottom;
 
+    // What every tooltip keeps its pill inside.
+    function publish-shell-rect() {
+        WindowChrome.shell-x = root.margin-left;
+        WindowChrome.shell-width = root.content-width;
+        WindowChrome.shell-height = root.content-height;
+    }
+    changed margin-left => { root.publish-shell-rect(); }
+    changed content-width => { root.publish-shell-rect(); }
+    changed content-height => { root.publish-shell-rect(); }
+    // `changed` doesn't fire when the first layout settles directly on the final size.
+    Timer {
+        interval: 1ms;
+        triggered => {
+            root.publish-shell-rect();
+            self.running = false;
+        }
+    }
+
     // `window_chrome::install` hydrates `Theme.use-native-titlebar` before `app.run()`, so the
     // window maps with the right frame; Slint applies later flips live. Dropping the OS frame also
     // drops its resize edges, which `ResizeRing` restores along this band, as wide as the margins it
@@ -431,7 +449,8 @@ export component AppWindow inherits Window {
             VerticalLayout {
             // `if` rather than `visible: false` so the bar's slot leaves the layout
             // entirely in native mode — a hidden child still claims its stretch.
-            if !Theme.use-native-titlebar: CustomTitleBar { }
+            // Over the sidebar and the panel, which a caption's tooltip hangs down onto.
+            if !Theme.use-native-titlebar: CustomTitleBar { z: 1; }
 
             // Only the right side needs a gutter: the titlebar, the sidebar and the bar frame the
             // panel's other three. The native titlebar gets one too rather than a flush edge, since
