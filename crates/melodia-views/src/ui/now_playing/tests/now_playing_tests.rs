@@ -73,10 +73,11 @@ const fn on_screen(
 }
 
 /// What is on screen beside what the two gates answer, `(surfaces, artwork, panel)`. The corners:
-/// Now Playing alone, a hidden miniplayer whose mirrors still name a layout, and every layout with
-/// its backdrop off and on.
-const RENDERED: [(Surfaces, bool, bool); 8] = [
+/// Now Playing alone and open under the strip, a hidden miniplayer whose mirrors still name a
+/// layout, and every layout with its backdrop off and on.
+const RENDERED: [(Surfaces, bool, bool); 9] = [
     (on_screen(true, false, MiniLayout::Strip, false), true, true),
+    (on_screen(true, true, MiniLayout::Strip, false), true, true),
     (on_screen(false, false, MiniLayout::Column, true), false, false),
     (on_screen(false, true, MiniLayout::Strip, false), false, false),
     (on_screen(false, true, MiniLayout::Strip, true), true, false),

@@ -229,19 +229,35 @@ fn the_miniplayer_captions_do_not_inherit_the_titlebar_style() -> Result<(), App
     Ok(())
 }
 
-#[test]
-fn the_kde_caption_style_persists_as_a_token() -> Result<(), AppError> {
-    let kde = serde_json::to_string(&TitlebarButtonStyle::Kde).map_err(|e| json_err(&e))?;
+/// Every caption style beside the token `settings.json` carries for it. A renamed variant changes
+/// its token, and a file holding the old one no longer parses.
+const CAPTION_STYLE_TOKENS: [(TitlebarButtonStyle, &str); 3] = [
+    (TitlebarButtonStyle::Standard, r#""standard""#),
+    (TitlebarButtonStyle::Macos, r#""macos""#),
+    (TitlebarButtonStyle::Kde, r#""kde""#),
+];
 
-    assert_eq!(kde, r#""kde""#);
+#[test]
+fn every_caption_style_persists_as_its_token() -> Result<(), AppError> {
+    let written = CAPTION_STYLE_TOKENS
+        .iter()
+        .map(|(style, _)| serde_json::to_string(style))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| json_err(&e))?;
+
+    assert_eq!(written, CAPTION_STYLE_TOKENS.map(|(_, token)| token));
     Ok(())
 }
 
 #[test]
-fn a_kde_caption_style_reads_back_from_its_token() -> Result<(), AppError> {
-    let style: TitlebarButtonStyle = serde_json::from_str(r#""kde""#).map_err(|e| json_err(&e))?;
+fn every_caption_style_reads_back_from_its_token() -> Result<(), AppError> {
+    let read = CAPTION_STYLE_TOKENS
+        .iter()
+        .map(|(_, token)| serde_json::from_str::<TitlebarButtonStyle>(token))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| json_err(&e))?;
 
-    assert_eq!(style, TitlebarButtonStyle::Kde);
+    assert_eq!(read, CAPTION_STYLE_TOKENS.map(|(style, _)| style));
     Ok(())
 }
 

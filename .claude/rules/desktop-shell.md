@@ -53,7 +53,7 @@ the OS owns has to be attached late or not at all on at least one platform.
   the ring the press disagreed with the cursor. macOS answers `NotSupported` and keeps AppKit's own
   edge resizing.
 
-- **A caption style is a chip index on the Slint side, and the file never sees it.**
+- **A caption style is a chip index on the Slint side, and `settings.json` never sees it.**
   `TitlebarButtonStyle` persists by name, but every Slint property carrying it holds the index
   `window_settings::{idx_for, style_for}` maps to. The `options` order of each chip group *is* that
   index, in `window-chrome-section.slint` and in `mini-player-section.slint`, and

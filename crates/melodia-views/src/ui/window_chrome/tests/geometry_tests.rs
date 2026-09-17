@@ -324,7 +324,8 @@ fn a_reading_a_settle_window_after_the_last_settles_the_placement_it_replaces() 
 #[test]
 fn a_drag_into_the_miniplayer_leaves_its_starting_placement_settled() {
     let t0 = Instant::now();
-    let mut mirror = recorded(placed(1200.0, 800.0), t0);
+    let mut mirror = recorded(placed(800.0, 600.0), t0);
+    mirror.observe(placed(1200.0, 800.0), t0 + Duration::from_millis(10));
     let drag_start = t0 + Duration::from_secs(5);
     mirror.observe(placed(900.0, 600.0), drag_start);
     mirror.observe(placed(600.0, 400.0), drag_start + Duration::from_millis(10));
@@ -481,10 +482,9 @@ fn a_miniplayer_launch_with_nothing_saved_holds_the_first_launch_placement() {
     );
 }
 
-/// `hold_full_player` keeps a hold already there, so one seeded here would stand in for the
-/// placement the window settles at before the user shrinks it.
+// The first-launch fallback is for the restore caption, which only a miniplayer launch mounts.
 #[test]
-fn a_full_player_launch_holds_nothing() {
+fn a_full_player_launch_with_nothing_saved_holds_nothing() {
     let hold = reading_env(|| hold_at_launch(None, false));
 
     assert!(hold.is_none(), "the launch held {hold:?}");
