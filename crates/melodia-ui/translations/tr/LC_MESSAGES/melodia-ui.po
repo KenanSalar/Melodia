@@ -1205,12 +1205,6 @@ msgstr "Dışa aktar"
 msgid "Export Playlists"
 msgstr "Çalma listelerini dışa aktar"
 
-msgid "Import playlists from .m3u8 files"
-msgstr ".m3u8 dosyalarından çalma listelerini içe aktar"
-
-msgid "Export playlists to .m3u8 files"
-msgstr "Çalma listelerini .m3u8 dosyalarına dışa aktar"
-
 msgid "Choose playlists to export."
 msgstr "Dışa aktarılacak çalma listelerini seçin."
 

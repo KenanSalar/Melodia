@@ -196,7 +196,7 @@ Windows keeps no PSS, so **Commit** is the figure to compare: the private memory
 | Toggle sidebar | `Ctrl+B` |
 | Settings | `Ctrl+,` |
 | New playlist | `Ctrl+N` |
-| Close dialog / clear selection / close Now Playing | `Esc` |
+| Close dialog / close Now Playing / clear selection | `Esc` |
 | Navigate back / forward through history | `Mouse-4` / `Mouse-5` |
 
 OS media keys (play/pause, next, previous, stop) are also handled.

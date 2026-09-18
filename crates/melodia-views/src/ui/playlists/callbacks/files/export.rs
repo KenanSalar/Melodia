@@ -10,7 +10,7 @@ use chrono::Local;
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel, Weak};
 
 use super::{refresh_export_selection_meta, set_all_picks, toggle_pick};
-use crate::ui::callbacks::another_dialog_is_up;
+use crate::ui::callbacks::DialogClaim;
 use crate::ui::file_dialog;
 use crate::ui::shell::notifications::{Completion, NotificationsUi, RowText};
 use crate::ui::util::count_as_i32;
@@ -33,6 +33,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, notifications: &Rc<Notifica
         let s = state.clone();
         let weak = weak.clone();
         playlists.on_request_export_playlists(move || {
+            let Some(claim) = DialogClaim::take_from(&weak) else { return };
             let s = s.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
@@ -48,7 +49,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, notifications: &Rc<Notifica
                     stats.iter().enumerate().filter(|(_, p)| p.is_smart).map(|(i, _)| i).collect();
                 library::smart_playlists::recount(&s, &mut stats, &smart).await;
                 let _ = weak.upgrade_in_event_loop(move |ui| {
-                    if another_dialog_is_up(&ui) {
+                    if !claim.holds(&ui) {
                         return;
                     }
                     let rows: Vec<UiPlaylistExportPickRow> = stats

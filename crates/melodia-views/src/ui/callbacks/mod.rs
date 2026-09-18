@@ -74,15 +74,35 @@ pub(super) fn model_track_ids(rows: &ModelRc<melodia_ui::TrackListRow>) -> Vec<i
     rows.iter().map(|r| i64::from(r.id)).collect()
 }
 
-/// Whether something already holds the `Dialog` global, so a raise landing from a later tick has
-/// to drop itself rather than fill it.
+/// Which raise intent held the `Dialog` global when a menu started fetching a body for it.
 ///
-/// The chrome a menu wrote is stale the moment anything else opens — `kind` has moved on — so a
-/// body filled past that point paints one dialog's rows under another's heading, and hands its
-/// Accept to the wrong branch of the dispatcher. **Ask it wherever an `await` sits between the
-/// click and the raise**; a plain event-loop hop can't be overtaken inside one tick.
-pub(super) fn another_dialog_is_up(ui: &AppWindow) -> bool {
-    ui.global::<Dialog>().get_open()
+/// **Take it synchronously at the click and ask [`Self::holds`] past the `await`.** The chrome a
+/// menu wrote is stale the moment anything else claims the global, so a body filled after that
+/// paints one dialog's rows under another's heading and hands its Accept to the wrong branch of
+/// the dispatcher.
+///
+/// Two things can retire a claim and `open` sees only one of them. Four openers deliberately leave
+/// `open` false while Rust loads the body, so through that window two menus both read "nothing is
+/// up"; `Dialog.request-generation` is what separates them, and the second menu's synchronous
+/// write is exactly what would otherwise ride out under the first one's rows.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) struct DialogClaim(i32);
+
+impl DialogClaim {
+    pub(super) fn take(ui: &AppWindow) -> Self {
+        Self(ui.global::<Dialog>().get_request_generation())
+    }
+
+    /// [`Self::take`] for a callback that holds only the weak handle. `None` where the window has
+    /// gone, which is also the answer to whether the raise is still worth resolving for.
+    pub(super) fn take_from(weak: &slint::Weak<AppWindow>) -> Option<Self> {
+        weak.upgrade().as_ref().map(Self::take)
+    }
+
+    /// Whether this claim may still fill the global.
+    pub(super) fn holds(self, ui: &AppWindow) -> bool {
+        !ui.global::<Dialog>().get_open() && Self::take(ui) == self
+    }
 }
 
 /// Replace the queue with `ids`, open on a random one, then turn shuffle on — the header

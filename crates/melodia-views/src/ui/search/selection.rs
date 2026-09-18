@@ -76,8 +76,8 @@ pub fn select_all(ui: &AppWindow, search_ui: &SearchUi) {
     apply_per_row_selection(&g, &id_set);
 }
 
-/// Reset selection (action-pill "Clear" button + section-leave +
-/// new-query). Same shape as `handle_select_row`.
+/// Reset selection (Escape, the row menu's "Clear selection", section-leave,
+/// and a new query). Same shape as `handle_select_row`.
 pub fn clear_selection(ui: &AppWindow, search_ui: &SearchUi) {
     let g = ui.global::<Search>();
     write_selection(&g, Vec::new());

@@ -258,8 +258,8 @@ export component BrowseView inherits Rectangle {
                                 track-clicked(id, idx) => { Browse.play-row(id, idx); }
 
                                 // The list's selection, not the shared `CardSelection` — the cards
-                                // are these rows, so the mode toggle keeps it and the pill group
-                                // above already describes it.
+                                // are these rows, so the mode toggle keeps it and the card's own
+                                // menu carries the count and the batch actions.
                                 selected-ids: Browse.selected-ids;
                                 selection-generation: Browse.selection-generation;
                                 is-card-selected(id, gen) => { Browse.is-card-selected(id, gen) }

@@ -21,6 +21,13 @@ use melodia_ui::{
 
 /// The scope token each grid passes. The `.slint` mounts spell the same literals; a mount that
 /// spells something else selects nothing rather than selecting the wrong grid's cards.
+///
+/// **A typo degrades to a single card; the empty string used to select normally.** Only the
+/// second needs stating. `EntityCardGrid.selection-scope` has no default, so a forgotten binding
+/// arrives as `""`, which is also what an untouched [`Selection`] holds, and comparing equal is
+/// exactly what a scope guard must not do: a grid that never named itself got a working-looking
+/// set, and two of them would have shared one. [`unnamed_scope`] is the guard, asked by the two
+/// callbacks that can seat a scope.
 pub mod scope {
     pub const ALBUMS: &str = "albums";
     pub const ARTISTS: &str = "artists";
@@ -29,6 +36,11 @@ pub mod scope {
     pub const FAVORITE_MOST_PLAYED: &str = "fav-most-played";
     pub const FAVORITE_ARTISTS: &str = "fav-artists";
     pub const RECENT_MOST_PLAYED: &str = "rp-most-played";
+}
+
+/// Whether the asking grid named no scope at all, which no selection may be seated under.
+fn unnamed_scope(asking_scope: &str) -> bool {
+    asking_scope.is_empty()
 }
 
 /// Which grid owns the live selection, and what is in it.
@@ -81,14 +93,23 @@ pub fn wire(ui: &AppWindow) {
         global.on_select_all(move |asking_scope| {
             let Some(ui) = weak.upgrade() else { return };
             let scope = asking_scope.to_string();
+            if unnamed_scope(&scope) {
+                return;
+            }
             let ids = visible_ids(&ui, &scope);
             if ids.is_empty() {
                 return;
             }
             // The anchor is left where the last pick put it, so a shift-pick after Select All
             // still ranges from what the user chose; `list_selection::select_all_curated` argues
-            // it for the track lists.
-            let anchor = selection.borrow().anchor;
+            // it for the track lists. **Only within the scope that set it**: `pick` drops the
+            // anchor on a scope change and this is the one writer that could carry one across,
+            // where entity ids all start at 1 and the next shift-range would measure from
+            // whichever card happens to share the number.
+            let anchor = {
+                let current = selection.borrow();
+                if current.scope == scope { current.anchor } else { 0 }
+            };
             publish(&ui, &selection, Selection { scope, ids, anchor });
         });
     }
@@ -115,7 +136,7 @@ fn pick(
     shift: bool,
     ctrl: bool,
 ) -> Option<Selection> {
-    if id == 0 {
+    if id == 0 || unnamed_scope(asking_scope) {
         return None;
     }
     let same_scope = current.scope == asking_scope;

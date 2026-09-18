@@ -38,7 +38,7 @@ export component BrowseCardGrid inherits Rectangle {
 
     // **Browse's cards read the *list's* selection**, not the shared `CardSelection` the four
     // entity grids use — they are the same rows, so toggling the presentation keeps the selection
-    // and the view's existing pill group already describes it. Forwarded rather than imported,
+    // and the menu that describes it is the row's own. Forwarded rather than imported,
     // as the two callbacks above are: `Browse` is a view global and this file names none.
     in property <[int]> selected-ids;
     in property <int> selection-generation: 0;

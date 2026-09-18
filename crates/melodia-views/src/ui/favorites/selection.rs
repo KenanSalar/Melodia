@@ -39,7 +39,7 @@ pub fn select_all(ui: &AppWindow, fav_ui: &FavoritesUi) {
     list_selection::select_all_curated(&g, &fav_ui.state().applied_selection);
 }
 
-/// Reset selection (called from the action-pill "Clear" button and section-leave).
+/// Reset selection (Escape, the row menu's "Clear selection", and section-leave).
 pub fn clear_selection(ui: &AppWindow, fav_ui: &FavoritesUi) {
     let g = ui.global::<Favorites>();
     list_selection::clear_curated_selection(&g, &fav_ui.state().applied_selection);

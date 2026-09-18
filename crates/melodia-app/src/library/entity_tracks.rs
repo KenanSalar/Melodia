@@ -68,21 +68,34 @@ pub async fn track_ids_for(
 /// and is resolved from its stored criteria, one query each. Only that last part is per-entity,
 /// a stored rule set being a query the database cannot union across playlists.
 ///
+/// **Those go out together**, `library::smart_playlists::recount`'s shape: WAL lets them run side
+/// by side across the read pool, where awaiting each in turn put a grid's worth of them in series
+/// on the click path.
+///
 /// An id the split read didn't return was deleted between the grid painting and the click; the
 /// rest of the selection still acts.
 async fn playlist_track_ids(state: &AppState, ids: &[i64]) -> Result<Vec<i64>, AppError> {
     let verdicts = queries::playlist::smart_criteria_for_playlists(&state.db, ids).await?;
 
     let mut manual_ids: Vec<i64> = Vec::new();
-    let mut grouped: HashMap<i64, Vec<i64>> = HashMap::new();
+    let mut smart: Vec<(i64, SmartCriteria)> = Vec::new();
     for (id, is_smart, smart_criteria) in verdicts {
-        if !is_smart {
+        if is_smart {
+            smart.push((id, SmartCriteria::from_json_opt(smart_criteria.as_deref())));
+        } else {
             manual_ids.push(id);
-            continue;
         }
-        let criteria = SmartCriteria::from_json_opt(smart_criteria.as_deref());
-        let rows = queries::smart_playlist::get_smart_playlist_tracks(&state.db, &criteria).await?;
-        grouped.insert(id, rows.into_iter().map(|row| row.id).collect());
+    }
+
+    let resolved = futures_util::future::join_all(smart.iter().map(|(id, criteria)| async move {
+        let rows = queries::smart_playlist::get_smart_playlist_tracks(&state.db, criteria).await;
+        (*id, rows)
+    }))
+    .await;
+
+    let mut grouped: HashMap<i64, Vec<i64>> = HashMap::with_capacity(ids.len());
+    for (id, rows) in resolved {
+        grouped.insert(id, rows?.into_iter().map(|row| row.id).collect());
     }
 
     let pairs = queries::track::track_ids_by_playlists(&state.db, &manual_ids).await?;

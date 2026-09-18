@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use async_compat::Compat;
-use slint::ComponentHandle;
+use slint::{ComponentHandle, Model};
 
 use crate::ui::browse::{self as browse_ui_mod, BrowseUi, NAV_BROWSE};
 use crate::ui::callbacks::macros::spawn_logged;
@@ -56,6 +56,13 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
                 bu.mark_dirty();
                 if let Some(ui) = weak.upgrade() {
                     ui.global::<Browse>().set_covers_generation(0);
+                    // A selection the user can no longer see still answers
+                    // `Selection.any-live()`, so Escape over Now Playing would drop it rather
+                    // than close the page. Guarded on there being one, the unstamp walking
+                    // every row of the directory.
+                    if ui.global::<Browse>().get_selected_ids().row_count() > 0 {
+                        browse_ui_mod::clear_selection(&ui);
+                    }
                 }
                 let bu = bu.clone();
                 s.runtime.spawn_blocking(move || bu.release_grid_covers());

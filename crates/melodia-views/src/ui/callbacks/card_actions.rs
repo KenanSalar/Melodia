@@ -8,7 +8,7 @@ use std::future::Future;
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
-use crate::ui::callbacks::another_dialog_is_up;
+use crate::ui::callbacks::DialogClaim;
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use melodia_app::library::{self, entity_tracks::EntityKind};
 use melodia_app::state::AppState;
@@ -110,6 +110,7 @@ pub fn wire(ui: &AppWindow, state: &AppState) {
         let state = state.clone();
         let weak = ui.as_weak();
         actions.on_create_playlist_from(move |kind, ids| {
+            let Some(claim) = DialogClaim::take_from(&weak) else { return };
             let weak = weak.clone();
             spawn_with_track_ids(
                 &state,
@@ -121,7 +122,7 @@ pub fn wire(ui: &AppWindow, state: &AppState) {
                     // fill here. Safe to flip `Dialog.open` from this hop: the recursion guard is about
                     // doing it *inside* the click handler, and this is a later tick.
                     let _ = weak.upgrade_in_event_loop(move |ui| {
-                        if another_dialog_is_up(&ui) {
+                        if !claim.holds(&ui) {
                             return;
                         }
                         ui.global::<Dialog>().invoke_open_create_playlist(to_id_model(&track_ids));
@@ -135,6 +136,7 @@ pub fn wire(ui: &AppWindow, state: &AppState) {
         let state = state.clone();
         let weak = ui.as_weak();
         actions.on_add_to_playlist(move |kind, ids| {
+            let Some(claim) = DialogClaim::take_from(&weak) else { return };
             let weak = weak.clone();
             spawn_with_track_ids(
                 &state,
@@ -143,7 +145,7 @@ pub fn wire(ui: &AppWindow, state: &AppState) {
                 &ids,
                 move |_, track_ids| async move {
                     let _ = weak.upgrade_in_event_loop(move |ui| {
-                        if another_dialog_is_up(&ui) {
+                        if !claim.holds(&ui) {
                             return;
                         }
                         // The menu set the chrome before calling, `@tr` resolving literals at codegen.
@@ -164,6 +166,7 @@ pub fn wire(ui: &AppWindow, state: &AppState) {
         let state = state.clone();
         let weak = ui.as_weak();
         actions.on_edit_tags(move |kind, ids, title| {
+            let Some(claim) = DialogClaim::take_from(&weak) else { return };
             let weak = weak.clone();
             spawn_with_track_ids(
                 &state,
@@ -172,7 +175,7 @@ pub fn wire(ui: &AppWindow, state: &AppState) {
                 &ids,
                 move |_, track_ids| async move {
                     let _ = weak.upgrade_in_event_loop(move |ui| {
-                        if another_dialog_is_up(&ui) {
+                        if !claim.holds(&ui) {
                             return;
                         }
                         let tab = ui.global::<TagEditor>().get_tab_tags();

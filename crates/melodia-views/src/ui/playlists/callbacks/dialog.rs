@@ -23,7 +23,7 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
 
-use crate::ui::callbacks::another_dialog_is_up;
+use crate::ui::callbacks::DialogClaim;
 use crate::ui::callbacks::macros::release_detail_hero_images;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use melodia_app::library;
@@ -231,7 +231,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     });
                 }
                 // The deleted id can still be sitting in the card selection, where it would keep
-                // being counted by the pills and asked for by the next batch action.
+                // being counted by the card menu and asked for by the next batch action.
                 let _ = weak.upgrade_in_event_loop(|ui| {
                     ui.global::<CardSelection>().invoke_clear();
                 });
@@ -388,6 +388,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         let s = state.clone();
         let weak = weak.clone();
         playlists.on_request_add_to_playlist(move |ids, exclude_id| {
+            let Some(claim) = DialogClaim::take_from(&weak) else { return };
             let id_vec: Vec<i64> = ids.iter().map(i64::from).collect();
             if id_vec.is_empty() {
                 return;
@@ -415,7 +416,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     std::collections::HashMap::new()
                 });
                 let _ = weak.upgrade_in_event_loop(move |ui| {
-                    if another_dialog_is_up(&ui) {
+                    if !claim.holds(&ui) {
                         return;
                     }
                     // Skip rows whose i64 playlist id can't fit in the
@@ -513,6 +514,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             if id < 0 {
                 return;
             }
+            let Some(claim) = DialogClaim::take_from(&weak) else { return };
             let artwork_path =
                 pu.grid_stats_by_id(id).and_then(|p| p.thumbnail_path).unwrap_or_default();
             let s = s.clone();
@@ -523,7 +525,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     .await
                     .unwrap_or_default();
                 let _ = weak.upgrade_in_event_loop(move |ui| {
-                    if another_dialog_is_up(&ui) {
+                    if !claim.holds(&ui) {
                         return;
                     }
                     let current_cover = if artwork_path.is_empty() {

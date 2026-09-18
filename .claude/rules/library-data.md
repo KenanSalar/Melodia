@@ -132,6 +132,17 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
     definition. Don't reintroduce a sort parameter for a fifth caller; retain and permute like the
     other two.
 
+  - **Which makes a `for_list` query's own `ORDER BY` dead, and copying one the trap.** Every
+    detail view re-sorts what it fetched, so that clause decides nothing there.
+    `queries::track::entity_ids`, which answers what a card's right-click Play queues, has no
+    re-sort behind it and its clause is the whole answer. The two have to agree or the same set
+    plays in one order from the page and another from the card beside it, which is what shipped:
+    `sort_key` where Artist and Genre Detail default to `"album"`, and bare nullable columns where
+    `ui::track_sort` maps an untagged track to `i32::MAX` and SQLite sorts NULL first. Nothing can
+    check it, `melodia-store` being unable to name `melodia-views` and the comparator being Rust
+    against SQL, so a new batch-action query states which arm of `ui::track_sort` it reproduces,
+    and a change to that comparator's defaults is two edits.
+
 - **`tracks_fts` indexes eight columns, and adding a ninth is a migration, not an edit.** fts5 has
   no `ALTER`, so a change means dropping the table plus all three triggers and rebuilding.
   The **newest** migration to have rebuilt it carries the column list, the tokenizer and the bm25

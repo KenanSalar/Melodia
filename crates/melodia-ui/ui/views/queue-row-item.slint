@@ -413,11 +413,11 @@ export component QueueRowItem inherits Rectangle {
 
             play-single => { Queue.skip-to(root.row-index); }
             toggle-favorite(ids, on) => { Queue.toggle-row-favorite(ids, on); }
+            select-all => { Queue.select-all(); }
+            clear-selection => { Queue.clear-selection(); }
             // The one action that stays index-shaped: `remove-selected` reads the Rust shadow, so
             // a queue holding one track twice removes the rows the user ticked rather than every
             // row sharing their ids. The payload is ignored for exactly that reason.
-            select-all => { Queue.select-all(); }
-            clear-selection => { Queue.clear-selection(); }
             request-remove(ids) => {
                 if (ctx-menu.multi-active) {
                     Queue.remove-selected();

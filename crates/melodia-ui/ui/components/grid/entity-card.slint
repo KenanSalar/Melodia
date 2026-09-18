@@ -113,10 +113,10 @@ export component EntityCard inherits Rectangle {
     // The corner cross-fades on the same curve the overlay's controls ride, so the box arrives
     // with them rather than snapping in over a card whose buttons are still easing.
     //
-    // **An eased float rather than `opacity`**, which would rasterize each corner into a texture:
-    // `Opacity::need_layer` bails only on exactly 1.0 or a lone childless child, and both of these
-    // carry a glyph and one of them a `TouchArea`. `Checkbox` and `MaterialIcon` both take a
-    // `fade`, so the alpha folds into the brushes instead.
+    // **One eased float, spent differently at each corner**, and the two arguments are at the
+    // corners rather than here: the badge folds it into its brushes, where `Opacity::need_layer`
+    // would rasterize it for nothing, and the box pays for an `opacity` because `Checkbox` eases
+    // its own fill and rim off `fade` and would stall on a `fade` that eases too.
     private property <float> box-t: root.box-shown ? 1.0 : 0.0;
     animate box-t { duration: Theme.dur-fast; easing: ease-in-out; }
 

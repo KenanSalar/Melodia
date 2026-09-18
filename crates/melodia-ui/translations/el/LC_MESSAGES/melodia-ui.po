@@ -1205,12 +1205,6 @@ msgstr "Εξαγωγή"
 msgid "Export Playlists"
 msgstr "Εξαγωγή λιστών"
 
-msgid "Import playlists from .m3u8 files"
-msgstr "Εισαγωγή λιστών από αρχεία .m3u8"
-
-msgid "Export playlists to .m3u8 files"
-msgstr "Εξαγωγή λιστών σε αρχεία .m3u8"
-
 msgid "Choose playlists to export."
 msgstr "Επιλέξτε λίστες για εξαγωγή."
 

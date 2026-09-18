@@ -2,10 +2,10 @@
 
 use std::sync::Arc;
 
-use slint::ComponentHandle;
+use slint::{ComponentHandle, Model};
 
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
-use crate::ui::tracks::TracksUi;
+use crate::ui::tracks::{self as tracks_ui_mod, TracksUi};
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Tracks};
 
@@ -31,7 +31,7 @@ pub(super) fn wire(ui: &AppWindow, _state: &AppState, tracks_ui: &Arc<TracksUi>)
     let tu = tracks_ui.clone();
     tracks.on_section_active_changed(move |active| {
         tu.set_section_active(active);
-        // **The leave does nothing else, and Tracks is the one library view that can say
+        // **The leave hands back nothing, and Tracks is the one library view that can say
         // that.** Its four siblings empty their models on the way out, so each owes the
         // `UNFETCHED_COUNT` rewind that stops a count outliving the rows it numbers — and,
         // having rewound, owes the `mark_dirty` that answers it. This model *survives* the
@@ -42,6 +42,16 @@ pub(super) fn wire(ui: &AppWindow, _state: &AppState, tracks_ui: &Arc<TracksUi>)
         // `boot::ui_setup::install_library_changed_refresher` already folds every bump
         // arriving while this tab is unmounted into the same flag.
         if !active {
+            // The one exception, and it releases nothing: a selection the user can no longer
+            // see still answers `Selection.any-live()`, so Escape over Now Playing would drop
+            // it rather than close the page. Its six siblings clear on leave for the same
+            // reason. Guarded on there being one, the unstamp walking a model that is
+            // library-sized here precisely because it survives.
+            if let Some(ui) = weak.upgrade()
+                && ui.global::<Tracks>().get_selected_ids().row_count() > 0
+            {
+                tracks_ui_mod::clear_selection(&ui);
+            }
             return;
         }
         if tu.take_dirty() {

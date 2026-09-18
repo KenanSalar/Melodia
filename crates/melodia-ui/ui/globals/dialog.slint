@@ -17,6 +17,15 @@ import { WindowChrome } from "shell.slint";
 // `enabled: Dialog.open` and the card `visible: t > 0.01`, so no stale click reaches a button.
 export global Dialog {
     in-out property <bool> open;
+    // Which dialog *intent* is the live one, bumped by every opener below through
+    // `claim-request()`.
+    //
+    // **`open` alone cannot answer that**: four of those openers deliberately leave it false while
+    // Rust fetches the body, so through the whole of that window two menus both read "nothing is
+    // up" and both go on to fill the same properties. The second one's synchronous write then
+    // rides out under the first one's rows. `ui::callbacks::DialogClaim` is the reader, taken at
+    // the click and re-checked past the `await`.
+    in-out property <int> request-generation;
     in-out property <string> title;
     in-out property <string> message;
     in-out property <string> confirm-label: "OK";
@@ -217,9 +226,16 @@ export global Dialog {
     // what it guards against being the *next* one — a re-spelled populate block opens the right
     // dialog and is free to drift.
 
+    // Seats a new intent, retiring whatever a slower one was still resolving for. Every opener
+    // opens with it, which is the whole of what `request-generation` needs to be true.
+    function claim-request() {
+        root.request-generation += 1;
+    }
+
     // Three call sites: the Playlists tab's New pill, Ctrl+N, and a track row's Add-to-Playlist →
     // "New Playlist…". The last passes the ids to add once the row exists, the other two `[]`.
     public function open-create-playlist(track-ids: [int]) {
+        root.claim-request();
         root.title = @tr("New Playlist");
         root.message = "";
         root.confirm-label = @tr("Create");
@@ -242,6 +258,7 @@ export global Dialog {
     // that lands — which is also why the tab is an argument rather than a property set beside this
     // call, the populate resetting `active-tab` a tick later.
     public function open-tag-editor(heading: string, ids: [int], tab: int) {
+        root.claim-request();
         root.title = heading;
         root.message = "";
         root.confirm-label = @tr("Save");
@@ -254,6 +271,7 @@ export global Dialog {
     // Two call sites — the Playlists grid card's overflow and the open playlist's pill row —
     // differing only in where they read the current name and description from.
     public function open-rename-playlist(id: int, name: string, description: string) {
+        root.claim-request();
         root.title = @tr("Rename Playlist");
         root.message = "";
         root.confirm-label = @tr("Save");
@@ -268,6 +286,7 @@ export global Dialog {
 
     // Same two call sites as the rename above.
     public function open-delete-playlist(id: int) {
+        root.claim-request();
         root.title = @tr("Delete playlist?");
         root.message = @tr("The playlist and its track order will be removed. The tracks themselves stay in your library.");
         root.confirm-label = @tr("Delete");
@@ -281,6 +300,7 @@ export global Dialog {
     // The card menu's multi-select arm. A separate opener rather than a count-ternary inside the
     // one above: the singular copy names one playlist's track order, which the plural cannot.
     public function open-delete-playlists(ids: [int]) {
+        root.claim-request();
         root.title = @tr("Delete {} playlists?", ids.length);
         root.message = @tr("The playlists and their track order will be removed. The tracks themselves stay in your library.");
         root.confirm-label = @tr("Delete");
@@ -297,6 +317,7 @@ export global Dialog {
     //
     // Doesn't set `open`, as `open-tag-editor` doesn't: Rust raises the card once the rules load.
     public function open-edit-smart-rules(id: int) {
+        root.claim-request();
         root.title = @tr("Edit Rules");
         root.message = "";
         root.confirm-label = @tr("Save");
@@ -313,6 +334,7 @@ export global Dialog {
     //
     // Doesn't set `open` either: Rust fills the rows and raises it from a fresh tick.
     public function prepare-add-to-playlist(heading: string) {
+        root.claim-request();
         root.title = heading;
         root.message = "";
         root.confirm-label = @tr("Add");
@@ -328,6 +350,7 @@ export global Dialog {
     //
     // Doesn't set `open`: Rust fills the pool and the preview before it raises the card.
     public function prepare-edit-artwork(id: int) {
+        root.claim-request();
         root.title = @tr("Edit Artwork");
         root.message = "";
         root.confirm-label = @tr("Apply");

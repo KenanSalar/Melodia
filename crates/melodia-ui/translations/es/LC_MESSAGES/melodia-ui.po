@@ -1201,12 +1201,6 @@ msgstr "Exportar"
 msgid "Export Playlists"
 msgstr "Exportar listas"
 
-msgid "Import playlists from .m3u8 files"
-msgstr "Importar listas desde archivos .m3u8"
-
-msgid "Export playlists to .m3u8 files"
-msgstr "Exportar listas a archivos .m3u8"
-
 msgid "Choose playlists to export."
 msgstr "Elige las listas que exportar."
 

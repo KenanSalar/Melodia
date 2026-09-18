@@ -77,7 +77,7 @@ pub fn select_all(ui: &AppWindow) {
     apply_selection_to_rows(&g);
 }
 
-/// Reset selection (called from the action-pill "Clear" button).
+/// Reset selection (Escape, the row menu's "Clear selection", and section-leave).
 pub fn clear_selection(ui: &AppWindow) {
     let g = ui.global::<Browse>();
     write_selection(&g, Vec::new());

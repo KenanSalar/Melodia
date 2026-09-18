@@ -249,7 +249,7 @@ pub fn select_all_curated<V: RowSelectionView, S: BuildHasher>(
     stamp_rows_selected(&view.track_rows(), &id_set);
 }
 
-/// Reset a curated page's selection (called from the action-pill "Clear" button and
+/// Reset a curated page's selection (Escape, the row menu's "Clear selection", and
 /// section-leave). Same diff-then-write shape as [`handle_curated_click`].
 pub fn clear_curated_selection<V: RowSelectionView, S: BuildHasher>(
     view: &V,

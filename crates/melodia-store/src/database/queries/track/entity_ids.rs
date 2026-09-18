@@ -11,7 +11,24 @@
 use crate::database::{DbPool, chunked_in_query};
 use melodia_core::error::AppError;
 
-/// Album tracks, disc/track-number ordered, matching what the album detail shows.
+/// Where an untagged track number sorts, mirroring `ui::track_sort`'s `i32::MAX`. Spelled out
+/// rather than derived: this is SQL, and the two sides can only be held together by review.
+const UNTAGGED_TRACK_LAST: i32 = i32::MAX;
+
+/// `ui::track_sort`'s `"album"` arm, the order both Artist and Genre Detail default to.
+/// `COALESCE` because the comparator reads a missing album as `""`, which sorts beside an empty
+/// one where a bare NULL would sort ahead of it.
+const ALBUM_THEN_TITLE: &str =
+    "COALESCE(t.album, '') COLLATE NOCASE ASC, t.title COLLATE NOCASE ASC";
+
+/// Album tracks in the order Album Detail opens on: `ui::track_sort`'s `"track_number"` arm,
+/// not the bare columns [`super::get_tracks_by_album_for_list`] spells.
+///
+/// **That sibling's `ORDER BY` is overwritten by an in-memory re-sort where this one is what
+/// plays**, so the two have to be read separately. They disagree on NULL, which both columns
+/// allow: `SQLite` sorts it first and the comparator sorts an untagged track last. The `COALESCE`
+/// pair is what closes that. It gives up the ordering half of `idx_tracks_album_disc_track` to
+/// sort sets one album wide; the `album_id` lookup still uses it.
 pub async fn track_ids_by_albums(
     db: &DbPool,
     album_ids: &[i64],
@@ -20,13 +37,18 @@ pub async fn track_ids_by_albums(
         format!(
             "SELECT album_id, id FROM tracks \
              WHERE album_id IN ({placeholders}) \
-             ORDER BY disc_number ASC, track_number ASC"
+             ORDER BY COALESCE(NULLIF(disc_number, 0), 1) ASC, \
+                      COALESCE(NULLIF(track_number, 0), {UNTAGGED_TRACK_LAST}) ASC, \
+                      title COLLATE NOCASE ASC"
         )
     })
     .await
 }
 
-/// Artist tracks in natural order.
+/// Artist tracks in the order Artist Detail opens on: by album, then title, which is
+/// `ui::track_sort`'s `"album"` arm. **Not `sort_key`**, the `for_list` sibling's order, which an
+/// in-memory re-sort overwrites there. Copying it queues a catalogue alphabetically by title
+/// under a page that shows it by album.
 ///
 /// **Joins where [`super::get_tracks_by_artist_for_list`] deliberately doesn't**, the artist id
 /// having to be in the projection for the caller to group on. So a row repeats both across
@@ -41,13 +63,14 @@ pub async fn track_ids_by_artists(
             "SELECT ta.artist_id, t.id FROM tracks t \
              JOIN track_artists ta ON ta.track_id = t.id \
              WHERE ta.artist_id IN ({placeholders}) \
-             ORDER BY t.sort_key COLLATE NOCASE ASC"
+             ORDER BY {ALBUM_THEN_TITLE}"
         )
     })
     .await
 }
 
-/// Genre tracks in natural order, joined and deduped for the reason the artist arm above gives.
+/// Genre tracks in Genre Detail's own order, joined and deduped for the reason the artist arm
+/// above gives, and ordered for the reason it gives too, both pages defaulting to `"album"`.
 pub async fn track_ids_by_genres(
     db: &DbPool,
     genre_ids: &[i64],
@@ -57,7 +80,7 @@ pub async fn track_ids_by_genres(
             "SELECT tg.genre_id, t.id FROM tracks t \
              JOIN track_genres tg ON tg.track_id = t.id \
              WHERE tg.genre_id IN ({placeholders}) \
-             ORDER BY t.sort_key COLLATE NOCASE ASC"
+             ORDER BY {ALBUM_THEN_TITLE}"
         )
     })
     .await
@@ -89,10 +112,16 @@ pub async fn track_ids_by_playlists(
 ///
 /// Shares that function's platform invariant through `list::directory_like_prefix`: `file_path`
 /// is stored with the platform's native separator, so the pattern carries it too.
+///
+/// `COLLATE NOCASE` because `library::browse` lists a directory's files through
+/// `to_lowercase()`, and the default BINARY collation would play `Zebra.flac` before
+/// `apple.flac` under a listing that shows the reverse. ASCII-only against a Unicode fold, so
+/// the two still part on a non-ASCII case pair.
 pub async fn track_ids_under_directory(db: &DbPool, dir_path: &str) -> Result<Vec<i64>, AppError> {
     let pattern = format!("{}%", super::list::directory_like_prefix(dir_path));
     let ids = sqlx::query_scalar::<_, i64>(
-        "SELECT id FROM tracks WHERE file_path LIKE ? ESCAPE '\\' ORDER BY file_path ASC",
+        "SELECT id FROM tracks WHERE file_path LIKE ? ESCAPE '\\' \
+         ORDER BY file_path COLLATE NOCASE ASC",
     )
     .bind(&pattern)
     .fetch_all(db.read())

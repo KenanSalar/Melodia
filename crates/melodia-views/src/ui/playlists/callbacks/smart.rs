@@ -19,7 +19,7 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
-use crate::ui::callbacks::another_dialog_is_up;
+use crate::ui::callbacks::DialogClaim;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::util::clamp_i64_to_i32;
 use melodia_app::library;
@@ -119,6 +119,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         let state = state.clone();
         se.on_request_edit(move |playlist_id| {
             let id = i64::from(playlist_id);
+            let Some(claim) = DialogClaim::take_from(&weak) else { return };
             let s = state.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
@@ -133,7 +134,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 let description = detail.description.unwrap_or_default();
                 let criteria = sc::SmartCriteria::from_json_opt(detail.smart_criteria.as_deref());
                 let _ = weak.upgrade_in_event_loop(move |ui| {
-                    if another_dialog_is_up(&ui) {
+                    if !claim.holds(&ui) {
                         return;
                     }
                     populate_editor(&ui, &name, &description, &criteria, id);

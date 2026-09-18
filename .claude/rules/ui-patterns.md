@@ -104,10 +104,21 @@ silently miss the other.
 - **A multi-selection grows no pill.** The count, every batch action and both ends of the set are
   the right-click menu's, on rows and cards alike: "Select all" ungated, "Clear selection" gated
   on the clicked item being *in* the set, so a menu raised beside one still acts on that item
-  alone. The other exits are Escape (`Selection.clear-live()`) and unpicking the last item. A
-  surface that grows a "{n} selected" chip is putting a second affordance in front of the menu
-  that already carries all of them. **A body click that picks fires on `clicked`**, for the
-  grab-invalidation reason `slint-pitfalls.md` argues.
+  alone. The other exits are Escape (`Selection.clear-live()`), a section leave, and unpicking the
+  last item. A surface that grows a "{n} selected" chip is putting a second affordance in front of
+  the menu that already carries all of them. **A body click that picks fires on `clicked`**, for
+  the grab-invalidation reason `slint-pitfalls.md` argues.
+
+- **Escape reaches a selection *after* it has closed Now Playing, and a section leave drops one.**
+  Both halves answer the same thing: with no pill, a set the user cannot see is indistinguishable
+  from no set, and `Selection.any-live()` asks ten globals without knowing which surface is on
+  screen. So the arm sits at the bottom of `shortcut-scope.slint`'s chain, where a set held by the
+  page *under* Now Playing cannot swallow the press meant to close it, and every list surface
+  hands its selection back on the way out. **`Tracks` and `Browse` are the two that release
+  nothing else on leave and still owe this one**, each guarded on there being a selection, since
+  the unstamp walks a row model those two keep across the leave. `CardSelection` is the exception
+  and stays scope-guarded instead: clearing it would mean a hook at each of seven mounts, which is
+  the thing its signature exists to avoid.
 
 - **A card menu offers both directions rather than reading a state it hasn't got.** A card is a
   set, so the `row-is-favorite` a row menu toggles on has no honest answer over one half
@@ -115,6 +126,13 @@ silently miss the other.
   beside each other instead, both well defined whatever the mixture. Reach for this wherever an
   entry acts on a set: hiding or dimming needs the same state, and leaves no way to undo.
 
+- **A menu entry is gated on what the operation needs, never on the card's kind.** The menu is the
+  right-click path to what the card's hover buttons already do, so an entry it hides while the
+  button beside it stays live reads as a bug on the card the user is pointing at. It shipped that
+  way once: `card-is-smart` gated Rename and Edit Artwork as well as Edit Rules, where
+  `playlist-grid.slint` mounts the pencil and the image button for every playlist and the detail
+  band offers both too. Only Edit Rules is a smart playlist's alone. Check the hover trio and the
+  detail band before adding a gate, all three being the same operation reached three ways.
 
 - **`MetaChip`/`MetaChipStrip` are decorative** — no `TouchArea`, no selected state. The
   *interactive* pill is `chip-group.slint`'s `Chip`. Deliberately not one component: one states a
@@ -548,6 +566,17 @@ three components that answer it, and each argues its geometry at its own file.
   commit live in `files/export.rs` and `files/add_picker.rs` (commit needs
   `Rc<NotificationsUi>`). Export opens from `export.rs`, Add-to-Playlist from `dialog.rs`.
 
+- **A raise that crosses an `await` owes a `DialogClaim`, and `Dialog.open` is not one.** Four
+  openers deliberately leave `open` false while Rust fetches the body, so through that whole window
+  two menus both read "nothing is up", both fill the same properties, and the second one's
+  synchronous write rides out under the first one's rows: the Add-to-Playlist picker committing a
+  row's single track under an overlap count solved for an album. `Dialog.request-generation` is
+  what separates them, bumped by `claim-request()` at the head of every opener; take
+  `DialogClaim::take_from(&weak)` **synchronously at the click** and ask `holds(&ui)` past the
+  await. It keeps the `open` test as its other half, the twelve single-caller kinds that write
+  `kind` inline never bumping anything. **The capture has to follow the opener**, which is why
+  `open-tag-editor` and `open-edit-smart-rules` invoke their fetch as their own last statement.
+
 - **Notifications stack** mirrors `Dialog`'s `kind`-routing — a new action is one branch plus one
   `show_localized(…)` call. Cap 5. Per-card props use `data:` not `row:` (Slint reserves `row` as
   the iter var), and translated strings reach Rust via `pure callback`s wrapping `@tr(…)` literals.
@@ -711,7 +740,11 @@ three components that answer it, and each argues its geometry at its own file.
   - **The ceiling is bytes, not entries.** A decoded buffer costs the square of the tier size, so
     one entry count is two different budgets — and it was wrong the expensive way round, a large
     logical desktop being by construction a 1× one, where the buffers are a fifth the size and the
-    same bytes buy several times the entries.
+    same bytes buy several times the entries. **It is a ceiling on a tier that has not retuned**:
+    the cap is derived from the size being moved *to* while `resize` trims by entry count, and a
+    retune leaves the old buffers in place on purpose (the release/retune asymmetry below), so a
+    drag across a step can hold two sizes at once until each is replaced or evicted. Bounded at
+    one entry per path, and a section leave empties the tier outright.
   - **Read after `app.show()` and again on every resize**, through `WindowChrome.display-changed`
     off the winit `Resized` filter. Read once, a cap sized for the launch window is one a later
     maximize overruns. It sets the cap exactly rather than growing it: a smaller window really

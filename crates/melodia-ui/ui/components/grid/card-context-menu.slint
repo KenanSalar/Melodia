@@ -22,8 +22,10 @@ export component CardContextMenu inherits Rectangle {
     in property <int> card-id;
     // Folder cards only.
     in property <string> card-path;
-    // Playlist cards only: gates the rules entry, and the three manual-edit entries a smart
-    // playlist has no answer for.
+    // Playlist cards only: gates the rules entry, which a manual playlist has no answer for.
+    // Rename and Edit Artwork are *not* gated on it. Both are well defined for a smart playlist
+    // and three other surfaces already offer them, the card's own hover buttons included, so
+    // gating here only made the menu disagree with the pencil sitting on the same card.
     in property <bool> card-is-smart: false;
     // Album cards only. 0 means no linkage and hides the entry.
     in property <int> card-artist-id: 0;
@@ -50,8 +52,8 @@ export component CardContextMenu inherits Rectangle {
     property <bool> is-track: root.card-kind == "track";
     // A folder is one path and never joins a selection, so its whole arm is single-target.
     property <bool> folder-single: root.is-folder && !root.multi-active;
-    // The manual-edit trio, which only a real playlist row can answer for.
-    property <bool> playlist-edits: root.is-playlist && !root.multi-active && !root.card-is-smart;
+    // Rename and Edit Artwork: single-target, and a playlist's whatever its kind.
+    property <bool> playlist-edits: root.is-playlist && !root.multi-active;
 
     public function show() {
         pop.show();
@@ -228,8 +230,12 @@ export component CardContextMenu inherits Rectangle {
                     }
                 }
 
-                // Single-target by nature, so hidden over a selection.
-                if root.folder-single || (root.is-track && !root.multi-active): MenuSeparator {}
+                // Single-target by nature, so hidden over a selection. The third disjunct is the
+                // album arm: `card-artist-id` is an album card's alone, and left out of the gate
+                // it put Go to Artist straight under Edit Tags with no rule between.
+                if root.folder-single
+                    || (root.is-track && !root.multi-active)
+                    || (!root.multi-active && root.card-artist-id != 0): MenuSeparator {}
                 if root.folder-single: MenuItem {
                     label: @tr("Open Folder");
                     icon: "folder_open";
@@ -268,7 +274,8 @@ export component CardContextMenu inherits Rectangle {
                 }
 
                 // The playlist block mirrors the card's own hover trio, which stays: the buttons
-                // are the discoverable path and these are the right-click one.
+                // are the discoverable path and these are the right-click one. Mirrors it for a
+                // smart playlist too, the buttons being ungated there.
                 if root.is-playlist: MenuSeparator {}
                 if root.playlist-edits: MenuItem {
                     label: @tr("Rename…");

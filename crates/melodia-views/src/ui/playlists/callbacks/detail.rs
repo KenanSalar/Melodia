@@ -8,7 +8,7 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
 use crate::ui::callbacks::{
-    another_dialog_is_up, collect_track_ids, play_row_start, spawn_play_then_shuffle,
+    DialogClaim, collect_track_ids, play_row_start, spawn_play_then_shuffle,
 };
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::track_list_view::{self, view_id};
@@ -285,6 +285,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             if id < 0 {
                 return;
             }
+            let Some(claim) = DialogClaim::take_from(&weak) else { return };
             let s = s.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
@@ -292,7 +293,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     .await
                     .unwrap_or_default();
                 let _ = weak.upgrade_in_event_loop(move |ui| {
-                    if another_dialog_is_up(&ui) {
+                    if !claim.holds(&ui) {
                         return;
                     }
                     let current_cover = ui.global::<PlaylistDetail>().get_cover();

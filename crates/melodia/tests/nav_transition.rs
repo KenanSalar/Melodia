@@ -27,7 +27,7 @@ const LOOKBACK: usize = 3;
 
 /// Does this line mount something that samples `Nav.pending-enter-from`? `==` is excluded
 /// at both properties — every branch selector in `app-window.slint` reads them — and so is
-/// a write of `true` to `now-playing-open`, whose branch hard-codes its own `below`.
+/// a write of `true` to `now-playing-open`, whose branch hard-codes its own `above`.
 fn mounts_a_view(line: &str) -> bool {
     let flips_index =
         line.starts_with("Nav.selected-index =") && !line.starts_with("Nav.selected-index ==");
