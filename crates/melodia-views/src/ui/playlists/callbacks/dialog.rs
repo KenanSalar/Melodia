@@ -212,7 +212,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
                 if let Err(e) = library::playlists::delete_playlist(&s, id).await {
-                    log::warn!("playlists::delete({id}): {e}");
+                    log::warn!("playlists::delete({id}): {}", describe(&e));
                     return;
                 }
                 if was_open {

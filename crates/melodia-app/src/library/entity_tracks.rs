@@ -71,11 +71,11 @@ pub async fn track_ids_for(
 /// An id the split read didn't return was deleted between the grid painting and the click; the
 /// rest of the selection still acts.
 async fn playlist_track_ids(state: &AppState, ids: &[i64]) -> Result<Vec<i64>, AppError> {
-    let kinds = queries::playlist::smart_criteria_for_playlists(&state.db, ids).await?;
+    let verdicts = queries::playlist::smart_criteria_for_playlists(&state.db, ids).await?;
 
     let mut manual_ids: Vec<i64> = Vec::new();
     let mut grouped: HashMap<i64, Vec<i64>> = HashMap::new();
-    for (id, is_smart, smart_criteria) in kinds {
+    for (id, is_smart, smart_criteria) in verdicts {
         if !is_smart {
             manual_ids.push(id);
             continue;

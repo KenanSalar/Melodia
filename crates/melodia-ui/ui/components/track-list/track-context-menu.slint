@@ -178,8 +178,9 @@ export component TrackContextMenu inherits Rectangle {
                         Dialog.open-create-playlist(pop.effective-ids);
                     }
                 }
-                // Hidden when there is nothing to add to. The chrome is set here so the `@tr`
-                // literals sit at the call site and a locale switch re-resolves them.
+                // Hidden when there is nothing to add to. Only the heading is ours — the same
+                // ternary as the label, being the same sentence — the rest of the chrome
+                // belonging to the opener, which the card menu shares.
                 if pop.visible-playlist-count > 0: MenuItem {
                     label: root.multi-active
                         ? @tr("Add {} to Playlist", root.multi-count)

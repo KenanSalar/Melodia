@@ -38,10 +38,11 @@ pub mod scope {
 #[derive(Default)]
 struct Selection {
     scope: String,
-    /// **Displayed order, which is what the batch actions queue in.** `library::entity_tracks`
-    /// flattens the ids in the order it is handed them, so a set sorted anywhere on the way out
-    /// plays albums by database id under a grid the user sorted by year. Ordered here for the
-    /// reason [`crate::ui::list_selection`] keeps a `Vec` for the track lists.
+    /// **Pick order, and never sorted — it is what the batch actions queue in.**
+    /// `library::entity_tracks` flattens the ids in the order it is handed them, so a set sorted
+    /// anywhere on the way out plays albums by database id under a grid the user sorted by year. A
+    /// shift range lands in displayed order and a ctrl-click appends, which is the same `Vec` and
+    /// the same reason [`crate::ui::list_selection`] has one for the track lists.
     ids: Vec<i32>,
     /// The id a shift-range measures from, `0` for none. No card carries id 0.
     anchor: i32,
@@ -100,6 +101,7 @@ fn pick(
         return None;
     }
     let same_scope = current.scope == asking_scope;
+    let scope = asking_scope.to_owned();
     let single = |anchor| Selection { scope: asking_scope.to_owned(), ids: vec![id], anchor };
 
     if shift && same_scope && current.anchor != 0 {
@@ -112,11 +114,7 @@ fn pick(
             return Some(single(id));
         };
         let (lo, hi) = if from <= to { (from, to) } else { (to, from) };
-        return Some(Selection {
-            scope: asking_scope.to_owned(),
-            ids: visible[lo..=hi].to_vec(),
-            anchor: current.anchor,
-        });
+        return Some(Selection { scope, ids: visible[lo..=hi].to_vec(), anchor: current.anchor });
     }
 
     if ctrl && same_scope {
@@ -127,7 +125,7 @@ fn pick(
             }
             None => ids.push(id),
         }
-        return Some(Selection { scope: asking_scope.to_owned(), ids, anchor: id });
+        return Some(Selection { scope, ids, anchor: id });
     }
 
     Some(single(id))
