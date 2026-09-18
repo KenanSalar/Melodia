@@ -23,6 +23,7 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
 
+use crate::ui::callbacks::another_dialog_is_up;
 use crate::ui::callbacks::macros::release_detail_hero_images;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use melodia_app::library;
@@ -414,13 +415,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     std::collections::HashMap::new()
                 });
                 let _ = weak.upgrade_in_event_loop(move |ui| {
-                    let dlg = ui.global::<Dialog>();
-                    // The menu set the chrome two queries ago and left `open` alone, so a
-                    // dialog raised since this started owns `Dialog` now and the `set_open`
-                    // below would force the picker's rows up under its heading. The card
-                    // menu's arm resolves entity ids to tracks first, which is what widened
-                    // the window enough to be worth a guard.
-                    if dlg.get_open() {
+                    if another_dialog_is_up(&ui) {
                         return;
                     }
                     // Skip rows whose i64 playlist id can't fit in the
@@ -460,6 +455,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                             })
                         })
                         .collect();
+                    let dlg = ui.global::<Dialog>();
                     dlg.set_playlist_pick_rows(ModelRc::new(VecModel::from(rows)));
                     dlg.set_add_select_all(false);
                     dlg.set_add_selected_count(0);
@@ -527,27 +523,19 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     .await
                     .unwrap_or_default();
                 let _ = weak.upgrade_in_event_loop(move |ui| {
-                    let dlg = ui.global::<Dialog>();
+                    if another_dialog_is_up(&ui) {
+                        return;
+                    }
                     let current_cover = if artwork_path.is_empty() {
                         Image::default()
                     } else {
                         pu.grid_cover_blocking(&artwork_path)
                     };
-                    dlg.set_title(SharedString::from("Edit Artwork"));
-                    dlg.set_message(SharedString::from(""));
-                    dlg.set_confirm_label(SharedString::from("Apply"));
-                    dlg.set_cancel_label(SharedString::from("Cancel"));
-                    dlg.set_destructive(false);
-                    dlg.set_kind(SharedString::from("edit-playlist-artwork"));
-                    dlg.set_target_id(i32::try_from(id).unwrap_or(-1));
-                    dlg.set_input_text(SharedString::from(""));
-                    dlg.set_mosaic_selection(ModelRc::new(VecModel::from(
-                        Vec::<SharedString>::new(),
-                    )));
-                    dlg.set_mosaic_touched(false);
-                    dlg.set_current_artwork(current_cover);
                     let cand_rows: Vec<SharedString> =
                         candidates.into_iter().map(SharedString::from).collect();
+                    let dlg = ui.global::<Dialog>();
+                    dlg.invoke_prepare_edit_artwork(i32::try_from(id).unwrap_or(-1));
+                    dlg.set_current_artwork(current_cover);
                     dlg.set_mosaic_candidates(ModelRc::new(VecModel::from(cand_rows)));
                     dlg.set_open(true);
                 });

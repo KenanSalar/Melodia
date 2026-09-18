@@ -23,7 +23,7 @@ use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::playlist::PlaylistStats;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
-use melodia_core::error::AppResult;
+use melodia_core::error::{AppResult, describe};
 use melodia_ui::{AppWindow, NavEnterFrom, PlaylistDetail, TrackListRow as UiTrackListRow};
 
 // `apply_detail_artwork` (cover + hero-blur write) and `replace_tracks_model` (in-place `tracks`
@@ -417,7 +417,10 @@ pub fn seed_detail_from_settings(
         // Below = first-launch fade-up, not a drill-in slide. The user
         // didn't navigate — we're just restoring their last view.
         if let Err(e) = open_playlist(&s, &pu, weak.clone(), id, NavEnterFrom::Below).await {
-            log::warn!("playlists::seed_detail_from_settings open_playlist({id}): {e}");
+            log::warn!(
+                "playlists::seed_detail_from_settings open_playlist({id}): {}",
+                describe(&e)
+            );
         }
         // Lowered however it went, and behind `open_playlist`'s own hop so the id is already in:
         // a playlist deleted since the last session owes the grid back rather than an empty body.

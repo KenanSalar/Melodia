@@ -11,6 +11,7 @@ use slint::{
     ComponentHandle, Image, Model, ModelRc, Rgb8Pixel, SharedPixelBuffer, SharedString, VecModel,
 };
 
+use crate::ui::callbacks::another_dialog_is_up;
 use crate::ui::util::{format_channels, format_sample_rate, len_as_i32};
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -130,6 +131,9 @@ pub(super) fn wire_request_edit(
                 or_logged(library::tags::get_tag_edit_release_tags(&s, &ids).await, "release tags");
 
             let Some(ui) = weak.upgrade() else { return };
+            if another_dialog_is_up(&ui) {
+                return;
+            }
             populate(
                 &ui,
                 &session,

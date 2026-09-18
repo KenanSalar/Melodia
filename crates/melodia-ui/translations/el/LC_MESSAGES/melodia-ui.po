@@ -2287,3 +2287,9 @@ msgstr "Διαγραφή {} λιστών;"
 
 msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
 msgstr "Οι λίστες και η σειρά των κομματιών τους θα καταργηθούν. Τα ίδια τα κομμάτια παραμένουν στη βιβλιοθήκη σας."
+
+msgid "Edit Artwork"
+msgstr "Επεξεργασία εικόνας"
+
+msgid "Apply"
+msgstr "Εφαρμογή"

@@ -7,11 +7,14 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
-use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
+use crate::ui::callbacks::{
+    another_dialog_is_up, collect_track_ids, play_row_start, spawn_play_then_shuffle,
+};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::track_list_view::{self, view_id};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Dialog, PlaylistDetail};
 
 /// Wire the `PlaylistDetail` callbacks. See [`super::wire`].
@@ -57,7 +60,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     crate::ui::track_list_view::view_id::PLAYLIST_DETAIL,
                     None,
                 ) {
-                    log::warn!("playlists::close_detail persist: {e}");
+                    log::warn!("playlists::close_detail persist: {}", describe(&e));
                 }
             });
 
@@ -249,7 +252,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 if let Err(e) =
                     library::playlists::reorder_playlist(&s, playlist_id, from, to).await
                 {
-                    log::warn!("playlists::reorder: {e}");
+                    log::warn!("playlists::reorder: {}", describe(&e));
                     let _ = weak.upgrade_in_event_loop(move |ui| {
                         playlists_ui_mod::rollback_reorder(&ui, &pu, snapshot);
                     });
@@ -262,8 +265,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     // playlist's own track artworks and open the picker dialog. Seeds
     // `current-artwork` from `PlaylistDetail.cover` (already decoded
     // for the open detail view) so the dialog opens on a preview of
-    // the saved state, and resets `mosaic-touched` so the dispatcher
-    // treats an immediate Apply as a no-op.
+    // the saved state; the rest of the chrome is
+    // `Dialog.prepare-edit-artwork`'s.
     {
         let s = state.clone();
         let pu = playlists_ui.clone();
@@ -280,23 +283,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     .await
                     .unwrap_or_default();
                 let _ = weak.upgrade_in_event_loop(move |ui| {
-                    let dlg = ui.global::<Dialog>();
+                    if another_dialog_is_up(&ui) {
+                        return;
+                    }
                     let current_cover = ui.global::<PlaylistDetail>().get_cover();
-                    dlg.set_title(SharedString::from("Edit Artwork"));
-                    dlg.set_message(SharedString::from(""));
-                    dlg.set_confirm_label(SharedString::from("Apply"));
-                    dlg.set_cancel_label(SharedString::from("Cancel"));
-                    dlg.set_destructive(false);
-                    dlg.set_kind(SharedString::from("edit-playlist-artwork"));
-                    dlg.set_target_id(i32::try_from(id).unwrap_or(-1));
-                    dlg.set_input_text(SharedString::from(""));
-                    dlg.set_mosaic_selection(ModelRc::new(VecModel::from(
-                        Vec::<SharedString>::new(),
-                    )));
-                    dlg.set_mosaic_touched(false);
-                    dlg.set_current_artwork(current_cover);
                     let cand_rows: Vec<SharedString> =
                         candidates.into_iter().map(SharedString::from).collect();
+                    let dlg = ui.global::<Dialog>();
+                    dlg.invoke_prepare_edit_artwork(i32::try_from(id).unwrap_or(-1));
+                    dlg.set_current_artwork(current_cover);
                     dlg.set_mosaic_candidates(ModelRc::new(VecModel::from(cand_rows)));
                     dlg.set_open(true);
                 });
@@ -333,7 +328,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 if let Err(e) =
                     library::playlists::remove_tracks_from_playlist_batch(&s, id, ids).await
                 {
-                    log::warn!("playlists::remove_selected({id}): {e}");
+                    log::warn!("playlists::remove_selected({id}): {}", describe(&e));
                     return;
                 }
                 let pu_ui = pu.clone();
@@ -341,10 +336,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     playlists_ui_mod::clear_selection(&ui, &pu_ui);
                 });
                 if let Err(e) = playlists_ui_mod::refresh_detail(&s, &pu, weak.clone(), id).await {
-                    log::warn!("playlists::remove_selected refresh: {e}");
+                    log::warn!("playlists::remove_selected refresh: {}", describe(&e));
                 }
                 if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak).await {
-                    log::warn!("playlists::remove_selected refetch grid: {e}");
+                    log::warn!("playlists::remove_selected refetch grid: {}", describe(&e));
                 }
             });
         });
@@ -372,16 +367,16 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     library::playlists::remove_tracks_from_playlist_batch(&s, playlist_id, id_vec)
                         .await
                 {
-                    log::warn!("playlists::remove_track: {e}");
+                    log::warn!("playlists::remove_track: {}", describe(&e));
                     return;
                 }
                 if let Err(e) =
                     playlists_ui_mod::refresh_detail(&s, &pu, weak.clone(), playlist_id).await
                 {
-                    log::warn!("playlists::remove_track refresh: {e}");
+                    log::warn!("playlists::remove_track refresh: {}", describe(&e));
                 }
                 if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak).await {
-                    log::warn!("playlists::remove_track refetch grid: {e}");
+                    log::warn!("playlists::remove_track refetch grid: {}", describe(&e));
                 }
             });
         });

@@ -28,7 +28,7 @@ use melodia_app::library;
 use melodia_app::services::settings::{SortDir, ViewSort};
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
-use melodia_ui::{AppWindow, Nav, Player};
+use melodia_ui::{AppWindow, Dialog, Nav, Player};
 
 use index_persist::IndexPersist;
 use macros::{spawn_logged_sync, wire_pb, wire_sync, wire_sync_pb};
@@ -72,6 +72,17 @@ pub(super) fn play_row_start(ids: &[i64], track_id: i64, idx: i32) -> Option<usi
 /// walk is cheap.
 pub(super) fn model_track_ids(rows: &ModelRc<melodia_ui::TrackListRow>) -> Vec<i64> {
     rows.iter().map(|r| i64::from(r.id)).collect()
+}
+
+/// Whether something already holds the `Dialog` global, so a raise landing from a later tick has
+/// to drop itself rather than fill it.
+///
+/// The chrome a menu wrote is stale the moment anything else opens — `kind` has moved on — so a
+/// body filled past that point paints one dialog's rows under another's heading, and hands its
+/// Accept to the wrong branch of the dispatcher. **Ask it wherever an `await` sits between the
+/// click and the raise**; a plain event-loop hop can't be overtaken inside one tick.
+pub(super) fn another_dialog_is_up(ui: &AppWindow) -> bool {
+    ui.global::<Dialog>().get_open()
 }
 
 /// Replace the queue with `ids`, open on a random one, then turn shuffle on — the header

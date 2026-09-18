@@ -2289,3 +2289,9 @@ msgstr "{} Playlists löschen?"
 
 msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
 msgstr "Die Playlists und ihre Titelreihenfolge werden entfernt. Die Titel selbst bleiben in deiner Bibliothek."
+
+msgid "Edit Artwork"
+msgstr "Bild bearbeiten"
+
+msgid "Apply"
+msgstr "Anwenden"

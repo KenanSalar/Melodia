@@ -13,6 +13,7 @@ use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{
     AppWindow, PlaylistDetail, PlaylistGridRow as UiPlaylistGridRow, Playlists,
     TrackListRow as UiTrackListRow,
@@ -69,7 +70,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     if pu.take_dirty() {
                         let open_id = pu.detail_playlist_id();
                         if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak.clone()).await {
-                            log::warn!("playlists::section_enter fetch_grid: {e}");
+                            log::warn!("playlists::section_enter fetch_grid: {}", describe(&e));
                         }
                         if open_id >= 0
                             && let Err(e) = playlists_ui_mod::open_playlist(
@@ -81,7 +82,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                             )
                             .await
                         {
-                            log::warn!("playlists::section_enter open_playlist({open_id}): {e}");
+                            log::warn!(
+                                "playlists::section_enter open_playlist({open_id}): {}",
+                                describe(&e)
+                            );
                             playlists_ui_mod::clear_detail(&pu);
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 let g = ui.global::<PlaylistDetail>();

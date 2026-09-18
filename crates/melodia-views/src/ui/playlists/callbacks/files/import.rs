@@ -15,6 +15,7 @@ use crate::ui::shell::notifications::{Completion, NotificationsUi, RowText};
 use crate::ui::util::count_as_i32;
 use melodia_app::library::playlist_files::{self, ImportFileResult};
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Playlists, Settings};
 
 pub(super) fn wire(
@@ -62,14 +63,14 @@ pub(super) fn wire(
                 })
                 .await
                 .unwrap_or_else(|e| {
-                    log::warn!("playlist import: task ended early: {e}");
+                    log::warn!("playlist import: task ended early: {}", describe(&e));
                     ImportFileResult::default()
                 });
 
             if result.imported > 0
                 && let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak.clone()).await
             {
-                log::warn!("fetch_grid after playlist import: {e}");
+                log::warn!("fetch_grid after playlist import: {}", describe(&e));
             }
 
             let Some(ui) = weak.upgrade() else { return };

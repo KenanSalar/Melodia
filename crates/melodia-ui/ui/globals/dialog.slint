@@ -324,4 +324,23 @@ export global Dialog {
         root.destructive = false;
         root.kind = "add-to-playlist";
     }
+
+    // The mosaic picker's chrome, for the grid card's overflow and the open playlist's own pill.
+    // Both are called from Rust rather than from the markup, the picker having nothing to show
+    // until the candidate pool loads — so this is also the only opener whose strings would
+    // otherwise be spelled in Rust, where `@tr` can't reach them.
+    //
+    // Doesn't set `open`: Rust fills the pool and the preview before it raises the card.
+    public function prepare-edit-artwork(id: int) {
+        root.title = @tr("Edit Artwork");
+        root.message = "";
+        root.confirm-label = @tr("Apply");
+        root.cancel-label = @tr("Cancel");
+        root.destructive = false;
+        root.kind = "edit-playlist-artwork";
+        root.target-id = id;
+        root.input-text = "";
+        root.mosaic-selection = [];
+        root.mosaic-touched = false;
+    }
 }

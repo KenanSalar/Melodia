@@ -10,6 +10,7 @@ use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Playlists};
 
 /// Wire the `Playlists` grid callbacks. See [`super::wire`].
@@ -79,7 +80,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     crate::ui::track_list_view::view_id::PLAYLIST_DETAIL,
                     Some(id),
                 ) {
-                    log::warn!("playlists::open_playlist persist: {e}");
+                    log::warn!("playlists::open_playlist persist: {}", describe(&e));
                 }
             });
         });

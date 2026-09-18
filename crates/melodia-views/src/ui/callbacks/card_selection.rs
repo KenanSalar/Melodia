@@ -101,8 +101,8 @@ fn pick(
         return None;
     }
     let same_scope = current.scope == asking_scope;
-    // Owned at each of the three returns rather than once above them: only one runs, and a
-    // binding ahead of the branches allocates on the plain-click path that never reads it.
+    // Owned per branch rather than once above them: the plain-click path takes `single`'s own
+    // copy, so a binding up here is an allocation it never reads.
     let single = |anchor| Selection { scope: asking_scope.to_owned(), ids: vec![id], anchor };
 
     if shift && same_scope && current.anchor != 0 {

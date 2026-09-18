@@ -14,6 +14,7 @@ use crate::ui::shell::notifications::{Completion, NotificationsUi};
 use crate::ui::util::len_as_i32;
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Dialog, PlaylistPickRow as UiPlaylistPickRow, Playlists, Settings};
 
 pub(super) fn wire(
@@ -100,20 +101,31 @@ pub(super) fn wire(
                 for pid in &pids {
                     match library::playlists::add_to_playlist(&s, *pid, track_ids.clone()).await {
                         Ok(()) => ok += 1,
-                        Err(e) => log::warn!("playlists::add_tracks_to_selected({pid}): {e}"),
+                        Err(e) => {
+                            log::warn!(
+                                "playlists::add_tracks_to_selected({pid}): {}",
+                                describe(&e)
+                            );
+                        }
                     }
                 }
 
                 if ok > 0 {
                     if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak.clone()).await {
-                        log::warn!("playlists::add_tracks_to_selected refetch grid: {e}");
+                        log::warn!(
+                            "playlists::add_tracks_to_selected refetch grid: {}",
+                            describe(&e)
+                        );
                     }
                     let detail_id = pu.detail_playlist_id();
                     if pids.contains(&detail_id)
                         && let Err(e) =
                             playlists_ui_mod::refresh_detail(&s, &pu, weak.clone(), detail_id).await
                     {
-                        log::warn!("playlists::add_tracks_to_selected refresh detail: {e}");
+                        log::warn!(
+                            "playlists::add_tracks_to_selected refresh detail: {}",
+                            describe(&e)
+                        );
                     }
                 }
 
