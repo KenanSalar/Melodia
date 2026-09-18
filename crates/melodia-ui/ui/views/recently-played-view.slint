@@ -1,5 +1,6 @@
 import { Theme } from "../theme.slint";
 import { RecentlyPlayed } from "../globals/curated.slint";
+import { CardSelection } from "../globals/card-selection.slint";
 import { GridColumnsSync } from "../components/grid-columns-sync.slint";
 import { GridGeometry } from "../components/grid-geometry.slint";
 import { MosaicTabHero } from "../components/hero/mosaic-tab-hero.slint";
@@ -141,6 +142,10 @@ export component RecentlyPlayedView inherits Rectangle {
                         icon: "shuffle";
                         text: @tr("Shuffle");
                         clicked => { RecentlyPlayed.shuffle-most-played(); }
+                    }
+                    if CardSelection.count-in("rp-most-played") > 0: SelectionPills {
+                        count: CardSelection.count-in("rp-most-played");
+                        cleared => { CardSelection.clear(); }
                     }
                 }
             }

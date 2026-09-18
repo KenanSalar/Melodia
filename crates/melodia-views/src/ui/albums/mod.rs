@@ -235,6 +235,7 @@ pub fn to_slint_album_row(a: &AlbumStats) -> UiAlbumRow {
     UiAlbumRow {
         id: clamp_i64_to_i32(a.id),
         name: SharedString::from(a.name.as_str()),
+        artist_id: clamp_i64_to_i32(a.artist_id),
         artist_name: SharedString::from(a.artist_name.as_str()),
         year: a.year.unwrap_or(0),
         track_count: a.track_count,

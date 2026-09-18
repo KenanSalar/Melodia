@@ -27,8 +27,10 @@ use crate::ui::callbacks::macros::release_detail_hero_images;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{
-    AppWindow, Dialog, PlaylistDetail, PlaylistPickRow as UiPlaylistPickRow, Playlists, TagEditor,
+    AppWindow, CardSelection, Dialog, PlaylistDetail, PlaylistPickRow as UiPlaylistPickRow,
+    Playlists, TagEditor,
 };
 
 /// Wire the playlist dialog + CRUD callbacks. See [`super::wire`].
@@ -231,6 +233,57 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     log::warn!("playlists::delete refetch grid: {e}");
                 }
                 log::info!("playlists::delete({id})");
+            });
+        });
+    }
+
+    // delete-playlists: the card menu's batch arm. Same shape as the single delete, with the
+    // refetch and the selection clear hoisted out of the loop — and the selection cleared because
+    // every id in it is about to stop existing.
+    {
+        let s = state.clone();
+        let pu = playlists_ui.clone();
+        let weak = weak.clone();
+        playlists.on_delete_playlists(move |ids| {
+            let ids: Vec<i64> = ids.iter().map(i64::from).collect();
+            if ids.is_empty() {
+                return;
+            }
+            let open_was_deleted = ids.contains(&pu.detail_playlist_id());
+            if open_was_deleted && let Some(ui) = weak.upgrade() {
+                let d = ui.global::<PlaylistDetail>();
+                d.set_playlist_id(-1);
+                release_detail_hero_images!(ui, d);
+                playlists_ui_mod::clear_detail(&pu);
+            }
+            let s = s.clone();
+            let pu = pu.clone();
+            let weak = weak.clone();
+            s.runtime.clone().spawn(async move {
+                for id in &ids {
+                    if let Err(e) = library::playlists::delete_playlist(&s, *id).await {
+                        log::warn!("playlists::delete_many({id}): {}", describe(&e));
+                    }
+                }
+                if open_was_deleted {
+                    let s_disk = s.clone();
+                    s.runtime.spawn_blocking(move || {
+                        if let Err(e) = library::settings::set_last_detail_id(
+                            &s_disk,
+                            crate::ui::track_list_view::view_id::PLAYLIST_DETAIL,
+                            None,
+                        ) {
+                            log::warn!("playlists::delete_many clear last_detail_id: {e}");
+                        }
+                    });
+                }
+                let _ = weak.upgrade_in_event_loop(|ui| {
+                    ui.global::<CardSelection>().invoke_clear();
+                });
+                if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak).await {
+                    log::warn!("playlists::delete_many refetch grid: {}", describe(&e));
+                }
+                log::info!("playlists::delete_many({})", ids.len());
             });
         });
     }

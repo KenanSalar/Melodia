@@ -116,6 +116,9 @@ pub(super) fn apply_selection_to_rows(g: &Browse) {
 
 /// Mutate the persistent `selected-ids` `VecModel<i32>` in place. Falls
 /// back to a fresh `ModelRc` only if the install step somehow didn't run.
+///
+/// Every selection write lands here, which is why the card grid's generation
+/// is bumped here rather than at the three callers.
 pub(super) fn write_selection(g: &Browse, ids: Vec<i32>) {
     let model = g.get_selected_ids();
     if let Some(vm) = model.as_any().downcast_ref::<VecModel<i32>>() {
@@ -123,4 +126,5 @@ pub(super) fn write_selection(g: &Browse, ids: Vec<i32>) {
     } else {
         g.set_selected_ids(ModelRc::new(VecModel::from(ids)));
     }
+    g.set_selection_generation(g.get_selection_generation().wrapping_add(1));
 }

@@ -919,16 +919,19 @@ fn the_sort_row_holds_every_per_pill_contract() {
 /// **The Playlists pills publish their tooltip's anchor; the sheet draws it.**
 ///
 /// Anchored on the pill itself it would be drawn by the band, which the body paints over
-/// and which clips besides — four tooltips that are simply never seen. The frame has to
-/// be the sheet's, declared after the scroll body, and it reaches the pills through the
-/// six anchors below. That is also what forces the row to sit at the pill component's
-/// root rather than under an `if` like its four siblings.
+/// and which clips besides — tooltips that are simply never seen. The frame has to be the
+/// sheet's, declared after the scroll body, and it reaches the pills through the six
+/// anchors below. That is also what forces the row to sit at the pill component's root
+/// rather than under an `if` like its four siblings.
+///
+/// Three, not four: Import and Export gave up their pills to the overflow menu when the
+/// selection group arrived, and a `MenuItem` carries no tooltip.
 #[test]
 fn the_playlist_action_tooltip_is_published_rather_than_drawn() {
     assert_eq!(
         PILLS.matches("tooltip-overlay: true;").count(),
-        4,
-        "all four Playlists action pills must suppress their in-tree tooltip",
+        3,
+        "every Playlists action pill must suppress its in-tree tooltip",
     );
     for anchor in ["tip-x", "tip-y", "tip-w", "tip-h", "tip-label", "tip-visible"] {
         assert!(

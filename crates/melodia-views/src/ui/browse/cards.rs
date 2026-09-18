@@ -90,9 +90,10 @@ pub fn mode_index(g: &Browse<'_>, mode: BrowseViewMode) -> i32 {
 /// pushed would render untranslated.
 pub fn to_browse_card_rows(folders: &[BrowseFolder], files: &[BrowseFile]) -> Vec<UiBrowseCardRow> {
     let mut cards = Vec::with_capacity(folders.len() + files.len());
-    cards.extend(folders.iter().map(|f| UiBrowseCardRow {
+    cards.extend(folders.iter().enumerate().map(|(idx, f)| UiBrowseCardRow {
         id: 0,
         row_index: -1,
+        card_index: len_as_i32(idx),
         path: SharedString::from(f.path.as_str()),
         title: SharedString::from(f.name.as_str()),
         subtitle: SharedString::from(""),
@@ -103,6 +104,7 @@ pub fn to_browse_card_rows(folders: &[BrowseFolder], files: &[BrowseFile]) -> Ve
     cards.extend(files.iter().enumerate().map(|(idx, f)| UiBrowseCardRow {
         id: if f.in_library { clamp_i64_to_i32(f.row.id) } else { 0 },
         row_index: len_as_i32(idx),
+        card_index: len_as_i32(folders.len() + idx),
         path: SharedString::from(""),
         title: SharedString::from(f.row.title.as_str()),
         subtitle: SharedString::from(f.row.artist.as_deref().unwrap_or("")),

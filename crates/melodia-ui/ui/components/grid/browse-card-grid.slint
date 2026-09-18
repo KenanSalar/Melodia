@@ -1,6 +1,8 @@
 import { ListView } from "std-widgets.slint";
 import { BrowseCardGridRow } from "../../models.slint";
+import { PopupHighlight } from "../../globals/shell.slint";
 import { EntityCard } from "entity-card.slint";
+import { CardContextMenu } from "card-context-menu.slint";
 
 // Browse's card view: one virtualized grid over subfolders *and* files, folders first, in the same
 // order the list would draw them. Rust chunks the flat card list into rows of `columns`, so the
@@ -34,6 +36,23 @@ export component BrowseCardGrid inherits Rectangle {
     // Forwarded by the host to its own global. `pure` so a binding can call it.
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
 
+    // **Browse's cards read the *list's* selection**, not the shared `CardSelection` the four
+    // entity grids use — they are the same rows, so toggling the presentation keeps the selection
+    // and the view's existing pill group already describes it. Forwarded rather than imported,
+    // as the two callbacks above are: `Browse` is a view global and this file names none.
+    in property <[int]> selected-ids;
+    in property <int> selection-generation: 0;
+    pure callback is-card-selected(int /*track_id*/, int /*generation*/) -> bool;
+    // `row_index` first, so the host forwards straight to `Browse.select-row` with the arguments
+    // the list already passes it and the shift-range walks one order for both presentations.
+    callback select-card(int /*row_index*/, int /*track_id*/, bool /*shift*/, bool /*ctrl*/);
+
+    // The folder card's menu, which the entity actions can't answer: a folder is a path.
+    callback play-folder(string /*path*/);
+    callback play-folder-next(string /*path*/);
+    callback queue-folder(string /*path*/);
+    callback reveal-folder(string /*path*/);
+
     // Same sign convention as `TrackList`, `AlbumGrid` and `EntityCardGrid` — a positive `v-offset`
     // is N px scrolled, where the inner `ListView` holds that as a non-positive `viewport-y`.
     out property <length> v-visible-height: list.visible-height;
@@ -60,27 +79,80 @@ export component BrowseCardGrid inherits Rectangle {
                 spacing: root.gap;
                 alignment: start;
 
-                for card in grid-row.cards: EntityCard {
-                    card-width: root.card-width;
-                    card-height: root.card-height;
-                    artwork-path: card.artwork_path;
-                    cover: root.request-cover(card.artwork_path, root.covers-generation);
-                    fallback-icon: card.is_folder ? "folder" : "music-note";
-                    // A pronounced zoom on the placeholder, as on the other grids; real artwork
-                    // stays gentle so a cover doesn't jitter inside the tile clip on hover.
-                    cover-scale-hover: card.artwork_path == "" ? 1.15 : 1.04;
-                    title: card.title;
-                    // A folder's subtitle is a literal here rather than a string Rust pushed, `@tr`
-                    // only translating literals at codegen. A track card carries its artist.
-                    subtitle: card.is_folder ? @tr("Folder") : card.subtitle;
-                    // A disk-only file — on disk inside a library folder but not in the DB.
-                    // `EntityCard` dims it and disables its own TouchArea.
-                    enabled: card.enabled;
-                    clicked => {
-                        if (card.is_folder) {
-                            root.folder-clicked(card.path);
-                        } else {
-                            root.track-clicked(card.id, card.row_index);
+                // A wrapper per card, for the reason `PlaylistGrid` gives.
+                for card in grid-row.cards: cell := Rectangle {
+                    width: root.card-width;
+                    height: root.card-height;
+
+                    property <length> ctx-x;
+                    property <length> ctx-y;
+                    property <int> ctx-card-id: -1;
+
+                    EntityCard {
+                        card-width: root.card-width;
+                        card-height: root.card-height;
+                        artwork-path: card.artwork_path;
+                        cover: root.request-cover(card.artwork_path, root.covers-generation);
+                        fallback-icon: card.is_folder ? "folder" : "music-note";
+                        // A pronounced zoom on the placeholder, as on the other grids; real
+                        // artwork stays gentle so a cover doesn't jitter inside the tile clip.
+                        cover-scale-hover: card.artwork_path == "" ? 1.15 : 1.04;
+                        title: card.title;
+                        // A folder's subtitle is a literal here rather than a string Rust pushed,
+                        // `@tr` only translating literals at codegen. A track card has its artist.
+                        subtitle: card.is_folder ? @tr("Folder") : card.subtitle;
+                        // A disk-only file — on disk inside a library folder but not in the DB.
+                        // `EntityCard` dims it and disables its own TouchArea.
+                        enabled: card.enabled;
+                        clicked => {
+                            if (card.is_folder) {
+                                root.folder-clicked(card.path);
+                            } else {
+                                root.track-clicked(card.id, card.row_index);
+                            }
+                        }
+
+                        // **A folder and a disk-only file both hold `id == 0`**, which is what
+                        // keeps them out of an id-keyed selection — the same guard the list's
+                        // handler already opens with, so no second predicate is spelled here.
+                        selectable: card.enabled && !card.is_folder;
+                        selected: root.is-card-selected(card.id, root.selection-generation);
+                        select-clicked(shift, ctrl) => {
+                            root.select-card(card.row_index, card.id, shift, ctrl);
+                        }
+                        // **Keyed on `card_index`, not on `id`** — every folder and every
+                        // disk-only file holds id 0, so an id here would arm all of their
+                        // watchers on the one open popup. The entity grids have no such
+                        // collision and key on their own ids.
+                        context-requested(x, y) => {
+                            cell.ctx-x = x;
+                            cell.ctx-y = y;
+                            cell.ctx-card-id = card.card_index;
+                            PopupHighlight.card-ctx-id = card.card_index;
+                            ctx-menu.show();
+                        }
+                    }
+
+                    ctx-menu := CardContextMenu {
+                        card-kind: card.is_folder ? "folder" : "track";
+                        card-id: card.id;
+                        card-path: card.path;
+                        card-selected: root.is-card-selected(card.id, root.selection-generation);
+                        effective-selection: root.selected-ids;
+                        selection-count: root.selected-ids.length;
+                        at-x: cell.ctx-x;
+                        at-y: cell.ctx-y;
+                        ctx-key: cell.ctx-card-id;
+                        live-ctx-key: PopupHighlight.card-ctx-id;
+
+                        open-folder(path) => { root.folder-clicked(path); }
+                        play-folder(path) => { root.play-folder(path); }
+                        play-folder-next(path) => { root.play-folder-next(path); }
+                        queue-folder(path) => { root.queue-folder(path); }
+                        reveal-folder(path) => { root.reveal-folder(path); }
+                        released => {
+                            PopupHighlight.card-ctx-id = -1;
+                            cell.ctx-card-id = -1;
                         }
                     }
                 }

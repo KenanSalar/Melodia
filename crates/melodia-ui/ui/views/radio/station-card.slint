@@ -107,9 +107,10 @@ export component StationCard inherits Rectangle {
         // of the tile plays for anyone who aimed at the artwork. A corner control, as every other
         // card in the tree draws one, leaves both actions reachable.
         //
-        // **Above the link, and in its slot when the station has no site**: the right edge is a
-        // stack off the bottom, so a control left hovering over a gap reads as a sibling that
-        // failed to draw.
+        // **Top-left, and the bottom right is the play count's on every card in the tree.** The
+        // pair reads left to right rather than stacking, mirroring the two at the bottom, which
+        // also retires the slot the link used to leave behind: play leads, so a station with no
+        // site simply has nothing to its right instead of a gap above it.
         //
         // **The four below frame the tile off `card-body.tile-size`, never off `parent`.** These
         // are laid out inside the card's overlay slot, but a `@children` element resolves names
@@ -117,8 +118,8 @@ export component StationCard inherits Rectangle {
         // square. The source reads correctly either way and only the generated tree tells them
         // apart, which is what `ui::entity_card_tests` walks for.
         play_btn := IconButton {
-            x: card-body.tile-size - self.width - Theme.pad-sm;
-            y: home_btn.y - (root.homepage-known ? self.height + Theme.pad-xs : 0px);
+            x: Theme.pad-sm;
+            y: Theme.pad-sm;
             icon: "play_arrow";
             icon-size: 18px;
             diameter: 30px;
@@ -129,8 +130,8 @@ export component StationCard inherits Rectangle {
 
         home_btn := IconButton {
             visible: root.homepage-known;
-            x: card-body.tile-size - self.width - Theme.pad-sm;
-            y: card-body.tile-size - self.height - Theme.pad-sm;
+            x: Theme.pad-sm + play_btn.width + Theme.pad-xs;
+            y: Theme.pad-sm;
             icon: "link";
             icon-size: 18px;
             diameter: 30px;
@@ -138,8 +139,8 @@ export component StationCard inherits Rectangle {
             clicked => { root.homepage-clicked(); }
         }
 
-        // Bottom-left, opposite the homepage link: the two that change the row rather than
-        // following it. Only the kept tabs mount them, so Browse looks exactly as it did.
+        // Bottom-left, under the pair above: the two that change the row rather than following
+        // it. Only the kept tabs mount them, so Browse looks exactly as it did.
         remove_btn := IconButton {
             visible: root.removable;
             x: Theme.pad-sm;

@@ -1,5 +1,6 @@
 import { Theme } from "../theme.slint";
 import { Favorites } from "../globals/curated.slint";
+import { CardSelection } from "../globals/card-selection.slint";
 import { GridColumnsSync } from "../components/grid-columns-sync.slint";
 import { GridGeometry } from "../components/grid-geometry.slint";
 import { MosaicTabHero } from "../components/hero/mosaic-tab-hero.slint";
@@ -151,6 +152,10 @@ export component FavoritesView inherits Rectangle {
                         text: @tr("Shuffle");
                         clicked => { Favorites.shuffle-most-played(); }
                     }
+                    if CardSelection.count-in("fav-most-played") > 0: SelectionPills {
+                        count: CardSelection.count-in("fav-most-played");
+                        cleared => { CardSelection.clear(); }
+                    }
                 }
             }
 
@@ -169,6 +174,10 @@ export component FavoritesView inherits Rectangle {
                     sort-field: Favorites.artist-sort-field;
                     sort-dir: Favorites.artist-sort-dir;
                     request-sort(f) => { Favorites.request-artist-sort(f); }
+                    if CardSelection.count-in("fav-artists") > 0: SelectionPills {
+                        count: CardSelection.count-in("fav-artists");
+                        cleared => { CardSelection.clear(); }
+                    }
                 }
             }
         }

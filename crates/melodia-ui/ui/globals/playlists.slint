@@ -41,6 +41,10 @@ export global Playlists {
         string /*description (empty ⇒ clear)*/,
     );
     callback delete-playlist(int /*id*/);
+    // The card menu's multi-select arm, through `Dialog.open-delete-playlists`. One refetch and
+    // one selection clear for the whole batch, where looping `delete-playlist` would do both per
+    // playlist.
+    callback delete-playlists([int] /*ids*/);
 
     // 1–4 paths from the playlist's own tracks; Rust composes the collage and persists it. An
     // empty selection clears the custom thumbnail and reverts to auto first-track.

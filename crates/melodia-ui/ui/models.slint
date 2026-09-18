@@ -100,6 +100,8 @@ export enum TrackColumn { number, title, artist, album, genre, year, length }
 export struct AlbumRow {
     id: int,
     name: string,
+    // Carried for the card menu's "Go to Artist" alone — the card itself paints the name.
+    artist_id: int,
     artist_name: string,
     year: int,            // 0 = unknown
     track_count: int,
@@ -357,6 +359,10 @@ export struct BrowseFolderRow {
 export struct BrowseCardRow {
     id: int,             // track id; 0 for a folder and for a disk-only file
     row_index: int,      // index into `Browse.rows`; -1 for a folder
+    // The card's own slot in the flat list, and the only field here unique to a card: `id` is 0
+    // for every folder and every disk-only file, so keying the open context menu on it would arm
+    // each of their watchers on one popup. Nothing else reads it.
+    card_index: int,
     path: string,        // folder path; "" for a track card
     title: string,
     subtitle: string,

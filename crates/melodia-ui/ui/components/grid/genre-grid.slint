@@ -1,6 +1,9 @@
 import { ListView } from "std-widgets.slint";
 import { GenreGridRow } from "../../models.slint";
+import { CardSelection } from "../../globals/card-selection.slint";
+import { PopupHighlight } from "../../globals/shell.slint";
 import { EntityCard } from "entity-card.slint";
+import { CardContextMenu } from "card-context-menu.slint";
 
 // Virtualized genre-card grid: `AlbumGrid` minus the cover plumbing. A genre has no artwork, so
 // each card falls back to its glyph and nothing here allocates an `Image` or needs an LRU. Rust
@@ -43,28 +46,72 @@ export component GenreGrid inherits Rectangle {
                 spacing: root.gap;
                 alignment: start;
 
-                for genre in grid-row.genres: EntityCard {
-                    card-width: root.card-width;
-                    card-height: root.card-height;
-                    // With no cover binding the card paints its glyph over a
-                    // name-hashed gradient. Rust precomputes both stops on
-                    // three independent axes — hue, hue offset, S/V jitter — so
-                    // cards stay distinguishable even at neighbouring hues.
-                    fallback-icon: "theater_comedy";
-                    tile-bg: @linear-gradient(135deg,
-                        genre.tile_color_1,
-                        genre.tile_color_2);
-                    tile-icon-color: #ffffff.with-alpha(0.3);
-                    // The pronounced zoom, not the covers' gentle one: on a glyph drawn at just
-                    // over half the tile, the gentle one reads as no zoom at all.
-                    cover-scale-hover: 1.15;
-                    title: genre.name;
-                    // The duration arrives display-ready from Rust; the count takes the Artists
-                    // grid's plural pair, a genre being able to exist for a single track.
-                    subtitle:
-                        @tr("{n} track" | "{n} tracks" % genre.track_count)
-                        + " · " + genre.display_duration;
-                    clicked => { root.open-genre(genre.id); }
+                // A wrapper per card, for the reason `PlaylistGrid` gives.
+                for genre in grid-row.genres: cell := Rectangle {
+                    width: root.card-width;
+                    height: root.card-height;
+
+                    property <length> ctx-x;
+                    property <length> ctx-y;
+                    property <int> ctx-card-id: -1;
+
+                    EntityCard {
+                        card-width: root.card-width;
+                        card-height: root.card-height;
+                        // With no cover binding the card paints its glyph over a
+                        // name-hashed gradient. Rust precomputes both stops on
+                        // three independent axes — hue, hue offset, S/V jitter — so
+                        // cards stay distinguishable even at neighbouring hues.
+                        fallback-icon: "theater_comedy";
+                        tile-bg: @linear-gradient(135deg,
+                            genre.tile_color_1,
+                            genre.tile_color_2);
+                        tile-icon-color: #ffffff.with-alpha(0.3);
+                        // The pronounced zoom, not the covers' gentle one: on a glyph drawn at
+                        // just over half the tile, the gentle one reads as no zoom at all.
+                        cover-scale-hover: 1.15;
+                        title: genre.name;
+                        // The duration arrives display-ready from Rust; the count takes the
+                        // Artists grid's plural pair, a genre being able to exist for one track.
+                        subtitle:
+                            @tr("{n} track" | "{n} tracks" % genre.track_count)
+                            + " · " + genre.display_duration;
+                        clicked => { root.open-genre(genre.id); }
+
+                        selectable: true;
+                        selected: CardSelection.selected(
+                            "genres", genre.id, CardSelection.generation);
+                        select-clicked(shift, ctrl) => {
+                            CardSelection.pick("genres", genre.id, shift, ctrl);
+                        }
+                        context-requested(x, y) => {
+                            cell.ctx-x = x;
+                            cell.ctx-y = y;
+                            cell.ctx-card-id = genre.id;
+                            PopupHighlight.card-ctx-id = genre.id;
+                            ctx-menu.show();
+                        }
+                    }
+
+                    ctx-menu := CardContextMenu {
+                        card-kind: "genre";
+                        card-id: genre.id;
+                        card-selected: CardSelection.selected(
+                            "genres", genre.id, CardSelection.generation);
+                        effective-selection: CardSelection.scope == "genres"
+                            ? CardSelection.selected-ids
+                            : [];
+                        selection-count: CardSelection.count-in("genres");
+                        at-x: cell.ctx-x;
+                        at-y: cell.ctx-y;
+                        ctx-key: cell.ctx-card-id;
+                        live-ctx-key: PopupHighlight.card-ctx-id;
+
+                        released => {
+                            PopupHighlight.card-ctx-id = -1;
+                            cell.ctx-card-id = -1;
+                        }
+                    }
                 }
             }
         }

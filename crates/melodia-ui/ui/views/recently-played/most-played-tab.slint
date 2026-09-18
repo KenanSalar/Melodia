@@ -25,6 +25,9 @@ export component RecentlyPlayedMostPlayedTab inherits Rectangle {
         row-height: root.row-h;
         gap: root.gap;
         show-play-count: true;
+        // These cards are tracks, so the menu's entity arm resolves each id to itself.
+        card-kind: "track";
+        selection-scope: "rp-most-played";
         covers-generation: RecentlyPlayed.covers-generation;
         request-cover(p, gen) => { RecentlyPlayed.request-most-played-cover(p, gen) }
         row-clicked(id) => { RecentlyPlayed.play-track(id); }

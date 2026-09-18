@@ -2254,3 +2254,32 @@ msgstr "Arrière-plan de l'album"
 
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Peint le mini-lecteur aux couleurs de l'album en cours de lecture, comme le fait la vue « Lecture en cours »."
+
+# ---- Entity card context menu -----------------------------------------------
+
+msgid "Rename…"
+msgstr "Renommer…"
+
+msgid "Edit Artwork…"
+msgstr "Modifier l'image…"
+
+msgid "Edit Rules…"
+msgstr "Modifier les règles…"
+
+msgid "Delete Playlist"
+msgstr "Supprimer la liste"
+
+msgid "Delete {} Playlists"
+msgstr "Supprimer {} listes"
+
+msgid "Show in File Manager"
+msgstr "Afficher dans le gestionnaire de fichiers"
+
+msgid "More playlist actions"
+msgstr "Plus d'actions de liste"
+
+msgid "Delete {} playlists?"
+msgstr "Supprimer {} listes ?"
+
+msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
+msgstr "Les listes et l'ordre de leurs pistes seront supprimés. Les pistes elles-mêmes restent dans votre bibliothèque."

@@ -166,6 +166,16 @@ async fn list_directory(
     Ok(BrowseResult { path: dir_str.into_owned(), name, folders: scan.folders, files })
 }
 
+/// Every track under `path`, subdirectories included — what a folder card's Play, Play Next and
+/// Add to Queue act on.
+///
+/// **Recursive, unlike what the view lists for the folder it is standing in.** A folder card is a
+/// folder the user has *not* navigated into, so an artist folder holding only album subfolders
+/// would otherwise offer a Play that queues nothing.
+pub async fn folder_track_ids(state: &AppState, path: &str) -> Result<Vec<i64>, AppError> {
+    queries::track::track_ids_under_directory(&state.db, path).await
+}
+
 #[cfg(test)]
 #[path = "tests/browse_tests.rs"]
 mod tests;

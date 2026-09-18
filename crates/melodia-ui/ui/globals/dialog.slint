@@ -58,6 +58,11 @@ export global Dialog {
     // picker reuses it as the canonical list being added.
     in-out property <[int]> pending-track-ids;
 
+    // The card-grid equivalent, holding *entity* ids. Its own property rather than borrowing the
+    // one above: a delete confirmation carrying playlist ids under a name that says tracks is the
+    // kind of thing a later reader acts on.
+    in-out property <[int]> pending-card-ids;
+
     // Populated by Rust *before* `open` flips, so the dialog opens already filled. Rust maintains
     // the count over enabled rows only, so the footer can disable itself without iterating in
     // Slint. All three are cleared in the teardown.
@@ -113,6 +118,8 @@ export global Dialog {
             );
         } else if (root.kind == "delete-playlist") {
             Playlists.delete-playlist(root.target-id);
+        } else if (root.kind == "delete-playlists") {
+            Playlists.delete-playlists(root.pending-card-ids);
         } else if (root.kind == "edit-playlist-artwork") {
             // Empty and touched reverts to auto; empty and untouched is a no-op.
             if (root.mosaic-selection.length == 0) {
@@ -180,6 +187,7 @@ export global Dialog {
         root.mosaic-candidates = [];
         root.mosaic-touched = false;
         root.pending-track-ids = [];
+        root.pending-card-ids = [];
         // Clearing the rows unmounts the picker's `for` loop, dropping every row's cover binding
         // and with it the row-tier LRU's `SharedPixelBuffer` Arcs — paired with `heap_trim::trim`.
         root.playlist-pick-rows = [];
@@ -271,6 +279,19 @@ export global Dialog {
         root.destructive = true;
         root.kind = "delete-playlist";
         root.target-id = id;
+        root.open = true;
+    }
+
+    // The card menu's multi-select arm. A separate opener rather than a count-ternary inside the
+    // one above: the singular copy names one playlist's track order, which the plural cannot.
+    public function open-delete-playlists(ids: [int]) {
+        root.title = @tr("Delete {} playlists?", ids.length);
+        root.message = @tr("The playlists and their track order will be removed. The tracks themselves stay in your library.");
+        root.confirm-label = @tr("Delete");
+        root.cancel-label = @tr("Cancel");
+        root.destructive = true;
+        root.kind = "delete-playlists";
+        root.pending-card-ids = ids;
         root.open = true;
     }
 }

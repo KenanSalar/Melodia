@@ -1,7 +1,10 @@
 import { ListView } from "std-widgets.slint";
 import { Theme } from "../../theme.slint";
 import { PlaylistGridRow } from "../../models.slint";
+import { CardSelection } from "../../globals/card-selection.slint";
+import { PopupHighlight } from "../../globals/shell.slint";
 import { EntityCard } from "entity-card.slint";
+import { CardContextMenu } from "card-context-menu.slint";
 import { IconButton } from "../icon-button.slint";
 
 // Virtualized playlist-card grid, `AlbumGrid`'s shape: Rust chunks the flat list
@@ -16,10 +19,15 @@ export component PlaylistGrid inherits Rectangle {
     in property <length> gap: 20px;
 
     callback open-playlist(int /*playlist_id*/);
-    // Fired by the card's hover-revealed icons; the view routes each one.
+    // Fired by the card's hover-revealed icons **and** by its right-click menu; the view routes
+    // each one. The two paths are deliberate: the buttons are the discoverable affordance, the
+    // menu is the right-click one, and both land on the same handler.
     callback delete-playlist(int /*playlist_id*/);
     callback edit-playlist-artwork(int /*playlist_id*/);
     callback rename-playlist(int /*playlist_id*/);
+    // Menu-only, having no room on the card: the batch delete and the smart-rules editor.
+    callback delete-playlists([int] /*playlist_ids*/);
+    callback edit-playlist-rules(int /*playlist_id*/);
     // Bumped by the host once a scheduled decode batch lands; the card's binding reads it so a
     // `pure` callback re-runs. See `AlbumGrid`.
     in property <int> covers-generation: 0;
@@ -48,70 +56,138 @@ export component PlaylistGrid inherits Rectangle {
                 spacing: root.gap;
                 alignment: start;
 
-                for playlist in grid-row.playlists: card := EntityCard {
-                    card-width: root.card-width;
-                    card-height: root.card-height;
-                    artwork-path: playlist.artwork_path;
-                    cover: root.request-cover(playlist.artwork_path, root.covers-generation);
-                    fallback-icon: "playlist";
-                    // A pronounced zoom on the placeholder, as on the other
-                    // grids; real artwork stays gentle so a cover doesn't
-                    // jitter inside the tile clip on hover.
-                    cover-scale-hover: playlist.artwork_path == "" ? 1.15 : 1.04;
-                    title: playlist.name;
-                    // Each segment translates on its own; the separator is
-                    // punctuation. An empty playlist drops the duration rather
-                    // than trailing a zero.
-                    subtitle: playlist.track_count > 0
-                        ? @tr("{n} track" | "{n} tracks" % playlist.track_count)
-                            + " · " + Theme.format-duration(playlist.total_duration_ms)
-                        : @tr("0 tracks");
-                    badge-icon: playlist.is_smart ? "auto_awesome" : "";
-                    clicked => { root.open-playlist(playlist.id); }
+                // **A wrapper per card, sized to it**, so the menu can be the card's sibling in the
+                // card's own coordinate frame — `context-requested` reports in that frame — and so
+                // the delegate has somewhere to hold the right-click snapshot. Declaring either on
+                // the `EntityCard` mount is not possible.
+                // **A wrapper per card, sized to it.** The menu has to be the card's *sibling* in
+                // the card's own coordinate frame, which is what `context-requested` reports in,
+                // and the delegate needs somewhere to hold the right-click snapshot — neither can
+                // be declared on the `EntityCard` mount itself.
+                for playlist in grid-row.playlists: cell := Rectangle {
+                    width: root.card-width;
+                    height: root.card-height;
 
-                    // The hover-revealed CRUD trio, which is what lets this grid skip a per-card
-                    // overflow menu. **The card's slot rather than the card itself**: it lived in
-                    // `EntityCard` once, where every other host raising the flag drew all three on
-                    // top of its own controls.
-                    //
-                    // **Framed off `card.tile-size`, never off `parent`.** These sit in the card's
-                    // overlay square, but a `@children` element resolves names where it is
-                    // *written*, so `parent` here is the `EntityCard` — its full height, not the
-                    // square — and the source reads correctly either way.
-                    show-overlay-actions: true;
-                    overlay-hovered: delete_btn.has-hover
-                        || artwork_btn.has-hover
-                        || name_btn.has-hover;
+                    property <length> ctx-x;
+                    property <length> ctx-y;
+                    property <int> ctx-card-id: -1;
 
-                    delete_btn := IconButton {
-                        x: card.tile-size - self.width - Theme.pad-sm;
-                        y: Theme.pad-sm;
-                        icon: "delete";
-                        icon-size: 18px;
-                        diameter: 30px;
-                        idle-bg: Theme.floating-chrome-bg;
-                        hover-fg: Theme.danger;
-                        clicked => { root.delete-playlist(playlist.id); }
+                    card := EntityCard {
+                        card-width: root.card-width;
+                        card-height: root.card-height;
+                        artwork-path: playlist.artwork_path;
+                        cover: root.request-cover(playlist.artwork_path, root.covers-generation);
+                        fallback-icon: "playlist";
+                        // A pronounced zoom on the placeholder, as on the other
+                        // grids; real artwork stays gentle so a cover doesn't
+                        // jitter inside the tile clip on hover.
+                        cover-scale-hover: playlist.artwork_path == "" ? 1.15 : 1.04;
+                        title: playlist.name;
+                        // Each segment translates on its own; the separator is
+                        // punctuation. An empty playlist drops the duration rather
+                        // than trailing a zero.
+                        subtitle: playlist.track_count > 0
+                            ? @tr("{n} track" | "{n} tracks" % playlist.track_count)
+                                + " · " + Theme.format-duration(playlist.total_duration_ms)
+                            : @tr("0 tracks");
+                        badge-icon: playlist.is_smart ? "auto_awesome" : "";
+                        clicked => { root.open-playlist(playlist.id); }
+
+                        selectable: true;
+                        selected: CardSelection.selected(
+                            "playlists", playlist.id, CardSelection.generation);
+                        select-clicked(shift, ctrl) => {
+                            CardSelection.pick("playlists", playlist.id, shift, ctrl);
+                        }
+                        // **Both writes precede `show()`**, or the popup body's `if` gate is still
+                        // false when the watcher would mount — the row menu's rule.
+                        //
+                        // The wrapper by id rather than `parent`: inside an `EntityCard` mount
+                        // `parent` is the card, not the square the overlay slot draws in, and
+                        // `entity_card_overlay.rs` bans the word here outright rather than trying
+                        // to tell a position from a write.
+                        context-requested(x, y) => {
+                            cell.ctx-x = x;
+                            cell.ctx-y = y;
+                            cell.ctx-card-id = playlist.id;
+                            PopupHighlight.card-ctx-id = playlist.id;
+                            ctx-menu.show();
+                        }
+
+                        // The hover-revealed CRUD trio. **The card's slot rather than the card
+                        // itself**: it lived in `EntityCard` once, where every other host raising
+                        // the flag drew all three on top of its own controls.
+                        //
+                        // **Framed off `card.tile-size`, never off `parent`.** These sit in the
+                        // card's overlay square, but a `@children` element resolves names where it
+                        // is *written*, so `parent` here is the `EntityCard` — its full height,
+                        // not the square — and the source reads correctly either way.
+                        show-overlay-actions: true;
+                        overlay-hovered: delete_btn.has-hover
+                            || artwork_btn.has-hover
+                            || name_btn.has-hover;
+
+                        delete_btn := IconButton {
+                            x: card.tile-size - self.width - Theme.pad-sm;
+                            y: Theme.pad-sm;
+                            icon: "delete";
+                            icon-size: 18px;
+                            diameter: 30px;
+                            idle-bg: Theme.floating-chrome-bg;
+                            hover-fg: Theme.danger;
+                            clicked => { root.delete-playlist(playlist.id); }
+                        }
+
+                        artwork_btn := IconButton {
+                            x: Theme.pad-sm;
+                            y: card.tile-size - self.height - Theme.pad-sm;
+                            icon: "image";
+                            icon-size: 18px;
+                            diameter: 30px;
+                            idle-bg: Theme.floating-chrome-bg;
+                            clicked => { root.edit-playlist-artwork(playlist.id); }
+                        }
+
+                        name_btn := IconButton {
+                            x: card.tile-size - self.width - Theme.pad-sm;
+                            y: card.tile-size - self.height - Theme.pad-sm;
+                            icon: "edit";
+                            icon-size: 18px;
+                            diameter: 30px;
+                            idle-bg: Theme.floating-chrome-bg;
+                            clicked => { root.rename-playlist(playlist.id); }
+                        }
                     }
 
-                    artwork_btn := IconButton {
-                        x: Theme.pad-sm;
-                        y: card.tile-size - self.height - Theme.pad-sm;
-                        icon: "image";
-                        icon-size: 18px;
-                        diameter: 30px;
-                        idle-bg: Theme.floating-chrome-bg;
-                        clicked => { root.edit-playlist-artwork(playlist.id); }
-                    }
+                    ctx-menu := CardContextMenu {
+                        card-kind: "playlist";
+                        card-id: playlist.id;
+                        card-is-smart: playlist.is_smart;
+                        card-selected: CardSelection.selected(
+                            "playlists", playlist.id, CardSelection.generation);
+                        effective-selection: CardSelection.scope == "playlists"
+                            ? CardSelection.selected-ids
+                            : [];
+                        selection-count: CardSelection.count-in("playlists");
+                        at-x: cell.ctx-x;
+                        at-y: cell.ctx-y;
+                        ctx-key: cell.ctx-card-id;
+                        live-ctx-key: PopupHighlight.card-ctx-id;
 
-                    name_btn := IconButton {
-                        x: card.tile-size - self.width - Theme.pad-sm;
-                        y: card.tile-size - self.height - Theme.pad-sm;
-                        icon: "edit";
-                        icon-size: 18px;
-                        diameter: 30px;
-                        idle-bg: Theme.floating-chrome-bg;
-                        clicked => { root.rename-playlist(playlist.id); }
+                        rename => { root.rename-playlist(playlist.id); }
+                        edit-artwork => { root.edit-playlist-artwork(playlist.id); }
+                        edit-rules => { root.edit-playlist-rules(playlist.id); }
+                        delete-cards(ids) => {
+                            if (ids.length > 1) {
+                                root.delete-playlists(ids);
+                            } else {
+                                root.delete-playlist(playlist.id);
+                            }
+                        }
+                        released => {
+                            PopupHighlight.card-ctx-id = -1;
+                            cell.ctx-card-id = -1;
+                        }
                     }
                 }
             }

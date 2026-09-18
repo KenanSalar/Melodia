@@ -1,6 +1,9 @@
 import { ListView } from "std-widgets.slint";
 import { ArtistGridRow } from "../../models.slint";
+import { CardSelection } from "../../globals/card-selection.slint";
+import { PopupHighlight } from "../../globals/shell.slint";
 import { EntityCard } from "entity-card.slint";
+import { CardContextMenu } from "card-context-menu.slint";
 
 // Virtualized artist-card grid, `AlbumGrid`'s shape: Rust chunks the flat list
 // into rows of `columns` cards and the inner `ListView` virtualizes by row. The
@@ -43,26 +46,70 @@ export component ArtistGrid inherits Rectangle {
                 spacing: root.gap;
                 alignment: start;
 
-                for artist in grid-row.artists: EntityCard {
-                    card-width: root.card-width;
-                    card-height: root.card-height;
-                    circular: true;
-                    fallback-icon: "person";
-                    artwork-path: artist.image_path;
-                    cover: root.request-cover(artist.image_path, root.covers-generation);
-                    // A pronounced zoom on the placeholder, as on the other
-                    // grids; real artwork stays gentle so a cover doesn't
-                    // jitter inside the tile clip on hover.
-                    cover-scale-hover: artist.image_path == "" ? 1.15 : 1.04;
-                    title: artist.name;
-                    // The separator is punctuation; the album count drops out
-                    // entirely at zero.
-                    subtitle:
-                        @tr("{n} track" | "{n} tracks" % artist.track_count)
-                        + (artist.album_count > 0
-                            ? " · " + @tr("{n} album" | "{n} albums" % artist.album_count)
-                            : "");
-                    clicked => { root.open-artist(artist.id); }
+                // A wrapper per card, for the reason `PlaylistGrid` gives.
+                for artist in grid-row.artists: cell := Rectangle {
+                    width: root.card-width;
+                    height: root.card-height;
+
+                    property <length> ctx-x;
+                    property <length> ctx-y;
+                    property <int> ctx-card-id: -1;
+
+                    EntityCard {
+                        card-width: root.card-width;
+                        card-height: root.card-height;
+                        circular: true;
+                        fallback-icon: "person";
+                        artwork-path: artist.image_path;
+                        cover: root.request-cover(artist.image_path, root.covers-generation);
+                        // A pronounced zoom on the placeholder, as on the other
+                        // grids; real artwork stays gentle so a cover doesn't
+                        // jitter inside the tile clip on hover.
+                        cover-scale-hover: artist.image_path == "" ? 1.15 : 1.04;
+                        title: artist.name;
+                        // The separator is punctuation; the album count drops out
+                        // entirely at zero.
+                        subtitle:
+                            @tr("{n} track" | "{n} tracks" % artist.track_count)
+                            + (artist.album_count > 0
+                                ? " · " + @tr("{n} album" | "{n} albums" % artist.album_count)
+                                : "");
+                        clicked => { root.open-artist(artist.id); }
+
+                        selectable: true;
+                        selected: CardSelection.selected(
+                            "artists", artist.id, CardSelection.generation);
+                        select-clicked(shift, ctrl) => {
+                            CardSelection.pick("artists", artist.id, shift, ctrl);
+                        }
+                        context-requested(x, y) => {
+                            cell.ctx-x = x;
+                            cell.ctx-y = y;
+                            cell.ctx-card-id = artist.id;
+                            PopupHighlight.card-ctx-id = artist.id;
+                            ctx-menu.show();
+                        }
+                    }
+
+                    ctx-menu := CardContextMenu {
+                        card-kind: "artist";
+                        card-id: artist.id;
+                        card-selected: CardSelection.selected(
+                            "artists", artist.id, CardSelection.generation);
+                        effective-selection: CardSelection.scope == "artists"
+                            ? CardSelection.selected-ids
+                            : [];
+                        selection-count: CardSelection.count-in("artists");
+                        at-x: cell.ctx-x;
+                        at-y: cell.ctx-y;
+                        ctx-key: cell.ctx-card-id;
+                        live-ctx-key: PopupHighlight.card-ctx-id;
+
+                        released => {
+                            PopupHighlight.card-ctx-id = -1;
+                            cell.ctx-card-id = -1;
+                        }
+                    }
                 }
             }
         }

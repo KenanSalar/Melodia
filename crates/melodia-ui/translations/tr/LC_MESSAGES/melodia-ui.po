@@ -2262,3 +2262,32 @@ msgstr "Albüm arka planı"
 
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Mini oynatıcıyı, “Şimdi Çalıyor” görünümünde olduğu gibi çalan albümün renkleriyle boyar."
+
+# ---- Entity card context menu -----------------------------------------------
+
+msgid "Rename…"
+msgstr "Yeniden adlandır…"
+
+msgid "Edit Artwork…"
+msgstr "Görseli düzenle…"
+
+msgid "Edit Rules…"
+msgstr "Kuralları düzenle…"
+
+msgid "Delete Playlist"
+msgstr "Çalma listesini sil"
+
+msgid "Delete {} Playlists"
+msgstr "{} çalma listesini sil"
+
+msgid "Show in File Manager"
+msgstr "Dosya yöneticisinde göster"
+
+msgid "More playlist actions"
+msgstr "Diğer çalma listesi işlemleri"
+
+msgid "Delete {} playlists?"
+msgstr "{} çalma listesi silinsin mi?"
+
+msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
+msgstr "Çalma listeleri ve parça sırası kaldırılacak. Parçaların kendisi kitaplığınızda kalır."

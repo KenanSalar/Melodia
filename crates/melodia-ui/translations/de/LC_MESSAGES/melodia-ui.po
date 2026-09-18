@@ -2260,3 +2260,32 @@ msgstr "Album-Hintergrund"
 
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Färbt den Miniplayer mit den Farben des laufenden Albums ein, wie es die Ansicht „Aktuelle Wiedergabe“ tut."
+
+# ---- Entity card context menu -----------------------------------------------
+
+msgid "Rename…"
+msgstr "Umbenennen…"
+
+msgid "Edit Artwork…"
+msgstr "Bild bearbeiten…"
+
+msgid "Edit Rules…"
+msgstr "Regeln bearbeiten…"
+
+msgid "Delete Playlist"
+msgstr "Playlist löschen"
+
+msgid "Delete {} Playlists"
+msgstr "{} Playlists löschen"
+
+msgid "Show in File Manager"
+msgstr "Im Dateimanager anzeigen"
+
+msgid "More playlist actions"
+msgstr "Weitere Playlist-Aktionen"
+
+msgid "Delete {} playlists?"
+msgstr "{} Playlists löschen?"
+
+msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
+msgstr "Die Playlists und ihre Titelreihenfolge werden entfernt. Die Titel selbst bleiben in deiner Bibliothek."

@@ -234,8 +234,14 @@ export global CompositeScroll {
 // queue may hold one track twice, where a track list cannot, so an id there would gate two rows'
 // watchers onto one popup. Keeping it separate is what lets `row-ctx-id` go on meaning "track id"
 // everywhere. Cleared on the same Release.
+// `card-ctx-id` is the third key space, for the card grids. It cannot fold into `row-ctx-id` — an
+// album id and a track id are both small integers and would arm each other's watchers — but one
+// key covers every grid, only one of which is ever mounted. **What it holds is per grid**: an
+// entity id for the four entity grids and the two curated ones, a *card index* for Browse, whose
+// folder and disk-only cards all share id 0 the way a queue shares a track id.
 export global PopupHighlight {
     in-out property <string> id: "";
     in-out property <int> row-ctx-id: -1;
     in-out property <int> queue-ctx-index: -1;
+    in-out property <int> card-ctx-id: -1;
 }

@@ -1,0 +1,67 @@
+import { Theme } from "../theme.slint";
+import { PopupHighlight } from "../globals/shell.slint";
+import { PillButton } from "action-pill.slint";
+import { PopupSurface } from "popup-surface.slint";
+import { FocusLossWatcher } from "focus-loss-watcher.slint";
+
+// A three-dot pill opening a menu of the host's own `MenuItem`s, for actions that no longer
+// earn a pill of their own once a row runs out of room.
+//
+// **The entries come through `@children`, never as a property list.** `@tr` resolves literals
+// at codegen, so a label handed over as a string would ship untranslated — the same reason
+// `TrackContextMenu` spells its own entries rather than taking them.
+//
+// `menu-id` is the `PopupHighlight` discriminator, so two overflow menus in one view can't
+// hold each other's highlight. `close-on-click` because every entry here acts and dismisses.
+export component PillOverflowMenu inherits Rectangle {
+    in property <string> menu-id;
+    in property <string> tooltip-text;
+    in property <length> menu-width: 220px;
+    // Suppresses the in-tree tooltip where the host paints one on a higher layer, forwarded
+    // to the pill along with the `hovered` the host's anchor reads back.
+    in property <bool> tooltip-overlay: false;
+    out property <bool> hovered: btn.hovered;
+
+    // Sized to the pill row's height so the popup hangs off this box rather than off the
+    // button's own alignment inside it.
+    width: btn.width;
+    height: 32px;
+
+    btn := PillButton {
+        // `more_vert`, the glyph the Now Playing bar's overflow already uses, so the two read as
+        // one control. It is also the one in `scripts/icons.txt`; `more_horiz` is not subsetted
+        // into the shipped face and renders as tofu.
+        icon: "more_vert";
+        tooltip-text: root.tooltip-text;
+        tooltip-overlay: root.tooltip-overlay;
+        force-bg: PopupHighlight.id == root.menu-id;
+        clicked => {
+            PopupHighlight.id = root.menu-id;
+            pop.show();
+        }
+    }
+
+    pop := PopupWindow {
+        // Left-aligned under the trigger: this row sits mid-band, where the column toggle's
+        // right alignment exists for a page-edge trigger. Slint clamps the far edge either way.
+        x: 0px;
+        y: root.height + Theme.popup-gap;
+        width: root.menu-width;
+        close-policy: close-on-click;
+
+        if PopupHighlight.id == root.menu-id: FocusLossWatcher {
+            close => {
+                pop.close();
+                PopupHighlight.id = "";
+            }
+        }
+
+        PopupSurface {
+            VerticalLayout {
+                padding: Theme.pad-xs;
+                spacing: 0;
+                @children
+            }
+        }
+    }
+}

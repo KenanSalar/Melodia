@@ -2258,3 +2258,32 @@ msgstr "Φόντο άλμπουμ"
 
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Βάφει τον μίνι αναπαραγωγέα με τα χρώματα του άλμπουμ που παίζει, όπως κάνει η προβολή «Αναπαράγεται τώρα»."
+
+# ---- Entity card context menu -----------------------------------------------
+
+msgid "Rename…"
+msgstr "Μετονομασία…"
+
+msgid "Edit Artwork…"
+msgstr "Επεξεργασία εικόνας…"
+
+msgid "Edit Rules…"
+msgstr "Επεξεργασία κανόνων…"
+
+msgid "Delete Playlist"
+msgstr "Διαγραφή λίστας"
+
+msgid "Delete {} Playlists"
+msgstr "Διαγραφή {} λιστών"
+
+msgid "Show in File Manager"
+msgstr "Εμφάνιση στη διαχείριση αρχείων"
+
+msgid "More playlist actions"
+msgstr "Περισσότερες ενέργειες λίστας"
+
+msgid "Delete {} playlists?"
+msgstr "Διαγραφή {} λιστών;"
+
+msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
+msgstr "Οι λίστες και η σειρά των κομματιών τους θα καταργηθούν. Τα ίδια τα κομμάτια παραμένουν στη βιβλιοθήκη σας."

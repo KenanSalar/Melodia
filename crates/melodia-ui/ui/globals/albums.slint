@@ -19,6 +19,9 @@ export global Albums {
     callback apply-filter(string);
     callback request-sort(string /*field*/);
     callback open-album(int /*album_id*/);
+    // The card menu's one cross-tab entry. Only `go-to-artist`, and so wired beside the `Search`
+    // exception rather than through `wire_go_to!`, which installs all three.
+    callback go-to-artist(int /*artist_id*/);
     // Invoked from each on-screen card's own binding, so only visible cards lock a cover.
     // `pure` so Slint may evaluate it inside a binding at all. Cache-only: a miss schedules and
     // comes back on the bump below, rather than decoding under the event loop.

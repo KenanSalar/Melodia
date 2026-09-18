@@ -6,7 +6,10 @@ import { GenreDetail, Genres } from "../../globals/genres.slint";
 import { PlaylistDetail, Playlists } from "../../globals/playlists.slint";
 import { SmartEditor } from "../../globals/dialog-forms.slint";
 import { Dialog } from "../../globals/dialog.slint";
+import { CardSelection } from "../../globals/card-selection.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../../components/action-pill.slint";
+import { MenuItem } from "../../components/context-menu.slint";
+import { PillOverflowMenu } from "../../components/pill-overflow-menu.slint";
 import { SelectionPills } from "../../components/selection-pills.slint";
 import { SortPillRow } from "../../components/sort-pill-row.slint";
 import { ColumnTogglePopup } from "../../components/track-list/column-toggle-popup.slint";
@@ -70,6 +73,12 @@ export component MyLibraryTabPills inherits Rectangle {
             sort-field: Albums.sort-field;
             sort-dir: Albums.sort-dir;
             request-sort(f) => { Albums.request-sort(f); }
+            // The card selection, in the sort row's trailing slot. The scope literal is the
+            // grid's own and `ui::callbacks::card_selection::scope` holds the matching const.
+            if CardSelection.count-in("albums") > 0: SelectionPills {
+                count: CardSelection.count-in("albums");
+                cleared => { CardSelection.clear(); }
+            }
         }
 
         if MyLibrary.tab-idx == MyLibrary.tab-artists && !root.artist-open: SortPillRow {
@@ -78,6 +87,10 @@ export component MyLibraryTabPills inherits Rectangle {
             sort-field: Artists.sort-field;
             sort-dir: Artists.sort-dir;
             request-sort(f) => { Artists.request-sort(f); }
+            if CardSelection.count-in("artists") > 0: SelectionPills {
+                count: CardSelection.count-in("artists");
+                cleared => { CardSelection.clear(); }
+            }
         }
 
         if MyLibrary.tab-idx == MyLibrary.tab-genres && !root.genre-open: SortPillRow {
@@ -86,6 +99,10 @@ export component MyLibraryTabPills inherits Rectangle {
             sort-field: Genres.sort-field;
             sort-dir: Genres.sort-dir;
             request-sort(f) => { Genres.request-sort(f); }
+            if CardSelection.count-in("genres") > 0: SelectionPills {
+                count: CardSelection.count-in("genres");
+                cleared => { CardSelection.clear(); }
+            }
         }
 
         // --- The four details ------------------------------------------------
@@ -257,8 +274,8 @@ export component MyLibraryTabPills inherits Rectangle {
         //
         // The one row that can't sit under an `if`, per the file header. It collapses to
         // a zero-width clipped cell instead: nothing paints, and `Clip` swallows every
-        // event outside its empty rect, so the four pills are as unreachable as an
-        // unmounted branch while their ids stay readable from this root. The three width
+        // event outside its empty rect, so the pills are as unreachable as an unmounted
+        // branch while their ids stay readable from this root. The three width
         // constraints are spelled out because an explicit `min-width` is what *replaces*
         // the constraint the pill's own bound width would otherwise merge in.
         Rectangle {
@@ -305,34 +322,40 @@ export component MyLibraryTabPills inherits Rectangle {
 
                 PillDivider { }
 
-                // Portable `.m3u8`, so playlists survive a database wipe. Both are pure
-                // Rust flows over native rfd dialogs.
-                ip := PillButton {
-                    icon: "download";
-                    text: @tr("Import");
-                    tooltip-text: @tr("Import playlists from .m3u8 files");
+                // **Import and Export fold in here rather than carrying a pill each.** Four
+                // labelled pills plus the selection group overran the band; these two are the
+                // rarest of the four, so they are what gives up its width. Both are still pure
+                // Rust flows over native rfd dialogs, and their bodies are unchanged.
+                om := PillOverflowMenu {
+                    menu-id: "playlists-overflow";
+                    tooltip-text: @tr("More playlist actions");
                     tooltip-overlay: true;
-                    clicked => { Playlists.import-playlists(); }
+
+                    MenuItem {
+                        label: @tr("Import");
+                        icon: "download";
+                        clicked => { Playlists.import-playlists(); }
+                    }
+                    MenuItem {
+                        label: @tr("Export");
+                        icon: "upload";
+                        clicked => {
+                            // Chrome inline so `@tr` applies; Rust fills the rows and opens
+                            // from a fresh tick.
+                            Dialog.title = @tr("Export Playlists");
+                            Dialog.message = @tr("Choose playlists to export.");
+                            Dialog.confirm-label = @tr("Export");
+                            Dialog.cancel-label = @tr("Cancel");
+                            Dialog.destructive = false;
+                            Dialog.kind = "export-playlists";
+                            Playlists.request-export-playlists();
+                        }
+                    }
                 }
 
-                PillDivider { }
-
-                ep := PillButton {
-                    icon: "upload";
-                    text: @tr("Export");
-                    tooltip-text: @tr("Export playlists to .m3u8 files");
-                    tooltip-overlay: true;
-                    clicked => {
-                        // Chrome inline so `@tr` applies; Rust fills the rows and opens
-                        // from a fresh tick.
-                        Dialog.title = @tr("Export Playlists");
-                        Dialog.message = @tr("Choose playlists to export.");
-                        Dialog.confirm-label = @tr("Export");
-                        Dialog.cancel-label = @tr("Cancel");
-                        Dialog.destructive = false;
-                        Dialog.kind = "export-playlists";
-                        Playlists.request-export-playlists();
-                    }
+                if CardSelection.count-in("playlists") > 0: SelectionPills {
+                    count: CardSelection.count-in("playlists");
+                    cleared => { CardSelection.clear(); }
                 }
             }
         }
@@ -345,32 +368,26 @@ export component MyLibraryTabPills inherits Rectangle {
     // under a parked pointer — a resize, Ctrl+B — keeps its tooltip anchored.
     property <length> px: np.hovered ? np.absolute-position.x
         : sp.hovered ? sp.absolute-position.x
-        : ip.hovered ? ip.absolute-position.x
-        : ep.hovered ? ep.absolute-position.x
+        : om.hovered ? om.absolute-position.x
         : 0px;
     property <length> py: np.hovered ? np.absolute-position.y
         : sp.hovered ? sp.absolute-position.y
-        : ip.hovered ? ip.absolute-position.y
-        : ep.hovered ? ep.absolute-position.y
+        : om.hovered ? om.absolute-position.y
         : 0px;
 
     out property <length> tip-x: root.px - root.absolute-position.x;
     out property <length> tip-y: root.py - root.absolute-position.y;
     out property <length> tip-w: np.hovered ? np.width
         : sp.hovered ? sp.width
-        : ip.hovered ? ip.width
-        : ep.hovered ? ep.width
+        : om.hovered ? om.width
         : 0px;
     out property <length> tip-h: np.hovered ? np.height
         : sp.hovered ? sp.height
-        : ip.hovered ? ip.height
-        : ep.hovered ? ep.height
+        : om.hovered ? om.height
         : 0px;
     out property <string> tip-label: np.hovered ? np.tooltip-text
         : sp.hovered ? sp.tooltip-text
-        : ip.hovered ? ip.tooltip-text
-        : ep.hovered ? ep.tooltip-text
+        : om.hovered ? om.tooltip-text
         : "";
-    out property <bool> tip-visible:
-        np.hovered || sp.hovered || ip.hovered || ep.hovered;
+    out property <bool> tip-visible: np.hovered || sp.hovered || om.hovered;
 }

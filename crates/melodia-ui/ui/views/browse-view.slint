@@ -260,6 +260,21 @@ export component BrowseView inherits Rectangle {
                                 request-cover(p, gen) => { Browse.request-card-cover(p, gen) }
                                 folder-clicked(path) => { Browse.open-folder(path); }
                                 track-clicked(id, idx) => { Browse.play-row(id, idx); }
+
+                                // The list's selection, not the shared `CardSelection` — the cards
+                                // are these rows, so the mode toggle keeps it and the pill group
+                                // above already describes it.
+                                selected-ids: Browse.selected-ids;
+                                selection-generation: Browse.selection-generation;
+                                is-card-selected(id, gen) => { Browse.is-card-selected(id, gen) }
+                                select-card(idx, id, shift, ctrl) => {
+                                    Browse.select-row(idx, id, shift, ctrl);
+                                }
+
+                                play-folder(path) => { Browse.play-folder(path); }
+                                play-folder-next(path) => { Browse.play-folder-next(path); }
+                                queue-folder(path) => { Browse.queue-folder(path); }
+                                reveal-folder(path) => { Browse.reveal-folder(path); }
                             }
                         }
                     }

@@ -160,4 +160,15 @@ pub(super) fn wire(
             browse_ui_mod::clear_selection(&ui);
         });
     }
+
+    // The card grid's per-card read of the same set. Its model is chunked into grid rows, so a
+    // flag on the row would cost a `set_row_data` over every card in a row to move one; the
+    // generation argument is what re-runs this `pure` binding instead.
+    {
+        let weak = weak.clone();
+        g.on_is_card_selected(move |id, _generation| {
+            let Some(ui) = weak.upgrade() else { return false };
+            ui.global::<Browse>().get_selected_ids().iter().any(|selected| selected == id)
+        });
+    }
 }

@@ -107,6 +107,23 @@ pub async fn get_favorite_tracks_for_list(
     Ok(tracks)
 }
 
+/// The native path separator as it must appear *inside* a LIKE pattern. `\` is the ESCAPE
+/// character, so on Windows a literal backslash is doubled.
+#[cfg(windows)]
+pub(super) const LIKE_SEPARATOR: &str = "\\\\";
+#[cfg(not(windows))]
+pub(super) const LIKE_SEPARATOR: &str = "/";
+
+/// `dir_path` escaped for `LIKE … ESCAPE '\'` and terminated with [`LIKE_SEPARATOR`]: the prefix
+/// every "files under this directory" pattern is built from.
+///
+/// One home for the escaping, shared with [`super::entity_ids::track_ids_under_directory`]. A
+/// folder is named by the user, and `_` is `LIKE`'s single-character wildcard.
+pub(super) fn directory_like_prefix(dir_path: &str) -> String {
+    let escaped = dir_path.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+    format!("{escaped}{LIKE_SEPARATOR}")
+}
+
 /// Fetch tracks whose files live directly inside `dir_path`, not in subdirectories. Returns the
 /// `TrackListRow` projection — Browse renders these through the shared `TrackList`, so it needs
 /// the same column set the Tracks view uses rather than a narrower browse-only slice.
@@ -124,15 +141,9 @@ pub async fn get_tracks_in_directory(
     db: &DbPool,
     dir_path: &str,
 ) -> Result<Vec<track::TrackListRow>, AppError> {
-    let escaped = dir_path.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
-    // Native path separator inside the LIKE pattern. `\` is the ESCAPE character, so on Windows
-    // the separator must be doubled to denote a literal `\` rather than an escape sequence.
-    #[cfg(windows)]
-    let sep = "\\\\";
-    #[cfg(not(windows))]
-    let sep = "/";
-    let pattern = format!("{escaped}{sep}%");
-    let subdir_pattern = format!("{escaped}{sep}%{sep}%");
+    let prefix = directory_like_prefix(dir_path);
+    let pattern = format!("{prefix}%");
+    let subdir_pattern = format!("{prefix}%{LIKE_SEPARATOR}%");
 
     let cols = track::track_list_columns();
     let sql = format!(

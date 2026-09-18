@@ -52,6 +52,16 @@ pub async fn reveal_in_file_manager(state: &AppState, track_id: i64) -> Result<(
         .ok_or_else(|| AppError::io_other(format!("track has no parent folder: {file_path}")))?
         .to_path_buf();
 
+    reveal_folder(folder).await
+}
+
+/// Open the OS file manager at `folder`.
+///
+/// Here rather than in [`crate::library::browse`], which is the other caller, because everything
+/// the act needs arguing about is here: the detached spawn, the existence check's reason for being
+/// on the blocking pool, and the `open::that_detached` rule above. Takes no `&AppState` — a folder
+/// card already holds its path, and there is nothing to resolve.
+pub async fn reveal_folder(folder: std::path::PathBuf) -> Result<(), AppError> {
     tokio::task::spawn_blocking(move || -> Result<(), AppError> {
         if !folder.is_dir() {
             return Err(AppError::io_other(format!(

@@ -1,6 +1,7 @@
 import { Theme } from "../../theme.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { Playlists } from "../../globals/playlists.slint";
+import { SmartEditor } from "../../globals/dialog-forms.slint";
 import { PlaylistGrid } from "../../components/grid/playlist-grid.slint";
 import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
@@ -35,6 +36,19 @@ export component MyLibraryPlaylistsTab inherits Rectangle {
             // The grid model carries no description, so both come off the cached
             // `PlaylistStats` list through Rust — no DB hop.
             Dialog.open-rename-playlist(id, Playlists.row-name(id), Playlists.row-description(id));
+        }
+        // Menu-only, both of them. Chrome inline so `@tr` applies, as the detail view's
+        // Edit-rules pill does it.
+        delete-playlists(ids) => { Dialog.open-delete-playlists(ids); }
+        edit-playlist-rules(id) => {
+            Dialog.title = @tr("Edit Rules");
+            Dialog.message = "";
+            Dialog.confirm-label = @tr("Save");
+            Dialog.cancel-label = @tr("Cancel");
+            Dialog.destructive = false;
+            Dialog.kind = "smart-playlist-editor";
+            Dialog.target-id = id;
+            SmartEditor.request-edit(id);
         }
         covers-generation: Playlists.covers-generation;
         request-cover(p, g) => { Playlists.request-cover(p, g) }
