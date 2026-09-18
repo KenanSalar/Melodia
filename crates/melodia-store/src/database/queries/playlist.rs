@@ -129,6 +129,22 @@ pub async fn get_playlist_by_id(db: &DbPool, id: i64) -> Result<playlist::Playli
         .ok_or_else(|| AppError::not_found("Playlist", id))
 }
 
+/// Just the smart-playlist verdict for a set of ids: `(id, is_smart, smart_criteria)`.
+///
+/// **The base table, not `playlist_stats`**, and the narrow projection is the point: the card
+/// menu's resolve asks this of every selected playlist purely to split the smart ones off, where
+/// `get_playlist_by_id` per id fetches the aggregate columns that view computes and throws them
+/// away. An id missing from the result is one deleted since the grid painted.
+pub async fn smart_criteria_for_playlists(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<Vec<(i64, bool, Option<String>)>, AppError> {
+    crate::database::chunked_in_query(db.read(), ids, |placeholders| {
+        format!("SELECT id, is_smart, smart_criteria FROM playlists WHERE id IN ({placeholders})")
+    })
+    .await
+}
+
 pub async fn update_playlist(
     db: &DbPool,
     id: i64,

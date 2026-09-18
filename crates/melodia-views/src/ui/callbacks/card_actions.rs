@@ -140,12 +140,12 @@ pub fn wire(ui: &AppWindow, state: &AppState) {
                     let _ = weak.upgrade_in_event_loop(move |ui| {
                         // The menu set the chrome before calling, `@tr` resolving literals at codegen.
                         // What it could not know is the track count behind the cards.
+                        let model = to_id_model(&track_ids);
                         let dialog = ui.global::<Dialog>();
-                        dialog.set_pending_track_ids(to_id_model(&track_ids));
+                        dialog.set_pending_track_ids(model.clone());
                         dialog.set_pick_total_tracks(len_as_i32(track_ids.len()));
                         // No playlist to exclude: a grid card is never the playlist you are inside.
-                        ui.global::<Playlists>()
-                            .invoke_request_add_to_playlist(to_id_model(&track_ids), -1);
+                        ui.global::<Playlists>().invoke_request_add_to_playlist(model, -1);
                     });
                 },
             );

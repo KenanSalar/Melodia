@@ -130,6 +130,9 @@ export component EntityCardGrid inherits Rectangle {
                         ctx-key: cell.ctx-card-id;
                         live-ctx-key: PopupHighlight.card-ctx-id;
 
+                        // The card's own activation, so Play over a single track card means what
+                        // clicking it means. Inert on the artist mount, which never takes the arm.
+                        play-single => { root.row-clicked(entity.id); }
                         released => {
                             PopupHighlight.card-ctx-id = -1;
                             cell.ctx-card-id = -1;

@@ -186,14 +186,9 @@ export component TrackContextMenu inherits Rectangle {
                         : @tr("Add to Playlist");
                     icon: "playlist_add";
                     clicked => {
-                        Dialog.title = root.multi-active
+                        Dialog.prepare-add-to-playlist(root.multi-active
                             ? @tr("Add {} to Playlist", root.multi-count)
-                            : @tr("Add to Playlist");
-                        Dialog.message = "";
-                        Dialog.confirm-label = @tr("Add");
-                        Dialog.cancel-label = @tr("Cancel");
-                        Dialog.destructive = false;
-                        Dialog.kind = "add-to-playlist";
+                            : @tr("Add to Playlist"));
                         Dialog.pending-track-ids = pop.effective-ids;
                         Dialog.pick-total-tracks = pop.effective-ids.length;
                         Playlists.request-add-to-playlist(

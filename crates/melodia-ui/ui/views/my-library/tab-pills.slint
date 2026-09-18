@@ -206,16 +206,7 @@ export component MyLibraryTabPills inherits Rectangle {
             if PlaylistDetail.playlist.is_smart: PillButton {
                 icon: "tune";
                 tooltip-text: @tr("Edit rules");
-                clicked => {
-                    Dialog.title = @tr("Edit Rules");
-                    Dialog.message = "";
-                    Dialog.confirm-label = @tr("Save");
-                    Dialog.cancel-label = @tr("Cancel");
-                    Dialog.destructive = false;
-                    Dialog.kind = "smart-playlist-editor";
-                    Dialog.target-id = PlaylistDetail.playlist-id;
-                    SmartEditor.request-edit(PlaylistDetail.playlist-id);
-                }
+                clicked => { Dialog.open-edit-smart-rules(PlaylistDetail.playlist-id); }
             }
             PillDivider { }
             PillButton {

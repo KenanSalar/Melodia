@@ -271,7 +271,7 @@ export component EntityCard inherits Rectangle {
     // own fade therefore could not be hovered until the *next* event after it appeared, and a
     // pointer that arrived and stopped never got one. The overlay's controls take `opacity`, which
     // filters no input, which is why they are already lit by the time they finish fading in.
-    Rectangle {
+    box := Rectangle {
         visible: root.selectable;
         x: 2 * Theme.pad-sm;
         y: 2 * Theme.pad-sm;
@@ -322,6 +322,13 @@ export component EntityCard inherits Rectangle {
             pointer-event(ev) => {
                 if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left) {
                     root.select-clicked(ev.modifiers.shift, !ev.modifiers.shift);
+                }
+                // This area sits over the card's own `touch`, which never sees a press inside it,
+                // so without this the corner is a hole in the card's right-click. Offset by the
+                // box's own origin, `context-requested` reporting in the card's frame.
+                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
+                    root.context-requested(
+                        box.x + box-touch.mouse-x, box.y + box-touch.mouse-y);
                 }
             }
         }

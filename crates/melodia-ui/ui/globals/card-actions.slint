@@ -9,8 +9,12 @@
 export global CardActions {
     // **Replaces the queue with the resolved tracks, and is not the retired Play All pill.**
     // Those eight were `player_play_tracks(ids, Some(0))` beside a list whose first row already
-    // did exactly that. A grid has no activation that plays at all — a card click opens the
-    // detail — so this is the surface's only play path rather than a second spelling of one.
+    // did exactly that. An entity grid has no activation that plays at all — a card click opens
+    // the detail — so this is that surface's only play path rather than a second spelling of one.
+    //
+    // **A single track card doesn't come through here**, its grid playing the displayed set on
+    // activation, so `CardContextMenu.play-single` routes it to the host instead. Over a
+    // *selection* of them it does: there is no activation that means "play these five".
     callback play(string /*kind*/, [int] /*entity_ids*/);
     callback shuffle(string, [int]);
     callback play-next(string, [int]);

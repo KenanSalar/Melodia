@@ -235,7 +235,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     ui.global::<CardSelection>().invoke_clear();
                 });
                 if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak).await {
-                    log::warn!("playlists::delete refetch grid: {e}");
+                    log::warn!("playlists::delete refetch grid: {}", describe(&e));
                 }
                 log::info!("playlists::delete({id})");
             });

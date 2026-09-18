@@ -145,6 +145,8 @@ export component BrowseCardGrid inherits Rectangle {
                         ctx-key: cell.ctx-card-id;
                         live-ctx-key: PopupHighlight.card-ctx-id;
 
+                        // The card's own activation: the folder from this track, as a click gives.
+                        play-single => { root.track-clicked(card.id, card.row_index); }
                         open-folder(path) => { root.folder-clicked(path); }
                         play-folder(path) => { root.play-folder(path); }
                         play-folder-next(path) => { root.play-folder-next(path); }

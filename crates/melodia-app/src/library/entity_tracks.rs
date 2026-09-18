@@ -63,26 +63,24 @@ pub async fn track_ids_for(
     Ok(flatten_in_order(group_by_entity(pairs), ids))
 }
 
-/// Playlists split two ways: manual membership is one batched read of `playlist_items`, while a
-/// smart playlist has no rows there at all and is resolved from its stored criteria, one query
-/// each. A selection here is a handful of cards, so the per-smart-playlist query isn't worth
-/// batching away.
+/// Playlists split two ways, and which side an id falls on is one batched read: manual membership
+/// is a second batched read of `playlist_items`, while a smart playlist has no rows there at all
+/// and is resolved from its stored criteria, one query each. Only that last part is per-entity,
+/// a stored rule set being a query the database cannot union across playlists.
+///
+/// An id the split read didn't return was deleted between the grid painting and the click; the
+/// rest of the selection still acts.
 async fn playlist_track_ids(state: &AppState, ids: &[i64]) -> Result<Vec<i64>, AppError> {
+    let kinds = queries::playlist::smart_criteria_for_playlists(&state.db, ids).await?;
+
     let mut manual_ids: Vec<i64> = Vec::new();
     let mut grouped: HashMap<i64, Vec<i64>> = HashMap::new();
-
-    for &id in ids {
-        let detail = match queries::playlist::get_playlist_by_id(&state.db, id).await {
-            Ok(detail) => detail,
-            // Deleted between the grid painting and the click. The rest of the selection still acts.
-            Err(AppError::NotFound(_)) => continue,
-            Err(e) => return Err(e),
-        };
-        if !detail.is_smart {
+    for (id, is_smart, smart_criteria) in kinds {
+        if !is_smart {
             manual_ids.push(id);
             continue;
         }
-        let criteria = SmartCriteria::from_json_opt(detail.smart_criteria.as_deref());
+        let criteria = SmartCriteria::from_json_opt(smart_criteria.as_deref());
         let rows = queries::smart_playlist::get_smart_playlist_tracks(&state.db, &criteria).await?;
         grouped.insert(id, rows.into_iter().map(|row| row.id).collect());
     }

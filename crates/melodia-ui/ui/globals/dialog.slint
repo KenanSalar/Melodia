@@ -294,4 +294,34 @@ export global Dialog {
         root.pending-card-ids = ids;
         root.open = true;
     }
+
+    // Two call sites, the open playlist's pill row and the grid card's menu. **Folded while New
+    // Smart Playlist beside it stays inline**: the two share a `kind` and nothing else, where these
+    // two are the same dialog reached from two places.
+    //
+    // Doesn't set `open`, as `open-tag-editor` doesn't: Rust raises the card once the rules load.
+    public function open-edit-smart-rules(id: int) {
+        root.title = @tr("Edit Rules");
+        root.message = "";
+        root.confirm-label = @tr("Save");
+        root.cancel-label = @tr("Cancel");
+        root.destructive = false;
+        root.kind = "smart-playlist-editor";
+        root.target-id = id;
+        SmartEditor.request-edit(id);
+    }
+
+    // The picker's chrome, for the track row menu and the card menu both. **The heading is the
+    // caller's**, as `open-tag-editor`'s is: the row menu counts the tracks it holds, and a card
+    // menu counts *cards* and cannot name a track total until Rust has resolved one.
+    //
+    // Doesn't set `open` either: Rust fills the rows and raises it from a fresh tick.
+    public function prepare-add-to-playlist(heading: string) {
+        root.title = heading;
+        root.message = "";
+        root.confirm-label = @tr("Add");
+        root.cancel-label = @tr("Cancel");
+        root.destructive = false;
+        root.kind = "add-to-playlist";
+    }
 }

@@ -63,6 +63,10 @@ export component CardContextMenu inherits Rectangle {
     callback edit-artwork();
     callback edit-rules();
     callback delete-cards([int] /*playlist_ids*/);
+    // Track cards only. Their grids *do* play on activation, so Play over one of them has to mean
+    // what clicking it means, the whole displayed set from that track, rather than a queue of one.
+    // `TrackContextMenu` carries the same callback for the same reason.
+    callback play-single();
     callback open-folder(string /*path*/);
     callback play-folder(string /*path*/);
     callback play-folder-next(string /*path*/);
@@ -109,15 +113,20 @@ export component CardContextMenu inherits Rectangle {
                 spacing: 0;
 
                 // **Play stays in multi mode here, unlike the row menu.** There it is dropped
-                // because "play a selection" is ambiguous against "queue it"; on a grid nothing
-                // else plays at all — a card click opens the detail — so dropping it would remove
-                // what the selection is for.
+                // because "play a selection" is ambiguous against "queue it"; on the entity grids
+                // nothing else plays at all — a card click opens the detail — so dropping it would
+                // remove what the selection is for.
+                //
+                // A lone track card is the exception, its grid playing on activation, and it goes
+                // through the host's own path rather than `CardActions`.
                 MenuItem {
                     label: @tr("Play");
                     icon: "play_arrow";
                     clicked => {
                         if (root.is-folder) {
                             root.play-folder(root.card-path);
+                        } else if (root.is-track && !root.multi-active) {
+                            root.play-single();
                         } else {
                             CardActions.play(root.card-kind, pop.effective-ids);
                         }
@@ -172,14 +181,9 @@ export component CardContextMenu inherits Rectangle {
                     label: @tr("Add to Playlist");
                     icon: "playlist_add";
                     clicked => {
-                        // Chrome here so the `@tr` literals resolve at codegen; Rust adds the
-                        // resolved track ids and the count before opening the picker.
-                        Dialog.title = @tr("Add to Playlist");
-                        Dialog.message = "";
-                        Dialog.confirm-label = @tr("Add");
-                        Dialog.cancel-label = @tr("Cancel");
-                        Dialog.destructive = false;
-                        Dialog.kind = "add-to-playlist";
+                        // A plain heading even over a selection: the count here is *cards*, and
+                        // the track total only exists once Rust has resolved them.
+                        Dialog.prepare-add-to-playlist(@tr("Add to Playlist"));
                         CardActions.add-to-playlist(root.card-kind, pop.effective-ids);
                     }
                 }
