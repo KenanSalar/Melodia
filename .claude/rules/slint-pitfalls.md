@@ -50,6 +50,14 @@ this file is what builds, looks right, and is wrong.
   `change_time + duration` and adopts it in one frame. Hence `library-tab-band.slint`, whose
   tab-bar brushes cross to `HeroBackdrop` tiers solved from the artwork decode — it eases the four
   mirrors it crosses *to* on a short curve of their own and lets the transition follow.
+  **And an animated property cannot land on the frame that dirtied it, so it may not be paired
+  with a snapped sibling off the same flag.** `mark_dirty` only sets `ShouldStart`; the first
+  `evaluate` runs on the next render and takes `from_value` from whatever is on screen then, so
+  the curve opens at zero on the frame its partner has already finished. No duration closes that
+  gap, and a short one turns the wait into a jump rather than into simultaneity, which reads as
+  an easing problem and is not one. `entity-card.slint` carries both halves: its selection ring
+  is a plain `border-width` and its tint is an `if root.selected` fill with no `animate` at all,
+  `selection-pill.slint`'s shape, which is why a track row's pick never had it.
 
 - **A `for` over a `pure callback`'s model rebuilds every instance whenever one of the call's
   inputs is marked dirty, not when its answer changes.** The same structural dirt as the entry

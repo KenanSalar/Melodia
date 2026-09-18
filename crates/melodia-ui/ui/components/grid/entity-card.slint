@@ -123,15 +123,31 @@ export component EntityCard inherits Rectangle {
         width: 100%;
         height: 100%;
         border-radius: Theme.radius-md;
-        background: root.selected
-            ? Theme.accent.with-alpha(0.14)
-            : (root.card-hovered ? Theme.surface0 : transparent);
+        // The hover fill alone. The selection tint is the child below, so the two states keep
+        // their own pace, and a selected card brightens under the pointer the way a selected
+        // row does rather than answering it with nothing.
+        background: root.card-hovered ? Theme.surface0 : transparent;
         animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-        // The ring and the fill on **one** element, so the renderer tucks the fill under the
-        // stroke and the curve gets a single antialiased pass. An `EdgeOutline` is the answer
-        // where there is a rounded clip to cut its bleed away; there is none here.
+        // The ring and the hover fill on **one** element, so the renderer tucks that fill under
+        // the stroke. An `EdgeOutline` is the answer where there is a rounded clip to cut its
+        // bleed away; there is none here.
         border-width: root.selected ? 2px : 0px;
         border-color: Theme.accent;
+
+        // The selection tint, mounted only while it paints and carrying no `animate`:
+        // `SelectionPill`'s shape, so a card answers a pick as a track row does. An animated
+        // fill cannot land on the frame the ring does whatever its duration, the curve starting
+        // a frame later and re-basing on every dirty its binding takes, so shortening it only
+        // turns the wait into a jump. A second rounded path is the cost, a sliver of the
+        // corner's coverage at this alpha.
+        if root.selected: Rectangle {
+            x: 0;
+            y: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: Theme.radius-md;
+            background: Theme.accent.with-alpha(0.14);
+        }
 
         VerticalLayout {
             padding: Theme.pad-sm;
