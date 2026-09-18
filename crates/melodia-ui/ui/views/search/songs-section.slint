@@ -72,6 +72,7 @@ export component SongsSection inherits VerticalLayout {
         toggle-row-favorite(ids, on) => { Search.toggle-row-favorite(ids, on); }
         set-row-rating(ids, n) => { Search.set-row-rating(ids, n); }
         select-row(idx, id, sh, ct) => { Search.select-row(idx, id, sh, ct); }
+        select-all => { Search.select-all(); }
         clear-selection => { Search.clear-selection(); }
         request-blur-search => { Search.blur-search-tick += 1; }
         // Reuses the card-click callbacks, so cross-tab nav means the same thing from

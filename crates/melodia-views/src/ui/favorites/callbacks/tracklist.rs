@@ -163,6 +163,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     {
         let weak = weak.clone();
         let fu = fav_ui.clone();
+        g.on_select_all(move || {
+            let Some(ui) = weak.upgrade() else { return };
+            favorites_ui_mod::select_all(&ui, &fu);
+        });
+    }
+
+    {
+        let weak = weak.clone();
+        let fu = fav_ui.clone();
         g.on_clear_selection(move || {
             let Some(ui) = weak.upgrade() else { return };
             favorites_ui_mod::clear_selection(&ui, &fu);

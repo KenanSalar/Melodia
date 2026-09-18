@@ -29,6 +29,7 @@ export component FavoritesSongsTab inherits Rectangle {
         toggle-row-favorite(ids, on) => { Favorites.toggle-row-favorite(ids, on); }
         set-row-rating(ids, n) => { Favorites.set-row-rating(ids, n); }
         select-row(idx, id, sh, ct) => { Favorites.select-row(idx, id, sh, ct); }
+        select-all => { Favorites.select-all(); }
         clear-selection => { Favorites.clear-selection(); }
         request-blur-search => { Favorites.blur-search-tick += 1; }
         go-to-album(aid) => { Favorites.go-to-album(aid); }

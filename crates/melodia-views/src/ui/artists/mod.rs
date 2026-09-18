@@ -63,7 +63,7 @@ pub(super) use detail::{
     open_artist, refresh_detail, resort_detail, set_filter,
 };
 pub(super) use grid::rebuild_grid;
-pub(super) use selection::{clear_selection, handle_select_row};
+pub(super) use selection::{clear_selection, handle_select_row, select_all};
 
 /// Install the Artists grid + detail models, build the handle, and wire every `Artists.*` /
 /// `ArtistDetail.*` callback to it.

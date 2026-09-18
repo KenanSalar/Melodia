@@ -164,6 +164,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     {
         let weak = weak.clone();
         let pu = playlists_ui.clone();
+        detail.on_select_all(move || {
+            let Some(ui) = weak.upgrade() else { return };
+            playlists_ui_mod::select_all(&ui, &pu);
+        });
+    }
+
+    {
+        let weak = weak.clone();
+        let pu = playlists_ui.clone();
         detail.on_clear_selection(move || {
             let Some(ui) = weak.upgrade() else { return };
             playlists_ui_mod::clear_selection(&ui, &pu);

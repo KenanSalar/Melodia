@@ -78,6 +78,7 @@ rounded_corner
 save
 search
 search_off
+select_all
 settings
 shield
 show_chart

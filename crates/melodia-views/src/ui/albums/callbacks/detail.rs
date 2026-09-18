@@ -188,6 +188,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
     {
         let weak = weak.clone();
         let au = albums_ui.clone();
+        detail.on_select_all(move || {
+            let Some(ui) = weak.upgrade() else { return };
+            albums_ui_mod::select_all(&ui, &au);
+        });
+    }
+
+    {
+        let weak = weak.clone();
+        let au = albums_ui.clone();
         detail.on_clear_selection(move || {
             let Some(ui) = weak.upgrade() else { return };
             albums_ui_mod::clear_selection(&ui, &au);

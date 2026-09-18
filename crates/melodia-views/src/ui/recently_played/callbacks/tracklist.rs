@@ -153,6 +153,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
     {
         let weak = weak.clone();
         let ru = rp_ui.clone();
+        g.on_select_all(move || {
+            let Some(ui) = weak.upgrade() else { return };
+            recently_played_ui_mod::select_all(&ui, &ru);
+        });
+    }
+
+    {
+        let weak = weak.clone();
+        let ru = rp_ui.clone();
         g.on_clear_selection(move || {
             let Some(ui) = weak.upgrade() else { return };
             recently_played_ui_mod::clear_selection(&ui, &ru);

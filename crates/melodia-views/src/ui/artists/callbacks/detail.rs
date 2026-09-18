@@ -197,6 +197,15 @@ pub(super) fn wire(
     {
         let weak = weak.clone();
         let au = artists_ui.clone();
+        detail.on_select_all(move || {
+            let Some(ui) = weak.upgrade() else { return };
+            artists_ui_mod::select_all(&ui, &au);
+        });
+    }
+
+    {
+        let weak = weak.clone();
+        let au = artists_ui.clone();
         detail.on_clear_selection(move || {
             let Some(ui) = weak.upgrade() else { return };
             artists_ui_mod::clear_selection(&ui, &au);

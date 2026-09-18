@@ -71,7 +71,7 @@ pub(super) use detail::{
     rollback_reorder, set_filter,
 };
 pub(super) use grid::{fetch_grid_stats, rebuild_grid};
-pub(super) use selection::{clear_selection, handle_select_row};
+pub(super) use selection::{clear_selection, handle_select_row, select_all};
 
 /// The M3U8 import / export wiring, kept out of [`install`] because it needs
 /// the `Rc<NotificationsUi>` for its completion toasts and that is created

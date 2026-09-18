@@ -146,6 +146,14 @@ pub(super) fn wire(
 
     {
         let weak = weak.clone();
+        tracks.on_select_all(move || {
+            let Some(ui) = weak.upgrade() else { return };
+            tracks_ui_mod::select_all(&ui);
+        });
+    }
+
+    {
+        let weak = weak.clone();
         tracks.on_clear_selection(move || {
             let Some(ui) = weak.upgrade() else { return };
             tracks_ui_mod::clear_selection(&ui);

@@ -137,10 +137,9 @@ export component QueueRowItem inherits Rectangle {
         // Grabbing only while actually pressing, not on idle hover.
         touch := TouchArea {
             mouse-cursor: self.pressed ? grabbing : default;
-            // On `clicked`, gated by Slint on this area's own `pressed`, so the hover-mounted
-            // checkbox keeps its click even when its branch goes mid-grab and the release is
-            // re-dispatched — `track-list-row.slint` argues it. Ahead of the drag commit below,
-            // which clears `drag-started`: a row the user dragged must not also be picked.
+            // On `clicked` rather than the release, per `slint-pitfalls.md`, this row's checkbox
+            // being hover-mounted too. Ahead of the drag commit below, which clears
+            // `drag-started`: a row the user dragged must not also be picked.
             clicked => {
                 if (root.selecting && !root.drag-started) {
                     root.pick(root.press-ctrl, root.press-shift);
@@ -417,6 +416,7 @@ export component QueueRowItem inherits Rectangle {
             // The one action that stays index-shaped: `remove-selected` reads the Rust shadow, so
             // a queue holding one track twice removes the rows the user ticked rather than every
             // row sharing their ids. The payload is ignored for exactly that reason.
+            select-all => { Queue.select-all(); }
             clear-selection => { Queue.clear-selection(); }
             request-remove(ids) => {
                 if (ctx-menu.multi-active) {

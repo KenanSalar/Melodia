@@ -212,6 +212,21 @@ this file is what builds, looks right, and is wrong.
   as leaving a `true` default alone and instead *enables* the pan on every sort that retires the
   drag. `!interactive` still forwards wheel events, so only drag-to-pan goes.
 
+- **A grabbing item that unmounts mid-gesture hands its release to the ancestor, as a fresh
+  event.** `handle_mouse_grab` walks the `item_stack` upgrading each weak ref, and a grabber whose
+  branch has gone sets `invalid`, which returns `Some(event)` and drops the whole gesture back into
+  `process_mouse_input` for a normal hit test. So an ancestor `TouchArea` that reads
+  `PointerEventKind.up` out of `pointer-event` sees a release for a press it never got, on a click
+  the user aimed at something else entirely. Anything hover-mounted whose action rewrites what it
+  sits in is the shape to watch: a track row's favourite toggle and star strip hang off
+  `if touch.has-hover` and patch the row, and the row body picked the row the user was rating.
+  **Cure: act on `clicked`, which `items/input_items.rs`'s `Released` arm gates on that item's own
+  `pressed`** — never set for an area that missed the press, re-dispatch or not. It costs the
+  modifiers, `clicked` carrying none, so a range-pick snapshots `ev.modifiers` on the `Down` arm
+  instead. `clicked` also runs *before* `pointer-event(Up)` in the same arm, which is what lets one
+  handler read a predicate the pick is about to invalidate (`entity-card.slint` opens a detail only
+  when the click was not a pick).
+
 - **Animating a binding derived from another animating property phase-lags.** Animate source only.
 
 - **Concurrent `animate` blocks aren't free at vsync** — re-evaluated per frame. For *periodic*

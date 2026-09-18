@@ -166,6 +166,7 @@ export component ArtistDetailBody inherits Rectangle {
                         toggle-row-favorite(ids, on) => { ArtistDetail.toggle-row-favorite(ids, on); }
                         set-row-rating(ids, n) => { ArtistDetail.set-row-rating(ids, n); }
                         select-row(idx, id, sh, ct) => { ArtistDetail.select-row(idx, id, sh, ct); }
+                        select-all => { ArtistDetail.select-all(); }
                         clear-selection => { ArtistDetail.clear-selection(); }
                         // A click in the track list blurs the band's SearchBar.
                         request-blur-search => { MyLibrary.blur-search-tick += 1; }

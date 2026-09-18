@@ -63,7 +63,9 @@ export component CardContextMenu inherits Rectangle {
     callback edit-artwork();
     callback edit-rules();
     callback delete-cards([int] /*playlist_ids*/);
-    // Drops the host's whole selection. No payload: the host owns the set.
+    // Take every card the grid is showing, and drop the whole set. No payload either way: the
+    // host owns the set.
+    callback select-all();
     callback clear-selection();
     // Track cards only. Their grids *do* play on activation, so Play over one of them has to mean
     // what clicking it means, the whole displayed set from that track, rather than a queue of one.
@@ -191,13 +193,25 @@ export component CardContextMenu inherits Rectangle {
                 }
 
                 if !root.is-folder: MenuSeparator {}
-                // **One-way, where the row menu toggles.** A card carries no favourite state, and
-                // a set that is half favourited has no honest toggle; removing stays on the
-                // detail view's track list.
+                // **Two entries, where the row menu toggles one.** A card is a set, so the state
+                // the row menu reads off `row-is-favorite` has no honest answer here: a playlist
+                // half favourited would make either label a lie, and resolving the truth means a
+                // query per menu open, per card. Both operations are well defined over a set
+                // whatever its mixture, so offering them retires the question rather than
+                // answering it — and leaves the undo the one-way entry never had.
                 if !root.is-folder: MenuItem {
                     label: @tr("Add to Favorites");
                     icon: "favorite";
-                    clicked => { CardActions.add-to-favorites(root.card-kind, pop.effective-ids); }
+                    clicked => {
+                        CardActions.set-favorites(root.card-kind, pop.effective-ids, true);
+                    }
+                }
+                if !root.is-folder: MenuItem {
+                    label: @tr("Remove from Favorites");
+                    icon: "heart_minus";
+                    clicked => {
+                        CardActions.set-favorites(root.card-kind, pop.effective-ids, false);
+                    }
                 }
                 if !root.is-folder: MenuItem {
                     label: root.multi-active
@@ -237,12 +251,16 @@ export component CardContextMenu inherits Rectangle {
                     clicked => { root.go-to-artist(root.card-artist-id); }
                 }
 
-                // The only way out of a large selection other than Escape, the grids carrying no
-                // clear button. Through the host: five grids keep their set on `CardSelection`
-                // and Browse keeps its cards' on `Browse`, its cards being its list rows. Gated
-                // on this card being in the set, so a menu raised on an unselected card acts on
-                // that card alone and says nothing about a set it isn't part of.
-                if root.card-selected: MenuSeparator {}
+                // The selection group, the row menu's twin and gated the same way: Clear only
+                // where this card is in the set, Select All always. Both go through the host,
+                // five grids keeping their set on `CardSelection` while Browse keeps its cards'
+                // on `Browse`, its cards being its list rows.
+                MenuSeparator {}
+                MenuItem {
+                    label: @tr("Select all");
+                    icon: "select_all";
+                    clicked => { root.select-all(); }
+                }
                 if root.card-selected: MenuItem {
                     label: @tr("Clear selection");
                     icon: "close";

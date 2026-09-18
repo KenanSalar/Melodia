@@ -77,6 +77,24 @@ pub fn wire(ui: &AppWindow) {
 
     {
         let weak = weak.clone();
+        let selection = selection.clone();
+        global.on_select_all(move |asking_scope| {
+            let Some(ui) = weak.upgrade() else { return };
+            let scope = asking_scope.to_string();
+            let ids = visible_ids(&ui, &scope);
+            if ids.is_empty() {
+                return;
+            }
+            // The anchor is left where the last pick put it, so a shift-pick after Select All
+            // still ranges from what the user chose; `list_selection::select_all_curated` argues
+            // it for the track lists.
+            let anchor = selection.borrow().anchor;
+            publish(&ui, &selection, Selection { scope, ids, anchor });
+        });
+    }
+
+    {
+        let weak = weak.clone();
         global.on_clear(move || {
             let Some(ui) = weak.upgrade() else { return };
             publish(&ui, &selection, Selection::default());

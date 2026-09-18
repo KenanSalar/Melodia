@@ -68,6 +68,15 @@ pub fn handle_select_row(
     apply_selection_to_rows(&g);
 }
 
+/// Take every displayed row into the selection. Disk-only rows drop out inside
+/// `displayed_ids`, which filters on the same `enabled` / `id != 0` pair the click handler
+/// guards on.
+pub fn select_all(ui: &AppWindow) {
+    let g = ui.global::<Browse>();
+    write_selection(&g, crate::ui::list_selection::displayed_ids(&g.get_rows()));
+    apply_selection_to_rows(&g);
+}
+
 /// Reset selection (called from the action-pill "Clear" button).
 pub fn clear_selection(ui: &AppWindow) {
     let g = ui.global::<Browse>();

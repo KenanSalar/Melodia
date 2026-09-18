@@ -64,6 +64,18 @@ pub fn handle_select_row(
     apply_per_row_selection(&g, &id_set);
 }
 
+/// Take every displayed row into the selection. The anchor is left where the
+/// last click put it; [`crate::ui::list_selection::select_all_curated`] argues
+/// why.
+pub fn select_all(ui: &AppWindow, search_ui: &SearchUi) {
+    let g = ui.global::<Search>();
+    let ids = crate::ui::list_selection::displayed_ids(&g.get_tracks());
+    let id_set: HashSet<i32> = ids.iter().copied().collect();
+    write_selection(&g, ids);
+    search_ui.state().applied_selection.lock().clone_from(&id_set);
+    apply_per_row_selection(&g, &id_set);
+}
+
 /// Reset selection (action-pill "Clear" button + section-leave +
 /// new-query). Same shape as `handle_select_row`.
 pub fn clear_selection(ui: &AppWindow, search_ui: &SearchUi) {

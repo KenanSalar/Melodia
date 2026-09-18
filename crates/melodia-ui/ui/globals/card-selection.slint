@@ -26,6 +26,9 @@ export global CardSelection {
     // re-sort would move it anyway. Rust anchors a shift-range on the **id** instead and resolves
     // both endpoints against the model at the moment of the click.
     callback pick(string /*scope*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
+    // Every card the asking scope is drawing. Scope-guarded like `pick`, so a grid can only
+    // ever select its own.
+    callback select-all(string /*scope*/);
     callback clear();
 
     // Pure Slint: the two inputs are real properties that dirty on their own, so this needs no

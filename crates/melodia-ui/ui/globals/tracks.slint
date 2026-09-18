@@ -38,6 +38,7 @@ export global Tracks {
     // Modifiers come off the row's pointer-event as bools; Rust does the work and walks the model
     // to flip the per-row `selected` flags, a Slint expression not being able to iterate one.
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
+    callback select-all();
     callback clear-selection();
 
     // Slint flips the matching `show_*` synchronously, then Rust persists the visible-column list.
@@ -116,6 +117,7 @@ export global Browse {
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new_state*/);
     callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
+    callback select-all();
     callback clear-selection();
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);

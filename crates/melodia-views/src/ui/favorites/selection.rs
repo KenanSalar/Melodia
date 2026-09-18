@@ -33,6 +33,12 @@ pub fn handle_select_row(
     );
 }
 
+/// Take every displayed row into the selection.
+pub fn select_all(ui: &AppWindow, fav_ui: &FavoritesUi) {
+    let g = ui.global::<Favorites>();
+    list_selection::select_all_curated(&g, &fav_ui.state().applied_selection);
+}
+
 /// Reset selection (called from the action-pill "Clear" button and section-leave).
 pub fn clear_selection(ui: &AppWindow, fav_ui: &FavoritesUi) {
     let g = ui.global::<Favorites>();

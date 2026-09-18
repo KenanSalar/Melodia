@@ -219,6 +219,7 @@ export component BrowseView inherits Rectangle {
                             toggle-row-favorite(ids, on) => { Browse.toggle-row-favorite(ids, on); }
                             set-row-rating(ids, n) => { Browse.set-row-rating(ids, n); }
                             select-row(idx, id, sh, ct) => { Browse.select-row(idx, id, sh, ct); }
+                            select-all => { Browse.select-all(); }
                             clear-selection => { Browse.clear-selection(); }
                             // Browse has no filter input — nothing to blur.
                             request-blur-search => { }
@@ -252,6 +253,7 @@ export component BrowseView inherits Rectangle {
 
                                 request-cover(p, gen) => { Browse.request-card-cover(p, gen) }
                                 folder-clicked(path) => { Browse.open-folder(path); }
+                                select-all => { Browse.select-all(); }
                                 clear-selection => { Browse.clear-selection(); }
                                 track-clicked(id, idx) => { Browse.play-row(id, idx); }
 

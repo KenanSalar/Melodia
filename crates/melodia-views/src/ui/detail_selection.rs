@@ -80,6 +80,13 @@ pub fn handle_select_row<V: RowSelectionView>(
     apply_selection_to_rows(view, refs);
 }
 
+/// Take every displayed row into the selection. The anchor is left where the last click put it;
+/// [`crate::ui::list_selection::select_all_curated`] argues why.
+pub fn select_all<V: RowSelectionView>(view: &V, refs: &SelectionRefs<'_>) {
+    write_selection(view, crate::ui::list_selection::displayed_ids(&view.track_rows()));
+    apply_selection_to_rows(view, refs);
+}
+
 /// Reset selection (called from the action-pill "Clear" button).
 pub fn clear_selection<V: RowSelectionView>(view: &V, refs: &SelectionRefs<'_>) {
     write_selection(view, Vec::new());
@@ -189,6 +196,13 @@ macro_rules! impl_detail_selection {
             use slint::ComponentHandle as _;
             let g = ui.global::<$Global>();
             $crate::ui::detail_selection::handle_select_row(&g, &refs(view), idx, id, shift, ctrl);
+        }
+
+        /// Take every displayed row into the selection.
+        pub fn select_all(ui: &melodia_ui::AppWindow, view: &$Ui) {
+            use slint::ComponentHandle as _;
+            let g = ui.global::<$Global>();
+            $crate::ui::detail_selection::select_all(&g, &refs(view));
         }
 
         /// Reset selection (called from the action-pill "Clear" button).

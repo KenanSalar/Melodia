@@ -95,6 +95,7 @@ export component ArtistGrid inherits Rectangle {
                     ctx-menu := CardContextMenu {
                         card-kind: "artist";
                         card-id: artist.id;
+                        select-all => { CardSelection.select-all("artists"); }
                         clear-selection => { CardSelection.clear(); }
                         card-selected: CardSelection.selected(
                             "artists", artist.id, CardSelection.generation);

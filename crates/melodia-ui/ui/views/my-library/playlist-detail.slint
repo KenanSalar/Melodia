@@ -68,6 +68,7 @@ export component PlaylistDetailBody inherits Rectangle {
             toggle-row-favorite(ids, on) => { PlaylistDetail.toggle-row-favorite(ids, on); }
             set-row-rating(ids, n) => { PlaylistDetail.set-row-rating(ids, n); }
             select-row(idx, id, sh, ct) => { PlaylistDetail.select-row(idx, id, sh, ct); }
+            select-all => { PlaylistDetail.select-all(); }
             clear-selection => { PlaylistDetail.clear-selection(); }
             // A click in the track list blurs the band's SearchBar.
             request-blur-search => { MyLibrary.blur-search-tick += 1; }

@@ -52,6 +52,16 @@ pub fn handle_select_row(
     list_selection::stamp_rows_selected(&g.get_rows(), &id_set);
 }
 
+/// Take every displayed row into the selection. The anchor is left where the last click put it;
+/// [`crate::ui::list_selection::select_all_curated`] argues why.
+pub fn select_all(ui: &AppWindow) {
+    let g = ui.global::<Tracks>();
+    let ids = list_selection::displayed_ids(&g.get_rows());
+    let id_set: HashSet<i32> = ids.iter().copied().collect();
+    write_selection(&g, ids);
+    list_selection::stamp_rows_selected(&g.get_rows(), &id_set);
+}
+
 /// Reset selection (called from the action-pill "Clear" button).
 pub fn clear_selection(ui: &AppWindow) {
     let g = ui.global::<Tracks>();

@@ -47,7 +47,7 @@ pub(super) use grid::{
     apply_filtered_grid_now, apply_filtered_grid_settled, mark_covers_warm, refresh_grid,
 };
 pub(super) use rows::to_slint_most_played_row;
-pub(super) use selection::{clear_selection, handle_select_row};
+pub(super) use selection::{clear_selection, handle_select_row, select_all};
 pub(super) use songs::{
     apply_filtered_tracks, apply_filtered_tracks_now, apply_row_favorite, apply_row_rating,
     refresh_tracks, set_filter,

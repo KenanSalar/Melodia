@@ -101,20 +101,20 @@ silently miss the other.
   Compose inside `ActionPill` with `PillLabel`/`PillDivider`; `IconButton` for round controls
   *outside* chips.
 
-- **A multi-selection grows no pill.** The count, every batch action and the way out are the
-  right-click menu's, on rows and cards alike — its "Clear selection" entry is gated on the
-  clicked item being *in* the set, so a menu raised beside one still acts on that item alone.
-  The other exits are Escape (`Selection.clear-live()`) and unpicking the last item. A surface
-  that grows a "{n} selected" chip is putting a second affordance in front of the menu that
-  already carries all of them.
+- **A multi-selection grows no pill.** The count, every batch action and both ends of the set are
+  the right-click menu's, on rows and cards alike: "Select all" ungated, "Clear selection" gated
+  on the clicked item being *in* the set, so a menu raised beside one still acts on that item
+  alone. The other exits are Escape (`Selection.clear-live()`) and unpicking the last item. A
+  surface that grows a "{n} selected" chip is putting a second affordance in front of the menu
+  that already carries all of them. **A body click that picks fires on `clicked`**, for the
+  grab-invalidation reason `slint-pitfalls.md` argues.
 
-- **A body click that picks belongs on `clicked`, never on `pointer-event`'s release.** Slint
-  gates `clicked` on that TouchArea's own `pressed`, which is the only thing that holds when a
-  nested control unmounts mid-grab: `handle_mouse_grab` then fails to upgrade its weak ref and
-  **re-dispatches the release as a fresh event**, which lands on the ancestor. The track row's
-  favourite toggle and star strip are mounted behind `touch.has-hover` and rewrite the row, so
-  reading the release directly picked the row the user was rating. `clicked` carries no
-  modifiers, so a range-pick takes its shift off the press that armed it.
+- **A card menu offers both directions rather than reading a state it hasn't got.** A card is a
+  set, so the `row-is-favorite` a row menu toggles on has no honest answer over one half
+  favourited, and resolving the truth costs a query per menu open per card. Add and Remove sit
+  beside each other instead, both well defined whatever the mixture. Reach for this wherever an
+  entry acts on a set: hiding or dimming needs the same state, and leaves no way to undo.
+
 
 - **`MetaChip`/`MetaChipStrip` are decorative** — no `TouchArea`, no selected state. The
   *interactive* pill is `chip-group.slint`'s `Chip`. Deliberately not one component: one states a

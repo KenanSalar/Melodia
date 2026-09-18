@@ -97,6 +97,7 @@ export component GenreGrid inherits Rectangle {
                     ctx-menu := CardContextMenu {
                         card-kind: "genre";
                         card-id: genre.id;
+                        select-all => { CardSelection.select-all("genres"); }
                         clear-selection => { CardSelection.clear(); }
                         card-selected: CardSelection.selected(
                             "genres", genre.id, CardSelection.generation);

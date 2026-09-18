@@ -90,6 +90,20 @@ pub fn stamp_rows_selected<S: BuildHasher>(
     }
 }
 
+/// Every id a row model is currently showing, in display order.
+///
+/// Read off the Slint model rather than any view's cache, so one projection answers for all nine
+/// lists: the model *is* the display order, post-filter and post-sort, whatever each view rebuilt
+/// it from. Disk-only Browse rows are dropped here rather than at that view — they arrive
+/// `enabled == false` and all share `id == 0`, which an id-keyed selection cannot hold.
+pub fn displayed_ids(rows: &ModelRc<UiTrackListRow>) -> Vec<i32> {
+    (0..rows.row_count())
+        .filter_map(|i| rows.row_data(i))
+        .filter(|r| r.enabled && r.id != 0)
+        .map(|r| r.id)
+        .collect()
+}
+
 /// Mutate a persistent `selected-ids` `VecModel<i32>` in place. Falls back to
 /// `install`ing a fresh `ModelRc` only if the install step somehow didn't run
 /// (test harness, future hot-reload).
@@ -212,6 +226,26 @@ pub fn handle_curated_click<V: RowSelectionView, S: BuildHasher>(
 
     // Re-stamp per-row `selected` flags so the checkbox + background highlight reflect the new
     // set immediately.
+    stamp_rows_selected(&view.track_rows(), &id_set);
+}
+
+/// Take every displayed row into a curated page's selection.
+///
+/// **The anchor is left where the last click put it**, unlike the clear below: Select All is not
+/// itself a click, so a shift-click after one should still range from whatever the user picked.
+/// The queue's own select-all has said the same since it was written.
+pub fn select_all_curated<V: RowSelectionView, S: BuildHasher>(
+    view: &V,
+    applied: &Mutex<HashSet<i32, S>>,
+) {
+    let ids = displayed_ids(&view.track_rows());
+    let id_set: HashSet<i32> = ids.iter().copied().collect();
+    write_curated_selection(view, ids);
+    {
+        let mut applied = applied.lock();
+        applied.clear();
+        applied.extend(id_set.iter().copied());
+    }
     stamp_rows_selected(&view.track_rows(), &id_set);
 }
 

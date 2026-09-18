@@ -120,6 +120,7 @@ export component EntityCardGrid inherits Rectangle {
                     ctx-menu := CardContextMenu {
                         card-kind: root.card-kind;
                         card-id: entity.id;
+                        select-all => { CardSelection.select-all(root.selection-scope); }
                         clear-selection => { CardSelection.clear(); }
                         card-selected: CardSelection.selected(
                             root.selection-scope, entity.id, CardSelection.generation);

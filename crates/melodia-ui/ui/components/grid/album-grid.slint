@@ -111,6 +111,7 @@ export component AlbumGrid inherits Rectangle {
                         card-kind: "album";
                         card-id: album.id;
                         card-artist-id: album.artist_id;
+                        select-all => { CardSelection.select-all("albums"); }
                         clear-selection => { CardSelection.clear(); }
                         card-selected: CardSelection.selected(
                             "albums", album.id, CardSelection.generation);

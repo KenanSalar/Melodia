@@ -160,6 +160,7 @@ export component PlaylistGrid inherits Rectangle {
                         card-kind: "playlist";
                         card-id: playlist.id;
                         card-is-smart: playlist.is_smart;
+                        select-all => { CardSelection.select-all("playlists"); }
                         clear-selection => { CardSelection.clear(); }
                         card-selected: CardSelection.selected(
                             "playlists", playlist.id, CardSelection.generation);

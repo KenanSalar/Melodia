@@ -89,8 +89,9 @@ export component TrackContextMenu inherits Rectangle {
     callback toggle-favorite([int] /*track_ids*/, bool /*new_state*/);
     // Playlist Detail removes from the open playlist, the queue sheet from the queue.
     callback request-remove([int] /*track_ids*/);
-    // Drops the host's whole selection. No payload: the host owns the set, and the queue's is a
-    // different shape from a track list's.
+    // Take every displayed row, and drop the whole set. No payload either way: the host owns
+    // the set, and the queue's is a different shape from a track list's.
+    callback select-all();
     callback clear-selection();
     callback go-to-album(int /*album_id*/);
     callback go-to-artist(int /*artist_id*/);
@@ -266,13 +267,19 @@ export component TrackContextMenu inherits Rectangle {
                     clicked => { root.go-to-genre(root.genre-id); }
                 }
 
-                // The only way out of a large selection other than Escape, the lists carrying no
-                // clear button. Through the host rather than straight to a global, unlike the
-                // card menu's twin: nine list globals keep their own set and the queue a tenth,
-                // and this component is deliberately told none of them. Gated on this row being
-                // in the set, so a menu raised on an unselected row acts on that row alone and
-                // says nothing about a set it isn't part of.
-                if root.row-selected: MenuSeparator {}
+                // The selection group. With no clear button on any list, Clear is the only way
+                // out of a large set other than Escape, and it is gated on this row being *in*
+                // the set: a menu raised on an unselected row acts on that row alone and says
+                // nothing about a set it isn't part of. Select All is ungated, being an offer
+                // rather than a statement about the row. Both go through the host rather than a
+                // global: nine list globals keep their own set and the queue a tenth, and this
+                // component is deliberately told none of them.
+                MenuSeparator {}
+                MenuItem {
+                    label: @tr("Select all");
+                    icon: "select_all";
+                    clicked => { root.select-all(); }
+                }
                 if root.row-selected: MenuItem {
                     label: @tr("Clear selection");
                     icon: "close";

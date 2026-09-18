@@ -198,6 +198,15 @@ pub(super) fn wire(
     {
         let weak = weak.clone();
         let su = search_ui.clone();
+        g.on_select_all(move || {
+            let Some(ui) = weak.upgrade() else { return };
+            search_ui_mod::select_all(&ui, &su);
+        });
+    }
+
+    {
+        let weak = weak.clone();
+        let su = search_ui.clone();
         g.on_clear_selection(move || {
             let Some(ui) = weak.upgrade() else { return };
             search_ui_mod::clear_selection(&ui, &su);

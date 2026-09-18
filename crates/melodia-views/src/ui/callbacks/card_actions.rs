@@ -89,14 +89,15 @@ pub fn wire(ui: &AppWindow, state: &AppState) {
 
     {
         let state = state.clone();
-        actions.on_add_to_favorites(move |kind, ids| {
+        actions.on_set_favorites(move |kind, ids, favorite| {
             spawn_with_track_ids(
                 &state,
                 "card favorite",
                 &kind,
                 &ids,
-                |state, track_ids| async move {
-                    if let Err(e) = library::favorites::set_favorite(&state, track_ids, true).await
+                move |state, track_ids| async move {
+                    if let Err(e) =
+                        library::favorites::set_favorite(&state, track_ids, favorite).await
                     {
                         log::warn!("card favorite: {}", describe(&e));
                     }

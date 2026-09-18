@@ -69,6 +69,7 @@ export global ArtistDetail {
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
     callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
+    callback select-all();
     callback clear-selection();
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);

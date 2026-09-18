@@ -218,10 +218,9 @@ export component EntityCard inherits Rectangle {
         // background, no cover zoom and no click — the `TrackListRowItem` contract.
         enabled: root.enabled;
         mouse-cursor: pointer;
-        // Both arms on `clicked`, which Slint gates on this area's own `pressed`: the box and the
-        // host's overlay controls grab their own presses, so neither can reach this even if one
-        // unmounts mid-grab and Slint re-dispatches the release. One handler also means `picking`
-        // is read once, so unpicking the last card cannot open its detail on the way out.
+        // Both arms on `clicked` rather than the release, per `slint-pitfalls.md`. One handler
+        // also means `picking` is read once, so unpicking the last card cannot open its detail on
+        // the way out.
         clicked => {
             if (root.picking) {
                 root.pick(root.press-shift);

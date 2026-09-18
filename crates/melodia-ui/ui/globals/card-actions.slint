@@ -19,10 +19,11 @@ export global CardActions {
     callback shuffle(string, [int]);
     callback play-next(string, [int]);
     callback add-to-queue(string, [int]);
-    // One-way: the per-row toggle reads `row-is-favorite`, which an entity row doesn't carry and
-    // which has no honest answer over a set that is half favourited. The inverse stays on the
-    // detail view's track list.
-    callback add-to-favorites(string, [int]);
+    // Both directions, as one call taking the state to write rather than a toggle. A card is a
+    // *set*, so `row-is-favorite`'s question has no honest answer here — half a playlist may be
+    // favourited — and the menu offers the two operations instead of guessing which one a label
+    // should name.
+    callback set-favorites(string /*kind*/, [int] /*entity_ids*/, bool /*favorite*/);
 
     // Both fill `Dialog` from the menu first, so the `@tr` chrome resolves at codegen; Rust adds
     // the resolved track ids and invokes the existing dialog flow.

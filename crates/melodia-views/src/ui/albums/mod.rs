@@ -60,7 +60,7 @@ pub(super) use detail::{
     open_album, refresh_detail, resort_detail, set_filter,
 };
 pub(super) use grid::rebuild_grid;
-pub(super) use selection::{clear_selection, handle_select_row};
+pub(super) use selection::{clear_selection, handle_select_row, select_all};
 
 /// Install the Albums grid + detail models, build the handle, and wire every
 /// `Albums.*` / `AlbumDetail.*` callback to it.
