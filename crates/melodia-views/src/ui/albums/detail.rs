@@ -79,7 +79,7 @@ pub async fn open_album(
 /// filter-box reseat.
 ///
 /// `enter_from` is the enter direction of the **page** mount a cross-section
-/// drill produces; `AlbumDetailBody` takes a fixed `below` and holds still while
+/// drill produces; `AlbumDetailBody` takes a fixed `above` and holds still while
 /// the band morphs, so it reaches nothing when `Nav.selected-index` doesn't move
 /// in the same tick.
 pub async fn open_album_with<F>(
@@ -317,9 +317,9 @@ pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, albums_ui: &A
     let au = albums_ui.clone();
     let weak = ui.as_weak();
     state.runtime.spawn(async move {
-        // `Below` is the first-launch fade-up rather than a drill-in slide —
+        // `Above` is the first-launch fade-down rather than a drill-in slide —
         // nobody navigated, this is a restore.
-        if let Err(e) = open_album(&s, &au, weak.clone(), id, NavEnterFrom::Below).await {
+        if let Err(e) = open_album(&s, &au, weak.clone(), id, NavEnterFrom::Above).await {
             log::warn!("albums::seed_detail_from_settings open_album({id}): {e}");
         }
         // Lowered however it went, and behind `open_album`'s own hop so the id is already in: an

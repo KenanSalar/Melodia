@@ -1139,7 +1139,7 @@ fn the_replay_flips_the_section_against_the_index_the_close_left_behind() {
 ///
 /// The branches then differ only on where they enter *from*: a tab pick with the band
 /// still is a move along the bar, so the five tab bodies take its direction, and a drill
-/// is not, so the four details keep `below`.
+/// is not, so the four details keep `above`.
 ///
 /// Walking the branches rather than listing them is the point — a tenth added later with
 /// `enter-from: Nav.pending-enter-from` copied off a sibling page compiles, looks right
@@ -1184,7 +1184,7 @@ fn every_body_branch_enters_on_an_axis_the_band_is_not_already_moving() {
         let (expected, why) = if head.contains("MyLibrary.tab-idx") {
             ("enter-from: band.tab-enter-from;", "a tab pick is a move along the bar")
         } else {
-            ("enter-from: NavEnterFrom.below;", "a drill is not a move along the bar")
+            ("enter-from: NavEnterFrom.above;", "a drill is not a move along the bar")
         };
         assert!(
             branch.contains(expected),

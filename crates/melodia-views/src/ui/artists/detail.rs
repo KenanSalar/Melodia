@@ -91,8 +91,8 @@ pub async fn open_artist(
 /// same frame, and Slint paints `ArtistDetailBody` with no Artists-grid frame in between.
 ///
 /// `enter_from` chooses the enter direction for the **page** mount a cross-section drill produces,
-/// not for `ArtistDetailBody`, which takes a fixed `below` and holds still while the band morphs.
-/// [`NavEnterFrom::Right`] for any user drill-in, [`NavEnterFrom::Below`] for the seed path.
+/// not for `ArtistDetailBody`, which takes a fixed `above` and holds still while the band morphs.
+/// [`NavEnterFrom::Right`] for any user drill-in, [`NavEnterFrom::Above`] for the seed path.
 pub async fn open_artist_with<F>(
     state: &AppState,
     artists_ui: &Arc<ArtistsUi>,
@@ -316,9 +316,9 @@ pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, artists_ui: &
     let au = artists_ui.clone();
     let weak = ui.as_weak();
     state.runtime.spawn(async move {
-        // Below = first-launch fade-up, not a drill-in slide: the user didn't navigate, this is
+        // Above = first-launch fade-down, not a drill-in slide: the user didn't navigate, this is
         // restoring their last view.
-        if let Err(e) = open_artist(&s, &au, weak.clone(), id, NavEnterFrom::Below).await {
+        if let Err(e) = open_artist(&s, &au, weak.clone(), id, NavEnterFrom::Above).await {
             log::warn!("artists::seed_detail_from_settings open_artist({id}): {e}");
         }
         // Lowered however it went, and behind `open_artist`'s own hop so the id is already in: an

@@ -285,10 +285,10 @@ export component BrowseView inherits Rectangle {
                 action-icon: "settings";
                 action-label: @tr("Open Settings");
                 // Persisted like every other nav entry, so the tab sticks, and
-                // marked like one too — lateral nav fades up from `below`, and
+                // marked like one too — lateral nav drops in from `above`, and
                 // an unwritten edge is whatever the last drill left behind.
                 action-clicked => {
-                    Nav.pending-enter-from = NavEnterFrom.below;
+                    Nav.pending-enter-from = NavEnterFrom.above;
                     Nav.selected-index = 9;
                     Nav.persist-selected-index(9);
                 }

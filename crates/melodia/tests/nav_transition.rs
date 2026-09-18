@@ -8,7 +8,7 @@
 //! it happens in. Closing Now Playing is the worked example: five entry points, each
 //! destroying that branch and remounting the view underneath.
 //!
-//! **A walk rather than a list**, the `file_dialog` reason. `below` specifically, not any
+//! **A walk rather than a list**, the `file_dialog` reason. `above` specifically, not any
 //! direction — a Slint-side mount is lateral by construction, the two that aren't (a drill
 //! in, a back out) being Rust's and going through `ui::nav_transition`.
 
@@ -18,7 +18,7 @@ use melodia_testkit::{MIN_SLINT_SOURCES, UI_DIR, stripped_sources};
 /// an equality: a tenth is fine, a walk that stopped finding them is not.
 const MIN_MOUNTS: usize = 9;
 
-const MARK: &str = "Nav.pending-enter-from = NavEnterFrom.below;";
+const MARK: &str = "Nav.pending-enter-from = NavEnterFrom.above;";
 
 /// How far back the mark may sit. One line covers seven of the nine; the sidebar puts two
 /// writes under one mark, and the miniplayer swap owes its mark to the swap itself rather

@@ -1,7 +1,7 @@
-// Which edge the next `ViewTransition` mount slides in from: lateral sidebar nav fades up from
-// `below`, a drill comes from the `right`, the back button from the `left`. **The mount it steers
+// Which edge the next `ViewTransition` mount slides in from: lateral sidebar nav drops in from
+// `above`, a drill comes from the `right`, the back button from the `left`. **The mount it steers
 // is a *page***, so a drill that doesn't move `Nav.selected-index` steers nothing.
-export enum NavEnterFrom { below, right, left }
+export enum NavEnterFrom { above, right, left }
 
 // Which content view the shell shows:
 //   0=search, 1=browse, 2=favorites, 3=my-library, 8=recently-played, 9=settings, 10=radio
@@ -24,7 +24,7 @@ export global Nav {
     callback reveal-in-folder(int /*track_id*/);
     // Written synchronously **immediately before** the flip that triggers the new mount. Typed
     // so a Rust typo is a compile error; `ui/nav_transition.rs` has the `mark_*` helpers.
-    in-out property <NavEnterFrom> pending-enter-from: NavEnterFrom.below;
+    in-out property <NavEnterFrom> pending-enter-from: NavEnterFrom.above;
     // Raised before `app.show()` for "Skip Startup Animation", and by `MiniPlayerSwitch` for the
     // full UI remounting on the way out of the miniplayer. The mount hands it back itself once
     // settled — `view-transition.slint` says why Rust can't.

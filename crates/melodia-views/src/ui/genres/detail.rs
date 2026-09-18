@@ -300,9 +300,9 @@ pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, genres_ui: &A
     let gu = genres_ui.clone();
     let weak = ui.as_weak();
     state.runtime.spawn(async move {
-        // Below = first-launch fade-up, not a drill-in slide: the user didn't navigate, this is
+        // Above = first-launch fade-down, not a drill-in slide: the user didn't navigate, this is
         // restoring their last view.
-        if let Err(e) = open_genre(&s, &gu, weak.clone(), id, NavEnterFrom::Below).await {
+        if let Err(e) = open_genre(&s, &gu, weak.clone(), id, NavEnterFrom::Above).await {
             log::warn!("genres::seed_detail_from_settings open_genre({id}): {e}");
         }
         // Lowered however it went, and behind `open_genre`'s own hop so the id is already in: a

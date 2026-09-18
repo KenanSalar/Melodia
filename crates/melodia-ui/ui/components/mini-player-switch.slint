@@ -87,7 +87,7 @@ export component MiniPlayerSwitch {
         // **Lateral.** The line below closes Now Playing, which remounts the branch underneath it.
         // Written in both directions anyway: the way back mounts under the swap timer's suppression
         // and never reads it, but an unwritten edge is whatever the last drill or back left behind.
-        Nav.pending-enter-from = NavEnterFrom.below;
+        Nav.pending-enter-from = NavEnterFrom.above;
         if (root.watched-active && Nav.now-playing-open) {
             Nav.now-playing-open = false;
         }

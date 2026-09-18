@@ -712,7 +712,7 @@ pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, radio_ui: &Ar
         // the row it resolves.
         let station = StationRef { id, uuid: String::new() };
         if let Err(e) =
-            open_station(&state, &radio_ui, weak.clone(), station, NavEnterFrom::Below).await
+            open_station(&state, &radio_ui, weak.clone(), station, NavEnterFrom::Above).await
         {
             log::warn!("radio: restore station detail: {}", melodia_core::error::describe(&e));
         }

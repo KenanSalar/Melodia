@@ -379,7 +379,7 @@ export component MyLibraryView inherits Rectangle {
             if root.album-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: NavEnterFrom.below;
+                enter-from: NavEnterFrom.above;
                 enabled: root.body-anim-armed;
                 slide: !band.morphing;
                 AlbumDetailBody { width: 100%; height: 100%; }
@@ -402,7 +402,7 @@ export component MyLibraryView inherits Rectangle {
             if root.artist-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: NavEnterFrom.below;
+                enter-from: NavEnterFrom.above;
                 enabled: root.body-anim-armed;
                 slide: !band.morphing;
                 ArtistDetailBody { width: 100%; height: 100%; }
@@ -425,7 +425,7 @@ export component MyLibraryView inherits Rectangle {
             if root.genre-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: NavEnterFrom.below;
+                enter-from: NavEnterFrom.above;
                 enabled: root.body-anim-armed;
                 slide: !band.morphing;
                 GenreDetailBody { width: 100%; height: 100%; }
@@ -448,7 +448,7 @@ export component MyLibraryView inherits Rectangle {
             if root.playlist-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: NavEnterFrom.below;
+                enter-from: NavEnterFrom.above;
                 enabled: root.body-anim-armed;
                 slide: !band.morphing;
                 PlaylistDetailBody { width: 100%; height: 100%; }

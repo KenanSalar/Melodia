@@ -826,7 +826,7 @@ three components that answer it, and each argues its geometry at its own file.
   `ui/nav_transition.rs`.
   - **An unwritten edge is not a default — it is whatever the last navigation left in the global**,
     and `mark_drill_back` fires on every detail close, so the value sitting there is reliably
-    `left`. *Every* Slint-side mount writes its own, `below` by construction, the two non-lateral
+    `left`. *Every* Slint-side mount writes its own, `above` by construction, the two non-lateral
     directions being Rust's; the pin **walks** the tree. The miniplayer's mark is for the Now Playing
     close it performs. The full UI it rebuilds on the way *back* mounts under the suppression below
     and never reads the edge.
@@ -850,7 +850,7 @@ three components that answer it, and each argues its geometry at its own file.
     under it put a second full-window layer over the most expensive frames of the swap. The setting
     has no say there.
   - **A page with sub-views nests a second one and must disarm it at mount**, the page's own enter
-    still playing when the first tab body mounts and a horizontal slide composed with a fade-up
+    still playing when the first tab body mounts and a horizontal slide composed with a fade-down
     reading as a diagonal. The host arms it in the tab bar's `selected` handler; starting `false`
     is what makes the page re-disarm for free, being rebuilt on every entry. Direction comes off
     `bar.previous-index`, so the host keeps no tab state and needs no mount seed.
@@ -859,7 +859,7 @@ three components that answer it, and each argues its geometry at its own file.
     between the two floors every frame. All nine branches carry `enabled: root.body-anim-armed`
     and `slide: !band.morphing`, and none reads `Nav.pending-enter-from`; the five **tab** bodies
     take `enter-from: band.tab-enter-from` (the bar's own left/right, forwarded off the band as on
-    `MosaicTabHero`) and the four **details** keep `below`, a drill not being a move along the bar.
+    `MosaicTabHero`) and the four **details** keep `above`, a drill not being a move along the bar.
     So a tab pick with the band still slides like the sibling pages, and anything the band morphs
     through is a cross-fade with both offsets zeroed — which is what makes `slide` the load-bearing
     line rather than the fixed axis it replaced. **`morphing` is

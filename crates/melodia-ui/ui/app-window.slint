@@ -552,12 +552,12 @@ export component AppWindow inherits Window {
                             title: root.view-title(Nav.selected-index);
                         }
                     }
-                    // Hard-coded to `below`: this branch only fires on open, and closing
+                    // Hard-coded to `above`: this branch only fires on open, and closing
                     // is the outgoing state, which `ViewTransition` doesn't animate.
                     if Nav.now-playing-open: ViewTransition {
                         width: parent.width;
                         height: parent.height;
-                        enter-from: NavEnterFrom.below;
+                        enter-from: NavEnterFrom.above;
                         NowPlayingView { width: 100%; height: 100%; }
                     }
 

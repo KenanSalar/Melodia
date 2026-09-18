@@ -29,7 +29,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
             let (s, ru, weak) = (s.clone(), ru.clone(), weak.clone());
             s.runtime.clone().spawn(async move {
                 if let Err(e) =
-                    detail::open_station(&s, &ru, weak, station, NavEnterFrom::Below).await
+                    detail::open_station(&s, &ru, weak, station, NavEnterFrom::Above).await
                 {
                     log::warn!("radio: open station: {}", melodia_core::error::describe(&e));
                 }

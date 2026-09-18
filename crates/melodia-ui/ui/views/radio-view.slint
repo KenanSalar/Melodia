@@ -259,12 +259,12 @@ export component RadioView inherits Rectangle {
                 }
             }
 
-            // A fixed `below`, not the band's direction: a drill is not a move along the tab bar,
+            // A fixed `above`, not the band's direction: a drill is not a move along the tab bar,
             // and the body holds still while the band morphs above it either way.
             if Radio.detail-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: NavEnterFrom.below;
+                enter-from: NavEnterFrom.above;
                 enabled: root.body-anim-armed;
                 slide: !band.morphing;
                 RadioStationDetail {

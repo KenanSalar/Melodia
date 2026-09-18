@@ -107,7 +107,7 @@ export component NowPlayingView inherits Rectangle {
                     // Lateral: the view underneath remounts and samples this. See the
                     // bar's own track-info card, which is the other half of the toggle.
                     clicked => {
-                        Nav.pending-enter-from = NavEnterFrom.below;
+                        Nav.pending-enter-from = NavEnterFrom.above;
                         Nav.now-playing-open = false;
                     }
                 }
