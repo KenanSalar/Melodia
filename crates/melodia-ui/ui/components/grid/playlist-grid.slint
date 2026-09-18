@@ -125,8 +125,8 @@ export component PlaylistGrid inherits Rectangle {
                             || name_btn.has-hover;
 
                         delete_btn := IconButton {
-                            x: card.tile-size - self.width - Theme.pad-sm;
-                            y: Theme.pad-sm;
+                            x: Theme.pad-sm;
+                            y: card.tile-size - self.height - Theme.pad-sm;
                             icon: "delete";
                             icon-size: 18px;
                             diameter: 30px;
@@ -136,8 +136,8 @@ export component PlaylistGrid inherits Rectangle {
                         }
 
                         artwork_btn := IconButton {
-                            x: Theme.pad-sm;
-                            y: card.tile-size - self.height - Theme.pad-sm;
+                            x: card.tile-size - self.width - Theme.pad-sm;
+                            y: Theme.pad-sm;
                             icon: "image";
                             icon-size: 18px;
                             diameter: 30px;

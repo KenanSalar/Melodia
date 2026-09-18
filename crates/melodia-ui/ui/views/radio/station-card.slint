@@ -107,10 +107,9 @@ export component StationCard inherits Rectangle {
         // of the tile plays for anyone who aimed at the artwork. A corner control, as every other
         // card in the tree draws one, leaves both actions reachable.
         //
-        // **Top-left, and the bottom right is the play count's on every card in the tree.** The
-        // pair reads left to right rather than stacking, mirroring the two at the bottom, which
-        // also retires the slot the link used to leave behind: play leads, so a station with no
-        // site simply has nothing to its right instead of a gap above it.
+        // **Top-left, and the bottom right is the play count's on every card in the tree.** Play
+        // leads the column and the link follows, so a station with no site leaves nothing under
+        // play rather than a hole above it.
         //
         // **The four below frame the tile off `card-body.tile-size`, never off `parent`.** These
         // are laid out inside the card's overlay slot, but a `@children` element resolves names
@@ -130,8 +129,8 @@ export component StationCard inherits Rectangle {
 
         home_btn := IconButton {
             visible: root.homepage-known;
-            x: Theme.pad-sm + play_btn.width + Theme.pad-xs;
-            y: Theme.pad-sm;
+            x: Theme.pad-sm;
+            y: Theme.pad-sm + play_btn.height + Theme.pad-xs;
             icon: "link";
             icon-size: 18px;
             diameter: 30px;
@@ -139,8 +138,8 @@ export component StationCard inherits Rectangle {
             clicked => { root.homepage-clicked(); }
         }
 
-        // Bottom-left, under the pair above: the two that change the row rather than following
-        // it. Only the kept tabs mount them, so Browse looks exactly as it did.
+        // Bottom-left, clear of the column above: the two that change the row rather than
+        // following it. Only the kept tabs mount them, so Browse looks exactly as it did.
         remove_btn := IconButton {
             visible: root.removable;
             x: Theme.pad-sm;
