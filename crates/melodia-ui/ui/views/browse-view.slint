@@ -359,5 +359,8 @@ export component BrowseView inherits Rectangle {
         height: view-toggle.height;
         label: root.card-mode ? @tr("List view") : @tr("Card view");
         shown: view-toggle.hovered;
+        // Off the pill: card mode drops the two segments after the toggle, leaving it at the
+        // chip's trailing edge, and nothing here has to know that.
+        align-end: view-toggle.icon-only;
     }
 }

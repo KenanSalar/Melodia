@@ -381,4 +381,10 @@ export component MyLibraryTabPills inherits Rectangle {
         : om.hovered ? om.tooltip-text
         : "";
     out property <bool> tip-visible: np.hovered || sp.hovered || om.hovered;
+    // Off the pill rather than spelled here: which of the three wants its trailing edge pinned
+    // is `PillButton`'s rule, and the in-tree mount reads the same property.
+    out property <bool> tip-align-end: np.hovered ? np.icon-only
+        : sp.hovered ? sp.icon-only
+        : om.hovered ? om.icon-only
+        : false;
 }

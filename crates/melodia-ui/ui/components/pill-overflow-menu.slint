@@ -21,6 +21,9 @@ export component PillOverflowMenu inherits Rectangle {
     // to the pill along with the `hovered` the host's anchor reads back.
     in property <bool> tooltip-overlay: false;
     out property <bool> hovered: btn.hovered;
+    // Read back rather than answered here, so the host's frame aligns its pill off the same
+    // property the in-tree mount does. Always true for a glyph-only trigger.
+    out property <bool> icon-only: btn.icon-only;
 
     // Sized to the pill row's height so the popup hangs off this box rather than off the
     // button's own alignment inside it.

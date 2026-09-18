@@ -34,13 +34,25 @@ silently miss the other.
   host's.** The pill flips to the opposite side where only that one has room, and slides along the
   host's edge to stay inside the shell rect `AppWindow` mirrors into `WindowChrome.shell-*`. So no
   host picks a side to dodge the window. What a host still owns is the two things the pill can't
-  see: **a clip between it and the window**, and **a sibling painted after it**.
+  see: **a clip between it and the window**, and **a sibling painted after it**. **The rect it
+  fits is the client's, not the panel's**: `edge-clearance` is `Theme.pad-xs` and so is the
+  panel's own right gutter, so a pill wide enough to reach the clamp parks its trailing border on
+  the clip line rather than inside it. Publishing the panel rect instead is not the fix,
+  `globals/shell.slint` sizing the miniplayer's artwork off the same two properties. Keep a wide
+  pill off the limit, which is what the alignment below does for the hosts that reach it.
 
 - **A host at the content panel's edge aligns its pill rather than centring it**, the panel
-  clipping inside the window where the slide can't see it. `align-end`, reached through
-  `IconButton.tooltip-align-end`, pins the pill's trailing edge to the host's. Both Now-Playing view
-  toggles take it, and what decides is a translated label: the English one fits and says nothing
-  about the six that follow.
+  clipping inside the window where the slide can't see it. `align-end` pins the pill's trailing
+  edge to the host's, and three things reach it. `IconButton.tooltip-align-end` is the opt-in,
+  taken by both Now-Playing view toggles, where what decides is a translated label: the English
+  one fits and says nothing about the six that follow. `TooltipFrame.align-end` is the same
+  answer for a host whose pill is drawn on the top layer. **An unlabelled `PillButton` takes it
+  on its own**, and that one is not a knob: the chrome collapses to 28 px while the label stays
+  several times that, so the centred arm has nothing left to centre against, and the chips these
+  sit in are right-aligned. `PillButton.icon-only` is the single statement of it, and **both
+  mount shapes read that property rather than restating the test** (in-tree binds it directly; a
+  top-layer host publishes it beside the rect, as `tab-pills`' `tip-align-end` and Browse's
+  `view-toggle.icon-only` do).
 
 - **A pill landing on a later-declared sibling is lifted with a constant `z`**, on the host's
   branch at the level where it and the occluder are siblings, where lifting it overlaps nothing

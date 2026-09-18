@@ -67,7 +67,9 @@ export component PillButton inherits Rectangle {
     in property <bool> force-bg: false;
     callback clicked();
 
-    private property <bool> icon-only: root.text == "" && root.icon != "";
+    // `out` so a host drawing the pill on a higher layer asks this rather than restating the
+    // test beside its own frame. The alignment below is the same rule on the other mount.
+    out property <bool> icon-only: root.text == "" && root.icon != "";
 
     height: 32px;
     width: chrome.width;
@@ -148,6 +150,11 @@ export component PillButton inherits Rectangle {
                 hovered: touch.has-hover && !root.tooltip-overlay;
                 host-width: chrome.width;
                 host-height: chrome.height;
+                // 28 px of chrome under a label several times that leaves the centred arm
+                // nothing to centre against, and these chips sit at the panel's right edge,
+                // so the overhang is what the window clamp catches. A labelled pill is wide
+                // enough to carry its own.
+                align-end: root.icon-only;
             }
 
             touch := TouchArea {

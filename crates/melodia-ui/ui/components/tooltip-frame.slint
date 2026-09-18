@@ -17,6 +17,9 @@ export component TooltipFrame inherits Rectangle {
     in property <string> label;
     in property <bool> shown;
     in property <TooltipSide> side: TooltipSide.below;
+    // The one input a host can't work around from out here: the pill's horizontal arm is the
+    // component's own, so an unlabelled host has no other way to say "pin the trailing edge".
+    in property <bool> align-end: false;
 
     Tooltip {
         text: root.label;
@@ -24,5 +27,6 @@ export component TooltipFrame inherits Rectangle {
         host-width: root.width;
         host-height: root.height;
         side: root.side;
+        align-end: root.align-end;
     }
 }
