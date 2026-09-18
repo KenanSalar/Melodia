@@ -46,6 +46,8 @@ export component BrowseCardGrid inherits Rectangle {
     // `row_index` first, so the host forwards straight to `Browse.select-row` with the arguments
     // the list already passes it and the shift-range walks one order for both presentations.
     callback select-card(int /*row_index*/, int /*track_id*/, bool /*shift*/, bool /*ctrl*/);
+    // Raised by a card's context menu; the view answers it against the list's set.
+    callback clear-selection();
 
     // The folder card's menu, which the entity actions can't answer: a folder is a path.
     callback play-folder(string /*path*/);
@@ -117,6 +119,7 @@ export component BrowseCardGrid inherits Rectangle {
                         // handler already opens with, so no second predicate is spelled here.
                         selectable: card.enabled && !card.is_folder;
                         selected: root.is-card-selected(card.id, root.selection-generation);
+                        selection-live: root.selected-ids.length > 0;
                         select-clicked(shift, ctrl) => {
                             root.select-card(card.row_index, card.id, shift, ctrl);
                         }
@@ -137,6 +140,7 @@ export component BrowseCardGrid inherits Rectangle {
                         card-kind: card.is_folder ? "folder" : "track";
                         card-id: card.id;
                         card-path: card.path;
+                        clear-selection => { root.clear-selection(); }
                         card-selected: root.is-card-selected(card.id, root.selection-generation);
                         effective-selection: root.selected-ids;
                         selection-count: root.selected-ids.length;

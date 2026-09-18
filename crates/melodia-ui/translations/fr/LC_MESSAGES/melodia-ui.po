@@ -8,6 +8,9 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "Clear selection"
+msgstr "Effacer la sélection"
+
 # ---- Sidebar / navigation ----------------------------------------------------
 
 msgid "Search"
@@ -82,9 +85,6 @@ msgstr "Effacer"
 
 msgid "Restart"
 msgstr "Redémarrer"
-
-msgid "Clear selection"
-msgstr "Effacer la sélection"
 
 # ---- Now-playing bar tooltips & states --------------------------------------
 
@@ -196,9 +196,6 @@ msgstr "La file d'attente est vide"
 msgid "Drop to add to queue"
 msgstr "Déposez pour ajouter à la file d'attente"
 
-msgid "Remove selected"
-msgstr "Retirer la sélection"
-
 msgid "Remove from Queue"
 msgstr "Retirer de la file d'attente"
 
@@ -213,9 +210,6 @@ msgstr "Vider la file d'attente ?"
 
 msgid "Remove all tracks from the queue? Playback will stop."
 msgstr "Retirer toutes les pistes de la file d'attente ? La lecture s'arrêtera."
-
-msgid "Remove from queue?"
-msgstr "Retirer de la file d'attente ?"
 
 # Plural: track count for the queue header subtitle ("3 tracks", "1 track").
 msgid "{n} track"
@@ -250,12 +244,6 @@ msgid "{n} song"
 msgid_plural "{n} songs"
 msgstr[0] "{n} morceau"
 msgstr[1] "{n} morceaux"
-
-# Plural: queue-remove confirmation dialog.
-msgid "Remove {n} track from the queue?"
-msgid_plural "Remove {n} tracks from the queue?"
-msgstr[0] "Retirer {n} piste de la file d'attente ?"
-msgstr[1] "Retirer {n} pistes de la file d'attente ?"
 
 msgid "{} selected"
 msgstr "{} sélectionné(s)"
@@ -805,9 +793,6 @@ msgstr "Renommer"
 msgid "Delete playlist"
 msgstr "Supprimer la liste"
 
-msgid "Remove from playlist"
-msgstr "Retirer de la liste"
-
 msgid "Remove from Playlist"
 msgstr "Retirer de la liste"
 
@@ -856,14 +841,6 @@ msgid "Delete"
 msgstr "Supprimer"
 
 # ---- Playlist Detail: Remove-selected confirm -------------------------------
-
-msgid "Remove from playlist?"
-msgstr "Retirer de la liste ?"
-
-msgid "Remove {n} track from the playlist?"
-msgid_plural "Remove {n} tracks from the playlist?"
-msgstr[0] "Retirer {n} piste de la liste ?"
-msgstr[1] "Retirer {n} pistes de la liste ?"
 
 # ---- Search view ------------------------------------------------------------
 

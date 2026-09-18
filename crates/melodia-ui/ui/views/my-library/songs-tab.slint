@@ -37,6 +37,7 @@ export component MyLibrarySongsTab inherits Rectangle {
             toggle-row-favorite(ids, on) => { Tracks.toggle-row-favorite(ids, on); }
             set-row-rating(ids, n) => { Tracks.set-row-rating(ids, n); }
             select-row(idx, id, sh, ct) => { Tracks.select-row(idx, id, sh, ct); }
+            clear-selection => { Tracks.clear-selection(); }
             // The page's one filter box, not this view's retired own.
             request-blur-search => { MyLibrary.blur-search-tick += 1; }
             go-to-album(aid) => { Tracks.go-to-album(aid); }

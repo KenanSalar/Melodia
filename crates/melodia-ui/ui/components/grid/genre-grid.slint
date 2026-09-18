@@ -81,6 +81,7 @@ export component GenreGrid inherits Rectangle {
                         selectable: true;
                         selected: CardSelection.selected(
                             "genres", genre.id, CardSelection.generation);
+                        selection-live: CardSelection.any-in("genres");
                         select-clicked(shift, ctrl) => {
                             CardSelection.pick("genres", genre.id, shift, ctrl);
                         }
@@ -96,6 +97,7 @@ export component GenreGrid inherits Rectangle {
                     ctx-menu := CardContextMenu {
                         card-kind: "genre";
                         card-id: genre.id;
+                        clear-selection => { CardSelection.clear(); }
                         card-selected: CardSelection.selected(
                             "genres", genre.id, CardSelection.generation);
                         effective-selection: CardSelection.scope == "genres"

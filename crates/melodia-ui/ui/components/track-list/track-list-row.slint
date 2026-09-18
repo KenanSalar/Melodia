@@ -53,6 +53,11 @@ export component TrackListRowItem inherits Rectangle {
     // Derived state.
     property <bool> playing: root.row-data.id == root.playing-track-id;
     property <bool> selected: root.row-data.selected;
+    // Once the view holds a selection the row body picks too. The first pick stays the box's,
+    // which is what keeps an idle list from selecting by accident.
+    property <bool> selecting: root.view-selected-ids.length > 0;
+    // Shift as it stood on the press the pick is about to complete; see `touch.clicked`.
+    property <bool> press-shift;
     // Disk-only Browse rows arrive `enabled == false` — dimmed, and swallowing every
     // interaction: row body, # checkbox, favourite button and right-click menu alike.
     property <bool> enabled: root.row-data.enabled;
@@ -126,6 +131,14 @@ export component TrackListRowItem inherits Rectangle {
     // and leaves room for multi-select later.
     callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
+    // Raised by the context menu; the view that owns the set answers it.
+    callback clear-selection();
+    // The box and the row body both pick through here. Ctrl is forced on whenever shift isn't
+    // held, so the backend's "replace selection" branch is unreachable from either and a pick on
+    // a selected row always removes it.
+    function pick(shift: bool) {
+        root.select-row(root.row-index, root.row-data.id, shift, !shift);
+    }
     // Only emitted under `view-context == "playlist-detail"`.
     callback request-remove-from-playlist([int] /*track_ids*/);
     // The id is the row's own album/artist/genre linkage, already non-zero — the menu hides the
@@ -201,11 +214,33 @@ export component TrackListRowItem inherits Rectangle {
                 root.enable-drag && self.pressed && root.drag-started
                     ? grabbing
                     : default;
+            // A row-body click picks only once the view holds a selection, so the first pick is
+            // the box's and an idle list can't select by accident.
+            //
+            // **On `clicked`, which Slint gates on this area's own `pressed`** — the checkbox,
+            // favourite and rating strip grab their own presses, and the last two are mounted
+            // behind `touch.has-hover` and rewrite the row, so their branch can go while the
+            // grab is live: `handle_mouse_grab` then fails to upgrade and re-dispatches the
+            // release, which lands here. Reading the release out of `pointer-event` picked the
+            // row the user was rating. `clicked` also runs before that event, so `drag-started`
+            // still holds the value the block below is about to reset.
+            clicked => {
+                if (root.enabled && root.selecting && !root.drag-started) {
+                    root.pick(root.press-shift);
+                }
+            }
+            // Still plays while a selection is live: the two clicks pick and unpick, so the set
+            // comes out where it started.
             double-clicked => { root.double-clicked-row(); }
-            // A row-body left-click is a no-op — only the # checkbox drives selection — but it
-            // still bumps the blur request, so clicking anywhere on a row drops filter focus. Drag
-            // press/up tracking shares this handler, `touch` being where Slint delivers them.
+            // The blur request is every left release, so clicking anywhere on a row drops filter
+            // focus. Drag press/up tracking shares this handler, `touch` being where Slint
+            // delivers them.
             pointer-event(ev) => {
+                // `clicked` carries no modifiers, so the shift a range-pick needs is taken off
+                // the press that armed it.
+                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
+                    root.press-shift = ev.modifiers.shift;
+                }
                 if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left) {
                     root.request-blur-search();
                 }
@@ -320,18 +355,10 @@ export component TrackListRowItem inherits Rectangle {
                         cb-touch := TouchArea {
                             mouse-cursor: pointer;
                             // Plain click toggles this row in or out; shift
-                            // range-selects against the anchor. Ctrl is forced on
-                            // whenever shift isn't held, so the backend's "replace
-                            // selection" branch is unreachable from the checkbox and
-                            // clicking a selected row's box always deselects it.
+                            // range-selects against the anchor.
                             pointer-event(ev) => {
                                 if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left && root.enabled) {
-                                    root.select-row(
-                                        root.row-index,
-                                        root.row-data.id,
-                                        ev.modifiers.shift,
-                                        !ev.modifiers.shift,
-                                    );
+                                    root.pick(ev.modifiers.shift);
                                     root.request-blur-search();
                                 }
                             }
@@ -531,6 +558,7 @@ export component TrackListRowItem inherits Rectangle {
             add-to-queue(ids) => { root.add-to-queue(ids); }
             toggle-favorite(ids, on) => { root.toggle-row-favorite(ids, on); }
             request-remove(ids) => { root.request-remove-from-playlist(ids); }
+            clear-selection => { root.clear-selection(); }
             go-to-album(aid) => { root.go-to-album(aid); }
             go-to-artist(aid) => { root.go-to-artist(aid); }
             go-to-genre(gid) => { root.go-to-genre(gid); }

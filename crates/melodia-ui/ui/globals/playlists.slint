@@ -170,9 +170,7 @@ export global PlaylistDetail {
     // `upgrade_in_event_loop`, landing on a fresh tick and so dodging the recursion guard.
     callback request-edit-artwork();
 
-    // The band's pill row reads `selected-ids`; the row context menu passes either the
-    // right-clicked row or the whole selection.
-    callback remove-selected();
+    // The row context menu passes either the right-clicked row or the whole selection.
     callback remove-track([int] /*track_ids*/);
 
     // Rust re-walks the cached tracks through the new needle in memory, no DB round-trip.

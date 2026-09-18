@@ -10,7 +10,7 @@
 // `Browse.selected-ids`, so card mode reads the selection list mode already owns and toggling the
 // mode keeps it.
 export global CardSelection {
-    // Both written by Rust; the pill groups read them through `count-in` below.
+    // Both written by Rust; the grids read them through `count-in` / `any-in` below.
     in-out property <[int]> selected-ids;
     in-out property <string> scope;
     // Bumped on every change, and the argument that re-runs `selected`. A `pure` binding is
@@ -30,8 +30,13 @@ export global CardSelection {
 
     // Pure Slint: the two inputs are real properties that dirty on their own, so this needs no
     // generation and no Rust hop. One home for the scope comparison rather than a ternary
-    // spelled at every pill mount.
+    // spelled at every mount. The count is what a card menu shows and gates `multi-active` on;
+    // `any-in` over it is what a grid hands its cards as `selection-live`.
     public pure function count-in(s: string) -> int {
         return root.scope == s ? root.selected-ids.length : 0;
+    }
+
+    public pure function any-in(s: string) -> bool {
+        return root.count-in(s) > 0;
     }
 }

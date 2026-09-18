@@ -305,50 +305,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     // commit lives in the `rename-playlist` / `delete-playlist`
     // branches in `super::dialog`.
 
-    // remove-selected: batch remove from the open playlist.
-    {
-        let s = state.clone();
-        let pu = playlists_ui.clone();
-        let weak = weak.clone();
-        detail.on_remove_selected(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            let id = pu.detail_playlist_id();
-            if id < 0 {
-                return;
-            }
-            let g = ui.global::<PlaylistDetail>();
-            let ids: Vec<i64> = g.get_selected_ids().iter().map(i64::from).collect();
-            if ids.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            let pu = pu.clone();
-            let weak = weak.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) =
-                    library::playlists::remove_tracks_from_playlist_batch(&s, id, ids).await
-                {
-                    log::warn!("playlists::remove_selected({id}): {}", describe(&e));
-                    return;
-                }
-                let pu_ui = pu.clone();
-                let _ = weak.upgrade_in_event_loop(move |ui| {
-                    playlists_ui_mod::clear_selection(&ui, &pu_ui);
-                });
-                if let Err(e) = playlists_ui_mod::refresh_detail(&s, &pu, weak.clone(), id).await {
-                    log::warn!("playlists::remove_selected refresh: {}", describe(&e));
-                }
-                if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak).await {
-                    log::warn!("playlists::remove_selected refetch grid: {}", describe(&e));
-                }
-            });
-        });
-    }
-
     // remove-track: row-context-menu removal. Single-row mode sends a
     // 1-element array; multi-select sends the entire selection. The
     // batch path goes through `remove_tracks_from_playlist_batch` so
-    // every shape collapses to one DB round-trip.
+    // every shape collapses to one DB round-trip. `refresh_detail`
+    // prunes the removed ids out of the selection on the way back.
     {
         let s = state.clone();
         let pu = playlists_ui.clone();

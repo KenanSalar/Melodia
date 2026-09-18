@@ -8,6 +8,9 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "Clear selection"
+msgstr "Limpiar selección"
+
 # ---- Sidebar / navigation ----------------------------------------------------
 
 msgid "Search"
@@ -82,9 +85,6 @@ msgstr "Limpiar"
 
 msgid "Restart"
 msgstr "Reiniciar"
-
-msgid "Clear selection"
-msgstr "Limpiar selección"
 
 # ---- Now-playing bar tooltips & states --------------------------------------
 
@@ -196,9 +196,6 @@ msgstr "La cola está vacía"
 msgid "Drop to add to queue"
 msgstr "Suelta para añadir a la cola"
 
-msgid "Remove selected"
-msgstr "Quitar selección"
-
 msgid "Remove from Queue"
 msgstr "Quitar de la cola"
 
@@ -213,9 +210,6 @@ msgstr "¿Vaciar la cola?"
 
 msgid "Remove all tracks from the queue? Playback will stop."
 msgstr "¿Quitar todas las pistas de la cola? La reproducción se detendrá."
-
-msgid "Remove from queue?"
-msgstr "¿Quitar de la cola?"
 
 # Plural: track count for the queue header subtitle ("3 tracks", "1 track").
 msgid "{n} track"
@@ -250,12 +244,6 @@ msgid "{n} song"
 msgid_plural "{n} songs"
 msgstr[0] "{n} canción"
 msgstr[1] "{n} canciones"
-
-# Plural: queue-remove confirmation dialog.
-msgid "Remove {n} track from the queue?"
-msgid_plural "Remove {n} tracks from the queue?"
-msgstr[0] "¿Quitar {n} pista de la cola?"
-msgstr[1] "¿Quitar {n} pistas de la cola?"
 
 msgid "{} selected"
 msgstr "{} seleccionado(s)"
@@ -805,9 +793,6 @@ msgstr "Renombrar"
 msgid "Delete playlist"
 msgstr "Eliminar lista"
 
-msgid "Remove from playlist"
-msgstr "Quitar de la lista"
-
 msgid "Remove from Playlist"
 msgstr "Quitar de la lista"
 
@@ -856,14 +841,6 @@ msgid "Delete"
 msgstr "Eliminar"
 
 # ---- Playlist Detail: Remove-selected confirm -------------------------------
-
-msgid "Remove from playlist?"
-msgstr "¿Quitar de la lista?"
-
-msgid "Remove {n} track from the playlist?"
-msgid_plural "Remove {n} tracks from the playlist?"
-msgstr[0] "¿Quitar {n} pista de la lista?"
-msgstr[1] "¿Quitar {n} pistas de la lista?"
 
 # ---- Search view ------------------------------------------------------------
 

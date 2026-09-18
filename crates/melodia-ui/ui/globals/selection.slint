@@ -1,0 +1,47 @@
+import { CardSelection } from "card-selection.slint";
+import { AlbumDetail } from "albums.slint";
+import { ArtistDetail } from "artists.slint";
+import { Favorites, RecentlyPlayed } from "curated.slint";
+import { GenreDetail } from "genres.slint";
+import { PlaylistDetail } from "playlists.slint";
+import { Search } from "search.slint";
+import { Browse, Tracks } from "tracks.slint";
+
+// One question and one verb over every surface that can hold a multi-selection, so the Escape
+// chain asks once instead of importing ten globals to spell a ten-term `||` inside a key binding.
+// A dispatcher over siblings, `globals/dialog.slint`'s shape, and a leaf: nothing imports this.
+//
+// **The queue is deliberately absent.** Its sheet owns Escape for as long as it is up and already
+// clears its own selection on the first press; joining here would put a second arm in front of
+// that one and leave the sheet's dead.
+export global Selection {
+    // Every surface tests its own set, because there is no shared one — the card grids share
+    // `CardSelection` keyed by scope, the nine lists each keep their own `selected-ids`.
+    public pure function any-live() -> bool {
+        return Tracks.selected-ids.length > 0
+            || Browse.selected-ids.length > 0
+            || Search.selected-ids.length > 0
+            || Favorites.selected-ids.length > 0
+            || RecentlyPlayed.selected-ids.length > 0
+            || AlbumDetail.selected-ids.length > 0
+            || ArtistDetail.selected-ids.length > 0
+            || GenreDetail.selected-ids.length > 0
+            || PlaylistDetail.selected-ids.length > 0
+            || CardSelection.selected-ids.length > 0;
+    }
+
+    // Guarded per surface rather than cleared blind: a list's clear walks its whole row model to
+    // unstamp the flags, and only one of these can be the one the user is looking at.
+    public function clear-live() {
+        if (Tracks.selected-ids.length > 0) { Tracks.clear-selection(); }
+        if (Browse.selected-ids.length > 0) { Browse.clear-selection(); }
+        if (Search.selected-ids.length > 0) { Search.clear-selection(); }
+        if (Favorites.selected-ids.length > 0) { Favorites.clear-selection(); }
+        if (RecentlyPlayed.selected-ids.length > 0) { RecentlyPlayed.clear-selection(); }
+        if (AlbumDetail.selected-ids.length > 0) { AlbumDetail.clear-selection(); }
+        if (ArtistDetail.selected-ids.length > 0) { ArtistDetail.clear-selection(); }
+        if (GenreDetail.selected-ids.length > 0) { GenreDetail.clear-selection(); }
+        if (PlaylistDetail.selected-ids.length > 0) { PlaylistDetail.clear-selection(); }
+        if (CardSelection.selected-ids.length > 0) { CardSelection.clear(); }
+    }
+}

@@ -101,8 +101,6 @@ export global Dialog {
             WindowChrome.restart-backdrop();
         } else if (root.kind == "clear-queue") {
             Queue.clear-queue();
-        } else if (root.kind == "remove-queue-selected") {
-            Queue.remove-selected();
         } else if (root.kind == "create-playlist") {
             // Name, optional description, and the ids to auto-add once it exists.
             Playlists.create-playlist(
@@ -129,8 +127,6 @@ export global Dialog {
             } else {
                 Playlists.apply-mosaic(root.target-id, root.mosaic-selection);
             }
-        } else if (root.kind == "remove-playlist-selected") {
-            PlaylistDetail.remove-selected();
         } else if (root.kind == "export-playlists") {
             // Rust reads the ticked rows, asks where to save them, writes them.
             Playlists.export-selected-playlists();

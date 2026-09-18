@@ -38,9 +38,4 @@ export component SortPillRow inherits ActionPill {
             clicked => { root.request-sort(root.fields[i]); }
         }
     }
-
-    // A trailing slot, for the selection group the four grid tabs grow once cards are picked.
-    // Inside this chip rather than a second one beside it, so the row still reads as one control
-    // — and behind the host's own `if`, `SelectionPills` claiming spacing at a count of zero.
-    @children
 }

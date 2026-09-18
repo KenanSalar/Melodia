@@ -101,11 +101,20 @@ silently miss the other.
   Compose inside `ActionPill` with `PillLabel`/`PillDivider`; `IconButton` for round controls
   *outside* chips.
 
-- **`SelectionPills`** — the "{n} selected" + `close` group. **Mount it behind the host's own
-  `if`, never with a count of zero**: the slots are unconditional inside, so a component hiding
-  its own children still claims a `pad-xs` of the pill's spacing. `divider-trails` follows
-  position, not taste. Playlist Detail's row stays hand-rolled, its destructive pill sitting
-  *between* the count and the close.
+- **A multi-selection grows no pill.** The count, every batch action and the way out are the
+  right-click menu's, on rows and cards alike — its "Clear selection" entry is gated on the
+  clicked item being *in* the set, so a menu raised beside one still acts on that item alone.
+  The other exits are Escape (`Selection.clear-live()`) and unpicking the last item. A surface
+  that grows a "{n} selected" chip is putting a second affordance in front of the menu that
+  already carries all of them.
+
+- **A body click that picks belongs on `clicked`, never on `pointer-event`'s release.** Slint
+  gates `clicked` on that TouchArea's own `pressed`, which is the only thing that holds when a
+  nested control unmounts mid-grab: `handle_mouse_grab` then fails to upgrade its weak ref and
+  **re-dispatches the release as a fresh event**, which lands on the ancestor. The track row's
+  favourite toggle and star strip are mounted behind `touch.has-hover` and rewrite the row, so
+  reading the release directly picked the row the user was rating. `clicked` carries no
+  modifiers, so a range-pick takes its shift off the press that armed it.
 
 - **`MetaChip`/`MetaChipStrip` are decorative** — no `TouchArea`, no selected state. The
   *interactive* pill is `chip-group.slint`'s `Chip`. Deliberately not one component: one states a

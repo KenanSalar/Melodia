@@ -63,6 +63,8 @@ export component CardContextMenu inherits Rectangle {
     callback edit-artwork();
     callback edit-rules();
     callback delete-cards([int] /*playlist_ids*/);
+    // Drops the host's whole selection. No payload: the host owns the set.
+    callback clear-selection();
     // Track cards only. Their grids *do* play on activation, so Play over one of them has to mean
     // what clicking it means, the whole displayed set from that track, rather than a queue of one.
     // `TrackContextMenu` carries the same callback for the same reason.
@@ -233,6 +235,18 @@ export component CardContextMenu inherits Rectangle {
                     label: @tr("Go to Artist");
                     icon: "person";
                     clicked => { root.go-to-artist(root.card-artist-id); }
+                }
+
+                // The only way out of a large selection other than Escape, the grids carrying no
+                // clear button. Through the host: five grids keep their set on `CardSelection`
+                // and Browse keeps its cards' on `Browse`, its cards being its list rows. Gated
+                // on this card being in the set, so a menu raised on an unselected card acts on
+                // that card alone and says nothing about a set it isn't part of.
+                if root.card-selected: MenuSeparator {}
+                if root.card-selected: MenuItem {
+                    label: @tr("Clear selection");
+                    icon: "close";
+                    clicked => { root.clear-selection(); }
                 }
 
                 // The playlist block mirrors the card's own hover trio, which stays: the buttons

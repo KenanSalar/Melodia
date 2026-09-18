@@ -11,9 +11,9 @@ import { SelectionPill } from "../components/track-list/selection-pill.slint";
 
 // One fixed-height queue row: number-or-checkbox, artwork, title, duration, delete.
 //
-// **Selection is driven by the checkbox only** — a click on the row body is a no-op for it, the
-// whole-row TouchArea being reserved for drag-to-reorder past a 4 px threshold and double-click
-// skip-to.
+// **The checkbox starts a selection and the row body extends one** — a body click is a no-op
+// until the sheet holds a pick, the whole-row TouchArea otherwise being drag-to-reorder past a
+// 4 px threshold and double-click skip-to.
 //
 // **The drag is hand-rolled rather than built on `DragArea` / `DropArea`.** Those negotiate a drop
 // onto a whole element: no insertion-slot granularity, no edge auto-scroll, and what they add is a
@@ -38,6 +38,18 @@ export component QueueRowItem inherits Rectangle {
     property <bool> is-drag-source: root.row-index == Queue.drag-source;
     property <bool> selected: root.row-data.selected;
     property <bool> show-checkbox: touch.has-hover || root.selected;
+    // Once the sheet holds a selection the row body picks instead of doing nothing; the first
+    // pick stays the checkbox's. The track lists' rule, spelled against the queue's own count.
+    property <bool> selecting: Queue.selected-count > 0;
+    // Modifiers as they stood on the press the pick is about to complete; see `touch.clicked`.
+    property <bool> press-ctrl;
+    property <bool> press-shift;
+
+    // The checkbox and the row body both pick through here. Ctrl is forced on whenever shift
+    // isn't held, so a pick on a selected row always removes it.
+    function pick(ctrl: bool, shift: bool) {
+        Queue.toggle-select(root.row-index, ctrl || !shift, shift);
+    }
 
     // The play-order index snapshotted at right-click, gating this row's `FocusLossWatcher`. An
     // **index**, not `row-data.id`, because a queue may hold one track twice: keyed by id, both
@@ -125,6 +137,15 @@ export component QueueRowItem inherits Rectangle {
         // Grabbing only while actually pressing, not on idle hover.
         touch := TouchArea {
             mouse-cursor: self.pressed ? grabbing : default;
+            // On `clicked`, gated by Slint on this area's own `pressed`, so the hover-mounted
+            // checkbox keeps its click even when its branch goes mid-grab and the release is
+            // re-dispatched — `track-list-row.slint` argues it. Ahead of the drag commit below,
+            // which clears `drag-started`: a row the user dragged must not also be picked.
+            clicked => {
+                if (root.selecting && !root.drag-started) {
+                    root.pick(root.press-ctrl, root.press-shift);
+                }
+            }
             double-clicked => {
                 if (!root.drag-started) {
                     Queue.skip-to(root.row-index);
@@ -132,6 +153,9 @@ export component QueueRowItem inherits Rectangle {
             }
             pointer-event(ev) => {
                 if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
+                    // `clicked` carries no modifiers, so they are taken off the press.
+                    root.press-ctrl = ev.modifiers.control;
+                    root.press-shift = ev.modifiers.shift;
                     root.press-abs-y = self.absolute-position.y + self.pressed-y;
                     root.drag-started = false;
                     // Arm the ghost. The timer publishes `drag-source` a beat later so
@@ -254,18 +278,15 @@ export component QueueRowItem inherits Rectangle {
                                 Checkbox {
                                     checked: root.selected;
                                 }
-                                // Selection is the checkbox's alone; the row body is
-                                // unbound. Modifiers ride through `ev.modifiers`.
+                                // The box starts a selection; once one is live the row body
+                                // picks too. Modifiers ride through `ev.modifiers`.
                                 cb-touch := TouchArea {
                                     mouse-cursor: pointer;
                                     pointer-event(ev) => {
                                         if (ev.kind == PointerEventKind.up
                                             && ev.button == PointerEventButton.left) {
-                                            Queue.toggle-select(
-                                                root.row-index,
-                                                ev.modifiers.control || !ev.modifiers.shift,
-                                                ev.modifiers.shift,
-                                            );
+                                            root.pick(
+                                                ev.modifiers.control, ev.modifiers.shift);
                                         }
                                     }
                                 }
@@ -396,6 +417,7 @@ export component QueueRowItem inherits Rectangle {
             // The one action that stays index-shaped: `remove-selected` reads the Rust shadow, so
             // a queue holding one track twice removes the rows the user ticked rather than every
             // row sharing their ids. The payload is ignored for exactly that reason.
+            clear-selection => { Queue.clear-selection(); }
             request-remove(ids) => {
                 if (ctx-menu.multi-active) {
                     Queue.remove-selected();

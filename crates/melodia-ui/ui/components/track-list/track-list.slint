@@ -56,6 +56,7 @@ export component TrackList inherits Rectangle {
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new_state*/);
     callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
+    callback clear-selection();
     callback request-blur-search();
     // Cross-tab navigation from the row's context menu.
     callback go-to-album(int /*album_id*/);
@@ -135,6 +136,7 @@ export component TrackList inherits Rectangle {
                 toggle-row-favorite(ids, on) => { root.toggle-row-favorite(ids, on); }
                 set-row-rating(ids, n) => { root.set-row-rating(ids, n); }
                 select-row(i, id, sh, ct) => { root.select-row(i, id, sh, ct); }
+                clear-selection => { root.clear-selection(); }
                 request-blur-search => { root.request-blur-search(); }
                 go-to-album(aid) => { root.go-to-album(aid); }
                 go-to-artist(aid) => { root.go-to-artist(aid); }

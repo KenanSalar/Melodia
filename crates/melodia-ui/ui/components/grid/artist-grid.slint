@@ -79,6 +79,7 @@ export component ArtistGrid inherits Rectangle {
                         selectable: true;
                         selected: CardSelection.selected(
                             "artists", artist.id, CardSelection.generation);
+                        selection-live: CardSelection.any-in("artists");
                         select-clicked(shift, ctrl) => {
                             CardSelection.pick("artists", artist.id, shift, ctrl);
                         }
@@ -94,6 +95,7 @@ export component ArtistGrid inherits Rectangle {
                     ctx-menu := CardContextMenu {
                         card-kind: "artist";
                         card-id: artist.id;
+                        clear-selection => { CardSelection.clear(); }
                         card-selected: CardSelection.selected(
                             "artists", artist.id, CardSelection.generation);
                         effective-selection: CardSelection.scope == "artists"

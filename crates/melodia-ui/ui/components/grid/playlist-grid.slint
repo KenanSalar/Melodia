@@ -92,6 +92,7 @@ export component PlaylistGrid inherits Rectangle {
                         selectable: true;
                         selected: CardSelection.selected(
                             "playlists", playlist.id, CardSelection.generation);
+                        selection-live: CardSelection.any-in("playlists");
                         select-clicked(shift, ctrl) => {
                             CardSelection.pick("playlists", playlist.id, shift, ctrl);
                         }
@@ -159,6 +160,7 @@ export component PlaylistGrid inherits Rectangle {
                         card-kind: "playlist";
                         card-id: playlist.id;
                         card-is-smart: playlist.is_smart;
+                        clear-selection => { CardSelection.clear(); }
                         card-selected: CardSelection.selected(
                             "playlists", playlist.id, CardSelection.generation);
                         effective-selection: CardSelection.scope == "playlists"

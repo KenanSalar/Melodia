@@ -5,7 +5,7 @@ import { Queue } from "../globals/queue.slint";
 import { ListTravel } from "../globals/list-travel.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
 import { IconButton } from "../components/icon-button.slint";
-import { ActionPill, PillButton, PillLabel, PillDivider } from "../components/action-pill.slint";
+import { ActionPill, PillButton } from "../components/action-pill.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { QueueRowItem } from "queue-row-item.slint";
 
@@ -52,7 +52,6 @@ export component QueueSheet inherits Rectangle {
     }
 
     private property <bool> has-rows: Queue.rows.length > 0;
-    private property <bool> has-selection: Queue.selected-count > 0;
 
     // Owned here and handed to every row. The drop indicator and the rows' slot math
     // both derive from it, so **one value is what keeps the painted line and the
@@ -233,43 +232,9 @@ export component QueueSheet inherits Rectangle {
                     }
                     Rectangle { horizontal-stretch: 1; }
 
-                    // Swaps between "Clear queue" and the selection actions. Same chrome
-                    // as the Songs tab's selection pill, and `if` rather than `visible:`
-                    // so the absent branch leaves no phantom layout slot.
-                    if root.has-selection: VerticalLayout {
-                        alignment: center;
-                        ActionPill {
-                            PillLabel {
-                                text: @tr("{} selected", Queue.selected-count);
-                            }
-                            PillButton {
-                                icon: "close";
-                                tooltip-text: @tr("Clear selection");
-                                clicked => { Queue.clear-selection(); }
-                            }
-                            PillDivider { }
-                            PillButton {
-                                text: @tr("Remove");
-                                danger: true;
-                                tooltip-text: @tr("Remove selected");
-                                clicked => {
-                                    Dialog.title = @tr("Remove from queue?");
-                                    // Slint forwards the `singular|plural % n` form to
-                                    // gettext's `msgid`/`msgid_plural`.
-                                    Dialog.message = @tr(
-                                        "Remove {n} track from the queue?" | "Remove {n} tracks from the queue?" % Queue.selected-count
-                                    );
-                                    Dialog.confirm-label = @tr("Remove");
-                                    Dialog.cancel-label = @tr("Cancel");
-                                    Dialog.destructive = true;
-                                    Dialog.kind = "remove-queue-selected";
-                                    Dialog.target-id = -1;
-                                    Dialog.open = true;
-                                }
-                            }
-                        }
-                    }
-                    if !root.has-selection && root.has-rows: VerticalLayout {
+                    // `if` rather than `visible:` so the absent branch leaves no phantom
+                    // layout slot.
+                    if root.has-rows: VerticalLayout {
                         alignment: center;
                         ActionPill {
                             PillButton {

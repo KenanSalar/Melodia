@@ -72,9 +72,13 @@ export component EntityCard inherits Rectangle {
     // that says nothing draws no box and is unaffected.
     in property <bool> selectable: false;
     in property <bool> selected: false;
+    // Whether the host's scope already holds a pick, which is what turns the body into a second
+    // way to select. The host answers, the scope being its own.
+    in property <bool> selection-live: false;
 
     callback clicked();
-    // The box was clicked; the host applies the modifiers against its own selection scope.
+    // The box or the body was clicked; the host applies the modifiers against its own selection
+    // scope.
     callback select-clicked(bool /*shift*/, bool /*ctrl*/);
     // A right-click, in this card's own coordinate frame. The host keeps the snapshot, the
     // highlight key and the menu, as `TrackListRowItem` does for a row.
@@ -95,6 +99,16 @@ export component EntityCard inherits Rectangle {
     // row swapping its number for a checkbox. Idle and unselected it is gone and the badge is
     // back, so a card nobody is pointing at looks exactly as it did.
     private property <bool> box-shown: root.selectable && (root.card-hovered || root.selected);
+
+    // One click cannot both pick and open, so a live selection costs the detail until it is
+    // cleared. The first pick is still the box's, which is what keeps an idle grid navigable.
+    private property <bool> picking: root.selectable && root.selection-live;
+    // Shift as it stood on the press the pick is about to complete; see `touch.clicked`.
+    private property <bool> press-shift;
+    // Both the box and the body pick through here. Ctrl is forced on whenever shift isn't held,
+    // so the backend's "replace selection" branch is unreachable and a pick on a selected card
+    // always removes it.
+    function pick(shift: bool) { root.select-clicked(shift, !shift); }
 
     // The corner cross-fades on the same curve the overlay's controls ride, so the box arrives
     // with them rather than snapping in over a card whose buttons are still easing.
@@ -204,8 +218,23 @@ export component EntityCard inherits Rectangle {
         // background, no cover zoom and no click — the `TrackListRowItem` contract.
         enabled: root.enabled;
         mouse-cursor: pointer;
-        clicked => { root.clicked(); }
+        // Both arms on `clicked`, which Slint gates on this area's own `pressed`: the box and the
+        // host's overlay controls grab their own presses, so neither can reach this even if one
+        // unmounts mid-grab and Slint re-dispatches the release. One handler also means `picking`
+        // is read once, so unpicking the last card cannot open its detail on the way out.
+        clicked => {
+            if (root.picking) {
+                root.pick(root.press-shift);
+            } else {
+                root.clicked();
+            }
+        }
         pointer-event(ev) => {
+            // `clicked` carries no modifiers, so the shift a range-pick needs is taken off the
+            // press that armed it.
+            if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
+                root.press-shift = ev.modifiers.shift;
+            }
             if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
                 root.context-requested(touch.mouse-x, touch.mouse-y);
             }
@@ -337,7 +366,7 @@ export component EntityCard inherits Rectangle {
             // to add — the whole feature, lost to one plausible-looking line.
             pointer-event(ev) => {
                 if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left) {
-                    root.select-clicked(ev.modifiers.shift, !ev.modifiers.shift);
+                    root.pick(ev.modifiers.shift);
                 }
                 // This area sits over the card's own `touch`, which never sees a press inside it,
                 // so without this the corner is a hole in the card's right-click. Offset by the

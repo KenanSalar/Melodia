@@ -1,13 +1,11 @@
 import { Theme } from "../theme.slint";
 import { Favorites } from "../globals/curated.slint";
-import { CardSelection } from "../globals/card-selection.slint";
 import { GridColumnsSync } from "../components/grid-columns-sync.slint";
 import { GridGeometry } from "../components/grid-geometry.slint";
 import { MosaicTabHero } from "../components/hero/mosaic-tab-hero.slint";
 import { TooltipFrame } from "../components/tooltip-frame.slint";
 import { ViewTransition } from "../components/view-transition.slint";
 import { ActionPill, PillButton, PillDivider } from "../components/action-pill.slint";
-import { SelectionPills } from "../components/selection-pills.slint";
 import { SortPillRow } from "../components/sort-pill-row.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
@@ -108,8 +106,8 @@ export component FavoritesView inherits Rectangle {
                 Favorites.tab-changed(i);
             }
 
-            // Songs gets the full pill — Shuffle, column toggle, selection chip;
-            // Most Played a Shuffle scoped to what its grid shows. Favorite
+            // Songs gets the full pill — Shuffle and the column toggle; Most
+            // Played a Shuffle scoped to what its grid shows. Favorite
             // Artists gets neither, since shuffling and track columns mean
             // nothing over a list of artists, and carries the entity grids' sort
             // row instead. **Most Played has no sort row on purpose**: its title
@@ -131,13 +129,6 @@ export component FavoritesView inherits Rectangle {
                         columns <=> Favorites.track-columns;
                         toggled(id) => { Favorites.toggle-column(id); }
                     }
-                    if Favorites.selected-ids.length > 0: SelectionPills {
-                        count: Favorites.selected-ids.length;
-                        cleared => {
-                            Favorites.clear-selection();
-                            Favorites.blur-search-tick += 1;
-                        }
-                    }
                 }
             }
 
@@ -151,10 +142,6 @@ export component FavoritesView inherits Rectangle {
                         icon: "shuffle";
                         text: @tr("Shuffle");
                         clicked => { Favorites.shuffle-most-played(); }
-                    }
-                    if CardSelection.count-in("fav-most-played") > 0: SelectionPills {
-                        count: CardSelection.count-in("fav-most-played");
-                        cleared => { CardSelection.clear(); }
                     }
                 }
             }
@@ -174,10 +161,6 @@ export component FavoritesView inherits Rectangle {
                     sort-field: Favorites.artist-sort-field;
                     sort-dir: Favorites.artist-sort-dir;
                     request-sort(f) => { Favorites.request-artist-sort(f); }
-                    if CardSelection.count-in("fav-artists") > 0: SelectionPills {
-                        count: CardSelection.count-in("fav-artists");
-                        cleared => { CardSelection.clear(); }
-                    }
                 }
             }
         }

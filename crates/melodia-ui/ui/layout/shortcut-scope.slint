@@ -3,6 +3,7 @@ import { Nav, NavEnterFrom } from "../globals/nav.slint";
 import { Onboarding } from "../globals/onboarding.slint";
 import { Player } from "../globals/player.slint";
 import { Queue } from "../globals/queue.slint";
+import { Selection } from "../globals/selection.slint";
 import { MiniPlayer, WindowChrome } from "../globals/shell.slint";
 
 // The app's global keyboard shortcuts, and the focus scope catching them. It takes the whole main
@@ -123,7 +124,8 @@ export component ShortcutScope inherits FocusScope {
     property <bool> queue-sheet-up: Queue.open && !MiniPlayer.active;
 
     key-pressed(ev) => {
-        // Priority: dialog cancel, then the queue sheet, then closing Now Playing. A nested
+        // Priority: dialog cancel, the queue sheet, a live selection, then closing Now Playing. A
+        // nested
         // `FocusScope` can't own the sheet's Esc — Slint focuses a scope on mouse press, never on
         // mount — so owning both keys at the root is what makes the priority explicit.
         if (ev.text == Key.Escape) {
@@ -145,6 +147,13 @@ export component ShortcutScope inherits FocusScope {
                 } else {
                     Queue.dismiss();
                 }
+                return accept;
+            }
+            // The list and card selections, which have no clear button of their own. Above Now
+            // Playing so a press over an open one drops the selection rather than the page under
+            // it; below the sheet, which answers for its own.
+            if (Selection.any-live()) {
+                Selection.clear-live();
                 return accept;
             }
             if (Nav.now-playing-open) {
