@@ -125,12 +125,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 {
                     Ok(_) => {
                         if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak).await {
-                            log::warn!("playlists::create_playlist refetch: {e}");
+                            log::warn!("playlists::create_playlist refetch: {}", describe(&e));
                         }
                         log::info!("playlists::create_playlist: {name_str:?}");
                     }
                     Err(e) => {
-                        log::warn!("playlists::create_playlist {name_str:?}: {e}");
+                        log::warn!("playlists::create_playlist {name_str:?}: {}", describe(&e));
                     }
                 }
             });
@@ -172,18 +172,18 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 {
                     Ok(_) => {
                         if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak.clone()).await {
-                            log::warn!("playlists::rename refetch grid: {e}");
+                            log::warn!("playlists::rename refetch grid: {}", describe(&e));
                         }
                         if pu.detail_playlist_id() == id
                             && let Err(e) =
                                 playlists_ui_mod::refresh_detail(&s, &pu, weak, id).await
                         {
-                            log::warn!("playlists::rename refresh detail: {e}");
+                            log::warn!("playlists::rename refresh detail: {}", describe(&e));
                         }
                         log::info!("playlists::rename({id}): {name_str:?}");
                     }
                     Err(e) => {
-                        log::warn!("playlists::rename({id}) {name_str:?}: {e}");
+                        log::warn!("playlists::rename({id}) {name_str:?}: {}", describe(&e));
                     }
                 }
             });
@@ -313,17 +313,17 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
                 if let Err(e) = library::playlists::set_playlist_thumbnail(&s, id, path_vec).await {
-                    log::warn!("playlists::apply_mosaic({id}): {e}");
+                    log::warn!("playlists::apply_mosaic({id}): {}", describe(&e));
                     return;
                 }
                 if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak.clone()).await {
-                    log::warn!("playlists::apply_mosaic refetch grid: {e}");
+                    log::warn!("playlists::apply_mosaic refetch grid: {}", describe(&e));
                 }
                 if pu.detail_playlist_id() == id
                     && let Err(e) =
                         playlists_ui_mod::refresh_detail(&s, &pu, weak.clone(), id).await
                 {
-                    log::warn!("playlists::apply_mosaic refresh detail: {e}");
+                    log::warn!("playlists::apply_mosaic refresh detail: {}", describe(&e));
                 }
             });
         });
@@ -354,17 +354,17 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 )
                 .await
                 {
-                    log::warn!("playlists::clear_artwork: {e}");
+                    log::warn!("playlists::clear_artwork: {}", describe(&e));
                     return;
                 }
                 if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak.clone()).await {
-                    log::warn!("playlists::clear_artwork refetch grid: {e}");
+                    log::warn!("playlists::clear_artwork refetch grid: {}", describe(&e));
                 }
                 if pu.detail_playlist_id() == id
                     && let Err(e) =
                         playlists_ui_mod::refresh_detail(&s, &pu, weak.clone(), id).await
                 {
-                    log::warn!("playlists::clear_artwork refresh detail: {e}");
+                    log::warn!("playlists::clear_artwork refresh detail: {}", describe(&e));
                 }
             });
         });
@@ -403,14 +403,26 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     ),
                 );
                 let playlist_stats = playlists_res.unwrap_or_else(|e| {
-                    log::warn!("playlists::request_add_to_playlist get_playlists: {e}");
+                    log::warn!(
+                        "playlists::request_add_to_playlist get_playlists: {}",
+                        describe(&e)
+                    );
                     Vec::new()
                 });
                 let counts = counts_res.unwrap_or_else(|e| {
-                    log::warn!("playlists::request_add_to_playlist counts: {e}");
+                    log::warn!("playlists::request_add_to_playlist counts: {}", describe(&e));
                     std::collections::HashMap::new()
                 });
                 let _ = weak.upgrade_in_event_loop(move |ui| {
+                    let dlg = ui.global::<Dialog>();
+                    // The menu set the chrome two queries ago and left `open` alone, so a
+                    // dialog raised since this started owns `Dialog` now and the `set_open`
+                    // below would force the picker's rows up under its heading. The card
+                    // menu's arm resolves entity ids to tracks first, which is what widened
+                    // the window enough to be worth a guard.
+                    if dlg.get_open() {
+                        return;
+                    }
                     // Skip rows whose i64 playlist id can't fit in the
                     // Slint-side i32 (`PlaylistPickRow.id`). The picker's
                     // toggle / commit route back into Rust by that id
@@ -448,7 +460,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                             })
                         })
                         .collect();
-                    let dlg = ui.global::<Dialog>();
                     dlg.set_playlist_pick_rows(ModelRc::new(VecModel::from(rows)));
                     dlg.set_add_select_all(false);
                     dlg.set_add_selected_count(0);

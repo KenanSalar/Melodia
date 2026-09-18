@@ -101,7 +101,8 @@ fn pick(
         return None;
     }
     let same_scope = current.scope == asking_scope;
-    let scope = asking_scope.to_owned();
+    // Owned at each of the three returns rather than once above them: only one runs, and a
+    // binding ahead of the branches allocates on the plain-click path that never reads it.
     let single = |anchor| Selection { scope: asking_scope.to_owned(), ids: vec![id], anchor };
 
     if shift && same_scope && current.anchor != 0 {
@@ -114,7 +115,11 @@ fn pick(
             return Some(single(id));
         };
         let (lo, hi) = if from <= to { (from, to) } else { (to, from) };
-        return Some(Selection { scope, ids: visible[lo..=hi].to_vec(), anchor: current.anchor });
+        return Some(Selection {
+            scope: asking_scope.to_owned(),
+            ids: visible[lo..=hi].to_vec(),
+            anchor: current.anchor,
+        });
     }
 
     if ctrl && same_scope {
@@ -125,7 +130,7 @@ fn pick(
             }
             None => ids.push(id),
         }
-        return Some(Selection { scope, ids, anchor: id });
+        return Some(Selection { scope: asking_scope.to_owned(), ids, anchor: id });
     }
 
     Some(single(id))

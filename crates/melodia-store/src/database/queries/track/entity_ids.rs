@@ -26,8 +26,12 @@ pub async fn track_ids_by_albums(
     .await
 }
 
-/// Artist tracks in natural order. A track credited to several selected artists comes back once
-/// per artist; the caller dedupes when it flattens.
+/// Artist tracks in natural order.
+///
+/// **Joins where [`super::get_tracks_by_artist_for_list`] deliberately doesn't**, the artist id
+/// having to be in the projection for the caller to group on. So a row repeats both across
+/// selected artists and inside one that credits the same artist twice, and the caller's dedupe is
+/// what covers the second case here.
 pub async fn track_ids_by_artists(
     db: &DbPool,
     artist_ids: &[i64],
@@ -43,7 +47,7 @@ pub async fn track_ids_by_artists(
     .await
 }
 
-/// Genre tracks in natural order, with the same multi-membership caveat as the artist arm.
+/// Genre tracks in natural order, joined and deduped for the reason the artist arm above gives.
 pub async fn track_ids_by_genres(
     db: &DbPool,
     genre_ids: &[i64],
