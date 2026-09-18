@@ -15,7 +15,7 @@ use melodia_testkit::{MIN_SLINT_SOURCES, UI_DIR, stripped_sources};
 ///
 /// Edit-Artwork is the sixth, and the only one whose fold bought more than a single
 /// spelling: both its callers are Rust, where `@tr` cannot reach a literal, so the mosaic
-/// picker shipped an English title and confirm button in every catalogue until
+/// picker shipped an English title and both buttons in every catalogue until
 /// `Dialog.prepare-edit-artwork()` took them. Its entry holds a `.slint` site re-inlining
 /// the kind rather than those two callers, this walk reading only the `.slint` tree.
 ///
