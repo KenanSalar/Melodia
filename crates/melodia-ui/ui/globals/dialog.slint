@@ -311,9 +311,12 @@ export global Dialog {
         root.open = true;
     }
 
-    // Two call sites, the open playlist's pill row and the grid card's menu. **Folded while New
-    // Smart Playlist beside it stays inline**: the two share a `kind` and nothing else, where these
-    // two are the same dialog reached from two places.
+    // Two call sites, the open playlist's pill row and the grid card's menu.
+    //
+    // **Shares a `kind` with the opener below and nothing else**, which is why they are two
+    // functions rather than one taking an id: Edit Rules / Save over a list that exists, New Smart
+    // Playlist / Create over one that doesn't. A count-ternary between them would put both
+    // headings behind one call and leave the `target-id` convention implicit.
     //
     // Doesn't set `open`, as `open-tag-editor` doesn't: Rust raises the card once the rules load.
     public function open-edit-smart-rules(id: int) {
@@ -326,6 +329,24 @@ export global Dialog {
         root.kind = "smart-playlist-editor";
         root.target-id = id;
         SmartEditor.request-edit(id);
+    }
+
+    // The Playlists tab's New Smart Playlist pill, and its one caller. Here for the claim, as
+    // `prepare-export-playlists` is: `request-new` raises from a fresh tick, so the window where
+    // `open` is still false is real, and chrome written inline through it retires nothing that was
+    // already resolving.
+    //
+    // `target-id` is `-1` for "no list yet", which is what `smart.rs`'s commit branches on.
+    public function open-new-smart-playlist() {
+        root.claim-request();
+        root.title = @tr("New Smart Playlist");
+        root.message = "";
+        root.confirm-label = @tr("Create");
+        root.cancel-label = @tr("Cancel");
+        root.destructive = false;
+        root.kind = "smart-playlist-editor";
+        root.target-id = -1;
+        SmartEditor.request-new();
     }
 
     // The picker's chrome, for the track row menu and the card menu both. **The heading is the
@@ -361,5 +382,21 @@ export global Dialog {
         root.input-text = "";
         root.mosaic-selection = [];
         root.mosaic-touched = false;
+    }
+
+    // The export picker's chrome, for the Playlists tab's overflow. One caller, so it is here
+    // for the claim rather than to state the strings once: the raise crosses a fetch, and an
+    // inline block leaves `open` false through all of it without retiring whatever else was
+    // mid-flight.
+    //
+    // Doesn't set `open`: Rust recounts the smart lists before it raises the card.
+    public function prepare-export-playlists() {
+        root.claim-request();
+        root.title = @tr("Export Playlists");
+        root.message = @tr("Choose playlists to export.");
+        root.confirm-label = @tr("Export");
+        root.cancel-label = @tr("Cancel");
+        root.destructive = false;
+        root.kind = "export-playlists";
     }
 }

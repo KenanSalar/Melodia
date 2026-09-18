@@ -15,10 +15,6 @@ import { FocusLossWatcher } from "focus-loss-watcher.slint";
 // hold each other's highlight. `close-on-click` because every entry here acts and dismisses.
 export component PillOverflowMenu inherits Rectangle {
     in property <string> menu-id;
-    // Every close path clears `PopupHighlight.id` back to "", which is also this property's
-    // default, so the `!= ""` half is what stops a host that forgot to set one sitting in its
-    // pressed background with a live watcher. `MenuSurface` carries the same guard.
-    property <bool> holds-highlight: root.menu-id != "" && PopupHighlight.id == root.menu-id;
     in property <string> tooltip-text;
     in property <length> menu-width: 220px;
     // Suppresses the in-tree tooltip where the host paints one on a higher layer, forwarded
@@ -28,6 +24,11 @@ export component PillOverflowMenu inherits Rectangle {
     // Read back rather than answered here, so the host's frame aligns its pill off the same
     // property the in-tree mount does. Always true for a glyph-only trigger.
     out property <bool> icon-only: btn.icon-only;
+
+    // Every close path clears `PopupHighlight.id` back to "", which is also `menu-id`'s default,
+    // so the `!= ""` half is what stops a host that forgot to set one sitting in its pressed
+    // background with a live watcher. `MenuSurface` carries the same guard.
+    property <bool> holds-highlight: root.menu-id != "" && PopupHighlight.id == root.menu-id;
 
     // Sized to the pill row's height so the popup hangs off this box rather than off the
     // button's own alignment inside it.

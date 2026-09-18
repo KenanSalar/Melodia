@@ -27,8 +27,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, notifications: &Rc<Notifica
     let weak = ui.as_weak();
 
     // request-export-playlists: fetch all playlists, fill the picker model
-    // (none selected — the user opts in), then open the dialog (chrome was
-    // set inline in Slint).
+    // (none selected — the user opts in), then open the dialog (chrome came
+    // from `Dialog.prepare-export-playlists`).
     {
         let s = state.clone();
         let weak = weak.clone();

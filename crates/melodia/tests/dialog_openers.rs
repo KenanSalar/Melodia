@@ -1,4 +1,5 @@
-//! Every dialog with more than one caller opens through a function of its own.
+//! Every dialog that two callers share, or that raises from a later tick, opens through a
+//! function of its own.
 
 use melodia_testkit::{MIN_SLINT_SOURCES, UI_DIR, stripped_sources};
 
@@ -24,27 +25,38 @@ use melodia_testkit::{MIN_SLINT_SOURCES, UI_DIR, stripped_sources};
 /// dialog, two headings, and two msgids translated separately in all six catalogues,
 /// with nothing failing.
 ///
-/// **Every other `Dialog.kind` write stays inline and stays out of this**, because those
-/// kinds have one caller each and a populate block with one caller is already stated
-/// once, where it is used. `smart-playlist-editor` is the interesting exception and cannot
-/// join the list: three sites share that `kind`, and only two of them are the same dialog.
-/// Edit Rules / Save over an existing list folded into `Dialog.open-edit-smart-rules()`;
-/// New Smart Playlist / Create still writes the kind inline, so an entry here would read
-/// that site as an offender. Two callers is the trigger for folding only when the two are
-/// meant to be the same dialog.
+/// **A second caller is not the only trigger, and the other one is a deferred raise.**
+/// Export and New Smart Playlist have one caller each and are folded anyway: both leave
+/// `open` false while Rust fetches or hops a tick, and a claim is a thing only a function
+/// can take — `Dialog.claim-request()` bumps the generation `ui::callbacks::DialogClaim`
+/// re-checks, and an inline populate block bumps nothing, so a slower flow it should have
+/// retired goes on to fill the global underneath it. `prepare-export-playlists` and
+/// `open-new-smart-playlist` are those two.
+///
+/// Folding the second retired the reason `smart-playlist-editor` used to be excluded here:
+/// three sites shared that `kind` and only two were the same dialog, so an entry would have
+/// read New Smart Playlist as an offender. Both halves are openers now, two functions rather
+/// than one because Edit Rules / Save and New Smart Playlist / Create differ in every string
+/// they carry.
+///
+/// **Every other `Dialog.kind` write stays inline and stays out of this**, because each has
+/// one caller *and* raises `open` in the same handler, where a populate block is already
+/// stated once and nothing can overtake it.
 ///
 /// Deliberately no census of the inline kinds here. One was written down once and was
 /// wrong within a release, every feature that raises a dialog moving it.
 #[test]
 fn every_multi_caller_dialog_opens_through_its_own_function() {
     const OWNER: &str = "globals/dialog.slint";
-    const FOLDED_KINDS: [&str; 6] = [
+    const FOLDED_KINDS: [&str; 8] = [
         "create-playlist",
         "rename-playlist",
         "delete-playlist",
         "edit-tags",
         "add-to-playlist",
         "edit-playlist-artwork",
+        "export-playlists",
+        "smart-playlist-editor",
     ];
 
     let sources = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES);
@@ -80,14 +92,13 @@ fn every_multi_caller_dialog_opens_through_its_own_function() {
 
     assert!(
         offenders.is_empty(),
-        "these dialogs are opened through `{OWNER}`'s own \
-         `open-create-playlist` / `open-rename-playlist` / `open-delete-playlist` / \
-         `open-tag-editor` / `prepare-add-to-playlist` / `prepare-edit-artwork`, so the message, \
-         the confirm label and the `destructive` flag are stated once. `open-tag-editor` and \
-         `prepare-add-to-playlist` take their heading as an argument, their callers counting \
-         different things. A site that re-spells the populate block \
-         compiles, opens the right dialog, and is free to drift on any of them — which is how \
-         Ctrl+N came to raise a second heading with a msgid of its own:\n{}",
+        "these dialogs are opened through a function of `{OWNER}`'s own, so the message, the \
+         confirm label and the `destructive` flag are stated once and the raise takes a claim. \
+         `open-tag-editor` and `prepare-add-to-playlist` take their heading as an argument, their \
+         callers counting different things. A site that re-spells the populate block compiles, \
+         opens the right dialog, and is free to drift on any of them — which is how Ctrl+N came \
+         to raise a second heading with a msgid of its own — and, where the raise is deferred, \
+         silently outlives whatever was already resolving:\n{}",
         offenders.join("\n")
     );
 }

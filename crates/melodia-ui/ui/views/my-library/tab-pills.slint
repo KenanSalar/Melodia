@@ -4,7 +4,6 @@ import { AlbumDetail, Albums } from "../../globals/albums.slint";
 import { ArtistDetail, Artists } from "../../globals/artists.slint";
 import { GenreDetail, Genres } from "../../globals/genres.slint";
 import { PlaylistDetail, Playlists } from "../../globals/playlists.slint";
-import { SmartEditor } from "../../globals/dialog-forms.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { ActionPill, PillButton, PillDivider } from "../../components/action-pill.slint";
 import { MenuItem } from "../../components/context-menu.slint";
@@ -225,14 +224,7 @@ export component MyLibraryTabPills inherits Rectangle {
                     tooltip-text: @tr("Create a playlist from rules");
                     tooltip-overlay: true;
                     clicked => {
-                        Dialog.title = @tr("New Smart Playlist");
-                        Dialog.message = "";
-                        Dialog.confirm-label = @tr("Create");
-                        Dialog.cancel-label = @tr("Cancel");
-                        Dialog.destructive = false;
-                        Dialog.kind = "smart-playlist-editor";
-                        Dialog.target-id = -1;
-                        SmartEditor.request-new();
+                        Dialog.open-new-smart-playlist();
                     }
                 }
 
@@ -256,14 +248,7 @@ export component MyLibraryTabPills inherits Rectangle {
                         label: @tr("Export");
                         icon: "upload";
                         clicked => {
-                            // Chrome inline so `@tr` applies; Rust fills the rows and opens
-                            // from a fresh tick.
-                            Dialog.title = @tr("Export Playlists");
-                            Dialog.message = @tr("Choose playlists to export.");
-                            Dialog.confirm-label = @tr("Export");
-                            Dialog.cancel-label = @tr("Cancel");
-                            Dialog.destructive = false;
-                            Dialog.kind = "export-playlists";
+                            Dialog.prepare-export-playlists();
                             Playlists.request-export-playlists();
                         }
                     }

@@ -135,7 +135,9 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   - **Which makes a `for_list` query's own `ORDER BY` dead, and copying one the trap.** Every
     detail view re-sorts what it fetched, so that clause decides nothing there.
     `queries::track::entity_ids`, which answers what a card's right-click Play queues, has no
-    re-sort behind it and its clause is the whole answer. The two have to agree or the same set
+    re-sort behind it and its clause is the whole answer. The two have to agree on the page's
+    **default** and can agree on nothing else, `resolve_view_sort` reading a field the user
+    persisted into `views.json`. Short of that they disagree from the first row: the same set
     plays in one order from the page and another from the card beside it, which is what shipped:
     `sort_key` where Artist and Genre Detail default to `"album"`, and bare nullable columns where
     `ui::track_sort` maps an untagged track to `i32::MAX` and SQLite sorts NULL first. Nothing can

@@ -43,10 +43,11 @@ pub(super) fn wire(ui: &AppWindow, _state: &AppState, tracks_ui: &Arc<TracksUi>)
         // arriving while this tab is unmounted into the same flag.
         if !active {
             // The one exception, and it releases nothing: a selection the user can no longer
-            // see still answers `Selection.any-live()`, so Escape over Now Playing would drop
-            // it rather than close the page. Its six siblings clear on leave for the same
-            // reason. Guarded on there being one, the unstamp walking a model that is
-            // library-sized here precisely because it survives.
+            // see still answers `Selection.any-live()`, so it swallows an Escape meant for the
+            // page they moved to, and comes back stamped on re-entry. Every sibling surface
+            // hands its own back on leave for the same reason, most of them by emptying the
+            // model the set is stamped on. Guarded on there being one, the unstamp walking a
+            // model that is library-sized here precisely because it survives.
             if let Some(ui) = weak.upgrade()
                 && ui.global::<Tracks>().get_selected_ids().row_count() > 0
             {

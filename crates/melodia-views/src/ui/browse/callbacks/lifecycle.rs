@@ -57,9 +57,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
                 if let Some(ui) = weak.upgrade() {
                     ui.global::<Browse>().set_covers_generation(0);
                     // A selection the user can no longer see still answers
-                    // `Selection.any-live()`, so Escape over Now Playing would drop it rather
-                    // than close the page. Guarded on there being one, the unstamp walking
-                    // every row of the directory.
+                    // `Selection.any-live()`, so it swallows an Escape meant for the page they
+                    // moved to, and comes back stamped on re-entry. Guarded on there being one,
+                    // the unstamp walking every row of the directory.
                     if ui.global::<Browse>().get_selected_ids().row_count() > 0 {
                         browse_ui_mod::clear_selection(&ui);
                     }

@@ -21,7 +21,7 @@ const UNTAGGED_TRACK_LAST: i32 = i32::MAX;
 const ALBUM_THEN_TITLE: &str =
     "COALESCE(t.album, '') COLLATE NOCASE ASC, t.title COLLATE NOCASE ASC";
 
-/// Album tracks in the order Album Detail opens on: `ui::track_sort`'s `"track_number"` arm,
+/// Album tracks in the order Album Detail defaults to: `ui::track_sort`'s `"track_number"` arm,
 /// not the bare columns [`super::get_tracks_by_album_for_list`] spells.
 ///
 /// **That sibling's `ORDER BY` is overwritten by an in-memory re-sort where this one is what
@@ -45,7 +45,7 @@ pub async fn track_ids_by_albums(
     .await
 }
 
-/// Artist tracks in the order Artist Detail opens on: by album, then title, which is
+/// Artist tracks in the order Artist Detail defaults to: by album, then title, which is
 /// `ui::track_sort`'s `"album"` arm. **Not `sort_key`**, the `for_list` sibling's order, which an
 /// in-memory re-sort overwrites there. Copying it queues a catalogue alphabetically by title
 /// under a page that shows it by album.
@@ -116,7 +116,9 @@ pub async fn track_ids_by_playlists(
 /// `COLLATE NOCASE` because `library::browse` lists a directory's files through
 /// `to_lowercase()`, and the default BINARY collation would play `Zebra.flac` before
 /// `apple.flac` under a listing that shows the reverse. ASCII-only against a Unicode fold, so
-/// the two still part on a non-ASCII case pair.
+/// the two still part on a non-ASCII case pair. **Case is the whole of the agreement**: this
+/// reads the subtree where the listing is one level, and keys on the path where it keys on the
+/// name, so a folder holding folders queues in an order no page shows.
 pub async fn track_ids_under_directory(db: &DbPool, dir_path: &str) -> Result<Vec<i64>, AppError> {
     let pattern = format!("{}%", super::list::directory_like_prefix(dir_path));
     let ids = sqlx::query_scalar::<_, i64>(

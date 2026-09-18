@@ -70,7 +70,9 @@ pub async fn track_ids_for(
 ///
 /// **Those go out together**, `library::smart_playlists::recount`'s shape: WAL lets them run side
 /// by side across the read pool, where awaiting each in turn put a grid's worth of them in series
-/// on the click path.
+/// on the click path. **Each projects to ids before the join collects it**, the membership query
+/// answering in full list rows: held whole, a selection's peak is every matched row of every
+/// playlist in it, where the serial version it replaced held one set at a time.
 ///
 /// An id the split read didn't return was deleted between the grid painting and the click; the
 /// rest of the selection still acts.
@@ -88,14 +90,17 @@ async fn playlist_track_ids(state: &AppState, ids: &[i64]) -> Result<Vec<i64>, A
     }
 
     let resolved = futures_util::future::join_all(smart.iter().map(|(id, criteria)| async move {
-        let rows = queries::smart_playlist::get_smart_playlist_tracks(&state.db, criteria).await;
-        (*id, rows)
+        let track_ids = queries::smart_playlist::get_smart_playlist_tracks(&state.db, criteria)
+            .await
+            .map(|rows| rows.into_iter().map(|row| row.id).collect::<Vec<i64>>());
+        (*id, track_ids)
     }))
     .await;
 
+    // Sized for both halves: the manual ones land in the same map through the `extend` below.
     let mut grouped: HashMap<i64, Vec<i64>> = HashMap::with_capacity(ids.len());
-    for (id, rows) in resolved {
-        grouped.insert(id, rows?.into_iter().map(|row| row.id).collect());
+    for (id, track_ids) in resolved {
+        grouped.insert(id, track_ids?);
     }
 
     let pairs = queries::track::track_ids_by_playlists(&state.db, &manual_ids).await?;

@@ -81,10 +81,11 @@ pub(super) fn model_track_ids(rows: &ModelRc<melodia_ui::TrackListRow>) -> Vec<i
 /// paints one dialog's rows under another's heading and hands its Accept to the wrong branch of
 /// the dispatcher.
 ///
-/// Two things can retire a claim and `open` sees only one of them. Four openers deliberately leave
-/// `open` false while Rust loads the body, so through that window two menus both read "nothing is
-/// up"; `Dialog.request-generation` is what separates them, and the second menu's synchronous
-/// write is exactly what would otherwise ride out under the first one's rows.
+/// Two things can retire a claim and `open` sees only one of them. Six openers deliberately leave
+/// `open` false while Rust loads the body or hops a tick to raise it, so through that window two
+/// menus both read "nothing is up"; `Dialog.request-generation` is what separates them, and the
+/// second menu's synchronous write is exactly what would otherwise ride out under the first one's
+/// rows.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) struct DialogClaim(i32);
 

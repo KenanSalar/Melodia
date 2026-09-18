@@ -114,9 +114,10 @@ silently miss the other.
   from no set, and `Selection.any-live()` asks ten globals without knowing which surface is on
   screen. So the arm sits at the bottom of `shortcut-scope.slint`'s chain, where a set held by the
   page *under* Now Playing cannot swallow the press meant to close it, and every list surface
-  hands its selection back on the way out. **`Tracks` and `Browse` are the two that release
-  nothing else on leave and still owe this one**, each guarded on there being a selection, since
-  the unstamp walks a row model those two keep across the leave. `CardSelection` is the exception
+  hands its selection back on the way out. **`Tracks` and `Browse` are the two that keep their row
+  model across the leave and so owe the clear on its own**, the rest emptying `selected-ids` beside
+  the rows in their teardown; each of those two is guarded on there being a selection, the unstamp
+  otherwise walking a model held precisely because it survives. `CardSelection` is the exception
   and stays scope-guarded instead: clearing it would mean a hook at each of seven mounts, which is
   the thing its signature exists to avoid.
 
@@ -566,16 +567,24 @@ three components that answer it, and each argues its geometry at its own file.
   commit live in `files/export.rs` and `files/add_picker.rs` (commit needs
   `Rc<NotificationsUi>`). Export opens from `export.rs`, Add-to-Playlist from `dialog.rs`.
 
-- **A raise that crosses an `await` owes a `DialogClaim`, and `Dialog.open` is not one.** Four
+- **A raise that crosses an `await` owes a `DialogClaim`, and `Dialog.open` is not one.** Six
   openers deliberately leave `open` false while Rust fetches the body, so through that whole window
   two menus both read "nothing is up", both fill the same properties, and the second one's
   synchronous write rides out under the first one's rows: the Add-to-Playlist picker committing a
   row's single track under an overlap count solved for an album. `Dialog.request-generation` is
   what separates them, bumped by `claim-request()` at the head of every opener; take
   `DialogClaim::take_from(&weak)` **synchronously at the click** and ask `holds(&ui)` past the
-  await. It keeps the `open` test as its other half, the twelve single-caller kinds that write
-  `kind` inline never bumping anything. **The capture has to follow the opener**, which is why
+  await. It keeps the `open` test as its other half, every remaining kind raising `open` in the
+  same handler that writes it. **The capture has to follow the opener**, which is why
   `open-tag-editor` and `open-edit-smart-rules` invoke their fetch as their own last statement.
+
+- **A deferred raise is an opener too, single caller or not**, `prepare-export-playlists` and
+  `open-new-smart-playlist` being the two that earn one on nothing else. Chrome written inline is
+  a block, and a block cannot claim: it leaves `open` false for as long as the fetch or the
+  event-loop hop takes and bumps nothing on the way, so a slower flow it should have retired
+  passes `holds` and fills the global underneath it. Taking a claim is the half a one-tick hop can
+  skip, nothing being able to overtake it; bumping one is not. `dialog_openers.rs` walks for both
+  triggers.
 
 - **Notifications stack** mirrors `Dialog`'s `kind`-routing — a new action is one branch plus one
   `show_localized(…)` call. Cap 5. Per-card props use `data:` not `row:` (Slint reserves `row` as
