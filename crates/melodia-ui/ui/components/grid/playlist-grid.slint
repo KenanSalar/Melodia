@@ -56,10 +56,6 @@ export component PlaylistGrid inherits Rectangle {
                 spacing: root.gap;
                 alignment: start;
 
-                // **A wrapper per card, sized to it**, so the menu can be the card's sibling in the
-                // card's own coordinate frame — `context-requested` reports in that frame — and so
-                // the delegate has somewhere to hold the right-click snapshot. Declaring either on
-                // the `EntityCard` mount is not possible.
                 // **A wrapper per card, sized to it.** The menu has to be the card's *sibling* in
                 // the card's own coordinate frame, which is what `context-requested` reports in,
                 // and the delegate needs somewhere to hold the right-click snapshot — neither can
@@ -104,8 +100,8 @@ export component PlaylistGrid inherits Rectangle {
                         //
                         // The wrapper by id rather than `parent`: inside an `EntityCard` mount
                         // `parent` is the card, not the square the overlay slot draws in, and
-                        // `entity_card_overlay.rs` bans the word here outright rather than trying
-                        // to tell a position from a write.
+                        // `crates/melodia/tests/entity_card_overlay.rs` bans the word here
+                        // outright rather than trying to tell a position from a write.
                         context-requested(x, y) => {
                             cell.ctx-x = x;
                             cell.ctx-y = y;

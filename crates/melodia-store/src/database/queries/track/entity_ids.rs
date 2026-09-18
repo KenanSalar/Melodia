@@ -8,8 +8,6 @@
 //! in a single chunk and its `ORDER BY` survives; the order the entities themselves come back in
 //! does not, and is the caller's to restore from the ids it asked with.
 
-use sqlx::AssertSqlSafe;
-
 use crate::database::{DbPool, chunked_in_query};
 use melodia_core::error::AppError;
 
@@ -89,10 +87,9 @@ pub async fn track_ids_by_playlists(
 /// is stored with the platform's native separator, so the pattern carries it too.
 pub async fn track_ids_under_directory(db: &DbPool, dir_path: &str) -> Result<Vec<i64>, AppError> {
     let pattern = format!("{}%", super::list::directory_like_prefix(dir_path));
-    let ids = sqlx::query_scalar::<_, i64>(AssertSqlSafe(
-        "SELECT id FROM tracks WHERE file_path LIKE ? ESCAPE '\\' ORDER BY file_path ASC"
-            .to_owned(),
-    ))
+    let ids = sqlx::query_scalar::<_, i64>(
+        "SELECT id FROM tracks WHERE file_path LIKE ? ESCAPE '\\' ORDER BY file_path ASC",
+    )
     .bind(&pattern)
     .fetch_all(db.read())
     .await?;

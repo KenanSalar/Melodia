@@ -33,7 +33,12 @@ export component EntityCardGrid inherits Rectangle {
     // **Three mounts, and they are not all the same kind of thing.** Favorites' Artists tab draws
     // artists; its Most Played tab and Recently Played's draw *tracks*. So the kind and the
     // selection scope are the host's to state rather than this component's to assume.
-    in property <string> card-kind: "track";
+    //
+    // **Neither carries a default, and a plausible one is what that buys.** `"track"` here would
+    // send a fourth mount's album ids down the track arm, queueing whatever rows happen to hold
+    // those numbers — silently right-looking. Empty reaches `EntityKind::from_token`'s `None` and
+    // the warn already written for it.
+    in property <string> card-kind;
     in property <string> selection-scope;
 
     // Bumped by the host once the tier behind `request-cover` is warm, and again per scheduled

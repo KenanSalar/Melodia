@@ -116,7 +116,7 @@ export component StationCard inherits Rectangle {
         // are laid out inside the card's overlay slot, but a `@children` element resolves names
         // where it is *written*, so `parent` here is the `EntityCard` — its full height, not the
         // square. The source reads correctly either way and only the generated tree tells them
-        // apart, which is what `ui::entity_card_tests` walks for.
+        // apart, which is what `crates/melodia/tests/entity_card_overlay.rs` walks for.
         play_btn := IconButton {
             x: Theme.pad-sm;
             y: Theme.pad-sm;

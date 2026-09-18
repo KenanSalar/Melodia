@@ -225,10 +225,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                             crate::ui::track_list_view::view_id::PLAYLIST_DETAIL,
                             None,
                         ) {
-                            log::warn!("playlists::delete clear last_detail_id: {e}");
+                            log::warn!("playlists::delete clear last_detail_id: {}", describe(&e));
                         }
                     });
                 }
+                // The deleted id can still be sitting in the card selection, where it would keep
+                // being counted by the pills and asked for by the next batch action.
+                let _ = weak.upgrade_in_event_loop(|ui| {
+                    ui.global::<CardSelection>().invoke_clear();
+                });
                 if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak).await {
                     log::warn!("playlists::delete refetch grid: {e}");
                 }
@@ -273,7 +278,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                             crate::ui::track_list_view::view_id::PLAYLIST_DETAIL,
                             None,
                         ) {
-                            log::warn!("playlists::delete_many clear last_detail_id: {e}");
+                            log::warn!(
+                                "playlists::delete_many clear last_detail_id: {}",
+                                describe(&e)
+                            );
                         }
                     });
                 }

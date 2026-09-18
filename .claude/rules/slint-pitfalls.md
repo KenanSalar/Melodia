@@ -113,7 +113,8 @@ this file is what builds, looks right, and is wrong.
   Cure: **the container publishes its own metric and the host frames against that**
   (`out property <length> tile-size` on `EntityCard`, `card-body.tile-size - self.width - …`),
   never `parent`. Verify in the generated tree — the binding names the property it actually read.
-  Pinned by `ui::entity_card_tests::no_overlay_host_positions_against_parent`, which finds the
+  Pinned by `crates/melodia/tests/entity_card_overlay.rs`'s
+  `no_overlay_host_positions_against_parent`, which finds the
   hosts by the flag that opens the slot and reads **the mount's own braces**: a host is free to
   spell `parent` elsewhere in its file, `x: parent.width - self.width` being the canonical
   `OverlayScrollbar` mount, so a file-wide ban would fail the first overlay host carrying a bar.
