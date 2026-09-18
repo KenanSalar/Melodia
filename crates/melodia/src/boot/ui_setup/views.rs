@@ -184,7 +184,8 @@ pub fn install_views(
     // launch is the cap a later maximize overruns — the cards past it can only paint
     // placeholders, the lookup behind them scheduling against a tier that cannot hold them.
     // Setting the cap exactly rather than growing it: a smaller window really does draw fewer
-    // cards, and a drag that oscillates re-warms through the model rebuild it triggers anyway.
+    // cards. Nothing here re-warms or announces, and nothing has to: a retune leaves the tier's
+    // buffers in place, so the cards keep painting what they had until each replacement lands.
     app.global::<melodia_ui::WindowChrome>().on_display_changed(retune.clone());
     if let Err(e) = slint::invoke_from_event_loop(retune) {
         log::warn!("Failed to schedule cover-cache display tuning: {e}");

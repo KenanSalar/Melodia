@@ -187,13 +187,14 @@ fn the_tier_follows_the_card_it_draws() {
 }
 
 /// **The tier has to hold still through a resize drag.** `WindowChrome.display-changed` re-derives
-/// it on every winit `Resized` and a genuine `set_thumb_size` clears the whole tier, so a size
-/// that flips between two steps as the window moves drops every decoded cover and repaints the
-/// grid as placeholders, over and over, under the drag.
+/// it on every winit `Resized` and a genuine `set_thumb_size` re-decodes every cover the grid is
+/// drawing, so a size that flips between two steps as the window moves re-decodes the visible set
+/// over and over, under the drag, on a pool two to four threads wide.
 ///
 /// Sizing to the widest card a column count can pack is what holds it flat. The card itself
 /// sweeps `min-card-w` up to that bound inside *every* column band, so a tier tracking it crosses
-/// a step boundary twice a band — which is a wipe per crossing, not a rounding difference.
+/// a step boundary twice a band — which is a screenful of decodes per crossing, not a rounding
+/// difference.
 #[test]
 fn the_tier_holds_still_through_a_resize_drag() {
     const MAX_RETUNES: usize = 8;
@@ -211,7 +212,7 @@ fn the_tier_holds_still_through_a_resize_drag() {
         assert!(
             retunes <= MAX_RETUNES,
             "a drag from 800 to 3840 logical px at {scale}× retunes the tier {retunes} times, \
-             past the {MAX_RETUNES} it can absorb — each one clears every grid's covers"
+             past the {MAX_RETUNES} it can absorb — each one re-decodes every grid's covers"
         );
     }
 }

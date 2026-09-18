@@ -614,28 +614,38 @@ three components that answer it, and each argues its geometry at its own file.
 - **No *uncapped* cover lookup decodes on the thread that asks.** `get_or_schedule_opt` answers
   from the tier and hands a miss to the decode pool, so the caller — a Slint model getter, so the
   event loop — gets the placeholder on that frame. What makes the placeholder temporary is a
-  generation the same binding reads: the tier fires one notifier per landed *batch* and
+  generation the same binding reads: the tier fires one notifier per *batch* and
   `ui::cover_generation::notify_on_decode` bumps the counter on the UI thread. Prewarm still covers
   the common case; this is for the misses it structurally can't reach. A prewarm is capped at the
   tier's own `CACHE_CAP` and walks **in display order**, so a library with more unique covers than
   that keeps its visible prefix and nothing else — and every row scrolled to past it used to decode
   inline, one at a time, on the event loop.
-  - **Per batch, not per cover.** A screenful of misses coalesces into one pass over the mounted
-    bindings, and a miss arriving mid-drain joins it rather than spawning a second.
+  - **Per batch, not per cover, and per batch *drained* rather than per batch landed.** A
+    screenful of misses coalesces into one pass over the mounted bindings, and a miss arriving
+    mid-drain joins it rather than spawning a second. A batch another writer already cached, and
+    one a release discarded, announce too: every binding that took a placeholder when it queued
+    has nothing else to re-run it, so a drain that stays silent leaves those cards on the glyph
+    until the next model rebuild, which on a grid is the next resize.
   - **A cached failure is a hit**, so a broken cover re-queues nothing and can't spin against its
-    own notifier.
+    own notifier. A retune re-asks it once, the failure being remembered against the size it was
+    attempted at.
   - **The notifier is a feedback loop, and two things stop it running away.** The queue is capped
     at the tier's own capacity, newest-wins, so a scroll can't queue more than the cache holds and
     then evict the visible prefix with the tail of its own batch. And a path the burst already
     handed to the pool is refused — a grid drawing more cards than its tier holds would otherwise
     re-queue whatever the last batch evicted, forever, at frame rate. A miss the burst hasn't seen
-    clears that state, which is what tells a moved visible set apart from a thrashing one.
-  - **A reset invalidates whatever is mid-decode.** `clear` and a genuine `set_thumb_size` bump a
-    tier epoch, and a batch that captured the old one drops its buffers rather than landing behind
-    the section leave that released them, or at a size nobody asked for. **The bump belongs under
-    the *cache* lock**, that being the one a finished batch takes to insert: emptying the tier and
+    clears that state, which is what tells a moved visible set apart from a thrashing one; so does
+    a retune, the burst's knowledge being about the size it was gathered at.
+  - **A release invalidates whatever is mid-decode. A retune does not, and that asymmetry is the
+    point.** `clear` bumps a tier epoch and a batch that captured the old one drops its buffers
+    rather than landing behind the section leave that released them. **The bump belongs under the
+    *cache* lock**, that being the one a finished batch takes to insert: emptying the tier and
     invalidating the batch have to be one step, or a batch reading the epoch between them lands in
-    the tier the reset just emptied.
+    the tier the release just emptied. `set_thumb_size` is outside all of it: it moves what a
+    lookup asks for, not whether there is still a tier to ask, so the mounted cards keep painting
+    the covers they had while the replacements decode. Emptying it instead strands every card
+    whose binding runs in the gap on a placeholder, and on a grid the next thing to re-run that
+    binding is the next column change.
   - **A surface with no generation to come back on takes `grid_prewarm::grid_cover_blocking`
     instead** — Artist Detail's Albums strip, whose callback carries no counter, and the Edit
     Artwork dialog's cover slot, which is a one-shot property write with no binding to re-run.
@@ -715,11 +725,12 @@ three components that answer it, and each argues its geometry at its own file.
   question, clamped to `STORE_MAX_DIM`, which is what caps a single-column panel's sharpness.
   - **The bound, never the card itself.** `card-w` sweeps `min-card-w` up to
     `min-card-w + pitch/cols` inside *every* column band, so a tier tracking it crosses a step
-    boundary twice a band — and `display-changed` re-derives on every winit `Resized` while a
-    genuine `set_thumb_size` clears the whole tier, so each crossing wipes every grid's covers
-    mid-drag. Sizing to the band's upper bound is what makes the answer flat across a drag rather
-    than merely close, and the step is what collapses the column counts a desktop passes through
-    into a handful of tiers.
+    boundary twice a band — and `display-changed` re-derives on every winit `Resized`, so each
+    crossing re-decodes every grid's visible covers mid-drag, on one pool every tier shares.
+    Sizing to the band's upper bound is what makes the answer flat across a drag rather than
+    merely close, and the step is what collapses the column counts a desktop passes through into
+    a handful of tiers. What a crossing does not cost is the covers themselves; that half is the
+    release/retune asymmetry above.
   - **The window is not the body, and `BODY_CHROME_W` is the gap.** The sidebar between them is
     the user's to drag from `sidebar-collapsed-w` to `sidebar-max-w`, a range no window
     measurement sees, so the estimate assumes the *widest* one: over-subtracting costs a tier one

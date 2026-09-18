@@ -113,18 +113,18 @@ const BODY_CHROME_W: u32 = 400 + 2 * 16;
 
 /// The size a tier is built at, before any geometry is known.
 ///
-/// A **fallback, not a tier size**: everything decoded at it is discarded the moment
+/// A **fallback, not a tier size**: everything decoded at it is re-decoded the moment
 /// [`cover_size_for_window`] retunes. Sized for the run where that never happens — the deferred
 /// retune in `boot::ui_setup` can fail to schedule — so it covers a wide panel's card rather than
 /// taking the cheap end.
 pub const GRID_COVER_FALLBACK: u32 = 256;
 
-/// Steps the derived size falls on. Quantized because
-/// [`melodia_artwork::media::image::cover_thumbs::CoverThumbs`] **clears the whole tier** when
-/// the size genuinely moves, and `WindowChrome.display-changed` re-derives it on every winit
-/// `Resized`: the answer has to be flat across a resize drag, not merely close. [`widest_card`]
-/// is what makes it flat; the step is what collapses the column counts a desktop drags through
-/// into a handful of tiers.
+/// Steps the derived size falls on. Quantized because a size that genuinely moves costs
+/// [`melodia_artwork::media::image::cover_thumbs::CoverThumbs`] a re-decode of every cover the
+/// grid is drawing, and `WindowChrome.display-changed` re-derives it on every winit `Resized`:
+/// the answer has to be flat across a resize drag, not merely close. [`widest_card`] is what
+/// makes it flat; the step is what collapses the column counts a desktop drags through into a
+/// handful of tiers.
 const SIZE_STEP: u32 = 32;
 
 /// The widest card `GridGeometry` can pack into the body of a window this wide.

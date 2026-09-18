@@ -109,12 +109,12 @@ fn row_cover_size_steps_up_for_hidpi_and_covers_the_bar_tile() {
     assert!(row_cover_size(2.0) > row_cover_size(1.0));
 }
 
-/// Every cached buffer was decoded at the old size, so a genuine change has to
-/// drop them — a retune that kept them would serve the wrong resolution for the
-/// rest of the session. A no-op change must keep them, the one call site
-/// running on every boot.
+/// A retune moves what a lookup asks for and drops nothing, because the call site is every winit
+/// `Resized` and a tier emptied under mounted cards leaves each one on its placeholder until
+/// something re-runs its binding. The old buffer keeps painting; the next lookup that may decode
+/// is what replaces it.
 #[test]
-fn set_thumb_size_drops_stale_buffers_only_when_the_size_moves() -> TestResult {
+fn a_retune_keeps_the_old_buffer_and_the_next_lookup_replaces_it() -> TestResult {
     let thumbs = CoverThumbs::new();
     let (_tmp, path) = write_test_png(120)?;
     let _ = thumbs.get_or_load_rgb8(&path);
@@ -124,7 +124,7 @@ fn set_thumb_size_drops_stale_buffers_only_when_the_size_moves() -> TestResult {
     assert_eq!(thumbs.cache.lock().len(), 1, "a no-op retune kept the tier");
 
     thumbs.set_thumb_size(ROW_THUMB_SIZE_HIDPI);
-    assert_eq!(thumbs.cache.lock().len(), 0);
+    assert_eq!(thumbs.cache.lock().len(), 1, "a retune must not empty the tier under its cards");
 
     let buf = thumbs.get_or_load_rgb8(&path).ok_or("cover failed to decode at the retuned size")?;
     assert_eq!(buf.width(), ROW_THUMB_SIZE_HIDPI);
@@ -209,7 +209,8 @@ fn a_remembered_failure_never_re_queues() -> TestResult {
 /// resident again behind a view nobody is looking at.
 ///
 /// The clear races the drain by construction, and the invariant is the same whichever wins: the
-/// batch is either dropped on its epoch or never claimed.
+/// batch is either dropped on its epoch or never claimed. It is announced either way, that being
+/// how a binding left on a placeholder by the batch learns to ask again.
 #[test]
 fn a_reset_drops_the_batch_that_was_decoding_across_it() -> TestResult {
     let thumbs = Arc::new(CoverThumbs::new());
@@ -224,7 +225,8 @@ fn a_reset_drops_the_batch_that_was_decoding_across_it() -> TestResult {
     let _ = thumbs.get_or_schedule_opt(Some(path));
     thumbs.clear();
 
-    // No notification is owed, so this settles the pool rather than awaiting one.
+    // Whether the batch landed and the clear took it, or the clear landed and the batch was
+    // dropped, decides nothing here — this only settles the pool before the tier is read.
     let _ = rx.recv_timeout(DRAIN_TIMEOUT);
     assert!(
         thumbs.cache.lock().is_empty(),
