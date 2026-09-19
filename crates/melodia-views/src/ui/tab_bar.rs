@@ -46,23 +46,6 @@ pub(crate) fn grid_signature<T: Hash>(tab: T, columns: i32, content: u64) -> u64
     hasher.finish()
 }
 
-/// Whether a landed prewarm may announce its tier to the cards. `warmed` is the tab the
-/// fetch decoded for *and still holds the buffers of* — `None` both when it skipped the
-/// prewarm and when a leave landing inside the decode took them straight back. Announcing
-/// under a rewound counter, or under a tab pick that overtook the decodes, puts the next
-/// surface's cards back on the decoding path.
-///
-/// Deliberately *not* a function of whether the rows changed. Those are independent facts,
-/// and conflating them left a grid on placeholders after a re-enter whose mount-time
-/// `columns-changed` had already written the final rows.
-pub(crate) fn should_announce_warm<T: PartialEq + Copy>(
-    warmed: Option<T>,
-    section_active: bool,
-    current_tab: T,
-) -> bool {
-    section_active && warmed == Some(current_tab)
-}
-
 #[cfg(test)]
 #[path = "tests/tab_bar_tests.rs"]
 mod tests;

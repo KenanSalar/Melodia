@@ -192,7 +192,20 @@ pub fn resize_rgb8(
         Some(rgb) => Cow::Borrowed(rgb),
         None => Cow::Owned(src.to_rgb8()),
     };
+    resize_rgb8_image(source, width, height, filter)
+}
 
+/// [`resize_rgb8`] for a caller already holding RGB8, which skips the `DynamicImage` it would
+/// otherwise wrap one in only for the match above to unwrap again.
+///
+/// Takes a `Cow` rather than a reference so the equal-size case can hand an owned source straight
+/// back; `Cow::Borrowed` is the spelling for a caller that has only a view of one.
+pub fn resize_rgb8_image(
+    source: Cow<'_, RgbImage>,
+    width: u32,
+    height: u32,
+    filter: FilterType,
+) -> Option<RgbImage> {
     // Equal sizes are not rare — a cover under the tier's tile and one over only the store's
     // *byte* bound both arrive asking for the source's own dimensions — and the resizer answers
     // those with a zeroed destination and a row-by-row copy of what is already in hand.

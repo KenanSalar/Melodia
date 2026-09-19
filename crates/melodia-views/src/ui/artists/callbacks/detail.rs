@@ -6,7 +6,6 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString};
 
-use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
 use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
 use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
@@ -17,12 +16,7 @@ use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, ArtistDetail};
 
 /// Wire the `ArtistDetail` callbacks. See [`super::wire`].
-pub(super) fn wire(
-    ui: &AppWindow,
-    state: &AppState,
-    artists_ui: &Arc<ArtistsUi>,
-    albums_ui: &Arc<AlbumsUi>,
-) {
+pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
     let detail = ui.global::<ArtistDetail>();
     let weak = ui.as_weak();
 
@@ -38,7 +32,6 @@ pub(super) fn wire(
         let s = state.clone();
         let au = artists_ui.clone();
         let weak = weak.clone();
-        let au_albums = albums_ui.clone();
         detail.on_close_detail(move || {
             let Some(ui) = weak.upgrade() else { return };
             let g = ui.global::<ArtistDetail>();
@@ -73,7 +66,6 @@ pub(super) fn wire(
             artists_ui_mod::clear_detail(&au);
 
             let au_swap = au.clone();
-            let albums_swap = au_albums.clone();
             s.runtime.spawn_blocking(move || {
                 au_swap.release_detail_artwork();
                 // Skip the Artists-grid prewarm when the close routes to
@@ -83,11 +75,9 @@ pub(super) fn wire(
                 if !origin_was_cross_section {
                     au_swap.prewarm_visible_covers();
                 }
-                // Free the Albums sub-section's cover thumbnails (they
-                // sat in `AlbumsUi.grid_covers`, borrowed for this
-                // detail page). The next artist-detail open will
-                // re-fetch what it needs.
-                albums_swap.release_grid_covers();
+                // The Albums strip this detail drew is gone; hand its pixels back as
+                // proxies, so the next artist detail paints them and re-sharpens.
+                crate::ui::grid_prewarm::hand_back_covers();
             });
 
             let s_disk = s.clone();
@@ -258,25 +248,20 @@ pub(super) fn wire(
     // toggle-albums-collapsed: flip the per-section flag synchronously
     // so the UI repaints this frame, then persist to
     // `views.json`'s `artist_albums_collapsed` so the next launch
-    // restores the same state. Collapsing also drops the borrowed
-    // grid-tier cover LRU (`AlbumsUi.grid_covers`): the
-    // `if !albums-collapsed` gate has unmounted the scroller, so its
-    // grid-tier covers are no longer visible or queried via
-    // `request-album-cover`. Safe because while Artist Detail is open
-    // the Albums tab is not the active section — `grid_covers` holds
-    // only this strip's covers. Re-expanding re-decodes them lazily.
+    // restores the same state. Collapsing also hands the grid tier's
+    // pixels back: the `if !albums-collapsed` gate has unmounted the
+    // scroller, so nothing queries them through `request-album-cover`.
+    // Re-expanding paints the proxies and re-sharpens behind them.
     {
         let s = state.clone();
         let weak = weak.clone();
-        let au_albums = albums_ui.clone();
         detail.on_toggle_albums_collapsed(move || {
             let Some(ui) = weak.upgrade() else { return };
             let g = ui.global::<ArtistDetail>();
             let new_state = !g.get_albums_collapsed();
             g.set_albums_collapsed(new_state);
             if new_state {
-                let au_albums = au_albums.clone();
-                s.runtime.spawn_blocking(move || au_albums.release_grid_covers());
+                s.runtime.spawn_blocking(crate::ui::grid_prewarm::hand_back_covers);
             }
             let s = s.clone();
             spawn_blocking_logged!(

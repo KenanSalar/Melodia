@@ -49,9 +49,6 @@ use melodia_ui::{
     BrowseFolderRow as UiBrowseFolderRow, TrackListRow as UiTrackListRow,
 };
 
-// `boot::ui_setup` retunes the cover cap once the window is live.
-pub use cards::tune_cache_for_display;
-
 /// Browse's `Nav.selected-index` — see [`crate::ui::favorites::NAV_FAVORITES`].
 pub const NAV_BROWSE: i32 = 1;
 
@@ -75,11 +72,6 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<BrowseUi> {
     install_selection_model(cx.app);
     let browse_ui = Arc::new(BrowseUi::new(cx.cover_thumbs.clone()));
     callbacks::wire(cx.app, cx.state, cx.view_state, &browse_ui);
-    crate::ui::cover_generation::notify_on_decode(
-        &browse_ui.grid_covers,
-        cx.app,
-        cards::repaint_covers,
-    );
     seed_from_settings(cx.app, cx.state, &browse_ui, cx.view_state);
     browse_ui
 }
@@ -105,12 +97,9 @@ pub struct BrowseUi {
     /// push an `ORDER BY`.
     sort_field: Mutex<String>,
     sort_dir: Mutex<String>,
-    /// The shared row tier.
+    /// The shared row tier. The card view's tiles draw from
+    /// `ui::grid_prewarm::tier()`, which no view holds.
     pub(super) cover_thumbs: Arc<CoverThumbs>,
-    /// The card view's own tier — private, so releasing it can't yank the row
-    /// thumbnails the shared one is still serving. Released on section leave and
-    /// on going back to the list.
-    pub(super) grid_covers: Arc<CoverThumbs>,
     /// Synchronous shadow of `Browse.view-mode`, read by the fetch off a tokio
     /// worker where the global is out of reach. A bool because the index itself
     /// lives only in Slint.
@@ -133,10 +122,6 @@ impl BrowseUi {
             sort_field: Mutex::new("title".to_owned()),
             sort_dir: Mutex::new("asc".to_owned()),
             cover_thumbs,
-            grid_covers: Arc::new(CoverThumbs::with_config(
-                crate::ui::grid_prewarm::GRID_COVER_FALLBACK,
-                cards::DEFAULT_GRID_COVER_CAP,
-            )),
             card_mode: AtomicBool::new(false),
             fetch_token: AtomicU64::new(0),
             section: SectionState::new(),
@@ -157,56 +142,31 @@ impl BrowseUi {
         self.card_mode.store(mode == BrowseViewMode::Card, Ordering::Relaxed);
     }
 
-    /// Resolve one card's cover, decoding only once the tier is known warm — a
-    /// `generation` of `0` means just toggled or just re-entered, so answer from
-    /// the cache and let the card paint its placeholder rather than putting a
-    /// decode per visible card on the UI thread.
-    pub fn grid_cover(&self, artwork_path: &str, generation: i32) -> slint::Image {
-        crate::ui::grid_prewarm::grid_cover(&self.grid_covers, artwork_path, generation)
-    }
-
-    /// Decode `paths` into the card tier. Blocking — call from `spawn_blocking`.
+    /// Decode `paths` into the grid tier, for a card view the user is looking at. Blocking — call
+    /// from `spawn_blocking`.
     ///
-    /// Returns whether the tier is warm **and still holds what was decoded** —
-    /// the answer a caller's `covers-generation` bump is gated on. `false` when
-    /// a leave or a toggle back to the list landed inside the decode, where the
-    /// buffers are handed straight back: announcing a tier the leave already
-    /// released puts the next cards on the decoding path. The two warm sites
-    /// differ only in where the paths come from, so the re-check lives here.
+    /// **The guard sits ahead of the decode, where its predecessor released after one.** Browse is
+    /// the only view whose boot seed fetches while the section is off screen, and against a tier
+    /// nothing clears any more, decode-then-release leaves a screenful of card covers resident for
+    /// the session, for a page the user has not opened. A leave landing *inside* the decode is no
+    /// longer a reason to hand anything back: those buffers are what the re-entry paints.
     ///
-    /// An empty `paths` is still a warm tier — a directory of nothing but
-    /// subfolders has no cover to wait for.
-    pub fn warm_card_tier(&self, paths: &[PathBuf]) -> bool {
-        if !paths.is_empty() {
-            self.grid_covers.prewarm(paths);
+    /// An empty `paths` is nothing to decode — a directory of nothing but subfolders has no cover.
+    pub fn warm_card_tier(&self, paths: &[PathBuf]) {
+        if paths.is_empty() || !self.section_active() || self.view_mode() != BrowseViewMode::Card {
+            return;
         }
-        // Re-checked *after* the decode — before it, the leave hasn't happened yet.
-        if self.section_active() && self.view_mode() == BrowseViewMode::Card {
-            return true;
-        }
-        self.release_grid_covers();
-        false
+        crate::ui::grid_prewarm::prewarm(paths);
     }
 
     /// [`Self::warm_card_tier`] over the cached listing — the mode toggle's path,
     /// which has no fetch to take a fresh file list from.
-    pub fn prewarm_card_covers(&self) -> bool {
-        if self.view_mode() != BrowseViewMode::Card {
-            return false;
-        }
+    pub fn prewarm_card_covers(&self) {
         let unique = {
             let files = self.last_files.lock();
             cards::first_screenful_paths(&files)
         };
-        self.warm_card_tier(&unique)
-    }
-
-    /// Drop every card cover. Paired with a `covers-generation` rewind by the
-    /// caller, so `0` keeps meaning "this tier is cold" rather than "first
-    /// toggle of the session".
-    pub fn release_grid_covers(&self) {
-        self.grid_covers.clear();
-        melodia_platform::services::platform::allocator::trim();
+        self.warm_card_tier(&unique);
     }
 
     pub fn current_path(&self) -> String {

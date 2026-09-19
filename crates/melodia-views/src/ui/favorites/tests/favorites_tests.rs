@@ -301,14 +301,11 @@ fn every_grid_mount_forwards_the_covers_generation() {
     );
 }
 
-/// The decode outlives a fast section leave, and `release_section_state` is
-/// spawned on that leave — it can easily finish first, so a prewarm that
-/// ignored it would refill the tier that release just emptied and hold a
-/// screenful of grid-tier buffers behind a view nobody can see, until the next
-/// leave. The check has to sit after the decode: before it, the leave hasn't
-/// happened yet, which is the whole problem.
+/// A leave keeps the picture and drops the pixels. Cleared instead, the re-entry paints the
+/// fallback glyph on every card for as long as the re-decode takes, which is the whole reason
+/// the leave shrinks rather than releases.
 #[test]
-fn a_prewarm_outliving_the_leave_keeps_nothing() -> TestResult {
+fn a_leave_keeps_a_proxy_of_what_the_grid_painted() -> TestResult {
     let (_tmp, path) = write_test_png(512)?;
     let path = path.to_str().ok_or("temp path is not UTF-8")?;
 
@@ -323,18 +320,16 @@ fn a_prewarm_outliving_the_leave_keeps_nothing() -> TestResult {
 
     fav_ui.set_section_active(true);
     fav_ui.prewarm_tab_covers(FavoritesTab::Artists);
-    assert!(
-        fav_ui.artist_cover(path, 0).size().width > 0,
-        "a prewarm for a section still on screen must leave its covers in the tier"
-    );
+    let warm = crate::ui::grid_prewarm::grid_cover(path).size().width;
+    assert!(warm > 0, "a prewarm must leave its covers in the tier");
 
-    fav_ui.artist_thumbs.clear();
     fav_ui.set_section_active(false);
-    fav_ui.prewarm_tab_covers(FavoritesTab::Artists);
-    assert_eq!(
-        fav_ui.artist_cover(path, 0).size().width,
-        0,
-        "a prewarm that landed after the section leave must hand its buffers back"
+    crate::ui::grid_prewarm::hand_back_covers();
+    let proxy = crate::ui::grid_prewarm::grid_cover(path).size().width;
+    assert!(
+        proxy > 0 && proxy < warm,
+        "a leave must leave a smaller picture behind, not an empty one \
+         (warm {warm}, after the leave {proxy})"
     );
     Ok(())
 }

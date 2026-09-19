@@ -649,6 +649,38 @@ three components that answer it, and each argues its geometry at its own file.
   need zero cover plumbing. `CoverThumbs::prewarm` dedupes and caps at LRU capacity — pass paths in
   **display order** so the kept prefix paints first.
 
+- **One tier behind every card grid, and it is `ui::grid_prewarm::tier()`.** Seven of them sat in
+  six view handles before — Favorites held two — each built at the same fallback, capped by the
+  same `cover_cap_for_window`, tuned by the same retune and told by its own notifier; the split
+  bought nothing but a section leave releasing its own, which is what made every re-entry cold. A module singleton rather than a
+  `ViewCtx` field, there being exactly one of it and no view owning it — the shape
+  `ui::nav_history::nav()` takes. **The tiers that stay private are private on decode size**:
+  Search's two card strips, the queue sheet's, and the row tier. Radio's logo tier is the one
+  exception on other grounds, below.
+
+- **A leave hands the pixels back and keeps the picture.** `grid_prewarm::hand_back_covers` shrinks
+  every entry to `PROXY_COVER_DIM` square in place rather than calling `clear`, so a re-entry paints
+  the right cover on frame one and the prewarm already on its way sharpens it behind.
+  `get_or_schedule_opt` needed nothing new for it: serving an entry whose recorded size isn't the
+  one being drawn *and* re-queueing it is the retune case, already argued there. The shrink clears
+  `settled` for the reason `set_thumb_size` does — every path the last burst handed to the pool is
+  worth handing over again, and left standing a card scrolled to past the next prewarm keeps the
+  proxy — and bumps no epoch, there being no released memory for an in-flight batch to land in.
+  - **The guard sits ahead of the decode, where it used to sit after one.** A prewarm for an
+    off-screen section was answered by decoding and then releasing; against a tier nothing clears,
+    that leaves a screenful resident for a page nobody opened. Browse is where it bit, being the
+    only view whose boot seed fetches while the section is off screen, and it measured at ~4 MiB of
+    anonymous memory on a launch landing anywhere else. Every other prewarm site already gated its
+    fetch on `section_active()`. A leave landing *inside* a decode is no longer a reason to hand
+    anything back: those buffers are what the re-entry paints.
+  - **Radio's logo tier is not this tier, and the reason is its card rather than its decode.**
+    `station-card.slint` derives `logo-native-size` from `cover.width / logo-decode-size`, so the
+    decoded *extent* is load-bearing for that card's layout: a proxy makes every logo read as a tiny
+    source, draw inset at half the tile, then pop to fill when the real decode lands. So it keeps
+    the old contract — released outright on leave, `covers-generation` rewound to `0` — and pays
+    nothing for it, a cold station card showing its own monogram on its own name-hashed tile rather
+    than a placeholder.
+
 - **No *uncapped* cover lookup decodes on the thread that asks.** `get_or_schedule_opt` answers
   from the tier and hands a miss to the decode pool, so the caller — a Slint model getter, so the
   event loop — gets the placeholder on that frame. What makes the placeholder temporary is a
@@ -674,16 +706,16 @@ three components that answer it, and each argues its geometry at its own file.
     re-queue whatever the last batch evicted, forever, at frame rate. A miss the burst hasn't seen
     clears that state, which is what tells a moved visible set apart from a thrashing one; so does
     a retune, the burst's knowledge being about the size it was gathered at.
-  - **A release invalidates whatever is mid-decode. A retune does not, and that asymmetry is the
-    point.** `clear` bumps a tier epoch and a batch that captured the old one drops its buffers
-    rather than landing behind the section leave that released them. **The bump belongs under the
-    *cache* lock**, that being the one a finished batch takes to insert: emptying the tier and
-    invalidating the batch have to be one step, or a batch reading the epoch between them lands in
-    the tier the release just emptied. `set_thumb_size` is outside all of it: it moves what a
-    lookup asks for, not whether there is still a tier to ask, so the mounted cards keep painting
-    the covers they had while the replacements decode. Emptying it instead strands every card
-    whose binding runs in the gap on a placeholder, and on a grid the next thing to re-run that
-    binding is the next column change.
+  - **A release invalidates whatever is mid-decode. A retune and a shrink do not, and that
+    asymmetry is the point.** `clear` bumps a tier epoch and a batch that captured the old one
+    drops its buffers rather than landing behind the section leave that released them. **The bump
+    belongs under the *cache* lock**, that being the one a finished batch takes to insert: emptying
+    the tier and invalidating the batch have to be one step, or a batch reading the epoch between
+    them lands in the tier the release just emptied. `set_thumb_size` and `shrink_to_proxy` are
+    outside all of it: each moves what a lookup asks for, not whether there is still a tier to ask,
+    so the mounted cards keep painting what they had while the replacements decode. Emptying it
+    instead strands every card whose binding runs in the gap on a placeholder, and on a grid the
+    next thing to re-run that binding is the next column change.
   - **A surface with no generation to come back on takes `grid_prewarm::grid_cover_blocking`
     instead** — Artist Detail's Albums strip, whose callback carries no counter, and the Edit
     Artwork dialog's cover slot, which is a one-shot property write with no binding to re-run.
@@ -701,47 +733,39 @@ three components that answer it, and each argues its geometry at its own file.
   covers the track lists still need) and the shared row tier. That is what makes a queue the size
   of the library affordable.
 
-- **`covers-generation` is the gate for a surface that fills with no fetch to hide behind.** A
-  `pure` callback's result is cached until a dependency is dirtied, and every ordinary lazy-cover
-  surface prewarms and **awaits before** setting rows, so its first evaluation is a cache hit.
-  Three can't: the queue sheet's **synchronous open**, `EntityCardGrid`'s **tab pick** (`TabBar`
-  writes `selected-index` before it emits `selected`), and `BrowseCardGrid`'s **mode toggle**.
-  - The argument does two jobs — reading it makes the binding depend on the counter, and its value
-    is the "is this tier warm" flag. **At 0 the Rust side answers cache-only**, so rows mounted on
-    that frame don't even queue work for a tier a leave is about to clear; past 0 they take the
-    scheduling lookup. Teardown rewinds to 0 beside the tier clear, so 0 keeps meaning "cold".
-    Answer unconditionally and the flag half is dead weight.
-  - **The bump has two callers and they mean different things.** `mark_covers_warm` is the
-    prewarm's, and moves the counter off 0; **`repaint_covers` is the decode notifier's, and never
-    does** — a batch landing after a tab-leave cleared the tier would otherwise read as warm and
-    cost the next mount the cache-only frame the gate exists for.
-  - **The three My Library grids carry the property without the gate.** Albums, Artists and
-    Playlists never answer cache-only, so their counter is only ever the repaint token; 0 is a
-    starting value there, not a state. Same for `RowCovers.generation`. Don't read a
-    `covers-generation` as cold-gated without checking the Rust side.
-  - **The bump is gated on the prewarm's verdict *and* a re-check on the UI thread**, because they
-    fail separately: a pick made while decodes ran already rewound the counter, while a section
-    leave landing mid-decode makes the prewarm hand its buffers back. **A prewarm that may release
-    what it warmed owes its caller that `bool`.**
-  - **Announce on the warm, not on the write** (`should_announce_warm`, fed a `warmed_tab` that is
-    `Some` only on `Ok(true)` — a `JoinError` is the same "we don't know"). Whether the tier is
-    warm and whether the rows moved are independent; a re-enter reliably lands on the signature
-    skip, the mount-time `columns-changed` having written final rows mid-decode.
+- **`covers-generation` is the repaint token, and on a card grid that is all it is.** A `pure`
+  callback's result is cached until a dependency is dirtied, so an `int` the binding also reads is
+  the whole mechanism that brings a scheduled decode to the screen. Its *value* decides nothing
+  there: `grid_prewarm::grid_cover` schedules a miss unconditionally, which is what the three My
+  Library grids always did and what every other grid does now.
+  - **One notifier, because there is one grid tier.** `set_decoded_notifier` is a `OnceLock`, so
+    `boot::ui_setup::views::install_grid_covers` is the single install and its closure bumps every
+    grid global. A bump on an unmounted page is a property write with no bindings to dirty, so
+    answering for all six costs nothing and saves the tier having to know which grid asked.
+  - **The `0` ⇒ cache-only arm is gone, and its premise is why.** It existed so rows mounting on a
+    tab pick "don't queue work for a tier a leave is about to clear" — no leave clears one now, and
+    keeping it left a card that missed the retained set scheduling nothing and waiting for the
+    prewarm's announce. With it went `should_announce_warm`, the `warmed_tab` plumbing through both
+    curated pages' fetch-and-apply, the `mark_covers_warm` / `repaint_covers` split, and the `bool`
+    every `prewarm_tab_covers` returned.
+  - **Two surfaces still gate on the value, and both hold a tier that really is released**: the
+    queue sheet's **synchronous open**, whose private tier is dropped on close, and Radio's leave.
+    There `0` still means cold, the lookup still answers cache-only, and the rewind still sits
+    beside the clear. `radio::covers::logo_cover` is that branch's one remaining home.
   - Browse rebuilds **without hopping the event loop** — `invoke_from_event_loop` posts even from
-    the UI thread, and a redraw winning that race paints an empty grid. Its released tier also
-    obliges a `mark_dirty()` on leave and the same wire-time seed, having no enter-time fetch.
-  - **The Rust half is `grid_prewarm::grid_cover(thumbs, path, generation)`** — the tier and
-    counter differ per page, the branch doesn't. Reach for it at a fourth surface: a copy that grew
-    a **decoding** `else` arm reads correctly and puts the UI-thread decode straight back, which is
-    the one thing neither arm does any more. The hero's `CoverMosaic` keeps the one-argument form,
-    its tier being warmed by a fetch.
+    the UI thread, and a redraw winning that race paints an empty grid. It keeps its card model
+    across the leave, which is why the covers under it are shrunk rather than dropped and why it
+    still owes a `mark_dirty()` on leave and the same wire-time seed, having no enter-time fetch.
+  - **The Rust half is `grid_prewarm::grid_cover(path)`** — one tier, one lookup, no branch. Reach
+    for it at a new surface: a copy that grew a **decoding** arm reads correctly and puts the
+    UI-thread decode straight back, which is the one thing it will not do.
 
-- **Cache cap via `grid_prewarm::cover_cap_for_window(app, fallback)`** — one band for every grid,
-  they all draw the same card. Derives its cap from the **window's** own logical size against
+- **Cache cap via `grid_prewarm::cover_cap_for_window(app)`** — one band for every grid, they all
+  draw the same card. Derives its cap from the **window's** own logical size against
   `GridGeometry`'s pitches, deliberately not the monitor's: the monitor caps against a screen the
   window may occupy a corner of, and asking costs a `with_winit_window` round trip that answers
-  `None` for the whole window-less boot. The fallback is passed in so a module keeps its own
-  default and a zero extent lands there.
+  `None` for the whole window-less boot. A zero extent lands on `GRID_COVER_CAP_FALLBACK`, which
+  the module owns now that one tier takes it.
   - **The pitches have to be the grid's, not a footprint estimate**: the cap has to come out at or
     above the cards actually mounted, or the scheduling lookup leaves the overflow on placeholders
     until a scroll. Margin comes from measuring the window rather than the grid's own box;
@@ -751,9 +775,10 @@ three components that answer it, and each argues its geometry at its own file.
     logical desktop being by construction a 1× one, where the buffers are a fifth the size and the
     same bytes buy several times the entries. **It is a ceiling on a tier that has not retuned**:
     the cap is derived from the size being moved *to* while `resize` trims by entry count, and a
-    retune leaves the old buffers in place on purpose (the release/retune asymmetry below), so a
+    retune leaves the old buffers in place on purpose (the release/retune asymmetry above), so a
     drag across a step can hold two sizes at once until each is replaced or evicted. Bounded at
-    one entry per path, and a section leave empties the tier outright.
+    one entry per path, and a section leave shrinks every entry to `PROXY_COVER_DIM` rather than
+    dropping it, so the idle case is that side length squared per cover and not the tier's.
   - **Read after `app.show()` and again on every resize**, through `WindowChrome.display-changed`
     off the winit `Resized` filter. Read once, a cap sized for the launch window is one a later
     maximize overruns. It sets the cap exactly rather than growing it: a smaller window really
@@ -771,7 +796,7 @@ three components that answer it, and each argues its geometry at its own file.
     crossing re-decodes every grid's visible covers mid-drag, on one pool every tier shares.
     Sizing to the band's upper bound is what makes the answer flat across a drag rather than
     merely close, and the step is what collapses the column counts a desktop passes through into
-    a handful of tiers. What a crossing does not cost is the covers themselves; that half is the
+    a handful of sizes. What a crossing does not cost is the covers themselves; that half is the
     release/retune asymmetry above.
   - **The window is not the body, and `BODY_CHROME_W` is the gap.** The sidebar between them is
     the user's to drag from `sidebar-collapsed-w` to `sidebar-max-w`, a range no window
@@ -782,14 +807,15 @@ three components that answer it, and each argues its geometry at its own file.
     not a tier size, but sized for the run where the deferred retune never schedules and it stays
     the live tier.
 
-- **The cap and the size are read together**, in the same `tune_cache_for_display`
-  call — two halves of one budget, and both are answers about the
-  display. The derived size replaced a `448` copied into five files, each justifying it in its own
-  doc comment off the same claim that flex-filled cards "run well past 260 px". They don't:
-  `GridGeometry` packs toward `min-card-w`, so a card is **largest in a narrow panel** and lands
-  near 190 px on a wide one. A tier spelling its own size is the thing to reach for this instead
-  of. Needs no winit round trip, the scale factor being Slint's own, and shares the cap's
-  zero-extent bail. `cover_thumbs::row_cover_size` is the row tier's twin, wired at each of its two
+- **The cap and the size are read together**, in `grid_prewarm::tune_for_display` — two halves of
+  one budget, and both are answers about the display. The derived size replaced a `448` copied
+  into five files, each justifying it in its own doc comment off the same claim that flex-filled
+  cards "run well past 260 px". They don't: `GridGeometry` packs toward `min-card-w`, so a card
+  is **largest in a narrow panel** and lands near 190 px on a wide one. A tier spelling its own
+  size is the thing to reach for this instead of. Needs no winit round trip, the scale factor
+  being Slint's own, and shares the cap's zero-extent bail. It answers the size back for the one
+  caller that publishes it — `Radio.logo-decode-size`, which that tier's card compares its logo
+  against. `cover_thumbs::row_cover_size` is the row tier's twin, wired at each of its two
   construction sites rather than through a tune hook, neither having one.
 
 - **Prewarm path dedup via `grid_prewarm::unique_artwork_paths(paths, cap)`**, first-seen-ordered
@@ -801,8 +827,10 @@ three components that answer it, and each argues its geometry at its own file.
   partly warm tier an uncapped call decodes a full capacity from anywhere in the list, evicting the
   visible prefix to do it.
 
-- **Artist Detail's Albums strip borrows `AlbumsUi.grid_covers`**, and the Artists wiring releases
-  on **both** Artists section-leave and `on_close_detail`.
+- **Artist Detail's Albums strip has nothing to borrow any more** — it draws from the one grid
+  tier like every other card, so the handle that used to hold Albums' is gone and with it the
+  release on both Artists section-leave and `on_close_detail`. Collapsing the Albums sub-section
+  still hands the pixels back, the scroller being unmounted and nothing querying them.
 
 ## Releasing what the UI pins
 
@@ -938,8 +966,9 @@ three components that answer it, and each argues its geometry at its own file.
     each view.** `tab-index`/`current-tab` are an optional sub-predicate defaulting `-1`, so the
     tabless mounts are untouched. My Library mounts five at `index: 3`, so a tab leave fires the
     departing view's existing hook and **every lifecycle path works unchanged** — hence the page
-    needs **no `covers-generation` machinery**, the entering tab's own fetch prewarming before it
-    writes rows. A `0` default on either property silently deactivates every section.
+    never needed the cold-gate machinery the curated pages carried, the entering tab's own fetch
+    prewarming before it writes rows. A `0` default on either property silently deactivates every
+    section.
   - **What the five cannot answer is the page's own leave** — only the *mounted* tab's fires — and
     **the answer is not a sixth mount**, which is the obvious shape and compiles: a gate fires on
     transitions of *its own* predicate, that predicate is already false while Now Playing covers
@@ -1151,8 +1180,9 @@ block first; each page's section below is deltas only.** The nav-index map is in
   `invoke_from_event_loop` posts even from the UI thread, and a redraw winning that race paints a
   bare panel or a `TrackList` of headers over an emptied model.
 
-- **Covers ride the `covers-generation` gate**, and the bump comes off `should_announce_warm`,
-  never off the write — see Covers.
+- **Covers ride one tier that no leave clears**, so a pick paints whatever the tab painted last
+  visit and the prewarm sharpens it. `covers-generation` is the repaint token and nothing else
+  here — see Covers.
 
 - **Signature skips** are keyed on the tab *and* the column count beside the mounted tab's
   contents. Hashing both tabs together, or dropping either of the first two, silently skips exactly
@@ -1161,8 +1191,9 @@ block first; each page's section below is deltas only.** The nav-index map is in
 - **A leave owes `mark_dirty()` for exactly what it hands back** — a tier, a model, a count.
   Tracks' leave releases nothing, so it owes none.
 
-- Shared helpers: `ui::tab_bar::{clamp_tab, grid_signature, should_announce_warm, UNFETCHED_COUNT}`,
+- Shared helpers: `ui::tab_bar::{clamp_tab, grid_signature, UNFETCHED_COUNT}`,
   `ui::grid_rows::{chunk_entity_rows, write_grid}`, `ui::track_list_cache`,
+  `ui::grid_prewarm::{tier, grid_cover, prewarm, hand_back_covers}`,
   `ui::mosaic_hero::{compose_off_thread, MosaicGuard}`.
 
 ### Per-page deltas
@@ -1175,9 +1206,8 @@ edit would otherwise reverse.
   resolve **in memory**, the fetch having lost its sort parameters entirely. **The artist sort
   applies to the cached `Vec`, not the filtered copy** — `first_screenful_paths` picks prewarm
   targets off that cache, so sorting downstream warms the covers of whichever artists SQL returned
-  first while the grid paints a different prefix. **`swap_tab_covers` prewarms
-  `GRID_PREWARM_AHEAD`, not the tier capacity**, the grids being uncapped, so warming everything
-  evicts its own work.
+  first while the grid paints a different prefix. **A tab pick prewarms `GRID_PREWARM_AHEAD`, not
+  the tier capacity**, the grids being uncapped, so warming everything evicts its own work.
 
 - **Recently Played** (two tabs) — **neither has a sort, and that is a decision rather than an
   omission**: the order **is** the page, so the synthetic-field cycle above is deliberately *not*

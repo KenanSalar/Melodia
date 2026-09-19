@@ -48,18 +48,17 @@ use melodia_ui::{
     Playlists, TrackListRow as UiTrackListRow,
 };
 
-use crate::ui::grid_prewarm::GRID_COVER_FALLBACK;
-use state::{DEFAULT_GRID_COVER_CAP, GridData, PlaylistDetailState, PlaylistGridState};
+use state::{GridData, PlaylistDetailState, PlaylistGridState};
 
 #[cfg(test)]
 use grid::compute_indices;
 
 // Reached from outside the slice: `ui::nav_history` replays a walk into a
-// detail, `boot::ui_setup` seeds the persisted one and retunes the cover cap,
-// and its `initial_grid_fetch!` kicks the first fetch after the window is shown
+// detail, `boot::ui_setup` seeds the persisted one, and its
+// `initial_grid_fetch!` kicks the first fetch after the window is shown
 // — which is why `fetch_grid` can't fold into `install` with the rest.
 pub use detail::{open_playlist_with, seed_detail_from_settings};
-pub use grid::{fetch_grid, tune_cache_for_display};
+pub use grid::fetch_grid;
 
 // Reached only from this slice's own `callbacks/`, which used to live two
 // modules away, plus the cross-slice `apply_detail_row_*` mirrors in
@@ -99,11 +98,8 @@ pub struct PlaylistsUi {
     detail: PlaylistDetailState,
     /// Row-tier cache — shared with Tracks / Browse — backs the
     /// detail track-list's artwork column.
+    /// The grid cards draw from `ui::grid_prewarm::tier()`, which no view holds.
     cover_thumbs: Arc<CoverThumbs>,
-    /// Grid-tier (`GRID_COVER_FALLBACK`) cache for the Playlists grid cards.
-    /// Released when the user opens a detail (the grid is unmounted) and
-    /// when leaving the section. Re-warmed on return.
-    grid_covers: Arc<CoverThumbs>,
     /// Detail-tier `(cover, blur)` pair cache for the Playlist Detail
     /// header. Released on detail-close and on section-leave.
     detail_artwork: Arc<DetailArtwork>,
@@ -128,10 +124,6 @@ impl PlaylistsUi {
                 filter: Mutex::new(Needle::default()),
             },
             cover_thumbs,
-            grid_covers: Arc::new(CoverThumbs::with_config(
-                GRID_COVER_FALLBACK,
-                DEFAULT_GRID_COVER_CAP,
-            )),
             detail_artwork: Arc::new(DetailArtwork::new(hero_blur)),
             section: SectionState::new(),
         }
@@ -147,7 +139,7 @@ impl PlaylistsUi {
         if self.section_active() {
             return;
         }
-        self.grid_covers.clear();
+        crate::ui::grid_prewarm::hand_back_covers();
         self.detail_artwork.clear();
         {
             let _gate = self.section.gate();
@@ -164,13 +156,6 @@ impl PlaylistsUi {
         melodia_platform::services::platform::allocator::trim();
     }
 
-    /// Drop just the grid-tier cover cache — called when the user opens
-    /// a playlist (the grid is unmounted).
-    pub fn release_grid_covers(&self) {
-        self.grid_covers.clear();
-        melodia_platform::services::platform::allocator::trim();
-    }
-
     /// Drop just the detail-tier `(cover, blur)` pair cache — called
     /// when the user closes a playlist detail.
     pub fn release_detail_artwork(&self) {
@@ -182,7 +167,7 @@ impl PlaylistsUi {
         let data = self.grid.data.lock().clone();
         let unique = grid::first_screenful_paths(&data);
         if !unique.is_empty() {
-            self.grid_covers.prewarm(&unique);
+            crate::ui::grid_prewarm::prewarm(&unique);
         }
     }
 
@@ -210,26 +195,6 @@ impl PlaylistsUi {
             .lock()
             .row_stats_by_id(id)
             .is_some_and(|(_, _, stat_dependent)| stat_dependent)
-    }
-
-    /// Lazy cover lookup for a Playlists **grid card** — backs
-    /// `Playlists.request-cover`. Resolves against the grid-tier cache.
-    pub fn grid_cover(&self, artwork_path: &str) -> slint::Image {
-        self.grid_covers
-            .get_or_schedule_opt(crate::ui::grid_prewarm::nonempty_artwork_path(artwork_path))
-    }
-
-    /// The grid tier itself, for the wiring that has to reach past a lookup — the
-    /// `Albums::grid_thumbs` contract.
-    pub fn grid_thumbs(&self) -> Arc<CoverThumbs> {
-        self.grid_covers.clone()
-    }
-
-    /// The inline sibling, for the Edit Artwork dialog's current-cover slot: it is written once as
-    /// a property rather than read from a binding, so a scheduled decode has nothing to re-run and
-    /// the placeholder would stand for the life of the dialog.
-    pub fn grid_cover_blocking(&self, artwork_path: &str) -> slint::Image {
-        crate::ui::grid_prewarm::grid_cover_blocking(&self.grid_covers, artwork_path)
     }
 
     /// Lookup of a playlist's canonical stats by id, against the cached

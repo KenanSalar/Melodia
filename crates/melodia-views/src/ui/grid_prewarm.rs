@@ -1,21 +1,93 @@
-//! Small shared helpers for the entity grids' cover caches.
+//! The one cover tier every entity grid draws from, and the helpers that shape it.
 //!
-//! Three things every grid needs and none should own: turning an iterator of optional
-//! artwork paths into a deduplicated, display-ordered `Vec<PathBuf>` for
-//! `CoverThumbs::prewarm`, sizing that cache against the display it will be drawn on, and
-//! resolving a card's cover against its page's `covers-generation`. The per-entity
-//! `first_screenful_paths` wrappers still own the projection.
+//! **One tier, not one per grid.** Every grid draws the same card at the same size, so the seven
+//! that used to sit in six view handles — Favorites held two — were the same LRU spelled seven
+//! times: same fallback, same cap, same retune, same notifier, and the only thing the split bought
+//! was a section leave releasing its own. That is what [`hand_back_covers`] replaces: the leave
+//! hands back the bytes without handing back the picture.
+//!
+//! Search's two card strips and the queue sheet keep private tiers, theirs decoding at sizes of
+//! their own. Radio's logo tier is private for a different reason and argues it at
+//! `ui::radio::covers`: its card reads the decoded extent, so a proxy would move the layout.
+//!
+//! Beside the tier, the three things every grid needs and none should own: turning an iterator of
+//! optional artwork paths into a deduplicated, display-ordered `Vec<PathBuf>` for
+//! `CoverThumbs::prewarm`, sizing the cache against the display it will be drawn on, and resolving
+//! a card's cover. The per-entity `first_screenful_paths` wrappers still own the projection.
 
 use std::collections::HashSet;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use slint::{ComponentHandle, Image};
 
 use melodia_artwork::media::image::artwork::STORE_MAX_DIM;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_ui::AppWindow;
+
+/// LRU capacity a freshly built tier carries until [`tune_for_display`] measures the window.
+/// A construction default only — eight views spelled this same number before they shared a tier.
+pub const GRID_COVER_CAP_FALLBACK: NonZeroUsize = match NonZeroUsize::new(48) {
+    Some(n) => n,
+    None => panic!("GRID_COVER_CAP_FALLBACK > 0"),
+};
+
+/// Side length a leaving section shrinks its covers to, in px.
+///
+/// **Tuned against what a card's tile measures, not against a byte budget.** It is on screen for
+/// the length of one re-entry's prewarm and is drawn upscaled into a tile several times its size,
+/// so the question is how soft the tile may read for that moment — the bytes it saves are a
+/// rounding error at any value worth considering. The one number here to set by eye.
+pub const PROXY_COVER_DIM: u32 = 64;
+
+/// The cover tier every card grid draws from.
+///
+/// A module singleton rather than a field threaded through `ViewCtx` and eight view handles,
+/// because there is exactly one of it and no view owns it — the same shape
+/// `ui::nav_history::nav()` takes, and what retires the strip that used to *borrow* Albums'
+/// tier. `LazyLock` over a boot-set `OnceLock` so there is no initialization order to get
+/// wrong: the first caller builds it, whoever that turns out to be.
+pub fn tier() -> &'static Arc<CoverThumbs> {
+    static TIER: LazyLock<Arc<CoverThumbs>> = LazyLock::new(|| {
+        Arc::new(CoverThumbs::with_config(GRID_COVER_FALLBACK, GRID_COVER_CAP_FALLBACK))
+    });
+    &TIER
+}
+
+/// Hand a grid's decoded pixels back as it goes off screen, keeping a proxy of each so the next
+/// mount paints the cover rather than the fallback glyph.
+///
+/// Every site that used to `clear()` a private tier calls this: a section leave, and the drill
+/// into a detail that unmounts the grid behind it. Pairs the shrink with the `malloc_trim` those
+/// sites already owed, glibc otherwise keeping the freed pages. **Blocking** — every caller is
+/// already on the blocking pool.
+pub fn hand_back_covers() {
+    tier().shrink_to_proxy(PROXY_COVER_DIM);
+    melodia_platform::services::platform::allocator::trim();
+}
+
+/// Retune the tier to the display the window is on, and answer the decode size for the one caller
+/// that publishes it (`Radio.logo-decode-size`, which a station tile compares its logo against to
+/// decide whether the source can fill it).
+///
+/// Called after `app.show()` and again on every resize, off `WindowChrome.display-changed`. The
+/// cap and the size are read together because they are two halves of one budget and both are
+/// answers about the display.
+pub fn tune_for_display(app: &AppWindow) -> u32 {
+    let cap = cover_cap_for_window(app);
+    let size = cover_size_for_window(app);
+    tier().resize(cap);
+    tier().set_thumb_size(size);
+    log::debug!("ui::grid_prewarm cover tier tuned to cap {cap}, {size} px");
+    size
+}
+
+/// Decode `paths` into the tier off the calling thread's own budget — the prewarm every grid runs
+/// before it publishes rows. **Blocking**; pass paths in display order.
+pub fn prewarm(paths: &[PathBuf]) {
+    tier().prewarm(paths);
+}
 
 /// Deduplicated, non-empty artwork paths from an iterator of optional path strings,
 /// first-seen order preserved, stopping at `cap`.
@@ -70,10 +142,10 @@ pub fn cover_cap(
     /// The row pitch beside [`CARD_PITCH_W`]'s column one, the tile being square above its text.
     const ROW_PITCH_H: u32 = MIN_CARD_W + CARD_TEXT_H + GAP;
     const MIN_CAP: usize = 32;
-    /// Ceiling on what one grid tier may hold, in bytes of RGB8. Set at what the old
+    /// Ceiling on what the grid tier may hold, in bytes of RGB8. Set at what the old
     /// entry-count ceiling cost at the largest tier, so the worst case is where it always was
-    /// and only the small-tier cases gain. Every one of these caches is released entirely on
-    /// section leave.
+    /// and only the small-tier cases gain. A section leave shrinks what it holds to
+    /// [`PROXY_COVER_DIM`], so this bounds the on-screen case and nothing idles near it.
     const MAX_TIER_BYTES: usize = 56 * 1024 * 1024;
 
     // Ceiling where [`widest_card`] floors: the cap has to cover what is mounted, so an
@@ -202,11 +274,11 @@ fn logical_dim(physical: u32, scale: f64) -> u32 {
 /// Slint's window rather than winit's monitor: the monitor caps against a screen the
 /// window may occupy a corner of, and asking it cost a `with_winit_window` round trip that
 /// answered `None` for the whole window-less boot.
-pub fn cover_cap_for_window(app: &AppWindow, fallback: NonZeroUsize) -> NonZeroUsize {
+pub fn cover_cap_for_window(app: &AppWindow) -> NonZeroUsize {
     let window = app.window();
     let physical = window.size();
     if physical.width == 0 || physical.height == 0 {
-        return fallback;
+        return GRID_COVER_CAP_FALLBACK;
     }
     let scale = f64::from(window.scale_factor());
     let logical_w = logical_dim(physical.width, scale);
@@ -214,26 +286,23 @@ pub fn cover_cap_for_window(app: &AppWindow, fallback: NonZeroUsize) -> NonZeroU
         logical_w,
         logical_dim(physical.height, scale),
         cover_size(logical_w, scale),
-        fallback,
+        GRID_COVER_CAP_FALLBACK,
     )
 }
 
 /// Resolve one grid card's cover without ever decoding on the calling thread.
 ///
-/// `generation` is the page's `covers-generation`: 0 means the tab was just entered and
-/// its tier cleared on the previous leave, so answer from the cache alone and let the card
-/// paint its placeholder — the off-thread prewarm bumps the counter when it lands, re-running
-/// these bindings. Past 0 a miss is scheduled rather than served, which covers the case the
-/// prewarm can't: a library with more unique covers than the tier holds, where scrolling past
-/// the warmed prefix used to decode under the event loop one card at a time. Full contract in
-/// the "Covers" section of `.claude/rules/ui-patterns.md`.
+/// A miss is scheduled rather than served, which covers the case the prewarm can't: a library with
+/// more unique covers than the tier holds, where scrolling past the warmed prefix used to decode
+/// under the event loop one card at a time. The card takes a placeholder for that frame and the
+/// page's `covers-generation` re-runs this binding when the batch lands. Full contract in the
+/// "Covers" section of `.claude/rules/ui-patterns.md`.
 ///
-/// Shared by the three grid tabs rather than spelled per page: the tier and the counter
-/// differ, the rule doesn't, and a copy that grew a decoding `else` arm would look right
-/// and quietly retire the mechanism.
-pub fn grid_cover(thumbs: &Arc<CoverThumbs>, artwork_path: &str, generation: i32) -> Image {
-    let path = nonempty_artwork_path(artwork_path);
-    if generation == 0 { thumbs.get_cached_opt(path) } else { thumbs.get_or_schedule_opt(path) }
+/// Shared by every grid rather than spelled per page: the counter each one bumps differs, the rule
+/// doesn't, and a copy that grew a decoding `else` arm would look right and quietly put the decode
+/// back on the event loop.
+pub fn grid_cover(artwork_path: &str) -> Image {
+    tier().get_or_schedule_opt(nonempty_artwork_path(artwork_path))
 }
 
 /// [`grid_cover`] for a surface with no generation behind it, which has to decode inline: nothing
@@ -243,8 +312,8 @@ pub fn grid_cover(thumbs: &Arc<CoverThumbs>, artwork_path: &str, generation: i32
 /// counter, and the Edit Artwork dialog's cover slot, a one-shot property write. Shared for the
 /// same reason [`grid_cover`] is: the choice between the two is the whole decision, and a per-view
 /// copy is where it stops being visible.
-pub fn grid_cover_blocking(thumbs: &CoverThumbs, artwork_path: &str) -> Image {
-    thumbs.get_or_load_opt(nonempty_artwork_path(artwork_path))
+pub fn grid_cover_blocking(artwork_path: &str) -> Image {
+    tier().get_or_load_opt(nonempty_artwork_path(artwork_path))
 }
 
 /// The `""` → `None` normalization every cover lookup owes its tier: Slint has no null

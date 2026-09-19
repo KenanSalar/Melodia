@@ -41,8 +41,7 @@ use melodia_ui::{
     ArtistRow as UiArtistRow, Artists, TrackListRow as UiTrackListRow,
 };
 
-use crate::ui::grid_prewarm::GRID_COVER_FALLBACK;
-use state::{ArtistDetailState, ArtistGridState, DEFAULT_GRID_COVER_CAP, GridData};
+use state::{ArtistDetailState, ArtistGridState, GridData};
 
 #[cfg(test)]
 use grid::compute_indices;
@@ -50,10 +49,10 @@ use grid::compute_indices;
 use state::GridIndexCache;
 
 // Reached from outside the slice: `ui::nav_history` replays a walk into a detail, `boot::ui_setup`
-// seeds the persisted one and retunes the cover cap, and its `initial_grid_fetch!` kicks the first
-// fetch after the window is shown — which is why `fetch_grid` can't fold into `install`.
+// seeds the persisted one, and its `initial_grid_fetch!` kicks the first fetch after the window is
+// shown — which is why `fetch_grid` can't fold into `install`.
 pub use detail::{open_artist_with, seed_detail_from_settings};
-pub use grid::{fetch_grid, tune_cache_for_display};
+pub use grid::fetch_grid;
 
 // Reached only from this slice's own `callbacks/`, plus the cross-slice `apply_detail_row_*`
 // mirrors in `callbacks::now_playing` and the drill in `callbacks::cross_tab_nav`. `pub(super)` is
@@ -68,19 +67,16 @@ pub(super) use selection::{clear_selection, handle_select_row, select_all};
 /// Install the Artists grid + detail models, build the handle, and wire every `Artists.*` /
 /// `ArtistDetail.*` callback to it.
 ///
-/// Takes `albums_ui` because Artists depends on Albums twice over: the handle borrows the Albums
-/// grid-cover tier for its own Albums strip, and the "open album from Artist Detail" hand-off needs
-/// a live `AlbumsUi` to call into. That parameter *is* the ordering, so "Albums before Artists" is
-/// a compile error to get wrong rather than a comment in the boot file.
+/// Takes `albums_ui` for the "open album from Artist Detail" hand-off, which needs a live
+/// `AlbumsUi` to call into. That parameter *is* the ordering, so "Albums before Artists" is a
+/// compile error to get wrong rather than a comment in the boot file. The detail's Albums strip
+/// no longer needs it — one tier serves every grid, so there is nothing left to borrow.
 ///
 /// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
 pub fn install(cx: ViewCtx<'_>, albums_ui: &Arc<AlbumsUi>) -> Arc<ArtistsUi> {
     install_models(cx.app);
-    let artists_ui = Arc::new(ArtistsUi::new(
-        cx.cover_thumbs.clone(),
-        albums_ui.grid_thumbs(),
-        detail_artwork::blur_spec(cx.app),
-    ));
+    let artists_ui =
+        Arc::new(ArtistsUi::new(cx.cover_thumbs.clone(), detail_artwork::blur_spec(cx.app)));
     callbacks::wire(cx.app, cx.state, cx.view_state, &artists_ui, albums_ui);
     artists_ui
 }
@@ -91,17 +87,10 @@ pub struct ArtistsUi {
     grid: ArtistGridState,
     detail: ArtistDetailState,
     /// Row-tier cache shared with Tracks / Browse / Albums — backs the small artwork column of the
-    /// detail view's `TrackList`.
+    /// detail view's `TrackList`. The grid cards and the detail's Albums strip both draw from
+    /// `ui::grid_prewarm::tier()`, which is why neither has a field here — one tier serves them
+    /// and the strip has nothing to borrow.
     cover_thumbs: Arc<CoverThumbs>,
-    /// Grid-tier cache for the Artists grid card tiles — private to this view, resolution-derived
-    /// cap, released entirely on section leave (see [`Self::release_section_state`]).
-    grid_covers: Arc<CoverThumbs>,
-    /// Borrowed handle to the **Albums** grid tier. The Artist Detail Albums strip resolves its
-    /// cards through `AlbumsUi::grid_cover` (decode-on-miss on the UI thread), so
-    /// [`detail::open_artist`]'s fetch prewarms the strip's covers into this cache off-thread
-    /// first. Not released here — the Artists wiring already clears the shared LRU through the
-    /// `AlbumsUi` handle.
-    albums_grid_covers: Arc<CoverThumbs>,
     /// Detail-tier `(cover, blur)` pair cache for the Artist Detail header. Released on section
     /// exit.
     detail_artwork: Arc<DetailArtwork>,
@@ -110,11 +99,7 @@ pub struct ArtistsUi {
 }
 
 impl ArtistsUi {
-    fn new(
-        cover_thumbs: Arc<CoverThumbs>,
-        albums_grid_covers: Arc<CoverThumbs>,
-        hero_blur: Option<BlurSpec>,
-    ) -> Self {
+    fn new(cover_thumbs: Arc<CoverThumbs>, hero_blur: Option<BlurSpec>) -> Self {
         Self {
             grid: ArtistGridState {
                 data: Mutex::new(Arc::new(GridData::new(Vec::new()))),
@@ -129,17 +114,12 @@ impl ArtistsUi {
                 applied_selection: Mutex::new(HashSet::new()),
             },
             cover_thumbs,
-            grid_covers: Arc::new(CoverThumbs::with_config(
-                GRID_COVER_FALLBACK,
-                DEFAULT_GRID_COVER_CAP,
-            )),
-            albums_grid_covers,
             detail_artwork: Arc::new(DetailArtwork::new(hero_blur)),
             section: SectionState::new(),
         }
     }
 
-    /// Drop *everything* the Artists section is keeping resident — both cover LRUs, the canonical
+    /// Drop *everything* the Artists section is keeping resident — the detail artwork, the canonical
     /// grid data, the memoized filter/sort indices, the cached detail track rows and the
     /// applied-selection shadow — then hand the freed pages back to the OS. Called off the UI
     /// thread on section leave. Re-entry re-fetches via [`fetch_grid`]; an open detail is
@@ -152,7 +132,7 @@ impl ArtistsUi {
         if self.section_active() {
             return;
         }
-        self.grid_covers.clear();
+        crate::ui::grid_prewarm::hand_back_covers();
         self.detail_artwork.clear();
         {
             let _gate = self.section.gate();
@@ -170,13 +150,6 @@ impl ArtistsUi {
         melodia_platform::services::platform::allocator::trim();
     }
 
-    /// Drop just the grid-tier cover cache. Called off the UI thread when the user opens an
-    /// artist: the grid view is unmounted by the `ArtistDetail.artist-id` flip.
-    pub fn release_grid_covers(&self) {
-        self.grid_covers.clear();
-        melodia_platform::services::platform::allocator::trim();
-    }
-
     /// Drop just the detail-tier `(cover, blur)` pair cache. Called when the user closes a detail.
     pub fn release_detail_artwork(&self) {
         self.detail_artwork.clear();
@@ -188,26 +161,13 @@ impl ArtistsUi {
         let data = self.grid.data.lock().clone();
         let unique = grid::first_screenful_paths(&data);
         if !unique.is_empty() {
-            self.grid_covers.prewarm(&unique);
+            crate::ui::grid_prewarm::prewarm(&unique);
         }
     }
 
     /// Artist id currently open in the detail view (`-1` = grid).
     pub fn detail_artist_id(&self) -> i64 {
         *self.detail.artist_id.lock()
-    }
-
-    /// Lazy cover lookup for an Artists **grid card** — backs `Artists.request-cover`, resolving
-    /// against the grid-tier cache.
-    pub fn grid_cover(&self, image_path: &str) -> slint::Image {
-        self.grid_covers
-            .get_or_schedule_opt(crate::ui::grid_prewarm::nonempty_artwork_path(image_path))
-    }
-
-    /// The grid tier itself, for the wiring that has to reach past a lookup — the
-    /// `AlbumsUi::grid_thumbs` contract.
-    pub fn grid_thumbs(&self) -> Arc<CoverThumbs> {
-        self.grid_covers.clone()
     }
 }
 

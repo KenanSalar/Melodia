@@ -37,15 +37,9 @@ pub(super) fn wire(
     // Detail **header** no longer uses a lazy callback — its cover is
     // decoded paired with the hero blur and pushed into
     // `AlbumDetail.cover` at `open_album` time (see `albums.rs`).
-    {
-        let au = albums_ui.clone();
-        // `generation` is read for its effect on the binding, never its value.
-        albums.on_request_cover(move |path, _generation| au.grid_cover(path.as_str()));
-        crate::ui::cover_generation::notify_on_decode(&albums_ui.grid_thumbs(), ui, |app| {
-            let albums = app.global::<Albums>();
-            albums.set_covers_generation(albums.get_covers_generation().wrapping_add(1));
-        });
-    }
+    // `generation` is read for its effect on the binding, never its value; the notifier that
+    // moves it is `boot::ui_setup::views::install_grid_covers`, one for the shared tier.
+    albums.on_request_cover(|path, _generation| crate::ui::grid_prewarm::grid_cover(path.as_str()));
 
     // columns-changed: the view recomputed its integer column count and
     // already wrote `Albums.columns`. Re-chunk the cached list — no DB hit.
@@ -127,8 +121,7 @@ pub(super) fn wire(
                 )
             );
 
-            let au_release = au.clone();
-            s.runtime.spawn_blocking(move || au_release.release_grid_covers());
+            s.runtime.spawn_blocking(crate::ui::grid_prewarm::hand_back_covers);
 
             let s_disk = s.clone();
             s.runtime.spawn_blocking(move || {

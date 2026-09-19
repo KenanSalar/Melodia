@@ -20,19 +20,22 @@
 //! nor `Sync`, so it can neither live in a cross-thread cache nor come out of a Rayon pipeline.
 //! `SharedPixelBuffer<Rgb8Pixel>` is both, and refcounted.
 
+use std::borrow::Cow;
 use std::collections::{HashSet, VecDeque};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 
+use image::RgbImage;
 use lru::LruCache;
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use slint::{Image, Rgb8Pixel, SharedPixelBuffer};
 
 use super::image_decode::{
-    FilterType, MAX_SOURCE_DIM, decode_capped_to, large_decode_guard, resize_rgb8, source_pixels,
+    FilterType, MAX_SOURCE_DIM, decode_capped_to, large_decode_guard, resize_rgb8,
+    resize_rgb8_image, source_pixels,
 };
 
 /// Row-tier thumbnail size at a 1× display — just over the now-playing bar's tile, the larger of
@@ -189,6 +192,69 @@ impl CoverThumbs {
         self.epoch.fetch_add(1, Ordering::Relaxed);
         pending.reset();
         cache.clear();
+    }
+
+    /// Downscale everything held to a `proxy_dim` square, in place, for a grid whose section is
+    /// being left.
+    ///
+    /// **The alternative to [`Self::clear`], and the difference is what coming back costs.** A
+    /// released tier re-reads and re-decodes every visible cover before a card can paint, so the
+    /// re-entry spends that whole round trip on the fallback glyph. A proxy is the same picture
+    /// for a fraction of the bytes, and the tier already knows what to do with one:
+    /// [`Self::get_or_schedule_opt`] serves an entry whose recorded size isn't the one being drawn
+    /// *and* re-queues it, so frame one paints the cover and the full-size replacement lands
+    /// behind it.
+    ///
+    /// Nothing is invalidated, so **no epoch bump** — there is no released memory for an in-flight
+    /// batch to land in. A batch landing between the snapshot and the write-back below loses its
+    /// decode to a proxy of the same cover and nothing else, which is not worth an identity check
+    /// to avoid.
+    ///
+    /// An entry already at or under `proxy_dim` is left alone: it costs nothing and it is still
+    /// the right answer at the live size. So is a cached failure, which has no buffer and must
+    /// stay remembered.
+    pub fn shrink_to_proxy(&self, proxy_dim: u32) {
+        // Resampled off the lock, as every other decode here is: the section leave this runs on
+        // shares the blocking pool with whatever the next section is already fetching.
+        let full: Vec<(PathBuf, SharedPixelBuffer<Rgb8Pixel>)> = {
+            let cache = self.cache.lock();
+            cache
+                .iter()
+                .filter_map(|(path, held)| {
+                    let buf = held.buf.as_ref()?;
+                    (buf.width().max(buf.height()) > proxy_dim).then(|| (path.clone(), buf.clone()))
+                })
+                .collect()
+        };
+
+        let shrunk: Vec<(PathBuf, SharedPixelBuffer<Rgb8Pixel>)> = full
+            .into_iter()
+            .filter_map(|(path, buf)| {
+                let source =
+                    RgbImage::from_raw(buf.width(), buf.height(), buf.as_bytes().to_vec())?;
+                let proxy =
+                    resize_rgb8_image(Cow::Owned(source), proxy_dim, proxy_dim, FilterType::Box)?;
+                Some((path, buffer_from_rgb(&proxy)))
+            })
+            .collect();
+
+        {
+            let mut cache = self.cache.lock();
+            for (path, buf) in shrunk {
+                // `peek_mut`, never `put`: promoting would reorder the tier into this pass's
+                // iteration order and hand the next eviction the wrong answer about what was
+                // seen last.
+                if let Some(held) = cache.peek_mut(&path) {
+                    held.buf = Some(buf);
+                    held.size = proxy_dim;
+                }
+            }
+        }
+        // What [`Self::set_thumb_size`] clears it for, and for the same reason: `settled` records
+        // which paths this burst already handed to the pool, and every one of them is now worth
+        // handing over again. Left standing, a card scrolled to past the next prewarm would have
+        // its re-decode refused and keep the proxy.
+        self.pending.lock().settled.clear();
     }
 
     /// Retune the LRU capacity in place, once the real display size is known. Shrinking evicts
@@ -510,10 +576,15 @@ fn decode_thumb_buffer(path: &Path, thumb_size: u32) -> CachedBuf {
     // tier's size either way, and enlarging it here only buys a bigger buffer.
     let side = thumb_size.min(dyn_img.width().max(dyn_img.height()));
     let thumb = resize_rgb8(&dyn_img, side, side, FilterType::Box)?;
-    let (w, h) = thumb.dimensions();
+    Some(buffer_from_rgb(&thumb))
+}
+
+/// An RGB8 image as the refcounted buffer the cache and `FemtoVG` both take.
+fn buffer_from_rgb(img: &RgbImage) -> SharedPixelBuffer<Rgb8Pixel> {
+    let (w, h) = img.dimensions();
     let mut buf = SharedPixelBuffer::<Rgb8Pixel>::new(w, h);
-    buf.make_mut_bytes().copy_from_slice(thumb.as_raw());
-    Some(buf)
+    buf.make_mut_bytes().copy_from_slice(img.as_raw());
+    buf
 }
 
 #[cfg(test)]

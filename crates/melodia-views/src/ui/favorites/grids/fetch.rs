@@ -73,25 +73,16 @@ pub async fn refresh_grids(state: &AppState, fav_ui: &Arc<FavoritesUi>, weak: &W
     // without moving that hash.
     crate::ui::favorites::hero::republish_chips(fav_ui, weak);
 
-    // Prewarm the mounted tab's tier off-thread before its rows land in the model: the cards'
-    // `request-*-cover` lookups decode on miss *on the UI thread*, so a cold tab would pay one
-    // synchronous grid-tier decode per visible card at first paint. Only the mounted tab, and only
-    // while the section is on screen; the other warms in `tab-changed`.
-    //
-    // `Some(tab)` only once the decode reports the tier is still *its* — a leave landing inside
-    // the burst hands the buffers back, and announcing that tab anyway would bump
-    // `covers-generation` over an empty tier on the re-enter. A `JoinError` is the same "we don't
-    // know", so it folds in here.
-    let warmed_tab = if fav_ui.section_active() {
+    // Prewarm the mounted tab's covers off-thread before its rows land in the model, so the
+    // cards' first binding evaluation is a cache hit rather than a placeholder plus a scheduled
+    // decode. Only the mounted tab; the other warms in `tab-changed`.
+    if fav_ui.section_active() {
         let fu = fav_ui.clone();
         let tab = fav_ui.active_tab();
-        let warm = tokio::task::spawn_blocking(move || fu.prewarm_tab_covers(tab)).await;
-        matches!(warm, Ok(true)).then_some(tab)
-    } else {
-        None
-    };
+        let _ = tokio::task::spawn_blocking(move || fu.prewarm_tab_covers(tab)).await;
+    }
 
     // Both fetches resolved or logged; push the filtered model so the visible tab reflects fresh
     // data and the live filter in one pass.
-    apply_filtered_grids(fav_ui, weak, warmed_tab);
+    apply_filtered_grids(fav_ui, weak);
 }

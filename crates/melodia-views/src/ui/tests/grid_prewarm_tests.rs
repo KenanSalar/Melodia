@@ -251,38 +251,28 @@ fn the_tier_covers_the_card_at_every_sidebar_width() {
     }
 }
 
-/// **Neither generation may decode on the calling thread.** 0 means the tier was cleared when
-/// its tab was left and the lookup answers from the cache alone; past 0 a miss is handed to the
-/// decode pool and still answers with the placeholder, the card coming back on the bump that
-/// follows. Neither is "return nothing" — an entry already in the tier resolves at any
-/// generation, which is what makes a re-entered warm tab paint instantly.
+/// **A miss may not decode on the calling thread.** The lookup runs inside a Slint model getter,
+/// so the caller is the event loop: a miss is handed to the decode pool and answered with the
+/// placeholder, the card coming back on the bump that follows. A hit resolves inline, which is
+/// what makes a re-entered tab paint on its first frame.
 #[test]
-fn no_generation_decodes_on_the_calling_thread() -> Result<(), Box<dyn std::error::Error>> {
-    let cap = NonZeroUsize::new(4).ok_or("cap must be > 0")?;
-    let thumbs = Arc::new(CoverThumbs::with_config(64, cap));
+fn a_miss_never_decodes_on_the_calling_thread() -> Result<(), Box<dyn std::error::Error>> {
+    let tier = super::tier();
     let (_tmp, path) = write_test_png(512)?;
     let path = path.to_str().ok_or("temp path is not UTF-8")?;
 
     assert_eq!(
-        super::grid_cover(&thumbs, path, 0).size().width,
+        super::grid_cover(path).size().width,
         0,
-        "a cold tier must hand back a placeholder rather than decode on the UI thread"
-    );
-    assert_eq!(
-        super::grid_cover(&thumbs, path, 1).size().width,
-        0,
-        "past 0 a miss schedules and still answers with the placeholder — decoding here is the \
-         regression, one grid-tier decode per visible card in the frame that mounts the grid"
+        "a miss schedules and answers with the placeholder — decoding here is the regression, \
+         one grid-tier decode per visible card in the frame that mounts the grid"
     );
 
     // What the scheduled decode will have done, without racing the pool for it.
-    thumbs.prewarm(&[PathBuf::from(path)]);
-    for generation in [0, 1] {
-        assert_eq!(
-            super::grid_cover(&thumbs, path, generation).size().width,
-            64,
-            "a cover already in the tier resolves at every generation"
-        );
-    }
+    tier.prewarm(&[PathBuf::from(path)]);
+    assert!(
+        super::grid_cover(path).size().width > 0,
+        "a cover already in the tier resolves inline"
+    );
     Ok(())
 }

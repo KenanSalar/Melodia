@@ -1,12 +1,11 @@
-//! Albums grid: DB fetch + filter / sort / chunk / prewarm logic, plus the
-//! display-aware cover-cache cap tuner.
+//! Albums grid: DB fetch + filter / sort / chunk / prewarm logic.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 
-use super::state::{DEFAULT_GRID_COVER_CAP, GRID_PREWARM_AHEAD, GridData, GridIndexCache};
+use super::state::{GRID_PREWARM_AHEAD, GridData, GridIndexCache};
 use super::{AlbumsUi, to_slint_album_row};
 use crate::ui::grid_rows::chunk_rows;
 use crate::ui::row_match;
@@ -58,8 +57,8 @@ pub async fn fetch_grid(
     if albums_ui.section_active() {
         let unique = first_screenful_paths(&data);
         if !unique.is_empty() {
-            let thumbs = albums_ui.grid_covers.clone();
-            let _ = tokio::task::spawn_blocking(move || thumbs.prewarm(&unique)).await;
+            let _ = tokio::task::spawn_blocking(move || crate::ui::grid_prewarm::prewarm(&unique))
+                .await;
         }
     }
 
@@ -188,19 +187,4 @@ pub(super) fn first_screenful_paths(data: &GridData) -> Vec<PathBuf> {
         data.albums.iter().map(|a| a.artwork_path.as_deref()),
         GRID_PREWARM_AHEAD,
     )
-}
-
-// --- Cap tuning -----------------------------------------------------------
-
-/// Retune the grid-tier cover cache to the real display resolution. Called after
-/// `app.show()` and again on every resize, off `WindowChrome.display-changed`; the cache is
-/// constructed with `DEFAULT_GRID_COVER_CAP` and resized here. The
-/// detail-tier `(cover, blur)` pair cache keeps its small fixed cap (see
-/// [`crate::ui::detail_artwork`]).
-pub fn tune_cache_for_display(app: &AppWindow, albums_ui: &AlbumsUi) {
-    let cap = crate::ui::grid_prewarm::cover_cap_for_window(app, DEFAULT_GRID_COVER_CAP);
-    let size = crate::ui::grid_prewarm::cover_size_for_window(app);
-    albums_ui.grid_covers.resize(cap);
-    albums_ui.grid_covers.set_thumb_size(size);
-    log::debug!("ui::albums album-cover cache tuned to cap {cap}, {size} px");
 }

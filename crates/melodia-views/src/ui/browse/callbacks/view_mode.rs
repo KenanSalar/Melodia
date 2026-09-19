@@ -7,7 +7,6 @@ use slint::ComponentHandle;
 
 use crate::ui::browse::{self as browse_ui_mod, BrowseUi};
 use crate::ui::callbacks::macros::spawn_blocking_logged;
-use crate::ui::tab_bar::should_announce_warm;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Browse};
@@ -36,41 +35,16 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
             let mode_idx = browse_ui_mod::mode_index(&g, mode);
             bu.set_view_mode(mode);
             g.set_view_mode(mode_idx);
-            g.set_covers_generation(0);
             browse_ui_mod::rebuild_cards(&ui, &bu);
 
-            let bu_work = bu.clone();
-            let weak_bump = weak.clone();
+            // The toggle has no fetch to hide a prewarm behind, so the cards mount against
+            // whatever the tier holds and each miss schedules itself; the shared notifier
+            // brings them back. Toggling *away* hands the pixels back as proxies.
             if mode == browse_ui_mod::BrowseViewMode::Card {
-                s.runtime.spawn(async move {
-                    let bu_prewarm = bu_work.clone();
-                    // A `JoinError` is the same "we don't know" as a prewarm that handed
-                    // its buffers back.
-                    // `Some(Card)` is "we decoded for the card tier and still hold it" —
-                    // the shape `should_announce_warm` takes, with the mode standing in
-                    // for the tab a grid page would pass.
-                    let warmed =
-                        tokio::task::spawn_blocking(move || bu_prewarm.prewarm_card_covers())
-                            .await
-                            .unwrap_or(false)
-                            .then_some(browse_ui_mod::BrowseViewMode::Card);
-                    let _ = weak_bump.upgrade_in_event_loop(move |ui| {
-                        // Both shadows are written on this thread, so this is the same
-                        // re-check the prewarm made, against anything that landed after
-                        // it returned.
-                        if should_announce_warm(
-                            warmed,
-                            bu_work.section_active(),
-                            bu_work.view_mode(),
-                        ) {
-                            let g = ui.global::<Browse>();
-                            g.set_covers_generation(g.get_covers_generation() + 1);
-                        }
-                    });
-                });
+                let bu_prewarm = bu.clone();
+                s.runtime.spawn_blocking(move || bu_prewarm.prewarm_card_covers());
             } else {
-                let bu_release = bu.clone();
-                s.runtime.spawn_blocking(move || bu_release.release_grid_covers());
+                s.runtime.spawn_blocking(crate::ui::grid_prewarm::hand_back_covers);
             }
 
             let s_disk = s.clone();
@@ -94,10 +68,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
         });
     }
 
-    // request-card-cover: one card's thumbnail off Browse's own grid tier, decoded only
-    // once `covers-generation` says the tier is warm.
-    {
-        let bu = browse_ui.clone();
-        g.on_request_card_cover(move |path, generation| bu.grid_cover(&path, generation));
-    }
+    // request-card-cover: one card's thumbnail off the shared grid tier. `generation` is read
+    // for its effect on the binding, never its value.
+    g.on_request_card_cover(|path, _generation| crate::ui::grid_prewarm::grid_cover(&path));
 }

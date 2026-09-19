@@ -2,7 +2,6 @@
 //! Playlist Detail submodules.
 
 use std::collections::HashSet;
-use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -126,14 +125,6 @@ pub(super) struct PlaylistDetailState {
     /// read. Cleared on fresh-open. Mirrors `ArtistDetailState::filter`.
     pub filter: Mutex<Needle>,
 }
-
-/// Fallback LRU capacity for the **grid** cover cache, used at
-/// construction and whenever the display can't be queried. Mirrors the
-/// Albums tier.
-pub(super) const DEFAULT_GRID_COVER_CAP: NonZeroUsize = match NonZeroUsize::new(48) {
-    Some(n) => n,
-    None => panic!("DEFAULT_GRID_COVER_CAP > 0"),
-};
 
 /// How many leading playlists' covers `fetch_grid` prewarms before the
 /// grid first paints. Same rationale as the Albums tier — covers the first

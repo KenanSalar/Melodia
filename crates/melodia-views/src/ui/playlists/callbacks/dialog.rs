@@ -518,7 +518,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let artwork_path =
                 pu.grid_stats_by_id(id).and_then(|p| p.thumbnail_path).unwrap_or_default();
             let s = s.clone();
-            let pu = pu.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
                 let candidates = library::playlists::get_playlist_artwork_paths(&s, id)
@@ -531,7 +530,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     let current_cover = if artwork_path.is_empty() {
                         Image::default()
                     } else {
-                        pu.grid_cover_blocking(&artwork_path)
+                        crate::ui::grid_prewarm::grid_cover_blocking(&artwork_path)
                     };
                     let cand_rows: Vec<SharedString> =
                         candidates.into_iter().map(SharedString::from).collect();

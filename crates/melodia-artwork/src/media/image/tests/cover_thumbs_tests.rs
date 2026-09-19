@@ -317,3 +317,69 @@ fn resize_shrinks_cap_and_evicts() -> TestResult {
     assert_eq!(cache.len(), 2);
     Ok(())
 }
+
+/// A section leave hands the bytes back and keeps the picture. Cleared instead, every card on the
+/// re-entry paints its fallback glyph for as long as the re-decode takes, which is the whole reason
+/// the leave shrinks.
+#[test]
+fn a_shrink_keeps_the_cover_at_a_fraction_of_the_bytes() -> TestResult {
+    let cap = NonZeroUsize::new(8).ok_or("cap must be > 0")?;
+    let thumbs = CoverThumbs::with_config(256, cap);
+    let (_tmp, path) = write_test_png(600)?;
+
+    let warm = thumbs.get_or_load_rgb8(&path).ok_or("cover failed to decode")?;
+    assert_eq!(warm.width(), 256);
+
+    thumbs.shrink_to_proxy(64);
+
+    let proxy = thumbs.get_cached_opt(path.to_str()).size();
+    assert_eq!(
+        (proxy.width, proxy.height),
+        (64, 64),
+        "a leave must leave the cover behind at the proxy size, not drop it"
+    );
+    Ok(())
+}
+
+/// The recorded size is what `holds` compares, so a proxy has to read as stale to everything that
+/// decodes — otherwise the prewarm that follows the re-entry skips it and the card keeps the soft
+/// tile for the rest of the session.
+#[test]
+fn a_proxy_reads_as_stale_to_the_next_prewarm() -> TestResult {
+    let cap = NonZeroUsize::new(8).ok_or("cap must be > 0")?;
+    let thumbs = CoverThumbs::with_config(256, cap);
+    let (_tmp, path) = write_test_png(600)?;
+    thumbs.get_or_load(&path);
+
+    thumbs.shrink_to_proxy(64);
+    thumbs.prewarm(std::slice::from_ref(&path));
+
+    let refreshed = thumbs.get_cached_opt(path.to_str()).size();
+    assert_eq!(
+        (refreshed.width, refreshed.height),
+        (256, 256),
+        "the prewarm after a leave must replace the proxy at the live tier size"
+    );
+    Ok(())
+}
+
+/// A cover the tier could not decode is remembered so a refilter doesn't keep re-opening a broken
+/// file. A shrink has nothing to shrink there and must not turn that answer back into a miss.
+#[test]
+fn a_shrink_leaves_a_remembered_failure_alone() -> TestResult {
+    let cap = NonZeroUsize::new(8).ok_or("cap must be > 0")?;
+    let thumbs = CoverThumbs::with_config(256, cap);
+    let dir = tempfile::tempdir()?;
+    let broken = dir.path().join("broken.jpg");
+    std::fs::write(&broken, b"not an image")?;
+
+    assert!(thumbs.get_or_load_rgb8(&broken).is_none(), "a broken file must fail to decode");
+    thumbs.shrink_to_proxy(64);
+
+    assert_eq!(
+        thumbs.cache.lock().peek(&broken).map(|held| held.size),
+        Some(256),
+        "a cached failure keeps the size it was attempted at, so it stays remembered"
+    );
+    Ok(())
+}

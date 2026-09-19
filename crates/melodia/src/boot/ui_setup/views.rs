@@ -45,6 +45,32 @@ fn install_row_covers(app: &AppWindow, cover_thumbs: &Arc<image::cover_thumbs::C
     });
 }
 
+/// Re-run every card grid's cover binding once a scheduled decode lands.
+///
+/// **One notifier, because there is one grid tier** — `set_decoded_notifier` is a `OnceLock` and
+/// the seven views that used to install their own now share it. Bumping a generation whose page
+/// isn't mounted is a property write with no bindings to dirty, so answering for all six costs
+/// nothing and saves the tier having to know which grid asked. Slint globals share no trait to be
+/// generic over, hence the list. Radio is absent because its logo tier is its own.
+fn install_grid_covers(app: &AppWindow) {
+    ui::cover_generation::notify_on_decode(ui::grid_prewarm::tier(), app, |app| {
+        macro_rules! repaint {
+            ($($global:ty),+ $(,)?) => {$({
+                let g = app.global::<$global>();
+                g.set_covers_generation(g.get_covers_generation().wrapping_add(1));
+            })+};
+        }
+        repaint!(
+            melodia_ui::Albums,
+            melodia_ui::Artists,
+            melodia_ui::Browse,
+            melodia_ui::Favorites,
+            melodia_ui::Playlists,
+            melodia_ui::RecentlyPlayed,
+        );
+    });
+}
+
 /// Install every view slice and its callbacks. Seeds the persisted nav index
 /// and reopens each view's persisted detail (if any). Returns the per-view
 /// handles for downstream wiring.
@@ -84,9 +110,11 @@ pub fn install_views(
     // rather than after the five tabs.
     ui::my_library::install(app, state);
 
-    // Ahead of the first `install`, every slice cloning the cache into its handle.
+    // Ahead of the first `install`, every slice cloning the row cache into its handle. The grid
+    // tier needs no clone and no `cx` field — `ui::grid_prewarm::tier()` is the whole of it.
     let cover_thumbs = Arc::new(image::cover_thumbs::CoverThumbs::new());
     install_row_covers(app, &cover_thumbs);
+    install_grid_covers(app);
 
     let cx = ui::view_ctx::ViewCtx {
         app,
@@ -105,8 +133,8 @@ pub fn install_views(
     let artists_ui = ui::artists::install(cx, &albums_ui);
     let genres_ui = ui::genres::install(cx);
     let playlists_ui = ui::playlists::install(cx);
-    let favorites_ui = ui::favorites::install(cx, &artists_ui);
-    let recently_played_ui = ui::recently_played::install(cx);
+    ui::favorites::install(cx, &artists_ui);
+    ui::recently_played::install(cx);
     let radio_ui = ui::radio::install(cx);
     let search_ui = ui::search::install(cx, &albums_ui, &artists_ui);
 
@@ -151,31 +179,23 @@ pub fn install_views(
     };
     ui::callbacks::wire_now_playing_favorite(app, state, row_flags);
     ui::callbacks::wire_now_playing_rating(app, state, row_flags);
-    // Retune every grid-tier cover LRU to the real display — one band for all of
-    // them, drawing the same card at the same size. Genres has no cover cache.
+    // Retune the cover tiers to the real display. One call for every card grid, they all draw
+    // the same card at the same size; Genres has no cover at all and Radio has its own tier.
     //
     // **Deferred to the event loop, because this runs long before
-    // `app.show()`**: inline, `with_winit_window` finds no window and every tier
-    // silently takes its construction fallback, while `scale_factor` answers 1.0
+    // `app.show()`**: inline, `with_winit_window` finds no window and the tier
+    // silently keeps its construction fallback, while `scale_factor` answers 1.0
     // until the window is on a monitor and serves a `HiDPI` display the 1×
     // decode size. The closure's `Arc` clones keep the handles this scope drops.
-    let (tune_albums, tune_artists) = (albums_ui.clone(), artists_ui.clone());
-    let (tune_playlists, tune_favorites) = (playlists_ui.clone(), favorites_ui.clone());
-    let (tune_recent, tune_browse) = (recently_played_ui.clone(), browse_ui.clone());
-    let tune_radio = radio_ui.clone();
-    let tune_rows = cover_thumbs.clone();
+    let (tune_rows, tune_radio) = (cover_thumbs.clone(), radio_ui.clone());
     let weak = app.as_weak();
     let retune = move || {
         let Some(app) = weak.upgrade() else { return };
-        ui::albums::tune_cache_for_display(&app, &tune_albums);
-        ui::artists::tune_cache_for_display(&app, &tune_artists);
-        ui::playlists::tune_cache_for_display(&app, &tune_playlists);
-        ui::favorites::tune_cache_for_display(&app, &tune_favorites);
-        ui::recently_played::tune_cache_for_display(&app, &tune_recent);
-        ui::browse::tune_cache_for_display(&app, &tune_browse);
+        ui::grid_prewarm::tune_for_display(&app);
+        // Radio's logo tier is the one card tier that isn't the shared one — see its own
+        // `covers` module for why — so it still tunes itself.
         ui::radio::tune_cache_for_display(&app, &tune_radio);
-        // The row tier belongs to no view, so it has no
-        // `tune_cache_for_display` — but it owes the same post-show read.
+        // The row tier is the other shared one and owes the same post-show read.
         tune_rows.set_thumb_size(image::cover_thumbs::row_cover_size(f64::from(
             app.window().scale_factor(),
         )));

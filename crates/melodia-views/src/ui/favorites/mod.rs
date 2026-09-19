@@ -37,7 +37,7 @@ use crate::ui::view_ctx::ViewCtx;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::track::FavoriteStats;
 
-use state::{FavoritesUiState, GRID_THUMB_CAP};
+use state::FavoritesUiState;
 
 /// This page's `Nav.selected-index`. **The single definition**, beside the view it names, the way
 /// [`crate::ui::my_library::NAV_MY_LIBRARY`] sits beside its page — the cross-tab hand-off stamps
@@ -45,14 +45,9 @@ use state::{FavoritesUiState, GRID_THUMB_CAP};
 /// which band is up.
 pub const NAV_FAVORITES: i32 = 2;
 
-// `boot::ui_setup` retunes the cover cap once the window is live.
-pub use covers::tune_cache_for_display;
-
 // `pub(super)` is `pub(in crate::ui)` here, exactly the reach these need: this slice's own
 // `callbacks/`, plus `ui::hero_chips`.
-pub(super) use grids::{
-    apply_filtered_grids_now, mark_covers_warm, refresh_grids, set_artist_sort,
-};
+pub(super) use grids::{apply_filtered_grids_now, refresh_grids, set_artist_sort};
 pub(super) use hero::refresh_hero;
 pub(super) use rows::{to_slint_fav_artist_row, to_slint_most_played_row};
 pub(super) use selection::{clear_selection, handle_select_row, select_all};
@@ -80,9 +75,6 @@ pub fn install(cx: ViewCtx<'_>, artists_ui: &Arc<ArtistsUi>) -> Arc<FavoritesUi>
     let favorites_ui =
         Arc::new(FavoritesUi::new(cx.cover_thumbs.clone(), detail_artwork::blur_spec(cx.app)));
     callbacks::wire(cx.app, cx.state, cx.view_state, &favorites_ui, artists_ui);
-    for tier in [&favorites_ui.most_played_thumbs, &favorites_ui.artist_thumbs] {
-        crate::ui::cover_generation::notify_on_decode(tier, cx.app, grids::repaint_covers);
-    }
     if let Some(vs) = cx.view_state {
         seed_tab(cx.app, &favorites_ui, vs.favorites_tab);
     }
@@ -98,9 +90,6 @@ pub struct FavoritesUi {
     /// The band's blur shape, or `None` under the aurora setting — read once at install, the
     /// setting being restart-gated, because the compose runs where no window handle is in reach.
     pub(super) hero_blur: Option<BlurSpec>,
-    /// The two grid tiers, released on section leave *and* on tab-leave.
-    pub(super) most_played_thumbs: Arc<CoverThumbs>,
-    pub(super) artist_thumbs: Arc<CoverThumbs>,
     /// Visibility + staleness + the mutation gate, the unit every entity grid carries.
     section: SectionState,
     /// Synchronous shadow of `Favorites.tab-idx`. The off-thread fetchers pick which cover tier to
@@ -125,16 +114,6 @@ impl FavoritesUi {
             inner: FavoritesUiState::new(),
             cover_thumbs,
             hero_blur,
-            most_played_thumbs: Arc::new(CoverThumbs::with_config(
-                crate::ui::grid_prewarm::GRID_COVER_FALLBACK,
-                GRID_THUMB_CAP,
-            )),
-            // Same tier as Most Played — the circular mask is applied at draw time, so the source
-            // needs no extra resolution.
-            artist_thumbs: Arc::new(CoverThumbs::with_config(
-                crate::ui::grid_prewarm::GRID_COVER_FALLBACK,
-                GRID_THUMB_CAP,
-            )),
             section: SectionState::new(),
             active_tab: AtomicU8::new(FavoritesTab::Songs.as_code()),
             songs_dirty: AtomicBool::new(true),
@@ -212,8 +191,7 @@ impl FavoritesUi {
         if self.section_active() {
             return;
         }
-        self.most_played_thumbs.clear();
-        self.artist_thumbs.clear();
+        crate::ui::grid_prewarm::hand_back_covers();
         {
             let _gate = self.gate();
             self.inner.tracks_all.clear();
