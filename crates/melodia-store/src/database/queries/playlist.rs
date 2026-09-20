@@ -193,8 +193,7 @@ pub async fn update_playlist(
 ///
 /// **Chunked rather than one statement per id**, [`super::track::set_favorite`]'s shape: the card
 /// menu's batch arm hands this a whole selection, and the write pool is one connection, so a loop
-/// over ids is that many serialised round trips. A chunk is also one implicit transaction, where
-/// the loop left a mid-way failure half applied.
+/// over ids is that many serialised round trips.
 pub async fn delete_playlists(db: &DbPool, ids: &[i64]) -> Result<(), AppError> {
     if ids.is_empty() {
         return Ok(());

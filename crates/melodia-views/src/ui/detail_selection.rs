@@ -82,6 +82,10 @@ pub fn handle_select_row<V: RowSelectionView>(
 
 /// Take every displayed row into the selection. The anchor is left where the last click put it;
 /// [`crate::ui::list_selection::select_all_curated`] argues why.
+///
+/// **Deliberately not `list_selection::select_all_ids`**, which the flat lists take: the stamper
+/// below is the O(changed) pass over this view's own cache, so folding the two walks into one
+/// would trade a cheaper stamp for a full one.
 pub fn select_all<V: RowSelectionView>(view: &V, refs: &SelectionRefs<'_>) {
     write_selection(view, crate::ui::list_selection::displayed_ids(&view.track_rows()));
     apply_selection_to_rows(view, refs);

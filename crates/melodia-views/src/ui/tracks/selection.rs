@@ -56,10 +56,8 @@ pub fn handle_select_row(
 /// [`crate::ui::list_selection::select_all_curated`] argues why.
 pub fn select_all(ui: &AppWindow) {
     let g = ui.global::<Tracks>();
-    let ids = list_selection::displayed_ids(&g.get_rows());
-    let id_set: HashSet<i32> = ids.iter().copied().collect();
+    let ids = list_selection::select_all_ids(&g.get_rows());
     write_selection(&g, ids);
-    list_selection::stamp_rows_selected(&g.get_rows(), &id_set);
 }
 
 /// Reset selection (Escape, the row menu's "Clear selection", and section-leave).

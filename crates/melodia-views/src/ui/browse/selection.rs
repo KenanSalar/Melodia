@@ -7,7 +7,7 @@ use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
 use super::BrowseUi;
 use crate::ui::util::clamp_i64_to_i32;
-use melodia_ui::{AppWindow, Browse, TrackListRow as UiTrackListRow};
+use melodia_ui::{AppWindow, Browse};
 
 /// Compute the new selection state for a row click and apply it. Mirrors
 /// `tracks::handle_select_row`, with one Browse-specific guard: disk-only
@@ -69,12 +69,12 @@ pub fn handle_select_row(
 }
 
 /// Take every displayed row into the selection. Disk-only rows drop out inside
-/// `displayed_ids`, which filters on the same `enabled` / `id != 0` pair the click handler
-/// guards on.
+/// `select_all_ids`, which filters on the same `enabled` / `id != 0` pair the click handler
+/// guards on, and stamps them unselected in the walk that collects the rest.
 pub fn select_all(ui: &AppWindow) {
     let g = ui.global::<Browse>();
-    write_selection(&g, crate::ui::list_selection::displayed_ids(&g.get_rows()));
-    apply_selection_to_rows(&g);
+    let ids = crate::ui::list_selection::select_all_ids(&g.get_rows());
+    write_selection(&g, ids);
 }
 
 /// Reset selection (Escape, the row menu's "Clear selection", and section-leave).
@@ -82,18 +82,7 @@ pub fn clear_selection(ui: &AppWindow) {
     let g = ui.global::<Browse>();
     write_selection(&g, Vec::new());
     g.set_selection_anchor(-1);
-    let rows = g.get_rows();
-    if let Some(vm) = rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
-        for i in 0..vm.row_count() {
-            let Some(mut r) = vm.row_data(i) else {
-                continue;
-            };
-            if r.selected {
-                r.selected = false;
-                vm.set_row_data(i, r);
-            }
-        }
-    }
+    crate::ui::list_selection::stamp_rows_selected(&g.get_rows(), &HashSet::new());
 }
 
 /// Clear the persistent `selected-ids` model + anchor without walking
@@ -104,23 +93,11 @@ pub(super) fn reset_selection(g: &Browse) {
     g.set_selection_anchor(-1);
 }
 
-/// Walk the `Browse.rows` `VecModel` and flip each row's `selected` flag
-/// to match the current `selected-ids` set.
+/// Flip each row's `selected` flag to match the current `selected-ids` set, this view's
+/// selection living on the global rather than being handed in.
 pub(super) fn apply_selection_to_rows(g: &Browse) {
     let selected: HashSet<i32> = g.get_selected_ids().iter().collect();
-    let rows = g.get_rows();
-    if let Some(vm) = rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
-        for i in 0..vm.row_count() {
-            let Some(mut r) = vm.row_data(i) else {
-                continue;
-            };
-            let now = selected.contains(&r.id);
-            if r.selected != now {
-                r.selected = now;
-                vm.set_row_data(i, r);
-            }
-        }
-    }
+    crate::ui::list_selection::stamp_rows_selected(&g.get_rows(), &selected);
 }
 
 /// Mutate the persistent `selected-ids` `VecModel<i32>` in place. Falls

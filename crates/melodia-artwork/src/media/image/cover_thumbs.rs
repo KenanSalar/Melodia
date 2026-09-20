@@ -76,10 +76,11 @@ struct Cached {
     size: u32,
 }
 
-/// Bounded Rayon pool for [`CoverThumbs::prewarm`]. Each decode briefly holds a full-resolution
-/// `DynamicImage`, so fanning across the `num_cpus`-wide global pool would let that many coexist
-/// at the peak; a small dedicated one bounds that *and* isolates the burst from the library
-/// scanner. `None` if it fails to build, in which case `prewarm` falls back to the global pool.
+/// Bounded Rayon pool for everything this tier hands off — the prewarm, the scheduled drain and
+/// the proxy shrink. Each decode briefly holds a full-resolution `DynamicImage`, so fanning across
+/// the `num_cpus`-wide global pool would let that many coexist at the peak; a small dedicated one
+/// bounds that *and* isolates the burst from the library scanner. `None` if it fails to build, in
+/// which case every caller falls back to the global pool.
 static DECODE_POOL: OnceLock<Option<rayon::ThreadPool>> = OnceLock::new();
 
 /// Sized to half the logical cores, clamped — the knob trading prewarm throughput against the

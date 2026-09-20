@@ -49,7 +49,6 @@ fn unnamed_scope(asking_scope: &str) -> bool {
 ///
 /// `RefCell` rather than a mutex: every path here is the event loop, as with the section gate's
 /// latch, and a re-entrant borrow should fail loudly rather than park the UI thread.
-#[derive(Default)]
 struct Selection {
     scope: String,
     /// **Pick order, and never sorted — it is what the batch actions queue in.**
@@ -60,18 +59,26 @@ struct Selection {
     ids: Vec<i32>,
     /// `ids` as a set, because the membership question is asked far more often than it is
     /// answered: every mounted card re-runs `selected` on each generation bump, so a scan of
-    /// `ids` makes one publish cost mounted cards times selected ids. Rebuilt in [`publish`],
-    /// which already walks the whole set.
+    /// `ids` makes one publish cost mounted cards times selected ids. Built beside the `ids` it
+    /// mirrors, in [`Selection::new`].
     members: HashSet<i32>,
     /// The id a shift-range measures from, `0` for none. No card carries id 0.
     anchor: i32,
 }
 
 impl Selection {
-    /// The only way to build one, so `members` cannot drift from `ids`.
+    /// The one place the fields are assembled, [`Default`] included, so `members` cannot drift
+    /// from `ids`.
     fn new(scope: String, ids: Vec<i32>, anchor: i32) -> Self {
         let members = ids.iter().copied().collect();
         Self { scope, ids, members, anchor }
+    }
+}
+
+impl Default for Selection {
+    /// The empty selection: no scope, so every grid's `selected` reads back `false`.
+    fn default() -> Self {
+        Self::new(String::new(), Vec::new(), 0)
     }
 }
 

@@ -69,11 +69,10 @@ pub fn handle_select_row(
 /// why.
 pub fn select_all(ui: &AppWindow, search_ui: &SearchUi) {
     let g = ui.global::<Search>();
-    let ids = crate::ui::list_selection::displayed_ids(&g.get_tracks());
+    let ids = crate::ui::list_selection::select_all_ids(&g.get_tracks());
     let id_set: HashSet<i32> = ids.iter().copied().collect();
     write_selection(&g, ids);
     search_ui.state().applied_selection.lock().clone_from(&id_set);
-    apply_per_row_selection(&g, &id_set);
 }
 
 /// Reset selection (Escape, the row menu's "Clear selection", section-leave,
@@ -86,25 +85,10 @@ pub fn clear_selection(ui: &AppWindow, search_ui: &SearchUi) {
     apply_per_row_selection(&g, &HashSet::new());
 }
 
-/// Re-stamp `selected: bool` on every row in the visible
-/// `VecModel<TrackListRow>` to match `desired`. Skipped rows whose flag
-/// already matches so the `ListView` delegate cache survives for any
-/// row that didn't actually flip.
+/// Re-stamp `selected: bool` on every row in the visible `VecModel<TrackListRow>` to match
+/// `desired`, naming the model this view keeps them in.
 fn apply_per_row_selection(g: &Search, desired: &HashSet<i32>) {
-    let rows = g.get_tracks();
-    let Some(vm) = rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
-        return;
-    };
-    for i in 0..vm.row_count() {
-        let Some(mut r) = vm.row_data(i) else {
-            continue;
-        };
-        let now = desired.contains(&r.id);
-        if r.selected != now {
-            r.selected = now;
-            vm.set_row_data(i, r);
-        }
-    }
+    crate::ui::list_selection::stamp_rows_selected(&g.get_tracks(), desired);
 }
 
 /// Mutate the persistent `selected-ids` `VecModel<i32>` in place.
