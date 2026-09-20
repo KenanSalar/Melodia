@@ -58,13 +58,22 @@ pub fn tier() -> &'static Arc<CoverThumbs> {
 /// Hand a grid's decoded pixels back as it goes off screen, keeping a proxy of each so the next
 /// mount paints the cover rather than the fallback glyph.
 ///
-/// Every site that used to `clear()` a private tier calls this: a section leave, and the drill
-/// into a detail that unmounts the grid behind it. Pairs the shrink with the `malloc_trim` those
-/// sites already owed, glibc otherwise keeping the freed pages. **Blocking** — every caller is
-/// already on the blocking pool.
+/// For a caller whose teardown is this and nothing else: the drill into a detail that unmounts the
+/// grid behind it, and the Albums sub-section collapsing. A `release_section_state` frees more
+/// after this and owes one trim at the end of all of it, so it takes [`shrink_covers`] instead.
+/// **Blocking** — every caller is already on the blocking pool.
 pub fn hand_back_covers() {
-    tier().shrink_to_proxy(PROXY_COVER_DIM);
+    shrink_covers();
     melodia_platform::services::platform::allocator::trim();
+}
+
+/// [`hand_back_covers`] without the `malloc_trim`, for a teardown that trims once at its end.
+///
+/// Trimming here as well would walk both arenas before the caller has freed its grid data, row
+/// caches and detail artwork, so the pass that covers the whole teardown is the caller's and this
+/// one is only in its way. **Blocking**, for the same reason.
+pub fn shrink_covers() {
+    tier().shrink_to_proxy(PROXY_COVER_DIM);
 }
 
 /// Retune the tier to the display the window is on, and answer the decode size for the one caller

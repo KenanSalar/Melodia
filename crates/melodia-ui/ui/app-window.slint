@@ -358,7 +358,7 @@ export component AppWindow inherits Window {
         active-changed(active) => { Tracks.section-active-changed(active); }
     }
 
-    // Albums. Rust releases the album-tier cover cache on `false` (tab away, nav away, or
+    // Albums. Rust shrinks the shared grid tier to proxies on `false` (tab away, nav away, or
     // opening Now Playing *from* the tab) and re-warms on `true`.
     SectionActiveGate {
         index: 3;

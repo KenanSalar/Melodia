@@ -27,8 +27,9 @@ export global Albums {
     // comes back on the bump below, rather than decoding under the event loop.
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
     in property <int> covers-generation: 0;
-    // Rust releases the album-tier cover cache on `false` and re-warms the first screenful on
-    // `true` — the grid-size buffers aren't worth keeping resident while the section is hidden.
+    // Rust shrinks the shared grid tier to proxies on `false` and re-warms the first screenful on
+    // `true` — the full-size buffers aren't worth keeping resident while the section is hidden,
+    // and the proxy is what paints the re-entry rather than the fallback glyph.
     callback section-active-changed(bool);
 }
 

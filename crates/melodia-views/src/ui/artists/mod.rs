@@ -132,7 +132,7 @@ impl ArtistsUi {
         if self.section_active() {
             return;
         }
-        crate::ui::grid_prewarm::hand_back_covers();
+        crate::ui::grid_prewarm::shrink_covers();
         self.detail_artwork.clear();
         {
             let _gate = self.section.gate();

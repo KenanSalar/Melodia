@@ -1,5 +1,5 @@
 //! Browse's card view — the flat card list, its chunk into grid rows, and the
-//! grid-tier cover cache behind it.
+//! prewarm projection that picks which covers the grid warms first.
 //!
 //! The grid draws subfolders and files together, folders first and then files in
 //! the list's own display order, so flipping the mode re-presents exactly what the

@@ -210,6 +210,13 @@ impl CoverThumbs {
     /// decode to a proxy of the same cover and nothing else, which is not worth an identity check
     /// to avoid.
     ///
+    /// **The wider race is the same trade and has the same answer.** Where one tier serves several
+    /// surfaces, the leave this runs on and the *arriving* surface's prewarm reach the pool in no
+    /// fixed order, so this can shrink a screenful the destination decoded a moment ago. It costs
+    /// that screenful twice and nothing else: the recorded size makes every one of them stale, so
+    /// the cards paint the proxy and re-queue. Narrowing it means either a timestamp per entry or
+    /// a caller-supplied path set, and the second is the per-view ownership sharing a tier retired.
+    ///
     /// An entry already at or under `proxy_dim` is left alone: it costs nothing and it is still
     /// the right answer at the live size. So is a cached failure, which has no buffer and must
     /// stay remembered.

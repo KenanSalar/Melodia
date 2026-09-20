@@ -41,10 +41,10 @@ export component EntityCardGrid inherits Rectangle {
     in property <string> card-kind;
     in property <string> selection-scope;
 
-    // Bumped by the host once the tier behind `request-cover` is warm, and again per scheduled
-    // decode batch that lands. The card's binding *reads* it, which is the only thing making a
-    // bump re-run a `pure` callback whose result is otherwise cached until a dependency dirties;
-    // the host forwards the value too, so Rust can answer cache-only while the tier is cold.
+    // Bumped by the host per scheduled decode batch that lands. The card's binding *reads* it,
+    // which is the only thing making a bump re-run a `pure` callback whose result is otherwise
+    // cached until a dependency dirties. Its *value* decides nothing: the lookup behind it
+    // always schedules a miss.
     in property <int> covers-generation: 0;
 
     callback row-clicked(int /*entity_id*/);

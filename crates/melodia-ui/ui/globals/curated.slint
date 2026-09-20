@@ -18,8 +18,9 @@ export global Favorites {
     out property <int> tab-count: 3;
 
     in-out property <int> tab-idx: 0;
-    // **Fires after the bar has already moved `tab-idx`.** Rust persists the pick,
-    // releases the departed grid's cover tier and builds the entering one's model.
+    // **Fires after the bar has already moved `tab-idx`.** Rust persists the pick and builds
+    // the entering tab's model. The covers stay: one tier serves both grids, so the pick
+    // paints whatever that tab painted last visit and the prewarm sharpens it.
     callback tab-changed(int);
 
     // One property for whichever grid tab is mounted — the two are mutually exclusive
@@ -76,10 +77,10 @@ export global Favorites {
     in-out property <[int]> selected-ids;
     in-out property <int>   selection-anchor: -1;
 
-    // One callback per cache tier, so Rust routes each surface into the right LRU; Songs-tab rows
-    // go through the shared `RowCovers` global. The two grid lookups take `covers-generation` for
-    // the queue sheet's two reasons — reading it makes a `pure` binding re-evaluate once the tier
-    // warms behind a mounted grid, and its *value* is the is-it-warm flag. At 0, cache-only.
+    // One callback per grid, both resolving against the one tier every card grid shares;
+    // Songs-tab rows go through `RowCovers`. They take `covers-generation` for its effect alone:
+    // reading it makes a `pure` binding re-evaluate once a scheduled decode lands behind a
+    // mounted grid. Its *value* decides nothing — the lookup always schedules.
     in-out property <int> covers-generation: 0;
     pure callback request-most-played-cover(string, int) -> image;
     pure callback request-artist-cover(string, int)      -> image;
@@ -136,8 +137,8 @@ export global RecentlyPlayed {
     out property <int> tab-count: 2;
 
     in-out property <int> tab-idx: 0;
-    // **Fires after the bar has already moved `tab-idx`.** Rust persists the pick,
-    // releases the departed tab's cover tier and builds the entering one's model.
+    // **Fires after the bar has already moved `tab-idx`.** Rust persists the pick and builds
+    // the entering tab's model. The covers stay, for the reason `Favorites`' pick gives.
     callback tab-changed(int);
 
     // The Most Played grid's column count, pushed down from the view's `GridGeometry`.
@@ -179,7 +180,7 @@ export global RecentlyPlayed {
     in-out property <int>   selection-anchor: -1;
 
     // The grid cards; Songs rows go through `RowCovers`. The lookup takes `covers-generation`
-    // for the reason `Favorites`' pair do.
+    // for the reason `Favorites`' pair do: the repaint, not the value.
     in-out property <int> covers-generation: 0;
     pure callback request-most-played-cover(string, int) -> image;
 

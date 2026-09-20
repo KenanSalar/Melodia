@@ -19,11 +19,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
     // rebuilt from the cached listing rather than re-fetched, and **without hopping the
     // event loop** — `invoke_from_event_loop` posts even when called from the UI thread,
     // and a redraw winning that race paints an empty grid.
-    //
-    // A toggle is the one path with no fetch to await before the grid mounts, so it takes
-    // the `covers-generation` pair: rewind to 0 so the mounting cards ask the tier
-    // cache-only, warm a screenful off-thread, then bump — gated on the view still being
-    // where the prewarm left it.
     {
         let s = state.clone();
         let bu = browse_ui.clone();

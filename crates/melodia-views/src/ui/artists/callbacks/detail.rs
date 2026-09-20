@@ -68,16 +68,17 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>
             let au_swap = au.clone();
             s.runtime.spawn_blocking(move || {
                 au_swap.release_detail_artwork();
-                // Skip the Artists-grid prewarm when the close routes to
-                // another section: the grid isn't going to mount, and
-                // warming Artists covers the user won't see wastes cache
-                // pressure on tiles the destination may actually need.
-                if !origin_was_cross_section {
+                // One arm or the other, never both: one tier serves the grid and the
+                // Albums strip now, so a hand-back beside the prewarm would shrink
+                // the screenful it just decoded and leave the grid soft on the frame
+                // it mounts. Routing to another section, the grid isn't going to
+                // mount and the strip is gone, so the pixels are dead weight for the
+                // destination; coming back to the grid, warming it is the point.
+                if origin_was_cross_section {
+                    crate::ui::grid_prewarm::hand_back_covers();
+                } else {
                     au_swap.prewarm_visible_covers();
                 }
-                // The Albums strip this detail drew is gone; hand its pixels back as
-                // proxies, so the next artist detail paints them and re-sharpens.
-                crate::ui::grid_prewarm::hand_back_covers();
             });
 
             let s_disk = s.clone();
@@ -251,7 +252,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>
     // restores the same state. Collapsing also hands the grid tier's
     // pixels back: the `if !albums-collapsed` gate has unmounted the
     // scroller, so nothing queries them through `request-album-cover`.
-    // Re-expanding paints the proxies and re-sharpens behind them.
+    // The strip pays a re-decode to come back either way — its lookup
+    // is the blocking one, which takes a proxy for a miss — so the
+    // proxy buys the bytes here and nothing else.
     {
         let s = state.clone();
         let weak = weak.clone();

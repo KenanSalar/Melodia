@@ -191,7 +191,7 @@ impl FavoritesUi {
         if self.section_active() {
             return;
         }
-        crate::ui::grid_prewarm::hand_back_covers();
+        crate::ui::grid_prewarm::shrink_covers();
         {
             let _gate = self.gate();
             self.inner.tracks_all.clear();

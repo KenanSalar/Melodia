@@ -89,8 +89,9 @@ export global Browse {
     // `ListView` virtualizes by row. `columns` is written by `GridColumnsSync`.
     in-out property <[BrowseCardGridRow]> card-rows;
     in-out property <int> columns: 1;
-    // Bumped once the card tier behind `request-card-cover` is warm. A mode toggle has no fetch to
-    // await before the grid mounts, so the cards ask cache-only until then.
+    // Bumped once a batch the cards scheduled through `request-card-cover` lands. Read for that
+    // effect and never for its value: a mode toggle has no fetch to await before the grid mounts,
+    // so the cards mount against whatever the shared tier holds and each miss schedules itself.
     in-out property <int> covers-generation: 0;
 
     // Card mode reads the *same* `selected-ids` the list reads, so toggling the presentation keeps

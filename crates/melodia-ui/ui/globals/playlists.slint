@@ -18,7 +18,7 @@ export global Playlists {
     callback columns-changed(int);
     callback apply-filter(string);
     callback open-playlist(int /*playlist_id*/);
-    // Lazy per-card lookup against a private grid tier, the `Albums.request-cover`
+    // Lazy per-card lookup against the shared grid tier, the `Albums.request-cover`
     // contract — only on-screen cards resolve, and a miss schedules rather than decoding.
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
     in property <int> covers-generation: 0;

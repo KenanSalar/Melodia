@@ -47,11 +47,12 @@ fn install_row_covers(app: &AppWindow, cover_thumbs: &Arc<image::cover_thumbs::C
 
 /// Re-run every card grid's cover binding once a scheduled decode lands.
 ///
-/// **One notifier, because there is one grid tier** — `set_decoded_notifier` is a `OnceLock` and
-/// the seven views that used to install their own now share it. Bumping a generation whose page
-/// isn't mounted is a property write with no bindings to dirty, so answering for all six costs
-/// nothing and saves the tier having to know which grid asked. Slint globals share no trait to be
-/// generic over, hence the list. Radio is absent because its logo tier is its own.
+/// **One notifier, because there is one grid tier** — `set_decoded_notifier` is a `OnceLock`, and
+/// the seven tiers that used to sit in six view files (Favorites held two) share it now. Bumping a
+/// generation whose page isn't mounted is a property write with no bindings to dirty, so answering
+/// for all six globals costs nothing and saves the tier having to know which grid asked. Slint
+/// globals share no trait to be generic over, hence the list. Radio is absent because its logo
+/// tier is its own.
 fn install_grid_covers(app: &AppWindow) {
     ui::cover_generation::notify_on_decode(ui::grid_prewarm::tier(), app, |app| {
         macro_rules! repaint {

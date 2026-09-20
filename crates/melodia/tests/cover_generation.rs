@@ -7,7 +7,7 @@
 //! bumping. Both leave a placeholder nothing ever replaces, which reads as a cold tier and shows
 //! up only on a library big enough to miss.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use melodia_testkit::rust_sources;
 
@@ -28,16 +28,17 @@ const BLOCKING_LOOKUP_SITES: [&str; 2] =
 /// here there is nothing to skip, and a renamed helper would otherwise empty the walk in silence.
 const MIN_LOOKUPS: usize = 6;
 
-/// Every file that installs a decoded-batch notifier.
+/// Every file that installs a decoded-batch notifier, and **how many it installs**.
 ///
-/// **An equality, not a floor**, and it is down to two because there is one *shared* grid tier:
-/// `set_decoded_notifier` is a `OnceLock`, so the single install in `install_grid_covers` is what
-/// bumps every grid's generation, and the row tier's sits beside it. Radio's logo tier is the one
-/// card tier that stays private — its station tile reads the decoded extent — so it keeps its own.
+/// **An equality, not a floor**, and the count is half of it: the boot file installs two, the row
+/// tier's and the grid tier's, so a set of *files* would find it either way and the one that
+/// matters most could go missing in silence. `set_decoded_notifier` is a `OnceLock`, so that
+/// single grid install is what bumps all six grid generations; Radio's logo tier is the one card
+/// tier that stays private — its station tile reads the decoded extent — so it keeps its own.
 /// A tier whose notifier goes missing still compiles, still schedules and still decodes — it
 /// simply never tells anyone, so its cards sit on the placeholder until something unrelated
 /// dirties the binding.
-const NOTIFIER_HOMES: [&str; 2] = ["boot/ui_setup/views.rs", "ui/radio/mod.rs"];
+const NOTIFIER_HOMES: [(&str, usize); 2] = [("boot/ui_setup/views.rs", 2), ("ui/radio/mod.rs", 1)];
 
 /// Every repeated cover surface takes the **scheduling** lookup, and the inline one stays at its
 /// two sanctioned sites.
@@ -93,24 +94,26 @@ fn only_the_two_generation_less_surfaces_decode_inline() {
 /// Every tier a scheduling lookup reads gets told when its batch lands.
 #[test]
 fn every_scheduling_tier_installs_a_notifier() {
-    let mut found = BTreeSet::new();
+    let mut found = BTreeMap::new();
 
     for (path, code) in rust_sources() {
         // The definition's own file, which names it without installing anything.
         if path == "ui/cover_generation.rs" {
             continue;
         }
-        if code.contains("notify_on_decode(") {
-            found.insert(path);
+        let installs = code.matches("notify_on_decode(").count();
+        if installs > 0 {
+            found.insert(path, installs);
         }
     }
 
-    let expected: BTreeSet<String> = NOTIFIER_HOMES.iter().map(|&s| s.to_owned()).collect();
+    let expected: BTreeMap<String, usize> =
+        NOTIFIER_HOMES.iter().map(|&(path, n)| (path.to_owned(), n)).collect();
     assert_eq!(
         found, expected,
-        "the set of files installing a decoded-batch notifier has moved. A *missing* entry is a \
-         tier whose scheduled decodes never reach the screen; an *extra* one is a tier this list \
-         hasn't been told about."
+        "the set of decoded-batch notifier installs has moved. A *missing* one is a tier whose \
+         scheduled decodes never reach the screen; an *extra* one is a tier this list hasn't been \
+         told about. The count is what separates the boot file's two."
     );
 }
 
