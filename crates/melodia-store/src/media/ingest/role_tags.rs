@@ -8,10 +8,10 @@
 //! DJ-mixer live in the `TIPL` frame, and lofty's `Id3v2Tag → Tag` conversion consumes it into the
 //! matching [`ItemKey`]s, so nothing here special-cases MP3 for them.
 //!
-//! **Three holes, none of them ours to close.** `Arranger` and `Performer` have no MP4 mapping and
-//! `Performer` has no `ID3v2` one, so a credit in those roles is read and written on FLAC, Ogg and
-//! APE only — [`super::tag_writer`]'s `UnsupportedFields` reports the write half rather than
-//! dropping it silently. The `ID3v2` performer hole is the one worth knowing *why* about: `TMCL`
+//! **Three holes, none of them ours to close.** `Arranger` has no MP4 mapping and `Performer` has
+//! neither an MP4 nor an `ID3v2` one, so an arranger credit is dropped on M4A and a performer credit
+//! on M4A and MP3 alike — [`super::tag_writer`]'s `UnsupportedFields` reports the write half rather
+//! than dropping it silently. The `ID3v2` performer hole is the one worth knowing *why* about: `TMCL`
 //! carries exactly that credit, lofty parses the frame, and then `split_tag` consumes only `TIPL`
 //! and leaves `TMCL` in a `pub(crate)` companion tag with no public accessor. Reaching it needs a
 //! second `Id3v2Tag` parse of the file, and

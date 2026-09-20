@@ -892,10 +892,10 @@ fn a_year_edit_leaves_no_earlier_key_to_be_read_instead() {
 
 /// What an MP3 actually keeps of a role credit.
 ///
-/// The read and write halves of the `ID3v2` mapping are not the same set — `TIPL` reaches the
-/// generic tag on the way *in* and there is no key to put it back through — so six of the ten are
-/// reported and dropped rather than written. Only a real file settles which, and a user losing a
-/// producer credit silently is the thing the report exists to prevent.
+/// `ID3v2`'s one hole. `TMCL` reaches the generic tag on the way *in* and there is no key to put it
+/// back through, so a performer credit is reported and dropped rather than written; the other nine
+/// round-trip. Only a real file settles which, and a user losing a credit silently is the thing the
+/// report exists to prevent.
 #[test]
 fn mp3_reports_the_roles_it_has_no_key_to_write() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
@@ -918,12 +918,17 @@ fn mp3_reports_the_roles_it_has_no_key_to_write() -> Result<(), AppError> {
     // Sorted, since `ROLES` order is the list's own presentation choice and free to change.
     let mut reported = unsupported.0.clone();
     reported.sort_unstable();
-    assert_eq!(reported, ["arranger", "dj_mixer", "engineer", "mixer", "performer", "producer"]);
+    assert_eq!(reported, ["performer"]);
 
     let tag = read_primary(&audio)?;
     assert_eq!(text(&tag, ItemKey::Composer).as_deref(), Some("Alice"));
     assert_eq!(text(&tag, ItemKey::Conductor).as_deref(), Some("Alice"));
-    assert_eq!(text(&tag, ItemKey::Producer), None, "reported, and genuinely not stored");
+    assert_eq!(
+        text(&tag, ItemKey::Producer).as_deref(),
+        Some("Alice"),
+        "TIPL is written, not just read"
+    );
+    assert_eq!(text(&tag, ItemKey::Performer), None, "reported, and genuinely not stored");
     Ok(())
 }
 

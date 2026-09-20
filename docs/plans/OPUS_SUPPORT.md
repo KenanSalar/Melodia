@@ -92,7 +92,7 @@ and the mapping table in one pass, so the module holds no byte offsets of its ow
 
 ---
 
-## Phase 0 — lofty 0.24.0 to 0.25.4
+## Phase 0 — lofty 0.24.0 to 0.25.4 ✅ done
 
 **First commit on this branch, ahead of the Opus work, and it ships with it.** Keep it a commit of
 its own so the bump and the three unrelated fixes it carries stay bisectable, but the whole feature
@@ -105,14 +105,20 @@ where the generic `Tag`, and therefore `TaggedFile`, never sees it. That would m
 open per Opus file, bypassing the single-opener discipline `crates/melodia/tests/lofty_open.rs` pins.
 **This bump deletes a module rather than enabling one.**
 
-- [ ] Bump `lofty` to `0.25.4` in `[workspace.dependencies]` (full `x.y.z`, per the dep convention).
-- [ ] Confirm the zero-line claim. Every breaking change in 0.25.x lands either on API we never name
+- [x] Bump `lofty` to `0.25.4` in `[workspace.dependencies]` (full `x.y.z`, per the dep convention).
+- [x] Confirm the zero-line claim. Every breaking change in 0.25.x lands either on API we never name
       (`LoftyError`, `Mp4Codec`, `crate::ogg::VorbisComments`, `TagType::remove_from_path`) or on
       ground our own convention already covers: every call site is
       `.map_err(|e| AppError::metadata(msg, e))`, and `metadata` takes
       `impl Into<Box<dyn Error + Send + Sync>>`, which absorbs whatever concrete error type lofty now
       returns. MSRV moves to 1.89 against our 1.97 pin.
-- [ ] Verify each of the three fixes against a real file, since all three fail silently today:
+      **Held for production code and not for the suite:** two tests pinned the broken write half as
+      an equality and failed, which is what an equality is for.
+      `role_tags_tests::each_format_names_exactly_the_roles_it_has_no_key_for` and
+      `tag_writer_tests::mp3_reports_the_roles_it_has_no_key_to_write` both listed six unwritable
+      `ID3v2` roles where there is now one. `role_tags`' module doc needed a line too: it had
+      arranger written on FLAC, Ogg and APE only, which was the write bug rather than the mapping.
+- [x] Verify each of the three fixes against a real file, since all three fail silently today:
       - **MP3 role-credit writes fail.** `Tag::insert_text` returns `false` for
         `ItemKey::{Producer,Arranger,Engineer,MixDj,MixEngineer}` on an ID3v2 tag, because the
         support lookup misses the `TIPL` special-casing that the write conversion does handle. That
@@ -127,6 +133,81 @@ open per Opus file, bypassing the single-opener discipline `crates/melodia/tests
 
 **Gate:** the full static gate, plus a tag round-trip on an MP3 covering role credits and movement
 number, and a first-time tag write to a previously untagged faststart M4A that still plays after.
+
+Passed. `fmt` and clippy clean, 3508 tests green. The three fixes, measured rather than taken from
+the changelog: the unwritable `ID3v2` role set went from six to one, with a producer credit now
+reading back off a real MP3; movement number and total round-trip; and a first-time tag write onto a
+faststart M4A whose `udta` had to be created leaves the decoded audio bit-identical, checked by
+md5 either side rather than by the file still opening.
+
+---
+
+## Phase 0.5 — A tag edit that says what it could not write, and why
+
+Phase 0 left two loose ends, and they are the same end seen twice: a tag edit reports its failures
+badly. One field lies about succeeding, and the toast that covers the rest names neither the field
+nor the reason.
+
+This is also the answer to the `performer` hole rather than a workaround for it. Performer stays
+unsupported on MP3 and M4A by design: lofty removed `ItemKey::MusicianCredits` deliberately in
+0.24.0 as an "ID3v2-specific field with a special format", and closed the issue asking for the
+`TMCL` half having landed only `TIPL`, so there is nothing upstream to wait for. Reading it would
+cost a second `Id3v2Tag` parse per MP3 on the scan path, and writing it without reading it is worse
+than not writing it at all, because the re-extract after a save would blank the credit the user just
+entered. What was actually wrong is that the app never said so.
+
+### The `MusicBrainz` recording id stops lying
+
+`apply_recording_id` exists only because `Tag::insert_text`'s support check had no `UFID` mapping
+and refused the key, so the function reaches past it with `insert_unchecked`. On 0.25.4 the checked
+insert is accepted and writes a correct `UFID` frame carrying the `http://musicbrainz.org` owner,
+measured against a real MP3 rather than read off the changelog.
+
+- [ ] Delete `apply_recording_id` and its doc comment. It is `apply_string` with one difference that
+      no longer exists, so the call site becomes an ordinary `apply_string` with
+      `ItemKey::MusicBrainzRecordingId` and a field name.
+- [ ] Name the behaviour change in the commit: an unchecked insert always "succeeds", so the MBID is
+      the one field that can never appear in `UnsupportedFields` today. After this it reports like
+      every other field, which is the point, and `library::mbid`'s auto-tagging writes through the
+      same path so a container that cannot take the id starts surfacing instead of silently dropping.
+
+### The toast names the field and the container
+
+Today the user gets `"{n} files have unsupported fields"`: a count, with no field and no reason. A
+performer credit on an MP3 is honest and useless.
+
+- [ ] **Type the field name.** `apply_edit` passes 29 bare `&'static str` literals as the reported
+      field, which is the magic-string shape that makes a translated label impossible. Replace them
+      with a `TagField` enum whose string form is today's value, so the report carries something a
+      label can be derived from. The ten roles are already typed through `CreditRole::as_db_str`, so
+      they fold in as one `TagField::Credit(CreditRole)` rather than ten more variants.
+- [ ] **Carry the container.** The reason is a property of the format, and `TagEditReport.unsupported`
+      is only `(path, fields)`. `apply_to_file` already resolves `primary_tag_type()`, so hand that
+      back with the rest.
+- [ ] **Translated labels, under the `@tr` constraint.** `@tr` resolves literals at codegen and a
+      `[string]` seeded from Rust renders whatever Rust pushed, so the labels are inline literal
+      lists in `.slint` indexed by position. `tag-editor-body.slint`'s `role-labels` is that pattern
+      already and its order matches `ROLES` exactly, so the credit half reuses it; the 29 non-credit
+      fields owe a list of their own.
+- [ ] **Fold before phrasing.** Report the distinct container-and-field pairs rather than one line
+      per file: a batch edit of one album is one format and one field repeated, so the useful message
+      is a single "Performer isn't supported by MP3 files". Keep the existing count as the fallback
+      where a batch genuinely spans several formats or fields, since a toast is one line.
+- [ ] **Pin the new list's order.** A positional label list mislabels silently when it drifts, which
+      is exactly what `smart_criteria_tests` guards against by `include_str!`ing the `.slint` and
+      asserting order and length. The new list owes the same, and `role-labels` has no such pin
+      today despite its own comment warning that a label out of order files a conductor as a
+      producer.
+- [ ] Every new string owes the same `msgid` in all six catalogues, which
+      `translations.rs::every_translated_literal_has_a_msgid_in_every_catalogue` enforces.
+- [ ] Correct `role_tags`' module doc while there: it explains the performer hole as `split_tag`
+      leaving `TMCL` in a `pub(crate)` companion tag, which is true but reads as though a newer lofty
+      might close it. Say the `ItemKey` was removed on purpose.
+
+**Gate:** clippy and tests. A performer credit saved onto an MP3, and an arranger onto an M4A, each
+produce a message naming the field and the container rather than a count. A `MusicBrainz` id written
+to a container that maps it still round-trips, and one written to a container that does not now
+reports instead of vanishing.
 
 ---
 

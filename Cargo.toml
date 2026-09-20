@@ -130,7 +130,11 @@ biquad = "0.6.0"
 realfft = "3.5.0"
 
 # Library scan and indexing
-lofty = "0.24.0"
+# 0.25 is a floor: `ItemKey::R128{Track,Album}Gain` is what lets an Opus file's loudness tag reach
+# `media::ingest::metadata` through the same `ItemKey` path as every other format's. Below it the
+# key is unmapped, and `VorbisComments::split_tag` leaves an unmapped key in the remainder, which
+# never becomes part of the `TaggedFile` a scan reads.
+lofty = "0.25.4"
 walkdir = "2.5"
 notify = "8.2.0"
 notify-debouncer-full = "0.7"
