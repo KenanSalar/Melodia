@@ -221,7 +221,7 @@ three components that answer it, and each argues its geometry at its own file.
     `rows.length == 1 ? rows[0].<field>.length : -1`, spelled at each of the five mounts against
     whichever model the mounted tab drew. `.length` lowers to `track_row_count_changes()` and an
     index to `row_data_tracked(…)`, so the binding re-runs when Rust swaps the model in; a
-    published count would be a second thing to write, in order, at all eight chunk sites.
+    published count would be a second thing to write, in order, at all ten chunk sites.
   - **`max-card-w` is where an under-filled row stops growing**, and `grid_prewarm::MAX_CARD_W`
     mirrors it so the tier covers what is drawn. The pin holding the two spellings together is
     `grid_prewarm_tests::the_card_constants_are_the_ones_the_component_declares`, which reads the

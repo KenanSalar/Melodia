@@ -211,7 +211,7 @@ pub const GRID_COVER_FALLBACK: u32 = 256;
 /// handful of tiers.
 const SIZE_STEP: u32 = 32;
 
-/// The widest card `GridGeometry` can pack into the body of a window this wide.
+/// The widest card `GridGeometry` will draw into the body of a window this wide.
 ///
 /// The bound rather than the card itself: `card-w` climbs from `min-card-w` to this as a column
 /// band fills, so sizing to the bound holds the tier flat across the band and steps only where
@@ -240,7 +240,9 @@ fn widest_card(logical_w: u32) -> u32 {
 /// `widest_card × scale`.
 ///
 /// Clamped to [`STORE_MAX_DIM`], past which every tier would upscale from a source the store
-/// already discarded — which is also the ceiling on how sharp a single-column panel can get.
+/// already discarded. That is the ceiling a *scaled* card runs into, and it takes a factor past
+/// two to reach: under that the card stops at [`MAX_CARD_W`] long before it, which is what caps a
+/// single-column panel's sharpness now.
 #[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,

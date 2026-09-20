@@ -111,8 +111,9 @@ fn the_ceiling_is_bytes_rather_than_entries() {
 }
 
 /// `GridGeometry`'s own `card-w`, which production no longer computes — it sizes to the widest
-/// card a column count can pack, and this is what that bound has to clear. A grid short enough to
-/// fit one row draws fewer columns and so a wider card, which is what the ceiling here bounds.
+/// card a column count can pack, and this is what that bound has to clear. The `MAX_CARD_W` here
+/// is the component's own clamp on a *packed* row; the wider card an under-filled one draws is out
+/// of this helper's reach, and `widest_card` argues where that leaves the tier.
 fn drawn_card_width(body_w: u32) -> u32 {
     let cols = (body_w.saturating_sub(GAP) / (MIN_CARD_W + GAP)).max(1);
     (body_w.saturating_sub((cols + 1) * GAP) / cols).min(MAX_CARD_W)
@@ -223,11 +224,11 @@ fn the_tier_holds_still_through_a_resize_drag() {
     }
 }
 
-/// **The tier may not land under the card the grid draws.** Rust measures the *window* while the
-/// grid gets the body, and the sidebar between them is the user's to drag across a range no
-/// window measurement sees. `BODY_CHROME_W` assumes the widest of them so the estimate can only
-/// run wide; the other way round every card is upscaled from a tier too small for it, and
-/// `FemtoVG` minifies bilinear with no mipmaps.
+/// **The tier may not land under the card a packed row draws.** Rust measures the *window*
+/// while the grid gets the body, and the sidebar between them is the user's to drag across a
+/// range no window measurement sees. `BODY_CHROME_W` assumes the widest of them so the estimate
+/// can only run wide; the other way round every card is upscaled from a tier too small for it,
+/// and `FemtoVG` minifies bilinear with no mipmaps.
 #[test]
 fn the_tier_covers_the_card_at_every_sidebar_width() {
     // `Theme.sidebar-collapsed-w` through `sidebar-max-w`, plus the page's `pad-lg` at both edges.
