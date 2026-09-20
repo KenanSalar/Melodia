@@ -13,7 +13,7 @@ use crate::ui::callbacks::{cross_tab_nav, next_sort, persist_view_sort};
 use crate::ui::favorites::NAV_FAVORITES;
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
 use crate::ui::model_diff::clear_vec_model;
-use crate::ui::tab_bar::{UNFETCHED_COUNT, should_announce_warm};
+use crate::ui::tab_bar::UNFETCHED_COUNT;
 use crate::ui::track_list_view::view_id;
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -61,11 +61,9 @@ pub(super) fn wire(
     {
         let s = state.clone();
         let aru = artists_ui.clone();
-        let fu = fav_ui.clone();
         let weak = weak.clone();
         g.on_open_artist(move |artist_id| {
-            let fu_release = fu.clone();
-            s.runtime.spawn_blocking(move || fu_release.release_artist_covers());
+            s.runtime.spawn_blocking(crate::ui::grid_prewarm::hand_back_covers);
             cross_tab_nav::open_artist_cross_tab(
                 &s,
                 &aru,
@@ -114,12 +112,6 @@ pub(super) fn wire(
             // nothing has invalidated. See `lifecycle::kick_full_refresh`.
             let songs = entering == favorites_ui_mod::FavoritesTab::Songs;
             let needs_fetch = if songs { fu.take_songs_dirty() } else { fu.take_grids_dirty() };
-
-            // The entering tier was cleared when its tab was last left, so the
-            // cards mount cold: hold the lookups at cache-only until the
-            // prewarm below reports back, or each visible card drags a grid-tier
-            // decode onto this thread in the frame that paints the grid.
-            g.set_covers_generation(0);
 
             // Fill the entering tab's model on this tick — it mounts on the
             // next frame, and the `_now` variant is what makes "this tick"
@@ -186,7 +178,6 @@ pub(super) fn wire(
 
             let fu_covers = fu.clone();
             let s_disk = s.clone();
-            let weak_warm = weak.clone();
             let persist_disk = Arc::clone(&persist);
             s.runtime.spawn_blocking(move || {
                 // Scoped to the write alone: a superseded tab drops its own disk
@@ -196,23 +187,12 @@ pub(super) fn wire(
                         log::warn!("favorites::set_favorites_tab: {e}");
                     }
                 });
-                // `warm` is the decode's own verdict — a section leave landing
-                // inside it handed the buffers back — so `Some(entering)` is
-                // exactly "we decoded for this tab and still hold it", which is
-                // what `should_announce_warm` takes. The other two terms are read
-                // on the UI thread, where both shadows are written: a pick made
-                // while the decodes ran owns a different tier, and a leave that
-                // landed after the prewarm returned owns none.
-                let warmed = fu_covers.swap_tab_covers(entering).then_some(entering);
-                let _ = weak_warm.upgrade_in_event_loop(move |ui| {
-                    if should_announce_warm(
-                        warmed,
-                        fu_covers.section_active(),
-                        fu_covers.active_tab(),
-                    ) {
-                        favorites_ui_mod::mark_covers_warm(&ui);
-                    }
-                });
+                // A pick can't await a prewarm the way a fetch does — `TabBar` writes
+                // `selected-index` before it emits `selected`, so the rows are already in
+                // by now. Whatever the entering tab painted last visit is still in the
+                // tier as a proxy; this sharpens it, and anything genuinely absent
+                // schedules itself off the card's own lookup.
+                fu_covers.prewarm_tab_covers(entering);
             });
         });
     }

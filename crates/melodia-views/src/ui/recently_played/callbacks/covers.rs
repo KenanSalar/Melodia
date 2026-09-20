@@ -2,24 +2,17 @@
 //! (Songs rows resolve through the shared `RowCovers` global like every other
 //! `TrackListRowItem`.) See [`super::wire`].
 
-use std::sync::Arc;
-
 use slint::ComponentHandle;
 
-use crate::ui::recently_played::RecentlyPlayedUi;
 use melodia_ui::{AppWindow, RecentlyPlayed};
 
 /// Wire the `request-most-played-cover` callback.
-pub(super) fn wire(ui: &AppWindow, rp_ui: &Arc<RecentlyPlayedUi>) {
-    let g = ui.global::<RecentlyPlayed>();
-    {
-        // The second argument is `RecentlyPlayed.covers-generation`: reading it
-        // is what makes the card's `pure` binding re-evaluate once the tier is
-        // warmed behind an already-mounted grid, and its value is the is-it-warm
-        // flag `grid_cover` branches on.
-        let ru = rp_ui.clone();
-        g.on_request_most_played_cover(move |path, generation| {
-            ru.most_played_cover(path.as_str(), generation)
-        });
-    }
+///
+/// The second argument is `RecentlyPlayed.covers-generation`, read for its effect on the card's
+/// `pure` binding and never for its value: it is what re-runs the lookup once a scheduled decode
+/// lands behind an already-mounted grid.
+pub(super) fn wire(ui: &AppWindow) {
+    ui.global::<RecentlyPlayed>().on_request_most_played_cover(|path, _generation| {
+        crate::ui::grid_prewarm::grid_cover(path.as_str())
+    });
 }

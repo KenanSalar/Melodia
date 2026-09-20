@@ -74,21 +74,13 @@ pub async fn refresh_grid(state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>, weak:
     // `stats_changed` tick that arrives while the page is hidden has already been
     // turned into a `mark_dirty` by the caller, so there is nothing on screen to
     // warm for; the tab warms in `tab-changed` instead.
-    //
-    // `Some(tab)` only once the decode reports the tier is still *its* — a leave
-    // landing inside the burst hands the buffers back, and announcing that tab
-    // anyway would bump `covers-generation` over an empty tier on the re-enter. A
-    // `JoinError` is the same "we don't know", so it folds in here.
-    let warmed_tab = if rp_ui.section_active() {
+    if rp_ui.section_active() {
         let ru = rp_ui.clone();
         let tab = rp_ui.active_tab();
-        let warm = tokio::task::spawn_blocking(move || ru.prewarm_tab_covers(tab)).await;
-        matches!(warm, Ok(true)).then_some(tab)
-    } else {
-        None
-    };
+        let _ = tokio::task::spawn_blocking(move || ru.prewarm_tab_covers(tab)).await;
+    }
 
     // Push the filtered model so the visible tab reflects fresh data AND the live
     // filter in one pass.
-    apply_filtered_grid(rp_ui, weak, warmed_tab);
+    apply_filtered_grid(rp_ui, weak);
 }

@@ -38,6 +38,7 @@ export global Tracks {
     // Modifiers come off the row's pointer-event as bools; Rust does the work and walks the model
     // to flip the per-row `selected` flags, a Slint expression not being able to iterate one.
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
+    callback select-all();
     callback clear-selection();
 
     // Slint flips the matching `show_*` synchronously, then Rust persists the visible-column list.
@@ -88,11 +89,27 @@ export global Browse {
     // `ListView` virtualizes by row. `columns` is written by `GridColumnsSync`.
     in-out property <[BrowseCardGridRow]> card-rows;
     in-out property <int> columns: 1;
-    // Bumped once the card tier behind `request-card-cover` is warm. A mode toggle has no fetch to
-    // await before the grid mounts, so the cards ask cache-only until then.
+    // Bumped once a batch the cards scheduled through `request-card-cover` lands. Read for that
+    // effect and never for its value: a mode toggle has no fetch to await before the grid mounts,
+    // so the cards mount against whatever the shared tier holds and each miss schedules itself.
     in-out property <int> covers-generation: 0;
 
+    // Card mode reads the *same* `selected-ids` the list reads, so toggling the presentation keeps
+    // the selection — which is why Browse stays off the shared `CardSelection` global. A chunked
+    // card model can't carry a per-row flag cheaply, so the card asks instead, against a generation
+    // Rust bumps on every selection write. Folder and disk-only cards both hold `id == 0` and the
+    // handler's existing early return keeps them unselectable.
+    in-out property <int> selection-generation: 0;
+    pure callback is-card-selected(int /*track_id*/, int /*generation*/) -> bool;
+
     callback open-folder(string /*path*/);
+    // A folder card's menu. Here rather than on `CardActions` because a folder is named by a path,
+    // and the shared global's callbacks all carry an id list. Recursive, unlike what the view lists
+    // for the folder it is standing in — argued at `library::browse::folder_track_ids`.
+    callback play-folder(string /*path*/);
+    callback play-folder-next(string /*path*/);
+    callback queue-folder(string /*path*/);
+    callback reveal-folder(string /*path*/);
     callback go-back();
     callback navigate-to(string /*absolute-path*/);    // breadcrumb segment click
     callback play-row(int /*track_id*/, int /*index*/);
@@ -101,6 +118,7 @@ export global Browse {
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new_state*/);
     callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
+    callback select-all();
     callback clear-selection();
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);

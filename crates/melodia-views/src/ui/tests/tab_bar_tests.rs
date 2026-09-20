@@ -1,4 +1,4 @@
-use super::{UNFETCHED_COUNT, clamp_tab, grid_signature, should_announce_warm};
+use super::{UNFETCHED_COUNT, clamp_tab, grid_signature};
 
 /// A fixture for the arithmetic — the real counts live in each host's Slint global.
 const TABS: i32 = 5;
@@ -43,41 +43,6 @@ fn the_signature_folds_in_the_tab_and_the_column_count() {
     assert_ne!(base, grid_signature(TestTab::Second, 4, 7), "the tab must count");
     assert_ne!(base, grid_signature(TestTab::First, 5, 7), "the column count must count");
     assert_ne!(base, grid_signature(TestTab::First, 4, 8), "the contents must count");
-}
-
-/// The re-enter case: a grid's rows can land before the prewarm returns (the view's
-/// mount-time `columns-changed` writes them), so by the time the decodes are done there is
-/// nothing left to repaint — and the tier is warm regardless. Gating the announcement on
-/// the write leaves `covers-generation` at its cold 0 until the next tab pick.
-#[test]
-fn a_landed_prewarm_announces_even_when_the_rows_did_not_move() {
-    assert!(should_announce_warm(
-        Some(TestTab::Second),
-        /* section_active */ true,
-        TestTab::Second,
-    ));
-}
-
-/// A leave that landed mid-refresh has already rewound the counter and dropped the
-/// buffers, so there is no tier to announce and nothing on screen to hear it.
-#[test]
-fn a_section_left_mid_refresh_announces_nothing() {
-    assert!(!should_announce_warm(
-        Some(TestTab::Second),
-        /* section_active */ false,
-        TestTab::Second,
-    ));
-    // `None` is the same refresh finding the section already hidden before it spawned the
-    // prewarm — no decode ran, so nothing is warm.
-    assert!(!should_announce_warm(None, true, TestTab::Second));
-}
-
-/// A tab pick that overtook the decodes owns a different tier, `swap_tab_covers` having
-/// cleared the one this task warmed. Announcing it would put the entering tab's cards
-/// straight back on the UI-thread decoding path.
-#[test]
-fn a_tab_pick_that_overtook_the_prewarm_announces_nothing() {
-    assert!(!should_announce_warm(Some(TestTab::Second), true, TestTab::First));
 }
 
 const CURATED: &str = include_str!("../../../../melodia-ui/ui/globals/curated.slint");

@@ -23,7 +23,8 @@ pub struct ViewCtx<'a> {
     pub app: &'a AppWindow,
     pub state: &'a AppState,
     /// The one row-tier LRU every track table shares. Each slice clones it into its
-    /// handle; the private grid / mosaic tiers stay the handle's.
+    /// handle. The card grids' tier is `ui::grid_prewarm::tier()` and rides no `install`
+    /// signature, there being exactly one of it and no view owning it.
     pub cover_thumbs: &'a Arc<CoverThumbs>,
     /// `None` on a fresh install *and* on an unreadable file — a slice seeding
     /// from it falls back to its Slint-declared default.

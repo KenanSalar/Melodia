@@ -8,6 +8,9 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "Clear selection"
+msgstr "Εκκαθάριση επιλογής"
+
 # ---- Sidebar / navigation ----------------------------------------------------
 
 msgid "Search"
@@ -82,9 +85,6 @@ msgstr "Εκκαθάριση"
 
 msgid "Restart"
 msgstr "Επανεκκίνηση"
-
-msgid "Clear selection"
-msgstr "Εκκαθάριση επιλογής"
 
 # ---- Now-playing bar tooltips & states --------------------------------------
 
@@ -196,9 +196,6 @@ msgstr "Η ουρά είναι άδεια"
 msgid "Drop to add to queue"
 msgstr "Αφήστε για προσθήκη στην ουρά"
 
-msgid "Remove selected"
-msgstr "Κατάργηση επιλεγμένων"
-
 msgid "Remove from Queue"
 msgstr "Κατάργηση από την ουρά"
 
@@ -213,9 +210,6 @@ msgstr "Εκκαθάριση ουράς;"
 
 msgid "Remove all tracks from the queue? Playback will stop."
 msgstr "Να καταργηθούν όλα τα κομμάτια από την ουρά; Η αναπαραγωγή θα σταματήσει."
-
-msgid "Remove from queue?"
-msgstr "Κατάργηση από την ουρά;"
 
 # Plural: track count for the queue header subtitle ("3 tracks", "1 track").
 # Greek pluralizes regularly after numerals, so msgstr[0] (singular) and
@@ -252,12 +246,6 @@ msgid "{n} song"
 msgid_plural "{n} songs"
 msgstr[0] "{n} τραγούδι"
 msgstr[1] "{n} τραγούδια"
-
-# Plural: queue-remove confirmation dialog.
-msgid "Remove {n} track from the queue?"
-msgid_plural "Remove {n} tracks from the queue?"
-msgstr[0] "Να καταργηθεί {n} κομμάτι από την ουρά;"
-msgstr[1] "Να καταργηθούν {n} κομμάτια από την ουρά;"
 
 msgid "{} selected"
 msgstr "{} επιλεγμένα"
@@ -807,9 +795,6 @@ msgstr "Μετονομασία"
 msgid "Delete playlist"
 msgstr "Διαγραφή λίστας"
 
-msgid "Remove from playlist"
-msgstr "Αφαίρεση από τη λίστα"
-
 msgid "Remove from Playlist"
 msgstr "Αφαίρεση από τη λίστα"
 
@@ -858,14 +843,6 @@ msgid "Delete"
 msgstr "Διαγραφή"
 
 # ---- Playlist Detail: Remove-selected confirm -------------------------------
-
-msgid "Remove from playlist?"
-msgstr "Αφαίρεση από τη λίστα;"
-
-msgid "Remove {n} track from the playlist?"
-msgid_plural "Remove {n} tracks from the playlist?"
-msgstr[0] "Αφαίρεση {n} κομματιού από τη λίστα;"
-msgstr[1] "Αφαίρεση {n} κομματιών από τη λίστα;"
 
 # ---- Search view ------------------------------------------------------------
 
@@ -1227,12 +1204,6 @@ msgstr "Εξαγωγή"
 
 msgid "Export Playlists"
 msgstr "Εξαγωγή λιστών"
-
-msgid "Import playlists from .m3u8 files"
-msgstr "Εισαγωγή λιστών από αρχεία .m3u8"
-
-msgid "Export playlists to .m3u8 files"
-msgstr "Εξαγωγή λιστών σε αρχεία .m3u8"
 
 msgid "Choose playlists to export."
 msgstr "Επιλέξτε λίστες για εξαγωγή."
@@ -1902,6 +1873,10 @@ msgstr "Οι σταθμοί που ακούτε εμφανίζονται εδώ.
 msgid "Added"
 msgstr "Προστέθηκε"
 
+# The Favorites tab's overflow pill, holding Import and Export.
+msgid "More station actions"
+msgstr "Περισσότερες ενέργειες σταθμού"
+
 # The add / edit station dialog.
 msgid "Add Station"
 msgstr "Προσθήκη σταθμού"
@@ -2258,3 +2233,38 @@ msgstr "Φόντο άλμπουμ"
 
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Βάφει τον μίνι αναπαραγωγέα με τα χρώματα του άλμπουμ που παίζει, όπως κάνει η προβολή «Αναπαράγεται τώρα»."
+
+# ---- Entity card context menu -----------------------------------------------
+
+msgid "Rename…"
+msgstr "Μετονομασία…"
+
+msgid "Edit Artwork…"
+msgstr "Επεξεργασία εικόνας…"
+
+msgid "Edit Rules…"
+msgstr "Επεξεργασία κανόνων…"
+
+msgid "Delete Playlist"
+msgstr "Διαγραφή λίστας"
+
+msgid "Delete {} Playlists"
+msgstr "Διαγραφή {} λιστών"
+
+msgid "Show in File Manager"
+msgstr "Εμφάνιση στη διαχείριση αρχείων"
+
+msgid "More playlist actions"
+msgstr "Περισσότερες ενέργειες λίστας"
+
+msgid "Delete {} playlists?"
+msgstr "Διαγραφή {} λιστών;"
+
+msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
+msgstr "Οι λίστες και η σειρά των κομματιών τους θα καταργηθούν. Τα ίδια τα κομμάτια παραμένουν στη βιβλιοθήκη σας."
+
+msgid "Edit Artwork"
+msgstr "Επεξεργασία εικόνας"
+
+msgid "Apply"
+msgstr "Εφαρμογή"

@@ -11,7 +11,7 @@ use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::callbacks::spawn_play_then_shuffle;
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::recently_played::{self as recently_played_ui_mod, RecentlyPlayedUi};
-use crate::ui::tab_bar::{UNFETCHED_COUNT, should_announce_warm};
+use crate::ui::tab_bar::UNFETCHED_COUNT;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, RecentlyPlayed, TrackListRow as UiTrackListRow};
@@ -92,12 +92,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 == recently_played_ui_mod::RecentlyPlayedTab::MostPlayed
                 && ru.take_grid_dirty();
 
-            // The entering tier was cleared when its tab was last left, so the
-            // cards mount cold: hold the lookups at cache-only until the prewarm
-            // below reports back, or each visible card drags a grid-tier decode onto
-            // this thread in the frame that paints the grid.
-            g.set_covers_generation(0);
-
             // Fill the entering tab's model on this tick — it mounts on the next
             // frame, and the `_now` variants are what make "this tick" true: a
             // hidden tab's model is empty, and the count that gates its empty
@@ -148,7 +142,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
 
             let ru_covers = ru.clone();
             let s_disk = s.clone();
-            let weak_warm = weak.clone();
             let persist_disk = Arc::clone(&persist);
             s.runtime.spawn_blocking(move || {
                 // Scoped to the write alone: a superseded tab drops its own disk
@@ -158,23 +151,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                         log::warn!("recently_played::set_recently_played_tab: {e}");
                     }
                 });
-                // `warm` is the decode's own verdict — a section leave landing
-                // inside it handed the buffers back — so `Some(entering)` is
-                // exactly "we decoded for this tab and still hold it", which is
-                // what `should_announce_warm` takes. The other two terms are read
-                // on the UI thread, where both shadows are written: a pick made
-                // while the decodes ran owns a different tier, and a leave that
-                // landed after the prewarm returned owns none.
-                let warmed = ru_covers.swap_tab_covers(entering).then_some(entering);
-                let _ = weak_warm.upgrade_in_event_loop(move |ui| {
-                    if should_announce_warm(
-                        warmed,
-                        ru_covers.section_active(),
-                        ru_covers.active_tab(),
-                    ) {
-                        recently_played_ui_mod::mark_covers_warm(&ui);
-                    }
-                });
+                // A pick can't await a prewarm the way a fetch does — `TabBar` writes
+                // `selected-index` before it emits `selected`, so the rows are already
+                // in by now. Whatever the entering tab painted last visit is still in
+                // the tier as a proxy; this sharpens it, and anything genuinely absent
+                // schedules itself off the card's own lookup.
+                ru_covers.prewarm_tab_covers(entering);
             });
         });
     }

@@ -8,7 +8,7 @@ macro_rules! spawn_logged {
     ($state:ident, $label:literal, $fut:expr) => {{
         $state.runtime.clone().spawn(async move {
             if let Err(e) = $fut.await {
-                log::warn!("{}: {e}", $label);
+                log::warn!("{}: {}", $label, melodia_core::error::describe(&e));
             }
         });
     }};
@@ -21,7 +21,7 @@ macro_rules! spawn_logged_toast {
     ($state:ident, $label:literal, $fut:expr) => {{
         $state.runtime.clone().spawn(async move {
             if let Err(e) = $fut.await {
-                log::warn!("{}: {e}", $label);
+                log::warn!("{}: {}", $label, melodia_core::error::describe(&e));
                 melodia_core::utils::toast::notify(
                     melodia_core::utils::toast::ToastKind::OperationFailed,
                     e.to_string(),
@@ -40,7 +40,7 @@ macro_rules! spawn_logged_sync {
     ($state:ident, $label:literal, $expr:expr) => {{
         $state.runtime.clone().spawn(async move {
             if let Err(e) = $expr {
-                log::warn!("{}: {e}", $label);
+                log::warn!("{}: {}", $label, melodia_core::error::describe(&e));
             }
         });
     }};
@@ -65,7 +65,7 @@ macro_rules! spawn_blocking_logged {
         // and a bare `$state.runtime.spawn_blocking(…)` holds that borrow across the move.
         $state.runtime.clone().spawn_blocking(move || {
             if let Err(e) = $expr {
-                log::warn!("{}: {e}", $label);
+                log::warn!("{}: {}", $label, melodia_core::error::describe(&e));
             }
         });
     }};
@@ -80,7 +80,7 @@ macro_rules! wire_sync {
             let s = s.clone();
             s.runtime.clone().spawn(async move {
                 if let Err(e) = $libfn(&s) {
-                    log::warn!("{}: {e}", $label);
+                    log::warn!("{}: {}", $label, melodia_core::error::describe(&e));
                 }
             });
         });
@@ -98,7 +98,7 @@ macro_rules! wire_pb {
             s.runtime.clone().spawn(async move {
                 let ctx = s.playback_ctx();
                 if let Err(e) = $libfn(&ctx).await {
-                    log::warn!("{}: {e}", $label);
+                    log::warn!("{}: {}", $label, melodia_core::error::describe(&e));
                 }
             });
         });
@@ -113,7 +113,7 @@ macro_rules! wire_sync_pb {
             let s = s.clone();
             s.runtime.clone().spawn(async move {
                 if let Err(e) = $libfn(&s.playback_ctx()) {
-                    log::warn!("{}: {e}", $label);
+                    log::warn!("{}: {}", $label, melodia_core::error::describe(&e));
                 }
             });
         });
@@ -145,7 +145,7 @@ macro_rules! wire_row_flag {
             $(let $cap = $cap.clone();)*
             s.runtime.clone().spawn(async move {
                 if let Err(e) = $setter(&s, $ids.clone(), value).await {
-                    log::warn!("{}: {e}", $label);
+                    log::warn!("{}: {}", $label, melodia_core::error::describe(&e));
                     return;
                 }
                 let $val = value;

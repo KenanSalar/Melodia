@@ -10,7 +10,12 @@ const GRID_GEOMETRY: &str =
 /// leaves the grid's overflow on placeholders.
 #[test]
 fn the_card_constants_are_the_ones_the_component_declares() {
-    for (name, value) in [("min-card-w", MIN_CARD_W), ("gap", GAP), ("card-text-h", CARD_TEXT_H)] {
+    for (name, value) in [
+        ("min-card-w", MIN_CARD_W),
+        ("gap", GAP),
+        ("card-text-h", CARD_TEXT_H),
+        ("max-card-w", MAX_CARD_W),
+    ] {
         let declared = format!("in property <length> {name}: {value}px;");
         assert!(
             GRID_GEOMETRY.contains(&declared),
@@ -106,10 +111,12 @@ fn the_ceiling_is_bytes_rather_than_entries() {
 }
 
 /// `GridGeometry`'s own `card-w`, which production no longer computes — it sizes to the widest
-/// card a column count can pack, and this is what that bound has to clear.
+/// card a column count can pack, and this is what that bound has to clear. The `MAX_CARD_W` here
+/// is the component's own clamp on a *packed* row; the wider card an under-filled one draws is out
+/// of this helper's reach, and `widest_card` argues where that leaves the tier.
 fn drawn_card_width(body_w: u32) -> u32 {
     let cols = (body_w.saturating_sub(GAP) / (MIN_CARD_W + GAP)).max(1);
-    body_w.saturating_sub((cols + 1) * GAP) / cols
+    (body_w.saturating_sub((cols + 1) * GAP) / cols).min(MAX_CARD_W)
 }
 
 /// `GridGeometry`'s own arithmetic, so the pin below measures the cap against the number of
@@ -178,22 +185,23 @@ fn the_tier_follows_the_card_it_draws() {
     assert!(super::cover_size(1920, 2.0) > super::cover_size(1920, 1.5));
     assert!(super::cover_size(1920, 2.0) >= MIN_CARD_W * 2);
 
-    // A narrow panel packs one much larger card, and is sized for that rather than for the wide
-    // case — the handful of tiles it mounts is what makes that affordable.
-    assert!(super::cover_size(500, 1.0) > wide);
+    // A narrow panel packs one card, and the component stops that one at `MAX_CARD_W`: the tier
+    // follows it to the ceiling and no further, where the packing alone asked for well past it.
+    assert_eq!(super::cover_size(500, 1.0), MAX_CARD_W);
 
     // Nothing may exceed what the store keeps, however extreme the pairing.
     assert_eq!(super::cover_size(400, 4.0), melodia_artwork::media::image::artwork::STORE_MAX_DIM);
 }
 
 /// **The tier has to hold still through a resize drag.** `WindowChrome.display-changed` re-derives
-/// it on every winit `Resized` and a genuine `set_thumb_size` clears the whole tier, so a size
-/// that flips between two steps as the window moves drops every decoded cover and repaints the
-/// grid as placeholders, over and over, under the drag.
+/// it on every winit `Resized` and a genuine `set_thumb_size` re-decodes every cover the grid is
+/// drawing, so a size that flips between two steps as the window moves re-decodes the visible set
+/// over and over, under the drag, on a pool two to four threads wide.
 ///
 /// Sizing to the widest card a column count can pack is what holds it flat. The card itself
 /// sweeps `min-card-w` up to that bound inside *every* column band, so a tier tracking it crosses
-/// a step boundary twice a band — which is a wipe per crossing, not a rounding difference.
+/// a step boundary twice a band — which is a screenful of decodes per crossing, not a rounding
+/// difference.
 #[test]
 fn the_tier_holds_still_through_a_resize_drag() {
     const MAX_RETUNES: usize = 8;
@@ -211,16 +219,16 @@ fn the_tier_holds_still_through_a_resize_drag() {
         assert!(
             retunes <= MAX_RETUNES,
             "a drag from 800 to 3840 logical px at {scale}× retunes the tier {retunes} times, \
-             past the {MAX_RETUNES} it can absorb — each one clears every grid's covers"
+             past the {MAX_RETUNES} it can absorb — each one re-decodes every grid's covers"
         );
     }
 }
 
-/// **The tier may not land under the card the grid draws.** Rust measures the *window* while the
-/// grid gets the body, and the sidebar between them is the user's to drag across a range no
-/// window measurement sees. `BODY_CHROME_W` assumes the widest of them so the estimate can only
-/// run wide; the other way round every card is upscaled from a tier too small for it, and
-/// `FemtoVG` minifies bilinear with no mipmaps.
+/// **The tier may not land under the card a packed row draws.** Rust measures the *window*
+/// while the grid gets the body, and the sidebar between them is the user's to drag across a
+/// range no window measurement sees. `BODY_CHROME_W` assumes the widest of them so the estimate
+/// can only run wide; the other way round every card is upscaled from a tier too small for it,
+/// and `FemtoVG` minifies bilinear with no mipmaps.
 #[test]
 fn the_tier_covers_the_card_at_every_sidebar_width() {
     // `Theme.sidebar-collapsed-w` through `sidebar-max-w`, plus the page's `pad-lg` at both edges.
@@ -250,38 +258,57 @@ fn the_tier_covers_the_card_at_every_sidebar_width() {
     }
 }
 
-/// **Neither generation may decode on the calling thread.** 0 means the tier was cleared when
-/// its tab was left and the lookup answers from the cache alone; past 0 a miss is handed to the
-/// decode pool and still answers with the placeholder, the card coming back on the bump that
-/// follows. Neither is "return nothing" — an entry already in the tier resolves at any
-/// generation, which is what makes a re-entered warm tab paint instantly.
+/// **A miss may not decode on the calling thread.** The lookup runs inside a Slint model getter,
+/// so the caller is the event loop: a miss is handed to the decode pool and answered with the
+/// placeholder, the card coming back on the bump that follows. A hit resolves inline, which is
+/// what makes a re-entered tab paint on its first frame.
 #[test]
-fn no_generation_decodes_on_the_calling_thread() -> Result<(), Box<dyn std::error::Error>> {
-    let cap = NonZeroUsize::new(4).ok_or("cap must be > 0")?;
-    let thumbs = Arc::new(CoverThumbs::with_config(64, cap));
+fn a_miss_never_decodes_on_the_calling_thread() -> Result<(), Box<dyn std::error::Error>> {
+    let tier = super::tier();
     let (_tmp, path) = write_test_png(512)?;
     let path = path.to_str().ok_or("temp path is not UTF-8")?;
 
     assert_eq!(
-        super::grid_cover(&thumbs, path, 0).size().width,
+        super::grid_cover(path).size().width,
         0,
-        "a cold tier must hand back a placeholder rather than decode on the UI thread"
-    );
-    assert_eq!(
-        super::grid_cover(&thumbs, path, 1).size().width,
-        0,
-        "past 0 a miss schedules and still answers with the placeholder — decoding here is the \
-         regression, one grid-tier decode per visible card in the frame that mounts the grid"
+        "a miss schedules and answers with the placeholder — decoding here is the regression, \
+         one grid-tier decode per visible card in the frame that mounts the grid"
     );
 
     // What the scheduled decode will have done, without racing the pool for it.
-    thumbs.prewarm(&[PathBuf::from(path)]);
-    for generation in [0, 1] {
-        assert_eq!(
-            super::grid_cover(&thumbs, path, generation).size().width,
-            64,
-            "a cover already in the tier resolves at every generation"
-        );
-    }
+    tier.prewarm(&[PathBuf::from(path)]);
+    assert!(
+        super::grid_cover(path).size().width > 0,
+        "a cover already in the tier resolves inline"
+    );
     Ok(())
+}
+
+/// The derived half of the relation the `const _` beside [`PROXY_COVER_DIM`] asserts for the
+/// fallback: a proxy that equals a size the tier can be tuned to reads as current, and the
+/// prewarm behind a re-entry skips it. On screen that is every card on the page keeping its soft
+/// tile for the rest of the session.
+#[test]
+fn the_proxy_stays_under_every_size_the_tier_can_take() {
+    for logical_w in [320, 480, 640, 960, 1280, 1920, 2560, 3840, 7680] {
+        for scale in [1.0, 1.25, 1.5, 2.0, 3.0] {
+            let size = super::cover_size(logical_w, scale);
+            assert!(
+                PROXY_COVER_DIM < size,
+                "the tier answers {size} px at {logical_w} logical / {scale}x, which a \
+                 {PROXY_COVER_DIM} px proxy would read as current"
+            );
+        }
+    }
+}
+
+/// The window-less boot and a backend that answers nonsense both arrive here as a scale the tier
+/// cannot use. Without the guard a zero or negative one clamps to `MIN_CARD_W`, and a `NaN` is
+/// the `as u32` saturating to zero.
+#[test]
+fn a_scale_the_display_cannot_have_falls_back_to_one() {
+    let sane = super::cover_size(1280, 1.0);
+    for nonsense in [0.0, -2.0, f64::NAN] {
+        assert_eq!(super::cover_size(1280, nonsense), sane, "scale {nonsense}");
+    }
 }

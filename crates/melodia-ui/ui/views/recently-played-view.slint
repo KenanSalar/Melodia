@@ -6,7 +6,6 @@ import { MosaicTabHero } from "../components/hero/mosaic-tab-hero.slint";
 import { TooltipFrame } from "../components/tooltip-frame.slint";
 import { ViewTransition } from "../components/view-transition.slint";
 import { ActionPill, PillButton, PillDivider } from "../components/action-pill.slint";
-import { SelectionPills } from "../components/selection-pills.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
 import { RecentlyPlayedMostPlayedTab } from "recently-played/most-played-tab.slint";
@@ -45,6 +44,9 @@ export component RecentlyPlayedView inherits Rectangle {
     geom := GridGeometry {
         avail-width: body.width;
         gap: root.grid-gap;
+        lone-row-cards: RecentlyPlayed.most-played-rows.length == 1
+            ? RecentlyPlayed.most-played-rows[0].entities.length
+            : -1;
     }
 
     GridColumnsSync {
@@ -100,8 +102,8 @@ export component RecentlyPlayedView inherits Rectangle {
                 RecentlyPlayed.tab-changed(i);
             }
 
-            // Songs gets the full pill — Shuffle, column toggle, selection chip;
-            // Most Played a Shuffle scoped to what its grid shows. **Neither has
+            // Songs gets the full pill — Shuffle and the column toggle; Most
+            // Played a Shuffle scoped to what its grid shows. **Neither has
             // a sort row**: Songs because recency is the page, Most Played
             // because its title names its own ordering.
             if RecentlyPlayed.tab-idx == RecentlyPlayed.tab-songs
@@ -120,13 +122,6 @@ export component RecentlyPlayedView inherits Rectangle {
                     ColumnTogglePopup {
                         columns <=> RecentlyPlayed.track-columns;
                         toggled(id) => { RecentlyPlayed.toggle-column(id); }
-                    }
-                    if RecentlyPlayed.selected-ids.length > 0: SelectionPills {
-                        count: RecentlyPlayed.selected-ids.length;
-                        cleared => {
-                            RecentlyPlayed.clear-selection();
-                            RecentlyPlayed.blur-search-tick += 1;
-                        }
                     }
                 }
             }

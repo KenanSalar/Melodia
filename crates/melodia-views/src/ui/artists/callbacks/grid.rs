@@ -30,17 +30,10 @@ pub(super) fn wire(
         artists.set_sort_dir(SharedString::from(sort.dir.as_str()));
     }
 
-    // request-cover: lazy per-card cover lookup. Backed by the Artists
-    // grid-tier `CoverThumbs` LRU.
-    {
-        let au = artists_ui.clone();
-        // `generation` is read for its effect on the binding, never its value.
-        artists.on_request_cover(move |path, _generation| au.grid_cover(path.as_str()));
-        crate::ui::cover_generation::notify_on_decode(&artists_ui.grid_thumbs(), ui, |app| {
-            let artists = app.global::<Artists>();
-            artists.set_covers_generation(artists.get_covers_generation().wrapping_add(1));
-        });
-    }
+    // request-cover: lazy per-card cover lookup off the shared grid tier. `generation` is
+    // read for its effect on the binding, never its value.
+    artists
+        .on_request_cover(|path, _generation| crate::ui::grid_prewarm::grid_cover(path.as_str()));
 
     {
         let au = artists_ui.clone();
@@ -107,8 +100,7 @@ pub(super) fn wire(
                 )
             );
 
-            let au_release = au.clone();
-            s.runtime.spawn_blocking(move || au_release.release_grid_covers());
+            s.runtime.spawn_blocking(crate::ui::grid_prewarm::hand_back_covers);
 
             let s_disk = s.clone();
             s.runtime.spawn_blocking(move || {

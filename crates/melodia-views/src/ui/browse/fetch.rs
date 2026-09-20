@@ -143,18 +143,12 @@ pub async fn fetch_and_apply(
             // prewarm above, this one is capped at a screenful, so the prefix
             // that survives the cap has to be the prefix that paints. Awaited
             // before the rows land (the Albums prewarm-then-write ordering), so
-            // the first screenful of cards is a cache hit. `warm_card_tier`
-            // owns the "does this tier still hold what it decoded" re-check; a
-            // `JoinError` is the same "we don't know" as a handed-back prewarm.
-            let warmed = if browse_ui.view_mode() == BrowseViewMode::Card {
+            // the first screenful of cards is a cache hit.
+            if browse_ui.view_mode() == BrowseViewMode::Card {
                 let unique = cards::first_screenful_paths(&files);
                 let bu = browse_ui.clone();
-                tokio::task::spawn_blocking(move || bu.warm_card_tier(&unique))
-                    .await
-                    .unwrap_or(false)
-            } else {
-                false
-            };
+                let _ = tokio::task::spawn_blocking(move || bu.warm_card_tier(&unique)).await;
+            }
 
             let token = browse_ui.fetch_token.load(Ordering::Relaxed);
             if token != my_token {
@@ -189,16 +183,6 @@ pub async fn fetch_and_apply(
                 *browse_ui.last_files.lock() = files;
                 *browse_ui.last_folders.lock() = browse_folders;
                 cards::rebuild_cards(&ui, &browse_ui);
-                // Announce only if the prewarm still holds its buffers *and* the
-                // view is still the surface it warmed for. Both shadows are
-                // written on this thread, so this re-check covers anything that
-                // landed after `warm_card_tier` made its own.
-                if warmed
-                    && browse_ui.section_active()
-                    && browse_ui.view_mode() == BrowseViewMode::Card
-                {
-                    g.set_covers_generation(g.get_covers_generation() + 1);
-                }
             });
         }
         Err(e) => {

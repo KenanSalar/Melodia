@@ -8,6 +8,9 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "Clear selection"
+msgstr "Effacer la sélection"
+
 # ---- Sidebar / navigation ----------------------------------------------------
 
 msgid "Search"
@@ -82,9 +85,6 @@ msgstr "Effacer"
 
 msgid "Restart"
 msgstr "Redémarrer"
-
-msgid "Clear selection"
-msgstr "Effacer la sélection"
 
 # ---- Now-playing bar tooltips & states --------------------------------------
 
@@ -196,9 +196,6 @@ msgstr "La file d'attente est vide"
 msgid "Drop to add to queue"
 msgstr "Déposez pour ajouter à la file d'attente"
 
-msgid "Remove selected"
-msgstr "Retirer la sélection"
-
 msgid "Remove from Queue"
 msgstr "Retirer de la file d'attente"
 
@@ -213,9 +210,6 @@ msgstr "Vider la file d'attente ?"
 
 msgid "Remove all tracks from the queue? Playback will stop."
 msgstr "Retirer toutes les pistes de la file d'attente ? La lecture s'arrêtera."
-
-msgid "Remove from queue?"
-msgstr "Retirer de la file d'attente ?"
 
 # Plural: track count for the queue header subtitle ("3 tracks", "1 track").
 msgid "{n} track"
@@ -250,12 +244,6 @@ msgid "{n} song"
 msgid_plural "{n} songs"
 msgstr[0] "{n} morceau"
 msgstr[1] "{n} morceaux"
-
-# Plural: queue-remove confirmation dialog.
-msgid "Remove {n} track from the queue?"
-msgid_plural "Remove {n} tracks from the queue?"
-msgstr[0] "Retirer {n} piste de la file d'attente ?"
-msgstr[1] "Retirer {n} pistes de la file d'attente ?"
 
 msgid "{} selected"
 msgstr "{} sélectionné(s)"
@@ -805,9 +793,6 @@ msgstr "Renommer"
 msgid "Delete playlist"
 msgstr "Supprimer la liste"
 
-msgid "Remove from playlist"
-msgstr "Retirer de la liste"
-
 msgid "Remove from Playlist"
 msgstr "Retirer de la liste"
 
@@ -856,14 +841,6 @@ msgid "Delete"
 msgstr "Supprimer"
 
 # ---- Playlist Detail: Remove-selected confirm -------------------------------
-
-msgid "Remove from playlist?"
-msgstr "Retirer de la liste ?"
-
-msgid "Remove {n} track from the playlist?"
-msgid_plural "Remove {n} tracks from the playlist?"
-msgstr[0] "Retirer {n} piste de la liste ?"
-msgstr[1] "Retirer {n} pistes de la liste ?"
 
 # ---- Search view ------------------------------------------------------------
 
@@ -1223,12 +1200,6 @@ msgstr "Exporter"
 
 msgid "Export Playlists"
 msgstr "Exporter les listes"
-
-msgid "Import playlists from .m3u8 files"
-msgstr "Importer des listes depuis des fichiers .m3u8"
-
-msgid "Export playlists to .m3u8 files"
-msgstr "Exporter des listes vers des fichiers .m3u8"
 
 msgid "Choose playlists to export."
 msgstr "Choisissez les listes à exporter."
@@ -1898,6 +1869,10 @@ msgstr "Les stations que vous écoutez apparaissent ici."
 msgid "Added"
 msgstr "Ajoutée"
 
+# The Favorites tab's overflow pill, holding Import and Export.
+msgid "More station actions"
+msgstr "Plus d'actions de station"
+
 # The add / edit station dialog.
 msgid "Add Station"
 msgstr "Ajouter une station"
@@ -2254,3 +2229,38 @@ msgstr "Arrière-plan de l'album"
 
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Peint le mini-lecteur aux couleurs de l'album en cours de lecture, comme le fait la vue « Lecture en cours »."
+
+# ---- Entity card context menu -----------------------------------------------
+
+msgid "Rename…"
+msgstr "Renommer…"
+
+msgid "Edit Artwork…"
+msgstr "Modifier l'image…"
+
+msgid "Edit Rules…"
+msgstr "Modifier les règles…"
+
+msgid "Delete Playlist"
+msgstr "Supprimer la liste"
+
+msgid "Delete {} Playlists"
+msgstr "Supprimer {} listes"
+
+msgid "Show in File Manager"
+msgstr "Afficher dans le gestionnaire de fichiers"
+
+msgid "More playlist actions"
+msgstr "Plus d'actions de liste"
+
+msgid "Delete {} playlists?"
+msgstr "Supprimer {} listes ?"
+
+msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
+msgstr "Les listes et l'ordre de leurs pistes seront supprimés. Les pistes elles-mêmes restent dans votre bibliothèque."
+
+msgid "Edit Artwork"
+msgstr "Modifier l'image"
+
+msgid "Apply"
+msgstr "Appliquer"

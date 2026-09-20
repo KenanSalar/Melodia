@@ -8,6 +8,9 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "Clear selection"
+msgstr "Cancella selezione"
+
 # ---- Sidebar / navigation ----------------------------------------------------
 
 msgid "Search"
@@ -82,9 +85,6 @@ msgstr "Svuota"
 
 msgid "Restart"
 msgstr "Riavvia"
-
-msgid "Clear selection"
-msgstr "Cancella selezione"
 
 # ---- Now-playing bar tooltips & states --------------------------------------
 
@@ -196,9 +196,6 @@ msgstr "La coda è vuota"
 msgid "Drop to add to queue"
 msgstr "Rilascia per aggiungere alla coda"
 
-msgid "Remove selected"
-msgstr "Rimuovi selezionati"
-
 msgid "Remove from Queue"
 msgstr "Rimuovi dalla coda"
 
@@ -213,9 +210,6 @@ msgstr "Svuotare la coda?"
 
 msgid "Remove all tracks from the queue? Playback will stop."
 msgstr "Rimuovere tutti i brani dalla coda? La riproduzione verrà interrotta."
-
-msgid "Remove from queue?"
-msgstr "Rimuovere dalla coda?"
 
 # Plural: track count for the queue header subtitle ("3 tracks", "1 track").
 msgid "{n} track"
@@ -250,12 +244,6 @@ msgid "{n} song"
 msgid_plural "{n} songs"
 msgstr[0] "{n} canzone"
 msgstr[1] "{n} canzoni"
-
-# Plural: queue-remove confirmation dialog.
-msgid "Remove {n} track from the queue?"
-msgid_plural "Remove {n} tracks from the queue?"
-msgstr[0] "Rimuovere {n} brano dalla coda?"
-msgstr[1] "Rimuovere {n} brani dalla coda?"
 
 msgid "{} selected"
 msgstr "{} selezionati"
@@ -805,9 +793,6 @@ msgstr "Rinomina"
 msgid "Delete playlist"
 msgstr "Elimina playlist"
 
-msgid "Remove from playlist"
-msgstr "Rimuovi dalla playlist"
-
 msgid "Remove from Playlist"
 msgstr "Rimuovi dalla playlist"
 
@@ -856,14 +841,6 @@ msgid "Delete"
 msgstr "Elimina"
 
 # ---- Playlist Detail: Remove-selected confirm -------------------------------
-
-msgid "Remove from playlist?"
-msgstr "Rimuovere dalla playlist?"
-
-msgid "Remove {n} track from the playlist?"
-msgid_plural "Remove {n} tracks from the playlist?"
-msgstr[0] "Rimuovere {n} brano dalla playlist?"
-msgstr[1] "Rimuovere {n} brani dalla playlist?"
 
 # ---- Search view ------------------------------------------------------------
 
@@ -1222,12 +1199,6 @@ msgstr "Esporta"
 
 msgid "Export Playlists"
 msgstr "Esporta playlist"
-
-msgid "Import playlists from .m3u8 files"
-msgstr "Importa playlist da file .m3u8"
-
-msgid "Export playlists to .m3u8 files"
-msgstr "Esporta playlist in file .m3u8"
 
 msgid "Choose playlists to export."
 msgstr "Scegli le playlist da esportare."
@@ -1897,6 +1868,10 @@ msgstr "Le stazioni che ascolti compaiono qui."
 msgid "Added"
 msgstr "Aggiunta"
 
+# The Favorites tab's overflow pill, holding Import and Export.
+msgid "More station actions"
+msgstr "Altre azioni stazione"
+
 # The add / edit station dialog.
 msgid "Add Station"
 msgstr "Aggiungi stazione"
@@ -2253,3 +2228,38 @@ msgstr "Sfondo dell'album"
 
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Colora il mini player con i colori dell'album in riproduzione, come fa la vista «In riproduzione»."
+
+# ---- Entity card context menu -----------------------------------------------
+
+msgid "Rename…"
+msgstr "Rinomina…"
+
+msgid "Edit Artwork…"
+msgstr "Modifica immagine…"
+
+msgid "Edit Rules…"
+msgstr "Modifica regole…"
+
+msgid "Delete Playlist"
+msgstr "Elimina playlist"
+
+msgid "Delete {} Playlists"
+msgstr "Elimina {} playlist"
+
+msgid "Show in File Manager"
+msgstr "Mostra nel gestore file"
+
+msgid "More playlist actions"
+msgstr "Altre azioni playlist"
+
+msgid "Delete {} playlists?"
+msgstr "Eliminare {} playlist?"
+
+msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
+msgstr "Le playlist e l'ordine dei loro brani verranno rimossi. I brani restano nella tua libreria."
+
+msgid "Edit Artwork"
+msgstr "Modifica immagine"
+
+msgid "Apply"
+msgstr "Applica"

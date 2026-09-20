@@ -23,12 +23,15 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
 
+use crate::ui::callbacks::DialogClaim;
 use crate::ui::callbacks::macros::release_detail_hero_images;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{
-    AppWindow, Dialog, PlaylistDetail, PlaylistPickRow as UiPlaylistPickRow, Playlists, TagEditor,
+    AppWindow, CardSelection, Dialog, PlaylistDetail, PlaylistPickRow as UiPlaylistPickRow,
+    Playlists, TagEditor,
 };
 
 /// Wire the playlist dialog + CRUD callbacks. See [`super::wire`].
@@ -123,12 +126,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 {
                     Ok(_) => {
                         if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak).await {
-                            log::warn!("playlists::create_playlist refetch: {e}");
+                            log::warn!("playlists::create_playlist refetch: {}", describe(&e));
                         }
                         log::info!("playlists::create_playlist: {name_str:?}");
                     }
                     Err(e) => {
-                        log::warn!("playlists::create_playlist {name_str:?}: {e}");
+                        log::warn!("playlists::create_playlist {name_str:?}: {}", describe(&e));
                     }
                 }
             });
@@ -170,18 +173,18 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 {
                     Ok(_) => {
                         if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak.clone()).await {
-                            log::warn!("playlists::rename refetch grid: {e}");
+                            log::warn!("playlists::rename refetch grid: {}", describe(&e));
                         }
                         if pu.detail_playlist_id() == id
                             && let Err(e) =
                                 playlists_ui_mod::refresh_detail(&s, &pu, weak, id).await
                         {
-                            log::warn!("playlists::rename refresh detail: {e}");
+                            log::warn!("playlists::rename refresh detail: {}", describe(&e));
                         }
                         log::info!("playlists::rename({id}): {name_str:?}");
                     }
                     Err(e) => {
-                        log::warn!("playlists::rename({id}) {name_str:?}: {e}");
+                        log::warn!("playlists::rename({id}) {name_str:?}: {}", describe(&e));
                     }
                 }
             });
@@ -209,8 +212,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let pu = pu.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
-                if let Err(e) = library::playlists::delete_playlist(&s, id).await {
-                    log::warn!("playlists::delete({id}): {e}");
+                if let Err(e) = library::playlists::delete_playlists(&s, &[id]).await {
+                    log::warn!("playlists::delete({id}): {}", describe(&e));
                     return;
                 }
                 if was_open {
@@ -223,14 +226,71 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                             crate::ui::track_list_view::view_id::PLAYLIST_DETAIL,
                             None,
                         ) {
-                            log::warn!("playlists::delete clear last_detail_id: {e}");
+                            log::warn!("playlists::delete clear last_detail_id: {}", describe(&e));
                         }
                     });
                 }
+                // The deleted id can still be sitting in the card selection, where it would keep
+                // being counted by the card menu and asked for by the next batch action.
+                let _ = weak.upgrade_in_event_loop(|ui| {
+                    ui.global::<CardSelection>().invoke_clear();
+                });
                 if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak).await {
-                    log::warn!("playlists::delete refetch grid: {e}");
+                    log::warn!("playlists::delete refetch grid: {}", describe(&e));
                 }
                 log::info!("playlists::delete({id})");
+            });
+        });
+    }
+
+    // delete-playlists: the card menu's batch arm. Same shape as the single delete over a set,
+    // down to sharing its statement — and the selection cleared because every id in it is about
+    // to stop existing.
+    {
+        let s = state.clone();
+        let pu = playlists_ui.clone();
+        let weak = weak.clone();
+        playlists.on_delete_playlists(move |ids| {
+            let ids: Vec<i64> = ids.iter().map(i64::from).collect();
+            if ids.is_empty() {
+                return;
+            }
+            let open_was_deleted = ids.contains(&pu.detail_playlist_id());
+            if open_was_deleted && let Some(ui) = weak.upgrade() {
+                let d = ui.global::<PlaylistDetail>();
+                d.set_playlist_id(-1);
+                release_detail_hero_images!(ui, d);
+                playlists_ui_mod::clear_detail(&pu);
+            }
+            let s = s.clone();
+            let pu = pu.clone();
+            let weak = weak.clone();
+            s.runtime.clone().spawn(async move {
+                if let Err(e) = library::playlists::delete_playlists(&s, &ids).await {
+                    log::warn!("playlists::delete_many: {}", describe(&e));
+                }
+                if open_was_deleted {
+                    let s_disk = s.clone();
+                    s.runtime.spawn_blocking(move || {
+                        if let Err(e) = library::settings::set_last_detail_id(
+                            &s_disk,
+                            crate::ui::track_list_view::view_id::PLAYLIST_DETAIL,
+                            None,
+                        ) {
+                            log::warn!(
+                                "playlists::delete_many clear last_detail_id: {}",
+                                describe(&e)
+                            );
+                        }
+                    });
+                }
+                let _ = weak.upgrade_in_event_loop(|ui| {
+                    ui.global::<CardSelection>().invoke_clear();
+                });
+                if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak).await {
+                    log::warn!("playlists::delete_many refetch grid: {}", describe(&e));
+                }
+                log::info!("playlists::delete_many({})", ids.len());
             });
         });
     }
@@ -252,17 +312,17 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
                 if let Err(e) = library::playlists::set_playlist_thumbnail(&s, id, path_vec).await {
-                    log::warn!("playlists::apply_mosaic({id}): {e}");
+                    log::warn!("playlists::apply_mosaic({id}): {}", describe(&e));
                     return;
                 }
                 if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak.clone()).await {
-                    log::warn!("playlists::apply_mosaic refetch grid: {e}");
+                    log::warn!("playlists::apply_mosaic refetch grid: {}", describe(&e));
                 }
                 if pu.detail_playlist_id() == id
                     && let Err(e) =
                         playlists_ui_mod::refresh_detail(&s, &pu, weak.clone(), id).await
                 {
-                    log::warn!("playlists::apply_mosaic refresh detail: {e}");
+                    log::warn!("playlists::apply_mosaic refresh detail: {}", describe(&e));
                 }
             });
         });
@@ -293,17 +353,17 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 )
                 .await
                 {
-                    log::warn!("playlists::clear_artwork: {e}");
+                    log::warn!("playlists::clear_artwork: {}", describe(&e));
                     return;
                 }
                 if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak.clone()).await {
-                    log::warn!("playlists::clear_artwork refetch grid: {e}");
+                    log::warn!("playlists::clear_artwork refetch grid: {}", describe(&e));
                 }
                 if pu.detail_playlist_id() == id
                     && let Err(e) =
                         playlists_ui_mod::refresh_detail(&s, &pu, weak.clone(), id).await
                 {
-                    log::warn!("playlists::clear_artwork refresh detail: {e}");
+                    log::warn!("playlists::clear_artwork refresh detail: {}", describe(&e));
                 }
             });
         });
@@ -326,6 +386,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         let s = state.clone();
         let weak = weak.clone();
         playlists.on_request_add_to_playlist(move |ids, exclude_id| {
+            let Some(claim) = DialogClaim::take_from(&weak) else { return };
             let id_vec: Vec<i64> = ids.iter().map(i64::from).collect();
             if id_vec.is_empty() {
                 return;
@@ -342,14 +403,20 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     ),
                 );
                 let playlist_stats = playlists_res.unwrap_or_else(|e| {
-                    log::warn!("playlists::request_add_to_playlist get_playlists: {e}");
+                    log::warn!(
+                        "playlists::request_add_to_playlist get_playlists: {}",
+                        describe(&e)
+                    );
                     Vec::new()
                 });
                 let counts = counts_res.unwrap_or_else(|e| {
-                    log::warn!("playlists::request_add_to_playlist counts: {e}");
+                    log::warn!("playlists::request_add_to_playlist counts: {}", describe(&e));
                     std::collections::HashMap::new()
                 });
                 let _ = weak.upgrade_in_event_loop(move |ui| {
+                    if !claim.holds(&ui) {
+                        return;
+                    }
                     // Skip rows whose i64 playlist id can't fit in the
                     // Slint-side i32 (`PlaylistPickRow.id`). The picker's
                     // toggle / commit route back into Rust by that id
@@ -445,37 +512,29 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             if id < 0 {
                 return;
             }
+            let Some(claim) = DialogClaim::take_from(&weak) else { return };
             let artwork_path =
                 pu.grid_stats_by_id(id).and_then(|p| p.thumbnail_path).unwrap_or_default();
             let s = s.clone();
-            let pu = pu.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
                 let candidates = library::playlists::get_playlist_artwork_paths(&s, id)
                     .await
                     .unwrap_or_default();
                 let _ = weak.upgrade_in_event_loop(move |ui| {
-                    let dlg = ui.global::<Dialog>();
+                    if !claim.holds(&ui) {
+                        return;
+                    }
                     let current_cover = if artwork_path.is_empty() {
                         Image::default()
                     } else {
-                        pu.grid_cover_blocking(&artwork_path)
+                        crate::ui::grid_prewarm::grid_cover_blocking(&artwork_path)
                     };
-                    dlg.set_title(SharedString::from("Edit Artwork"));
-                    dlg.set_message(SharedString::from(""));
-                    dlg.set_confirm_label(SharedString::from("Apply"));
-                    dlg.set_cancel_label(SharedString::from("Cancel"));
-                    dlg.set_destructive(false);
-                    dlg.set_kind(SharedString::from("edit-playlist-artwork"));
-                    dlg.set_target_id(i32::try_from(id).unwrap_or(-1));
-                    dlg.set_input_text(SharedString::from(""));
-                    dlg.set_mosaic_selection(ModelRc::new(VecModel::from(
-                        Vec::<SharedString>::new(),
-                    )));
-                    dlg.set_mosaic_touched(false);
-                    dlg.set_current_artwork(current_cover);
                     let cand_rows: Vec<SharedString> =
                         candidates.into_iter().map(SharedString::from).collect();
+                    let dlg = ui.global::<Dialog>();
+                    dlg.invoke_prepare_edit_artwork(i32::try_from(id).unwrap_or(-1));
+                    dlg.set_current_artwork(current_cover);
                     dlg.set_mosaic_candidates(ModelRc::new(VecModel::from(cand_rows)));
                     dlg.set_open(true);
                 });

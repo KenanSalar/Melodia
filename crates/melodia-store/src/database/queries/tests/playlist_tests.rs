@@ -66,7 +66,7 @@ async fn update_playlist() -> Result<(), AppError> {
 async fn delete_playlist() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let pl = queries::playlist::create_playlist(&db, "ToDelete", None).await?;
-    queries::playlist::delete_playlist(&db, pl.id).await?;
+    queries::playlist::delete_playlists(&db, &[pl.id]).await?;
     let result = queries::playlist::get_playlist_by_id(&db, pl.id).await;
     assert!(result.is_err());
     Ok(())
@@ -618,5 +618,93 @@ async fn a_reorder_moving_more_rows_than_one_update_holds_lands_every_position()
     expected.push(ids[0]);
     assert_eq!(order(&db, playlist).await?, expected);
     assert_eq!(position_spread(&db, playlist).await?, (400, 0, 399, 400));
+    Ok(())
+}
+
+/// The card menu's batch arm hands this a whole selection, and the write pool is one connection,
+/// so the loop this replaced was that many serialised round trips. Membership goes with each one
+/// through the cascade.
+#[tokio::test]
+async fn several_playlists_delete_in_one_pass() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    let tracks: Vec<i64> =
+        queries::track::get_all_tracks(&db).await?.iter().map(|t| t.id).collect();
+    let doomed =
+        queries::playlist::create_playlist_with_tracks(&db, "Doomed", None, &tracks).await?;
+    let also = queries::playlist::create_playlist(&db, "Also Doomed", None).await?;
+    let kept = queries::playlist::create_playlist(&db, "Kept", None).await?;
+
+    queries::playlist::delete_playlists(&db, &[doomed, also.id]).await?;
+
+    let left: Vec<i64> =
+        queries::playlist::get_all_playlists(&db).await?.iter().map(|p| p.id).collect();
+    assert_eq!(left, [kept.id]);
+    let orphans: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM playlist_items WHERE playlist_id = ?")
+            .bind(doomed)
+            .fetch_one(db.read())
+            .await?;
+    assert_eq!(orphans, 0, "the cascade takes the membership rows with the playlist");
+    Ok(())
+}
+
+#[tokio::test]
+async fn deleting_nothing_is_not_an_error() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    queries::playlist::create_playlist(&db, "Kept", None).await?;
+
+    queries::playlist::delete_playlists(&db, &[]).await?;
+
+    assert_eq!(queries::playlist::get_all_playlists(&db).await?.len(), 1);
+    Ok(())
+}
+
+/// Past one statement's bind budget the delete chunks, and a chunk loop that stops after its
+/// first pass leaves most of the selection on screen.
+#[tokio::test]
+async fn more_playlists_than_one_statement_holds_all_delete() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    let over_budget = crate::database::MAX_BINDS_PER_STATEMENT + 1;
+    let mut ids = Vec::with_capacity(over_budget);
+    for index in 0..over_budget {
+        ids.push(queries::playlist::create_playlist(&db, &format!("P{index:04}"), None).await?.id);
+    }
+
+    queries::playlist::delete_playlists(&db, &ids).await?;
+
+    assert!(queries::playlist::get_all_playlists(&db).await?.is_empty());
+    Ok(())
+}
+
+/// The split the card menu's resolve runs before it asks anything else. A narrower projection
+/// than `get_playlist_by_id`'s on purpose, so it may not lose the two fields that decide the arm.
+#[tokio::test]
+async fn the_smart_verdict_comes_back_for_every_id_that_still_exists() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    let manual = queries::playlist::create_playlist(&db, "Manual", None).await?;
+    let smart = queries::playlist::create_smart_playlist(&db, "Smart", None, r#"{"x":1}"#).await?;
+
+    let mut verdicts =
+        queries::playlist::smart_criteria_for_playlists(&db, &[manual.id, smart.id]).await?;
+    verdicts.sort_unstable_by_key(|&(id, _, _)| id);
+
+    assert_eq!(
+        verdicts,
+        [(manual.id, false, None), (smart.id, true, Some(r#"{"x":1}"#.to_owned()))]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_id_deleted_under_the_grid_is_simply_absent() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    let kept = queries::playlist::create_playlist(&db, "Kept", None).await?;
+    let gone = queries::playlist::create_playlist(&db, "Gone", None).await?;
+    queries::playlist::delete_playlists(&db, &[gone.id]).await?;
+
+    let verdicts =
+        queries::playlist::smart_criteria_for_playlists(&db, &[kept.id, gone.id]).await?;
+
+    assert_eq!(verdicts, [(kept.id, false, None)]);
     Ok(())
 }

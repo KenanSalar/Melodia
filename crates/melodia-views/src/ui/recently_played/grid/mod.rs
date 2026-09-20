@@ -19,9 +19,7 @@ mod apply;
 mod fetch;
 mod warm;
 
-pub use apply::{
-    apply_filtered_grid_now, apply_filtered_grid_settled, mark_covers_warm, repaint_covers,
-};
+pub use apply::{apply_filtered_grid_now, apply_filtered_grid_settled};
 pub use fetch::refresh_grid;
 
 #[cfg(test)]

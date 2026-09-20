@@ -29,7 +29,13 @@ pub fn handle_select_row(
     );
 }
 
-/// Reset selection (called from the action-pill "Clear" button and section-leave).
+/// Take every displayed row into the selection.
+pub fn select_all(ui: &AppWindow, rp_ui: &RecentlyPlayedUi) {
+    let g = ui.global::<RecentlyPlayed>();
+    list_selection::select_all_curated(&g, &rp_ui.state().applied_selection);
+}
+
+/// Reset selection (Escape, the row menu's "Clear selection", and section-leave).
 pub fn clear_selection(ui: &AppWindow, rp_ui: &RecentlyPlayedUi) {
     let g = ui.global::<RecentlyPlayed>();
     list_selection::clear_curated_selection(&g, &rp_ui.state().applied_selection);

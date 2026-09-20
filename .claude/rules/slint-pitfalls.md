@@ -50,6 +50,16 @@ this file is what builds, looks right, and is wrong.
   `change_time + duration` and adopts it in one frame. Hence `library-tab-band.slint`, whose
   tab-bar brushes cross to `HeroBackdrop` tiers solved from the artwork decode — it eases the four
   mirrors it crosses *to* on a short curve of their own and lets the transition follow.
+  **And an animated property cannot land on the frame that dirtied it, so it may not be paired
+  with a snapped sibling off the same flag.** `mark_dirty` only sets `ShouldStart`; the first
+  `evaluate` runs on the next render and takes `from_value` from whatever is on screen then, so
+  the curve opens at zero on the frame its partner has already finished. No duration closes that
+  gap, and a short one turns the wait into a jump rather than into simultaneity, which reads as
+  an easing problem and is not one. `entity-card.slint` carries both halves: its selection ring
+  is a plain `border-width` and its tint is an `if root.selected` fill with no `animate` at all,
+  `selection-pill.slint`'s shape, which is why a track row's pick never had it. Pinned by
+  `crates/melodia/tests/card_selection.rs`'s `the_card_selection_ring_and_tint_never_animate`,
+  which reads the tint's own braces: an `animate` elsewhere in that file is ordinary.
 
 - **A `for` over a `pure callback`'s model rebuilds every instance whenever one of the call's
   inputs is marked dirty, not when its answer changes.** The same structural dirt as the entry
@@ -113,7 +123,8 @@ this file is what builds, looks right, and is wrong.
   Cure: **the container publishes its own metric and the host frames against that**
   (`out property <length> tile-size` on `EntityCard`, `card-body.tile-size - self.width - …`),
   never `parent`. Verify in the generated tree — the binding names the property it actually read.
-  Pinned by `ui::entity_card_tests::no_overlay_host_positions_against_parent`, which finds the
+  Pinned by `crates/melodia/tests/entity_card_overlay.rs`'s
+  `no_overlay_host_positions_against_parent`, which finds the
   hosts by the flag that opens the slot and reads **the mount's own braces**: a host is free to
   spell `parent` elsewhere in its file, `x: parent.width - self.width` being the canonical
   `OverlayScrollbar` mount, so a file-wide ban would fail the first overlay host carrying a bar.
@@ -202,6 +213,21 @@ this file is what builds, looks right, and is wrong.
   **`!reorder-enabled` is what that binding used to say, and is the trap worth keeping**: it reads
   as leaving a `true` default alone and instead *enables* the pan on every sort that retires the
   drag. `!interactive` still forwards wheel events, so only drag-to-pan goes.
+
+- **A grabbing item that unmounts mid-gesture hands its release to the ancestor, as a fresh
+  event.** `handle_mouse_grab` walks the `item_stack` upgrading each weak ref, and a grabber whose
+  branch has gone sets `invalid`, which returns `Some(event)` and drops the whole gesture back into
+  `process_mouse_input` for a normal hit test. So an ancestor `TouchArea` that reads
+  `PointerEventKind.up` out of `pointer-event` sees a release for a press it never got, on a click
+  the user aimed at something else entirely. Anything hover-mounted whose action rewrites what it
+  sits in is the shape to watch: a track row's favourite toggle and star strip hang off
+  `if touch.has-hover` and patch the row, and the row body picked the row the user was rating.
+  **Cure: act on `clicked`, which `items/input_items.rs`'s `Released` arm gates on that item's own
+  `pressed`** — never set for an area that missed the press, re-dispatch or not. It costs the
+  modifiers, `clicked` carrying none, so a range-pick snapshots `ev.modifiers` on the `Down` arm
+  instead. `clicked` also runs *before* `pointer-event(Up)` in the same arm, which is what lets one
+  handler read a predicate the pick is about to invalidate (`entity-card.slint` opens a detail only
+  when the click was not a pick).
 
 - **Animating a binding derived from another animating property phase-lags.** Animate source only.
 

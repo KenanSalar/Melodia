@@ -1,5 +1,6 @@
 import { Theme } from "../../theme.slint";
 import { ArtworkImage } from "../artwork-image.slint";
+import { Checkbox } from "../checkbox.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { PlayCountBadge } from "play-count-badge.slint";
 
@@ -62,11 +63,26 @@ export component EntityCard inherits Rectangle {
     // A Material Symbols ligature, marking a smart playlist. Empty means no badge.
     in property <string> badge-icon: "";
 
-    // The play count on the Most Played surfaces, drawn by the shared badge rather than
-    // by this card. Shares the corner with `badge-icon`; no caller sets both.
+    // The play count, drawn by the shared badge rather than by this card. It takes the tile's
+    // **bottom right** on every host, clear of `badge-icon` and of the selection box, both of
+    // which own the top left.
     in property <int> play-count: 0;
 
+    // Whether this grid supports multi-selection, and whether this card is in the set. A host
+    // that says nothing draws no box and is unaffected.
+    in property <bool> selectable: false;
+    in property <bool> selected: false;
+    // Whether the host's scope already holds a pick, which is what turns the body into a second
+    // way to select. The host answers, the scope being its own.
+    in property <bool> selection-live: false;
+
     callback clicked();
+    // The box or the body was clicked; the host applies the modifiers against its own selection
+    // scope.
+    callback select-clicked(bool /*shift*/, bool /*ctrl*/);
+    // A right-click, in this card's own coordinate frame. The host keeps the snapshot, the
+    // highlight key and the menu, as `TrackListRowItem` does for a row.
+    callback context-requested(length /*x*/, length /*y*/);
 
     // **Every hover-driven binding on this card reads this, not `touch.has-hover`.** A
     // higher-z TouchArea captures the pointer, so hovering any nested button flips that
@@ -74,7 +90,35 @@ export component EntityCard inherits Rectangle {
     // aiming at one — which is what `overlay-hovered` is for.
     // `out`, so a host placing a control *beside* the card rather than in the overlay slot can
     // ride the same answer — the star on a station card is the one such control.
-    out property <bool> card-hovered: touch.has-hover || root.overlay-hovered;
+    // The box is this card's own child rather than the host's, so it folds itself in here
+    // instead of going back out through `overlay-hovered`.
+    out property <bool> card-hovered:
+        touch.has-hover || box-touch.has-hover || root.overlay-hovered;
+
+    // The box takes the badge corner while it is up, which is the grid's reading of the track
+    // row swapping its number for a checkbox. Idle and unselected it is gone and the badge is
+    // back, so a card nobody is pointing at looks exactly as it did.
+    private property <bool> box-shown: root.selectable && (root.card-hovered || root.selected);
+
+    // One click cannot both pick and open, so a live selection costs the detail until it is
+    // cleared. The first pick is still the box's, which is what keeps an idle grid navigable.
+    private property <bool> picking: root.selectable && root.selection-live;
+    // Shift as it stood on the press the pick is about to complete; see `touch.clicked`.
+    private property <bool> press-shift;
+    // Both the box and the body pick through here. Ctrl is forced on whenever shift isn't held,
+    // so the backend's "replace selection" branch is unreachable and a pick on a selected card
+    // always removes it.
+    function pick(shift: bool) { root.select-clicked(shift, !shift); }
+
+    // The corner cross-fades on the same curve the overlay's controls ride, so the box arrives
+    // with them rather than snapping in over a card whose buttons are still easing.
+    //
+    // **One eased float, spent differently at each corner**, and the two arguments are at the
+    // corners rather than here: the badge folds it into its brushes, where `Opacity::need_layer`
+    // would rasterize it for nothing, and the box pays for an `opacity` because `Checkbox` eases
+    // its own fill and rim off `fade` and would stall on a `fade` that eases too.
+    private property <float> box-t: root.box-shown ? 1.0 : 0.0;
+    animate box-t { duration: Theme.dur-fast; easing: ease-in-out; }
 
     // The artwork square, published because a host positioning against it must not re-derive the
     // formula: a station card sizes its favicon's 1:1 estimate off this, and a padding change here
@@ -93,8 +137,31 @@ export component EntityCard inherits Rectangle {
         width: 100%;
         height: 100%;
         border-radius: Theme.radius-md;
+        // The hover fill alone. The selection tint is the child below, so the two states keep
+        // their own pace, and a selected card brightens under the pointer the way a selected
+        // row does rather than answering it with nothing.
         background: root.card-hovered ? Theme.surface0 : transparent;
         animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        // The ring and the hover fill on **one** element, so the renderer tucks that fill under
+        // the stroke. An `EdgeOutline` is the answer where there is a rounded clip to cut its
+        // bleed away; there is none here.
+        border-width: root.selected ? 2px : 0px;
+        border-color: Theme.accent;
+
+        // The selection tint, mounted only while it paints and carrying no `animate`:
+        // `SelectionPill`'s shape, so a card answers a pick as a track row does. An animated
+        // fill cannot land on the frame the ring does whatever its duration, the curve starting
+        // a frame later and re-basing on every dirty its binding takes, so shortening it only
+        // turns the wait into a jump. A second rounded path is the cost, a sliver of the
+        // corner's coverage at this alpha.
+        if root.selected: Rectangle {
+            x: 0;
+            y: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: Theme.radius-md;
+            background: Theme.accent.with-alpha(0.14);
+        }
 
         VerticalLayout {
             padding: Theme.pad-sm;
@@ -151,7 +218,26 @@ export component EntityCard inherits Rectangle {
         // background, no cover zoom and no click — the `TrackListRowItem` contract.
         enabled: root.enabled;
         mouse-cursor: pointer;
-        clicked => { root.clicked(); }
+        // Both arms on `clicked` rather than the release, per `slint-pitfalls.md`. One handler
+        // also means `picking` is read once, so unpicking the last card cannot open its detail on
+        // the way out.
+        clicked => {
+            if (root.picking) {
+                root.pick(root.press-shift);
+            } else {
+                root.clicked();
+            }
+        }
+        pointer-event(ev) => {
+            // `clicked` carries no modifiers, so the shift a range-pick needs is taken off the
+            // press that armed it.
+            if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
+                root.press-shift = ev.modifiers.shift;
+            }
+            if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
+                root.context-requested(touch.mouse-x, touch.mouse-y);
+            }
+        }
     }
 
     // The host's own hover controls, framing the artwork square rather than the title row, and
@@ -178,15 +264,18 @@ export component EntityCard inherits Rectangle {
     }
 
     // Top-left of the tile, clear of the hover trio. Non-interactive, so card clicks
-    // pass straight through.
+    // pass straight through. Yields the corner to the selection box, which is the one
+    // thing that can want it at the same time.
     badge := Rectangle {
-        visible: root.badge-icon != "";
+        // Gated on the eased float rather than on `box-shown`, so the branch outlives the
+        // fade-out and the two corners dissolve into each other instead of one popping.
+        visible: root.badge-icon != "" && root.box-t < 1.0;
         x: 2 * Theme.pad-sm;
         y: 2 * Theme.pad-sm;
         width: 28px;
         height: 28px;
         border-radius: self.height / 2;
-        background: Theme.floating-chrome-bg;
+        background: Theme.floating-chrome-bg.transparentize(root.box-t);
         MaterialIcon {
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
@@ -194,13 +283,102 @@ export component EntityCard inherits Rectangle {
             icon-size: 18px;
             icon-color: Theme.accent;
             filled: true;
+            fade: 1.0 - root.box-t;
         }
     }
 
-    // The same corner, hiding itself where the row has no plays behind it.
+    // **The tile's bottom right, on every host.** The top left belongs to `badge-icon` and to the
+    // selection box, so a count sharing it had to disappear under the pointer — which is exactly
+    // when a card is being compared against its neighbours. The offsets land it where the playlist
+    // card's own bottom-right control sits: `tile-size` less the badge, the tile's `pad-sm` origin
+    // absorbing the inset. A host with a control of its own there moves the control, not this.
+    //
+    // **`count` is passed straight through, and `visible` is left alone**: the badge owns the
+    // zero-count rule so no host restates it, and overriding that binding would draw an empty
+    // pill on every unplayed card.
     PlayCountBadge {
+        x: root.tile-size - self.width;
+        y: root.tile-size - self.height;
+        count: root.play-count;
+    }
+
+    // **Drawn by the card rather than handed to the overlay slot**, which carries one fade for
+    // everything in it and drops to zero on an idle card — a ticked box has to survive that.
+    // Same chrome as the badge it replaces, so the corner reads as one family over artwork.
+    // Declared after `touch` so it consumes its own click before the card's open action.
+    //
+    // **Split in two: this element is the input half and paints nothing.** It binds no
+    // `background`, so it stays an `Empty` the renderer never visits, and it is gated on
+    // `selectable` rather than on the fade — `visible` lowers to a `Clip` that `passes/visible.rs`
+    // creates *after* `default_geometry`, so it never gets the parent geometry its kind defaults
+    // to and sits at zero size, intercepting every pointer event while hidden. A box gated on its
+    // own fade therefore could not be hovered until the *next* event after it appeared, and a
+    // pointer that arrived and stopped never got one. The overlay's controls take `opacity`, which
+    // filters no input, which is why they are already lit by the time they finish fading in.
+    box := Rectangle {
+        visible: root.selectable;
         x: 2 * Theme.pad-sm;
         y: 2 * Theme.pad-sm;
-        count: root.play-count;
+        width: 28px;
+        height: 28px;
+
+        // The paint half, behind the eased float so an idle card builds no rounded path and
+        // allocates no layer. Gated on the float rather than its target, or the box would vanish
+        // on the frame the pointer leaves, taking its own fade-out with it.
+        if root.box-t > 0: Rectangle {
+            width: 100%;
+            height: 100%;
+            border-radius: self.height / 2;
+            // The two brushes `IconButton` crosses between, on its curve, so the corner answers
+            // the pointer exactly as the controls beside it do.
+            background: box-touch.has-hover ? Theme.surface0 : Theme.floating-chrome-bg;
+            animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+            // **`opacity` here and brush alpha on the badge, and the difference is `Checkbox`.** It
+            // `animate`s its own fill and rim to cross-fade a tick, and folds `fade` into both of
+            // those bindings — so easing `fade` re-dirties them every frame and the rim stalls and
+            // then snaps, which is the pop this replaced. Nothing under the badge animates a brush,
+            // so that corner takes the free path.
+            //
+            // The layer this costs is bounded to the transition: `need_layer` bails at exactly 1.0,
+            // so a selected card sitting at rest allocates nothing and only the card under the
+            // pointer ever does. The glyph is a Material Symbols square, so the ink-cropping half
+            // doesn't apply either.
+            opacity: root.box-t;
+
+            Checkbox {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                checked: root.selected;
+                // The rim has to hold against artwork rather than against a panel, so it takes
+                // the loudest of the knob's three hosts.
+                unchecked-border: Theme.subtext0;
+            }
+        }
+
+        box-touch := TouchArea {
+            // The card's own `touch` contract, restated because this area sits above it and would
+            // otherwise leave a dimmed card one live corner. Held here rather than by the one host
+            // that also happens to make disabled cards unselectable.
+            enabled: root.enabled;
+            mouse-cursor: pointer;
+            // **Ctrl is forced on unless shift is held**, the track row's box verbatim: a
+            // checkbox means "add or remove this one", so a plain click has to toggle. Passing
+            // the raw modifiers instead sends an unmodified click down the replace-the-selection
+            // arm, which makes a ticked box impossible to untick and a second card impossible
+            // to add — the whole feature, lost to one plausible-looking line.
+            pointer-event(ev) => {
+                if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left) {
+                    root.pick(ev.modifiers.shift);
+                }
+                // This area sits over the card's own `touch`, which never sees a press inside it,
+                // so without this the corner is a hole in the card's right-click. Offset by the
+                // box's own origin, `context-requested` reporting in the card's frame.
+                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
+                    root.context-requested(
+                        box.x + box-touch.mouse-x, box.y + box-touch.mouse-y);
+                }
+            }
+        }
     }
 }

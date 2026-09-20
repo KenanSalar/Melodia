@@ -10,6 +10,7 @@ use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Playlists};
 
 /// Wire the `Playlists` grid callbacks. See [`super::wire`].
@@ -17,17 +18,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     let playlists = ui.global::<Playlists>();
     let weak = ui.as_weak();
 
-    // request-cover: lazy per-card cover lookup, backed by the
-    // playlist-tier `CoverThumbs`. Only on-screen cards invoke this.
-    {
-        let pu = playlists_ui.clone();
-        // `generation` is read for its effect on the binding, never its value.
-        playlists.on_request_cover(move |path, _generation| pu.grid_cover(path.as_str()));
-        crate::ui::cover_generation::notify_on_decode(&playlists_ui.grid_thumbs(), ui, |app| {
-            let playlists = app.global::<Playlists>();
-            playlists.set_covers_generation(playlists.get_covers_generation().wrapping_add(1));
-        });
-    }
+    // request-cover: lazy per-card cover lookup off the shared grid tier. Only on-screen cards
+    // invoke this, and `generation` is read for its effect on the binding, never its value.
+    playlists
+        .on_request_cover(|path, _generation| crate::ui::grid_prewarm::grid_cover(path.as_str()));
 
     {
         let pu = playlists_ui.clone();
@@ -69,8 +63,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 )
             );
 
-            let pu_release = pu.clone();
-            s.runtime.spawn_blocking(move || pu_release.release_grid_covers());
+            s.runtime.spawn_blocking(crate::ui::grid_prewarm::hand_back_covers);
 
             let s_disk = s.clone();
             s.runtime.spawn_blocking(move || {
@@ -79,7 +72,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     crate::ui::track_list_view::view_id::PLAYLIST_DETAIL,
                     Some(id),
                 ) {
-                    log::warn!("playlists::open_playlist persist: {e}");
+                    log::warn!("playlists::open_playlist persist: {}", describe(&e));
                 }
             });
         });

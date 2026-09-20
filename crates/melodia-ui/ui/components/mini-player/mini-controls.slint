@@ -5,9 +5,10 @@ import { MetaChip } from "../meta-chip.slint";
 import { SeekRow } from "../now-playing/seek-row.slint";
 import { VolumePopupHorizontal } from "../now-playing/volume-popup-horizontal.slint";
 import { PlayButton } from "../now-playing/play-button.slint";
-import { MiniIconButton, MiniGlyphs } from "mini-icon-button.slint";
+import { MiniIconButton, MiniGlyphs, MiniSizes } from "mini-icon-button.slint";
 
-// Previous, play and next, leading the controls cluster every layout draws.
+// Previous, play and next, leading the controls cluster every layout draws. Its three sizes are
+// `MiniSizes`', which a card with room to spare opens up.
 export component MiniTransport inherits HorizontalLayout {
     // The play disc and the glyph punched out of it, eased by the host with the rest of its surface.
     in property <brush> disc-color;
@@ -21,6 +22,8 @@ export component MiniTransport inherits HorizontalLayout {
         alignment: center;
         MiniIconButton {
             icon: "chevron_left";
+            diameter: MiniSizes.button-d;
+            icon-size: MiniSizes.button-icon;
             button-enabled: Player.vm.has_previous;
             tooltip-text: @tr("Previous");
             clicked => { Player.previous(); }
@@ -29,8 +32,8 @@ export component MiniTransport inherits HorizontalLayout {
     VerticalLayout {
         alignment: center;
         PlayButton {
-            wrapper-d: 30px;
-            icon-size: 16px;
+            wrapper-d: MiniSizes.play-d;
+            icon-size: MiniSizes.play-icon;
             is-playing: Player.vm.is_playing;
             animation-mode: 0;
             disc-color: root.disc-color;
@@ -42,6 +45,8 @@ export component MiniTransport inherits HorizontalLayout {
         alignment: center;
         MiniIconButton {
             icon: "chevron_right";
+            diameter: MiniSizes.button-d;
+            icon-size: MiniSizes.button-icon;
             button-enabled: Player.vm.has_next;
             tooltip-text: @tr("Next");
             clicked => { Player.next(); }
@@ -69,11 +74,10 @@ export component MiniTrailingControls inherits HorizontalLayout {
         // card; the horizontal sibling is the same slider rotated, flying out to the left of the
         // disc.
         //
-        // A step above the row's glyphs, as the bar sets its own: at one size the speaker reads
-        // smaller than the icons beside it.
+        // The glyph steps a size above the row's, argued at `MiniSizes`.
         VolumePopupHorizontal {
-            diameter: 28px;
-            icon-size: 20px;
+            diameter: MiniSizes.button-d;
+            icon-size: MiniSizes.volume-icon;
             trigger-fg: MiniGlyphs.idle;
             trigger-hover-fg: MiniGlyphs.lit;
             trigger-hover-bg: MiniGlyphs.hover-bg;
@@ -85,6 +89,8 @@ export component MiniTrailingControls inherits HorizontalLayout {
         alignment: center;
         MiniIconButton {
             icon: "push_pin";
+            diameter: MiniSizes.button-d;
+            icon-size: MiniSizes.button-icon;
             active: WindowChrome.always-on-top-active;
             filled: WindowChrome.always-on-top-active;
             tooltip-text: WindowChrome.always-on-top-active
@@ -96,6 +102,8 @@ export component MiniTrailingControls inherits HorizontalLayout {
         alignment: center;
         MiniIconButton {
             icon: "tonality";
+            diameter: MiniSizes.button-d;
+            icon-size: MiniSizes.button-icon;
             active: MiniPlayer.backdrop-shown;
             filled: MiniPlayer.backdrop-shown;
             tooltip-text: MiniPlayer.backdrop-shown
@@ -107,6 +115,8 @@ export component MiniTrailingControls inherits HorizontalLayout {
         alignment: center;
         MiniIconButton {
             icon: Player.vm.track.is_favorite ? "favorite" : "favorite_border";
+            diameter: MiniSizes.button-d;
+            icon-size: MiniSizes.button-icon;
             active: Player.vm.track.is_favorite;
             filled: Player.vm.track.is_favorite;
             button-enabled: Player.vm.has_track;

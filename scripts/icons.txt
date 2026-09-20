@@ -29,6 +29,7 @@ description
 dock_to_left
 dock_to_right
 download
+drive_file_move
 edit
 error
 expand_less
@@ -77,6 +78,7 @@ rounded_corner
 save
 search
 search_off
+select_all
 settings
 shield
 show_chart

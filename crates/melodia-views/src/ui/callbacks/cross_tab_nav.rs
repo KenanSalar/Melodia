@@ -33,7 +33,7 @@ use crate::ui::track_list_view::view_id;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_ui::{
-    AlbumDetail, AppWindow, ArtistDetail, Browse, Favorites, GenreDetail, MyLibrary, Nav,
+    AlbumDetail, Albums, AppWindow, ArtistDetail, Browse, Favorites, GenreDetail, MyLibrary, Nav,
     NavEnterFrom, PlaylistDetail, Queue, RecentlyPlayed, Search, Tracks,
 };
 
@@ -130,7 +130,11 @@ pub fn wire_cross_tab_nav(
     // Search is the exception: album and artist reuse `Search.open-album` / `open-artist`,
     // wired elsewhere.
     let g = ui.global::<Search>();
-    g.on_go_to_genre(make_go_to_genre(state, genres_ui, weak));
+    g.on_go_to_genre(make_go_to_genre(state, genres_ui, weak.clone()));
+
+    // The Albums grid's card menu wants only "Go to Artist", so it takes the helper directly
+    // rather than joining the macro, which installs all three on every global it names.
+    ui.global::<Albums>().on_go_to_artist(make_go_to_artist(state, artists_ui, weak));
 }
 
 fn make_go_to_album(

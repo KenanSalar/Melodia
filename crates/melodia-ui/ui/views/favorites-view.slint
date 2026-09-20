@@ -6,7 +6,6 @@ import { MosaicTabHero } from "../components/hero/mosaic-tab-hero.slint";
 import { TooltipFrame } from "../components/tooltip-frame.slint";
 import { ViewTransition } from "../components/view-transition.slint";
 import { ActionPill, PillButton, PillDivider } from "../components/action-pill.slint";
-import { SelectionPills } from "../components/selection-pills.slint";
 import { SortPillRow } from "../components/sort-pill-row.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
@@ -46,9 +45,21 @@ export component FavoritesView inherits Rectangle {
     // component declaring it.
     property <length> grid-gap: 20px;
 
+    // Cards on the mounted grid's only row, the one thing the body width can't answer for itself.
+    // Songs is a track list, so it falls through to the width.
+    property <int> grid-lone-row-cards:
+        Favorites.tab-idx == Favorites.tab-most-played
+            ? (Favorites.most-played-rows.length == 1
+                ? Favorites.most-played-rows[0].entities.length : -1)
+            : Favorites.tab-idx == Favorites.tab-artists
+                ? (Favorites.artist-rows.length == 1
+                    ? Favorites.artist-rows[0].entities.length : -1)
+                : -1;
+
     geom := GridGeometry {
         avail-width: body.width;
         gap: root.grid-gap;
+        lone-row-cards: root.grid-lone-row-cards;
     }
 
     GridColumnsSync {
@@ -107,8 +118,8 @@ export component FavoritesView inherits Rectangle {
                 Favorites.tab-changed(i);
             }
 
-            // Songs gets the full pill — Shuffle, column toggle, selection chip;
-            // Most Played a Shuffle scoped to what its grid shows. Favorite
+            // Songs gets the full pill — Shuffle and the column toggle; Most
+            // Played a Shuffle scoped to what its grid shows. Favorite
             // Artists gets neither, since shuffling and track columns mean
             // nothing over a list of artists, and carries the entity grids' sort
             // row instead. **Most Played has no sort row on purpose**: its title
@@ -129,13 +140,6 @@ export component FavoritesView inherits Rectangle {
                     ColumnTogglePopup {
                         columns <=> Favorites.track-columns;
                         toggled(id) => { Favorites.toggle-column(id); }
-                    }
-                    if Favorites.selected-ids.length > 0: SelectionPills {
-                        count: Favorites.selected-ids.length;
-                        cleared => {
-                            Favorites.clear-selection();
-                            Favorites.blur-search-tick += 1;
-                        }
                     }
                 }
             }

@@ -33,6 +33,8 @@ export component RecentlyPlayedSongsTab inherits Rectangle {
         toggle-row-favorite(ids, on) => { RecentlyPlayed.toggle-row-favorite(ids, on); }
         set-row-rating(ids, n) => { RecentlyPlayed.set-row-rating(ids, n); }
         select-row(idx, id, sh, ct) => { RecentlyPlayed.select-row(idx, id, sh, ct); }
+        select-all => { RecentlyPlayed.select-all(); }
+        clear-selection => { RecentlyPlayed.clear-selection(); }
         request-blur-search => { RecentlyPlayed.blur-search-tick += 1; }
         go-to-album(aid) => { RecentlyPlayed.go-to-album(aid); }
         go-to-artist(aid) => { RecentlyPlayed.go-to-artist(aid); }

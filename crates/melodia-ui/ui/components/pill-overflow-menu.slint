@@ -1,0 +1,81 @@
+import { Theme } from "../theme.slint";
+import { PopupHighlight } from "../globals/shell.slint";
+import { PillButton } from "action-pill.slint";
+import { PopupSurface } from "popup-surface.slint";
+import { FocusLossWatcher } from "focus-loss-watcher.slint";
+
+// A three-dot pill opening a menu of the host's own `MenuItem`s, for actions that no longer
+// earn a pill of their own once a row runs out of room.
+//
+// **The entries come through `@children`, never as a property list.** `@tr` resolves literals
+// at codegen, so a label handed over as a string would ship untranslated — the same reason
+// `TrackContextMenu` spells its own entries rather than taking them.
+//
+// `menu-id` is the `PopupHighlight` discriminator, so two overflow menus in one view can't
+// hold each other's highlight. `close-on-click` because every entry here acts and dismisses.
+export component PillOverflowMenu inherits Rectangle {
+    in property <string> menu-id;
+    in property <string> tooltip-text;
+    // A floor, not the width: past it the widest entry decides. Matches the Now Playing
+    // overflow's, so the two read as one control at their narrowest as well as by their glyph.
+    in property <length> min-menu-width: 156px;
+    // Suppresses the in-tree tooltip where the host paints one on a higher layer, forwarded
+    // to the pill along with the `hovered` the host's anchor reads back.
+    in property <bool> tooltip-overlay: false;
+    out property <bool> hovered: btn.hovered;
+    // Read back rather than answered here, so the host's frame aligns its pill off the same
+    // property the in-tree mount does. Always true for a glyph-only trigger.
+    out property <bool> icon-only: btn.icon-only;
+
+    // Every close path clears `PopupHighlight.id` back to "", which is also `menu-id`'s default,
+    // so the `!= ""` half is what stops a host that forgot to set one sitting in its pressed
+    // background with a live watcher. `MenuSurface` carries the same guard.
+    property <bool> holds-highlight: root.menu-id != "" && PopupHighlight.id == root.menu-id;
+
+    // Sized to the pill row's height so the popup hangs off this box rather than off the
+    // button's own alignment inside it.
+    width: btn.width;
+    height: 32px;
+
+    btn := PillButton {
+        // `more_vert`, the glyph the Now Playing bar's overflow already uses, so the two read as
+        // one control. It is also the one in `scripts/icons.txt`; `more_horiz` is not subsetted
+        // into the shipped face and renders as tofu.
+        icon: "more_vert";
+        tooltip-text: root.tooltip-text;
+        tooltip-overlay: root.tooltip-overlay;
+        force-bg: root.holds-highlight;
+        clicked => {
+            PopupHighlight.id = root.menu-id;
+            pop.show();
+        }
+    }
+
+    pop := PopupWindow {
+        // Right-aligned: the trigger is the trailing pill in a row the band anchors to its far
+        // edge. No inside margin like `SortMenuPopup`'s: `show_popup` reads this offset before it
+        // resolves the popup's size, and a bound `width` already answers with the real number.
+        x: btn.width - self.width;
+        y: root.height + Theme.popup-gap;
+        // Sized to the widest entry, so a longer locale gets the room instead of a fixed box
+        // deciding for it. The binding sits on the popup because the enclosing component cannot
+        // name an id inside one; `+ 2px` leaves `PopupSurface`'s border a pixel each side.
+        width: max(root.min-menu-width, items.preferred-width + 2px);
+        close-policy: close-on-click;
+
+        if root.holds-highlight: FocusLossWatcher {
+            close => {
+                pop.close();
+                PopupHighlight.id = "";
+            }
+        }
+
+        PopupSurface {
+            items := VerticalLayout {
+                padding: Theme.pad-xs;
+                spacing: 0;
+                @children
+            }
+        }
+    }
+}

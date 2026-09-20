@@ -7,7 +7,6 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::ComponentHandle;
 
-use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
 use crate::ui::callbacks::macros::{release_detail_hero_images, spawn_logged};
 use crate::ui::model_diff::clear_vec_model;
@@ -16,16 +15,11 @@ use crate::ui::tab_bar::UNFETCHED_COUNT;
 use melodia_app::state::AppState;
 use melodia_ui::{
     AlbumRow as UiAlbumRow, AppWindow, ArtistDetail, ArtistGridRow as UiArtistGridRow, Artists,
-    TrackListRow as UiTrackListRow,
+    CardSelection, TrackListRow as UiTrackListRow,
 };
 
 /// Wire the Artists section-lifecycle callbacks. See [`super::wire`].
-pub(super) fn wire(
-    ui: &AppWindow,
-    state: &AppState,
-    artists_ui: &Arc<ArtistsUi>,
-    albums_ui: &Arc<AlbumsUi>,
-) {
+pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
     let artists = ui.global::<Artists>();
     let weak = ui.as_weak();
 
@@ -36,9 +30,9 @@ pub(super) fn wire(
     // tracks + albums + selected-ids VecModels) on the UI thread so the
     // `SharedPixelBuffer` Arcs + `SharedString` allocations drop. Then
     // off-thread call `release_section_state` (Rust-side caches + grid
-    // data + detail tracks + `malloc_trim`) plus `albums.release_grid_covers`
-    // — Artist Detail's Albums sub-section borrows `AlbumsUi.grid_covers`,
-    // so its lingering thumbnails are freed too.
+    // data + detail tracks + the shared grid tier down to proxies +
+    // `malloc_trim`), which covers the detail's Albums strip too — one tier
+    // serves both.
     //
     // On return: full `fetch_grid` if data was wiped, else just prewarm
     // (initial enter after boot's pre-fetch). The detail re-fetch (if
@@ -53,7 +47,6 @@ pub(super) fn wire(
     }
     {
         let au = artists_ui.clone();
-        let albums = albums_ui.clone();
         let s = state.clone();
         let weak = weak.clone();
         artists.on_section_active_changed(move |active| {
@@ -76,9 +69,11 @@ pub(super) fn wire(
                 clear_vec_model::<UiAlbumRow>(&d.get_albums(), "artists: clear detail albums");
                 clear_vec_model::<i32>(&d.get_selected_ids(), "artists: clear detail selection");
                 d.set_selection_anchor(-1);
+                // The card grid's set goes back with the models it describes;
+                // `card-selection.slint` argues why it cannot outlive the leave.
+                ui.global::<CardSelection>().invoke_clear();
             }
             let au = au.clone();
-            let albums = albums.clone();
             let s = s.clone();
             let weak = weak.clone();
             if active {
@@ -121,10 +116,7 @@ pub(super) fn wire(
                 });
             } else {
                 let runtime = s.runtime.clone();
-                runtime.spawn_blocking(move || {
-                    au.release_section_state();
-                    albums.release_grid_covers();
-                });
+                runtime.spawn_blocking(move || au.release_section_state());
             }
         });
     }

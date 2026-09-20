@@ -17,7 +17,7 @@ use crate::ui::recently_played::{
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use melodia_app::state::AppState;
 use melodia_ui::{
-    AppWindow, EntityGridRow as UiEntityGridRow, Nav, RecentlyPlayed,
+    AppWindow, CardSelection, EntityGridRow as UiEntityGridRow, Nav, RecentlyPlayed,
     TrackListRow as UiTrackListRow,
 };
 
@@ -63,11 +63,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 // both back rather than leaving this banner's solve and this
                 // view's counts for the next hero to paint under.
                 release_shared_hero!(ui);
-                // The grid tier goes with `release_section_state` below, so
-                // rewind the counter that means "cold" — else the next enter
-                // reads a leftover bump as a warm tier and decodes on mount.
-                g.set_covers_generation(0);
-                // And rewind both counts to "not fetched yet" on the same tick
+                // Rewind both counts to "not fetched yet" on the same tick
                 // as the models they number, for the reason the folds are reset
                 // beside their caches: a count that outlives its model is the
                 // one thing these surfaces can state that is *wrong* rather
@@ -85,6 +81,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                     "recently_played: clear selected-ids",
                 );
                 g.set_selection_anchor(-1);
+                // The card grid's set goes back with the models it describes;
+                // `card-selection.slint` argues why it cannot outlive the leave.
+                ui.global::<CardSelection>().invoke_clear();
             }
             let ru = ru.clone();
             let s = s.clone();

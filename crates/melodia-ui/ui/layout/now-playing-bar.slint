@@ -182,9 +182,9 @@ export component NowPlayingBar inherits Rectangle {
                 // Now Playing is a fresh `ViewTransition` mount, and left unwritten it
                 // enters from whatever the last drill or back put there. Set
                 // unconditionally, since opening reads nothing — that branch hard-codes
-                // `below`.
+                // `above`.
                 clicked => {
-                    Nav.pending-enter-from = NavEnterFrom.below;
+                    Nav.pending-enter-from = NavEnterFrom.above;
                     Nav.now-playing-open = !Nav.now-playing-open;
                 }
             }

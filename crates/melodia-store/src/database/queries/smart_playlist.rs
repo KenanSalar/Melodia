@@ -30,6 +30,21 @@ pub async fn get_smart_playlist_tracks(
     Ok(rows)
 }
 
+/// [`get_smart_playlist_tracks`] as ids alone, for a caller that only needs the membership.
+///
+/// **Backs the card menu's batch actions**, which resolve a selection to track ids and act on
+/// those: going through the list projection there materialises every `TrackListRow` column only
+/// to read `id` off it. Same criteria, same order, same cap, so the ids arrive in the order the
+/// rows would have.
+pub async fn get_smart_playlist_track_ids(
+    db: &DbPool,
+    criteria: &SmartCriteria,
+) -> Result<Vec<i64>, AppError> {
+    let mut qb = membership_query("id", criteria);
+    let ids = qb.build_query_scalar::<i64>().persistent(false).fetch_all(db.read()).await?;
+    Ok(ids)
+}
+
 /// [`get_smart_playlist_tracks`] as M3U export rows, in the same order and under the same cap.
 pub async fn get_smart_playlist_tracks_for_export(
     db: &DbPool,

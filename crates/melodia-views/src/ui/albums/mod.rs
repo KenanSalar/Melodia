@@ -37,8 +37,7 @@ use melodia_ui::{
     TrackListRow as UiTrackListRow,
 };
 
-use crate::ui::grid_prewarm::GRID_COVER_FALLBACK;
-use state::{AlbumDetailState, AlbumGridState, DEFAULT_GRID_COVER_CAP, GridData};
+use state::{AlbumDetailState, AlbumGridState, GridData};
 
 #[cfg(test)]
 use grid::compute_indices;
@@ -46,11 +45,11 @@ use grid::compute_indices;
 use state::GridIndexCache;
 
 // Reached from outside the slice: `ui::nav_history` replays a walk into a
-// detail, `boot::ui_setup` seeds the persisted one and retunes the cover cap,
-// and its `initial_grid_fetch!` kicks the first fetch after the window is shown
+// detail, `boot::ui_setup` seeds the persisted one, and its
+// `initial_grid_fetch!` kicks the first fetch after the window is shown
 // — which is why `fetch_grid` can't fold into `install` with the rest.
 pub use detail::{open_album_with, seed_detail_from_settings};
-pub use grid::{fetch_grid, tune_cache_for_display};
+pub use grid::fetch_grid;
 
 // `pub(super)` is `pub(in crate::ui)` here, which is exactly the reach these
 // need: this slice's own `callbacks/`, plus the cross-slice `apply_detail_row_*`
@@ -60,7 +59,7 @@ pub(super) use detail::{
     open_album, refresh_detail, resort_detail, set_filter,
 };
 pub(super) use grid::rebuild_grid;
-pub(super) use selection::{clear_selection, handle_select_row};
+pub(super) use selection::{clear_selection, handle_select_row, select_all};
 
 /// Install the Albums grid + detail models, build the handle, and wire every
 /// `Albums.*` / `AlbumDetail.*` callback to it.
@@ -85,15 +84,11 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<AlbumsUi> {
 pub struct AlbumsUi {
     grid: AlbumGridState,
     detail: AlbumDetailState,
-    /// The shared row tier, for the detail `TrackList`'s artwork column.
+    /// The shared row tier, for the detail `TrackList`'s artwork column. The grid's cards draw
+    /// from `ui::grid_prewarm::tier()`, which no view holds.
     cover_thumbs: Arc<CoverThumbs>,
-    /// The grid card tier — private, with a resolution-derived cap. Separate
-    /// from `cover_thumbs` so its larger buffers can't pollute the row LRU, and
-    /// from `detail_artwork` because the tiles render at a different size.
-    /// Released whenever the user leaves the section, re-warmed on return.
-    grid_covers: Arc<CoverThumbs>,
     /// The detail header's `(cover, blur)` pair, one decode yielding both — see
-    /// [`crate::ui::detail_artwork`]. Released beside `grid_covers`.
+    /// [`crate::ui::detail_artwork`]. Handed back beside the grid's covers.
     detail_artwork: Arc<DetailArtwork>,
     /// Visibility + staleness + the mutation gate. See [`SectionState`].
     section: SectionState,
@@ -114,18 +109,15 @@ impl AlbumsUi {
                 filter: Mutex::new(Needle::default()),
             },
             cover_thumbs,
-            grid_covers: Arc::new(CoverThumbs::with_config(
-                GRID_COVER_FALLBACK,
-                DEFAULT_GRID_COVER_CAP,
-            )),
             detail_artwork: Arc::new(DetailArtwork::new(hero_blur)),
             section: SectionState::new(),
         }
     }
 
-    /// Drop *everything* the section keeps resident — both cover tiers, the
+    /// Drop *everything* the section keeps resident — the detail's artwork, the
     /// canonical grid data, the memoized indices, the cached detail rows and the
-    /// selection shadow — then hand the freed pages back. Runs off the UI thread
+    /// selection shadow, plus the grid tier's pixels down to proxies — then hand
+    /// the freed pages back. Runs off the UI thread
     /// on section leave; the caller has already cleared the Slint model there,
     /// which a `VecModel` mutation can't be done from here. Re-entry re-fetches
     /// through [`fetch_grid`], and re-runs `open_album` if a detail was open.
@@ -139,7 +131,7 @@ impl AlbumsUi {
         if self.section_active() {
             return;
         }
-        self.grid_covers.clear();
+        crate::ui::grid_prewarm::shrink_covers();
         self.detail_artwork.clear();
         {
             let _gate = self.section.gate();
@@ -154,15 +146,6 @@ impl AlbumsUi {
             self.detail.all_tracks.lock().clear();
             self.detail.applied_selection.lock().clear();
         }
-        melodia_platform::services::platform::allocator::trim();
-    }
-
-    /// Drop just the grid tier, on opening an album: the grid unmounts the
-    /// moment `AlbumDetail.album-id >= 0` flips, so its covers are neither
-    /// visible nor queried. The header pair stays warm, and returning to the
-    /// grid re-warms through [`Self::prewarm_visible_covers`].
-    pub fn release_grid_covers(&self) {
-        self.grid_covers.clear();
         melodia_platform::services::platform::allocator::trim();
     }
 
@@ -182,33 +165,13 @@ impl AlbumsUi {
         let data = self.grid.data.lock().clone();
         let unique = grid::first_screenful_paths(&data);
         if !unique.is_empty() {
-            self.grid_covers.prewarm(&unique);
+            crate::ui::grid_prewarm::prewarm(&unique);
         }
     }
 
     /// Album id currently open in the detail view (`-1` = grid).
     pub fn detail_album_id(&self) -> i64 {
         *self.detail.album_id.lock()
-    }
-
-    /// Backs `Albums.request-cover`, so a card's cover is resolved only once it
-    /// is on screen.
-    pub fn grid_cover(&self, artwork_path: &str) -> slint::Image {
-        self.grid_covers
-            .get_or_schedule_opt(crate::ui::grid_prewarm::nonempty_artwork_path(artwork_path))
-    }
-
-    /// The inline sibling, for Artist Detail's Albums strip — its callback carries no generation,
-    /// so a scheduled cover would have nothing to bring the card back.
-    pub fn grid_cover_blocking(&self, artwork_path: &str) -> slint::Image {
-        crate::ui::grid_prewarm::grid_cover_blocking(&self.grid_covers, artwork_path)
-    }
-
-    /// The grid tier itself, for a surface that borrows it — Artist Detail's
-    /// Albums strip prewarms through this and resolves via [`Self::grid_cover`].
-    /// One LRU, so the existing release sites clear it for both.
-    pub fn grid_thumbs(&self) -> Arc<CoverThumbs> {
-        self.grid_covers.clone()
     }
 }
 
@@ -235,6 +198,7 @@ pub fn to_slint_album_row(a: &AlbumStats) -> UiAlbumRow {
     UiAlbumRow {
         id: clamp_i64_to_i32(a.id),
         name: SharedString::from(a.name.as_str()),
+        artist_id: clamp_i64_to_i32(a.artist_id),
         artist_name: SharedString::from(a.artist_name.as_str()),
         year: a.year.unwrap_or(0),
         track_count: a.track_count,

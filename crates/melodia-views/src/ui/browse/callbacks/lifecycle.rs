@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use async_compat::Compat;
-use slint::ComponentHandle;
+use slint::{ComponentHandle, Model};
 
 use crate::ui::browse::{self as browse_ui_mod, BrowseUi, NAV_BROWSE};
 use crate::ui::callbacks::macros::spawn_logged;
@@ -22,11 +22,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
     // bullet in `.claude/rules/ui-patterns.md`.
     browse_ui.set_section_active(ui.global::<Nav>().get_selected_index() == NAV_BROWSE);
     // `browse::seed_from_settings` fetches whatever section the launch lands on, and off
-    // screen that fetch *releases* what it warmed — `warm_card_tier` hands its buffers
-    // back and reports `false`, so the card tier stays cold and nothing bumps the
-    // generation. Seeding the flag here costs one re-fetch on the first visit to a Browse
-    // the boot didn't land on, and nothing at all on the one it did. Same shape, same
-    // reason, as the four detail lifecycles'.
+    // screen the leave that follows hands its covers back as proxies. Seeding the flag here
+    // costs one re-fetch on the first visit to a Browse the boot didn't land on, and nothing
+    // at all on the one it did. Same shape, same reason, as the four detail lifecycles'.
     if !browse_ui.section_active() {
         browse_ui.mark_dirty();
     }
@@ -42,23 +40,23 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
         g.on_section_active_changed(move |active| {
             bu.set_section_active(active);
             if !active {
-                // The card tier is Browse's only cache, and it is worth a section's
-                // release: at grid-tier size a full LRU is tens of megabytes. The generation
-                // rewinds beside it so `0` keeps meaning "cold" rather than "first toggle
-                // of the session".
-                //
-                // **The release is only honest beside the `mark_dirty`** — the
-                // `tracks/callbacks/lifecycle.rs` rule, and Browse is the other view with
-                // no enter-time fetch of its own, so without it the re-enter paints every
-                // card on its placeholder. Landed synchronously, *before* the release task
-                // is spawned, so a re-enter can never read `false` off a tier the spawn is
-                // about to empty.
+                // Browse keeps its card model across the leave, so the covers under it are
+                // handed back as proxies rather than dropped — cleared, the surviving
+                // delegates would re-evaluate against an empty tier and the whole grid would
+                // paint its placeholder on re-entry. `mark_dirty` beside it is the
+                // `tracks/callbacks/lifecycle.rs` rule: Browse has no enter-time fetch of its
+                // own, so nothing else would refresh the listing.
                 bu.mark_dirty();
                 if let Some(ui) = weak.upgrade() {
-                    ui.global::<Browse>().set_covers_generation(0);
+                    // A selection the user can no longer see still answers
+                    // `Selection.any-live()`, so it swallows an Escape meant for the page they
+                    // moved to, and comes back stamped on re-entry. Guarded on there being one,
+                    // the unstamp walking every row of the directory.
+                    if ui.global::<Browse>().get_selected_ids().row_count() > 0 {
+                        browse_ui_mod::clear_selection(&ui);
+                    }
                 }
-                let bu = bu.clone();
-                s.runtime.spawn_blocking(move || bu.release_grid_covers());
+                s.runtime.spawn_blocking(crate::ui::grid_prewarm::hand_back_covers);
                 return;
             }
             if bu.take_dirty() {

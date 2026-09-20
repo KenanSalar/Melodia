@@ -732,3 +732,39 @@ async fn an_exported_row_carries_what_its_entry_is_written_from() -> Result<(), 
     assert_eq!(written, [("One".to_owned(), Some("Artist A".to_owned()), 180_000, Some(hash))]);
     Ok(())
 }
+
+/// The card menu's batch actions resolve a smart playlist through the id projection rather than
+/// the row one, so the two have to answer identically. Order and cap are the halves a narrowed
+/// projection can lose in silence, and a different order means the same playlist queues one way
+/// from its page and another from the card beside it.
+#[tokio::test]
+async fn the_id_projection_answers_in_the_row_projection_s_order() -> Result<(), AppError> {
+    let s = seed().await?;
+    let c = SmartCriteria {
+        rules: vec![Rule {
+            field: RuleField::PlayCount,
+            op: RuleOp::Gt,
+            value: Some(RuleValue::Number(0.0)),
+        }],
+        limit: Some(SmartLimit { count: 2, order: LimitOrder::PlayCountDesc }),
+        ..SmartCriteria::default()
+    };
+
+    let rows = resolve(&s.db, &c).await?;
+    let ids = queries::smart_playlist::get_smart_playlist_track_ids(&s.db, &c).await?;
+
+    assert_eq!(ids, rows.iter().map(|r| r.id).collect::<Vec<i64>>());
+    assert_eq!(ids, [s.t1, s.t3], "the cap and the order are both the row query's");
+    Ok(())
+}
+
+/// A rule set nothing matches is the empty answer rather than the whole library, which is what a
+/// dropped `WHERE` would make it.
+#[tokio::test]
+async fn an_unmatched_rule_set_resolves_to_no_ids() -> Result<(), AppError> {
+    let s = seed().await?;
+    let c = one(RuleField::Title, RuleOp::Is, Some(RuleValue::Text("Nothing".to_owned())));
+
+    assert!(queries::smart_playlist::get_smart_playlist_track_ids(&s.db, &c).await?.is_empty());
+    Ok(())
+}

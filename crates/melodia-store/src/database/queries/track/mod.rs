@@ -2,6 +2,7 @@
 //! so a call site still names `queries::track::…`.
 
 mod credits;
+mod entity_ids;
 #[cfg(test)]
 mod full_rows;
 mod list;
@@ -10,6 +11,7 @@ mod ranking;
 mod write;
 
 pub use credits::*;
+pub use entity_ids::*;
 #[cfg(test)]
 pub use full_rows::*;
 pub use list::*;

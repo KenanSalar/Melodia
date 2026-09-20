@@ -13,7 +13,8 @@ use crate::ui::model_diff::clear_vec_model;
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use melodia_app::state::AppState;
 use melodia_ui::{
-    AppWindow, EntityGridRow as UiEntityGridRow, Favorites, Nav, TrackListRow as UiTrackListRow,
+    AppWindow, CardSelection, EntityGridRow as UiEntityGridRow, Favorites, Nav,
+    TrackListRow as UiTrackListRow,
 };
 
 /// Wire the Favorites section-lifecycle callbacks.
@@ -56,10 +57,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 // Six heroes share one colour set and one chip row, so hand both back rather than
                 // leaving this banner's solve for the next hero to paint under.
                 release_shared_hero!(ui);
-                // Both grid tiers go with `release_section_state` below, so rewind the counter
-                // that means "cold" — else the next enter reads a leftover bump as a warm tier.
-                g.set_covers_generation(0);
-                // And rewind all three counts on the same tick as the models they number: a count
+                // Rewind all three counts on the same tick as the models they number: a count
                 // that outlives its model is the one thing these surfaces can state that is
                 // *wrong* rather than merely absent. `track-count` is the visible one, the hero
                 // square reading it to pick its fallback glyph.
@@ -74,6 +72,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 clear_vec_model::<UiEntityGridRow>(&g.get_artist_rows(), "favorites: clear artist");
                 clear_vec_model::<i32>(&g.get_selected_ids(), "favorites: clear selected-ids");
                 g.set_selection_anchor(-1);
+                // The card grids' set goes back with the models it describes;
+                // `card-selection.slint` argues why it cannot outlive the leave.
+                ui.global::<CardSelection>().invoke_clear();
             }
             let fu = fu.clone();
             let s = s.clone();

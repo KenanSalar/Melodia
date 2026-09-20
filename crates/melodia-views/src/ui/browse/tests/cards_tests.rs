@@ -1,5 +1,6 @@
 use super::*;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
+use melodia_testkit::write_test_png;
 
 fn folder(name: &str, path: &str) -> BrowseFolder {
     BrowseFolder { name: name.to_owned(), path: path.to_owned() }
@@ -90,8 +91,9 @@ fn folders_are_skipped_by_the_prewarm_rather_than_counted() {
 #[test]
 fn the_prewarm_cap_fits_inside_the_cache_it_fills() {
     // Prewarming more than the LRU can hold would evict the visible prefix it just
-    // decoded — the same floor every other grid tier keeps.
-    assert!(GRID_PREWARM_AHEAD <= DEFAULT_GRID_COVER_CAP.get());
+    // decoded. Against the construction fallback, which is the smallest the shared tier
+    // is ever set to — `tune_for_display` only ever raises it off a real window.
+    assert!(GRID_PREWARM_AHEAD <= crate::ui::grid_prewarm::GRID_COVER_CAP_FALLBACK.get());
 }
 
 const GLOBAL: &str = include_str!("../../../../../melodia-ui/ui/globals/tracks.slint");
@@ -139,4 +141,59 @@ fn the_mode_constants_are_exactly_the_range_the_clamp_admits() {
         VIEW.contains("Browse.view-mode == Browse.mode-card"),
         "browse-view.slint must derive `card-mode` from `Browse.mode-card`"
     );
+}
+
+/// **Browse is the only view whose boot seed fetches while its section is off screen**, so it is
+/// the only one where an ungated prewarm fills the shared tier for a page nobody opened. Its
+/// predecessor decoded and then released, which was honest against a tier the leave cleared and is
+/// a screenful of resident covers against one it doesn't — on every launch that lands anywhere
+/// else, for the life of the session.
+#[test]
+fn an_off_screen_browse_warms_nothing() -> Result<(), Box<dyn std::error::Error>> {
+    let (_tmp, path) = write_test_png(600)?;
+    let browse_ui = idle_browse();
+    browse_ui.set_view_mode(crate::ui::browse::BrowseViewMode::Card);
+
+    browse_ui.set_section_active(false);
+    browse_ui.warm_card_tier(std::slice::from_ref(&path));
+    assert_eq!(
+        crate::ui::grid_prewarm::tier().get_cached_opt(path.to_str()).size().width,
+        0,
+        "a prewarm for a section nobody is looking at must decode nothing at all"
+    );
+
+    browse_ui.set_section_active(true);
+    browse_ui.warm_card_tier(std::slice::from_ref(&path));
+    assert!(
+        crate::ui::grid_prewarm::tier().get_cached_opt(path.to_str()).size().width > 0,
+        "the same call on screen must still warm the tier"
+    );
+    Ok(())
+}
+
+/// The list view draws no cards, so warming for it spends a screenful of decodes on covers nothing
+/// will ask for. The mode is checked beside the section for that reason, not as a second guess at
+/// the same question.
+#[test]
+fn the_list_view_warms_nothing() -> Result<(), Box<dyn std::error::Error>> {
+    let (_tmp, path) = write_test_png(600)?;
+    let browse_ui = idle_browse();
+    browse_ui.set_section_active(true);
+    browse_ui.set_view_mode(crate::ui::browse::BrowseViewMode::List);
+
+    browse_ui.warm_card_tier(std::slice::from_ref(&path));
+
+    assert_eq!(
+        crate::ui::grid_prewarm::tier().get_cached_opt(path.to_str()).size().width,
+        0,
+        "a list-mode prewarm must decode nothing — no card will ask for it"
+    );
+    Ok(())
+}
+
+/// A handle with nothing wired to it — these two only ever ask what `warm_card_tier` decides.
+fn idle_browse() -> BrowseUi {
+    BrowseUi::new(std::sync::Arc::new(
+        melodia_artwork::media::image::cover_thumbs::CoverThumbs::new(),
+    ))
 }

@@ -133,8 +133,8 @@ pub fn install(
 }
 
 /// Push the selection from the shadow into the Slint `Queue` global: the
-/// count the header's "{n} selected" pill reads, and the id list the row
-/// context menu hands to a batch action.
+/// count the row context menu labels its batch entries with, and the id list
+/// it hands them.
 ///
 /// **The count is rows and the ids are deduped**, which is the same number
 /// everywhere except a queue holding one track twice. Selection is preserved

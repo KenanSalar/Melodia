@@ -231,6 +231,9 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                     if ph.get_queue_ctx_index() != -1 {
                         ph.set_queue_ctx_index(-1);
                     }
+                    if ph.get_card_ctx_id() != -1 {
+                        ph.set_card_ctx_id(-1);
+                    }
                 }
                 EventResult::Propagate
             }

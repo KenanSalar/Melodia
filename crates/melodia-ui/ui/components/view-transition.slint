@@ -8,10 +8,10 @@ import { Nav, NavEnterFrom } from "../globals/nav.slint";
 // so flipping `shown` there makes `true` the initial value and the view appears instantly; the
 // Timer fires once the first `shown: false` frame has painted.
 export component ViewTransition inherits Rectangle {
-    in property <NavEnterFrom> enter-from: NavEnterFrom.below;
+    in property <NavEnterFrom> enter-from: NavEnterFrom.above;
     // Off, the view is simply *there*. For the nested case: a page wrapping each tab body in
     // one of these, inside its own enter transition, would otherwise play both on the mount
-    // frame and a horizontal tab slide over a fade-up reads as a diagonal. The host arms it on
+    // frame and a horizontal tab slide over a fade-down reads as a diagonal. The host arms it on
     // the first real tab pick.
     in property <bool> enabled: true;
     // **Fade without translating.** `enabled` answers "does this view animate at all"; this
@@ -44,7 +44,7 @@ export component ViewTransition inherits Rectangle {
     opacity: settled ? 1.0 : 0.0;
     x: settled || !root.slide ? 0px : (enter-from == NavEnterFrom.right ? 32px
                                      : enter-from == NavEnterFrom.left  ? -32px : 0px);
-    y: settled || !root.slide ? 0px : (enter-from == NavEnterFrom.below ? 32px : 0px);
+    y: settled || !root.slide ? 0px : (enter-from == NavEnterFrom.above ? -32px : 0px);
 
     animate opacity { duration: Theme.dur-spatial; easing: cubic-bezier(0.2, 0, 0, 1); }
     animate x       { duration: Theme.dur-spatial; easing: cubic-bezier(0.2, 0, 0, 1); }

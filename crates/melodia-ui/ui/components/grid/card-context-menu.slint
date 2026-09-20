@@ -1,0 +1,309 @@
+import { Theme } from "../../theme.slint";
+import { CardActions } from "../../globals/card-actions.slint";
+import { Dialog } from "../../globals/dialog.slint";
+import { Nav } from "../../globals/nav.slint";
+import { MenuItem, MenuSeparator } from "../context-menu.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { FocusLossWatcher } from "../focus-loss-watcher.slint";
+
+// The right-click menu every entity card raises, and the only place its entries are spelled.
+//
+// `TrackContextMenu`'s contract, one layer over: **the host keeps the pointer position, the
+// right-click snapshot and the highlight key; this keeps the menu.** What differs is that a card
+// is a *set* of tracks, so the actions go through `CardActions` with a kind and an id list and
+// Rust resolves the set once, rather than each entry naming a track callback.
+//
+// `card-kind` is what a host configures, and it both picks the per-kind entries and travels to
+// Rust as the token `EntityKind::from_token` parses.
+export component CardContextMenu inherits Rectangle {
+    // "album" | "artist" | "genre" | "playlist" | "track" | "folder". Only "folder" is not an
+    // `EntityKind`: Browse routes those through its own global, a folder being a path.
+    in property <string> card-kind;
+    in property <int> card-id;
+    // Folder cards only.
+    in property <string> card-path;
+    // Playlist cards only: gates the rules entry, which a manual playlist has no answer for.
+    // Rename and Edit Artwork are *not* gated on it. Both are well defined for a smart playlist
+    // and three other surfaces already offer them, the card's own hover buttons included, so
+    // gating here only made the menu disagree with the pencil sitting on the same card.
+    in property <bool> card-is-smart: false;
+    // Album cards only. 0 means no linkage and hides the entry.
+    in property <int> card-artist-id: 0;
+
+    in property <bool> card-selected;
+    // The batch payload in multi mode, the host's own scope's selection.
+    in property <[int]> effective-selection;
+    in property <int> selection-count;
+    in property <length> at-x;
+    in property <length> at-y;
+    // The watcher gate, as on the row menu: the host's right-click snapshot against whatever the
+    // shell currently says owns an open menu.
+    in property <int> ctx-key: -1;
+    in property <int> live-ctx-key: -1;
+
+    // Read by the host to route a batch action. Multi mode needs this card selected *and* more
+    // than one selected — a right-click on an unselected card falls back to that card alone and
+    // leaves the selection untouched.
+    out property <bool> multi-active: root.card-selected && root.selection-count > 1;
+
+    property <int> multi-count: root.selection-count;
+    property <bool> is-playlist: root.card-kind == "playlist";
+    property <bool> is-folder: root.card-kind == "folder";
+    property <bool> is-track: root.card-kind == "track";
+    // A folder is one path and never joins a selection, so its whole arm is single-target.
+    property <bool> folder-single: root.is-folder && !root.multi-active;
+    // Rename and Edit Artwork: single-target, and a playlist's whatever its kind.
+    property <bool> playlist-edits: root.is-playlist && !root.multi-active;
+
+    public function show() {
+        pop.show();
+    }
+
+    // Per-kind entries the host owns, because the grid already has these wired for its hover
+    // controls or its navigation.
+    callback rename();
+    callback edit-artwork();
+    callback edit-rules();
+    callback delete-cards([int] /*playlist_ids*/);
+    // Take every card the grid is showing, and drop the whole set. No payload either way: the
+    // host owns the set.
+    callback select-all();
+    callback clear-selection();
+    // Track cards only. Their grids *do* play on activation, so Play over one of them has to mean
+    // what clicking it means, the whole displayed set from that track, rather than a queue of one.
+    // `TrackContextMenu` carries the same callback for the same reason.
+    callback play-single();
+    callback open-folder(string /*path*/);
+    callback play-folder(string /*path*/);
+    callback play-folder-next(string /*path*/);
+    callback queue-folder(string /*path*/);
+    callback reveal-folder(string /*path*/);
+    // The album card's one cross-tab entry, routed by the grid to `Albums.go-to-artist` — this
+    // file imports no view global, as the row menu's "Go to …" set doesn't either.
+    callback go-to-artist(int /*artist_id*/);
+    // Focus loss closed the popup; the host hands back its own snapshot and highlight key.
+    callback released();
+
+    // **Pinned at the origin, and the zero size is why** — the `TrackContextMenu` argument
+    // verbatim: a child with no `x`/`y` in a non-layout parent is *centred*, so at zero width the
+    // wrapper lands at half the card and carries the popup with it, `at-x` being measured from
+    // here. Set inside the component, where a host cannot forget it.
+    x: 0px;
+    y: 0px;
+    width: 0px;
+    height: 0px;
+
+    // One PopupWindow per mounted card. The grids virtualize by row, so this stays a screenful of
+    // popups whatever the library size.
+    pop := PopupWindow {
+        x: root.at-x;
+        y: root.at-y;
+        width: 230px;
+        close-policy: close-on-click;
+
+        // This card alone in single mode, the whole selection in multi. Computed once so every
+        // handler reads the same list.
+        property <[int]> effective-ids:
+            root.multi-active ? root.effective-selection : [root.card-id];
+
+        if root.ctx-key != -1 && root.ctx-key == root.live-ctx-key: FocusLossWatcher {
+            close => {
+                pop.close();
+                root.released();
+            }
+        }
+
+        PopupSurface {
+            VerticalLayout {
+                padding: Theme.pad-xs;
+                spacing: 0;
+
+                // **Play stays in multi mode here, unlike the row menu.** There it is dropped
+                // because "play a selection" is ambiguous against "queue it"; on the entity grids
+                // nothing else plays at all — a card click opens the detail — so dropping it would
+                // remove what the selection is for.
+                //
+                // A lone track card is the exception, its grid playing on activation, and it goes
+                // through the host's own path rather than `CardActions`.
+                MenuItem {
+                    label: @tr("Play");
+                    icon: "play_arrow";
+                    clicked => {
+                        if (root.is-folder) {
+                            root.play-folder(root.card-path);
+                        } else if (root.is-track && !root.multi-active) {
+                            root.play-single();
+                        } else {
+                            CardActions.play(root.card-kind, pop.effective-ids);
+                        }
+                    }
+                }
+                if !root.is-folder: MenuItem {
+                    label: @tr("Shuffle");
+                    icon: "shuffle";
+                    clicked => { CardActions.shuffle(root.card-kind, pop.effective-ids); }
+                }
+                MenuItem {
+                    label: root.multi-active
+                        ? @tr("Play {} Next", root.multi-count)
+                        : @tr("Play Next");
+                    icon: "queue_play_next";
+                    clicked => {
+                        if (root.is-folder) {
+                            root.play-folder-next(root.card-path);
+                        } else {
+                            CardActions.play-next(root.card-kind, pop.effective-ids);
+                        }
+                    }
+                }
+                MenuItem {
+                    label: root.multi-active
+                        ? @tr("Add {} to Queue", root.multi-count)
+                        : @tr("Add to Queue");
+                    icon: "queue_music";
+                    clicked => {
+                        if (root.is-folder) {
+                            root.queue-folder(root.card-path);
+                        } else {
+                            CardActions.add-to-queue(root.card-kind, pop.effective-ids);
+                        }
+                    }
+                }
+
+                // The playlist entries below need a real track list, which a folder reaches only
+                // through Browse's own callbacks — so the whole block sits out for a folder card.
+                if !root.is-folder: MenuSeparator {}
+                if !root.is-folder: MenuItem {
+                    label: @tr("New Playlist…");
+                    icon: "add";
+                    clicked => {
+                        // Unlike the row menu's, this can't fill `Dialog` inline: the opener wants
+                        // the *track* ids, which only Rust knows. It sets its own `@tr` chrome and
+                        // raises the card once they land.
+                        CardActions.create-playlist-from(root.card-kind, pop.effective-ids);
+                    }
+                }
+                if !root.is-folder: MenuItem {
+                    label: @tr("Add to Playlist");
+                    icon: "playlist_add";
+                    clicked => {
+                        // A plain heading even over a selection: the count here is *cards*, and
+                        // the track total only exists once Rust has resolved them.
+                        Dialog.prepare-add-to-playlist(@tr("Add to Playlist"));
+                        CardActions.add-to-playlist(root.card-kind, pop.effective-ids);
+                    }
+                }
+
+                if !root.is-folder: MenuSeparator {}
+                // **Two entries, where the row menu toggles one.** A card is a set, so the state
+                // the row menu reads off `row-is-favorite` has no honest answer here: a playlist
+                // half favourited would make either label a lie, and resolving the truth means a
+                // query per menu open, per card. Both operations are well defined over a set
+                // whatever its mixture, so offering them retires the question rather than
+                // answering it — and leaves the undo the one-way entry never had.
+                if !root.is-folder: MenuItem {
+                    label: @tr("Add to Favorites");
+                    icon: "favorite";
+                    clicked => {
+                        CardActions.set-favorites(root.card-kind, pop.effective-ids, true);
+                    }
+                }
+                if !root.is-folder: MenuItem {
+                    label: @tr("Remove from Favorites");
+                    icon: "heart_minus";
+                    clicked => {
+                        CardActions.set-favorites(root.card-kind, pop.effective-ids, false);
+                    }
+                }
+                if !root.is-folder: MenuItem {
+                    label: root.multi-active
+                        ? @tr("Edit Tags for {}", root.multi-count)
+                        : @tr("Edit Tags…");
+                    icon: "edit";
+                    clicked => {
+                        CardActions.edit-tags(
+                            root.card-kind,
+                            pop.effective-ids,
+                            root.multi-active
+                                ? @tr("Edit {} Tracks", root.multi-count)
+                                : @tr("Edit Track Information"));
+                    }
+                }
+
+                // Single-target by nature, so hidden over a selection. The third disjunct is the
+                // album arm: `card-artist-id` is an album card's alone, and left out of the gate
+                // it put Go to Artist straight under Edit Tags with no rule between.
+                if root.folder-single
+                    || (root.is-track && !root.multi-active)
+                    || (!root.multi-active && root.card-artist-id != 0): MenuSeparator {}
+                if root.folder-single: MenuItem {
+                    label: @tr("Open Folder");
+                    icon: "folder_open";
+                    clicked => { root.open-folder(root.card-path); }
+                }
+                if root.folder-single: MenuItem {
+                    label: @tr("Show in File Manager");
+                    icon: "drive_file_move";
+                    clicked => { root.reveal-folder(root.card-path); }
+                }
+                if root.is-track && !root.multi-active: MenuItem {
+                    label: @tr("Open Containing Folder");
+                    icon: "folder_open";
+                    clicked => { Nav.reveal-in-folder(root.card-id); }
+                }
+                if !root.multi-active && root.card-artist-id != 0: MenuItem {
+                    label: @tr("Go to Artist");
+                    icon: "person";
+                    clicked => { root.go-to-artist(root.card-artist-id); }
+                }
+
+                // The selection group. **Clear is gated on the scope holding a set rather than on
+                // this card being in it.** That is the row menu's gate and a grid cannot borrow
+                // it: a card has no second activation, so a set scrolled or filtered out of view
+                // leaves every visible card picking instead of opening, with no card left able to
+                // offer the way back. Both go through the host, five grids keeping their set on
+                // `CardSelection` while Browse keeps its cards' on `Browse`, its cards being its
+                // list rows.
+                MenuSeparator {}
+                MenuItem {
+                    label: @tr("Select all");
+                    icon: "select_all";
+                    clicked => { root.select-all(); }
+                }
+                if root.selection-count > 0: MenuItem {
+                    label: @tr("Clear selection");
+                    icon: "close";
+                    clicked => { root.clear-selection(); }
+                }
+
+                // The playlist block mirrors the card's own hover trio, which stays: the buttons
+                // are the discoverable path and these are the right-click one. Mirrors it for a
+                // smart playlist too, the buttons being ungated there.
+                if root.is-playlist: MenuSeparator {}
+                if root.playlist-edits: MenuItem {
+                    label: @tr("Rename…");
+                    icon: "edit";
+                    clicked => { root.rename(); }
+                }
+                if root.playlist-edits: MenuItem {
+                    label: @tr("Edit Artwork…");
+                    icon: "image";
+                    clicked => { root.edit-artwork(); }
+                }
+                if root.is-playlist && !root.multi-active && root.card-is-smart: MenuItem {
+                    label: @tr("Edit Rules…");
+                    icon: "auto_awesome";
+                    clicked => { root.edit-rules(); }
+                }
+                if root.is-playlist: MenuItem {
+                    label: root.multi-active
+                        ? @tr("Delete {} Playlists", root.multi-count)
+                        : @tr("Delete Playlist");
+                    icon: "delete";
+                    destructive: true;
+                    clicked => { root.delete-cards(pop.effective-ids); }
+                }
+            }
+        }
+    }
+}

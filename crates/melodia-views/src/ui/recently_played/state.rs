@@ -4,7 +4,6 @@
 //! names its own, so the cached sets are only ever filtered.
 
 use std::collections::HashSet;
-use std::num::NonZeroUsize;
 
 use parking_lot::Mutex;
 
@@ -84,15 +83,6 @@ impl RecentlyPlayedUiState {
         }
     }
 }
-
-/// LRU capacity for the Most Played tier, sized like the album grid's default:
-/// a screenful or two of cards, so scrolling re-decodes rather than the cache growing
-/// with the library. A construction default only — [`super::tune_cache_for_display`]
-/// resizes it against the real display once the window is live.
-pub(super) const GRID_THUMB_CAP: NonZeroUsize = match NonZeroUsize::new(48) {
-    Some(n) => n,
-    None => panic!("GRID_THUMB_CAP > 0"),
-};
 
 /// How many covers to decode up front when the Most Played tab becomes visible.
 ///

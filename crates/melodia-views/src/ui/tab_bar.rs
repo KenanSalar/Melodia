@@ -2,9 +2,9 @@
 //!
 //! Every page that mounts a `TabBar` persists which tab was showing, so each needs the
 //! same read-side clamp; the component's source-level invariants are pinned here too, no
-//! host owning the file. The two grid-bearing pages also share the pair of predicates
-//! below plus the count sentinel — those are about a *tab* rather than what one contains,
-//! which is what makes them generic over each host's own tab enum.
+//! host owning the file. The grid-bearing pages also share the count sentinel and the
+//! signature below — both are about a *tab* rather than what one contains, which is what
+//! makes them generic over each host's own tab enum.
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 
@@ -44,23 +44,6 @@ pub(crate) fn grid_signature<T: Hash>(tab: T, columns: i32, content: u64) -> u64
     columns.hash(&mut hasher);
     content.hash(&mut hasher);
     hasher.finish()
-}
-
-/// Whether a landed prewarm may announce its tier to the cards. `warmed` is the tab the
-/// fetch decoded for *and still holds the buffers of* — `None` both when it skipped the
-/// prewarm and when a leave landing inside the decode took them straight back. Announcing
-/// under a rewound counter, or under a tab pick that overtook the decodes, puts the next
-/// surface's cards back on the decoding path.
-///
-/// Deliberately *not* a function of whether the rows changed. Those are independent facts,
-/// and conflating them left a grid on placeholders after a re-enter whose mount-time
-/// `columns-changed` had already written the final rows.
-pub(crate) fn should_announce_warm<T: PartialEq + Copy>(
-    warmed: Option<T>,
-    section_active: bool,
-    current_tab: T,
-) -> bool {
-    section_active && warmed == Some(current_tab)
 }
 
 #[cfg(test)]

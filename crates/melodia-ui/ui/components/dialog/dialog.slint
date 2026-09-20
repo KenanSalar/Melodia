@@ -92,8 +92,6 @@ export component DialogOverlay inherits Rectangle {
         // colour is driven independently by `destructive`.
         property <string> kind-icon:
             DialogGlobal.kind == "delete-playlist" ? "delete" :
-            DialogGlobal.kind == "remove-playlist-selected" ? "playlist_remove" :
-            DialogGlobal.kind == "remove-queue-selected" ? "playlist_remove" :
             DialogGlobal.kind == "remove-folder" ? "folder_off" :
             DialogGlobal.kind == "remove-from-favorites"
                 || DialogGlobal.kind == "remove-from-recent" ? "delete" :

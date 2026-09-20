@@ -2,7 +2,6 @@
 //! Artist Detail submodules. Mirrors `src/ui/albums/state.rs`.
 
 use std::collections::HashSet;
-use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -87,13 +86,6 @@ pub(super) struct ArtistDetailState {
     pub filter: Mutex<Needle>,
     pub applied_selection: Mutex<HashSet<i32>>,
 }
-
-/// Fallback LRU capacity. Replaced at startup by
-/// `tune_cache_for_display`.
-pub(super) const DEFAULT_GRID_COVER_CAP: NonZeroUsize = match NonZeroUsize::new(48) {
-    Some(n) => n,
-    None => panic!("DEFAULT_GRID_COVER_CAP > 0"),
-};
 
 /// How many leading (name-sorted) artists' covers `fetch_grid` prewarms.
 pub(super) const GRID_PREWARM_AHEAD: usize = 24;

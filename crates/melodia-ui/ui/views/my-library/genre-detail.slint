@@ -36,6 +36,8 @@ export component GenreDetailBody inherits Rectangle {
         toggle-row-favorite(ids, on) => { GenreDetail.toggle-row-favorite(ids, on); }
         set-row-rating(ids, n) => { GenreDetail.set-row-rating(ids, n); }
         select-row(idx, id, sh, ct) => { GenreDetail.select-row(idx, id, sh, ct); }
+        select-all => { GenreDetail.select-all(); }
+        clear-selection => { GenreDetail.clear-selection(); }
         // A click in the track list blurs the band's SearchBar.
         request-blur-search => { MyLibrary.blur-search-tick += 1; }
         go-to-album(aid) => { GenreDetail.go-to-album(aid); }

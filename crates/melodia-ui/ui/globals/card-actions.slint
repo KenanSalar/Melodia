@@ -1,0 +1,34 @@
+// What a card's right-click menu does, for every entity kind.
+//
+// **Stateless on purpose.** Each callback carries its own `kind` and id list, so nothing here can
+// go stale between one grid and the next — the same reason `CardSelection.pick` takes a scope.
+// `kind` is one of "album", "artist", "genre", "playlist", "track"; Rust parses it into an
+// `EntityKind` once at the boundary and resolves the whole set to track ids in one batched query
+// before acting. **Browse's folder cards go through `Browse` instead** — a folder is a path rather
+// than an id, and putting one here would add a mostly-empty string argument to every callback.
+export global CardActions {
+    // **Replaces the queue with the resolved tracks, and is not the retired Play All pill.**
+    // Those eight were `player_play_tracks(ids, Some(0))` beside a list whose first row already
+    // did exactly that. An entity grid has no activation that plays at all — a card click opens
+    // the detail — so this is that surface's only play path rather than a second spelling of one.
+    //
+    // **A single track card doesn't come through here**, its grid playing the displayed set on
+    // activation, so `CardContextMenu.play-single` routes it to the host instead. Over a
+    // *selection* of them it does: there is no activation that means "play these five".
+    callback play(string /*kind*/, [int] /*entity_ids*/);
+    callback shuffle(string, [int]);
+    callback play-next(string, [int]);
+    callback add-to-queue(string, [int]);
+    // Both directions, as one call taking the state to write rather than a toggle. A card is a
+    // *set*, so `row-is-favorite`'s question has no honest answer here — half a playlist may be
+    // favourited — and the menu offers the two operations instead of guessing which one a label
+    // should name.
+    callback set-favorites(string /*kind*/, [int] /*entity_ids*/, bool /*favorite*/);
+
+    // Both fill `Dialog` from the menu first, so the `@tr` chrome resolves at codegen; Rust adds
+    // the resolved track ids and invokes the existing dialog flow.
+    callback create-playlist-from(string, [int]);
+    callback add-to-playlist(string, [int]);
+    // The title arrives already translated for the same reason.
+    callback edit-tags(string, [int], string /*title*/);
+}

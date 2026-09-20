@@ -33,21 +33,16 @@ use crate::ui::section_state::{SectionState, impl_section_state_helpers};
 use crate::ui::view_ctx::ViewCtx;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 
-use state::{GRID_THUMB_CAP, RecentlyPlayedUiState, SongsTotals};
+use state::{RecentlyPlayedUiState, SongsTotals};
 
 /// This page's `Nav.selected-index` — see [`crate::ui::favorites::NAV_FAVORITES`].
 pub const NAV_RECENTLY_PLAYED: i32 = 8;
 
-// `boot::ui_setup` retunes the cover cap once the window is live.
-pub use covers::tune_cache_for_display;
-
 // `pub(super)` is `pub(in crate::ui)` here, exactly the reach these need: this slice's own
 // `callbacks/`, plus `ui::hero_chips`.
-pub(super) use grid::{
-    apply_filtered_grid_now, apply_filtered_grid_settled, mark_covers_warm, refresh_grid,
-};
+pub(super) use grid::{apply_filtered_grid_now, apply_filtered_grid_settled, refresh_grid};
 pub(super) use rows::to_slint_most_played_row;
-pub(super) use selection::{clear_selection, handle_select_row};
+pub(super) use selection::{clear_selection, handle_select_row, select_all};
 pub(super) use songs::{
     apply_filtered_tracks, apply_filtered_tracks_now, apply_row_favorite, apply_row_rating,
     refresh_tracks, set_filter,
@@ -66,11 +61,6 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<RecentlyPlayedUi> {
     let rp_ui =
         Arc::new(RecentlyPlayedUi::new(cx.cover_thumbs.clone(), detail_artwork::blur_spec(cx.app)));
     callbacks::wire(cx.app, cx.state, &rp_ui);
-    crate::ui::cover_generation::notify_on_decode(
-        &rp_ui.most_played_thumbs,
-        cx.app,
-        grid::repaint_covers,
-    );
     if let Some(vs) = cx.view_state {
         seed_tab(cx.app, &rp_ui, vs.recently_played_tab);
     }
@@ -86,8 +76,6 @@ pub struct RecentlyPlayedUi {
     /// The band's blur shape, or `None` under the aurora setting — read once at install, the
     /// setting being restart-gated, because the compose runs where no window handle is in reach.
     pub(super) hero_blur: Option<BlurSpec>,
-    /// Released on section leave *and* on tab-leave.
-    pub(super) most_played_thumbs: Arc<CoverThumbs>,
     /// Visibility + staleness + the mutation gate, the unit every entity grid carries. Also gates
     /// the refresh subscriber, so a background tick can't repaint a hidden view.
     section: SectionState,
@@ -120,10 +108,6 @@ impl RecentlyPlayedUi {
             inner: RecentlyPlayedUiState::new(),
             cover_thumbs,
             hero_blur,
-            most_played_thumbs: Arc::new(CoverThumbs::with_config(
-                crate::ui::grid_prewarm::GRID_COVER_FALLBACK,
-                GRID_THUMB_CAP,
-            )),
             section: SectionState::new(),
             active_tab: AtomicU8::new(RecentlyPlayedTab::Songs.as_code()),
             grid_dirty: AtomicBool::new(true),
@@ -192,7 +176,7 @@ impl RecentlyPlayedUi {
         if self.section_active() {
             return;
         }
-        self.most_played_thumbs.clear();
+        crate::ui::grid_prewarm::shrink_covers();
         {
             let _gate = self.gate();
             self.inner.tracks_all.lock().clear();

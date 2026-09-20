@@ -18,7 +18,7 @@ export global Playlists {
     callback columns-changed(int);
     callback apply-filter(string);
     callback open-playlist(int /*playlist_id*/);
-    // Lazy per-card lookup against a private grid tier, the `Albums.request-cover`
+    // Lazy per-card lookup against the shared grid tier, the `Albums.request-cover`
     // contract — only on-screen cards resolve, and a miss schedules rather than decoding.
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
     in property <int> covers-generation: 0;
@@ -41,6 +41,10 @@ export global Playlists {
         string /*description (empty ⇒ clear)*/,
     );
     callback delete-playlist(int /*id*/);
+    // The card menu's multi-select arm, through `Dialog.open-delete-playlists`. One refetch and
+    // one selection clear for the whole batch, where looping `delete-playlist` would do both per
+    // playlist.
+    callback delete-playlists([int] /*ids*/);
 
     // 1–4 paths from the playlist's own tracks; Rust composes the collage and persists it. An
     // empty selection clears the custom thumbnail and reverts to auto first-track.
@@ -149,6 +153,7 @@ export global PlaylistDetail {
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
     callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
+    callback select-all();
     callback clear-selection();
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);
@@ -166,9 +171,7 @@ export global PlaylistDetail {
     // `upgrade_in_event_loop`, landing on a fresh tick and so dodging the recursion guard.
     callback request-edit-artwork();
 
-    // The band's pill row reads `selected-ids`; the row context menu passes either the
-    // right-clicked row or the whole selection.
-    callback remove-selected();
+    // The row context menu passes either the right-clicked row or the whole selection.
     callback remove-track([int] /*track_ids*/);
 
     // Rust re-walks the cached tracks through the new needle in memory, no DB round-trip.

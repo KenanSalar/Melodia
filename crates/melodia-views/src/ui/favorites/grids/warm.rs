@@ -1,9 +1,9 @@
 //! Which of the prepared hashes belongs to the tab on screen.
 //!
 //! The tab-agnostic half of the same question — folding the tab and the column
-//! count in, and deciding whether a landed prewarm may announce itself — lives
-//! in [`crate::ui::tab_bar`], since Recently Played asks it identically. What
-//! stays here is the one part that names *these* tabs.
+//! count into one signature — lives in [`crate::ui::tab_bar`], since Recently
+//! Played asks it identically. What stays here is the one part that names
+//! *these* tabs.
 //!
 //! Pure, and named rather than inlined, because its failure mode is a grid that
 //! looks correct and is stale.

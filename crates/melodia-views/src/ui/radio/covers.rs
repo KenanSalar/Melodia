@@ -1,15 +1,17 @@
 //! The logo tier the station cards draw from, and its lifecycle.
 //!
-//! Its own `CoverThumbs` rather than the shared row tier, for the reason every grid has one: a
-//! card is drawn at grid size, and a leave has to be able to hand its buffers back without pulling
-//! covers out from under the track lists.
+//! **The one card tier that is not `ui::grid_prewarm::tier()`**, and the reason is the station
+//! tile rather than the decode: `station-card.slint` derives `logo-native-size` from
+//! `cover.width / logo-decode-size`, so the *decoded extent* is load-bearing for that card's
+//! layout. The shared tier's leave shrinks what it holds to a proxy, which every other card reads
+//! as the same picture and this one would read as a tiny source to inset. So this tier keeps the
+//! old contract: released outright on leave, generation rewound to `0`, and its decode size
+//! retuned only while it holds nothing. A station's cold card costs nothing anyway, its monogram
+//! and name-hashed tile being carried on the row.
 //!
-//! **The leave releases this and nothing else.** The browse cache and its Slint model survive,
-//! because re-entering the section must not cost a directory round trip; what a leave actually
-//! frees is the decoded pixels, which is where the bytes are. So this file is the whole of Radio's
-//! `release_section_state`.
-
-use std::num::NonZeroUsize;
+//! **It is also the only thing the leave frees.** The browse cache and its Slint model survive,
+//! because re-entering the section must not cost a directory round trip; the decoded pixels are
+//! where the bytes are. So this file is the whole of Radio's `release_section_state`.
 
 use slint::ComponentHandle;
 
@@ -19,33 +21,50 @@ use melodia_ui::{AppWindow, Radio};
 
 use super::RadioUi;
 
-/// Fallback LRU capacity, used at construction and whenever the display can't be queried.
-/// [`tune_cache_for_display`] replaces it once there is a window to measure. Must stay at or above
-/// [`PREWARM_AHEAD`] or the prewarm would evict its own work.
-const DEFAULT_LOGO_CAP: NonZeroUsize = match NonZeroUsize::new(48) {
-    Some(n) => n,
-    None => panic!("DEFAULT_LOGO_CAP > 0"),
-};
-
 /// How many leading logos a landed page warms before the grid paints. Roughly one screenful at any
 /// reasonable column count; everything past it decodes lazily on scroll-in through `request-logo`.
 const PREWARM_AHEAD: usize = 24;
 
 pub fn new_tier() -> CoverThumbs {
-    CoverThumbs::with_config(grid_prewarm::GRID_COVER_FALLBACK, DEFAULT_LOGO_CAP)
+    CoverThumbs::with_config(
+        grid_prewarm::GRID_COVER_FALLBACK,
+        grid_prewarm::GRID_COVER_CAP_FALLBACK,
+    )
 }
 
 /// Size the logo cache against the display it will be drawn on. Called after `app.show()` and
 /// again on every resize, off `WindowChrome.display-changed`.
 pub fn tune_cache_for_display(app: &AppWindow, radio_ui: &RadioUi) {
-    let cap = grid_prewarm::cover_cap_for_window(app, DEFAULT_LOGO_CAP);
+    let cap = grid_prewarm::cover_cap_for_window(app);
     radio_ui.covers.resize(cap);
 
-    // Published as well as set, because the card compares the logo it was handed against it to
-    // decide whether the source can fill the tile — see `Radio.logo-decode-size`.
+    // **The decode size moves only over an empty tier**, which is what sets this retune apart from
+    // the shared one. The size is published as well as set, the card dividing `cover.width` by it
+    // to decide whether the source can fill the tile, so the two agree only while no buffer
+    // decoded at the old size is still held. The leave empties this tier, so the enter after it
+    // decodes at whatever is current; a resize mid-section keeps the denominator its logos were
+    // measured against.
+    if !radio_ui.covers.is_empty() {
+        return;
+    }
     let thumb_size = grid_prewarm::cover_size_for_window(app);
     radio_ui.covers.set_thumb_size(thumb_size);
     app.global::<Radio>().set_logo_decode_size(i32::try_from(thumb_size).unwrap_or(i32::MAX));
+}
+
+/// Resolve one station card's logo without ever decoding on the calling thread.
+///
+/// The branch every grid took before they shared a tier, kept here because this tier is still
+/// released outright: `0` means the leave emptied it, so answer from the cache alone and let the
+/// card fall back to its monogram until [`prewarm`] announces. Past `0` a miss is scheduled and
+/// still answered with the monogram, the card coming back on the bump that follows.
+pub fn logo_cover(radio_ui: &RadioUi, artwork_path: &str, generation: i32) -> slint::Image {
+    let path = grid_prewarm::nonempty_artwork_path(artwork_path);
+    if generation == 0 {
+        radio_ui.covers.get_cached_opt(path)
+    } else {
+        radio_ui.covers.get_or_schedule_opt(path)
+    }
 }
 
 /// Decode roughly a screenful of logos, off the UI thread.

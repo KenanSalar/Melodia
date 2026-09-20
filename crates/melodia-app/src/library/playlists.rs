@@ -61,8 +61,10 @@ pub async fn update_playlist(
     .await
 }
 
-pub async fn delete_playlist(state: &AppState, id: i64) -> Result<(), AppError> {
-    queries::playlist::delete_playlist(&state.db, id).await
+/// Drop one or more playlists. The single-card arm passes a one-element slice rather than
+/// keeping a second spelling of the same statement.
+pub async fn delete_playlists(state: &AppState, ids: &[i64]) -> Result<(), AppError> {
+    queries::playlist::delete_playlists(&state.db, ids).await
 }
 
 pub async fn add_to_playlist(

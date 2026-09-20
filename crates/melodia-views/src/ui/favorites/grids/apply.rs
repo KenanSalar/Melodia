@@ -12,7 +12,7 @@ use crate::ui::favorites::{
 };
 use crate::ui::grid_rows::{chunk_entity_rows, write_grid};
 use crate::ui::row_match::most_played_matches;
-use crate::ui::tab_bar::{grid_signature, should_announce_warm};
+use crate::ui::tab_bar::grid_signature;
 use crate::ui::util::len_as_i32;
 use melodia_core::entities::artist::FavoriteArtist;
 use melodia_ui::{AppWindow, EntityStripRow as UiEntityStripRow, Favorites};
@@ -173,24 +173,13 @@ fn write_filtered_grids(ui: &AppWindow, fav_ui: &FavoritesUi, prepared: Prepared
 }
 
 /// Apply from a worker thread, hopping to the event loop to write.
-///
-/// `warmed_tab` is the tab whose tier `fetch::refresh_grids` decoded, and it rides in the same
-/// closure as the rows so a grid can never mount against a bumped counter and a tier nobody warmed
-/// — the case `refresh_grids` hits when the user leaves the section mid-query.
-pub(super) fn apply_filtered_grids(
-    fav_ui: &Arc<FavoritesUi>,
-    weak: &Weak<AppWindow>,
-    warmed_tab: Option<FavoritesTab>,
-) {
+pub(super) fn apply_filtered_grids(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
     let prepared = build_filtered_grids(fav_ui);
     let fav_ui = fav_ui.clone();
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
         write_filtered_grids(&ui, &fav_ui, prepared);
-        if should_announce_warm(warmed_tab, fav_ui.section_active(), fav_ui.active_tab()) {
-            mark_covers_warm(&ui);
-        }
     });
 }
 
@@ -202,24 +191,4 @@ pub(super) fn apply_filtered_grids(
 /// already non-zero. `ui::albums::grid::rebuild_grid` is a plain call for the same reason.
 pub fn apply_filtered_grids_now(ui: &AppWindow, fav_ui: &FavoritesUi) {
     write_filtered_grids(ui, fav_ui, build_filtered_grids(fav_ui));
-}
-
-/// Let the mounted grid's card bindings start decoding on a miss again — see
-/// `Favorites.covers-generation`.
-pub fn mark_covers_warm(ui: &AppWindow) {
-    let g = ui.global::<Favorites>();
-    g.set_covers_generation(g.get_covers_generation().saturating_add(1));
-}
-
-/// Re-run the mounted card bindings once a scheduled decode has landed.
-///
-/// Deliberately not [`mark_covers_warm`]: it never moves off 0, so a batch landing after a
-/// tab-leave cleared the tier cannot read as warm and cost the next mount the cache-only frame
-/// the gate exists for.
-pub fn repaint_covers(ui: &AppWindow) {
-    let g = ui.global::<Favorites>();
-    let generation = g.get_covers_generation();
-    if generation > 0 {
-        g.set_covers_generation(generation.saturating_add(1));
-    }
 }

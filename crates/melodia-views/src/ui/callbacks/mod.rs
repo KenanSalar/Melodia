@@ -10,6 +10,8 @@
 // inside `ui::` — nothing in `library/`, `player/` or `boot/` can name either.
 pub(in crate::ui) mod macros;
 
+pub(in crate::ui) mod card_actions;
+pub(in crate::ui) mod card_selection;
 pub(in crate::ui) mod cross_tab_nav;
 pub(in crate::ui) mod index_persist;
 mod library_settings;
@@ -26,7 +28,7 @@ use melodia_app::library;
 use melodia_app::services::settings::{SortDir, ViewSort};
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
-use melodia_ui::{AppWindow, Nav, Player};
+use melodia_ui::{AppWindow, Dialog, Nav, Player};
 
 use index_persist::IndexPersist;
 use macros::{spawn_logged_sync, wire_pb, wire_sync, wire_sync_pb};
@@ -70,6 +72,38 @@ pub(super) fn play_row_start(ids: &[i64], track_id: i64, idx: i32) -> Option<usi
 /// walk is cheap.
 pub(super) fn model_track_ids(rows: &ModelRc<melodia_ui::TrackListRow>) -> Vec<i64> {
     rows.iter().map(|r| i64::from(r.id)).collect()
+}
+
+/// Which raise intent held the `Dialog` global when a menu started fetching a body for it.
+///
+/// **Take it synchronously at the click and ask [`Self::holds`] past the `await`.** The chrome a
+/// menu wrote is stale the moment anything else claims the global, so a body filled after that
+/// paints one dialog's rows under another's heading and hands its Accept to the wrong branch of
+/// the dispatcher.
+///
+/// Two things can retire a claim and `open` sees only one of them. Six openers deliberately leave
+/// `open` false while Rust loads the body or hops a tick to raise it, so through that window two
+/// menus both read "nothing is up"; `Dialog.request-generation` is what separates them, and the
+/// second menu's synchronous write is exactly what would otherwise ride out under the first one's
+/// rows.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) struct DialogClaim(i32);
+
+impl DialogClaim {
+    pub(super) fn take(ui: &AppWindow) -> Self {
+        Self(ui.global::<Dialog>().get_request_generation())
+    }
+
+    /// [`Self::take`] for a callback that holds only the weak handle. `None` where the window has
+    /// gone, which is also the answer to whether the raise is still worth resolving for.
+    pub(super) fn take_from(weak: &slint::Weak<AppWindow>) -> Option<Self> {
+        weak.upgrade().as_ref().map(Self::take)
+    }
+
+    /// Whether this claim may still fill the global.
+    pub(super) fn holds(self, ui: &AppWindow) -> bool {
+        !ui.global::<Dialog>().get_open() && Self::take(ui) == self
+    }
 }
 
 /// Replace the queue with `ids`, open on a random one, then turn shuffle on — the header
@@ -176,6 +210,11 @@ pub fn persisted_sort<'a>(
 pub fn wire_all(ui: &AppWindow, state: &AppState) {
     let player = ui.global::<Player>();
     let ui_weak = ui.as_weak();
+
+    // The two card-grid globals: selection state shared across every grid, and the actions its
+    // right-click menu fires. Here rather than in a view slice because seven grids answer to them.
+    card_selection::wire(ui);
+    card_actions::wire(ui, state);
 
     wire_sync_pb!(
         player,

@@ -68,11 +68,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
             s.runtime.spawn_blocking(move || {
                 au_swap.release_detail_artwork();
                 // Skip the Albums-grid prewarm when the close is routing to
-                // another section: the grid isn't going to mount, and
-                // `AlbumsUi.grid_covers` is shared with the Artist Detail's
-                // Albums sub-section — prewarming would evict that
-                // sub-section's still-needed thumbnails in favor of grid
-                // covers the user won't see.
+                // another section: the grid isn't going to mount, and one tier
+                // serves every grid — prewarming would evict covers the
+                // destination still needs for ones the user won't see.
                 if !origin_was_cross_section {
                     au_swap.prewarm_visible_covers();
                 }
@@ -182,6 +180,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
         detail.on_select_row(move |idx, id, shift, ctrl| {
             let Some(ui) = weak.upgrade() else { return };
             albums_ui_mod::handle_select_row(&ui, &au, idx, id, shift, ctrl);
+        });
+    }
+
+    {
+        let weak = weak.clone();
+        let au = albums_ui.clone();
+        detail.on_select_all(move || {
+            let Some(ui) = weak.upgrade() else { return };
+            albums_ui_mod::select_all(&ui, &au);
         });
     }
 

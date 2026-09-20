@@ -12,7 +12,7 @@ use crate::ui::recently_played::{
     RecentlyPlayedTab, RecentlyPlayedUi, tab_from_index, to_slint_most_played_row,
 };
 use crate::ui::row_match::most_played_matches;
-use crate::ui::tab_bar::{grid_signature, should_announce_warm};
+use crate::ui::tab_bar::grid_signature;
 use crate::ui::util::len_as_i32;
 use melodia_ui::{AppWindow, EntityStripRow as UiEntityStripRow, RecentlyPlayed};
 
@@ -129,24 +129,13 @@ fn write_filtered_grid(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, prepared: Prepa
 }
 
 /// Apply from a worker thread, hopping to the event loop to write.
-///
-/// `warmed_tab` is the tab whose tier [`super::fetch::refresh_grid`] decoded, and it rides in the
-/// same closure as the rows so the grid can never mount against a bumped counter and a tier nobody
-/// warmed — the case `refresh_grid` hits when the user leaves the section mid-query.
-pub(super) fn apply_filtered_grid(
-    rp_ui: &Arc<RecentlyPlayedUi>,
-    weak: &Weak<AppWindow>,
-    warmed_tab: Option<RecentlyPlayedTab>,
-) {
+pub(super) fn apply_filtered_grid(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindow>) {
     let prepared = build_filtered_grid(rp_ui);
     let rp_ui = rp_ui.clone();
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
         write_filtered_grid(&ui, &rp_ui, prepared);
-        if should_announce_warm(warmed_tab, rp_ui.section_active(), rp_ui.active_tab()) {
-            mark_covers_warm(&ui);
-        }
     });
 }
 
@@ -190,21 +179,4 @@ pub fn apply_filtered_grid_settled(
 /// is already non-zero.
 pub fn apply_filtered_grid_now(ui: &AppWindow, rp_ui: &RecentlyPlayedUi) {
     write_filtered_grid(ui, rp_ui, build_filtered_grid(rp_ui));
-}
-
-/// Let the mounted grid's card bindings start decoding on a miss again — see
-/// `RecentlyPlayed.covers-generation`.
-pub fn mark_covers_warm(ui: &AppWindow) {
-    let g = ui.global::<RecentlyPlayed>();
-    g.set_covers_generation(g.get_covers_generation().saturating_add(1));
-}
-
-/// Re-run the mounted card bindings once a scheduled decode has landed — the
-/// `favorites::grids::apply::repaint_covers` contract, never moving off 0.
-pub fn repaint_covers(ui: &AppWindow) {
-    let g = ui.global::<RecentlyPlayed>();
-    let generation = g.get_covers_generation();
-    if generation > 0 {
-        g.set_covers_generation(generation.saturating_add(1));
-    }
 }

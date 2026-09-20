@@ -19,13 +19,17 @@ export global Albums {
     callback apply-filter(string);
     callback request-sort(string /*field*/);
     callback open-album(int /*album_id*/);
+    // The card menu's one cross-tab entry. Only `go-to-artist`, and so wired beside the `Search`
+    // exception rather than through `wire_go_to!`, which installs all three.
+    callback go-to-artist(int /*artist_id*/);
     // Invoked from each on-screen card's own binding, so only visible cards lock a cover.
     // `pure` so Slint may evaluate it inside a binding at all. Cache-only: a miss schedules and
     // comes back on the bump below, rather than decoding under the event loop.
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
     in property <int> covers-generation: 0;
-    // Rust releases the album-tier cover cache on `false` and re-warms the first screenful on
-    // `true` — the grid-size buffers aren't worth keeping resident while the section is hidden.
+    // Rust shrinks the shared grid tier to proxies on `false` and re-warms the first screenful on
+    // `true` — the full-size buffers aren't worth keeping resident while the section is hidden,
+    // and the proxy is what paints the re-entry rather than the fallback glyph.
     callback section-active-changed(bool);
 }
 
@@ -85,6 +89,7 @@ export global AlbumDetail {
     callback go-to-album(int /*album_id*/);
     callback go-to-artist(int /*artist_id*/);
     callback go-to-genre(int /*genre_id*/);
+    callback select-all();
     callback clear-selection();
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);

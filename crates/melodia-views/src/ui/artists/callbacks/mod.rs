@@ -35,7 +35,7 @@ pub(super) fn wire(
     albums_ui: &Arc<AlbumsUi>,
 ) {
     grid::wire(ui, state, view_state, artists_ui);
-    detail::wire(ui, state, artists_ui, albums_ui);
+    detail::wire(ui, state, artists_ui);
     cross_tab::wire(ui, state, albums_ui);
-    lifecycle::wire(ui, state, artists_ui, albums_ui);
+    lifecycle::wire(ui, state, artists_ui);
 }

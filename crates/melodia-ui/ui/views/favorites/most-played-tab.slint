@@ -26,6 +26,9 @@ export component FavoritesMostPlayedTab inherits Rectangle {
         row-height: root.row-h;
         gap: root.gap;
         show-play-count: true;
+        // These cards are tracks, so the menu's entity arm resolves each id to itself.
+        card-kind: "track";
+        selection-scope: "fav-most-played";
         covers-generation: Favorites.covers-generation;
         request-cover(p, gen) => { Favorites.request-most-played-cover(p, gen) }
         row-clicked(id) => { Favorites.play-track(id); }

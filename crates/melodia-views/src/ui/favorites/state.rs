@@ -2,7 +2,6 @@
 //! concentrated here so the public [`crate::ui::favorites::FavoritesUi`] surface stays small.
 
 use std::collections::HashSet;
-use std::num::NonZeroUsize;
 
 use parking_lot::Mutex;
 
@@ -88,15 +87,6 @@ impl FavoritesUiState {
         }
     }
 }
-
-/// LRU capacity per grid tier, sized like the album grid's default: a screenful or two of cards,
-/// so scrolling re-decodes rather than the cache growing with the library. The two tiers are never
-/// both warm, so this bounds one at a time. A construction default only —
-/// `ui::favorites::tune_cache_for_display` resizes both against the real display.
-pub(super) const GRID_THUMB_CAP: NonZeroUsize = match NonZeroUsize::new(48) {
-    Some(n) => n,
-    None => panic!("GRID_THUMB_CAP > 0"),
-};
 
 /// How many covers to decode up front when a grid tab becomes visible.
 ///

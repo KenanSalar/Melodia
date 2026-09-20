@@ -8,6 +8,9 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "Clear selection"
+msgstr "Seçimi temizle"
+
 # ---- Sidebar / navigation ----------------------------------------------------
 
 msgid "Search"
@@ -82,9 +85,6 @@ msgstr "Temizle"
 
 msgid "Restart"
 msgstr "Yeniden Başlat"
-
-msgid "Clear selection"
-msgstr "Seçimi temizle"
 
 # ---- Now-playing bar tooltips & states --------------------------------------
 
@@ -196,9 +196,6 @@ msgstr "Sıra boş"
 msgid "Drop to add to queue"
 msgstr "Sıraya eklemek için bırak"
 
-msgid "Remove selected"
-msgstr "Seçimi kaldır"
-
 msgid "Remove from Queue"
 msgstr "Sıradan çıkar"
 
@@ -213,9 +210,6 @@ msgstr "Sıra temizlensin mi?"
 
 msgid "Remove all tracks from the queue? Playback will stop."
 msgstr "Sıradaki tüm parçalar kaldırılsın mı? Çalma duracak."
-
-msgid "Remove from queue?"
-msgstr "Sıradan kaldırılsın mı?"
 
 # Plural: track count for the queue header subtitle ("3 tracks", "1 track").
 # Turkish nouns don't take the plural suffix after a numeral ("3 parça", not
@@ -255,12 +249,6 @@ msgid "{n} song"
 msgid_plural "{n} songs"
 msgstr[0] "{n} şarkı"
 msgstr[1] "{n} şarkı"
-
-# Plural: queue-remove confirmation dialog.
-msgid "Remove {n} track from the queue?"
-msgid_plural "Remove {n} tracks from the queue?"
-msgstr[0] "Sıradaki {n} parça kaldırılsın mı?"
-msgstr[1] "Sıradaki {n} parça kaldırılsın mı?"
 
 msgid "{} selected"
 msgstr "{} seçili"
@@ -810,9 +798,6 @@ msgstr "Yeniden adlandır"
 msgid "Delete playlist"
 msgstr "Çalma listesini sil"
 
-msgid "Remove from playlist"
-msgstr "Çalma listesinden çıkar"
-
 msgid "Remove from Playlist"
 msgstr "Çalma listesinden çıkar"
 
@@ -861,14 +846,6 @@ msgid "Delete"
 msgstr "Sil"
 
 # ---- Playlist Detail: Remove-selected confirm -------------------------------
-
-msgid "Remove from playlist?"
-msgstr "Çalma listesinden çıkarılsın mı?"
-
-msgid "Remove {n} track from the playlist?"
-msgid_plural "Remove {n} tracks from the playlist?"
-msgstr[0] "{n} parça çalma listesinden çıkarılsın mı?"
-msgstr[1] "{n} parça çalma listesinden çıkarılsın mı?"
 
 # ---- Search view ------------------------------------------------------------
 
@@ -1227,12 +1204,6 @@ msgstr "Dışa aktar"
 
 msgid "Export Playlists"
 msgstr "Çalma listelerini dışa aktar"
-
-msgid "Import playlists from .m3u8 files"
-msgstr ".m3u8 dosyalarından çalma listelerini içe aktar"
-
-msgid "Export playlists to .m3u8 files"
-msgstr "Çalma listelerini .m3u8 dosyalarına dışa aktar"
 
 msgid "Choose playlists to export."
 msgstr "Dışa aktarılacak çalma listelerini seçin."
@@ -1904,6 +1875,10 @@ msgstr "Dinlediğin istasyonlar burada görünür."
 msgid "Added"
 msgstr "Eklenme"
 
+# The Favorites tab's overflow pill, holding Import and Export.
+msgid "More station actions"
+msgstr "Diğer istasyon işlemleri"
+
 # The add / edit station dialog.
 msgid "Add Station"
 msgstr "İstasyon Ekle"
@@ -2262,3 +2237,38 @@ msgstr "Albüm arka planı"
 
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Mini oynatıcıyı, “Şimdi Çalıyor” görünümünde olduğu gibi çalan albümün renkleriyle boyar."
+
+# ---- Entity card context menu -----------------------------------------------
+
+msgid "Rename…"
+msgstr "Yeniden adlandır…"
+
+msgid "Edit Artwork…"
+msgstr "Görseli düzenle…"
+
+msgid "Edit Rules…"
+msgstr "Kuralları düzenle…"
+
+msgid "Delete Playlist"
+msgstr "Çalma listesini sil"
+
+msgid "Delete {} Playlists"
+msgstr "{} çalma listesini sil"
+
+msgid "Show in File Manager"
+msgstr "Dosya yöneticisinde göster"
+
+msgid "More playlist actions"
+msgstr "Diğer çalma listesi işlemleri"
+
+msgid "Delete {} playlists?"
+msgstr "{} çalma listesi silinsin mi?"
+
+msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
+msgstr "Çalma listeleri ve parça sırası kaldırılacak. Parçaların kendisi kitaplığınızda kalır."
+
+msgid "Edit Artwork"
+msgstr "Görseli düzenle"
+
+msgid "Apply"
+msgstr "Uygula"

@@ -1,6 +1,7 @@
 import { ListView } from "std-widgets.slint";
 import { AlbumGridRow } from "../../models.slint";
 import { EntityCard } from "entity-card.slint";
+import { CardCell } from "card-cell.slint";
 
 // Virtualized album-card grid. Rust chunks the flat list into rows of `columns` cards, so the inner
 // `ListView` virtualizes by row and only on-screen rows build their cards. Covers come lazily off
@@ -25,6 +26,8 @@ export component AlbumGrid inherits Rectangle {
     in property <int> covers-generation: 0;
 
     callback open-album(int /*album_id*/);
+    // The card menu's one cross-tab entry, routed by the host to `Albums.go-to-artist`.
+    callback go-to-artist(int /*artist_id*/);
     // Forwarded by the host to its own global. `pure` so a binding can call it.
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
 
@@ -56,24 +59,40 @@ export component AlbumGrid inherits Rectangle {
                 spacing: root.gap;
                 alignment: start;
 
-                for album in grid-row.albums: EntityCard {
+                for album in grid-row.albums: cell := CardCell {
                     card-width: root.card-width;
                     card-height: root.card-height;
-                    artwork-path: album.artwork_path;
-                    cover: root.request-cover(album.artwork_path, root.covers-generation);
-                    fallback-icon: "album";
-                    // A pronounced zoom on the placeholder, as on the other
-                    // grids; real artwork stays gentle so a cover doesn't
-                    // jitter inside the tile clip on hover.
-                    cover-scale-hover: album.artwork_path == "" ? 1.15 : 1.04;
-                    title: album.name;
-                    // The separator is punctuation; only the fallback is
-                    // translated.
-                    subtitle: (album.artist_name == ""
-                        ? @tr("Unknown artist")
-                        : album.artist_name)
-                        + (album.year > 0 ? " · \{album.year}" : "");
-                    clicked => { root.open-album(album.id); }
+                    scope: "albums";
+                    card-kind: "album";
+                    card-id: album.id;
+                    card-artist-id: album.artist_id;
+                    go-to-artist(id) => { root.go-to-artist(id); }
+
+                    EntityCard {
+                        card-width: root.card-width;
+                        card-height: root.card-height;
+                        artwork-path: album.artwork_path;
+                        cover: root.request-cover(album.artwork_path, root.covers-generation);
+                        fallback-icon: "album";
+                        // A pronounced zoom on the placeholder, as on the other
+                        // grids; real artwork stays gentle so a cover doesn't
+                        // jitter inside the tile clip on hover.
+                        cover-scale-hover: album.artwork_path == "" ? 1.15 : 1.04;
+                        title: album.name;
+                        // The separator is punctuation; only the fallback is
+                        // translated.
+                        subtitle: (album.artist_name == ""
+                            ? @tr("Unknown artist")
+                            : album.artist_name)
+                            + (album.year > 0 ? " · \{album.year}" : "");
+                        clicked => { root.open-album(album.id); }
+
+                        selectable: true;
+                        selected: cell.selected;
+                        selection-live: cell.selection-live;
+                        select-clicked(shift, ctrl) => { cell.pick(shift, ctrl); }
+                        context-requested(x, y) => { cell.open-menu(x, y); }
+                    }
                 }
             }
         }

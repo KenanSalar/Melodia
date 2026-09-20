@@ -2,7 +2,6 @@ import { Theme } from "../../theme.slint";
 import { Player } from "../../globals/player.slint";
 import { Search } from "../../globals/search.slint";
 import { ActionPill } from "../../components/action-pill.slint";
-import { SelectionPills } from "../../components/selection-pills.slint";
 import { ColumnTogglePopup } from "../../components/track-list/column-toggle-popup.slint";
 import { TrackList } from "../../components/track-list/track-list.slint";
 
@@ -34,13 +33,6 @@ export component SongsSection inherits VerticalLayout {
             ColumnTogglePopup {
                 columns <=> Search.track-columns;
                 toggled(id) => { Search.toggle-column(id); }
-            }
-            if Search.selected-ids.length > 0: SelectionPills {
-                count: Search.selected-ids.length;
-                cleared => {
-                    Search.clear-selection();
-                    Search.blur-search-tick += 1;
-                }
             }
         }
     }
@@ -80,6 +72,8 @@ export component SongsSection inherits VerticalLayout {
         toggle-row-favorite(ids, on) => { Search.toggle-row-favorite(ids, on); }
         set-row-rating(ids, n) => { Search.set-row-rating(ids, n); }
         select-row(idx, id, sh, ct) => { Search.select-row(idx, id, sh, ct); }
+        select-all => { Search.select-all(); }
+        clear-selection => { Search.clear-selection(); }
         request-blur-search => { Search.blur-search-tick += 1; }
         // Reuses the card-click callbacks, so cross-tab nav means the same thing from
         // either surface.

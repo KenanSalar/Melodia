@@ -3,7 +3,7 @@ import { TagEditor } from "../../globals/dialog-forms.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { Nav } from "../../globals/nav.slint";
 import { Playlists } from "../../globals/playlists.slint";
-import { MenuItem, MenuSeparator } from "context-menu.slint";
+import { MenuItem, MenuSeparator } from "../context-menu.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 
@@ -89,6 +89,10 @@ export component TrackContextMenu inherits Rectangle {
     callback toggle-favorite([int] /*track_ids*/, bool /*new_state*/);
     // Playlist Detail removes from the open playlist, the queue sheet from the queue.
     callback request-remove([int] /*track_ids*/);
+    // Take every displayed row, and drop the whole set. No payload either way: the host owns
+    // the set, and the queue's is a different shape from a track list's.
+    callback select-all();
+    callback clear-selection();
     callback go-to-album(int /*album_id*/);
     callback go-to-artist(int /*artist_id*/);
     callback go-to-genre(int /*genre_id*/);
@@ -178,22 +182,18 @@ export component TrackContextMenu inherits Rectangle {
                         Dialog.open-create-playlist(pop.effective-ids);
                     }
                 }
-                // Hidden when there is nothing to add to. The chrome is set here so the `@tr`
-                // literals sit at the call site and a locale switch re-resolves them.
+                // Hidden when there is nothing to add to. Only the heading is ours — the same
+                // ternary as the label, being the same sentence — the rest of the chrome
+                // belonging to the opener, which the card menu shares.
                 if pop.visible-playlist-count > 0: MenuItem {
                     label: root.multi-active
                         ? @tr("Add {} to Playlist", root.multi-count)
                         : @tr("Add to Playlist");
                     icon: "playlist_add";
                     clicked => {
-                        Dialog.title = root.multi-active
+                        Dialog.prepare-add-to-playlist(root.multi-active
                             ? @tr("Add {} to Playlist", root.multi-count)
-                            : @tr("Add to Playlist");
-                        Dialog.message = "";
-                        Dialog.confirm-label = @tr("Add");
-                        Dialog.cancel-label = @tr("Cancel");
-                        Dialog.destructive = false;
-                        Dialog.kind = "add-to-playlist";
+                            : @tr("Add to Playlist"));
                         Dialog.pending-track-ids = pop.effective-ids;
                         Dialog.pick-total-tracks = pop.effective-ids.length;
                         Playlists.request-add-to-playlist(
@@ -265,6 +265,25 @@ export component TrackContextMenu inherits Rectangle {
                     label: @tr("Go to Genre");
                     icon: "music_note";
                     clicked => { root.go-to-genre(root.genre-id); }
+                }
+
+                // The selection group. With no clear button on any list, Clear is the only way
+                // out of a large set other than Escape, and it is gated on this row being *in*
+                // the set: a menu raised on an unselected row acts on that row alone and says
+                // nothing about a set it isn't part of. Select All is ungated, being an offer
+                // rather than a statement about the row. Both go through the host rather than a
+                // global: nine list globals keep their own set and the queue a tenth, and this
+                // component is deliberately told none of them.
+                MenuSeparator {}
+                MenuItem {
+                    label: @tr("Select all");
+                    icon: "select_all";
+                    clicked => { root.select-all(); }
+                }
+                if root.row-selected: MenuItem {
+                    label: @tr("Clear selection");
+                    icon: "close";
+                    clicked => { root.clear-selection(); }
                 }
 
                 // Removes the row, or the whole selection, from whichever list the host is. Two

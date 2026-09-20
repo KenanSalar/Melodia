@@ -36,6 +36,9 @@ export component MyLibraryPlaylistsTab inherits Rectangle {
             // `PlaylistStats` list through Rust — no DB hop.
             Dialog.open-rename-playlist(id, Playlists.row-name(id), Playlists.row-description(id));
         }
+        // Menu-only, both of them; the detail view's pill row raises the same two dialogs.
+        delete-playlists(ids) => { Dialog.open-delete-playlists(ids); }
+        edit-playlist-rules(id) => { Dialog.open-edit-smart-rules(id); }
         covers-generation: Playlists.covers-generation;
         request-cover(p, g) => { Playlists.request-cover(p, g) }
     }

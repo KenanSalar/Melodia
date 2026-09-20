@@ -129,6 +129,22 @@ pub async fn get_playlist_by_id(db: &DbPool, id: i64) -> Result<playlist::Playli
         .ok_or_else(|| AppError::not_found("Playlist", id))
 }
 
+/// Just the smart-playlist verdict for a set of ids: `(id, is_smart, smart_criteria)`.
+///
+/// **The base table, not `playlist_stats`**, and the narrow projection is the point: the card
+/// menu's resolve asks this of every selected playlist purely to split the smart ones off, where
+/// `get_playlist_by_id` per id fetches the aggregate columns that view computes and throws them
+/// away. An id missing from the result is one deleted since the grid painted.
+pub async fn smart_criteria_for_playlists(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<Vec<(i64, bool, Option<String>)>, AppError> {
+    crate::database::chunked_in_query(db.read(), ids, |placeholders| {
+        format!("SELECT id, is_smart, smart_criteria FROM playlists WHERE id IN ({placeholders})")
+    })
+    .await
+}
+
 pub async fn update_playlist(
     db: &DbPool,
     id: i64,
@@ -173,9 +189,24 @@ pub async fn update_playlist(
     }
 }
 
-pub async fn delete_playlist(db: &DbPool, id: i64) -> Result<(), AppError> {
-    // Cascade will handle playlist_items
-    sqlx::query("DELETE FROM playlists WHERE id = ?").bind(id).execute(db.write()).await?;
+/// Drop one or more playlists. Cascade handles `playlist_items`.
+///
+/// **Chunked rather than one statement per id**, [`super::track::set_favorite`]'s shape: the card
+/// menu's batch arm hands this a whole selection, and the write pool is one connection, so a loop
+/// over ids is that many serialised round trips.
+pub async fn delete_playlists(db: &DbPool, ids: &[i64]) -> Result<(), AppError> {
+    if ids.is_empty() {
+        return Ok(());
+    }
+    for chunk in ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT) {
+        let placeholders = crate::database::placeholders(chunk.len());
+        let sql = format!("DELETE FROM playlists WHERE id IN ({placeholders})");
+        let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false);
+        for id in chunk {
+            query = query.bind(*id);
+        }
+        query.execute(db.write()).await?;
+    }
     Ok(())
 }
 

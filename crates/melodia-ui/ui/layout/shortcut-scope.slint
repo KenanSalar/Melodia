@@ -3,6 +3,7 @@ import { Nav, NavEnterFrom } from "../globals/nav.slint";
 import { Onboarding } from "../globals/onboarding.slint";
 import { Player } from "../globals/player.slint";
 import { Queue } from "../globals/queue.slint";
+import { Selection } from "../globals/selection.slint";
 import { MiniPlayer, WindowChrome } from "../globals/shell.slint";
 
 // The app's global keyboard shortcuts, and the focus scope catching them. It takes the whole main
@@ -123,9 +124,10 @@ export component ShortcutScope inherits FocusScope {
     property <bool> queue-sheet-up: Queue.open && !MiniPlayer.active;
 
     key-pressed(ev) => {
-        // Priority: dialog cancel, then the queue sheet, then closing Now Playing. A nested
-        // `FocusScope` can't own the sheet's Esc — Slint focuses a scope on mouse press, never on
-        // mount — so owning both keys at the root is what makes the priority explicit.
+        // Priority: dialog cancel, the welcome card, the queue sheet, closing Now Playing, then
+        // a live selection. A nested `FocusScope` can't own the sheet's Esc — Slint focuses a
+        // scope on mouse press, never on mount — so owning both keys at the root is what makes
+        // the priority explicit.
         if (ev.text == Key.Escape) {
             if (Dialog.open) {
                 Dialog.cancelled();
@@ -148,8 +150,17 @@ export component ShortcutScope inherits FocusScope {
                 return accept;
             }
             if (Nav.now-playing-open) {
-                Nav.pending-enter-from = NavEnterFrom.below;
+                Nav.pending-enter-from = NavEnterFrom.above;
                 Nav.now-playing-open = false;
+                return accept;
+            }
+            // The list and card selections, which have no clear button of their own. **Last**,
+            // and that is the whole of what keeps the arm honest: `any-live()` asks ten globals
+            // and none of them knows whether its surface is the one on screen, so above the
+            // arm before it a set held by the page *under* Now Playing would swallow the press
+            // that was meant to close it. Below the sheet too, which answers for its own.
+            if (Selection.any-live()) {
+                Selection.clear-live();
                 return accept;
             }
             return reject;
@@ -224,7 +235,7 @@ export component ShortcutScope inherits FocusScope {
                 // Settings' nav index; the `Nav` global has the map. The edge goes with it, as
                 // `sidebar.slint` does — lateral nav, and left unwritten the page inherits
                 // whichever direction the last drill or back put there.
-                Nav.pending-enter-from = NavEnterFrom.below;
+                Nav.pending-enter-from = NavEnterFrom.above;
                 Nav.selected-index = 9;
                 Nav.persist-selected-index(9);
                 return accept;
@@ -255,7 +266,7 @@ export component ShortcutScope inherits FocusScope {
             return accept;
         }
         if (ev.text == "f") {
-            Nav.pending-enter-from = NavEnterFrom.below;
+            Nav.pending-enter-from = NavEnterFrom.above;
             Nav.now-playing-open = !Nav.now-playing-open;
             return accept;
         }

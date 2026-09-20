@@ -1,5 +1,6 @@
 // Responsive card-grid geometry, derived once instead of once per view: every grid page answers the
-// same three questions from its body width, and the arithmetic had been copied verbatim into each.
+// same three questions from its body width and what it holds, and the arithmetic had been copied
+// verbatim into each.
 // `GridColumnsSync` beside it owns *when* the column count reaches Rust. Non-visual.
 //
 // **`avail-width` must come from the element the grid fills**, whose width the layout fixes
@@ -12,11 +13,25 @@ export component GridGeometry {
     in property <length> gap: 20px;
     // What the text block adds under the artwork tile.
     in property <length> card-text-h: 46px;
+    // Cards on the grid's only row, or `-1` where it has more than one and the width answers for
+    // itself. A column a short grid cannot fill is a column its cards pay for: admitting one shrinks
+    // every card on screen to make room for nothing.
+    in property <int> lone-row-cards: -1;
+    // Where an under-filled row stops growing. A full row's own stretch tops out around here at the
+    // column counts a normal window packs, so a short grid keeps drawing the same card rather than a
+    // bigger one; `grid_prewarm::MAX_CARD_W` mirrors it to size the cover tier.
+    in property <length> max-card-w: 224px;
 
+    // The width's own answer, and the chunk width Rust is handed.
     out property <int> cols:
         max(1, Math.floor((root.avail-width - root.gap) / (root.min-card-w + root.gap)));
-    out property <length> card-w:
-        max(0px, (root.avail-width - (root.cols + 1) * root.gap) / root.cols);
+    // What is drawn. Clamped to `cols` as well, a resize reaching the cards a frame before Rust
+    // re-chunks and the stale row being the wider one.
+    property <int> drawn-cols:
+        root.lone-row-cards < 0 ? root.cols : max(1, min(root.cols, root.lone-row-cards));
+    out property <length> card-w: max(0px, min(
+        (root.avail-width - (root.drawn-cols + 1) * root.gap) / root.drawn-cols,
+        root.max-card-w));
     // Artwork is square, so the tile's height is the card's width.
     out property <length> card-h: root.card-w + root.card-text-h;
     out property <length> row-h: root.card-h + root.gap;

@@ -14,7 +14,8 @@ use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use melodia_app::state::AppState;
 use melodia_ui::{
-    AlbumDetail, AlbumGridRow as UiAlbumGridRow, Albums, AppWindow, TrackListRow as UiTrackListRow,
+    AlbumDetail, AlbumGridRow as UiAlbumGridRow, Albums, AppWindow, CardSelection,
+    TrackListRow as UiTrackListRow,
 };
 
 /// Wire the Albums section-lifecycle callbacks. See [`super::wire`].
@@ -86,6 +87,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
                 clear_vec_model::<UiTrackListRow>(&d.get_tracks(), "albums: clear detail tracks");
                 clear_vec_model::<i32>(&d.get_selected_ids(), "albums: clear detail selection");
                 d.set_selection_anchor(-1);
+                // The card grid's set goes back with the models it describes;
+                // `card-selection.slint` argues why it cannot outlive the leave.
+                ui.global::<CardSelection>().invoke_clear();
             }
             let au = au.clone();
             let s = s.clone();

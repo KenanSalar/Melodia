@@ -4,10 +4,10 @@ import { AlbumDetail, Albums } from "../../globals/albums.slint";
 import { ArtistDetail, Artists } from "../../globals/artists.slint";
 import { GenreDetail, Genres } from "../../globals/genres.slint";
 import { PlaylistDetail, Playlists } from "../../globals/playlists.slint";
-import { SmartEditor } from "../../globals/dialog-forms.slint";
 import { Dialog } from "../../globals/dialog.slint";
-import { ActionPill, PillLabel, PillButton, PillDivider } from "../../components/action-pill.slint";
-import { SelectionPills } from "../../components/selection-pills.slint";
+import { ActionPill, PillButton, PillDivider } from "../../components/action-pill.slint";
+import { MenuItem } from "../../components/context-menu.slint";
+import { PillOverflowMenu } from "../../components/pill-overflow-menu.slint";
 import { SortPillRow } from "../../components/sort-pill-row.slint";
 import { ColumnTogglePopup } from "../../components/track-list/column-toggle-popup.slint";
 
@@ -36,18 +36,8 @@ export component MyLibraryTabPills inherits Rectangle {
         // inset on the other four tabs.
         spacing: 0px;
 
-        // --- Songs: the selection chip, then the column toggle ----------------
-        //
-        // The chip leads so its group reads to the left of the toggle.
+        // --- Songs: the column toggle -----------------------------------------
         if MyLibrary.tab-idx == MyLibrary.tab-songs: ActionPill {
-            if Tracks.selected-ids.length > 0: SelectionPills {
-                count: Tracks.selected-ids.length;
-                divider-trails: true;
-                cleared => {
-                    Tracks.clear-selection();
-                    MyLibrary.blur-search-tick += 1;
-                }
-            }
             ColumnTogglePopup {
                 columns <=> Tracks.track-columns;
                 toggled(id) => { Tracks.toggle-column(id); }
@@ -91,8 +81,8 @@ export component MyLibraryTabPills inherits Rectangle {
         // --- The four details ------------------------------------------------
         //
         // Each is the row that used to sit at the foot of that view's `DetailHeader`,
-        // unchanged: one pill holding Shuffle, whatever is particular to the entity, the
-        // column toggle with its own column locked off, then the selection slots. **The
+        // unchanged: one pill holding Shuffle, whatever is particular to the entity, and the
+        // column toggle with its own column locked off. **The
         // tooltips stay in-tree** — `Tooltip`'s default side is `above` and the band's
         // slot rides its lower edge, so the pill lands inside the band, painted after
         // everything the band owns and before the body. Only the Playlists row below needs
@@ -110,10 +100,6 @@ export component MyLibraryTabPills inherits Rectangle {
                 hide-album: true;
                 toggled(id) => { AlbumDetail.toggle-column(id); }
             }
-            if AlbumDetail.selected-ids.length > 0: SelectionPills {
-                count: AlbumDetail.selected-ids.length;
-                cleared => { AlbumDetail.clear-selection(); }
-            }
         }
 
         if root.artist-open: ActionPill {
@@ -129,10 +115,6 @@ export component MyLibraryTabPills inherits Rectangle {
                 hide-artist: true;
                 toggled(id) => { ArtistDetail.toggle-column(id); }
             }
-            if ArtistDetail.selected-ids.length > 0: SelectionPills {
-                count: ArtistDetail.selected-ids.length;
-                cleared => { ArtistDetail.clear-selection(); }
-            }
         }
 
         if root.genre-open: ActionPill {
@@ -147,10 +129,6 @@ export component MyLibraryTabPills inherits Rectangle {
                 // Meaningless here: every row is the same genre.
                 hide-genre: true;
                 toggled(id) => { GenreDetail.toggle-column(id); }
-            }
-            if GenreDetail.selected-ids.length > 0: SelectionPills {
-                count: GenreDetail.selected-ids.length;
-                cleared => { GenreDetail.clear-selection(); }
             }
         }
 
@@ -189,16 +167,7 @@ export component MyLibraryTabPills inherits Rectangle {
             if PlaylistDetail.playlist.is_smart: PillButton {
                 icon: "tune";
                 tooltip-text: @tr("Edit rules");
-                clicked => {
-                    Dialog.title = @tr("Edit Rules");
-                    Dialog.message = "";
-                    Dialog.confirm-label = @tr("Save");
-                    Dialog.cancel-label = @tr("Cancel");
-                    Dialog.destructive = false;
-                    Dialog.kind = "smart-playlist-editor";
-                    Dialog.target-id = PlaylistDetail.playlist-id;
-                    SmartEditor.request-edit(PlaylistDetail.playlist-id);
-                }
+                clicked => { Dialog.open-edit-smart-rules(PlaylistDetail.playlist-id); }
             }
             PillDivider { }
             PillButton {
@@ -214,51 +183,14 @@ export component MyLibraryTabPills inherits Rectangle {
                 columns <=> PlaylistDetail.track-columns;
                 toggled(id) => { PlaylistDetail.toggle-column(id); }
             }
-            // Selection slots — appended when multi-select is active.
-            if PlaylistDetail.selected-ids.length > 0: PillDivider { }
-            if PlaylistDetail.selected-ids.length > 0: PillLabel {
-                text: @tr("{} selected", PlaylistDetail.selected-ids.length);
-            }
-            // A smart playlist's membership is derived — nothing to remove from.
-            if PlaylistDetail.selected-ids.length > 0
-                && !PlaylistDetail.playlist.is_smart: PillButton {
-                icon: "playlist_remove";
-                // Lighter glyph than its siblings — 16 px puts it back on the same
-                // optical row as their 14 px default.
-                icon-size: 16px;
-                danger: true;
-                tooltip-text: @tr("Remove from playlist");
-                clicked => {
-                    // Confirm even for one row — a stray click on the destructive chip
-                    // must not drop tracks silently.
-                    Dialog.title = @tr("Remove from playlist?");
-                    Dialog.message = @tr(
-                        "Remove {n} track from the playlist?"
-                            | "Remove {n} tracks from the playlist?"
-                            % PlaylistDetail.selected-ids.length
-                    );
-                    Dialog.confirm-label = @tr("Remove");
-                    Dialog.cancel-label = @tr("Cancel");
-                    Dialog.destructive = true;
-                    Dialog.kind = "remove-playlist-selected";
-                    Dialog.target-id = -1;
-                    Dialog.open = true;
-                }
-            }
-            if PlaylistDetail.selected-ids.length > 0: PillDivider { }
-            if PlaylistDetail.selected-ids.length > 0: PillButton {
-                icon: "close";
-                tooltip-text: @tr("Clear selection");
-                clicked => { PlaylistDetail.clear-selection(); }
-            }
         }
 
         // --- Playlists: collapsed, never unmounted ----------------------------
         //
         // The one row that can't sit under an `if`, per the file header. It collapses to
         // a zero-width clipped cell instead: nothing paints, and `Clip` swallows every
-        // event outside its empty rect, so the four pills are as unreachable as an
-        // unmounted branch while their ids stay readable from this root. The three width
+        // event outside its empty rect, so the pills are as unreachable as an unmounted
+        // branch while their ids stay readable from this root. The three width
         // constraints are spelled out because an explicit `min-width` is what *replaces*
         // the constraint the pill's own bound width would otherwise merge in.
         Rectangle {
@@ -292,46 +224,33 @@ export component MyLibraryTabPills inherits Rectangle {
                     tooltip-text: @tr("Create a playlist from rules");
                     tooltip-overlay: true;
                     clicked => {
-                        Dialog.title = @tr("New Smart Playlist");
-                        Dialog.message = "";
-                        Dialog.confirm-label = @tr("Create");
-                        Dialog.cancel-label = @tr("Cancel");
-                        Dialog.destructive = false;
-                        Dialog.kind = "smart-playlist-editor";
-                        Dialog.target-id = -1;
-                        SmartEditor.request-new();
+                        Dialog.open-new-smart-playlist();
                     }
                 }
 
                 PillDivider { }
 
-                // Portable `.m3u8`, so playlists survive a database wipe. Both are pure
-                // Rust flows over native rfd dialogs.
-                ip := PillButton {
-                    icon: "download";
-                    text: @tr("Import");
-                    tooltip-text: @tr("Import playlists from .m3u8 files");
+                // **Import and Export fold in here rather than carrying a pill each.** Four
+                // labelled pills overran the band, and these two are the rarest, so they are
+                // what gives up the width. Both are still pure Rust flows over native rfd
+                // dialogs.
+                om := PillOverflowMenu {
+                    menu-id: "playlists-overflow";
+                    tooltip-text: @tr("More playlist actions");
                     tooltip-overlay: true;
-                    clicked => { Playlists.import-playlists(); }
-                }
 
-                PillDivider { }
-
-                ep := PillButton {
-                    icon: "upload";
-                    text: @tr("Export");
-                    tooltip-text: @tr("Export playlists to .m3u8 files");
-                    tooltip-overlay: true;
-                    clicked => {
-                        // Chrome inline so `@tr` applies; Rust fills the rows and opens
-                        // from a fresh tick.
-                        Dialog.title = @tr("Export Playlists");
-                        Dialog.message = @tr("Choose playlists to export.");
-                        Dialog.confirm-label = @tr("Export");
-                        Dialog.cancel-label = @tr("Cancel");
-                        Dialog.destructive = false;
-                        Dialog.kind = "export-playlists";
-                        Playlists.request-export-playlists();
+                    MenuItem {
+                        label: @tr("Import");
+                        icon: "download";
+                        clicked => { Playlists.import-playlists(); }
+                    }
+                    MenuItem {
+                        label: @tr("Export");
+                        icon: "upload";
+                        clicked => {
+                            Dialog.prepare-export-playlists();
+                            Playlists.request-export-playlists();
+                        }
                     }
                 }
             }
@@ -345,32 +264,32 @@ export component MyLibraryTabPills inherits Rectangle {
     // under a parked pointer — a resize, Ctrl+B — keeps its tooltip anchored.
     property <length> px: np.hovered ? np.absolute-position.x
         : sp.hovered ? sp.absolute-position.x
-        : ip.hovered ? ip.absolute-position.x
-        : ep.hovered ? ep.absolute-position.x
+        : om.hovered ? om.absolute-position.x
         : 0px;
     property <length> py: np.hovered ? np.absolute-position.y
         : sp.hovered ? sp.absolute-position.y
-        : ip.hovered ? ip.absolute-position.y
-        : ep.hovered ? ep.absolute-position.y
+        : om.hovered ? om.absolute-position.y
         : 0px;
 
     out property <length> tip-x: root.px - root.absolute-position.x;
     out property <length> tip-y: root.py - root.absolute-position.y;
     out property <length> tip-w: np.hovered ? np.width
         : sp.hovered ? sp.width
-        : ip.hovered ? ip.width
-        : ep.hovered ? ep.width
+        : om.hovered ? om.width
         : 0px;
     out property <length> tip-h: np.hovered ? np.height
         : sp.hovered ? sp.height
-        : ip.hovered ? ip.height
-        : ep.hovered ? ep.height
+        : om.hovered ? om.height
         : 0px;
     out property <string> tip-label: np.hovered ? np.tooltip-text
         : sp.hovered ? sp.tooltip-text
-        : ip.hovered ? ip.tooltip-text
-        : ep.hovered ? ep.tooltip-text
+        : om.hovered ? om.tooltip-text
         : "";
-    out property <bool> tip-visible:
-        np.hovered || sp.hovered || ip.hovered || ep.hovered;
+    out property <bool> tip-visible: np.hovered || sp.hovered || om.hovered;
+    // Off the pill rather than spelled here: which of the three wants its trailing edge pinned
+    // is `PillButton`'s rule, and the in-tree mount reads the same property.
+    out property <bool> tip-align-end: np.hovered ? np.icon-only
+        : sp.hovered ? sp.icon-only
+        : om.hovered ? om.icon-only
+        : false;
 }

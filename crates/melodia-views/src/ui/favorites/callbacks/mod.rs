@@ -49,7 +49,7 @@ pub(super) fn wire(
 ) {
     hydrate_sort_from_settings(view_state, fav_ui, &ui.global::<Favorites>());
 
-    covers::wire(ui, fav_ui);
+    covers::wire(ui);
     hero::wire(ui, state, fav_ui);
     subviews::wire(ui, state, fav_ui, artists_ui);
     tracklist::wire(ui, state, fav_ui);

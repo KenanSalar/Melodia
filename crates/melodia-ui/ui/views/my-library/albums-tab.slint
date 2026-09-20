@@ -25,6 +25,7 @@ export component MyLibraryAlbumsTab inherits Rectangle {
         row-height: root.row-h;
         gap: root.gap;
         open-album(id) => { Albums.open-album(id); }
+        go-to-artist(id) => { Albums.go-to-artist(id); }
         covers-generation: Albums.covers-generation;
         request-cover(p, g) => { Albums.request-cover(p, g) }
     }

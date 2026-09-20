@@ -1,5 +1,5 @@
 //! Browse's card view — the flat card list, its chunk into grid rows, and the
-//! grid-tier cover cache behind it.
+//! prewarm projection that picks which covers the grid warms first.
 //!
 //! The grid draws subfolders and files together, folders first and then files in
 //! the list's own display order, so flipping the mode re-presents exactly what the
@@ -8,12 +8,11 @@
 //! mode-gated: rows built for the surface that isn't mounted reach nothing (the
 //! `favorites::grids::apply::build_filtered_grids` precedent).
 //!
-//! The cover tier here is **private and grid-sized**, never the shared row tier
-//! `BrowseUi::cover_thumbs` points at: the two hold buffers an order of magnitude
-//! apart in size, so mixing them would evict the row thumbnails Tracks and the
-//! now-playing bar are also using.
+//! Cards draw from `ui::grid_prewarm::tier()`, the one every card grid shares, never
+//! the row tier `BrowseUi::cover_thumbs` points at: the two hold buffers an order of
+//! magnitude apart in size, so mixing them would evict the row thumbnails Tracks and
+//! the now-playing bar are also using.
 
-use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
 use slint::{ComponentHandle, SharedString};
@@ -25,15 +24,6 @@ use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use melodia_core::entities::browse::{BrowseFile, BrowseFolder};
 use melodia_ui::{
     AppWindow, Browse, BrowseCardGridRow as UiBrowseCardGridRow, BrowseCardRow as UiBrowseCardRow,
-};
-
-/// Fallback LRU capacity for the card cover cache, used at construction and
-/// whenever the display can't be queried. [`tune_cache_for_display`] replaces it
-/// at startup with a resolution-derived cap. Must stay ≥ [`GRID_PREWARM_AHEAD`]
-/// or the prewarm would thrash the LRU it fills.
-pub(super) const DEFAULT_GRID_COVER_CAP: NonZeroUsize = match NonZeroUsize::new(48) {
-    Some(n) => n,
-    None => panic!("DEFAULT_GRID_COVER_CAP > 0"),
 };
 
 /// How many leading cards' covers a fetch or a mode toggle prewarms before the
@@ -90,9 +80,10 @@ pub fn mode_index(g: &Browse<'_>, mode: BrowseViewMode) -> i32 {
 /// pushed would render untranslated.
 pub fn to_browse_card_rows(folders: &[BrowseFolder], files: &[BrowseFile]) -> Vec<UiBrowseCardRow> {
     let mut cards = Vec::with_capacity(folders.len() + files.len());
-    cards.extend(folders.iter().map(|f| UiBrowseCardRow {
+    cards.extend(folders.iter().enumerate().map(|(idx, f)| UiBrowseCardRow {
         id: 0,
         row_index: -1,
+        card_index: len_as_i32(idx),
         path: SharedString::from(f.path.as_str()),
         title: SharedString::from(f.name.as_str()),
         subtitle: SharedString::from(""),
@@ -103,6 +94,7 @@ pub fn to_browse_card_rows(folders: &[BrowseFolder], files: &[BrowseFile]) -> Ve
     cards.extend(files.iter().enumerate().map(|(idx, f)| UiBrowseCardRow {
         id: if f.in_library { clamp_i64_to_i32(f.row.id) } else { 0 },
         row_index: len_as_i32(idx),
+        card_index: len_as_i32(folders.len() + idx),
         path: SharedString::from(""),
         title: SharedString::from(f.row.title.as_str()),
         subtitle: SharedString::from(f.row.artist.as_deref().unwrap_or("")),
@@ -143,24 +135,6 @@ pub fn first_screenful_paths(files: &[BrowseFile]) -> Vec<PathBuf> {
         files.iter().map(|f| f.row.artwork_path.as_deref()),
         GRID_PREWARM_AHEAD,
     )
-}
-
-/// Re-run the mounted card bindings once a scheduled decode has landed — the
-/// `favorites::grids::apply::repaint_covers` contract, never moving off 0.
-pub fn repaint_covers(ui: &AppWindow) {
-    let g = ui.global::<Browse>();
-    let generation = g.get_covers_generation();
-    if generation > 0 {
-        g.set_covers_generation(generation.saturating_add(1));
-    }
-}
-
-/// Size the card cover cache against the display it will be drawn on. Called after `app.show()`
-/// and again on every resize, off `WindowChrome.display-changed`.
-pub fn tune_cache_for_display(app: &AppWindow, browse_ui: &BrowseUi) {
-    let cap = grid_prewarm::cover_cap_for_window(app, DEFAULT_GRID_COVER_CAP);
-    browse_ui.grid_covers.resize(cap);
-    browse_ui.grid_covers.set_thumb_size(grid_prewarm::cover_size_for_window(app));
 }
 
 #[cfg(test)]

@@ -17,6 +17,15 @@ import { WindowChrome } from "shell.slint";
 // `enabled: Dialog.open` and the card `visible: t > 0.01`, so no stale click reaches a button.
 export global Dialog {
     in-out property <bool> open;
+    // Which dialog *intent* is the live one, bumped by every opener below through
+    // `claim-request()`.
+    //
+    // **`open` alone cannot answer that**: four of those openers deliberately leave it false while
+    // Rust fetches the body, so through the whole of that window two menus both read "nothing is
+    // up" and both go on to fill the same properties. The second one's synchronous write then
+    // rides out under the first one's rows. `ui::callbacks::DialogClaim` is the reader, taken at
+    // the click and re-checked past the `await`.
+    in-out property <int> request-generation;
     in-out property <string> title;
     in-out property <string> message;
     in-out property <string> confirm-label: "OK";
@@ -58,6 +67,11 @@ export global Dialog {
     // picker reuses it as the canonical list being added.
     in-out property <[int]> pending-track-ids;
 
+    // The card-grid equivalent, holding *entity* ids. Its own property rather than borrowing the
+    // one above: a delete confirmation carrying playlist ids under a name that says tracks is the
+    // kind of thing a later reader acts on.
+    in-out property <[int]> pending-card-ids;
+
     // Populated by Rust *before* `open` flips, so the dialog opens already filled. Rust maintains
     // the count over enabled rows only, so the footer can disable itself without iterating in
     // Slint. All three are cleared in the teardown.
@@ -96,8 +110,6 @@ export global Dialog {
             WindowChrome.restart-backdrop();
         } else if (root.kind == "clear-queue") {
             Queue.clear-queue();
-        } else if (root.kind == "remove-queue-selected") {
-            Queue.remove-selected();
         } else if (root.kind == "create-playlist") {
             // Name, optional description, and the ids to auto-add once it exists.
             Playlists.create-playlist(
@@ -113,6 +125,8 @@ export global Dialog {
             );
         } else if (root.kind == "delete-playlist") {
             Playlists.delete-playlist(root.target-id);
+        } else if (root.kind == "delete-playlists") {
+            Playlists.delete-playlists(root.pending-card-ids);
         } else if (root.kind == "edit-playlist-artwork") {
             // Empty and touched reverts to auto; empty and untouched is a no-op.
             if (root.mosaic-selection.length == 0) {
@@ -122,8 +136,6 @@ export global Dialog {
             } else {
                 Playlists.apply-mosaic(root.target-id, root.mosaic-selection);
             }
-        } else if (root.kind == "remove-playlist-selected") {
-            PlaylistDetail.remove-selected();
         } else if (root.kind == "export-playlists") {
             // Rust reads the ticked rows, asks where to save them, writes them.
             Playlists.export-selected-playlists();
@@ -180,6 +192,7 @@ export global Dialog {
         root.mosaic-candidates = [];
         root.mosaic-touched = false;
         root.pending-track-ids = [];
+        root.pending-card-ids = [];
         // Clearing the rows unmounts the picker's `for` loop, dropping every row's cover binding
         // and with it the row-tier LRU's `SharedPixelBuffer` Arcs — paired with `heap_trim::trim`.
         root.playlist-pick-rows = [];
@@ -207,15 +220,23 @@ export global Dialog {
     // `closed-teardown()` reason, and they take their payload as parameters, so this file imports no
     // sibling global on their account.
     //
-    // **Only the kinds opened from more than one place are here**, a kind with one caller earning
-    // nothing by moving.
+    // **A kind earns a function here on either of two counts**: two callers share it, or its raise
+    // is deferred past a fetch and so has to take a claim. A kind with one caller that opens in the
+    // same handler earns nothing by moving.
     // `crates/melodia/tests/dialog_openers.rs` walks the tree rather than naming the call sites,
     // what it guards against being the *next* one — a re-spelled populate block opens the right
     // dialog and is free to drift.
 
+    // Seats a new intent, retiring whatever a slower one was still resolving for. Every opener
+    // opens with it, which is the whole of what `request-generation` needs to be true.
+    function claim-request() {
+        root.request-generation += 1;
+    }
+
     // Three call sites: the Playlists tab's New pill, Ctrl+N, and a track row's Add-to-Playlist →
     // "New Playlist…". The last passes the ids to add once the row exists, the other two `[]`.
     public function open-create-playlist(track-ids: [int]) {
+        root.claim-request();
         root.title = @tr("New Playlist");
         root.message = "";
         root.confirm-label = @tr("Create");
@@ -238,6 +259,7 @@ export global Dialog {
     // that lands — which is also why the tab is an argument rather than a property set beside this
     // call, the populate resetting `active-tab` a tick later.
     public function open-tag-editor(heading: string, ids: [int], tab: int) {
+        root.claim-request();
         root.title = heading;
         root.message = "";
         root.confirm-label = @tr("Save");
@@ -250,6 +272,7 @@ export global Dialog {
     // Two call sites — the Playlists grid card's overflow and the open playlist's pill row —
     // differing only in where they read the current name and description from.
     public function open-rename-playlist(id: int, name: string, description: string) {
+        root.claim-request();
         root.title = @tr("Rename Playlist");
         root.message = "";
         root.confirm-label = @tr("Save");
@@ -264,6 +287,7 @@ export global Dialog {
 
     // Same two call sites as the rename above.
     public function open-delete-playlist(id: int) {
+        root.claim-request();
         root.title = @tr("Delete playlist?");
         root.message = @tr("The playlist and its track order will be removed. The tracks themselves stay in your library.");
         root.confirm-label = @tr("Delete");
@@ -272,5 +296,108 @@ export global Dialog {
         root.kind = "delete-playlist";
         root.target-id = id;
         root.open = true;
+    }
+
+    // The card menu's multi-select arm. A separate opener rather than a count-ternary inside the
+    // one above: the singular copy names one playlist's track order, which the plural cannot.
+    public function open-delete-playlists(ids: [int]) {
+        root.claim-request();
+        root.title = @tr("Delete {} playlists?", ids.length);
+        root.message = @tr("The playlists and their track order will be removed. The tracks themselves stay in your library.");
+        root.confirm-label = @tr("Delete");
+        root.cancel-label = @tr("Cancel");
+        root.destructive = true;
+        root.kind = "delete-playlists";
+        root.pending-card-ids = ids;
+        root.open = true;
+    }
+
+    // Two call sites, the open playlist's pill row and the grid card's menu.
+    //
+    // **Shares a `kind` with the opener below and nothing else**, which is why they are two
+    // functions rather than one taking an id: Edit Rules / Save over a list that exists, New Smart
+    // Playlist / Create over one that doesn't. A count-ternary between them would put both
+    // headings behind one call and leave the `target-id` convention implicit.
+    //
+    // Doesn't set `open`, as `open-tag-editor` doesn't: Rust raises the card once the rules load.
+    public function open-edit-smart-rules(id: int) {
+        root.claim-request();
+        root.title = @tr("Edit Rules");
+        root.message = "";
+        root.confirm-label = @tr("Save");
+        root.cancel-label = @tr("Cancel");
+        root.destructive = false;
+        root.kind = "smart-playlist-editor";
+        root.target-id = id;
+        SmartEditor.request-edit(id);
+    }
+
+    // The Playlists tab's New Smart Playlist pill, and its one caller. Here for the claim, as
+    // `prepare-export-playlists` is: `request-new` raises from a fresh tick, so the window where
+    // `open` is still false is real, and chrome written inline through it retires nothing that was
+    // already resolving.
+    //
+    // `target-id` is `-1` for "no list yet", which is what `smart.rs`'s commit branches on.
+    public function open-new-smart-playlist() {
+        root.claim-request();
+        root.title = @tr("New Smart Playlist");
+        root.message = "";
+        root.confirm-label = @tr("Create");
+        root.cancel-label = @tr("Cancel");
+        root.destructive = false;
+        root.kind = "smart-playlist-editor";
+        root.target-id = -1;
+        SmartEditor.request-new();
+    }
+
+    // The picker's chrome, for the track row menu and the card menu both. **The heading is the
+    // caller's**, as `open-tag-editor`'s is: the row menu counts the tracks it holds, and a card
+    // menu counts *cards* and cannot name a track total until Rust has resolved one.
+    //
+    // Doesn't set `open` either: Rust fills the rows and raises it from a fresh tick.
+    public function prepare-add-to-playlist(heading: string) {
+        root.claim-request();
+        root.title = heading;
+        root.message = "";
+        root.confirm-label = @tr("Add");
+        root.cancel-label = @tr("Cancel");
+        root.destructive = false;
+        root.kind = "add-to-playlist";
+    }
+
+    // The mosaic picker's chrome, for the grid card's overflow and the open playlist's own pill.
+    // Both are called from Rust rather than from the markup, the picker having nothing to show
+    // until the candidate pool loads — so this is also the only opener whose strings would
+    // otherwise be spelled in Rust, where `@tr` can't reach them.
+    //
+    // Doesn't set `open`: Rust fills the pool and the preview before it raises the card.
+    public function prepare-edit-artwork(id: int) {
+        root.claim-request();
+        root.title = @tr("Edit Artwork");
+        root.message = "";
+        root.confirm-label = @tr("Apply");
+        root.cancel-label = @tr("Cancel");
+        root.destructive = false;
+        root.kind = "edit-playlist-artwork";
+        root.target-id = id;
+        root.input-text = "";
+        root.mosaic-selection = [];
+        root.mosaic-touched = false;
+    }
+
+    // The export picker's chrome, for the Playlists tab's overflow. One caller, so it is here
+    // for the claim rather than to state the strings once: the raise crosses a fetch, and an
+    // inline block leaves `open` false through all of it without retiring whatever else was
+    // mid-flight.
+    //
+    // Doesn't set `open`: Rust recounts the smart lists before it raises the card.
+    public function prepare-export-playlists() {
+        root.claim-request();
+        root.title = @tr("Export Playlists");
+        root.message = @tr("Choose playlists to export.");
+        root.confirm-label = @tr("Export");
+        root.cancel-label = @tr("Cancel");
+        root.destructive = false;
+        root.kind = "export-playlists";
     }
 }

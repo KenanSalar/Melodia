@@ -1,6 +1,7 @@
 import { ListView } from "std-widgets.slint";
 import { ArtistGridRow } from "../../models.slint";
 import { EntityCard } from "entity-card.slint";
+import { CardCell } from "card-cell.slint";
 
 // Virtualized artist-card grid, `AlbumGrid`'s shape: Rust chunks the flat list
 // into rows of `columns` cards and the inner `ListView` virtualizes by row. The
@@ -43,26 +44,40 @@ export component ArtistGrid inherits Rectangle {
                 spacing: root.gap;
                 alignment: start;
 
-                for artist in grid-row.artists: EntityCard {
+                for artist in grid-row.artists: cell := CardCell {
                     card-width: root.card-width;
                     card-height: root.card-height;
-                    circular: true;
-                    fallback-icon: "person";
-                    artwork-path: artist.image_path;
-                    cover: root.request-cover(artist.image_path, root.covers-generation);
-                    // A pronounced zoom on the placeholder, as on the other
-                    // grids; real artwork stays gentle so a cover doesn't
-                    // jitter inside the tile clip on hover.
-                    cover-scale-hover: artist.image_path == "" ? 1.15 : 1.04;
-                    title: artist.name;
-                    // The separator is punctuation; the album count drops out
-                    // entirely at zero.
-                    subtitle:
-                        @tr("{n} track" | "{n} tracks" % artist.track_count)
-                        + (artist.album_count > 0
-                            ? " · " + @tr("{n} album" | "{n} albums" % artist.album_count)
-                            : "");
-                    clicked => { root.open-artist(artist.id); }
+                    scope: "artists";
+                    card-kind: "artist";
+                    card-id: artist.id;
+
+                    EntityCard {
+                        card-width: root.card-width;
+                        card-height: root.card-height;
+                        circular: true;
+                        fallback-icon: "person";
+                        artwork-path: artist.image_path;
+                        cover: root.request-cover(artist.image_path, root.covers-generation);
+                        // A pronounced zoom on the placeholder, as on the other
+                        // grids; real artwork stays gentle so a cover doesn't
+                        // jitter inside the tile clip on hover.
+                        cover-scale-hover: artist.image_path == "" ? 1.15 : 1.04;
+                        title: artist.name;
+                        // The separator is punctuation; the album count drops out
+                        // entirely at zero.
+                        subtitle:
+                            @tr("{n} track" | "{n} tracks" % artist.track_count)
+                            + (artist.album_count > 0
+                                ? " · " + @tr("{n} album" | "{n} albums" % artist.album_count)
+                                : "");
+                        clicked => { root.open-artist(artist.id); }
+
+                        selectable: true;
+                        selected: cell.selected;
+                        selection-live: cell.selection-live;
+                        select-clicked(shift, ctrl) => { cell.pick(shift, ctrl); }
+                        context-requested(x, y) => { cell.open-menu(x, y); }
+                    }
                 }
             }
         }

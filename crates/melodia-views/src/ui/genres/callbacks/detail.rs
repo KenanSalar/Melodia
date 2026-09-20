@@ -174,6 +174,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
     {
         let weak = weak.clone();
         let gu = genres_ui.clone();
+        detail.on_select_all(move || {
+            let Some(ui) = weak.upgrade() else { return };
+            genres_ui_mod::select_all(&ui, &gu);
+        });
+    }
+
+    {
+        let weak = weak.clone();
+        let gu = genres_ui.clone();
         detail.on_clear_selection(move || {
             let Some(ui) = weak.upgrade() else { return };
             genres_ui_mod::clear_selection(&ui, &gu);

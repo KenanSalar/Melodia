@@ -19,11 +19,13 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
+use crate::ui::callbacks::DialogClaim;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::util::clamp_i64_to_i32;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::smart_criteria as sc;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Dialog, SmartEditor, SmartRuleRow};
 
 /// Wire the Smart-Playlist editor callbacks + install its rules model. See
@@ -117,13 +119,14 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         let state = state.clone();
         se.on_request_edit(move |playlist_id| {
             let id = i64::from(playlist_id);
+            let Some(claim) = DialogClaim::take_from(&weak) else { return };
             let s = state.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
                 let detail = match library::playlists::get_playlist_detail(&s, id).await {
                     Ok(p) => p,
                     Err(e) => {
-                        log::warn!("smart edit fetch {id}: {e}");
+                        log::warn!("smart edit fetch {id}: {}", describe(&e));
                         return;
                     }
                 };
@@ -131,6 +134,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 let description = detail.description.unwrap_or_default();
                 let criteria = sc::SmartCriteria::from_json_opt(detail.smart_criteria.as_deref());
                 let _ = weak.upgrade_in_event_loop(move |ui| {
+                    if !claim.holds(&ui) {
+                        return;
+                    }
                     populate_editor(&ui, &name, &description, &criteria, id);
                     ui.global::<Dialog>().set_open(true);
                 });
@@ -165,11 +171,13 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     {
                         Ok(_) => {
                             if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak).await {
-                                log::warn!("smart create refetch: {e}");
+                                log::warn!("smart create refetch: {}", describe(&e));
                             }
                             log::info!("smart playlist created: {name:?}");
                         }
-                        Err(e) => log::warn!("create smart playlist {name:?}: {e}"),
+                        Err(e) => {
+                            log::warn!("create smart playlist {name:?}: {}", describe(&e));
+                        }
                     }
                 } else {
                     // Name / description are user-owned too — update them along
@@ -179,13 +187,13 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                         library::playlists::update_playlist(&s, target_id, name, description, None)
                             .await
                     {
-                        log::warn!("update smart playlist meta {target_id}: {e}");
+                        log::warn!("update smart playlist meta {target_id}: {}", describe(&e));
                     }
                     if let Err(e) =
                         library::smart_playlists::update_smart_criteria(&s, target_id, &criteria)
                             .await
                     {
-                        log::warn!("update smart criteria {target_id}: {e}");
+                        log::warn!("update smart criteria {target_id}: {}", describe(&e));
                     }
                 }
             });

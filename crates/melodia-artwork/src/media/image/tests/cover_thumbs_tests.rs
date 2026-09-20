@@ -109,12 +109,12 @@ fn row_cover_size_steps_up_for_hidpi_and_covers_the_bar_tile() {
     assert!(row_cover_size(2.0) > row_cover_size(1.0));
 }
 
-/// Every cached buffer was decoded at the old size, so a genuine change has to
-/// drop them — a retune that kept them would serve the wrong resolution for the
-/// rest of the session. A no-op change must keep them, the one call site
-/// running on every boot.
+/// A retune moves what a lookup asks for and drops nothing, because the call site is every winit
+/// `Resized` and a tier emptied under mounted cards leaves each one on its placeholder until
+/// something re-runs its binding. The old buffer keeps painting; the next lookup that may decode
+/// is what replaces it.
 #[test]
-fn set_thumb_size_drops_stale_buffers_only_when_the_size_moves() -> TestResult {
+fn a_retune_keeps_the_old_buffer_and_the_next_lookup_replaces_it() -> TestResult {
     let thumbs = CoverThumbs::new();
     let (_tmp, path) = write_test_png(120)?;
     let _ = thumbs.get_or_load_rgb8(&path);
@@ -124,7 +124,7 @@ fn set_thumb_size_drops_stale_buffers_only_when_the_size_moves() -> TestResult {
     assert_eq!(thumbs.cache.lock().len(), 1, "a no-op retune kept the tier");
 
     thumbs.set_thumb_size(ROW_THUMB_SIZE_HIDPI);
-    assert_eq!(thumbs.cache.lock().len(), 0);
+    assert_eq!(thumbs.cache.lock().len(), 1, "a retune must not empty the tier under its cards");
 
     let buf = thumbs.get_or_load_rgb8(&path).ok_or("cover failed to decode at the retuned size")?;
     assert_eq!(buf.width(), ROW_THUMB_SIZE_HIDPI);
@@ -209,7 +209,8 @@ fn a_remembered_failure_never_re_queues() -> TestResult {
 /// resident again behind a view nobody is looking at.
 ///
 /// The clear races the drain by construction, and the invariant is the same whichever wins: the
-/// batch is either dropped on its epoch or never claimed.
+/// batch is either dropped on its epoch or never claimed. It is announced either way, that being
+/// how a binding left on a placeholder by the batch learns to ask again.
 #[test]
 fn a_reset_drops_the_batch_that_was_decoding_across_it() -> TestResult {
     let thumbs = Arc::new(CoverThumbs::new());
@@ -224,7 +225,8 @@ fn a_reset_drops_the_batch_that_was_decoding_across_it() -> TestResult {
     let _ = thumbs.get_or_schedule_opt(Some(path));
     thumbs.clear();
 
-    // No notification is owed, so this settles the pool rather than awaiting one.
+    // Whether the batch landed and the clear took it, or the clear landed and the batch was
+    // dropped, decides nothing here — this only settles the pool before the tier is read.
     let _ = rx.recv_timeout(DRAIN_TIMEOUT);
     assert!(
         thumbs.cache.lock().is_empty(),
@@ -313,5 +315,125 @@ fn resize_shrinks_cap_and_evicts() -> TestResult {
     let cache = thumbs.cache.lock();
     assert_eq!(cache.cap(), smaller);
     assert_eq!(cache.len(), 2);
+    Ok(())
+}
+
+/// A section leave hands the bytes back and keeps the picture. Cleared instead, every card on the
+/// re-entry paints its fallback glyph for as long as the re-decode takes, which is the whole reason
+/// the leave shrinks.
+#[test]
+fn a_shrink_keeps_the_cover_at_a_fraction_of_the_bytes() -> TestResult {
+    let cap = NonZeroUsize::new(8).ok_or("cap must be > 0")?;
+    let thumbs = CoverThumbs::with_config(256, cap);
+    let (_tmp, path) = write_test_png(600)?;
+
+    let warm = thumbs.get_or_load_rgb8(&path).ok_or("cover failed to decode")?;
+    assert_eq!(warm.width(), 256);
+
+    thumbs.shrink_to_proxy(64);
+
+    let proxy = thumbs.get_cached_opt(path.to_str()).size();
+    assert_eq!(
+        (proxy.width, proxy.height),
+        (64, 64),
+        "a leave must leave the cover behind at the proxy size, not drop it"
+    );
+    Ok(())
+}
+
+/// The recorded size is what `holds` compares, so a proxy has to read as stale to everything that
+/// decodes — otherwise the prewarm that follows the re-entry skips it and the card keeps the soft
+/// tile for the rest of the session.
+#[test]
+fn a_proxy_reads_as_stale_to_the_next_prewarm() -> TestResult {
+    let cap = NonZeroUsize::new(8).ok_or("cap must be > 0")?;
+    let thumbs = CoverThumbs::with_config(256, cap);
+    let (_tmp, path) = write_test_png(600)?;
+    thumbs.get_or_load(&path);
+
+    thumbs.shrink_to_proxy(64);
+    thumbs.prewarm(std::slice::from_ref(&path));
+
+    let refreshed = thumbs.get_cached_opt(path.to_str()).size();
+    assert_eq!(
+        (refreshed.width, refreshed.height),
+        (256, 256),
+        "the prewarm after a leave must replace the proxy at the live tier size"
+    );
+    Ok(())
+}
+
+/// A cover the tier could not decode is remembered so a refilter doesn't keep re-opening a broken
+/// file. A shrink has nothing to shrink there and must not turn that answer back into a miss.
+#[test]
+fn a_shrink_leaves_a_remembered_failure_alone() -> TestResult {
+    let cap = NonZeroUsize::new(8).ok_or("cap must be > 0")?;
+    let thumbs = CoverThumbs::with_config(256, cap);
+    let dir = tempfile::tempdir()?;
+    let broken = dir.path().join("broken.jpg");
+    std::fs::write(&broken, b"not an image")?;
+
+    assert!(thumbs.get_or_load_rgb8(&broken).is_none(), "a broken file must fail to decode");
+    thumbs.shrink_to_proxy(64);
+
+    assert_eq!(
+        thumbs.cache.lock().peek(&broken).map(|held| held.size),
+        Some(256),
+        "a cached failure keeps the size it was attempted at, so it stays remembered"
+    );
+    Ok(())
+}
+
+/// The step is `> 1.25`, and 125% is a real desktop setting sitting exactly on it. The existing
+/// sweep samples either side and never the boundary itself, which is the value a retune moves by
+/// accident.
+#[test]
+fn the_row_tier_steps_up_just_past_the_hidpi_threshold() {
+    assert_eq!(row_cover_size(1.25), ROW_THUMB_SIZE, "125% is still the 1x tier");
+    assert_eq!(row_cover_size(1.26), ROW_THUMB_SIZE_HIDPI);
+}
+
+/// The shrink's predicate is strictly greater, so a cover the tier already drew smaller than the
+/// proxy is left alone, buffer and recorded size both. Rewriting the size would make the next
+/// prewarm re-decode a cover that cannot get any smaller, once per section leave.
+#[test]
+fn a_shrink_leaves_a_cover_already_under_the_proxy_alone() -> TestResult {
+    let cap = NonZeroUsize::new(8).ok_or("cap must be > 0")?;
+    let thumbs = CoverThumbs::with_config(256, cap);
+    let (_tmp, path) = write_test_png(32)?;
+    thumbs.get_or_load(&path);
+
+    thumbs.shrink_to_proxy(64);
+
+    let held = thumbs.get_cached_opt(path.to_str()).size();
+    assert_eq!((held.width, held.height), (32, 32), "the tier is downscale-only either way");
+    assert_eq!(
+        thumbs.cache.lock().peek(&path).map(|entry| entry.size),
+        Some(256),
+        "an entry the shrink skipped keeps the size it was decoded for"
+    );
+    Ok(())
+}
+
+/// The write-back is `peek_mut`, never `put`. Promoting would reorder the tier into the shrink's
+/// own iteration order and hand the next eviction the wrong answer about what was seen last, so a
+/// section leave would silently decide which covers the *next* page gets to keep.
+#[test]
+fn a_shrink_does_not_reorder_the_tier() -> TestResult {
+    let cap = NonZeroUsize::new(2).ok_or("cap must be > 0")?;
+    let thumbs = CoverThumbs::with_config(256, cap);
+    let (_oldest_tmp, oldest) = write_test_png(600)?;
+    let (_newest_tmp, newest) = write_test_png(601)?;
+    thumbs.get_or_load(&oldest);
+    thumbs.get_or_load(&newest);
+
+    thumbs.shrink_to_proxy(64);
+
+    let (_third_tmp, third) = write_test_png(602)?;
+    thumbs.get_or_load(&third);
+
+    let cache = thumbs.cache.lock();
+    assert!(cache.peek(&oldest).is_none(), "the least recently seen cover is the one evicted");
+    assert!(cache.peek(&newest).is_some(), "a shrink is not a use, so it moves nothing");
     Ok(())
 }

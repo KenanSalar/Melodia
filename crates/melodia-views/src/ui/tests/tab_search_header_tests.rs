@@ -82,7 +82,7 @@ fn the_row_hands_out_no_spacing_of_its_own() {
 /// `previous-index`.
 ///
 /// A tab body sits inside its page's own enter transition, so a horizontal slide composed
-/// with the page's fade-up reads as a diagonal on every arrival from the sidebar —
+/// with the page's fade-down reads as a diagonal on every arrival from the sidebar —
 /// `tab-anim-armed` starts `false` and only a real pick arms it, and a page destroyed and
 /// rebuilt on entry re-disarms for free.
 #[test]

@@ -1,9 +1,9 @@
 //! Which of the prepared hashes belongs to the tab on screen.
 //!
-//! The tab-agnostic half — folding the tab and the column count in, and deciding
-//! whether a landed prewarm may announce itself — is [`crate::ui::tab_bar`]'s,
-//! Favorites asking it identically. Pure and named rather than inlined, its
-//! failure mode being a grid that looks correct and is stale.
+//! The tab-agnostic half — folding the tab and the column count into one
+//! signature — is [`crate::ui::tab_bar`]'s, Favorites asking it identically.
+//! Pure and named rather than inlined, its failure mode being a grid that looks
+//! correct and is stale.
 
 use super::apply::PreparedGrid;
 use crate::ui::recently_played::RecentlyPlayedTab;

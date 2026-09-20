@@ -188,9 +188,24 @@ export component MyLibraryView inherits Rectangle {
     // property not being readable back from outside the component declaring it.
     property <length> grid-gap: 20px;
 
+    // Cards on the mounted grid's only row, the one thing the body width can't answer for itself.
+    // Songs is a track list, so it falls through to the width.
+    property <int> grid-lone-row-cards:
+        MyLibrary.tab-idx == MyLibrary.tab-albums
+            ? (Albums.grid-rows.length == 1 ? Albums.grid-rows[0].albums.length : -1)
+            : MyLibrary.tab-idx == MyLibrary.tab-artists
+                ? (Artists.grid-rows.length == 1 ? Artists.grid-rows[0].artists.length : -1)
+                : MyLibrary.tab-idx == MyLibrary.tab-genres
+                    ? (Genres.grid-rows.length == 1 ? Genres.grid-rows[0].genres.length : -1)
+                    : MyLibrary.tab-idx == MyLibrary.tab-playlists
+                        ? (Playlists.grid-rows.length == 1
+                            ? Playlists.grid-rows[0].playlists.length : -1)
+                        : -1;
+
     geom := GridGeometry {
         avail-width: body.width;
         gap: root.grid-gap;
+        lone-row-cards: root.grid-lone-row-cards;
     }
 
     // **The count goes to all four, the re-chunk only to the tab on screen.** Writing all
@@ -379,7 +394,7 @@ export component MyLibraryView inherits Rectangle {
             if root.album-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: NavEnterFrom.below;
+                enter-from: NavEnterFrom.above;
                 enabled: root.body-anim-armed;
                 slide: !band.morphing;
                 AlbumDetailBody { width: 100%; height: 100%; }
@@ -402,7 +417,7 @@ export component MyLibraryView inherits Rectangle {
             if root.artist-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: NavEnterFrom.below;
+                enter-from: NavEnterFrom.above;
                 enabled: root.body-anim-armed;
                 slide: !band.morphing;
                 ArtistDetailBody { width: 100%; height: 100%; }
@@ -425,7 +440,7 @@ export component MyLibraryView inherits Rectangle {
             if root.genre-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: NavEnterFrom.below;
+                enter-from: NavEnterFrom.above;
                 enabled: root.body-anim-armed;
                 slide: !band.morphing;
                 GenreDetailBody { width: 100%; height: 100%; }
@@ -448,7 +463,7 @@ export component MyLibraryView inherits Rectangle {
             if root.playlist-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: NavEnterFrom.below;
+                enter-from: NavEnterFrom.above;
                 enabled: root.body-anim-armed;
                 slide: !band.morphing;
                 PlaylistDetailBody { width: 100%; height: 100%; }
@@ -476,5 +491,6 @@ export component MyLibraryView inherits Rectangle {
         height: pills.tip-h;
         label: pills.tip-label;
         shown: pills.tip-visible;
+        align-end: pills.tip-align-end;
     }
 }

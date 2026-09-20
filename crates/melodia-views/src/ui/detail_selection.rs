@@ -80,7 +80,18 @@ pub fn handle_select_row<V: RowSelectionView>(
     apply_selection_to_rows(view, refs);
 }
 
-/// Reset selection (called from the action-pill "Clear" button).
+/// Take every displayed row into the selection. The anchor is left where the last click put it;
+/// [`crate::ui::list_selection::select_all_curated`] argues why.
+///
+/// **Deliberately not `list_selection::select_all_ids`**, which the flat lists take: the stamper
+/// below is the O(changed) pass over this view's own cache, so folding the two walks into one
+/// would trade a cheaper stamp for a full one.
+pub fn select_all<V: RowSelectionView>(view: &V, refs: &SelectionRefs<'_>) {
+    write_selection(view, crate::ui::list_selection::displayed_ids(&view.track_rows()));
+    apply_selection_to_rows(view, refs);
+}
+
+/// Reset selection (Escape, and the row menu's "Clear selection").
 pub fn clear_selection<V: RowSelectionView>(view: &V, refs: &SelectionRefs<'_>) {
     write_selection(view, Vec::new());
     view.set_anchor(-1);
@@ -131,8 +142,8 @@ pub fn apply_selection_to_rows<V: RowSelectionView>(view: &V, refs: &SelectionRe
 
 /// Drop from `selected-ids` every id `tracks` no longer carries. Each detail view's
 /// re-fetch owes this before it hands the model swap on: the swap re-stamps the rows from
-/// this set, so an id whose track is gone would otherwise keep the "{n} selected" pill and
-/// the applied shadow describing a track nothing can show.
+/// this set, so an id whose track is gone would otherwise keep the menu's count and the
+/// applied shadow describing a track nothing can show.
 ///
 /// Bails on an empty selection, the steady state on the watcher tick that runs this, rather
 /// than building a set over every track in the entity to prove nothing needed dropping. And
@@ -191,7 +202,14 @@ macro_rules! impl_detail_selection {
             $crate::ui::detail_selection::handle_select_row(&g, &refs(view), idx, id, shift, ctrl);
         }
 
-        /// Reset selection (called from the action-pill "Clear" button).
+        /// Take every displayed row into the selection.
+        pub fn select_all(ui: &melodia_ui::AppWindow, view: &$Ui) {
+            use slint::ComponentHandle as _;
+            let g = ui.global::<$Global>();
+            $crate::ui::detail_selection::select_all(&g, &refs(view));
+        }
+
+        /// Reset selection (Escape, and the row menu's "Clear selection").
         pub fn clear_selection(ui: &melodia_ui::AppWindow, view: &$Ui) {
             use slint::ComponentHandle as _;
             let g = ui.global::<$Global>();

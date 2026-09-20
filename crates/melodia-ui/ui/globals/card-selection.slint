@@ -1,0 +1,50 @@
+// Multi-selection for every entity-card grid, shared rather than copied per view.
+//
+// **Every call carries the asking grid's scope, and that argument is the guard.** Rust holds one
+// `(scope, set)` pair, so a grid asking about a scope that is not the current one is answered
+// `false` and replaces the set on its first pick: a stale selection cannot bleed from Albums onto
+// Artists whatever any mount forgets.
+//
+// **It still goes back on section leave**, which the scope guard neither covers nor could. A set
+// the user can no longer see still answers `Selection.any-live()`, so it swallows the Escape meant
+// for the page they moved to, and it comes back live on re-entry, where a card has no second
+// activation and every click picks instead of opening. One `clear()` in each page's leave answers
+// for all seven scopes, so no mount has to know.
+//
+// **Browse is deliberately not here.** Its cards *are* its list rows, sharing `row_index` and
+// `Browse.selected-ids`, so card mode reads the selection list mode already owns and toggling the
+// mode keeps it.
+export global CardSelection {
+    // Both written by Rust; the grids read them through `count-in` / `any-in` below.
+    in-out property <[int]> selected-ids;
+    in-out property <string> scope;
+    // Bumped on every change, and the argument that re-runs `selected`. A `pure` binding is
+    // cached until a dependency is dirtied, which is the same reason every grid threads
+    // `covers-generation` through `request-cover`.
+    in property <int> generation;
+
+    // Per-card, so a selection change re-evaluates one bool per mounted card instead of
+    // restamping a chunk row and rebuilding every card component in it.
+    pure callback selected(string /*scope*/, int /*id*/, int /*generation*/) -> bool;
+
+    // No card index: the grids chunk their rows, so a card has no flat position to offer, and a
+    // re-sort would move it anyway. Rust anchors a shift-range on the **id** instead and resolves
+    // both endpoints against the model at the moment of the click.
+    callback pick(string /*scope*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
+    // Every card the asking scope is drawing. Scope-guarded like `pick`, so a grid can only
+    // ever select its own.
+    callback select-all(string /*scope*/);
+    callback clear();
+
+    // Pure Slint: the two inputs are real properties that dirty on their own, so this needs no
+    // generation and no Rust hop. One home for the scope comparison rather than a ternary
+    // spelled at every mount. The count is what a card menu shows and gates `multi-active` on;
+    // `any-in` over it is what a grid hands its cards as `selection-live`.
+    public pure function count-in(s: string) -> int {
+        return root.scope == s ? root.selected-ids.length : 0;
+    }
+
+    public pure function any-in(s: string) -> bool {
+        return root.count-in(s) > 0;
+    }
+}

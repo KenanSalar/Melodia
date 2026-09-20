@@ -7,7 +7,6 @@ import { Browse } from "../globals/tracks.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { TooltipFrame } from "../components/tooltip-frame.slint";
 import { ActionPill, PillButton, PillDivider } from "../components/action-pill.slint";
-import { SelectionPills } from "../components/selection-pills.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
 import { TrackList } from "../components/track-list/track-list.slint";
 import { CompositeScrollbars } from "../components/composite-scrollbars.slint";
@@ -51,6 +50,8 @@ export component BrowseView inherits Rectangle {
     geom := GridGeometry {
         avail-width: body.width - 2 * root.page-inset;
         gap: root.grid-gap;
+        // List mode empties `card-rows`, so what this answers there reaches no card.
+        lone-row-cards: Browse.card-rows.length == 1 ? Browse.card-rows[0].cards.length : -1;
     }
 
     GridColumnsSync {
@@ -105,16 +106,9 @@ export component BrowseView inherits Rectangle {
                 segment-clicked(p) => { Browse.navigate-to(p); }
             }
 
-            // The selection chip leads, so its group reads to the left of the column
-            // toggle.
             VerticalLayout {
                 alignment: center;
                 ActionPill {
-                    if Browse.selected-ids.length > 0: SelectionPills {
-                        count: Browse.selected-ids.length;
-                        divider-trails: true;
-                        cleared => { Browse.clear-selection(); }
-                    }
                     // Shows the presentation you'd switch *to*, so the glyph names the
                     // action rather than the state. Its tooltip hangs **below**, and so
                     // has to be painted on a higher layer — see the frame at the view
@@ -227,6 +221,8 @@ export component BrowseView inherits Rectangle {
                             toggle-row-favorite(ids, on) => { Browse.toggle-row-favorite(ids, on); }
                             set-row-rating(ids, n) => { Browse.set-row-rating(ids, n); }
                             select-row(idx, id, sh, ct) => { Browse.select-row(idx, id, sh, ct); }
+                            select-all => { Browse.select-all(); }
+                            clear-selection => { Browse.clear-selection(); }
                             // Browse has no filter input — nothing to blur.
                             request-blur-search => { }
                             go-to-album(aid) => { Browse.go-to-album(aid); }
@@ -259,7 +255,24 @@ export component BrowseView inherits Rectangle {
 
                                 request-cover(p, gen) => { Browse.request-card-cover(p, gen) }
                                 folder-clicked(path) => { Browse.open-folder(path); }
+                                select-all => { Browse.select-all(); }
+                                clear-selection => { Browse.clear-selection(); }
                                 track-clicked(id, idx) => { Browse.play-row(id, idx); }
+
+                                // The list's selection, not the shared `CardSelection` — the cards
+                                // are these rows, so the mode toggle keeps it and the card's own
+                                // menu carries the count and the batch actions.
+                                selected-ids: Browse.selected-ids;
+                                selection-generation: Browse.selection-generation;
+                                is-card-selected(id, gen) => { Browse.is-card-selected(id, gen) }
+                                select-card(idx, id, shift, ctrl) => {
+                                    Browse.select-row(idx, id, shift, ctrl);
+                                }
+
+                                play-folder(path) => { Browse.play-folder(path); }
+                                play-folder-next(path) => { Browse.play-folder-next(path); }
+                                queue-folder(path) => { Browse.queue-folder(path); }
+                                reveal-folder(path) => { Browse.reveal-folder(path); }
                             }
                         }
                     }
@@ -274,10 +287,10 @@ export component BrowseView inherits Rectangle {
                 action-icon: "settings";
                 action-label: @tr("Open Settings");
                 // Persisted like every other nav entry, so the tab sticks, and
-                // marked like one too — lateral nav fades up from `below`, and
+                // marked like one too — lateral nav drops in from `above`, and
                 // an unwritten edge is whatever the last drill left behind.
                 action-clicked => {
-                    Nav.pending-enter-from = NavEnterFrom.below;
+                    Nav.pending-enter-from = NavEnterFrom.above;
                     Nav.selected-index = 9;
                     Nav.persist-selected-index(9);
                 }
@@ -344,5 +357,8 @@ export component BrowseView inherits Rectangle {
         height: view-toggle.height;
         label: root.card-mode ? @tr("List view") : @tr("Card view");
         shown: view-toggle.hovered;
+        // Off the pill: card mode drops the two segments after the toggle, leaving it at the
+        // chip's trailing edge, and nothing here has to know that.
+        align-end: view-toggle.icon-only;
     }
 }

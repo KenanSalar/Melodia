@@ -28,6 +28,8 @@ export component FavoritesArtistsTab inherits Rectangle {
         gap: root.gap;
         circular: true;
         fallback-icon: "person";
+        card-kind: "artist";
+        selection-scope: "fav-artists";
         covers-generation: Favorites.covers-generation;
         request-cover(p, gen) => { Favorites.request-artist-cover(p, gen) }
         row-clicked(id) => { Favorites.open-artist(id); }

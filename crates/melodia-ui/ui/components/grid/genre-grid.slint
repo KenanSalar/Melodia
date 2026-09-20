@@ -1,6 +1,7 @@
 import { ListView } from "std-widgets.slint";
 import { GenreGridRow } from "../../models.slint";
 import { EntityCard } from "entity-card.slint";
+import { CardCell } from "card-cell.slint";
 
 // Virtualized genre-card grid: `AlbumGrid` minus the cover plumbing. A genre has no artwork, so
 // each card falls back to its glyph and nothing here allocates an `Image` or needs an LRU. Rust
@@ -43,28 +44,42 @@ export component GenreGrid inherits Rectangle {
                 spacing: root.gap;
                 alignment: start;
 
-                for genre in grid-row.genres: EntityCard {
+                for genre in grid-row.genres: cell := CardCell {
                     card-width: root.card-width;
                     card-height: root.card-height;
-                    // With no cover binding the card paints its glyph over a
-                    // name-hashed gradient. Rust precomputes both stops on
-                    // three independent axes — hue, hue offset, S/V jitter — so
-                    // cards stay distinguishable even at neighbouring hues.
-                    fallback-icon: "theater_comedy";
-                    tile-bg: @linear-gradient(135deg,
-                        genre.tile_color_1,
-                        genre.tile_color_2);
-                    tile-icon-color: #ffffff.with-alpha(0.3);
-                    // The pronounced zoom, not the covers' gentle one: on a glyph drawn at just
-                    // over half the tile, the gentle one reads as no zoom at all.
-                    cover-scale-hover: 1.15;
-                    title: genre.name;
-                    // The duration arrives display-ready from Rust; the count takes the Artists
-                    // grid's plural pair, a genre being able to exist for a single track.
-                    subtitle:
-                        @tr("{n} track" | "{n} tracks" % genre.track_count)
-                        + " · " + genre.display_duration;
-                    clicked => { root.open-genre(genre.id); }
+                    scope: "genres";
+                    card-kind: "genre";
+                    card-id: genre.id;
+
+                    EntityCard {
+                        card-width: root.card-width;
+                        card-height: root.card-height;
+                        // With no cover binding the card paints its glyph over a
+                        // name-hashed gradient. Rust precomputes both stops on
+                        // three independent axes — hue, hue offset, S/V jitter — so
+                        // cards stay distinguishable even at neighbouring hues.
+                        fallback-icon: "theater_comedy";
+                        tile-bg: @linear-gradient(135deg,
+                            genre.tile_color_1,
+                            genre.tile_color_2);
+                        tile-icon-color: #ffffff.with-alpha(0.3);
+                        // The pronounced zoom, not the covers' gentle one: on a glyph drawn at
+                        // just over half the tile, the gentle one reads as no zoom at all.
+                        cover-scale-hover: 1.15;
+                        title: genre.name;
+                        // The duration arrives display-ready from Rust; the count takes the
+                        // Artists grid's plural pair, a genre being able to exist for one track.
+                        subtitle:
+                            @tr("{n} track" | "{n} tracks" % genre.track_count)
+                            + " · " + genre.display_duration;
+                        clicked => { root.open-genre(genre.id); }
+
+                        selectable: true;
+                        selected: cell.selected;
+                        selection-live: cell.selection-live;
+                        select-clicked(shift, ctrl) => { cell.pick(shift, ctrl); }
+                        context-requested(x, y) => { cell.open-menu(x, y); }
+                    }
                 }
             }
         }

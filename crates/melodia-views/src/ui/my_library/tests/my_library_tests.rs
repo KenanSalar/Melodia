@@ -919,16 +919,19 @@ fn the_sort_row_holds_every_per_pill_contract() {
 /// **The Playlists pills publish their tooltip's anchor; the sheet draws it.**
 ///
 /// Anchored on the pill itself it would be drawn by the band, which the body paints over
-/// and which clips besides — four tooltips that are simply never seen. The frame has to
-/// be the sheet's, declared after the scroll body, and it reaches the pills through the
-/// six anchors below. That is also what forces the row to sit at the pill component's
-/// root rather than under an `if` like its four siblings.
+/// and which clips besides — tooltips that are simply never seen. The frame has to be the
+/// sheet's, declared after the scroll body, and it reaches the pills through the six
+/// anchors below. That is also what forces the row to sit at the pill component's root
+/// rather than under an `if` like its four siblings.
+///
+/// Three, not four: Import and Export gave up their pills to the overflow menu when the
+/// selection group arrived, and a `MenuItem` carries no tooltip.
 #[test]
 fn the_playlist_action_tooltip_is_published_rather_than_drawn() {
     assert_eq!(
         PILLS.matches("tooltip-overlay: true;").count(),
-        4,
-        "all four Playlists action pills must suppress their in-tree tooltip",
+        3,
+        "every Playlists action pill must suppress its in-tree tooltip",
     );
     for anchor in ["tip-x", "tip-y", "tip-w", "tip-h", "tip-label", "tip-visible"] {
         assert!(
@@ -1136,7 +1139,7 @@ fn the_replay_flips_the_section_against_the_index_the_close_left_behind() {
 ///
 /// The branches then differ only on where they enter *from*: a tab pick with the band
 /// still is a move along the bar, so the five tab bodies take its direction, and a drill
-/// is not, so the four details keep `below`.
+/// is not, so the four details keep `above`.
 ///
 /// Walking the branches rather than listing them is the point — a tenth added later with
 /// `enter-from: Nav.pending-enter-from` copied off a sibling page compiles, looks right
@@ -1181,7 +1184,7 @@ fn every_body_branch_enters_on_an_axis_the_band_is_not_already_moving() {
         let (expected, why) = if head.contains("MyLibrary.tab-idx") {
             ("enter-from: band.tab-enter-from;", "a tab pick is a move along the bar")
         } else {
-            ("enter-from: NavEnterFrom.below;", "a drill is not a move along the bar")
+            ("enter-from: NavEnterFrom.above;", "a drill is not a move along the bar")
         };
         assert!(
             branch.contains(expected),

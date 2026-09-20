@@ -7,8 +7,7 @@ use std::sync::Arc;
 
 use slint::ComponentHandle;
 
-use crate::ui::grid_prewarm;
-use crate::ui::radio::{RadioTab, RadioUi, browse, kept, mounted_tab};
+use crate::ui::radio::{RadioTab, RadioUi, browse, covers, kept, mounted_tab};
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Radio};
 
@@ -52,11 +51,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     }
 
     {
-        // The card's lazy logo lookup. `grid_cover` is the branch every grid takes: cache-only
-        // while the generation is `0`, scheduling past it, and never decoding on this thread.
+        // The card's lazy logo lookup: cache-only while the generation is `0`, scheduling past
+        // it, and never decoding on this thread.
         let ru = radio_ui.clone();
         g.on_request_logo(move |artwork_path, generation| {
-            grid_prewarm::grid_cover(&ru.covers, &artwork_path, generation)
+            covers::logo_cover(&ru, &artwork_path, generation)
         });
     }
 }

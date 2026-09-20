@@ -52,7 +52,15 @@ pub fn handle_select_row(
     list_selection::stamp_rows_selected(&g.get_rows(), &id_set);
 }
 
-/// Reset selection (called from the action-pill "Clear" button).
+/// Take every displayed row into the selection. The anchor is left where the last click put it;
+/// [`crate::ui::list_selection::select_all_curated`] argues why.
+pub fn select_all(ui: &AppWindow) {
+    let g = ui.global::<Tracks>();
+    let ids = list_selection::select_all_ids(&g.get_rows());
+    write_selection(&g, ids);
+}
+
+/// Reset selection (Escape, the row menu's "Clear selection", and section-leave).
 pub fn clear_selection(ui: &AppWindow) {
     let g = ui.global::<Tracks>();
     write_selection(&g, Vec::new());

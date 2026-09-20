@@ -102,10 +102,19 @@ export component RadioView inherits Rectangle {
     // text height is the one thing Radio moves, its card carrying a third line.
     property <length> grid-gap: 20px;
 
+    // Cards on the mounted grid's only row, the one thing the body width can't answer for itself.
+    property <int> grid-lone-row-cards:
+        Radio.tab-idx == Radio.tab-browse
+            ? (Radio.browse-rows.length == 1 ? Radio.browse-rows[0].stations.length : -1)
+            : Radio.tab-idx == Radio.tab-favorites
+                ? (Radio.favorites-rows.length == 1 ? Radio.favorites-rows[0].stations.length : -1)
+                : (Radio.recent-rows.length == 1 ? Radio.recent-rows[0].stations.length : -1);
+
     geom := GridGeometry {
         avail-width: body.width;
         gap: root.grid-gap;
         card-text-h: 66px;
+        lone-row-cards: root.grid-lone-row-cards;
     }
 
     // One count for three grids: Rust re-chunks whichever tab is mounted, so the callback fires
@@ -182,7 +191,7 @@ export component RadioView inherits Rectangle {
             use-a: Radio.blur-use-a;
             has-blur: Radio.has-blur;
 
-            RadioTabPills { }
+            pills := RadioTabPills { }
         }
 
         body := Rectangle {
@@ -259,12 +268,12 @@ export component RadioView inherits Rectangle {
                 }
             }
 
-            // A fixed `below`, not the band's direction: a drill is not a move along the tab bar,
+            // A fixed `above`, not the band's direction: a drill is not a move along the tab bar,
             // and the body holds still while the band morphs above it either way.
             if Radio.detail-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: NavEnterFrom.below;
+                enter-from: NavEnterFrom.above;
                 enabled: root.body-anim-armed;
                 slide: !band.morphing;
                 RadioStationDetail {
@@ -275,8 +284,9 @@ export component RadioView inherits Rectangle {
         }
     }
 
-    // On a layer of its own: the bar sits in the band, and Slint paints in declaration order, so
-    // anything the band owns is covered by the body underneath.
+    // On a layer of its own: the bar and the pills sit in the band, and Slint paints in
+    // declaration order, so anything the band owns is covered by the body underneath — and the
+    // band clips its own height besides.
     TooltipFrame {
         x: band.absolute-position.x - root.absolute-position.x + band.tip-x;
         y: band.absolute-position.y - root.absolute-position.y + band.tip-y;
@@ -284,5 +294,15 @@ export component RadioView inherits Rectangle {
         height: band.tip-h;
         label: band.tip-label;
         shown: band.tip-visible;
+    }
+
+    TooltipFrame {
+        x: pills.absolute-position.x - root.absolute-position.x + pills.tip-x;
+        y: pills.absolute-position.y - root.absolute-position.y + pills.tip-y;
+        width: pills.tip-w;
+        height: pills.tip-h;
+        label: pills.tip-label;
+        shown: pills.tip-visible;
+        align-end: pills.tip-align-end;
     }
 }
