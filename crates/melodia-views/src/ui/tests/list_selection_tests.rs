@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 
-use super::{compute_click_selection, restamp_selected};
+use slint::{Model, ModelExt, ModelRc, VecModel};
+
+use super::{compute_click_selection, displayed_ids, restamp_selected, select_all_ids};
 use melodia_ui::TrackListRow as UiTrackListRow;
 
 /// Displayed order used by every shift-range case below.
@@ -106,4 +108,61 @@ fn restamp_with_empty_set_is_a_no_op() {
     // Empty set early-returns without clearing existing flags — restamp runs
     // on freshly-built (all-false) rows; clearing is stamp_rows_selected's job.
     assert!(rows[0].selected);
+}
+
+fn row(id: i32, enabled: bool, selected: bool) -> UiTrackListRow {
+    UiTrackListRow { id, enabled, selected, ..Default::default() }
+}
+
+/// Browse's disk-only rows carry both halves of the predicate at once, so one of them going
+/// missing looks like nothing until a folder holding an unimported file is selected.
+#[test]
+fn a_disk_only_row_is_not_something_a_selection_can_hold() {
+    let rows: ModelRc<UiTrackListRow> = ModelRc::new(VecModel::from(vec![
+        row(10, true, false),
+        row(0, false, false),
+        row(20, false, false),
+        row(0, true, false),
+        row(30, true, false),
+    ]));
+    assert_eq!(displayed_ids(&rows), [10, 30]);
+}
+
+/// The half [`displayed_ids`] cannot do, and the reason `select_all_ids` exists: a disabled row
+/// left stamped from an earlier pick reads as selected while its id is not in the set.
+#[test]
+fn select_all_stamps_the_rows_it_keeps_and_unstamps_the_rest() {
+    let model = VecModel::from(vec![
+        row(10, true, false),
+        row(0, false, true),
+        row(20, true, true),
+        row(30, false, true),
+    ]);
+    let rows: ModelRc<UiTrackListRow> = ModelRc::new(model);
+
+    assert_eq!(select_all_ids(&rows), [10, 20]);
+
+    let stamped: Vec<bool> = rows.iter().map(|r| r.selected).collect();
+    assert_eq!(stamped, [true, false, true, false]);
+}
+
+#[test]
+fn select_all_on_an_empty_model_yields_nothing() {
+    let rows: ModelRc<UiTrackListRow> = ModelRc::new(VecModel::<UiTrackListRow>::default());
+    assert_eq!(select_all_ids(&rows), Vec::<i32>::new());
+}
+
+/// The downcast-miss arm. It stamps nothing, which is `stamp_rows_selected`'s own early return,
+/// but it still owes the caller the ids or Select All silently selects an empty set.
+#[test]
+fn a_model_that_is_not_a_vec_model_still_answers_with_its_ids() {
+    let rows: ModelRc<UiTrackListRow> = ModelRc::new(
+        VecModel::from(vec![row(10, true, false), row(0, true, false), row(20, true, false)])
+            .map(|r: UiTrackListRow| r),
+    );
+    assert!(
+        rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>().is_none(),
+        "the fixture has to miss the downcast or it tests the arm above"
+    );
+    assert_eq!(select_all_ids(&rows), [10, 20]);
 }

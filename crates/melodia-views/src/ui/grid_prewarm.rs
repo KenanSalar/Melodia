@@ -42,6 +42,13 @@ pub const GRID_COVER_CAP_FALLBACK: NonZeroUsize = match NonZeroUsize::new(48) {
 /// rounding error at any value worth considering. The one number here to set by eye.
 pub const PROXY_COVER_DIM: u32 = 64;
 
+/// **A proxy has to read as stale**, which it only does while it is strictly under every size the
+/// tier can be asked for: `holds` compares the recorded size, so a proxy equal to a live one is
+/// current and the prewarm behind a re-entry skips it, leaving the page soft for the session.
+/// [`GRID_COVER_FALLBACK`] is the smallest of those sizes, [`cover_size`]'s own floor being higher;
+/// `grid_prewarm_tests` sweeps the derived half.
+const _: () = assert!(PROXY_COVER_DIM < GRID_COVER_FALLBACK, "a proxy must read as stale");
+
 /// The cover tier every card grid draws from.
 ///
 /// A module singleton rather than a field threaded through `ViewCtx` and six view handles,

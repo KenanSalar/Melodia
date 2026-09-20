@@ -383,3 +383,57 @@ fn a_shrink_leaves_a_remembered_failure_alone() -> TestResult {
     );
     Ok(())
 }
+
+/// The step is `> 1.25`, and 125% is a real desktop setting sitting exactly on it. The existing
+/// sweep samples either side and never the boundary itself, which is the value a retune moves by
+/// accident.
+#[test]
+fn the_row_tier_steps_up_just_past_the_hidpi_threshold() {
+    assert_eq!(row_cover_size(1.25), ROW_THUMB_SIZE, "125% is still the 1x tier");
+    assert_eq!(row_cover_size(1.26), ROW_THUMB_SIZE_HIDPI);
+}
+
+/// The shrink's predicate is strictly greater, so a cover the tier already drew smaller than the
+/// proxy is left alone, buffer and recorded size both. Rewriting the size would make the next
+/// prewarm re-decode a cover that cannot get any smaller, once per section leave.
+#[test]
+fn a_shrink_leaves_a_cover_already_under_the_proxy_alone() -> TestResult {
+    let cap = NonZeroUsize::new(8).ok_or("cap must be > 0")?;
+    let thumbs = CoverThumbs::with_config(256, cap);
+    let (_tmp, path) = write_test_png(32)?;
+    thumbs.get_or_load(&path);
+
+    thumbs.shrink_to_proxy(64);
+
+    let held = thumbs.get_cached_opt(path.to_str()).size();
+    assert_eq!((held.width, held.height), (32, 32), "the tier is downscale-only either way");
+    assert_eq!(
+        thumbs.cache.lock().peek(&path).map(|entry| entry.size),
+        Some(256),
+        "an entry the shrink skipped keeps the size it was decoded for"
+    );
+    Ok(())
+}
+
+/// The write-back is `peek_mut`, never `put`. Promoting would reorder the tier into the shrink's
+/// own iteration order and hand the next eviction the wrong answer about what was seen last, so a
+/// section leave would silently decide which covers the *next* page gets to keep.
+#[test]
+fn a_shrink_does_not_reorder_the_tier() -> TestResult {
+    let cap = NonZeroUsize::new(2).ok_or("cap must be > 0")?;
+    let thumbs = CoverThumbs::with_config(256, cap);
+    let (_oldest_tmp, oldest) = write_test_png(600)?;
+    let (_newest_tmp, newest) = write_test_png(601)?;
+    thumbs.get_or_load(&oldest);
+    thumbs.get_or_load(&newest);
+
+    thumbs.shrink_to_proxy(64);
+
+    let (_third_tmp, third) = write_test_png(602)?;
+    thumbs.get_or_load(&third);
+
+    let cache = thumbs.cache.lock();
+    assert!(cache.peek(&oldest).is_none(), "the least recently seen cover is the one evicted");
+    assert!(cache.peek(&newest).is_some(), "a shrink is not a use, so it moves nothing");
+    Ok(())
+}

@@ -57,7 +57,9 @@ this file is what builds, looks right, and is wrong.
   gap, and a short one turns the wait into a jump rather than into simultaneity, which reads as
   an easing problem and is not one. `entity-card.slint` carries both halves: its selection ring
   is a plain `border-width` and its tint is an `if root.selected` fill with no `animate` at all,
-  `selection-pill.slint`'s shape, which is why a track row's pick never had it.
+  `selection-pill.slint`'s shape, which is why a track row's pick never had it. Pinned by
+  `crates/melodia/tests/card_selection.rs`'s `the_card_selection_ring_and_tint_never_animate`,
+  which reads the tint's own braces: an `animate` elsewhere in that file is ordinary.
 
 - **A `for` over a `pure callback`'s model rebuilds every instance whenever one of the call's
   inputs is marked dirty, not when its answer changes.** The same structural dirt as the entry

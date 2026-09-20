@@ -124,7 +124,10 @@ silently miss the other.
   another's set, and says nothing about a set no grid is showing. One `clear()` in each of the six
   `on_section_active_changed` bodies covers all seven scopes, since the state is one global keyed
   by one scope string. A card grid is the surface that needs it most, having no pill and no second
-  activation: a set left live turns every click into a pick.
+  activation: a set left live turns every click into a pick. Held by
+  `crates/melodia/tests/card_selection.rs`'s `every_section_leave_hands_its_card_selection_back`,
+  an **equality** over the six because a floor cannot see one slice stop clearing; the same file
+  holds the dispatcher's ten surfaces and the Escape arm's place at the bottom of the chain.
 
 - **A card menu offers both directions rather than reading a state it hasn't got.** A card is a
   set, so the `row-is-favorite` a row menu toggles on has no honest answer over one half
@@ -139,6 +142,8 @@ silently miss the other.
   `playlist-grid.slint` mounts the pencil and the image button for every playlist and the detail
   band offers both too. Only Edit Rules is a smart playlist's alone. Check the hover trio and the
   detail band before adding a gate, all three being the same operation reached three ways.
+  `card_selection.rs`'s `a_card_menu_entry_is_gated_on_the_operation_and_not_the_kind` holds
+  `card-is-smart` to that one entry.
 
 - **`MetaChip`/`MetaChipStrip` are decorative** — no `TouchArea`, no selected state. The
   *interactive* pill is `chip-group.slint`'s `Chip`. Deliberately not one component: one states a
@@ -217,7 +222,9 @@ three components that answer it, and each argues its geometry at its own file.
   Per-kind menu arms (`go-to-artist`, the playlist four, `play-single`) are callbacks the grid
   forwards, inert on a kind that never raises them. **`BrowseCardGrid` is the one exemption**: its
   cards are its list rows, so it reads `Browse.selected-ids` and keys its snapshot on `card_index`,
-  every folder and disk-only file holding `id == 0`.
+  every folder and disk-only file holding `id == 0`. `card_selection.rs`'s
+  `a_card_grid_mount_states_its_scope_and_nothing_else` walks the `.slint` tree for the four files
+  that may name `CardSelection` at all, so the exemption has to stay one.
 
 - **A strip and a grid are different components on purpose.** `HorizontalCardStrip` walks a plain
   `for` — affordable for a capped carousel, not for an uncapped page, where every card is built and
@@ -238,7 +245,9 @@ three components that answer it, and each argues its geometry at its own file.
     `rows.length == 1 ? rows[0].<field>.length : -1`, spelled at each of the five mounts against
     whichever model the mounted tab drew. `.length` lowers to `track_row_count_changes()` and an
     index to `row_data_tracked(…)`, so the binding re-runs when Rust swaps the model in; a
-    published count would be a second thing to write, in order, at all ten chunk sites.
+    published count would be a second thing to write, in order, at all ten chunk sites. Pinned by
+    `card_selection.rs`'s `a_lone_row_grid_asks_its_model_how_many_cards_it_drew`, which reads each
+    mount's binding value rather than listing the shapes the five spell it in.
   - **`max-card-w` is where an under-filled row stops growing**, and `grid_prewarm::MAX_CARD_W`
     mirrors it so the tier covers what is drawn. The pin holding the two spellings together is
     `grid_prewarm_tests::the_card_constants_are_the_ones_the_component_declares`, which reads the

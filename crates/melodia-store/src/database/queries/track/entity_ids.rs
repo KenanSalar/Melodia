@@ -130,3 +130,7 @@ pub async fn track_ids_under_directory(db: &DbPool, dir_path: &str) -> Result<Ve
     .await?;
     Ok(ids)
 }
+
+#[cfg(test)]
+#[path = "../tests/entity_ids_tests.rs"]
+mod tests;

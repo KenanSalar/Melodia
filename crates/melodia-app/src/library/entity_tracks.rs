@@ -141,3 +141,7 @@ fn dedupe(ids: impl Iterator<Item = i64>) -> Vec<i64> {
     let mut seen: HashSet<i64> = HashSet::new();
     ids.filter(|id| seen.insert(*id)).collect()
 }
+
+#[cfg(test)]
+#[path = "tests/entity_tracks_tests.rs"]
+mod tests;

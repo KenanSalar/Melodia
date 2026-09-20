@@ -1227,3 +1227,26 @@ async fn a_skip_batch_one_row_past_a_statement_counts_every_track() -> Result<()
     assert_eq!(rows_counted(&db, "skip_count", 1).await?, 334);
     Ok(())
 }
+
+/// A folder is named by the user and `_` is `LIKE`'s single-character wildcard, so an unescaped
+/// one makes "play this folder" reach a sibling. The replace order is the other half: escaping the
+/// backslash last would re-escape the ones the `%` and `_` arms just introduced.
+#[test]
+fn a_folder_name_cannot_smuggle_a_like_wildcard() {
+    use super::list::{LIKE_SEPARATOR, directory_like_prefix};
+
+    let cases = [
+        ("plain", "plain"),
+        ("50% off", "50\\% off"),
+        ("track_01", "track\\_01"),
+        ("back\\slash", "back\\\\slash"),
+        ("_%\\", "\\_\\%\\\\"),
+    ];
+    for (dir, escaped) in cases {
+        assert_eq!(
+            directory_like_prefix(dir),
+            format!("{escaped}{LIKE_SEPARATOR}"),
+            "folder {dir:?}"
+        );
+    }
+}

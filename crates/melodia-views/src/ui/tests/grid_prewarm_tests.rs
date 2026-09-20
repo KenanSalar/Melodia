@@ -283,3 +283,32 @@ fn a_miss_never_decodes_on_the_calling_thread() -> Result<(), Box<dyn std::error
     );
     Ok(())
 }
+
+/// The derived half of the relation the `const _` beside [`PROXY_COVER_DIM`] asserts for the
+/// fallback: a proxy that equals a size the tier can be tuned to reads as current, and the
+/// prewarm behind a re-entry skips it. On screen that is every card on the page keeping its soft
+/// tile for the rest of the session.
+#[test]
+fn the_proxy_stays_under_every_size_the_tier_can_take() {
+    for logical_w in [320, 480, 640, 960, 1280, 1920, 2560, 3840, 7680] {
+        for scale in [1.0, 1.25, 1.5, 2.0, 3.0] {
+            let size = super::cover_size(logical_w, scale);
+            assert!(
+                PROXY_COVER_DIM < size,
+                "the tier answers {size} px at {logical_w} logical / {scale}x, which a \
+                 {PROXY_COVER_DIM} px proxy would read as current"
+            );
+        }
+    }
+}
+
+/// The window-less boot and a backend that answers nonsense both arrive here as a scale the tier
+/// cannot use. Taken literally, a zero scale clamps to `MIN_CARD_W` and a negative one is an
+/// `as u32` saturating to zero.
+#[test]
+fn a_scale_the_display_cannot_have_falls_back_to_one() {
+    let sane = super::cover_size(1280, 1.0);
+    for nonsense in [0.0, -2.0, f64::NAN] {
+        assert_eq!(super::cover_size(1280, nonsense), sane, "scale {nonsense}");
+    }
+}

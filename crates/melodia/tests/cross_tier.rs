@@ -211,3 +211,149 @@ fn migration_sources(
     }
     Ok((sources, unreadable))
 }
+
+/// Where the page's own default sort is spelled, against the arm of `ui::track_sort` each
+/// `queries::track::entity_ids` clause was written to reproduce.
+const DETAIL_DEFAULTS: [(&str, &str, &str); 3] = [
+    ("artists", include_str!("../../melodia-views/src/ui/artists/detail.rs"), "album"),
+    ("genres", include_str!("../../melodia-views/src/ui/genres/detail.rs"), "album"),
+    ("albums", include_str!("../../melodia-views/src/ui/albums/detail.rs"), "track_number"),
+];
+
+/// One row of [`sorted_library`]'s fixture: title, album, disc, track.
+type StagedTrack = (&'static str, Option<&'static str>, Option<i32>, Option<i32>);
+
+/// The library the two sides are asked about, plus the ids to ask with.
+struct Sorted {
+    db: melodia_store::database::DbPool,
+    album: i64,
+    artist: i64,
+    genre: i64,
+}
+
+/// A library built out of the partitions the two sides answer differently: a missing album where
+/// the comparator reads `""` and `SQLite` sorts `NULL` first, an untagged track number where the
+/// comparator sorts last and `SQLite` sorts first, and a case-mixed album name. Its title order,
+/// its `sort_key` order and its album order all disagree, so a tidy fixture's accidental
+/// agreement cannot carry the assertion.
+async fn sorted_library() -> Result<Sorted, AppError> {
+    use melodia_core::entities::artist::ArtistCredit;
+    use melodia_core::entities::genre::GenreList;
+    use melodia_store::database::DbPool;
+    use melodia_store::database::queries;
+    use melodia_store::database::queries::fixtures::{insert_tagged_track, make_test_metadata};
+
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+
+    let staged: [StagedTrack; 8] = [
+        // The album arm's own partitions: an untagged number and a zero disc beside real ones.
+        ("One", Some("Mid"), Some(1), None),
+        ("Two", Some("Mid"), Some(1), Some(1)),
+        ("Three", Some("Mid"), Some(2), Some(1)),
+        ("Eight", Some("Mid"), Some(0), Some(2)),
+        // The album term's: a missing name, an empty one, and a case pair that `COLLATE NOCASE`
+        // and `BINARY` order differently.
+        ("Four", None, Some(1), Some(0)),
+        ("Five", Some(""), None, Some(1)),
+        ("Six", Some("apple"), Some(1), Some(1)),
+        ("Seven", Some("Banana"), Some(1), Some(1)),
+    ];
+    for (title, album, disc, track) in staged {
+        let mut meta = make_test_metadata(title);
+        meta.artist = ArtistCredit::from_name("Sorted Artist");
+        meta.genres = GenreList::from_name("Sorted Genre");
+        meta.album = album.map(str::to_owned);
+        meta.disc_number = disc;
+        meta.track_number = track;
+        let path = std::path::Path::new("/music").join(format!("{title}.mp3"));
+        insert_tagged_track(&db, &path.to_string_lossy(), &meta).await?;
+    }
+
+    let album = sqlx::query_scalar::<_, i64>("SELECT id FROM albums WHERE name = 'Mid'")
+        .fetch_one(db.read())
+        .await?;
+    let artist =
+        sqlx::query_scalar::<_, i64>("SELECT id FROM artists WHERE name = 'Sorted Artist'")
+            .fetch_one(db.read())
+            .await?;
+    let genre = sqlx::query_scalar::<_, i64>("SELECT id FROM genres WHERE name = 'Sorted Genre'")
+        .fetch_one(db.read())
+        .await?;
+    Ok(Sorted { db, album, artist, genre })
+}
+
+/// The ids `sort_track_list_rows` puts `rows` in, which is the order the page paints.
+fn as_the_page_shows(
+    mut rows: Vec<melodia_core::entities::track::TrackListRow>,
+    field: &str,
+) -> Vec<i64> {
+    melodia_views::ui::track_sort::sort_track_list_rows(&mut rows, field, "asc");
+    rows.into_iter().map(|r| r.id).collect()
+}
+
+fn queued(pairs: &[(i64, i64)]) -> Vec<i64> {
+    pairs.iter().map(|&(_, track_id)| track_id).collect()
+}
+
+/// **What `library-data.md` said nothing could check.** A detail page re-sorts what it fetched, so
+/// its query's own `ORDER BY` decides nothing; the card beside it has no re-sort and its clause is
+/// the whole answer. The two are Rust against SQL in crates that cannot name each other, and they
+/// have already shipped disagreeing: the same set played in one order from the page and another
+/// from the card.
+#[tokio::test]
+async fn a_card_queues_its_artist_in_the_order_the_page_shows_it() -> Result<(), AppError> {
+    let s = sorted_library().await?;
+    let rows =
+        melodia_store::database::queries::track::get_tracks_by_artist_for_list(&s.db, s.artist)
+            .await?;
+
+    let queued_by_the_card =
+        melodia_store::database::queries::track::track_ids_by_artists(&s.db, &[s.artist]).await?;
+
+    assert_eq!(queued(&queued_by_the_card), as_the_page_shows(rows, "album"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_card_queues_its_genre_in_the_order_the_page_shows_it() -> Result<(), AppError> {
+    let s = sorted_library().await?;
+    let rows =
+        melodia_store::database::queries::track::get_tracks_by_genre_for_list(&s.db, s.genre)
+            .await?;
+
+    let queued_by_the_card =
+        melodia_store::database::queries::track::track_ids_by_genres(&s.db, &[s.genre]).await?;
+
+    assert_eq!(queued(&queued_by_the_card), as_the_page_shows(rows, "album"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_card_queues_its_album_in_the_order_the_page_shows_it() -> Result<(), AppError> {
+    let s = sorted_library().await?;
+    let rows =
+        melodia_store::database::queries::track::get_tracks_by_album_for_list(&s.db, s.album)
+            .await?;
+
+    let queued_by_the_card =
+        melodia_store::database::queries::track::track_ids_by_albums(&s.db, &[s.album]).await?;
+
+    assert_eq!(queued(&queued_by_the_card), as_the_page_shows(rows, "track_number"));
+    Ok(())
+}
+
+/// The other half of the agreement, and the one the assertions above cannot see: each page's
+/// default is a literal in its own file, so moving one silently leaves the card reproducing an arm
+/// nobody's page takes any more.
+#[test]
+fn every_detail_page_still_defaults_to_the_arm_its_card_reproduces() {
+    for (page, source, field) in DETAIL_DEFAULTS {
+        let spelled = format!("\"{field}\")");
+        assert!(
+            source.contains("resolve_view_sort(") && source.contains(&spelled),
+            "{page} detail no longer defaults to `{field}`, and `queries::track::entity_ids` \
+             reproduces that arm, so it has to move with it"
+        );
+    }
+}

@@ -101,8 +101,10 @@ pub fn wire(ui: &AppWindow) {
         let selection = selection.clone();
         global.on_pick(move |asking_scope, id, shift, ctrl| {
             let Some(ui) = weak.upgrade() else { return };
+            let scope = asking_scope.as_str();
             // Resolved before the write, so the borrow is closed by the time `publish` takes one.
-            let next = pick(&ui, &selection.borrow(), asking_scope.as_str(), id, shift, ctrl);
+            let next =
+                pick(&selection.borrow(), scope, id, shift, ctrl, || visible_ids(&ui, scope));
             if let Some(next) = next {
                 publish(&ui, &selection, next);
             }
@@ -150,13 +152,17 @@ pub fn wire(ui: &AppWindow) {
 /// Plain click selects the one card and moves the anchor, ctrl toggles it, shift takes the range
 /// from the anchor to it in displayed order. A click in a scope that isn't the live one starts
 /// that scope's selection fresh, whatever the modifiers say.
+///
+/// `visible` supplies the displayed-order id list and is only invoked in the shift branch, which
+/// is the whole of what a range costs: [`crate::ui::list_selection::compute_click_selection`]'s
+/// shape, and what keeps the grid walk out of a plain click.
 fn pick(
-    ui: &AppWindow,
     current: &Selection,
     asking_scope: &str,
     id: i32,
     shift: bool,
     ctrl: bool,
+    visible: impl FnOnce() -> Vec<i32>,
 ) -> Option<Selection> {
     if id == 0 || unnamed_scope(asking_scope) {
         return None;
@@ -167,7 +173,7 @@ fn pick(
     let single = |anchor| Selection::new(asking_scope.to_owned(), vec![id], anchor);
 
     if shift && same_scope && current.anchor != 0 {
-        let visible = visible_ids(ui, asking_scope);
+        let visible = visible();
         let from = visible.iter().position(|&card| card == current.anchor);
         let to = visible.iter().position(|&card| card == id);
         // A missing endpoint means the grid re-filtered under the anchor. Fall back to the one
@@ -258,3 +264,7 @@ where
     }
     out
 }
+
+#[cfg(test)]
+#[path = "tests/card_selection_tests.rs"]
+mod tests;

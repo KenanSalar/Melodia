@@ -165,3 +165,55 @@ fn only_the_named_cover_tiers_are_built() {
         TIER_HOMES.map(|(path, why)| format!("{path} — {why}")).join("\n  ")
     );
 }
+
+/// The six card grids one notifier answers for, and the three files allowed to move a
+/// `covers-generation` at all.
+///
+/// Radio is absent from the first on purpose: its logo tier is its own, because
+/// `station-card.slint` reads the decoded *extent* for its layout. It is present in the second for
+/// the same reason, beside the queue sheet's private tier. A seventh grid whose global never gets
+/// bumped schedules its decodes and then sits on the placeholder until the next column change.
+const GRID_GENERATION_GLOBALS: [&str; 6] =
+    ["Albums", "Artists", "Browse", "Favorites", "Playlists", "RecentlyPlayed"];
+
+const GENERATION_WRITERS: [&str; 3] =
+    ["boot/ui_setup/views.rs", "ui/queue_sheet/callbacks.rs", "ui/radio/covers.rs"];
+
+#[test]
+fn only_the_boot_install_answers_for_the_grid_tier() {
+    let sources = rust_sources();
+    let boot = sources
+        .iter()
+        .find(|(path, _)| path == "boot/ui_setup/views.rs")
+        .map_or("", |(_, src)| src.as_str());
+
+    let install = melodia_testkit::block_after(boot, "fn install_grid_covers(");
+    let repainted: BTreeSet<&str> = install
+        .match_indices("melodia_ui::")
+        .filter_map(|(at, needle)| {
+            let rest = install.get(at + needle.len()..)?;
+            let end = rest.find(|c: char| !c.is_alphanumeric() && c != '_')?;
+            rest.get(..end)
+        })
+        .collect();
+
+    assert_eq!(
+        repainted,
+        GRID_GENERATION_GLOBALS.into_iter().collect::<BTreeSet<&str>>(),
+        "`set_decoded_notifier` is a `OnceLock`, so this closure is the only thing that brings a \
+         landed grid decode to the screen. A bump on an unmounted page costs nothing, so leaving \
+         a global out buys nothing and strands its cards on the placeholder"
+    );
+
+    let writers: BTreeSet<&str> = sources
+        .iter()
+        .filter(|(_, src)| src.contains("set_covers_generation("))
+        .map(|(path, _)| path.as_str())
+        .collect();
+    assert_eq!(
+        writers,
+        GENERATION_WRITERS.into_iter().collect::<BTreeSet<&str>>(),
+        "a repaint token moved from anywhere else is a second answer to `is this tier warm`, and \
+         the two only ever disagree"
+    );
+}

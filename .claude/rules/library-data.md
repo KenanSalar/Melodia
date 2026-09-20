@@ -140,10 +140,14 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
     persisted into `views.json`. Short of that they disagree from the first row: the same set
     plays in one order from the page and another from the card beside it, which is what shipped:
     `sort_key` where Artist and Genre Detail default to `"album"`, and bare nullable columns where
-    `ui::track_sort` maps an untagged track to `i32::MAX` and SQLite sorts NULL first. Nothing can
-    check it, `melodia-store` being unable to name `melodia-views` and the comparator being Rust
-    against SQL, so a new batch-action query states which arm of `ui::track_sort` it reproduces,
-    and a change to that comparator's defaults is two edits.
+    `ui::track_sort` maps an untagged track to `i32::MAX` and SQLite sorts NULL first. **Neither
+    crate can check it**, `melodia-store` being unable to name `melodia-views` and the comparator
+    being Rust against SQL, so the pin is `crates/melodia/tests/cross_tier.rs`'s
+    `a_card_queues_its_{artist,genre,album}_in_the_order_the_page_shows_it`: it asks both sides over
+    a library built out of the partitions they answer differently, a tidy fixture agreeing by
+    accident. A new batch-action query states which arm it reproduces and joins that walk. **The
+    page's own default is the other half and moves separately**, so it is read off each detail
+    file's `resolve_view_sort` literal beside them.
 
 - **`tracks_fts` indexes eight columns, and adding a ninth is a migration, not an edit.** fts5 has
   no `ALTER`, so a change means dropping the table plus all three triggers and rebuilding.
