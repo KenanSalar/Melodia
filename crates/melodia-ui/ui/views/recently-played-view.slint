@@ -44,6 +44,9 @@ export component RecentlyPlayedView inherits Rectangle {
     geom := GridGeometry {
         avail-width: body.width;
         gap: root.grid-gap;
+        lone-row-cards: RecentlyPlayed.most-played-rows.length == 1
+            ? RecentlyPlayed.most-played-rows[0].entities.length
+            : -1;
     }
 
     GridColumnsSync {

@@ -172,14 +172,17 @@ pub fn cover_cap(
     NonZeroUsize::new(cap).unwrap_or(fallback)
 }
 
-/// `GridGeometry`'s three defaults. Every one of its five mounts binds `avail-width: body.width`
-/// and the shared gap and takes the width pitch as declared, so there is one answer to what a card
-/// measures and this is what derives it. Radio is the one mount that moves `card-text-h`, its
-/// station card carrying a third line, and that can only make its rows taller than [`cover_cap`]'s
-/// `ROW_PITCH_H` assumes: fewer rows on screen than counted, which is the safe direction for a cap.
+/// `GridGeometry`'s four length defaults. Every one of its five mounts binds
+/// `avail-width: body.width` and the shared gap and takes the width pitch as declared, so there is
+/// one answer to what a card measures and this is what derives it. Radio is the one mount that
+/// moves `card-text-h`, its station card carrying a third line, and that can only make its rows
+/// taller than [`cover_cap`]'s `ROW_PITCH_H` assumes: fewer rows on screen than counted, which is
+/// the safe direction for a cap.
 const MIN_CARD_W: u32 = 180;
 const GAP: u32 = 20;
 const CARD_TEXT_H: u32 = 46;
+/// The ceiling the component stops a card growing at, so nothing a grid draws is wider than this.
+const MAX_CARD_W: u32 = 224;
 
 /// The pitch `GridGeometry` packs columns at.
 const CARD_PITCH_W: u32 = MIN_CARD_W + GAP;
@@ -215,10 +218,16 @@ const SIZE_STEP: u32 = 32;
 /// the column count really moves. It also can't land under what the grid draws, which is the
 /// failure that shows — `FemtoVG` minifies bilinear with no mipmaps, so a soft tile is the worse
 /// of the two.
+///
+/// Capped at [`MAX_CARD_W`]: on a narrow body the packing alone answers for a card far wider than
+/// the component now draws, and the tier was paying for one. The cap is also the one place this
+/// bound can land *under* the draw, an under-filled row holding the ceiling where the packing has
+/// stepped below it. That takes a 4K-wide desktop at 1x and the emptiest grid there is, where
+/// flooring the tier instead would cost entries on the displays that mount the most cards.
 fn widest_card(logical_w: u32) -> u32 {
     let body = logical_w.saturating_sub(BODY_CHROME_W).max(CARD_PITCH_W);
     let cols = (body.saturating_sub(GAP) / CARD_PITCH_W).max(1);
-    MIN_CARD_W + CARD_PITCH_W / cols
+    (MIN_CARD_W + CARD_PITCH_W / cols).min(MAX_CARD_W)
 }
 
 /// Square decode size (px) for a grid-card tile on this window.

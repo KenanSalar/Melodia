@@ -102,10 +102,19 @@ export component RadioView inherits Rectangle {
     // text height is the one thing Radio moves, its card carrying a third line.
     property <length> grid-gap: 20px;
 
+    // Cards on the mounted grid's only row, the one thing the body width can't answer for itself.
+    property <int> grid-lone-row-cards:
+        Radio.tab-idx == Radio.tab-browse
+            ? (Radio.browse-rows.length == 1 ? Radio.browse-rows[0].stations.length : -1)
+            : Radio.tab-idx == Radio.tab-favorites
+                ? (Radio.favorites-rows.length == 1 ? Radio.favorites-rows[0].stations.length : -1)
+                : (Radio.recent-rows.length == 1 ? Radio.recent-rows[0].stations.length : -1);
+
     geom := GridGeometry {
         avail-width: body.width;
         gap: root.grid-gap;
         card-text-h: 66px;
+        lone-row-cards: root.grid-lone-row-cards;
     }
 
     // One count for three grids: Rust re-chunks whichever tab is mounted, so the callback fires

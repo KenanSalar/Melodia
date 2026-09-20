@@ -212,6 +212,20 @@ three components that answer it, and each argues its geometry at its own file.
   `cols`/`card-w`/`card-h`/`row-h` — **feed it the *body*'s width**, which the layout fixes
   independently of the cards, so a card sizing itself from it is a derivation and not a cycle. My
   Library derives it once for four mutually exclusive tabs.
+  - **A grid that fits on one row draws that many columns rather than what the width packs**, and
+    the mount says so through `lone-row-cards`. Admitting a column a short grid cannot fill shrinks
+    every card on screen to make room for nothing, which is what widening the window did to a page
+    holding five playlists. Only `card-w` reads the count: `cols` stays the width's own answer and
+    so the chunk width Rust is handed, and nothing about the chunking or `columns-changed` moves.
+  - **The count comes off the row model, not a count property written beside it** —
+    `rows.length == 1 ? rows[0].<field>.length : -1`, spelled at each of the five mounts against
+    whichever model the mounted tab drew. `.length` lowers to `track_row_count_changes()` and an
+    index to `row_data_tracked(…)`, so the binding re-runs when Rust swaps the model in; a
+    published count would be a second thing to write, in order, at all eight chunk sites.
+  - **`max-card-w` is where an under-filled row stops growing**, and `grid_prewarm::MAX_CARD_W`
+    mirrors it so the tier covers what is drawn. The pin holding the two spellings together is
+    `grid_prewarm_tests::the_card_constants_are_the_ones_the_component_declares`, which reads the
+    `.slint` source, so a length default added here owes an entry there.
 
 - **`GridEmptyState`** is the centred glyph + heading + copy block, and **not only for grids** —
   Browse's three states and Playlist Detail's empty list mount it too, which is what the optional
@@ -789,7 +803,8 @@ three components that answer it, and each argues its geometry at its own file.
   *smallest* on the panels mounting the most of them: the two constants this replaced sized the
   wide case generously and doubled it for `HiDPI`, which made the displays paying for the most
   buffers hold each one at roughly twice the pixels it drew. `widest_card × scale` is the whole
-  question, clamped to `STORE_MAX_DIM`, which is what caps a single-column panel's sharpness.
+  question, clamped to `MAX_CARD_W` before the scale and to `STORE_MAX_DIM` after it, the second
+  being what caps a single-column panel's sharpness once a scale factor is on it.
   - **The bound, never the card itself.** `card-w` sweeps `min-card-w` up to
     `min-card-w + pitch/cols` inside *every* column band, so a tier tracking it crosses a step
     boundary twice a band — and `display-changed` re-derives on every winit `Resized`, so each
@@ -811,12 +826,13 @@ three components that answer it, and each argues its geometry at its own file.
   one budget, and both are answers about the display. The derived size replaced a `448` copied
   into five files, each justifying it in its own doc comment off the same claim that flex-filled
   cards "run well past 260 px". They don't: `GridGeometry` packs toward `min-card-w`, so a card
-  is **largest in a narrow panel** and lands near 190 px on a wide one. A tier spelling its own
-  size is the thing to reach for this instead of. Needs no winit round trip, the scale factor
-  being Slint's own, and shares the cap's zero-extent bail. It answers the size back for the one
-  caller that publishes it — `Radio.logo-decode-size`, which that tier's card compares its logo
-  against. `cover_thumbs::row_cover_size` is the row tier's twin, wired at each of its two
-  construction sites rather than through a tune hook, neither having one.
+  is **largest in a narrow panel**, where `max-card-w` is now what stops it, and lands near 190 px
+  on a wide one. A tier spelling its own size is the thing to reach for this instead of. Needs no
+  winit round trip, the scale factor being Slint's own, and shares the cap's zero-extent bail. It
+  answers the size back for the one caller that publishes it — `Radio.logo-decode-size`, which
+  that tier's card compares its logo against. `cover_thumbs::row_cover_size` is the row tier's
+  twin, wired at each of its two construction sites rather than through a tune hook, neither
+  having one.
 
 - **Prewarm path dedup via `grid_prewarm::unique_artwork_paths(paths, cap)`**, first-seen-ordered
   and non-empty. **Every prewarm site goes through it**, the per-entity wrapper owning only the

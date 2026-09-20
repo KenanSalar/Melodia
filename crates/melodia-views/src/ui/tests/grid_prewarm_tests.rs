@@ -10,7 +10,12 @@ const GRID_GEOMETRY: &str =
 /// leaves the grid's overflow on placeholders.
 #[test]
 fn the_card_constants_are_the_ones_the_component_declares() {
-    for (name, value) in [("min-card-w", MIN_CARD_W), ("gap", GAP), ("card-text-h", CARD_TEXT_H)] {
+    for (name, value) in [
+        ("min-card-w", MIN_CARD_W),
+        ("gap", GAP),
+        ("card-text-h", CARD_TEXT_H),
+        ("max-card-w", MAX_CARD_W),
+    ] {
         let declared = format!("in property <length> {name}: {value}px;");
         assert!(
             GRID_GEOMETRY.contains(&declared),
@@ -106,10 +111,11 @@ fn the_ceiling_is_bytes_rather_than_entries() {
 }
 
 /// `GridGeometry`'s own `card-w`, which production no longer computes — it sizes to the widest
-/// card a column count can pack, and this is what that bound has to clear.
+/// card a column count can pack, and this is what that bound has to clear. A grid short enough to
+/// fit one row draws fewer columns and so a wider card, which is what the ceiling here bounds.
 fn drawn_card_width(body_w: u32) -> u32 {
     let cols = (body_w.saturating_sub(GAP) / (MIN_CARD_W + GAP)).max(1);
-    body_w.saturating_sub((cols + 1) * GAP) / cols
+    (body_w.saturating_sub((cols + 1) * GAP) / cols).min(MAX_CARD_W)
 }
 
 /// `GridGeometry`'s own arithmetic, so the pin below measures the cap against the number of
@@ -178,9 +184,9 @@ fn the_tier_follows_the_card_it_draws() {
     assert!(super::cover_size(1920, 2.0) > super::cover_size(1920, 1.5));
     assert!(super::cover_size(1920, 2.0) >= MIN_CARD_W * 2);
 
-    // A narrow panel packs one much larger card, and is sized for that rather than for the wide
-    // case — the handful of tiles it mounts is what makes that affordable.
-    assert!(super::cover_size(500, 1.0) > wide);
+    // A narrow panel packs one card, and the component stops that one at `MAX_CARD_W`: the tier
+    // follows it to the ceiling and no further, where the packing alone asked for well past it.
+    assert_eq!(super::cover_size(500, 1.0), MAX_CARD_W);
 
     // Nothing may exceed what the store keeps, however extreme the pairing.
     assert_eq!(super::cover_size(400, 4.0), melodia_artwork::media::image::artwork::STORE_MAX_DIM);

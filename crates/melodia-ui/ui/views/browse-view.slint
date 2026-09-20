@@ -50,6 +50,8 @@ export component BrowseView inherits Rectangle {
     geom := GridGeometry {
         avail-width: body.width - 2 * root.page-inset;
         gap: root.grid-gap;
+        // List mode empties `card-rows`, so what this answers there reaches no card.
+        lone-row-cards: Browse.card-rows.length == 1 ? Browse.card-rows[0].cards.length : -1;
     }
 
     GridColumnsSync {
