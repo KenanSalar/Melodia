@@ -104,6 +104,37 @@ pub fn displayed_ids(rows: &ModelRc<UiTrackListRow>) -> Vec<i32> {
         .collect()
 }
 
+/// Every displayed id, stamping `selected` on the rows in the same walk.
+///
+/// **Select All is the one selection whose predicate is the row's own**, so it needs no id set to
+/// test against and no second pass: [`displayed_ids`] followed by [`stamp_rows_selected`] clones
+/// every row twice to answer what one walk answers, and Slint's `Model` has no borrowing
+/// accessor to make either clone free. Keeps that function's skip-if-unchanged guard for the
+/// same reason it has one.
+///
+/// Falls back to [`displayed_ids`] where the model isn't the `VecModel` the views install, which
+/// is [`stamp_rows_selected`]'s own early return: there is nothing to stamp either way.
+pub fn select_all_ids(rows: &ModelRc<UiTrackListRow>) -> Vec<i32> {
+    let Some(vm) = rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
+        return displayed_ids(rows);
+    };
+    let mut ids = Vec::with_capacity(vm.row_count());
+    for i in 0..vm.row_count() {
+        let Some(mut r) = vm.row_data(i) else {
+            continue;
+        };
+        let wanted = r.enabled && r.id != 0;
+        if wanted {
+            ids.push(r.id);
+        }
+        if r.selected != wanted {
+            r.selected = wanted;
+            vm.set_row_data(i, r);
+        }
+    }
+    ids
+}
+
 /// Mutate a persistent `selected-ids` `VecModel<i32>` in place. Falls back to
 /// `install`ing a fresh `ModelRc` only if the install step somehow didn't run
 /// (test harness, future hot-reload).
@@ -238,15 +269,13 @@ pub fn select_all_curated<V: RowSelectionView, S: BuildHasher>(
     view: &V,
     applied: &Mutex<HashSet<i32, S>>,
 ) {
-    let ids = displayed_ids(&view.track_rows());
-    let id_set: HashSet<i32> = ids.iter().copied().collect();
-    write_curated_selection(view, ids);
+    let ids = select_all_ids(&view.track_rows());
     {
         let mut applied = applied.lock();
         applied.clear();
-        applied.extend(id_set.iter().copied());
+        applied.extend(ids.iter().copied());
     }
-    stamp_rows_selected(&view.track_rows(), &id_set);
+    write_curated_selection(view, ids);
 }
 
 /// Reset a curated page's selection (Escape, the row menu's "Clear selection", and

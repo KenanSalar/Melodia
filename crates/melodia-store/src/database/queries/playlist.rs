@@ -189,9 +189,25 @@ pub async fn update_playlist(
     }
 }
 
-pub async fn delete_playlist(db: &DbPool, id: i64) -> Result<(), AppError> {
-    // Cascade will handle playlist_items
-    sqlx::query("DELETE FROM playlists WHERE id = ?").bind(id).execute(db.write()).await?;
+/// Drop one or more playlists. Cascade handles `playlist_items`.
+///
+/// **Chunked rather than one statement per id**, [`super::track::set_favorite`]'s shape: the card
+/// menu's batch arm hands this a whole selection, and the write pool is one connection, so a loop
+/// over ids is that many serialised round trips. A chunk is also one implicit transaction, where
+/// the loop left a mid-way failure half applied.
+pub async fn delete_playlists(db: &DbPool, ids: &[i64]) -> Result<(), AppError> {
+    if ids.is_empty() {
+        return Ok(());
+    }
+    for chunk in ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT) {
+        let placeholders = crate::database::placeholders(chunk.len());
+        let sql = format!("DELETE FROM playlists WHERE id IN ({placeholders})");
+        let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false);
+        for id in chunk {
+            query = query.bind(*id);
+        }
+        query.execute(db.write()).await?;
+    }
     Ok(())
 }
 

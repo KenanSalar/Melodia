@@ -212,7 +212,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let pu = pu.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
-                if let Err(e) = library::playlists::delete_playlist(&s, id).await {
+                if let Err(e) = library::playlists::delete_playlists(&s, &[id]).await {
                     log::warn!("playlists::delete({id}): {}", describe(&e));
                     return;
                 }
@@ -243,9 +243,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         });
     }
 
-    // delete-playlists: the card menu's batch arm. Same shape as the single delete, with the
-    // refetch and the selection clear hoisted out of the loop — and the selection cleared because
-    // every id in it is about to stop existing.
+    // delete-playlists: the card menu's batch arm. Same shape as the single delete over a set,
+    // down to sharing its statement — and the selection cleared because every id in it is about
+    // to stop existing.
     {
         let s = state.clone();
         let pu = playlists_ui.clone();
@@ -266,10 +266,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let pu = pu.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
-                for id in &ids {
-                    if let Err(e) = library::playlists::delete_playlist(&s, *id).await {
-                        log::warn!("playlists::delete_many({id}): {}", describe(&e));
-                    }
+                if let Err(e) = library::playlists::delete_playlists(&s, &ids).await {
+                    log::warn!("playlists::delete_many: {}", describe(&e));
                 }
                 if open_was_deleted {
                     let s_disk = s.clone();

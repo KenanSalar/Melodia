@@ -12,6 +12,7 @@
 //! of the click.
 
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::rc::Rc;
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
@@ -57,8 +58,21 @@ struct Selection {
     /// shift range lands in displayed order and a ctrl-click appends, which is the same `Vec` and
     /// the same reason [`crate::ui::list_selection`] has one for the track lists.
     ids: Vec<i32>,
+    /// `ids` as a set, because the membership question is asked far more often than it is
+    /// answered: every mounted card re-runs `selected` on each generation bump, so a scan of
+    /// `ids` makes one publish cost mounted cards times selected ids. Rebuilt in [`publish`],
+    /// which already walks the whole set.
+    members: HashSet<i32>,
     /// The id a shift-range measures from, `0` for none. No card carries id 0.
     anchor: i32,
+}
+
+impl Selection {
+    /// The only way to build one, so `members` cannot drift from `ids`.
+    fn new(scope: String, ids: Vec<i32>, anchor: i32) -> Self {
+        let members = ids.iter().copied().collect();
+        Self { scope, ids, members, anchor }
+    }
 }
 
 /// Wire the four `CardSelection` callbacks. UI-thread only, like every other selection path.
@@ -71,7 +85,7 @@ pub fn wire(ui: &AppWindow) {
         let selection = selection.clone();
         global.on_selected(move |asking_scope, id, _generation| {
             let selection = selection.borrow();
-            selection.scope == asking_scope.as_str() && selection.ids.contains(&id)
+            selection.scope == asking_scope.as_str() && selection.members.contains(&id)
         });
     }
 
@@ -111,7 +125,7 @@ pub fn wire(ui: &AppWindow) {
                 let current = selection.borrow();
                 if current.scope == scope { current.anchor } else { 0 }
             };
-            publish(&ui, &selection, Selection { scope, ids, anchor });
+            publish(&ui, &selection, Selection::new(scope, ids, anchor));
         });
     }
 
@@ -143,7 +157,7 @@ fn pick(
     let same_scope = current.scope == asking_scope;
     // Owned per branch rather than once above them: the plain-click path takes `single`'s own
     // copy, so a binding up here is an allocation it never reads.
-    let single = |anchor| Selection { scope: asking_scope.to_owned(), ids: vec![id], anchor };
+    let single = |anchor| Selection::new(asking_scope.to_owned(), vec![id], anchor);
 
     if shift && same_scope && current.anchor != 0 {
         let visible = visible_ids(ui, asking_scope);
@@ -155,11 +169,11 @@ fn pick(
             return Some(single(id));
         };
         let (lo, hi) = if from <= to { (from, to) } else { (to, from) };
-        return Some(Selection {
-            scope: asking_scope.to_owned(),
-            ids: visible[lo..=hi].to_vec(),
-            anchor: current.anchor,
-        });
+        return Some(Selection::new(
+            asking_scope.to_owned(),
+            visible[lo..=hi].to_vec(),
+            current.anchor,
+        ));
     }
 
     if ctrl && same_scope {
@@ -170,7 +184,7 @@ fn pick(
             }
             None => ids.push(id),
         }
-        return Some(Selection { scope: asking_scope.to_owned(), ids, anchor: id });
+        return Some(Selection::new(asking_scope.to_owned(), ids, id));
     }
 
     Some(single(id))
@@ -229,8 +243,11 @@ where
     GridRow: Clone + 'static,
     Card: Clone + 'static,
 {
-    grid_rows
-        .iter()
-        .flat_map(|grid_row| cards(grid_row).iter().map(|card| id(&card)).collect::<Vec<_>>())
-        .collect()
+    // Extended per row rather than `flat_map`ped: the inner `ModelRc` is a temporary, so a
+    // `flat_map` has to `collect` each row into its own `Vec` to outlive it.
+    let mut out = Vec::new();
+    for grid_row in grid_rows.iter() {
+        out.extend(cards(grid_row).iter().map(|card| id(&card)));
+    }
+    out
 }

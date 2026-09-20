@@ -221,8 +221,9 @@ impl CoverThumbs {
     /// the right answer at the live size. So is a cached failure, which has no buffer and must
     /// stay remembered.
     pub fn shrink_to_proxy(&self, proxy_dim: u32) {
-        // Resampled off the lock, as every other decode here is: the section leave this runs on
-        // shares the blocking pool with whatever the next section is already fetching.
+        // Resampled on the decode pool and off the lock, as every other decode here is: the
+        // section leave this runs on shares its blocking thread with whatever the next section is
+        // already fetching, and the pool is what keeps a full tier off that one thread.
         let full: Vec<(PathBuf, SharedPixelBuffer<Rgb8Pixel>)> = {
             let cache = self.cache.lock();
             cache
@@ -234,16 +235,25 @@ impl CoverThumbs {
                 .collect()
         };
 
-        let shrunk: Vec<(PathBuf, SharedPixelBuffer<Rgb8Pixel>)> = full
-            .into_iter()
-            .filter_map(|(path, buf)| {
-                let source =
-                    RgbImage::from_raw(buf.width(), buf.height(), buf.as_bytes().to_vec())?;
-                let proxy =
-                    resize_rgb8_image(Cow::Owned(source), proxy_dim, proxy_dim, FilterType::Box)?;
-                Some((path, buffer_from_rgb(&proxy)))
-            })
-            .collect();
+        let resample_all = move || {
+            full.into_par_iter()
+                .filter_map(|(path, buf)| {
+                    let source =
+                        RgbImage::from_raw(buf.width(), buf.height(), buf.as_bytes().to_vec())?;
+                    let proxy = resize_rgb8_image(
+                        Cow::Owned(source),
+                        proxy_dim,
+                        proxy_dim,
+                        FilterType::Box,
+                    )?;
+                    Some((path, buffer_from_rgb(&proxy)))
+                })
+                .collect::<Vec<(PathBuf, SharedPixelBuffer<Rgb8Pixel>)>>()
+        };
+        let shrunk: Vec<(PathBuf, SharedPixelBuffer<Rgb8Pixel>)> = match decode_pool() {
+            Some(pool) => pool.install(resample_all),
+            None => resample_all(),
+        };
 
         {
             let mut cache = self.cache.lock();

@@ -70,9 +70,9 @@ pub async fn track_ids_for(
 ///
 /// **Those go out together**, `library::smart_playlists::recount`'s shape: WAL lets them run side
 /// by side across the read pool, where awaiting each in turn put a grid's worth of them in series
-/// on the click path. **Each projects to ids before the join collects it**, the membership query
-/// answering in full list rows: held whole, a selection's peak is every matched row of every
-/// playlist in it, where the serial version it replaced held one set at a time.
+/// on the click path. **Each asks for ids rather than rows**, since running concurrently means
+/// the peak is every set at once: through the list projection that peak is every matched row of
+/// every playlist in the selection, for an answer that is one column of it.
 ///
 /// An id the split read didn't return was deleted between the grid painting and the click, and a
 /// rule set the evaluator can't answer is logged where it fails. Either way the rest of the
@@ -91,9 +91,8 @@ async fn playlist_track_ids(state: &AppState, ids: &[i64]) -> Result<Vec<i64>, A
     }
 
     let resolved = futures_util::future::join_all(smart.iter().map(|(id, criteria)| async move {
-        let track_ids = queries::smart_playlist::get_smart_playlist_tracks(&state.db, criteria)
-            .await
-            .map(|rows| rows.into_iter().map(|row| row.id).collect::<Vec<i64>>());
+        let track_ids =
+            queries::smart_playlist::get_smart_playlist_track_ids(&state.db, criteria).await;
         (*id, track_ids)
     }))
     .await;

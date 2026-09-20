@@ -66,7 +66,7 @@ async fn update_playlist() -> Result<(), AppError> {
 async fn delete_playlist() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let pl = queries::playlist::create_playlist(&db, "ToDelete", None).await?;
-    queries::playlist::delete_playlist(&db, pl.id).await?;
+    queries::playlist::delete_playlists(&db, &[pl.id]).await?;
     let result = queries::playlist::get_playlist_by_id(&db, pl.id).await;
     assert!(result.is_err());
     Ok(())
