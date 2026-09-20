@@ -5,8 +5,9 @@
 //! `cover.width / logo-decode-size`, so the *decoded extent* is load-bearing for that card's
 //! layout. The shared tier's leave shrinks what it holds to a proxy, which every other card reads
 //! as the same picture and this one would read as a tiny source to inset. So this tier keeps the
-//! old contract — released outright on leave, generation rewound to `0` — and a station's cold
-//! card costs nothing anyway, its monogram and name-hashed tile being carried on the row.
+//! old contract: released outright on leave, generation rewound to `0`, and its decode size
+//! retuned only while it holds nothing. A station's cold card costs nothing anyway, its monogram
+//! and name-hashed tile being carried on the row.
 //!
 //! **It is also the only thing the leave frees.** The browse cache and its Slint model survive,
 //! because re-entering the section must not cost a directory round trip; the decoded pixels are
@@ -37,8 +38,15 @@ pub fn tune_cache_for_display(app: &AppWindow, radio_ui: &RadioUi) {
     let cap = grid_prewarm::cover_cap_for_window(app);
     radio_ui.covers.resize(cap);
 
-    // Published as well as set, because the card compares the logo it was handed against it to
-    // decide whether the source can fill the tile — see `Radio.logo-decode-size`.
+    // **The decode size moves only over an empty tier**, which is what sets this retune apart from
+    // the shared one. The size is published as well as set, the card dividing `cover.width` by it
+    // to decide whether the source can fill the tile, so the two agree only while no buffer
+    // decoded at the old size is still held. The leave empties this tier, so the enter after it
+    // decodes at whatever is current; a resize mid-section keeps the denominator its logos were
+    // measured against.
+    if !radio_ui.covers.is_empty() {
+        return;
+    }
     let thumb_size = grid_prewarm::cover_size_for_window(app);
     radio_ui.covers.set_thumb_size(thumb_size);
     app.global::<Radio>().set_logo_decode_size(i32::try_from(thumb_size).unwrap_or(i32::MAX));

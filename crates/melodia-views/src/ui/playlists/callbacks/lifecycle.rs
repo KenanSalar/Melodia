@@ -15,7 +15,7 @@ use crate::ui::tab_bar::UNFETCHED_COUNT;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{
-    AppWindow, PlaylistDetail, PlaylistGridRow as UiPlaylistGridRow, Playlists,
+    AppWindow, CardSelection, PlaylistDetail, PlaylistGridRow as UiPlaylistGridRow, Playlists,
     TrackListRow as UiTrackListRow,
 };
 
@@ -60,6 +60,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 );
                 clear_vec_model::<i32>(&d.get_selected_ids(), "playlists: clear detail selection");
                 d.set_selection_anchor(-1);
+                // The card grid's set goes back with the models it describes;
+                // `card-selection.slint` argues why it cannot outlive the leave.
+                ui.global::<CardSelection>().invoke_clear();
             }
             let pu = pu.clone();
             let s = s.clone();

@@ -60,7 +60,7 @@ struct Selection {
     anchor: i32,
 }
 
-/// Wire the three `CardSelection` callbacks. UI-thread only, like every other selection path.
+/// Wire the four `CardSelection` callbacks. UI-thread only, like every other selection path.
 pub fn wire(ui: &AppWindow) {
     let global = ui.global::<CardSelection>();
     let weak = ui.as_weak();

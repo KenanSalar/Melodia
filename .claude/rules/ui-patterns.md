@@ -117,9 +117,12 @@ silently miss the other.
   hands its selection back on the way out. **`Tracks` and `Browse` are the two that keep their row
   model across the leave and so owe the clear on its own**, the rest emptying `selected-ids` beside
   the rows in their teardown; each of those two is guarded on there being a selection, the unstamp
-  otherwise walking a model held precisely because it survives. `CardSelection` is the exception
-  and stays scope-guarded instead: clearing it would mean a hook at each of seven mounts, which is
-  the thing its signature exists to avoid.
+  otherwise walking a model held precisely because it survives. **`CardSelection` goes back on the
+  same leaves**, its scope guard answering a different question: that guard stops one grid reading
+  another's set, and says nothing about a set no grid is showing. One `clear()` in each of the six
+  `on_section_active_changed` bodies covers all seven scopes, since the state is one global keyed
+  by one scope string. A card grid is the surface that needs it most, having no pill and no second
+  activation: a set left live turns every click into a pick.
 
 - **A card menu offers both directions rather than reading a state it hasn't got.** A card is a
   set, so the `row-is-favorite` a row menu toggles on has no honest answer over one half
@@ -683,8 +686,8 @@ three components that answer it, and each argues its geometry at its own file.
   - **The guard sits ahead of the decode, where it used to sit after one.** A prewarm for an
     off-screen section was answered by decoding and then releasing; against a tier nothing clears,
     that leaves a screenful resident for a page nobody opened. Browse is where it bit, being the
-    only view whose boot seed fetches while the section is off screen, and it measured at ~4 MiB of
-    anonymous memory on a launch landing anywhere else. Every other prewarm site already gated its
+    only view whose boot seed fetches while the section is off screen, so a launch landing anywhere
+    else paid for a screenful it never drew. Every other prewarm site already gated its
     fetch on `section_active()`. A leave landing *inside* a decode is no longer a reason to hand
     anything back: those buffers are what the re-entry paints.
   - **Radio's logo tier is not this tier, and the reason is its card rather than its decode.**

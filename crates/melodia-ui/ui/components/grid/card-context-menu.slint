@@ -257,17 +257,20 @@ export component CardContextMenu inherits Rectangle {
                     clicked => { root.go-to-artist(root.card-artist-id); }
                 }
 
-                // The selection group, the row menu's twin and gated the same way: Clear only
-                // where this card is in the set, Select All always. Both go through the host,
-                // five grids keeping their set on `CardSelection` while Browse keeps its cards'
-                // on `Browse`, its cards being its list rows.
+                // The selection group. **Clear is gated on the scope holding a set rather than on
+                // this card being in it.** That is the row menu's gate and a grid cannot borrow
+                // it: a card has no second activation, so a set scrolled or filtered out of view
+                // leaves every visible card picking instead of opening, with no card left able to
+                // offer the way back. Both go through the host, five grids keeping their set on
+                // `CardSelection` while Browse keeps its cards' on `Browse`, its cards being its
+                // list rows.
                 MenuSeparator {}
                 MenuItem {
                     label: @tr("Select all");
                     icon: "select_all";
                     clicked => { root.select-all(); }
                 }
-                if root.card-selected: MenuItem {
+                if root.selection-count > 0: MenuItem {
                     label: @tr("Clear selection");
                     icon: "close";
                     clicked => { root.clear-selection(); }

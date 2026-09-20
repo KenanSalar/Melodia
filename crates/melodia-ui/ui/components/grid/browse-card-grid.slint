@@ -36,8 +36,8 @@ export component BrowseCardGrid inherits Rectangle {
     // Forwarded by the host to its own global. `pure` so a binding can call it.
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
 
-    // **Browse's cards read the *list's* selection**, not the shared `CardSelection` the four
-    // entity grids use — they are the same rows, so toggling the presentation keeps the selection
+    // **Browse's cards read the *list's* selection**, not the shared `CardSelection` the five
+    // other grids use: they are the same rows, so toggling the presentation keeps the selection
     // and the menu that describes it is the row's own. Forwarded rather than imported,
     // as the two callbacks above are: `Browse` is a view global and this file names none.
     in property <[int]> selected-ids;

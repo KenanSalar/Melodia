@@ -74,7 +74,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Favorites and Recently Played, each a hero banner over sortable lists and browsable card grids
 - Browse by folder, as a detailed list or a grid of cards
 - Star ratings, play and skip counts, natural sort, resizable and toggleable columns
-- Multi-selection on every list and card grid: tick one to start, then a click anywhere on a row or card adds the next and shift-click takes a range. Right-click acts on the whole set, from queueing it to editing its tags; `Esc` clears it
+- Multi-selection on every library list and card grid: tick one to start, then a click anywhere on a row or card adds the next and shift-click takes a range. Right-click acts on the whole set, from queueing it to editing its tags; `Esc` clears it
 - Tag editing for one track or many at once, cover art included, written straight back to the files. A track's artists, its genres and the ten studio credits (composer, lyricist, conductor, performer, producer and the rest) are each an editable list rather than one text box, beside the rest of what a file can carry: work and movement, key, mood, ISRC, and the release's own label, catalog number, barcode and medium
 - Manual and smart playlists, the latter rule-based and resolved live; `.m3u8` import and export, several at once as a single `.zip` that imports back without extracting, drag-and-drop import and reordering
 - A database backup before every schema migration, three kept

@@ -220,8 +220,9 @@ export global Dialog {
     // `closed-teardown()` reason, and they take their payload as parameters, so this file imports no
     // sibling global on their account.
     //
-    // **Only the kinds opened from more than one place are here**, a kind with one caller earning
-    // nothing by moving.
+    // **A kind earns a function here on either of two counts**: two callers share it, or its raise
+    // is deferred past a fetch and so has to take a claim. A kind with one caller that opens in the
+    // same handler earns nothing by moving.
     // `crates/melodia/tests/dialog_openers.rs` walks the tree rather than naming the call sites,
     // what it guards against being the *next* one — a re-spelled populate block opens the right
     // dialog and is free to drift.

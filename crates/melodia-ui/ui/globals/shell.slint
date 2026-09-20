@@ -237,7 +237,7 @@ export global CompositeScroll {
 // `card-ctx-id` is the third key space, for the card grids. It cannot fold into `row-ctx-id` — an
 // album id and a track id are both small integers and would arm each other's watchers — but one
 // key covers every grid, only one of which is ever mounted. **What it holds is per grid**: an
-// entity id for the four entity grids and the two curated ones, a *card index* for Browse, whose
+// entity id for the four entity grids and the three curated mounts, a *card index* for Browse, whose
 // folder and disk-only cards all share id 0 the way a queue shares a track id.
 export global PopupHighlight {
     in-out property <string> id: "";

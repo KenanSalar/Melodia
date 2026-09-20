@@ -266,8 +266,14 @@ impl CoverThumbs {
 
     /// Retune the LRU capacity in place, once the real display size is known. Shrinking evicts
     /// down to the new cap.
+    ///
+    /// **Clears `settled` for [`Self::set_thumb_size`]'s reason**, and this is the half that can
+    /// strand a card: an entry a shrink evicted is a miss again, and `schedule` refuses any path
+    /// the last batch already handed to the pool. Left standing, that card keeps its fallback
+    /// glyph with nothing queued to replace it until some path outside the batch misses.
     pub fn resize(&self, cache_cap: NonZeroUsize) {
         self.cache.lock().resize(cache_cap);
+        self.pending.lock().settled.clear();
     }
 
     /// Retune the decode size in place, alongside [`Self::resize`]. Retunable rather than fixed at
@@ -287,6 +293,12 @@ impl CoverThumbs {
             return;
         }
         self.pending.lock().settled.clear();
+    }
+
+    /// Whether the tier holds nothing. For the one caller that publishes its decode size beside
+    /// it: a retune only agrees with what is held when there is nothing held.
+    pub fn is_empty(&self) -> bool {
+        self.cache.lock().is_empty()
     }
 
     /// Current LRU capacity. A `prewarm` caller building a display-ordered path list can

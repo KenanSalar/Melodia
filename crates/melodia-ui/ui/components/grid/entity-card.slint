@@ -357,6 +357,10 @@ export component EntityCard inherits Rectangle {
         }
 
         box-touch := TouchArea {
+            // The card's own `touch` contract, restated because this area sits above it and would
+            // otherwise leave a dimmed card one live corner. Held here rather than by the one host
+            // that also happens to make disabled cards unselectable.
+            enabled: root.enabled;
             mouse-cursor: pointer;
             // **Ctrl is forced on unless shift is held**, the track row's box verbatim: a
             // checkbox means "add or remove this one", so a plain click has to toggle. Passing

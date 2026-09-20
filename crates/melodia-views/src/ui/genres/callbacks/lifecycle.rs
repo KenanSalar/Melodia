@@ -19,7 +19,8 @@ use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use melodia_app::state::AppState;
 use melodia_ui::{
-    AppWindow, GenreDetail, GenreGridRow as UiGenreGridRow, Genres, TrackListRow as UiTrackListRow,
+    AppWindow, CardSelection, GenreDetail, GenreGridRow as UiGenreGridRow, Genres,
+    TrackListRow as UiTrackListRow,
 };
 
 /// Wire the Genres section-lifecycle callbacks. See [`super::wire`].
@@ -73,6 +74,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
                 // no images to release, so it takes the shared pair alone rather
                 // than the full `release_detail_hero_images!`.
                 release_shared_hero!(ui);
+                // The card grid's set goes back with the models it describes;
+                // `card-selection.slint` argues why it cannot outlive the leave.
+                ui.global::<CardSelection>().invoke_clear();
             }
             let gu = gu.clone();
             let s = s.clone();

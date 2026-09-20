@@ -1,6 +1,6 @@
 //! The tracks behind a set of entity cards — what every card right-click action operates on.
 //!
-//! One place that knows how an album, artist, genre or playlist becomes a track list, so the nine
+//! One place that knows how an album, artist, genre or playlist becomes a track list, so the eight
 //! `CardActions` handlers each resolve through a single call rather than repeating the match.
 //! Browse's folder cards are deliberately absent: a folder is a path rather than an id, and the
 //! concept belongs to [`crate::library::browse`].
@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::state::AppState;
 use melodia_core::entities::smart_criteria::SmartCriteria;
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 use melodia_store::database::queries;
 
 /// Which kind of card a grid's menu is acting on.
@@ -74,8 +74,9 @@ pub async fn track_ids_for(
 /// answering in full list rows: held whole, a selection's peak is every matched row of every
 /// playlist in it, where the serial version it replaced held one set at a time.
 ///
-/// An id the split read didn't return was deleted between the grid painting and the click; the
-/// rest of the selection still acts.
+/// An id the split read didn't return was deleted between the grid painting and the click, and a
+/// rule set the evaluator can't answer is logged where it fails. Either way the rest of the
+/// selection still acts: a menu that resolves nothing has only a log line to show for it.
 async fn playlist_track_ids(state: &AppState, ids: &[i64]) -> Result<Vec<i64>, AppError> {
     let verdicts = queries::playlist::smart_criteria_for_playlists(&state.db, ids).await?;
 
@@ -100,7 +101,15 @@ async fn playlist_track_ids(state: &AppState, ids: &[i64]) -> Result<Vec<i64>, A
     // Sized for both halves: the manual ones land in the same map through the `extend` below.
     let mut grouped: HashMap<i64, Vec<i64>> = HashMap::with_capacity(ids.len());
     for (id, track_ids) in resolved {
-        grouped.insert(id, track_ids?);
+        // Logged and skipped rather than propagated, `recount`'s shape: one rule set the
+        // evaluator can't answer would otherwise take the whole selection down, and the caller
+        // has nothing to show for an `Err` but a log line.
+        match track_ids {
+            Ok(track_ids) => {
+                grouped.insert(id, track_ids);
+            }
+            Err(e) => log::warn!("smart playlist {id} resolve failed: {}", describe(&e)),
+        }
     }
 
     let pairs = queries::track::track_ids_by_playlists(&state.db, &manual_ids).await?;

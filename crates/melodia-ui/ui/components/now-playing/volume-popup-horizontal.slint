@@ -85,8 +85,10 @@ export component VolumePopupHorizontal inherits Rectangle {
         // leaves the badge floating above.
         x: -self.width - Theme.popup-gap;
         y: (btn.height - self.height) / 2;
-        // The vertical popup's slider length rotated, so one travel serves both.
-        width: min(180px, root.max-flyout-width);
+        // The vertical popup's slider length rotated, so one travel serves both. Floored as well
+        // as capped: the room left of the disc is what a window narrower than its own minimum
+        // takes away, and a negative width is not a shorter slider.
+        width: clamp(root.max-flyout-width, 96px, 180px);
         height: 72px;
         close-policy: close-on-click-outside;
 
