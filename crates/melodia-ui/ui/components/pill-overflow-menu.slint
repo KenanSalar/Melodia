@@ -16,7 +16,9 @@ import { FocusLossWatcher } from "focus-loss-watcher.slint";
 export component PillOverflowMenu inherits Rectangle {
     in property <string> menu-id;
     in property <string> tooltip-text;
-    in property <length> menu-width: 220px;
+    // A floor, not the width: past it the widest entry decides. Matches the Now Playing
+    // overflow's, so the two read as one control at their narrowest as well as by their glyph.
+    in property <length> min-menu-width: 156px;
     // Suppresses the in-tree tooltip where the host paints one on a higher layer, forwarded
     // to the pill along with the `hovered` the host's anchor reads back.
     in property <bool> tooltip-overlay: false;
@@ -55,7 +57,10 @@ export component PillOverflowMenu inherits Rectangle {
         // resolves the popup's size, and a bound `width` already answers with the real number.
         x: btn.width - self.width;
         y: root.height + Theme.popup-gap;
-        width: root.menu-width;
+        // Sized to the widest entry, so a longer locale gets the room instead of a fixed box
+        // deciding for it. The binding sits on the popup because the enclosing component cannot
+        // name an id inside one; `+ 2px` leaves `PopupSurface`'s border a pixel each side.
+        width: max(root.min-menu-width, items.preferred-width + 2px);
         close-policy: close-on-click;
 
         if root.holds-highlight: FocusLossWatcher {
@@ -66,7 +71,7 @@ export component PillOverflowMenu inherits Rectangle {
         }
 
         PopupSurface {
-            VerticalLayout {
+            items := VerticalLayout {
                 padding: Theme.pad-xs;
                 spacing: 0;
                 @children
