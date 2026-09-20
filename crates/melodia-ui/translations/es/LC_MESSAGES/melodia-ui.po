@@ -1869,6 +1869,10 @@ msgstr "Las emisoras que escuches aparecerán aquí."
 msgid "Added"
 msgstr "Añadida"
 
+# The Favorites tab's overflow pill, holding Import and Export.
+msgid "More station actions"
+msgstr "Más acciones de emisoras"
+
 # The add / edit station dialog.
 msgid "Add Station"
 msgstr "Añadir emisora"

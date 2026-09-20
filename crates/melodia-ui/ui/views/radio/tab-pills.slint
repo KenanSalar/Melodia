@@ -3,6 +3,8 @@ import { Radio } from "../../globals/radio.slint";
 import { RadioForm } from "../../globals/dialog-forms.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { ActionPill, PillButton, PillDivider } from "../../components/action-pill.slint";
+import { MenuItem } from "../../components/context-menu.slint";
+import { PillOverflowMenu } from "../../components/pill-overflow-menu.slint";
 import { SortMenuPopup } from "../../components/sort-menu-popup.slint";
 import { FacetChip } from "facet-chip.slint";
 
@@ -23,24 +25,33 @@ component DirectoryFacetChip inherits FacetChip {
 
 // Every pill row the Radio band can show, mutually exclusive on the mounted tab and handed to
 // `LibraryTabBand` as its whole `@children`: Browse's filter chips, then Favorites' single chip of
-// add / import / export plus its sort picker. Recently Played has none, its order being the page.
+// add and sort with import / export folded into an overflow. Recently Played has none, its order
+// being the page.
 //
 // **The two tab rows gate on `!detail-open`**, describing the tab under a station page rather
 // than the page, and the station's own row takes the slot instead — which is where My Library
 // puts each of its four details' actions.
 //
 // **Favorites sorts through a popup rather than the usual `SortPillRow`.** Four fields spelled out
-// beside three operations mounted two chips at once, flush against each other under the
+// beside the row's own pills mounted two chips at once, flush against each other under the
 // `spacing: 0px` below, and left the band no room for the count line it reserves against
 // `pills.width`.
 //
-// **Every row here is labelled, and none of them carries a tooltip.** A label is legible without
-// aiming at it, and a tooltip restating one is a second copy of the same string; icon-only is what
-// My Library's detail arms take because theirs run to fifteen segments, where the widest row here
-// is four. Nothing in this file needs the published-anchor treatment `MyLibraryTabPills` carries
-// for exactly one of its rows either — that is for a tooltip opening *downward* past the band's
-// edge, and `Tooltip`'s default side is `above`.
+// **Labels rather than tooltips, the overflow excepted** — it has no label to restate, and a
+// label is legible without aiming at it, which is the trade My Library's detail arms decline
+// because theirs run to fifteen segments where the widest row here is four.
+//
+// **That one tooltip is the reason the Favorites row can't sit under an `if`.** It opens
+// *downward*, where the band clips its own height and the page body is declared after it, so the
+// host places it from a top-layer frame — and a frame reaches the pill by id, which an `if` makes
+// unreadable from out here. The row collapses to a zero-width cell instead; this file publishes
+// the rect and `radio-view.slint` hangs the frame, the shape `MyLibraryTabPills` carries for its
+// Playlists row.
 export component RadioTabPills inherits Rectangle {
+    // Spelled once: the collapse below and the pills it holds must not be able to disagree about
+    // whether the row is up.
+    property <bool> favorites-row-up: !Radio.detail-open && Radio.tab-idx == Radio.tab-favorites;
+
     HorizontalLayout {
         alignment: end;
         // The rows are mutually exclusive, so any spacing here would read as a permanent inset on
@@ -107,53 +118,75 @@ export component RadioTabPills inherits Rectangle {
             }
         }
 
-        if !Radio.detail-open && Radio.tab-idx == Radio.tab-favorites: ActionPill {
-            // Fills the Dialog inline rather than hopping through Rust: a synchronous
-            // `set_open(true)` mid-click-handler trips Slint's recursion guard.
-            PillButton {
-                icon: "add";
-                text: @tr("Add Station");
-                clicked => {
-                    // Reset here as well as at the teardown: the session's first open has had no
-                    // close before it, and the declared defaults are not the add form's.
-                    RadioForm.reset();
-                    Dialog.title = @tr("Add Station");
-                    Dialog.message = "";
-                    Dialog.confirm-label = @tr("Add");
-                    Dialog.cancel-label = @tr("Cancel");
-                    Dialog.destructive = false;
-                    Dialog.kind = "add-station";
-                    Dialog.target-id = -1;
-                    Dialog.open = true;
+        // --- Favorites: collapsed, never unmounted --------------------------------------------
+        //
+        // The one row that can't sit under an `if`, per the file header. It collapses to a
+        // zero-width clipped cell instead: nothing paints, and `Clip` swallows every event outside
+        // its empty rect, so the pills are as unreachable as an unmounted branch while `om` stays
+        // readable from this root. The three width constraints are spelled out because an explicit
+        // `min-width` is what *replaces* the constraint the pill's own bound width would otherwise
+        // merge in.
+        Rectangle {
+            clip: true;
+            min-width: 0px;
+            preferred-width: root.favorites-row-up ? fav.preferred-width : 0px;
+            max-width: root.favorites-row-up ? fav.preferred-width : 0px;
+
+            fav := ActionPill {
+                // Fills the Dialog inline rather than hopping through Rust: a synchronous
+                // `set_open(true)` mid-click-handler trips Slint's recursion guard.
+                PillButton {
+                    icon: "add";
+                    text: @tr("Add Station");
+                    clicked => {
+                        // Reset here as well as at the teardown: the session's first open has had
+                        // no close before it, and the declared defaults are not the add form's.
+                        RadioForm.reset();
+                        Dialog.title = @tr("Add Station");
+                        Dialog.message = "";
+                        Dialog.confirm-label = @tr("Add");
+                        Dialog.cancel-label = @tr("Cancel");
+                        Dialog.destructive = false;
+                        Dialog.kind = "add-station";
+                        Dialog.target-id = -1;
+                        Dialog.open = true;
+                    }
                 }
-            }
 
-            PillDivider { }
+                PillDivider { }
 
-            // Portable playlists, so a station list survives a database wipe and arrives from
-            // whatever the user was using before. Both are pure Rust flows over native pickers.
-            PillButton {
-                icon: "download";
-                text: @tr("Import");
-                clicked => { Radio.import-stations(); }
-            }
+                SortMenuPopup {
+                    labels: [@tr("Name"), @tr("Added"), @tr("Plays"), @tr("Last played")];
+                    fields: ["name", "added", "plays", "played"];
+                    sort-field: Radio.sort-field;
+                    sort-dir: Radio.sort-dir;
+                    request-sort(f) => { Radio.request-sort(f); }
+                }
 
-            PillDivider { }
+                PillDivider { }
 
-            PillButton {
-                icon: "upload";
-                text: @tr("Export");
-                clicked => { Radio.export-stations(); }
-            }
+                // **Import and Export fold in here rather than carrying a pill each**, the trade
+                // the Playlists row already makes: they are the rarest actions on the row, so they
+                // are what gives up the width. Portable lists, so a station collection survives a
+                // database wipe and arrives from whatever the user was using before; both are pure
+                // Rust flows over native pickers.
+                om := PillOverflowMenu {
+                    menu-id: "radio-favorites-overflow";
+                    tooltip-text: @tr("More station actions");
+                    // Drawn by the host's top-layer frame, out of the body's way.
+                    tooltip-overlay: true;
 
-            PillDivider { }
-
-            SortMenuPopup {
-                labels: [@tr("Name"), @tr("Added"), @tr("Plays"), @tr("Last played")];
-                fields: ["name", "added", "plays", "played"];
-                sort-field: Radio.sort-field;
-                sort-dir: Radio.sort-dir;
-                request-sort(f) => { Radio.request-sort(f); }
+                    MenuItem {
+                        label: @tr("Import");
+                        icon: "download";
+                        clicked => { Radio.import-stations(); }
+                    }
+                    MenuItem {
+                        label: @tr("Export");
+                        icon: "upload";
+                        clicked => { Radio.export-stations(); }
+                    }
+                }
             }
         }
 
@@ -202,4 +235,20 @@ export component RadioTabPills inherits Rectangle {
             }
         }
     }
+
+    // --- The overflow pill's tooltip anchor ----------------------------------
+    //
+    // Published, never drawn: see the file header. The rect is read off the pill live rather than
+    // snapshotted on the hover edge, so a pill that moves under a parked pointer — a resize,
+    // Ctrl+B — keeps its tooltip anchored. Collapsed, the cell takes no events, so `hovered` is
+    // false and the frame draws nothing wherever the rect happens to sit.
+    out property <length> tip-x: om.absolute-position.x - root.absolute-position.x;
+    out property <length> tip-y: om.absolute-position.y - root.absolute-position.y;
+    out property <length> tip-w: om.width;
+    out property <length> tip-h: om.height;
+    out property <string> tip-label: om.tooltip-text;
+    out property <bool> tip-visible: om.hovered;
+    // Off the pill rather than spelled here: which pills want their trailing edge pinned is
+    // `PillButton`'s rule, and the in-tree mount reads the same property.
+    out property <bool> tip-align-end: om.icon-only;
 }

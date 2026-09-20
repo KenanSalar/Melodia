@@ -1875,6 +1875,10 @@ msgstr "Dinlediğin istasyonlar burada görünür."
 msgid "Added"
 msgstr "Eklenme"
 
+# The Favorites tab's overflow pill, holding Import and Export.
+msgid "More station actions"
+msgstr "Diğer istasyon işlemleri"
+
 # The add / edit station dialog.
 msgid "Add Station"
 msgstr "İstasyon Ekle"

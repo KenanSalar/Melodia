@@ -1873,6 +1873,10 @@ msgstr "Οι σταθμοί που ακούτε εμφανίζονται εδώ.
 msgid "Added"
 msgstr "Προστέθηκε"
 
+# The Favorites tab's overflow pill, holding Import and Export.
+msgid "More station actions"
+msgstr "Περισσότερες ενέργειες σταθμού"
+
 # The add / edit station dialog.
 msgid "Add Station"
 msgstr "Προσθήκη σταθμού"

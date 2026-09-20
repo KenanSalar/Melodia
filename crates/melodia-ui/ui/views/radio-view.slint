@@ -191,7 +191,7 @@ export component RadioView inherits Rectangle {
             use-a: Radio.blur-use-a;
             has-blur: Radio.has-blur;
 
-            RadioTabPills { }
+            pills := RadioTabPills { }
         }
 
         body := Rectangle {
@@ -284,8 +284,9 @@ export component RadioView inherits Rectangle {
         }
     }
 
-    // On a layer of its own: the bar sits in the band, and Slint paints in declaration order, so
-    // anything the band owns is covered by the body underneath.
+    // On a layer of its own: the bar and the pills sit in the band, and Slint paints in
+    // declaration order, so anything the band owns is covered by the body underneath — and the
+    // band clips its own height besides.
     TooltipFrame {
         x: band.absolute-position.x - root.absolute-position.x + band.tip-x;
         y: band.absolute-position.y - root.absolute-position.y + band.tip-y;
@@ -293,5 +294,15 @@ export component RadioView inherits Rectangle {
         height: band.tip-h;
         label: band.tip-label;
         shown: band.tip-visible;
+    }
+
+    TooltipFrame {
+        x: pills.absolute-position.x - root.absolute-position.x + pills.tip-x;
+        y: pills.absolute-position.y - root.absolute-position.y + pills.tip-y;
+        width: pills.tip-w;
+        height: pills.tip-h;
+        label: pills.tip-label;
+        shown: pills.tip-visible;
+        align-end: pills.tip-align-end;
     }
 }
