@@ -9,7 +9,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use melodia_testkit::rust_sources;
+use melodia_testkit::{
+    MIN_SLINT_SOURCES, UI_DIR, globals_declaring, rust_sources, stripped_sources,
+};
 
 /// The two surfaces sanctioned to decode inline, and the only files `grid_cover_blocking` may be
 /// named in besides its own definition and its own test.
@@ -166,21 +168,45 @@ fn only_the_named_cover_tiers_are_built() {
     );
 }
 
-/// The six card grids one notifier answers for, and the three files allowed to move a
-/// `covers-generation` at all.
-///
-/// Radio is absent from the first on purpose: its logo tier is its own, because
-/// `station-card.slint` reads the decoded *extent* for its layout. It is present in the second for
-/// the same reason, beside the queue sheet's private tier. A seventh grid whose global never gets
-/// bumped schedules its decodes and then sits on the placeholder until the next column change.
-const GRID_GENERATION_GLOBALS: [&str; 6] =
-    ["Albums", "Artists", "Browse", "Favorites", "Playlists", "RecentlyPlayed"];
+/// What a global declares to be a surface a landed decode has to reach.
+const GENERATION_PROPERTY: &str = "property <int> covers-generation";
 
+/// The two that carry one and are **not** the shared install's to answer for, each holding a tier
+/// of its own: the queue sheet's is dropped on close and Radio's logo tier is released on leave,
+/// so `0` still means cold on both where a grid's value means nothing at all. Radio's is its own
+/// because `station-card.slint` reads the decoded *extent* for its layout.
+const PRIVATE_TIER_GLOBALS: [&str; 2] = ["Queue", "Radio"];
+
+/// The three files allowed to move a `covers-generation` at all: the shared install, and the two
+/// private tiers above.
 const GENERATION_WRITERS: [&str; 3] =
     ["boot/ui_setup/views.rs", "ui/queue_sheet/callbacks.rs", "ui/radio/covers.rs"];
 
+/// The grids one notifier answers for, **derived from the globals rather than listed**: a seventh
+/// grid that reaches neither a list here nor the closure would pass a list against itself, and it
+/// schedules its decodes and then sits on the placeholder until the next column change.
 #[test]
 fn only_the_boot_install_answers_for_the_grid_tier() {
+    let slint = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES);
+    let declaring: BTreeSet<String> =
+        slint.iter().flat_map(|(_, src)| globals_declaring(src, GENERATION_PROPERTY)).collect();
+    for private in PRIVATE_TIER_GLOBALS {
+        assert!(
+            declaring.contains(private),
+            "{private} is exempted here but no longer carries a generation at all"
+        );
+    }
+    let expected: BTreeSet<&str> = declaring
+        .iter()
+        .map(String::as_str)
+        .filter(|name| !PRIVATE_TIER_GLOBALS.contains(name))
+        .collect();
+    assert!(
+        expected.len() >= 6,
+        "only {} grid generations found — the walk is broken",
+        expected.len()
+    );
+
     let sources = rust_sources();
     let boot = sources
         .iter()
@@ -198,8 +224,7 @@ fn only_the_boot_install_answers_for_the_grid_tier() {
         .collect();
 
     assert_eq!(
-        repainted,
-        GRID_GENERATION_GLOBALS.into_iter().collect::<BTreeSet<&str>>(),
+        repainted, expected,
         "`set_decoded_notifier` is a `OnceLock`, so this closure is the only thing that brings a \
          landed grid decode to the screen. A bump on an unmounted page costs nothing, so leaving \
          a global out buys nothing and strands its cards on the placeholder"

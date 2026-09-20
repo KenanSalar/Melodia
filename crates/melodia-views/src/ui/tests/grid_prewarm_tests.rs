@@ -303,8 +303,8 @@ fn the_proxy_stays_under_every_size_the_tier_can_take() {
 }
 
 /// The window-less boot and a backend that answers nonsense both arrive here as a scale the tier
-/// cannot use. Taken literally, a zero scale clamps to `MIN_CARD_W` and a negative one is an
-/// `as u32` saturating to zero.
+/// cannot use. Without the guard a zero or negative one clamps to `MIN_CARD_W`, and a `NaN` is
+/// the `as u32` saturating to zero.
 #[test]
 fn a_scale_the_display_cannot_have_falls_back_to_one() {
     let sane = super::cover_size(1280, 1.0);

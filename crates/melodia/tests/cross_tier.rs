@@ -349,9 +349,14 @@ async fn a_card_queues_its_album_in_the_order_the_page_shows_it() -> Result<(), 
 #[test]
 fn every_detail_page_still_defaults_to_the_arm_its_card_reproduces() {
     for (page, source, field) in DETAIL_DEFAULTS {
-        let spelled = format!("\"{field}\")");
+        // The call's own arguments rather than the file: a `"album"` anywhere else in it would
+        // keep this passing after the default moved, which is the one thing it is here for.
+        let args = source
+            .split_once("resolve_view_sort(")
+            .and_then(|(_, rest)| rest.split_once(')'))
+            .map_or("", |(args, _)| args);
         assert!(
-            source.contains("resolve_view_sort(") && source.contains(&spelled),
+            args.contains(&format!("\"{field}\"")),
             "{page} detail no longer defaults to `{field}`, and `queries::track::entity_ids` \
              reproduces that arm, so it has to move with it"
         );

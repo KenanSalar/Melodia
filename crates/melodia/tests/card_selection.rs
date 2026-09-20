@@ -7,8 +7,8 @@
 use std::collections::BTreeSet;
 
 use melodia_testkit::{
-    MIN_SLINT_SOURCES, MIN_UI_SOURCES, UI_DIR, UI_SRC_DIR, block_after, block_body, depth_between,
-    stripped_sources,
+    MIN_SLINT_SOURCES, MIN_UI_SOURCES, UI_DIR, UI_SRC_DIR, block_after, depth_between,
+    globals_declaring, stripped_sources,
 };
 
 /// The six section leaves that hand the shared card selection back. **An equality, not a floor**:
@@ -69,25 +69,8 @@ fn inside_block_after(src: &str, opener: &str, needle: &str) -> bool {
         .any(|(found, _)| depth_between(src, open, found).is_some_and(|depth| depth >= 1))
 }
 
-/// Every global whose body declares a `selected-ids` model, which is what makes a surface one the
-/// Escape arm has to know about.
-fn globals_holding_a_selection(src: &str) -> Vec<String> {
-    const KEYWORD: &str = "global ";
-    let mut found = Vec::new();
-    for (at, _) in src.match_indices(KEYWORD) {
-        let head = at + KEYWORD.len();
-        let Some(brace) = src.get(head..).and_then(|rest| rest.find('{')) else { continue };
-        let name = src.get(head..head + brace).unwrap_or("").trim();
-        if name.is_empty() || name.contains(char::is_whitespace) {
-            continue;
-        }
-        let Some(body) = block_body(src, head + brace) else { continue };
-        if body.contains("property <[int]> selected-ids") {
-            found.push(name.to_owned());
-        }
-    }
-    found
-}
+/// What a global declares to be one of the surfaces the Escape arm has to know about.
+const SELECTION_MODEL: &str = "property <[int]> selected-ids";
 
 /// The globals a `Selection` body asks about, read off the `X.selected-ids.length > 0` each of its
 /// arms is written as.
@@ -152,7 +135,7 @@ fn a_card_grid_mount_states_its_scope_and_nothing_else() {
 fn every_multi_selection_surface_is_one_the_escape_arm_asks_about() {
     let sources = slint_sources();
     let declaring: BTreeSet<String> =
-        sources.iter().flat_map(|(_, src)| globals_holding_a_selection(src)).collect();
+        sources.iter().flat_map(|(_, src)| globals_declaring(src, SELECTION_MODEL)).collect();
 
     let dispatcher = sources
         .iter()

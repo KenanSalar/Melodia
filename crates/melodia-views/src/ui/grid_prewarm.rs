@@ -45,9 +45,12 @@ pub const PROXY_COVER_DIM: u32 = 64;
 /// **A proxy has to read as stale**, which it only does while it is strictly under every size the
 /// tier can be asked for: `holds` compares the recorded size, so a proxy equal to a live one is
 /// current and the prewarm behind a re-entry skips it, leaving the page soft for the session.
-/// [`GRID_COVER_FALLBACK`] is the smallest of those sizes, [`cover_size`]'s own floor being higher;
-/// `grid_prewarm_tests` sweeps the derived half.
-const _: () = assert!(PROXY_COVER_DIM < GRID_COVER_FALLBACK, "a proxy must read as stale");
+/// The two floors are [`GRID_COVER_FALLBACK`], what a tier is built at, and [`MIN_CARD_W`], what
+/// [`cover_size`] clamps to and the lower of the two; `grid_prewarm_tests` sweeps the derived half.
+const _: () = assert!(
+    PROXY_COVER_DIM < MIN_CARD_W && PROXY_COVER_DIM < GRID_COVER_FALLBACK,
+    "a proxy must read as stale"
+);
 
 /// The cover tier every card grid draws from.
 ///

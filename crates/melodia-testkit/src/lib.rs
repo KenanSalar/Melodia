@@ -417,6 +417,34 @@ pub fn block_after<'a>(src: &'a str, needle: &str) -> &'a str {
         .unwrap_or_default()
 }
 
+/// The `.slint` globals in `src` whose body declares `needle`, by name.
+///
+/// Declaring a property is what puts a global in the set some dispatcher or installer has to
+/// answer for, and two pins ask it of two different properties: `crates/melodia/tests/card_selection.rs`
+/// of `selected-ids`, `crates/melodia/tests/cover_generation.rs` of `covers-generation`. Both derive
+/// their expected set from this rather than listing one, so a global added to neither the list
+/// nor the thing that has to reach it is a miss rather than a pass.
+///
+/// Pair it with [`strip_line_comments`], [`block_body`]'s own requirement — a `global ` in prose
+/// names a global that isn't there.
+pub fn globals_declaring(src: &str, needle: &str) -> Vec<String> {
+    const KEYWORD: &str = "global ";
+    let mut found = Vec::new();
+    for (at, _) in src.match_indices(KEYWORD) {
+        let head = at + KEYWORD.len();
+        let Some(brace) = src.get(head..).and_then(|rest| rest.find('{')) else { continue };
+        let name = src.get(head..head + brace).map(str::trim).unwrap_or_default();
+        if name.is_empty() || name.contains(char::is_whitespace) {
+            continue;
+        }
+        let Some(body) = block_body(src, head + brace) else { continue };
+        if body.contains(needle) {
+            found.push(name.to_owned());
+        }
+    }
+    found
+}
+
 /// A wrapped condition joined back onto the `if` it belongs to, so a per-line walk sees one
 /// statement.
 ///
