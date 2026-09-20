@@ -1,10 +1,6 @@
 //! `Favorites.*` lazy cover-lookup callbacks — one per grid tab, Most Played
 //! and Artists. (Songs-tab rows resolve through the shared `RowCovers` global
 //! like every other `TrackListRowItem`.) See [`super::wire`].
-//!
-//! The two grid lookups carry `Favorites.covers-generation` for its effect on
-//! their `pure` bindings and for nothing else; the value stopped meaning
-//! anything when the grids started sharing one tier.
 
 use slint::ComponentHandle;
 

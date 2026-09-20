@@ -103,11 +103,13 @@ silently miss the other.
 
 - **A multi-selection grows no pill.** The count, every batch action and both ends of the set are
   the right-click menu's, on rows and cards alike: "Select all" ungated, "Clear selection" gated
-  on the clicked item being *in* the set, so a menu raised beside one still acts on that item
-  alone. The other exits are Escape (`Selection.clear-live()`), a section leave, and unpicking the
-  last item. A surface that grows a "{n} selected" chip is putting a second affordance in front of
-  the menu that already carries all of them. **A body click that picks fires on `clicked`**, for
-  the grab-invalidation reason `slint-pitfalls.md` argues.
+  on the clicked *row* being in the set, so a menu raised beside one still acts on that row alone.
+  **A card gates it on the scope holding a set instead**, a card having no second activation with
+  which to reach a set it can no longer see; `card-context-menu.slint` argues it. The other exits
+  are Escape (`Selection.clear-live()`), a section leave, and unpicking the last item. A surface
+  that grows a "{n} selected" chip is putting a second affordance in front of the menu that
+  already carries all of them. **A body click that picks fires on `clicked`**, for the
+  grab-invalidation reason `slint-pitfalls.md` argues.
 
 - **Escape reaches a selection *after* it has closed Now Playing, and a section leave drops one.**
   Both halves answer the same thing: with no pill, a set the user cannot see is indistinguishable
@@ -831,11 +833,9 @@ three components that answer it, and each argues its geometry at its own file.
   cards "run well past 260 px". They don't: `GridGeometry` packs toward `min-card-w`, so a card
   is **largest in a narrow panel**, where `max-card-w` is now what stops it, and lands near 190 px
   on a wide one. A tier spelling its own size is the thing to reach for this instead of. Needs no
-  winit round trip, the scale factor being Slint's own, and shares the cap's zero-extent bail. It
-  answers the size back for the one caller that publishes it — `Radio.logo-decode-size`, which
-  that tier's card compares its logo against. `cover_thumbs::row_cover_size` is the row tier's
-  twin, wired at each of its two construction sites rather than through a tune hook, neither
-  having one.
+  winit round trip, the scale factor being Slint's own, and shares the cap's zero-extent bail.
+  `cover_thumbs::row_cover_size` is the row tier's twin, wired at each of its two construction
+  sites rather than through a tune hook, neither having one.
 
 - **Prewarm path dedup via `grid_prewarm::unique_artwork_paths(paths, cap)`**, first-seen-ordered
   and non-empty. **Every prewarm site goes through it**, the per-entity wrapper owning only the

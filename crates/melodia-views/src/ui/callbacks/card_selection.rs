@@ -2,8 +2,9 @@
 //!
 //! One `(scope, set)` pair rather than a copy of the state per view. Every callback carries the
 //! asking grid's scope, so a grid that is not the one holding the set reads back an empty
-//! selection and replaces it on its first pick. That is what makes a stale selection unable to
-//! bleed across grids without a section-leave hook at each mount.
+//! selection and replaces it on its first pick, which is what stops a stale set bleeding from one
+//! grid onto another whatever any mount forgets. The section leaves still hand it back, for the
+//! different question `card-selection.slint` argues: a set no grid is showing.
 //!
 //! Not [`crate::ui::list_selection`]: that layer anchors a shift-range on a **row index**, which a
 //! grid cannot offer. Its cards live in chunked rows and a re-sort moves every position, so the

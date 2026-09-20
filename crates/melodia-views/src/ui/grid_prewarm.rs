@@ -76,20 +76,17 @@ pub fn shrink_covers() {
     tier().shrink_to_proxy(PROXY_COVER_DIM);
 }
 
-/// Retune the tier to the display the window is on, and answer the decode size for the one caller
-/// that publishes it (`Radio.logo-decode-size`, which a station tile compares its logo against to
-/// decide whether the source can fill it).
+/// Retune the tier to the display the window is on.
 ///
 /// Called after `app.show()` and again on every resize, off `WindowChrome.display-changed`. The
 /// cap and the size are read together because they are two halves of one budget and both are
 /// answers about the display.
-pub fn tune_for_display(app: &AppWindow) -> u32 {
+pub fn tune_for_display(app: &AppWindow) {
     let cap = cover_cap_for_window(app);
     let size = cover_size_for_window(app);
     tier().resize(cap);
     tier().set_thumb_size(size);
     log::debug!("ui::grid_prewarm cover tier tuned to cap {cap}, {size} px");
-    size
 }
 
 /// Decode `paths` into the tier off the calling thread's own budget — the prewarm every grid runs

@@ -101,9 +101,7 @@ async fn playlist_track_ids(state: &AppState, ids: &[i64]) -> Result<Vec<i64>, A
     // Sized for both halves: the manual ones land in the same map through the `extend` below.
     let mut grouped: HashMap<i64, Vec<i64>> = HashMap::with_capacity(ids.len());
     for (id, track_ids) in resolved {
-        // Logged and skipped rather than propagated, `recount`'s shape: one rule set the
-        // evaluator can't answer would otherwise take the whole selection down, and the caller
-        // has nothing to show for an `Err` but a log line.
+        // Logged and skipped, `recount`'s shape.
         match track_ids {
             Ok(track_ids) => {
                 grouped.insert(id, track_ids);
