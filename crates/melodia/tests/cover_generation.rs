@@ -119,11 +119,12 @@ fn every_scheduling_tier_installs_a_notifier() {
 
 /// Every file that builds a `CoverThumbs` of its own, and what makes each one's a separate tier.
 ///
-/// **An equality, not a floor**, because a ninth costs memory in exactly the way eight did: each
-/// holds a screenful of decoded RGB8, and the eight card tiers this collapsed were the same LRU at
-/// the same size with the same cap, split only so a section leave could release its own. That is
-/// what `grid_prewarm::hand_back_covers` replaced. A new tier here is either a decode size nothing
-/// else draws at, or a regression — and a passing suite is the last place it would show.
+/// **An equality, not a floor**, because a sixth costs memory in exactly the way the seven this
+/// collapsed did: each holds a screenful of decoded RGB8, and those seven — in six view handles,
+/// Favorites holding two — were the same LRU at the same size with the same cap, split only so a
+/// section leave could release its own. That is what `grid_prewarm::hand_back_covers` replaced. A
+/// new tier here is either a decode size nothing else draws at, or a regression — and a passing
+/// suite is the last place it would show.
 const TIER_HOMES: [(&str, &str); 5] = [
     ("boot/ui_setup/views.rs", "the row tier, at row-tile size"),
     ("ui/grid_prewarm.rs", "the one tier every card grid draws from"),

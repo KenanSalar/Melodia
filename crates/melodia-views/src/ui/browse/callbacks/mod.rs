@@ -1,6 +1,6 @@
 //! `Browse.*` callbacks, split by concern:
 //!
-//! * [`lifecycle`] — the section gate, the card tier it releases, and the
+//! * [`lifecycle`] — the section gate, the shared grid tier it hands back, and the
 //!   `library_changed` re-fetch subscriber.
 //! * [`navigation`] — folder open / back / breadcrumb, and the persisted path behind
 //!   all three.
@@ -8,8 +8,8 @@
 //! * [`folder_actions`] — the folder card's right-click menu, which the shared `CardActions`
 //!   global can't answer: a folder is a path, not an id.
 //! * [`columns`] — column-visibility persistence, under Browse's own `views.json` key.
-//! * [`view_mode`] — the list-versus-cards toggle and the private cover tier the grid
-//!   draws from.
+//! * [`view_mode`] — the list-versus-cards toggle and the cover lookup the grid draws
+//!   through.
 
 mod columns;
 mod folder_actions;

@@ -1,0 +1,105 @@
+import { CardSelection } from "../../globals/card-selection.slint";
+import { PopupHighlight } from "../../globals/shell.slint";
+import { CardContextMenu } from "card-context-menu.slint";
+
+// **A wrapper per card, sized to it, and the one home for what a card owes its selection.** The
+// menu has to be the card's *sibling* in the card's own coordinate frame, which is what
+// `context-requested` reports in, and the delegate needs somewhere to hold the right-click
+// snapshot — neither can be declared on the `EntityCard` mount itself.
+//
+// The card goes in through `@children` because the entity it draws is the one thing the grids
+// don't share: Slint has no generics and each takes its own row struct, so `for x in grid-row.xs:`
+// is unspellable here. Everything around that line is not, and was written out five times before
+// this component existed.
+//
+// **Every scope-derived answer is spelled here once**, `CardSelection`'s own argument for
+// `count-in` / `any-in` carried the rest of the way: a mount states its scope and nothing else.
+//
+// **`BrowseCardGrid` deliberately does not mount this.** Its cards *are* its list rows, so it
+// reads `Browse.selected-ids` rather than `CardSelection`, and it keys its snapshot on
+// `card_index` because every folder and disk-only file holds `id == 0`. Covering it would mean a
+// second mode on four properties plus a parameterised snapshot key, for one call site.
+export component CardCell inherits Rectangle {
+    in property <length> card-width;
+    in property <length> card-height;
+    // The `CardSelection` scope this grid owns. No default: an empty one answers `false` to
+    // everything and picks nothing, which reads as a dead grid rather than as a missing property.
+    in property <string> scope;
+    // Travels to Rust as the token `EntityKind::from_token` parses; `CardContextMenu` also picks
+    // its per-kind entries off it.
+    in property <string> card-kind;
+    in property <int> card-id;
+    // Album cards only; 0 hides the entry.
+    in property <int> card-artist-id: 0;
+    // Playlist cards only.
+    in property <bool> card-is-smart: false;
+
+    // What the mounted card binds its own selection state to.
+    out property <bool> selected:
+        CardSelection.selected(root.scope, root.card-id, CardSelection.generation);
+    out property <bool> selection-live: CardSelection.any-in(root.scope);
+
+    // Per-kind menu entries the grid owns, because it already has them wired for its hover
+    // controls or its navigation. Inert on a kind that doesn't raise them.
+    callback go-to-artist(int /*artist_id*/);
+    callback rename();
+    callback edit-artwork();
+    callback edit-rules();
+    callback delete-cards([int] /*card_ids*/);
+    callback play-single();
+
+    // The right-click snapshot, gating this cell's `FocusLossWatcher` against whatever the shell
+    // says owns the open menu.
+    private property <length> ctx-x;
+    private property <length> ctx-y;
+    private property <int> ctx-card-id: -1;
+
+    public function pick(shift: bool, ctrl: bool) {
+        CardSelection.pick(root.scope, root.card-id, shift, ctrl);
+    }
+
+    // **Every write precedes `show()`**, or the popup body's `if` gate is still false when the
+    // watcher would mount — the row menu's rule.
+    public function open-menu(x: length, y: length) {
+        root.ctx-x = x;
+        root.ctx-y = y;
+        root.ctx-card-id = root.card-id;
+        PopupHighlight.card-ctx-id = root.card-id;
+        ctx-menu.show();
+    }
+
+    width: root.card-width;
+    height: root.card-height;
+
+    // Ahead of the menu, which has to stay the later sibling to paint over the card.
+    @children
+
+    ctx-menu := CardContextMenu {
+        card-kind: root.card-kind;
+        card-id: root.card-id;
+        card-artist-id: root.card-artist-id;
+        card-is-smart: root.card-is-smart;
+        select-all => { CardSelection.select-all(root.scope); }
+        clear-selection => { CardSelection.clear(); }
+        card-selected: root.selected;
+        effective-selection: CardSelection.scope == root.scope
+            ? CardSelection.selected-ids
+            : [];
+        selection-count: CardSelection.count-in(root.scope);
+        at-x: root.ctx-x;
+        at-y: root.ctx-y;
+        ctx-key: root.ctx-card-id;
+        live-ctx-key: PopupHighlight.card-ctx-id;
+
+        go-to-artist(id) => { root.go-to-artist(id); }
+        rename => { root.rename(); }
+        edit-artwork => { root.edit-artwork(); }
+        edit-rules => { root.edit-rules(); }
+        delete-cards(ids) => { root.delete-cards(ids); }
+        play-single => { root.play-single(); }
+        released => {
+            PopupHighlight.card-ctx-id = -1;
+            root.ctx-card-id = -1;
+        }
+    }
+}

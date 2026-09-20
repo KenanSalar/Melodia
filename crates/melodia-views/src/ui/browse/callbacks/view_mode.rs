@@ -1,5 +1,5 @@
-//! The list-versus-cards toggle, the re-chunk behind it, and the private cover tier the
-//! card grid draws from.
+//! The list-versus-cards toggle, the re-chunk behind it, and the cover lookup the card
+//! grid draws through.
 
 use std::sync::Arc;
 

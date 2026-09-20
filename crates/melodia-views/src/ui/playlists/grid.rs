@@ -1,5 +1,5 @@
-//! Playlists grid: DB fetch + filter / sort / chunk / prewarm logic, plus
-//! the display-aware cover-cache cap tuner. Mirrors `albums::grid`.
+//! Playlists grid: DB fetch + filter / sort / chunk / prewarm logic. Mirrors
+//! `albums::grid`.
 
 use std::path::PathBuf;
 use std::sync::Arc;

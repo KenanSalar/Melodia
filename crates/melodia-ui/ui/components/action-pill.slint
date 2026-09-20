@@ -3,7 +3,7 @@ import { MaterialIcon } from "material-icon.slint";
 import { Tooltip } from "tooltip.slint";
 
 // The rounded near-opaque chip hosting a row of pill segments; callers compose
-// `PillLabel` / `PillDivider` / `PillButton` inside it.
+// `PillButton` / `PillDivider` inside it.
 //
 // **Each primitive below wraps its chrome in a centring `VerticalLayout`.** A
 // `HorizontalLayout` doesn't centre a fixed-height child cross-axis, and an explicit
@@ -160,30 +160,6 @@ export component PillButton inherits Rectangle {
             touch := TouchArea {
                 mouse-cursor: pointer;
                 clicked => { root.clicked(); }
-            }
-        }
-    }
-}
-
-// A non-interactive text segment inside an `ActionPill`.
-export component PillLabel inherits Rectangle {
-    in property <string> text;
-
-    height: 32px;
-    width: layout.preferred-width;
-
-    VerticalLayout {
-        alignment: center;
-        layout := HorizontalLayout {
-            padding-left: 10px;
-            padding-right: 6px;
-            alignment: center;
-            Text {
-                text: root.text;
-                color: Theme.subtext0;
-                font-size: Theme.font-size-sm;
-                font-weight: 500;
-                vertical-alignment: center;
             }
         }
     }

@@ -2,9 +2,9 @@
 //!
 //! Every page that mounts a `TabBar` persists which tab was showing, so each needs the
 //! same read-side clamp; the component's source-level invariants are pinned here too, no
-//! host owning the file. The two grid-bearing pages also share the pair of predicates
-//! below plus the count sentinel — those are about a *tab* rather than what one contains,
-//! which is what makes them generic over each host's own tab enum.
+//! host owning the file. The grid-bearing pages also share the count sentinel and the
+//! signature below — both are about a *tab* rather than what one contains, which is what
+//! makes them generic over each host's own tab enum.
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 

@@ -25,13 +25,17 @@ use melodia_testkit::{MIN_SLINT_SOURCES, UI_DIR, stripped_sources};
 /// dialog, two headings, and two msgids translated separately in all six catalogues,
 /// with nothing failing.
 ///
-/// **A second caller is not the only trigger, and the other one is a deferred raise.**
-/// Export and New Smart Playlist have one caller each and are folded anyway: both leave
-/// `open` false while Rust fetches or hops a tick, and a claim is a thing only a function
-/// can take — `Dialog.claim-request()` bumps the generation `ui::callbacks::DialogClaim`
-/// re-checks, and an inline populate block bumps nothing, so a slower flow it should have
-/// retired goes on to fill the global underneath it. `prepare-export-playlists` and
-/// `open-new-smart-playlist` are those two.
+/// **Nor is a second caller the only trigger.** `delete-playlists` has one, the card menu's batch
+/// arm, and is folded because the singular copy names one playlist's track order and the plural
+/// cannot: two openers rather than a count-ternary inside one, so each heading and message is
+/// stated where it is written.
+///
+/// **The other trigger is a deferred raise.** Export and New Smart Playlist have one caller
+/// each and are folded anyway: both leave `open` false while Rust fetches or hops a tick, and
+/// a claim is a thing only a function can take — `Dialog.claim-request()` bumps the generation
+/// `ui::callbacks::DialogClaim` re-checks, and an inline populate block bumps nothing, so a
+/// slower flow it should have retired goes on to fill the global underneath it.
+/// `prepare-export-playlists` and `open-new-smart-playlist` are those two.
 ///
 /// Folding the second retired the reason `smart-playlist-editor` used to be excluded here:
 /// three sites shared that `kind` and only two were the same dialog, so an entry would have
@@ -48,10 +52,11 @@ use melodia_testkit::{MIN_SLINT_SOURCES, UI_DIR, stripped_sources};
 #[test]
 fn every_multi_caller_dialog_opens_through_its_own_function() {
     const OWNER: &str = "globals/dialog.slint";
-    const FOLDED_KINDS: [&str; 8] = [
+    const FOLDED_KINDS: [&str; 9] = [
         "create-playlist",
         "rename-playlist",
         "delete-playlist",
+        "delete-playlists",
         "edit-tags",
         "add-to-playlist",
         "edit-playlist-artwork",

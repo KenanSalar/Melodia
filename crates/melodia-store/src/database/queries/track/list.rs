@@ -6,12 +6,18 @@ use crate::database::DbPool;
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
 
-/// The `ORDER BY` body the three whole-table track fetches share — the natural-ordering key built
-/// at scan time from title/artist/album.
+/// The `ORDER BY` body every track fetch with no order of its own shares: the natural-ordering key
+/// built at scan time from title/artist/album.
 ///
-/// **Fixed**: both callers that could want another order retain their rows
-/// (`ui::track_list_cache`) and permute them in memory through `ui::track_sort`, so a per-column
-/// order here would be a second spelling of sort semantics that nothing consults.
+/// **Fixed**, because every view that reads one re-sorts what it gets, over rows it retains
+/// (`ui::track_list_cache`) or through `ui::track_sort` directly, so a per-column order here would
+/// be a second spelling of sort semantics that nothing consults.
+///
+/// **Which makes the clause dead on a detail page, and copying it into a batch-action query the
+/// trap.** `queries::track::entity_ids` decides the order a card's right-click Play queues in and
+/// has no re-sort behind it, so it owes agreement to `ui::track_sort`'s default for that page and
+/// not to this: Artist and Genre Detail default to `"album"`, and `sort_key` taken from here
+/// queues a catalogue by title under a page that shows it by album.
 ///
 /// What the clause is still for is **determinism**: the in-memory comparator appends `sort_key` as
 /// its tie-breaker and `sort_by_cached_key` is stable, so rows tied on it fall back to the order
@@ -61,7 +67,7 @@ pub async fn get_tracks_by_artist_for_list(
     let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(format!(
         "SELECT {cols} FROM tracks \
          WHERE id IN (SELECT track_id FROM track_artists WHERE artist_id = ?) \
-         ORDER BY sort_key COLLATE NOCASE ASC"
+         ORDER BY {TRACK_LIST_ORDER}"
     )))
     .bind(artist_id)
     .fetch_all(db.read())
@@ -84,7 +90,7 @@ pub async fn get_tracks_by_genre_for_list(
     let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(format!(
         "SELECT {cols} FROM tracks \
          WHERE id IN (SELECT track_id FROM track_genres WHERE genre_id = ?) \
-         ORDER BY sort_key COLLATE NOCASE ASC"
+         ORDER BY {TRACK_LIST_ORDER}"
     )))
     .bind(genre_id)
     .fetch_all(db.read())

@@ -1,8 +1,8 @@
 //! Genres grid: DB fetch + filter / sort / chunk logic.
 //!
 //! Mirror of `src/ui/albums/grid.rs` minus everything cover-related: no
-//! prewarm step, no cap-tuning function, no `first_screenful_paths`.
-//! Genres have no artwork (see the `Genres` global comment in
+//! prewarm step and no `first_screenful_paths`. Genres have no artwork (see
+//! the `Genres` global comment in
 //! `crates/melodia-ui/ui/globals/genres.slint`).
 
 use std::sync::Arc;

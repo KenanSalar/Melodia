@@ -1,10 +1,8 @@
 import { ListView } from "std-widgets.slint";
 import { Theme } from "../../theme.slint";
 import { PlaylistGridRow } from "../../models.slint";
-import { CardSelection } from "../../globals/card-selection.slint";
-import { PopupHighlight } from "../../globals/shell.slint";
 import { EntityCard } from "entity-card.slint";
-import { CardContextMenu } from "card-context-menu.slint";
+import { CardCell } from "card-cell.slint";
 import { IconButton } from "../icon-button.slint";
 
 // Virtualized playlist-card grid, `AlbumGrid`'s shape: Rust chunks the flat list
@@ -56,17 +54,24 @@ export component PlaylistGrid inherits Rectangle {
                 spacing: root.gap;
                 alignment: start;
 
-                // **A wrapper per card, sized to it.** The menu has to be the card's *sibling* in
-                // the card's own coordinate frame, which is what `context-requested` reports in,
-                // and the delegate needs somewhere to hold the right-click snapshot — neither can
-                // be declared on the `EntityCard` mount itself.
-                for playlist in grid-row.playlists: cell := Rectangle {
-                    width: root.card-width;
-                    height: root.card-height;
+                for playlist in grid-row.playlists: cell := CardCell {
+                    card-width: root.card-width;
+                    card-height: root.card-height;
+                    scope: "playlists";
+                    card-kind: "playlist";
+                    card-id: playlist.id;
+                    card-is-smart: playlist.is_smart;
 
-                    property <length> ctx-x;
-                    property <length> ctx-y;
-                    property <int> ctx-card-id: -1;
+                    rename => { root.rename-playlist(playlist.id); }
+                    edit-artwork => { root.edit-playlist-artwork(playlist.id); }
+                    edit-rules => { root.edit-playlist-rules(playlist.id); }
+                    delete-cards(ids) => {
+                        if (ids.length > 1) {
+                            root.delete-playlists(ids);
+                        } else {
+                            root.delete-playlist(playlist.id);
+                        }
+                    }
 
                     card := EntityCard {
                         card-width: root.card-width;
@@ -90,26 +95,14 @@ export component PlaylistGrid inherits Rectangle {
                         clicked => { root.open-playlist(playlist.id); }
 
                         selectable: true;
-                        selected: CardSelection.selected(
-                            "playlists", playlist.id, CardSelection.generation);
-                        selection-live: CardSelection.any-in("playlists");
-                        select-clicked(shift, ctrl) => {
-                            CardSelection.pick("playlists", playlist.id, shift, ctrl);
-                        }
-                        // **Both writes precede `show()`**, or the popup body's `if` gate is still
-                        // false when the watcher would mount — the row menu's rule.
-                        //
-                        // The wrapper by id rather than `parent`: inside an `EntityCard` mount
+                        selected: cell.selected;
+                        selection-live: cell.selection-live;
+                        select-clicked(shift, ctrl) => { cell.pick(shift, ctrl); }
+                        // The cell by id rather than `parent`: inside an `EntityCard` mount
                         // `parent` is the card, not the square the overlay slot draws in, and
                         // `crates/melodia/tests/entity_card_overlay.rs` bans the word here
                         // outright rather than trying to tell a position from a write.
-                        context-requested(x, y) => {
-                            cell.ctx-x = x;
-                            cell.ctx-y = y;
-                            cell.ctx-card-id = playlist.id;
-                            PopupHighlight.card-ctx-id = playlist.id;
-                            ctx-menu.show();
-                        }
+                        context-requested(x, y) => { cell.open-menu(x, y); }
 
                         // The hover-revealed CRUD trio. **The card's slot rather than the card
                         // itself**: it lived in `EntityCard` once, where every other host raising
@@ -153,39 +146,6 @@ export component PlaylistGrid inherits Rectangle {
                             diameter: 30px;
                             idle-bg: Theme.floating-chrome-bg;
                             clicked => { root.rename-playlist(playlist.id); }
-                        }
-                    }
-
-                    ctx-menu := CardContextMenu {
-                        card-kind: "playlist";
-                        card-id: playlist.id;
-                        card-is-smart: playlist.is_smart;
-                        select-all => { CardSelection.select-all("playlists"); }
-                        clear-selection => { CardSelection.clear(); }
-                        card-selected: CardSelection.selected(
-                            "playlists", playlist.id, CardSelection.generation);
-                        effective-selection: CardSelection.scope == "playlists"
-                            ? CardSelection.selected-ids
-                            : [];
-                        selection-count: CardSelection.count-in("playlists");
-                        at-x: cell.ctx-x;
-                        at-y: cell.ctx-y;
-                        ctx-key: cell.ctx-card-id;
-                        live-ctx-key: PopupHighlight.card-ctx-id;
-
-                        rename => { root.rename-playlist(playlist.id); }
-                        edit-artwork => { root.edit-playlist-artwork(playlist.id); }
-                        edit-rules => { root.edit-playlist-rules(playlist.id); }
-                        delete-cards(ids) => {
-                            if (ids.length > 1) {
-                                root.delete-playlists(ids);
-                            } else {
-                                root.delete-playlist(playlist.id);
-                            }
-                        }
-                        released => {
-                            PopupHighlight.card-ctx-id = -1;
-                            cell.ctx-card-id = -1;
                         }
                     }
                 }

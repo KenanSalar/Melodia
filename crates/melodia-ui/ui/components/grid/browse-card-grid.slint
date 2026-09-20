@@ -82,7 +82,9 @@ export component BrowseCardGrid inherits Rectangle {
                 spacing: root.gap;
                 alignment: start;
 
-                // A wrapper per card, for the reason `PlaylistGrid` gives.
+                // A wrapper per card, for the reason `CardCell` gives. Spelled out rather than
+                // mounted, that component deriving every answer from a `CardSelection` scope
+                // this grid has not got.
                 for card in grid-row.cards: cell := Rectangle {
                     width: root.card-width;
                     height: root.card-height;

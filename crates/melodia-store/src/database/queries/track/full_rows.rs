@@ -33,11 +33,11 @@ pub async fn get_tracks_by_artist(
     db: &DbPool,
     artist_id: i64,
 ) -> Result<Vec<track::Track>, AppError> {
-    let tracks = sqlx::query_as::<_, track::Track>(
+    let tracks = sqlx::query_as::<_, track::Track>(AssertSqlSafe(format!(
         "SELECT * FROM tracks \
          WHERE id IN (SELECT track_id FROM track_artists WHERE artist_id = ?) \
-         ORDER BY sort_key COLLATE NOCASE ASC",
-    )
+         ORDER BY {TRACK_LIST_ORDER}"
+    )))
     .bind(artist_id)
     .fetch_all(db.read())
     .await?;
@@ -48,11 +48,11 @@ pub async fn get_tracks_by_genre(
     db: &DbPool,
     genre_id: i64,
 ) -> Result<Vec<track::Track>, AppError> {
-    let tracks = sqlx::query_as::<_, track::Track>(
+    let tracks = sqlx::query_as::<_, track::Track>(AssertSqlSafe(format!(
         "SELECT * FROM tracks \
          WHERE id IN (SELECT track_id FROM track_genres WHERE genre_id = ?) \
-         ORDER BY sort_key COLLATE NOCASE ASC",
-    )
+         ORDER BY {TRACK_LIST_ORDER}"
+    )))
     .bind(genre_id)
     .fetch_all(db.read())
     .await?;

@@ -1,9 +1,7 @@
 import { ListView } from "std-widgets.slint";
 import { ArtistGridRow } from "../../models.slint";
-import { CardSelection } from "../../globals/card-selection.slint";
-import { PopupHighlight } from "../../globals/shell.slint";
 import { EntityCard } from "entity-card.slint";
-import { CardContextMenu } from "card-context-menu.slint";
+import { CardCell } from "card-cell.slint";
 
 // Virtualized artist-card grid, `AlbumGrid`'s shape: Rust chunks the flat list
 // into rows of `columns` cards and the inner `ListView` virtualizes by row. The
@@ -46,14 +44,12 @@ export component ArtistGrid inherits Rectangle {
                 spacing: root.gap;
                 alignment: start;
 
-                // A wrapper per card, for the reason `PlaylistGrid` gives.
-                for artist in grid-row.artists: cell := Rectangle {
-                    width: root.card-width;
-                    height: root.card-height;
-
-                    property <length> ctx-x;
-                    property <length> ctx-y;
-                    property <int> ctx-card-id: -1;
+                for artist in grid-row.artists: cell := CardCell {
+                    card-width: root.card-width;
+                    card-height: root.card-height;
+                    scope: "artists";
+                    card-kind: "artist";
+                    card-id: artist.id;
 
                     EntityCard {
                         card-width: root.card-width;
@@ -77,41 +73,10 @@ export component ArtistGrid inherits Rectangle {
                         clicked => { root.open-artist(artist.id); }
 
                         selectable: true;
-                        selected: CardSelection.selected(
-                            "artists", artist.id, CardSelection.generation);
-                        selection-live: CardSelection.any-in("artists");
-                        select-clicked(shift, ctrl) => {
-                            CardSelection.pick("artists", artist.id, shift, ctrl);
-                        }
-                        context-requested(x, y) => {
-                            cell.ctx-x = x;
-                            cell.ctx-y = y;
-                            cell.ctx-card-id = artist.id;
-                            PopupHighlight.card-ctx-id = artist.id;
-                            ctx-menu.show();
-                        }
-                    }
-
-                    ctx-menu := CardContextMenu {
-                        card-kind: "artist";
-                        card-id: artist.id;
-                        select-all => { CardSelection.select-all("artists"); }
-                        clear-selection => { CardSelection.clear(); }
-                        card-selected: CardSelection.selected(
-                            "artists", artist.id, CardSelection.generation);
-                        effective-selection: CardSelection.scope == "artists"
-                            ? CardSelection.selected-ids
-                            : [];
-                        selection-count: CardSelection.count-in("artists");
-                        at-x: cell.ctx-x;
-                        at-y: cell.ctx-y;
-                        ctx-key: cell.ctx-card-id;
-                        live-ctx-key: PopupHighlight.card-ctx-id;
-
-                        released => {
-                            PopupHighlight.card-ctx-id = -1;
-                            cell.ctx-card-id = -1;
-                        }
+                        selected: cell.selected;
+                        selection-live: cell.selection-live;
+                        select-clicked(shift, ctrl) => { cell.pick(shift, ctrl); }
+                        context-requested(x, y) => { cell.open-menu(x, y); }
                     }
                 }
             }

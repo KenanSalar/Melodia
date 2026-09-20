@@ -27,7 +27,8 @@ use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_ui::AppWindow;
 
 /// LRU capacity a freshly built tier carries until [`tune_for_display`] measures the window.
-/// A construction default only — eight views spelled this same number before they shared a tier.
+/// A construction default only — six view handles spelled this same number before they shared a
+/// tier.
 pub const GRID_COVER_CAP_FALLBACK: NonZeroUsize = match NonZeroUsize::new(48) {
     Some(n) => n,
     None => panic!("GRID_COVER_CAP_FALLBACK > 0"),
@@ -43,7 +44,7 @@ pub const PROXY_COVER_DIM: u32 = 64;
 
 /// The cover tier every card grid draws from.
 ///
-/// A module singleton rather than a field threaded through `ViewCtx` and eight view handles,
+/// A module singleton rather than a field threaded through `ViewCtx` and six view handles,
 /// because there is exactly one of it and no view owns it — the same shape
 /// `ui::nav_history::nav()` takes, and what retires the strip that used to *borrow* Albums'
 /// tier. `LazyLock` over a boot-set `OnceLock` so there is no initialization order to get

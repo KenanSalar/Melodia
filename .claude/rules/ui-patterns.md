@@ -98,7 +98,7 @@ silently miss the other.
 
 - **`PillButton`** (`components/action-pill.slint`) — `danger: true` tints icon **and** label
   only; the filled destructive treatment is `SectionButton`'s, and the two are not one pattern.
-  Compose inside `ActionPill` with `PillLabel`/`PillDivider`; `IconButton` for round controls
+  Compose inside `ActionPill`, separated by `PillDivider`; `IconButton` for round controls
   *outside* chips.
 
 - **A multi-selection grows no pill.** The count, every batch action and both ends of the set are
@@ -206,6 +206,18 @@ three components that answer it, and each argues its geometry at its own file.
   list into grid-row structs of N, **`GridColumnsSync`** computes N from the width and fires
   `columns-changed` so a resize rebuilds the model without touching the database. Detail views own
   no header — the four under My Library are bodies, the banner being the page's own band.
+
+- **`EntityCard` goes inside `grid/card-cell.slint`'s `CardCell`, which owns everything a card owes
+  its selection.** The menu has to be the card's *sibling* in the card's own coordinate frame and
+  the delegate needs somewhere to hold the right-click snapshot, so neither can live on the
+  `EntityCard` mount; the card itself arrives through `@children` because Slint has no generics and
+  each grid iterates its own row struct. **A mount states its scope and nothing else** — `selected`,
+  `selection-live`, the menu's `effective-selection` and its count are all derived there once, and a
+  mount reaching past them for a `CardSelection` call is re-spelling what the cell already answers.
+  Per-kind menu arms (`go-to-artist`, the playlist four, `play-single`) are callbacks the grid
+  forwards, inert on a kind that never raises them. **`BrowseCardGrid` is the one exemption**: its
+  cards are its list rows, so it reads `Browse.selected-ids` and keys its snapshot on `card_index`,
+  every folder and disk-only file holding `id == 0`.
 
 - **A strip and a grid are different components on purpose.** `HorizontalCardStrip` walks a plain
   `for` — affordable for a capped carousel, not for an uncapped page, where every card is built and

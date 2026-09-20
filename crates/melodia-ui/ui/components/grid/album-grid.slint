@@ -1,9 +1,7 @@
 import { ListView } from "std-widgets.slint";
 import { AlbumGridRow } from "../../models.slint";
-import { CardSelection } from "../../globals/card-selection.slint";
-import { PopupHighlight } from "../../globals/shell.slint";
 import { EntityCard } from "entity-card.slint";
-import { CardContextMenu } from "card-context-menu.slint";
+import { CardCell } from "card-cell.slint";
 
 // Virtualized album-card grid. Rust chunks the flat list into rows of `columns` cards, so the inner
 // `ListView` virtualizes by row and only on-screen rows build their cards. Covers come lazily off
@@ -61,16 +59,14 @@ export component AlbumGrid inherits Rectangle {
                 spacing: root.gap;
                 alignment: start;
 
-                // A wrapper per card, so the menu is the card's sibling in the card's own
-                // coordinate frame and the delegate has somewhere to hold the right-click
-                // snapshot — the `PlaylistGrid` contract, and the reason for the id below.
-                for album in grid-row.albums: cell := Rectangle {
-                    width: root.card-width;
-                    height: root.card-height;
-
-                    property <length> ctx-x;
-                    property <length> ctx-y;
-                    property <int> ctx-card-id: -1;
+                for album in grid-row.albums: cell := CardCell {
+                    card-width: root.card-width;
+                    card-height: root.card-height;
+                    scope: "albums";
+                    card-kind: "album";
+                    card-id: album.id;
+                    card-artist-id: album.artist_id;
+                    go-to-artist(id) => { root.go-to-artist(id); }
 
                     EntityCard {
                         card-width: root.card-width;
@@ -92,43 +88,10 @@ export component AlbumGrid inherits Rectangle {
                         clicked => { root.open-album(album.id); }
 
                         selectable: true;
-                        selected: CardSelection.selected(
-                            "albums", album.id, CardSelection.generation);
-                        selection-live: CardSelection.any-in("albums");
-                        select-clicked(shift, ctrl) => {
-                            CardSelection.pick("albums", album.id, shift, ctrl);
-                        }
-                        context-requested(x, y) => {
-                            cell.ctx-x = x;
-                            cell.ctx-y = y;
-                            cell.ctx-card-id = album.id;
-                            PopupHighlight.card-ctx-id = album.id;
-                            ctx-menu.show();
-                        }
-                    }
-
-                    ctx-menu := CardContextMenu {
-                        card-kind: "album";
-                        card-id: album.id;
-                        card-artist-id: album.artist_id;
-                        select-all => { CardSelection.select-all("albums"); }
-                        clear-selection => { CardSelection.clear(); }
-                        card-selected: CardSelection.selected(
-                            "albums", album.id, CardSelection.generation);
-                        effective-selection: CardSelection.scope == "albums"
-                            ? CardSelection.selected-ids
-                            : [];
-                        selection-count: CardSelection.count-in("albums");
-                        at-x: cell.ctx-x;
-                        at-y: cell.ctx-y;
-                        ctx-key: cell.ctx-card-id;
-                        live-ctx-key: PopupHighlight.card-ctx-id;
-
-                        go-to-artist(id) => { root.go-to-artist(id); }
-                        released => {
-                            PopupHighlight.card-ctx-id = -1;
-                            cell.ctx-card-id = -1;
-                        }
+                        selected: cell.selected;
+                        selection-live: cell.selection-live;
+                        select-clicked(shift, ctrl) => { cell.pick(shift, ctrl); }
+                        context-requested(x, y) => { cell.open-menu(x, y); }
                     }
                 }
             }
