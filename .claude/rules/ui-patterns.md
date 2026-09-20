@@ -696,9 +696,9 @@ three components that answer it, and each argues its geometry at its own file.
     `station-card.slint` derives `logo-native-size` from `cover.width / logo-decode-size`, so the
     decoded *extent* is load-bearing for that card's layout: a proxy makes every logo read as a tiny
     source, draw inset at half the tile, then pop to fill when the real decode lands. So it keeps
-    the old contract — released outright on leave, `covers-generation` rewound to `0` — and pays
-    nothing for it, a cold station card showing its own monogram on its own name-hashed tile rather
-    than a placeholder.
+    the old contract — released outright on leave, `covers-generation` rewound to `0`, and its
+    decode size retuned only while it holds nothing — and pays nothing for it, a cold station card
+    showing its own monogram on its own name-hashed tile rather than a placeholder.
 
 - **No *uncapped* cover lookup decodes on the thread that asks.** `get_or_schedule_opt` answers
   from the tier and hands a miss to the decode pool, so the caller — a Slint model getter, so the
