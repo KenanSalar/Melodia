@@ -50,9 +50,10 @@ export component PillOverflowMenu inherits Rectangle {
     }
 
     pop := PopupWindow {
-        // Left-aligned under the trigger: this row sits mid-band, where the column toggle's
-        // right alignment exists for a page-edge trigger. Slint clamps the far edge either way.
-        x: 0px;
+        // Right-aligned: the trigger is the trailing pill in a row the band anchors to its far
+        // edge. No inside margin like `SortMenuPopup`'s: `show_popup` reads this offset before it
+        // resolves the popup's size, and a bound `width` already answers with the real number.
+        x: btn.width - self.width;
         y: root.height + Theme.popup-gap;
         width: root.menu-width;
         close-policy: close-on-click;
