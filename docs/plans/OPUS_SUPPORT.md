@@ -1,367 +1,309 @@
 # Opus Support
 
-Working doc. Delete when the feature ships.
+Working doc. Delete when the feature ships; leave an ADR behind first.
 
-> **The route below is dead, and most of this doc with it.** It waited on rodio 0.23 to
-> register `symphonia-adapter-libopus` through a feature flag; #90 removed rodio from the
-> tree entirely, and `player::decode::CODECS` is our own `CodecRegistry` built by
-> `CodecRegistry::new()` + `register_enabled_codecs`. Registering a decoder is now one
-> line there and nothing at either call site — which was always the argument for owning
-> the registry.
+Status: **proposed** · Created: 2026-09-21
+
+Issue [#35](https://github.com/KenanSalar/Melodia/issues/35), branch `feat/opus-decoding`.
+The lofty bump in Phase 0 ships on this branch too, as its own commit, not a separate PR.
+
+> Upstream facts below were verified **2026-09-20** against the pinned `symphonia 0.6.1` /
+> `lofty 0.24.0` sources in the registry, the `lofty 0.25.4` and `opus-pure 0.2.1` crate tarballs,
+> and this tree's `Cargo.lock`. The decode measurements were taken in-session against
+> `ffmpeg`'s libopus; the protocol is in the decision section.
 >
-> **What is left of this plan:** add `symphonia-adapter-libopus` to `Cargo.toml`, call
-> `register_audio_decoder::<OpusDecoder>()` in `decode.rs`, add `"opus"` to
-> `utils::audio_ext::AUDIO_EXTENSIONS` (which pulls in a `silence.opus` fixture, since
-> `file_decode_tests::every_scanned_extension_reaches_a_decoder` walks that list), and
-> check the licence against the five packaging formats. Phases 1 and 2 below are about a
-> rodio bump and do not apply; the container findings and the licence work still do.
->
-> `symphonia-format-ogg` already demuxes Opus and applies `pre_skip`, so the decoder is
-> genuinely the only missing piece — that half of this doc holds.
-
-All upstream facts below were verified **2026-07-23**. Anything marked
-⚠️ **re-verify** is expected to drift — check it again on the day rather than trusting
-this doc.
-
-Every bare `src/…` below names the pre-workspace tree, which
-[#83](https://github.com/KenanSalar/Melodia/issues/83) moved into `crates/<member>/src/`. Left as
-written, the sections holding them being the dead ones; the live summary above spells its own
-module paths and those are current.
+> Anything marked ⚠️ **re-verify** is expected to drift; check it again on the day rather than
+> trusting this doc.
 
 ---
 
-## Why this shape
+## The symptom
 
-Three findings decide the approach:
+An `.opus` file in a watched folder is invisible. `utils::audio_ext::AUDIO_EXTENSIONS` has no entry
+for it, so the library walk skips it, the watcher ignores it, drag-and-drop refuses it and Browse
+will not show it. Reached anyway, `decode::open` gets as far as a track and then fails:
+`symphonia-format-ogg` maps Ogg Opus completely (48 kHz, channels off the mapping family, the whole
+`OpusHead` handed over as extra data) and then no decoder in symphonia 0.6.1 claims
+`CODEC_ID_OPUS`.
 
-1. **The container half already works.** `symphonia-format-ogg` ships a complete Opus
-   mapper (`src/mappings/opus.rs`) and already lists `"opus"` in its extension set
-   (`demuxer.rs:351`). It parses `OpusHead`, sets `CODEC_TYPE_OPUS`, 48 kHz, channel
-   count, and `with_delay(pre_skip)` — so demuxing *and* gapless pre-skip trimming are
-   correct today, on the symphonia 0.5.5 we already compile. The only missing piece is
-   a `Decoder` registered for `CODEC_TYPE_OPUS`.
+The same gap shows on the radio side one step further along. `stream_source::codec_from_mime` maps
+`audio/opus` to the label `"OPUS"`, so a station serving Opus paints a codec badge over a stream
+that cannot decode.
 
-2. **rodio has already done the wiring.** PR
-   [#851](https://github.com/RustAudio/rodio/pull/851) (merged 2026-03-11) makes
-   `Settings::default()` register the adapter automatically when the feature is on:
+## The decision: a pure-Rust decoder, not libopus
 
-   ```rust
-   codec_registry: {
-       let mut codec_registry = CodecRegistry::new();
-       register_enabled_codecs(&mut codec_registry);
-       #[cfg(feature = "symphonia-libopus")]
-       codec_registry.register_all::<symphonia_adapter_libopus::OpusDecoder>();
-       Registry::new(codec_registry)
-   }
-   ```
+Both routes end at the same Symphonia `AudioDecoder` trait, so this is a dependency choice rather
+than an architectural one.
 
-   It is unreleased: last release is 0.22.2 (2026-03-05), six days before the merge.
+`symphonia-adapter-libopus` 0.3.0 is 209 lines over `opusic-sys`, which vendors libopus and builds
+it with CMake. It handles mono and stereo only, never reads the `OpusHead` output gain, and
+reallocates its `AudioBuffer` whenever a packet's frame count changes. For a local file here that
+last one is an allocation on the cpal callback thread.
 
-3. **Our decode path needs no change.** `decode_file` already passes the file
-   extension as the hint, and rodio's docs list `"opus"` as the hint string gated on
-   `symphonia-libopus`. So Phase 2 is genuinely a feature flag plus one entry in
-   `AUDIO_EXTENSIONS`.
+`opus-pure` 0.2.1 (BSD-3-Clause, the same licence as libopus) has zero dependencies, no `build.rs`,
+and ships an `OpusMSDecoder`. Measured rather than quoted:
 
-The work that *isn't* free is everything downstream: the C build in CI, and two
-Opus-specific loudness quirks that silently degrade features we already ship
-(Phase 4).
-
-**Native Symphonia Opus is not the plan.** `symphonia-codec-opus/src/lib.rs` is a
-1-byte placeholder; every commit touching that crate is housekeeping. Both paths
-terminate at the same Symphonia `Decoder` trait, so swapping to a first-party decoder
-later is a dependency line and a registration call — see Phase 8.
-
----
-
-## Phase 0 — Trigger
-
-Not started. Nothing to do until rodio 0.23 is on crates.io.
-
-- [ ] `cargo search rodio` reports `0.23.x` (watch
-      [releases](https://github.com/RustAudio/rodio/releases))
-- [ ] Read the released `CHANGELOG.md` + `UPGRADE.md` in full — the notes captured in
-      Phase 1 are a snapshot of `main`, not the final release
-- [ ] ⚠️ **re-verify** which Symphonia the release pins. `main` currently pins
-      symphonia 0.5.5 + `symphonia-adapter-libopus` 0.2 and registers via
-      `register_all::<OpusDecoder>()`. If rodio moves to symphonia 0.6 first, the
-      adapter goes to 0.3 and the call becomes `register_audio_decoder::<OpusDecoder>()`.
-      Either way it's internal to rodio — but it changes our transitive graph.
-
----
-
-## Phase 1 — Upgrade to rodio 0.23 (no Opus yet)
-
-Keep this phase Opus-free so a regression here is unambiguous.
-
-**Our rodio surface is small** — every symbol we touch, verified present in `main` with
-unchanged signatures:
-
-| Site | Symbols |
+| | |
 |---|---|
-| `src/state/mod.rs:135` | `DeviceSinkBuilder::from_default_device`, `with_error_callback`, `open_stream`, `MixerDeviceSink`, `log_on_drop` |
-| `src/player/rodio_backend.rs` | `Decoder`, `Decoder::builder`, `Player`, `mixer::Mixer` |
-| `src/player/decks.rs` | `Player::{connect_new, append, clear, play, pause, set_volume, set_speed, try_seek, get_pos, len, empty, is_paused}`, `Source` |
-| `src/player/equalizer.rs` | `Source`, `SeekError`, `ChannelCount`, `Sample`, `SampleRate` |
+| its own suite, `cargo test --release` on rustc 1.97.0 | **339 passed, 0 failed, 3 ignored** |
+| SNR against ffmpeg's libopus, 12 s of 128 kb/s VBR stereo | **109.0 dB** |
+| largest absolute difference | **1 LSB** at 16-bit, on 0.084% of samples |
+| frame count | 576000, exactly 12.00 s, **delta 0** |
+| throughput | 12.00 s of audio in 0.02 s wall, single-threaded |
 
-**Breaking changes in `UPGRADE.md` as of 2026-07-23 — none of the three touch us:**
+The frame-count delta is the one that matters: pre-skip and end-trim land exactly where libopus puts
+them. A first pass read 79.7 dB at 2 LSB, which turned out to be that crate's example WAV writer and
+its `×32767` truncating cast, confirmed by pushing ffmpeg's own float output through the same rule
+and reproducing the identical 2 LSB on 71% of samples.
 
-- `stream::supported_output_configs` removed — we don't call it.
-- `Done` now takes a callback instead of an `Arc<AtomicUsize>` — we don't use `Done`.
-- `Zero::new_samples()` returns `Result` — we don't use `Zero`.
+Taking libopus would add CMake and a vendored C build to ten release slots, and a media C dependency
+to a binary whose pitch is that it has none, in exchange for a decoder that is measurably no better
+here and does less. The risk is that `opus-pure` is young and lightly adopted. What mitigates it is
+owning the seam: `decode::CODECS` is our registry, so swapping the crate behind it is one line there
+and nothing at either call site.
 
-⚠️ **re-verify:** that list will have grown by release. `main` is mid-flight.
-
-**Behavioural changes that do land on us:**
-
-- [ ] **`Source` trait shape.** Required methods in `main` are still
-      `current_span_len` / `channels` / `sample_rate` / `total_duration`, with
-      `try_seek`, `size_hint`, `is_exhausted` defaulted. `EqSource` implements exactly
-      that set — expected clean, confirm.
-- [ ] **Mixer still sums without clamping.** `Mixer::sum_current_sources` in `main` is
-      still a bare `sum += value` with no clamp. The complementary-linear crossfade
-      curve depends on this (post-clamp decks summing ≤ 1.0 is what prevents clipping).
-      If 0.23 adds a clamp, the crossfade design needs revisiting before anything else.
-      **Check this first — it's the one change that would invalidate an architectural
-      assumption.**
-- [ ] **Complete-frame guarantees.** 0.23 documents that sources must return complete
-      frames and fixes decoders + `TakeDuration` to comply. This *strengthens* the
-      `frame_phase == 0` generation-poll invariant in `EqSource::next`; confirm it
-      doesn't change the arithmetic.
-- [ ] **Span-boundary handling.** 0.23 fixes sources to handle sample-rate and
-      channel-count changes at span boundaries. `EqSource` builds biquad coefficients
-      from `Source::sample_rate()` — check whether a mid-source spec change can now
-      reach us, and whether `rebuild` needs to key on rate as well as generation.
-- [ ] **Default rate 44.1 → 48 kHz** and `open_sink_or_fallback` now tries 48 kHz then
-      44.1 kHz before the device max. We call `from_default_device().open_stream()`, so
-      confirm which config we end up on and that the limiter's per-channel-rate
-      constants still line up.
-- [ ] **`SampleRateConverter` now wraps a `Source` and takes a `ResampleConfig`**
-      (rubato-backed). We don't call it directly, but it's now in the playback path
-      whenever source rate ≠ device rate. Relevant to Phase 2: **Opus always decodes at
-      48 kHz**, so on a 44.1 kHz device every Opus track goes through the resampler —
-      a path our current formats mostly avoid.
-
-**Steps**
-
-- [ ] Bump `rodio` in `Cargo.toml` to the exact released `0.23.x` (full `x.y.z`, per
-      dep convention). Keep the existing per-codec feature list unchanged.
-- [ ] `cargo clippy --all-targets -- -D warnings`
-- [ ] `cargo test` — pay attention to `player/tests/{crossfade,equalizer,handlers,actions}_tests.rs`
-- [ ] `tests/crossfade.rs` drives the mixer directly — the highest-signal test for the
-      no-clamp property and for frame parity.
-
-**Gate:** manual playback pass on the existing eight formats — gapless transition,
-crossfade transition, fade-on-pause, seek, speed change at 0.25× and 2×, EQ sweep,
-ReplayGain on an album-tagged FLAC. Then a release build + `/usr/bin/time -v` RSS
-reading for the record.
+**Native Symphonia Opus is not the plan.** ⚠️ **re-verify:** `symphonia-codec-opus` does not exist on
+crates.io, the facade's 0.6.1 feature list has no `opus` entry, and upstream's own status table still
+marks it as not started. The two open PRs both conflict and the further along of the two implements
+SILK only, which is the wrong half for music. Both routes register into the same `CodecRegistry`
+behind the same trait, so adopting a first-party decoder later is a dependency line and a
+registration call.
 
 ---
 
-## Phase 2 — Turn on Opus decode
+## Structure
 
-- [ ] Add `"symphonia-libopus"` to the `rodio` feature list in `Cargo.toml`, with a
-      comment covering: what it pulls (`symphonia-adapter-libopus` → `opusic-sys` →
-      vendored libopus, built by CMake), and why the adapter rather than native
-      Symphonia.
-- [ ] Add `"opus"` to `AUDIO_EXTENSIONS` (`src/media/mod.rs`). That single const is
-      the whole gate — library walk, watcher, DnD import and Browse all route through
-      `is_audio_extension`.
-- [x] ~~Consider `"oga"` and `"spx"` in the same edit.~~ `oga` landed ahead of this plan
-      in `74fba0c`, along with the header sniff its extension needs (lofty's own map has
-      no entry for it). `spx` stays out: Speex has no decoder and would fail at playback.
-- [ ] Verify `decode_file` needs no change: it passes the extension as `with_hint`, and
-      `"opus"` is the documented hint. Expected zero-diff.
+Where each piece lands, and what stays out of reach of what.
 
-**Do not** enable any of `opusic-sys`'s `no-hardening`, `no-stack-protector`,
-`no-fortify-source`, or `no-simd` features. Defaults keep the hardening on; we're
-compiling C into a binary that parses files from the user's disk.
+| what | where | note |
+|---|---|---|
+| the decoder | `crates/melodia-audio/src/player/source/opus.rs` | new module, beside `aac_trim.rs`, which is the precedent for a codec quirk the tiers below do not handle |
+| registration | `decode::CODECS`, `decode.rs:45-49` | one line; nothing at either call site changes |
+| `opus-pure` | `[workspace.dependencies]`, named by `melodia-audio` alone | the tier boundary in `.claude/rules/audio-stack.md` holds: `source` names the codec, `playback` never does |
+| pre-skip, end-trim, output gain, surround | inside that module | **not** `file_decode`, which is where the AAC delay had to go. Opus states all of it in the identification packet, so there is nothing for a per-file reader to find, and the stream path gets the same handling for free |
+| R128 read | `media/ingest/metadata.rs`, beside the four `ReplayGain*` keys | one helper, no format branch |
+| R128 storage | the four existing `replaygain_*` columns | no schema change, no DSP change |
+| zero-channel guard | `metadata::sniff_file_type` | the one place in the tree that already reads a file header |
 
-**Gate:** a `.opus` file scans, appears with correct duration/metadata/artwork, plays,
-seeks, and survives a gapless transition into and out of an MP3 neighbour.
+Two duplications this deliberately does not create. **The gain is not folded into the ReplayGain
+columns at scan**, which would be the cheaper edit and would silently gate a mandatory-to-apply gain
+on a user toggle. And **no second `OpusHead` parser**: `opus_pure::OpusHead` answers pre-skip, gain
+and the mapping table in one pass, so the module holds no byte offsets of its own.
 
 ---
 
-## Phase 3 — Scan and playback surface
+## Phase 0 — lofty 0.24.0 to 0.25.4
 
-- [ ] **Metadata.** Lofty 0.24 already ships `src/ogg/opus/` — title/artist/album/
-      artwork/comments come through the existing `extract_metadata` path with no change.
-      Verify against a real file rather than assuming.
-- [ ] **Duration.** Ogg Opus duration comes from the final page granule position;
-      confirm `TrackSummary.duration_ms` is sane for VBR Opus. Our `with_byte_len` hint
-      exists for MP3/Vorbis VBR estimation and shouldn't interfere.
-- [ ] **EQ.** Opus is always 48 kHz, so all ten bands sit below Nyquist and the
-      band-skip path never triggers. No change expected — worth one listen.
-- [ ] **Crossfade / gapless.** `with_delay(pre_skip)` in the mapper means Symphonia
-      trims encoder delay for us under `with_gapless(true)`. Verify an Opus→Opus gapless
-      transition has no audible seam, and that an Opus track crossfades correctly (the
-      ramp counts media samples, which is rate-independent, so this should be clean).
-- [ ] **BLAKE3 / moved-file detection, watcher, playlists (M3U8), smart playlists** —
-      all format-agnostic, no work expected.
+**First commit on this branch, ahead of the Opus work, and it ships with it.** Keep it a commit of
+its own so the bump and the three unrelated fixes it carries stay bisectable, but the whole feature
+lands as one PR.
 
----
+Why it goes first: `ItemKey::R128TrackGain` and `R128AlbumGain` arrived in 0.25.0. Without them
+R128 has to be read through the concrete `lofty::ogg::OpusFile`, because `ItemKey` is a closed enum
+with no `Unknown` variant and `VorbisComments::split_tag` leaves an unmapped key in the remainder,
+where the generic `Tag`, and therefore `TaggedFile`, never sees it. That would mean a second lofty
+open per Opus file, bypassing the single-opener discipline `crates/melodia/tests/lofty_open.rs` pins.
+**This bump deletes a module rather than enabling one.**
 
-## Phase 4 — Opus loudness (the part that silently breaks a shipped feature)
+- [ ] Bump `lofty` to `0.25.4` in `[workspace.dependencies]` (full `x.y.z`, per the dep convention).
+- [ ] Confirm the zero-line claim. Every breaking change in 0.25.x lands either on API we never name
+      (`LoftyError`, `Mp4Codec`, `crate::ogg::VorbisComments`, `TagType::remove_from_path`) or on
+      ground our own convention already covers: every call site is
+      `.map_err(|e| AppError::metadata(msg, e))`, and `metadata` takes
+      `impl Into<Box<dyn Error + Send + Sync>>`, which absorbs whatever concrete error type lofty now
+      returns. MSRV moves to 1.89 against our 1.97 pin.
+- [ ] Verify each of the three fixes against a real file, since all three fail silently today:
+      - **MP3 role-credit writes fail.** `Tag::insert_text` returns `false` for
+        `ItemKey::{Producer,Arranger,Engineer,MixDj,MixEngineer}` on an ID3v2 tag, because the
+        support lookup misses the `TIPL` special-casing that the write conversion does handle. That
+        is exactly `role_tags::push_values`, which contradicts its own doc comment.
+        `tag_writer::apply_recording_id` already hand-works-around the MBID half of the same defect
+        with `insert_unchecked`.
+      - **MP3 movement number and total are dropped.** `insert_text` succeeds, so nothing reaches
+        `UnsupportedFields` and the value simply never lands in the file.
+      - **First-time M4A tagging can corrupt the file.** The `moov.stco` offsets are not updated when
+        `udta`/`meta` have to be created, which is `apply_to_file`'s `insert_tag` branch, on the
+        faststart layout ffmpeg and iTunes write.
 
-Opus does **not** use `REPLAYGAIN_*` tags. Two separate mechanisms, and we currently
-honour neither.
-
-### 4a — `R128_TRACK_GAIN` / `R128_ALBUM_GAIN` (required)
-
-`src/media/metadata.rs:322-325` reads only `ItemKey::ReplayGain{Track,Album}{Gain,Peak}`.
-Lofty 0.24 has **no `R128` handling at all** (grepped: zero hits) — it maps
-`REPLAYGAIN_TRACK_GAIN` in VorbisComments to `ItemKey::ReplayGainTrackGain`, and leaves
-`R128_TRACK_GAIN` as an unmapped custom comment.
-
-Consequence: an Opus file tagged by `opusenc`, `loudgain -o`, or `rsgain` carries
-`R128_TRACK_GAIN` and reads as *untagged* — `rg_gain` silently falls back to unity while
-every other format in the library is normalised. Volume jumps on every Opus track.
-
-- [ ] Read `R128_TRACK_GAIN` / `R128_ALBUM_GAIN` from the Vorbis comments directly
-      (they're plain string items; reach past `ItemKey` to the raw key).
-- [ ] Convert: the value is **Q7.8 fixed point** — dB × 256, as a signed integer string.
-      `gain_db = value as f64 / 256.0`.
-- [ ] **Add +5 dB.** R128 references −23 LUFS; ReplayGain 2.0 references −18 LUFS. Without
-      the offset every Opus track plays ~5 dB below the rest of the library — which looks
-      like the feature working but wrong, the worst failure mode.
-- [ ] Peak: R128 defines no peak field. Leave `replaygain_*_peak` as `None`; the
-      prevent-clipping path already handles an unknown peak.
-- [ ] Prefer `REPLAYGAIN_*` when both are present (some taggers write both) — that path
-      is already reference-aligned and needs no offset.
-- [ ] Unit-test the conversion in `src/media/tests/metadata_tests.rs`: a known Q7.8
-      value round-trips to the expected dB, and the −23→−18 offset is applied exactly
-      once.
-
-### 4b — `OpusHead` output gain (optional, lower priority)
-
-RFC 7845 puts a mandatory-to-apply gain in the identification header. **Neither of our
-libraries applies or exposes it:**
-
-- `symphonia-format-ogg` `mappings/opus.rs:73` — `let _ = reader.read_u16()?;`
-- Lofty `src/ogg/opus/properties.rs:105` — `let _output_gain = …`, no getter on
-  `OpusProperties`
-
-So a file with a non-zero header gain plays at the wrong level. In practice most taggers
-write the comment tag instead of the header, so this is rarer than 4a.
-
-- [ ] Decide whether to handle it. If yes: read bytes 16–17 of the identification packet
-      as little-endian `i16`, Q7.8 dB, and fold it into the baked `TrackReplayGain` at
-      scan time — we already have the per-source gain mechanism, so it's a scan-side read
-      plus an addition, not a DSP change.
-- [ ] If deferred, note it in `CLAUDE.md` as a known gap rather than leaving it silent.
+**Gate:** the full static gate, plus a tag round-trip on an MP3 covering role credits and movement
+number, and a first-time tag write to a previously untagged faststart M4A that still plays after.
 
 ---
 
-## Phase 5 — Tag editing
+## Phase 1 — The decoder
 
-The Edit Track Information dialog writes through `src/media/tag_writer.rs`, which
-targets the **primary tag type**. For Ogg Opus that's VorbisComments.
+New module `crates/melodia-audio/src/player/source/opus.rs`, holding an `AudioDecoder` and
+`RegisterableAudioDecoder` for `CODEC_ID_OPUS` over `opus_pure`.
 
-- [ ] Verify `apply_to_file` resolves the primary tag correctly for Opus and that a
-      round-trip edit (title, artist, album artist, composer, BPM, lyrics) survives.
-- [ ] BPM: the ID3v2-specific `IntegerBpm` + `Bpm` double-write shouldn't be needed here
-      (VorbisComments has a `Bpm` key) — confirm no `UnsupportedFields` entries come back.
-- [ ] Lyrics key on Vorbis is `Lyrics`, not `UnsyncLyrics` — the existing tag-type branch
-      already covers this; confirm it fires.
-- [ ] MusicBrainz Recording ID: the `UFID` unchecked-insert special case in
-      `apply_recording_id` is ID3v2-only. Opus goes through the normal text path —
-      confirm MBID auto-tagging writes and re-reads correctly, since LB love-sync depends
-      on it.
-- [ ] Cover art: Opus stores pictures as base64 `METADATA_BLOCK_PICTURE` comments.
-      Confirm `read_cover_art` + replace/remove behave, and that the M4A-style
-      `pic_type` flattening quirk does **not** apply here.
-- [ ] Remember the export caveat: a tag edit changes `file_hash`, staling
-      `#MELODIA-HASH` lines in previously exported `.m3u8`.
+- [ ] `opus-pure = "0.2.1"` in `[workspace.dependencies]`, named by `melodia-audio` alone.
+- [ ] Register with one line in `decode::CODECS` (`decode.rs:45-49`), whose doc comment already names
+      this case as the reason the registry is ours rather than `symphonia::default::get_codecs`.
+      Nothing changes at either call site.
+- [ ] **One parse answers everything.** `opus_pure::OpusHead` reads `pre_skip`, `output_gain_q8`,
+      `mapping_family`, `stream_count`, `coupled_count` and `channel_mapping` off the identification
+      packet Symphonia hands over in `extra_data`. No byte offsets belong in this module.
+- [ ] **Pre-skip.** Symphonia's Ogg Opus packet parser returns a zero discard on every path
+      (`mappings/opus.rs::parse_next_packet_dur` returns `(dur, Duration::ZERO)`), so
+      `packet.trim_start` is always zero for Opus, unlike Vorbis. The count sits on `Track::delay`,
+      which `.claude/rules/symphonia.md` already records as advisory and unapplied. Drop those frames
+      here, keyed off `packet.pts` so a seek into the middle of a file cannot re-trigger it.
+- [ ] **End padding.** This half does arrive, on the last packet's `trim_end`, worked out by the Ogg
+      reader from the granule position. Apply it.
+- [ ] **Output gain.** Q7.8 dB, RFC 7845 §5.1, which asks that players apply it by default.
+      Symphonia parses it into `OpusHead.gain` and the Ogg mapper discards it, so nothing downstream
+      applies it. It belongs here and **not** in the ReplayGain path: it is mandatory to apply, so it
+      must not be gated on the ReplayGain toggle. Carry it as `Option<f32>`, `None` at 0 dB, so the
+      common case is an exact passthrough with no multiply, the same shape as `EqSource`'s flat-band
+      bypass.
+- [ ] Size both buffers once at open, to the longest packet Opus allows (120 ms at 48 kHz), so
+      nothing on the decode path grows a `Vec`. This decoder is pulled inline on the cpal callback for
+      a local file, and it is the point at which the C adapter reallocates.
+- [ ] Do **not** add a soft-clip stage. `opus_pure`'s float output is not bounded by ±1, since codec
+      ringing carries slightly past it, matching libopus. The DSP chain clamps whenever anything is
+      enabled. A nonlinearity on every Opus track, to correct an overshoot the device converts
+      identically either way, is the wrong trade. Say so in the module doc so it is not re-proposed.
 
----
-
-## Phase 6 — CI and packaging
-
-`opusic-sys` 0.7.3 defaults to `bundled`, which builds vendored libopus **via CMake**
-(`[build-dependencies.cmake]`) as a static library.
-
-- [ ] **CMake availability.** Preinstalled on the runner images we use:
-      `ubuntu-latest` 3.31.6, `windows-2025` 3.31.6, `windows-11-arm` 4.4.0. libopus
-      declares `cmake_minimum_required(VERSION 3.16)`, so CMake 4.x is fine (4.x only
-      rejects `<3.5`). ⚠️ **re-verify** `ubuntu-24.04-arm` specifically — it's the one
-      image I didn't confirm, and it carries four of the ten release slots.
-- [ ] If any slot lacks it, add cmake to `.github/actions/linux-system-deps/action.yml`
-      (alongside `libasound2-dev` et al.) rather than to individual jobs.
-- [ ] **Build time.** The vendored C build runs once per cold cache, across all ten
-      release slots and both PR-validation jobs. Check the hit on `Swatinem/rust-cache`
-      warm runs — if it rebuilds every time, that's a cache-key problem worth fixing.
-- [ ] **Artifact size.** libopus static is small, but measure the delta on the tarball,
-      AppImage, RPM, DEB and MSI. The updater downloads whole artifacts.
-- [ ] **LTO interaction.** `opusic-sys` explicitly disables interprocedural optimisation
-      for the opus build and strips `-flto` from `CFLAGS`. Our `lto = "fat"` applies to
-      Rust codegen units and doesn't conflict — but if CI sets `CFLAGS`, expect a
-      `cargo:warning` and confirm it's benign.
-- [ ] **Licensing.** libopus and `opusic-sys` are BSD-3-Clause; the adapter is
-      MIT OR Apache-2.0. All compatible with AGPL-3.0-or-later; the package `License:`
-      fields stay as they are. Consider adding the BSD notice to the RPM/DEB doc dir
-      for attribution hygiene.
-- [ ] **`cargo audit`** runs in `release.yml` — confirm the new C-bearing crates come
-      back clean.
-- [ ] Update `packaging/com.github.kenansalar.melodia.metainfo.xml` and the
-      `[package.metadata.deb]` `extended-description` in `Cargo.toml`, which both list
-      supported formats explicitly.
+**Gate:** clippy and tests. A `.opus` file decodes through `FileDecoder` at the right rate and
+channel count. Keep the module inside the 800-line cap; surround lands in Phase 4 on top of this.
 
 ---
 
-## Phase 7 — Tests
+## Phase 2 — Ingest: the extension surface, and the panic it exposes
 
-- [ ] Add a small Opus fixture. Generate rather than commit a found file:
-      `gst-launch-1.0 audiotestsrc num-buffers=200 ! audioconvert ! opusenc ! oggmux ! filesink location=…`
-      or `ffmpeg`/`opusenc` if preferred.
-- [ ] `src/media/tests/scanner_tests.rs` asserts `files.len() == AUDIO_EXTENSIONS.len()`
-      — it picks up new extensions automatically, but confirm it still passes.
-- [ ] R128 conversion unit test (Phase 4a).
-- [ ] Decode smoke test: build a `Decoder` over the fixture and pull frames — catches a
-      missing feature flag or an unregistered codec without needing an audio device.
-- [ ] `tests/headless.rs` runs under CI's ALSA null device; make sure nothing new needs a
-      real device.
+One phase, because the second half is caused by the first.
+
+**The guard.** `lofty::ogg::opus::properties` ends its channel validation with
+`ChannelMask::from_opus_channels(properties.channels).expect("Channel count is valid")`. 0.25.x adds
+a `channel_mapping_family > 1` guard ahead of that, so ambisonic Opus now errors rather than
+panicking. It does **not** guard `channels == 0`, which still falls to `from_opus_channels`'s
+`_ => None` arm and still panics. Read out of the 0.25.4 source, not taken from the changelog.
+`panic = "abort"` is in `[profile.release]`, so there is no `catch_unwind` to reach for, and
+`extract_or_filename_row`'s `Err` arm cannot help either: a crafted or truncated `.opus` in a watched
+folder **aborts Melodia mid-scan**. It is unreachable today only because `.opus` is not scanned,
+which makes it this phase's exposure to create rather than a pre-existing one to note and leave.
+
+- [ ] Widen `metadata::sniff_file_type`'s `SNIFF_BYTES` (36 today) and refuse a zero-channel Opus
+      header before lofty parses it. For a 19-byte `OpusHead` the channel byte sits at offset 37:
+      a 27-byte Ogg page header, one segment-table byte, the 8-byte magic, then version. Argue the
+      offset at the constant.
+- [ ] Report it upstream.
+- [ ] `"opus"` into `AUDIO_EXTENSIONS` (`crates/melodia-core/src/utils/audio_ext.rs`). That single
+      const is the whole gate: the walk, the watcher, import, Browse and the argv filter all route
+      through `is_audio_extension`. No sniff is needed for *identification*, since lofty maps
+      `"opus" => FileType::Opus` directly, unlike `.oga`.
+- [ ] `test-assets/silence.opus`, generated with ffmpeg, plus a `*.opus binary` line in
+      `.gitattributes` beside its siblings.
+      `file_decode_tests::every_scanned_extension_reaches_a_decoder` walks the const and opens
+      `silence.<ext>` for each; `scanner_tests::collects_all_supported_extensions` asserts the count.
+- [ ] Two `crates/melodia/wix/main.wxs` rows, `SupportedTypes` **and**
+      `Capabilities\FileAssociations`, held by `packaging.rs::the_msi_offers_every_audio_extension`.
+- [ ] The freedesktop MIME type in the four `.desktop` sources: `scripts/Melodia.desktop`,
+      `assets/desktop/Melodia.desktop.tmpl`, and the heredocs in `scripts/build-appimage.sh` and
+      `scripts/build-rpm.sh`. Held by
+      `desktop_integration_tests::all_desktop_sources_agree_on_mime_and_wmclass`, whose list is
+      deliberately hand-maintained rather than derived from the const.
+
+**Gate:** `cargo test --locked --workspace`, where the two walks fail loudly if the fixture or a
+packaging row is missing. A zero-channel `.opus` header reaching `read_tags` comes back an
+`AppError` instead of taking the process down.
 
 ---
 
-## Phase 8 — Docs and exit
+## Phase 3 — R128 loudness
 
-- [ ] `README.md` — format list in the feature section, plus the "Opus is not decoded
-      yet" paragraph below it, which this plan retires.
-- [ ] `CLAUDE.md`:
-      - Symphonia formats bullet: add Opus, and note the decoder is libopus via the
-        adapter, not Symphonia native.
-      - ReplayGain section: document the R128 read path and the +5 dB reference offset.
-        That offset is exactly the kind of thing that looks like a bug to the next
-        reader.
-      - Any deferred item from Phase 4b, as a known gap.
-      - "pure-Rust backend" in the header: reword. It's already imprecise — the binary
-        statically links SQLite (`libsqlite3.a`) and aws-lc-sys — but adding a *media*
-        C dependency makes the claim actively misleading. "No WebView, no IPC, no
-        FFmpeg/GStreamer media stack" is what's actually true and worth defending.
+Opus carries no `REPLAYGAIN_*`. It carries `R128_TRACK_GAIN` and `R128_ALBUM_GAIN` (RFC 7845 §5.2),
+Q7.8 fixed-point dB against EBU R128's −23 LUFS reference. `extract` reads only the four
+`ItemKey::ReplayGain*` keys today (`metadata.rs:316-327`), so **every Opus file would read as
+untagged and play at unity while the rest of the library is normalised**, which is the failure mode
+that looks like the feature working.
+
+- [ ] Read `ItemKey::R128TrackGain` and `R128AlbumGain` beside the existing four. On 0.25.4 these are
+      plain `ItemKey`s, so they go through the same `text(tag, key)` helper as everything else: no
+      format branch, no second open.
+- [ ] Convert `value / 256.0`, then **add 5 dB** for the distance to ReplayGain 2.0's −18 LUFS
+      reference. Argue it at its definition with both reference levels named, since it is exactly the
+      constant that reads as a bug to the next person.
+- [ ] Store into the existing four columns. No schema change and no DSP change; album mode, the
+      preamp and prevent-clipping all keep working untouched.
+- [ ] `REPLAYGAIN_*` wins where both are present, that path being already reference-aligned and
+      needing no offset.
+- [ ] Peak stays `None`, R128 defining none. The prevent-clipping path already handles an unknown
+      peak.
+- [ ] Unit-test the conversion: a known Q7.8 value round-trips, and the −23 to −18 offset is applied
+      exactly once.
+
+**Gate:** an Opus track tagged by `rsgain` sits at the same loudness as the rest of the library
+rather than 5 dB under it.
+
+---
+
+## Phase 4 — Surround
+
+Channel mapping family 1 above two channels. The C adapter cannot do this at all.
+
+- [ ] Route mono and stereo to `opus_pure::OpusDecoder`, and family 1 above two channels to
+      `OpusMSDecoder::new(48_000, channels, mapping_family)`.
+- [ ] The supported set is exactly family 0 and family 1, because Symphonia's own `OpusHead::read`
+      refuses family 2 and above before we see it, and builds the positioned layout up to 8 channels
+      itself.
+- [ ] `ChannelLayout::surround` derives the stream and coupled counts from the channel count, so
+      validate those against the header's own `stream_count` and `coupled_count`, and **refuse a file
+      where they disagree** rather than decoding it into the wrong channels.
+
+**Gate:** a 5.1 fixture (`ffmpeg -ac 6 -c:a libopus`) decodes to six channels, and a header with a
+mismatched `stream_count` is refused.
+
+---
+
+## Phase 5 — Seek pre-roll
+
+RFC 7845 §4.2 wants roughly 80 ms decoded and discarded ahead of a seek target, or the first frames
+come off a cold decoder.
+
+- [ ] `file_decode::try_seek` already trims from wherever the demuxer landed to the exact requested
+      position, via `samples_before(required_ts, actual_ts)`, so those frames *are* pre-roll. What is
+      missing is a guaranteed amount of it. Ask the demuxer for `target − pre_roll` and trim to
+      `target`.
+- [ ] Make the pre-roll a per-codec figure that is zero for every codec but Opus, so nothing else
+      changes behaviour.
+
+**Gate:** `a_seek_lands_on_the_frame_it_asked_for` still passes for every existing format, and an
+Opus seek lands on the frame it asked for.
+
+---
+
+## Phase 6 — Radio
+
+- [ ] Nothing to build. Registering the decoder is all an Opus station mount needs, since
+      `stream_decode` hands `decode::open` a MIME hint and everything from the codec inward is
+      shared. Confirm that `codec_from_mime`'s existing `"OPUS"` label now sits over a stream that
+      plays.
+
+**Gate:** an Opus station tunes, plays, and survives a reconnect.
+
+---
+
+## Phase 7 — Docs and exit
+
+- [ ] `README.md` format list in the feature section.
+- [ ] The `[package.metadata.deb] extended-description` in `crates/melodia/Cargo.toml`.
+- [ ] Root `CLAUDE.md`: the Symphonia formats bullet, and the R128 +5 dB offset. The "pure-Rust
+      backend" claim in the header survives this change, which is a direct consequence of the route
+      chosen and worth stating in the PR rather than leaving silent.
+- [ ] Call the three Phase 0 fixes out in the PR description. They ship inside a PR titled for Opus
+      and none of them is about Opus, so a reader scanning the release for why their MP3 role credits
+      started saving has nothing else to go on.
 - [ ] Delete this file.
 
-**Future swap to native Symphonia Opus.** When `symphonia-codec-opus/src/lib.rs` stops
-being 1 byte and ships: drop the `symphonia-libopus` feature, enable the native codec
-feature, drop the CMake CI step. Both register into the same `CodecRegistry` behind the
-same `Decoder` trait, so nothing in `rodio_backend.rs`, `decks.rs` or `equalizer.rs`
-changes. Phase 4's R128 work is decoder-independent and stays either way. Worth a note
-in `CLAUDE.md` next to the winit-fork retirement condition — same shape of "delete this
-when upstream lands".
-
 ---
 
-## Appendix — verified references
+## Verification across the whole feature
 
-| Claim | Source |
-|---|---|
-| rodio Opus merged, unreleased | [PR #851](https://github.com/RustAudio/rodio/pull/851), merged 2026-03-11; last release 0.22.2, 2026-03-05 |
-| Feature auto-registers the decoder | rodio `main` `src/decoder/builder.rs`, `Settings::default()` |
-| Manual registration escape hatch | `DecoderBuilder::with_symphonia_decoder::<D>()`, same file |
-| `"opus"` is the hint string | rodio master `_autodocs/configuration.md` (via Context7) |
-| Ogg Opus demuxing already works | `symphonia-format-ogg-0.5.5/src/mappings/opus.rs`, `demuxer.rs:351` |
-| Pre-skip handled | same file, `.with_delay(u32::from(pre_skip)).with_sample_rate(48_000)` |
-| Mixer sums without clamping | rodio `main` `src/mixer.rs::sum_current_sources` |
-| libopus built by CMake | `opusic-sys` 0.7.3 `Cargo.toml`, `bundled = ["dep:cmake"]`; `build.rs` |
-| libopus needs CMake ≥3.16 | `xiph/opus` `CMakeLists.txt` |
-| Lofty has no R128 support | `lofty-0.24.0/src/` — zero `R128` matches |
-| Header output gain discarded | `symphonia .../mappings/opus.rs:73`; `lofty .../ogg/opus/properties.rs:105` |
-| Symphonia native Opus is a stub | `symphonia-codec-opus/src/lib.rs` is 1 byte; [issue #8](https://github.com/pdeljanov/Symphonia/issues/8) open since 2020-04-11 |
+- `cargo fmt --all --check`, then `cargo clippy --all-targets --locked --workspace -- -D warnings`.
+- `cargo test --locked --workspace`.
+- A decode cross-check against ffmpeg's libopus on the committed fixture, run the way the measurement
+  in the decision section was run. **Identical frame count is the assertion**, because that is what
+  catches a pre-skip or end-trim regression, which an SNR threshold alone would not.
+- Manual, after the static gates and only on the go-ahead: an `.opus` file scans with the right
+  duration, metadata and artwork; plays; seeks; survives a gapless transition into and out of an MP3
+  neighbour; and crossfades.
