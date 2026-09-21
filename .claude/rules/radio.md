@@ -85,7 +85,10 @@ is the copy to delete.
   ordinary transport code and is one. `record_probed_codec` was exactly that and now sits beside
   `mark_played`, whose one-line-`UPDATE`-per-play shape it copies. **No walk holds this yet** —
   `radio_facade.rs` anchors on the facade's own directory and greps for `radio_browser`, so all
-  four of its checks stayed green through the bypass. Until one does, the rule is the grep.
+  four of its checks stayed green through the bypass. Until one does, the rule is the grep, and the
+  grep is noisier than the rule: eight test modules name `queries::radio::` to build fixtures, one
+  of them `melodia-store`'s own, where naming the module next door is not a door question at all.
+  A ninth hit is prose, `entities::radio` describing this rule rather than reaching past it.
 - **Two tables, and only one holds rows the user owns.** `radio_stations` is favorites, hand-typed
   URLs and play history at three points in one row's life. `radio_logo_answers` is a record of our
   own network outcomes keyed on the URL — which is what lets it exist beside the rule that browsed

@@ -77,21 +77,21 @@ pub fn cover_picture_from_path(path: &Path) -> Result<Picture, AppError> {
     // handed through untouched — `decoded` was only ever the validator. Past them it stops being
     // the validator and becomes the source the re-encode below works from.
     let embeds_as_is = matches!(format, Some(image::ImageFormat::Jpeg | image::ImageFormat::Png));
-    let within_bounds = decoded.width() <= EMBED_MAX_DIM
-        && decoded.height() <= EMBED_MAX_DIM
-        && bytes.len() <= EMBED_MAX_BYTES;
+    let within_dims = decoded.width() <= EMBED_MAX_DIM && decoded.height() <= EMBED_MAX_DIM;
+    let within_bytes = bytes.len() <= EMBED_MAX_BYTES;
 
-    let data = if embeds_as_is && within_bounds {
+    let data = if embeds_as_is && within_dims && within_bytes {
         bytes
     } else {
         let jpeg = embeddable_jpeg(&decoded, path)?;
         // The artwork store's normalizer declines a re-encode that grew and this owes the same
         // rule for the same reason: under a fixed quality a cheaply-encoded source is always at
         // risk of growing, so a cap may cost CPU but must never make the user's own file bigger.
-        // Flat art a shade over the dimension cap is what reaches it. Only that cap is waived,
-        // never the compatibility one: a source no container would take is re-encoded whatever
-        // the sizes say.
-        if embeds_as_is && jpeg.len() >= bytes.len() { bytes } else { jpeg }
+        // Flat art a shade over the dimension cap is what reaches it, trading a decode the store
+        // bounds again anyway for bytes in a file the user keeps. The other two bounds hold: past
+        // the byte cap the tag itself is what grows, and a source no container would take is
+        // re-encoded whatever the sizes say.
+        if embeds_as_is && within_bytes && jpeg.len() >= bytes.len() { bytes } else { jpeg }
     };
 
     let mut picture = Picture::from_reader(&mut Cursor::new(&data)).map_err(|e| {

@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use crate::library::playback;
-use crate::state::{AppState, PlaybackContext};
+use crate::state::AppState;
 use melodia_core::entities::radio;
 use melodia_core::error::{AppError, describe};
 use melodia_engine::player::engine::types::RadioNowPlaying;
@@ -32,15 +32,11 @@ pub async fn mark_played(state: &AppState, id: i64) -> Result<(), AppError> {
 /// between the open and the first sample behind whatever else holds that pool. Failure is logged
 /// and swallowed: a display string is not worth ending a tune over. `station_id` is `0` for a
 /// station with no row of its own, which would match nothing.
-///
-/// Takes the context rather than the state because its one caller is mid-transport and holds no
-/// other; it is the row bookkeeping half of an open, which is why it sits here beside
-/// [`mark_played`] rather than with the connect that produces the answer.
-pub async fn record_probed_codec(ctx: &PlaybackContext, station: &RadioNowPlaying, codec: &str) {
+pub async fn record_probed_codec(db: &DbPool, station: &RadioNowPlaying, codec: &str) {
     if codec.is_empty() || station.station_id == 0 {
         return;
     }
-    if let Err(e) = queries::radio::set_probed_codec(&ctx.db, station.station_id, codec).await {
+    if let Err(e) = queries::radio::set_probed_codec(db, station.station_id, codec).await {
         log::warn!("Could not record {}'s format: {}", station.name, describe(&e));
     }
 }

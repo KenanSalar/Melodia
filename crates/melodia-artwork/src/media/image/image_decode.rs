@@ -231,7 +231,7 @@ pub fn resize_rgb8_image(
     Some(dst)
 }
 
-/// `image` as JPEG bytes at `quality`.
+/// `source` as JPEG bytes at `quality`.
 ///
 /// Shared for the same reason [`resize_rgb8`] is: both writers that produce a JPEG in memory sit
 /// behind a resize, so a difference in how they encode is a difference between the cover the store
@@ -240,10 +240,10 @@ pub fn resize_rgb8_image(
 ///
 /// Returns `image`'s own error rather than an `Option`: one caller reports which step failed and
 /// the other only wants to know that one did.
-pub fn encode_jpeg(image: RgbImage, quality: u8) -> image::ImageResult<Vec<u8>> {
+pub fn encode_jpeg(source: RgbImage, quality: u8) -> image::ImageResult<Vec<u8>> {
     let mut encoded = Vec::new();
     let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut encoded, quality);
-    DynamicImage::ImageRgb8(image).write_with_encoder(encoder)?;
+    DynamicImage::ImageRgb8(source).write_with_encoder(encoder)?;
     Ok(encoded)
 }
 

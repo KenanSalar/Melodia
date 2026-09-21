@@ -175,6 +175,12 @@ fn logo_row(id: i64, uuid: &str, artwork_path: Option<&str>) -> RadioStation {
     station
 }
 
+/// The logo the map holds for `uuid`. Asked per field rather than by map size, the entry itself
+/// standing for either answer a row can carry.
+fn remembered_logo(radio_ui: &RadioUi, uuid: &str) -> Option<String> {
+    radio_ui.kept_answers.lock().get(uuid)?.logo.clone()
+}
+
 /// The map is a projection of the two caches, and the heal is what breaks a copy that isn't.
 ///
 /// A station played out of Browse is kept with no logo, found on its own site a moment later, and
@@ -186,13 +192,12 @@ fn a_logo_found_after_the_refresh_still_reaches_browse() {
     let radio_ui = RadioUi::new(false, None);
     radio_ui.recent.lock().stations = vec![logo_row(7, "uuid-7", None)];
     remember_kept_answers(&radio_ui);
-    assert!(radio_ui.kept_answers.lock().is_empty(), "the row had no logo yet");
+    assert!(remembered_logo(&radio_ui, "uuid-7").is_none(), "the row had no logo yet");
 
     adopt_logo_path(&radio_ui, 7, "/store/7.png");
     remember_kept_answers(&radio_ui);
 
-    let answers = radio_ui.kept_answers.lock();
-    assert_eq!(answers.get("uuid-7").and_then(|kept| kept.logo.as_deref()), Some("/store/7.png"));
+    assert_eq!(remembered_logo(&radio_ui, "uuid-7").as_deref(), Some("/store/7.png"));
 }
 
 /// The other half, and the one the bug actually lived in: the helper was right and the heal never
@@ -230,10 +235,10 @@ fn the_map_spans_both_tabs_and_skips_what_no_directory_page_can_name() {
 
     remember_kept_answers(&radio_ui);
 
-    let known = radio_ui.kept_answers.lock();
-    assert_eq!(known.len(), 2);
-    assert!(known.contains_key("uuid-1"), "a favorite");
-    assert!(known.contains_key("uuid-3"), "and a station only ever played");
+    let answers = radio_ui.kept_answers.lock();
+    assert_eq!(answers.len(), 2);
+    assert!(answers.contains_key("uuid-1"), "a favorite");
+    assert!(answers.contains_key("uuid-3"), "and a station only ever played");
 }
 
 /// A path the refresh already blanked must not come back through the map — the file is gone, and
@@ -243,11 +248,11 @@ fn a_row_whose_logo_went_missing_contributes_nothing() {
     let radio_ui = RadioUi::new(false, None);
     radio_ui.kept.lock().stations = vec![logo_row(1, "uuid-1", Some("/store/1.png"))];
     remember_kept_answers(&radio_ui);
-    assert_eq!(radio_ui.kept_answers.lock().len(), 1);
+    assert_eq!(remembered_logo(&radio_ui, "uuid-1").as_deref(), Some("/store/1.png"));
 
     radio_ui.kept.lock().stations = vec![logo_row(1, "uuid-1", None)];
     remember_kept_answers(&radio_ui);
-    assert!(radio_ui.kept_answers.lock().is_empty());
+    assert!(remembered_logo(&radio_ui, "uuid-1").is_none());
 }
 
 /// What the box can reach. The card shows name, country, codec and tags, and the needle covers

@@ -417,8 +417,12 @@ pub fn apply_edit(tag: &mut Tag, edit: &TagEdit, picture: Option<&Picture>) -> V
 
     write.string(&edit.title, ItemKey::TrackTitle, TagField::Title);
     write.credits(&edit.artist, ItemKey::TrackArtist, ItemKey::TrackArtists, TagField::Artist);
-    let album_artist = TagField::AlbumArtist;
-    write.credits(&edit.album_artist, ItemKey::AlbumArtist, ItemKey::AlbumArtists, album_artist);
+    write.credits(
+        &edit.album_artist,
+        ItemKey::AlbumArtist,
+        ItemKey::AlbumArtists,
+        TagField::AlbumArtist,
+    );
     write.string(&edit.album, ItemKey::AlbumTitle, TagField::Album);
     write.genres(&edit.genres);
     write.roles(&edit.credits);
@@ -442,8 +446,11 @@ pub fn apply_edit(tag: &mut Tag, edit: &TagEdit, picture: Option<&Picture>) -> V
     // Through the ordinary checked path like every other text field: `ID3v2` stores this in a
     // binary `UFID` frame, which `Tag::insert_text` refused until lofty 0.25 taught its support
     // check about the mapping the conversion already had.
-    let recording_id = TagField::MusicBrainzRecordingId;
-    write.string(&edit.musicbrainz_track_id, ItemKey::MusicBrainzRecordingId, recording_id);
+    write.string(
+        &edit.musicbrainz_track_id,
+        ItemKey::MusicBrainzRecordingId,
+        TagField::MusicBrainzRecordingId,
+    );
 
     write.number(&edit.track_number, ItemKey::TrackNumber, TagField::TrackNumber);
     write.number(&edit.track_total, ItemKey::TrackTotal, TagField::TrackTotal);

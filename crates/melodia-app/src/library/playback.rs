@@ -188,7 +188,7 @@ async fn open_and_start_station(
             // above declined and nothing claimed the stage. Closing it here rather than leaving it
             // for the next station is what stops an abandoned connection outliving its station.
             ctx.engine.discard_staged_stream(generation);
-            crate::library::radio::record_probed_codec(ctx, station, &codec).await;
+            crate::library::radio::record_probed_codec(&ctx.db, station, &codec).await;
             Ok(())
         }
         Err(e) => {
