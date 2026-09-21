@@ -137,6 +137,21 @@ fn a_header_disagreeing_with_the_canonical_layout_is_refused() {
     assert!(refused.is_err(), "a stream count no 6-channel layout states has to be refused");
 }
 
+/// Matroska states a channel count and no order, reporting `Channels::Discrete` for every audio
+/// track, so the positioned set is derived from the count rather than read off the container. Read
+/// off it, a stereo Opus in an `.mka` does not open at all, and no other fixture carries Opus in a
+/// container that answers that way.
+///
+/// The frame count is deliberately not asserted: `symphonia-format-mkv` parses `DiscardPadding` and
+/// applies it nowhere, so the tail padding stays in where ffmpeg's own read of the same file drops
+/// it.
+#[test]
+fn opus_in_a_container_that_names_no_channel_order_still_decodes() -> Result<(), AppError> {
+    let decoder = FileDecoder::open(&asset("silence-opus.mka"))?;
+    assert_eq!(decoder.channels().get(), 2);
+    Ok(())
+}
+
 /// The pre-roll is per codec, and the gate is the codec id rather than the presence of a field.
 /// Widening every format's seek would change behaviour nothing here has evidence for.
 #[test]

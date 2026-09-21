@@ -333,7 +333,8 @@ which makes it this phase's exposure to create rather than a pre-existing one to
       check derives the packet's offset from the page's own segment count rather than assuming 37,
       so a packet laced into two segments cannot walk past it, and hands anything it cannot make
       sense of to lofty like every other malformed header.
-- [ ] Report it upstream.
+- [x] Not reported upstream, deliberately. The guard sits ahead of lofty and holds whichever way
+      0.25.x's own validation goes, so nothing here waits on an answer.
 - [x] `"opus"` into `AUDIO_EXTENSIONS` (`crates/melodia-core/src/utils/audio_ext.rs`). That single
       const is the whole gate: the walk, the watcher, import, Browse and the argv filter all route
       through `is_audio_extension`. No sniff is needed for *identification*, since lofty maps
@@ -369,7 +370,7 @@ counts the priming.
 
 ---
 
-## Phase 3 — R128 loudness
+## Phase 3 — R128 loudness ✅ done
 
 Opus carries no `REPLAYGAIN_*`. It carries `R128_TRACK_GAIN` and `R128_ALBUM_GAIN` (RFC 7845 §5.2),
 Q7.8 fixed-point dB against EBU R128's −23 LUFS reference. `extract` reads only the four
@@ -416,7 +417,7 @@ The offset is measured rather than taken from the spec alone. The same 5 s tone,
 
 ---
 
-## Phase 4 — Surround
+## Phase 4 — Surround ✅ done
 
 Channel mapping family 1 above two channels. The C adapter cannot do this at all.
 
@@ -449,7 +450,7 @@ Channel mapping family 1 above two channels. The C adapter cannot do this at all
       the set from `VORBIS_ORDER` against the count answers for all three containers and deletes
       the comparison rather than adding a branch beside it: Ogg and MP4 build their sets from that
       same table, so it could only ever have fired for the set that was breaking.
-- [ ] A `.mka` fixture carrying Opus, which is the refusal with no pin and the one the walk over
+- [x] A `.mka` fixture carrying Opus, which is the refusal with no pin and the one the walk over
       `AUDIO_EXTENSIONS` cannot reach while `silence.mka` carries FLAC.
 
 **Gate:** a 5.1 fixture (`ffmpeg -ac 6 -c:a libopus`) decodes to six channels, and a header with a
@@ -466,9 +467,18 @@ which is what makes that comparison mean anything. The header states
 channels diverge from libopus by full signal amplitude and only front-left — plane 0 under either
 order — stays put.
 
+**The `.mka` half is a refusal rather than a wrong channel, so the pin is that the file opens at
+all.** `silence-opus.mka` carries the same header as its Ogg sibling, family 0 and a pre-skip of
+312, and comes out at two channels where reading the set off the container turns it away, Matroska
+naming a count and no order. A frame count is deliberately not asserted there:
+`symphonia-format-mkv` parses `DiscardPadding` and applies it nowhere, so the 648 frames of tail
+padding stay in and the decode hands over 48648 where ffmpeg reads 48000 out of the same file,
+against a stated 1.008 s. Closing that means reaching a field the demuxer never hands out, so it is
+upstream's rather than ours.
+
 ---
 
-## Phase 5 — Seek pre-roll
+## Phase 5 — Seek pre-roll ✅ done
 
 RFC 7845 §4.2 wants roughly 80 ms decoded and discarded ahead of a seek target, or the first frames
 come off a cold decoder.
@@ -550,7 +560,9 @@ which is the only word in the list that appears nowhere else:
     `surround-bad-layout.opus`, the same file with its stream count rewritten and the Ogg page CRC
     recomputed: Symphonia reads none of those bytes and `opus_pure` derives the layout rather than
     reading them, so nothing but our own check stands between it and a decode into the wrong
-    channels.
+    channels. `silence-opus.mka` is the third, and the one the extension walk cannot reach: it asks
+    whether the set is derived at all, a container naming a count and no order leaving nothing to
+    read it off.
   - **The pre-roll needs a pin of its own, which is the whole finding.** Forcing it to zero leaves
     *both* seek tests green, because a pre-roll is inaudible in a frame count by construction — it
     changes how warm the decoder is, not how much audio comes out. So `seek_pre_roll` is asserted
