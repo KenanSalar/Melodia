@@ -1,5 +1,5 @@
-//! Whole-file read and atomic whole-file write, for the small JSON and text files the app keeps
-//! beside its database.
+//! Whole-file read and atomic whole-file write: the small JSON and text files the app keeps beside
+//! its database, and the tag rewrite of a track in the user's own library.
 //!
 //! The reads are plain and unsynchronised, and they are safe because the writes are not: every
 //! write lands through a temp file in the same directory and a rename, so a reader sees either
@@ -95,7 +95,10 @@ pub fn write_with_sync(
 /// reader on the file it opened, whole to the end, and the next open gets the new one. Rust opens
 /// with `FILE_SHARE_DELETE`, so that holds on Windows too.
 ///
-/// Costs one copy of the file, which is why it is for whole-file rewrites: those pay it anyway.
+/// Costs one copy of the file, which is why it is for whole-file rewrites: those pay it anyway,
+/// and a write permission on the *directory* that an in-place save did not need. No fallback to
+/// one: a second write path would be the one nobody exercises, and it is the path that reintroduces
+/// the fault above.
 pub fn rewrite_with_sync(
     path: &Path,
     rewrite: impl FnOnce(&Path) -> AppResult<()>,

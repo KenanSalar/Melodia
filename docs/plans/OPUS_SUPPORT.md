@@ -262,8 +262,9 @@ registered decoder without it is a commit nothing can validate.
       **which no decoder can reach**: `decode::open` takes the id, the timebase and the length off
       the `Track` and drops it, and `make_decoder` sees `AudioCodecParameters` alone. It is also
       Ogg-only, Matroska shifting the timestamp by `codec_delay` instead and MP4 filling nothing. So
-      it is read off the header and added to `packet.trim_start` on the first packet, a one-shot
-      spent afterwards and not re-armed by `reset`.
+      it is read off the header and added to `packet.trim_start`, spent across as many packets as
+      it takes, and not re-armed by `reset`. Not a one-shot, because RFC 7845 §5.1 wants at least
+      3840 frames on a cropped stream and that outruns a 20 ms packet.
 - [x] **End padding.** This half does arrive, on the last packet's `trim_end`, worked out by the Ogg
       reader from the granule position. Applied through `AudioBuffer::trim`, the same call Vorbis
       makes, and under `opts.gapless` the same way.
@@ -296,7 +297,7 @@ should.
 packet's PTS is zero rather than negative. A decoder that swallows the pre-skip therefore hands back
 audio that runs `pre_skip` frames ahead of the demuxer's timeline: the 1.0065 s above against 1.000 s
 of audio, so a stated duration is that much long and a seek lands that much early, 6.5 ms at the 312
-frames RFC 7845 recommends. Under everything that reads those numbers here, and the alternative is a
+frames libopus primes with. Under everything that reads those numbers here, and the alternative is a
 head reader above the codec that would serve Ogg and neither of the others. Argued in the module
 doc, with `Track::delay` named as where exactness would come from.
 

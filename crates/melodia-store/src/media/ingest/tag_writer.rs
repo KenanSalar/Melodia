@@ -546,7 +546,8 @@ pub fn apply_edit(tag: &mut Tag, edit: &TagEdit, picture: Option<&Picture>) -> U
     UnsupportedFields(out)
 }
 
-/// Read-modify-write `path`'s tags in place. **Blocking** — callers go through `spawn_blocking`.
+/// Read `path`'s tags, apply `edit`, and write the result back. **Blocking** — callers go through
+/// `spawn_blocking`.
 pub fn apply_to_file(
     path: &Path,
     edit: &TagEdit,

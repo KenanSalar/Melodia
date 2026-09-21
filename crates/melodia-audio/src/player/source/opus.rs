@@ -15,7 +15,7 @@
 //! skew.** The Ogg mapper leaves `absgp_to_ts` at identity, so the granule position arrives
 //! still carrying the pre-skip and the first packet's timestamp is zero rather than negative: a
 //! stated duration runs that much long and a seek lands that much early, 6.5 ms at the 312
-//! frames RFC 7845 recommends. What it buys is the other two containers, neither of which
+//! frames libopus primes with. What it buys is the other two containers, neither of which
 //! stands a `Track::delay` up for a reader above the codec to find. That field is where
 //! exactness would come from if the skew ever starts to matter.
 //!
@@ -101,9 +101,10 @@ pub struct OpusDecoder {
     /// so that nothing on the decode path grows.
     pcm: Vec<f32>,
     channels: usize,
-    /// Priming owed to the head of the stream, taken off with the first packet's own trim and
-    /// spent there. [`AudioDecoder::reset`] does not re-arm it, so a seek cannot cut real audio.
-    pre_skip: u32,
+    /// Priming owed to the head of the stream, spent across as many packets as it takes: a stream
+    /// cropped under RFC 7845 section 5.1 states at least 3840 frames, which outruns a 20 ms
+    /// packet. [`AudioDecoder::reset`] does not re-arm it, so a seek cannot cut real audio.
+    pre_skip: usize,
     gapless: bool,
 }
 
@@ -136,7 +137,7 @@ impl OpusDecoder {
             buf: AudioBuffer::new(AudioSpec::new(DECODE_RATE, channels), MAX_PACKET_SAMPLES),
             pcm: vec![0.0; MAX_PACKET_SAMPLES * count],
             channels: count,
-            pre_skip: u32::from(head.pre_skip),
+            pre_skip: usize::from(head.pre_skip),
             gapless: opts.gapless,
         })
     }
@@ -159,9 +160,14 @@ impl OpusDecoder {
         self.buf.copy_from_slice_interleaved(&decoded);
 
         if self.gapless {
-            let head = packet.trim_start.get().saturating_add(u64::from(self.pre_skip));
-            self.buf.trim(trim_count(head), trim_count(packet.trim_end.get()));
-            self.pre_skip = 0;
+            let start = trim_count(packet.trim_start.get());
+            let end = trim_count(packet.trim_end.get());
+            // What the priming has left to spend here. `AudioBuffer::trim` clears the buffer on an
+            // overshoot and reports nothing back, so a pre-skip longer than one packet has to
+            // carry its remainder or the rest of it plays.
+            let available = frames.saturating_sub(start).saturating_sub(end);
+            self.buf.trim(start.saturating_add(self.pre_skip), end);
+            self.pre_skip = self.pre_skip.saturating_sub(available);
         }
         Ok(())
     }
