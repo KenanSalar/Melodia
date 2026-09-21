@@ -64,10 +64,14 @@ pub(super) struct Edit {
     pub playable: Option<u64>,
 }
 
-/// Frames the decoder hands over that are not music.
+/// How much of what the container's timeline counts is not music.
+///
+/// Resolved here for AAC, and filled by [`super::file_decode`] for Opus too, where
+/// [`super::opus`] has already dropped the head and what is left owing is the offset it leaves on
+/// a timeline that still counts those frames.
 #[derive(Clone, Copy)]
 pub(super) struct Trim {
-    /// Encoder priming, dropped ahead of the first real sample.
+    /// Encoder priming, ahead of the first real sample.
     pub head: u64,
     /// Real audio after it, where the container states a length.
     pub playable: Option<u64>,

@@ -11,13 +11,14 @@
 //! [`super::decode::open`] never hands a decoder. Both are read back here, off the container's
 //! own copy of the header.
 //!
-//! **The priming comes off here rather than in [`super::file_decode`], and that costs a known
-//! skew.** The Ogg mapper leaves `absgp_to_ts` at identity, so the granule position arrives
-//! still carrying the pre-skip and the first packet's timestamp is zero rather than negative: a
-//! stated duration runs that much long and a seek lands that much early, 6.5 ms at the 312
-//! frames libopus primes with. What it buys is the other two containers, neither of which
-//! stands a `Track::delay` up for a reader above the codec to find. That field is where
-//! exactness would come from if the skew ever starts to matter.
+//! **The priming comes off here rather than in [`super::file_decode`], which is what covers all
+//! three containers**: only Ogg stands a `Track::delay` up for a reader above the codec to find.
+//! The cost is that the demuxer's timeline is then ahead of the samples handed out, the Ogg
+//! mapper leaving `absgp_to_ts` at identity so the granule position arrives still counting the
+//! priming and the first packet's timestamp is zero rather than negative.
+//! [`super::file_decode::FileDecoder::install_trim`] takes that offset back off the length and
+//! adds it onto a seek, reading the same `Track::delay`, so the two timelines agree again without
+//! this module having to know which container it was handed.
 //!
 //! **No soft clip.** The float output rings slightly past plus or minus one, as libopus does,
 //! and the DSP chain clamps whenever anything is enabled. A nonlinearity on every Opus track,

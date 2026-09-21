@@ -15,6 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use symphonia::core::codecs::audio::AudioDecoder;
+use symphonia::core::codecs::audio::well_known::CODEC_ID_OPUS;
 use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatReader, SeekMode, SeekTo};
 use symphonia::core::io::MediaSource;
@@ -137,41 +138,83 @@ impl FileDecoder {
         Ok(decoded)
     }
 
-    /// Drops the encoder priming ahead of the first real sample and arms the end of the real audio.
+    /// Lines this source's timeline up with the demuxer's, dropping the priming where nothing
+    /// below has.
     ///
-    /// Every other codec, and every AAC file stating nothing, leaves here untouched. The head goes
-    /// through [`Self::skip`] rather than through a window inside the cursor, since the cursor is
-    /// shared with the stream decoder and a live mount has neither a container header to state a
-    /// delay nor a gapless transition to spoil.
+    /// Two codecs state padding and they arrive here in opposite states. AAC states it where no
+    /// decoder reads it, so the head comes off through [`Self::skip`] rather than a window inside
+    /// the cursor: the cursor is shared with the stream decoder, and a live mount has neither a
+    /// container header stating a delay nor a gapless transition to spoil. Opus states it in the
+    /// identification packet and [`super::opus`] has already taken it off, so all that is left is
+    /// the offset it leaves behind on a timeline that still counts those frames. Every other codec
+    /// leaves here untouched.
     ///
     /// Runs on the thread that opened the file, which is never the audio callback: all three call
     /// sites hoist the open off the deck lock for the position monitor's sake.
     fn install_trim(&mut self, edits: &[aac_trim::Edit]) {
+        if let Some(trim) = self.aac_padding(edits) {
+            let shape = self.cursor.shape();
+            self.trim = Some(trim);
+            // Ahead of the counts, which describe the audio left once this is gone.
+            self.skip(
+                usize::try_from(interleaved(trim.head, shape.channels)).unwrap_or(usize::MAX),
+            );
+            self.measure_playable();
+            log::debug!(
+                "AAC encoder padding: {} priming frames dropped, {:?} of audio",
+                trim.head,
+                self.total_duration
+            );
+            return;
+        }
+
+        if let Some(head) = self.opus_priming() {
+            self.trim = Some(Trim { head, playable: None });
+            self.measure_playable();
+            log::debug!(
+                "Opus pre-skip: {head} frames already off the samples, {:?} of audio",
+                self.total_duration
+            );
+        }
+    }
+
+    /// What an AAC file states about its own encoder padding, in decoded frames.
+    fn aac_padding(&mut self, edits: &[aac_trim::Edit]) -> Option<Trim> {
+        let timing = decode::audio_track(&*self.format).and_then(aac_trim::aac_timing)?;
+        aac_trim::resolve(&timing, &self.format.metadata(), edits, self.cursor.shape().rate)
+    }
+
+    /// The priming [`super::opus`] has already dropped, which the demuxer's timeline still counts.
+    ///
+    /// Gated on the codec rather than on the field being filled: the MP3 and CAF readers fill
+    /// `Track::delay` too, and MP3's decoder acts on its own packet trims already, so a blanket
+    /// rule would take the same delay off twice. Ogg is the only container that fills it for Opus,
+    /// and the only one that needs to: Matroska subtracts its `CodecDelay` from the timestamps
+    /// instead, so its timeline already agrees with the samples, and MP4 fills nothing.
+    fn opus_priming(&self) -> Option<u64> {
+        let track = decode::audio_track(&*self.format)?;
+        if decode::audio_params(track)?.codec != CODEC_ID_OPUS {
+            return None;
+        }
+        track.delay.map(u64::from)
+    }
+
+    /// Restates the length, and arms the end count, against the real audio rather than against
+    /// everything the container holds.
+    ///
+    /// A file stating a head and no length still plays for that much less than the container says,
+    /// and the seek clamp reads this.
+    fn measure_playable(&mut self) {
+        let Some(trim) = self.trim else {
+            return;
+        };
         let shape = self.cursor.shape();
-        let Some(timing) = decode::audio_track(&*self.format).and_then(aac_trim::aac_timing) else {
-            return;
-        };
-        let Some(trim) = aac_trim::resolve(&timing, &self.format.metadata(), edits, shape.rate)
-        else {
-            return;
-        };
-
-        self.trim = Some(trim);
-        self.skip(usize::try_from(interleaved(trim.head, shape.channels)).unwrap_or(usize::MAX));
-
-        // A file stating a head and no length still plays for that much less than the container
-        // says, and the seek clamp reads this.
         let head = self.head_duration();
         self.total_duration = match trim.playable {
             Some(playable) => Some(frames_to_duration(playable, shape.rate)),
             None => self.total_duration.map(|total| total.saturating_sub(head)),
         };
         self.remaining = trim.playable.map(|playable| interleaved(playable, shape.channels));
-        log::debug!(
-            "AAC encoder padding: {} priming frames dropped, {:?} of audio",
-            trim.head,
-            self.total_duration
-        );
     }
 
     /// Interleaved samples between where the demuxer landed and where the seek asked for, rounded

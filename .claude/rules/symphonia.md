@@ -70,12 +70,15 @@ loop {
   reads it; iTunSMPB is not parsed at all). This is not a 0.6 regression: 0.5 gated the
   same two demuxers on `FormatOptions::enable_gapless`, and MP3 got *better*, since 0.6 emits the
   trims unconditionally under a default-on flag
-- **`Track::delay`/`padding` is advisory metadata rather than something applied.** CAF fills both
-  from its packet table and no decoder it feeds ever uses them; Opus-in-Ogg fills `delay` from
-  `pre_skip` and nothing carries it to a decoder, `decode::open` dropping the `Track` once it has
-  the id, the timebase and the length, so `player::source::opus` reads the priming back off the
-  identification packet instead, which is also what covers Matroska and MP4, neither of which
-  fills the field at all. So AAC is trimmed here rather than upstream, in
+- **`Track::delay`/`padding` reaches no decoder, and only one reader above one acts on it.** CAF
+  fills both from its packet table and nothing uses them. Opus-in-Ogg fills `delay` from
+  `pre_skip`, and `decode::open` drops the `Track` once it has the id, the timebase and the
+  length, so no decoder can see it: `player::source::opus` reads the priming off the
+  identification packet instead, which is what covers Matroska and MP4 as well, neither of them
+  filling the field. What `file_decode` then reads `delay` for is the *offset* rather than the
+  frames, the demuxer's timeline still counting priming the decoder no longer hands over, and it
+  is gated on `CODEC_ID_OPUS` because MP3 fills the field too and its decoder already acts on its
+  own trims. So AAC is trimmed here rather than upstream, in
   `player::aac_trim`, which reads the two places a file states its padding and hands `file_decode` a
   head and a playable length; that module argues the numbers,
   `docs/adr/` argues why we read them rather than trusting the flag, and

@@ -88,7 +88,7 @@ Where each piece lands, and what stays out of reach of what.
 | the decoder | `crates/melodia-audio/src/player/source/opus.rs` | new module, beside `aac_trim.rs`, which is the precedent for a codec quirk the tiers below do not handle |
 | registration | `decode::CODECS`, `decode.rs:45-49` | one line; nothing at either call site changes |
 | `opus-pure` | `[workspace.dependencies]`, named by `melodia-audio` alone | the tier boundary in `.claude/rules/audio-stack.md` holds: `source` names the codec, `playback` never does |
-| pre-skip, end-trim, output gain, surround | inside that module | **not** `file_decode`, which is where the AAC delay had to go. Only a decoder sees `packet.trim_end`, and only the identification packet states the priming in a way all three containers carry: Matroska fills no `Track::delay` and MP4 fills neither, so a reader above the codec would cover Ogg alone |
+| pre-skip, end-trim, output gain, surround | inside that module | **not** `file_decode`, which is where the AAC delay had to go. Only a decoder sees `packet.trim_end`, and only the identification packet states the priming in a way all three containers carry: Matroska fills no `Track::delay` and MP4 fills neither, so a reader above the codec would cover Ogg alone. What `file_decode` keeps is the *offset* those dropped frames leave on the demuxer's timeline |
 | R128 read | `media/ingest/metadata.rs`, beside the four `ReplayGain*` keys | one helper, no format branch |
 | R128 storage | the four existing `replaygain_*` columns | no schema change, no DSP change |
 | zero-channel guard | `metadata::read_tags`, on the resolved `FileType` | `sniff_file_type` only runs once the extension has resolved to nothing, so it never sees a file named `.opus` |
@@ -292,14 +292,22 @@ rather than assumed: `test-assets/silence.opus` states `pre_skip = 312` and a co
 is what ffmpeg's libopus writes out of the same file. Priming and padding both land where they
 should.
 
-**The skew that buys the other two containers, recorded once.** The Ogg mapper leaves
-`absgp_to_ts` at identity, so the granule position arrives still counting the priming and the first
-packet's PTS is zero rather than negative. A decoder that swallows the pre-skip therefore hands back
-audio that runs `pre_skip` frames ahead of the demuxer's timeline: the 1.0065 s above against 1.000 s
-of audio, so a stated duration is that much long and a seek lands that much early, 6.5 ms at the 312
-frames libopus primes with. Under everything that reads those numbers here, and the alternative is a
-head reader above the codec that would serve Ogg and neither of the others. Argued in the module
-doc, with `Track::delay` named as where exactness would come from.
+**The offset dropping the priming leaves behind, and where it is taken back.** The Ogg mapper
+leaves `absgp_to_ts` at identity, so the granule position arrives still counting the priming and the
+first packet's PTS is zero rather than negative. A decoder that swallows the pre-skip therefore
+hands back samples that run `pre_skip` frames behind the demuxer's timeline: the 1.0065 s above
+against 1.000 s of audio, and lofty subtracts the same number when it reads the file for the
+library, so left alone the track row and the seek bar describe one file with two lengths.
+
+`file_decode::install_trim` closes it off `Track::delay`, the field the Ogg mapper fills with the
+pre-skip and never overwrites. It sets no head to *drop*, the decoder having done that, only the
+offset, and the existing machinery does the rest: `total_duration` loses it and a seek target gains
+it. Gated on `CODEC_ID_OPUS` rather than on the field being filled, because MP3 and CAF fill it too
+and MP3's decoder already acts on its own packet trims. The double-trim this looks like it should
+cause cannot happen: `decode::fill` loops until a packet yields audio and priming-only packets yield
+none, so the decoder's counter is spent before `install_trim` runs, and `reset` never re-arms it.
+Matroska needs none of this, its lacing already subtracting `CodecDelay` from the timestamps; MP4
+fills nothing and is unchanged.
 
 ---
 
@@ -353,8 +361,10 @@ normally either way.
 
 **Registering the decoder also turns on Opus inside `.mka` and `.m4a`**, both already scanned:
 `symphonia-format-mkv` maps `A_OPUS` and `symphonia-format-isomp4` parses `dOps` into the same
-`extra_data`. Neither container states a delay, so those files keep their 6.5 ms of priming; the
-skew argued in Phase 1 is the same one.
+`extra_data`. The priming comes off in the decoder either way. Neither fills `Track::delay`, so
+neither takes the timeline offset Phase 1 adds for Ogg, and neither needs it the same way:
+Matroska's lacing already subtracts `CodecDelay` from its timestamps, and MP4 keeps a length that
+counts the priming.
 
 ---
 
@@ -450,13 +460,14 @@ Opus seek lands on the frame it asked for.
 
 - `cargo fmt --all --check`, then `cargo clippy --all-targets --locked --workspace -- -D warnings`.
 - `cargo test --locked --workspace`.
-- The decode cross-check against ffmpeg's libopus is a test now rather than a step, in
-  `player::source::opus::tests`. **Identical frame count is the assertion**, because that is what
-  catches a pre-skip or end-trim regression, which an SNR threshold alone would not, and the second
-  fixture states a pre-skip no single packet can hold so the carry is pinned too. Four more sit
-  beside the code they hold: the zero-channel header that would otherwise end the process, the tag
-  write a reader survives, and the two arms of the embedded-cover cap. Each was checked by breaking
-  the code and watching that test, and only that test, go red.
+- Seven pins hold what a passing build cannot see, each checked by breaking the code and watching
+  that test, and only that test, go red. Four are in `player::source::opus::tests`: the frame count
+  against what ffmpeg's libopus reads out of the same fixture, **which is the only assertion a
+  pre-skip or end-trim regression moves** where an SNR threshold would not; a header stating a
+  pre-skip no single packet can hold; the length with the priming left out; and a seek landing
+  where it asked. The other three sit beside the code they hold, the zero-channel header that would
+  otherwise end the process, the tag write a reader survives, and the embedded-cover cap on both
+  arms.
 - Manual, after the static gates and only on the go-ahead: an `.opus` file scans with the right
   duration, metadata and artwork; plays; seeks; survives a gapless transition into and out of an MP3
   neighbour; and crossfades.
