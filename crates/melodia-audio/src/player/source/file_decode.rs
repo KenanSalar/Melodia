@@ -23,7 +23,7 @@ use symphonia::core::units::{Time, TimeBase, Timestamp};
 
 use melodia_core::error::AppError;
 
-use super::aac_trim::{self, Trim};
+use super::aac_trim;
 use super::audio::{
     AudioSource, ChannelCount, Sample, SampleRate, SeekError, frames_in, frames_to_duration,
     interleaved,
@@ -89,6 +89,20 @@ impl MediaSource for FileSource {
     fn byte_len(&self) -> Option<u64> {
         self.byte_len
     }
+}
+
+/// How much of what the container's timeline counts is not music.
+///
+/// The reader's rather than either codec's: two of them fill it and neither reads it back.
+/// [`super::aac_trim`] resolves one off what an AAC file states, and the Opus arm of
+/// [`FileDecoder::install_trim`] fills one off the offset [`super::opus`] leaves behind having
+/// already dropped the head itself.
+#[derive(Clone, Copy)]
+pub(super) struct Trim {
+    /// Encoder priming, ahead of the first real sample.
+    pub head: u64,
+    /// Real audio after it, where the container states a length.
+    pub playable: Option<u64>,
 }
 
 /// A file's demuxer and codec, handing out interleaved samples one at a time.

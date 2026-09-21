@@ -211,7 +211,7 @@ export component TagEditorBody inherits HorizontalLayout {
             }
 
             // Every role gets a box even where the format has no key for it — the writer reports
-            // those back through `UnsupportedFields` rather than the form hiding them per file,
+            // those back through `WriteOutcome` rather than the form hiding them per file,
             // which over a mixed selection could only ever be wrong for some of it.
             if TagEditor.active-tab == TagEditor.tab-credits: DialogScrollPane {
                 width: 100%;

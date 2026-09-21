@@ -35,7 +35,7 @@ use melodia_core::error::describe;
 use melodia_core::utils::self_writes::SelfWrites;
 use melodia_store::database::{DbPool, queries};
 use melodia_store::media::ingest::metadata::extract_metadata;
-use melodia_store::media::ingest::tag_writer;
+use melodia_store::media::ingest::{cover_embed, tag_writer};
 
 /// Width cap for the tag-write fan-out. The MP4 save clones the embedded cover,
 /// so an unbounded `par_iter` would hold `num_cpus × (image + its clone)`
@@ -388,7 +388,7 @@ fn prepare_artwork(
     let source = artwork_source.ok_or_else(|| {
         AppError::metadata_msg("artwork Replace requested without a source image".to_owned())
     })?;
-    let picture = tag_writer::cover_picture_from_path(source)?;
+    let picture = cover_embed::cover_picture_from_path(source)?;
     let cached = artwork::cache_image_file(source, artwork_dir);
     Ok((Some(picture), cached))
 }

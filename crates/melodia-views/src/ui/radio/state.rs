@@ -19,6 +19,26 @@ use super::browse::BrowseState;
 use super::logos::LogoMemo;
 use super::{covers, detail, facets, history, kept};
 
+/// What a station's stored row tells Browse that a directory answer cannot.
+#[derive(Default)]
+pub(super) struct KeptAnswers {
+    /// The logo the row holds.
+    ///
+    /// **A row answers a question the memo cannot.** The memo is keyed on the `favicon_url` a
+    /// browse asked about, so it only ever holds what *that URL* returned this session; a station
+    /// whose favicon 404s and whose logo was found on its own site has an `artwork_path` and no
+    /// memo entry, and a page carrying it drew a monogram beside the two local tabs painting the
+    /// real thing.
+    pub(super) logo: Option<String>,
+    /// What an open measured the station to hold.
+    ///
+    /// **Browse would otherwise be the one page that forgets what the app measured.** A directory
+    /// row carries the container its `codec` column names and nothing else, so a station the user
+    /// has already played reads `OGG` on a Browse card while both local tabs read `OGG/VORBIS`.
+    /// Only a station with a local row contributes, which is exactly the set that has an answer.
+    pub(super) format: Option<String>,
+}
+
 /// Rust-side state for the Radio page.
 pub struct RadioUi {
     /// Whether the page is on screen. **Seeded at wire time rather than left to the gate**, which
@@ -40,22 +60,14 @@ pub struct RadioUi {
     /// Derived from the same fetch that fills [`Self::kept`], since a starred station *is* a kept
     /// one — a query of its own would be a second answer to keep true.
     pub(super) starred: Mutex<HashSet<String>>,
-    /// The logo every kept station already has, keyed on directory uuid.
+    /// What a kept station's own row already answers about it, keyed on directory uuid.
     ///
-    /// **A row answers a question the memo cannot.** The memo is keyed on the `favicon_url` a
-    /// browse asked about, so it only ever holds what *that URL* returned this session; a station
-    /// whose favicon 404s and whose logo was found on its own site has an `artwork_path` and no
-    /// memo entry, and a page carrying it drew a monogram beside the two local tabs painting the
-    /// real thing. Filled from the same fetch as [`Self::starred`], for the same reason.
-    pub(super) known_logos: Mutex<HashMap<String, String>>,
-    /// What an open measured each kept station to hold, keyed on directory uuid, for the same
-    /// reason and off the same fetch as [`Self::known_logos`].
-    ///
-    /// **Browse would otherwise be the one page that forgets what the app measured.** A directory
-    /// row carries the container its `codec` column names and nothing else, so a station the user
-    /// has already played reads `OGG` on a Browse card while both local tabs read `OGG/VORBIS`.
-    /// Only a station with a local row contributes, which is exactly the set that has an answer.
-    pub(super) known_formats: Mutex<HashMap<String, String>>,
+    /// Both answers together rather than a map each: they come off the same fetch, describe the
+    /// same row and go stale on the same write, so a second map would be a second thing to keep
+    /// in step and neither question is asked without the other. An entry exists only where the
+    /// row answered at least one of them. Filled from the same fetch as [`Self::starred`], for
+    /// the same reason.
+    pub(super) kept_answers: Mutex<HashMap<String, KeptAnswers>>,
     /// The station ids the logo repair has already asked about this session.
     ///
     /// `kept::refresh` runs on a section enter, on every star flip — Browse's included — and on
@@ -110,8 +122,7 @@ impl RadioUi {
             section,
             browse: Mutex::new(BrowseState::default()),
             starred: Mutex::new(HashSet::new()),
-            known_logos: Mutex::new(HashMap::new()),
-            known_formats: Mutex::new(HashMap::new()),
+            kept_answers: Mutex::new(HashMap::new()),
             healed: Mutex::new(HashSet::new()),
             kept: Mutex::new(kept::KeptState::default()),
             recent: Mutex::new(kept::KeptState::default()),

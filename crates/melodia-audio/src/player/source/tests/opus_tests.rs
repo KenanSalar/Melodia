@@ -9,7 +9,6 @@
 //! every other. It is asked as energy per channel per window instead, off a fixture built so that
 //! the answer is the identity and any reorder defect is a visible permutation of it.
 
-use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use symphonia::core::codecs::audio::AudioCodecParameters;
@@ -18,12 +17,8 @@ use symphonia::core::codecs::audio::well_known::{CODEC_ID_FLAC, CODEC_ID_OPUS};
 use super::{SEEK_PRE_ROLL, seek_pre_roll};
 use crate::player::source::audio::AudioSource;
 use crate::player::source::file_decode::FileDecoder;
+use crate::player::source::tests::helpers::asset;
 use melodia_core::error::AppError;
-use melodia_testkit::ASSETS_DIR;
-
-fn asset(name: &str) -> PathBuf {
-    Path::new(ASSETS_DIR).join(name)
-}
 
 /// Frames `name` decodes to, pulled to the end.
 fn decoded_frames(name: &str) -> Result<usize, AppError> {

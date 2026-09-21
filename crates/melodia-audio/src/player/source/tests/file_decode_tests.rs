@@ -5,18 +5,14 @@
 //! scanning, listing, and then refusing to play.
 
 use std::fs::File;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
 use super::{FileDecoder, probe_duration};
 use crate::player::source::aac_trim;
 use crate::player::source::audio::AudioSource;
+use crate::player::source::tests::helpers::asset;
 use melodia_core::error::AppError;
-use melodia_testkit::ASSETS_DIR;
-
-fn asset(name: &str) -> PathBuf {
-    Path::new(ASSETS_DIR).join(name)
-}
 
 /// The function exists for the containers lofty can't identify, so those are the cases worth
 /// pinning: without this answer their rows reach the library reading 0:00.

@@ -84,7 +84,7 @@ fn kept_row(id: i64, uuid: Option<&str>) -> RadioStationRow {
 fn browsed_row(uuid: &str) -> RadioStationRow {
     let mut station = browsed(0);
     uuid.clone_into(&mut station.station_uuid);
-    to_slint_radio_station_row(&station, false, None, None)
+    to_slint_radio_station_row(&station, &LocalAnswers::default())
 }
 
 /// The model shape both grids install. Through the caller's own chunker, so a change to how a
@@ -113,7 +113,8 @@ fn a_kept_station_carries_its_own_play_count() {
 /// badged with four-figure counts, reading as their own history.
 #[test]
 fn a_browsed_station_reports_no_plays_of_its_own() {
-    assert_eq!(to_slint_radio_station_row(&browsed(4_213), false, None, None).play_count, 0);
+    let row = to_slint_radio_station_row(&browsed(4_213), &LocalAnswers::default());
+    assert_eq!(row.play_count, 0);
 }
 
 /// Every shape a segmented station arrives in with nothing to call its format, and the two it does

@@ -159,7 +159,7 @@ fn logo_for(radio_ui: &RadioUi, station: &DirectoryStation) -> Option<String> {
         .favicon_url
         .as_deref()
         .and_then(|url| radio_ui.logos.path_for(url))
-        .or_else(|| radio_ui.known_logos.lock().get(&station.station_uuid).cloned())
+        .or_else(|| radio_ui.kept_answers.lock().get(&station.station_uuid)?.logo.clone())
         .or_else(|| site_logo(radio_ui, station))
 }
 
@@ -170,7 +170,7 @@ fn logo_for(radio_ui: &RadioUi, station: &DirectoryStation) -> Option<String> {
 /// played would read `OGG` here while both local tabs read `OGG/VORBIS`. Only a station with a
 /// local row has an answer, which is the set the map holds.
 pub(super) fn format_for(radio_ui: &RadioUi, station: &DirectoryStation) -> Option<String> {
-    radio_ui.known_formats.lock().get(&station.station_uuid).cloned()
+    radio_ui.kept_answers.lock().get(&station.station_uuid)?.format.clone()
 }
 
 /// What this session read off the station's own site, for a row the directory gave no usable
@@ -197,14 +197,12 @@ pub fn apply(ui: &AppWindow, radio_ui: &RadioUi) {
             .stations
             .iter()
             .map(|station| {
-                let logo = logo_for(radio_ui, station);
-                let format = format_for(radio_ui, station);
-                rows::to_slint_radio_station_row(
-                    station,
-                    starred.contains(&station.station_uuid),
-                    logo.as_deref(),
-                    format.as_deref(),
-                )
+                let local = rows::LocalAnswers {
+                    is_favorite: starred.contains(&station.station_uuid),
+                    logo: logo_for(radio_ui, station),
+                    format: format_for(radio_ui, station),
+                };
+                rows::to_slint_radio_station_row(station, &local)
             })
             .collect();
         (station_rows, browse.has_more)
@@ -438,11 +436,13 @@ async fn warm_page(
     // reached it either way — nothing here regresses, it just doesn't improve.
     let (favicon_urls, effort) = {
         let browse = radio_ui.browse.lock();
-        let known = radio_ui.known_logos.lock();
+        let known = radio_ui.kept_answers.lock();
         let urls: Vec<String> = browse
             .stations
             .iter()
-            .filter(|station| !known.contains_key(&station.station_uuid))
+            .filter(|station| {
+                known.get(&station.station_uuid).is_none_or(|kept| kept.logo.is_none())
+            })
             .filter_map(|station| station.favicon_url.clone())
             .collect();
         (urls, logos::Effort::for_result(fresh, browse.stations.len()))

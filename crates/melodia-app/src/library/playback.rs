@@ -188,7 +188,7 @@ async fn open_and_start_station(
             // above declined and nothing claimed the stage. Closing it here rather than leaving it
             // for the next station is what stops an abandoned connection outliving its station.
             ctx.engine.discard_staged_stream(generation);
-            record_probed_codec(ctx, station, &codec).await;
+            crate::library::radio::record_probed_codec(ctx, station, &codec).await;
             Ok(())
         }
         Err(e) => {
@@ -199,26 +199,6 @@ async fn open_and_start_station(
             );
             Err(e)
         }
-    }
-}
-
-/// Write down what the mount that just opened actually serves, where it says anything.
-///
-/// The open is the only moment that answer exists. The directory's `codec` column names the
-/// container, so an Ogg station reads `OGG` whether it carries Vorbis, Opus or FLAC, and the
-/// response's content type says the same; the decoder is what can tell them apart. It lands in
-/// `probed_codec` rather than over the directory's own column, which a re-import rewrites.
-///
-/// **Last, once the stream is playing.** It is a write-pool `UPDATE`, so anywhere earlier it sits
-/// between the open and the first sample behind whatever else holds that pool. Failure is logged
-/// and swallowed: a display string is not worth ending a tune over. `station_id` is `0` for a
-/// station with no row of its own, which would match nothing.
-async fn record_probed_codec(ctx: &PlaybackContext, station: &RadioNowPlaying, codec: &str) {
-    if codec.is_empty() || station.station_id == 0 {
-        return;
-    }
-    if let Err(e) = queries::radio::set_probed_codec(&ctx.db, station.station_id, codec).await {
-        log::warn!("Could not record {}'s format: {}", station.name, describe(&e));
     }
 }
 

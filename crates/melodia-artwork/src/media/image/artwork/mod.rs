@@ -25,8 +25,8 @@
 //! file — and the store directory holds whatever else a user has put there.
 //!
 //! Every byte is rederivable from the user's own files, which is what makes deleting aggressively
-//! safe. Nothing here ever writes back to those files: `tag_writer` embeds a picked cover's
-//! original bytes, so a capped store never caps what lands in a tag.
+//! safe. Nothing here ever writes back to those files: `cover_embed` bounds a picked cover against
+//! caps of its own, so a capped store never caps what lands in a tag.
 
 use std::io::{self, Write};
 use std::num::NonZeroUsize;
@@ -317,11 +317,8 @@ fn normalized_bytes(bytes: &[u8], width: u32, height: u32) -> Option<Vec<u8>> {
     let (target_w, target_h) =
         image_decode::fit_within(width, height, STORE_MAX_DIM, STORE_MAX_DIM);
     let resized = resize_rgb8(&decoded, target_w, target_h, STORE_FILTER)?;
+    let encoded = image_decode::encode_jpeg(resized, STORE_JPEG_QUALITY).ok()?;
 
-    let mut encoded = Vec::new();
-    let encoder =
-        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut encoded, STORE_JPEG_QUALITY);
-    image::DynamicImage::ImageRgb8(resized).write_with_encoder(encoder).ok()?;
     (encoded.len() < bytes.len()).then_some(encoded)
 }
 

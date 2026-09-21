@@ -345,7 +345,7 @@ fn extract(
         comment: text(tag, ItemKey::Comment),
         // `ItemKey::Bpm` has NO ID3v2 mapping — MP3 / WAV / AIFF keep BPM in `TBPM`, which lofty
         // exposes as `IntegerBpm`. Reading only `Bpm` therefore misses it on every ID3v2 file,
-        // including the ones `tag_writer::apply_bpm` writes. Prefer the decimal key (Vorbis
+        // including the ones `tag_writer`'s BPM write puts there. Prefer the decimal key (Vorbis
         // `BPM`, MP4 freeform); fall back to the integer.
         bpm: text(tag, ItemKey::Bpm)
             .or_else(|| text(tag, ItemKey::IntegerBpm))

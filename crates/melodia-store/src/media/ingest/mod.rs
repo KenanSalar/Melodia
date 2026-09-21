@@ -1,5 +1,6 @@
 //! Reading a media file into the library, and writing back to it.
 
+pub mod cover_embed;
 pub mod metadata;
 pub mod rating_tags;
 pub mod role_tags;

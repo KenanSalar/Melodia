@@ -17,8 +17,9 @@
 //!
 //! Scope is AAC. FLAC and ALAC are lossless and pad nothing, and Vorbis and Opus come off their
 //! own decoders instead: upstream's Vorbis reads the packet trims, and [`super::opus`] argues why
-//! ours takes the priming there rather than here. [`Trim`] is the one thing that crosses back:
-//! [`super::file_decode`] fills one for Opus off the offset that leaves on the demuxer's timeline.
+//! ours takes the priming there rather than here. The [`Trim`](super::file_decode::Trim) this
+//! resolves is the reader's rather than this module's, two codecs filling one: Opus gets its own
+//! off the offset the decoder leaves on the demuxer's timeline, which is nothing to do with AAC.
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
@@ -29,6 +30,7 @@ use symphonia::core::meta::{Metadata, RawValue};
 use symphonia::core::units::{Duration as SymphoniaDuration, TimeBase};
 
 use super::audio::SampleRate;
+use super::file_decode::Trim;
 
 /// Box headers the walk will read before giving up.
 ///
@@ -62,19 +64,6 @@ pub(super) struct Edit {
     pub delay: u64,
     /// Media ticks the presentation runs for, where the edit list's own timescale converts to this
     /// one exactly. See [`exact_media_ticks`] for why an inexact one is dropped rather than rounded.
-    pub playable: Option<u64>,
-}
-
-/// How much of what the container's timeline counts is not music.
-///
-/// Resolved here for AAC, and filled by [`super::file_decode`] for Opus too, where
-/// [`super::opus`] has already dropped the head and what is left owing is the offset it leaves on
-/// a timeline that still counts those frames.
-#[derive(Clone, Copy)]
-pub(super) struct Trim {
-    /// Encoder priming, ahead of the first real sample.
-    pub head: u64,
-    /// Real audio after it, where the container states a length.
     pub playable: Option<u64>,
 }
 

@@ -34,7 +34,8 @@ pub use logos::{
     prune_logo_answers, record_logo_outcome, set_artwork, site_origin,
 };
 pub use playback::{
-    mark_played, play_directory_station, play_station, set_directory_favorite, station_to_restore,
+    mark_played, play_directory_station, play_station, record_probed_codec, set_directory_favorite,
+    station_to_restore,
 };
 
 // `library::radio_files` composes these with its own write rather than going through the door

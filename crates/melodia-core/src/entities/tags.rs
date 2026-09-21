@@ -27,7 +27,7 @@ pub enum ArtworkEdit {
     #[default]
     Keep,
     Remove,
-    /// Embed the picture the caller built with `media::ingest::tag_writer::cover_picture_from_path`.
+    /// Embed the picture the caller built with `media::ingest::cover_embed::cover_picture_from_path`.
     Replace,
 }
 

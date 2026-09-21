@@ -523,7 +523,7 @@ fn a_solo_credit_keeps_its_only_id() {
     assert_eq!(read_credit_mbids(Some(&tag), ItemKey::MusicBrainzArtistId, 1), ["id-alice"]);
 }
 
-/// The read side of the same precedence `tag_writer::apply_year` clears the whole list for:
+/// The read side of the same precedence `tag_writer`'s year write clears the whole list for:
 /// `ReleaseDate` is the explicit answer, `RecordingDate` the one Picard writes, `Year` a
 /// Vorbis-only spelling some rippers still emit alone.
 #[test]

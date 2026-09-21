@@ -186,12 +186,13 @@ fn a_logo_found_after_the_refresh_still_reaches_browse() {
     let radio_ui = RadioUi::new(false, None);
     radio_ui.recent.lock().stations = vec![logo_row(7, "uuid-7", None)];
     remember_kept_answers(&radio_ui);
-    assert!(radio_ui.known_logos.lock().is_empty(), "the row had no logo yet");
+    assert!(radio_ui.kept_answers.lock().is_empty(), "the row had no logo yet");
 
     adopt_logo_path(&radio_ui, 7, "/store/7.png");
     remember_kept_answers(&radio_ui);
 
-    assert_eq!(radio_ui.known_logos.lock().get("uuid-7").map(String::as_str), Some("/store/7.png"));
+    let answers = radio_ui.kept_answers.lock();
+    assert_eq!(answers.get("uuid-7").and_then(|kept| kept.logo.as_deref()), Some("/store/7.png"));
 }
 
 /// The other half, and the one the bug actually lived in: the helper was right and the heal never
@@ -229,7 +230,7 @@ fn the_map_spans_both_tabs_and_skips_what_no_directory_page_can_name() {
 
     remember_kept_answers(&radio_ui);
 
-    let known = radio_ui.known_logos.lock();
+    let known = radio_ui.kept_answers.lock();
     assert_eq!(known.len(), 2);
     assert!(known.contains_key("uuid-1"), "a favorite");
     assert!(known.contains_key("uuid-3"), "and a station only ever played");
@@ -242,11 +243,11 @@ fn a_row_whose_logo_went_missing_contributes_nothing() {
     let radio_ui = RadioUi::new(false, None);
     radio_ui.kept.lock().stations = vec![logo_row(1, "uuid-1", Some("/store/1.png"))];
     remember_kept_answers(&radio_ui);
-    assert_eq!(radio_ui.known_logos.lock().len(), 1);
+    assert_eq!(radio_ui.kept_answers.lock().len(), 1);
 
     radio_ui.kept.lock().stations = vec![logo_row(1, "uuid-1", None)];
     remember_kept_answers(&radio_ui);
-    assert!(radio_ui.known_logos.lock().is_empty());
+    assert!(radio_ui.kept_answers.lock().is_empty());
 }
 
 /// What the box can reach. The card shows name, country, codec and tags, and the needle covers

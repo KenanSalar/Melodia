@@ -26,6 +26,7 @@ use melodia_app::state::AppState;
 use melodia_core::entities::radio::RadioStation;
 use melodia_ui::{AppWindow, Radio, RadioStationGridRow};
 
+use super::state::KeptAnswers;
 use super::{RadioTab, RadioUi, covers, mounted_tab, rows};
 
 /// One local list: what was fetched, and what the box has narrowed it to.
@@ -301,23 +302,30 @@ pub fn refresh(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
 /// One pass for both, the second map having the same key, the same source rows and the same
 /// staleness to avoid.
 fn remember_kept_answers(radio_ui: &RadioUi) {
-    let mut logos = HashMap::new();
-    let mut formats = HashMap::new();
+    let mut answers: HashMap<String, KeptAnswers> = HashMap::new();
     for cache in [&radio_ui.kept, &radio_ui.recent] {
         for station in &cache.lock().stations {
             let Some(uuid) = &station.station_uuid else {
                 continue;
             };
-            if let Some(path) = &station.artwork_path {
-                logos.insert(uuid.clone(), path.clone());
+            let format = station.format();
+            // No entry for a row that answered neither, so presence in the map still means the
+            // station told Browse something.
+            if station.artwork_path.is_none() && format.is_none() {
+                continue;
             }
-            if let Some(format) = station.format() {
-                formats.insert(uuid.clone(), format);
+            // Per field rather than per entry: the same station can sit in both caches, and a
+            // later row that lost one answer must not blank the other's.
+            let answer = answers.entry(uuid.clone()).or_default();
+            if let Some(path) = &station.artwork_path {
+                answer.logo = Some(path.clone());
+            }
+            if format.is_some() {
+                answer.format = format;
             }
         }
     }
-    *radio_ui.known_logos.lock() = logos;
-    *radio_ui.known_formats.lock() = formats;
+    *radio_ui.kept_answers.lock() = answers;
 }
 
 /// Drop artwork paths whose file is gone, so the row says what is actually drawable.
