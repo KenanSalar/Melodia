@@ -17,7 +17,8 @@
 //!
 //! Scope is AAC. FLAC and ALAC are lossless and pad nothing, and Vorbis and Opus come off their
 //! own decoders instead: upstream's Vorbis reads the packet trims, and [`super::opus`] argues why
-//! ours takes the priming there rather than here.
+//! ours takes the priming there rather than here. [`Trim`] is the one thing that crosses back:
+//! [`super::file_decode`] fills one for Opus off the offset that leaves on the demuxer's timeline.
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};

@@ -1,9 +1,9 @@
 //! Tests for the Opus decoder.
 //!
-//! Both cases are frame counts, which is the only assertion that can see a pre-skip or an end-trim
-//! regression: the samples either side of one are still the right samples, so a comparison against
-//! a reference decode would agree on everything it looked at and disagree only on how much there
-//! was.
+//! Counts rather than samples: the audio either side of a pre-skip or end-trim regression is still
+//! the right audio, so a comparison against a reference decode would agree on everything it looked
+//! at and disagree only on how much there was. The last two ask that of the demuxer's timeline
+//! instead, a stated length and a seek's landing against what the decoder hands over.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;

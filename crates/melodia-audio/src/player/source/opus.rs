@@ -108,6 +108,8 @@ pub struct OpusDecoder {
     /// cropped under RFC 7845 section 5.1 states at least 3840 frames, which outruns a 20 ms
     /// packet. [`AudioDecoder::reset`] does not re-arm it, so a seek cannot cut real audio.
     pre_skip: usize,
+    /// Off, the priming stays in and [`super::file_decode`]'s timeline offset would describe
+    /// frames still being handed over. `decode::make_decoder` takes the default, which is on.
     gapless: bool,
 }
 
