@@ -178,9 +178,10 @@ const R128_TO_REPLAYGAIN_DB: f64 = 5.0;
 /// Parse an `R128_*_GAIN` value — Q7.8 fixed-point dB, e.g. "-1280" — restated against
 /// `ReplayGain`'s reference so it can share the columns and the DSP.
 ///
-/// No non-finite guard, unlike the two above: an integer scaled and offset cannot be one.
+/// `i16` because RFC 7845 §5.2 states the field as one, which caps the answer at ±128 dB: no
+/// non-finite guard is owed, unlike the two above, and no absurd one can reach the DSP either.
 fn parse_r128_gain(s: &str) -> Option<f64> {
-    let q7_8 = s.trim().parse::<i32>().ok()?;
+    let q7_8 = s.trim().parse::<i16>().ok()?;
     Some(f64::from(q7_8) / 256.0 + R128_TO_REPLAYGAIN_DB)
 }
 

@@ -223,8 +223,9 @@ impl FileDecoder {
     /// Normally the one the demuxer echoed back, that being its own restatement of what it was
     /// asked for. Where a pre-roll was taken off the ask the two part company, and the trim still
     /// owes the target: restating it here is what turns the frames in between from a head the
-    /// listener would hear into warm-up the decoder needs. A timebase that cannot restate it
-    /// leaves the echoed one standing, and the seek keeps whatever warm-up its landing gave it.
+    /// listener would hear into warm-up the decoder needs. A target the timebase cannot restate
+    /// leaves the echoed one standing, which is the seek this path made before there was a
+    /// pre-roll to take off.
     fn trim_target(&self, target: Duration, pre_roll: Duration, echoed: Timestamp) -> Timestamp {
         if pre_roll.is_zero() {
             return echoed;
@@ -347,8 +348,13 @@ impl AudioSource for FileDecoder {
 
         // Ask short of the target wherever the codec needs warming, and let the trim below take
         // the difference back off: those frames are decoded and discarded, which is the whole of
-        // what asking early buys. Zero everywhere but Opus, so no other format moves.
-        let pre_roll = opus::seek_pre_roll(self.decoder.codec_params());
+        // what asking early buys. Zero everywhere but Opus, so no other format moves, and zero
+        // without the timebase the trim is measured through, since asking early with nothing to
+        // trim is a replay rather than a warm-up.
+        let pre_roll = match self.time_base {
+            Some(_) => opus::seek_pre_roll(self.decoder.codec_params()),
+            None => Duration::ZERO,
+        };
         let time = seek_time(target.saturating_sub(pre_roll))
             .ok_or_else(|| other(AppError::Player("Seek position out of range".to_owned())))?;
 

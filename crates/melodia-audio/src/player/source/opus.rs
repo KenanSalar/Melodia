@@ -6,25 +6,21 @@
 //! identification packet over whole as `extra_data`, so which container it was is invisible
 //! from here.
 //!
-//! **Two numbers Symphonia reads out of that packet and then drops.** The playback gain reaches
-//! no field of `AudioCodecParameters` at all, and the pre-skip lands on `Track::delay`, which
-//! [`super::decode::open`] never hands a decoder. Both are read back here, off the container's
-//! own copy of the header.
+//! **Two numbers Symphonia reads out of that packet and drops**, both read back below: the
+//! playback gain reaches no field of `AudioCodecParameters`, and the pre-skip lands on
+//! `Track::delay`, which [`super::decode::open`] never hands a decoder.
 //!
-//! **The priming comes off here rather than in [`super::file_decode`], which is what covers all
-//! three containers**: only Ogg stands a `Track::delay` up for a reader above the codec to find.
-//! The cost is that the demuxer's timeline is then ahead of the samples handed out, the Ogg
-//! mapper leaving `absgp_to_ts` at identity so the granule position arrives still counting the
-//! priming and the first packet's timestamp is zero rather than negative.
-//! [`super::file_decode::FileDecoder::install_trim`] takes that offset back off the length and
-//! adds it onto a seek, reading the same `Track::delay`, so the two timelines agree again without
-//! this module having to know which container it was handed.
+//! **The priming comes off here rather than in [`super::file_decode`]**, which is what covers all
+//! three containers: only Ogg stands a `Track::delay` up for a reader above the codec. The cost is
+//! a demuxer timeline left running ahead of the samples handed out, which
+//! [`super::file_decode::FileDecoder::install_trim`] takes back off the length and adds onto a
+//! seek.
 //!
-//! **The stream layout is ours to check.** Symphonia's header reader stops at the mapping family
-//! byte, so the stream count, the coupled count and the mapping table reach nothing above the
-//! codec, and `opus_pure` derives its layout from the channel count rather than reading them. A
-//! file disagreeing with the canonical layout is refused here or it decodes into the wrong
-//! channels in silence.
+//! **The stream layout is ours to state and ours to check.** Symphonia's header reader stops at
+//! the mapping family byte and `opus_pure` derives its layout from the channel count, so the
+//! stream count, the coupled count and the mapping table are read here or nowhere, and a file
+//! disagreeing with the canonical layout would decode into the wrong channels in silence. The
+//! positions are ours for the mirror of that: Matroska hands over a bare count naming no order.
 //!
 //! **No soft clip.** The float output rings slightly past plus or minus one, as libopus does,
 //! and the DSP chain clamps whenever anything is enabled. A nonlinearity on every Opus track,
@@ -61,17 +57,16 @@ static SUPPORTED_CODECS: [SupportedAudioCodec; 1] = [SupportedAudioCodec {
 
 /// Audio to decode and throw away ahead of a seek target, per RFC 7845 section 4.2.
 ///
-/// A seek resets the decoder, and Opus carries state across packets that the first ones after a
-/// reset have to rebuild, so played from the target itself a seek opens on audio that is wrong
-/// rather than merely different. It is a floor and usually free: [`super::file_decode`] already
-/// discards everything between the packet the demuxer landed in and the frame asked for, and this
-/// only widens that where the landing was too close to warm anything.
+/// A seek resets the decoder and Opus carries state across packets, so played from the target
+/// itself a seek opens on audio that is wrong rather than merely different. A floor, and usually
+/// free: [`super::file_decode`] already discards from the packet the demuxer landed in to the
+/// frame asked for, and this widens that only where the landing warmed nothing.
 pub(super) const SEEK_PRE_ROLL: Duration = Duration::from_millis(80);
 
 /// [`SEEK_PRE_ROLL`] where `params` names Opus, and nothing for every other codec.
 ///
-/// Per codec rather than for all of them: MP3, AAC and Vorbis hold state across packets too, but
-/// widening their seeks is a behaviour change each has to earn on its own evidence.
+/// MP3, AAC and Vorbis hold state across packets too, but widening their seeks is a behaviour
+/// change each has to earn on its own evidence.
 pub(super) fn seek_pre_roll(params: &AudioCodecParameters) -> Duration {
     if params.codec == CODEC_ID_OPUS { SEEK_PRE_ROLL } else { Duration::ZERO }
 }
@@ -91,10 +86,9 @@ struct Head {
 impl Head {
     /// Reads all three off `extra_data`.
     ///
-    /// Offsets rather than a parse: RFC 7845 section 5.1 froze the layout, and Symphonia has
-    /// already validated the header this is a second read of. One too short to hold them is one
-    /// stating none, which is what [`Default`] says — and family 0 is the right answer to default
-    /// to, the two families building the same layout for the only counts family 0 admits.
+    /// Offsets rather than a parse: RFC 7845 section 5.1 froze the layout and Symphonia has
+    /// already validated the header. One too short states none, and family 0 is the right default
+    /// for that, the two families building the same layout for the counts family 0 admits.
     fn read(extra_data: Option<&[u8]>) -> Self {
         /// From the `OpusHead` magic, which every container keeps at the front of `extra_data`.
         const PRE_SKIP: usize = 10;
@@ -115,11 +109,10 @@ impl Head {
 
 /// Refuses a header stating a stream layout that is not the one `layout` was built as.
 ///
-/// `opus_pure` derives the layout from the channel count and the family, and Symphonia's own
-/// header reader stops at the family byte, so the stream count, the coupled count and the mapping
-/// table reach nothing at all. A file disagreeing with the canonical layout has to be turned away
-/// here or it decodes into the wrong channels with nothing anywhere to say so. Family 0 states
-/// none of the three and has nothing to check.
+/// Nothing else can: `opus_pure` derives the layout from the channel count and the family, and
+/// Symphonia's header reader stops at the family byte, so the three fields are read here or
+/// nowhere and a disagreement is a decode into the wrong channels with nothing to say so. Family 0
+/// states none of them.
 fn check_stated_layout(extra_data: Option<&[u8]>, layout: &ChannelLayout) -> SymphoniaResult<()> {
     /// Straight after the mapping family, which only a non-zero one is followed by.
     const STREAM_COUNT: usize = 19;
@@ -152,10 +145,9 @@ fn check_stated_layout(extra_data: Option<&[u8]>, layout: &ChannelLayout) -> Sym
 
 /// The channel positions each count carries, in the order Opus hands them over.
 ///
-/// RFC 7845 section 5.1.1.2's Vorbis orders, spelled in Symphonia's vocabulary so they can be
-/// matched against the set its own header reader built from the same table. `Channels` is a set
-/// and keeps no order, while a buffer's planes run in ascending channel position — which puts LFE
-/// fourth where Opus puts it last.
+/// RFC 7845 section 5.1.1.2's Vorbis orders in Symphonia's vocabulary, the set a buffer is specced
+/// with being built from this table. A buffer's planes run in ascending channel position, which
+/// puts LFE fourth where Opus puts it last.
 const VORBIS_ORDER: [&[Position]; 8] = [
     &[Position::FRONT_LEFT],
     &[Position::FRONT_LEFT, Position::FRONT_RIGHT],
@@ -197,23 +189,24 @@ const VORBIS_ORDER: [&[Position]; 8] = [
     ],
 ];
 
-/// Which Opus output channel feeds each of `channels`' planes, in the buffer's own plane order.
+/// The positioned set `count` channels carry, and which Opus output channel feeds each of its
+/// planes. `None` for a count Opus states no order for.
 ///
-/// `None` where the container's set is not the one this count's Vorbis order names, which is also
-/// what makes the index lookup below safe to trust: it counts the positions trailing the one asked
-/// for and answers as readily for a position the set does not hold as for one it does.
-fn plane_sources(channels: &Channels) -> Option<Box<[usize]>> {
-    let order = *VORBIS_ORDER.get(channels.count().checked_sub(1)?)?;
-    let named = order.iter().copied().fold(Position::empty(), |set, pos| set | pos);
-    if *channels != Channels::Positioned(named) {
-        return None;
-    }
+/// Derived rather than read off the container, one of the three stating no order: Matroska reports
+/// `Channels::Discrete` for every audio track, which names no positions to sort planes by. Ogg and
+/// MP4 build theirs from this same table, so nothing is overridden. It is also what makes the
+/// index lookup safe, that call counting trailing positions and answering as readily for one the
+/// set does not hold.
+fn positioned_layout(count: usize) -> Option<(Channels, Box<[usize]>)> {
+    let order = *VORBIS_ORDER.get(count.checked_sub(1)?)?;
+    let channels =
+        Channels::Positioned(order.iter().copied().fold(Position::empty(), |set, pos| set | pos));
 
     let mut sources = vec![0; order.len()];
     for (channel, &pos) in order.iter().enumerate() {
         sources[channels.get_canonical_index_for_positioned_channel(pos)?] = channel;
     }
-    Some(sources.into_boxed_slice())
+    Some((channels, sources.into_boxed_slice()))
 }
 
 /// The little-endian `u16` at `at`, or `None` where the slice ends before it.
@@ -235,8 +228,7 @@ pub struct OpusDecoder {
     buf: AudioBuffer<f32>,
     /// Interleaved scratch the codec writes into, sized once for the longest packet Opus allows so
     /// that nothing *here* grows. `opus_pure` still takes a couple of small allocations per packet
-    /// for its own frame bookkeeping, bounded by the frame count and so per packet rather than per
-    /// frame; closing that is an upstream change, not one this side can make.
+    /// for its own bookkeeping; closing that is an upstream change.
     pcm: Vec<f32>,
     channels: usize,
     /// Which Opus output channel feeds each plane of [`Self::buf`], the two orders parting company
@@ -253,27 +245,24 @@ pub struct OpusDecoder {
 
 impl OpusDecoder {
     fn try_new(params: &AudioCodecParameters, opts: AudioDecoderOptions) -> SymphoniaResult<Self> {
-        let Some(channels) = params.channels.clone() else {
+        let Some(count) = params.channels.as_ref().map(Channels::count) else {
             return unsupported_error("opus: channels or a channel layout is required");
         };
-        let count = channels.count();
-        let Some(sources) = plane_sources(&channels) else {
-            return unsupported_error("opus: channel set is not one Opus states an order for");
+        let Some((channels, sources)) = positioned_layout(count) else {
+            return unsupported_error("opus: channel count is not one Opus states an order for");
         };
 
         let head = Head::read(params.extra_data.as_deref());
-        // The multistream decoder for every count, not just above two: family 0 is a single stream
-        // whose mapping is the identity, so the two decoders differ by a remux, and this way the
-        // counts each family cannot carry are refused by `ChannelLayout::surround` rather than by
-        // a range test here that would have to agree with it.
+        // Multistream for every count, not just above two: family 0 is a single stream with an
+        // identity mapping, so the two decoders differ by a remux, and this leaves the counts a
+        // family cannot carry to `ChannelLayout::surround` rather than to a range test here.
         let mut decoder =
             opus_pure::OpusMSDecoder::new(DECODE_RATE.cast_signed(), count, head.mapping_family)
                 .map_err(|_| SymphoniaError::Unsupported("opus: stream cannot be decoded"))?;
         check_stated_layout(params.extra_data.as_deref(), decoder.layout())?;
 
-        // RFC 7845 asks that this be applied by default, so it belongs here and not beside
-        // ReplayGain, where the user's toggle would gate it. It describes the file rather than any
-        // one stream, so every stream carries it.
+        // RFC 7845 asks this be applied by default, so it belongs here rather than beside
+        // ReplayGain, where the user's toggle would gate it. It describes the file, not a stream.
         for stream in decoder.streams_mut() {
             stream.gain_q8 = i32::from(head.gain_q8);
         }
@@ -306,22 +295,23 @@ impl OpusDecoder {
         self.buf.clear();
         self.buf.render_uninit(Some(frames));
 
-        // De-interleave through the plane order rather than with `copy_from_slice_interleaved`,
-        // which assumes the two agree. One path rather than a permuted one beside a direct one:
-        // for the counts where they do agree this walks the same samples in the same order.
+        // Through the plane order rather than `copy_from_slice_interleaved`, which lays a packet
+        // out assuming the two agree. One path, not a permuted one beside a direct one: the counts
+        // where they agree take the identity through it and give up upstream's paired-plane pass.
         let channels = self.channels;
         for (plane, &source) in self.buf.iter_planes_mut().zip(&self.sources) {
-            for (sample, frame) in plane.iter_mut().zip(decoded.chunks_exact(channels)) {
-                *sample = frame[source];
+            for (sample, &value) in
+                plane.iter_mut().zip(decoded.iter().skip(source).step_by(channels))
+            {
+                *sample = value;
             }
         }
 
         if self.gapless {
             let start = trim_count(packet.trim_start.get());
             let end = trim_count(packet.trim_end.get());
-            // What the priming has left to spend here. `AudioBuffer::trim` clears the buffer on an
-            // overshoot and reports nothing back, so a pre-skip longer than one packet has to
-            // carry its remainder or the rest of it plays.
+            // `AudioBuffer::trim` clears the buffer on an overshoot and reports nothing back, so a
+            // pre-skip outrunning one packet has to carry its own remainder or the rest plays.
             let available = frames.saturating_sub(start).saturating_sub(end);
             self.buf.trim(start.saturating_add(self.pre_skip), end);
             self.pre_skip = self.pre_skip.saturating_sub(available);

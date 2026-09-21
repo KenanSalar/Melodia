@@ -390,8 +390,9 @@ feature working.
       expression.
 - [x] Peak stays `None`, R128 defining none. The prevent-clipping path already handles an unknown
       peak.
-- [ ] Unit-test the conversion: a known Q7.8 value round-trips, and the −23 to −18 offset is applied
-      exactly once.
+- [x] Unit-test the conversion: a known Q7.8 value round-trips, and the −23 to −18 offset is applied
+      exactly once. A decimal is refused too, since parsing one as a float would read a
+      `ReplayGain`-style value as a Q7.8 count and hand back a gain 256 times too small.
 
 **The gate is not a bare `rsgain`, and the original wording here would have passed without any of
 this.** Its **default** Opus mode (`-o d`) writes standard `REPLAYGAIN_*`, which the existing four
@@ -439,7 +440,17 @@ Channel mapping family 1 above two channels. The C adapter cannot do this at all
       eight channels. Derived from Symphonia's own canonical-index rule against a table of
       positions rather than tabulated as indices, so renumbering a bit upstream cannot silently
       rotate the channels.
-- [ ] A fixture with distinct content per channel, and the two refusals.
+- [x] A fixture with distinct content per channel, and the layout refusal.
+- [x] **The channel set is ours to state, not only to check**, which the review caught and this
+      plan did not name either. `plane_sources` took the container's `Channels` and required a
+      positioned one; `symphonia-format-mkv` reports `Channels::Discrete` for *every* audio track,
+      so a stereo Opus-in-`.mka` that decoded before the surround work stopped decoding at all,
+      silently, with `.mka` in `AUDIO_EXTENSIONS` and no fixture carrying Opus to see it. Deriving
+      the set from `VORBIS_ORDER` against the count answers for all three containers and deletes
+      the comparison rather than adding a branch beside it: Ogg and MP4 build their sets from that
+      same table, so it could only ever have fired for the set that was breaking.
+- [ ] A `.mka` fixture carrying Opus, which is the refusal with no pin and the one the walk over
+      `AUDIO_EXTENSIONS` cannot reach while `silence.mka` carries FLAC.
 
 **Gate:** a 5.1 fixture (`ffmpeg -ac 6 -c:a libopus`) decodes to six channels, and a header with a
 mismatched `stream_count` is refused.
