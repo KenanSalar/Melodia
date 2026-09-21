@@ -163,6 +163,16 @@ fn logo_for(radio_ui: &RadioUi, station: &DirectoryStation) -> Option<String> {
         .or_else(|| site_logo(radio_ui, station))
 }
 
+/// The format a browsed station is drawn with, preferring what an open measured over what the
+/// directory files it under.
+///
+/// A directory row carries the container and nothing else, so a station the user has already
+/// played would read `OGG` here while both local tabs read `OGG/VORBIS`. Only a station with a
+/// local row has an answer, which is the set the map holds.
+pub(super) fn format_for(radio_ui: &RadioUi, station: &DirectoryStation) -> Option<String> {
+    radio_ui.known_formats.lock().get(&station.station_uuid).cloned()
+}
+
 /// What this session read off the station's own site, for a row the directory gave no usable
 /// favicon. Keyed on the origin, the same spelling [`logos::discover_missing`] records under.
 fn site_logo(radio_ui: &RadioUi, station: &DirectoryStation) -> Option<String> {
@@ -188,10 +198,12 @@ pub fn apply(ui: &AppWindow, radio_ui: &RadioUi) {
             .iter()
             .map(|station| {
                 let logo = logo_for(radio_ui, station);
+                let format = format_for(radio_ui, station);
                 rows::to_slint_radio_station_row(
                     station,
                     starred.contains(&station.station_uuid),
                     logo.as_deref(),
+                    format.as_deref(),
                 )
             })
             .collect();

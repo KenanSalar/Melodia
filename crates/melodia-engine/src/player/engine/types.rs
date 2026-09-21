@@ -113,7 +113,7 @@ impl From<&melodia_core::entities::radio::RadioStation> for RadioNowPlaying {
             country: station.country_name().map(str::to_owned),
             tags: station.genre().map(str::to_owned),
             homepage: station.website().map(str::to_owned),
-            codec: (!station.codec.is_empty()).then(|| station.codec.clone()),
+            codec: station.format(),
             bitrate: station.bitrate,
             play_count: station.play_count,
         }

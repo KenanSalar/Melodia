@@ -40,6 +40,7 @@ chronological and the groups are not, so a low number can sit anywhere.
 | [11. AAC encoder delay is read out of the file, not switched on](0011-aac-trim-read-from-the-file.md) | Accepted, 2026-09-02 |
 | [14. The network never touches the audio callback thread](0014-no-network-on-the-audio-callback.md) | Accepted, 2026-08-20 |
 | [35. State mutation returns an action list, and the pair is serialized](0035-player-actions-and-lock-ordering.md) | Accepted, 2026-05-25 |
+| [40. Opus decodes through a pure-Rust crate, not libopus](0040-opus-decodes-through-a-pure-rust-crate.md) | Accepted, 2026-09-21 |
 
 ### Library and data
 

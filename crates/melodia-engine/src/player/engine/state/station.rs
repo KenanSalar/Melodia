@@ -3,6 +3,8 @@
 
 use std::sync::Arc;
 
+use melodia_core::entities::radio::compose_format;
+
 use super::{PlayerAction, PlayerState};
 use crate::player::engine::types::{PlaybackSource, PlaybackStatus, RadioNowPlaying};
 
@@ -53,6 +55,34 @@ impl PlayerState {
         }
         self.status = PlaybackStatus::Playing;
         vec![PlayerAction::PlayStream { generation, volume: self.effective_volume() }]
+    }
+
+    /// Name the format the open just measured, on the station already sitting on the bar.
+    ///
+    /// The row a station was tuned from carries the directory's word, which names the *container*:
+    /// an Ogg mount is filed under `OGG` whether it holds Vorbis or Opus, and the response's
+    /// content type says no more. The open is the first moment anything knows better, and the same
+    /// correction goes to the row itself — this is what keeps the first play from stating the old
+    /// answer until the next one.
+    ///
+    /// Composed against what is already on the bar rather than against the row, which this layer
+    /// does not hold: that value is [`compose_format`]'s output for the same station, and folding
+    /// a measurement into it a second time is what the containment arm there is for.
+    ///
+    /// Session-checked like everything else arriving off an open, and a no-op where the two agree,
+    /// so the `Arc`'s copy-on-write is paid once per station rather than once per tune.
+    pub fn adopt_probed_codec(&mut self, generation: u64, codec: &str) {
+        if codec.is_empty() || !self.is_current_station_session(generation) {
+            return;
+        }
+        let Some(station) = self.station_mut() else {
+            return;
+        };
+        let composed = compose_format(station.codec.as_deref().unwrap_or_default(), Some(codec));
+        if composed == station.codec {
+            return;
+        }
+        Arc::make_mut(station).codec = composed;
     }
 
     /// The stream could not be opened. Clears the station rather than leaving a play button that

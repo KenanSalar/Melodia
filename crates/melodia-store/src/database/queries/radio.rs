@@ -15,7 +15,10 @@ const INSERT_COLUMNS: &str = "station_uuid, name, stream_url, homepage, favicon_
 /// The four `local_*` columns are absent for the same reason and a stronger one:
 /// they are the user's own answers to what a directory entry left blank, so the
 /// directory has nothing to say about them and rewriting its own four in full
-/// stays correct.
+/// stays correct. `probed_codec` is absent on that same argument pointed the
+/// other way: it is what an open measured the stream to hold, against a `codec`
+/// naming only the container, so listing it here would revert the better answer
+/// every time the station was re-imported.
 const DIRECTORY_CONFLICT: &str = "\
     ON CONFLICT(station_uuid) DO UPDATE SET
         name = excluded.name,
@@ -229,6 +232,20 @@ where
 
 pub async fn delete_station(db: &DbPool, id: i64) -> Result<(), AppError> {
     sqlx::query("DELETE FROM radio_stations WHERE id = ?").bind(id).execute(db.write()).await?;
+    Ok(())
+}
+
+/// Record what a station's stream was measured to hold, which only a successful open knows.
+///
+/// Written on every tune rather than compared first: the row would have to be re-read to compare,
+/// and a station that changed what it serves is exactly the one the stale value would be wrong
+/// for. It is one small `UPDATE` beside [`mark_played`]'s, on the same path.
+pub async fn set_probed_codec(db: &DbPool, id: i64, codec: &str) -> Result<(), AppError> {
+    sqlx::query("UPDATE radio_stations SET probed_codec = ? WHERE id = ?")
+        .bind(codec)
+        .bind(id)
+        .execute(db.write())
+        .await?;
     Ok(())
 }
 

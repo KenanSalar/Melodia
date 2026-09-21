@@ -209,11 +209,15 @@ impl StationSource {
     fn to_row(&self, radio_ui: &RadioUi) -> RadioStationRow {
         match self {
             Self::Kept(station) => rows::to_slint_kept_station_row(station),
-            Self::Browsed(station, logo) => rows::to_slint_radio_station_row(
-                station,
-                radio_ui.starred.lock().contains(&station.station_uuid),
-                logo.as_deref(),
-            ),
+            Self::Browsed(station, logo) => {
+                let format = browse::format_for(radio_ui, station);
+                rows::to_slint_radio_station_row(
+                    station,
+                    radio_ui.starred.lock().contains(&station.station_uuid),
+                    logo.as_deref(),
+                    format.as_deref(),
+                )
+            }
         }
     }
 }

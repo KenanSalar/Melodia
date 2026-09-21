@@ -56,7 +56,16 @@ pub struct RadioStation {
     pub country: String,
     pub country_code: String,
     pub language: String,
+    /// The directory's, and it names the *container*: every Ogg mount is filed
+    /// under `OGG` whichever codec is inside it.
     pub codec: String,
+    /// What the stream turned out to hold, recorded the first time it played and
+    /// `None` until then. Its own column for [`Self::local_homepage`]'s reason
+    /// pointed the other way: the re-import that rewrites [`Self::codec`]
+    /// wholesale must not be able to take this with it. Never read alone —
+    /// [`Self::format`] is what folds the two together.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub probed_codec: Option<String>,
     /// Advertised kbps, `0` where the directory does not know. A display hint
     /// only: it is zero on a large share of live stations, so nothing may divide
     /// by it without a fallback.
@@ -85,6 +94,53 @@ fn filled(value: Option<&str>) -> Option<&str> {
     value.filter(|text| !text.is_empty())
 }
 
+/// Between the container a station is filed under and the codec inside it.
+///
+/// A slash rather than a space or a dot: a card's meta line already joins country, format and
+/// bitrate with ` · `, so a dot here would read as a fourth field, and a space would read as one
+/// two-word name at exactly the moment the point is that there are two answers.
+const FORMAT_SEPARATOR: &str = "/";
+
+/// One display string for a station's format, from what the directory filed it under and what an
+/// open measured it to hold.
+///
+/// **Both are kept where they differ, the directory's first.** Its `codec` column names the
+/// *container*, so every Ogg mount is filed under `OGG` whichever codec is inside it, and that is
+/// also the value its codec filter matches on. A user who filtered on `OGG` and landed on a page
+/// reading `VORBIS` alone has nothing to tell them those are the same station.
+///
+/// Nothing is composed where one answer already implies the other. `UNKNOWN` and a blank name
+/// nothing, so the measurement stands alone; and where one contains the other the more specific
+/// wins, which is what keeps a station the directory calls `AAC+` from reading `AAC+/AAC`.
+pub fn compose_format(directory: &str, probed: Option<&str>) -> Option<String> {
+    let (Some(directory), Some(probed)) = (filled(Some(directory)), filled(probed)) else {
+        return filled(Some(directory)).or(filled(probed)).map(str::to_owned);
+    };
+    if directory.eq_ignore_ascii_case(UNKNOWN_CODEC) {
+        return Some(probed.to_owned());
+    }
+    if contains_ignore_ascii_case(directory, probed) {
+        return Some(directory.to_owned());
+    }
+    if contains_ignore_ascii_case(probed, directory) {
+        return Some(probed.to_owned());
+    }
+    Some(format!("{directory}{FORMAT_SEPARATOR}{probed}"))
+}
+
+/// Substring test that ignores case without allocating an upper-cased copy of either side.
+///
+/// Both sides are short display tokens compared once per station row, and the directory's are not
+/// reliably upper-cased the way ours are. `needle` must be non-empty, which is what the `filled`
+/// pair above the one call site guarantees.
+fn contains_ignore_ascii_case(haystack: &str, needle: &str) -> bool {
+    haystack.len() >= needle.len()
+        && haystack
+            .as_bytes()
+            .windows(needle.len())
+            .any(|window| window.eq_ignore_ascii_case(needle.as_bytes()))
+}
+
 impl RadioStation {
     /// The site this station links out to, whoever supplied it.
     ///
@@ -108,6 +164,12 @@ impl RadioStation {
     /// The country a card shows. [`Self::website`]'s rule.
     pub fn country_name(&self) -> Option<&str> {
         filled(self.local_country.as_deref()).or_else(|| filled(Some(self.country.as_str())))
+    }
+
+    /// The format a card shows, which unlike [`Self::website`]'s rule keeps *both* answers where
+    /// they differ. [`compose_format`] argues why.
+    pub fn format(&self) -> Option<String> {
+        compose_format(&self.codec, self.probed_codec.as_deref())
     }
 
     /// Whether one field is the user's to fill in.

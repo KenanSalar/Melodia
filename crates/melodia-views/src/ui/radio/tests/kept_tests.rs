@@ -26,6 +26,7 @@ fn station(name: &str, added: &str, plays: i32, last_played: Option<&str>) -> Ra
         country_code: String::new(),
         language: String::new(),
         codec: String::new(),
+        probed_codec: None,
         bitrate: 0,
         hls: false,
         is_favorite: true,
@@ -184,11 +185,11 @@ fn logo_row(id: i64, uuid: &str, artwork_path: Option<&str>) -> RadioStation {
 fn a_logo_found_after_the_refresh_still_reaches_browse() {
     let radio_ui = RadioUi::new(false, None);
     radio_ui.recent.lock().stations = vec![logo_row(7, "uuid-7", None)];
-    remember_logos(&radio_ui);
+    remember_kept_answers(&radio_ui);
     assert!(radio_ui.known_logos.lock().is_empty(), "the row had no logo yet");
 
     adopt_logo_path(&radio_ui, 7, "/store/7.png");
-    remember_logos(&radio_ui);
+    remember_kept_answers(&radio_ui);
 
     assert_eq!(radio_ui.known_logos.lock().get("uuid-7").map(String::as_str), Some("/store/7.png"));
 }
@@ -208,7 +209,7 @@ fn every_write_to_the_two_caches_re_derives_the_map() {
             .and_then(|(_, rest)| rest.split_once("\n}\n"))
             .map_or("", |(body, _)| body);
         assert!(
-            body.contains("remember_logos("),
+            body.contains("remember_kept_answers("),
             "`{site}` moves what a row holds, and Browse reads the map rather than the caches"
         );
     }
@@ -226,7 +227,7 @@ fn the_map_spans_both_tabs_and_skips_what_no_directory_page_can_name() {
     }];
     radio_ui.recent.lock().stations = vec![logo_row(3, "uuid-3", Some("/store/3.png"))];
 
-    remember_logos(&radio_ui);
+    remember_kept_answers(&radio_ui);
 
     let known = radio_ui.known_logos.lock();
     assert_eq!(known.len(), 2);
@@ -240,11 +241,11 @@ fn the_map_spans_both_tabs_and_skips_what_no_directory_page_can_name() {
 fn a_row_whose_logo_went_missing_contributes_nothing() {
     let radio_ui = RadioUi::new(false, None);
     radio_ui.kept.lock().stations = vec![logo_row(1, "uuid-1", Some("/store/1.png"))];
-    remember_logos(&radio_ui);
+    remember_kept_answers(&radio_ui);
     assert_eq!(radio_ui.known_logos.lock().len(), 1);
 
     radio_ui.kept.lock().stations = vec![logo_row(1, "uuid-1", None)];
-    remember_logos(&radio_ui);
+    remember_kept_answers(&radio_ui);
     assert!(radio_ui.known_logos.lock().is_empty());
 }
 

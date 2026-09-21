@@ -273,7 +273,7 @@ pub fn refresh(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
         *ru.starred.lock() = starred;
         ru.kept.lock().stations = favorites;
         ru.recent.lock().stations = recent;
-        remember_logos(&ru);
+        remember_kept_answers(&ru);
 
         paint_mounted(&weak, &ru);
         if let Some(tab) = mounted {
@@ -283,25 +283,36 @@ pub fn refresh(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     });
 }
 
-/// Re-derive the uuid-keyed logos Browse falls back on, from whatever the two caches now hold.
+/// Re-derive the two uuid-keyed maps Browse falls back on, from whatever the two caches now hold.
 ///
-/// **Off the caches rather than off the rows a caller has in hand**, so the map cannot describe a
+/// **Off the caches rather than off the rows a caller has in hand**, so the maps cannot describe a
 /// list that has since moved: the bulk refresh and a landed heal both change what a row holds, and
 /// a partial update is exactly Browse painting a monogram beside a tab drawing the real thing.
 ///
 /// Both lists, since a station can be in either — a played-but-unstarred station is as likely to
 /// come back in a directory page as a favorite. One the user typed in carries no uuid and no page
 /// can name it, so it contributes nothing.
-fn remember_logos(radio_ui: &RadioUi) {
+///
+/// One pass for both, the second map having the same key, the same source rows and the same
+/// staleness to avoid.
+fn remember_kept_answers(radio_ui: &RadioUi) {
     let mut logos = HashMap::new();
+    let mut formats = HashMap::new();
     for cache in [&radio_ui.kept, &radio_ui.recent] {
         for station in &cache.lock().stations {
-            if let (Some(uuid), Some(path)) = (&station.station_uuid, &station.artwork_path) {
+            let Some(uuid) = &station.station_uuid else {
+                continue;
+            };
+            if let Some(path) = &station.artwork_path {
                 logos.insert(uuid.clone(), path.clone());
+            }
+            if let Some(format) = station.format() {
+                formats.insert(uuid.clone(), format);
             }
         }
     }
     *radio_ui.known_logos.lock() = logos;
+    *radio_ui.known_formats.lock() = formats;
 }
 
 /// Drop artwork paths whose file is gone, so the row says what is actually drawable.
@@ -360,9 +371,9 @@ async fn heal_logos(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak<AppWi
         landed = true;
     }
     if landed {
-        // Browse draws from the map, not from the caches, so it has to be re-derived here too —
-        // this is the one path that finds a logo *after* the refresh built it.
-        remember_logos(radio_ui);
+        // Browse draws from the maps, not from the caches, so they have to be re-derived here too
+        // — this is the one path that finds a logo *after* the refresh built them.
+        remember_kept_answers(radio_ui);
         // Both grids, because a heal moves both: the row's own `artwork_path`, and the uuid-keyed
         // map a browsed card reads. Only the paths moved, so each `apply` patches rather than
         // resetting, which is what lets this land under a pointer that is mid-click.

@@ -128,6 +128,7 @@ fn directory_station() -> RadioStation {
         country_code: "US".to_owned(),
         language: "english".to_owned(),
         codec: "MP3".to_owned(),
+        probed_codec: None,
         bitrate: 320,
         hls: false,
         is_favorite: true,

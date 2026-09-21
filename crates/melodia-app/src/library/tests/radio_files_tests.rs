@@ -73,6 +73,7 @@ fn station(name: &str, stream_url: &str) -> RadioStation {
         country_code: String::new(),
         language: String::new(),
         codec: String::new(),
+        probed_codec: None,
         bitrate: 0,
         hls: false,
         is_favorite: true,

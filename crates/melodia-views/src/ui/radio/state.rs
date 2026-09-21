@@ -48,6 +48,14 @@ pub struct RadioUi {
     /// memo entry, and a page carrying it drew a monogram beside the two local tabs painting the
     /// real thing. Filled from the same fetch as [`Self::starred`], for the same reason.
     pub(super) known_logos: Mutex<HashMap<String, String>>,
+    /// What an open measured each kept station to hold, keyed on directory uuid, for the same
+    /// reason and off the same fetch as [`Self::known_logos`].
+    ///
+    /// **Browse would otherwise be the one page that forgets what the app measured.** A directory
+    /// row carries the container its `codec` column names and nothing else, so a station the user
+    /// has already played reads `OGG` on a Browse card while both local tabs read `OGG/VORBIS`.
+    /// Only a station with a local row contributes, which is exactly the set that has an answer.
+    pub(super) known_formats: Mutex<HashMap<String, String>>,
     /// The station ids the logo repair has already asked about this session.
     ///
     /// `kept::refresh` runs on a section enter, on every star flip — Browse's included — and on
@@ -102,6 +110,7 @@ impl RadioUi {
             section,
             browse: Mutex::new(BrowseState::default()),
             starred: Mutex::new(HashSet::new()),
+            known_formats: Mutex::new(HashMap::new()),
             known_logos: Mutex::new(HashMap::new()),
             healed: Mutex::new(HashSet::new()),
             kept: Mutex::new(kept::KeptState::default()),
