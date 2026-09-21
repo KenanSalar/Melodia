@@ -8,6 +8,7 @@
 //! It replaced `rodio::Decoder`, so that type doubles as the specification: what must not be lost
 //! is the frame-accurate seek, which is the one thing here neither reference implementation does.
 
+use std::collections::VecDeque;
 use std::fs::{File, Metadata};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
@@ -29,6 +30,7 @@ use super::audio::{
     interleaved,
 };
 use super::decode::{self, Rounding};
+use super::mkv_trim;
 use super::opus;
 
 /// How far short of a stated length a seek is allowed to land.
@@ -93,16 +95,56 @@ impl MediaSource for FileSource {
 
 /// How much of what the container's timeline counts is not music.
 ///
-/// The reader's rather than either codec's: two of them fill it and neither reads it back.
-/// [`super::aac_trim`] resolves one off what an AAC file states, and the Opus arm of
-/// [`FileDecoder::install_trim`] fills one off the offset [`super::opus`] leaves behind having
-/// already dropped the head itself.
+/// The reader's rather than any codec's, three sources filling one and none of them reading it back.
+/// [`super::aac_trim`] resolves the head and the length off what an AAC file states, the Opus arm of
+/// [`FileDecoder::install_trim`] fills a head off the offset [`super::opus`] leaves behind having
+/// already dropped the samples, and [`super::mkv_trim`] answers the tail for whatever codec a
+/// Matroska file carries.
 #[derive(Clone, Copy)]
 pub(super) struct Trim {
     /// Encoder priming, ahead of the first real sample.
     pub head: u64,
     /// Real audio after it, where the container states a length.
     pub playable: Option<u64>,
+    /// Padding the container states inside its last packets, where nothing below drops it.
+    pub tail: u64,
+}
+
+/// Interleaved samples held back so a container's trailing padding is never handed out.
+///
+/// The count to drop is known at the open and the count of samples ahead of it is not: a container
+/// states its own length far more coarsely than a frame, so ending on a count the way
+/// [`Trim::playable`] does would leave part of the padding in. A window this wide delays every
+/// sample by exactly as many instead, and whatever is still inside it when the decoder runs out is
+/// what the container asked to have dropped.
+struct TailWindow {
+    held: VecDeque<Sample>,
+    width: usize,
+}
+
+impl TailWindow {
+    /// A window `width` interleaved samples wide, or `None` where there is nothing to hold back.
+    ///
+    /// The capacity covers the one sample that arrives before the oldest leaves, so the queue never
+    /// grows past the open.
+    fn new(width: u64) -> Option<Self> {
+        let width = usize::try_from(width).ok().filter(|width| *width > 0)?;
+        Some(Self { held: VecDeque::with_capacity(width + 1), width })
+    }
+
+    /// Takes `sample` and hands back the one that arrived `width` pulls before it, or `None` while
+    /// the window is still filling.
+    fn push(&mut self, sample: Sample) -> Option<Sample> {
+        self.held.push_back(sample);
+        if self.held.len() <= self.width {
+            return None;
+        }
+        self.held.pop_front()
+    }
+
+    fn clear(&mut self) {
+        self.held.clear();
+    }
 }
 
 /// A file's demuxer and codec, handing out interleaved samples one at a time.
@@ -117,6 +159,8 @@ pub struct FileDecoder {
     trim: Option<Trim>,
     /// Interleaved samples of real audio left ahead of that padding.
     remaining: Option<u64>,
+    /// The trailing padding, where the only thing the container states is how much of it there is.
+    tail: Option<TailWindow>,
 }
 
 impl FileDecoder {
@@ -126,9 +170,11 @@ impl FileDecoder {
         let mut file = File::open(path)
             .map_err(|e| AppError::Player(format!("Cannot open {}: {e}", path.display())))?;
 
-        // Read while the handle is still ours: the edit list is the half of an AAC file's encoder
-        // padding that the demuxer parses and keeps to itself, and it is the same open either way.
+        // Read while the handle is still ours: an MP4's edit list and a Matroska file's discard
+        // padding are both halves of what a container states and the demuxer keeps to itself, and
+        // either way it is the same open. Each costs one read for a file of the other's container.
         let edits = aac_trim::edit_lists(&mut file);
+        let discards = mkv_trim::discard_padding(&mut file);
 
         let mut hint = Hint::new();
         if let Some(extension) = path.extension().and_then(|e| e.to_str()) {
@@ -148,49 +194,54 @@ impl FileDecoder {
             total_duration,
             trim: None,
             remaining: None,
+            tail: None,
         };
-        decoded.install_trim(&edits);
+        decoded.install_trim(&edits, &discards);
         Ok(decoded)
     }
 
     /// Lines this source's timeline up with the demuxer's, dropping the priming where nothing
     /// below has.
     ///
-    /// Two codecs state padding and they arrive here in opposite states. AAC states it where no
-    /// decoder reads it, so the head comes off through [`Self::skip`] rather than a window inside
-    /// the cursor: the cursor is shared with the stream decoder, and a live mount has neither a
-    /// container header stating a delay nor a gapless transition to spoil. Opus states it in the
-    /// identification packet and [`super::opus`] has already taken it off, so all that is left is
-    /// the offset it leaves behind on a timeline that still counts those frames. Every other codec
-    /// leaves here untouched.
+    /// A head arrives in one of two states and a tail only ever in one. AAC states its head where no
+    /// decoder reads it, so that one comes off through [`Self::skip`] rather than a window inside the
+    /// cursor: the cursor is shared with the stream decoder, and a live mount has neither a container
+    /// header stating a delay nor a gapless transition to spoil. Opus states its head in the
+    /// identification packet and [`super::opus`] has already taken it off, so all that is left is the
+    /// offset it leaves behind on a timeline that still counts those frames. A tail is the
+    /// container's, not the codec's, and [`super::mkv_trim`] is the only reader that answers one.
     ///
     /// Runs on the thread that opened the file, which is never the audio callback: all three call
     /// sites hoist the open off the deck lock for the position monitor's sake.
-    fn install_trim(&mut self, edits: &[aac_trim::Edit]) {
-        if let Some(trim) = self.aac_padding(edits) {
+    fn install_trim(&mut self, edits: &[aac_trim::Edit], discards: &[mkv_trim::Discard]) {
+        let tail = mkv_trim::resolve(discards, self.track, self.cursor.shape().rate).unwrap_or(0);
+
+        if let Some(aac) = self.aac_padding(edits) {
             let shape = self.cursor.shape();
-            self.trim = Some(trim);
+            self.trim = Some(Trim { tail, ..aac });
             // Ahead of the counts, which describe the audio left once this is gone.
-            self.skip(
-                usize::try_from(interleaved(trim.head, shape.channels)).unwrap_or(usize::MAX),
-            );
+            self.skip(usize::try_from(interleaved(aac.head, shape.channels)).unwrap_or(usize::MAX));
             self.measure_playable();
             log::debug!(
                 "AAC encoder padding: {} priming frames dropped, {:?} of audio",
-                trim.head,
+                aac.head,
                 self.total_duration
             );
             return;
         }
 
-        if let Some(head) = self.opus_priming() {
-            self.trim = Some(Trim { head, playable: None });
-            self.measure_playable();
-            log::debug!(
-                "Opus pre-skip: {head} frames already off the samples, {:?} of audio",
-                self.total_duration
-            );
+        let head = self.opus_priming().unwrap_or(0);
+        if head == 0 && tail == 0 {
+            return;
         }
+
+        self.trim = Some(Trim { head, playable: None, tail });
+        self.measure_playable();
+        log::debug!(
+            "Container padding: {head} priming frames already off the samples, {tail} trailing \
+             frames held back, {:?} of audio",
+            self.total_duration
+        );
     }
 
     /// What an AAC file states about its own encoder padding, in decoded frames.
@@ -205,7 +256,9 @@ impl FileDecoder {
     /// `Track::delay` too, and MP3's decoder acts on its own packet trims already, so a blanket
     /// rule would take the same delay off twice. Ogg is the only container that fills it for Opus,
     /// and the only one that needs to: Matroska subtracts its `CodecDelay` from the timestamps
-    /// instead, so its timeline already agrees with the samples, and MP4 fills nothing.
+    /// instead, so its timeline already agrees with the samples, and MP4 fills nothing. That is the
+    /// head alone. Matroska states its tail in an element the reader drops, which is
+    /// [`super::mkv_trim`]'s half.
     fn opus_priming(&self) -> Option<u64> {
         let track = decode::audio_track(&*self.format)?;
         if decode::audio_params(track)?.codec != CODEC_ID_OPUS {
@@ -214,7 +267,7 @@ impl FileDecoder {
         track.delay.map(u64::from)
     }
 
-    /// Restates the length, and arms the end count, against the real audio rather than against
+    /// Restates the length, and arms both end mechanisms, against the real audio rather than against
     /// everything the container holds.
     ///
     /// A file stating a head and no length still plays for that much less than the container says,
@@ -224,10 +277,18 @@ impl FileDecoder {
             return;
         };
         let shape = self.cursor.shape();
+
+        // A stated length already ends short of the padding, so a window on top of one would take
+        // the same frames off twice.
+        let tail = if trim.playable.is_none() { trim.tail } else { 0 };
+        self.tail = TailWindow::new(interleaved(tail, shape.channels));
+
         let head = self.head_duration();
         self.total_duration = match trim.playable {
             Some(playable) => Some(frames_to_duration(playable, shape.rate)),
-            None => self.total_duration.map(|total| total.saturating_sub(head)),
+            None => self.total_duration.map(|total| {
+                total.saturating_sub(head).saturating_sub(frames_to_duration(tail, shape.rate))
+            }),
         };
         self.remaining = trim.playable.map(|playable| interleaved(playable, shape.channels));
     }
@@ -324,11 +385,22 @@ impl Iterator for FileDecoder {
         if self.remaining == Some(0) {
             return None;
         }
-        let sample = self.cursor.next_sample(&mut *self.format, &mut *self.decoder, self.track)?;
-        if let Some(remaining) = &mut self.remaining {
-            *remaining -= 1;
+
+        // One turn per pull once a window is full, the extra turns being the fill it takes at the
+        // open and again after a seek. Without one the first turn returns.
+        loop {
+            let sample =
+                self.cursor.next_sample(&mut *self.format, &mut *self.decoder, self.track)?;
+            if let Some(remaining) = &mut self.remaining {
+                *remaining -= 1;
+            }
+            let Some(window) = &mut self.tail else {
+                return Some(sample);
+            };
+            if let Some(held) = window.push(sample) {
+                return Some(held);
+            }
         }
-        Some(sample)
     }
 }
 
@@ -394,6 +466,12 @@ impl AudioSource for FileDecoder {
         // position being left, and one that ran out there would end the skip early and leave the
         // channel phase unrestored.
         self.remaining = None;
+
+        // The window holds what preceded the position being left, which is no longer what precedes
+        // the next sample handed out. It refills through the skip below.
+        if let Some(window) = &mut self.tail {
+            window.clear();
+        }
 
         // A demuxer seek lands on a packet boundary, so without the trim every seek replays the
         // tail of what came before. Both reference players stop at the whole packet, and one says

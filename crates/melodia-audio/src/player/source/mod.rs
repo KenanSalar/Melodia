@@ -13,6 +13,7 @@ pub mod audio;
 pub mod decode;
 pub mod file_decode;
 pub mod hls;
+pub mod mkv_trim;
 pub mod opus;
 pub mod prebuffer;
 pub mod stream_decode;

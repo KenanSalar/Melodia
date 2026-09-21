@@ -18,8 +18,10 @@
 //! Scope is AAC. FLAC and ALAC are lossless and pad nothing, and Vorbis and Opus come off their
 //! own decoders instead: upstream's Vorbis reads the packet trims, and [`super::opus`] argues why
 //! ours takes the priming there rather than here. The [`Trim`](super::file_decode::Trim) this
-//! resolves is the reader's rather than this module's, two codecs filling one: Opus gets its own
-//! off the offset the decoder leaves on the demuxer's timeline, which is nothing to do with AAC.
+//! resolves is the reader's rather than this module's, three sources filling one: Opus gets its own
+//! head off the offset the decoder leaves on the demuxer's timeline, and [`super::mkv_trim`]
+//! answers a tail that belongs to the container rather than to any codec. Neither is anything to do
+//! with AAC.
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
@@ -122,7 +124,8 @@ pub(super) fn resolve(
     if head > u64::from(rate.get()) * HEAD_CEILING_SECS || playable == Some(0) {
         return None;
     }
-    (head > 0 || playable.is_some()).then_some(Trim { head, playable })
+    // The tail is the container's answer rather than an AAC file's, so it is filled in beside this.
+    (head > 0 || playable.is_some()).then_some(Trim { head, playable, tail: 0 })
 }
 
 /// Converts a count stated against the container's timescale into decoded frames.

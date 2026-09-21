@@ -136,14 +136,20 @@ fn a_header_disagreeing_with_the_canonical_layout_is_refused() {
 /// track, so the positioned set is derived from the count rather than read off the container. Read
 /// off it, a stereo Opus in an `.mka` does not open at all, and no other fixture carries Opus in a
 /// container that answers that way.
-///
-/// The frame count is deliberately not asserted: `symphonia-format-mkv` parses `DiscardPadding` and
-/// applies it nowhere, so the tail padding stays in where ffmpeg's own read of the same file drops
-/// it.
 #[test]
 fn opus_in_a_container_that_names_no_channel_order_still_decodes() -> Result<(), AppError> {
     let decoder = FileDecoder::open(&asset("silence-opus.mka"))?;
     assert_eq!(decoder.channels().get(), 2);
+    Ok(())
+}
+
+/// The file states 648 frames of `DiscardPadding` and `symphonia-format-mkv` parses that element into
+/// a field it reads nowhere, so nothing below [`super::super::mkv_trim`] can tell the decoder to drop
+/// them. Without it the tail stays in and the count reads 48648, which is what the reference
+/// implementation's own read of the same file says it should not.
+#[test]
+fn the_padding_a_matroska_file_states_is_never_handed_out() -> Result<(), AppError> {
+    assert_eq!(decoded_frames("silence-opus.mka")?, 48_000);
     Ok(())
 }
 
