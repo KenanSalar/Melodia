@@ -209,6 +209,27 @@ produce a message naming the field and the container rather than a count. A `Mus
 to a container that maps it still round-trips, and one written to a container that does not now
 reports instead of vanishing.
 
+Passed. `fmt` and clippy clean, 3510 tests green. The M4A half measured on the fixture rather than
+reasoned about: an arranger credit saved beside a composer comes back `Some("M4A")` with the
+arranger alone unwritten, the composer landed in the file, and a `label_index` pointing at the slot
+`settings.slint` spells `"Arranger"`, so the sentence is "Arranger can't be saved to M4A files".
+
+Two things the bullets above named and the first pass did not carry all the way. `format_name`'s
+answer is an `Option`, because its fallback for a container lofty grows later is interpolated into a
+translated sentence and any filler word would read as English inside whatever locale is up; a
+container we cannot name puts the toast back on the count. And the backfill's half of the MBID
+bullet is a log rather than a toast, `tasks::mbid_backfill` having no UI to raise one.
+
+The two write paths log it differently, which is the half worth remembering. The backfill goes per
+file through `WriteOutcome::log_unsupported`, which only suits it because its set is structurally
+almost always empty: every primary tag type maps the recording id. A tag edit is a batch the user
+sized, so it folds through `TagEditReport::log_unsupported`, one line per container-and-fields
+group naming a path and the count behind it, and it sits in `write_tag_edit` rather than in
+`apply_tag_edit` so the rating write-back is covered by construction and no later `?` can drop the
+report before it is recorded. `tag_writer::describe_unsupported` is the clause both spell, so the
+fallback for a container lofty grows later cannot drift between them. Nothing else records which
+file lost a field.
+
 ---
 
 ## Phase 1 — The decoder

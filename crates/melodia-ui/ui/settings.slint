@@ -572,7 +572,7 @@ export global Settings {
     // `ROLES` order. An inline literal list because `@tr` resolves at codegen and a `[string]`
     // seeded from Rust would arrive untranslated, so Rust sends indices and reads the labels back.
     // A label out of order names the wrong field and nothing else would notice, which is what
-    // `tag_field_labels.rs` pins.
+    // `tags_tests.rs::the_slint_label_lists_line_up_with_the_rust_order` pins.
     out property <[string]> tag-field-labels: [
         @tr("Title"), @tr("Artist"), @tr("Album"), @tr("Album Artist"), @tr("Genre"),
         @tr("Year"), @tr("Track"), @tr("Track Total"), @tr("Disc"), @tr("Disc Total"),

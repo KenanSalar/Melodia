@@ -121,8 +121,10 @@ fn run_write_pass(
                 // and `update_track_metadata` COALESCEs a NULL artwork to the
                 // existing value.
                 self_writes.mark(p);
-                let outcome = tag_writer::apply_to_file(p, &edit, None)
-                    .and_then(|_| extract_metadata(p, artwork_dir, cover_cache, true));
+                let outcome = tag_writer::apply_to_file(p, &edit, None).and_then(|written| {
+                    written.log_unsupported(path);
+                    extract_metadata(p, artwork_dir, cover_cache, true)
+                });
                 FileWrite { path: path.clone(), outcome }
             })
             .collect::<Vec<FileWrite>>()

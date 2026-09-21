@@ -132,10 +132,15 @@ fn the_slint_label_lists_line_up_with_the_rust_order() {
         )
     }
 
+    // Stripped whole, ahead of both splits: a comment mentioning `@tr("` would otherwise count as
+    // an entry, and one carrying a `];` would truncate the list before its last label.
+    let settings = melodia_testkit::strip_line_comments(SETTINGS);
+    let tag_editor = melodia_testkit::strip_line_comments(TAG_EDITOR);
+
     let field_labels =
-        labels(SETTINGS, "out property <[string]> tag-field-labels: [").unwrap_or_default();
+        labels(&settings, "out property <[string]> tag-field-labels: [").unwrap_or_default();
     let role_labels =
-        labels(TAG_EDITOR, "private property <[string]> role-labels: [").unwrap_or_default();
+        labels(&tag_editor, "private property <[string]> role-labels: [").unwrap_or_default();
 
     assert_eq!(
         field_labels.len(),

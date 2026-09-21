@@ -75,7 +75,9 @@ pub struct TagEditReport {
 #[derive(Debug, Clone)]
 pub struct UnsupportedWrite {
     pub path: String,
-    pub format: &'static str,
+    /// `None` for a container lofty grew after this build, which costs the toast the name and
+    /// puts it back on the count.
+    pub format: Option<&'static str>,
     pub fields: Vec<TagField>,
 }
 
@@ -89,9 +91,45 @@ impl TagEditReport {
     #[must_use]
     pub fn unsupported_agreement(&self) -> Option<(&'static str, &[TagField])> {
         let (first, rest) = self.unsupported.split_first()?;
+        let format = first.format?;
         let agreed =
             rest.iter().all(|other| other.format == first.format && other.fields == first.fields);
-        agreed.then_some((first.format, &first.fields))
+        agreed.then_some((format, &first.fields))
+    }
+
+    /// Record what the batch could not write, folded the way the toast folds it.
+    ///
+    /// Per file would be the obvious shape and is the wrong one here: a batch is however many
+    /// tracks the user selected, the log rotates at a size, and nobody reads five thousand lines
+    /// saying the same thing. `mbid_backfill` logs per file because its set is structurally almost
+    /// always empty — every primary tag type maps the recording id — so it cannot flood.
+    ///
+    /// One path still survives per group, because a count alone cannot be chased: it names a file
+    /// to open and the rest are the same edit against the same container.
+    ///
+    /// A commit that fails returns `Err` before this and takes the report with it, so a
+    /// rolled-back edit records no unsupported field. That is the right way round: the rows went
+    /// back, the watcher has the files again, and which key did not fit is not what went wrong
+    /// there.
+    fn log_unsupported(&self) {
+        let mut groups: Vec<(&UnsupportedWrite, usize)> = Vec::new();
+        for write in &self.unsupported {
+            match groups
+                .iter_mut()
+                .find(|(first, _)| first.format == write.format && first.fields == write.fields)
+            {
+                Some((_, others)) => *others += 1,
+                None => groups.push((write, 0)),
+            }
+        }
+
+        for (first, others) in groups {
+            let what = tag_writer::describe_unsupported(first.format, &first.fields);
+            match others {
+                0 => log::warn!("{}: {what}", first.path),
+                _ => log::warn!("{} and {others} more: {what}", first.path),
+            }
+        }
     }
 }
 
@@ -325,6 +363,9 @@ pub(crate) async fn write_tag_edit(
         };
 
     report.updated = updated_ids.len();
+    // Here rather than in `apply_tag_edit`, so the rating write-back is covered too and so no
+    // later `?` can drop the report before it is recorded.
+    report.log_unsupported();
     Ok((report, updated_ids))
 }
 

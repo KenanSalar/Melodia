@@ -34,8 +34,10 @@ pub(super) fn show_report_toast(
 
     let failed = len_as_i32(report.failures.len());
     let unsupported = len_as_i32(report.unsupported.len());
-    let message = named_unsupported_message(&settings, &report)
-        .filter(|_| failed == 0)
+    // A failure outranks an unsupported field, so don't phrase the one the count will win over.
+    let message = (failed == 0)
+        .then(|| named_unsupported_message(&settings, &report))
+        .flatten()
         .unwrap_or_else(|| settings.invoke_tag_edit_message(failed, unsupported));
     notifications.show_completion(
         Completion::partial_if(failed > 0 || unsupported > 0),

@@ -70,8 +70,33 @@ impl UnsupportedFields {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WriteOutcome {
     /// The container as its own users name it. A proper noun, so nothing translates it.
-    pub format: &'static str,
+    pub format: Option<&'static str>,
     pub unsupported: Vec<TagField>,
+}
+
+/// What a log line says about fields a container had no key for.
+///
+/// Both write paths log this and they log it differently — one per file, one folded over a batch —
+/// so the *clause* is shared and the subject in front of it is the caller's. A second spelling
+/// would drift, and the fallback in particular is a literal somebody greps a log for.
+#[must_use]
+pub fn describe_unsupported(format: Option<&str>, fields: &[TagField]) -> String {
+    let named: Vec<&str> = fields.iter().copied().map(TagField::as_db_str).collect();
+    format!("{} has no key for {}", format.unwrap_or("this container"), named.join(", "))
+}
+
+impl WriteOutcome {
+    /// Record what fell out, because nothing else keeps the file it fell out of.
+    ///
+    /// Per file, which only suits a caller whose set is structurally almost always empty — the
+    /// MBID backfill, every primary tag type mapping the recording id, and no UI of its own to
+    /// raise anything. A tag edit is a batch the user sized and folds its own report instead.
+    pub fn log_unsupported(&self, path: &str) {
+        if self.unsupported.is_empty() {
+            return;
+        }
+        log::warn!("{path}: {}", describe_unsupported(self.format, &self.unsupported));
+    }
 }
 
 /// What to call `file_type` when telling someone their file would not take a field.
@@ -79,8 +104,11 @@ pub struct WriteOutcome {
 /// The extension rather than the specification: `Mpeg` and `Mp4` are what lofty calls the
 /// containers, and neither is what is written on the file the user picked. Both cover more than
 /// one extension, so each names the common one and the message stays true for the rest.
-fn format_name(file_type: FileType) -> &'static str {
-    match file_type {
+///
+/// `None` rather than a filler word, because the name is interpolated into a translated sentence
+/// and a fallback would read as English inside whatever locale is up.
+fn format_name(file_type: FileType) -> Option<&'static str> {
+    Some(match file_type {
         FileType::Aac => "AAC",
         FileType::Aiff => "AIFF",
         FileType::Ape => "APE",
@@ -94,10 +122,10 @@ fn format_name(file_type: FileType) -> &'static str {
         FileType::Wav => "WAV",
         FileType::WavPack => "WavPack",
         FileType::Custom(name) => name,
-        // `FileType` is `#[non_exhaustive]`-shaped in practice: a variant added upstream should
-        // cost a vaguer message, never a build that cannot see the new format at all.
-        _ => "this",
-    }
+        // `FileType` is `#[non_exhaustive]`: a variant added upstream should cost a vaguer
+        // message, never a build that cannot see the new format at all.
+        _ => return None,
+    })
 }
 
 /// Write one text item, recording the field name when the key doesn't map.
