@@ -665,6 +665,11 @@ pub fn read_lyrics_and_credits(
 
 /// `decoded` fitted inside the embed bounds and re-encoded as a JPEG, which every container we
 /// target accepts.
+///
+/// Flattens an alpha channel, and that is the trade rather than an oversight: the artwork store's
+/// own normalizer flattens for the same reason, and every tier draws out of `cover_thumbs`, which
+/// is `RgbImage` end to end, so the transparency this would preserve is transparency nothing here
+/// can show. Keeping it means re-encoding to PNG and giving back most of the size the cap is for.
 fn embeddable_jpeg(decoded: &image::DynamicImage, source: &Path) -> Result<Vec<u8>, AppError> {
     let (width, height) =
         image_decode::fit_within(decoded.width(), decoded.height(), EMBED_MAX_DIM, EMBED_MAX_DIM);

@@ -970,3 +970,57 @@ fn flac_writes_every_role_there_is() -> Result<(), AppError> {
     assert_eq!(text(&read_primary(&audio)?, ItemKey::Performer).as_deref(), Some("Alice"));
     Ok(())
 }
+
+/// A tag write must not move bytes under a reader that already has the file open, and that reader
+/// is usually a deck playing the track: an in-place rewrite shifts everything after the tag, and
+/// what the decoder reads at its old offsets stops being the track. Renaming an edited copy over
+/// it leaves the open handle on the file it opened.
+#[test]
+fn a_tag_write_leaves_a_reader_on_the_file_it_opened() -> Result<(), AppError> {
+    use std::io::Read;
+
+    let tmp = TempDir::new()?;
+    let path = stage(&tmp, "silence.opus")?;
+    let before = std::fs::read(&path)?;
+    let mut opened_first = std::fs::File::open(&path)?;
+
+    let edit = TagEdit { title: FieldEdit::Set("Edited".to_owned()), ..TagEdit::default() };
+    apply_to_file(&path, &edit, None)?;
+
+    let mut through_the_old_handle = Vec::new();
+    opened_first.read_to_end(&mut through_the_old_handle)?;
+    assert_eq!(through_the_old_handle, before, "a handle opened first keeps its own bytes");
+    assert_ne!(std::fs::read(&path)?, before, "and the path holds the edited file");
+    Ok(())
+}
+
+/// A PNG wider than the cap, in as few bytes as a solid image compresses to. Generated rather than
+/// checked in: what the cap answers for is the dimension, and a real cover that size would be
+/// megabytes of fixture for one number.
+fn oversized_png(tmp: &TempDir) -> Result<PathBuf, AppError> {
+    let path = tmp.path().join("poster.png");
+    image::RgbImage::from_pixel(EMBED_MAX_DIM * 2, 64, image::Rgb([9, 9, 9]))
+        .save(&path)
+        .map_err(|e| AppError::metadata(format!("Failed to write {}", path.display()), e))?;
+    Ok(path)
+}
+
+/// Over the caps a pick is fitted and re-encoded, so one poster does not become the larger half of
+/// every file in the batch it is written to. Inside them it is handed through as the user's own
+/// bytes, a re-encode there spending quality on nothing.
+#[test]
+fn an_oversized_cover_is_fitted_and_one_inside_the_caps_is_untouched() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+
+    let fitted = cover_picture_from_path(&oversized_png(&tmp)?)?;
+    let fitted_size = image::load_from_memory(fitted.data())
+        .map(|decoded| (decoded.width(), decoded.height()))
+        .map_err(|e| AppError::metadata("Failed to read the fitted cover back", e))?;
+    assert_eq!(fitted_size, (EMBED_MAX_DIM, 32));
+    assert_eq!(fitted.mime_type(), Some(&lofty::picture::MimeType::Jpeg));
+
+    let inside = assets_dir().join("cover.jpg");
+    let untouched = cover_picture_from_path(&inside)?;
+    assert_eq!(untouched.data(), std::fs::read(&inside)?);
+    Ok(())
+}

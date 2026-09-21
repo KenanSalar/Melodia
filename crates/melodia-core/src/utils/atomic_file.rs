@@ -92,8 +92,13 @@ pub fn write_with_sync(
 /// every byte after the edit under whoever already has the file open**, and a deck playing that
 /// track keeps reading at offsets that now land somewhere else: an edit that grows a tag by a
 /// megabyte does not sound like an edit, it sounds like the track breaking. Renaming leaves that
-/// reader on the file it opened, whole to the end, and the next open gets the new one. Rust opens
-/// with `FILE_SHARE_DELETE`, so that holds on Windows too.
+/// reader on the file it opened, whole to the end, and the next open gets the new one.
+///
+/// On Windows the replace is a `MoveFileExW` with `MOVEFILE_REPLACE_EXISTING`, which needs delete
+/// access to the name it takes over. Rust opens every file with `FILE_SHARE_DELETE`, so our own
+/// reader grants it; a foreign handle without it, an indexer or a scanner, does not. That case
+/// fails the edit rather than corrupting it, the temp going with the error, and it is the same
+/// lock `updater::install::swap` already rolls back for.
 ///
 /// Costs one copy of the file, which is why it is for whole-file rewrites: those pay it anyway,
 /// and a write permission on the *directory* that an in-place save did not need. No fallback to

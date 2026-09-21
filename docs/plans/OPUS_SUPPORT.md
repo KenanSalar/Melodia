@@ -450,9 +450,13 @@ Opus seek lands on the frame it asked for.
 
 - `cargo fmt --all --check`, then `cargo clippy --all-targets --locked --workspace -- -D warnings`.
 - `cargo test --locked --workspace`.
-- A decode cross-check against ffmpeg's libopus on the committed fixture, run the way the measurement
-  in the decision section was run. **Identical frame count is the assertion**, because that is what
-  catches a pre-skip or end-trim regression, which an SNR threshold alone would not.
+- The decode cross-check against ffmpeg's libopus is a test now rather than a step, in
+  `player::source::opus::tests`. **Identical frame count is the assertion**, because that is what
+  catches a pre-skip or end-trim regression, which an SNR threshold alone would not, and the second
+  fixture states a pre-skip no single packet can hold so the carry is pinned too. Four more sit
+  beside the code they hold: the zero-channel header that would otherwise end the process, the tag
+  write a reader survives, and the two arms of the embedded-cover cap. Each was checked by breaking
+  the code and watching that test, and only that test, go red.
 - Manual, after the static gates and only on the go-ahead: an `.opus` file scans with the right
   duration, metadata and artwork; plays; seeks; survives a gapless transition into and out of an MP3
   neighbour; and crossfades.

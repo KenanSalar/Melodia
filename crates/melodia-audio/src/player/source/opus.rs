@@ -97,8 +97,10 @@ pub struct OpusDecoder {
     params: AudioCodecParameters,
     decoder: opus_pure::OpusDecoder,
     buf: AudioBuffer<f32>,
-    /// Interleaved scratch the codec writes into, sized once for the longest packet Opus allows
-    /// so that nothing on the decode path grows.
+    /// Interleaved scratch the codec writes into, sized once for the longest packet Opus allows so
+    /// that nothing *here* grows. `opus_pure` still takes a couple of small allocations per packet
+    /// for its own frame bookkeeping, bounded by the frame count and so per packet rather than per
+    /// frame; closing that is an upstream change, not one this side can make.
     pcm: Vec<f32>,
     channels: usize,
     /// Priming owed to the head of the stream, spent across as many packets as it takes: a stream
@@ -223,3 +225,7 @@ impl RegisterableAudioDecoder for OpusDecoder {
         &SUPPORTED_CODECS
     }
 }
+
+#[cfg(test)]
+#[path = "tests/opus_tests.rs"]
+mod tests;

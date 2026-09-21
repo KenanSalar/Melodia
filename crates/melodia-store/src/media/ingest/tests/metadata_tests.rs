@@ -546,3 +546,13 @@ fn a_file_that_says_nothing_carries_no_release_tags() {
     assert_eq!(release.label, None);
     assert!(!release.is_compilation);
 }
+
+/// An Opus header stating no channels reaches lofty's property parser, whose channel-mask lookup
+/// has arms for one through eight and an `expect` for the rest. Take the guard away and this goes
+/// red on that `expect`; in a release build, where `panic = "abort"` applies, the same line ends
+/// the process mid-scan instead, which is what the guard is really standing in front of.
+#[test]
+fn an_opus_header_stating_no_channels_is_refused_rather_than_panicking() {
+    let refused = read_tags(&assets_dir().join("silence-zero-channels.opus"), TagScope::Full);
+    assert!(refused.is_err(), "a zero-channel Opus header has to come back an error");
+}
