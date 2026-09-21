@@ -80,7 +80,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - A database backup before every schema migration, three kept
 
 ### Playback
-- Gapless, including the AAC encoder delay and padding read back from `iTunSMPB` or the MP4 edit list
+- Gapless, including the AAC encoder delay and padding read back from `iTunSMPB` or the MP4 edit list, and the trailing padding a Matroska file states
 - Crossfade (1–12 s) across two decks with a clip-safe ramp, optionally skipped between same-album tracks
 - 10-band equalizer (31 Hz – 16 kHz) with preamp, presets, and a soft-knee limiter
 - ReplayGain in track or album mode, with preamp and peak-based clip prevention

@@ -110,6 +110,18 @@ pub(super) struct Trim {
     pub tail: u64,
 }
 
+/// What stops this source short of the demuxer running out.
+///
+/// Never both at once: a container that states a length states it short of the padding already, so
+/// a window behind one would take the same frames off twice. One field rather than two is what
+/// makes that a property of the type instead of an invariant spread across three call sites.
+enum End {
+    /// Interleaved samples of real audio left, where the container states a length.
+    Counted(u64),
+    /// The trailing padding held back, where all the container states is how much of it there is.
+    Held(TailWindow),
+}
+
 /// Interleaved samples held back so a container's trailing padding is never handed out.
 ///
 /// The count to drop is known at the open and the count of samples ahead of it is not: a container
@@ -141,10 +153,6 @@ impl TailWindow {
         }
         self.held.pop_front()
     }
-
-    fn clear(&mut self) {
-        self.held.clear();
-    }
 }
 
 /// A file's demuxer and codec, handing out interleaved samples one at a time.
@@ -157,10 +165,8 @@ pub struct FileDecoder {
     total_duration: Option<Duration>,
     /// The encoder padding this file states, for the seek that has to add its head back on.
     trim: Option<Trim>,
-    /// Interleaved samples of real audio left ahead of that padding.
-    remaining: Option<u64>,
-    /// The trailing padding, where the only thing the container states is how much of it there is.
-    tail: Option<TailWindow>,
+    /// How that padding's trailing half is kept out of what this hands over.
+    end: Option<End>,
 }
 
 impl FileDecoder {
@@ -193,8 +199,7 @@ impl FileDecoder {
             time_base,
             total_duration,
             trim: None,
-            remaining: None,
-            tail: None,
+            end: None,
         };
         decoded.install_trim(&edits, &discards);
         Ok(decoded)
@@ -267,30 +272,25 @@ impl FileDecoder {
         track.delay.map(u64::from)
     }
 
-    /// Restates the length, and arms both end mechanisms, against the real audio rather than against
-    /// everything the container holds.
+    /// Restates the length, and arms the end, against the real audio rather than against everything
+    /// the container holds.
     ///
     /// A file stating a head and no length still plays for that much less than the container says,
-    /// and the seek clamp reads this.
+    /// and the seek clamp reads this. The tail owes no such subtraction: a container's own duration
+    /// ends where the padding starts, which is the element's definition and the same reason [`End`]
+    /// is one field.
     fn measure_playable(&mut self) {
         let Some(trim) = self.trim else {
             return;
         };
         let shape = self.cursor.shape();
 
-        // A stated length already ends short of the padding, so a window on top of one would take
-        // the same frames off twice.
-        let tail = if trim.playable.is_none() { trim.tail } else { 0 };
-        self.tail = TailWindow::new(interleaved(tail, shape.channels));
-
         let head = self.head_duration();
         self.total_duration = match trim.playable {
             Some(playable) => Some(frames_to_duration(playable, shape.rate)),
-            None => self.total_duration.map(|total| {
-                total.saturating_sub(head).saturating_sub(frames_to_duration(tail, shape.rate))
-            }),
+            None => self.total_duration.map(|total| total.saturating_sub(head)),
         };
-        self.remaining = trim.playable.map(|playable| interleaved(playable, shape.channels));
+        self.end = self.end_after(Duration::ZERO);
     }
 
     /// The timestamp a post-seek trim measures against.
@@ -353,12 +353,20 @@ impl FileDecoder {
             .map_or(Duration::ZERO, |trim| frames_to_duration(trim.head, self.cursor.shape().rate))
     }
 
-    /// Interleaved samples of real audio left once `pos` on the trimmed timeline has played.
-    fn playable_after(&self, pos: Duration) -> Option<u64> {
+    /// The end this file's padding calls for, as it stands once `pos` on the trimmed timeline has
+    /// played.
+    ///
+    /// A count is restated from there. A window is rebuilt empty and refills on the next pull,
+    /// whatever it held having described the position being left rather than what precedes the next
+    /// sample handed out.
+    fn end_after(&self, pos: Duration) -> Option<End> {
+        let trim = self.trim?;
         let shape = self.cursor.shape();
-        let playable = self.trim?.playable?;
+        let Some(playable) = trim.playable else {
+            return TailWindow::new(interleaved(trim.tail, shape.channels)).map(End::Held);
+        };
         let played = frames_in(pos, shape.rate);
-        Some(interleaved(playable.saturating_sub(played), shape.channels))
+        Some(End::Counted(interleaved(playable.saturating_sub(played), shape.channels)))
     }
 }
 
@@ -379,27 +387,28 @@ impl Iterator for FileDecoder {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        // The trailing padding is inside the last packet rather than beyond it, so the source ends
-        // on a count instead of on the demuxer running out. Saturated at zero, so a re-poll past
-        // the end stays ended the way the cursor's own latch does.
-        if self.remaining == Some(0) {
-            return None;
-        }
-
-        // One turn per pull once a window is full, the extra turns being the fill it takes at the
-        // open and again after a seek. Without one the first turn returns.
-        loop {
-            let sample =
-                self.cursor.next_sample(&mut *self.format, &mut *self.decoder, self.track)?;
-            if let Some(remaining) = &mut self.remaining {
+        match &mut self.end {
+            None => self.cursor.next_sample(&mut *self.format, &mut *self.decoder, self.track),
+            // The trailing padding is inside the last packet rather than beyond it, so a source
+            // with a stated length ends on that count instead of on the demuxer running out.
+            // Saturated at zero, so a re-poll past the end stays ended the way the cursor's own
+            // latch does.
+            Some(End::Counted(0)) => None,
+            Some(End::Counted(remaining)) => {
+                let sample =
+                    self.cursor.next_sample(&mut *self.format, &mut *self.decoder, self.track)?;
                 *remaining -= 1;
+                Some(sample)
             }
-            let Some(window) = &mut self.tail else {
-                return Some(sample);
-            };
-            if let Some(held) = window.push(sample) {
-                return Some(held);
-            }
+            // More than one turn only while the window is filling, which is at the open and again
+            // after a seek.
+            Some(End::Held(window)) => loop {
+                let sample =
+                    self.cursor.next_sample(&mut *self.format, &mut *self.decoder, self.track)?;
+                if let Some(held) = window.push(sample) {
+                    return Some(held);
+                }
+            },
         }
     }
 }
@@ -462,16 +471,10 @@ impl AudioSource for FileDecoder {
         // `AudioSource`, so anything driving this iterator by hand can be.
         let channel_phase = self.cursor.discard_buffered();
 
-        // Cleared around the skip below, which pulls through `next`: the count still describes the
-        // position being left, and one that ran out there would end the skip early and leave the
-        // channel phase unrestored.
-        self.remaining = None;
-
-        // The window holds what preceded the position being left, which is no longer what precedes
-        // the next sample handed out. It refills through the skip below.
-        if let Some(window) = &mut self.tail {
-            window.clear();
-        }
+        // Dropped around the skip below, which pulls through `next`: it still describes the
+        // position being left, and a count that ran out there would end the skip early and leave
+        // the channel phase unrestored.
+        self.end = None;
 
         // A demuxer seek lands on a packet boundary, so without the trim every seek replays the
         // tail of what came before. Both reference players stop at the whole packet, and one says
@@ -483,7 +486,7 @@ impl AudioSource for FileDecoder {
         );
         self.skip(trim + channel_phase);
 
-        self.remaining = self.playable_after(pos);
+        self.end = self.end_after(pos);
         Ok(())
     }
 }

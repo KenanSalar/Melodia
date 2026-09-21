@@ -67,7 +67,11 @@ loop {
 - **But only two decoders act on it**, MP3 and Vorbis. AAC, ALAC, FLAC, PCM and ADPCM ignore
   `opts.gapless` outright, and `symphonia-format-isomp4` populates neither `Packet::trim_start`/
   `trim_end` nor `Track::delay`/`padding` (it parses the edit list into `TrakAtom.edts` and never
-  reads it; iTunSMPB is not parsed at all). This is not a 0.6 regression: 0.5 gated the
+  reads it; iTunSMPB is not parsed at all). `symphonia-format-mkv` is the same shape at the other
+  end of the file: it parses `DiscardPadding` onto a block-group struct marked
+  `#[allow(dead_code)]` and builds every packet through the constructor that zeroes both trims, so
+  a decoder that honours `trim_end` is told nothing however the flag is set, and `CodecDelay` lands
+  on its own track state rather than on `Track::delay`. This is not a 0.6 regression: 0.5 gated the
   same two demuxers on `FormatOptions::enable_gapless`, and MP3 got *better*, since 0.6 emits the
   trims unconditionally under a default-on flag
 - **`Track::delay`/`padding` reaches no decoder, and exactly one reader above them acts on it.**
@@ -86,6 +90,10 @@ loop {
   head and a playable length; that module argues the numbers,
   `docs/adr/` argues why we read them rather than trusting the flag, and
   `.claude/rules/audio-stack.md` says why it sits outside the shared `decode`
+- **`player::mkv_trim` is `aac_trim`'s sibling for `DiscardPadding`**, reading the tail a Matroska
+  file states for whatever codec its blocks carry. Each module names the other, but the comparison
+  between them, codec scope against container scope and a count against a window, is
+  `.claude/rules/audio-stack.md`'s
 
 ### Performance
 

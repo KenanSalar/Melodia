@@ -94,11 +94,11 @@ fn ticks_to_frames(ticks: u64, rate: SampleRate) -> Option<u64> {
 
 /// `None` where the file is not Matroska, states no segment, or ends in a cluster this cannot reach.
 fn read_discards(file: &mut File) -> Option<Vec<Discard>> {
-    let end = file.metadata().ok()?.len();
-    // One read, so a file of any other container costs nothing more than this.
+    // Ahead of everything else, so a file of any other container costs one read and nothing more.
     if !is_matroska(file) {
         return None;
     }
+    let end = file.metadata().ok()?.len();
 
     let mut budget = MAX_ELEMENT_HEADERS;
     let segment = find_segment(file, end, &mut budget)?;
