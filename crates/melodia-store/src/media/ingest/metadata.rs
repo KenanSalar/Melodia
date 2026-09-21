@@ -167,6 +167,23 @@ fn parse_replaygain_peak(s: &str) -> Option<f64> {
     s.trim().parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
+/// What an `R128_*_GAIN` value has to move by to mean the same thing as a `REPLAYGAIN_*` one.
+///
+/// EBU R128 normalises to −23 LUFS where `ReplayGain` 2.0 normalises to −18, so a gain written
+/// against the first plays this much under a library normalised against the second. RFC 7845
+/// §5.2 fixes the reference the tag is written against, which is what makes the distance a
+/// property of the format rather than of whichever tagger wrote it.
+const R128_TO_REPLAYGAIN_DB: f64 = 5.0;
+
+/// Parse an `R128_*_GAIN` value — Q7.8 fixed-point dB, e.g. "-1280" — restated against
+/// `ReplayGain`'s reference so it can share the columns and the DSP.
+///
+/// No non-finite guard, unlike the two above: an integer scaled and offset cannot be one.
+fn parse_r128_gain(s: &str) -> Option<f64> {
+    let q7_8 = s.trim().parse::<i32>().ok()?;
+    Some(f64::from(q7_8) / 256.0 + R128_TO_REPLAYGAIN_DB)
+}
+
 /// What [`extract`] does with a file it can hash but whose tags won't parse.
 #[derive(Clone, Copy)]
 enum OnUnreadableTags {
@@ -346,15 +363,22 @@ fn extract(
         musicbrainz_track_id: text(tag, ItemKey::MusicBrainzRecordingId),
         musicbrainz_release_id: text(tag, ItemKey::MusicBrainzReleaseId),
         musicbrainz_release_track_id: text(tag, ItemKey::MusicBrainzTrackId),
+        // Opus carries `R128_*_GAIN` where everything else carries `REPLAYGAIN_*`, and read as
+        // untagged it would play at unity against a normalised library. `REPLAYGAIN_*` wins where
+        // both are present: it is already written against the reference the columns mean, so it
+        // owes no conversion. Neither peak has an R128 counterpart — R128 defines none — and the
+        // prevent-clipping path already treats a peak it doesn't know as no ceiling.
         replaygain_track_gain: text(tag, ItemKey::ReplayGainTrackGain)
             .as_deref()
-            .and_then(parse_replaygain_gain),
+            .and_then(parse_replaygain_gain)
+            .or_else(|| text(tag, ItemKey::R128TrackGain).as_deref().and_then(parse_r128_gain)),
         replaygain_track_peak: text(tag, ItemKey::ReplayGainTrackPeak)
             .as_deref()
             .and_then(parse_replaygain_peak),
         replaygain_album_gain: text(tag, ItemKey::ReplayGainAlbumGain)
             .as_deref()
-            .and_then(parse_replaygain_gain),
+            .and_then(parse_replaygain_gain)
+            .or_else(|| text(tag, ItemKey::R128AlbumGain).as_deref().and_then(parse_r128_gain)),
         replaygain_album_peak: text(tag, ItemKey::ReplayGainAlbumPeak)
             .as_deref()
             .and_then(parse_replaygain_peak),

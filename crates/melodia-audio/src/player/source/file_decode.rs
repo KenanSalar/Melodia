@@ -19,7 +19,7 @@ use symphonia::core::codecs::audio::well_known::CODEC_ID_OPUS;
 use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatReader, SeekMode, SeekTo};
 use symphonia::core::io::MediaSource;
-use symphonia::core::units::{TimeBase, Timestamp};
+use symphonia::core::units::{Time, TimeBase, Timestamp};
 
 use melodia_core::error::AppError;
 
@@ -29,6 +29,7 @@ use super::audio::{
     interleaved,
 };
 use super::decode::{self, Rounding};
+use super::opus;
 
 /// How far short of a stated length a seek is allowed to land.
 ///
@@ -217,6 +218,23 @@ impl FileDecoder {
         self.remaining = trim.playable.map(|playable| interleaved(playable, shape.channels));
     }
 
+    /// The timestamp a post-seek trim measures against.
+    ///
+    /// Normally the one the demuxer echoed back, that being its own restatement of what it was
+    /// asked for. Where a pre-roll was taken off the ask the two part company, and the trim still
+    /// owes the target: restating it here is what turns the frames in between from a head the
+    /// listener would hear into warm-up the decoder needs. A timebase that cannot restate it
+    /// leaves the echoed one standing, and the seek keeps whatever warm-up its landing gave it.
+    fn trim_target(&self, target: Duration, pre_roll: Duration, echoed: Timestamp) -> Timestamp {
+        if pre_roll.is_zero() {
+            return echoed;
+        }
+        let (Some(time_base), Some(time)) = (self.time_base, seek_time(target)) else {
+            return echoed;
+        };
+        time_base.calc_timestamp(time).unwrap_or(echoed)
+    }
+
     /// Interleaved samples between where the demuxer landed and where the seek asked for, rounded
     /// up to a whole frame so the channels stay in step. Never under, so a seek cannot replay a
     /// frame the listener already heard; rodio rounded the other way and could.
@@ -327,11 +345,12 @@ impl AudioSource for FileDecoder {
         // trimmed one sits that far short of the timestamp to ask it for.
         let target = pos.saturating_add(self.head_duration());
 
-        let time = symphonia::core::units::Time::try_new(
-            i64::try_from(target.as_secs()).map_err(other)?,
-            target.subsec_nanos(),
-        )
-        .ok_or_else(|| other(AppError::Player("Seek position out of range".to_owned())))?;
+        // Ask short of the target wherever the codec needs warming, and let the trim below take
+        // the difference back off: those frames are decoded and discarded, which is the whole of
+        // what asking early buys. Zero everywhere but Opus, so no other format moves.
+        let pre_roll = opus::seek_pre_roll(self.decoder.codec_params());
+        let time = seek_time(target.saturating_sub(pre_roll))
+            .ok_or_else(|| other(AppError::Player("Seek position out of range".to_owned())))?;
 
         let seeked = self
             .format
@@ -360,7 +379,10 @@ impl AudioSource for FileDecoder {
         // tail of what came before. Both reference players stop at the whole packet, and one says
         // in its own comment that it should not. rodio trimmed to the frame, and that is the
         // behaviour this path inherited and has to keep.
-        let trim = self.samples_before(seeked.required_ts, seeked.actual_ts);
+        let trim = self.samples_before(
+            self.trim_target(target, pre_roll, seeked.required_ts),
+            seeked.actual_ts,
+        );
         self.skip(trim + channel_phase);
 
         self.remaining = self.playable_after(pos);
@@ -370,6 +392,11 @@ impl AudioSource for FileDecoder {
 
 fn other(source: impl std::error::Error + Send + Sync + 'static) -> SeekError {
     SeekError::Other(Arc::new(source))
+}
+
+/// `pos` as the `Time` a demuxer seek takes, or `None` where it does not fit one.
+fn seek_time(pos: Duration) -> Option<Time> {
+    Time::try_new(i64::try_from(pos.as_secs()).ok()?, pos.subsec_nanos())
 }
 
 #[cfg(test)]

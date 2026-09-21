@@ -2,7 +2,8 @@
 
 Working doc. Delete when the feature ships; leave an ADR behind first.
 
-Status: **in progress**, Phases 0 to 2 landed · Created: 2026-09-21
+Status: **in progress**, Phases 0 to 5 and the Phase 7 docs written and through the static gate;
+what is left is the manual pass, Phase 6 being nothing but a line in it · Created: 2026-09-21
 
 Issue [#35](https://github.com/KenanSalar/Melodia/issues/35), branch `feat/opus-decoding`.
 The lofty bump in Phase 0 ships on this branch too, as its own commit, not a separate PR.
@@ -372,27 +373,45 @@ counts the priming.
 
 Opus carries no `REPLAYGAIN_*`. It carries `R128_TRACK_GAIN` and `R128_ALBUM_GAIN` (RFC 7845 §5.2),
 Q7.8 fixed-point dB against EBU R128's −23 LUFS reference. `extract` reads only the four
-`ItemKey::ReplayGain*` keys today (`metadata.rs:316-327`), so **every Opus file would read as
-untagged and play at unity while the rest of the library is normalised**, which is the failure mode
-that looks like the feature working.
+`ItemKey::ReplayGain*` keys today, so **every Opus file would read as untagged and play at unity
+while the rest of the library is normalised**, which is the failure mode that looks like the
+feature working.
 
-- [ ] Read `ItemKey::R128TrackGain` and `R128AlbumGain` beside the existing four. On 0.25.4 these are
+- [x] Read `ItemKey::R128TrackGain` and `R128AlbumGain` beside the existing four. On 0.25.4 these are
       plain `ItemKey`s, so they go through the same `text(tag, key)` helper as everything else: no
       format branch, no second open.
-- [ ] Convert `value / 256.0`, then **add 5 dB** for the distance to ReplayGain 2.0's −18 LUFS
+- [x] Convert `value / 256.0`, then **add 5 dB** for the distance to ReplayGain 2.0's −18 LUFS
       reference. Argue it at its definition with both reference levels named, since it is exactly the
       constant that reads as a bug to the next person.
-- [ ] Store into the existing four columns. No schema change and no DSP change; album mode, the
+- [x] Store into the existing four columns. No schema change and no DSP change; album mode, the
       preamp and prevent-clipping all keep working untouched.
-- [ ] `REPLAYGAIN_*` wins where both are present, that path being already reference-aligned and
-      needing no offset.
-- [ ] Peak stays `None`, R128 defining none. The prevent-clipping path already handles an unknown
+- [x] `REPLAYGAIN_*` wins where both are present, that path being already reference-aligned and
+      needing no offset. The `.or_else` chain `bpm` already uses, so each field stays one
+      expression.
+- [x] Peak stays `None`, R128 defining none. The prevent-clipping path already handles an unknown
       peak.
 - [ ] Unit-test the conversion: a known Q7.8 value round-trips, and the −23 to −18 offset is applied
       exactly once.
 
-**Gate:** an Opus track tagged by `rsgain` sits at the same loudness as the rest of the library
-rather than 5 dB under it.
+**The gate is not a bare `rsgain`, and the original wording here would have passed without any of
+this.** Its **default** Opus mode (`-o d`) writes standard `REPLAYGAIN_*`, which the existing four
+keys already read. `-o r` writes R128 tags against rsgain's own target loudness, which is
+ReplayGain's −18 rather than −23; only `-o s` overrides the target and produces a tag written
+against the reference RFC 7845 §5.2 names. So `-o s` is the arm this phase is for and `-o d` is the
+precedence arm.
+
+**Gate:** an Opus track tagged `rsgain custom -s i -o s` sits at the same loudness as the rest of
+the library rather than 5 dB under it, and one tagged `-o d` does too, through the `REPLAYGAIN_*`
+arm.
+
+**Header gain and the tag compose rather than double-count**, so nothing guards against applying
+both: RFC 7845 §5.2.1 asks that a player using either R128 tag apply it *in addition to* the
+header's output gain, which is exactly the split here — the decoder applies the header gain
+unconditionally, the DSP applies the tag under the user's toggle.
+
+The offset is measured rather than taken from the spec alone. The same 5 s tone, tagged twice:
+`-o s` wrote `R128_TRACK_GAIN = -319`, which is −319/256 + 5 = **+3.754 dB**, and `-o d` wrote
+`REPLAYGAIN_TRACK_GAIN = "3.76 dB"`. The two agree to rounding, which is the whole claim.
 
 ---
 
@@ -400,17 +419,41 @@ rather than 5 dB under it.
 
 Channel mapping family 1 above two channels. The C adapter cannot do this at all.
 
-- [ ] Route mono and stereo to `opus_pure::OpusDecoder`, and family 1 above two channels to
-      `OpusMSDecoder::new(48_000, channels, mapping_family)`.
-- [ ] The supported set is exactly family 0 and family 1, because Symphonia's own `OpusHead::read`
+- [x] **`OpusMSDecoder` for every count, not only above two.** Family 0 is a single stream whose
+      mapping is the identity, so the two decoders differ by a remux, and routing mono and stereo
+      to `opus_pure::OpusDecoder` beside it would have meant an enum, two decode arms, two resets
+      and two places the gain is set. The cost is one strided remux pass per packet on the stereo
+      path, against a decode that is far more work; the enum is the fallback if it ever measures.
+- [x] The supported set is exactly family 0 and family 1, because Symphonia's own `OpusHead::read`
       refuses family 2 and above before we see it, and builds the positioned layout up to 8 channels
-      itself.
-- [ ] `ChannelLayout::surround` derives the stream and coupled counts from the channel count, so
+      itself. The counts each family cannot carry are refused by `ChannelLayout::surround` rather
+      than by a range test here that would have to agree with it.
+- [x] `ChannelLayout::surround` derives the stream and coupled counts from the channel count, so
       validate those against the header's own `stream_count` and `coupled_count`, and **refuse a file
-      where they disagree** rather than decoding it into the wrong channels.
+      where they disagree** rather than decoding it into the wrong channels. The mapping table is
+      compared too, and a header stopping before it is refused: Ogg admits a 19-byte identification
+      packet and MP4 an 11-byte `dOps` body, both of which end one byte past the family.
+- [x] **The plane reorder, which this plan did not name and nothing above the codec can do.**
+      `OpusMSDecoder` emits the Vorbis order; a buffer's planes run in ascending channel position,
+      which puts LFE fourth where Opus puts it last. The two differ for three, five, six, seven and
+      eight channels. Derived from Symphonia's own canonical-index rule against a table of
+      positions rather than tabulated as indices, so renumbering a bit upstream cannot silently
+      rotate the channels.
+- [ ] A fixture with distinct content per channel, and the two refusals.
 
 **Gate:** a 5.1 fixture (`ffmpeg -ac 6 -c:a libopus`) decodes to six channels, and a header with a
 mismatched `stream_count` is refused.
+
+Measured against the reference rather than against what the fixture was assumed to hold, which is
+the stronger comparison and turned out to be the necessary one: a 6-channel 450 kb/s fixture does
+**not** carry its six tones where the encoder was asked to put them. Decoded through `FileDecoder`
+and against `ffmpeg`'s own libopus, the two agree channel for channel to **6e-8**, float epsilon,
+at an identical 96 000 frames. Symphonia's plane order and ffmpeg's 5.1 order are the same order,
+which is what makes that comparison mean anything. The header states
+`family 1, streams 4, coupled 2, mapping [0, 4, 1, 2, 3, 5]`, exactly the canonical layout
+`check_stated_layout` compares against. With the reorder replaced by the identity, five of the six
+channels diverge from libopus by full signal amplitude and only front-left — plane 0 under either
+order — stays put.
 
 ---
 
@@ -419,24 +462,36 @@ mismatched `stream_count` is refused.
 RFC 7845 §4.2 wants roughly 80 ms decoded and discarded ahead of a seek target, or the first frames
 come off a cold decoder.
 
-- [ ] `file_decode::try_seek` already trims from wherever the demuxer landed to the exact requested
+- [x] `file_decode::try_seek` already trims from wherever the demuxer landed to the exact requested
       position, via `samples_before(required_ts, actual_ts)`, so those frames *are* pre-roll. What is
       missing is a guaranteed amount of it. Ask the demuxer for `target − pre_roll` and trim to
-      `target`.
-- [ ] Make the pre-roll a per-codec figure that is zero for every codec but Opus, so nothing else
-      changes behaviour.
+      `target`. `seeked.required_ts` then echoes the *ask* rather than the target, so
+      `trim_target` restates the target through the timebase instead; a timebase that cannot
+      leaves the echoed one standing, which is the seek this path made before.
+- [x] Make the pre-roll a per-codec figure that is zero for every codec but Opus, so nothing else
+      changes behaviour. `opus::seek_pre_roll` over `params.codec`, the shape `aac_trim::aac_timing`
+      set, read off `self.decoder.codec_params()` rather than stored — a seek is rare enough to ask.
+      With it zero the ask and the trim are what they were, which is what keeps the three existing
+      seek tests honest without touching them.
 
 **Gate:** `a_seek_lands_on_the_frame_it_asked_for` still passes for every existing format, and an
 Opus seek lands on the frame it asked for.
+
+Both halves pinned by mutation rather than by a green run. Replacing `trim_target` with the echoed
+timestamp leaves the WAV seek test green and fails the Opus one at **27 840 frames against
+24 000** — a difference of 3840, which is exactly 80 ms at 48 kHz. So the pre-roll fires, the
+restatement is what takes it back off, and neither touches any other format.
 
 ---
 
 ## Phase 6 — Radio
 
-- [ ] Nothing to build. Registering the decoder is all an Opus station mount needs, since
-      `stream_decode` hands `decode::open` a MIME hint and everything from the codec inward is
-      shared. Confirm that `codec_from_mime`'s existing `"OPUS"` label now sits over a stream that
-      plays.
+- [x] Nothing to build, and nothing was: `stream_source::codec_from_mime` already maps
+      `audio/opus` to `"OPUS"`, `stream_decode` hands `decode::open` a MIME hint, and everything
+      from the codec inward is shared with the file path. The registration in Phase 1 is the whole
+      change a station mount needed.
+- [ ] Confirm the label now sits over a stream that plays. Manual, and the one part of this phase
+      that exists.
 
 **Gate:** an Opus station tunes, plays, and survives a reconnect.
 
@@ -444,11 +499,23 @@ Opus seek lands on the frame it asked for.
 
 ## Phase 7 — Docs and exit
 
-- [ ] `README.md` format list in the feature section.
-- [ ] The `[package.metadata.deb] extended-description` in `crates/melodia/Cargo.toml`.
-- [ ] Root `CLAUDE.md`: the Symphonia formats bullet, and the R128 +5 dB offset. The "pure-Rust
-      backend" claim in the header survives this change, which is a direct consequence of the route
-      chosen and worth stating in the PR rather than leaving silent.
+**Five places enumerate the formats, not the two this plan named.** Found by grepping for `AIFF`,
+which is the only word in the list that appears nowhere else:
+
+- [x] `README.md` format list in the feature section.
+- [x] The `[package.metadata.deb] extended-description` in `crates/melodia/Cargo.toml`.
+- [x] The RPM `%description` heredoc in `scripts/build-rpm.sh`.
+- [x] The AppStream feature list in `packaging/com.github.kenansalar.melodia.metainfo.xml`, which
+      is what Discover and GNOME Software show.
+- [x] The Symphonia formats list, which is `.claude/rules/audio-stack.md`'s rather than root
+      `CLAUDE.md`'s — that file enumerates no formats and no codecs at all. Its "a fourteenth
+      extension owes a `silence.<ext>`" was stale the moment Phase 2 landed `"opus"` and now reads
+      fifteenth.
+- [x] **The R128 offset stays at its constant and goes in no rule.** It is argued in the doc
+      comment on `R128_TO_REPLAYGAIN_DB` with both reference levels named, and this tree's own
+      convention is that prose in a rule restating a doc comment is the copy to delete.
+- [ ] The "pure-Rust backend" claim in the header survives this change, which is a direct
+      consequence of the route chosen and worth stating in the PR rather than leaving silent.
 - [ ] Call the three Phase 0 fixes out in the PR description. They ship inside a PR titled for Opus
       and none of them is about Opus, so a reader scanning the release for why their MP3 role credits
       started saving has nothing else to go on.
@@ -460,14 +527,30 @@ Opus seek lands on the frame it asked for.
 
 - `cargo fmt --all --check`, then `cargo clippy --all-targets --locked --workspace -- -D warnings`.
 - `cargo test --locked --workspace`.
-- Seven pins hold what a passing build cannot see, each checked by breaking the code and watching
-  that test, and only that test, go red. Four are in `player::source::opus::tests`: the frame count
-  against what ffmpeg's libopus reads out of the same fixture, **which is the only assertion a
-  pre-skip or end-trim regression moves** where an SNR threshold would not; a header stating a
-  pre-skip no single packet can hold; the length with the priming left out; and a seek landing
-  where it asked. The other three sit beside the code they hold, the zero-channel header that would
-  otherwise end the process, the tag write a reader survives, and the embedded-cover cap on both
-  arms.
+- Every pin holds something a passing build cannot see, and each was checked by breaking the code
+  and watching that test, **and only that test**, go red.
+  - **Timing, in `player::source::opus::tests`**: the frame count against what ffmpeg's libopus
+    reads out of the same fixture, **which is the only assertion a pre-skip or end-trim regression
+    moves** where an SNR threshold would not; a header stating a pre-skip no single packet can
+    hold; the length with the priming left out; and a seek landing where it asked.
+  - **Surround, in the same file.** A count cannot answer this one, every channel being as long as
+    every other, so `surround.opus` gives each channel a tone in a window of its own and the
+    assertion is that the loudest window per plane is the identity. Its sibling is
+    `surround-bad-layout.opus`, the same file with its stream count rewritten and the Ogg page CRC
+    recomputed: Symphonia reads none of those bytes and `opus_pure` derives the layout rather than
+    reading them, so nothing but our own check stands between it and a decode into the wrong
+    channels.
+  - **The pre-roll needs a pin of its own, which is the whole finding.** Forcing it to zero leaves
+    *both* seek tests green, because a pre-roll is inaudible in a frame count by construction — it
+    changes how warm the decoder is, not how much audio comes out. So `seek_pre_roll` is asserted
+    directly, against Opus and against a codec that must not get one.
+  - **R128, in `metadata_tests`**: the Q7.8 conversion against the value `rsgain` writes, a
+    decimal refused, and three that go through a real tagged Opus file — the gain read back, the
+    peak left empty, and `REPLAYGAIN_*` winning over R128 where a file carries both.
+  - **Four sit beside the code they hold**: the zero-channel header that would otherwise end the
+    process, the tag write a reader survives, and the embedded-cover cap on both arms.
 - Manual, after the static gates and only on the go-ahead: an `.opus` file scans with the right
   duration, metadata and artwork; plays; seeks; survives a gapless transition into and out of an MP3
-  neighbour; and crossfades.
+  neighbour; and crossfades. Plus the two the automated pins cannot reach — a real surround file
+  through real speakers, and an Opus station tuning, playing and surviving a reconnect, which is
+  the whole of Phase 6.
