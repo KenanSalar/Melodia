@@ -315,8 +315,8 @@ fn m4a_artwork_replace_actually_replaces() -> Result<(), AppError> {
     assert_ne!(old_bytes, new_bytes, "fixtures must differ, or nothing is proven");
 
     let edit = TagEdit { artwork: ArtworkEdit::Replace, ..TagEdit::default() };
-    let unsupported = apply_to_file(&audio, &edit, Some(&picture))?;
-    assert!(unsupported.is_empty());
+    let written = apply_to_file(&audio, &edit, Some(&picture))?;
+    assert!(written.unsupported.is_empty());
 
     // Exactly one picture — not the old one lingering beside the new one.
     let after = read_primary(&audio)?;
@@ -434,8 +434,12 @@ fn flac_round_trips_a_full_edit_with_lyrics_under_the_lyrics_key() -> Result<(),
     let tmp = TempDir::new()?;
     let audio = stage(&tmp, "silence.flac")?;
 
-    let unsupported = apply_to_file(&audio, &full_edit(), None)?;
-    assert!(unsupported.is_empty(), "VorbisComments maps every field: {:?}", unsupported.0);
+    let written = apply_to_file(&audio, &full_edit(), None)?;
+    assert!(
+        written.unsupported.is_empty(),
+        "VorbisComments maps every field: {:?}",
+        written.unsupported
+    );
 
     let tag = read_primary(&audio)?;
     assert_eq!(tag.tag_type(), TagType::VorbisComments);
@@ -477,8 +481,8 @@ fn mp3_round_trips_a_full_edit_with_bpm_in_tbpm() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let audio = stage(&tmp, "silence.mp3")?;
 
-    let unsupported = apply_to_file(&audio, &full_edit(), None)?;
-    assert!(unsupported.is_empty(), "ID3v2 maps every field: {:?}", unsupported.0);
+    let written = apply_to_file(&audio, &full_edit(), None)?;
+    assert!(written.unsupported.is_empty(), "ID3v2 maps every field: {:?}", written.unsupported);
 
     let tag = read_primary(&audio)?;
     assert_eq!(tag.tag_type(), TagType::Id3v2);
@@ -508,11 +512,11 @@ fn musicbrainz_recording_id_round_trips_across_formats() -> Result<(), AppError>
             musicbrainz_track_id: FieldEdit::Set(recording.into()),
             ..TagEdit::default()
         };
-        let unsupported = apply_to_file(&audio, &edit, None)?;
+        let written = apply_to_file(&audio, &edit, None)?;
         assert!(
-            unsupported.is_empty(),
+            written.unsupported.is_empty(),
             "{fixture}: the recording id must map: {:?}",
-            unsupported.0
+            written.unsupported
         );
 
         let cache = artwork::new_cover_cache();
@@ -567,8 +571,8 @@ fn an_id3v1_only_mp3_gains_a_fresh_id3v2_tag_and_loses_nothing() -> Result<(), A
     assert!(tagged.tag(TagType::Id3v2).is_none(), "fixture must not already carry an ID3v2 tag");
     assert!(tagged.tag(TagType::Id3v1).is_some(), "fixture must carry an ID3v1 tag");
 
-    let unsupported = apply_to_file(&audio, &full_edit(), None)?;
-    assert!(unsupported.is_empty(), "{:?}", unsupported.0);
+    let written = apply_to_file(&audio, &full_edit(), None)?;
+    assert!(written.unsupported.is_empty(), "{:?}", written.unsupported);
 
     let tag = read_primary(&audio)?;
     assert_eq!(
@@ -600,11 +604,11 @@ fn wav_round_trips_a_full_edit_through_a_fresh_id3v2_tag() -> Result<(), AppErro
     let tmp = TempDir::new()?;
     let audio = stage(&tmp, "silence.wav")?;
 
-    let unsupported = apply_to_file(&audio, &full_edit(), None)?;
+    let written = apply_to_file(&audio, &full_edit(), None)?;
     assert!(
-        unsupported.is_empty(),
+        written.unsupported.is_empty(),
         "WAV's primary tag is ID3v2, which maps every field: {:?}",
-        unsupported.0
+        written.unsupported
     );
 
     let tag = read_primary(&audio)?;
@@ -625,8 +629,12 @@ fn ogg_round_trips_a_full_edit() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let audio = stage(&tmp, "silence.ogg")?;
 
-    let unsupported = apply_to_file(&audio, &full_edit(), None)?;
-    assert!(unsupported.is_empty(), "VorbisComments maps every field: {:?}", unsupported.0);
+    let written = apply_to_file(&audio, &full_edit(), None)?;
+    assert!(
+        written.unsupported.is_empty(),
+        "VorbisComments maps every field: {:?}",
+        written.unsupported
+    );
 
     let tag = read_primary(&audio)?;
     assert_eq!(tag.tag_type(), TagType::VorbisComments);
@@ -648,8 +656,12 @@ fn an_oga_round_trips_a_full_edit_despite_its_extension() -> Result<(), AppError
     let audio = tmp.path().join("quiet.oga");
     std::fs::copy(assets_dir().join("silence.ogg"), &audio)?;
 
-    let unsupported = apply_to_file(&audio, &full_edit(), None)?;
-    assert!(unsupported.is_empty(), "VorbisComments maps every field: {:?}", unsupported.0);
+    let written = apply_to_file(&audio, &full_edit(), None)?;
+    assert!(
+        written.unsupported.is_empty(),
+        "VorbisComments maps every field: {:?}",
+        written.unsupported
+    );
 
     let tag = read_primary(&audio)?;
     assert_eq!(tag.tag_type(), TagType::VorbisComments);
@@ -667,11 +679,11 @@ fn aiff_and_aifc_round_trip_a_full_edit_through_id3v2() -> Result<(), AppError> 
         let tmp = TempDir::new()?;
         let audio = stage(&tmp, fixture)?;
 
-        let unsupported = apply_to_file(&audio, &full_edit(), None)?;
+        let written = apply_to_file(&audio, &full_edit(), None)?;
         assert!(
-            unsupported.is_empty(),
+            written.unsupported.is_empty(),
             "{fixture}: AIFF's primary tag is ID3v2, which maps every field: {:?}",
-            unsupported.0
+            written.unsupported
         );
 
         let tag = read_primary(&audio)?;
@@ -906,7 +918,7 @@ fn mp3_reports_the_roles_it_has_no_key_to_write() -> Result<(), AppError> {
         .map(|role| RoleCredit { role, name: "Alice".into(), detail: String::new() })
         .collect();
 
-    let unsupported = apply_to_file(
+    let written = apply_to_file(
         &audio,
         &TagEdit {
             credits: FieldEdit::Set(RoleCreditEdit::whole(RoleCredits::new(every_role))),
@@ -916,7 +928,8 @@ fn mp3_reports_the_roles_it_has_no_key_to_write() -> Result<(), AppError> {
     )?;
 
     // Sorted, since `ROLES` order is the list's own presentation choice and free to change.
-    let mut reported = unsupported.0.clone();
+    let mut reported: Vec<&str> =
+        written.unsupported.iter().copied().map(TagField::as_db_str).collect();
     reported.sort_unstable();
     assert_eq!(reported, ["performer"]);
 
@@ -944,7 +957,7 @@ fn flac_writes_every_role_there_is() -> Result<(), AppError> {
         .map(|role| RoleCredit { role, name: "Alice".into(), detail: String::new() })
         .collect();
 
-    let unsupported = apply_to_file(
+    let written = apply_to_file(
         &audio,
         &TagEdit {
             credits: FieldEdit::Set(RoleCreditEdit::whole(RoleCredits::new(every_role))),
@@ -953,7 +966,7 @@ fn flac_writes_every_role_there_is() -> Result<(), AppError> {
         None,
     )?;
 
-    assert!(unsupported.is_empty(), "{:?}", unsupported.0);
+    assert!(written.unsupported.is_empty(), "{:?}", written.unsupported);
     assert_eq!(text(&read_primary(&audio)?, ItemKey::Performer).as_deref(), Some("Alice"));
     Ok(())
 }

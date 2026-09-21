@@ -32,7 +32,7 @@ use std::io::Cursor;
 use std::path::Path;
 
 use lofty::config::WriteOptions;
-use lofty::file::{AudioFile, TaggedFileExt};
+use lofty::file::{AudioFile, FileType, TaggedFileExt};
 use lofty::picture::{Picture, PictureType};
 use lofty::prelude::ItemKey;
 use lofty::tag::items::Timestamp;
@@ -42,7 +42,7 @@ use super::{metadata, rating_tags, role_tags};
 use melodia_artwork::media::image::image_decode;
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::genre::GenreList;
-use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, RoleCreditEdit, TagEdit};
+use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, RoleCreditEdit, TagEdit, TagField};
 use melodia_core::error::AppError;
 
 /// Upper bound for a written BPM. Anything past this is a typo, not a tempo, and a tag holding a
@@ -55,11 +55,48 @@ const MAX_BPM: f64 = 1000.0;
 /// A safety net rather than a routine outcome: all three primary tag types map every field
 /// [`TagEdit`] exposes. Don't build UI around it being populated.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct UnsupportedFields(pub Vec<&'static str>);
+pub struct UnsupportedFields(pub Vec<TagField>);
 
 impl UnsupportedFields {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+}
+
+/// What a write to a real file left unwritten, and the container that would not take it.
+///
+/// [`apply_edit`]'s own answer cannot carry the second half: it is handed a `Tag` and knows only
+/// the tag type, where the reason a user needs is the format they recognise the file by.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WriteOutcome {
+    /// The container as its own users name it. A proper noun, so nothing translates it.
+    pub format: &'static str,
+    pub unsupported: Vec<TagField>,
+}
+
+/// What to call `file_type` when telling someone their file would not take a field.
+///
+/// The extension rather than the specification: `Mpeg` and `Mp4` are what lofty calls the
+/// containers, and neither is what is written on the file the user picked. Both cover more than
+/// one extension, so each names the common one and the message stays true for the rest.
+fn format_name(file_type: FileType) -> &'static str {
+    match file_type {
+        FileType::Aac => "AAC",
+        FileType::Aiff => "AIFF",
+        FileType::Ape => "APE",
+        FileType::Flac => "FLAC",
+        FileType::Mpeg => "MP3",
+        FileType::Mp4 => "M4A",
+        FileType::Mpc => "Musepack",
+        FileType::Opus => "Opus",
+        FileType::Vorbis => "Ogg Vorbis",
+        FileType::Speex => "Speex",
+        FileType::Wav => "WAV",
+        FileType::WavPack => "WavPack",
+        FileType::Custom(name) => name,
+        // `FileType` is `#[non_exhaustive]`-shaped in practice: a variant added upstream should
+        // cost a vaguer message, never a build that cannot see the new format at all.
+        _ => "this",
     }
 }
 
@@ -71,13 +108,7 @@ impl UnsupportedFields {
 /// fallbacks below expressible. It is also why the `Accessor` setters are unused: they throw
 /// that bool away, and their default bodies are empty no-ops, so a non-overriding impl would
 /// discard the whole write.
-fn set_text(
-    tag: &mut Tag,
-    key: ItemKey,
-    value: String,
-    field: &'static str,
-    out: &mut Vec<&'static str>,
-) {
+fn set_text(tag: &mut Tag, key: ItemKey, value: String, field: TagField, out: &mut Vec<TagField>) {
     if !tag.insert_text(key, value) {
         out.push(field);
     }
@@ -103,8 +134,8 @@ fn apply_string(
     tag: &mut Tag,
     edit: &FieldEdit<String>,
     key: ItemKey,
-    field: &'static str,
-    out: &mut Vec<&'static str>,
+    field: TagField,
+    out: &mut Vec<TagField>,
 ) {
     match edit {
         FieldEdit::Keep => {}
@@ -124,8 +155,8 @@ fn apply_credits(
     edit: &FieldEdit<ArtistCredit>,
     printed_key: ItemKey,
     list_key: ItemKey,
-    field: &'static str,
-    out: &mut Vec<&'static str>,
+    field: TagField,
+    out: &mut Vec<TagField>,
 ) {
     match edit {
         FieldEdit::Keep => {}
@@ -156,13 +187,13 @@ fn apply_credits(
 /// frame joined by the v2.4 NUL, which its own reader splits back out. The other shape
 /// `metadata::read_genres` accepts, a single value holding `"; "`, is what *other* taggers write
 /// and is never written here.
-fn apply_genres(tag: &mut Tag, edit: &FieldEdit<GenreList>, out: &mut Vec<&'static str>) {
+fn apply_genres(tag: &mut Tag, edit: &FieldEdit<GenreList>, out: &mut Vec<TagField>) {
     match edit {
         FieldEdit::Keep => {}
         FieldEdit::Clear => tag.remove_key(ItemKey::Genre),
         FieldEdit::Set(genres) => {
             if !set_texts(tag, ItemKey::Genre, genres.names().iter().cloned()) {
-                out.push("genre");
+                out.push(TagField::Genre);
             }
         }
     }
@@ -177,13 +208,13 @@ fn apply_genres(tag: &mut Tag, edit: &FieldEdit<GenreList>, out: &mut Vec<&'stat
 ///
 /// The dialog never sends `Clear` — an emptied form arrives as a `Set` of an empty set, so the
 /// scope still decides what goes. This arm is for a producer that has no scope to offer.
-fn apply_roles(tag: &mut Tag, edit: &FieldEdit<RoleCreditEdit>, out: &mut Vec<&'static str>) {
+fn apply_roles(tag: &mut Tag, edit: &FieldEdit<RoleCreditEdit>, out: &mut Vec<TagField>) {
     match edit {
         FieldEdit::Keep => {}
         FieldEdit::Clear => role_tags::clear(tag),
         FieldEdit::Set(credits) => {
             for role in role_tags::write_roles(tag, credits) {
-                out.push(role.as_db_str());
+                out.push(TagField::Credit(role));
             }
         }
     }
@@ -198,8 +229,8 @@ fn apply_flag(
     tag: &mut Tag,
     edit: &FieldEdit<bool>,
     key: ItemKey,
-    field: &'static str,
-    out: &mut Vec<&'static str>,
+    field: TagField,
+    out: &mut Vec<TagField>,
 ) {
     match edit {
         FieldEdit::Keep => {}
@@ -208,30 +239,13 @@ fn apply_flag(
     }
 }
 
-/// Write the `MusicBrainz` **Recording** id.
-///
-/// Its own function because `ID3v2` stores it in a binary `UFID` frame, which
-/// [`Tag::insert_text`]'s support check has no mapping for and would refuse. `insert_unchecked`
-/// stores it regardless — lofty's `Tag → Id3v2Tag` conversion makes the `UFID` frame on save — and
-/// `VorbisComments` and MP4 map the key directly, so the same path writes them too.
-fn apply_recording_id(tag: &mut Tag, edit: &FieldEdit<String>) {
-    match edit {
-        FieldEdit::Keep => {}
-        FieldEdit::Clear => tag.remove_key(ItemKey::MusicBrainzRecordingId),
-        FieldEdit::Set(v) => tag.insert_unchecked(TagItem::new(
-            ItemKey::MusicBrainzRecordingId,
-            ItemValue::Text(v.clone()),
-        )),
-    }
-}
-
 /// Apply a numeric field that crosses the tag boundary as its decimal string.
 fn apply_number<T: std::fmt::Display>(
     tag: &mut Tag,
     edit: &FieldEdit<T>,
     key: ItemKey,
-    field: &'static str,
-    out: &mut Vec<&'static str>,
+    field: TagField,
+    out: &mut Vec<TagField>,
 ) {
     match edit {
         FieldEdit::Keep => {}
@@ -262,7 +276,7 @@ fn clear_front_cover(tag: &mut Tag) {
 /// Write `IntegerBpm` always, `Bpm` additionally where it maps, and report BPM unsupported only
 /// when *both* come back `false` — the one field where that bool is load-bearing on a format we
 /// ship.
-fn apply_bpm(tag: &mut Tag, edit: &FieldEdit<f64>, out: &mut Vec<&'static str>) {
+fn apply_bpm(tag: &mut Tag, edit: &FieldEdit<f64>, out: &mut Vec<TagField>) {
     match edit {
         FieldEdit::Keep => {}
         FieldEdit::Clear => {
@@ -279,7 +293,7 @@ fn apply_bpm(tag: &mut Tag, edit: &FieldEdit<f64>, out: &mut Vec<&'static str>) 
             let int_ok = tag.insert_text(ItemKey::IntegerBpm, format!("{:.0}", bpm.round()));
             let dec_ok = tag.insert_text(ItemKey::Bpm, bpm.to_string());
             if !int_ok && !dec_ok {
-                out.push("bpm");
+                out.push(TagField::Bpm);
             }
         }
     }
@@ -291,7 +305,7 @@ fn apply_bpm(tag: &mut Tag, edit: &FieldEdit<f64>, out: &mut Vec<&'static str>) 
 /// `LYRICS` is what Picard, `foobar2000` and `MusicBee` write in Vorbis comments, so writing only
 /// `UnsyncLyrics` would put our FLAC lyrics under `UNSYNCEDLYRICS` where no other player looks —
 /// and leave theirs invisible to us. Write keyed by tag type, clear *both*.
-fn apply_lyrics(tag: &mut Tag, edit: &FieldEdit<String>, out: &mut Vec<&'static str>) {
+fn apply_lyrics(tag: &mut Tag, edit: &FieldEdit<String>, out: &mut Vec<TagField>) {
     match edit {
         FieldEdit::Keep => {}
         FieldEdit::Clear => {
@@ -304,7 +318,7 @@ fn apply_lyrics(tag: &mut Tag, edit: &FieldEdit<String>, out: &mut Vec<&'static 
             } else {
                 ItemKey::UnsyncLyrics
             };
-            set_text(tag, key, v.clone(), "lyrics", out);
+            set_text(tag, key, v.clone(), TagField::Lyrics, out);
         }
     }
 }
@@ -314,13 +328,13 @@ fn apply_lyrics(tag: &mut Tag, edit: &FieldEdit<String>, out: &mut Vec<&'static 
 ///
 /// `Set(0)` folds into the clear there — an unrated track and a zero-star one are the same thing,
 /// and the star strip's top star toggles between them.
-fn apply_rating(tag: &mut Tag, edit: &FieldEdit<i32>, out: &mut Vec<&'static str>) {
+fn apply_rating(tag: &mut Tag, edit: &FieldEdit<i32>, out: &mut Vec<TagField>) {
     match edit {
         FieldEdit::Keep => {}
         FieldEdit::Clear => rating_tags::clear(tag),
         FieldEdit::Set(stars) => {
             if !rating_tags::write_stars(tag, *stars) {
-                out.push("rating");
+                out.push(TagField::Rating);
             }
         }
     }
@@ -336,7 +350,7 @@ fn apply_rating(tag: &mut Tag, edit: &FieldEdit<i32>, out: &mut Vec<&'static str
 ///
 /// Seeding from the existing timestamp is what preserves a month/day through a year-only edit;
 /// `Timestamp`'s `Display` appends `-MM-DD` only when those parts are present.
-fn apply_year(tag: &mut Tag, edit: &FieldEdit<u16>, out: &mut Vec<&'static str>) {
+fn apply_year(tag: &mut Tag, edit: &FieldEdit<u16>, out: &mut Vec<TagField>) {
     match edit {
         FieldEdit::Keep => {}
         FieldEdit::Clear => clear_release_dates(tag),
@@ -344,7 +358,7 @@ fn apply_year(tag: &mut Tag, edit: &FieldEdit<u16>, out: &mut Vec<&'static str>)
             let existing = metadata::release_timestamp(Some(tag)).unwrap_or_default();
             let ts = Timestamp { year: *y, ..existing };
             clear_release_dates(tag);
-            set_text(tag, ItemKey::RecordingDate, ts.to_string(), "year", out);
+            set_text(tag, ItemKey::RecordingDate, ts.to_string(), TagField::Year, out);
         }
     }
 }
@@ -358,15 +372,15 @@ fn clear_release_dates(tag: &mut Tag) {
 /// Apply `edit` to an in-memory tag, returning the fields this tag format had no key for.
 /// **Pure — no I/O at all**; the `Replace` image is decoded by the caller and handed in built.
 pub fn apply_edit(tag: &mut Tag, edit: &TagEdit, picture: Option<&Picture>) -> UnsupportedFields {
-    let mut out: Vec<&'static str> = Vec::new();
+    let mut out: Vec<TagField> = Vec::new();
 
-    apply_string(tag, &edit.title, ItemKey::TrackTitle, "title", &mut out);
+    apply_string(tag, &edit.title, ItemKey::TrackTitle, TagField::Title, &mut out);
     apply_credits(
         tag,
         &edit.artist,
         ItemKey::TrackArtist,
         ItemKey::TrackArtists,
-        "artist",
+        TagField::Artist,
         &mut out,
     );
     apply_credits(
@@ -374,50 +388,89 @@ pub fn apply_edit(tag: &mut Tag, edit: &TagEdit, picture: Option<&Picture>) -> U
         &edit.album_artist,
         ItemKey::AlbumArtist,
         ItemKey::AlbumArtists,
-        "album_artist",
+        TagField::AlbumArtist,
         &mut out,
     );
-    apply_string(tag, &edit.album, ItemKey::AlbumTitle, "album", &mut out);
+    apply_string(tag, &edit.album, ItemKey::AlbumTitle, TagField::Album, &mut out);
     apply_genres(tag, &edit.genres, &mut out);
     apply_roles(tag, &edit.credits, &mut out);
-    apply_string(tag, &edit.comment, ItemKey::Comment, "comment", &mut out);
-    apply_string(tag, &edit.disc_subtitle, ItemKey::SetSubtitle, "disc_subtitle", &mut out);
-    apply_string(tag, &edit.subtitle, ItemKey::TrackSubtitle, "subtitle", &mut out);
-    apply_string(tag, &edit.initial_key, ItemKey::InitialKey, "initial_key", &mut out);
-    apply_string(tag, &edit.mood, ItemKey::Mood, "mood", &mut out);
-    apply_string(tag, &edit.grouping, ItemKey::ContentGroup, "grouping", &mut out);
-    apply_string(tag, &edit.work, ItemKey::Work, "work", &mut out);
-    apply_string(tag, &edit.movement, ItemKey::Movement, "movement", &mut out);
-    apply_string(tag, &edit.language, ItemKey::Language, "language", &mut out);
-    apply_string(tag, &edit.copyright, ItemKey::CopyrightMessage, "copyright", &mut out);
-    apply_string(tag, &edit.isrc, ItemKey::Isrc, "isrc", &mut out);
-    apply_string(tag, &edit.label, ItemKey::Label, "label", &mut out);
-    apply_string(tag, &edit.catalog_number, ItemKey::CatalogNumber, "catalog_number", &mut out);
-    apply_string(tag, &edit.barcode, ItemKey::Barcode, "barcode", &mut out);
-    apply_string(tag, &edit.media, ItemKey::OriginalMediaType, "media", &mut out);
+    apply_string(tag, &edit.comment, ItemKey::Comment, TagField::Comment, &mut out);
+    apply_string(tag, &edit.disc_subtitle, ItemKey::SetSubtitle, TagField::DiscSubtitle, &mut out);
+    apply_string(tag, &edit.subtitle, ItemKey::TrackSubtitle, TagField::Subtitle, &mut out);
+    apply_string(tag, &edit.initial_key, ItemKey::InitialKey, TagField::InitialKey, &mut out);
+    apply_string(tag, &edit.mood, ItemKey::Mood, TagField::Mood, &mut out);
+    apply_string(tag, &edit.grouping, ItemKey::ContentGroup, TagField::Grouping, &mut out);
+    apply_string(tag, &edit.work, ItemKey::Work, TagField::Work, &mut out);
+    apply_string(tag, &edit.movement, ItemKey::Movement, TagField::Movement, &mut out);
+    apply_string(tag, &edit.language, ItemKey::Language, TagField::Language, &mut out);
+    apply_string(tag, &edit.copyright, ItemKey::CopyrightMessage, TagField::Copyright, &mut out);
+    apply_string(tag, &edit.isrc, ItemKey::Isrc, TagField::Isrc, &mut out);
+    apply_string(tag, &edit.label, ItemKey::Label, TagField::Label, &mut out);
+    apply_string(
+        tag,
+        &edit.catalog_number,
+        ItemKey::CatalogNumber,
+        TagField::CatalogNumber,
+        &mut out,
+    );
+    apply_string(tag, &edit.barcode, ItemKey::Barcode, TagField::Barcode, &mut out);
+    apply_string(tag, &edit.media, ItemKey::OriginalMediaType, TagField::Media, &mut out);
     apply_string(
         tag,
         &edit.release_type,
         ItemKey::MusicBrainzReleaseType,
-        "release_type",
+        TagField::ReleaseType,
         &mut out,
     );
-    apply_string(tag, &edit.release_country, ItemKey::ReleaseCountry, "release_country", &mut out);
-    apply_recording_id(tag, &edit.musicbrainz_track_id);
+    apply_string(
+        tag,
+        &edit.release_country,
+        ItemKey::ReleaseCountry,
+        TagField::ReleaseCountry,
+        &mut out,
+    );
+    // Through the ordinary checked path like every other text field: `ID3v2` stores this in a
+    // binary `UFID` frame, which `Tag::insert_text` refused until lofty 0.25 taught its support
+    // check about the mapping the conversion already had.
+    apply_string(
+        tag,
+        &edit.musicbrainz_track_id,
+        ItemKey::MusicBrainzRecordingId,
+        TagField::MusicBrainzRecordingId,
+        &mut out,
+    );
 
-    apply_number(tag, &edit.track_number, ItemKey::TrackNumber, "track_number", &mut out);
-    apply_number(tag, &edit.track_total, ItemKey::TrackTotal, "track_total", &mut out);
-    apply_number(tag, &edit.disc_number, ItemKey::DiscNumber, "disc_number", &mut out);
-    apply_number(tag, &edit.disc_total, ItemKey::DiscTotal, "disc_total", &mut out);
-    apply_number(tag, &edit.movement_number, ItemKey::MovementNumber, "movement_number", &mut out);
-    apply_number(tag, &edit.movement_total, ItemKey::MovementTotal, "movement_total", &mut out);
+    apply_number(tag, &edit.track_number, ItemKey::TrackNumber, TagField::TrackNumber, &mut out);
+    apply_number(tag, &edit.track_total, ItemKey::TrackTotal, TagField::TrackTotal, &mut out);
+    apply_number(tag, &edit.disc_number, ItemKey::DiscNumber, TagField::DiscNumber, &mut out);
+    apply_number(tag, &edit.disc_total, ItemKey::DiscTotal, TagField::DiscTotal, &mut out);
+    apply_number(
+        tag,
+        &edit.movement_number,
+        ItemKey::MovementNumber,
+        TagField::MovementNumber,
+        &mut out,
+    );
+    apply_number(
+        tag,
+        &edit.movement_total,
+        ItemKey::MovementTotal,
+        TagField::MovementTotal,
+        &mut out,
+    );
     // `OriginalReleaseDate` maps on all three primary tag types, and a bare 4-digit year is a
     // valid whole timestamp — `extract_metadata` parses it back as a year-only one.
-    apply_number(tag, &edit.original_year, ItemKey::OriginalReleaseDate, "original_year", &mut out);
+    apply_number(
+        tag,
+        &edit.original_year,
+        ItemKey::OriginalReleaseDate,
+        TagField::OriginalYear,
+        &mut out,
+    );
 
     apply_year(tag, &edit.year, &mut out);
     apply_bpm(tag, &edit.bpm, &mut out);
-    apply_flag(tag, &edit.compilation, ItemKey::FlagCompilation, "compilation", &mut out);
+    apply_flag(tag, &edit.compilation, ItemKey::FlagCompilation, TagField::Compilation, &mut out);
     apply_lyrics(tag, &edit.lyrics, &mut out);
     apply_rating(tag, &edit.rating, &mut out);
 
@@ -444,12 +497,13 @@ pub fn apply_to_file(
     path: &Path,
     edit: &TagEdit,
     picture: Option<&Picture>,
-) -> Result<UnsupportedFields, AppError> {
+) -> Result<WriteOutcome, AppError> {
     // `Full` is load-bearing rather than a default: skipping picture frames at *parse* leaves
     // `Tag.pictures` empty, and `save_to_path` writes that emptiness back over every embedded
     // picture the file had.
     let mut tagged = metadata::read_tags(path, metadata::TagScope::Full)?;
 
+    let format = format_name(tagged.file_type());
     let tag_type = tagged.primary_tag_type();
 
     // `insert_tag` no-ops when the `FileType` doesn't support the `TagType`, so without this
@@ -474,7 +528,7 @@ pub fn apply_to_file(
         AppError::metadata(format!("Failed to write tags to {}", path.display()), e)
     })?;
 
-    Ok(unsupported)
+    Ok(WriteOutcome { format, unsupported: unsupported.0 })
 }
 
 /// Decode-validate a user-picked cover and produce an embeddable [`Picture`].

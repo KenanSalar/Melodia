@@ -28,7 +28,7 @@ use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::credits::RoleCredits;
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::ExtractedMetadata;
-use melodia_core::entities::tags::{ArtworkEdit, TagEdit};
+use melodia_core::entities::tags::{ArtworkEdit, TagEdit, TagField};
 use melodia_core::entities::track::{TagEditRow, TrackSummary};
 use melodia_core::error::AppError;
 use melodia_core::error::describe;
@@ -62,9 +62,37 @@ pub struct TagEditReport {
     pub updated: usize,
     /// `(file, error)` for files whose write or re-extract failed.
     pub failures: Vec<(String, String)>,
-    /// `(file, fields)` the file's tag format has no key for — a rare safety
+    /// Files whose container had no key for part of the edit — a rare safety
     /// net, since all three primary tag types map every exposed field.
-    pub unsupported: Vec<(String, Vec<&'static str>)>,
+    pub unsupported: Vec<UnsupportedWrite>,
+}
+
+/// One file's worth of "that field did not fit in this container".
+///
+/// The format rides along because it is the *reason*, and the toast has no other way to reach it:
+/// a path does not say what the container was, and deriving it from the extension would re-answer
+/// a question the writer already answered off the file's own header.
+#[derive(Debug, Clone)]
+pub struct UnsupportedWrite {
+    pub path: String,
+    pub format: &'static str,
+    pub fields: Vec<TagField>,
+}
+
+impl TagEditReport {
+    /// The one line a toast can draw, when every file failed the same way.
+    ///
+    /// `None` where a batch spans containers or disagrees about which fields fell out, because a
+    /// single sentence would then have to lie about one of them; the caller falls back to a count.
+    /// A batch is normally one album in one format, so this is the usual answer rather than the
+    /// lucky one.
+    #[must_use]
+    pub fn unsupported_agreement(&self) -> Option<(&'static str, &[TagField])> {
+        let (first, rest) = self.unsupported.split_first()?;
+        let agreed =
+            rest.iter().all(|other| other.format == first.format && other.fields == first.fields);
+        agreed.then_some((first.format, &first.fields))
+    }
 }
 
 /// The rows that populate the Edit Track Information dialog.
@@ -331,7 +359,7 @@ fn prepare_artwork(
 struct FileWrite {
     id: i64,
     path: String,
-    outcome: Result<(ExtractedMetadata, Vec<&'static str>), AppError>,
+    outcome: Result<(ExtractedMetadata, tag_writer::WriteOutcome), AppError>,
 }
 
 /// Rewrite each file's tags on a bounded Rayon pool, then re-extract. Mirrors
@@ -365,9 +393,8 @@ fn run_write_pass(
         // event this write is about to fire — and with the DB `file_path`
         // (the set keys on exact `PathBuf` equality).
         self_writes.mark(p);
-        let outcome = tag_writer::apply_to_file(p, edit, picture).and_then(|unsupported| {
-            extract_metadata(p, artwork_dir, cover_cache, skip_artwork)
-                .map(|meta| (meta, unsupported.0))
+        let outcome = tag_writer::apply_to_file(p, edit, picture).and_then(|written| {
+            extract_metadata(p, artwork_dir, cover_cache, skip_artwork).map(|meta| (meta, written))
         });
         FileWrite { id: *id, path: path.clone(), outcome }
     };
@@ -429,7 +456,7 @@ async fn run_commit(
     let mut cleared_album_ids: Vec<i64> = Vec::new();
 
     for f in files {
-        let (meta, unsupported) = match &f.outcome {
+        let (meta, written) = match &f.outcome {
             Ok(ok) => ok,
             Err(e) => {
                 let reason = describe(e);
@@ -468,8 +495,12 @@ async fn run_commit(
 
         queries::scan::update_track_metadata(&mut tx, &f.path, meta, &rids, &mut names).await?;
         updated_ids.push(f.id);
-        if !unsupported.is_empty() {
-            report.unsupported.push((f.path.clone(), unsupported.clone()));
+        if !written.unsupported.is_empty() {
+            report.unsupported.push(UnsupportedWrite {
+                path: f.path.clone(),
+                format: written.format,
+                fields: written.unsupported.clone(),
+            });
         }
 
         if !cleared_release.is_empty()

@@ -142,7 +142,7 @@ md5 either side rather than by the file still opening.
 
 ---
 
-## Phase 0.5 — A tag edit that says what it could not write, and why
+## Phase 0.5 — A tag edit that says what it could not write, and why ✅ done
 
 Phase 0 left two loose ends, and they are the same end seen twice: a tag edit reports its failures
 badly. One field lies about succeeding, and the toast that covers the rest names neither the field
@@ -163,10 +163,10 @@ and refused the key, so the function reaches past it with `insert_unchecked`. On
 insert is accepted and writes a correct `UFID` frame carrying the `http://musicbrainz.org` owner,
 measured against a real MP3 rather than read off the changelog.
 
-- [ ] Delete `apply_recording_id` and its doc comment. It is `apply_string` with one difference that
+- [x] Delete `apply_recording_id` and its doc comment. It is `apply_string` with one difference that
       no longer exists, so the call site becomes an ordinary `apply_string` with
       `ItemKey::MusicBrainzRecordingId` and a field name.
-- [ ] Name the behaviour change in the commit: an unchecked insert always "succeeds", so the MBID is
+- [x] Name the behaviour change in the commit: an unchecked insert always "succeeds", so the MBID is
       the one field that can never appear in `UnsupportedFields` today. After this it reports like
       every other field, which is the point, and `library::mbid`'s auto-tagging writes through the
       same path so a container that cannot take the id starts surfacing instead of silently dropping.
@@ -176,31 +176,31 @@ measured against a real MP3 rather than read off the changelog.
 Today the user gets `"{n} files have unsupported fields"`: a count, with no field and no reason. A
 performer credit on an MP3 is honest and useless.
 
-- [ ] **Type the field name.** `apply_edit` passes 29 bare `&'static str` literals as the reported
+- [x] **Type the field name.** `apply_edit` passes 29 bare `&'static str` literals as the reported
       field, which is the magic-string shape that makes a translated label impossible. Replace them
       with a `TagField` enum whose string form is today's value, so the report carries something a
       label can be derived from. The ten roles are already typed through `CreditRole::as_db_str`, so
       they fold in as one `TagField::Credit(CreditRole)` rather than ten more variants.
-- [ ] **Carry the container.** The reason is a property of the format, and `TagEditReport.unsupported`
+- [x] **Carry the container.** The reason is a property of the format, and `TagEditReport.unsupported`
       is only `(path, fields)`. `apply_to_file` already resolves `primary_tag_type()`, so hand that
       back with the rest.
-- [ ] **Translated labels, under the `@tr` constraint.** `@tr` resolves literals at codegen and a
+- [x] **Translated labels, under the `@tr` constraint.** `@tr` resolves literals at codegen and a
       `[string]` seeded from Rust renders whatever Rust pushed, so the labels are inline literal
       lists in `.slint` indexed by position. `tag-editor-body.slint`'s `role-labels` is that pattern
       already and its order matches `ROLES` exactly, so the credit half reuses it; the 29 non-credit
       fields owe a list of their own.
-- [ ] **Fold before phrasing.** Report the distinct container-and-field pairs rather than one line
+- [x] **Fold before phrasing.** Report the distinct container-and-field pairs rather than one line
       per file: a batch edit of one album is one format and one field repeated, so the useful message
       is a single "Performer isn't supported by MP3 files". Keep the existing count as the fallback
       where a batch genuinely spans several formats or fields, since a toast is one line.
-- [ ] **Pin the new list's order.** A positional label list mislabels silently when it drifts, which
+- [x] **Pin the new list's order.** A positional label list mislabels silently when it drifts, which
       is exactly what `smart_criteria_tests` guards against by `include_str!`ing the `.slint` and
       asserting order and length. The new list owes the same, and `role-labels` has no such pin
       today despite its own comment warning that a label out of order files a conductor as a
       producer.
-- [ ] Every new string owes the same `msgid` in all six catalogues, which
+- [x] Every new string owes the same `msgid` in all six catalogues, which
       `translations.rs::every_translated_literal_has_a_msgid_in_every_catalogue` enforces.
-- [ ] Correct `role_tags`' module doc while there: it explains the performer hole as `split_tag`
+- [x] Correct `role_tags`' module doc while there: it explains the performer hole as `split_tag`
       leaving `TMCL` in a `pub(crate)` companion tag, which is true but reads as though a newer lofty
       might close it. Say the `ItemKey` was removed on purpose.
 

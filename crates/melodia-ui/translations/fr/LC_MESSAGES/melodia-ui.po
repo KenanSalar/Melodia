@@ -2264,3 +2264,23 @@ msgstr "Modifier l'image"
 
 msgid "Apply"
 msgstr "Appliquer"
+
+# ---- Tag-edit completion toast: the fields a container had no key for -------
+
+msgid "Track Total"
+msgstr "Total de pistes"
+
+msgid "Disc Total"
+msgstr "Total de disques"
+
+msgid "Movement Number"
+msgstr "Numéro de mouvement"
+
+msgid "Movement Total"
+msgstr "Total de mouvements"
+
+msgid "MusicBrainz Recording ID"
+msgstr "ID d'enregistrement MusicBrainz"
+
+msgid "{} can't be saved to {} files"
+msgstr "{} ne peut pas être enregistré dans les fichiers {}"

@@ -233,6 +233,155 @@ impl ClearedReleaseTags {
     }
 }
 
+/// A field a write can fail on, and the vocabulary the report shares with the toast.
+///
+/// A type rather than the `&'static str` the writer used to push, because the value crosses two
+/// boundaries wanting different things of it: a log wants a stable name that never moves, and the
+/// user wants a word their own language has. A string can be one or the other.
+///
+/// [`Self::Credit`] carries the role rather than spelling ten more variants, since
+/// [`CreditRole`] is already the typed form of exactly that question.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TagField {
+    Title,
+    Artist,
+    Album,
+    AlbumArtist,
+    Genre,
+    Year,
+    TrackNumber,
+    TrackTotal,
+    DiscNumber,
+    DiscTotal,
+    OriginalYear,
+    Bpm,
+    Comment,
+    Subtitle,
+    DiscSubtitle,
+    Grouping,
+    Work,
+    Movement,
+    MovementNumber,
+    MovementTotal,
+    InitialKey,
+    Mood,
+    Language,
+    Isrc,
+    Copyright,
+    Label,
+    CatalogNumber,
+    Barcode,
+    Media,
+    ReleaseType,
+    ReleaseCountry,
+    Compilation,
+    Lyrics,
+    Rating,
+    MusicBrainzRecordingId,
+    Credit(CreditRole),
+}
+
+/// Every non-credit [`TagField`], in the order the UI's label list mirrors.
+///
+/// The order is the whole contract: [`TagField::label_index`] is a position in it, so a label list
+/// that drifts names the wrong field and nothing else notices. `tags_tests` pins both halves.
+pub const PLAIN_TAG_FIELDS: [TagField; 35] = [
+    TagField::Title,
+    TagField::Artist,
+    TagField::Album,
+    TagField::AlbumArtist,
+    TagField::Genre,
+    TagField::Year,
+    TagField::TrackNumber,
+    TagField::TrackTotal,
+    TagField::DiscNumber,
+    TagField::DiscTotal,
+    TagField::OriginalYear,
+    TagField::Bpm,
+    TagField::Comment,
+    TagField::Subtitle,
+    TagField::DiscSubtitle,
+    TagField::Grouping,
+    TagField::Work,
+    TagField::Movement,
+    TagField::MovementNumber,
+    TagField::MovementTotal,
+    TagField::InitialKey,
+    TagField::Mood,
+    TagField::Language,
+    TagField::Isrc,
+    TagField::Copyright,
+    TagField::Label,
+    TagField::CatalogNumber,
+    TagField::Barcode,
+    TagField::Media,
+    TagField::ReleaseType,
+    TagField::ReleaseCountry,
+    TagField::Compilation,
+    TagField::Lyrics,
+    TagField::Rating,
+    TagField::MusicBrainzRecordingId,
+];
+
+impl TagField {
+    /// The stable name a log or a test spells. Never shown to a user, so it never moves.
+    #[must_use]
+    pub fn as_db_str(self) -> &'static str {
+        match self {
+            Self::Title => "title",
+            Self::Artist => "artist",
+            Self::Album => "album",
+            Self::AlbumArtist => "album_artist",
+            Self::Genre => "genre",
+            Self::Year => "year",
+            Self::TrackNumber => "track_number",
+            Self::TrackTotal => "track_total",
+            Self::DiscNumber => "disc_number",
+            Self::DiscTotal => "disc_total",
+            Self::OriginalYear => "original_year",
+            Self::Bpm => "bpm",
+            Self::Comment => "comment",
+            Self::Subtitle => "subtitle",
+            Self::DiscSubtitle => "disc_subtitle",
+            Self::Grouping => "grouping",
+            Self::Work => "work",
+            Self::Movement => "movement",
+            Self::MovementNumber => "movement_number",
+            Self::MovementTotal => "movement_total",
+            Self::InitialKey => "initial_key",
+            Self::Mood => "mood",
+            Self::Language => "language",
+            Self::Isrc => "isrc",
+            Self::Copyright => "copyright",
+            Self::Label => "label",
+            Self::CatalogNumber => "catalog_number",
+            Self::Barcode => "barcode",
+            Self::Media => "media",
+            Self::ReleaseType => "release_type",
+            Self::ReleaseCountry => "release_country",
+            Self::Compilation => "compilation",
+            Self::Lyrics => "lyrics",
+            Self::Rating => "rating",
+            Self::MusicBrainzRecordingId => "musicbrainz_recording_id",
+            Self::Credit(role) => role.as_db_str(),
+        }
+    }
+
+    /// Where this field's label sits in the UI's list, credits following the plain fields.
+    ///
+    /// `None` only where a variant is missing from [`PLAIN_TAG_FIELDS`], which the tests forbid;
+    /// the caller falls back to a message naming no field rather than to a wrong one.
+    #[must_use]
+    pub fn label_index(self) -> Option<usize> {
+        match self {
+            Self::Credit(role) => {
+                ROLES.iter().position(|r| *r == role).map(|i| PLAIN_TAG_FIELDS.len() + i)
+            }
+            plain => PLAIN_TAG_FIELDS.iter().position(|f| *f == plain),
+        }
+    }
+}
+
 #[cfg(test)]
 #[path = "tests/tags_tests.rs"]
 mod tests;
