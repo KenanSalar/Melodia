@@ -179,7 +179,6 @@ async fn open_and_start_station(
     match opened {
         Ok(prepared) => {
             let codec = prepared.codec().to_owned();
-            record_probed_codec(ctx, station, &codec).await;
             ctx.engine.stage_stream(generation, prepared);
             ctx.emit_and_execute(|s| {
                 s.adopt_probed_codec(generation, &codec);
@@ -189,6 +188,7 @@ async fn open_and_start_station(
             // above declined and nothing claimed the stage. Closing it here rather than leaving it
             // for the next station is what stops an abandoned connection outliving its station.
             ctx.engine.discard_staged_stream(generation);
+            record_probed_codec(ctx, station, &codec).await;
             Ok(())
         }
         Err(e) => {
@@ -209,10 +209,12 @@ async fn open_and_start_station(
 /// response's content type says the same; the decoder is what can tell them apart. It lands in
 /// `probed_codec` rather than over the directory's own column, which a re-import rewrites.
 ///
-/// Logged and swallowed on failure: the station is already playing by the time this runs, and a
-/// display string is not worth ending a tune over.
+/// **Last, once the stream is playing.** It is a write-pool `UPDATE`, so anywhere earlier it sits
+/// between the open and the first sample behind whatever else holds that pool. Failure is logged
+/// and swallowed: a display string is not worth ending a tune over. `station_id` is `0` for a
+/// station with no row of its own, which would match nothing.
 async fn record_probed_codec(ctx: &PlaybackContext, station: &RadioNowPlaying, codec: &str) {
-    if codec.is_empty() {
+    if codec.is_empty() || station.station_id == 0 {
         return;
     }
     if let Err(e) = queries::radio::set_probed_codec(&ctx.db, station.station_id, codec).await {

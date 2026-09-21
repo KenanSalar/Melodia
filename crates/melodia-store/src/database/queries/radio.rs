@@ -44,9 +44,10 @@ const DIRECTORY_CONFLICT: &str = "\
 /// UNIQUE, so a hand-typed station adds a row every time the way importing the
 /// same playlist twice is two playlists.
 ///
-/// **`RETURNING id`, not the row.** Every caller wants the id and nothing else, and the row is 22
-/// columns and a dozen heap strings dropped on the next line — a cost the import loop pays per
-/// entry. A caller that genuinely wants the persisted state reads it back with
+/// **`RETURNING id`, not the row.** Every caller wants the id and nothing else, and the row is a
+/// column per field on [`radio::RadioStation`] and a heap string for most of them, dropped on the
+/// next line: a cost the import loop would pay per entry, and one that grows with the table.
+/// A caller that genuinely wants the persisted state reads it back with
 /// [`get_station_by_id`], which also answers for what `SQLite` stored rather than what the insert
 /// echoed.
 pub async fn save_station(db: &DbPool, station: &radio::NewRadioStation) -> Result<i64, AppError> {

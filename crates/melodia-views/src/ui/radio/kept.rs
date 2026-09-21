@@ -51,6 +51,10 @@ impl KeptState {
 /// Through the resolvers, so the box searches what the card draws: a genre the user typed over a
 /// blank directory entry is on screen, and a directory value an override replaced is not.
 ///
+/// **Format is the one read as its two columns instead**, [`RadioStation::format`] composing a
+/// `String` where this runs per row per keystroke. What that gives up is a needle spanning the
+/// separator, which is nothing a user types looking for a station.
+///
 /// **Bitrate is `Option` here because `0` is the directory saying it does not know**, not a
 /// station that streams at zero, and a large share of live rows carry it — matched raw, the needle
 /// `0` would select all of them. It is also the one field matched whole rather than as a
@@ -62,6 +66,7 @@ fn station_matches(station: &RadioStation, needle: &Needle) -> bool {
         || needle.contains(station.country_name().unwrap_or_default())
         || needle.contains(&station.language)
         || needle.contains(&station.codec)
+        || needle.contains(station.probed_codec.as_deref().unwrap_or_default())
         || needle.equals_number((station.bitrate > 0).then_some(station.bitrate))
 }
 

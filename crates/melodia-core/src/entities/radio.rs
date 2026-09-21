@@ -113,8 +113,9 @@ const FORMAT_SEPARATOR: &str = "/";
 /// nothing, so the measurement stands alone; and where one contains the other the more specific
 /// wins, which is what keeps a station the directory calls `AAC+` from reading `AAC+/AAC`.
 pub fn compose_format(directory: &str, probed: Option<&str>) -> Option<String> {
-    let (Some(directory), Some(probed)) = (filled(Some(directory)), filled(probed)) else {
-        return filled(Some(directory)).or(filled(probed)).map(str::to_owned);
+    let (named, measured) = (filled(Some(directory)), filled(probed));
+    let (Some(directory), Some(probed)) = (named, measured) else {
+        return named.or(measured).map(str::to_owned);
     };
     if directory.eq_ignore_ascii_case(UNKNOWN_CODEC) {
         return Some(probed.to_owned());
@@ -128,13 +129,25 @@ pub fn compose_format(directory: &str, probed: Option<&str>) -> Option<String> {
     Some(format!("{directory}{FORMAT_SEPARATOR}{probed}"))
 }
 
+/// [`compose_format`] over a value that already carries a measurement, which is what a
+/// Now-Playing surface holds rather than either column.
+///
+/// The containment arms fold a repeat of the same answer back onto itself, so only a station that
+/// changed what it serves between two plays reaches this: composed a second time it would name
+/// both codecs, and it holds exactly one.
+pub fn recompose_format(current: &str, probed: &str) -> Option<String> {
+    let directory = current.split_once(FORMAT_SEPARATOR).map_or(current, |(named, _)| named);
+    compose_format(directory, Some(probed))
+}
+
 /// Substring test that ignores case without allocating an upper-cased copy of either side.
 ///
 /// Both sides are short display tokens compared once per station row, and the directory's are not
-/// reliably upper-cased the way ours are. `needle` must be non-empty, which is what the `filled`
-/// pair above the one call site guarantees.
+/// reliably upper-cased the way ours are. An empty `needle` is refused here rather than left to
+/// the callers, `windows(0)` being a panic rather than a `false`.
 fn contains_ignore_ascii_case(haystack: &str, needle: &str) -> bool {
-    haystack.len() >= needle.len()
+    !needle.is_empty()
+        && haystack.len() >= needle.len()
         && haystack
             .as_bytes()
             .windows(needle.len())
