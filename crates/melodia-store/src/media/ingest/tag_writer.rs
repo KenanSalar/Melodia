@@ -44,10 +44,36 @@ use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, RoleCreditEdit, TagEdit, TagField};
 use melodia_core::error::AppError;
+use melodia_core::utils::atomic_file;
 
 /// Upper bound for a written BPM. Anything past this is a typo, not a tempo, and a tag holding a
 /// 12-digit "tempo" is worse than one holding none.
 const MAX_BPM: f64 = 1000.0;
+
+/// Longest edge an embedded cover keeps.
+///
+/// The largest thumbnail the Cover Art Archive publishes and the largest size Picard offers short
+/// of the original, so it is where the tools a library has already been through agree. Far above
+/// anything the artwork store draws, and small enough that a picked poster does not become the
+/// larger half of every track on the album it is written to.
+const EMBED_MAX_DIM: u32 = 1200;
+
+/// Byte ceiling, and a bound of its own rather than a consequence of [`EMBED_MAX_DIM`]: dimensions
+/// decide decode cost, bytes decide how much of the user's file is picture, and an image can fail
+/// either alone. Ordinary 8-bit encodings cannot reach this inside the dimension cap; 16-bit PNG
+/// and uncompressed TIFF can. It also sits well under the point where base64 in a Vorbis comment
+/// would push the packet past the 16 MiB Symphonia will assemble, which is a file Melodia would
+/// have written and then refused to play.
+const EMBED_MAX_BYTES: usize = 4 * 1024 * 1024;
+
+/// Quality for the re-encode. Its own knob rather than the artwork store's, which answers a
+/// different question: that one fills a cache we can rebuild from this, and this lands in a file
+/// the user keeps.
+const EMBED_JPEG_QUALITY: u8 = 90;
+
+/// Resampler for the re-encode. Lanczos3 for the reason the store's persisted images take it: this
+/// outlives the session, and nothing downstream can sharpen it back.
+const EMBED_FILTER: image_decode::FilterType = image_decode::FilterType::Lanczos3;
 
 /// Fields the file's tag format has no key for. Never an error — the rest of the edit still lands
 /// — but the user is told, so "BPM didn't save" is a message rather than a mystery.
@@ -552,8 +578,12 @@ pub fn apply_to_file(
 
     let unsupported = apply_edit(tag, edit, picture);
 
-    tagged.save_to_path(path, WriteOptions::default()).map_err(|e| {
-        AppError::metadata(format!("Failed to write tags to {}", path.display()), e)
+    // Through a copy and a rename rather than in place, because a tag edit routinely targets the
+    // track a deck is holding open; [`atomic_file::rewrite_with_sync`] argues what that costs.
+    atomic_file::rewrite_with_sync(path, |target| {
+        tagged.save_to_path(target, WriteOptions::default()).map_err(|e| {
+            AppError::metadata(format!("Failed to write tags to {}", path.display()), e)
+        })
     })?;
 
     Ok(WriteOutcome { format, unsupported: unsupported.0 })
@@ -591,19 +621,16 @@ pub fn cover_picture_from_path(path: &Path) -> Result<Picture, AppError> {
         .decode()
         .map_err(|e| AppError::metadata(format!("Failed to decode cover {}", path.display()), e))?;
 
-    // Every container we target embeds JPEG and PNG as-is, so hand the original bytes through —
-    // `decoded` was only ever the validator.
-    let passthrough = matches!(format, Some(image::ImageFormat::Jpeg | image::ImageFormat::Png));
+    // Every container we target embeds JPEG and PNG as-is, so a cover already inside the bounds is
+    // handed through untouched — `decoded` was only ever the validator. Past them it stops being
+    // the validator and becomes the source the re-encode below works from.
+    let within_bounds = decoded.width() <= EMBED_MAX_DIM
+        && decoded.height() <= EMBED_MAX_DIM
+        && bytes.len() <= EMBED_MAX_BYTES;
+    let passthrough =
+        within_bounds && matches!(format, Some(image::ImageFormat::Jpeg | image::ImageFormat::Png));
 
-    let data = if passthrough {
-        bytes
-    } else {
-        let mut jpeg = Vec::new();
-        decoded.write_to(&mut Cursor::new(&mut jpeg), image::ImageFormat::Jpeg).map_err(|e| {
-            AppError::metadata(format!("Failed to re-encode cover {} to JPEG", path.display()), e)
-        })?;
-        jpeg
-    };
+    let data = if passthrough { bytes } else { embeddable_jpeg(&decoded, path)? };
 
     let mut picture = Picture::from_reader(&mut Cursor::new(&data)).map_err(|e| {
         AppError::metadata(format!("Not a usable cover image: {}", path.display()), e)
@@ -633,6 +660,24 @@ pub fn read_lyrics_and_credits(
     let tagged = metadata::read_tags(path, metadata::TagScope::TagsOnly)?;
     let tag = tagged.primary_tag().or_else(|| tagged.first_tag());
     Ok((tag.and_then(lyrics_from), metadata::credits_from_tag(tag)))
+}
+
+/// `decoded` fitted inside the embed bounds and re-encoded as a JPEG, which every container we
+/// target accepts.
+fn embeddable_jpeg(decoded: &image::DynamicImage, source: &Path) -> Result<Vec<u8>, AppError> {
+    let (width, height) =
+        image_decode::fit_within(decoded.width(), decoded.height(), EMBED_MAX_DIM, EMBED_MAX_DIM);
+    let resized =
+        image_decode::resize_rgb8(decoded, width, height, EMBED_FILTER).ok_or_else(|| {
+            AppError::metadata_msg(format!("Cover {} could not be resized", source.display()))
+        })?;
+
+    let mut jpeg = Vec::new();
+    let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, EMBED_JPEG_QUALITY);
+    image::DynamicImage::ImageRgb8(resized).write_with_encoder(encoder).map_err(|e| {
+        AppError::metadata(format!("Failed to re-encode cover {} to JPEG", source.display()), e)
+    })?;
+    Ok(jpeg)
 }
 
 fn lyrics_from(tag: &Tag) -> Option<String> {

@@ -32,7 +32,7 @@ ignore = [
     # revisit: 2026-10-06
     "RUSTSEC-2026-0206",
 
-    # paste 1.0.15 unmaintained — via lofty 0.24.0 (direct) and rav1e 0.8.1 (slint → image →
+    # paste 1.0.15 unmaintained — via lofty 0.25.4 (direct) and rav1e 0.8.1 (slint → image →
     # ravif → rav1e). Lofty has no migration plan; rav1e's pastey migration (PR #3430) is merged
     # but unreleased.
     # revisit: 2026-08-19

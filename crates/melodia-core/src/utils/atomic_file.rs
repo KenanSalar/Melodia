@@ -84,6 +84,36 @@ pub fn write_with_sync(
     Ok(())
 }
 
+/// Hands `rewrite` a copy of `path` to work on, renaming it over the original only once `rewrite`
+/// succeeds.
+///
+/// [`write_with_sync`]'s shape for a library that insists on opening the path itself, and it is
+/// here for a second reason on top of the crash safety the others buy. **A rewrite in place moves
+/// every byte after the edit under whoever already has the file open**, and a deck playing that
+/// track keeps reading at offsets that now land somewhere else: an edit that grows a tag by a
+/// megabyte does not sound like an edit, it sounds like the track breaking. Renaming leaves that
+/// reader on the file it opened, whole to the end, and the next open gets the new one. Rust opens
+/// with `FILE_SHARE_DELETE`, so that holds on Windows too.
+///
+/// Costs one copy of the file, which is why it is for whole-file rewrites: those pay it anyway.
+pub fn rewrite_with_sync(
+    path: &Path,
+    rewrite: impl FnOnce(&Path) -> AppResult<()>,
+) -> AppResult<()> {
+    // Resolved first, because a rename replaces the *link* where a write in place followed it: a
+    // symlinked track would otherwise become a regular file holding the edit, with the file the
+    // user actually keeps left untouched.
+    let path = &std::fs::canonicalize(path)?;
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+    // Closed rather than held open: `rewrite` opens the path for itself, and the temp keeps no
+    // extension, so a watcher over a music folder sees a file it does not scan.
+    let tmp = tempfile::NamedTempFile::new_in(dir)?.into_temp_path();
+    std::fs::copy(path, &tmp)?;
+    rewrite(&tmp)?;
+    tmp.persist(path).map_err(|e| AppError::Io(e.error))?;
+    Ok(())
+}
+
 #[cfg(test)]
 #[path = "tests/atomic_file_tests.rs"]
 mod tests;

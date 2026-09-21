@@ -74,6 +74,29 @@ fn sniff_file_type(path: &Path) -> Option<FileType> {
     FileType::from_buffer(&head)
 }
 
+/// The channel count `path`'s Opus identification packet states, or `None` where the file is not
+/// laid out the way an encoder writes one.
+///
+/// Derived rather than assumed, because an Ogg page header runs 27 bytes plus one per segment
+/// and a packet laced into two would walk past a fixed offset. Anything this cannot make sense
+/// of goes to lofty, which is where every other malformed header already goes.
+fn opus_channel_count(path: &Path) -> Option<u8> {
+    const PAGE_HEADER: usize = 27;
+    const SEGMENT_COUNT_AT: usize = 26;
+    const MAGIC: &[u8] = b"OpusHead";
+    /// The longest a segment table runs, plus the version byte and the channel count behind the
+    /// magic.
+    const HEAD_BYTES: usize = PAGE_HEADER + 255 + 10;
+
+    let mut head = Vec::with_capacity(HEAD_BYTES);
+    std::fs::File::open(path).ok()?.take(HEAD_BYTES as u64).read_to_end(&mut head).ok()?;
+
+    let packet = head.get(PAGE_HEADER + usize::from(*head.get(SEGMENT_COUNT_AT)?)..)?;
+    let rest = packet.strip_prefix(MAGIC)?;
+    // Version, then the count.
+    rest.get(1).copied()
+}
+
 /// How much of a file [`read_tags`] is being asked for.
 ///
 /// Both halves lofty can be talked out of are expensive and neither is optional by default:
@@ -113,6 +136,16 @@ pub fn read_tags(path: &Path, scope: TagScope) -> Result<TaggedFile, AppError> {
         && let Some(sniffed) = sniff_file_type(path)
     {
         probe = probe.set_file_type(sniffed);
+    }
+
+    // `lofty::ogg::opus::properties` guards a mapping family above 1 and a channel count too
+    // large for the family named, and then hands the count to `ChannelMask::from_opus_channels`,
+    // whose arms run 1 to 8 and whose `expect` takes everything else. `panic = "abort"` leaves
+    // nothing to catch, so one crafted or truncated file in a watched folder ends the process
+    // mid-scan. Checked here rather than in [`sniff_file_type`], which only runs once the
+    // extension has resolved to nothing and so never sees a file named `.opus`.
+    if matches!(probe.file_type(), Some(FileType::Opus)) && opus_channel_count(path) == Some(0) {
+        return Err(AppError::metadata_msg(format!("{} states no audio channels", path.display())));
     }
 
     probe

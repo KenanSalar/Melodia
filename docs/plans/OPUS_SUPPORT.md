@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships; leave an ADR behind first.
 
-Status: **proposed** · Created: 2026-09-21
+Status: **in progress**, Phases 0 to 2 landed · Created: 2026-09-21
 
 Issue [#35](https://github.com/KenanSalar/Melodia/issues/35), branch `feat/opus-decoding`.
 The lofty bump in Phase 0 ships on this branch too, as its own commit, not a separate PR.
@@ -36,12 +36,20 @@ Both routes end at the same Symphonia `AudioDecoder` trait, so this is a depende
 than an architectural one.
 
 `symphonia-adapter-libopus` 0.3.0 is 209 lines over `opusic-sys`, which vendors libopus and builds
-it with CMake. It handles mono and stereo only, never reads the `OpusHead` output gain, and
-reallocates its `AudioBuffer` whenever a packet's frame count changes. For a local file here that
-last one is an allocation on the cpal callback thread.
+it with CMake. It handles mono and stereo only, never reads the `OpusHead` output gain, ignores
+`AudioDecoderOptions::gapless` where Vorbis honours it, and reallocates its `AudioBuffer` whenever a
+packet's frame count changes. For a local file here that last one is an allocation on the cpal
+callback thread. It is still the shape to copy, minus those three.
+
+Two pure-Rust adapters exist and neither is the answer. `symphonia-adapter-oporus` 0.1.3 over
+`oporus` 0.2.4 is **LGPL-2.1**, workable under AGPL-3.0 but the only copyleft audio dependency we
+would be adding, and by `licenses/ATTRIBUTION.txt`'s own criterion it would owe an entry plus a
+licence text in all five package formats. `symphonia-adapter-opus-rs` 0.1.1 over `ruopus` 0.1.2 is
+permissive, and it is 0.1.x on both halves with unsafe SIMD kernels on the decode path.
 
 `opus-pure` 0.2.1 (BSD-3-Clause, the same licence as libopus) has zero dependencies, no `build.rs`,
-and ships an `OpusMSDecoder`. Measured rather than quoted:
+and ships an `OpusMSDecoder`. BSD-3 is permissive and the crate is unmodified, so by that same
+criterion it owes no attribution entry. Measured rather than quoted:
 
 | | |
 |---|---|
@@ -63,8 +71,8 @@ owning the seam: `decode::CODECS` is our registry, so swapping the crate behind 
 and nothing at either call site.
 
 **Native Symphonia Opus is not the plan.** ⚠️ **re-verify:** `symphonia-codec-opus` does not exist on
-crates.io, the facade's 0.6.1 feature list has no `opus` entry, and upstream's own status table still
-marks it as not started. The two open PRs both conflict and the further along of the two implements
+crates.io and the facade's 0.6.1 feature list has no `opus` entry, both re-checked 2026-09-21, and
+upstream's own status table still marks it as not started. The two open PRs both conflict and the further along of the two implements
 SILK only, which is the wrong half for music. Both routes register into the same `CodecRegistry`
 behind the same trait, so adopting a first-party decoder later is a dependency line and a
 registration call.
@@ -80,15 +88,15 @@ Where each piece lands, and what stays out of reach of what.
 | the decoder | `crates/melodia-audio/src/player/source/opus.rs` | new module, beside `aac_trim.rs`, which is the precedent for a codec quirk the tiers below do not handle |
 | registration | `decode::CODECS`, `decode.rs:45-49` | one line; nothing at either call site changes |
 | `opus-pure` | `[workspace.dependencies]`, named by `melodia-audio` alone | the tier boundary in `.claude/rules/audio-stack.md` holds: `source` names the codec, `playback` never does |
-| pre-skip, end-trim, output gain, surround | inside that module | **not** `file_decode`, which is where the AAC delay had to go. Opus states all of it in the identification packet, so there is nothing for a per-file reader to find, and the stream path gets the same handling for free |
+| pre-skip, end-trim, output gain, surround | inside that module | **not** `file_decode`, which is where the AAC delay had to go. Only a decoder sees `packet.trim_end`, and only the identification packet states the priming in a way all three containers carry: Matroska fills no `Track::delay` and MP4 fills neither, so a reader above the codec would cover Ogg alone |
 | R128 read | `media/ingest/metadata.rs`, beside the four `ReplayGain*` keys | one helper, no format branch |
 | R128 storage | the four existing `replaygain_*` columns | no schema change, no DSP change |
-| zero-channel guard | `metadata::sniff_file_type` | the one place in the tree that already reads a file header |
+| zero-channel guard | `metadata::read_tags`, on the resolved `FileType` | `sniff_file_type` only runs once the extension has resolved to nothing, so it never sees a file named `.opus` |
 
-Two duplications this deliberately does not create. **The gain is not folded into the ReplayGain
+One duplication this deliberately does not create: **the gain is not folded into the ReplayGain
 columns at scan**, which would be the cheaper edit and would silently gate a mandatory-to-apply gain
-on a user toggle. And **no second `OpusHead` parser**: `opus_pure::OpusHead` answers pre-skip, gain
-and the mapping table in one pass, so the module holds no byte offsets of its own.
+on a user toggle. `opus_pure` applies it inside the decoder through the `gain_q8` field libopus's
+own `OPUS_SET_GAIN` exists for.
 
 ---
 
@@ -232,35 +240,44 @@ file lost a field.
 
 ---
 
-## Phase 1 — The decoder
+## Phase 1 — The decoder ✅ done
 
 New module `crates/melodia-audio/src/player/source/opus.rs`, holding an `AudioDecoder` and
-`RegisterableAudioDecoder` for `CODEC_ID_OPUS` over `opus_pure`.
+`RegisterableAudioDecoder` for `CODEC_ID_OPUS` over `opus_pure`. **Phase 2 ships in the same
+commit**: the extension const is the only gate on the scan, the watcher, import and Browse, so a
+registered decoder without it is a commit nothing can validate.
 
-- [ ] `opus-pure = "0.2.1"` in `[workspace.dependencies]`, named by `melodia-audio` alone.
-- [ ] Register with one line in `decode::CODECS` (`decode.rs:45-49`), whose doc comment already names
+- [x] `opus-pure = "0.2.1"` in `[workspace.dependencies]`, named by `melodia-audio` alone.
+- [x] Register with one line in `decode::CODECS` (`decode.rs:45-49`), whose doc comment already names
       this case as the reason the registry is ours rather than `symphonia::default::get_codecs`.
       Nothing changes at either call site.
-- [ ] **One parse answers everything.** `opus_pure::OpusHead` reads `pre_skip`, `output_gain_q8`,
-      `mapping_family`, `stream_count`, `coupled_count` and `channel_mapping` off the identification
-      packet Symphonia hands over in `extra_data`. No byte offsets belong in this module.
-- [ ] **Pre-skip.** Symphonia's Ogg Opus packet parser returns a zero discard on every path
+- [x] **Two fields off `extra_data`, at their RFC 7845 §5.1 offsets.** Not one parse:
+      `opus_pure::OpusHead::parse` is `pub(crate)` and unreachable, and `symphonia_common`'s own
+      `OpusHead` is not re-exported by the facade and keeps neither the gain nor the mapping table.
+      The container hands the identification packet over whole, Symphonia has already validated it,
+      and only the pre-skip and the gain are read back.
+- [x] **Pre-skip.** Symphonia's Ogg Opus packet parser returns a zero discard on every path
       (`mappings/opus.rs::parse_next_packet_dur` returns `(dur, Duration::ZERO)`), so
       `packet.trim_start` is always zero for Opus, unlike Vorbis. The count sits on `Track::delay`,
-      which `.claude/rules/symphonia.md` already records as advisory and unapplied. Drop those frames
-      here, keyed off `packet.pts` so a seek into the middle of a file cannot re-trigger it.
-- [ ] **End padding.** This half does arrive, on the last packet's `trim_end`, worked out by the Ogg
-      reader from the granule position. Apply it.
-- [ ] **Output gain.** Q7.8 dB, RFC 7845 §5.1, which asks that players apply it by default.
+      **which no decoder can reach**: `decode::open` takes the id, the timebase and the length off
+      the `Track` and drops it, and `make_decoder` sees `AudioCodecParameters` alone. It is also
+      Ogg-only, Matroska shifting the timestamp by `codec_delay` instead and MP4 filling nothing. So
+      it is read off the header and added to `packet.trim_start` on the first packet, a one-shot
+      spent afterwards and not re-armed by `reset`.
+- [x] **End padding.** This half does arrive, on the last packet's `trim_end`, worked out by the Ogg
+      reader from the granule position. Applied through `AudioBuffer::trim`, the same call Vorbis
+      makes, and under `opts.gapless` the same way.
+- [x] **Output gain.** Q7.8 dB, RFC 7845 §5.1, which asks that players apply it by default.
       Symphonia parses it into `OpusHead.gain` and the Ogg mapper discards it, so nothing downstream
       applies it. It belongs here and **not** in the ReplayGain path: it is mandatory to apply, so it
-      must not be gated on the ReplayGain toggle. Carry it as `Option<f32>`, `None` at 0 dB, so the
-      common case is an exact passthrough with no multiply, the same shape as `EqSource`'s flat-band
-      bypass.
-- [ ] Size both buffers once at open, to the longest packet Opus allows (120 ms at 48 kHz), so
+      must not be gated on the ReplayGain toggle. `opus_pure` exposes `gain_q8` for exactly this, so
+      it is a field assignment rather than a multiply of ours.
+- [x] Size both buffers once at open, to the longest packet Opus allows (120 ms at 48 kHz), so
       nothing on the decode path grows a `Vec`. This decoder is pulled inline on the cpal callback for
-      a local file, and it is the point at which the C adapter reallocates.
-- [ ] Do **not** add a soft-clip stage. `opus_pure`'s float output is not bounded by ±1, since codec
+      a local file, and it is the point at which the C adapter reallocates. `opus_pure` still
+      allocates two or three small `Vec`s per packet inside its own frame-range bookkeeping, bounded
+      by the frame count; that is upstream's and it is not the PCM buffer.
+- [x] Do **not** add a soft-clip stage. `opus_pure`'s float output is not bounded by ±1, since codec
       ringing carries slightly past it, matching libopus. The DSP chain clamps whenever anything is
       enabled. A nonlinearity on every Opus track, to correct an overshoot the device converts
       identically either way, is the wrong trade. Say so in the module doc so it is not re-proposed.
@@ -268,11 +285,27 @@ New module `crates/melodia-audio/src/player/source/opus.rs`, holding an `AudioDe
 **Gate:** clippy and tests. A `.opus` file decodes through `FileDecoder` at the right rate and
 channel count. Keep the module inside the 800-line cap; surround lands in Phase 4 on top of this.
 
+Passed. `fmt` and clippy clean, 3510 tests green, the module at 224 lines. The decode measured
+rather than assumed: `test-assets/silence.opus` states `pre_skip = 312` and a container duration of
+1.0065 s, and comes out of `FileDecoder` at 48 kHz, two channels and **exactly 48000 frames**, which
+is what ffmpeg's libopus writes out of the same file. Priming and padding both land where they
+should.
+
+**The skew that buys the other two containers, recorded once.** The Ogg mapper leaves
+`absgp_to_ts` at identity, so the granule position arrives still counting the priming and the first
+packet's PTS is zero rather than negative. A decoder that swallows the pre-skip therefore hands back
+audio that runs `pre_skip` frames ahead of the demuxer's timeline: the 1.0065 s above against 1.000 s
+of audio, so a stated duration is that much long and a seek lands that much early, 6.5 ms at the 312
+frames RFC 7845 recommends. Under everything that reads those numbers here, and the alternative is a
+head reader above the codec that would serve Ogg and neither of the others. Argued in the module
+doc, with `Track::delay` named as where exactness would come from.
+
 ---
 
-## Phase 2 — Ingest: the extension surface, and the panic it exposes
+## Phase 2 — Ingest: the extension surface, and the panic it exposes ✅ done
 
-One phase, because the second half is caused by the first.
+One phase, because the second half is caused by the first, and one commit with Phase 1 for the
+reason stated there.
 
 **The guard.** `lofty::ogg::opus::properties` ends its channel validation with
 `ChannelMask::from_opus_channels(properties.channels).expect("Channel count is valid")`. 0.25.x adds
@@ -284,22 +317,24 @@ panicking. It does **not** guard `channels == 0`, which still falls to `from_opu
 folder **aborts Melodia mid-scan**. It is unreachable today only because `.opus` is not scanned,
 which makes it this phase's exposure to create rather than a pre-existing one to note and leave.
 
-- [ ] Widen `metadata::sniff_file_type`'s `SNIFF_BYTES` (36 today) and refuse a zero-channel Opus
-      header before lofty parses it. For a 19-byte `OpusHead` the channel byte sits at offset 37:
-      a 27-byte Ogg page header, one segment-table byte, the 8-byte magic, then version. Argue the
-      offset at the constant.
+- [x] Refuse a zero-channel Opus header before lofty parses it, **in `read_tags` on the resolved
+      `FileType`, not in `sniff_file_type`**: that one runs only once the extension has resolved to
+      nothing, and lofty maps `"opus"` directly, so it never sees the file the panic is about. The
+      check derives the packet's offset from the page's own segment count rather than assuming 37,
+      so a packet laced into two segments cannot walk past it, and hands anything it cannot make
+      sense of to lofty like every other malformed header.
 - [ ] Report it upstream.
-- [ ] `"opus"` into `AUDIO_EXTENSIONS` (`crates/melodia-core/src/utils/audio_ext.rs`). That single
+- [x] `"opus"` into `AUDIO_EXTENSIONS` (`crates/melodia-core/src/utils/audio_ext.rs`). That single
       const is the whole gate: the walk, the watcher, import, Browse and the argv filter all route
       through `is_audio_extension`. No sniff is needed for *identification*, since lofty maps
       `"opus" => FileType::Opus` directly, unlike `.oga`.
-- [ ] `test-assets/silence.opus`, generated with ffmpeg, plus a `*.opus binary` line in
+- [x] `test-assets/silence.opus`, generated with ffmpeg, plus a `*.opus binary` line in
       `.gitattributes` beside its siblings.
       `file_decode_tests::every_scanned_extension_reaches_a_decoder` walks the const and opens
       `silence.<ext>` for each; `scanner_tests::collects_all_supported_extensions` asserts the count.
-- [ ] Two `crates/melodia/wix/main.wxs` rows, `SupportedTypes` **and**
+- [x] Two `crates/melodia/wix/main.wxs` rows, `SupportedTypes` **and**
       `Capabilities\FileAssociations`, held by `packaging.rs::the_msi_offers_every_audio_extension`.
-- [ ] The freedesktop MIME type in the four `.desktop` sources: `scripts/Melodia.desktop`,
+- [x] `audio/x-opus+ogg` in the four `.desktop` sources: `scripts/Melodia.desktop`,
       `assets/desktop/Melodia.desktop.tmpl`, and the heredocs in `scripts/build-appimage.sh` and
       `scripts/build-rpm.sh`. Held by
       `desktop_integration_tests::all_desktop_sources_agree_on_mime_and_wmclass`, whose list is
@@ -308,6 +343,17 @@ which makes it this phase's exposure to create rather than a pre-existing one to
 **Gate:** `cargo test --locked --workspace`, where the two walks fail loudly if the fixture or a
 packaging row is missing. A zero-channel `.opus` header reaching `read_tags` comes back an
 `AppError` instead of taking the process down.
+
+Passed. Both halves measured on a crafted file rather than reasoned about: `silence.opus` with its
+channel byte zeroed panics inside `lofty-0.25.4/src/ogg/opus/properties.rs:132` on
+`"Channel count is valid"` when handed straight to lofty, and comes back
+`Metadata error: … states no audio channels` through `read_tags`. The unmodified fixture reads
+normally either way.
+
+**Registering the decoder also turns on Opus inside `.mka` and `.m4a`**, both already scanned:
+`symphonia-format-mkv` maps `A_OPUS` and `symphonia-format-isomp4` parses `dOps` into the same
+`extra_data`. Neither container states a delay, so those files keep their 6.5 ms of priming; the
+skew argued in Phase 1 is the same one.
 
 ---
 

@@ -338,6 +338,7 @@
                             <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Melodia.exe\SupportedTypes" Name=".aac" Value="" Type="string" />
                             <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Melodia.exe\SupportedTypes" Name=".ogg" Value="" Type="string" />
                             <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Melodia.exe\SupportedTypes" Name=".oga" Value="" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Melodia.exe\SupportedTypes" Name=".opus" Value="" Type="string" />
                             <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Melodia.exe\SupportedTypes" Name=".wav" Value="" Type="string" />
                             <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Melodia.exe\SupportedTypes" Name=".aiff" Value="" Type="string" />
                             <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Melodia.exe\SupportedTypes" Name=".aif" Value="" Type="string" />
@@ -360,6 +361,7 @@
                             <RegistryValue Root="HKLM" Key="Software\Melodia\Capabilities\FileAssociations" Name=".aac" Value="Melodia.AssocFile.Audio" Type="string" />
                             <RegistryValue Root="HKLM" Key="Software\Melodia\Capabilities\FileAssociations" Name=".ogg" Value="Melodia.AssocFile.Audio" Type="string" />
                             <RegistryValue Root="HKLM" Key="Software\Melodia\Capabilities\FileAssociations" Name=".oga" Value="Melodia.AssocFile.Audio" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Melodia\Capabilities\FileAssociations" Name=".opus" Value="Melodia.AssocFile.Audio" Type="string" />
                             <RegistryValue Root="HKLM" Key="Software\Melodia\Capabilities\FileAssociations" Name=".wav" Value="Melodia.AssocFile.Audio" Type="string" />
                             <RegistryValue Root="HKLM" Key="Software\Melodia\Capabilities\FileAssociations" Name=".aiff" Value="Melodia.AssocFile.Audio" Type="string" />
                             <RegistryValue Root="HKLM" Key="Software\Melodia\Capabilities\FileAssociations" Name=".aif" Value="Melodia.AssocFile.Audio" Type="string" />

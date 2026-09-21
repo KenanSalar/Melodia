@@ -40,11 +40,12 @@ use super::audio::{ChannelCount, SampleRate, Shape};
 /// Our own registry, rather than `symphonia::default::get_codecs`.
 ///
 /// That one is fixed at whatever the crate's own features enable, so a decoder living outside it
-/// can never be reached: Opus arrives as an adapter crate rather than a Symphonia feature, and
-/// registering it is a line here and nothing at either call site.
+/// could never be reached: Symphonia ships none for Opus and offers no feature for one, and
+/// registering [`super::opus`] is a line here and nothing at either call site.
 static CODECS: LazyLock<CodecRegistry> = LazyLock::new(|| {
     let mut registry = CodecRegistry::new();
     symphonia::default::register_enabled_codecs(&mut registry);
+    registry.register_audio_decoder::<super::opus::OpusDecoder>();
     registry
 });
 

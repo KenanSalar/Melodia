@@ -121,6 +121,11 @@ symphonia = { version = "0.6.1", default-features = false, features = [
     "id3v1",
     "id3v2",
 ] }
+# Symphonia ships no Opus decoder and no feature for one, so `player::source::opus` is a
+# registration into `decode::CODECS` over this. Pure Rust with no dependencies and no
+# `build.rs`: the libopus adapter would put CMake and a vendored C build in ten release slots
+# for a decoder that measured no better here.
+opus-pure = "0.2.1"
 # The graphic EQ cascades this crate's `Type::PeakingEQ` filters. `DirectForm1` keeps
 # its delay line across a coefficient swap, so a slider drag injects no transient.
 biquad = "0.6.0"

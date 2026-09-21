@@ -72,7 +72,10 @@ loop {
   trims unconditionally under a default-on flag
 - **`Track::delay`/`padding` is advisory metadata rather than something applied.** CAF fills both
   from its packet table and no decoder it feeds ever uses them; Opus-in-Ogg fills `delay` from
-  `pre_skip` for a decoder 0.6.1 does not ship. So AAC is trimmed here rather than upstream, in
+  `pre_skip` and nothing carries it to a decoder, `decode::open` dropping the `Track` once it has
+  the id, the timebase and the length, so `player::source::opus` reads the priming back off the
+  identification packet instead, which is also what covers Matroska and MP4, neither of which
+  fills the field at all. So AAC is trimmed here rather than upstream, in
   `player::aac_trim`, which reads the two places a file states its padding and hands `file_decode` a
   head and a playable length; that module argues the numbers,
   `docs/adr/` argues why we read them rather than trusting the flag, and

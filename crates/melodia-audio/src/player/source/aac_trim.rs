@@ -15,8 +15,9 @@
 //! for. `iTunSMPB` wins where both are present: it names the original sample count outright, where
 //! an edit list only offsets a duration the container states elsewhere.
 //!
-//! Scope is AAC. FLAC and ALAC are lossless and pad nothing, Vorbis is trimmed upstream, and Opus
-//! has no decoder here yet.
+//! Scope is AAC. FLAC and ALAC are lossless and pad nothing, and Vorbis and Opus come off their
+//! own decoders instead: upstream's Vorbis reads the packet trims, and [`super::opus`] argues why
+//! ours takes the priming there rather than here.
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
