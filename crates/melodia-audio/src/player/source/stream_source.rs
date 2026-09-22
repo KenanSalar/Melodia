@@ -425,9 +425,12 @@ async fn connect(
     let titles = shared.clone();
     let reader: StreamReader =
         IcyMetadataReader::new(reader, icy.metadata_interval(), move |parsed| {
-            titles.set_title(parsed.ok().and_then(|m| {
-                m.stream_title().map(str::trim).filter(|t| !t.is_empty()).map(str::to_owned)
-            }));
+            // A block that won't parse says nothing about the song, and read as "no title" it
+            // would clear the line and make the next good block look like a new song.
+            let Ok(metadata) = parsed else { return };
+            titles.set_title(
+                metadata.stream_title().map(str::trim).filter(|t| !t.is_empty()).map(str::to_owned),
+            );
         });
 
     // **On the blocking pool, never on a worker.** Building the decoder probes the container by
@@ -683,8 +686,6 @@ fn feed_loop(mut ctx: FeedContext) {
             return;
         }
 
-        // Before the reopen, whose probe can already read the first title of the new connection.
-        ctx.shared.rejoin();
         match ctx.runtime.block_on(reopen(&ctx.client, &ctx.url, &ctx.shared, ctx.reopen)) {
             Ok(opened) if opened.shape == ctx.shape => {
                 ctx.decoder = opened.decoder;

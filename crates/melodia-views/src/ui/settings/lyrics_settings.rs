@@ -38,7 +38,7 @@ pub fn install(ui: &AppWindow, state: &AppState) {
 /// The card's row owes Now Playing nothing, for [`online_handler`]'s reason: reaching this page
 /// closed that view, and its close already handed the sheet back.
 pub(crate) fn enabled_handler(ui: &AppWindow, state: &AppState) -> impl Fn(bool) + 'static {
-    let mirror = mirrored(
+    mirrored(
         ui,
         state,
         &state.lyrics_enabled,
@@ -48,15 +48,7 @@ pub(crate) fn enabled_handler(ui: &AppWindow, state: &AppState) -> impl Fn(bool)
             ui.global::<Settings>().set_lyrics_enabled(on);
             ui.global::<Lyrics>().set_enabled(on);
         },
-    );
-    let state = state.clone();
-    move |on| {
-        mirror(on);
-        // Off means nothing held, the radio answers in memory included.
-        if !on {
-            library::lyrics::forget_live(&state);
-        }
-    }
+    )
 }
 
 /// The handler both rows of the online-lookup switch register.

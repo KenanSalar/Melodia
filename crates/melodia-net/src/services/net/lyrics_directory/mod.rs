@@ -91,13 +91,3 @@ pub async fn fetch(
 ) -> Result<Option<LyricsAnswer>, LookupError> {
     lrclib::fetch(client, pacer, title, credit, album, duration_ms).await
 }
-
-/// Ask the directory about a song a station announced, by title and artist alone.
-pub async fn fetch_heard(
-    client: &reqwest::Client,
-    pacer: &RequestPacer,
-    title: &str,
-    credit: &ArtistCredit,
-) -> Result<Option<LyricsAnswer>, LookupError> {
-    lrclib::fetch_heard(client, pacer, title, credit).await
-}

@@ -285,8 +285,8 @@ fn the_now_playing_column_mounts_exactly_one_arm() {
 
     let arms = [
         "if !Player.vm.has_station && !Lyrics.enabled: UpNextList {",
-        "if Lyrics.enabled: LyricsPanel {",
-        "if Player.vm.has_station && !Lyrics.enabled: Rectangle {",
+        "if !Player.vm.has_station && Lyrics.enabled: LyricsPanel {",
+        "if Player.vm.has_station: Rectangle {",
     ];
     for arm in arms {
         assert_eq!(
@@ -297,12 +297,12 @@ fn the_now_playing_column_mounts_exactly_one_arm() {
     }
 
     // The heading names whichever arm is up, so it has to branch on the same two properties in
-    // the same order. Read the other way round it labels a station's lyrics "Station".
+    // the same order. Read the other way round it labels a station panel "Lyrics".
     let station_at = source.find("Player.vm.has_station ? @tr(\"Station\")");
     let lyrics_at = source.find("Lyrics.enabled ? @tr(\"Lyrics\")");
     assert!(
-        matches!((station_at, lyrics_at), (Some(station), Some(lyrics)) if lyrics < station),
-        "the column heading must test the lyrics switch before the station, as the mounts do"
+        matches!((station_at, lyrics_at), (Some(station), Some(lyrics)) if station < lyrics),
+        "the column heading must test the station before the lyrics switch, as the mounts do"
     );
 }
 

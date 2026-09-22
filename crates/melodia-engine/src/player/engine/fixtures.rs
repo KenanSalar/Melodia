@@ -27,7 +27,6 @@ pub fn test_station(name: &str) -> Arc<RadioNowPlaying> {
         stream_url: "http://example.test/live.mp3".to_owned(),
         artwork_path: None,
         live_title: None,
-        song_started_ms: None,
         buffering: false,
         country: None,
         tags: None,

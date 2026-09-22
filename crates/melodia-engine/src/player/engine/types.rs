@@ -77,11 +77,6 @@ pub struct RadioNowPlaying {
     /// The current track as the stream itself announces it, in whatever shape the station sends.
     /// `None` until the first metadata block arrives, which for some stations is never.
     pub live_title: Option<String>,
-    /// Where on the deck's clock the audio [`Self::live_title`] names started, or `None` where the
-    /// song was already under way when the stream was joined. What a lyrics sheet is followed
-    /// against. Session-only, the clock restarting with the connection.
-    #[serde(skip)]
-    pub song_started_ms: Option<u64>,
     /// Whether the stream is currently running on empty. It lives here rather than on
     /// `PlayerState` because it means nothing without a station: reconciled by the playback
     /// monitor off [`melodia_audio::player::source::prebuffer::StreamShared`], and gone the
@@ -115,7 +110,6 @@ impl From<&melodia_core::entities::radio::RadioStation> for RadioNowPlaying {
             stream_url: station.stream_url.clone(),
             artwork_path: station.artwork_path.clone(),
             live_title: None,
-            song_started_ms: None,
             buffering: false,
             country: station.country_name().map(str::to_owned),
             tags: station.genre().map(str::to_owned),

@@ -178,9 +178,10 @@ export component NowPlayingView inherits Rectangle {
                 VisualizerPicker { }
             }
 
-            // On a station too: the switch trades the station's description for the words of the
-            // song it is announcing.
-            VerticalLayout {
+            // **Gone rather than disabled on a station**, the vote's rule directly above: the
+            // column keeps its panel whatever the switch says, a stream having no track to look a
+            // sheet up for, so here it could only ever swap nothing for nothing.
+            if !Player.vm.has_station: VerticalLayout {
                 alignment: center;
                 LyricsControls { }
             }
@@ -374,10 +375,10 @@ export component NowPlayingView inherits Rectangle {
                 Text {
                     // A station's queue is untouched underneath it but is not what comes next,
                     // so this column states what the station *is* instead. Lyrics take the same
-                    // slot on either, the column being one column with three arms rather than a
+                    // slot on a track, the column being one column with three arms rather than a
                     // place two things share.
-                    text: Lyrics.enabled ? @tr("Lyrics")
-                        : Player.vm.has_station ? @tr("Station")
+                    text: Player.vm.has_station ? @tr("Station")
+                        : Lyrics.enabled ? @tr("Lyrics")
                         : @tr("Up Next");
                     // Accent-tinted like the divider under it but solid: a heading carries it at
                     // full alpha where a hairline can't. The rows below keep the list palette.
@@ -398,7 +399,10 @@ export component NowPlayingView inherits Rectangle {
                     compact: false;
                 }
 
-                if Lyrics.enabled: LyricsPanel {
+                // **A station keeps its panel whatever the switch says.** A stream has no track to
+                // look a sheet up for, so the switch would be offering something that could only
+                // ever be empty; what a station has instead is the description below.
+                if !Player.vm.has_station && Lyrics.enabled: LyricsPanel {
                     vertical-stretch: 1;
                 }
                 // **The station page's own body, on this view's palette.** What a stream has
@@ -409,7 +413,7 @@ export component NowPlayingView inherits Rectangle {
                 //
                 // One scroller for the pair — the history is capped by the ring that fills it, so
                 // there is nothing to virtualize and no second scroller to nest.
-                if Player.vm.has_station && !Lyrics.enabled: Rectangle {
+                if Player.vm.has_station: Rectangle {
                     vertical-stretch: 1;
 
                     station-sv := ScrollView {

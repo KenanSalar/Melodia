@@ -59,11 +59,20 @@ pub struct StreamShared {
     abandoned: AtomicBool,
     title: parking_lot::Mutex<Option<String>>,
     title_generation: AtomicU64,
-    pending: parking_lot::Mutex<VecDeque<PendingTitle>>,
-    /// Whether the next title names a song already under way: set for a fresh cell and by every
-    /// reconnect, taken by the title that follows.
-    joining: AtomicBool,
-    ring: OnceLock<RingTap>,
+    announced: parking_lot::Mutex<Announced>,
+    ring: OnceLock<Arc<SampleRing>>,
+}
+
+/// What the stream has said, as against what has been published of it.
+#[derive(Debug, Default)]
+struct Announced {
+    pending: VecDeque<PendingTitle>,
+    /// The last title the stream sent, once [`Self::said_any`]. **Plenty of servers resend an
+    /// unchanged title in every metadata block**, about once a second, and each repeat would
+    /// republish the station to every surface watching it.
+    last: Option<String>,
+    /// Kept apart from `last`, a cleared title being something a stream can say.
+    said_any: bool,
 }
 
 /// An announcement and the ring position its audio starts at.
@@ -71,32 +80,6 @@ pub struct StreamShared {
 struct PendingTitle {
     title: Option<String>,
     at_sample: usize,
-    joined: bool,
-}
-
-/// What [`StreamShared`] needs of the ring to know when a queued title is being heard.
-struct RingTap {
-    ring: Arc<SampleRing>,
-    samples_per_second: u64,
-}
-
-impl std::fmt::Debug for RingTap {
-    // The ring's slots are seconds of audio, which no log line wants.
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RingTap")
-            .field("samples_per_second", &self.samples_per_second)
-            .finish_non_exhaustive()
-    }
-}
-
-/// A title whose audio has started playing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct HeardTitle {
-    /// How long its audio has already been playing, the monitor's tick being coarser than a song
-    /// change.
-    pub playing_for: Duration,
-    /// The song was already under way when the stream was joined, so its start is unknown.
-    pub joined_mid_song: bool,
 }
 
 /// Tickets for [`StreamShared::title_generation`], drawn process-wide rather than counted per
@@ -117,8 +100,7 @@ impl StreamShared {
             abandoned: AtomicBool::new(false),
             title: parking_lot::Mutex::new(None),
             title_generation: AtomicU64::new(next_title_generation()),
-            pending: parking_lot::Mutex::new(VecDeque::new()),
-            joining: AtomicBool::new(true),
+            announced: parking_lot::Mutex::new(Announced::default()),
             ring: OnceLock::new(),
         })
     }
@@ -158,53 +140,39 @@ impl StreamShared {
     /// inside `IcyMetadataReader`'s callback, which must not block — an uncontended lock and a
     /// push is the whole handler. Before the ring exists (a title read during the probe) its audio
     /// starts at the ring's first sample.
+    ///
+    /// A repeat of the last title is dropped.
     pub fn set_title(&self, title: Option<String>) {
-        let at_sample =
-            self.ring.get().map_or(0, |tap| tap.ring.write_cursor.load(Ordering::Acquire));
-        let joined = self.joining.swap(false, Ordering::AcqRel);
-        let mut pending = self.pending.lock();
-        if pending.len() == MAX_PENDING_TITLES {
-            pending.pop_front();
+        let mut announced = self.announced.lock();
+        if announced.said_any && announced.last == title {
+            return;
         }
-        pending.push_back(PendingTitle { title, at_sample, joined });
-    }
-
-    /// The stream is being joined again after a drop, so the next title is mid-song.
-    pub fn rejoin(&self) {
-        self.joining.store(true, Ordering::Release);
+        let at_sample = self.ring.get().map_or(0, |ring| ring.write_cursor.load(Ordering::Acquire));
+        announced.last.clone_from(&title);
+        announced.said_any = true;
+        if announced.pending.len() == MAX_PENDING_TITLES {
+            announced.pending.pop_front();
+        }
+        announced.pending.push_back(PendingTitle { title, at_sample });
     }
 
     /// Publish the newest queued title whose audio has started playing, if one has.
     ///
     /// The monitor's to call, on its tick: the audio callback may not take a lock, and nothing
-    /// else knows when a sample has been heard.
-    pub fn publish_heard_title(&self) -> Option<HeardTitle> {
-        let played = self.ring.get().map_or(0, |tap| tap.ring.read_cursor.load(Ordering::Acquire));
+    /// else knows when a sample has been heard. Only the newest of several due titles is shown,
+    /// the others never having been audible for long.
+    pub fn publish_heard_title(&self) {
+        let played = self.ring.get().map_or(0, |ring| ring.read_cursor.load(Ordering::Acquire));
         let heard = {
-            let mut pending = self.pending.lock();
-            let due = pending.iter().take_while(|title| title.at_sample <= played).count();
-            // Only the newest of several due titles was ever audible long enough to show, but a
-            // join among them still means the one shown started before we were listening.
-            let joined = pending.iter().take(due).any(|title| title.joined);
-            let newest = pending.drain(..due).next_back()?;
-            PendingTitle { joined, ..newest }
+            let mut announced = self.announced.lock();
+            let due =
+                announced.pending.iter().take_while(|title| title.at_sample <= played).count();
+            announced.pending.drain(..due).next_back()
         };
+        let Some(heard) = heard else { return };
 
         *self.title.lock() = heard.title;
         self.title_generation.store(next_title_generation(), Ordering::Release);
-        Some(HeardTitle {
-            playing_for: self.samples_as_duration(played - heard.at_sample),
-            joined_mid_song: heard.joined,
-        })
-    }
-
-    fn samples_as_duration(&self, samples: usize) -> Duration {
-        let per_second = self.ring.get().map_or(0, |tap| tap.samples_per_second);
-        if per_second == 0 {
-            return Duration::ZERO;
-        }
-        let samples = u64::try_from(samples).unwrap_or(u64::MAX);
-        Duration::from_millis(samples.saturating_mul(1_000) / per_second)
     }
 
     /// Moves on every [`Self::publish_heard_title`] that publishes, and never back onto a value any
@@ -229,6 +197,16 @@ struct SampleRing {
     slots: Box<[AtomicU32]>,
     write_cursor: AtomicUsize,
     read_cursor: AtomicUsize,
+}
+
+impl std::fmt::Debug for SampleRing {
+    // The slots are seconds of audio, which no log line wants.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SampleRing")
+            .field("write_cursor", &self.write_cursor)
+            .field("read_cursor", &self.read_cursor)
+            .finish_non_exhaustive()
+    }
 }
 
 impl SampleRing {
@@ -333,10 +311,9 @@ impl PrebufferSource {
     /// The source and the writer that feeds it, plus the shared cell both report through.
     pub fn new(shared: Arc<StreamShared>, shape: Shape) -> (Self, RingWriter) {
         let ring = Arc::new(SampleRing::for_format(shape.channels, shape.rate));
-        let samples_per_second = u64::from(shape.rate.get()) * u64::from(shape.channels.get());
         // One source per cell, so a second `set` cannot happen; ignoring it keeps the first ring,
         // which is the one the cell's titles were queued against.
-        let _ = shared.ring.set(RingTap { ring: ring.clone(), samples_per_second });
+        let _ = shared.ring.set(ring.clone());
         let writer = RingWriter { ring: ring.clone(), shared: shared.clone() };
         let source =
             Self { ring, shared, shape, frame_phase: 0, frame_starved: false, starved: false };

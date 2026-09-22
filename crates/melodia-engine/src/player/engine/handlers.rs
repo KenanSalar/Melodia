@@ -231,10 +231,9 @@ fn reconcile_live_stream(
     stream: &StreamShared,
     player_state: &PlayerStateHandle,
     sinks: &PlayerSinks,
-    live: LiveTick<'_>,
+    last_title_generation: &mut u64,
 ) {
-    let LiveTick { position_ms, last_title_generation } = live;
-    let heard = stream.publish_heard_title();
+    stream.publish_heard_title();
     let buffering = stream.is_buffering();
     let title_generation = stream.title_generation();
     let title_moved = title_generation != *last_title_generation;
@@ -246,12 +245,6 @@ fn reconcile_live_stream(
     }
     *last_title_generation = title_generation;
     let title = title_moved.then(|| stream.title());
-    // Placed on the deck's clock by how long its audio has already played, since the tick that
-    // noticed it came some way into the song.
-    let song_started_ms = heard.and_then(|heard| {
-        let playing_for = u64::try_from(heard.playing_for.as_millis()).unwrap_or(u64::MAX);
-        (!heard.joined_mid_song).then(|| position_ms.saturating_sub(playing_for))
-    });
 
     with_state_emit(player_state, sinks, |state| {
         if let Some(radio) = state.station_mut() {
@@ -261,18 +254,10 @@ fn reconcile_live_stream(
             radio.buffering = buffering;
             if let Some(title) = title {
                 radio.live_title = title;
-                radio.song_started_ms = song_started_ms;
             }
         }
         Vec::<PlayerAction>::new()
     });
-}
-
-/// What the monitor's tick hands [`reconcile_live_stream`] beside the stream itself.
-struct LiveTick<'a> {
-    /// The deck's position this tick, the clock a song's start is placed on.
-    position_ms: u64,
-    last_title_generation: &'a mut u64,
 }
 
 /// What the monitor knows at a save point, for whoever owns the writing.
@@ -417,10 +402,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                             &stream,
                             &player_state,
                             &sinks,
-                            LiveTick {
-                                position_ms: tick.position_ms,
-                                last_title_generation: &mut last_title_generation,
-                            },
+                            &mut last_title_generation,
                         );
                     }
 

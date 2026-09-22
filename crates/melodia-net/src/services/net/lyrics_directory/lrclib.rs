@@ -110,13 +110,6 @@ impl ApiLyrics {
         self.synced_lyrics.as_deref().is_some_and(|text| !text.trim().is_empty())
     }
 
-    /// Whether the row answers at all: words, or the directory's word that there are none.
-    fn says_something(&self) -> bool {
-        self.instrumental
-            || self.is_timed()
-            || self.plain_lyrics.as_deref().is_some_and(|text| !text.trim().is_empty())
-    }
-
     /// How far this row's recording sits from the one playing, in milliseconds.
     ///
     /// Fractional because [`DURATION_TOLERANCE_MS`] is measured against it, and because it is the
@@ -313,42 +306,13 @@ async fn search_timed(
     duration_ms: i64,
     ours: &Recording,
 ) -> Result<Option<LyricsAnswer>, LookupError> {
-    let rows = search(client, pacer, title, credit, ours).await?;
-    Ok(pick_timed(rows, ours, album, duration_ms).map(ApiLyrics::into_answer))
-}
-
-/// Asks the index about a song a station announced, which carries a title and an artist and
-/// nothing else.
-///
-/// **The index alone**, because the signature requires the one field a stream never has. That
-/// leaves no length to tell a radio edit from the album cut, so the pick is the best sheet the
-/// index holds for the recording rather than the one closest to it.
-pub(super) async fn fetch_heard(
-    client: &reqwest::Client,
-    pacer: &RequestPacer,
-    title: &str,
-    credit: &ArtistCredit,
-) -> Result<Option<LyricsAnswer>, LookupError> {
-    let ours = Recording::from_credit(title, credit);
-    let rows = search(client, pacer, title, credit, &ours).await?;
-    Ok(pick_heard(rows, &ours).map(ApiLyrics::into_answer))
-}
-
-/// The index's rows for this recording, unfiltered.
-async fn search(
-    client: &reqwest::Client,
-    pacer: &RequestPacer,
-    title: &str,
-    credit: &ArtistCredit,
-    ours: &Recording,
-) -> Result<Vec<ApiLyrics>, LookupError> {
     // **Asked here first, because nothing this side cannot compare is worth a request.** A title
     // that is nothing but a bracketed credit, or a credit that is nothing but separators, folds to
     // a recording `Recording::matches` refuses every row against, so the cap could only be spent
     // to be told nothing. The signature has no such bail: it asks by exact title and length, which
     // stay comparable when the fold does not.
     if !ours.can_match() {
-        return Ok(Vec::new());
+        return Ok(None);
     }
 
     // Back to the tag where the trim empties a field. The cut is there to widen the query, and a
@@ -369,20 +333,12 @@ async fn search(
         .append_pair("artist_name", artist_query);
 
     let Some(body) = send(client, pacer, url, "Lyrics search", MAX_SEARCH_BYTES).await? else {
-        return Ok(Vec::new());
+        return Ok(None);
     };
-    serde_json::from_slice(&body)
-        .map_err(|e| failed("Failed to parse the lyrics search response", e))
-}
+    let rows: Vec<ApiLyrics> = serde_json::from_slice(&body)
+        .map_err(|e| failed("Failed to parse the lyrics search response", e))?;
 
-/// The row the index returned for a song heard on air, timed over untimed and glossed over not.
-///
-/// `min_by_key` keeps the first of equal rows, so what is left to decide falls to the index's own
-/// order.
-fn pick_heard(rows: Vec<ApiLyrics>, ours: &Recording) -> Option<ApiLyrics> {
-    rows.into_iter()
-        .filter(|row| row.says_something() && ours.matches(&row.recording()))
-        .min_by_key(|row| (u8::from(!row.is_timed()), gloss_rank(row)))
+    Ok(pick_timed(rows, ours, album, duration_ms).map(ApiLyrics::into_answer))
 }
 
 /// The row the index returned that is this recording, or nothing it can stand behind.
