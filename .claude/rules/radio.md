@@ -83,12 +83,10 @@ is the copy to delete.
   exemption at that module's own `//!`.** The facade's doc argues the door against the *UI*, which
   leaves the sibling nobody expects: a station-row write from elsewhere in `melodia-app` reads as
   ordinary transport code and is one. `record_probed_codec` was exactly that and now sits beside
-  `mark_played`, whose one-line-`UPDATE`-per-play shape it copies. **No walk holds this yet** —
-  `radio_facade.rs` anchors on the facade's own directory and greps for `radio_browser`, so all
-  four of its checks stayed green through the bypass. Until one does, the rule is the grep, and the
-  grep is noisier than the rule: eight test modules name `queries::radio::` to build fixtures, one
-  of them `melodia-store`'s own, where naming the module next door is not a door question at all.
-  A ninth hit is prose, `entities::radio` describing this rule rather than reaching past it.
+  `mark_played`, whose one-line-`UPDATE`-per-play shape it copies. **`radio_facade.rs`'s
+  `only_the_radio_facade_writes_to_the_station_table` is what holds it**, and the six checks beside
+  it are what could not: they anchor on the facade's own directory and grep for `radio_browser`, so
+  every one stayed green through the bypass.
 - **Two tables, and only one holds rows the user owns.** `radio_stations` is favorites, hand-typed
   URLs and play history at three points in one row's life. `radio_logo_answers` is a record of our
   own network outcomes keyed on the URL — which is what lets it exist beside the rule that browsed

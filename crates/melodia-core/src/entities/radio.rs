@@ -552,3 +552,7 @@ pub struct StoredLogo {
     pub path: String,
     pub bytes: u64,
 }
+
+#[cfg(test)]
+#[path = "tests/radio_tests.rs"]
+mod tests;

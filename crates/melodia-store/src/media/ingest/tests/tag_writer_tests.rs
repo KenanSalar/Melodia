@@ -962,3 +962,75 @@ fn a_tag_write_leaves_a_reader_on_the_file_it_opened() -> Result<(), AppError> {
     assert_ne!(std::fs::read(&path)?, before, "and the path holds the edited file");
     Ok(())
 }
+
+/// What the toast names the container, which is the half of an unsupported report the user reads.
+///
+/// Nothing else in the suite reads `WriteOutcome::format`. Every variant lofty ships today is
+/// listed, so this is an equality rather than a sample.
+///
+/// What it cannot see: `FileType` is `#[non_exhaustive]` and nothing enumerates it at runtime, so
+/// the `_ => None` arm is unreachable while that list stands and a variant added upstream would
+/// fall through it silently. That is the arm's purpose — a vaguer message rather than a build that
+/// cannot see the new format — but it means a new container owes a row here by hand.
+#[test]
+fn every_container_this_build_can_write_names_itself() {
+    use lofty::file::FileType;
+
+    let cases = [
+        (FileType::Aac, Some("AAC")),
+        (FileType::Aiff, Some("AIFF")),
+        (FileType::Ape, Some("APE")),
+        (FileType::Flac, Some("FLAC")),
+        (FileType::Mpeg, Some("MP3")),
+        (FileType::Mp4, Some("M4A")),
+        (FileType::Mpc, Some("Musepack")),
+        (FileType::Opus, Some("Opus")),
+        (FileType::Vorbis, Some("Ogg Vorbis")),
+        (FileType::Speex, Some("Speex")),
+        (FileType::Wav, Some("WAV")),
+        (FileType::WavPack, Some("WavPack")),
+    ];
+
+    for (file_type, expected) in cases {
+        assert_eq!(format_name(file_type), expected, "{file_type:?}");
+    }
+    assert_eq!(format_name(FileType::Custom("Tracker")), Some("Tracker"), "a format lofty grew");
+}
+
+/// The clause a container this build cannot name still owes. It is the greppable half: a message
+/// naming no format at all reads as a bug where a vaguer one reads as a container we do not know.
+#[test]
+fn a_container_this_build_cannot_name_is_still_described() {
+    let clause = describe_unsupported(None, &[TagField::Credit(CreditRole::Performer)]);
+
+    assert_eq!(clause, "this container has no key for performer");
+    assert_eq!(
+        describe_unsupported(Some("MP3"), &[TagField::Lyrics, TagField::Rating]),
+        "MP3 has no key for lyrics, rating"
+    );
+}
+
+/// `Tag::insert_text` used to succeed on `ID3v2` and write nothing for these two, so the dialog
+/// reported a clean save and the file came back without them. The lofty bump taught its support
+/// check the mapping the write conversion already had.
+#[test]
+fn mp3_round_trips_the_movement_pair_the_bump_taught_it() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let path = stage(&tmp, "silence.mp3")?;
+
+    let edit = TagEdit {
+        movement: FieldEdit::Set("Allegro".into()),
+        movement_number: FieldEdit::Set(2),
+        movement_total: FieldEdit::Set(4),
+        ..TagEdit::default()
+    };
+    let written = apply_to_file(&path, &edit, None)?;
+
+    assert_eq!(written.unsupported, vec![], "MP3 states a key for all three");
+    assert_eq!(written.format, Some("MP3"));
+    let tag = read_primary(&path)?;
+    assert_eq!(text(&tag, ItemKey::Movement).as_deref(), Some("Allegro"));
+    assert_eq!(text(&tag, ItemKey::MovementNumber).as_deref(), Some("2"));
+    assert_eq!(text(&tag, ItemKey::MovementTotal).as_deref(), Some("4"));
+    Ok(())
+}

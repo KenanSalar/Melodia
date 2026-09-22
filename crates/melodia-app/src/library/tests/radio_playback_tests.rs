@@ -5,11 +5,15 @@
 //! reported for a station the directory does not know is a request nobody asked for and nothing
 //! reports either.
 
+use std::sync::Arc;
+
 use melodia_core::entities::radio::DirectoryStation;
 use melodia_core::error::AppError;
+use melodia_engine::player::engine::fixtures::test_station;
+use melodia_engine::player::engine::types::RadioNowPlaying;
 use melodia_store::database::{DbPool, queries};
 
-use super::{click_uuid, keep_directory_station, keep_station};
+use super::{click_uuid, keep_directory_station, keep_station, record_probed_codec};
 
 /// One browse result. Spelled out rather than defaulted: `DirectoryStation` has no `Default`, a
 /// station with no uuid and no URL being one nothing may keep.
@@ -80,6 +84,64 @@ async fn releasing_a_browsed_station_still_leaves_its_row() -> Result<(), AppErr
     let station = queries::radio::get_station_by_id(&db, id).await?;
     assert!(!station.is_favorite, "the star is what the caller asked to clear");
     assert_eq!(station.station_uuid.as_deref(), Some("uuid-1"), "and the row it hangs on stays");
+    Ok(())
+}
+
+/// The fixture with the id of a row that actually exists, since what this half writes is keyed on
+/// it.
+fn now_playing(station_id: i64) -> RadioNowPlaying {
+    RadioNowPlaying { station_id, ..Arc::unwrap_or_clone(test_station("Example FM")) }
+}
+
+async fn probed_codec_of(db: &DbPool, id: i64) -> Result<Option<String>, AppError> {
+    Ok(queries::radio::get_station_by_id(db, id).await?.probed_codec)
+}
+
+/// The open is the only moment anything knows what an Ogg mount holds, and this is the half that
+/// outlives the session: without it the row keeps stating the container until the next play.
+#[tokio::test]
+async fn a_measured_format_reaches_the_row() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let id = keep_station(&db, &browsed("uuid-1"), None).await?;
+
+    record_probed_codec(&db, &now_playing(id), "OPUS").await;
+
+    assert_eq!(probed_codec_of(&db, id).await?.as_deref(), Some("OPUS"));
+    Ok(())
+}
+
+/// A mount whose codec the decoder could not name answers nothing, and writing that would blank a
+/// perfectly good answer from the play before it.
+#[tokio::test]
+async fn a_measurement_of_nothing_is_not_recorded() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let id = keep_station(&db, &browsed("uuid-1"), None).await?;
+    record_probed_codec(&db, &now_playing(id), "OPUS").await;
+
+    record_probed_codec(&db, &now_playing(id), "").await;
+
+    assert_eq!(probed_codec_of(&db, id).await?.as_deref(), Some("OPUS"));
+    Ok(())
+}
+
+/// `station_id == 0` means "no database row", the sentinel spelled by hand here because
+/// `rows::station_has_row` lives in a crate this one sits below.
+///
+/// Pinned against a row moved *to* rowid 0 rather than against an absent one, which is what makes
+/// it a test at all: an `UPDATE` keyed on an id nothing holds matches nothing either way, so the
+/// guard is only visible where the id is one `SQLite` would otherwise honour.
+#[tokio::test]
+async fn a_station_with_no_row_of_its_own_records_nothing() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let id = keep_station(&db, &browsed("uuid-1"), None).await?;
+    sqlx::query("UPDATE radio_stations SET id = 0 WHERE id = ?")
+        .bind(id)
+        .execute(db.write())
+        .await?;
+
+    record_probed_codec(&db, &now_playing(0), "OPUS").await;
+
+    assert_eq!(probed_codec_of(&db, 0).await?, None, "the sentinel was taken for a row id");
     Ok(())
 }
 

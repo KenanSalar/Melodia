@@ -321,3 +321,7 @@ fn read_at(file: &mut File, pos: u64, buf: &mut [u8]) -> Option<()> {
     file.seek(SeekFrom::Start(pos)).ok()?;
     file.read_exact(buf).ok()
 }
+
+#[cfg(test)]
+#[path = "tests/mkv_trim_tests.rs"]
+mod tests;

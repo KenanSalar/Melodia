@@ -178,3 +178,153 @@ fn a_seek_inside_the_pre_roll_window_still_lands_where_it_asked() -> Result<(), 
     assert_eq!(decoder.count() / channels, 47_040);
     Ok(())
 }
+
+/// The layout table, the header parse and the refusals under the decode tests above, which no
+/// fixture reaches every branch of: `test-assets/` carries a stereo file and a 5.1 one, and the
+/// table states eight orders.
+mod layout {
+    use opus_pure::OpusMSDecoder;
+    use symphonia::core::audio::Position;
+
+    use super::super::{DECODE_RATE, Head, check_stated_layout, positioned_layout, trim_count};
+    use crate::player::source::file_decode::FileDecoder;
+    use crate::player::source::tests::helpers::asset;
+    use melodia_core::error::AppError;
+
+    /// Opus states an order for one channel through eight, and nothing either side.
+    ///
+    /// Zero falls out of the `checked_sub`, which is what a container reporting no channels at all
+    /// arrives as; nine is the first count past the table.
+    #[test]
+    fn a_channel_count_opus_states_no_order_for_is_refused() {
+        assert!(positioned_layout(0).is_none(), "no channels is not a layout");
+        assert!(positioned_layout(9).is_none(), "and nine is past every order Opus states");
+    }
+
+    /// Every count carries as many positions as it claims channels, and each Opus output channel
+    /// feeds exactly one plane.
+    ///
+    /// The permutation is the half worth asserting: the inverse is built by writing each channel
+    /// into the slot its position sorts to, so a row naming one position twice silently leaves a
+    /// plane reading channel zero and drops the channel that should have fed it.
+    #[test]
+    fn every_channel_count_opus_states_an_order_for_lands_in_the_plane_order()
+    -> Result<(), AppError> {
+        for count in 1..=8 {
+            let Some((channels, sources)) = positioned_layout(count) else {
+                return Err(AppError::Player(format!("{count} channels states no layout")));
+            };
+
+            assert_eq!(channels.count(), count, "{count} channels");
+            let mut fed: Vec<usize> = sources.to_vec();
+            fed.sort_unstable();
+            assert_eq!(fed, (0..count).collect::<Vec<_>>(), "{count} channels");
+        }
+        Ok(())
+    }
+
+    /// Opus hands surround over in the Vorbis order and a buffer's planes run in ascending channel
+    /// position, so the two part company from three channels up: LFE arrives last and is wanted
+    /// fourth. The unit twin of the energy check above, which is what says these indices are the
+    /// right way round rather than merely self-consistent.
+    #[test]
+    fn the_low_frequency_channel_arrives_last_and_is_wanted_fourth() -> Result<(), AppError> {
+        let Some((channels, sources)) = positioned_layout(6) else {
+            return Err(AppError::Player("5.1 states no layout".to_owned()));
+        };
+        let Some(plane) = channels.get_canonical_index_for_positioned_channel(Position::LFE1)
+        else {
+            return Err(AppError::Player("5.1 names no low-frequency channel".to_owned()));
+        };
+
+        assert_eq!(plane, 3, "the buffer sorts LFE fourth");
+        assert_eq!(sources.get(plane), Some(&5), "and Opus hands it over last");
+        Ok(())
+    }
+
+    /// Matroska reports `Channels::Discrete` for every audio track, so the positioned set is
+    /// derived from the count rather than read off the container. A zero-channel header reaches
+    /// here as a count of nothing and has to be turned away rather than decoded into no planes.
+    #[test]
+    fn a_container_that_states_no_channels_is_refused_rather_than_decoded() {
+        let refused = FileDecoder::open(&asset("silence-zero-channels.opus"));
+
+        assert!(refused.is_err(), "a header stating no channels has to be refused");
+    }
+
+    /// An `OpusHead` is a frozen layout read at fixed offsets, so a short one states nothing rather
+    /// than reading a field out of whatever follows. Family 0 is the right default for that: the
+    /// two families build the same layout for the counts family 0 admits.
+    #[test]
+    fn a_header_too_short_to_state_its_fields_states_none_of_them() {
+        // `OpusHead`, version 1, two channels, pre-skip 312, input rate 48k, gain 0, family 0.
+        let whole: [u8; 19] = [
+            b'O', b'p', b'u', b's', b'H', b'e', b'a', b'd', 1, 2, 0x38, 0x01, 0x80, 0xBB, 0x00,
+            0x00, 0x00, 0x00, 0,
+        ];
+
+        let read = Head::read(Some(&whole));
+        assert_eq!((read.pre_skip, read.gain_q8, read.mapping_family), (312, 0, 0));
+
+        for short in [0usize, 11, 17] {
+            let truncated = Head::read(whole.get(..short));
+            assert_eq!(
+                (truncated.pre_skip, truncated.gain_q8, truncated.mapping_family),
+                (0, 0, 0),
+                "{short} bytes states a field it does not carry"
+            );
+        }
+        // One byte past the gain and one short of the family, which defaults rather than refusing.
+        let no_family = Head::read(whole.get(..18));
+        assert_eq!((no_family.pre_skip, no_family.mapping_family), (312, 0));
+        assert_eq!(Head::read(None).pre_skip, 0);
+    }
+
+    /// The gain is the one field read as signed, and it is the quiet half of the header: a file
+    /// asking to play softer reads as one asking to play far louder if the sign is dropped.
+    #[test]
+    fn a_negative_output_gain_reads_back_as_one() {
+        let mut header: [u8; 19] = [
+            b'O', b'p', b'u', b's', b'H', b'e', b'a', b'd', 1, 2, 0x38, 0x01, 0x80, 0xBB, 0x00,
+            0x00, 0x00, 0x00, 0,
+        ];
+        // -256 in Q7.8, which is one decibel down.
+        header[16] = 0x00;
+        header[17] = 0xFF;
+
+        assert_eq!(Head::read(Some(&header)).gain_q8, -256);
+    }
+
+    /// Family 0 states no stream layout to disagree with, so the check has nothing to read and must
+    /// not refuse a header that legitimately stops at the family byte.
+    #[test]
+    fn a_family_0_header_states_no_layout_to_disagree_with() -> Result<(), AppError> {
+        let stereo = OpusMSDecoder::new(DECODE_RATE.cast_signed(), 2, 0)
+            .map_err(|_| AppError::Player("stereo is not a layout opus_pure builds".to_owned()))?;
+
+        assert!(check_stated_layout(None, stereo.layout()).is_ok());
+        Ok(())
+    }
+
+    /// Ogg admits a 19-byte identification packet and MP4 an 11-byte `dOps` body, both of which
+    /// stop one byte past the family, so a family-1 header carrying no mapping table gets as far as
+    /// the check. Read past, those bytes are whatever the container put after the header.
+    #[test]
+    fn a_family_1_header_with_no_mapping_table_is_refused() -> Result<(), AppError> {
+        let surround = OpusMSDecoder::new(DECODE_RATE.cast_signed(), 6, 1)
+            .map_err(|_| AppError::Player("5.1 is not a layout opus_pure builds".to_owned()))?;
+        let stops_at_the_family = [0u8; 19];
+
+        assert!(check_stated_layout(Some(&stops_at_the_family), surround.layout()).is_err());
+        Ok(())
+    }
+
+    /// The trim it feeds treats anything past the buffer as the whole of it, so a count too large
+    /// to represent has to empty the packet rather than wrap to a small one.
+    #[test]
+    fn a_frame_count_too_large_to_represent_empties_the_packet() {
+        assert_eq!(trim_count(0), 0);
+        assert_eq!(trim_count(312), 312);
+        assert_eq!(trim_count(u64::MAX), usize::MAX);
+    }
+}

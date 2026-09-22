@@ -318,3 +318,54 @@ fn write_smpb(path: &Path, value: &str) -> Result<(), AppError> {
     ilst.save_to_path(path, WriteOptions::default())
         .map_err(|e| AppError::Player(format!("could not write iTunSMPB: {e}")))
 }
+
+/// The window a container's trailing padding is held back in.
+///
+/// A count is what [`super::super::Trim::playable`] ends on, and a padding cannot use one: a
+/// container states its own length far more coarsely than a frame, so ending on a count would
+/// leave part of the padding in. Delaying every sample by exactly the padding's width instead
+/// means whatever is still inside when the decoder runs out is what gets dropped.
+mod tail_window {
+    use super::super::TailWindow;
+    use melodia_core::error::AppError;
+
+    /// A window of the stated width, or an error rather than a skipped body: a constructor that
+    /// regressed to answering `None` would leave the two tests below passing on nothing.
+    fn window_of(width: u64) -> Result<TailWindow, AppError> {
+        TailWindow::new(width)
+            .ok_or_else(|| AppError::Player(format!("no window {width} samples wide")))
+    }
+
+    /// `None` rather than an empty window, which is what makes an armed [`super::super::End::Held`]
+    /// carrying nothing unrepresentable rather than merely unused.
+    #[test]
+    fn a_window_of_no_width_is_no_window() {
+        assert!(TailWindow::new(0).is_none());
+        assert!(TailWindow::new(1).is_some());
+    }
+
+    /// Nothing comes out until the window is full, and from then on each push hands back the sample
+    /// that arrived exactly `width` pushes before it.
+    #[test]
+    fn a_window_hands_back_the_sample_that_arrived_a_width_ago() -> Result<(), AppError> {
+        let mut window = window_of(3)?;
+
+        let handed: Vec<Option<f32>> =
+            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0].into_iter().map(|s| window.push(s)).collect();
+
+        assert_eq!(handed, vec![None, None, None, Some(1.0), Some(2.0), Some(3.0)]);
+        Ok(())
+    }
+
+    /// The whole point: once the decoder stops, exactly `width` samples are still inside and are
+    /// never handed over, whatever the container said its own length was.
+    #[test]
+    fn a_window_holds_exactly_its_width_back_when_the_decoder_runs_out() -> Result<(), AppError> {
+        let mut window = window_of(4)?;
+
+        let handed = (0u8..10).map(f32::from).filter_map(|s| window.push(s)).count();
+
+        assert_eq!(handed, 6, "four of the ten samples are the padding and must stay inside");
+        Ok(())
+    }
+}

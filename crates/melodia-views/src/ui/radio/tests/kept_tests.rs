@@ -241,6 +241,45 @@ fn the_map_spans_both_tabs_and_skips_what_no_directory_page_can_name() {
     assert!(answers.contains_key("uuid-3"), "and a station only ever played");
 }
 
+/// The format the map holds for `uuid`, [`remembered_logo`]'s twin.
+fn remembered_format(radio_ui: &RadioUi, uuid: &str) -> Option<String> {
+    radio_ui.kept_answers.lock().get(uuid)?.format.clone()
+}
+
+/// Browse draws what a play measured, so a station that answered a format and never a logo still
+/// has something to hand over. Gated on the logo alone it would be skipped and the browse row
+/// would keep stating the container.
+#[test]
+fn a_row_that_answers_only_a_format_still_earns_an_entry() {
+    let radio_ui = RadioUi::new(false, None);
+    let mut measured = logo_row(1, "uuid-1", None);
+    measured.probed_codec = Some("OPUS".to_owned());
+    radio_ui.kept.lock().stations = vec![measured];
+
+    remember_kept_answers(&radio_ui);
+
+    assert_eq!(remembered_format(&radio_ui, "uuid-1").as_deref(), Some("OPUS"));
+    assert!(remembered_logo(&radio_ui, "uuid-1").is_none(), "it never had a logo to remember");
+}
+
+/// The same station sits in both caches, and the two rows are read from different queries: the
+/// recents projection can carry a measurement where the favorites one carries the logo. Merged per
+/// entry rather than per field, whichever cache is walked last wins outright and the other answer
+/// disappears from Browse.
+#[test]
+fn a_later_row_that_lost_one_answer_does_not_blank_the_other() {
+    let radio_ui = RadioUi::new(false, None);
+    radio_ui.kept.lock().stations = vec![logo_row(1, "uuid-1", Some("/store/1.png"))];
+    let mut only_a_format = logo_row(1, "uuid-1", None);
+    only_a_format.probed_codec = Some("OPUS".to_owned());
+    radio_ui.recent.lock().stations = vec![only_a_format];
+
+    remember_kept_answers(&radio_ui);
+
+    assert_eq!(remembered_logo(&radio_ui, "uuid-1").as_deref(), Some("/store/1.png"));
+    assert_eq!(remembered_format(&radio_ui, "uuid-1").as_deref(), Some("OPUS"));
+}
+
 /// A path the refresh already blanked must not come back through the map — the file is gone, and
 /// a card handed a dead path drew nothing at all where a monogram was the honest answer.
 #[test]
@@ -275,6 +314,30 @@ fn the_needle_reaches_every_field_the_card_draws() {
     assert!(
         !station_matches(&station, &row_match::fold_needle("https")),
         "the stream URL is not on the card and must not be searchable — every station would match"
+    );
+}
+
+/// The card draws what a play measured wherever it has one, so a station the directory files under
+/// `OGG` reads `OGG/OPUS` and the box has to find it by either word.
+///
+/// Matched as the two raw columns rather than through `RadioStation::format`, which would allocate
+/// a composed string per row per keystroke. The cost is the one case below: a needle spanning the
+/// separator names something drawn on the card and still finds nothing.
+#[test]
+fn the_needle_reaches_the_format_a_play_measured() {
+    let mut station = station("Jazz FM", "2026-01-01T00:00:00.000+00:00", 0, None);
+    station.codec = "OGG".to_owned();
+    station.probed_codec = Some("OPUS".to_owned());
+
+    for needle in ["ogg", "opus"] {
+        assert!(
+            station_matches(&station, &row_match::fold_needle(needle)),
+            "{needle:?} is half of what the card draws and must match"
+        );
+    }
+    assert!(
+        !station_matches(&station, &row_match::fold_needle("ogg/opus")),
+        "the columns are matched apart, so a needle spanning the separator cannot land"
     );
 }
 

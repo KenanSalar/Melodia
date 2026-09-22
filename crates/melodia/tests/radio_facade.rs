@@ -238,3 +238,55 @@ fn a_station_reaches_the_deck_only_from_behind_the_switch() {
          `PlaybackContext`, which no count of `http_client()` reaches"
     );
 }
+
+/// The station table's own door, crate-`src/`-relative as [`rust_sources`] reports paths.
+const STATION_WRITERS: [&str; 2] = ["library/radio/", "library/radio_files.rs"];
+
+/// `melodia-store`'s own tree, where naming the module next door is not a door question at all.
+const STORE_TREE: &str = "database/";
+
+/// Vacuity floor. The facade is five files and `radio_files` is a sixth, and a walk that stopped
+/// matching would take this pin with it while still passing.
+const MIN_STATION_WRITERS: usize = 4;
+
+/// **`queries::radio::` is `library::radio`'s to name, and `library::radio_files`'s by the written
+/// exemption at that module's own `//!`.**
+///
+/// The doc above argues the door against the *UI*, which leaves the sibling nobody expects: a
+/// station-row write from elsewhere in `melodia-app` reads as ordinary transport code and is one.
+/// `record_probed_codec` was exactly that before it moved in beside `mark_played`, and none of the
+/// checks above saw it — they anchor on the facade's own directory and grep for `radio_browser`.
+///
+/// Test modules are allowed wholesale: eight of them name the module to build fixtures, and a
+/// fixture is not a door. That is also what this cannot see — a test reaching past the facade to
+/// *write* a row goes unreported.
+#[test]
+fn only_the_radio_facade_writes_to_the_station_table() {
+    let mut writers = Vec::new();
+    let mut offenders = Vec::new();
+
+    for (path, code) in rust_sources() {
+        if !code.contains("queries::radio::") {
+            continue;
+        }
+        if path.contains("/tests/") || path.starts_with(STORE_TREE) {
+            continue;
+        }
+        if STATION_WRITERS.iter().any(|home| path.starts_with(home)) {
+            writers.push(path);
+            continue;
+        }
+        offenders.push(path);
+    }
+
+    assert!(
+        offenders.is_empty(),
+        "{offenders:?} reach the station table directly. Give the facade a function and call that \
+         — the off switch and the two-table split are only one guard while it is the one door"
+    );
+    assert!(
+        writers.len() >= MIN_STATION_WRITERS,
+        "only {} files reach `queries::radio::` at all, so this walk has stopped checking anything",
+        writers.len()
+    );
+}
