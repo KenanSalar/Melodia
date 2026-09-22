@@ -83,8 +83,8 @@ impl PlayerState {
         if composed.as_deref() == station.codec.as_deref() {
             return;
         }
-        // Owned only past the guard, so the tune that measures what the bar already says costs
-        // neither the string nor the `Arc`.
+        // Owned only past the guard, so a tune that measures what the bar already says pays no
+        // `Arc` copy, and no string either wherever one answer already stood alone.
         let composed = composed.map(Cow::into_owned);
         Arc::make_mut(station).codec = composed;
     }

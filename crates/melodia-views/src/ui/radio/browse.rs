@@ -157,8 +157,9 @@ pub fn resolve(radio_ui: &RadioUi, uuid: &str) -> Option<(DirectoryStation, Opti
 /// entry of `None`. Either way the two local tabs paint it and Browse was painting a monogram.
 /// Last is what a narrow search discovered on the site of a station that has no row yet.
 ///
-/// `kept` is that row's answers, looked up by the caller: every site here asks over a whole page,
-/// so reaching for the lock in here would take it once per station rather than once per pass.
+/// `kept` is that row's answers, looked up by the caller: three of the four sites walk a whole
+/// page, and reaching for the lock in here would take it once per station rather than once per
+/// pass.
 fn logo_for(
     radio_ui: &RadioUi,
     kept: Option<&KeptAnswers>,
