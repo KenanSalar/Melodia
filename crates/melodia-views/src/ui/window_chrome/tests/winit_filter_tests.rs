@@ -181,6 +181,7 @@ fn the_resize_arm_writes_the_frame_only_when_one_was_measured() {
 fn the_resize_arm_writes_the_frame_ahead_of_slint() {
     const ARM: &str = "WindowEvent::Resized(_) =>";
     const POSTED: &str = "weak.upgrade_in_event_loop(move |ui|";
+    const SETTER: &str = "set_frame_allowance_w(";
     let code = filter_source();
     let arm = block_after(&code, ARM);
     let posted = block_after(arm, POSTED);
@@ -190,6 +191,12 @@ fn the_resize_arm_writes_the_frame_ahead_of_slint() {
         !posted.contains("set_frame_allowance_"),
         "the frame reading is written from the posted closure, so it reaches the exit edge after \
          the size it is the edge for:\n{arm}"
+    );
+    // Absence from the posted block is not enough on its own: a hop of its own, ahead of it, reads
+    // as synchronous and lands just as late.
+    assert!(
+        matches!((arm.find(SETTER), arm.find(POSTED)), (Some(write), Some(hop)) if write < hop),
+        "the frame reading is no longer written before the arm posts anything:\n{arm}"
     );
 }
 

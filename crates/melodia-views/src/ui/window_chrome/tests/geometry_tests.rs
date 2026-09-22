@@ -87,7 +87,7 @@ fn a_client_empty_on_one_axis_is_a_minimized_window() {
 fn only_a_restored_window_is_one_to_measure() {
     const LIVE: WinitPhysicalSize<u32> = WinitPhysicalSize::new(800, 600);
     const MINIMIZED: WinitPhysicalSize<u32> = WinitPhysicalSize::new(0, 0);
-    // (decorated, maximized, client, settled)
+    // (decorated, maximized, client, measurable)
     let table = [
         (true, false, LIVE, Some(LIVE)),
         (false, false, LIVE, Some(LIVE)),
@@ -98,11 +98,11 @@ fn only_a_restored_window_is_one_to_measure() {
         (true, true, MINIMIZED, None),
         (false, true, MINIMIZED, None),
     ];
-    for (decorated, maximized, client, settled) in table {
+    for (decorated, maximized, client, measurable) in table {
         let reading = WindowReading { client, scale: 1.0, maximized, decorated };
         assert_eq!(
-            settled_client(reading),
-            settled,
+            measurable_client(reading),
+            measurable,
             "decorated {decorated}, maximized {maximized}, client {client:?}"
         );
     }
@@ -122,6 +122,9 @@ fn framing(decorated: bool, client: WinitPhysicalSize<u32>, scale: f64) -> Windo
     WindowReading { client, scale, maximized: false, decorated }
 }
 
+/// A decoration change the reading under test could plausibly be the OS answering.
+const FRESH_FLIP: Option<Duration> = Some(Duration::from_millis(16));
+
 fn assert_step(got: Option<WinitLogicalSize<f32>>, width: f32, height: f32) {
     assert!(
         matches!(got, Some(step) if is_allowance(step, width, height)),
@@ -138,7 +141,7 @@ fn the_frame_going_measures_what_the_client_gained() {
     let before = framing(true, WinitPhysicalSize::new(936, 227), 1.0);
     let now = framing(false, WinitPhysicalSize::new(936, 255), 1.0);
 
-    assert_step(step_across(before, now), 0.0, 28.0);
+    assert_step(step_across(before, now, FRESH_FLIP), 0.0, 28.0);
 }
 
 /// The same step the other way, which is the one the Full Player caption needs: it asks for the
@@ -149,7 +152,7 @@ fn the_frame_returning_measures_the_same_step() {
     let before = framing(false, WinitPhysicalSize::new(936, 255), 1.0);
     let now = framing(true, WinitPhysicalSize::new(936, 227), 1.0);
 
-    assert_step(step_across(before, now), 0.0, 28.0);
+    assert_step(step_across(before, now, FRESH_FLIP), 0.0, 28.0);
 }
 
 /// Every reading a resize drag delivers wears the decoration the one before it did. Measured across
@@ -159,12 +162,55 @@ fn two_readings_under_one_decoration_measure_nothing() {
     let before = framing(true, WinitPhysicalSize::new(936, 400), 1.0);
     let now = framing(true, WinitPhysicalSize::new(936, 227), 1.0);
 
-    assert_eq!(step_across(before, now), None, "a drag between two readings is not a frame");
     assert_eq!(
-        step_across(framing(false, before.client, 1.0), framing(false, now.client, 1.0)),
+        step_across(before, now, FRESH_FLIP),
+        None,
+        "a drag between two readings is not a frame"
+    );
+    assert_eq!(
+        step_across(
+            framing(false, before.client, 1.0),
+            framing(false, now.client, 1.0),
+            FRESH_FLIP
+        ),
         None,
         "and neither is one the miniplayer is already up for"
     );
+}
+
+/// **X11 and a Wayland compositor drawing its own decorations both answer a dropped frame with no
+/// size at all**, the frame coming off the window rather than going to the client. Unbounded, the
+/// next resize of any kind is then the first reading to disagree with the last about the
+/// decoration, and the leave's own resize measures the whole miniplayer-to-full-player step as a
+/// frame: the exit edge lands above the window the restore just asked for and the miniplayer never
+/// leaves again.
+#[test]
+fn a_resize_no_decoration_change_explains_measures_nothing() {
+    let mini = framing(true, WinitPhysicalSize::new(540, 240), 1.0);
+    let restored = framing(false, WinitPhysicalSize::new(1200, 800), 1.0);
+    let stale = Some(FRAME_STEP_GRACE + Duration::from_millis(1));
+
+    assert_eq!(
+        step_across(mini, restored, stale),
+        None,
+        "a decoration change too old to have moved this client is not what moved it"
+    );
+    assert_eq!(
+        step_across(mini, restored, None),
+        None,
+        "and a client that has crossed no decoration change at all has taken no frame"
+    );
+}
+
+/// The step is two physical sizes subtracted, so it means nothing across a move to a monitor that
+/// reports the window at a different scale: divided by either factor the answer is wrong by their
+/// ratio, and it sticks for the session.
+#[test]
+fn two_readings_under_different_scales_measure_nothing() {
+    let before = framing(true, WinitPhysicalSize::new(936, 227), 1.0);
+    let now = framing(false, WinitPhysicalSize::new(1872, 510), 2.0);
+
+    assert_eq!(step_across(before, now, FRESH_FLIP), None);
 }
 
 /// `MiniPlayerSwitch` compares its edges in logical pixels, so the step has to reach it in them.
@@ -173,7 +219,7 @@ fn the_step_reaches_the_exit_edge_in_logical_pixels() {
     let before = framing(true, WinitPhysicalSize::new(1404, 340), 1.5);
     let now = framing(false, WinitPhysicalSize::new(1404, 382), 1.5);
 
-    assert_step(step_across(before, now), 0.0, 28.0);
+    assert_step(step_across(before, now, FRESH_FLIP), 0.0, 28.0);
 }
 
 /// The memo is the reading the next one is a step away from, so it has to move whatever this
@@ -193,10 +239,27 @@ fn a_reading_that_measures_nothing_is_still_the_one_to_measure_from() {
         "`frame_allowance` no longer records every reading it is handed:\n{body}"
     );
     assert!(
-        matches!((body.find("settled_client(reading)?"), body.find(RECORD)),
+        matches!((body.find("measurable_client(reading)?"), body.find(RECORD)),
             (Some(gate), Some(record)) if gate < record),
         "the gate has to run before the record, or a maximized or minimized reading becomes the \
          one the next step is measured from:\n{body}"
+    );
+}
+
+/// The announcement is the whole of what tells a frame step apart from an ordinary resize, and
+/// unwired it can only fail silently: every step goes stale, the allowance stays at zero, and the
+/// miniplayer is back to an exit edge short by a titlebar wherever the client really does grow by
+/// one. A source walk because `install` wants a window and the whole app state.
+#[test]
+fn the_decoration_change_reaches_the_step_that_needs_it() {
+    const CALL: &str = "geometry::wire_frame_changes(app);";
+    let code = strip_line_comments(include_str!("../mod.rs"));
+    let body = block_after(&code, "pub fn install");
+
+    assert!(!body.is_empty(), "no `pub fn install` found: the walk is broken, not the code");
+    assert!(
+        body.contains(CALL),
+        "nothing takes the window's decoration changes, so no reading can be a frame:\n{body}"
     );
 }
 
@@ -256,10 +319,10 @@ fn every_frame_reading_goes_through_the_one_gate() {
 
     let ungated: Vec<&str> = READERS
         .into_iter()
-        .filter(|reader| !block_after(&code, reader).contains("settled_client(reading)?"))
+        .filter(|reader| !block_after(&code, reader).contains("measurable_client(reading)?"))
         .collect();
 
-    assert!(ungated.is_empty(), "these frame readings skip `settled_client`: {ungated:?}");
+    assert!(ungated.is_empty(), "these frame readings skip `measurable_client`: {ungated:?}");
 }
 
 fn sized(width: f64, height: f64) -> PersistedGeometry {

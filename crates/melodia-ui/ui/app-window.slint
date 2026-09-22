@@ -100,6 +100,12 @@ export component AppWindow inherits Window {
     // full UI fades out with no titlebar at all or the miniplayer fades out under the OS one, and on
     // Win32 the visible window steps in or out by the invisible resize borders while it's on screen.
     property <bool> frameless: !Theme.use-native-titlebar || mini-switch.render-active;
+    // This binding is what drives `no-frame`, so it is the only announcement Rust gets that the OS
+    // is about to move the client by a frame. It runs a change-handler pass ahead of the window
+    // property being applied, which is the whole of the headroom the reading is allowed.
+    changed frameless => {
+        WindowChrome.frame-changed();
+    }
     // The one shape that draws its own window edge: rounded corners, the outline and the resize
     // grabs. Maximized, the corners would clip against the screen edge and resizing is a no-op.
     property <bool> rounded-shell: root.frameless && !WindowChrome.is-maximized;

@@ -89,7 +89,15 @@ the OS owns has to be attached late or not at all on at least one platform.
   cannot be asked**: a Wayland compositor draws its decoration outside the surface, so winit's
   `outer_size` reads the client straight back and a frame query is zero exactly where the client
   really did grow by a titlebar. That is argued at `frame_allowance`, which also says why the
-  measurement retired the platform split `with_returning_frame` used to carry. The
+  measurement retired the platform split `with_returning_frame` used to carry.
+  **The desktops it doesn't bite answer that change with no reading at all**, X11 and a compositor
+  drawing its own decorations both taking a dropped frame out of the window rather than handing it
+  to the client, **so a step counts only while the decoration change is recent enough to be what
+  moved the client**. `changed frameless` announces it over `WindowChrome.frame-changed` and
+  `geometry::wire_frame_changes` stamps the moment; that link fails silently in both directions.
+  Unwired, every step goes stale and the allowance sits back at zero. Unbounded, the leave's own
+  resize is read as a frame, the exit edge lands above the window the restore just asked for and
+  the miniplayer never leaves again. The
   window's own minimum gives the reading up while a frame stands: Win32 fixes a resize drag's
   minimum when the drag starts, framed, and a drag from the full UI otherwise can't take the
   frameless miniplayer down to its floor until the button comes up. The

@@ -177,6 +177,7 @@ pub fn install(app: &AppWindow, state: &AppState) -> Result<(), AppError> {
         resize: resize_grab::wire(app),
     };
 
+    geometry::wire_frame_changes(app);
     winit_filter::install(app, state, press_targets);
     controls::wire(app, state);
     seed_always_on_top(app, state, settings.window.always_on_top);

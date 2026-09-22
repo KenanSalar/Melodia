@@ -424,6 +424,22 @@ fn the_framed_window_minimum_gives_up_the_frame_the_miniplayer_drops() {
     );
 }
 
+/// `frameless` is what drives `no-frame`, so this binding moving is the only notice Rust gets that
+/// the OS is about to hand the client a frame or take one back. Without it every reading looks like
+/// an ordinary resize, `geometry::frame_allowance` measures none of them, and the exit edge is back
+/// to sitting a titlebar inside the size the drop has just grown the window to.
+#[test]
+fn the_frame_announces_itself_to_the_side_that_measures_it() {
+    let shell = code_tokens(APP_WINDOW);
+
+    let handler = block_after(&shell, "changed frameless =>");
+
+    assert!(
+        handler.contains("WindowChrome.frame-changed()"),
+        "the decoration change no longer reaches the step measured across it:\n{handler}"
+    );
+}
+
 /// Dropping the frame grows the client area by the frame, so an exit edge without the allowance
 /// sits inside the size the miniplayer has just grown to.
 #[test]

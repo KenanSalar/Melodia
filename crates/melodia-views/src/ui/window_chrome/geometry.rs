@@ -26,7 +26,9 @@
 //!
 //! **The frame the miniplayer drops is measured as the step it costs the client, not asked of the
 //! window.** [`frame_allowance`] carries the argument; the exit edge and the restore both want that
-//! step and nothing else, so there is one number rather than a query per platform.
+//! step and nothing else, so there is one number rather than a query per platform. What bounds it
+//! to a frame is [`wire_frame_changes`]: the step is only a frame while it is the decoration
+//! change's own, and half the desktops answer that change with no reading at all.
 
 use std::sync::{Once, OnceLock};
 use std::time::{Duration, Instant};
@@ -233,6 +235,22 @@ fn last_framing() -> &'static Mutex<Option<WindowReading>> {
     LAST_FRAMING.get_or_init(|| Mutex::new(None))
 }
 
+/// When the window last announced it was gaining or losing its OS frame, `None` once a step has
+/// been measured across it.
+static FRAME_CHANGED_AT: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
+
+fn frame_changed_at() -> &'static Mutex<Option<Instant>> {
+    FRAME_CHANGED_AT.get_or_init(|| Mutex::new(None))
+}
+
+/// Take `app-window.slint`'s decoration changes, which is the one thing [`frame_allowance`] cannot
+/// see for itself: `frameless` is what drives `no-frame`, and no winit event announces the change
+/// on the desktops that answer it with no size at all.
+pub fn wire_frame_changes(app: &AppWindow) {
+    app.global::<melodia_ui::WindowChrome>()
+        .on_frame_changed(|| *frame_changed_at().lock() = Some(Instant::now()));
+}
+
 /// The window state a `Resized` or `Moved` event consults more than once, read in one pass.
 ///
 /// On X11 the client size and the maximized state are each a blocking round trip on the UI
@@ -337,8 +355,17 @@ fn with_returning_frame(app: &AppWindow, client: LogicalSize) -> LogicalSize {
     )
 }
 
-/// Returns what the OS frame adds to the client area, in logical pixels, on the reading that
-/// crossed a decoration change, and `None` on every other.
+/// How long after [`wire_frame_changes`]' announcement a reading can still be the one the
+/// decoration change moved.
+///
+/// Past it the client was moved by something else. Unbounded, a desktop that answers a dropped
+/// frame with no size at all leaves the *next* resize of any kind looking like the crossing, and
+/// the leave's own resize measures the whole miniplayer-to-full-player step as a frame. `KWin`'s
+/// `CONFIGURE_GRACE` in [`super::resize_release`] is the same budget for the same round trip.
+const FRAME_STEP_GRACE: Duration = Duration::from_millis(250);
+
+/// Returns what the OS frame adds to the client area, in logical pixels, on a reading
+/// [`step_across`] can attribute to a decoration change, and `None` on every other.
 ///
 /// **Measured as the step rather than asked of the window, because the window server that most
 /// needs asking cannot answer.** A Wayland compositor draws its decoration outside the surface and
@@ -352,18 +379,36 @@ fn with_returning_frame(app: &AppWindow, client: LogicalSize) -> LogicalSize {
 /// Records the reading and answers what that reading decides, [`super::resize_release`]'s shape:
 /// split into a query and a command, a caller could ask and forget to record.
 pub fn frame_allowance(reading: WindowReading) -> Option<WinitLogicalSize<f32>> {
-    settled_client(reading)?;
+    measurable_client(reading)?;
+    let since_flip = frame_changed_at().lock().map(|at| at.elapsed());
     let before = last_framing().lock().replace(reading)?;
-    step_across(before, reading)
+    let step = step_across(before, reading, since_flip)?;
+    *frame_changed_at().lock() = None;
+    Some(step)
 }
 
-/// [`frame_allowance`] past its lock read.
+/// [`frame_allowance`] past its lock reads.
 ///
 /// `None` wherever the two readings wear the same decoration, which is every reading a resize drag
 /// delivers: measured across those, the step would be the drag's own motion and the exit edge would
-/// follow the pointer.
-fn step_across(before: WindowReading, now: WindowReading) -> Option<WinitLogicalSize<f32>> {
+/// follow the pointer. `None` too wherever no decoration change is recent enough to have moved this
+/// reading ([`FRAME_STEP_GRACE`]), and wherever the two were taken under different scale factors,
+/// their physical sizes then not being in the same units.
+fn step_across(
+    before: WindowReading,
+    now: WindowReading,
+    since_flip: Option<Duration>,
+) -> Option<WinitLogicalSize<f32>> {
     if before.decorated == now.decorated {
+        return None;
+    }
+    if since_flip.is_none_or(|since| since > FRAME_STEP_GRACE) {
+        return None;
+    }
+    // Bit equality rather than a tolerance: the factor is one `f64` for as long as the window stays
+    // on a monitor, and a move that changed it is exactly what the two sizes can't be subtracted
+    // across.
+    if before.scale.to_bits() != now.scale.to_bits() {
         return None;
     }
     let (framed, bare) =
@@ -375,15 +420,15 @@ fn step_across(before: WindowReading, now: WindowReading) -> Option<WinitLogical
 /// takes over when the frame drops, without the visible window having moved.
 ///
 /// Win32's left, right and bottom are invisible resize borders, and its top is the caption the user
-/// sees, so `top` is always zero. `None` wherever [`settled_client`] finds no window to measure, and
-/// wherever there is no frame standing: undecorated, the outer rect *is* the client, so the margins
-/// would read zero and replace the ones the native miniplayer insets itself by.
+/// sees, so `top` is always zero. `None` wherever [`measurable_client`] finds no window to measure,
+/// and wherever there is no frame standing: undecorated, the outer rect *is* the client, so the
+/// margins would read zero and replace the ones the native miniplayer insets itself by.
 #[cfg(target_os = "windows")]
 pub fn frame_margins(w: &WinitWindow, reading: WindowReading) -> Option<WinitLogicalInsets<f32>> {
     if !reading.decorated {
         return None;
     }
-    let inner = settled_client(reading)?;
+    let inner = measurable_client(reading)?;
     let outer = ScreenRect { at: w.outer_position().ok()?, size: w.outer_size() };
     let client = ScreenRect { at: w.inner_position().ok()?, size: inner };
     Some(margins_between(outer, client, reading.scale))
@@ -400,9 +445,9 @@ pub fn frame_margins(_: &WinitWindow, _: WindowReading) -> Option<WinitLogicalIn
 ///
 /// `None` while maximized, where a WM may strip the frame without the window ever learning it lost
 /// one; and while minimized, the client then describing no window to measure.
-fn settled_client(reading: WindowReading) -> Option<WinitPhysicalSize<u32>> {
-    let settled = !reading.maximized && !is_minimized_client(reading.client);
-    settled.then_some(reading.client)
+fn measurable_client(reading: WindowReading) -> Option<WinitPhysicalSize<u32>> {
+    let measurable = !reading.maximized && !is_minimized_client(reading.client);
+    measurable.then_some(reading.client)
 }
 
 /// Whether a client size is Win32's reading of a minimized window: empty, inside a small outer
