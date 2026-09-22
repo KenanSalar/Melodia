@@ -45,9 +45,9 @@ const MAX_PENDING_TITLES: usize = 4;
 
 /// The state a live stream publishes to everyone who is not on the feed thread.
 ///
-/// Three of the four fields are one-way latches or plain flags read from the audio callback, so
-/// they are atomics; the title is the one value with a payload, and its generation counter is what
-/// lets the playback monitor ask "did it change?" without taking the lock on every tick.
+/// The flags are one-way latches or plain flags read from the audio callback, so they are atomics;
+/// the title is the one value with a payload, and its generation counter is what lets the playback
+/// monitor ask "did it change?" without taking the lock on every tick.
 ///
 /// **A title is held back until its audio is heard.** The decoder reads it ahead of the samples
 /// that follow it by everything the ring holds, so publishing it on arrival changed the song on

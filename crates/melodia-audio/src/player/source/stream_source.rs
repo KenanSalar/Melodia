@@ -19,7 +19,8 @@ use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::Duration;
 
-use icy_metadata::{IcyHeaders, IcyMetadataReader, RequestIcyMetadata};
+use icy_metadata::error::MetadataParseError;
+use icy_metadata::{IcyHeaders, IcyMetadata, IcyMetadataReader, RequestIcyMetadata};
 use reqwest::Url;
 use stream_download::http::{Client as StreamClient, HttpStream, format_range_header_bytes};
 use stream_download::storage::bounded::BoundedStorageProvider;
@@ -425,9 +426,7 @@ async fn connect(
     let titles = shared.clone();
     let reader: StreamReader =
         IcyMetadataReader::new(reader, icy.metadata_interval(), move |parsed| {
-            // A block that won't parse says nothing about the song, and read as "no title" it
-            // would clear the line and make the next good block look like a new song.
-            let Ok(metadata) = parsed else { return };
+            let Some(metadata) = readable_metadata(parsed) else { return };
             titles.set_title(
                 metadata.stream_title().map(str::trim).filter(|t| !t.is_empty()).map(str::to_owned),
             );
@@ -454,6 +453,23 @@ async fn connect(
     }
 
     Ok(Opened::Audio(Box::new(OpenedStream { shape: decoder.shape(), decoder, facts })))
+}
+
+/// A metadata block as metadata, or `None` where it says nothing about the song.
+///
+/// A block that isn't UTF-8 is read as Latin-1, what older servers send, rather than dropped:
+/// dropped, the previous song's title would stay up for the whole of this one. An empty block is
+/// skipped rather than read as a cleared title, which would make the next block look like a new
+/// song.
+fn readable_metadata(parsed: Result<IcyMetadata, MetadataParseError>) -> Option<IcyMetadata> {
+    match parsed {
+        Ok(metadata) => Some(metadata),
+        Err(MetadataParseError::InvalidUtf8(e)) => {
+            let latin1: String = e.as_bytes().iter().copied().map(char::from).collect();
+            latin1.trim_end_matches('\0').parse().ok()
+        }
+        Err(MetadataParseError::Empty(_)) => None,
+    }
 }
 
 /// A trimmed header value, or `None` where the server sent the field empty.
