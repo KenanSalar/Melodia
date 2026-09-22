@@ -12,6 +12,7 @@
 //! accent-folded, which is right for matching and wrong for the box: reseating from it would put
 //! a lowercased, unaccented spelling of what the user typed back in front of them.
 
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -308,7 +309,7 @@ fn remember_kept_answers(radio_ui: &RadioUi) {
             let Some(uuid) = &station.station_uuid else {
                 continue;
             };
-            let format = station.format();
+            let format = station.format().map(Cow::into_owned);
             // No entry for a row that answered neither, so presence in the map still means the
             // station told Browse something.
             if station.artwork_path.is_none() && format.is_none() {

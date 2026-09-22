@@ -212,10 +212,11 @@ impl StationSource {
             Self::Browsed(station, logo) => {
                 // The logo is the one the page was opened with rather than a fresh resolve: a
                 // seated page keeps drawing what it was seated with.
+                let kept = radio_ui.kept_answers.lock();
                 let local = rows::LocalAnswers {
                     is_favorite: radio_ui.starred.lock().contains(&station.station_uuid),
                     logo: logo.clone(),
-                    format: browse::format_for(radio_ui, station),
+                    format: browse::format_for(kept.get(&station.station_uuid)),
                 };
                 rows::to_slint_radio_station_row(station, &local)
             }

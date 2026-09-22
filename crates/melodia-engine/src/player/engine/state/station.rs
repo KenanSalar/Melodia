@@ -1,6 +1,7 @@
 //! A station's session on the deck: connecting, connected, failed, and the generation that refuses
 //! a connect the user already moved on from.
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use melodia_core::entities::radio::recompose_format;
@@ -79,9 +80,12 @@ impl PlayerState {
             return;
         };
         let composed = recompose_format(station.codec.as_deref().unwrap_or_default(), codec);
-        if composed == station.codec {
+        if composed.as_deref() == station.codec.as_deref() {
             return;
         }
+        // Owned only past the guard, so the tune that measures what the bar already says costs
+        // neither the string nor the `Arc`.
+        let composed = composed.map(Cow::into_owned);
         Arc::make_mut(station).codec = composed;
     }
 

@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
@@ -112,21 +114,24 @@ const FORMAT_SEPARATOR: &str = "/";
 /// Nothing is composed where one answer already implies the other. `UNKNOWN` and a blank name
 /// nothing, so the measurement stands alone; and where one contains the other the more specific
 /// wins, which is what keeps a station the directory calls `AAC+` from reading `AAC+/AAC`.
-pub fn compose_format(directory: &str, probed: Option<&str>) -> Option<String> {
+///
+/// Borrowed wherever one answer stands alone, which is every station the user has not played:
+/// only the join has a string to build, and a row draws far more of the former than the latter.
+pub fn compose_format<'a>(directory: &'a str, probed: Option<&'a str>) -> Option<Cow<'a, str>> {
     let (named, measured) = (filled(Some(directory)), filled(probed));
     let (Some(directory), Some(probed)) = (named, measured) else {
-        return named.or(measured).map(str::to_owned);
+        return named.or(measured).map(Cow::Borrowed);
     };
     if directory.eq_ignore_ascii_case(UNKNOWN_CODEC) {
-        return Some(probed.to_owned());
+        return Some(Cow::Borrowed(probed));
     }
     if contains_ignore_ascii_case(directory, probed) {
-        return Some(directory.to_owned());
+        return Some(Cow::Borrowed(directory));
     }
     if contains_ignore_ascii_case(probed, directory) {
-        return Some(probed.to_owned());
+        return Some(Cow::Borrowed(probed));
     }
-    Some(format!("{directory}{FORMAT_SEPARATOR}{probed}"))
+    Some(Cow::Owned(format!("{directory}{FORMAT_SEPARATOR}{probed}")))
 }
 
 /// [`compose_format`] over a value that already carries a measurement, which is what a
@@ -135,7 +140,7 @@ pub fn compose_format(directory: &str, probed: Option<&str>) -> Option<String> {
 /// The containment arms fold a repeat of the same answer back onto itself, so only a station that
 /// changed what it serves between two plays reaches this: composed a second time it would name
 /// both codecs, and it holds exactly one.
-pub fn recompose_format(current: &str, probed: &str) -> Option<String> {
+pub fn recompose_format<'a>(current: &'a str, probed: &'a str) -> Option<Cow<'a, str>> {
     let directory = current.split_once(FORMAT_SEPARATOR).map_or(current, |(named, _)| named);
     compose_format(directory, Some(probed))
 }
@@ -181,7 +186,7 @@ impl RadioStation {
 
     /// The format a card shows, which unlike [`Self::website`]'s rule keeps *both* answers where
     /// they differ. [`compose_format`] argues why.
-    pub fn format(&self) -> Option<String> {
+    pub fn format(&self) -> Option<Cow<'_, str>> {
         compose_format(&self.codec, self.probed_codec.as_deref())
     }
 

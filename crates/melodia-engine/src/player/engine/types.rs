@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -113,7 +114,7 @@ impl From<&melodia_core::entities::radio::RadioStation> for RadioNowPlaying {
             country: station.country_name().map(str::to_owned),
             tags: station.genre().map(str::to_owned),
             homepage: station.website().map(str::to_owned),
-            codec: station.format(),
+            codec: station.format().map(Cow::into_owned),
             bitrate: station.bitrate,
             play_count: station.play_count,
         }
