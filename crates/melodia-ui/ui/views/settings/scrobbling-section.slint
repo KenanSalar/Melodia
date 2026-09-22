@@ -56,7 +56,16 @@ export component ScrobblingSection inherits Rectangle {
     property <bool> show-mbid: Settings.scrobble-listenbrainz-connected
         && row-visible(mbid-label, mbid-desc);
 
-    out property <bool> has-matches: show-lastfm || show-listenbrainz || show-mbid;
+    property <string> radio-label: @tr("Scrobble radio songs");
+    property <string> radio-desc: @tr("Songs heard in full on a station go to your connected scrobbling services");
+    // Here rather than on the Radio card, since this is where a reader looks for what gets
+    // scrobbled; it exists only while radio does, as the MusicBrainz rows exist only with
+    // ListenBrainz.
+    property <bool> show-radio: Settings.radio-enabled && row-visible(radio-label, radio-desc);
+    property <bool> any-service-on: (Settings.scrobble-lastfm-connected && Settings.scrobble-lastfm-enabled)
+        || (Settings.scrobble-listenbrainz-connected && Settings.scrobble-listenbrainz-enabled);
+
+    out property <bool> has-matches: show-lastfm || show-listenbrainz || show-mbid || show-radio;
 
     VerticalLayout {
     if has-matches: SectionCard {
@@ -209,6 +218,23 @@ export component ScrobblingSection inherits Rectangle {
                 icon: "";
                 primary: false;
                 clicked => { Settings.scrobble-lookup-missing-mbids(); }
+            }
+        }
+
+        if root.show-radio && (root.show-lastfm || root.show-listenbrainz || root.show-mbid): SectionDivider {}
+
+        // Greyed rather than hidden with no service on, so the switch is findable and says why
+        // it can't be used yet.
+        if root.show-radio: SettingRow {
+            icon: "radio";
+            label: root.radio-label;
+            description: root.any-service-on
+                ? root.radio-desc
+                : @tr("Turn on Last.fm or ListenBrainz above first");
+            disabled: !root.any-service-on;
+            ToggleSwitch {
+                checked <=> Settings.radio-scrobble;
+                toggled(v) => { Settings.radio-scrobble-changed(v); }
             }
         }
     }

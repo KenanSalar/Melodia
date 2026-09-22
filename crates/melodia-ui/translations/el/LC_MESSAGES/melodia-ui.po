@@ -1817,6 +1817,9 @@ msgstr "Scrobble τραγουδιών από το ραδιόφωνο"
 msgid "Songs heard in full on a station go to your connected scrobbling services"
 msgstr "Τα τραγούδια που ακούστηκαν ολόκληρα σε έναν σταθμό στέλνονται στις συνδεδεμένες υπηρεσίες scrobbling"
 
+msgid "Turn on Last.fm or ListenBrainz above first"
+msgstr "Ενεργοποιήστε πρώτα το Last.fm ή το ListenBrainz παραπάνω"
+
 # ---- Radio: Browse -----------------------------------------------------------
 # The filter chips. "Genre" and "Language" reuse the labels above.
 msgid "Country"

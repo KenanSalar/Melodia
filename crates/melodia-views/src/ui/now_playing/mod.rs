@@ -110,10 +110,22 @@ impl NowPlayingSource {
     }
 }
 
+/// A song a station is announcing, and where on the deck's clock it started.
+#[derive(Clone, PartialEq, Eq)]
+pub(super) struct OnAir {
+    pub(super) song: HeardSong,
+    /// `None` for the song the stream was joined in the middle of.
+    pub(super) started_ms: Option<u64>,
+}
+
 /// The song a station is announcing, where the announcement names an artist.
-pub(super) fn heard_on_air(vm: &PlayerViewModelLight) -> Option<HeardSong> {
-    let song = vm.radio.as_deref()?.announcement()?;
-    Some(HeardSong { artist: song.artist.to_owned(), title: song.title.to_owned() })
+pub(super) fn heard_on_air(vm: &PlayerViewModelLight) -> Option<OnAir> {
+    let radio = vm.radio.as_deref()?;
+    let song = radio.announcement()?;
+    Some(OnAir {
+        song: HeardSong { artist: song.artist.to_owned(), title: song.title.to_owned() },
+        started_ms: radio.song_started_ms,
+    })
 }
 
 /// Shared UI-thread state coordinating the view's two subscribers and the
@@ -150,7 +162,7 @@ pub struct NowPlayingState {
     pub(super) current_source: RefCell<Option<NowPlayingSource>>,
     /// The song the station on the deck last announced with an artist, for the lyrics panel.
     /// Kept apart from [`Self::current_source`], whose key deliberately ignores the title.
-    pub(super) on_air: RefCell<Option<HeardSong>>,
+    pub(super) on_air: RefCell<Option<OnAir>>,
     /// The source whose artwork and chips are currently in the `Player` global. The open
     /// callback compares it against `current_source` to skip a redundant re-seed when
     /// nothing changed while the view was closed.

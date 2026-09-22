@@ -137,7 +137,9 @@ pub(super) fn published_row(row: &Row, romanization_shown: bool) -> LyricRow {
 /// Move the sung line on, interpolating between the position channel's roughly one-second ticks.
 pub(super) fn follow(ui: &AppWindow, ly: &Rc<LyricsUi>) {
     let player = ui.global::<Player>();
-    let reported = player.get_position_ms();
+    // A station's clock runs from the connection, so its song's stamps count from where it started.
+    let reported =
+        player.get_position_ms().saturating_sub(ly.live_origin_ms.get().unwrap_or_default());
     // The two projections rather than `get_vm()`, which clones the whole view model — sixteen
     // strings and two images — for these two numbers, on every tick.
     let is_playing = player.get_vm_is_playing();
@@ -177,6 +179,10 @@ pub(super) fn follow(ui: &AppWindow, ly: &Rc<LyricsUi>) {
 /// *row* that was clicked: a stamp repeated by a chorus names two of them, and pinning the first
 /// leaves the panel gliding back up the sheet from a seek into the second.
 pub(super) fn seek_at(ui: &AppWindow, ly: &Rc<LyricsUi>, y: f32) {
+    // A stream cannot seek.
+    if ly.live_origin_ms.get().is_some() {
+        return;
+    }
     let rows = ly.rows.borrow();
     let Some(index) = row_at(&ly.offsets.borrow(), &rows, ly.metrics, y) else {
         return;

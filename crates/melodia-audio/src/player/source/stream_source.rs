@@ -683,6 +683,8 @@ fn feed_loop(mut ctx: FeedContext) {
             return;
         }
 
+        // Before the reopen, whose probe can already read the first title of the new connection.
+        ctx.shared.rejoin();
         match ctx.runtime.block_on(reopen(&ctx.client, &ctx.url, &ctx.shared, ctx.reopen)) {
             Ok(opened) if opened.shape == ctx.shape => {
                 ctx.decoder = opened.decoder;

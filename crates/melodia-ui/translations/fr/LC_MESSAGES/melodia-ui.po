@@ -1813,6 +1813,9 @@ msgstr "Scrobbler les titres de la radio"
 msgid "Songs heard in full on a station go to your connected scrobbling services"
 msgstr "Les titres écoutés en entier sur une station sont envoyés à vos services de scrobbling connectés"
 
+msgid "Turn on Last.fm or ListenBrainz above first"
+msgstr "Activez d'abord Last.fm ou ListenBrainz ci-dessus"
+
 # ---- Radio: Browse -----------------------------------------------------------
 # The filter chips. "Genre" and "Language" reuse the labels above.
 msgid "Country"

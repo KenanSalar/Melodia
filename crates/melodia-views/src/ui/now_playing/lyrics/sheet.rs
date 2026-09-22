@@ -11,9 +11,8 @@ use async_compat::Compat;
 use slint::{ComponentHandle, Weak};
 
 use super::rows::rows_for;
-use super::{Claim, LyricsUi, NowPlayingState, follow};
+use super::{Claim, LyricsUi, NowPlayingState, OnAir, follow};
 use melodia_app::library;
-use melodia_app::library::lyrics::HeardSong;
 use melodia_app::state::AppState;
 use melodia_core::entities::lyrics::{Lyrics as Sheet, LyricsOutcome, LyricsSource};
 use melodia_core::entities::track::TrackSummary;
@@ -23,7 +22,7 @@ use melodia_ui::{AppWindow, Lyrics, LyricsState};
 /// What the panel would show words for.
 enum Playing {
     Track(Arc<TrackSummary>),
-    OnAir(HeardSong),
+    OnAir(OnAir),
 }
 
 impl Playing {
@@ -39,7 +38,7 @@ impl Playing {
     fn claim(&self) -> Claim {
         match self {
             Self::Track(track) => Claim::Track(track.file_path.clone()),
-            Self::OnAir(song) => Claim::OnAir(song.clone()),
+            Self::OnAir(on_air) => Claim::OnAir(on_air.clone()),
         }
     }
 }
@@ -51,7 +50,7 @@ impl Playing {
 async fn fetch(state: &AppState, playing: &Playing) -> LyricsOutcome {
     let fetched = match playing {
         Playing::Track(track) => library::lyrics::for_track(state, track).await,
-        Playing::OnAir(song) => library::lyrics::for_live(state, song).await,
+        Playing::OnAir(on_air) => library::lyrics::for_live(state, &on_air.song).await,
     };
     fetched.unwrap_or_else(|e| {
         log::debug!("ui::now_playing lyrics: {}", melodia_core::error::describe(&e));
@@ -235,6 +234,16 @@ fn apply(
     let global = ui.global::<Lyrics>();
     // Only a track has a tag to write a sheet into.
     let has_tag = matches!(claim, Claim::Track(_));
+    // A station's song is followed from where it started, and a song joined midway has no start
+    // to follow from, so it is printed whole.
+    let (followable, origin) = match &claim {
+        Claim::Track(_) => (true, None),
+        Claim::OnAir(on_air) => (
+            on_air.started_ms.is_some(),
+            on_air.started_ms.map(|ms| i32::try_from(ms).unwrap_or(i32::MAX)),
+        ),
+    };
+    ly.live_origin_ms.set(origin);
 
     // Recorded whichever of the three this came to, so a re-open that finds the same track already
     // answered does not pay for a second lookup — including the two that draw no rows, which are
@@ -243,6 +252,13 @@ fn apply(
 
     match outcome {
         LyricsOutcome::Sheet(sheet) => {
+            let untimed;
+            let sheet = if followable {
+                sheet
+            } else {
+                untimed = without_timings(sheet);
+                &untimed
+            };
             take_sheet(ly, sheet);
             follow::republish(ui, ly);
             global.set_synced(sheet.is_synced());
@@ -308,4 +324,14 @@ fn clear(ui: &AppWindow, ly: &Rc<LyricsUi>) {
 /// Keep the sheet's text and stamps. Heights are not kept, following the width instead.
 fn take_sheet(ly: &Rc<LyricsUi>, sheet: &Sheet) {
     *ly.rows.borrow_mut() = rows_for(sheet);
+}
+
+/// The sheet printed whole, for a song whose stamps have no clock to be read against.
+fn without_timings(sheet: &Sheet) -> Sheet {
+    let mut sheet = sheet.clone();
+    for line in &mut sheet.lines {
+        line.at_ms = None;
+        line.end_ms = None;
+    }
+    sheet
 }

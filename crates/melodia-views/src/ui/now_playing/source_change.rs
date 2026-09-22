@@ -116,9 +116,14 @@ pub(super) fn spawn_source_change_subscriber(
 /// Compared against the borrowed announcement, so only a new song allocates.
 fn note_song(np_state: &NowPlayingState, vm: &PlayerViewModelLight) -> bool {
     let announced = vm.radio.as_deref().and_then(RadioNowPlaying::announcement);
+    let started_ms = vm.radio.as_deref().and_then(|radio| radio.song_started_ms);
     let unchanged = match (np_state.on_air.borrow().as_ref(), announced) {
         (None, None) => true,
-        (Some(held), Some(song)) => held.artist == song.artist && held.title == song.title,
+        (Some(held), Some(song)) => {
+            held.song.artist == song.artist
+                && held.song.title == song.title
+                && held.started_ms == started_ms
+        }
         _ => false,
     };
     if !unchanged {

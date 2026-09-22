@@ -15,8 +15,9 @@
 //! shape from `playback::visualizer`'s per-deck ring, which is the same trade — atomics over a
 //! mutex, because one of the two parties is a real-time callback.
 
-use std::sync::Arc;
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use super::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError, Shape};
@@ -37,11 +38,20 @@ pub const PREBUFFER_MS: u64 = 1_500;
 /// enough that the thread is not spinning through a period's worth of samples at a time.
 const FEED_PARK: Duration = Duration::from_millis(20);
 
+/// How many announcements may wait for their audio at once. The ring holds seconds and a station
+/// announces once a song, so more than one is a station flapping its title, and only the newest
+/// of those is ever shown anyway.
+const MAX_PENDING_TITLES: usize = 4;
+
 /// The state a live stream publishes to everyone who is not on the feed thread.
 ///
 /// Three of the four fields are one-way latches or plain flags read from the audio callback, so
 /// they are atomics; the title is the one value with a payload, and its generation counter is what
 /// lets the playback monitor ask "did it change?" without taking the lock on every tick.
+///
+/// **A title is held back until its audio is heard.** The decoder reads it ahead of the samples
+/// that follow it by everything the ring holds, so publishing it on arrival changed the song on
+/// screen, on the OS panel and in a scrobble's timestamp seconds before the song itself.
 #[derive(Debug)]
 pub struct StreamShared {
     buffering: AtomicBool,
@@ -49,6 +59,44 @@ pub struct StreamShared {
     abandoned: AtomicBool,
     title: parking_lot::Mutex<Option<String>>,
     title_generation: AtomicU64,
+    pending: parking_lot::Mutex<VecDeque<PendingTitle>>,
+    /// Whether the next title names a song already under way: set for a fresh cell and by every
+    /// reconnect, taken by the title that follows.
+    joining: AtomicBool,
+    ring: OnceLock<RingTap>,
+}
+
+/// An announcement and the ring position its audio starts at.
+#[derive(Debug)]
+struct PendingTitle {
+    title: Option<String>,
+    at_sample: usize,
+    joined: bool,
+}
+
+/// What [`StreamShared`] needs of the ring to know when a queued title is being heard.
+struct RingTap {
+    ring: Arc<SampleRing>,
+    samples_per_second: u64,
+}
+
+impl std::fmt::Debug for RingTap {
+    // The ring's slots are seconds of audio, which no log line wants.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RingTap")
+            .field("samples_per_second", &self.samples_per_second)
+            .finish_non_exhaustive()
+    }
+}
+
+/// A title whose audio has started playing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HeardTitle {
+    /// How long its audio has already been playing, the monitor's tick being coarser than a song
+    /// change.
+    pub playing_for: Duration,
+    /// The song was already under way when the stream was joined, so its start is unknown.
+    pub joined_mid_song: bool,
 }
 
 /// Tickets for [`StreamShared::title_generation`], drawn process-wide rather than counted per
@@ -69,6 +117,9 @@ impl StreamShared {
             abandoned: AtomicBool::new(false),
             title: parking_lot::Mutex::new(None),
             title_generation: AtomicU64::new(next_title_generation()),
+            pending: parking_lot::Mutex::new(VecDeque::new()),
+            joining: AtomicBool::new(true),
+            ring: OnceLock::new(),
         })
     }
 
@@ -103,17 +154,62 @@ impl StreamShared {
         self.abandoned.load(Ordering::Acquire)
     }
 
-    /// Publish the live ICY title. Called from the feed thread inside `IcyMetadataReader`'s
-    /// callback, which must not block — an uncontended lock and a counter bump is the whole
-    /// handler.
+    /// Queue the live ICY title behind the audio already decoded. Called from the feed thread
+    /// inside `IcyMetadataReader`'s callback, which must not block — an uncontended lock and a
+    /// push is the whole handler. Before the ring exists (a title read during the probe) its audio
+    /// starts at the ring's first sample.
     pub fn set_title(&self, title: Option<String>) {
-        *self.title.lock() = title;
-        self.title_generation.store(next_title_generation(), Ordering::Release);
+        let at_sample =
+            self.ring.get().map_or(0, |tap| tap.ring.write_cursor.load(Ordering::Acquire));
+        let joined = self.joining.swap(false, Ordering::AcqRel);
+        let mut pending = self.pending.lock();
+        if pending.len() == MAX_PENDING_TITLES {
+            pending.pop_front();
+        }
+        pending.push_back(PendingTitle { title, at_sample, joined });
     }
 
-    /// Moves on every [`Self::set_title`], and never back onto a value any cell has published. The
-    /// monitor keeps the last value it saw and only takes the lock when this moved, so a station
-    /// that changes track once a song costs one relaxed load per tick.
+    /// The stream is being joined again after a drop, so the next title is mid-song.
+    pub fn rejoin(&self) {
+        self.joining.store(true, Ordering::Release);
+    }
+
+    /// Publish the newest queued title whose audio has started playing, if one has.
+    ///
+    /// The monitor's to call, on its tick: the audio callback may not take a lock, and nothing
+    /// else knows when a sample has been heard.
+    pub fn publish_heard_title(&self) -> Option<HeardTitle> {
+        let played = self.ring.get().map_or(0, |tap| tap.ring.read_cursor.load(Ordering::Acquire));
+        let heard = {
+            let mut pending = self.pending.lock();
+            let due = pending.iter().take_while(|title| title.at_sample <= played).count();
+            // Only the newest of several due titles was ever audible long enough to show, but a
+            // join among them still means the one shown started before we were listening.
+            let joined = pending.iter().take(due).any(|title| title.joined);
+            let newest = pending.drain(..due).next_back()?;
+            PendingTitle { joined, ..newest }
+        };
+
+        *self.title.lock() = heard.title;
+        self.title_generation.store(next_title_generation(), Ordering::Release);
+        Some(HeardTitle {
+            playing_for: self.samples_as_duration(played - heard.at_sample),
+            joined_mid_song: heard.joined,
+        })
+    }
+
+    fn samples_as_duration(&self, samples: usize) -> Duration {
+        let per_second = self.ring.get().map_or(0, |tap| tap.samples_per_second);
+        if per_second == 0 {
+            return Duration::ZERO;
+        }
+        let samples = u64::try_from(samples).unwrap_or(u64::MAX);
+        Duration::from_millis(samples.saturating_mul(1_000) / per_second)
+    }
+
+    /// Moves on every [`Self::publish_heard_title`] that publishes, and never back onto a value any
+    /// cell has published. The monitor keeps the last value it saw and only takes the lock when
+    /// this moved, so a station that changes track once a song costs one relaxed load per tick.
     pub fn title_generation(&self) -> u64 {
         self.title_generation.load(Ordering::Acquire)
     }
@@ -237,6 +333,10 @@ impl PrebufferSource {
     /// The source and the writer that feeds it, plus the shared cell both report through.
     pub fn new(shared: Arc<StreamShared>, shape: Shape) -> (Self, RingWriter) {
         let ring = Arc::new(SampleRing::for_format(shape.channels, shape.rate));
+        let samples_per_second = u64::from(shape.rate.get()) * u64::from(shape.channels.get());
+        // One source per cell, so a second `set` cannot happen; ignoring it keeps the first ring,
+        // which is the one the cell's titles were queued against.
+        let _ = shared.ring.set(RingTap { ring: ring.clone(), samples_per_second });
         let writer = RingWriter { ring: ring.clone(), shared: shared.clone() };
         let source =
             Self { ring, shared, shape, frame_phase: 0, frame_starved: false, starved: false };

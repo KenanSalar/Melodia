@@ -6,8 +6,8 @@
 //! station repeating its playlist inside a session asks once per song, misses included. It is
 //! dropped whole when the station stops being the one playing, and its answers live no longer.
 //!
-//! Only the lookup can answer, so with it switched off a station has no lyrics at all, and what it
-//! answers is shown untimed.
+//! Only the lookup can answer, so with it switched off a station has no lyrics at all. A timed
+//! sheet stays timed here; whether a song's start is known enough to follow it is the panel's call.
 
 use std::num::NonZeroUsize;
 
@@ -17,7 +17,7 @@ use parking_lot::Mutex;
 use super::{ensure_enabled, lrc, online_lookup_enabled, romanized};
 use crate::state::AppState;
 use melodia_core::entities::artist::ArtistCredit;
-use melodia_core::entities::lyrics::{Lyrics, LyricsOutcome, LyricsSource};
+use melodia_core::entities::lyrics::{LyricsOutcome, LyricsSource};
 use melodia_core::error::AppError;
 use melodia_net::services::net::lyrics_directory as directory;
 
@@ -90,20 +90,7 @@ async fn look_up(state: &AppState, song: &HeardSong) -> LyricsOutcome {
     };
     if let Some(text) = answer.text() {
         return lrc::parse(text, LyricsSource::Online)
-            .map_or(LyricsOutcome::Absent, |sheet| LyricsOutcome::Sheet(untimed(sheet)));
+            .map_or(LyricsOutcome::Absent, LyricsOutcome::Sheet);
     }
     if answer.instrumental { LyricsOutcome::Instrumental } else { LyricsOutcome::Absent }
-}
-
-/// The sheet with its stamps dropped, so the panel shows it whole rather than following it.
-///
-/// **A stream gives no clock to follow by.** The title is read off the socket, ahead of the audio
-/// by everything buffered between the two, and a station's own title changes drift from the song's
-/// start by seconds either way, so a highlight would mark the wrong line more often than the right.
-fn untimed(mut sheet: Lyrics) -> Lyrics {
-    for line in &mut sheet.lines {
-        line.at_ms = None;
-        line.end_ms = None;
-    }
-    sheet
 }

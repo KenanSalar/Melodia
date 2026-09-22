@@ -148,6 +148,11 @@ fn the_title_generation_moves_only_when_a_title_is_published() {
     assert_eq!(shared.title_generation(), before);
 
     shared.set_title(Some("Artist - Track".to_owned()));
+    assert_eq!(shared.title(), None, "queued, not yet heard");
+    assert_eq!(shared.title_generation(), before);
+
+    // With no ring yet, its audio starts at the ring's first sample, which counts as heard.
+    assert!(shared.publish_heard_title().is_some());
     assert_eq!(shared.title().as_deref(), Some("Artist - Track"));
     assert!(shared.title_generation() > before);
 }

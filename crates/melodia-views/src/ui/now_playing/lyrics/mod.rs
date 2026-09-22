@@ -20,9 +20,8 @@ use std::time::Instant;
 
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
-use super::NowPlayingState;
+use super::{NowPlayingState, OnAir};
 use crate::ui::settings::lyrics_settings;
-use melodia_app::library::lyrics::HeardSong;
 use melodia_app::state::AppState;
 use melodia_app::tasks;
 use melodia_core::entities::lyrics::LyricLine;
@@ -186,6 +185,9 @@ pub(crate) struct LyricsUi {
     /// A clicked row, held until the clock catches up with it.
     pinned: Cell<Option<usize>>,
     pinned_at_ms: Cell<i32>,
+    /// Where on the deck's clock a station's song started, which its stamps count from. `None` for
+    /// a track, whose stamps are the deck's own clock and whose lines seek.
+    live_origin_ms: Cell<Option<i32>>,
     /// What the resident sheet belongs to, and `None` whenever the rows have been handed back.
     /// **This is what makes the reseed idempotent**, so the three unrelated edges that reach it
     /// cost one lookup between them rather than one each.
@@ -213,11 +215,12 @@ impl LyricsUi {
 }
 
 /// Whose sheet the panel holds: a track by its path, or a song a station announced. A station's
-/// URL is not the key, since one station plays a new song every few minutes.
+/// URL is not the key, since one station plays a new song every few minutes, and the song's start
+/// is part of it, since the same song again is a new clock to follow.
 #[derive(Clone, PartialEq, Eq)]
 enum Claim {
     Track(String),
-    OnAir(HeardSong),
+    OnAir(OnAir),
 }
 
 /// Install the panel's callbacks and seed the toggles.
@@ -236,6 +239,7 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
         anchor_at: Cell::new(Instant::now()),
         pinned: Cell::new(None),
         pinned_at_ms: Cell::new(0),
+        live_origin_ms: Cell::new(None),
         holding: RefCell::new(None),
         reseed: RefCell::new(None),
         model,

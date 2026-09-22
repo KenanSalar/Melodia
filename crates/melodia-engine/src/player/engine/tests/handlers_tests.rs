@@ -319,6 +319,11 @@ fn seated(
     (handle, sinks, published)
 }
 
+/// A tick at the top of the deck's clock, for the checks that are not about where a song starts.
+fn at_start(last_title_generation: &mut u64) -> LiveTick<'_> {
+    LiveTick { position_ms: 0, last_title_generation }
+}
+
 /// The whole reason the change checks exist. A station that is playing happily changes neither
 /// its buffering flag nor its title, and the monitor runs twice a second: republishing the view
 /// model on every one of those ticks rebuilds it for nothing.
@@ -328,7 +333,7 @@ fn a_station_with_nothing_to_report_publishes_nothing() {
     let (handle, sinks, published) = seated(playing_a_station());
     let mut last_generation = stream.title_generation();
 
-    reconcile_live_stream(&stream, &handle, &sinks, &mut last_generation);
+    reconcile_live_stream(&stream, &handle, &sinks, at_start(&mut last_generation));
 
     assert_eq!(published.has_changed().ok(), Some(false));
 }
@@ -344,7 +349,7 @@ fn a_moved_title_generation_publishes_the_station_again() {
     // tick read one.
     let mut last_generation = stream.title_generation().wrapping_sub(1);
 
-    reconcile_live_stream(&stream, &handle, &sinks, &mut last_generation);
+    reconcile_live_stream(&stream, &handle, &sinks, at_start(&mut last_generation));
 
     assert_eq!(published.has_changed().ok(), Some(true));
     assert_eq!(last_generation, stream.title_generation(), "the tick has to record what it saw");
@@ -362,7 +367,7 @@ fn a_station_that_stopped_buffering_has_the_flag_cleared() {
     let (handle, sinks, published) = seated(state);
     let mut last_generation = stream.title_generation();
 
-    reconcile_live_stream(&stream, &handle, &sinks, &mut last_generation);
+    reconcile_live_stream(&stream, &handle, &sinks, at_start(&mut last_generation));
 
     assert_eq!(published.has_changed().ok(), Some(true));
     assert_eq!(
@@ -383,7 +388,7 @@ fn a_new_title_reaches_the_station_the_ui_paints() {
     let mut last_generation = stream.title_generation();
     stream.set_title(Some("Night Bus".to_owned()));
 
-    reconcile_live_stream(&stream, &handle, &sinks, &mut last_generation);
+    reconcile_live_stream(&stream, &handle, &sinks, at_start(&mut last_generation));
 
     assert_eq!(
         lock_state(&handle).station().and_then(|s| s.live_title.clone()).as_deref(),
@@ -406,7 +411,7 @@ fn a_station_that_stops_announcing_has_its_title_cleared() {
     let mut last_generation = stream.title_generation();
     stream.set_title(None);
 
-    reconcile_live_stream(&stream, &handle, &sinks, &mut last_generation);
+    reconcile_live_stream(&stream, &handle, &sinks, at_start(&mut last_generation));
 
     assert_eq!(lock_state(&handle).station().and_then(|s| s.live_title.clone()), None);
 }
