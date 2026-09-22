@@ -667,3 +667,76 @@ async fn stored_release(
     .await?;
     Ok(row)
 }
+
+/// Whether a batch's unsupported fields can be named in the toast or only counted.
+///
+/// The toast has room for one clause, so it is offered exactly when every file that refused
+/// something refused the same fields in the same container. Anything else falls back to the count,
+/// which is the honest answer rather than the first file's story told about all of them.
+mod unsupported_agreement {
+    use super::super::{TagEditReport, UnsupportedWrite};
+    use melodia_core::entities::credits::CreditRole;
+    use melodia_core::entities::tags::TagField;
+
+    fn refused(
+        path: &str,
+        format: Option<&'static str>,
+        fields: Vec<TagField>,
+    ) -> UnsupportedWrite {
+        UnsupportedWrite { path: path.to_owned(), format, fields }
+    }
+
+    fn report(unsupported: Vec<UnsupportedWrite>) -> TagEditReport {
+        TagEditReport { unsupported, ..TagEditReport::default() }
+    }
+
+    #[test]
+    fn one_container_refusing_one_set_of_fields_is_named_in_full() {
+        let performer = vec![TagField::Credit(CreditRole::Performer)];
+        let batch = report(vec![
+            refused("/music/a.mp3", Some("MP3"), performer.clone()),
+            refused("/music/b.mp3", Some("MP3"), performer.clone()),
+        ]);
+
+        assert_eq!(batch.unsupported_agreement(), Some(("MP3", performer.as_slice())));
+    }
+
+    /// A batch spanning two containers refuses different things for different reasons, and naming
+    /// either one tells the user the other file is fine when it is not.
+    #[test]
+    fn two_containers_refusing_different_fields_are_only_counted() {
+        let batch = report(vec![
+            refused("/music/a.mp3", Some("MP3"), vec![TagField::Credit(CreditRole::Performer)]),
+            refused("/music/b.m4a", Some("M4A"), vec![TagField::Credit(CreditRole::Arranger)]),
+        ]);
+
+        assert_eq!(batch.unsupported_agreement(), None);
+    }
+
+    /// One container can still refuse different fields per file, the edit being a diff against each
+    /// file's own starting point.
+    #[test]
+    fn one_container_refusing_different_fields_per_file_is_only_counted() {
+        let batch = report(vec![
+            refused("/music/a.mp3", Some("MP3"), vec![TagField::Credit(CreditRole::Performer)]),
+            refused("/music/b.mp3", Some("MP3"), vec![TagField::Lyrics]),
+        ]);
+
+        assert_eq!(batch.unsupported_agreement(), None);
+    }
+
+    /// A container lofty grew after this build has no name to put in the clause, so it costs the
+    /// name and falls back on the count rather than printing a blank.
+    #[test]
+    fn a_container_this_build_cannot_name_is_counted_rather_than_named() {
+        let batch = report(vec![refused("/music/a.xyz", None, vec![TagField::Lyrics])]);
+
+        assert_eq!(batch.unsupported_agreement(), None);
+    }
+
+    /// The common case by far: every field landed, so there is nothing to agree about.
+    #[test]
+    fn a_report_with_nothing_unsupported_agrees_on_nothing() {
+        assert_eq!(report(vec![]).unsupported_agreement(), None);
+    }
+}

@@ -79,11 +79,25 @@ the OS owns has to be attached late or not at all on at least one platform.
   is not what the restart is for; `window_chrome`'s module doc says what is.
 
 - **Under the native title bar the miniplayer drops the frame**, through `app-window.slint`'s
-  `frameless`, and that couples three trees. On Win32 and macOS the client area grows into the
-  frame it lost, so the winit `Resized` arm measures the frame while one stands
-  (`window_chrome::geometry::frame_allowance`), `WindowChrome.frame-allowance-*` holds the reading
-  across the frameless span, and `MiniPlayerSwitch` widens its exit edge by it. Drop any link and a
-  window parked just inside the threshold bounces in and out, which no Linux runner can show. The
+  `frameless`, and that couples three trees. Win32, macOS and `KWin` all keep the window's rect
+  across that change, so the client area grows into the frame it lost: the winit `Resized` arm
+  measures **the step the client takes when the decoration changes**
+  (`window_chrome::geometry::frame_allowance`), `WindowChrome.frame-allowance-*` holds it across the
+  frameless span, `MiniPlayerSwitch` widens its exit edge by it and `restore_full_player` hands it
+  back. Drop any link and a window parked just inside the threshold bounces in and out.
+  **The step is measured rather than asked of the window because the desktop it bites hardest on
+  cannot be asked**: a Wayland compositor draws its decoration outside the surface, so winit's
+  `outer_size` reads the client straight back and a frame query is zero exactly where the client
+  really did grow by a titlebar. That is argued at `frame_allowance`, which also says why the
+  measurement retired the platform split `with_returning_frame` used to carry.
+  **The desktops it doesn't bite answer that change with no reading at all**, X11 and a compositor
+  drawing its own decorations both taking a dropped frame out of the window rather than handing it
+  to the client, **so a step counts only while the decoration change is recent enough to be what
+  moved the client**. `changed frameless` announces it over `WindowChrome.frame-changed` and
+  `geometry::wire_frame_changes` stamps the moment; that link fails silently in both directions.
+  Unwired, every step goes stale and the allowance sits back at zero. Unbounded, the leave's own
+  resize is read as a frame, the exit edge lands above the window the restore just asked for and
+  the miniplayer never leaves again. The
   window's own minimum gives the reading up while a frame stands: Win32 fixes a resize drag's
   minimum when the drag starts, framed, and a drag from the full UI otherwise can't take the
   frameless miniplayer down to its floor until the button comes up. The

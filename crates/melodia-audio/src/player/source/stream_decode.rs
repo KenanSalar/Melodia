@@ -12,7 +12,7 @@
 
 use std::io::{Read, Seek, SeekFrom};
 
-use symphonia::core::codecs::audio::AudioDecoder;
+use symphonia::core::codecs::audio::{AudioCodecId, AudioDecoder};
 use symphonia::core::formats::FormatReader;
 use symphonia::core::formats::probe::Hint;
 use symphonia::core::io::MediaSource;
@@ -91,6 +91,14 @@ impl StreamDecoder {
     /// renegotiates one mid-stream ends instead.
     pub fn shape(&self) -> Shape {
         self.cursor.shape()
+    }
+
+    /// What is actually inside the container, as against what the response's content type named.
+    ///
+    /// Asked of the decoder rather than stored, for [`super::opus::seek_pre_roll`]'s reason: it is
+    /// read once per open.
+    pub fn codec(&self) -> AudioCodecId {
+        self.decoder.codec_params().codec
     }
 }
 

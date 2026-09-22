@@ -1,11 +1,11 @@
 //! The set of files *we* just rewrote, so the folder watcher can ignore its own echo.
 //!
-//! `melodia-store`'s `tag_writer::apply_to_file` rewrites a file's bytes in place, which comes
-//! back as a `FileEvent::Modified` — a re-hash, a lofty re-parse, an artwork re-extract and a
+//! `melodia-store`'s `tag_writer::apply_to_file` renames an edited copy over the track, which
+//! comes back as a `FileEvent::Created` — a re-hash, a lofty re-parse, an artwork re-extract and a
 //! redundant row write per file, seconds after the edit already landed. It can't loop, a DB write
 //! firing no filesystem event, but a batch pays for itself twice. So the tag orchestrator
 //! [`mark`](SelfWrites::mark)s each path immediately before writing it, and the file-event
-//! processor drops any `Modified` whose path [`take_recent`](SelfWrites::take_recent)s true.
+//! processor drops the create or modify whose path [`take_recent`](SelfWrites::take_recent)s true.
 //!
 //! **Mark per file, not per batch.** The TTL has to line up with the event it catches, and marking
 //! a whole batch up front starts the clock on the last file long before it is written.
@@ -24,11 +24,11 @@
 //!
 //! - **An external edit to the same file inside the TTL is swallowed**, caught by the next
 //!   launch's `reconcile_watched_folders`.
-//! - **Any other event kind for a marked path in the same batch strands its mark.** Dedup keeps
-//!   one event per path and every other kind outranks `Modified`, so the entry is never consumed
-//!   and shadows a genuine edit for the rest of its TTL. It needs an external create/rename/delete
-//!   racing our own write on one path inside a single batch, and self-heals at the next boot
-//!   reconcile.
+//! - **A `Removed` or `Renamed` for a marked path in the same batch strands its mark.** Dedup
+//!   keeps one event per path and both outrank the two kinds the filter consults, so the entry is
+//!   never consumed and shadows a genuine edit for the rest of its TTL. It needs an external
+//!   rename or delete racing our own write on one path inside a single batch, and self-heals at
+//!   the next boot reconcile.
 //! - **A debouncer overflow bypasses the set, correctly** — the batch arrives as
 //!   `FileEvent::RescanNeeded` and short-circuits to a full reconcile before the filter is
 //!   consulted, and a rescan re-derives from disk.

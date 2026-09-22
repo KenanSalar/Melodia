@@ -4,6 +4,7 @@ use crate::state::PlaybackContext;
 use melodia_audio::player::source::stream_source;
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
+use melodia_core::error::describe;
 use melodia_engine::player::engine::state::{lock_state, play_track_inner, with_state_emit};
 use melodia_engine::player::engine::types::{PlaybackSource, PlaybackStatus, RadioNowPlaying};
 use melodia_store::database::queries;
@@ -135,7 +136,7 @@ fn resume_station(ctx: &PlaybackContext) -> bool {
     let ctx = ctx.clone();
     tokio::spawn(async move {
         if let Err(e) = open_and_start_station(&ctx, &station, generation).await {
-            log::warn!("Could not resume {}: {}", station.name, melodia_core::error::describe(&e));
+            log::warn!("Could not resume {}: {}", station.name, describe(&e));
         }
     });
     true
@@ -177,12 +178,17 @@ async fn open_and_start_station(
 
     match opened {
         Ok(prepared) => {
+            let codec = prepared.codec().to_owned();
             ctx.engine.stage_stream(generation, prepared);
-            ctx.emit_and_execute(|s| s.build_station_connected_actions(generation));
+            ctx.emit_and_execute(|s| {
+                s.adopt_probed_codec(generation, &codec);
+                s.build_station_connected_actions(generation)
+            });
             // The session can have ended while the open was in flight, in which case the emit
             // above declined and nothing claimed the stage. Closing it here rather than leaving it
             // for the next station is what stops an abandoned connection outliving its station.
             ctx.engine.discard_staged_stream(generation);
+            crate::library::radio::record_probed_codec(&ctx.db, station, &codec).await;
             Ok(())
         }
         Err(e) => {

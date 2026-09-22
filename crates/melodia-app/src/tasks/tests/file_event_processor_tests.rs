@@ -126,25 +126,33 @@ fn suppress_drops_modified_events_for_paths_we_wrote() {
 }
 
 #[test]
-fn suppress_only_filters_modified() {
-    // A tag write rewrites the file in place, so it can only ever produce a
-    // Modified. Anything else for the same path is a genuine external change
-    // and must pass through even while the path is marked.
+fn suppress_drops_the_created_a_rename_produces_and_passes_the_rest() {
+    // A tag write renames an edited copy over the track, so its echo arrives as a Created. A
+    // Removed or a Renamed is a genuine external change and passes through even while marked.
     let self_writes = SelfWrites::default();
     self_writes.mark(Path::new("/music/edited.mp3"));
+    self_writes.mark(Path::new("/music/gone.mp3"));
 
-    let original = vec![
+    let mut batch = vec![
         FileEvent::Created(PathBuf::from("/music/edited.mp3")),
-        FileEvent::Removed(PathBuf::from("/music/edited.mp3")),
+        FileEvent::Removed(PathBuf::from("/music/gone.mp3")),
         FileEvent::Renamed {
-            from: PathBuf::from("/music/edited.mp3"),
+            from: PathBuf::from("/music/gone.mp3"),
             to: PathBuf::from("/music/moved.mp3"),
         },
     ];
 
-    let mut batch = original.clone();
     suppress_self_writes(&mut batch, &self_writes);
-    assert_eq!(batch, original);
+    assert_eq!(
+        batch,
+        vec![
+            FileEvent::Removed(PathBuf::from("/music/gone.mp3")),
+            FileEvent::Renamed {
+                from: PathBuf::from("/music/gone.mp3"),
+                to: PathBuf::from("/music/moved.mp3"),
+            },
+        ]
+    );
 }
 
 #[test]

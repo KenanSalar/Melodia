@@ -15,8 +15,13 @@
 //! for. `iTunSMPB` wins where both are present: it names the original sample count outright, where
 //! an edit list only offsets a duration the container states elsewhere.
 //!
-//! Scope is AAC. FLAC and ALAC are lossless and pad nothing, Vorbis is trimmed upstream, and Opus
-//! has no decoder here yet.
+//! Scope is AAC. FLAC and ALAC are lossless and pad nothing, and Vorbis and Opus come off their
+//! own decoders instead: upstream's Vorbis reads the packet trims, and [`super::opus`] argues why
+//! ours takes the priming there rather than here. The [`Trim`](super::file_decode::Trim) this
+//! resolves is the reader's rather than this module's, three sources filling one: Opus gets its own
+//! head off the offset the decoder leaves on the demuxer's timeline, and [`super::mkv_trim`]
+//! answers a tail that belongs to the container rather than to any codec. Neither is anything to do
+//! with AAC.
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
@@ -27,6 +32,7 @@ use symphonia::core::meta::{Metadata, RawValue};
 use symphonia::core::units::{Duration as SymphoniaDuration, TimeBase};
 
 use super::audio::SampleRate;
+use super::file_decode::Trim;
 
 /// Box headers the walk will read before giving up.
 ///
@@ -60,15 +66,6 @@ pub(super) struct Edit {
     pub delay: u64,
     /// Media ticks the presentation runs for, where the edit list's own timescale converts to this
     /// one exactly. See [`exact_media_ticks`] for why an inexact one is dropped rather than rounded.
-    pub playable: Option<u64>,
-}
-
-/// Frames the decoder hands over that are not music.
-#[derive(Clone, Copy)]
-pub(super) struct Trim {
-    /// Encoder priming, dropped ahead of the first real sample.
-    pub head: u64,
-    /// Real audio after it, where the container states a length.
     pub playable: Option<u64>,
 }
 
@@ -127,7 +124,8 @@ pub(super) fn resolve(
     if head > u64::from(rate.get()) * HEAD_CEILING_SECS || playable == Some(0) {
         return None;
     }
-    (head > 0 || playable.is_some()).then_some(Trim { head, playable })
+    // The tail is the container's answer rather than an AAC file's, so it is filled in beside this.
+    (head > 0 || playable.is_some()).then_some(Trim { head, playable, tail: 0 })
 }
 
 /// Converts a count stated against the container's timescale into decoded frames.

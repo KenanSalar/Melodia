@@ -228,8 +228,9 @@ export component WindowChromeSection inherits Rectangle {
             disabled: root.native-titlebar;
 
             if !root.native-titlebar: ChipGroup {
-                // Same brand-name rule as the corner-radius chips above.
-                options: [@tr("Standard"), "macOS", "KDE"];
+                // All three name a desktop, so none takes `@tr()`; the corner-radius chips above
+                // carry the rule.
+                options: ["Windows", "macOS", "KDE"];
                 selected-index <=> Settings.titlebar-button-style;
                 selected(i) => {
                     Settings.titlebar-button-style-changed(i);

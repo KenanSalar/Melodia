@@ -202,7 +202,7 @@ export global Settings {
     in-out property <int> corner-radius: 6;
     callback corner-radius-changed(int);
 
-    // 0 = Standard (Windows caption glyphs), 1 = macOS (traffic lights with hover-reveal glyphs),
+    // 0 = Windows (its caption glyphs), 1 = macOS (traffic lights with hover-reveal glyphs),
     // 2 = KDE (Breeze's glyphs and hover disc).
     // Mirrored into `Theme.titlebar-button-style` so `custom-titlebar.slint` reads it through
     // `Theme`, the `shell-radius` precedent. Inert under the native titlebar.
@@ -561,6 +561,30 @@ export global Settings {
         }
         return "";
     }
+    // The message above names a count and nothing else, which tells a user their edit half-landed
+    // without telling them what to do about it. This one is reached instead wherever every file in
+    // the batch fell out the same way, which is the usual shape: one album, one format, one field.
+    pure callback tag-unsupported-message(string /*fields*/, string /*format*/) -> string;
+    tag-unsupported-message(fields, format) => {
+        return @tr("{} can't be saved to {} files", fields, format);
+    }
+    // Indexed by `TagField::label_index`: `PLAIN_TAG_FIELDS` in order, then the ten credit roles in
+    // `ROLES` order. An inline literal list because `@tr` resolves at codegen and a `[string]`
+    // seeded from Rust would arrive untranslated, so Rust sends indices and reads the labels back.
+    // A label out of order names the wrong field and nothing else would notice, which is what
+    // `tags_tests.rs::the_slint_label_lists_line_up_with_the_rust_order` pins.
+    out property <[string]> tag-field-labels: [
+        @tr("Title"), @tr("Artist"), @tr("Album"), @tr("Album Artist"), @tr("Genre"),
+        @tr("Year"), @tr("Track"), @tr("Track Total"), @tr("Disc"), @tr("Disc Total"),
+        @tr("Original Year"), @tr("BPM"), @tr("Comment"), @tr("Subtitle"), @tr("Disc Subtitle"),
+        @tr("Grouping"), @tr("Work"), @tr("Movement"), @tr("Movement Number"),
+        @tr("Movement Total"), @tr("Key"), @tr("Mood"), @tr("Language"), @tr("ISRC"),
+        @tr("Copyright"), @tr("Record Label"), @tr("Catalog Number"), @tr("Barcode"),
+        @tr("Media"), @tr("Release Type"), @tr("Release Country"), @tr("Compilation"),
+        @tr("Lyrics"), @tr("Rating"), @tr("MusicBrainz Recording ID"),
+        @tr("Composer"), @tr("Lyricist"), @tr("Arranger"), @tr("Conductor"), @tr("Performer"),
+        @tr("Remixer"), @tr("Producer"), @tr("Engineer"), @tr("Mixer"), @tr("DJ Mixer"),
+    ];
     pure callback tag-edit-failed-title() -> string;
     tag-edit-failed-title => {
         return @tr("Couldn't save tags");

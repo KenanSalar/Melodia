@@ -190,7 +190,9 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   MP3 would drop album-artist/composer/BPM/lyrics); BPM writes `IntegerBpm` **and** `Bpm`; **M4A
   `Ilst` flattens every `pic_type` to `Other`**, so `clear_front_cover` must remove *both*
   `CoverFront` and `Other` or Replace/Remove silently revert. Cover picks decode-validate up front, so a corrupt pick fails
-  the batch before any file is touched. After the write it's the scan pipeline: re-extract via
+  the batch before any file is touched — that half is `media/ingest/cover_embed.rs`, which is about
+  pixels where the writer beside it is about keys, and which owns the bounds a picked image is
+  fitted to and the rule that a re-encode may never hand back more bytes than it was given. After the write it's the scan pipeline: re-extract via
   `extract_metadata` (**never hand-build the UPDATE** — a fresh mtime beside a stale hash is the
   one state `track_is_current` can't repair) → `update_track_metadata`. Own writes stay out of the
   watcher via `SelfWrites` (TTL 30 s, `mark` per-file *before* its write). Post-commit refresh is

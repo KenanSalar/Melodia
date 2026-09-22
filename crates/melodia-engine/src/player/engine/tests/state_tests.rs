@@ -1389,6 +1389,91 @@ fn a_stream_that_finished_connecting_too_late_is_refused() {
     assert_eq!(state.station().map(|r| r.name.as_str()), Some("Other FM"));
 }
 
+/// [`tuned_in`] with the directory's word filled in, which is what a station tuned from a row
+/// carries: the column names the container, so an Ogg mount is filed under `OGG` whichever codec
+/// is inside it.
+fn tuned_in_to_a_station_filed_under(codec: &str) -> (PlayerState, u64) {
+    let mut filed = Arc::unwrap_or_clone(station("Example FM"));
+    filed.codec = Some(codec.to_owned());
+
+    let mut state = playing_a_queue();
+    let (generation, _actions) = state.build_station_connecting_actions(Arc::new(filed));
+    (state, generation)
+}
+
+/// The open is the first moment anything knows what an Ogg mount actually holds, and both answers
+/// are kept: a user who filtered on `OGG` and landed on a page reading `OPUS` alone has nothing to
+/// tell them those are the same station.
+#[test]
+fn a_measured_format_lands_on_the_station_already_on_the_bar() {
+    let (mut state, generation) = tuned_in_to_a_station_filed_under("OGG");
+
+    state.adopt_probed_codec(generation, "OPUS");
+
+    assert_eq!(state.station().and_then(|r| r.codec.as_deref()), Some("OGG/OPUS"));
+}
+
+/// An open takes seconds and a click takes none, so a measurement arriving after the user moved on
+/// must not rename whatever they moved to.
+#[test]
+fn a_format_measured_for_a_session_the_user_left_is_refused() {
+    let (mut state, stale) = tuned_in_to_a_station_filed_under("OGG");
+    let (_fresh, _actions) = state.build_station_connecting_actions(station("Other FM"));
+
+    state.adopt_probed_codec(stale, "OPUS");
+
+    assert_eq!(
+        state.station().and_then(|r| r.codec.as_deref()),
+        None,
+        "the newer station was renamed"
+    );
+}
+
+/// The bar already carries whatever the last play measured, so a second play composes against a
+/// composition. The containment arms absorb a repeat, which is what made this look safe: it breaks
+/// only for a station that changed what it serves, and then it names both codecs for one mount.
+#[test]
+fn a_second_play_of_the_same_station_does_not_name_its_format_twice() {
+    let (mut state, generation) = tuned_in_to_a_station_filed_under("OGG");
+
+    state.adopt_probed_codec(generation, "VORBIS");
+    state.adopt_probed_codec(generation, "OPUS");
+
+    assert_eq!(state.station().and_then(|r| r.codec.as_deref()), Some("OGG/OPUS"));
+}
+
+/// Observed as the allocation rather than the value, because the value is unchanged either way:
+/// composing a measurement the bar already carries hands back what it was given, so a test reading
+/// the string cannot see the guard go.
+///
+/// A second holder stands in for the published view model. `Arc::make_mut` copies only where the
+/// handle is shared, which is exactly when the guard is worth having.
+#[test]
+fn a_measurement_that_repeats_what_the_bar_says_pays_for_no_copy() {
+    let (mut state, generation) = tuned_in_to_a_station_filed_under("OGG");
+    state.adopt_probed_codec(generation, "OPUS");
+    let published = state.station().map(Arc::clone);
+
+    state.adopt_probed_codec(generation, "OPUS");
+
+    let held = published.as_ref().map(Arc::as_ptr);
+    assert_eq!(
+        held,
+        state.station().map(Arc::as_ptr),
+        "a repeated measurement rebuilt the station"
+    );
+}
+
+/// A mount whose codec the decoder could not name answers nothing, and nothing is not a format.
+#[test]
+fn an_empty_measurement_is_not_a_format() {
+    let (mut state, generation) = tuned_in_to_a_station_filed_under("OGG");
+
+    state.adopt_probed_codec(generation, "");
+
+    assert_eq!(state.station().and_then(|r| r.codec.as_deref()), Some("OGG"));
+}
+
 #[test]
 fn a_failed_connect_forgets_the_station() {
     let (mut state, generation) = tuned_in();

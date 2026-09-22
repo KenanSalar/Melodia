@@ -1,11 +1,15 @@
 //! Stations projected onto the Slint boundary structs.
 //!
 //! The tree's sixteen other `to_slint_*` converters live beside the view that fills the model,
-//! and these are no different — what is different is the third input on the directory's side. A
-//! browsed card's star and its logo are not facts about the station, they are facts about *this
-//! install*, so both arrive as arguments rather than being looked up here: a converter that
-//! reached for either would need the handle, and the caller already holds both while it walks the
-//! page. A kept station carries them as columns and so needs neither.
+//! and these are no different — what is different is the second input on the directory's side. A
+//! browsed card's star, its logo and the format an open measured are not facts about the station,
+//! they are facts about *this install*, so they arrive as [`LocalAnswers`] rather than being
+//! looked up here: a converter that reached for any of them would need the handle, and the caller
+//! already holds it while it walks the page. A kept station carries all three as columns and so
+//! needs none of them.
+//!
+//! They travel as one struct rather than three arguments because two of them are `Option<&str>`
+//! and nothing but their order would have told them apart.
 
 use slint::{Model, SharedString, VecModel};
 
@@ -103,15 +107,26 @@ fn same_station(a: &RadioStationRow, b: &RadioStationRow) -> bool {
     a.id == b.id && a.uuid == b.uuid
 }
 
-/// One browsed station, with this install's answers about it folded in.
+/// What this install knows about a browsed station that the directory's answer does not carry.
+///
+/// Each field is `None` or `false` for a station this install has never met, which is the common
+/// case on a directory page and the reason none of them is a column.
+#[derive(Default)]
+pub struct LocalAnswers {
+    pub is_favorite: bool,
+    pub logo: Option<String>,
+    pub format: Option<String>,
+}
+
+/// One browsed station, with those answers folded in.
 ///
 /// `id` stays `0`: a directory station has no row until the user keeps or plays it, and that zero
 /// is what every call site taking a whole row branches on.
 pub fn to_slint_radio_station_row(
     station: &DirectoryStation,
-    is_favorite: bool,
-    logo: Option<&str>,
+    local: &LocalAnswers,
 ) -> RadioStationRow {
+    let (logo, format) = (local.logo.as_deref(), local.format.as_deref());
     let tile = identity::station_tile(&station.name);
     RadioStationRow {
         id: 0,
@@ -124,9 +139,9 @@ pub fn to_slint_radio_station_row(
         artwork_path: logo.map(SharedString::from).unwrap_or_default(),
         tags: SharedString::from(display_tags(&station.tags)),
         country: SharedString::from(&station.country),
-        codec: SharedString::from(display_codec(&station.codec, station.hls)),
+        codec: SharedString::from(display_codec(format, &station.codec, station.hls)),
         bitrate: station.bitrate,
-        is_favorite,
+        is_favorite: local.is_favorite,
         // Nothing has been played from the directory: a play writes the row first.
         play_count: 0,
         tile_color_1: tile.color_1,
@@ -142,6 +157,7 @@ pub fn to_slint_radio_station_row(
 /// splits its star and its Edit control on.
 pub fn to_slint_kept_station_row(station: &RadioStation) -> RadioStationRow {
     let tile = identity::station_tile(&station.name);
+    let format = station.format();
     RadioStationRow {
         id: crate::ui::util::clamp_i64_to_i32(station.id),
         uuid: station.station_uuid.as_deref().map(SharedString::from).unwrap_or_default(),
@@ -151,7 +167,7 @@ pub fn to_slint_kept_station_row(station: &RadioStation) -> RadioStationRow {
         artwork_path: station.artwork_path.as_deref().map(SharedString::from).unwrap_or_default(),
         tags: SharedString::from(display_tags(station.genre().unwrap_or_default())),
         country: station.country_name().map(SharedString::from).unwrap_or_default(),
-        codec: SharedString::from(display_codec(&station.codec, station.hls)),
+        codec: SharedString::from(display_codec(format.as_deref(), &station.codec, station.hls)),
         bitrate: station.bitrate,
         is_favorite: station.is_favorite,
         play_count: station.play_count,
@@ -197,12 +213,21 @@ pub fn split_tags(raw: &str) -> Vec<String> {
 /// A blank codec is the same case reached from the other side: a hand-typed segmented station is
 /// described by the segments themselves, and a fragmented-MP4 one carries no elementary stream
 /// this end can name.
-fn display_codec(codec: &str, hls: bool) -> &str {
-    let audio_unidentified = codec
+///
+/// `format` is `RadioStation::format`'s answer, and `None` for a browsed station, which has never
+/// been opened and so has only the directory's word. The segmented test is deliberately asked of
+/// the directory's column rather than of that answer: once a station has played, a probed codec
+/// fills the `UNKNOWN` the test reads, and the row would start naming what is inside the segments
+/// where the useful thing to say is how they arrive.
+fn display_codec<'a>(format: Option<&'a str>, directory: &'a str, hls: bool) -> &'a str {
+    let audio_unidentified = directory
         .split(',')
         .next()
         .is_some_and(|audio| audio.is_empty() || audio.eq_ignore_ascii_case(UNKNOWN_CODEC));
-    if hls && audio_unidentified { facets::SEGMENTED_CODEC_LABEL } else { codec }
+    if hls && audio_unidentified {
+        return facets::SEGMENTED_CODEC_LABEL;
+    }
+    format.unwrap_or(directory)
 }
 
 /// The directory's comma-separated tag field as one display line.

@@ -26,6 +26,7 @@ fn station(name: &str, added: &str, plays: i32, last_played: Option<&str>) -> Ra
         country_code: String::new(),
         language: String::new(),
         codec: String::new(),
+        probed_codec: None,
         bitrate: 0,
         hls: false,
         is_favorite: true,
@@ -174,6 +175,12 @@ fn logo_row(id: i64, uuid: &str, artwork_path: Option<&str>) -> RadioStation {
     station
 }
 
+/// The logo the map holds for `uuid`. Asked per field rather than by map size, the entry itself
+/// standing for either answer a row can carry.
+fn remembered_logo(radio_ui: &RadioUi, uuid: &str) -> Option<String> {
+    radio_ui.kept_answers.lock().get(uuid)?.logo.clone()
+}
+
 /// The map is a projection of the two caches, and the heal is what breaks a copy that isn't.
 ///
 /// A station played out of Browse is kept with no logo, found on its own site a moment later, and
@@ -184,13 +191,13 @@ fn logo_row(id: i64, uuid: &str, artwork_path: Option<&str>) -> RadioStation {
 fn a_logo_found_after_the_refresh_still_reaches_browse() {
     let radio_ui = RadioUi::new(false, None);
     radio_ui.recent.lock().stations = vec![logo_row(7, "uuid-7", None)];
-    remember_logos(&radio_ui);
-    assert!(radio_ui.known_logos.lock().is_empty(), "the row had no logo yet");
+    remember_kept_answers(&radio_ui);
+    assert!(remembered_logo(&radio_ui, "uuid-7").is_none(), "the row had no logo yet");
 
     adopt_logo_path(&radio_ui, 7, "/store/7.png");
-    remember_logos(&radio_ui);
+    remember_kept_answers(&radio_ui);
 
-    assert_eq!(radio_ui.known_logos.lock().get("uuid-7").map(String::as_str), Some("/store/7.png"));
+    assert_eq!(remembered_logo(&radio_ui, "uuid-7").as_deref(), Some("/store/7.png"));
 }
 
 /// The other half, and the one the bug actually lived in: the helper was right and the heal never
@@ -208,7 +215,7 @@ fn every_write_to_the_two_caches_re_derives_the_map() {
             .and_then(|(_, rest)| rest.split_once("\n}\n"))
             .map_or("", |(body, _)| body);
         assert!(
-            body.contains("remember_logos("),
+            body.contains("remember_kept_answers("),
             "`{site}` moves what a row holds, and Browse reads the map rather than the caches"
         );
     }
@@ -226,12 +233,51 @@ fn the_map_spans_both_tabs_and_skips_what_no_directory_page_can_name() {
     }];
     radio_ui.recent.lock().stations = vec![logo_row(3, "uuid-3", Some("/store/3.png"))];
 
-    remember_logos(&radio_ui);
+    remember_kept_answers(&radio_ui);
 
-    let known = radio_ui.known_logos.lock();
-    assert_eq!(known.len(), 2);
-    assert!(known.contains_key("uuid-1"), "a favorite");
-    assert!(known.contains_key("uuid-3"), "and a station only ever played");
+    let answers = radio_ui.kept_answers.lock();
+    assert_eq!(answers.len(), 2);
+    assert!(answers.contains_key("uuid-1"), "a favorite");
+    assert!(answers.contains_key("uuid-3"), "and a station only ever played");
+}
+
+/// The format the map holds for `uuid`, [`remembered_logo`]'s twin.
+fn remembered_format(radio_ui: &RadioUi, uuid: &str) -> Option<String> {
+    radio_ui.kept_answers.lock().get(uuid)?.format.clone()
+}
+
+/// Browse draws what a play measured, so a station that answered a format and never a logo still
+/// has something to hand over. Gated on the logo alone it would be skipped and the browse row
+/// would keep stating the container.
+#[test]
+fn a_row_that_answers_only_a_format_still_earns_an_entry() {
+    let radio_ui = RadioUi::new(false, None);
+    let mut measured = logo_row(1, "uuid-1", None);
+    measured.probed_codec = Some("OPUS".to_owned());
+    radio_ui.kept.lock().stations = vec![measured];
+
+    remember_kept_answers(&radio_ui);
+
+    assert_eq!(remembered_format(&radio_ui, "uuid-1").as_deref(), Some("OPUS"));
+    assert!(remembered_logo(&radio_ui, "uuid-1").is_none(), "it never had a logo to remember");
+}
+
+/// The same station sits in both caches, and the two rows are read from different queries: the
+/// recents projection can carry a measurement where the favorites one carries the logo. Merged per
+/// entry rather than per field, whichever cache is walked last wins outright and the other answer
+/// disappears from Browse.
+#[test]
+fn a_later_row_that_lost_one_answer_does_not_blank_the_other() {
+    let radio_ui = RadioUi::new(false, None);
+    radio_ui.kept.lock().stations = vec![logo_row(1, "uuid-1", Some("/store/1.png"))];
+    let mut only_a_format = logo_row(1, "uuid-1", None);
+    only_a_format.probed_codec = Some("OPUS".to_owned());
+    radio_ui.recent.lock().stations = vec![only_a_format];
+
+    remember_kept_answers(&radio_ui);
+
+    assert_eq!(remembered_logo(&radio_ui, "uuid-1").as_deref(), Some("/store/1.png"));
+    assert_eq!(remembered_format(&radio_ui, "uuid-1").as_deref(), Some("OPUS"));
 }
 
 /// A path the refresh already blanked must not come back through the map — the file is gone, and
@@ -240,12 +286,12 @@ fn the_map_spans_both_tabs_and_skips_what_no_directory_page_can_name() {
 fn a_row_whose_logo_went_missing_contributes_nothing() {
     let radio_ui = RadioUi::new(false, None);
     radio_ui.kept.lock().stations = vec![logo_row(1, "uuid-1", Some("/store/1.png"))];
-    remember_logos(&radio_ui);
-    assert_eq!(radio_ui.known_logos.lock().len(), 1);
+    remember_kept_answers(&radio_ui);
+    assert_eq!(remembered_logo(&radio_ui, "uuid-1").as_deref(), Some("/store/1.png"));
 
     radio_ui.kept.lock().stations = vec![logo_row(1, "uuid-1", None)];
-    remember_logos(&radio_ui);
-    assert!(radio_ui.known_logos.lock().is_empty());
+    remember_kept_answers(&radio_ui);
+    assert!(remembered_logo(&radio_ui, "uuid-1").is_none());
 }
 
 /// What the box can reach. The card shows name, country, codec and tags, and the needle covers
@@ -268,6 +314,30 @@ fn the_needle_reaches_every_field_the_card_draws() {
     assert!(
         !station_matches(&station, &row_match::fold_needle("https")),
         "the stream URL is not on the card and must not be searchable — every station would match"
+    );
+}
+
+/// The card draws what a play measured wherever it has one, so a station the directory files under
+/// `OGG` reads `OGG/OPUS` and the box has to find it by either word.
+///
+/// Matched as the two raw columns rather than through `RadioStation::format`, which would allocate
+/// a composed string per row per keystroke. The cost is the one case below: a needle spanning the
+/// separator names something drawn on the card and still finds nothing.
+#[test]
+fn the_needle_reaches_the_format_a_play_measured() {
+    let mut station = station("Jazz FM", "2026-01-01T00:00:00.000+00:00", 0, None);
+    station.codec = "OGG".to_owned();
+    station.probed_codec = Some("OPUS".to_owned());
+
+    for needle in ["ogg", "opus"] {
+        assert!(
+            station_matches(&station, &row_match::fold_needle(needle)),
+            "{needle:?} is half of what the card draws and must match"
+        );
+    }
+    assert!(
+        !station_matches(&station, &row_match::fold_needle("ogg/opus")),
+        "the columns are matched apart, so a needle spanning the separator cannot land"
     );
 }
 

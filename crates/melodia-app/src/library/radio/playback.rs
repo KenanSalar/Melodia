@@ -9,7 +9,7 @@ use std::sync::Arc;
 use crate::library::playback;
 use crate::state::AppState;
 use melodia_core::entities::radio;
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 use melodia_engine::player::engine::types::RadioNowPlaying;
 use melodia_net::services::net::radio_browser;
 use melodia_store::database::{DbPool, queries};
@@ -19,6 +19,26 @@ use super::{directory_client, ensure_enabled, get_station};
 /// Count a play against a station, which is what orders the recents list.
 pub async fn mark_played(state: &AppState, id: i64) -> Result<(), AppError> {
     queries::radio::mark_played(&state.db, id).await
+}
+
+/// Write down what the mount that just opened actually serves, where it says anything.
+///
+/// The open is the only moment that answer exists. The directory's `codec` column names the
+/// container, so an Ogg station reads `OGG` whether it carries Vorbis, Opus or FLAC, and the
+/// response's content type says the same; the decoder is what can tell them apart. It lands in
+/// `probed_codec` rather than over the directory's own column, which a re-import rewrites.
+///
+/// **Last, once the stream is playing.** It is a write-pool `UPDATE`, so anywhere earlier it sits
+/// between the open and the first sample behind whatever else holds that pool. Failure is logged
+/// and swallowed: a display string is not worth ending a tune over. `station_id` is `0` for a
+/// station with no row of its own, which would match nothing.
+pub async fn record_probed_codec(db: &DbPool, station: &RadioNowPlaying, codec: &str) {
+    if codec.is_empty() || station.station_id == 0 {
+        return;
+    }
+    if let Err(e) = queries::radio::set_probed_codec(db, station.station_id, codec).await {
+        log::warn!("Could not record {}'s format: {}", station.name, describe(&e));
+    }
 }
 
 /// Tune to a stored station, counting the play ahead of the connect.

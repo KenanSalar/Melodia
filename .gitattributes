@@ -47,6 +47,7 @@ crates/melodia-app/src/services/updater/tests/fixtures/*.json -text -merge
 *.aac  binary
 *.ogg  binary
 *.oga  binary
+*.opus binary
 *.wav  binary
 *.aif  binary
 *.aiff binary

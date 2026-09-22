@@ -5,7 +5,7 @@ use reqwest::Url;
 use crate::player::source::prebuffer::{PrebufferSource, StreamShared};
 use crate::player::source::stream_source::{
     ABANDON_POLL, PREFETCH_FALLBACK_BYTES, PREFETCH_MAX_BYTES, PREFETCH_MIN_BYTES,
-    PREFETCH_SECONDS, RECONNECT_ATTEMPTS, RECONNECT_MAX_DELAY, first_stream_url,
+    PREFETCH_SECONDS, RECONNECT_ATTEMPTS, RECONNECT_MAX_DELAY, codec_token, first_stream_url,
     is_playlist_content_type, is_playlist_url, prefetch_bytes, reconnect_delay,
     sleep_unless_abandoned,
 };
@@ -241,4 +241,35 @@ fn the_prefetch_is_two_seconds_of_audio_between_its_floor_and_its_ceiling() {
 
     // The unclamped middle really is the stated number of seconds.
     assert_eq!(prefetch_bytes(Some(320)), 320 * 1_000 / 8 * PREFETCH_SECONDS);
+}
+
+/// The decoder's answer, in the spelling the directory files stations under.
+///
+/// Three MPEG layers collapse onto one token because a listener reading a card does not
+/// distinguish them and the directory does not either. The fall-through is the load-bearing arm:
+/// it leaves the content type's word standing rather than blanking it, which is what keeps a PCM
+/// mount reading `WAV` instead of naming one of a dozen width-and-layout ids.
+#[test]
+fn every_codec_a_station_can_serve_carries_a_token_of_its_own() {
+    use symphonia::core::codecs::audio::well_known::{
+        CODEC_ID_AAC, CODEC_ID_ALAC, CODEC_ID_FLAC, CODEC_ID_MP1, CODEC_ID_MP2, CODEC_ID_MP3,
+        CODEC_ID_OPUS, CODEC_ID_PCM_ALAW, CODEC_ID_PCM_MULAW, CODEC_ID_VORBIS,
+    };
+
+    let cases = [
+        ("MPEG layer I", CODEC_ID_MP1, Some("MP3")),
+        ("MPEG layer II", CODEC_ID_MP2, Some("MP3")),
+        ("MPEG layer III", CODEC_ID_MP3, Some("MP3")),
+        ("AAC", CODEC_ID_AAC, Some("AAC")),
+        ("Vorbis", CODEC_ID_VORBIS, Some("VORBIS")),
+        ("Opus", CODEC_ID_OPUS, Some("OPUS")),
+        ("FLAC", CODEC_ID_FLAC, Some("FLAC")),
+        ("ALAC", CODEC_ID_ALAC, Some("ALAC")),
+        ("A-law PCM", CODEC_ID_PCM_ALAW, None),
+        ("mu-law PCM", CODEC_ID_PCM_MULAW, None),
+    ];
+
+    for (what, codec, expected) in cases {
+        assert_eq!(codec_token(codec), expected, "{what}");
+    }
 }

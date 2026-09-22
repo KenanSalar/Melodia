@@ -55,6 +55,9 @@ export component TagEditorBody inherits HorizontalLayout {
     // indexes `role-names` by position, so a label out of order files a conductor as a producer.
     // An inline literal list because `@tr` resolves at codegen: a `[string]` seeded from Rust
     // renders whatever Rust pushed, untranslated.
+    //
+    // `tags_tests.rs::the_slint_label_lists_line_up_with_the_rust_order` holds this against
+    // `settings.slint`'s `tag-field-labels`, which claims the same order from the other side.
     private property <[string]> role-labels: [
         @tr("Composer"), @tr("Lyricist"), @tr("Arranger"), @tr("Conductor"), @tr("Performer"),
         @tr("Remixer"), @tr("Producer"), @tr("Engineer"), @tr("Mixer"), @tr("DJ Mixer"),
@@ -208,7 +211,7 @@ export component TagEditorBody inherits HorizontalLayout {
             }
 
             // Every role gets a box even where the format has no key for it — the writer reports
-            // those back through `UnsupportedFields` rather than the form hiding them per file,
+            // those back through `WriteOutcome` rather than the form hiding them per file,
             // which over a mixed selection could only ever be wrong for some of it.
             if TagEditor.active-tab == TagEditor.tab-credits: DialogScrollPane {
                 width: 100%;

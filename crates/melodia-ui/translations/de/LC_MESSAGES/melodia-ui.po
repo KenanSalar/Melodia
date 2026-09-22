@@ -510,9 +510,6 @@ msgstr "Stil der Dekorationsschaltflächen"
 msgid "Decoration Button Side"
 msgstr "Seite der Dekorationsschaltflächen"
 
-msgid "Standard"
-msgstr "Standard"
-
 msgid "Right"
 msgstr "Rechts"
 
@@ -2270,3 +2267,23 @@ msgstr "Bild bearbeiten"
 
 msgid "Apply"
 msgstr "Anwenden"
+
+# ---- Tag-edit completion toast: the fields a container had no key for -------
+
+msgid "Track Total"
+msgstr "Titel gesamt"
+
+msgid "Disc Total"
+msgstr "Discs gesamt"
+
+msgid "Movement Number"
+msgstr "Satznummer"
+
+msgid "Movement Total"
+msgstr "Sätze gesamt"
+
+msgid "MusicBrainz Recording ID"
+msgstr "MusicBrainz-Aufnahme-ID"
+
+msgid "{} can't be saved to {} files"
+msgstr "{} kann nicht in {}-Dateien gespeichert werden"

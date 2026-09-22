@@ -1,5 +1,5 @@
-//! The primitives every image path shares: one bounded decode, one resize, and the gate that
-//! keeps two oversized decodes off the heap at once.
+//! The primitives every image path shares: one bounded decode, one resize, one JPEG encode, and
+//! the gate that keeps two oversized decodes off the heap at once.
 //!
 //! Cover art reaches the app from files the user didn't write, so every decode has
 //! to be bounded before it runs: a forged dimension header in a tag can ask for
@@ -8,7 +8,7 @@
 //! preamble — open, guess the format, apply the limits, decode — belongs in front of
 //! every decode in the tree, and this is the single copy of it.
 //!
-//! [`capped_limits`] is for the one decode that can't use it: `tag_writer` reads a
+//! [`capped_limits`] is for the one decode that can't use it: `cover_embed` reads a
 //! picked cover from memory, so it builds its own reader and takes only the bound.
 //! It needs the guessed [`image::ImageFormat`] back and reports which step failed,
 //! neither of which survives the `Option` [`decode_memory_capped`] returns.
@@ -24,7 +24,8 @@
 //! dominant per-cover cost, and one copy is what makes swapping it a single edit.
 //! **It takes a target and computes none.** What shape a cover ends up is a question
 //! each tier answers differently, so it stays at the call site; [`fit_within`] is the
-//! one piece of that arithmetic more than one of them needed.
+//! one piece of that arithmetic more than one of them needed. [`encode_jpeg`] is the
+//! step after it, shared on the same argument.
 //!
 //! [`large_decode_guard`] is shared for the reason the bound above is: what it holds down is
 //! process RSS, so a second copy beside it would cap its own half and leave the sum free.
@@ -148,7 +149,7 @@ fn short_edge_request(width: u16, height: u16, target: u32) -> u16 {
 
 /// [`decode_capped`] for bytes already in hand, for the store's own normalizer.
 ///
-/// `tag_writer` still builds its own reader rather than calling this: it needs the guessed
+/// `cover_embed` still builds its own reader rather than calling this: it needs the guessed
 /// [`image::ImageFormat`] back and reports which step failed, neither of which survives an
 /// `Option`.
 pub fn decode_memory_capped(bytes: &[u8], max_dim: u32) -> Option<DynamicImage> {
@@ -228,6 +229,22 @@ pub fn resize_rgb8_image(
         })
         .ok()?;
     Some(dst)
+}
+
+/// `source` as JPEG bytes at `quality`.
+///
+/// Shared for the same reason [`resize_rgb8`] is: both writers that produce a JPEG in memory sit
+/// behind a resize, so a difference in how they encode is a difference between the cover the store
+/// caches and the cover written into the user's file. The quality stays the caller's, each of them
+/// buying something different with it.
+///
+/// Returns `image`'s own error rather than an `Option`: one caller reports which step failed and
+/// the other only wants to know that one did.
+pub fn encode_jpeg(source: RgbImage, quality: u8) -> image::ImageResult<Vec<u8>> {
+    let mut encoded = Vec::new();
+    let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut encoded, quality);
+    DynamicImage::ImageRgb8(source).write_with_encoder(encoder)?;
+    Ok(encoded)
 }
 
 /// Ceiling on the scratch a thread's resampler may keep between calls.

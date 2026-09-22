@@ -515,9 +515,6 @@ msgstr "Pencere düğmeleri stili"
 msgid "Decoration Button Side"
 msgstr "Pencere düğmeleri tarafı"
 
-msgid "Standard"
-msgstr "Standart"
-
 msgid "Right"
 msgstr "Sağ"
 
@@ -2272,3 +2269,23 @@ msgstr "Görseli düzenle"
 
 msgid "Apply"
 msgstr "Uygula"
+
+# ---- Tag-edit completion toast: the fields a container had no key for -------
+
+msgid "Track Total"
+msgstr "Toplam parça"
+
+msgid "Disc Total"
+msgstr "Toplam disk"
+
+msgid "Movement Number"
+msgstr "Bölüm numarası"
+
+msgid "Movement Total"
+msgstr "Toplam bölüm"
+
+msgid "MusicBrainz Recording ID"
+msgstr "MusicBrainz Kayıt Kimliği"
+
+msgid "{} can't be saved to {} files"
+msgstr "{} {} dosyalarına kaydedilemiyor"

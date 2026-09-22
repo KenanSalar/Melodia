@@ -180,10 +180,7 @@ fn each_format_names_exactly_the_roles_it_has_no_key_for() {
     let table = [
         (TagType::VorbisComments, &[][..]),
         (TagType::Mp4Ilst, &["arranger", "performer"][..]),
-        (
-            TagType::Id3v2,
-            &["arranger", "producer", "engineer", "mixer", "dj_mixer", "performer"][..],
-        ),
+        (TagType::Id3v2, &["performer"][..]),
     ];
 
     for (tag_type, expected) in table {

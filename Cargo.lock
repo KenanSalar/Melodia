@@ -760,7 +760,7 @@ checksum = "46d07918caa9eeaaf06b7873925c53a61daac173539b4f7715090745e44e4e69"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.2",
+ "syn 3.0.6",
 ]
 
 [[package]]
@@ -1346,9 +1346,9 @@ checksum = "0c87e182de0887fd5361989c677c4e8f5000cd9491d6d563161a8f3a5519fc7f"
 
 [[package]]
 name = "data-encoding"
-version = "2.11.0"
+version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4ae5f15dda3c708c0ade84bfee31ccab44a3da4f88015ed22f63732abe300c8"
+checksum = "4583a4551df46e2792f82ceeac45e850d2e2d5debba0b91f102385cda5b11f06"
 
 [[package]]
 name = "data-url"
@@ -1584,7 +1584,7 @@ dependencies = [
  "enum-ordinalize",
  "proc-macro2",
  "quote",
- "syn 3.0.2",
+ "syn 3.0.6",
 ]
 
 [[package]]
@@ -1619,7 +1619,7 @@ checksum = "a65863d15a4ce2888bd2f0f543cc963d3879c3a022c8ee43f6141d479a3ac815"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.2",
+ "syn 3.0.6",
 ]
 
 [[package]]
@@ -1733,7 +1733,7 @@ dependencies = [
  "bit_field",
  "half",
  "lebe",
- "miniz_oxide",
+ "miniz_oxide 0.8.9",
  "rayon-core",
  "smallvec",
  "zune-inflate",
@@ -1837,12 +1837,13 @@ checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 
 [[package]]
 name = "flate2"
-version = "1.1.9"
+version = "1.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "843fba2746e448b37e26a819579957415c8cef339bf08564fe8b7ddbd959573c"
+checksum = "6e634e2e0ebac1ee034020da1ca582e17ffe4e0f5e985823721e168928136dcb"
 dependencies = [
  "crc32fast",
- "miniz_oxide",
+ "miniz_oxide 0.9.1",
+ "zlib-rs",
 ]
 
 [[package]]
@@ -3503,9 +3504,9 @@ dependencies = [
 
 [[package]]
 name = "lofty"
-version = "0.24.0"
+version = "0.25.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dec4feeff6c7d75093278133a06e827d7af6d2bfe20b0f331f9d10338a5ec7ca"
+checksum = "bb21dd79145b0781f2423fda92dd807fcd3911e44b66044d86db3b11ec7accf9"
 dependencies = [
  "byteorder",
  "data-encoding",
@@ -3518,20 +3519,20 @@ dependencies = [
 
 [[package]]
 name = "lofty_attr"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "458ace39169e4b83c4f77ae3d42d5d1d11c422feef590219a97c973d3b524557"
+checksum = "fdbca1b60ba7cea959ffc84ac27f3dbdbacd6dfda168c7eabbc00e48654bb9fd"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.118",
+ "syn 3.0.6",
 ]
 
 [[package]]
 name = "log"
-version = "0.4.33"
+version = "0.4.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
+checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
 name = "loop9"
@@ -3658,7 +3659,7 @@ checksum = "0695a693e38d35838dd34bc3ab19911395f6837ccf55c7271189cfb12cb8b57f"
 
 [[package]]
 name = "melodia"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "async-compat",
  "glob",
@@ -3684,7 +3685,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-app"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "async-compat",
  "blake3",
@@ -3731,7 +3732,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-artwork"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "blake3",
  "color-thief",
@@ -3752,7 +3753,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-audio"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "icy-metadata",
  "lofty",
@@ -3760,6 +3761,7 @@ dependencies = [
  "melodia-core",
  "melodia-net",
  "melodia-testkit",
+ "opus-pure",
  "parking_lot",
  "reqwest",
  "stream-download",
@@ -3771,7 +3773,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-core"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "chrono",
  "dirs",
@@ -3790,7 +3792,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-engine"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "log",
  "melodia-audio",
@@ -3807,7 +3809,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-integrations"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "log",
  "lru",
@@ -3830,7 +3832,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-net"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "blake3",
  "futures-util",
@@ -3849,7 +3851,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-platform"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "blake3",
  "chrono",
@@ -3874,7 +3876,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-playback"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "biquad",
  "cpal",
@@ -3889,7 +3891,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-store"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "blake3",
  "chrono",
@@ -3913,7 +3915,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-testkit"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "image",
  "tempfile",
@@ -3921,7 +3923,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-ui"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "slint",
  "slint-build",
@@ -3929,7 +3931,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-views"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "async-compat",
  "chrono",
@@ -3997,6 +3999,16 @@ name = "miniz_oxide"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fa76a2c86f704bdb222d66965fb3d63269ce38518b83cb0575fca855ebb6316"
+dependencies = [
+ "adler2",
+ "simd-adler32",
+]
+
+[[package]]
+name = "miniz_oxide"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b63fbc4a50860e98e7b2aa7804ded1db5cbc3aff9193adaff57a6931bf7c4b4c"
 dependencies = [
  "adler2",
  "simd-adler32",
@@ -4780,6 +4792,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
+name = "opus-pure"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de6a3cef053e1fdea38a5e50edb0789590a31184c5a59f6cd5e462fe844793e7"
+
+[[package]]
 name = "orbclient"
 version = "0.3.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5023,7 +5041,7 @@ dependencies = [
  "crc32fast",
  "fdeflate",
  "flate2",
- "miniz_oxide",
+ "miniz_oxide 0.8.9",
 ]
 
 [[package]]
@@ -5036,7 +5054,7 @@ dependencies = [
  "crc32fast",
  "fdeflate",
  "flate2",
- "miniz_oxide",
+ "miniz_oxide 0.8.9",
 ]
 
 [[package]]
@@ -5170,7 +5188,7 @@ checksum = "1c8d9ca532f185d5d4db7a7c9d51420b452168ea1c2b913953281bd6fe1fcbd0"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.2",
+ "syn 3.0.6",
 ]
 
 [[package]]
@@ -5741,7 +5759,7 @@ checksum = "1c25ef604ac7dd839d44d64648952ea23c97866f124ff671b0ed2cf3ad9bb06e"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.2",
+ "syn 3.0.6",
 ]
 
 [[package]]
@@ -6049,7 +6067,7 @@ checksum = "e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.2",
+ "syn 3.0.6",
 ]
 
 [[package]]
@@ -6982,9 +7000,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "3.0.2"
+version = "3.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a207d6d6a2b7fc470b80443726053f18a2481b7e1eee970597051596567987a3"
+checksum = "8593e8e72159ed2257d083c7a454a85cbf854f37a0966d8d483aff8c8a3ebcee"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -7111,7 +7129,7 @@ checksum = "43cbfe0cf76104d42a574802844187e84a305e531ed54455f11fbde0f10541cd"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.2",
+ "syn 3.0.6",
 ]
 
 [[package]]
@@ -8112,7 +8130,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -9134,6 +9152,12 @@ dependencies = [
  "memchr",
  "typed-path",
 ]
+
+[[package]]
+name = "zlib-rs"
+version = "0.6.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b268e58e7c693d7c271f93ffc4ba3b380412554231c85bf61ca7af91042a4112"
 
 [[package]]
 name = "zmij"

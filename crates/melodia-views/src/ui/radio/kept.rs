@@ -12,6 +12,7 @@
 //! accent-folded, which is right for matching and wrong for the box: reseating from it would put
 //! a lowercased, unaccented spelling of what the user typed back in front of them.
 
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -26,6 +27,7 @@ use melodia_app::state::AppState;
 use melodia_core::entities::radio::RadioStation;
 use melodia_ui::{AppWindow, Radio, RadioStationGridRow};
 
+use super::state::KeptAnswers;
 use super::{RadioTab, RadioUi, covers, mounted_tab, rows};
 
 /// One local list: what was fetched, and what the box has narrowed it to.
@@ -51,6 +53,10 @@ impl KeptState {
 /// Through the resolvers, so the box searches what the card draws: a genre the user typed over a
 /// blank directory entry is on screen, and a directory value an override replaced is not.
 ///
+/// **Format is the one read as its two columns instead**, [`RadioStation::format`] composing a
+/// `String` where this runs per row per keystroke. What that gives up is a needle spanning the
+/// separator, which is nothing a user types looking for a station.
+///
 /// **Bitrate is `Option` here because `0` is the directory saying it does not know**, not a
 /// station that streams at zero, and a large share of live rows carry it — matched raw, the needle
 /// `0` would select all of them. It is also the one field matched whole rather than as a
@@ -62,6 +68,7 @@ fn station_matches(station: &RadioStation, needle: &Needle) -> bool {
         || needle.contains(station.country_name().unwrap_or_default())
         || needle.contains(&station.language)
         || needle.contains(&station.codec)
+        || needle.contains(station.probed_codec.as_deref().unwrap_or_default())
         || needle.equals_number((station.bitrate > 0).then_some(station.bitrate))
 }
 
@@ -273,7 +280,7 @@ pub fn refresh(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
         *ru.starred.lock() = starred;
         ru.kept.lock().stations = favorites;
         ru.recent.lock().stations = recent;
-        remember_logos(&ru);
+        remember_kept_answers(&ru);
 
         paint_mounted(&weak, &ru);
         if let Some(tab) = mounted {
@@ -283,25 +290,43 @@ pub fn refresh(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     });
 }
 
-/// Re-derive the uuid-keyed logos Browse falls back on, from whatever the two caches now hold.
+/// Re-derive the two uuid-keyed maps Browse falls back on, from whatever the two caches now hold.
 ///
-/// **Off the caches rather than off the rows a caller has in hand**, so the map cannot describe a
+/// **Off the caches rather than off the rows a caller has in hand**, so the maps cannot describe a
 /// list that has since moved: the bulk refresh and a landed heal both change what a row holds, and
 /// a partial update is exactly Browse painting a monogram beside a tab drawing the real thing.
 ///
 /// Both lists, since a station can be in either — a played-but-unstarred station is as likely to
 /// come back in a directory page as a favorite. One the user typed in carries no uuid and no page
 /// can name it, so it contributes nothing.
-fn remember_logos(radio_ui: &RadioUi) {
-    let mut logos = HashMap::new();
+///
+/// One pass for both, the second map having the same key, the same source rows and the same
+/// staleness to avoid.
+fn remember_kept_answers(radio_ui: &RadioUi) {
+    let mut answers: HashMap<String, KeptAnswers> = HashMap::new();
     for cache in [&radio_ui.kept, &radio_ui.recent] {
         for station in &cache.lock().stations {
-            if let (Some(uuid), Some(path)) = (&station.station_uuid, &station.artwork_path) {
-                logos.insert(uuid.clone(), path.clone());
+            let Some(uuid) = &station.station_uuid else {
+                continue;
+            };
+            let format = station.format().map(Cow::into_owned);
+            // No entry for a row that answered neither, so presence in the map still means the
+            // station told Browse something.
+            if station.artwork_path.is_none() && format.is_none() {
+                continue;
+            }
+            // Per field rather than per entry: the same station can sit in both caches, and a
+            // later row that lost one answer must not blank the other's.
+            let answer = answers.entry(uuid.clone()).or_default();
+            if let Some(path) = &station.artwork_path {
+                answer.logo = Some(path.clone());
+            }
+            if format.is_some() {
+                answer.format = format;
             }
         }
     }
-    *radio_ui.known_logos.lock() = logos;
+    *radio_ui.kept_answers.lock() = answers;
 }
 
 /// Drop artwork paths whose file is gone, so the row says what is actually drawable.
@@ -360,9 +385,9 @@ async fn heal_logos(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak<AppWi
         landed = true;
     }
     if landed {
-        // Browse draws from the map, not from the caches, so it has to be re-derived here too —
-        // this is the one path that finds a logo *after* the refresh built it.
-        remember_logos(radio_ui);
+        // Browse draws from the maps, not from the caches, so they have to be re-derived here too
+        // — this is the one path that finds a logo *after* the refresh built them.
+        remember_kept_answers(radio_ui);
         // Both grids, because a heal moves both: the row's own `artwork_path`, and the uuid-keyed
         // map a browsed card reads. Only the paths moved, so each `apply` patches rather than
         // resetting, which is what lets this land under a pointer that is mid-click.

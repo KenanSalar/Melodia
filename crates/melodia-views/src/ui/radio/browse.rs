@@ -25,6 +25,7 @@ use melodia_core::entities::radio::{
 };
 use melodia_ui::{AppWindow, Radio, RadioStationGridRow};
 
+use super::state::KeptAnswers;
 use super::{RadioUi, covers, logos, rows};
 
 /// Everything loaded for the query currently on screen.
@@ -142,7 +143,8 @@ pub fn query(radio_ui: &RadioUi) -> StationSearch {
 pub fn resolve(radio_ui: &RadioUi, uuid: &str) -> Option<(DirectoryStation, Option<String>)> {
     let browse = radio_ui.browse.lock();
     let station = browse.stations.iter().find(|station| station.station_uuid == uuid)?.clone();
-    let logo = logo_for(radio_ui, &station);
+    let kept = radio_ui.kept_answers.lock();
+    let logo = logo_for(radio_ui, kept.get(&station.station_uuid), &station);
     Some((station, logo))
 }
 
@@ -154,13 +156,33 @@ pub fn resolve(radio_ui: &RadioUi, uuid: &str) -> Option<(DirectoryStation, Opti
 /// found on its own site has a row and can have no memo entry, and one inside a backoff has a memo
 /// entry of `None`. Either way the two local tabs paint it and Browse was painting a monogram.
 /// Last is what a narrow search discovered on the site of a station that has no row yet.
-fn logo_for(radio_ui: &RadioUi, station: &DirectoryStation) -> Option<String> {
+///
+/// `kept` is that row's answers, looked up by the caller: three of the four sites walk a whole
+/// page, and reaching for the lock in here would take it once per station rather than once per
+/// pass.
+fn logo_for(
+    radio_ui: &RadioUi,
+    kept: Option<&KeptAnswers>,
+    station: &DirectoryStation,
+) -> Option<String> {
     station
         .favicon_url
         .as_deref()
         .and_then(|url| radio_ui.logos.path_for(url))
-        .or_else(|| radio_ui.known_logos.lock().get(&station.station_uuid).cloned())
+        .or_else(|| kept?.logo.clone())
         .or_else(|| site_logo(radio_ui, station))
+}
+
+/// The format a browsed station is drawn with, preferring what an open measured over what the
+/// directory files it under.
+///
+/// A directory row carries the container and nothing else, so a station the user has already
+/// played would read `OGG` here while both local tabs read `OGG/VORBIS`. Only a station with a
+/// local row has an answer, which is the set the map holds.
+///
+/// [`logo_for`]'s `kept`, and the same lookup answers both.
+pub(super) fn format_for(kept: Option<&KeptAnswers>) -> Option<String> {
+    kept?.format.clone()
 }
 
 /// What this session read off the station's own site, for a row the directory gave no usable
@@ -183,16 +205,18 @@ pub fn apply(ui: &AppWindow, radio_ui: &RadioUi) {
     let (station_rows, has_more) = {
         let browse = radio_ui.browse.lock();
         let starred = radio_ui.starred.lock();
+        let kept = radio_ui.kept_answers.lock();
         let station_rows: Vec<_> = browse
             .stations
             .iter()
             .map(|station| {
-                let logo = logo_for(radio_ui, station);
-                rows::to_slint_radio_station_row(
-                    station,
-                    starred.contains(&station.station_uuid),
-                    logo.as_deref(),
-                )
+                let answers = kept.get(&station.station_uuid);
+                let local = rows::LocalAnswers {
+                    is_favorite: starred.contains(&station.station_uuid),
+                    logo: logo_for(radio_ui, answers, station),
+                    format: format_for(answers),
+                };
+                rows::to_slint_radio_station_row(station, &local)
             })
             .collect();
         (station_rows, browse.has_more)
@@ -376,10 +400,13 @@ async fn discover_page(
 ) -> bool {
     let sites: Vec<(String, String)> = {
         let browse = radio_ui.browse.lock();
+        let kept = radio_ui.kept_answers.lock();
         browse
             .stations
             .iter()
-            .filter(|station| logo_for(radio_ui, station).is_none())
+            .filter(|station| {
+                logo_for(radio_ui, kept.get(&station.station_uuid), station).is_none()
+            })
             .map(|station| {
                 (station.homepage.clone().unwrap_or_default(), station.stream_url.clone())
             })
@@ -426,11 +453,13 @@ async fn warm_page(
     // reached it either way — nothing here regresses, it just doesn't improve.
     let (favicon_urls, effort) = {
         let browse = radio_ui.browse.lock();
-        let known = radio_ui.known_logos.lock();
+        let known = radio_ui.kept_answers.lock();
         let urls: Vec<String> = browse
             .stations
             .iter()
-            .filter(|station| !known.contains_key(&station.station_uuid))
+            .filter(|station| {
+                known.get(&station.station_uuid).is_none_or(|kept| kept.logo.is_none())
+            })
             .filter_map(|station| station.favicon_url.clone())
             .collect();
         (urls, logos::Effort::for_result(fresh, browse.stations.len()))
@@ -465,7 +494,12 @@ async fn warm_page(
 
     let artwork_paths: Vec<String> = {
         let browse = radio_ui.browse.lock();
-        browse.stations.iter().filter_map(|station| logo_for(radio_ui, station)).collect()
+        let kept = radio_ui.kept_answers.lock();
+        browse
+            .stations
+            .iter()
+            .filter_map(|station| logo_for(radio_ui, kept.get(&station.station_uuid), station))
+            .collect()
     };
 
     let ru = radio_ui.clone();

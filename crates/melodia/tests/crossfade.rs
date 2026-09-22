@@ -70,9 +70,18 @@ const _: () = assert!(
 /// is cheap enough that two seconds of audio retires in tens of milliseconds,
 /// so on a contended runner a frame budget expires before the thread it waits
 /// for is ever scheduled. Wide because the only thing past it is a hang, and
-/// safe to be wide only because [`pull_until`] yields rather than spinning the
-/// six-second fixtures dry.
+/// safe to be wide only because [`pull_until`] pulls at a device's rate rather
+/// than spinning the six-second fixtures dry.
 const CONTROL_OP_BUDGET: Duration = Duration::from_secs(5);
+
+/// How much audio one turn of [`pull_until`]'s wait takes, and the wall clock it takes it over.
+///
+/// The wait has to keep pulling, the op landing in the deck's callback and this thread being it.
+/// But a free-running puller retires seconds of audio in the millisecond the other thread takes to
+/// be scheduled, and a deck drained in that window is one `seek` declines to touch, which reads at
+/// the assertion as a fade left stranded rather than as the fixture run dry. Holding the turns to
+/// the rate a device would ask at is what keeps [`CONTROL_OP_BUDGET`] inside the fixtures.
+const WAIT_TURN_MS: u64 = 1;
 
 fn frames_for_ms(ms: u64) -> usize {
     let ms = usize::try_from(ms).unwrap_or(0);
@@ -167,13 +176,18 @@ fn pull_lenient(src: &mut MixerPull, frames: usize) {
 /// *leniently*, whatever is landing being a transition by definition; a caller
 /// asserts [`pull`]'s steady-state coupling after this returns, not during it.
 fn pull_until(src: &mut MixerPull, what: &str, mut done: impl FnMut() -> bool) {
-    let deadline = Instant::now() + CONTROL_OP_BUDGET;
+    let started = Instant::now();
+    let mut next_turn = started;
     while !done() {
-        assert!(Instant::now() < deadline, "{what}");
-        pull_lenient(src, 64);
-        // The op is runnable once the pull has serviced it, so give it a core: on a
-        // contended runner an unyielding puller is what it waits behind.
-        std::thread::yield_now();
+        assert!(started.elapsed() < CONTROL_OP_BUDGET, "{what}");
+        if Instant::now() < next_turn {
+            // The op is runnable once the pull has serviced it, so give it a core: on a
+            // contended runner an unyielding puller is what it waits behind.
+            std::thread::yield_now();
+            continue;
+        }
+        pull_lenient(src, frames_for_ms(WAIT_TURN_MS));
+        next_turn += Duration::from_millis(WAIT_TURN_MS);
     }
 }
 

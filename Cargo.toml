@@ -19,7 +19,7 @@ exclude = ["winit"]
 # `build-{rpm,appimage,tarball}.sh`) anchor on this table by name and take the
 # first `version = ` inside it, so that entry stays first.
 [workspace.package]
-version = "0.16.0"
+version = "0.17.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 # Lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
@@ -121,6 +121,11 @@ symphonia = { version = "0.6.1", default-features = false, features = [
     "id3v1",
     "id3v2",
 ] }
+# Symphonia ships no Opus decoder and no feature for one, so `player::source::opus` is a
+# registration into `decode::CODECS` over this. Pure Rust with no dependencies and no
+# `build.rs`: the libopus adapter would put CMake and a vendored C build in ten release slots
+# for a decoder that measured no better here.
+opus-pure = "0.2.1"
 # The graphic EQ cascades this crate's `Type::PeakingEQ` filters. `DirectForm1` keeps
 # its delay line across a coefficient swap, so a slider drag injects no transient.
 biquad = "0.6.0"
@@ -130,10 +135,14 @@ biquad = "0.6.0"
 realfft = "3.5.0"
 
 # Library scan and indexing
-lofty = "0.24.0"
+# 0.25 is a floor: `ItemKey::R128{Track,Album}Gain` is what lets an Opus file's loudness tag reach
+# `media::ingest::metadata` through the same `ItemKey` path as every other format's. Below it the
+# key is unmapped, and `VorbisComments::split_tag` leaves an unmapped key in the remainder, which
+# never becomes part of the `TaggedFile` a scan reads.
+lofty = "0.25.4"
 walkdir = "2.5"
 notify = "8.2.0"
-notify-debouncer-full = "0.7"
+notify-debouncer-full = "0.7.0"
 rayon = "1.12"
 blake3 = "1.8.5"
 natord = "1.0.9"

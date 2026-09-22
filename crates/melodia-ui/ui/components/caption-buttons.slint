@@ -12,9 +12,10 @@ export enum CaptionStyle { standard, kde }
 // brushes to flash the theme's danger red. Bespoke rather than an `IconButton`, whose glyph is a font
 // icon: these are drawn.
 //
-// The standard cell and glyph follow Windows 11's caption buttons: 46 × 32, with a 10 px glyph of 1 px
-// strokes. The glyphs are drawn because Segoe Fluent Icons isn't ours to ship, and Material Symbols'
-// window icons have proportions of their own, `minimize` sitting on the baseline like an underscore.
+// The standard cell, glyph and hover fill follow Windows 11's caption buttons: 46 × 32, filled edge
+// to edge under the pointer, with a 10 px glyph of 1 px strokes. The glyphs are drawn because Segoe
+// Fluent Icons isn't ours to ship, and Material Symbols' window icons have proportions of their own,
+// `minimize` sitting on the baseline like an underscore.
 //
 // The KDE style follows Breeze's decoration at its default button size (`breezebutton.cpp`): chevrons
 // for minimize and maximize, a diamond for restore, and under the pointer an 18 px disc in the
@@ -61,22 +62,14 @@ export component CaptionButton inherits Rectangle {
     property <float> hover-t: touch.has-hover ? 1.0 : 0.0;
     animate hover-t { duration: Theme.dur-fast; easing: ease-in-out; }
 
-    // A standard fill is inset inside the cell, so the click target stays wide for aim while the
-    // painted highlight reads lighter than the full button would. A KDE disc is the glyph box.
+    // A standard fill is the whole cell, square, as Windows paints its captions: close runs into the
+    // window's corner and the shell's clip is what rounds it there. A KDE disc is the glyph box.
     Rectangle {
-        width: root.kde ? root.glyph-size : parent.width - 8px;
-        height: root.kde ? root.glyph-size : parent.height - 8px;
+        width: root.kde ? root.glyph-size : parent.width;
+        height: root.kde ? root.glyph-size : parent.height;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
-        // The standard fill tracks the window's outer radius, so every button reads as matched to
-        // the outline: the close button at the corner is genuinely concentric with the window's arc,
-        // and the other two take the same value. Floored at 0 for the Square preset, and only the
-        // preset chips populate `shell-radius`, so the subtraction never needs a piecewise floor.
-        // Maximized falls back to a pill — the outline goes square there, and 0 reads too sharp on
-        // a button.
-        border-radius: root.kde
-            ? self.width / 2
-            : WindowChrome.is-maximized ? 6px : max(0px, Theme.shell-radius - 4px);
+        border-radius: root.kde ? self.width / 2 : 0px;
         // Breeze steps into and out of the press, easing only the hover.
         background: root.kde && touch.pressed
             ? root.pressed-bg

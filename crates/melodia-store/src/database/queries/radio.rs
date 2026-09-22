@@ -15,7 +15,10 @@ const INSERT_COLUMNS: &str = "station_uuid, name, stream_url, homepage, favicon_
 /// The four `local_*` columns are absent for the same reason and a stronger one:
 /// they are the user's own answers to what a directory entry left blank, so the
 /// directory has nothing to say about them and rewriting its own four in full
-/// stays correct.
+/// stays correct. `probed_codec` is absent on that same argument pointed the
+/// other way: it is what an open measured the stream to hold, against a `codec`
+/// naming only the container, so listing it here would revert the better answer
+/// every time the station was re-imported.
 const DIRECTORY_CONFLICT: &str = "\
     ON CONFLICT(station_uuid) DO UPDATE SET
         name = excluded.name,
@@ -41,9 +44,10 @@ const DIRECTORY_CONFLICT: &str = "\
 /// UNIQUE, so a hand-typed station adds a row every time the way importing the
 /// same playlist twice is two playlists.
 ///
-/// **`RETURNING id`, not the row.** Every caller wants the id and nothing else, and the row is 22
-/// columns and a dozen heap strings dropped on the next line — a cost the import loop pays per
-/// entry. A caller that genuinely wants the persisted state reads it back with
+/// **`RETURNING id`, not the row.** Every caller wants the id and nothing else, and the row is a
+/// column per field on [`radio::RadioStation`] and a heap string for most of them, dropped on the
+/// next line: a cost the import loop would pay per entry, and one that grows with the table.
+/// A caller that genuinely wants the persisted state reads it back with
 /// [`get_station_by_id`], which also answers for what `SQLite` stored rather than what the insert
 /// echoed.
 pub async fn save_station(db: &DbPool, station: &radio::NewRadioStation) -> Result<i64, AppError> {
@@ -229,6 +233,20 @@ where
 
 pub async fn delete_station(db: &DbPool, id: i64) -> Result<(), AppError> {
     sqlx::query("DELETE FROM radio_stations WHERE id = ?").bind(id).execute(db.write()).await?;
+    Ok(())
+}
+
+/// Record what a station's stream was measured to hold, which only a successful open knows.
+///
+/// Written on every tune rather than compared first: the row would have to be re-read to compare,
+/// and a station that changed what it serves is exactly the one the stale value would be wrong
+/// for. It is one small `UPDATE` beside [`mark_played`]'s, on the same path.
+pub async fn set_probed_codec(db: &DbPool, id: i64, codec: &str) -> Result<(), AppError> {
+    sqlx::query("UPDATE radio_stations SET probed_codec = ? WHERE id = ?")
+        .bind(codec)
+        .bind(id)
+        .execute(db.write())
+        .await?;
     Ok(())
 }
 

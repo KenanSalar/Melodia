@@ -8,14 +8,18 @@
 //! DJ-mixer live in the `TIPL` frame, and lofty's `Id3v2Tag → Tag` conversion consumes it into the
 //! matching [`ItemKey`]s, so nothing here special-cases MP3 for them.
 //!
-//! **Three holes, none of them ours to close.** `Arranger` and `Performer` have no MP4 mapping and
-//! `Performer` has no `ID3v2` one, so a credit in those roles is read and written on FLAC, Ogg and
-//! APE only — [`super::tag_writer`]'s `UnsupportedFields` reports the write half rather than
-//! dropping it silently. The `ID3v2` performer hole is the one worth knowing *why* about: `TMCL`
-//! carries exactly that credit, lofty parses the frame, and then `split_tag` consumes only `TIPL`
-//! and leaves `TMCL` in a `pub(crate)` companion tag with no public accessor. Reaching it needs a
-//! second `Id3v2Tag` parse of the file, and
-//! [`crate::media::ingest::metadata::read_tags`] is the tree's only lofty open.
+//! **Three holes, none of them ours to close.** `Arranger` has no MP4 mapping and `Performer` has
+//! neither an MP4 nor an `ID3v2` one, so an arranger credit is dropped on M4A and a performer credit
+//! on M4A and MP3 alike — [`super::tag_writer`]'s `WriteOutcome` reports the write half rather
+//! than dropping it silently. The `ID3v2` performer hole is the one worth knowing *why* about, and
+//! it is not one upstream is going to close: `TMCL` carries exactly that credit, lofty parses the
+//! frame, and then `split_tag` consumes only `TIPL` and leaves `TMCL` in a `pub(crate)` companion
+//! tag with no public accessor. `ItemKey::MusicianCredits` existed until lofty 0.24 and was removed
+//! deliberately, as an `ID3v2`-specific field with a format a flat key cannot carry, so waiting for
+//! a newer lofty is waiting for nothing. Closing it here means a second `Id3v2Tag` parse of every
+//! MP3 on the scan path, since writing it without reading it back would blank the credit on the
+//! re-extract a save already does, and [`crate::media::ingest::metadata::read_tags`] is the tree's
+//! only lofty open.
 //!
 //! **`Writer` is read and never written.** lofty maps both `Writer` and `Lyricist` to `ID3v2`'s
 //! `TEXT` frame, so on an MP3 the two are one field: writing a writer credit would consume the

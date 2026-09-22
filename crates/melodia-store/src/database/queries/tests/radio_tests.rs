@@ -9,7 +9,7 @@ use super::{
     clear_play_history, delete_station, get_favorite_stations, get_recent_stations,
     get_station_by_id, logo_answers, logo_miss_attempts, mark_played, prune_logo_answers,
     record_logo_hit, record_logo_miss, save_station, set_artwork, set_favorite, set_local_fields,
-    station_id_with_url, update_station,
+    set_probed_codec, station_id_with_url, update_station,
 };
 
 fn directory_station(uuid: &str, name: &str) -> radio::NewRadioStation {
@@ -125,6 +125,62 @@ async fn re_importing_a_station_updates_it_without_touching_the_user_side() -> R
     assert!(second.last_played.is_some(), "the re-import cleared the last-played stamp");
     assert_eq!(second.artwork_path.as_deref(), Some(logo), "the re-import blanked the logo");
     assert_eq!(second.date_added, first.date_added, "the re-import re-dated the station");
+    Ok(())
+}
+
+/// **The whole reason `probed_codec` is its own column.** `DIRECTORY_CONFLICT` rewrites every
+/// directory field on each re-import, and `codec` is one of them, so a measured value written
+/// there would stand until the user re-starred or re-browsed the station and then silently revert
+/// to the container name it was correcting.
+#[tokio::test]
+async fn a_probed_codec_survives_the_re_import_that_rewrites_the_directorys_columns()
+-> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+
+    let mut imported = directory_station("uuid-1", "Station");
+    imported.codec = "OGG".to_owned();
+    let id = save_station(&db, &imported).await?;
+    set_probed_codec(&db, id, "OPUS").await?;
+
+    let mut refreshed = directory_station("uuid-1", "Station");
+    refreshed.codec = "MP3".to_owned();
+    save_station(&db, &refreshed).await?;
+
+    let after = get_station_by_id(&db, id).await?;
+    assert_eq!(after.codec, "MP3", "the re-import left the directory's own column standing");
+    assert_eq!(
+        after.probed_codec.as_deref(),
+        Some("OPUS"),
+        "the re-import reverted what an open measured"
+    );
+    Ok(())
+}
+
+/// The answer exists only once a stream has opened, and nothing backfills it: probing every stored
+/// station would mean a socket per row for a display string.
+#[tokio::test]
+async fn a_station_that_has_never_played_states_no_probed_codec() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+
+    let id = save_station(&db, &custom_station("A", "http://a.invalid/")).await?;
+
+    assert_eq!(get_station_by_id(&db, id).await?.probed_codec, None);
+    Ok(())
+}
+
+/// Written on every tune rather than compared first, because the row would have to be re-read to
+/// compare and a station that changed what it serves is exactly the one a stale value is wrong for.
+#[tokio::test]
+async fn recording_what_an_open_measured_replaces_whatever_stood_before_it() -> Result<(), AppError>
+{
+    let db = DbPool::test_pool().await?;
+    let id = save_station(&db, &custom_station("A", "http://a.invalid/")).await?;
+
+    set_probed_codec(&db, id, "VORBIS").await?;
+    assert_eq!(get_station_by_id(&db, id).await?.probed_codec.as_deref(), Some("VORBIS"));
+
+    set_probed_codec(&db, id, "OPUS").await?;
+    assert_eq!(get_station_by_id(&db, id).await?.probed_codec.as_deref(), Some("OPUS"));
     Ok(())
 }
 

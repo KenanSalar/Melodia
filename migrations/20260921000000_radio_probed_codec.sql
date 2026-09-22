@@ -1,0 +1,23 @@
+-- What a station's stream turned out to hold, as against what the directory says
+-- it holds.
+--
+-- radio-browser.info's `codec` column names the *container*, so every Ogg mount
+-- is filed under OGG whether it carries Vorbis, Opus or FLAC -- its whole codec
+-- facet lists eleven values and OPUS is not one of them. A response's content
+-- type answers no better: these mounts send audio/ogg or application/ogg. The
+-- only thing that can tell them apart is the decoder, and it can only speak once
+-- the stream is open, which is why this is a column and not a derivation.
+--
+-- Its own column rather than a correction to `codec`, for the reason the four
+-- local_* columns are their own: DIRECTORY_CONFLICT rewrites the directory's
+-- fields wholesale on every re-import, and `codec` is one of them. A probed value
+-- written there would survive until the user re-starred or re-browsed the
+-- station and then silently revert. Kept apart, each column has exactly one
+-- writer -- the directory for `codec`, a successful open for this -- and a
+-- reader takes this one first.
+--
+-- NULL until the station has played once, which is the only moment the answer
+-- exists. Nothing backfills it: probing every stored station would mean opening
+-- a socket per row for a display string.
+ALTER TABLE radio_stations
+ADD COLUMN probed_codec TEXT;

@@ -74,6 +74,29 @@ fn sniff_file_type(path: &Path) -> Option<FileType> {
     FileType::from_buffer(&head)
 }
 
+/// The channel count `path`'s Opus identification packet states, or `None` where the file is not
+/// laid out the way an encoder writes one.
+///
+/// Derived rather than assumed, because an Ogg page header runs 27 bytes plus one per segment
+/// and a packet laced into two would walk past a fixed offset. Anything this cannot make sense
+/// of goes to lofty, which is where every other malformed header already goes.
+fn opus_channel_count(path: &Path) -> Option<u8> {
+    const PAGE_HEADER: usize = 27;
+    const SEGMENT_COUNT_AT: usize = 26;
+    const MAGIC: &[u8] = b"OpusHead";
+    /// The longest a segment table runs, plus the version byte and the channel count behind the
+    /// magic.
+    const HEAD_BYTES: usize = PAGE_HEADER + 255 + 10;
+
+    let mut head = Vec::with_capacity(HEAD_BYTES);
+    std::fs::File::open(path).ok()?.take(HEAD_BYTES as u64).read_to_end(&mut head).ok()?;
+
+    let packet = head.get(PAGE_HEADER + usize::from(*head.get(SEGMENT_COUNT_AT)?)..)?;
+    let rest = packet.strip_prefix(MAGIC)?;
+    // Version, then the count.
+    rest.get(1).copied()
+}
+
 /// How much of a file [`read_tags`] is being asked for.
 ///
 /// Both halves lofty can be talked out of are expensive and neither is optional by default:
@@ -115,6 +138,16 @@ pub fn read_tags(path: &Path, scope: TagScope) -> Result<TaggedFile, AppError> {
         probe = probe.set_file_type(sniffed);
     }
 
+    // `lofty::ogg::opus::properties` guards a mapping family above 1 and a channel count too
+    // large for the family named, and then hands the count to `ChannelMask::from_opus_channels`,
+    // whose arms run 1 to 8 and whose `expect` takes everything else. `panic = "abort"` leaves
+    // nothing to catch, so one crafted or truncated file in a watched folder ends the process
+    // mid-scan. Checked here rather than in [`sniff_file_type`], which only runs once the
+    // extension has resolved to nothing and so never sees a file named `.opus`.
+    if matches!(probe.file_type(), Some(FileType::Opus)) && opus_channel_count(path) == Some(0) {
+        return Err(AppError::metadata_msg(format!("{} states no audio channels", path.display())));
+    }
+
     probe
         .read()
         .map_err(|e| AppError::metadata(format!("Failed to read tags from {}", path.display()), e))
@@ -132,6 +165,24 @@ fn parse_replaygain_gain(s: &str) -> Option<f64> {
 /// Rejects non-finite values for the same reason as the gain parser.
 fn parse_replaygain_peak(s: &str) -> Option<f64> {
     s.trim().parse::<f64>().ok().filter(|v| v.is_finite())
+}
+
+/// What an `R128_*_GAIN` value has to move by to mean the same thing as a `REPLAYGAIN_*` one.
+///
+/// EBU R128 normalises to −23 LUFS where `ReplayGain` 2.0 normalises to −18, so a gain written
+/// against the first plays this much under a library normalised against the second. RFC 7845
+/// §5.2 fixes the reference the tag is written against, which is what makes the distance a
+/// property of the format rather than of whichever tagger wrote it.
+const R128_TO_REPLAYGAIN_DB: f64 = 5.0;
+
+/// Parse an `R128_*_GAIN` value — Q7.8 fixed-point dB, e.g. "-1280" — restated against
+/// `ReplayGain`'s reference so it can share the columns and the DSP.
+///
+/// `i16` because RFC 7845 §5.2 states the field as one, which caps the answer at ±128 dB: no
+/// non-finite guard is owed, unlike the two above, and no absurd one can reach the DSP either.
+fn parse_r128_gain(s: &str) -> Option<f64> {
+    let q7_8 = s.trim().parse::<i16>().ok()?;
+    Some(f64::from(q7_8) / 256.0 + R128_TO_REPLAYGAIN_DB)
 }
 
 /// What [`extract`] does with a file it can hash but whose tags won't parse.
@@ -294,7 +345,7 @@ fn extract(
         comment: text(tag, ItemKey::Comment),
         // `ItemKey::Bpm` has NO ID3v2 mapping — MP3 / WAV / AIFF keep BPM in `TBPM`, which lofty
         // exposes as `IntegerBpm`. Reading only `Bpm` therefore misses it on every ID3v2 file,
-        // including the ones `tag_writer::apply_bpm` writes. Prefer the decimal key (Vorbis
+        // including the ones `tag_writer`'s BPM write puts there. Prefer the decimal key (Vorbis
         // `BPM`, MP4 freeform); fall back to the integer.
         bpm: text(tag, ItemKey::Bpm)
             .or_else(|| text(tag, ItemKey::IntegerBpm))
@@ -313,15 +364,22 @@ fn extract(
         musicbrainz_track_id: text(tag, ItemKey::MusicBrainzRecordingId),
         musicbrainz_release_id: text(tag, ItemKey::MusicBrainzReleaseId),
         musicbrainz_release_track_id: text(tag, ItemKey::MusicBrainzTrackId),
+        // Opus carries `R128_*_GAIN` where everything else carries `REPLAYGAIN_*`, and read as
+        // untagged it would play at unity against a normalised library. `REPLAYGAIN_*` wins where
+        // both are present: it is already written against the reference the columns mean, so it
+        // owes no conversion. Neither peak has an R128 counterpart — R128 defines none — and the
+        // prevent-clipping path already treats a peak it doesn't know as no ceiling.
         replaygain_track_gain: text(tag, ItemKey::ReplayGainTrackGain)
             .as_deref()
-            .and_then(parse_replaygain_gain),
+            .and_then(parse_replaygain_gain)
+            .or_else(|| text(tag, ItemKey::R128TrackGain).as_deref().and_then(parse_r128_gain)),
         replaygain_track_peak: text(tag, ItemKey::ReplayGainTrackPeak)
             .as_deref()
             .and_then(parse_replaygain_peak),
         replaygain_album_gain: text(tag, ItemKey::ReplayGainAlbumGain)
             .as_deref()
-            .and_then(parse_replaygain_gain),
+            .and_then(parse_replaygain_gain)
+            .or_else(|| text(tag, ItemKey::R128AlbumGain).as_deref().and_then(parse_r128_gain)),
         replaygain_album_peak: text(tag, ItemKey::ReplayGainAlbumPeak)
             .as_deref()
             .and_then(parse_replaygain_peak),

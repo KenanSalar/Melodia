@@ -15,6 +15,7 @@ use lofty::tag::{Tag, TagType};
 use tempfile::TempDir;
 
 use super::*;
+use crate::media::ingest::cover_embed::cover_picture_from_path;
 use crate::media::ingest::metadata::{TagScope, extract_metadata, read_tags};
 use melodia_artwork::media::image::artwork;
 use melodia_core::entities::credits::{CreditRole, ROLES, RoleCredit, RoleCredits};
@@ -315,8 +316,8 @@ fn m4a_artwork_replace_actually_replaces() -> Result<(), AppError> {
     assert_ne!(old_bytes, new_bytes, "fixtures must differ, or nothing is proven");
 
     let edit = TagEdit { artwork: ArtworkEdit::Replace, ..TagEdit::default() };
-    let unsupported = apply_to_file(&audio, &edit, Some(&picture))?;
-    assert!(unsupported.is_empty());
+    let written = apply_to_file(&audio, &edit, Some(&picture))?;
+    assert!(written.unsupported.is_empty());
 
     // Exactly one picture — not the old one lingering beside the new one.
     let after = read_primary(&audio)?;
@@ -395,38 +396,6 @@ fn m4a_accepts_a_webp_cover_by_normalizing_it_to_jpeg() -> Result<(), AppError> 
     Ok(())
 }
 
-#[test]
-fn a_jpeg_cover_is_embedded_byte_for_byte() -> Result<(), AppError> {
-    let jpg = assets_dir().join("cover.jpg");
-    let original = std::fs::read(&jpg)?;
-
-    let picture = cover_picture_from_path(&jpg)?;
-
-    assert_eq!(
-        picture.mime_type(),
-        Some(&lofty::picture::MimeType::Jpeg),
-        "JPEG must pass through, not be re-compressed"
-    );
-    assert_eq!(picture.data(), original.as_slice());
-    assert_eq!(picture.pic_type(), PictureType::CoverFront);
-    Ok(())
-}
-
-#[test]
-fn a_corrupt_cover_is_rejected_before_anything_is_written() -> Result<(), AppError> {
-    let tmp = TempDir::new()?;
-    let broken = tmp.path().join("truncated.jpg");
-    // A valid JPEG magic number and nothing behind it. `Picture::from_reader`
-    // sniffs 8 bytes and would happily embed this; only a real decode catches it.
-    std::fs::write(&broken, [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46])?;
-
-    assert!(
-        cover_picture_from_path(&broken).is_err(),
-        "the decode is the validation step — a truncated image must not embed"
-    );
-    Ok(())
-}
-
 // -------------------------------------------------------- FLAC (Vorbis)
 
 #[test]
@@ -434,8 +403,12 @@ fn flac_round_trips_a_full_edit_with_lyrics_under_the_lyrics_key() -> Result<(),
     let tmp = TempDir::new()?;
     let audio = stage(&tmp, "silence.flac")?;
 
-    let unsupported = apply_to_file(&audio, &full_edit(), None)?;
-    assert!(unsupported.is_empty(), "VorbisComments maps every field: {:?}", unsupported.0);
+    let written = apply_to_file(&audio, &full_edit(), None)?;
+    assert!(
+        written.unsupported.is_empty(),
+        "VorbisComments maps every field: {:?}",
+        written.unsupported
+    );
 
     let tag = read_primary(&audio)?;
     assert_eq!(tag.tag_type(), TagType::VorbisComments);
@@ -477,8 +450,8 @@ fn mp3_round_trips_a_full_edit_with_bpm_in_tbpm() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let audio = stage(&tmp, "silence.mp3")?;
 
-    let unsupported = apply_to_file(&audio, &full_edit(), None)?;
-    assert!(unsupported.is_empty(), "ID3v2 maps every field: {:?}", unsupported.0);
+    let written = apply_to_file(&audio, &full_edit(), None)?;
+    assert!(written.unsupported.is_empty(), "ID3v2 maps every field: {:?}", written.unsupported);
 
     let tag = read_primary(&audio)?;
     assert_eq!(tag.tag_type(), TagType::Id3v2);
@@ -508,11 +481,11 @@ fn musicbrainz_recording_id_round_trips_across_formats() -> Result<(), AppError>
             musicbrainz_track_id: FieldEdit::Set(recording.into()),
             ..TagEdit::default()
         };
-        let unsupported = apply_to_file(&audio, &edit, None)?;
+        let written = apply_to_file(&audio, &edit, None)?;
         assert!(
-            unsupported.is_empty(),
+            written.unsupported.is_empty(),
             "{fixture}: the recording id must map: {:?}",
-            unsupported.0
+            written.unsupported
         );
 
         let cache = artwork::new_cover_cache();
@@ -567,8 +540,8 @@ fn an_id3v1_only_mp3_gains_a_fresh_id3v2_tag_and_loses_nothing() -> Result<(), A
     assert!(tagged.tag(TagType::Id3v2).is_none(), "fixture must not already carry an ID3v2 tag");
     assert!(tagged.tag(TagType::Id3v1).is_some(), "fixture must carry an ID3v1 tag");
 
-    let unsupported = apply_to_file(&audio, &full_edit(), None)?;
-    assert!(unsupported.is_empty(), "{:?}", unsupported.0);
+    let written = apply_to_file(&audio, &full_edit(), None)?;
+    assert!(written.unsupported.is_empty(), "{:?}", written.unsupported);
 
     let tag = read_primary(&audio)?;
     assert_eq!(
@@ -600,11 +573,11 @@ fn wav_round_trips_a_full_edit_through_a_fresh_id3v2_tag() -> Result<(), AppErro
     let tmp = TempDir::new()?;
     let audio = stage(&tmp, "silence.wav")?;
 
-    let unsupported = apply_to_file(&audio, &full_edit(), None)?;
+    let written = apply_to_file(&audio, &full_edit(), None)?;
     assert!(
-        unsupported.is_empty(),
+        written.unsupported.is_empty(),
         "WAV's primary tag is ID3v2, which maps every field: {:?}",
-        unsupported.0
+        written.unsupported
     );
 
     let tag = read_primary(&audio)?;
@@ -625,8 +598,12 @@ fn ogg_round_trips_a_full_edit() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let audio = stage(&tmp, "silence.ogg")?;
 
-    let unsupported = apply_to_file(&audio, &full_edit(), None)?;
-    assert!(unsupported.is_empty(), "VorbisComments maps every field: {:?}", unsupported.0);
+    let written = apply_to_file(&audio, &full_edit(), None)?;
+    assert!(
+        written.unsupported.is_empty(),
+        "VorbisComments maps every field: {:?}",
+        written.unsupported
+    );
 
     let tag = read_primary(&audio)?;
     assert_eq!(tag.tag_type(), TagType::VorbisComments);
@@ -648,8 +625,12 @@ fn an_oga_round_trips_a_full_edit_despite_its_extension() -> Result<(), AppError
     let audio = tmp.path().join("quiet.oga");
     std::fs::copy(assets_dir().join("silence.ogg"), &audio)?;
 
-    let unsupported = apply_to_file(&audio, &full_edit(), None)?;
-    assert!(unsupported.is_empty(), "VorbisComments maps every field: {:?}", unsupported.0);
+    let written = apply_to_file(&audio, &full_edit(), None)?;
+    assert!(
+        written.unsupported.is_empty(),
+        "VorbisComments maps every field: {:?}",
+        written.unsupported
+    );
 
     let tag = read_primary(&audio)?;
     assert_eq!(tag.tag_type(), TagType::VorbisComments);
@@ -667,11 +648,11 @@ fn aiff_and_aifc_round_trip_a_full_edit_through_id3v2() -> Result<(), AppError> 
         let tmp = TempDir::new()?;
         let audio = stage(&tmp, fixture)?;
 
-        let unsupported = apply_to_file(&audio, &full_edit(), None)?;
+        let written = apply_to_file(&audio, &full_edit(), None)?;
         assert!(
-            unsupported.is_empty(),
+            written.unsupported.is_empty(),
             "{fixture}: AIFF's primary tag is ID3v2, which maps every field: {:?}",
-            unsupported.0
+            written.unsupported
         );
 
         let tag = read_primary(&audio)?;
@@ -892,10 +873,10 @@ fn a_year_edit_leaves_no_earlier_key_to_be_read_instead() {
 
 /// What an MP3 actually keeps of a role credit.
 ///
-/// The read and write halves of the `ID3v2` mapping are not the same set — `TIPL` reaches the
-/// generic tag on the way *in* and there is no key to put it back through — so six of the ten are
-/// reported and dropped rather than written. Only a real file settles which, and a user losing a
-/// producer credit silently is the thing the report exists to prevent.
+/// `ID3v2`'s one hole. `TMCL` reaches the generic tag on the way *in* and there is no key to put it
+/// back through, so a performer credit is reported and dropped rather than written; the other nine
+/// round-trip. Only a real file settles which, and a user losing a credit silently is the thing the
+/// report exists to prevent.
 #[test]
 fn mp3_reports_the_roles_it_has_no_key_to_write() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
@@ -906,7 +887,7 @@ fn mp3_reports_the_roles_it_has_no_key_to_write() -> Result<(), AppError> {
         .map(|role| RoleCredit { role, name: "Alice".into(), detail: String::new() })
         .collect();
 
-    let unsupported = apply_to_file(
+    let written = apply_to_file(
         &audio,
         &TagEdit {
             credits: FieldEdit::Set(RoleCreditEdit::whole(RoleCredits::new(every_role))),
@@ -916,14 +897,20 @@ fn mp3_reports_the_roles_it_has_no_key_to_write() -> Result<(), AppError> {
     )?;
 
     // Sorted, since `ROLES` order is the list's own presentation choice and free to change.
-    let mut reported = unsupported.0.clone();
+    let mut reported: Vec<&str> =
+        written.unsupported.iter().copied().map(TagField::as_db_str).collect();
     reported.sort_unstable();
-    assert_eq!(reported, ["arranger", "dj_mixer", "engineer", "mixer", "performer", "producer"]);
+    assert_eq!(reported, ["performer"]);
 
     let tag = read_primary(&audio)?;
     assert_eq!(text(&tag, ItemKey::Composer).as_deref(), Some("Alice"));
     assert_eq!(text(&tag, ItemKey::Conductor).as_deref(), Some("Alice"));
-    assert_eq!(text(&tag, ItemKey::Producer), None, "reported, and genuinely not stored");
+    assert_eq!(
+        text(&tag, ItemKey::Producer).as_deref(),
+        Some("Alice"),
+        "TIPL is written, not just read"
+    );
+    assert_eq!(text(&tag, ItemKey::Performer), None, "reported, and genuinely not stored");
     Ok(())
 }
 
@@ -939,7 +926,7 @@ fn flac_writes_every_role_there_is() -> Result<(), AppError> {
         .map(|role| RoleCredit { role, name: "Alice".into(), detail: String::new() })
         .collect();
 
-    let unsupported = apply_to_file(
+    let written = apply_to_file(
         &audio,
         &TagEdit {
             credits: FieldEdit::Set(RoleCreditEdit::whole(RoleCredits::new(every_role))),
@@ -948,7 +935,102 @@ fn flac_writes_every_role_there_is() -> Result<(), AppError> {
         None,
     )?;
 
-    assert!(unsupported.is_empty(), "{:?}", unsupported.0);
+    assert!(written.unsupported.is_empty(), "{:?}", written.unsupported);
     assert_eq!(text(&read_primary(&audio)?, ItemKey::Performer).as_deref(), Some("Alice"));
+    Ok(())
+}
+
+/// A tag write must not move bytes under a reader that already has the file open, and that reader
+/// is usually a deck playing the track: an in-place rewrite shifts everything after the tag, and
+/// what the decoder reads at its old offsets stops being the track. Renaming an edited copy over
+/// it leaves the open handle on the file it opened.
+#[test]
+fn a_tag_write_leaves_a_reader_on_the_file_it_opened() -> Result<(), AppError> {
+    use std::io::Read;
+
+    let tmp = TempDir::new()?;
+    let path = stage(&tmp, "silence.opus")?;
+    let before = std::fs::read(&path)?;
+    let mut opened_first = std::fs::File::open(&path)?;
+
+    let edit = TagEdit { title: FieldEdit::Set("Edited".to_owned()), ..TagEdit::default() };
+    apply_to_file(&path, &edit, None)?;
+
+    let mut through_the_old_handle = Vec::new();
+    opened_first.read_to_end(&mut through_the_old_handle)?;
+    assert_eq!(through_the_old_handle, before, "a handle opened first keeps its own bytes");
+    assert_ne!(std::fs::read(&path)?, before, "and the path holds the edited file");
+    Ok(())
+}
+
+/// What the toast names the container, which is the half of an unsupported report the user reads.
+///
+/// Nothing else in the suite reads `WriteOutcome::format`. Every variant lofty ships today is
+/// listed, so this is an equality rather than a sample.
+///
+/// What it cannot see: `FileType` is `#[non_exhaustive]` and nothing enumerates it at runtime, so
+/// the `_ => None` arm is unreachable while that list stands and a variant added upstream would
+/// fall through it silently. That is the arm's purpose — a vaguer message rather than a build that
+/// cannot see the new format — but it means a new container owes a row here by hand.
+#[test]
+fn every_container_this_build_can_write_names_itself() {
+    use lofty::file::FileType;
+
+    let cases = [
+        (FileType::Aac, Some("AAC")),
+        (FileType::Aiff, Some("AIFF")),
+        (FileType::Ape, Some("APE")),
+        (FileType::Flac, Some("FLAC")),
+        (FileType::Mpeg, Some("MP3")),
+        (FileType::Mp4, Some("M4A")),
+        (FileType::Mpc, Some("Musepack")),
+        (FileType::Opus, Some("Opus")),
+        (FileType::Vorbis, Some("Ogg Vorbis")),
+        (FileType::Speex, Some("Speex")),
+        (FileType::Wav, Some("WAV")),
+        (FileType::WavPack, Some("WavPack")),
+    ];
+
+    for (file_type, expected) in cases {
+        assert_eq!(format_name(file_type), expected, "{file_type:?}");
+    }
+    assert_eq!(format_name(FileType::Custom("Tracker")), Some("Tracker"), "a format lofty grew");
+}
+
+/// The clause a container this build cannot name still owes. It is the greppable half: a message
+/// naming no format at all reads as a bug where a vaguer one reads as a container we do not know.
+#[test]
+fn a_container_this_build_cannot_name_is_still_described() {
+    let clause = describe_unsupported(None, &[TagField::Credit(CreditRole::Performer)]);
+
+    assert_eq!(clause, "this container has no key for performer");
+    assert_eq!(
+        describe_unsupported(Some("MP3"), &[TagField::Lyrics, TagField::Rating]),
+        "MP3 has no key for lyrics, rating"
+    );
+}
+
+/// `Tag::insert_text` used to succeed on `ID3v2` and write nothing for these two, so the dialog
+/// reported a clean save and the file came back without them. The lofty bump taught its support
+/// check the mapping the write conversion already had.
+#[test]
+fn mp3_round_trips_the_movement_pair_the_bump_taught_it() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let path = stage(&tmp, "silence.mp3")?;
+
+    let edit = TagEdit {
+        movement: FieldEdit::Set("Allegro".into()),
+        movement_number: FieldEdit::Set(2),
+        movement_total: FieldEdit::Set(4),
+        ..TagEdit::default()
+    };
+    let written = apply_to_file(&path, &edit, None)?;
+
+    assert_eq!(written.unsupported, vec![], "MP3 states a key for all three");
+    assert_eq!(written.format, Some("MP3"));
+    let tag = read_primary(&path)?;
+    assert_eq!(text(&tag, ItemKey::Movement).as_deref(), Some("Allegro"));
+    assert_eq!(text(&tag, ItemKey::MovementNumber).as_deref(), Some("2"));
+    assert_eq!(text(&tag, ItemKey::MovementTotal).as_deref(), Some("4"));
     Ok(())
 }

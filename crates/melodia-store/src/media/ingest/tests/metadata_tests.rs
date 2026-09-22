@@ -105,6 +105,40 @@ fn parse_peak_rejects_non_finite() {
     assert_eq!(parse_replaygain_peak("inf"), None);
 }
 
+/// The value `rsgain custom -o s` writes for a tone it also rates `+3.76 dB` through
+/// `REPLAYGAIN_TRACK_GAIN`, which is what says the offset is applied once and in the right
+/// direction. Exact rather than approximate: 256 is a power of two, so the division is.
+#[test]
+fn parse_r128_gain_restates_q7_8_against_replaygain() {
+    assert_eq!(parse_r128_gain("-319"), Some(3.753_906_25));
+}
+
+/// A tag already at R128's own reference still sits 5 dB under a `ReplayGain` library, so zero in
+/// is not zero out. The case that reads as a bug and is the whole point of the constant.
+#[test]
+fn parse_r128_gain_on_zero_is_the_offset_alone() {
+    assert_eq!(parse_r128_gain("0"), Some(5.0));
+}
+
+#[test]
+fn parse_r128_gain_extra_whitespace() {
+    assert_eq!(parse_r128_gain("  -319  "), Some(3.753_906_25));
+}
+
+/// RFC 7845 section 5.2 states these in Q7.8, so they are integers. Parsing one as a float would
+/// read a `ReplayGain`-style decimal as a Q7.8 count and hand back a gain 256 times too small.
+#[test]
+fn parse_r128_gain_rejects_a_decimal() {
+    assert_eq!(parse_r128_gain("-1.25"), None);
+    assert_eq!(parse_r128_gain("-6.50 dB"), None);
+}
+
+#[test]
+fn parse_r128_gain_invalid() {
+    assert_eq!(parse_r128_gain("not a number"), None);
+    assert_eq!(parse_r128_gain(""), None);
+}
+
 // ── extract_metadata ──
 
 #[test]
@@ -489,7 +523,7 @@ fn a_solo_credit_keeps_its_only_id() {
     assert_eq!(read_credit_mbids(Some(&tag), ItemKey::MusicBrainzArtistId, 1), ["id-alice"]);
 }
 
-/// The read side of the same precedence `tag_writer::apply_year` clears the whole list for:
+/// The read side of the same precedence `tag_writer`'s year write clears the whole list for:
 /// `ReleaseDate` is the explicit answer, `RecordingDate` the one Picard writes, `Year` a
 /// Vorbis-only spelling some rippers still emit alone.
 #[test]
@@ -545,4 +579,86 @@ fn a_file_that_says_nothing_carries_no_release_tags() {
 
     assert_eq!(release.label, None);
     assert!(!release.is_compilation);
+}
+
+/// Write Vorbis comments onto a staged file, so the two loudness families can be put in one file
+/// and the precedence between them read back off [`extract_metadata`].
+///
+/// The insert is checked rather than assumed: `insert_text` answers `false` for a key the tag type
+/// has no mapping for and writes nothing, which would leave the test asserting against a file it
+/// never tagged. That is the shape of the MP3 role-credit defect the lofty bump was for.
+fn tag_vorbis(path: &std::path::Path, items: &[(ItemKey, &str)]) -> Result<(), AppError> {
+    let mut tag = Tag::new(lofty::tag::TagType::VorbisComments);
+    for (key, value) in items {
+        if !tag.insert_text(*key, (*value).to_owned()) {
+            return Err(AppError::Validation(format!("{key:?} has no Vorbis mapping")));
+        }
+    }
+    tag.save_to_path(path, lofty::config::WriteOptions::default())
+        .map_err(|e| AppError::metadata(format!("tagging {}", path.display()), e))
+}
+
+/// Opus states its loudness in `R128_*_GAIN` and no other container does, so without this read the
+/// four columns stay empty and the track plays at unity while its neighbours are normalised.
+#[test]
+fn extract_metadata_reads_r128_loudness_off_an_opus_file() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let artwork_dir = tmp.path().join("artwork");
+    std::fs::create_dir(&artwork_dir)?;
+    let opus = stage_as(&tmp, "silence.opus", "loud.opus")?;
+    tag_vorbis(&opus, &[(ItemKey::R128TrackGain, "-319"), (ItemKey::R128AlbumGain, "0")])?;
+
+    let meta = extract_metadata(&opus, &artwork_dir, &test_cover_cache(), false)?;
+
+    assert_eq!(meta.replaygain_track_gain, Some(3.753_906_25));
+    assert_eq!(meta.replaygain_album_gain, Some(5.0));
+    Ok(())
+}
+
+/// R128 defines no peak, so the clip guard has nothing to read. `compute_linear_gain` treats an
+/// unknown peak as no ceiling rather than as a peak of zero, which is what makes leaving these
+/// empty the right answer instead of a number invented here.
+#[test]
+fn an_r128_tagged_file_states_no_peak() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let artwork_dir = tmp.path().join("artwork");
+    std::fs::create_dir(&artwork_dir)?;
+    let opus = stage_as(&tmp, "silence.opus", "nopeak.opus")?;
+    tag_vorbis(&opus, &[(ItemKey::R128TrackGain, "-319")])?;
+
+    let meta = extract_metadata(&opus, &artwork_dir, &test_cover_cache(), false)?;
+
+    assert_eq!(meta.replaygain_track_peak, None);
+    assert_eq!(meta.replaygain_album_peak, None);
+    Ok(())
+}
+
+/// A file carrying both families is one `rsgain` has scanned in its default Opus mode over a pass
+/// that wrote R128. `REPLAYGAIN_*` is already written against the reference the columns mean, so it
+/// wins outright — offset or averaged in, the track would sit 5 dB off in one direction or other.
+#[test]
+fn replaygain_wins_over_r128_on_a_file_carrying_both() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let artwork_dir = tmp.path().join("artwork");
+    std::fs::create_dir(&artwork_dir)?;
+    let opus = stage_as(&tmp, "silence.opus", "both.opus")?;
+    tag_vorbis(
+        &opus,
+        &[(ItemKey::ReplayGainTrackGain, "-6.50 dB"), (ItemKey::R128TrackGain, "-319")],
+    )?;
+
+    let meta = extract_metadata(&opus, &artwork_dir, &test_cover_cache(), false)?;
+
+    assert_eq!(meta.replaygain_track_gain, Some(-6.5));
+    Ok(())
+}
+
+/// An Opus header stating no channels reaches lofty's property parser, whose channel-mask lookup
+/// has arms for one through eight and an `expect` for the rest. Take the guard away and this goes
+/// red on that `expect`; in a release build, where `panic = "abort"` applies, the same line ends
+/// the process mid-scan instead, which is what the guard is really standing in front of.
+#[test]
+fn an_opus_header_stating_no_channels_is_refused_rather_than_panicking() {
+    let refused = read_tags(&assets_dir().join("silence-zero-channels.opus"), TagScope::Full);
+    assert!(refused.is_err(), "a zero-channel Opus header has to come back an error");
 }

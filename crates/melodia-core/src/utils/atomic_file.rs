@@ -1,5 +1,5 @@
-//! Whole-file read and atomic whole-file write, for the small JSON and text files the app keeps
-//! beside its database.
+//! Whole-file read and atomic whole-file write: the small JSON and text files the app keeps beside
+//! its database, and the tag rewrite of a track in the user's own library.
 //!
 //! The reads are plain and unsynchronised, and they are safe because the writes are not: every
 //! write lands through a temp file in the same directory and a rename, so a reader sees either
@@ -80,7 +80,65 @@ pub fn write_with_sync(
         write(&mut writer)?;
         writer.flush()?;
     }
-    tmp.persist(path).map_err(|e| AppError::Io(e.error))?;
+    rename_over(tmp.into_temp_path(), path)
+}
+
+/// Hands `rewrite` a copy of `path` to work on, renaming it over the original only once `rewrite`
+/// succeeds.
+///
+/// [`write_with_sync`]'s shape for a library that insists on opening the path itself, and it is
+/// here for a second reason on top of the crash safety the others buy. **A rewrite in place moves
+/// every byte after the edit under whoever already has the file open**, and a deck playing that
+/// track keeps reading at offsets that now land somewhere else: an edit that grows a tag by a
+/// megabyte does not sound like an edit, it sounds like the track breaking. Renaming leaves that
+/// reader on the file it opened, whole to the end, and the next open gets the new one.
+///
+/// Taking the name off a file someone is reading is where Windows asks for more than a rename;
+/// [`rename_over`] is what pays it.
+///
+/// Costs one copy of the file, which is why it is for whole-file rewrites: those pay it anyway,
+/// and a write permission on the *directory* that an in-place save did not need. No fallback to
+/// one: a second write path would be the one nobody exercises, and it is the path that reintroduces
+/// the fault above.
+pub fn rewrite_with_sync(
+    path: &Path,
+    rewrite: impl FnOnce(&Path) -> AppResult<()>,
+) -> AppResult<()> {
+    // Resolved first, because a rename replaces the *link* where a write in place followed it: a
+    // symlinked track would otherwise become a regular file holding the edit, with the file the
+    // user actually keeps left untouched.
+    let path = &std::fs::canonicalize(path)?;
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+    // Closed rather than held open: `rewrite` opens the path for itself, and the temp keeps no
+    // extension, so a watcher over a music folder sees a file it does not scan.
+    let tmp = tempfile::NamedTempFile::new_in(dir)?.into_temp_path();
+    std::fs::copy(path, &tmp)?;
+    rewrite(&tmp)?;
+    rename_over(tmp, path)
+}
+
+/// Rename `tmp` over `path`, taking the temp with it if the rename fails.
+///
+/// Not `TempPath::persist`, which is a bare `MoveFileExW` on Windows: that call cannot take a name
+/// another handle holds open, whatever share mode that handle was opened with, and a deck playing
+/// the track being edited is exactly such a handle. `std::fs::rename` retries the same replace
+/// through `FileRenameInfoEx` with POSIX semantics, the one form that unlinks a name out from
+/// under a live reader. Unix never had the split, `persist` being `fs::rename` there.
+///
+/// A handle that denies delete sharing outright, an indexer or a scanner, still refuses both, and
+/// still fails the write rather than corrupting it.
+///
+/// [`TempPath::keep`] first, for the half of `persist` that is not the move: the temp is created
+/// `FILE_ATTRIBUTE_TEMPORARY` and both callers carry that onto the file they leave behind, so
+/// without it every file written here is one the cache manager has been told not to flush.
+///
+/// [`TempPath::keep`]: tempfile::TempPath::keep
+fn rename_over(tmp: tempfile::TempPath, path: &Path) -> AppResult<()> {
+    let tmp = tmp.keep().map_err(|e| AppError::Io(e.error))?;
+    std::fs::rename(&tmp, path).inspect_err(|_| {
+        // `keep` disarmed the cleanup, and there is nothing to report past the rename's own error.
+        let _ = std::fs::remove_file(&tmp);
+    })?;
     Ok(())
 }
 

@@ -512,9 +512,6 @@ msgstr "Στιλ κουμπιών διακόσμησης"
 msgid "Decoration Button Side"
 msgstr "Πλευρά κουμπιών διακόσμησης"
 
-msgid "Standard"
-msgstr "Τυπικό"
-
 msgid "Right"
 msgstr "Δεξιά"
 
@@ -2268,3 +2265,23 @@ msgstr "Επεξεργασία εικόνας"
 
 msgid "Apply"
 msgstr "Εφαρμογή"
+
+# ---- Tag-edit completion toast: the fields a container had no key for -------
+
+msgid "Track Total"
+msgstr "Σύνολο κομματιών"
+
+msgid "Disc Total"
+msgstr "Σύνολο δίσκων"
+
+msgid "Movement Number"
+msgstr "Αριθμός μέρους"
+
+msgid "Movement Total"
+msgstr "Σύνολο μερών"
+
+msgid "MusicBrainz Recording ID"
+msgstr "Αναγνωριστικό ηχογράφησης MusicBrainz"
+
+msgid "{} can't be saved to {} files"
+msgstr "Το {} δεν μπορεί να αποθηκευτεί σε αρχεία {}"

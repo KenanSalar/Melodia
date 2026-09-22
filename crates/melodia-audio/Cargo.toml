@@ -20,6 +20,8 @@ melodia-core = { path = "../melodia-core" }
 melodia-net = { path = "../melodia-net" }
 
 symphonia.workspace = true
+# The Opus decoder `player::source::opus` registers, which Symphonia has none of.
+opus-pure.workspace = true
 reqwest.workspace = true
 stream-download.workspace = true
 icy-metadata.workspace = true

@@ -233,6 +233,7 @@ fn all_desktop_sources_agree_on_mime_and_wmclass() {
         "audio/ogg",
         "audio/x-vorbis+ogg",
         "audio/x-flac+ogg",
+        "audio/x-opus+ogg",
         "audio/wav",
         "audio/x-wav",
         "audio/aac",

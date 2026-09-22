@@ -148,10 +148,10 @@ fn the_move_arm_ticks_the_loop_win32_parked() {
     );
 }
 
-/// The frame reading has to outlive the frame it measured. Once the miniplayer drops the frame
-/// `frame_allowance` answers `None`, and an arm writing a default there hands `MiniPlayerSwitch`
-/// a zero allowance while the client area is still grown by the real one, so a window parked just
-/// inside the threshold bounces straight back out.
+/// The frame reading has to outlive the frame it measured. `frame_allowance` answers `None` on
+/// every reading but the one that crossed the decoration change, and an arm writing a default there
+/// hands `MiniPlayerSwitch` a zero allowance while the client area is still grown by the real one,
+/// so a window parked just inside the threshold bounces straight back out.
 #[test]
 fn the_resize_arm_writes_the_frame_only_when_one_was_measured() {
     const ARM: &str = "WindowEvent::Resized(_) =>";
@@ -170,6 +170,33 @@ fn the_resize_arm_writes_the_frame_only_when_one_was_measured() {
         arm.matches("set_frame_allowance_").count(),
         2,
         "the arm writes the frame reading somewhere besides the gated pair:\n{arm}"
+    );
+}
+
+/// The allowance is the edge the size arriving with this very event is measured against, and this
+/// filter runs ahead of Slint's own handling, so the write has to be synchronous. Posted, it lands
+/// a beat after the decision that needed it: the miniplayer drops the frame, the client grows by it,
+/// and the switch leaves against the edge it had before the drop.
+#[test]
+fn the_resize_arm_writes_the_frame_ahead_of_slint() {
+    const ARM: &str = "WindowEvent::Resized(_) =>";
+    const POSTED: &str = "weak.upgrade_in_event_loop(move |ui|";
+    const SETTER: &str = "set_frame_allowance_w(";
+    let code = filter_source();
+    let arm = block_after(&code, ARM);
+    let posted = block_after(arm, POSTED);
+
+    assert!(!posted.is_empty(), "no `{POSTED}` block found: the walk is broken, not the code");
+    assert!(
+        !posted.contains("set_frame_allowance_"),
+        "the frame reading is written from the posted closure, so it reaches the exit edge after \
+         the size it is the edge for:\n{arm}"
+    );
+    // Absence from the posted block is not enough on its own: a hop of its own, ahead of it, reads
+    // as synchronous and lands just as late.
+    assert!(
+        matches!((arm.find(SETTER), arm.find(POSTED)), (Some(write), Some(hop)) if write < hop),
+        "the frame reading is no longer written before the arm posts anything:\n{arm}"
     );
 }
 

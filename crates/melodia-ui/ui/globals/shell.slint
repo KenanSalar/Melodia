@@ -23,9 +23,13 @@ export enum DragRegion { none, titlebar, miniplayer }
 export global WindowChrome {
     in property <bool> is-maximized;
 
-    // What the OS frame adds to the client area on each axis. Rust writes it only while a frame is
-    // up, so the reading from before the miniplayer dropped the frame survives for its exit edge.
-    // The window's minimum reads it too, while the frame stands.
+    // What the OS frame adds to the client area on each axis, measured as the step the client takes
+    // when a decoration comes or goes rather than asked of the window: a Wayland compositor draws
+    // its decoration outside the surface and tells the client nothing about it, so the query reads
+    // zero on the one desktop whose client really does grow by a titlebar. Rust writes it only on a
+    // reading that crossed a change `frame-changed` has just announced, so it survives every
+    // frameless one after it, for the miniplayer's exit edge and for the window's minimum while a
+    // frame stands.
     in property <length> frame-allowance-w;
     in property <length> frame-allowance-h;
 
@@ -74,6 +78,11 @@ export global WindowChrome {
     // The same for `ResizeRing`'s grabs, kept in a cell the filter checks first, before an OS-level
     // resize.
     callback resize-zone-changed(ResizeZone);
+    // The window is about to gain or lose its OS frame. Rust stamps the moment, because the step
+    // the client takes is only a frame while it is that change's own: a desktop that takes a
+    // dropped frame out of the window rather than handing it to the client reports no size at all,
+    // and the next resize of any kind would be read as the frame.
+    callback frame-changed();
     callback restart-app();
     callback restart-tray();
     callback restart-backdrop();
@@ -173,7 +182,7 @@ export global MiniPlayer {
             - root.controls-min-width) / (root.controls-max-width - root.controls-min-width),
             0, 1));
 
-    // The column's window captions: 0 = Standard, 1 = macOS, 2 = KDE,
+    // The column's window captions: 0 = Windows, 1 = macOS, 2 = KDE,
     // `Theme.titlebar-button-style`'s tokens. Its own setting rather than that one's, a miniplayer
     // showing captions under the native titlebar as well, where the titlebar's style has nothing
     // to draw.

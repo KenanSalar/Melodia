@@ -38,6 +38,7 @@ fn kept(plays: i32) -> RadioStation {
         country_code: String::new(),
         language: String::new(),
         codec: String::new(),
+        probed_codec: None,
         bitrate: 0,
         hls: false,
         is_favorite: false,
@@ -83,7 +84,7 @@ fn kept_row(id: i64, uuid: Option<&str>) -> RadioStationRow {
 fn browsed_row(uuid: &str) -> RadioStationRow {
     let mut station = browsed(0);
     uuid.clone_into(&mut station.station_uuid);
-    to_slint_radio_station_row(&station, false, None)
+    to_slint_radio_station_row(&station, &LocalAnswers::default())
 }
 
 /// The model shape both grids install. Through the caller's own chunker, so a change to how a
@@ -112,7 +113,8 @@ fn a_kept_station_carries_its_own_play_count() {
 /// badged with four-figure counts, reading as their own history.
 #[test]
 fn a_browsed_station_reports_no_plays_of_its_own() {
-    assert_eq!(to_slint_radio_station_row(&browsed(4_213), false, None).play_count, 0);
+    let row = to_slint_radio_station_row(&browsed(4_213), &LocalAnswers::default());
+    assert_eq!(row.play_count, 0);
 }
 
 /// Every shape a segmented station arrives in with nothing to call its format, and the two it does
@@ -120,15 +122,36 @@ fn a_browsed_station_reports_no_plays_of_its_own() {
 /// so the card would otherwise draw an empty slot where the chip beside it reads `HLS`.
 #[test]
 fn a_segmented_station_with_no_format_of_its_own_is_drawn_as_hls() {
-    assert_eq!(display_codec("", true), facets::SEGMENTED_CODEC_LABEL);
-    assert_eq!(display_codec("UNKNOWN", true), facets::SEGMENTED_CODEC_LABEL);
-    assert_eq!(display_codec("unknown,H.264", true), facets::SEGMENTED_CODEC_LABEL);
+    assert_eq!(display_codec(None, "", true), facets::SEGMENTED_CODEC_LABEL);
+    assert_eq!(display_codec(None, "UNKNOWN", true), facets::SEGMENTED_CODEC_LABEL);
+    assert_eq!(display_codec(None, "unknown,H.264", true), facets::SEGMENTED_CODEC_LABEL);
 
-    assert_eq!(display_codec("", false), "", "a direct mount that named nothing says nothing");
     assert_eq!(
-        display_codec("AAC", true),
+        display_codec(None, "", false),
+        "",
+        "a direct mount that named nothing says nothing"
+    );
+    assert_eq!(
+        display_codec(Some("AAC"), "AAC", true),
         "AAC",
         "the bucket is generalised on the chip, never over a station that named its own format"
+    );
+}
+
+/// The whole point of the probe: an Ogg mount is filed under `OGG` by the directory and answers
+/// `audio/ogg` on the wire, so nothing above the decoder can tell Vorbis from Opus.
+///
+/// The segmented arm is the one exception, and it is asked of the directory's column for exactly
+/// this reason: once a station has played, the probe fills the `UNKNOWN` the test reads, and a
+/// card that then named the codec inside the segments would stop saying how they arrive.
+#[test]
+fn a_probed_format_beats_the_directorys_word_everywhere_but_the_segmented_arm() {
+    assert_eq!(display_codec(Some("OPUS"), "OGG", false), "OPUS");
+    assert_eq!(display_codec(None, "OGG", false), "OGG", "nothing probed leaves it standing");
+    assert_eq!(
+        display_codec(Some("AAC"), "UNKNOWN", true),
+        facets::SEGMENTED_CODEC_LABEL,
+        "a played segmented station still says how it arrives"
     );
 }
 

@@ -209,11 +209,21 @@ impl StationSource {
     fn to_row(&self, radio_ui: &RadioUi) -> RadioStationRow {
         match self {
             Self::Kept(station) => rows::to_slint_kept_station_row(station),
-            Self::Browsed(station, logo) => rows::to_slint_radio_station_row(
-                station,
-                radio_ui.starred.lock().contains(&station.station_uuid),
-                logo.as_deref(),
-            ),
+            Self::Browsed(station, logo) => {
+                // The logo is the one the page was opened with rather than a fresh resolve: a
+                // seated page keeps drawing what it was seated with.
+                //
+                // The star shadow is read out before the answers are taken, so the two are never
+                // held at once: `browse::apply` nests them the other way round.
+                let is_favorite = radio_ui.starred.lock().contains(&station.station_uuid);
+                let kept = radio_ui.kept_answers.lock();
+                let local = rows::LocalAnswers {
+                    is_favorite,
+                    logo: logo.clone(),
+                    format: browse::format_for(kept.get(&station.station_uuid)),
+                };
+                rows::to_slint_radio_station_row(station, &local)
+            }
         }
     }
 }

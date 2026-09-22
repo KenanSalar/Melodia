@@ -5,24 +5,20 @@
 //! ffmpeg and states a priming nothing here chose.
 
 use std::fs::File;
-use std::path::{Path, PathBuf};
 
 use symphonia::core::meta::MetadataLog;
 use symphonia::core::units::TimeBase;
 
 use super::{edit_lists, exact_media_ticks, parse_smpb};
 use crate::player::source::audio::SampleRate;
+use crate::player::source::file_decode::Trim;
+use crate::player::source::tests::helpers::asset;
 use melodia_core::error::AppError;
-use melodia_testkit::ASSETS_DIR;
 
 /// What iTunes writes: priming 0x840 (2112, Apple's default), remainder 0x1DC, and a count of
 /// 0xAC44E4 samples. Twelve fields, of which three carry anything.
 const ITUNES: &str = " 00000000 00000840 000001DC 0000000000AC44E4 00000000 00000000 \
                       00000000 00000000 00000000 00000000 00000000 00000000";
-
-fn asset(name: &str) -> PathBuf {
-    Path::new(ASSETS_DIR).join(name)
-}
 
 #[test]
 fn itunsmpb_yields_the_priming_and_the_original_sample_count() -> Result<(), AppError> {
@@ -193,7 +189,7 @@ fn an_implausible_priming_is_refused_rather_than_acted_on() {
 ///
 /// The timebase is a plain 1/44100, which is what an MP4 audio track carries, and the metadata log
 /// is empty so the edit list is what answers rather than an `iTunSMPB`.
-fn resolved(duration: Option<u64>, delay: u64, playable: Option<u64>) -> Option<super::Trim> {
+fn resolved(duration: Option<u64>, delay: u64, playable: Option<u64>) -> Option<Trim> {
     let rate = SampleRate::new(44_100)?;
     let timing = super::Timing { id: 1, time_base: TimeBase::try_new(1, 44_100)?, duration };
     let edits = [super::Edit { track_id: 1, delay, playable }];

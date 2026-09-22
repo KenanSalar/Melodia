@@ -79,6 +79,13 @@ is the copy to delete.
 
 ## Stations on disk
 
+- **`queries::radio::` is `library::radio`'s to name, and `library::radio_files`'s by the written
+  exemption at that module's own `//!`.** The facade's doc argues the door against the *UI*, which
+  leaves the sibling nobody expects: a station-row write from elsewhere in `melodia-app` reads as
+  ordinary transport code and is one. `record_probed_codec` was exactly that and now sits beside
+  `mark_played`, whose one-line-`UPDATE`-per-play shape it copies. **`radio_facade.rs`'s
+  `only_the_radio_facade_writes_to_the_station_table` is what holds it**, and its own doc comment
+  argues why none of the six checks beside it could.
 - **Two tables, and only one holds rows the user owns.** `radio_stations` is favorites, hand-typed
   URLs and play history at three points in one row's life. `radio_logo_answers` is a record of our
   own network outcomes keyed on the URL — which is what lets it exist beside the rule that browsed
@@ -96,7 +103,10 @@ is the copy to delete.
   offered only where the directory said nothing.
 - **The migration shipped in v0.12.0, so a schema change here is a second migration, never an edit
   to it.** Its header argues the schema — no `AUTOINCREMENT`, no secondary indexes, why `hls` and
-  `country` are stored rather than re-derived — and none of that is restated here.
+  `country` are stored rather than re-derived — and none of that is restated here. There is a
+  second one now, `probed_codec`, and it argues its own column the same way: why the answer only
+  exists once a stream has opened, and why it sits beside the directory's `codec` rather than
+  correcting it. Read whichever one owns the column you are asking about.
 - **A deleted station's id can be reused**, there being no `AUTOINCREMENT`. So a persisted
   `last_detail_ids` entry can land on a different station across a restart, exactly as it can for a
   playlist. That is the accepted cost of not upserting every station the user merely glanced at.
@@ -149,7 +159,11 @@ Each of these is written once in Rust and again in `.slint`, so each needs a pin
   what made Radio persist as Settings and boot onto My Library — silent at both ends.
 - **`id == 0` means "no database row"**, given its one meaning in `rows::station_has_row` and asked
   from four directions: which cache a page resolves from, whether a removal has a target, whether
-  `views.json` may name the page (D6), and whether a history walk may reopen it.
+  `views.json` may name the page (D6), and whether a history walk may reopen it. A fifth asks it
+  in `melodia-app`, where `record_probed_codec` refuses to write a row that does not exist, and
+  that one spells the comparison by hand: `station_has_row` lives in `melodia-views`, which nothing
+  below it can name. So the sentinel now has two homes rather than one, and the raw spelling is the
+  one to grep for when its meaning moves.
 - **The `-1` sentinels are declared twice by hand** — `NO_SEAT`, `VOTES_UNKNOWN`, `chip_index`'s
   miss, and `tab_bar::UNFETCHED_COUNT`. The facet chip *indices* are the one group that is safe:
   `facets::chip_indices` reads them off the global rather than restating them.

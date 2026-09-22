@@ -25,6 +25,11 @@ use stream_download::http::{Client as StreamClient, HttpStream, format_range_hea
 use stream_download::storage::bounded::BoundedStorageProvider;
 use stream_download::storage::memory::MemoryStorageProvider;
 use stream_download::{Settings, StreamDownload};
+use symphonia::core::codecs::audio::AudioCodecId;
+use symphonia::core::codecs::audio::well_known::{
+    CODEC_ID_AAC, CODEC_ID_ALAC, CODEC_ID_FLAC, CODEC_ID_MP1, CODEC_ID_MP2, CODEC_ID_MP3,
+    CODEC_ID_OPUS, CODEC_ID_VORBIS,
+};
 
 use melodia_core::error::AppError;
 use melodia_core::error::describe;
@@ -158,8 +163,9 @@ pub struct StationFacts {
     pub genre: String,
     pub homepage: Option<String>,
     pub logo_url: Option<String>,
-    /// A short display token — `MP3`, `AAC` — off the response's content type, in the directory's
-    /// own spelling for its `codec` column. Empty where the server sent a type we have no name for.
+    /// A short display token — `MP3`, `OPUS` — in the directory's own spelling for its `codec`
+    /// column, off the decoded container where [`codec_token`] names that codec and off the
+    /// response's content type otherwise. Empty where neither has a name for it.
     pub codec: String,
     /// Advertised kbps, `0` where the server does not say. Same display hint as the directory's.
     pub bitrate: i32,
@@ -210,12 +216,19 @@ struct Resolved {
 pub struct PreparedStream {
     source: PrebufferSource,
     shared: Arc<StreamShared>,
+    codec: String,
 }
 
 impl PreparedStream {
     /// Split into the source the deck plays and the cell everyone else watches.
     pub fn into_parts(self) -> (PrebufferSource, Arc<StreamShared>) {
         (self.source, self.shared)
+    }
+
+    /// [`StationFacts::codec`] for the mount that just opened, so a caller holding the station's
+    /// row can record what it actually serves. Empty where nothing could name it.
+    pub fn codec(&self) -> &str {
+        &self.codec
     }
 }
 
@@ -235,7 +248,7 @@ pub fn prepared_stream_for_test(shape: Shape) -> (PreparedStream, std::sync::Wea
     let shared = StreamShared::new();
     let watching = Arc::downgrade(&shared);
     let (source, _writer) = PrebufferSource::new(Arc::clone(&shared), shape);
-    (PreparedStream { source, shared }, watching)
+    (PreparedStream { source, shared, codec: String::new() }, watching)
 }
 
 /// Open `url` and start feeding it, following one level of playlist indirection first.
@@ -248,6 +261,7 @@ pub async fn open(client: &reqwest::Client, url: &str) -> Result<PreparedStream,
     let Resolved { opened, url, reopen } = connect_following_playlist(client, url, &shared).await?;
 
     let (source, writer) = PrebufferSource::new(shared.clone(), opened.shape);
+    let codec = opened.facts.codec;
     spawn_feed(FeedContext {
         decoder: opened.decoder,
         writer,
@@ -259,7 +273,7 @@ pub async fn open(client: &reqwest::Client, url: &str) -> Result<PreparedStream,
         runtime: tokio::runtime::Handle::current(),
     });
 
-    Ok(PreparedStream { source, shared })
+    Ok(PreparedStream { source, shared, codec })
 }
 
 /// Open `url` far enough to know it plays, then let it go.
@@ -353,7 +367,7 @@ async fn open_segments(
     shared: &Arc<StreamShared>,
 ) -> Result<OpenedStream, AppError> {
     let stream = hls::open(client, url, body, Arc::clone(shared)).await?;
-    let facts = StationFacts {
+    let mut facts = StationFacts {
         codec: stream.codec.to_owned(),
         bitrate: stream.bitrate_kbps,
         hls: true,
@@ -367,6 +381,10 @@ async fn open_segments(
     })
     .await
     .map_err(AppError::io_source)??;
+
+    if let Some(token) = codec_token(decoder.codec()) {
+        token.clone_into(&mut facts.codec);
+    }
 
     Ok(OpenedStream { shape: decoder.shape(), decoder, facts })
 }
@@ -387,7 +405,7 @@ async fn connect(
     }
 
     let icy = IcyHeaders::parse_from_headers(stream.headers());
-    let facts = StationFacts {
+    let mut facts = StationFacts {
         name: non_blank(icy.name()),
         genre: icy.genre().join(GENRE_SEPARATOR),
         homepage: non_blank(icy.station_url()),
@@ -428,6 +446,10 @@ async fn connect(
     .await
     .map_err(AppError::io_source)??;
 
+    if let Some(token) = codec_token(decoder.codec()) {
+        token.clone_into(&mut facts.codec);
+    }
+
     Ok(Opened::Audio(Box::new(OpenedStream { shape: decoder.shape(), decoder, facts })))
 }
 
@@ -457,6 +479,27 @@ fn codec_from_mime(mime: Option<&str>) -> &'static str {
         Some("audio/flac" | "audio/x-flac") => "FLAC",
         Some("audio/wav" | "audio/x-wav" | "audio/wave") => "WAV",
         _ => "",
+    }
+}
+
+/// The codec the container turned out to hold, in that same spelling.
+///
+/// A content type names the container, so every Ogg mount answers `audio/ogg` whether it carries
+/// Vorbis, Opus or FLAC, and the directory's own column says `OGG` for the same reason. This is
+/// the one answer that can tell them apart, so it wins wherever it has one.
+///
+/// `None` for a codec with no token of ours, which leaves [`codec_from_mime`]'s answer standing:
+/// PCM is the case that matters, the id splitting into a dozen widths and layouts where the
+/// content type says `WAV` and is what a listener would recognise.
+fn codec_token(codec: AudioCodecId) -> Option<&'static str> {
+    match codec {
+        CODEC_ID_MP1 | CODEC_ID_MP2 | CODEC_ID_MP3 => Some("MP3"),
+        CODEC_ID_AAC => Some("AAC"),
+        CODEC_ID_VORBIS => Some("VORBIS"),
+        CODEC_ID_OPUS => Some("OPUS"),
+        CODEC_ID_FLAC => Some("FLAC"),
+        CODEC_ID_ALAC => Some("ALAC"),
+        _ => None,
     }
 }
 
