@@ -71,7 +71,9 @@ pub mod window_chrome;
 // view mounted inside it do on the frame the window opens, and on the miniplayer swap's
 // crossfade. `titlebar_tests` reaches a third
 // tree — it holds the brand mark's theme brush to the asset it is painted over, the only
-// thing here a dark-palette reviewer cannot see going wrong. `frameless_tests` holds the
+// thing here a dark-palette reviewer cannot see going wrong, and `caption_tests` reaches it
+// for the decoration buttons, whose fill answers to the OS decoration beside the window and
+// to a backdrop that is off by default. `frameless_tests` holds the
 // shell's frame bindings and the miniplayer's exit edge to one another, a pairing only a Win32
 // or macOS frame shows breaking.
 //
@@ -81,6 +83,9 @@ pub mod window_chrome;
 #[cfg(test)]
 #[path = "tests/aurora_backdrop_tests.rs"]
 mod aurora_backdrop_tests;
+#[cfg(test)]
+#[path = "tests/caption_tests.rs"]
+mod caption_tests;
 #[cfg(test)]
 #[path = "tests/detail_restore_tests.rs"]
 mod detail_restore_tests;

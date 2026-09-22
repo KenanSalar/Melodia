@@ -12,8 +12,8 @@ import { MiniIconButton, MiniGlyphs } from "mini-icon-button.slint";
 // button that grows the window hands back the full player at the geometry it last settled at.
 //
 // A layout rather than a `Rectangle`, so the `if`-mounted captions size it. Every caption takes the
-// row's 28 px rather than a titlebar's 32 and keeps its width: the height is the room this row has,
-// where the width is the pitch the style is drawn to.
+// titlebar's cell and the pitch its style is drawn to: this row is the window's top edge as the
+// titlebar's is, so the cells reach back over the host's inset rather than sitting inside it.
 export component MiniCaptions inherits HorizontalLayout {
     // The drawn glyphs' ink, eased by the host with the rest of its surface. Hover and its fill
     // stay stepped, the caption easing those itself.
@@ -21,7 +21,10 @@ export component MiniCaptions inherits HorizontalLayout {
     // The glyph a KDE caption punches out of its lit disc.
     in property <brush> ink-on-lit;
 
-    private property <length> cell-height: 28px;
+    // Only the macOS arm reads this as a constraint: a `HorizontalLayout` stretches its cross-axis
+    // children and ignores their min and max, where `MacOsTitleBarCluster`'s `GridLayout` caps its
+    // lights at it and would otherwise top-align them above the drawn captions.
+    private property <length> cell-height: MiniPlayer.captions-height;
 
     out property <CaptionStyle> style: MiniPlayer.button-style == 2
         ? CaptionStyle.kde
@@ -29,8 +32,12 @@ export component MiniCaptions inherits HorizontalLayout {
     // A standard caption lights its glyph over a fill, where a KDE one fills a disc with the lit ink.
     private property <brush> caption-hover-fg:
         root.style == CaptionStyle.kde ? root.ink-on-lit : MiniGlyphs.lit;
-    private property <brush> caption-hover-bg:
-        root.style == CaptionStyle.kde ? MiniGlyphs.lit : MiniGlyphs.hover-bg;
+    // `MiniGlyphs.hover-bg` goes transparent on the backdrop, which the round controls answer with
+    // `hover-lift`. A caption has no lift and its fill is the whole cell, so there it takes the
+    // tier the disc buttons take.
+    private property <brush> caption-hover-bg: root.style == CaptionStyle.kde
+        ? MiniGlyphs.lit
+        : MiniPlayer.backdrop-shown ? Player.np-accent-disc-hover : MiniGlyphs.hover-bg;
 
     horizontal-stretch: 0;
     spacing: 0;
@@ -109,9 +116,11 @@ export component MiniCaptionsRow inherits Rectangle {
 
         HorizontalLayout {
             x: 0;
-            y: (parent.height - Theme.pad-xs * root.open-t - self.height) / 2;
+            // Centred on the row while it opens, reaching back over the host's inset once it is
+            // open, so the cells land on the window's top edge where the titlebar's do.
+            y: (parent.height - self.height) / 2 - root.edge-pad * root.open-t;
             width: parent.width;
-            height: MiniPlayer.captions-height - Theme.pad-xs;
+            height: MiniPlayer.captions-height;
             spacing: 2px;
             padding-left: 4px;
             // The cluster reaches back over the host's padding to the inset the titlebar gives its
