@@ -3696,6 +3696,7 @@ dependencies = [
  "kakasi",
  "lofty",
  "log",
+ "lru",
  "melodia-artwork",
  "melodia-audio",
  "melodia-core",

@@ -17,7 +17,7 @@ use slint::{ComponentHandle, Image, Weak};
 
 use super::metadata::to_slint_track_meta;
 use super::write_crossfade_slot;
-use super::{NowPlayingSource, NowPlayingState, SourceKey};
+use super::{NowPlayingSource, NowPlayingState, SourceKey, heard_on_air};
 use crate::ui::appearance::theme_apply::color;
 use crate::ui::aurora;
 use crate::ui::backdrop::{self, BackdropSample};
@@ -26,6 +26,8 @@ use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::track::TrackSummary;
+use melodia_engine::player::engine::state::PlayerViewModelLight;
+use melodia_engine::player::engine::types::RadioNowPlaying;
 use melodia_ui::{AppWindow, Player, TrackMetaRow};
 
 thread_local! {
@@ -60,20 +62,32 @@ pub(super) fn spawn_source_change_subscriber(
             if rx.changed().await.is_err() {
                 break;
             }
-            // *Only* the source's identity: this fires on every `view_model` push — play,
-            // pause, volume, speed, and every ICY title a station announces — and acts
-            // solely on a source change. Both the read and the compare happen under the
-            // borrow, so a push that moved nothing allocates nothing; the guard is gone by
-            // the closing brace, well before the `.await` below.
-            let new_source = {
+            // The source's identity, plus the one thing a station changes under it that anything
+            // here draws: the song, for the lyrics panel. This fires on every `view_model` push —
+            // play, pause, volume, speed, and every ICY title — so both reads and both compares
+            // happen under the borrow, and a push that moved nothing allocates nothing; the guard
+            // is gone by the closing brace, well before the `.await` below.
+            let (new_source, song_moved) = {
                 let vm = rx.borrow_and_update();
                 let Some(vm) = vm.as_ref() else { continue };
+                let song_moved = note_song(&np_state, vm);
                 let source = vm.source();
                 if SourceKey::describes(last_key.as_ref(), source.as_ref().map(|s| s.id)) {
-                    continue;
+                    (None, song_moved)
+                } else {
+                    (Some(NowPlayingSource::from_vm(vm)), song_moved)
                 }
-                NowPlayingSource::from_vm(vm)
             };
+            let Some(new_source) = new_source else {
+                if song_moved {
+                    np_state.lyrics.kick();
+                }
+                continue;
+            };
+            // Answers for a station's songs are worth nothing once it has stopped playing.
+            if matches!(last_key, Some(SourceKey::Station(_))) {
+                library::lyrics::forget_live(&state);
+            }
             last_key = new_source.as_ref().map(|s| s.key.clone());
             // Regardless of visibility, so a later open can seed the artwork from it.
             np_state.current_source.borrow_mut().clone_from(&new_source);
@@ -95,6 +109,22 @@ pub(super) fn spawn_source_change_subscriber(
         log::debug!("ui::now_playing source-change subscriber stopped");
     }))?;
     Ok(())
+}
+
+/// Record the song the station is announcing, answering whether it moved.
+///
+/// Compared against the borrowed announcement, so only a new song allocates.
+fn note_song(np_state: &NowPlayingState, vm: &PlayerViewModelLight) -> bool {
+    let announced = vm.radio.as_deref().and_then(RadioNowPlaying::announcement);
+    let unchanged = match (np_state.on_air.borrow().as_ref(), announced) {
+        (None, None) => true,
+        (Some(held), Some(song)) => held.artist == song.artist && held.title == song.title,
+        _ => false,
+    };
+    if !unchanged {
+        *np_state.on_air.borrow_mut() = heard_on_air(vm);
+    }
+    !unchanged
 }
 
 /// Fetch metadata and decode the cover for `track`, then write both into the `Player`

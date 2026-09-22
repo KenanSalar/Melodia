@@ -130,6 +130,9 @@ pub struct AppState {
     /// Whether playing a station reports a click back to the directory. Read on
     /// the play path, which is already on a worker.
     pub radio_send_clicks: SharedFlag,
+    /// Whether a song heard on a station is scrobbled, read by `tasks::scrobble`'s detector on
+    /// every title change.
+    pub radio_scrobble: SharedFlag,
     /// Whether lyrics run at all, on [`Self::radio_enabled`]'s terms: `library::lyrics`
     /// refuses on it from a worker, and the Now Playing switch and the Settings card
     /// both write it.
@@ -150,6 +153,9 @@ pub struct AppState {
     /// can construct fresh and the pacing is state rather than process-global. Shared by every
     /// clone of `AppState`, which is the point: the floor is per host, not per caller.
     pub lyrics_pacer: Arc<RequestPacer>,
+    /// What the lyrics directory said about the songs heard on the station playing, shared across
+    /// clones so the Now Playing panel and a later reseed read one cache.
+    pub live_lyrics: Arc<crate::library::lyrics::LiveLyrics>,
     /// Whether a star rating is also written into the file's own tag, on the same
     /// terms as [`Self::radio_enabled`]: `tasks::rating_writeback` asks once per
     /// coalesced burst, and a `settings.json` read there would be a file read on
@@ -287,10 +293,12 @@ impl AppState {
             radio_enabled: SharedFlag::new(settings.radio.radio_enabled),
             radio_hide_segmented: SharedFlag::new(settings.radio.radio_hide_segmented),
             radio_send_clicks: SharedFlag::new(settings.radio.radio_send_clicks),
+            radio_scrobble: SharedFlag::new(settings.radio.radio_scrobble),
             lyrics_enabled: SharedFlag::new(settings.lyrics.lyrics_enabled),
             lyrics_online_enabled: SharedFlag::new(settings.lyrics.lyrics_online_enabled),
             lyrics_romanization_shown: SharedFlag::new(settings.lyrics.lyrics_romanization_shown),
             lyrics_pacer: Arc::new(crate::library::lyrics::pacer()),
+            live_lyrics: Arc::default(),
             write_ratings_to_tags: SharedFlag::new(settings.library.write_ratings_to_tags),
             media_controls: Some(mc_handle),
             http_client,

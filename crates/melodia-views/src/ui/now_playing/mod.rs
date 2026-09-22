@@ -29,6 +29,7 @@ use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel};
 
 use crate::ui::chips;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
+use melodia_app::library::lyrics::HeardSong;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::track::TrackSummary;
@@ -109,6 +110,12 @@ impl NowPlayingSource {
     }
 }
 
+/// The song a station is announcing, where the announcement names an artist.
+pub(super) fn heard_on_air(vm: &PlayerViewModelLight) -> Option<HeardSong> {
+    let song = vm.radio.as_deref()?.announcement()?;
+    Some(HeardSong { artist: song.artist.to_owned(), title: song.title.to_owned() })
+}
+
 /// Shared UI-thread state coordinating the view's two subscribers and the
 /// `now-playing-open` callback. All three run on the event-loop thread, so
 /// `Rc<Cell/RefCell>` is enough.
@@ -141,6 +148,9 @@ pub struct NowPlayingState {
     /// Latest source on the deck, kept whether or not the view is open so opening it can
     /// seed the artwork and chips.
     pub(super) current_source: RefCell<Option<NowPlayingSource>>,
+    /// The song the station on the deck last announced with an artist, for the lyrics panel.
+    /// Kept apart from [`Self::current_source`], whose key deliberately ignores the title.
+    pub(super) on_air: RefCell<Option<HeardSong>>,
     /// The source whose artwork and chips are currently in the `Player` global. The open
     /// callback compares it against `current_source` to skip a redundant re-seed when
     /// nothing changed while the view was closed.
@@ -298,9 +308,10 @@ pub fn install(
     // `watch::Receiver::changed()` only fires on sends *after* subscribe and the
     // startup queue-restore already broadcast, so without an explicit seed the view is
     // empty until the next playback transition. As in `queue_sheet::install`.
-    let (current_source, qvm) = {
+    let (current_source, on_air, qvm) = {
         let s = lock_state(&state.player_state);
-        (NowPlayingSource::from_vm(&s.to_view_model_light()), s.to_queue_view_model())
+        let vm = s.to_view_model_light();
+        (NowPlayingSource::from_vm(&vm), heard_on_air(&vm), s.to_queue_view_model())
     };
     let initial_key = current_source.as_ref().map(|s| s.key.clone());
 
@@ -322,6 +333,7 @@ pub fn install(
         last_current_id: Cell::new(current_track_id(&qvm)),
         last_queue_index: Cell::new(qvm.queue_index),
         current_source: RefCell::new(current_source),
+        on_air: RefCell::new(on_air),
         applied_source: RefCell::new(None),
         chip_texts: RefCell::new(Vec::new()),
         chip_last_width: Cell::new(0.0),

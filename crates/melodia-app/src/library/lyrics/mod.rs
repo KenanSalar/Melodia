@@ -30,11 +30,14 @@
 //! being read, because reading it costs nothing anybody asked to stop paying.
 
 mod embedded;
+mod live;
 mod lrc;
 mod online;
 mod romanize;
 mod sidecar;
 mod store;
+
+pub use live::{HeardSong, LiveLyrics, for_live, forget_live};
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

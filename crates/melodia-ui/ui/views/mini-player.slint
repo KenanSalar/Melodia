@@ -362,7 +362,7 @@ export component MiniPlayerView inherits Rectangle {
             // **Clipped here**, Up Next clipping itself: the sheet's empty state is centred on the
             // panel rather than inside its scroller, so a panel shorter than the message would
             // paint it over the timeline.
-            if !Player.vm.has_station && Lyrics.enabled: LyricsPanel {
+            if Lyrics.enabled: LyricsPanel {
                 clip: true;
                 vertical-stretch: 1;
                 compact: true;
@@ -373,7 +373,7 @@ export component MiniPlayerView inherits Rectangle {
                 bar-on-backdrop: root.on-backdrop;
                 bar-recolor-duration: root.recolor;
             }
-            if Player.vm.has_station || !Lyrics.enabled: UpNextList {
+            if !Lyrics.enabled: UpNextList {
                 vertical-stretch: 1;
                 compact: true;
                 ink: root.ink;

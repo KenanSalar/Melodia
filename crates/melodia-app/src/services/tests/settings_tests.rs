@@ -689,6 +689,7 @@ fn test_radio_roundtrip() -> Result<(), AppError> {
             radio_enabled: true,
             radio_hide_segmented: true,
             radio_send_clicks: false,
+            radio_scrobble: false,
         },
         ..reading_env(SettingsData::default)
     };

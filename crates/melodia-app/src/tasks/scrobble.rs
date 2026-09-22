@@ -1,7 +1,8 @@
 //! Scrobbling background tasks: a **detector** that turns the player's
 //! view-model + position watch channels into scrobble / now-playing decisions
 //! (via the pure
-//! [`melodia_integrations::services::integrations::scrobble::detector::DetectorState`]),
+//! [`melodia_integrations::services::integrations::scrobble::detector::DetectorState`], and
+//! its station twin `live_detector::LiveDetector`),
 //! and a **submitter** that drains the durable queue to the providers with
 //! per-provider batching, retry, and backoff.
 //!
@@ -15,11 +16,14 @@ use std::time::Duration;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
-use crate::state::AppState;
+use crate::state::{AppState, SharedFlag};
 use crate::tasks::TaskSpawner;
 use melodia_core::entities::track::ScrobbleRow;
 use melodia_engine::player::engine::state::{PlayerViewModelLight, PositionTick};
 use melodia_integrations::services::integrations::scrobble::detector::{DetectorState, Effect};
+use melodia_integrations::services::integrations::scrobble::live_detector::{
+    LiveDetector, LiveEffect,
+};
 use melodia_integrations::services::integrations::scrobble::{ScrobbleService, ScrobbleTrack};
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
@@ -39,10 +43,11 @@ const FLUSH_TIMEOUT: Duration = Duration::from_secs(2);
 pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let detector_service = state.scrobble.clone();
     let db = state.db.clone();
+    let radio_scrobble = state.radio_scrobble.clone();
     let vm_rx = state.sinks.view_model.subscribe();
     let pos_rx = state.position_tx.subscribe();
     spawner.spawn_cancellable(move |shutdown| {
-        run_detector(shutdown, detector_service, db, vm_rx, pos_rx)
+        run_detector(shutdown, detector_service, db, radio_scrobble, vm_rx, pos_rx)
     });
 
     let submitter_service = state.scrobble.clone();
@@ -53,23 +58,27 @@ fn now_ts() -> i64 {
     chrono::Utc::now().timestamp()
 }
 
-/// Correlate the two watch channels through the pure detector, performing the DB
+/// Correlate the two watch channels through the pure detectors, performing the DB
 /// enrichment fetch + service calls each decision asks for. Do-while shaped:
 /// each receiver's primed value is processed before the first `changed()`.
 async fn run_detector(
     shutdown: CancellationToken,
     service: Arc<ScrobbleService>,
     db: DbPool,
+    radio_scrobble: SharedFlag,
     mut vm_rx: watch::Receiver<Option<PlayerViewModelLight>>,
     mut pos_rx: watch::Receiver<Option<PositionTick>>,
 ) {
     let mut detector = DetectorState::new();
+    let mut live = LiveDetector::new();
     // Single-slot cache so a play's now-playing fetch is reused at its scrobble.
     let mut last_row: Option<(i64, ScrobbleRow)> = None;
 
     let primed_vm = vm_rx.borrow_and_update().clone();
     let effects = detector.on_view_model(primed_vm.as_ref(), now_ts());
     process_effects(effects, &service, &db, &mut last_row).await;
+    let live_effects = live.on_view_model(primed_vm.as_ref(), now_ts(), radio_scrobble.get());
+    process_live_effects(live_effects, &service).await;
     let primed_tick = pos_rx.borrow_and_update().clone();
     if let Some(tick) = primed_tick {
         let effects = detector.on_position(&tick, now_ts());
@@ -92,6 +101,8 @@ async fn run_detector(
                 let vm = vm_rx.borrow_and_update().clone();
                 let effects = detector.on_view_model(vm.as_ref(), now_ts());
                 process_effects(effects, &service, &db, &mut last_row).await;
+                let live_effects = live.on_view_model(vm.as_ref(), now_ts(), radio_scrobble.get());
+                process_live_effects(live_effects, &service).await;
             }
             result = pos_rx.changed() => {
                 if result.is_err() {
@@ -127,6 +138,20 @@ async fn process_effects(
                     && let Err(e) = service.enqueue_scrobble(&row, timestamp).await
                 {
                     log::warn!("Failed to enqueue scrobble for track {track_id}: {e}");
+                }
+            }
+        }
+    }
+}
+
+/// A station's song already carries its whole payload, so there is no row to fetch.
+async fn process_live_effects(effects: Vec<LiveEffect>, service: &ScrobbleService) {
+    for effect in effects {
+        match effect {
+            LiveEffect::NowPlaying(track) => service.update_now_playing(track),
+            LiveEffect::Scrobble { track, timestamp } => {
+                if let Err(e) = service.enqueue_track(track, timestamp).await {
+                    log::warn!("Failed to enqueue a radio scrobble: {e}");
                 }
             }
         }

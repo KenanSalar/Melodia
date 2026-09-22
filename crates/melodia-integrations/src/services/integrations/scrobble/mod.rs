@@ -8,6 +8,7 @@
 
 pub mod credentials;
 pub mod detector;
+pub mod live_detector;
 pub mod model;
 pub mod providers;
 pub mod queue;
@@ -433,15 +434,19 @@ impl ScrobbleService {
         }
     }
 
-    /// Enrich a DB row into a durable scrobble and wake the submitter. Sets a
-    /// provider's "needs submitting" flag only when that provider is currently
-    /// connected + enabled (a flag for a disconnected provider would never clear
-    /// and would pin the item through `retain_pending`). A no-op when the row
-    /// can't be scrobbled or no provider wants it.
+    /// Enrich a DB row into a durable scrobble. A no-op when the row can't be scrobbled.
     pub async fn enqueue_scrobble(&self, row: &ScrobbleRow, timestamp: i64) -> AppResult<()> {
-        let Some(track) = ScrobbleTrack::from_row(row) else {
-            return Ok(());
-        };
+        match ScrobbleTrack::from_row(row) {
+            Some(track) => self.enqueue_track(track, timestamp).await,
+            None => Ok(()),
+        }
+    }
+
+    /// Queue a durable scrobble and wake the submitter. Sets a provider's "needs
+    /// submitting" flag only when that provider is currently connected + enabled (a
+    /// flag for a disconnected provider would never clear and would pin the item
+    /// through `retain_pending`). A no-op when no provider wants it.
+    pub async fn enqueue_track(&self, track: ScrobbleTrack, timestamp: i64) -> AppResult<()> {
         let (lastfm_remaining, listenbrainz_remaining) = {
             let runtime = self.runtime.read();
             (runtime.lastfm_scrobble_ready(), runtime.listenbrainz_scrobble_ready())

@@ -4,7 +4,7 @@ import { SectionCard } from "../../components/settings/section-card.slint";
 import { SettingRow } from "../../components/settings/setting-row.slint";
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 
-// The switch that mounts or removes the whole Radio section, and the two rows that configure it
+// The switch that mounts or removes the whole Radio section, and the rows that configure it
 // once it is on. The master row's description names radio-browser.info because a user deciding to
 // stay local is entitled to know who would be contacted. Search visibility follows
 // `discord-section.slint`.
@@ -32,9 +32,13 @@ export component RadioSection inherits Rectangle {
 
     property <bool> show-radio: row-visible(radio-label, radio-desc);
     property <bool> show-segmented: row-visible(segmented-label, segmented-desc);
-    property <bool> show-clicks: row-visible(clicks-label, clicks-desc);
+    property <string> scrobble-label: @tr("Scrobble radio songs");
+    property <string> scrobble-desc: @tr("Songs heard in full on a station go to your connected scrobbling services");
 
-    out property <bool> has-matches: show-radio || (Settings.radio-enabled && (show-segmented || show-clicks));
+    property <bool> show-clicks: row-visible(clicks-label, clicks-desc);
+    property <bool> show-scrobble: row-visible(scrobble-label, scrobble-desc);
+
+    out property <bool> has-matches: show-radio || (Settings.radio-enabled && (show-segmented || show-clicks || show-scrobble));
 
     VerticalLayout {
     if has-matches: SectionCard {
@@ -69,6 +73,16 @@ export component RadioSection inherits Rectangle {
             ToggleSwitch {
                 checked <=> Settings.radio-send-clicks;
                 toggled(v) => { Settings.radio-send-clicks-changed(v); }
+            }
+        }
+
+        if Settings.radio-enabled && root.show-scrobble: SettingRow {
+            icon: "history";
+            label: root.scrobble-label;
+            description: root.scrobble-desc;
+            ToggleSwitch {
+                checked <=> Settings.radio-scrobble;
+                toggled(v) => { Settings.radio-scrobble-changed(v); }
             }
         }
     }

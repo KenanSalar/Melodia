@@ -22,6 +22,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use super::NowPlayingState;
 use crate::ui::settings::lyrics_settings;
+use melodia_app::library::lyrics::HeardSong;
 use melodia_app::state::AppState;
 use melodia_app::tasks;
 use melodia_core::entities::lyrics::LyricLine;
@@ -185,10 +186,10 @@ pub(crate) struct LyricsUi {
     /// A clicked row, held until the clock catches up with it.
     pinned: Cell<Option<usize>>,
     pinned_at_ms: Cell<i32>,
-    /// The track path the resident sheet belongs to, and `None` whenever the rows have been
-    /// handed back. **This is what makes the reseed idempotent**, so the three unrelated edges
-    /// that reach it cost one lookup between them rather than one each.
-    holding: RefCell<Option<String>>,
+    /// What the resident sheet belongs to, and `None` whenever the rows have been handed back.
+    /// **This is what makes the reseed idempotent**, so the three unrelated edges that reach it
+    /// cost one lookup between them rather than one each.
+    holding: RefCell<Option<Claim>>,
     /// Filled after [`install`] returns, because looking a sheet up needs the `NowPlayingState`
     /// this is a field of. `NowPlayingState`'s own two seeders, one layer down.
     reseed: RefCell<Option<super::Seeder>>,
@@ -205,10 +206,18 @@ impl LyricsUi {
         }
     }
 
-    /// Whether the resident sheet is already this track's.
-    fn holds(&self, path: &str) -> bool {
-        self.holding.borrow().as_deref() == Some(path)
+    /// Whether the resident sheet is already this one's.
+    fn holds(&self, claim: &Claim) -> bool {
+        self.holding.borrow().as_ref() == Some(claim)
     }
+}
+
+/// Whose sheet the panel holds: a track by its path, or a song a station announced. A station's
+/// URL is not the key, since one station plays a new song every few minutes.
+#[derive(Clone, PartialEq, Eq)]
+enum Claim {
+    Track(String),
+    OnAir(HeardSong),
 }
 
 /// Install the panel's callbacks and seed the toggles.

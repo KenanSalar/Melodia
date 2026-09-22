@@ -1807,6 +1807,12 @@ msgstr "Informar reproducciones al directorio"
 msgid "An anonymous count is what orders stations by popularity"
 msgstr "Un recuento anónimo es lo que ordena las emisoras por popularidad"
 
+msgid "Scrobble radio songs"
+msgstr "Hacer scrobbling de canciones de radio"
+
+msgid "Songs heard in full on a station go to your connected scrobbling services"
+msgstr "Las canciones escuchadas completas en una emisora se envían a tus servicios de scrobbling conectados"
+
 # ---- Radio: Browse -----------------------------------------------------------
 # The filter chips. "Genre" and "Language" reuse the labels above.
 msgid "Country"

@@ -2,6 +2,7 @@
 //! both services agree on. Kept free of any provider or I/O type so it stays a
 //! pure, independently-testable core.
 
+use melodia_engine::player::engine::now_playing::Announcement;
 use serde::{Deserialize, Serialize};
 
 /// One scrobble's worth of track metadata, normalized to what both Last.fm and
@@ -41,6 +42,21 @@ impl ScrobbleTrack {
             release_mbid: non_empty(row.musicbrainz_release_id.as_deref()),
         })
     }
+
+    /// Build a scrobble payload from what a station announced. A stream carries nothing past the
+    /// two names, so every other field stays absent rather than guessed.
+    pub fn heard_on_air(song: Announcement<'_>) -> Self {
+        Self {
+            artist: song.artist.to_owned(),
+            track: song.title.to_owned(),
+            album: None,
+            album_artist: None,
+            duration_secs: None,
+            track_number: None,
+            recording_mbid: None,
+            release_mbid: None,
+        }
+    }
 }
 
 /// Trim `s` and return it owned only if it has non-whitespace content.
@@ -48,16 +64,18 @@ fn non_empty(s: Option<&str>) -> Option<String> {
     s.map(str::trim).filter(|t| !t.is_empty()).map(str::to_owned)
 }
 
+/// The length both services require a track to exceed before it may scrobble at all.
+pub const MIN_TRACK_MS: u64 = 30_000;
+
 /// Played-time (ms) after which a track qualifies to scrobble, per the rule both
-/// services share: a track over 30 s scrobbles once it has played at least half
-/// its length **or** 4 minutes, whichever comes first.
+/// services share: a track over [`MIN_TRACK_MS`] scrobbles once it has played at
+/// least half its length **or** 4 minutes, whichever comes first.
 ///
-/// Returns `None` for tracks that can never scrobble (30 s or shorter). A
-/// `duration_ms` of `0` means "duration unknown"; those fall back to the 4-minute
-/// cap so a stream with no reported length can still scrobble.
+/// Returns `None` for tracks that can never scrobble. A `duration_ms` of `0` means
+/// "duration unknown"; those fall back to the 4-minute cap so a stream with no
+/// reported length can still scrobble.
 pub fn scrobble_threshold_ms(duration_ms: u64) -> Option<u64> {
     const FOUR_MIN_MS: u64 = 240_000;
-    const MIN_TRACK_MS: u64 = 30_000;
 
     if duration_ms == 0 {
         return Some(FOUR_MIN_MS);

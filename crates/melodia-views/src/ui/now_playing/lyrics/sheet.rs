@@ -11,30 +11,52 @@ use async_compat::Compat;
 use slint::{ComponentHandle, Weak};
 
 use super::rows::rows_for;
-use super::{LyricsUi, NowPlayingState, follow};
+use super::{Claim, LyricsUi, NowPlayingState, follow};
 use melodia_app::library;
+use melodia_app::library::lyrics::HeardSong;
 use melodia_app::state::AppState;
 use melodia_core::entities::lyrics::{Lyrics as Sheet, LyricsOutcome, LyricsSource};
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::utils::toast::{self, ToastKind};
 use melodia_ui::{AppWindow, Lyrics, LyricsState};
 
-/// The sheet for `track`, or `None` where the panel should be left as it is.
+/// What the panel would show words for.
+enum Playing {
+    Track(Arc<TrackSummary>),
+    OnAir(HeardSong),
+}
+
+impl Playing {
+    /// What is playing, where it is something with words to look up: a track, or a station's song
+    /// that names an artist.
+    fn now(np_state: &NowPlayingState) -> Option<Self> {
+        if let Some(track) = playing_track(np_state) {
+            return Some(Self::Track(track));
+        }
+        np_state.on_air.borrow().clone().map(Self::OnAir)
+    }
+
+    fn claim(&self) -> Claim {
+        match self {
+            Self::Track(track) => Claim::Track(track.file_path.clone()),
+            Self::OnAir(song) => Claim::OnAir(song.clone()),
+        }
+    }
+}
+
+/// The sheet for what is playing.
 ///
 /// A failure is logged and reads as "nothing found": a sidecar in some old codepage or a directory
 /// that is down are both, to a reader, a panel with no words in it, and neither is worth a toast.
-async fn fetch(state: &AppState, track: &TrackSummary) -> LyricsOutcome {
-    match library::lyrics::for_track(state, track).await {
-        Ok(outcome) => outcome,
-        Err(e) => {
-            log::debug!(
-                "ui::now_playing lyrics for {}: {}",
-                track.id,
-                melodia_core::error::describe(&e)
-            );
-            LyricsOutcome::Absent
-        }
-    }
+async fn fetch(state: &AppState, playing: &Playing) -> LyricsOutcome {
+    let fetched = match playing {
+        Playing::Track(track) => library::lyrics::for_track(state, track).await,
+        Playing::OnAir(song) => library::lyrics::for_live(state, song).await,
+    };
+    fetched.unwrap_or_else(|e| {
+        log::debug!("ui::now_playing lyrics: {}", melodia_core::error::describe(&e));
+        LyricsOutcome::Absent
+    })
 }
 
 /// Bring the panel in line with whatever is playing, looking a sheet up if it has to.
@@ -51,38 +73,38 @@ fn reseed(weak: &Weak<AppWindow>, state: &AppState, np_state: &Rc<NowPlayingStat
     let Some(ui) = weak.upgrade() else { return };
     let ly = &np_state.lyrics;
 
-    let track = np_state.current_source.borrow().as_ref().and_then(|s| s.track.clone());
     // **Both terms, and the mount is the one that is not obvious.** The switch is the persisted
     // setting rather than "the panel is mounted", so on its own it answers `true` for a closed
     // view behind which the source-change path is still running. That would spend a request per
     // track on a panel nobody can see. Two surfaces mount one, the full view and the
     // miniplayer's column; the card and the strip have no slot for it whatever they paint on.
     let wanted = np_state.renders_panel() && library::lyrics::is_enabled(state);
-    let Some(track) = track.filter(|_| wanted) else {
-        // Closed, switched off, or a station, which has no words to look up. Either way the
-        // previous song's sheet must not sit under it.
+    let Some(playing) = Playing::now(np_state).filter(|_| wanted) else {
+        // Closed, switched off, or a station announcing nothing with an artist in it. Either way
+        // the previous song's sheet must not sit under it.
         if ly.holding.borrow().is_some() {
             release(&ui, ly);
         }
         return;
     };
-    if ly.holds(&track.file_path) {
+    let claim = playing.claim();
+    if ly.holds(&claim) {
         return;
     }
 
-    mark_loading(&ui, ly, &track.file_path);
+    mark_loading(&ui, ly, claim.clone());
     let weak = weak.clone();
     let state = state.clone();
     let np_state = np_state.clone();
     let res = slint::spawn_local(Compat::new(async move {
-        let outcome = fetch(&state, &track).await;
+        let outcome = fetch(&state, &playing).await;
         let Some(ui) = weak.upgrade() else { return };
         // The song may have moved under the lookup; the claim taken above is what says so, and it
         // is the same test the two other edges dedupe on.
-        if !np_state.lyrics.holds(&track.file_path) {
+        if !np_state.lyrics.holds(&claim) {
             return;
         }
-        apply(&ui, &np_state.lyrics, &track.file_path, &outcome, state.lyrics_online_enabled.get());
+        apply(&ui, &np_state.lyrics, claim, &outcome, state.lyrics_online_enabled.get());
     }));
     if let Err(e) = res {
         log::warn!("ui::now_playing lyrics reseed task spawn_local: {e}");
@@ -181,7 +203,7 @@ fn report_save_failure(e: &melodia_core::error::AppError) {
 }
 
 /// The track on the deck, or `None` on a station or an empty queue.
-fn playing_track(np_state: &Rc<NowPlayingState>) -> Option<Arc<TrackSummary>> {
+fn playing_track(np_state: &NowPlayingState) -> Option<Arc<TrackSummary>> {
     np_state.current_source.borrow().as_ref().and_then(|s| s.track.clone())
 }
 
@@ -205,17 +227,19 @@ pub(crate) fn wire_reseed(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPla
 fn apply(
     ui: &AppWindow,
     ly: &Rc<LyricsUi>,
-    track_path: &str,
+    claim: Claim,
     outcome: &LyricsOutcome,
     online_enabled: bool,
 ) {
     ly.pinned.set(None);
     let global = ui.global::<Lyrics>();
+    // Only a track has a tag to write a sheet into.
+    let has_tag = matches!(claim, Claim::Track(_));
 
     // Recorded whichever of the three this came to, so a re-open that finds the same track already
     // answered does not pay for a second lookup — including the two that draw no rows, which are
     // answers rather than absences.
-    *ly.holding.borrow_mut() = Some(track_path.to_owned());
+    *ly.holding.borrow_mut() = Some(claim);
 
     match outcome {
         LyricsOutcome::Sheet(sheet) => {
@@ -224,7 +248,7 @@ fn apply(
             global.set_synced(sheet.is_synced());
             // Every source but the file's own tag is worth offering to write into it. A sidecar
             // counts: it is the user's file, but it is not the one that travels with the track.
-            global.set_can_save_to_tag(sheet.source != LyricsSource::Tag);
+            global.set_can_save_to_tag(has_tag && sheet.source != LyricsSource::Tag);
             global.set_state(LyricsState::Ready);
         }
         LyricsOutcome::Instrumental => {
@@ -248,12 +272,12 @@ fn apply(
 
 /// Say a lookup is out, so the panel is not claiming "not found" while it is still looking.
 ///
-/// **Claims the track before the `.await`, not after it.** The lookup can reach a file and then a
+/// **Takes the claim before the `.await`, not after it.** The lookup can reach a file and then a
 /// socket, and a reseed landing in that window would otherwise see a sheet for the *previous*
-/// track and start a second one for the same song.
-fn mark_loading(ui: &AppWindow, ly: &Rc<LyricsUi>, track_path: &str) {
+/// song and start a second one for the same song.
+fn mark_loading(ui: &AppWindow, ly: &Rc<LyricsUi>, claim: Claim) {
     clear(ui, ly);
-    *ly.holding.borrow_mut() = Some(track_path.to_owned());
+    *ly.holding.borrow_mut() = Some(claim);
     ui.global::<Lyrics>().set_state(LyricsState::Loading);
 }
 
