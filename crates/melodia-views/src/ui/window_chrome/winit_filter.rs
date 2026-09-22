@@ -10,9 +10,10 @@
 //!    history, gated on no overlay being open so the buttons don't fight its input
 //!    context.
 //! 3. **`Resized`** — re-read `is_maximized`, so the maximize/restore icon stays in sync
-//!    with Win+↑ and window-tile shortcuts that bypass our buttons. Also measures the OS
-//!    frame, which the miniplayer's exit edge allows for once it drops the frame, and on
-//!    Win32 the invisible borders it keeps transparent so the window's edges stay put.
+//!    with Win+↑ and window-tile shortcuts that bypass our buttons. Also the two frame readings:
+//!    the step a decoration change costs the client, which the miniplayer's exit edge allows for
+//!    once it drops the frame, and on Win32 the invisible borders it keeps transparent so the
+//!    window's edges stay put.
 //! 4. **`Focused(bool)`** — mirror OS focus into `Theme.window-focused`, and use the
 //!    transition to reconcile the tray-bridge's visibility shadow: raise on focus, ask
 //!    the OS about a minimize on focus loss (see [`schedule_minimize_probe`]).
@@ -249,18 +250,26 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                         geometry::ensure_on_screen(ww, reading);
                         (
                             reading.is_maximized(),
-                            geometry::frame_allowance(ww, reading),
+                            geometry::frame_allowance(reading),
                             geometry::frame_margins(ww, reading),
                         )
                     })
                     .unwrap_or((false, None, None));
+                // Synchronous, where everything below is posted: this filter runs ahead of Slint's
+                // own handling, so the size that arrives with this event is the first thing
+                // `MiniPlayerSwitch` measures against the exit edge. Posted, the allowance for the
+                // frame it has just dropped lands a beat after the decision that needed it, and the
+                // miniplayer swaps straight back out of the size the drop grew it to.
+                if let Some(frame) = frame
+                    && let Some(ui) = weak.upgrade()
+                {
+                    let chrome = ui.global::<melodia_ui::WindowChrome>();
+                    chrome.set_frame_allowance_w(frame.width);
+                    chrome.set_frame_allowance_h(frame.height);
+                }
                 let _ = weak.upgrade_in_event_loop(move |ui| {
                     let chrome = ui.global::<melodia_ui::WindowChrome>();
                     chrome.set_is_maximized(maximized);
-                    if let Some(frame) = frame {
-                        chrome.set_frame_allowance_w(frame.width);
-                        chrome.set_frame_allowance_h(frame.height);
-                    }
                     if let Some(margins) = margins {
                         chrome.set_frame_margin_left(margins.left);
                         chrome.set_frame_margin_right(margins.right);

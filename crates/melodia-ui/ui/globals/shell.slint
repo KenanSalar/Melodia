@@ -23,9 +23,12 @@ export enum DragRegion { none, titlebar, miniplayer }
 export global WindowChrome {
     in property <bool> is-maximized;
 
-    // What the OS frame adds to the client area on each axis. Rust writes it only while a frame is
-    // up, so the reading from before the miniplayer dropped the frame survives for its exit edge.
-    // The window's minimum reads it too, while the frame stands.
+    // What the OS frame adds to the client area on each axis, measured as the step the client takes
+    // when a decoration comes or goes rather than asked of the window: a Wayland compositor draws
+    // its decoration outside the surface and tells the client nothing about it, so the query reads
+    // zero on the one desktop whose client really does grow by a titlebar. Rust writes it only on
+    // the reading that crossed the change, so it survives every frameless one after it, for the
+    // miniplayer's exit edge and for the window's minimum while a frame stands.
     in property <length> frame-allowance-w;
     in property <length> frame-allowance-h;
 
