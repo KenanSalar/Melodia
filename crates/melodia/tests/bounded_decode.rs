@@ -22,8 +22,9 @@ const EXEMPT: &str = "media/ingest/cover_embed.rs";
 /// compiles clean and looks like every other decode in the tree.
 ///
 /// The counts are what stop a second call appearing *inside* a sanctioned file, which is the half
-/// a file-set check walks past. Three in the owner: the two readers it builds and the definition
-/// itself.
+/// a file-set check walks past. Three in the owner: the two decodes it bounds and the definition
+/// itself. Its third reader, `source_pixels`, takes no cap and needs none, stopping at the header
+/// without decoding a pixel.
 #[test]
 fn the_decode_cap_is_applied_by_hand_only_where_the_shared_preamble_cannot_reach() {
     let offenders = spellings_outside("capped_limits(", &[(OWNER, 3), (EXEMPT, 1)]);
@@ -35,8 +36,9 @@ fn the_decode_cap_is_applied_by_hand_only_where_the_shared_preamble_cannot_reach
     );
 }
 
-/// The reader is the other half of the same rule: a decode that opens its own has to bound it, and
-/// one that never opens one cannot be unbounded.
+/// The reader is the other half of the same rule: a site that opens its own has to bound it before
+/// it decodes, and one that never opens one cannot be unbounded. Reading a header is the third case
+/// rather than a hole, and it is why the owner's `open` count is two.
 ///
 /// Both spellings, because `new` reads from memory and `open` from a path and neither is a
 /// substring of the other. `cover_embed` reaches only for the memory one — a second site opening a

@@ -84,9 +84,8 @@ is the copy to delete.
   leaves the sibling nobody expects: a station-row write from elsewhere in `melodia-app` reads as
   ordinary transport code and is one. `record_probed_codec` was exactly that and now sits beside
   `mark_played`, whose one-line-`UPDATE`-per-play shape it copies. **`radio_facade.rs`'s
-  `only_the_radio_facade_writes_to_the_station_table` is what holds it**, and the six checks beside
-  it are what could not: they anchor on the facade's own directory and grep for `radio_browser`, so
-  every one stayed green through the bypass.
+  `only_the_radio_facade_writes_to_the_station_table` is what holds it**, and its own doc comment
+  argues why none of the six checks beside it could.
 - **Two tables, and only one holds rows the user owns.** `radio_stations` is favorites, hand-typed
   URLs and play history at three points in one row's life. `radio_logo_answers` is a record of our
   own network outcomes keyed on the URL — which is what lets it exist beside the rule that browsed

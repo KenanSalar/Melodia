@@ -249,7 +249,7 @@ const STORE_TREE: &str = "database/";
 /// matching would take this pin with it while still passing.
 const MIN_STATION_WRITERS: usize = 4;
 
-/// **`queries::radio::` is `library::radio`'s to name, and `library::radio_files`'s by the written
+/// **`queries::radio` is `library::radio`'s to name, and `library::radio_files`'s by the written
 /// exemption at that module's own `//!`.**
 ///
 /// The doc above argues the door against the *UI*, which leaves the sibling nobody expects: a
@@ -260,13 +260,19 @@ const MIN_STATION_WRITERS: usize = 4;
 /// Test modules are allowed wholesale: eight of them name the module to build fixtures, and a
 /// fixture is not a door. That is also what this cannot see — a test reaching past the facade to
 /// *write* a row goes unreported.
+///
+/// The needle stops at the module name, since `use …::queries::radio;` reaches the table exactly
+/// as a qualified call does while spelling no second colon. A `queries::radio_logos` added later
+/// would match it by prefix, which costs a false positive to refine rather than a hole to find.
 #[test]
 fn only_the_radio_facade_writes_to_the_station_table() {
+    const NEEDLE: &str = "queries::radio";
+
     let mut writers = Vec::new();
     let mut offenders = Vec::new();
 
     for (path, code) in rust_sources() {
-        if !code.contains("queries::radio::") {
+        if !code.contains(NEEDLE) {
             continue;
         }
         if path.contains("/tests/") || path.starts_with(STORE_TREE) {
@@ -286,7 +292,7 @@ fn only_the_radio_facade_writes_to_the_station_table() {
     );
     assert!(
         writers.len() >= MIN_STATION_WRITERS,
-        "only {} files reach `queries::radio::` at all, so this walk has stopped checking anything",
+        "only {} files reach `queries::radio` at all, so this walk has stopped checking anything",
         writers.len()
     );
 }
