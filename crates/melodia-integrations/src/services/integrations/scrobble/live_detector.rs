@@ -30,6 +30,10 @@ pub enum LiveEffect {
 struct Heard {
     stream_url: String,
     line: Option<String>,
+    /// Whether the station has sent a line since tuning in. Kept apart from `line`, because
+    /// plenty of stations blank their title between songs, and the song after the blank still
+    /// started while we were listening.
+    announced: bool,
 }
 
 /// A song whose start we witnessed, still playing.
@@ -66,23 +70,26 @@ impl LiveDetector {
         };
 
         let line = radio.live_title.as_deref();
-        if self
-            .last
-            .as_ref()
-            .is_some_and(|last| last.stream_url == radio.stream_url && last.line.as_deref() == line)
-        {
+        let same_station = self.last.as_ref().filter(|last| last.stream_url == radio.stream_url);
+        if same_station.is_some_and(|last| last.line.as_deref() == line) {
             return Vec::new();
         }
 
-        // A turnover only when the line before was an announcement on this same station: the first
-        // one after tuning in names a song that was already under way.
-        let turnover = self
-            .last
-            .as_ref()
-            .is_some_and(|last| last.stream_url == radio.stream_url && last.line.is_some());
-        let mut effects: Vec<LiveEffect> = self.finish(now_ts).into_iter().collect();
-        self.last =
-            Some(Heard { stream_url: radio.stream_url.clone(), line: line.map(str::to_owned) });
+        // A turnover only once this same station has announced something: the first line after
+        // tuning in names a song that was already under way. A song another station's line
+        // displaced was cut off rather than finished, so it is dropped.
+        let turnover = same_station.is_some_and(|last| last.announced);
+        let mut effects = Vec::new();
+        if turnover {
+            effects.extend(self.finish(now_ts));
+        } else {
+            self.on_air = None;
+        }
+        self.last = Some(Heard {
+            stream_url: radio.stream_url.clone(),
+            line: line.map(str::to_owned),
+            announced: turnover || line.is_some(),
+        });
 
         if let Some(song) = radio.announcement() {
             let track = ScrobbleTrack::heard_on_air(song);
