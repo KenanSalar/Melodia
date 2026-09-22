@@ -51,7 +51,7 @@ export component MiniPlayerSection inherits Rectangle {
 
                 ChipGroup {
                     // The brand-name rule the titlebar's style row keeps.
-                    options: [@tr("Standard"), "macOS", "KDE"];
+                    options: ["Windows", "macOS", "KDE"];
                     selected-index <=> Settings.mini-player-button-style;
                     selected(i) => {
                         Settings.mini-player-button-style-changed(i);

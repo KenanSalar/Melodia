@@ -515,9 +515,6 @@ msgstr "Pencere düğmeleri stili"
 msgid "Decoration Button Side"
 msgstr "Pencere düğmeleri tarafı"
 
-msgid "Standard"
-msgstr "Standart"
-
 msgid "Right"
 msgstr "Sağ"
 

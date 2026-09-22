@@ -18,7 +18,7 @@ const MINI_CAPTIONS: &str =
 
 /// Every style beside the chip label naming it, in the chips' order.
 const CHIPS: [(TitlebarButtonStyle, &str); 3] = [
-    (TitlebarButtonStyle::Standard, r#"@tr("Standard")"#),
+    (TitlebarButtonStyle::Standard, r#""Windows""#),
     (TitlebarButtonStyle::Macos, r#""macOS""#),
     (TitlebarButtonStyle::Kde, r#""KDE""#),
 ];

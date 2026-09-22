@@ -510,9 +510,6 @@ msgstr "Stil der Dekorationsschaltflächen"
 msgid "Decoration Button Side"
 msgstr "Seite der Dekorationsschaltflächen"
 
-msgid "Standard"
-msgstr "Standard"
-
 msgid "Right"
 msgstr "Rechts"
 

@@ -510,9 +510,6 @@ msgstr "Style des boutons de décoration"
 msgid "Decoration Button Side"
 msgstr "Côté des boutons de décoration"
 
-msgid "Standard"
-msgstr "Standard"
-
 msgid "Right"
 msgstr "Droite"
 

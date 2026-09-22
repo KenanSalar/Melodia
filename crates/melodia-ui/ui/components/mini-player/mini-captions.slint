@@ -115,8 +115,9 @@ export component MiniCaptionsRow inherits Rectangle {
             spacing: 2px;
             padding-left: 4px;
             // The cluster reaches back over the host's padding to the inset the titlebar gives its
-            // style, flush for all but KDE, where Breeze keeps a gap. What falls past the clip is
-            // the close cell's own outer padding: it paints nothing and lies under the resize band.
+            // style, flush for all but KDE, where Breeze keeps a gap. So the close fill reaches the
+            // window edge as the titlebar's does, and the strip of it past the clip is cut only
+            // while the row is moving, where the row is fading anyway.
             padding-right: (captions.style == CaptionStyle.kde
                 ? Theme.kde-caption-edge-pad
                 : 0px) - root.edge-pad;

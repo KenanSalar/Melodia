@@ -202,7 +202,7 @@ export global Settings {
     in-out property <int> corner-radius: 6;
     callback corner-radius-changed(int);
 
-    // 0 = Standard (Windows caption glyphs), 1 = macOS (traffic lights with hover-reveal glyphs),
+    // 0 = Windows (its caption glyphs), 1 = macOS (traffic lights with hover-reveal glyphs),
     // 2 = KDE (Breeze's glyphs and hover disc).
     // Mirrored into `Theme.titlebar-button-style` so `custom-titlebar.slint` reads it through
     // `Theme`, the `shell-radius` precedent. Inert under the native titlebar.

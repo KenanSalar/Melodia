@@ -512,9 +512,6 @@ msgstr "Στιλ κουμπιών διακόσμησης"
 msgid "Decoration Button Side"
 msgstr "Πλευρά κουμπιών διακόσμησης"
 
-msgid "Standard"
-msgstr "Τυπικό"
-
 msgid "Right"
 msgstr "Δεξιά"
 

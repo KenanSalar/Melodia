@@ -207,7 +207,7 @@ export global Theme {
     // frame, and on `shell-radius` it changed shape the moment the frame went.
     out property <length> window-radius: use-native-titlebar ? native-content-radius : shell-radius;
 
-    // 0 = Standard (Windows caption glyphs), 1 = macOS (traffic lights), 2 = KDE (Breeze's glyphs).
+    // 0 = Windows (its caption glyphs), 1 = macOS (traffic lights), 2 = KDE (Breeze's glyphs).
     // `custom-titlebar.slint` reads it through `Theme` rather than reaching into `Settings`, the
     // `shell-radius` precedent.
     in-out property <int> titlebar-button-style: 0;
