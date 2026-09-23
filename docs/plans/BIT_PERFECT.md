@@ -1,451 +1,369 @@
 # Bit-Perfect Output
 
-Working doc. Delete when the feature ships.
+Working doc. Delete it when the feature ships. Tracks issue #66.
 
-Status: **proposed** · Created: 2026-08-14
+Status: **planned** · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
 
-> Upstream and local facts below were verified **2026-08-14** against the pinned
-> `rodio 0.22.2` / `cpal 0.17.3` sources in the registry, this tree's `Cargo.lock`,
-> and the rox checkout at `~/Development/rox` (ADR 9 / ADR 19,
-> `crates/rox-playback/src/output/`).
->
-> **Re-read against #90 before acting on any of it.** rodio is gone and
-> `crates/melodia-playback/src/player/playback/output/` exists, so findings 1 through 3 and Phase 1 are largely spent —
-> each is marked where it changed. Everything about exclusive mode is untouched.
->
-> **cpal has since moved to 0.18.2**, which changes three premises below: a built stream now
-> stays paused until `play()`; the block size is still the host's choice but is finally
-> *readable*, through `StreamTrait::buffer_size`, which `Negotiated` now carries beside the
-> request; and a lost device arrives as `ErrorKind::DeviceNotAvailable` on ALSA too, so
-> finding 3's "already has the signal" is now true on every host rather than inferred on
-> Linux. Finding 4's three bindings all survived the bump.
+## What the user sees today
 
----
+Every track goes through the OS mixer at whatever rate the system output happens to run at,
+usually 48 kHz. A 44.1 kHz CD rip gets resampled on Linux and Windows. Nothing tells the user it
+happened. They also cannot find out what Melodia hands to the DAC, because the negotiated format
+only goes to the log. When a USB DAC is unplugged, the user gets a toast and silence until
+Melodia restarts.
 
 ## What ships
 
-An **Exclusive / bit-perfect output** mode: Melodia claims the audio device for
-itself, sets it to the *file's* sample rate, and hands the decoder's samples to the
-DAC unmodified.
+1. **Match the file rate**: the output reopens at each track's sample rate. In shared mode this
+   helps wherever the OS lets a stream set the rate.
+2. **Exclusive output**: Melodia takes the device for itself, runs it at the file's rate and
+   format, and hands it the decoder's samples.
+3. **A signal path panel** that tells the truth. It shows each stage from file to DAC, gives a
+   verdict (**Bit-perfect**, **Enhanced**, **Converted** or **Fallback**), and names whatever
+   is keeping playback from being bit-perfect. A **Make bit-perfect** button resets those things.
+4. **Recovery from device loss**. This comes free with the reopen machinery and ships first.
 
-The claim has to be checkable or it is decoration. Melodia's is:
+The claim the panel makes, and which a test pins:
 
-> With bit-perfect on, and the mode reporting **Engaged**, the samples the device
-> receives are the decoder's output, bit-identical.
+> When the panel reads **Bit-perfect**, the device receives the decoder's samples bit for bit.
 
-That holds only when **all** of these are true, and the UI states which one is not:
+Here is what breaks it. The panel names each of these rather than hiding it:
 
-| condition | why it's load-bearing |
+| stage | breaks bit-perfect when |
 |---|---|
-| Device claimed exclusively | otherwise the OS mixer resamples and mixes |
-| Mixer rate == source rate | `Mixer::add` resamples every source to the mixer's rate (finding 1) |
-| Mixer channels == source channels | a mono→stereo upmix is not the decoder's output |
-| EQ off, ReplayGain off, limiter bypassed | each multiplies samples by design |
-| Crossfade not running | a fade is two sources summed |
-| Speed == 1.0 | anything else is resampling |
-| Volume == 100% | see below |
+| output | not exclusive (the OS mixer may convert or mix), or fell back from exclusive |
+| rate | device rate != source rate (`output::convert` interpolates) |
+| channels | a downmix or a wider layout. Mono duplicated to stereo at unity is exact and does **not** break it |
+| source | a 32-bit integer source. f32 carries 24 bits, so its low 8 bits are lost |
+| DSP | EQ active, ReplayGain gain other than unity, the limiter engaged (all inside `EqSource`, whose bypass is already exact) |
+| speed | anything but 1.0 |
+| volume | anything but 100 %, or muted (`voice.rs` skips the multiply only at bitwise unity) |
+| crossfade | a fade in progress (and crossfade is ineligible while the output follows the rate, see Phase 2) |
 
-The visualizer tap is the one thing that **stays on**: it is read-only and taps
-before the deck's conversion, pause and volume (`.claude/rules/audio-stack.md`), so it observes
-without touching. That's a Melodia advantage worth keeping — most players kill their
-visualizer in exclusive mode.
+The visualizer tap stays on. It is read-only and sits above the deck's conversion and volume.
 
-Volume is the interesting one, and #90 settled it: a deck skips the multiply entirely
-when its volume's bit pattern is exactly unity, which `volume_to_amplitude` produces at
-volume 100. Bit-exactness is therefore structural rather than an f32 accident — but the
-*user-facing* rule stays "volume at 100%", because that's the only value we'd defend,
-and Phase 4's round-trip test is what pins it rather than the argument.
+**Not in v1:** DSD/DoP, ASIO, upsampling, dither, a picker for the shared-mode device, and a
+native PipeWire exclusive stream (see Open questions).
 
-**Not in scope for v1:** DSD / DoP (no Rust DSD decoder), ASIO, sample-rate families
-the device refuses, mono and multichannel sources (they report *not engaged* with the
-reason "channel conversion"), and any form of upsampling.
+## What changed since the 2026-08-14 draft
 
----
+Checked against the tree at `46ad594a` and against cpal 0.18.2:
 
-## Prior art — what the robust ones agree on
+- **rodio is gone (ADR 0007), which spends the old Phase 1.** `output/` exists and
+  `AudioOutput` is owned on `AppState` (`crates/melodia-app/src/state/mod.rs:56`).
+  `MixerPull::fill` (`output/mixer.rs:70`) is the only fill point, and it keeps `-0.0` intact.
+  Equal-rate conversion is exact and pinned (`convert_tests.rs:28,39`). The unity skip is at
+  `voice.rs:362`. `Negotiated` already carries `shape`, `format`, `requested_period` and
+  `period` (`device.rs:49`). Issue #66's body still blames rodio and is out of date.
+- **None of the exclusive half exists.** There is no `OutputMode`, no device setting, no
+  reopen, and no bit-depth plumbing: the decoder throws `bits_per_sample` away in
+  `decode.rs` `fill`.
+- **cpal 0.18.2 has no exclusive mode on any host.** The WASAPI exclusive PR (RustAudio/cpal#1368)
+  is parked until 0.19's backend-extension traits land (#1220). The PipeWire host exists behind a
+  feature flag, but only master sets `node.rate` (#1341, unreleased). So Melodia owns its
+  exclusive backends. They sit behind one seam, so a later cpal can replace them one at a time.
+- **cpal's CoreAudio host already switches the device's nominal rate and physical format** to
+  whatever config the stream is built with. On macOS, "match the file rate" is nearly free, and
+  exclusive comes down to hog mode around a cpal stream. The old draft's own IOProc is not needed.
+- **The old spine ("rebuild the decks against a new mixer") is replaced by reshaping in place.**
+  See Phase 1. The decks, their fade cells, a staged gapless source and the position all survive
+  a reopen, because only the stream is replaced.
+- **Wrapper crates keep the new `unsafe` count at zero.** `alsa` 0.11 is safe. The `wasapi`
+  crate wraps COM. `coreaudio-rs` 0.14.2 (already in the lock through cpal) has safe
+  `toggle_hog_mode` and `get_hogging_pid` helpers. `objc2-core-audio` and a raw `windows`
+  backend would each add dozens of sites against `unsafe_code = "deny"`.
+- **No ring buffer.** A backend's writer thread owns `MixerPull` and calls `fill` directly. The
+  old draft's per-sample ring-drain critique is moot.
+- **Packaging is unaffected.** `libasound` is already linked through cpal.
 
-Surveyed: foobar2000 (WASAPI component + ASIO), Audirvāna (hog mode + integer mode),
-Roon / RoonBridge, HQPlayer, MPD's ALSA output, Squeezelite, MediaMonkey, Strawberry.
+## How the best implementations do it (mechanisms, no attribution)
 
-Six things every one of them does, and one thing only the good ones do:
-
-1. **Claim the device exclusively** — WASAPI `AUDCLNT_SHAREMODE_EXCLUSIVE` on Windows,
-   CoreAudio hog mode on macOS, ALSA `hw:` with resampling disabled on Linux. This is
-   the whole feature; everything else is bookkeeping.
-2. **Follow the source rate per track**, reopening the device when it changes, and
-   eat the audible gap that costs. Nobody has solved gapless-across-rates; they all
-   gap.
-3. **Hard-bypass every DSP node**, including their own volume control, and disable
-   the software volume slider outright.
-4. **Report what was negotiated, not what was requested** — rate, bit depth, format,
-   and whether the mode is actually engaged.
-5. **Fall back to shared output with a visible reason** when the claim fails (device
-   busy, rate unsupported). Never silence, never a dead toggle.
-6. **Expose a buffer/period knob and a resync delay.** Roon calls it "Resync Delay";
-   foobar calls it hardware buffer. Both exist because real DACs need time to relock
-   their PLL after a rate change, and a fixed constant serves nobody.
-7. **The good ones are event-driven where the OS offers it.** On Windows that means
-   `AUDCLNT_STREAMFLAGS_EVENTCALLBACK` + `SetEventHandle` — the driver signals when a
-   buffer is free instead of the app polling a timer. Microsoft's `RenderExclusiveEventDriven`
-   sample is the reference, and in exclusive mode it forces `hnsPeriodicity ==
-   hnsBufferDuration`. On macOS the HAL's IOProc is already a push. On Linux, blocking
-   `snd_pcm_writei` is the equivalent.
-
-One thing **none** of the desktop players handles well and Linux forces on us:
-coordinating the `hw:` claim with the running sound server. WirePlumber reserves ALSA
-devices over the `org.freedesktop.ReserveDevice1` D-Bus protocol; taking the card
-without asking either fails or yanks it. See Phase 5.
-
----
-
-## rox: what to take, what to leave
-
-rox spent this option already (ADR 9 deferred it, ADR 19 spends it) and the
-implementation is genuinely good — the design is right, the comments argue rather
-than narrate, and the format ladder and period math are pulled above the FFI so they
-compile and test on every platform. The negotiation code is the expensive half and
-it is the half worth porting.
-
-**Take:**
-
-- The **shape**: one seam (`Request` → `Negotiated`), one shared fill point every
-  backend calls, per-platform backends behind `cfg`, fallback-to-shared-with-a-reason.
-- The **format ladder** (`f32` → `s32` carrying 24 valid bits → `s16`, best-first,
-  a named format the device refuses falls back and the *result* is reported). Packed
-  24-bit deliberately absent — no Rust type carries it and every card offering it
-  offers `S32_LE`.
-- The **WASAPI alignment dance**: `AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED` → `GetBufferSize`
-  → recompute the duration with the half-tick round-up → **activate a fresh
-  `IAudioClient`** (a failed one can't be re-initialized). Also `IsFormatSupported ==
-  S_OK` exactly, never "not an error" — `S_FALSE` is the shared-mode near-miss answer.
-- The **channel mask table** — an exclusive-mode driver compares the mask against what
-  it publishes, so filling the low bits spells 4 channels as FL/FR/FC/LFE and the claim
-  fails for a reason nothing reports.
-- CoreAudio's **hog-mode toggle guard**: `AudioHardware.h` says the value passed to a
-  hog-mode *set* is ignored and the set **toggles**, so setting while you already own
-  it releases it. The read-back is what decides whether you got it.
-- The **nominal-rate settle poll** — the set returns before the driver relocks, and
-  reading straight back gets the old rate.
-- ALSA's `set_rate_resample(false)` — the one line that makes the mode mean anything.
-
-**Leave, and why:**
-
-| rox does | Melodia should | why |
-|---|---|---|
-| WASAPI push-mode, high-resolution waitable timer, wake twice a period | event-driven: `AUDCLNT_STREAMFLAGS_EVENTCALLBACK` + `SetEventHandle` + `WaitForSingleObject` on the driver's event | the documented exclusive design; no timer drift, no wasted wakes, lower latency. rox's own comment notes the `buffer == period` constraint and routes around it rather than accepting it |
-| writer threads at default priority | `AvSetMmThreadCharacteristics("Pro Audio")` on Windows; `SCHED_FIFO` (best-effort, degrade quietly) on Linux | a hand-rolled writer thread is exactly where the OS expects you to ask for RT scheduling. Without it a 40 ms buffer is at CFS's mercy |
-| claims `hw:` with no coordination | acquire `org.freedesktop.ReserveDevice1` first, release on drop | on a stock PipeWire desktop — which is every Fedora/Ubuntu install — the card is already reserved. Without this, Linux exclusive fails for most users and the reason string blames the hardware |
-| `fill()` pops the ring one sample at a time, re-reads `slots()` per frame, matches on channel count per frame | drain in contiguous chunks, hoist the channel decision out of the loop | this is the measurable inefficiency. `rtrb::read_chunk` hands back slices; per-frame atomic loads and a per-frame `match` on a value that never changes are pure overhead on the RT thread |
-| bit-exactness argued in the ADR, tested only in `f32` | a round-trip test: known 16- and 24-bit fixtures → the full chain, bypassed → assert bit-identical | rox's hardware tests are `#[ignore]`d, so nothing in CI pins the claim. Melodia can pull `MixerPull` in a plain unit test and prove it without a device |
-| `Result<_, String>` throughout | `AppError` with the boundary variants | the tree's error contract; `error::describe` needs a typed cause |
-| hand-declares ~300 lines of CoreAudio `extern "C"` + four-char constants | use `objc2-core-audio` | finding 4 — it's already in our lock file, needs no SDK and no bindgen, and covers the whole surface |
-
-Straight answer on "not optimized": the *design* is sound and the FFI is careful.
-The real costs are the polled WASAPI loop and the per-sample ring drain, and the real
-*gaps* are scheduling priority and the Linux reservation — those matter more than the
-CPU does.
-
----
-
-## Five findings that decide the shape
-
-1. **Resampling is per source and visible, and the passthrough is exact.**
-   `output::convert` runs per deck source rather than per voice, and steps exactly one
-   source frame per output frame when the rates match — bit-identically, `-0.0`
-   included, which `convert_tests` pins. **Bit-perfect still requires the mixer to run
-   at the source rate**, since the conversion happens whether or not anyone wanted it;
-   what changed is that following the rate is now a mixer rebuild rather than a fight
-   with a dependency. *(Was: `Mixer::add` resampled inside rodio at add time against a
-   rate fixed at construction. #90 removed that.)*
-
-2. **A new mixer means new decks.** `Decks` takes its two voices off the mixer at boot,
-   and that's the property crossfade rests on. Both must be rebuilt against the new
-   mixer, under the decks lock, in the right order. This is the structural spine of the
-   feature and the only genuinely risky part — hence its own phase, built and shipped
-   against the *shared* backend where a mistake is a glitch rather than a dead device.
-   The voices are reference-counted, so the rebuild is a swap rather than a lifetime
-   problem.
-
-3. **The reopen is unblocked.** *(Was: `MixerDeviceSink` was `Box::leak`'d so it
-   outlived every `Player`, and a leaked sink never releases the device.)* #90 made the
-   handle an owned `AudioOutput` on `AppState` with the stream dropping before the
-   decks, and corrected the `process::exit(0)` paragraph in `CLAUDE.md` — which stays,
-   because three other threads never exit and only one of the four was the sink's.
-
-   **rox already ships the recovery half, so it need not be re-derived.** Its cpal error
-   callback only sets a `device_lost` flag (`crates/rox-playback/src/output.rs:381-389`)
-   and the UI pump polls it and calls `reopen_device`
-   (`crates/rox-services/src/player.rs:1345-1357`), rebuilding the session at the current
-   spot or clearing it with a reason. That is the shape `tasks::audio_health` defers here:
-   it already has the signal and deliberately only reports it, because acting on it means
-   the deck rebuild item 2 above owns.
-
-   **Take the reopen, not the callback.** rox is on 0.18.1 and still classifies nothing: one
-   `device_lost` store for every kind it receives, including the three 0.18 documents as
-   non-fatal (`Xrun`, `RealtimeDenied`, `DeviceChanged`, the last saying outright that the
-   stream stays active). So it rebuilds a whole session on an xrun. `stream_health`'s
-   three-way split is the half to keep when the reopen lands on top of it.
-
-4. **Every platform binding we need is already in `Cargo.lock`,** pulled by
-   `cpal 0.18.2`:
-   - `alsa 0.11.0` — Linux. `libasound` is already linked; a direct dep is a manifest
-     line, not a new C dependency.
-   - `windows 0.62.2` — Windows. **Pin exactly this version** so the two share one
-     copy of the bindings instead of compiling a second set.
-   - `objc2-core-audio 0.3.2` (+ `-types`, `objc2-core-foundation`) — macOS. Verified
-     to expose `AudioObjectGetPropertyData` / `SetPropertyData`,
-     `AudioObjectPropertyAddress`, `AudioDeviceCreateIOProcID`,
-     `kAudioDevicePropertyHogMode`, `kAudioDevicePropertyNominalSampleRate`,
-     `kAudioStreamPropertyPhysicalFormat`. Pure Rust, no SDK headers, no bindgen — so
-     it type-checks from a Linux CI runner, which is the constraint that pushed rox
-     into hand-declaring the lot.
-
-5. **The rate is already in the database and not on the projection.**
-   `migrations/20260514000000_initial_schema.sql:102–104` gives `tracks` its
-   `channels`, `sample_rate` and `bit_depth` columns. `TrackSummary` doesn't carry
-   them. ReplayGain solved exactly this problem — baked onto `TrackSummary` so the
-   sync `play_track_inner` needs no async fetch — and the same argument applies
-   verbatim: the reopen decision has to be made before the source is built.
-
----
+Surveyed: the sibling checkouts under `~/Development`, plus current docs and changelogs.
+- Exclusive claims: ALSA `hw:` with resampling off. WASAPI exclusive, **event-driven**,
+  `buffer == period`, integer PCM tried before float (many drivers refuse float in exclusive),
+  `IsFormatSupported == S_OK` exactly, a fresh client on `BUFFER_SIZE_NOT_ALIGNED`, MMCSS on
+  the writer thread. CoreAudio hog mode with a read-back guard, because a set is a toggle.
+- **The reopen is decided before the track plays**, from the decoder's format. Gapless holds
+  within a format, and the gap falls at a format boundary. The weaker design notices the
+  mismatch after the track is already audible and rebuilds the whole session.
+- **Format ladders start from the source depth.** One implementation left out packed 24-bit
+  and so falls back on DACs that only offer `S24_3LE`, which is common for USB. **`S24_LE`
+  is LSB-aligned in 32 bits, and WASAPI's 24-in-32 is MSB-aligned.** Mixing the two up is the
+  48 dB-too-quiet bug cpal fixed in 0.18.2 (#1309).
+- **On Linux, nothing in the survey coordinates with the sound server.** The fix is
+  `org.freedesktop.ReserveDevice1`. The session manager reserves each card at priority −20,
+  and a normal app at priority 0 outranks it and receives the card. An owner must also answer
+  `RequestRelease`.
+- **Resync delay.** DACs mute while their clock relocks after a rate change, which clips the
+  start of the track. The fix is a short, configurable run of silence after each reopen.
+- **UX:** off by default. Each stage is graded with a colour and a reason. When the claim
+  fails, the player falls back to shared visibly and never goes silent. On Windows the reason
+  names the "Allow applications to take exclusive control" checkbox when that is the cause.
+- **USB drivers that stutter in event mode** are real. A polling-exclusive compatibility
+  switch is the known fix.
 
 ## Structure
 
-**The directory exists.** #90 built `crates/melodia-playback/src/player/playback/output/` for the shared backend, so this is no
-longer a greenfield layout — it is four files to extend rather than one `shared.rs` to write:
-
 ```
 crates/melodia-playback/src/player/playback/output/
-  mod.rs        AudioOutput: the open handle, and the only door onto Mixer
-  device.rs     the cpal stream, the config ladder, Negotiated, the period math
-  mixer.rs      the unclamped sum, in LOCKSTEP_FRAMES steps
-  voice.rs      one voice: transport, the command channel, the clock
-  convert.rs    rate, channel map, the speed ratio
-  tests/        convert / voice / mixer / device, per the tree's `#[path]` convention
+  mod.rs        AudioOutput: open / reopen / close. OutputRequest, OutputMode, Negotiated (moved up)
+  device.rs     the cpal backend (shared, plus macOS exclusive via hog.rs). Ladder prefers the requested shape
+  mixer.rs      + MixerPull::reshape, MixerPull::hold (resync silence)
+  voice.rs      + VoicePull::reshape. The control side's device shape becomes a shared cell
+  convert.rs    unchanged
+  encode.rs     NEW: DeviceFormat + the ladder + the one f32 -> device-bytes conversion for owned backends
+  claim.rs      NEW: ClaimError (typed fallback reasons, a local std::error::Error)
+  alsa.rs       NEW  #[cfg(target_os = "linux")]
+  reserve.rs    NEW  #[cfg(target_os = "linux")]   ReserveDevice1 over zbus::blocking
+  wasapi.rs     NEW  #[cfg(target_os = "windows")]
+  hog.rs        NEW  #[cfg(target_os = "macos")]   hog mode + device-id lookup via coreaudio-rs
+crates/melodia-engine/src/player/engine/
+  signal_path.rs NEW: pure evaluate(inputs) -> SignalPath { stages, verdict }
 ```
 
-What this plan still adds, on top of that:
-
-```
-  mod.rs        + the seam: OutputMode, OutputRequest, OutputBackend, pump()
-                  (Negotiated is already device.rs's and moves or is re-exported)
-  device.rs     becomes the shared backend behind the trait
-  alsa.rs       #[cfg(target_os = "linux")]
-  reserve.rs    #[cfg(target_os = "linux")]  org.freedesktop.ReserveDevice1
-  wasapi.rs     #[cfg(target_os = "windows")] — format ladder + period math above the cfg
-  coreaudio.rs  #[cfg(target_os = "macos")]
-```
-
-Ownership rules, so this doesn't sprawl:
-
-- **`pump()` in `mod.rs` is the only place samples reach a device buffer**, and every
-  backend calls it. Two backends drifting on what they do to the samples would make
-  "bit-perfect" mean two things. Same argument as rox's `fill`, same enforcement.
-- **`stream_health.rs` stays where it is** and every backend reports through it, so
-  `tasks::audio_health`'s Linux rate-classification keeps working unchanged. Don't
-  add a second health path.
-- **`wasapi.rs`'s format ladder and period math live above the `cfg`**, plain Rust
-  with their own tests, so they compile and run on Linux CI. rox's reasoning, and it
-  applies harder here since nobody develops this tree on Windows.
-- **`melodia-views` reaches the output layer through `library::playback::*`**, never
-  directly — the repo-wide rule, and the device picker is the obvious place to break it.
-- **`player/output/` owns no persistence.** Settings go through `mutate_settings` +
-  the kick-after-persist rule like every other playback flag.
-
----
+Ownership rules:
+- **`MixerPull::fill` stays the only place samples are produced for a device.** For owned
+  backends, `encode.rs` is the only place they become device bytes. The cpal path keeps its
+  typed `FromSample`, where cpal owns the byte layout.
+- **`PlaybackEngine` owns `AudioOutput`**, which moves off `AppState`. The reopen has to run
+  under the decks lock, and the engine is what holds it. Lock order becomes
+  `exec_lock → PlayerState → decks → output`, never reversed.
+- **`signal_path::evaluate` is the only place the verdict is computed.** It is pure, and the
+  UI reads it through a `watch`. That is the "one place" the old bypass matrix wanted, without
+  locking any controls.
+- `stream_health` stays the one health path. Every backend reports through it.
+- `melodia-views` reaches all of this through `library::playback::*`.
+- Settings persist through `mutate_settings` + kick-after-persist. `output/` persists nothing.
+- New thread names fit 15 bytes (`alsa-out`, `wasapi-out`). Files stay under 800 lines.
+- `libc` stays confined to `allocator`. Anything that needs a tid or an rlimit goes through
+  whatever Phase 4's entry check picks.
 
 ## Phases
 
-Each phase is independently shippable and leaves the tree working. Platform phases
-are independent of each other — the seam falls back to shared wherever a backend
-doesn't exist.
+Each phase leaves the tree shippable. Phases 4 to 6 are independent: the seam falls back to
+shared wherever a backend doesn't exist. **Per phase: implement → static gates (fmt, clippy
+`--workspace`) → Kenan tests by hand → then tests and docs** (memory: manual test gates tests
+and docs).
 
-### Phase 1 — The output seam · **mostly done by #90**
+### Phase 1: Reopen in place, and recover from device loss
 
-`crates/melodia-playback/src/player/playback/output/` exists, `AudioOutput` is owned on `AppState`, `device::open` carries
-the fallback ladder and the `stream_health` callback, and `mixer::fill` is the single
-point samples reach a device buffer — the ownership rule this doc wrote for `pump()`,
-adopted there. What is left of this phase is the exclusive-mode vocabulary, which had
-nowhere to attach before there was a seam:
+The spine. It is built and shipped against the shared cpal backend, where a bug costs a glitch
+rather than a dead card.
 
-1. Widen `Negotiated` (currently `{ shape, format }`) with `mode`, `device`, `engaged`
-   and `reason`, and add `OutputMode { Shared, Exclusive }` plus
-   `OutputRequest { mode, device, rate, channels, format, period_ms }`.
-2. Put today's `device.rs` behind a `trait OutputBackend` so a platform backend is a
-   sibling file rather than an arm in every match. `device::open`'s `build` closure
-   already inverts the construction the right way for this.
+1. **The stream hands `MixerPull` back.** `device::open` takes the `MixerPull` by value. The
+   cpal callback holds it in an `Arc<parking_lot::Mutex<_>>` and `try_lock`s it: uncontended
+   except at close, and it writes silence if the lock is held. `DeviceStream::close()` pauses,
+   drops the stream and `Arc::try_unwrap`s the puller back out.
+2. **`MixerPull::reshape(device: Shape)`.** Each `VoicePull` first services its pending
+   commands, so an append built against the old shape is mounted rather than lost. It then
+   rebuilds every loaded source's `Converter` (the playing one and a staged one) against the
+   new shape, and resizes `scratch`. `Voice`'s control-side `device` becomes a shared cell, so
+   later appends build against the new shape. Nothing else changes: the decks, the fade cells,
+   the positions and the visualizer slots are all untouched.
+3. **`AudioOutput::reopen(request) -> Result<Negotiated, AppError>`**: close → reshape →
+   open. If the open fails, it reopens the previous request. If that fails too, the puller
+   stays parked and the error reports device loss. The whole thing runs under the decks lock,
+   on the `emit_and_execute` path, and never on the UI thread.
+4. **`OutputRequest { mode, device, shape: Option<Shape> }`** and
+   **`OutputMode { Shared, Exclusive }`**. `Negotiated` moves to `mod.rs` and gains `mode`,
+   `device_name` and `fallback: Option<ClaimError>`. `claim.rs` defines `ClaimError`. The
+   variants cover busy, not allowed, reserved by another app, format refused, rate refused,
+   device gone, and I/O with a typed `#[source]`. It is never a `String`.
+5. **Device-loss recovery**, as the first consumer. On `device_lost`, `tasks::audio_health`
+   asks the engine to reopen the current request, with a bounded backoff. If the reopen fails,
+   it keeps today's toast. Keep `stream_health`'s three-way split: xruns and non-fatal kinds
+   never trigger a reopen.
+6. Publish `Negotiated` on a `watch` from the engine. The boot log line reads from it.
 
-**Exit:** `cargo clippy --all-targets --locked -- -D warnings` clean, `cargo test`
-clean, playback behaves identically. No user-visible change.
+**Exit:** unplugging the DAC mid-track continues playback on the new default output at the same
+position. A crossfade or a staged gapless track in flight survives a forced reopen. No deadlock
+under parallel tests. Measure peak RSS once (`/usr/bin/time -v`, release).
+**Tests after the go:** a device-free reshape test that pulls `mixer::pair` across a reshape
+and asserts position and sample continuity, plus a reopen-failure test that falls back to the
+previous request.
 
-### Phase 2 — Source format on the playback projection
+### Phase 2: Source format truth and following the file rate
 
-1. Add `sample_rate`, `channels`, `bit_depth` to `TrackSummary` (`Option<i32>`,
-   `#[serde(default)]` — the queue round-trip persists it).
-2. Carry them through the projection queries in
-   `crates/melodia-store/src/database/queries/track/` and
-   whatever else builds a `TrackSummary`. Follow the ReplayGain columns exactly.
-3. Surface the negotiated-vs-source pair in the UI as read-only text (Now Playing
-   detail, or Settings → Playback). It reads "FLAC 44.1 kHz / 24-bit → device 48 kHz"
-   today, which is useful on its own and proves the data path before anything acts
-   on it.
+1. **`AudioSource::format() -> SourceFormat { bits: Option<u8>, float: bool }`**, read from
+   Symphonia's `AudioCodecParameters` (`sample_format`, `bits_per_sample`) in `decode::open`.
+   It is carried on `decode::Opened` / `Cursor` and on both decoders. It is the source of
+   truth for the panel and the ladder. The database's `bit_depth` is not used for either.
+2. **The ladder prefers the requested shape.** Given `request.shape`, `device::ladder` puts
+   the rungs whose range contains that rate and channel count first. The chosen rung shows up
+   in `Negotiated`.
+3. **The reopen happens at the boundary, decided from the decoder:**
+   - `play_media` compares `decoded.shape()` with the negotiated shape. If rate-following is
+     on and they differ, it reopens before the append.
+   - `preload_gapless` makes the same comparison. On a mismatch it refuses to stage, so the
+     transition goes through `EndOfStream → PlayMedia` and reopens there. A per-path refusal
+     latch stops the monitor from reopening the file on every 500 ms tick.
+   - `crossfade_eligible` gains a `follows_rate` term. **Crossfade is off while the output
+     follows the rate**, because a fade cannot cross a reopen. The UI says so on the crossfade
+     row. Adding this term means no `TrackSummary` change is needed.
+4. **Resync delay.** After a reopen, `MixerPull::hold(frames)` emits silence first. The default
+   is a named constant, tuned against hardware in Phase 4.
+5. **Settings.** `OutputFlags` goes in `crates/melodia-app/src/services/settings/playback.rs`
+   with `#[serde(default)]` and is flattened into `SettingsData`. Fields: `mode` (a persisted
+   key, not an index), `follow_rate`, `device`, `resync_delay_ms`. Everything defaults off or
+   shared. The Settings → Playback **Output** card gets a "Match the file's sample rate" toggle.
+   It is hidden on Windows, where shared mode's `AUTOCONVERTPCM` makes it a no-op.
+6. **Entry check (Linux):** with `default.clock.allowed-rates` set, confirm with `pw-top` or
+   `hw_params` whether opening cpal's ALSA default at 44.1 kHz moves the PipeWire graph. If it
+   doesn't, the Linux half of this toggle waits for a cpal release that carries #1341, and the
+   panel reports "Converted by system mixer". Record the answer here.
 
-**Exit:** the rate shown for a playing track matches `ffprobe`. No playback change.
+**Exit:** a 44.1 / 48 / 96 kHz sequence reopens at each boundary. A same-rate album stays
+gapless. On macOS, Audio MIDI Setup follows the file. On Linux, the entry check's answer holds.
 
-### Phase 3 — Reopen at rate · the structural spine
+### Phase 3: The signal path panel and "Make bit-perfect"
 
-The risky phase. Built against the **shared** backend so a bug is a glitch.
+1. **`signal_path::evaluate`** is pure. Its inputs:
+   - `Negotiated`
+   - the playing source's `SourceFormat` and shape
+   - EQ and ReplayGain state, read from `EqSource`'s bypass condition and not recomputed
+   - speed, volume and mute
+   - whether a crossfade is in flight
 
-1. `PlaybackEngine::reopen_at(rate, channels)`: under the decks lock, drop both decks,
-   drop the backend, build a fresh `mixer::pair(DECK_COUNT, shape)`, open the backend
-   against it, rebuild `Decks`. `EqShared` / `ReplayGainShared` / `VisualizerShared` are
-   rate-independent `Arc`s and survive; `FadeShared` is deck-scoped and is rebuilt
-   with the decks.
-2. Wire it as a side effect on the `emit_and_execute` path — it must run under
-   `exec_lock`, never with the `PlayerState` lock held.
-3. Two entry points: **at a track boundary** when the next track's rate differs (the
-   common case; the reopen lands in the gap), and **mid-track** when the user toggles
-   the setting, which re-plays the current track at its position.
-4. Gate the whole thing behind a new `follow_source_rate` flag, default **off**. On
-   its own this is already worth shipping on Linux: PipeWire honours a requested rate
-   in `default.clock.allowed-rates`, so shared mode plus rate-following removes one
-   resample without any FFI.
-5. Suppress gapless preload and crossfade across a rate boundary while the flag is
-   on — two tracks at different rates cannot both be bit-perfect, and a fade would
-   need one of them resampled. Reuse the existing `crossfade_eligible` predicate;
-   add the rate term there rather than a second gate.
+   It returns stages plus a verdict:
+   - **Bit-perfect** requires exclusive output and every row in the table above clean.
+   - **Enhanced** means only DSP the user chose (EQ, RG, volume, speed) touched the samples.
+   - **Converted** covers a resample, a downmix, or shared output.
+   - **Fallback** means exclusive was asked for and refused. The reason is shown.
 
-**Exit:** toggling the flag and playing a 44.1 / 48 / 96 kHz sequence reopens cleanly
-each time, position and queue survive, no deadlock under `--test-threads=1` or
-parallel. Peak RSS unchanged (measure with `/usr/bin/time -v` on release once, at the
-end of the phase).
+   **Shared output never reads Bit-perfect.** The OS mixer is out of our sight.
+2. It is published on a `watch`, re-evaluated whenever an input changes, and never evaluated
+   per sample.
+3. **UI:** in Settings → Playback **Output**, the mode picker (Shared / Exclusive, exclusive
+   greyed until the platform's backend exists), the stage list, and the verdict.
+   **Make bit-perfect** calls one `library::playback` function that turns EQ and ReplayGain
+   off, sets speed to 1.0 and volume to 100 through the existing setters, so each persists as
+   usual.
+4. All new strings get a msgid in all six catalogs.
 
-### Phase 4 — The bit-perfect contract · settings + the truth panel
+**Exit:** the panel is right across the toggle matrix: EQ, RG, speed, volume and mute, each
+on and off, over shared, exclusive and fallback.
+**Tests after the go:** a table-driven unit test over `evaluate`.
 
-1. `BitPerfectFlags` in `crates/melodia-app/src/services/settings/playback.rs` — `#[serde(default)]`,
-   `#[serde(flatten)]`'d like `PlaybackFlags`. Fields: `enabled`, `mode`
-   (`shared` / `exclusive`), `device_id`, `period_ms`, `resync_delay_ms`.
-   Ships **off**, per the new-visible-behaviour default.
-2. The bypass matrix, enforced in one place: with bit-perfect on, EQ / ReplayGain /
-   crossfade are forced off and their controls disabled with a reason, speed pins to
-   1.0, and the volume slider disables at 100%. Do this by *disabling the controls*,
-   not by silently ignoring them — a slider that moves and does nothing is worse than
-   one that won't move.
-3. The truth panel in Settings → Playback: mode, device, negotiated rate / format,
-   and either **Engaged** or the single reason it isn't, taken from
-   `Negotiated::reason`. This is the deliverable that makes the claim checkable.
-4. **The round-trip test.** Fixtures: a short 16-bit and a short 24-bit WAV. Build
-   the full chain with everything bypassed, pull `MixerPull` directly (via
-   `output::mixer::pair`, as `crates/melodia/tests/crossfade.rs` already does), assert the
-   samples are bit-identical to the decoder's output. No device needed. This is the
-   test rox doesn't have, and it's what stops a future DSP change quietly breaking
-   the claim.
+### Phase 4: Linux exclusive: ALSA `hw:`, ReserveDevice1, device picker
 
-**Exit:** the panel tells the truth in every combination; the round-trip test passes
-and fails if you re-enable any node. New strings have a `msgid` in all six catalogs.
+1. **`encode.rs`** is plain Rust with no `cfg`.
+   - `DeviceFormat { S16, S24Packed /*S24_3LE*/, S24Low /*S24_LE*/, S32, F32 }`.
+   - A ladder that starts from the source depth:
+     - 16-bit: S16, S32, S24Packed, S24Low
+     - 24-bit: S24Packed, S32, S24Low
+     - float or 32-bit: S32, F32
+   - Each rung fed by power-of-two scaling, saturating at +1.0.
+2. **`alsa.rs`:**
+   - Enumerate with `card::Iter` + `Ctl::pcm_info`, which gives stable
+     `hw:CARD=<id>,DEV=<n>` ids and card names. Never use name hints.
+   - Open `hw:` with `set_rate_resample(false)`, the **exact** rate (refused means fallback,
+     never "near") and the exact channel count, then walk the format ladder.
+   - Period and buffer come from named constants.
+   - The writer thread `alsa-out` owns the `MixerPull`: `fill` → `encode` → blocking `writei`.
+     `try_recover` retries a bounded number of times, then reports `DeviceNotAvailable`
+     through `stream_health`, which goes into Phase 1's recovery.
+3. **`reserve.rs`** runs over `zbus::blocking` on the session bus, inside `spawn_blocking`.
+   Never enable the zbus `tokio` feature.
+   - Acquire `org.freedesktop.ReserveDevice1.Audio<N>` at priority 0 before opening the card.
+   - Serve `RequestRelease`: yield to a higher priority, which becomes the fallback reason
+     "taken by <ApplicationName>".
+   - Hold the claim through pause. Release it on stop, when the mode is turned off, and at quit.
+   - A reservation that fails is a fallback reason, not an error.
+4. **Real-time priority, best-effort and degrading quietly.**
+   - **Entry check:** does `audio_thread_priority`'s Linux path pull in `libdbus`? That would
+     be a new C dependency and a packaging change.
+   - If it does, request RT through RealtimeKit over `zbus::blocking` instead.
+   - Either way, failing to get RT never fails the claim.
+5. **Device picker:** in the Output card, shown when the mode is Exclusive, listing ALSA cards.
+   It persists the id. A missing device falls back with the reason "not connected".
+6. Put in the module docs that the stream disappears from the sound server's mixer while
+   exclusive, and that `PIPEWIRE_ALSA` has no effect here. Users will report both.
 
-### Phase 5 — Linux exclusive · ALSA `hw:` + device reservation
+**Exit:**
+- `/proc/asound/card*/pcm*p/sub*/hw_params` shows the file's rate and format.
+- Other apps go silent while exclusive holds the card, and recover when the mode is turned off.
+- A card held by another client falls back with the right reason.
+- The resync default is tuned on real hardware.
 
-1. `output/reserve.rs`: acquire `org.freedesktop.ReserveDevice1` for
-   `org.freedesktop.ReserveDevice1.Audio<N>` before the claim, release on drop.
-   **`zbus::blocking::Connection` inside `spawn_blocking`** — never `features =
-   ["tokio"]` on zbus, which panics Slint's a11y thread (`CLAUDE.md`, Known Gaps).
-   Failing to reserve is a fallback reason, not an error.
-2. `output/alsa.rs`: enumerate via card/pcm info rather than name hints (hints are
-   full of `default` and plugin aliases, none of which is a claim on hardware); open
-   `hw:CARD=x,DEV=n`; `set_rate_resample(false)`; negotiate format via the shared
-   ladder; period and buffer from the request with the tree's usual named constants.
-3. Writer thread: blocking `writei`, `pump()` per period, `try_recover` on xrun with
-   a bounded retry, report through `stream_health`. Ask for `SCHED_FIFO` best-effort
-   and degrade quietly when `RLIMIT_RTPRIO` says no — most desktops allow it via
-   `rtkit`, and a failure to get it must not fail the claim.
-4. Note in the module docs that `PIPEWIRE_ALSA` (set in `main.rs`) does nothing in
-   this mode: the `hw:` claim bypasses pipewire-alsa, so the stream stops appearing
-   in `pavucontrol` entirely. That's the point, and it's the first thing a user will
-   report as a bug.
+**Tests after the go:**
+- `encode` round-trip units for every rung, including sign and full-scale saturation.
+- `crates/melodia/tests/bit_perfect.rs`: 16-bit and 24-bit WAV fixtures (generated with
+  ffmpeg into `tests/assets/`, with `.gitattributes` binary lines) go through
+  `FileDecoder` → the full chain → `mixer::pair` → `encode`. Assert the result equals the
+  file's PCM, and that enabling EQ breaks the equality.
 
-**Exit:** exclusive engages on a real card; a second app's audio is silenced;
-`/proc/asound/card*/pcm*p/sub*/hw_params` shows the file's rate and format; toggling
-off releases the card and other apps recover. Busy device falls back with the right
-reason.
+### Phase 5: Windows exclusive: WASAPI through the `wasapi` crate
 
-### Phase 6 — Windows exclusive · WASAPI event-driven
+1. **Entry check:** `cargo search wasapi` and pin it. Confirm its `windows` dependency
+   unifies with cpal's `0.62.2`. If it pulls a second copy, weigh the compile cost before
+   adopting it.
+2. The backend runs on a thread it owns (`wasapi-out`, COM initialised there) in
+   `EventsExclusive` mode.
+   - Format: `WAVEFORMATEXTENSIBLE` with integer PCM first, using `encode.rs`'s ladder. 24-bit
+     goes in a 32-bit container with `wValidBitsPerSample = 24`, MSB-aligned. Keep that
+     alignment separate from ALSA's `S24Low`.
+   - Rate: exact.
+   - Alignment retry through the crate's aligned-period helper, with a fresh client each time.
+   - Pre-fill before `Start`, then one full buffer per event.
+3. **Error mapping into `ClaimError`:**
+   - `DEVICE_IN_USE` → busy.
+   - `EXCLUSIVE_MODE_NOT_ALLOWED` → not allowed, with the reason naming the Sound-settings
+     checkbox.
+   - `DEVICE_INVALIDATED` → gone, which goes into Phase 1's recovery.
+4. MMCSS through Phase 4's priority choice.
+5. The device list comes from endpoint ids, shown in the same picker.
 
-1. `windows = "0.62.2"` pinned to match cpal (finding 4), feature list limited to the
-   modules the backend names.
-2. Format ladder, `period_hns`, `buffer_hns`, `aligned_hns` as plain Rust above the
-   `cfg`, with unit tests that run on Linux.
-3. COM on a thread we own (the UI thread is an STA; an interface created there can't
-   legally be touched from the writer). `IsFormatSupported == S_OK` exactly. The
-   alignment dance with a **freshly activated** client on retry.
-4. **Event-driven**: `AUDCLNT_STREAMFLAGS_EVENTCALLBACK`, `SetEventHandle`,
-   `hnsPeriodicity == hnsBufferDuration`, writer blocks on `WaitForSingleObject`.
-   `AvSetMmThreadCharacteristics("Pro Audio")` on that thread, released on exit.
-5. Staging buffer + one `copy_nonoverlapping` per period — nothing promises the
-   driver's pointer is aligned for the sample type.
+**Exit:** Melodia disappears from the Windows volume mixer while it plays. With the checkbox
+cleared, it falls back with that reason. An unplug recovers.
 
-**Exit:** engages on a real endpoint; the Windows volume mixer shows Melodia gone
-while it plays; a busy endpoint falls back with a reason.
+### Phase 6: macOS exclusive: hog mode around the cpal stream
 
-### Phase 7 — macOS exclusive · hog mode
+1. **`hog.rs`**, over `coreaudio-rs` pinned to the lock's `0.14.2`:
+   - Map the chosen cpal device to its `AudioDeviceID` by name. Verify this against
+     `coreaudio-rs`'s helpers.
+   - Take hog mode, guarded by `get_hogging_pid` (the set toggles, so re-read to confirm).
+   - Build the cpal stream at the file's shape. cpal sets the nominal rate and physical format
+     and waits for the settle.
+   - Release hog mode **after** the stream drops.
+2. A device that dies arrives as `DeviceNotAvailable` → Phase 1's recovery.
 
-1. `objc2-core-audio` pinned to `0.3.2`. No hand-declared `extern "C"`, no
-   four-char-code constant table — that's the whole reason for the dependency.
-2. Take hog mode (guard the toggle-on-set behaviour; the read-back decides), set the
-   nominal rate and poll until it settles, read back the buffer frame size, attach an
-   IOProc, watch `kAudioDevicePropertyDeviceIsAlive`.
-3. Release hog mode **last** in `Drop`, after the IOProc is destroyed — releasing
-   earlier lets another app reconfigure the rate under a live IOProc.
-4. Handle both buffer layouts: one interleaved buffer (every built-in output and most
-   USB DACs) and one buffer per stream (pro interfaces, aggregate devices).
+**Exit:** other apps go silent. Audio MIDI Setup shows the file's rate and format. Turning the
+mode off restores system audio. Unplugging recovers.
 
-**Exit:** engages on a real device; other apps go silent; unplugging trips the reopen
-path; toggling off restores system audio.
+### Phase 7: Polish
 
-### Phase 8 — Polish
-
-1. Device picker in Settings → Playback, populated per mode (the ids don't cross —
-   a cpal device name means nothing to the ALSA backend, so ask for the two lists
-   separately).
-2. Period / buffer knob and the resync delay, both with the device's own limits as
-   bounds and both reported back as negotiated.
-3. Packaging: `alsa-lib-devel` / `libasound2-dev` build deps on the RPM and DEB specs
-   and the AUR PKGBUILD; check the CI Linux runner has them. Read
-   `.claude/rules/ci-packaging.md` before touching any of it.
-4. `.claude/rules/unsafe-rust.md`: the sanctioned-site table currently lists ten calls
-   in five files, and this feature adds a much larger FFI surface. Decide and write
-   down which — extend the table, or give each `output/<platform>.rs` a module-level
-   `#[allow(unsafe_code, reason = "…")]` under the rule's "unless every item in it is
-   FFI" clause. Don't leave the rule silently out of date.
-5. `README.md` feature list, `CLAUDE.md` conventions, and a new
-   `.claude/rules/bit-perfect.md` scoped to
-   `crates/melodia-playback/src/player/playback/output/**` holding the
-   contract and the per-platform quirks — it cuts across enough that a nested
-   `CLAUDE.md` would miss the settings and UI halves.
-
----
+1. **Take the position lead out.** Subtract the negotiated device latency: cpal's
+   `buffer_size`, `snd_pcm_delay`, or the padding. This is the audio-stack.md bullet that
+   deferred the change to this feature.
+2. A **Now Playing quality chip** (verdict + rate) that opens the signal path panel.
+3. Advanced knobs: period / buffer, resync delay, and WASAPI **compatibility (polling) mode**
+   for USB drivers that stutter under event mode. Each knob is bounded by the device's limits
+   and reported back as negotiated.
+4. Optional, off by default: **hardware volume** (ALSA simple mixer, `IAudioEndpointVolume`,
+   CoreAudio device volume), so the slider can move without breaking the claim. It may be
+   better as its own issue.
+5. Docs:
+   - README feature list and CLAUDE.md (AudioOutput ownership, the lock order).
+   - `.claude/rules/audio-stack.md` (reshape, the exclusive backends, the verdict).
+   - An `unsafe-rust.md` row only if a site appeared after all.
+   - Then delete this doc.
 
 ## Cross-cutting
 
-- **Memory.** One writer thread and one staging buffer sized to the device period per
-  claim; the reopen drops the old mixer and decks before building the new ones. No new
-  caches. Measure peak RSS once at the end of Phase 3 and once at the end of Phase 5;
-  anything over the usual ceiling gets `heaptrack` before it merges.
-- **Threading.** Backends run on their own threads and never touch Slint. The reopen
-  is a side effect on the `emit_and_execute` path — `exec_lock → PlayerState → decks`,
-  never reversed.
-- **Errors.** `AppError` boundary variants with `#[source]`, and every fallback reason
-  is a user-facing string that names what failed, not that something did.
-- **i18n.** Every new literal needs the same `msgid` in all six `.po` catalogs; the
-  device names and negotiated formats are data and stay untranslated.
-- **Logging.** Nothing in `pump()` or a writer loop logs — the health counters exist
-  for exactly this. The last thing a dying writer thread does may log.
+- **Memory.** Each claim adds one writer thread and one staging buffer sized to a period.
+  There is no ring and no new cache. A reshape frees the old stream before the new one opens.
+- **Threading.** Backends never touch Slint. A reopen never runs on the UI thread, so
+  CoreAudio's rate settle blocks an engine thread instead.
+- **Errors.** `ClaimError` is typed and user-facing. `error::describe` covers the logs.
+- **Logging.** Nothing logs in `fill`, `encode` or a writer loop. The health counters exist for
+  that.
+- **i18n.** Every literal needs a msgid in all six catalogs. Device names and formats are data.
 
 ## Open questions
 
-- Does WirePlumber release the card promptly enough on reservation, or does it need a
-  settle delay of its own? Decide against real hardware in Phase 5.
-- Whether the truth panel belongs in Settings → Playback or on Now Playing. Settings
-  for v1; revisit if users can't find it.
-- Whether `follow_source_rate` (Phase 3) is worth exposing on its own as a shared-mode
-  setting, or should only ever appear as part of the bit-perfect toggle.
+- Does opening cpal's ALSA default at the file rate move the PipeWire graph? (Phase 2 entry check)
+- Should a long pause give up the exclusive claim, so other apps get the card back?
+- How long does the session manager take to let go of a card after a ReserveDevice1 release?
+- Once cpal 0.19's extension traits ship (#1220), can they replace `wasapi.rs` or add a native
+  PipeWire exclusive stream (`PW_STREAM_FLAG_EXCLUSIVE` / `node.force-rate`)?
+
