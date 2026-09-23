@@ -427,9 +427,10 @@ async fn connect(
     let reader: StreamReader =
         IcyMetadataReader::new(reader, icy.metadata_interval(), move |parsed| {
             let Some(metadata) = readable_metadata(parsed) else { return };
-            titles.set_title(
-                metadata.stream_title().map(str::trim).filter(|t| !t.is_empty()).map(str::to_owned),
-            );
+            // A block carrying only `StreamUrl` says nothing about the song; read as a cleared
+            // title, it ends the song mid-play and the repeat after it counts as a new one.
+            let Some(title) = metadata.stream_title() else { return };
+            titles.set_title(Some(title.trim()).filter(|t| !t.is_empty()).map(str::to_owned));
         });
 
     // **On the blocking pool, never on a worker.** Building the decoder probes the container by

@@ -47,6 +47,9 @@ struct OnAir {
 pub struct LiveDetector {
     last: Option<Heard>,
     on_air: Option<OnAir>,
+    /// The last song that may not start again: one already scrobbled, or one joined part way. A
+    /// station that blanks or ads over a song and then restores its line would otherwise count it.
+    spent: Option<ScrobbleTrack>,
 }
 
 impl LiveDetector {
@@ -79,11 +82,13 @@ impl LiveDetector {
         // tuning in names a song that was already under way. A song another station's line
         // displaced was cut off rather than finished, so it is dropped.
         let turnover = same_station.is_some_and(|last| last.announced);
+        let announced = radio.announcement().map(ScrobbleTrack::heard_on_air);
         let mut effects = Vec::new();
         if turnover {
             effects.extend(self.finish(now_ts));
         } else {
             self.on_air = None;
+            self.spent.clone_from(&announced);
         }
         self.last = Some(Heard {
             stream_url: radio.stream_url.clone(),
@@ -91,10 +96,9 @@ impl LiveDetector {
             announced: turnover || line.is_some(),
         });
 
-        if let Some(song) = radio.announcement() {
-            let track = ScrobbleTrack::heard_on_air(song);
+        if let Some(track) = announced {
             effects.push(LiveEffect::NowPlaying(track.clone()));
-            if turnover {
+            if turnover && self.spent.as_ref() != Some(&track) {
                 self.on_air = Some(OnAir { track, started_at: now_ts });
             }
         }
@@ -104,13 +108,15 @@ impl LiveDetector {
     /// The song on air, as a scrobble if it ran long enough, clearing it either way.
     fn finish(&mut self, now_ts: i64) -> Option<LiveEffect> {
         let song = self.on_air.take()?;
-        let heard_ms = u64::try_from(now_ts.saturating_sub(song.started_at)).ok()? * 1000;
-        (heard_ms > MIN_TRACK_MS)
-            .then_some(LiveEffect::Scrobble { track: song.track, timestamp: song.started_at })
+        let heard_secs = u64::try_from(now_ts.saturating_sub(song.started_at)).unwrap_or(0);
+        let scrobbled = heard_secs.saturating_mul(1000) > MIN_TRACK_MS;
+        self.spent = scrobbled.then(|| song.track.clone());
+        scrobbled.then_some(LiveEffect::Scrobble { track: song.track, timestamp: song.started_at })
     }
 
     fn interrupt(&mut self) {
         self.last = None;
         self.on_air = None;
+        self.spent = None;
     }
 }

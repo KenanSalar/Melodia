@@ -176,8 +176,8 @@ impl StreamShared {
     }
 
     /// Moves on every [`Self::publish_heard_title`] that publishes, and never back onto a value any
-    /// cell has published. The monitor keeps the last value it saw and only takes the lock when
-    /// this moved, so a station that changes track once a song costs one relaxed load per tick.
+    /// cell has published. The monitor keeps the last value it saw and only takes the title's lock
+    /// when this moved, so a station that changes track once a song clones its title once a song.
     pub fn title_generation(&self) -> u64 {
         self.title_generation.load(Ordering::Acquire)
     }
