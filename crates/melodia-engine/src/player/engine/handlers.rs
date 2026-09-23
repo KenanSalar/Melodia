@@ -233,6 +233,7 @@ fn reconcile_live_stream(
     sinks: &PlayerSinks,
     last_title_generation: &mut u64,
 ) {
+    stream.publish_heard_title();
     let buffering = stream.is_buffering();
     let title_generation = stream.title_generation();
     let title_moved = title_generation != *last_title_generation;

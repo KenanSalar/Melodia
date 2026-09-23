@@ -242,8 +242,10 @@ export struct RadioVm {
     uuid: string,
     name: string,
     // What the stream announced, or empty until it announces something — which for plenty of
-    // stations is never.
+    // stations is never. Split by Rust's `RadioNowPlaying::announcement`, so a line naming no
+    // artist arrives whole as `live_title` beside an empty `live_artist`.
     live_title: string,
+    live_artist: string,
     artwork_path: string,
     // The row tier's logo, on `TrackSummaryRow.cover_img`'s contract: empty (`width == 0`) until
     // the decode lands, and the full view takes its own larger copy from `Player.np-station-logo`.

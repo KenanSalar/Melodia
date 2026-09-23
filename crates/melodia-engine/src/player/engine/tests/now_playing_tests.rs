@@ -69,18 +69,23 @@ fn a_station_lends_its_name_until_it_announces_a_song() {
 }
 
 #[test]
-fn an_announced_song_takes_the_title_and_the_station_drops_a_line() {
+fn an_announced_song_takes_the_title_and_the_artist_takes_the_line_below() {
     let vm = deck(None, Some(tuned_to("Night Radio", Some("Field - Nocturne"))), 0);
 
-    assert_eq!(lines(vm.source()), Some(("Field - Nocturne", Some("Night Radio"))));
+    assert_eq!(lines(vm.source()), Some(("Nocturne", Some("Field"))));
 }
 
 #[test]
-fn a_station_never_reports_an_album() {
+fn a_station_takes_the_album_slot_only_once_an_artist_holds_the_line_above_it() {
     let announced = deck(None, Some(tuned_to("Night Radio", Some("Field - Nocturne"))), 0);
+    let unsplit = deck(None, Some(tuned_to("Night Radio", Some("Station ident"))), 0);
     let silent = deck(None, Some(tuned_to("Night Radio", None)), 0);
 
-    assert_eq!(announced.source().map(|s| s.album), Some(None));
+    assert_eq!(announced.source().map(|s| s.album), Some(Some("Night Radio")));
+    assert_eq!(
+        unsplit.source().map(|s| (s.title, s.secondary, s.album)),
+        Some(("Station ident", Some("Night Radio"), None))
+    );
     assert_eq!(silent.source().map(|s| s.album), Some(None));
 }
 

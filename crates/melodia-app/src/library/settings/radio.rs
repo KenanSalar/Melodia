@@ -26,3 +26,10 @@ pub fn set_radio_send_clicks(state: &AppState, send: bool) -> Result<(), AppErro
         settings.radio.radio_send_clicks = send;
     })
 }
+
+/// Persist whether songs heard on a station are scrobbled.
+pub fn set_radio_scrobble(state: &AppState, scrobble: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(&state.paths, move |settings| {
+        settings.radio.radio_scrobble = scrobble;
+    })
+}

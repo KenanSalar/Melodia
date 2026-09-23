@@ -12,10 +12,11 @@ export global Player {
     // spelled again in Slint because only `@tr` at a literal reaches the catalogues.
     //
     // **The song leads and the station follows**, so the station is on screen either way: as the
-    // subtitle once something is announced, and as the title until then. In that second case the
-    // subtitle falls through to the station's genres rather than standing empty — the line is
-    // there whatever happens, so it may as well say something, and a genre under a station name
-    // reads the way an artist under a title does.
+    // third line once the stream names an artist, as the subtitle under a line naming none, and
+    // as the title until anything is announced. In that last case the subtitle falls through to
+    // the station's genres rather than standing empty — the line is there whatever happens, so it
+    // may as well say something, and a genre under a station name reads the way an artist under a
+    // title does.
     //
     // The LRM forces an LTR base direction so `elide` renders its `…` at the right edge for RTL
     // scripts too; see the title-cell note in `track-list-row.slint`.
@@ -24,16 +25,20 @@ export global Player {
         : (root.vm.has_track ? "‎" + root.vm.track.title : @tr("No track playing"));
 
     out property <string> source-subtitle: root.vm.has_station
-        ? "‎" + (root.vm.radio.live_title == "" ? root.vm.radio.tags : root.vm.radio.name)
+        ? "‎" + (root.vm.radio.live_title == ""
+            ? root.vm.radio.tags
+            : (root.vm.radio.live_artist == "" ? root.vm.radio.name : root.vm.radio.live_artist))
         : (root.vm.has_track
             ? "‎" + (root.vm.track.artist == "" ? @tr("Unknown artist") : root.vm.track.artist)
             : "—");
 
-    // The third line: an album for a track, the station's country for a stream. **Empty rather
-    // than LRM-prefixed when there is nothing**, so a host can gate its `Text` on `!= ""` without
-    // a second property to ask.
+    // The third line: an album for a track; for a stream, the station once an artist has taken
+    // its line, otherwise the station's country. **Empty rather than LRM-prefixed when there is
+    // nothing**, so a host can gate its `Text` on `!= ""` without a second property to ask.
     out property <string> source-tertiary: root.vm.has_station
-        ? (root.vm.radio.country == "" ? "" : "‎" + root.vm.radio.country)
+        ? (root.vm.radio.live_artist != ""
+            ? "‎" + root.vm.radio.name
+            : (root.vm.radio.country == "" ? "" : "‎" + root.vm.radio.country))
         : (root.vm.has_track && root.vm.track.album != "" ? "‎" + root.vm.track.album : "");
 
     // What the station pill says, in the slot a track's seek bar occupies. Four states, one

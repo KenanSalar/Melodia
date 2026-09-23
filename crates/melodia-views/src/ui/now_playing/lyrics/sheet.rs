@@ -51,7 +51,7 @@ fn reseed(weak: &Weak<AppWindow>, state: &AppState, np_state: &Rc<NowPlayingStat
     let Some(ui) = weak.upgrade() else { return };
     let ly = &np_state.lyrics;
 
-    let track = np_state.current_source.borrow().as_ref().and_then(|s| s.track.clone());
+    let track = playing_track(np_state);
     // **Both terms, and the mount is the one that is not obvious.** The switch is the persisted
     // setting rather than "the panel is mounted", so on its own it answers `true` for a closed
     // view behind which the source-change path is still running. That would spend a request per
@@ -181,7 +181,7 @@ fn report_save_failure(e: &melodia_core::error::AppError) {
 }
 
 /// The track on the deck, or `None` on a station or an empty queue.
-fn playing_track(np_state: &Rc<NowPlayingState>) -> Option<Arc<TrackSummary>> {
+fn playing_track(np_state: &NowPlayingState) -> Option<Arc<TrackSummary>> {
     np_state.current_source.borrow().as_ref().and_then(|s| s.track.clone())
 }
 

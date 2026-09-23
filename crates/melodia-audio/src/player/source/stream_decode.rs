@@ -22,6 +22,14 @@ use melodia_core::error::AppError;
 use super::audio::{Sample, Shape};
 use super::decode;
 
+/// The most one read hands the demuxer.
+///
+/// Symphonia's stream buffer asks for up to 32 KiB a refill and takes a short read as it comes,
+/// so this is how far reading runs ahead of decoding. An ICY title fires when reading reaches it,
+/// and the ring can only measure the delay *after* decoding, so everything read ahead of that
+/// lands early; at a common bitrate the uncapped refill is seconds of audio.
+const MAX_READ_AHEAD: usize = 4 * 1024;
+
 /// A reader the demuxer may read but must never seek or measure.
 ///
 /// Both answers are the shape of a live mount rather than a shortcoming: there is no end to seek
@@ -31,7 +39,8 @@ pub struct LiveSource<R>(pub R);
 
 impl<R: Read> Read for LiveSource<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.0.read(buf)
+        let len = buf.len().min(MAX_READ_AHEAD);
+        self.0.read(&mut buf[..len])
     }
 }
 

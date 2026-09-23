@@ -19,7 +19,8 @@ use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::Duration;
 
-use icy_metadata::{IcyHeaders, IcyMetadataReader, RequestIcyMetadata};
+use icy_metadata::error::MetadataParseError;
+use icy_metadata::{IcyHeaders, IcyMetadata, IcyMetadataReader, RequestIcyMetadata};
 use reqwest::Url;
 use stream_download::http::{Client as StreamClient, HttpStream, format_range_header_bytes};
 use stream_download::storage::bounded::BoundedStorageProvider;
@@ -425,9 +426,11 @@ async fn connect(
     let titles = shared.clone();
     let reader: StreamReader =
         IcyMetadataReader::new(reader, icy.metadata_interval(), move |parsed| {
-            titles.set_title(parsed.ok().and_then(|m| {
-                m.stream_title().map(str::trim).filter(|t| !t.is_empty()).map(str::to_owned)
-            }));
+            let Some(metadata) = readable_metadata(parsed) else { return };
+            // A block carrying only `StreamUrl` says nothing about the song; read as a cleared
+            // title, it ends the song mid-play and the repeat after it counts as a new one.
+            let Some(title) = metadata.stream_title() else { return };
+            titles.set_title(Some(title.trim()).filter(|t| !t.is_empty()).map(str::to_owned));
         });
 
     // **On the blocking pool, never on a worker.** Building the decoder probes the container by
@@ -451,6 +454,41 @@ async fn connect(
     }
 
     Ok(Opened::Audio(Box::new(OpenedStream { shape: decoder.shape(), decoder, facts })))
+}
+
+/// A metadata block as metadata, or `None` where it says nothing about the song.
+///
+/// A block that isn't UTF-8 is read as Windows-1252, what older servers send, rather than dropped:
+/// dropped, the previous song's title would stay up for the whole of this one. An empty block is
+/// skipped rather than read as a cleared title, which would make the next block look like a new
+/// song.
+fn readable_metadata(parsed: Result<IcyMetadata, MetadataParseError>) -> Option<IcyMetadata> {
+    match parsed {
+        Ok(metadata) => Some(metadata),
+        Err(MetadataParseError::InvalidUtf8(e)) => {
+            let decoded: String = e.as_bytes().iter().copied().map(windows_1252).collect();
+            decoded.trim_end_matches('\0').parse().ok()
+        }
+        Err(MetadataParseError::Empty(_)) => None,
+    }
+}
+
+/// Windows-1252's characters for 0x80–0x9F, where it parts from Latin-1. Read as Latin-1 those
+/// bytes are control codes, and they hold the curly apostrophe and the dash song titles are full
+/// of. The five bytes the code page leaves undefined keep their Latin-1 reading, as WHATWG's
+/// decoder does.
+const WINDOWS_1252_HIGH: [char; 32] = [
+    '\u{20AC}', '\u{0081}', '\u{201A}', '\u{0192}', '\u{201E}', '\u{2026}', '\u{2020}', '\u{2021}',
+    '\u{02C6}', '\u{2030}', '\u{0160}', '\u{2039}', '\u{0152}', '\u{008D}', '\u{017D}', '\u{008F}',
+    '\u{0090}', '\u{2018}', '\u{2019}', '\u{201C}', '\u{201D}', '\u{2022}', '\u{2013}', '\u{2014}',
+    '\u{02DC}', '\u{2122}', '\u{0161}', '\u{203A}', '\u{0153}', '\u{009D}', '\u{017E}', '\u{0178}',
+];
+
+fn windows_1252(byte: u8) -> char {
+    match byte {
+        0x80..=0x9F => WINDOWS_1252_HIGH[usize::from(byte - 0x80)],
+        _ => char::from(byte),
+    }
 }
 
 /// A trimmed header value, or `None` where the server sent the field empty.

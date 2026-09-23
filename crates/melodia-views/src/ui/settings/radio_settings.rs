@@ -7,8 +7,8 @@
 //!
 //! Every shadow is written **before** its persist, not after it, so a directory call racing
 //! the disk write reads the new answer. `library::radio` refuses on the master shadow, which
-//! is what makes "off" mean no traffic rather than a hidden sidebar row; the other two are
-//! read the same way, per page and per play.
+//! is what makes "off" mean no traffic rather than a hidden sidebar row; the others are read
+//! the same way, per page, per play and per title change.
 
 use slint::ComponentHandle;
 
@@ -22,6 +22,7 @@ pub fn install_radio(ui: &AppWindow, state: &AppState) {
     g.set_radio_enabled(state.radio_enabled.get());
     g.set_radio_hide_segmented(state.radio_hide_segmented.get());
     g.set_radio_send_clicks(state.radio_send_clicks.get());
+    g.set_radio_scrobble(state.radio_scrobble.get());
 
     {
         let s = state.clone();
@@ -59,11 +60,17 @@ pub fn install_radio(ui: &AppWindow, state: &AppState) {
         });
     }
 
-    // The one of the three with nothing to run between the two steps, so it takes the helper.
+    // Nothing to run between the shadow and the persist, so these take the helper.
     g.on_radio_send_clicks_changed(shadow_toggle(
         state,
         &state.radio_send_clicks,
         "set_radio_send_clicks",
         library::settings::set_radio_send_clicks,
+    ));
+    g.on_radio_scrobble_changed(shadow_toggle(
+        state,
+        &state.radio_scrobble,
+        "set_radio_scrobble",
+        library::settings::set_radio_scrobble,
     ));
 }

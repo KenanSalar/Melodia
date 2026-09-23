@@ -231,11 +231,15 @@ fn reuse_or_warm(
 /// from, so one station cannot wear two different tiles on two pages.
 fn to_slint_radio_vm(station: &RadioNowPlaying, cover_thumbs: &CoverThumbs) -> RadioVm {
     let tile = crate::ui::radio::station_tile(&station.name);
+    let announcement = station.announcement();
     RadioVm {
         station_id: clamp_i64_to_i32(station.station_id),
         uuid: opt_shared(station.station_uuid.as_deref()),
         name: SharedString::from(station.name.as_str()),
-        live_title: SharedString::from(station.live_title.as_deref().unwrap_or("")),
+        live_title: SharedString::from(
+            announcement.map_or(station.live_title.as_deref().unwrap_or(""), |song| song.title),
+        ),
+        live_artist: SharedString::from(announcement.map_or("", |song| song.artist)),
         artwork_path: SharedString::from(station.artwork_path.as_deref().unwrap_or("")),
         logo_img: cover_thumbs.get_cached_opt(station.artwork_path.as_deref()),
         monogram: tile.monogram,

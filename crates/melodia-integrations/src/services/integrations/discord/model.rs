@@ -35,8 +35,8 @@ pub struct Presence {
     /// Second line (Discord `state`) — the artist, or the station once the line above is its
     /// song; `None` when there is nothing to add.
     pub state: Option<String>,
-    /// Large-image tooltip — the album, falling back to the app name. A station has no album, so
-    /// it always takes the fallback.
+    /// Large-image tooltip — the album, falling back to the app name. A station fills it with its
+    /// own name once the lines above are a song and an artist.
     pub large_text: Option<String>,
     /// External `https://` cover URL for the large image; `None` uses the app
     /// logo asset. Populated by the detector task on a track change (the pure
@@ -59,7 +59,7 @@ pub enum Update {
 
 /// What the card is *about*, at the granularity a republish has to notice.
 ///
-/// A track is its id. A station is its stream URL **and the line it is announcing**: the source
+/// A track is its id. A station is its stream URL **and the lines it is announcing**: the source
 /// never changes for the life of a session, so keyed on the URL alone every song after the first
 /// would dedupe away and the card would name whatever was playing when it tuned in. Owned rather
 /// than borrowed because it is held across evaluations; a station is the only arm that allocates,
@@ -67,16 +67,18 @@ pub enum Update {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum CardSource {
     Track(i64),
-    Station { stream_url: String, title: String },
+    Station { stream_url: String, title: String, secondary: Option<String> },
 }
 
 impl From<&SourceSummary<'_>> for CardSource {
     fn from(source: &SourceSummary<'_>) -> Self {
         match source.id {
             SourceId::Track(id) => Self::Track(id),
-            SourceId::Station(stream_url) => {
-                Self::Station { stream_url: stream_url.to_owned(), title: source.title.to_owned() }
-            }
+            SourceId::Station(stream_url) => Self::Station {
+                stream_url: stream_url.to_owned(),
+                title: source.title.to_owned(),
+                secondary: source.secondary.map(str::to_owned),
+            },
         }
     }
 }

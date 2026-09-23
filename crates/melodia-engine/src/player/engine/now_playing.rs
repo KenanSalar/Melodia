@@ -16,6 +16,7 @@
 //! placeholder nothing asked for.
 
 use super::state::PlayerViewModelLight;
+use super::types::RadioNowPlaying;
 
 /// Which source a summary describes, and what tells one instance of it from the next.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,7 +40,8 @@ pub struct SourceSummary<'a> {
     /// Who by: a track's artist, or the station's name once [`Self::title`] is the song. `None`
     /// where there is nothing to add — an untagged track, or a station still lending its name.
     pub secondary: Option<&'a str>,
-    /// A station has no album, and never will.
+    /// A track's album. A station lends its name here once [`Self::secondary`] is an artist, so an
+    /// OS panel with three slots still says what is tuned.
     pub album: Option<&'a str>,
     pub artwork_path: Option<&'a str>,
     /// `None` for a live source, so a consumer publishes an *absent* length rather than a zero
@@ -55,12 +57,18 @@ impl PlayerViewModelLight {
     /// a future that leaves both set can only read as the more specific of the two.
     pub fn source(&self) -> Option<SourceSummary<'_>> {
         if let Some(radio) = self.radio.as_ref() {
+            let station = radio.name.as_str();
             let announced = radio.live_title.as_deref().and_then(non_empty);
+            let (title, secondary, album) = match (radio.announcement(), announced) {
+                (Some(song), _) => (song.title, Some(song.artist), Some(station)),
+                (None, Some(line)) => (line, Some(station), None),
+                (None, None) => (station, None, None),
+            };
             return Some(SourceSummary {
                 id: SourceId::Station(radio.stream_url.as_str()),
-                title: announced.unwrap_or(radio.name.as_str()),
-                secondary: announced.map(|_| radio.name.as_str()),
-                album: None,
+                title,
+                secondary,
+                album,
                 artwork_path: radio.artwork_path.as_deref().and_then(non_empty),
                 duration_ms: None,
             });
@@ -75,6 +83,32 @@ impl PlayerViewModelLight {
             artwork_path: track.artwork_path.as_deref().and_then(non_empty),
             duration_ms: Some(self.duration_ms),
         })
+    }
+}
+
+/// A stream's announcement read as a song by someone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Announcement<'a> {
+    pub artist: &'a str,
+    pub title: &'a str,
+}
+
+impl RadioNowPlaying {
+    /// What the stream announced, as artist and title, or `None` where it named no artist.
+    ///
+    /// **Split on the first `" - "`**, because `Artist - Title` is the convention stations follow
+    /// and a title carries a second dash far more often than an artist does (`Song - Remastered`).
+    /// It is a convention and not a format, so a line that doesn't split is a jingle, an ad or a
+    /// show name, and every consumer falls back to showing it whole.
+    ///
+    /// **Two halves with no letter between them are not a song.** Some stations briefly announce
+    /// their automation's catalogue ids (`403761 - 287105`) before the real line. One numeric half
+    /// is kept, since band names and titles like `311` or `1979` exist.
+    pub fn announcement(&self) -> Option<Announcement<'_>> {
+        let (artist, title) = self.live_title.as_deref()?.split_once(" - ")?;
+        let song = Announcement { artist: non_empty(artist)?, title: non_empty(title)? };
+        let has_letter = |text: &str| text.chars().any(char::is_alphabetic);
+        (has_letter(song.artist) || has_letter(song.title)).then_some(song)
     }
 }
 

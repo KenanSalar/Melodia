@@ -65,7 +65,9 @@ pub use onboarding::set_onboarding_seen;
 pub use playback::{
     set_gapless_playback, set_play_button_animation, set_playback_speed, set_resume_on_startup,
 };
-pub use radio::{set_radio_enabled, set_radio_hide_segmented, set_radio_send_clicks};
+pub use radio::{
+    set_radio_enabled, set_radio_hide_segmented, set_radio_scrobble, set_radio_send_clicks,
+};
 pub use ratings::set_write_ratings_to_tags;
 pub use replaygain::{
     set_replaygain_enabled, set_replaygain_mode, set_replaygain_preamp,

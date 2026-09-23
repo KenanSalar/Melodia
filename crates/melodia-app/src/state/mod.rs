@@ -130,6 +130,9 @@ pub struct AppState {
     /// Whether playing a station reports a click back to the directory. Read on
     /// the play path, which is already on a worker.
     pub radio_send_clicks: SharedFlag,
+    /// Whether a song heard on a station is scrobbled, read by `tasks::scrobble`'s detector on
+    /// every title change.
+    pub radio_scrobble: SharedFlag,
     /// Whether lyrics run at all, on [`Self::radio_enabled`]'s terms: `library::lyrics`
     /// refuses on it from a worker, and the Now Playing switch and the Settings card
     /// both write it.
@@ -287,6 +290,7 @@ impl AppState {
             radio_enabled: SharedFlag::new(settings.radio.radio_enabled),
             radio_hide_segmented: SharedFlag::new(settings.radio.radio_hide_segmented),
             radio_send_clicks: SharedFlag::new(settings.radio.radio_send_clicks),
+            radio_scrobble: SharedFlag::new(settings.radio.radio_scrobble),
             lyrics_enabled: SharedFlag::new(settings.lyrics.lyrics_enabled),
             lyrics_online_enabled: SharedFlag::new(settings.lyrics.lyrics_online_enabled),
             lyrics_romanization_shown: SharedFlag::new(settings.lyrics.lyrics_romanization_shown),
