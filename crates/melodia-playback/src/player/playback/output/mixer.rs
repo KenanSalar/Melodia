@@ -92,6 +92,18 @@ impl MixerPull {
             }
         }
     }
+
+    /// Bring every voice to `device` for the next stream, leaving what they hold where it is.
+    ///
+    /// Nothing loaded depends on the device, so a source part way through carries on from the
+    /// same frame; only the output width and the step change. Only while no stream is pulling.
+    pub fn reshape(&mut self, device: Shape) {
+        self.device = device;
+        for voice in &mut self.voices {
+            voice.reshape(device);
+        }
+        self.scratch.resize(LOCKSTEP_FRAMES * usize::from(device.channels.get()), 0.0);
+    }
 }
 
 /// Build a mixer and its puller, with `voices` many brought to `device`.

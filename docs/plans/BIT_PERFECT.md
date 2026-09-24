@@ -2,7 +2,7 @@
 
 Working doc. Delete it when the feature ships. Tracks issue #66.
 
-Status: **planned** · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
+Status: **Phase 1 in progress** (implemented, awaiting the manual test) · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
 
 ## What the user sees today
 
@@ -174,6 +174,25 @@ rather than a dead card.
    it keeps today's toast. Keep `stream_health`'s three-way split: xruns and non-fatal kinds
    never trigger a reopen.
 6. Publish `Negotiated` on a `watch` from the engine. The boot log line reads from it.
+
+**As built (2026-09-24), where it departs from the steps above:**
+- **The device shape left `Converter`.** It allocated only by source width and its interpolation
+  state lives on the source's timeline, so `fill` now takes the device and nothing loaded depends
+  on it. Reshape is a field assignment plus a `scratch` resize: no converter rebuild, no shared
+  device cell on `Voice`, and no append/reshape race to guard.
+- **The puller never leaves `AudioOutput`.** It sits in an `Arc<Mutex<MixerPull>>` every stream
+  clones, so dropping the stream is the whole handoff and nothing rests on when cpal drops its
+  callback. The ladder reshapes it per rung instead of building a mixer per rung.
+- `take_device_lost` on `stream_health`, polled every 250 ms by `tasks::audio_health`, so a
+  loss is not held for a 5 s drain window. The backoff is `REOPEN_BACKOFF` there.
+- **A stall is a loss too.** Restarting `PipeWire` under the ALSA plugin reports nothing: no
+  `POLLHUP`, and cpal polls with no timeout, so the data callback just stops. The callback beats
+  `AudioStreamHealth::blocks` on every block (silence included), and `StallWatch` reopens after a
+  second without movement. Found in the first manual test, where recovery never fired.
+- **Deferred to the phase that first reads them:** `OutputRequest`, `OutputMode`, `ClaimError`
+  and the fall-back-to-the-previous-request arm (Phases 2 to 4: in Phase 1 every request is the
+  default device), and the `Negotiated` watch plus its move to `mod.rs` (Phase 3's panel).
+  Phase 1 exposes `PlaybackEngine::negotiated()` and adds `device_name` to `Negotiated`.
 
 **Exit:** unplugging the DAC mid-track continues playback on the new default output at the same
 position. A crossfade or a staged gapless track in flight survives a forced reopen. No deadlock

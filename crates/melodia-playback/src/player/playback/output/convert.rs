@@ -25,9 +25,12 @@ pub struct Filled {
     pub source_frames: u64,
 }
 
+/// The device is not held here but handed to every [`Self::fill`], because nothing below depends
+/// on it between calls: the buffers are sized by the source and the interpolation state lives on
+/// the source's timeline. That is what lets an output reopen at another shape under a source that
+/// is part way through, with no rebuild and nothing built on the control thread to go stale.
 pub struct Converter {
     source: Shape,
-    device: Shape,
     /// The two source frames the output is interpolated between, and where between them the next
     /// output frame falls. Held across calls, so a block boundary is not a source boundary and the
     /// interpolation window never restarts mid-track.
@@ -41,11 +44,10 @@ pub struct Converter {
 }
 
 impl Converter {
-    pub fn new(source: Shape, device: Shape) -> Self {
+    pub fn new(source: Shape) -> Self {
         let width = usize::from(source.channels.get());
         Self {
             source,
-            device,
             prev: vec![0.0; width].into_boxed_slice(),
             next: vec![0.0; width].into_boxed_slice(),
             position: 0.0,
@@ -55,14 +57,20 @@ impl Converter {
         }
     }
 
-    /// Write up to `out.len()` samples, pulling from `src` as the ratio demands.
+    /// Write up to `out.len()` samples at `device`'s shape, pulling from `src` as the ratio demands.
     ///
     /// A short return means the source ended; `out` past that point is untouched. `speed` scales
     /// the source's rate rather than the device's, so `1.0` against equal rates steps exactly one
     /// source frame per output frame and every sample passes through untouched.
-    pub fn fill(&mut self, out: &mut [Sample], src: &mut dyn AudioSource, speed: f64) -> Filled {
-        let width = usize::from(self.device.channels.get());
-        let step = f64::from(self.source.rate.get()) * speed / f64::from(self.device.rate.get());
+    pub fn fill(
+        &mut self,
+        out: &mut [Sample],
+        src: &mut dyn AudioSource,
+        device: Shape,
+        speed: f64,
+    ) -> Filled {
+        let width = usize::from(device.channels.get());
+        let step = f64::from(self.source.rate.get()) * speed / f64::from(device.rate.get());
 
         let mut filled = Filled { samples: 0, source_frames: 0 };
         if self.done {

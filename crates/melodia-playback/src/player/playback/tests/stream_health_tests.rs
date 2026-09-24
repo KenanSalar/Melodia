@@ -1,10 +1,8 @@
 //! Tests for the counters the audio device's error callback writes into.
 
-use std::sync::Arc;
-
 use cpal::{Error, ErrorKind};
 
-use super::{AudioStreamHealth, error_callback};
+use super::AudioStreamHealth;
 
 fn backend(description: &str) -> Error {
     Error::with_message(ErrorKind::BackendError, description.to_owned())
@@ -115,18 +113,4 @@ fn a_window_with_no_unclassified_error_carries_no_description() {
     let report = health.drain();
     assert_eq!(report.underruns, 1);
     assert!(report.first_other_error.is_none());
-}
-
-/// `output::device::open` clones the callback once per configuration its ladder
-/// retries, so every clone has to reach the same counters.
-#[test]
-fn a_cloned_callback_writes_to_the_same_counters() {
-    let health = Arc::new(AudioStreamHealth::default());
-    let mut callback = error_callback(Arc::clone(&health));
-    let mut retry = callback.clone();
-
-    callback(ErrorKind::Xrun.into());
-    retry(ErrorKind::Xrun.into());
-
-    assert_eq!(health.drain().underruns, 2);
 }

@@ -145,7 +145,6 @@ pub struct Voice {
     /// Behind a lock because a `Receiver` is not `Sync` and this side is shared; nothing contends
     /// it, the collector being one task.
     spent: Mutex<Receiver<Loaded>>,
-    device: Shape,
 }
 
 impl Voice {
@@ -168,7 +167,7 @@ impl Voice {
     /// ordering between them.
     pub fn append_at<S: AudioSource + 'static>(&self, source: S, position: Duration) {
         let frames = frames_in(position, source.sample_rate());
-        let loaded = self.load(source);
+        let loaded = Self::load(source);
         self.send_counted(Command::Append { loaded, frames });
     }
 
@@ -181,7 +180,7 @@ impl Voice {
     /// dry, takes no source from this.
     pub fn replace<S: AudioSource + 'static>(&self, source: S, position: Duration, mounted: u64) {
         let frames = frames_in(position, source.sample_rate());
-        let loaded = self.load(source);
+        let loaded = Self::load(source);
         self.send_counted(Command::Replace { loaded, frames, mounted });
     }
 
@@ -191,9 +190,9 @@ impl Voice {
         self.shared.mounted.load(Ordering::Acquire)
     }
 
-    /// Pair `source` with the converter that brings it to this device.
-    fn load<S: AudioSource + 'static>(&self, source: S) -> Loaded {
-        Loaded { converter: Converter::new(source.shape(), self.device), source: Box::new(source) }
+    /// Pair `source` with the converter that brings it to whatever device is open when it plays.
+    fn load<S: AudioSource + 'static>(source: S) -> Loaded {
+        Loaded { converter: Converter::new(source.shape()), source: Box::new(source) }
     }
 
     /// Send a command carrying a source, counting it before the callback can see it.
@@ -366,8 +365,12 @@ impl VoicePull {
             let Some(loaded) = self.current.as_mut() else {
                 break;
             };
-            let Filled { samples, source_frames } =
-                loaded.converter.fill(&mut block[written..], &mut *loaded.source, speed);
+            let Filled { samples, source_frames } = loaded.converter.fill(
+                &mut block[written..],
+                &mut *loaded.source,
+                self.device,
+                speed,
+            );
             written += samples;
             self.shared.frames.fetch_add(source_frames, Ordering::Relaxed);
             if loaded.converter.is_done() {
@@ -382,6 +385,14 @@ impl VoicePull {
             }
         }
         written
+    }
+
+    /// Render at `device` from here on, mid-source included.
+    ///
+    /// Only while no stream is pulling, which is what `output::AudioOutput::reopen` guarantees by
+    /// dropping the old stream first.
+    pub fn reshape(&mut self, device: Shape) {
+        self.device = device;
     }
 
     /// Drain the control side's commands.
@@ -515,8 +526,7 @@ pub fn pair(device: Shape) -> (Voice, VoicePull) {
         mounted: AtomicU64::new(0),
     });
 
-    let voice =
-        Voice { shared: shared.clone(), commands: command_tx, spent: Mutex::new(spent_rx), device };
+    let voice = Voice { shared: shared.clone(), commands: command_tx, spent: Mutex::new(spent_rx) };
     let pull = VoicePull {
         shared,
         commands: command_rx,

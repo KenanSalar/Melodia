@@ -21,15 +21,18 @@
 //! points ALSA's default PCM at the userspace `null` device. A stricter open than this one makes
 //! `crates/melodia/tests/headless.rs` fail looking like a scan bug.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SizedSample};
+use parking_lot::Mutex;
 
 use melodia_core::error::AppError;
 
 use melodia_audio::player::source::audio::{ChannelCount, Sample, SampleRate, Shape};
 
+use super::super::stream_health::{self, AudioStreamHealth};
 use super::mixer::MixerPull;
 
 /// Device frames the host is asked to hand over at a time.
@@ -45,8 +48,11 @@ const TARGET_BUFFER: Duration = Duration::from_millis(50);
 ///
 /// Reported rather than assumed because every part of it can differ from the request, and because a
 /// bit-perfect mode is only checkable if the negotiated end of it is visible.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Negotiated {
+    /// What the host calls the device, or `None` where it would not say. After a reopen this is
+    /// the only thing telling a bug report which output the audio moved to.
+    pub device_name: Option<String>,
     pub shape: Shape,
     pub format: cpal::SampleFormat,
     /// The period that was asked for, or `None` where the host was left to name its own.
@@ -71,25 +77,37 @@ pub struct DeviceStream {
 
 impl DeviceStream {
     pub fn negotiated(&self) -> Negotiated {
-        self.negotiated
+        self.negotiated.clone()
     }
 }
 
-/// Open the default device, building the callback's state for whichever config takes.
+/// The device an open is aimed at, and the config it names as its own.
 ///
-/// `build` is handed the shape of each attempt and returns the puller for it plus whatever the
-/// caller wants to keep from the successful one. It runs per attempt because the mixer has to be
-/// built against the negotiated shape, and only opening the stream says whether that shape works.
+/// Resolved afresh for every open rather than kept, so a reopen after the device went away lands
+/// on whatever the system calls its default *now*.
+pub struct Target {
+    device: cpal::Device,
+    default: cpal::SupportedStreamConfig,
+}
+
+impl Target {
+    /// The shape the device prefers, which is the first rung [`open`] tries.
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Player`] when that config reports no channels or no rate.
+    pub fn default_shape(&self) -> Result<Shape, AppError> {
+        shape_of(&self.default)
+    }
+}
+
+/// The system's default output device.
 ///
 /// # Errors
 ///
-/// [`AppError::Player`] when there is no output device, when it cannot name its own default
-/// config, or when nothing opens.
-pub fn open<T, E, B>(mut build: B, error_callback: E) -> Result<(DeviceStream, T), AppError>
-where
-    E: FnMut(cpal::Error) + Clone + Send + 'static,
-    B: FnMut(Shape) -> (T, MixerPull),
-{
+/// [`AppError::Player`] when there is no output device, or when it cannot name its own default
+/// config.
+pub fn default_target() -> Result<Target, AppError> {
     let device = cpal::default_host()
         .default_output_device()
         .ok_or_else(|| AppError::Player("No audio output device".to_owned()))?;
@@ -98,11 +116,57 @@ where
         .default_output_config()
         .map_err(|e| AppError::Player(format!("Failed to read the output device's config: {e}")))?;
 
+    Ok(Target { device, default })
+}
+
+/// What every stream's callbacks hold: the puller, and the health cell they report into.
+///
+/// The puller never leaves its owner: each stream holds a clone of the `Arc`, so dropping the
+/// stream is all it takes to get it back.
+#[derive(Clone)]
+pub struct Feed {
+    pub(super) pull: Arc<Mutex<MixerPull>>,
+    pub(super) health: Arc<AudioStreamHealth>,
+}
+
+impl Feed {
+    pub fn new(pull: MixerPull, health: Arc<AudioStreamHealth>) -> Self {
+        Self { pull: Arc::new(Mutex::new(pull)), health }
+    }
+
+    /// Pull one block, or write silence where the puller is taken.
+    ///
+    /// **The beat comes first and unconditionally**, silence included: a callback that has stopped
+    /// being called is the one failure no host reports, and the beat is how it is seen.
+    ///
+    /// `try_lock` because this is the audio thread. The one holder it can meet is a reopen
+    /// reshaping the puller, and that only happens once the stream it would be racing has been
+    /// dropped, so the silence arm is reachable in principle and inaudible in practice.
+    fn fill(&self, block: &mut [Sample]) {
+        self.health.beat();
+        match self.pull.try_lock() {
+            Some(mut pull) => pull.fill(block),
+            None => block.fill(0.0),
+        }
+    }
+}
+
+/// Open a stream on `target`, feeding it from `feed` at whichever config takes.
+///
+/// Each rung reshapes the puller to its own shape before building, because only opening the stream
+/// says whether that shape works.
+///
+/// # Errors
+///
+/// [`AppError::Player`] when nothing opens.
+pub fn open(target: &Target, feed: &Feed) -> Result<DeviceStream, AppError> {
+    let Target { device, default } = target;
+
     // Listed once for both passes, and **not** with `?`: a device that cannot enumerate can still
     // open the config it just named as its default, which is the likeliest rung of all and the one
     // rodio reached first — it only lists inside the fallback its default attempt failed into. A
-    // `?` here spends a listing failure on the whole boot without trying that config once.
-    let rungs = ladder(&device).unwrap_or_else(|e| {
+    // `?` here spends a listing failure on the whole open without trying that config once.
+    let rungs = ladder(device).unwrap_or_else(|e| {
         log::warn!("Falling back to the default output config alone: {e}");
         Vec::new()
     });
@@ -111,8 +175,8 @@ where
     for buffer in [Buffer::Target, Buffer::HostChoice] {
         // The device's own config leads each pass: it is the likeliest to open, and on the second
         // pass it has not been tried at that block size at all.
-        for candidate in std::iter::once(&default).chain(&rungs) {
-            match attempt(&device, candidate, buffer, &mut build, error_callback.clone()) {
+        for candidate in std::iter::once(default).chain(&rungs) {
+            match attempt(device, candidate, buffer, feed) {
                 Ok(opened) => return Ok(opened),
                 Err(e) => {
                     first.get_or_insert(e);
@@ -149,9 +213,9 @@ fn ladder(device: &cpal::Device) -> Result<Vec<cpal::SupportedStreamConfig>, App
 /// The rates one reported range is tried at: its top, the two standard rates, then its floor.
 ///
 /// **A standard rate only when it falls strictly inside.** The endpoints are already the rungs
-/// either side of it, so the strict test is what stops a duplicate, and a rung costs a whole
-/// `build` — which allocates the mixer the failed attempt then throws away. The floor drops the
-/// same way where it *is* the top, which rodio's walk emitted twice.
+/// either side of it, so the strict test is what stops a duplicate, and a rung costs a stream the
+/// driver may take its time refusing. The floor drops the same way where it *is* the top, which
+/// rodio's walk emitted twice.
 fn rates_for(
     min: cpal::SampleRate,
     max: cpal::SampleRate,
@@ -166,21 +230,14 @@ fn rates_for(
 }
 
 /// Build and start a stream for one config, or say why it could not be.
-fn attempt<T, E, B>(
+fn attempt(
     device: &cpal::Device,
     supported: &cpal::SupportedStreamConfig,
     buffer: Buffer,
-    build: &mut B,
-    error_callback: E,
-) -> Result<(DeviceStream, T), AppError>
-where
-    E: FnMut(cpal::Error) + Send + 'static,
-    B: FnMut(Shape) -> (T, MixerPull),
-{
-    let Some(shape) = shape_of(supported) else {
-        return Err(AppError::Player("Output config has no channels or no rate".to_owned()));
-    };
-    let (kept, pull) = build(shape);
+    feed: &Feed,
+) -> Result<DeviceStream, AppError> {
+    let shape = shape_of(supported)?;
+    feed.pull.lock().reshape(shape);
 
     let requested_period = buffer.requested(supported);
     let mut config = supported.config();
@@ -189,27 +246,26 @@ where
 
     let format = supported.sample_format();
     let staging = staging_samples(supported);
-    let stream = build_stream(device, config, format, staging, pull, error_callback)?;
+    let stream = build_stream(device, config, format, staging, feed.clone())?;
     stream
         .play()
         .map_err(|e| AppError::Player(format!("Failed to start the audio stream: {e}")))?;
-    // A host with no answer is a log line missing one term, never a rung that fails.
+    // A host with no answer is a log line missing one term, never a rung that fails. The name
+    // likewise.
     let period = stream.buffer_size().ok();
+    let device_name = device.description().ok().map(|description| description.name().to_owned());
 
-    Ok((
-        DeviceStream {
-            _stream: stream,
-            negotiated: Negotiated { shape, format, requested_period, period },
-        },
-        kept,
-    ))
+    Ok(DeviceStream {
+        _stream: stream,
+        negotiated: Negotiated { device_name, shape, format, requested_period, period },
+    })
 }
 
-fn shape_of(supported: &cpal::SupportedStreamConfig) -> Option<Shape> {
-    Some(Shape {
-        channels: ChannelCount::new(supported.channels())?,
-        rate: SampleRate::new(supported.sample_rate())?,
-    })
+fn shape_of(supported: &cpal::SupportedStreamConfig) -> Result<Shape, AppError> {
+    ChannelCount::new(supported.channels())
+        .zip(SampleRate::new(supported.sample_rate()))
+        .map(|(channels, rate)| Shape { channels, rate })
+        .ok_or_else(|| AppError::Player("Output config has no channels or no rate".to_owned()))
 }
 
 /// What one rung asks the host to hand the callback at a time.
@@ -283,26 +339,22 @@ fn staging_samples(supported: &cpal::SupportedStreamConfig) -> usize {
 /// the one place samples are produced however the device wants them — the conversion is the only
 /// thing that differs between a shared stream and an exclusive one later. The exception is the
 /// format that *is* [`Sample`], which needs neither half; [`direct_stream`] says what that saves.
-fn build_stream<E>(
+fn build_stream(
     device: &cpal::Device,
     config: cpal::StreamConfig,
     format: cpal::SampleFormat,
     staging_samples: usize,
-    pull: MixerPull,
-    error_callback: E,
-) -> Result<cpal::Stream, AppError>
-where
-    E: FnMut(cpal::Error) + Send + 'static,
-{
+    feed: Feed,
+) -> Result<cpal::Stream, AppError> {
     if format == cpal::SampleFormat::F32 {
-        return direct_stream(device, config, pull, error_callback);
+        return direct_stream(device, config, feed);
     }
 
     macro_rules! arms {
         ($($variant:ident => $ty:ty),+ $(,)?) => {
             match format {
                 $(cpal::SampleFormat::$variant => {
-                    output_stream::<$ty, E>(device, config, staging_samples, pull, error_callback)
+                    output_stream::<$ty>(device, config, staging_samples, feed)
                 })+
                 other => Err(AppError::Player(format!("Unsupported sample format {other}"))),
             }
@@ -339,18 +391,15 @@ where
 /// here: a resident buffer the size of one period, and a full pass over every block to copy each
 /// sample onto itself. [`MixerPull::fill`] zeroes what it is handed before writing, partial
 /// trailing frame included, so nothing depended on owning that buffer first.
-fn direct_stream<E>(
+fn direct_stream(
     device: &cpal::Device,
     config: cpal::StreamConfig,
-    mut pull: MixerPull,
-    error_callback: E,
-) -> Result<cpal::Stream, AppError>
-where
-    E: FnMut(cpal::Error) + Send + 'static,
-{
+    feed: Feed,
+) -> Result<cpal::Stream, AppError> {
+    let error_callback = stream_health::error_callback(Arc::clone(&feed.health));
     opened(device.build_output_stream::<Sample, _, _>(
         config,
-        move |data, _| pull.fill(data),
+        move |data, _| feed.fill(data),
         error_callback,
         None,
     ))
@@ -361,17 +410,16 @@ fn opened(built: Result<cpal::Stream, cpal::Error>) -> Result<cpal::Stream, AppE
     built.map_err(|e| AppError::Player(format!("Failed to open the audio stream: {e}")))
 }
 
-fn output_stream<T, E>(
+fn output_stream<T>(
     device: &cpal::Device,
     config: cpal::StreamConfig,
     staging_samples: usize,
-    mut pull: MixerPull,
-    error_callback: E,
+    feed: Feed,
 ) -> Result<cpal::Stream, AppError>
 where
     T: SizedSample + FromSample<Sample>,
-    E: FnMut(cpal::Error) + Send + 'static,
 {
+    let error_callback = stream_health::error_callback(Arc::clone(&feed.health));
     // A host handing over more than `staging_samples` allowed for grows this once and keeps it.
     let mut staging: Vec<Sample> = vec![0.0; staging_samples];
     opened(device.build_output_stream::<T, _, _>(
@@ -381,7 +429,7 @@ where
                 staging.resize(data.len(), 0.0);
             }
             let block = &mut staging[..data.len()];
-            pull.fill(block);
+            feed.fill(block);
             for (slot, sample) in data.iter_mut().zip(block.iter()) {
                 *slot = T::from_sample(*sample);
             }

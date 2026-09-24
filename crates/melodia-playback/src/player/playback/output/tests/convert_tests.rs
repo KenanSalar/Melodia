@@ -16,10 +16,10 @@ fn ramp(count: usize) -> Vec<f32> {
 fn drain(source: Vec<f32>, channels: u16, from: u32, to: u32, speed: f64) -> (Vec<f32>, u64) {
     let mut src = TestSource::new(source, channels, from);
     let device = shape(channels, to);
-    let mut converter = Converter::new(shape(channels, from), device);
+    let mut converter = Converter::new(shape(channels, from));
 
     let mut out = vec![0.0; 4096];
-    let Filled { samples, source_frames } = converter.fill(&mut out, &mut src, speed);
+    let Filled { samples, source_frames } = converter.fill(&mut out, &mut src, device, speed);
     out.truncate(samples);
     (out, source_frames)
 }
@@ -101,10 +101,10 @@ fn an_empty_source_yields_nothing() {
 #[test]
 fn a_mono_source_is_duplicated_across_a_stereo_device() {
     let mut src = TestSource::new(vec![0.5, 0.25], 1, 48_000);
-    let mut converter = Converter::new(shape(1, 48_000), shape(2, 48_000));
+    let mut converter = Converter::new(shape(1, 48_000));
 
     let mut out = vec![0.0; 4];
-    let filled = converter.fill(&mut out, &mut src, 1.0);
+    let filled = converter.fill(&mut out, &mut src, shape(2, 48_000), 1.0);
 
     assert_eq!(filled.samples, 4);
     assert_eq!(bits(&out), bits(&[0.5, 0.5, 0.25, 0.25]));
@@ -115,10 +115,10 @@ fn a_mono_source_is_duplicated_across_a_stereo_device() {
 #[test]
 fn a_mono_device_is_handed_the_average_rather_than_the_left_channel() {
     let mut src = TestSource::new(vec![0.5, 0.25], 2, 48_000);
-    let mut converter = Converter::new(shape(2, 48_000), shape(1, 48_000));
+    let mut converter = Converter::new(shape(2, 48_000));
 
     let mut out = vec![0.0; 2];
-    let filled = converter.fill(&mut out, &mut src, 1.0);
+    let filled = converter.fill(&mut out, &mut src, shape(1, 48_000), 1.0);
 
     assert_eq!(filled.samples, 1, "one stereo frame is one mono frame");
     // (0.5 + 0.25) / 2 is exact in binary, so the mean can be pinned bit-for-bit like its neighbours.
@@ -130,10 +130,10 @@ fn a_mono_device_is_handed_the_average_rather_than_the_left_channel() {
 #[test]
 fn a_narrower_device_wider_than_mono_still_carries_the_channels_it_can() {
     let mut src = TestSource::new(vec![0.5, 0.25, 0.125, 0.0625], 4, 48_000);
-    let mut converter = Converter::new(shape(4, 48_000), shape(2, 48_000));
+    let mut converter = Converter::new(shape(4, 48_000));
 
     let mut out = vec![0.0; 2];
-    let filled = converter.fill(&mut out, &mut src, 1.0);
+    let filled = converter.fill(&mut out, &mut src, shape(2, 48_000), 1.0);
 
     assert_eq!(filled.samples, 2);
     assert_eq!(bits(&out), bits(&[0.5, 0.25]));
@@ -144,10 +144,10 @@ fn a_narrower_device_wider_than_mono_still_carries_the_channels_it_can() {
 #[test]
 fn mono_reaches_a_stereo_device_at_unity_on_both_channels() {
     let mut src = TestSource::new(vec![0.5, -0.25], 1, 48_000);
-    let mut converter = Converter::new(shape(1, 48_000), shape(2, 48_000));
+    let mut converter = Converter::new(shape(1, 48_000));
 
     let mut out = vec![0.0; 4];
-    let filled = converter.fill(&mut out, &mut src, 1.0);
+    let filled = converter.fill(&mut out, &mut src, shape(2, 48_000), 1.0);
 
     assert_eq!(filled.samples, 4);
     assert_eq!(bits(&out), bits(&[0.5, 0.5, -0.25, -0.25]));
@@ -156,10 +156,10 @@ fn mono_reaches_a_stereo_device_at_unity_on_both_channels() {
 #[test]
 fn a_wider_device_leaves_the_channels_the_source_has_no_answer_for_silent() {
     let mut src = TestSource::new(vec![0.5, 0.25], 2, 48_000);
-    let mut converter = Converter::new(shape(2, 48_000), shape(4, 48_000));
+    let mut converter = Converter::new(shape(2, 48_000));
 
     let mut out = vec![0.0; 4];
-    let filled = converter.fill(&mut out, &mut src, 1.0);
+    let filled = converter.fill(&mut out, &mut src, shape(4, 48_000), 1.0);
 
     assert_eq!(filled.samples, 4);
     assert_eq!(bits(&out), bits(&[0.5, 0.25, 0.0, 0.0]));
@@ -170,10 +170,10 @@ fn a_wider_device_leaves_the_channels_the_source_has_no_answer_for_silent() {
 #[test]
 fn a_trailing_partial_frame_is_dropped_rather_than_padded() {
     let mut src = TestSource::new(vec![0.5, 0.25, 0.125], 2, 48_000);
-    let mut converter = Converter::new(shape(2, 48_000), shape(2, 48_000));
+    let mut converter = Converter::new(shape(2, 48_000));
 
     let mut out = vec![0.0; 8];
-    let filled = converter.fill(&mut out, &mut src, 1.0);
+    let filled = converter.fill(&mut out, &mut src, shape(2, 48_000), 1.0);
 
     assert_eq!(filled.samples, 2, "the lone third sample is not half a frame of output");
     assert_eq!(filled.source_frames, 1);
@@ -186,11 +186,11 @@ fn a_block_boundary_is_not_a_source_boundary() {
     let (whole, _) = drain(ramp(64), 1, 44_100, 48_000, 1.0);
 
     let mut src = TestSource::new(ramp(64), 1, 44_100);
-    let mut converter = Converter::new(shape(1, 44_100), shape(1, 48_000));
+    let mut converter = Converter::new(shape(1, 44_100));
     let mut pieced = Vec::new();
     let mut block = vec![0.0; 7];
     while !converter.is_done() {
-        let filled = converter.fill(&mut block, &mut src, 1.0);
+        let filled = converter.fill(&mut block, &mut src, shape(1, 48_000), 1.0);
         pieced.extend_from_slice(&block[..filled.samples]);
     }
 
@@ -200,13 +200,14 @@ fn a_block_boundary_is_not_a_source_boundary() {
 #[test]
 fn a_drained_converter_stays_drained() {
     let mut src = TestSource::new(ramp(2), 1, 44_100);
-    let mut converter = Converter::new(shape(1, 44_100), shape(1, 44_100));
+    let device = shape(1, 44_100);
+    let mut converter = Converter::new(device);
 
     let mut out = vec![0.0; 16];
-    let first = converter.fill(&mut out, &mut src, 1.0);
+    let first = converter.fill(&mut out, &mut src, device, 1.0);
     assert_eq!(first.samples, 2);
     assert!(converter.is_done());
 
-    let second = converter.fill(&mut out, &mut src, 1.0);
+    let second = converter.fill(&mut out, &mut src, device, 1.0);
     assert_eq!(second, Filled { samples: 0, source_frames: 0 });
 }

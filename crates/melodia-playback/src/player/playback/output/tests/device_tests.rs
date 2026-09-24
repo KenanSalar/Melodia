@@ -111,8 +111,7 @@ fn a_wide_range_tries_both_standard_rates_between_its_ends() {
     assert_eq!(rungs, [192_000, cpal::SAMPLE_RATE_48K, cpal::SAMPLE_RATE_CD, 8_000]);
 }
 
-/// A rung costs a whole `build`, which allocates the mixer the failed attempt then throws away, so
-/// a standard rate only earns one where it falls *strictly* inside: on an endpoint it is already
+/// A rung costs a stream the driver may take its time refusing, so a standard rate only earns one where it falls *strictly* inside: on an endpoint it is already
 /// the rung either side, and outside the range `try_with_sample_rate` would drop it anyway.
 #[test]
 fn a_standard_rate_only_earns_a_rung_strictly_inside_the_range() {

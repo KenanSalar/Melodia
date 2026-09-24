@@ -30,7 +30,7 @@ use melodia_net::services::net::pacer::RequestPacer;
 use melodia_platform::services::platform::always_on_top::{self, AlwaysOnTopCapability};
 use melodia_playback::player::playback::decks::DECK_COUNT;
 use melodia_playback::player::playback::output::AudioOutput;
-use melodia_playback::player::playback::stream_health::{self, AudioStreamHealth};
+use melodia_playback::player::playback::stream_health::AudioStreamHealth;
 use melodia_store::database::{self, DbPool};
 use melodia_store::media::ingest::watcher::{FileEvent, FolderWatcher};
 
@@ -53,11 +53,9 @@ pub struct AppState {
     pub cover_cache: CoverCache,
     pub player_state: Arc<PlayerStateHandle>,
     pub engine: Arc<PlaybackEngine>,
-    /// The open device. Held because dropping it stops the stream and releases the card, which is
-    /// what a device picker will need.
-    pub audio_output: Arc<AudioOutput>,
     /// Fault counters the output device's error callback writes into, on the
-    /// audio thread. Drained by `tasks::audio_health` and read nowhere else.
+    /// audio thread. Drained by `tasks::audio_health`, the output's reopen being the
+    /// one other reader.
     pub audio_health: Arc<AudioStreamHealth>,
     pub sinks: Arc<PlayerSinks>,
     pub position_tx: watch::Sender<Option<PositionTick>>,
@@ -188,12 +186,11 @@ impl AppState {
         // The error callback records into counters rather than logging, because cpal calls it on
         // the output worker thread; `player::playback::stream_health` argues that.
         let audio_health = Arc::new(AudioStreamHealth::default());
-        let audio_output =
-            AudioOutput::open(DECK_COUNT, stream_health::error_callback(audio_health.clone()))?;
+        let audio_output = AudioOutput::open(DECK_COUNT, audio_health.clone())?;
         log::info!("Audio output: {:?}", audio_output.negotiated());
         // The runtime handle is only used to schedule the deferred half of a
         // faded pause / stop (arm the ramp now, pause the decks once it lands).
-        let engine = Arc::new(PlaybackEngine::new(audio_output.mixer(), runtime.clone())?);
+        let engine = Arc::new(PlaybackEngine::with_output(audio_output, runtime.clone())?);
 
         let db = database::init_database(&paths).await?;
 
@@ -270,7 +267,6 @@ impl AppState {
             cover_cache,
             player_state,
             engine,
-            audio_output: Arc::new(audio_output),
             audio_health,
             sinks,
             position_tx,

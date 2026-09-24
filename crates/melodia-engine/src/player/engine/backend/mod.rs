@@ -29,6 +29,8 @@ use melodia_audio::player::source::stream_source::PreparedStream;
 use melodia_playback::player::playback::crossfade::{self, CrossfadeShared};
 use melodia_playback::player::playback::decks::{Deck, Decks, DeferredOp, lock_decks};
 use melodia_playback::player::playback::equalizer::{self, EqShared, EqSource};
+use melodia_playback::player::playback::output::AudioOutput;
+use melodia_playback::player::playback::output::device::Negotiated;
 use melodia_playback::player::playback::output::mixer::Mixer;
 use melodia_playback::player::playback::replaygain::{ReplayGainShared, TrackReplayGain};
 use melodia_playback::player::playback::visualizer::{VisualizerShared, VisualizerTap};
@@ -56,6 +58,10 @@ pub fn evaluate_playback_check(was_gapless: bool, sources: usize) -> PlaybackChe
 }
 
 pub struct PlaybackEngine {
+    // The device the decks play into, or `None` on the device-free rigs the tests build. First so
+    // it drops first: the stream is what stops the callback. Only ever locked under the decks
+    // lock, which is the order `reopen_output` takes them in.
+    output: Mutex<Option<AudioOutput>>,
     // The mutex is what makes a multi-op sequence atomic (a `Deck` is already
     // Send+Sync on its own); `Arc` so a deferred pause/stop can hold the decks
     // after its sleep.
@@ -104,11 +110,14 @@ pub struct PlaybackEngine {
 }
 
 impl PlaybackEngine {
+    /// The engine over a mixer with no device behind it, which whoever built the mixer pulls.
+    ///
     /// # Errors
     ///
     /// [`AppError::Player`] if `mixer` carries fewer voices than the decks need.
     pub fn new(mixer: &Mixer, runtime: tokio::runtime::Handle) -> Result<Self, AppError> {
         Ok(Self {
+            output: Mutex::new(None),
             decks: Arc::new(std::sync::Mutex::new(Decks::connect(mixer)?)),
             gapless_pending: Arc::new(AtomicBool::new(false)),
             crossfade_armed: AtomicBool::new(false),
@@ -121,6 +130,44 @@ impl PlaybackEngine {
             live_stream: Arc::new(Mutex::new(None)),
             runtime,
         })
+    }
+
+    /// The engine playing into `output`, which it keeps so it can reopen it.
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Player`] if `output` carries fewer voices than the decks need.
+    pub fn with_output(
+        output: AudioOutput,
+        runtime: tokio::runtime::Handle,
+    ) -> Result<Self, AppError> {
+        let engine = Self::new(output.mixer(), runtime)?;
+        *engine.output.lock() = Some(output);
+        Ok(engine)
+    }
+
+    /// Reopen the output on whatever the default device is now, carrying on from where the decks
+    /// are.
+    ///
+    /// **The decks lock is held across the whole reopen**, so a transport op queues behind it
+    /// instead of sending a command to a stream that isn't there and waiting out
+    /// `output::voice::SERVICE_TIMEOUT` for an answer. Blocking: it opens a device.
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Player`] when there is no output to reopen, or the device refuses to open.
+    pub fn reopen_output(&self) -> Result<Negotiated, AppError> {
+        let _decks = self.lock_decks();
+        let mut output = self.output.lock();
+        let output = output
+            .as_mut()
+            .ok_or_else(|| AppError::Player("There is no audio output to reopen".to_owned()))?;
+        output.reopen()
+    }
+
+    /// What the device agreed to, or `None` while no stream is open.
+    pub fn negotiated(&self) -> Option<Negotiated> {
+        self.output.lock().as_ref().and_then(AudioOutput::negotiated)
     }
 
     /// Invalidate any deferred pause/stop *and* any in-flight gapless preload,

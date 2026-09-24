@@ -1,5 +1,6 @@
-//! What the audio device's error callback is allowed to do: record into atomics
-//! and return.
+//! What the audio device's callbacks are allowed to do: record into atomics
+//! and return. The data callback's one entry is [`AudioStreamHealth::beat`]; the
+//! rest is the error callback's.
 //!
 //! cpal invokes it on the output worker thread, inside the ALSA xrun handler and
 //! *before* its own `try_recover`. It was a `log::warn!`, which under the file
@@ -25,6 +26,9 @@ pub struct AudioStreamHealth {
     underruns: AtomicU64,
     other: AtomicU64,
     device_lost: AtomicBool,
+    /// Blocks the data callback has been asked for, ever. Never drained: only its movement means
+    /// anything, which is why a reader compares two reads rather than taking a count.
+    blocks: AtomicU64,
     /// Kept because the counter alone says nothing actionable.
     first_other_error: parking_lot::Mutex<Option<String>>,
 }
@@ -78,6 +82,28 @@ impl AudioStreamHealth {
         }
     }
 
+    /// Record one data-callback block.
+    ///
+    /// A loss the host reports arrives through [`Self::record`]. This is for the one it doesn't:
+    /// the `PipeWire` ALSA plugin, whose server went away, raises no `POLLHUP`, so cpal's worker
+    /// polls on with no timeout and the callback simply stops being called.
+    pub fn beat(&self) {
+        self.blocks.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Blocks recorded by [`Self::beat`] so far; a value that stops moving is a stalled stream.
+    pub fn blocks(&self) -> u64 {
+        self.blocks.load(Ordering::Relaxed)
+    }
+
+    /// Take a lost-device report on its own, leaving the counters for [`Self::drain`].
+    ///
+    /// A reopen wants the loss sooner than a drain window, and a swap means whichever of the two
+    /// takes it first is the one that acts on it.
+    pub fn take_device_lost(&self) -> bool {
+        self.device_lost.swap(false, Ordering::Relaxed)
+    }
+
     /// Take everything recorded since the last call.
     ///
     /// A quiet window is a zeroed report rather than an absence, and that is the whole of why
@@ -100,13 +126,8 @@ impl AudioStreamHealth {
     }
 }
 
-/// The callback to hand `output::device::open`.
-///
-/// `Clone` because that ladder clones it once per configuration it retries; the
-/// captured `Arc` is what supplies that.
-pub fn error_callback(
-    health: Arc<AudioStreamHealth>,
-) -> impl FnMut(Error) + Clone + Send + 'static {
+/// The error callback `output::device` hands every stream it builds.
+pub fn error_callback(health: Arc<AudioStreamHealth>) -> impl FnMut(Error) + Send + 'static {
     move |err| health.record(&err)
 }
 
