@@ -1,7 +1,7 @@
-//! Tests for the unclassified-error log latch — the half of this task with no
-//! `DeviceNotAvailable` to hang off.
+//! Tests for the task's two pure halves: the unclassified-error log latch, and the watch that
+//! reads a stalled callback as a lost device.
 
-use super::WarnedOnce;
+use super::{STALL_POLLS, StallWatch, WarnedOnce};
 
 /// The count a quiet-but-not-empty window carries.
 const TRANSIENT: u64 = 3;
@@ -59,4 +59,49 @@ fn a_repeating_fault_stops_warning_after_the_first_window() {
         !emit.contains("log::warn!("),
         "a fixed `warn` here is the repeat that spends the rotation budget"
     );
+}
+
+/// The block count a stream has reached when the watch first reads it.
+const BEATING: u64 = 7;
+
+/// A second of silence from the callback is the only sign a `PipeWire` restart under the ALSA
+/// plugin leaves, so the watch has to fire on exactly the poll that completes the stall.
+#[test]
+fn a_stall_fires_on_the_poll_that_completes_it() {
+    let mut stall = StallWatch::default();
+    assert!(!stall.observe(BEATING), "the first read is movement, not a stall");
+    for poll in 1..STALL_POLLS {
+        assert!(
+            !stall.observe(BEATING),
+            "fired after {poll} quiet poll(s), short of the threshold"
+        );
+    }
+    assert!(stall.observe(BEATING), "a full stall went unseen");
+}
+
+/// Past the stall the output may have been left with no stream at all, and a watch that kept
+/// firing would retry a reopen every poll for the rest of the session.
+#[test]
+fn a_stall_fires_once_however_long_it_lasts() {
+    let mut stall = StallWatch::default();
+    for _ in 0..=STALL_POLLS {
+        stall.observe(BEATING);
+    }
+    for _ in 0..STALL_POLLS * 3 {
+        assert!(!stall.observe(BEATING), "the same stall fired twice");
+    }
+}
+
+/// Any beat re-arms it, so the stream a recovery opened is watched from its first block.
+#[test]
+fn movement_re_arms_the_watch() {
+    let mut stall = StallWatch::default();
+    for _ in 0..=STALL_POLLS {
+        stall.observe(BEATING);
+    }
+    assert!(!stall.observe(BEATING + 1), "movement is not a stall");
+    for _ in 1..STALL_POLLS {
+        stall.observe(BEATING + 1);
+    }
+    assert!(stall.observe(BEATING + 1), "a second stall after a recovery went unseen");
 }

@@ -114,3 +114,30 @@ fn a_window_with_no_unclassified_error_carries_no_description() {
     assert_eq!(report.underruns, 1);
     assert!(report.first_other_error.is_none());
 }
+
+/// The reopen path takes the loss on its own, and whichever of it and the drain swaps first owns
+/// the event: the other must not see the same loss and reopen a second time.
+#[test]
+fn taking_a_lost_device_takes_it_from_the_drain() {
+    let health = AudioStreamHealth::default();
+    health.record(&ErrorKind::DeviceNotAvailable.into());
+    health.record(&ErrorKind::Xrun.into());
+
+    assert!(health.take_device_lost());
+    assert!(!health.take_device_lost(), "a loss is taken once");
+    let report = health.drain();
+    assert!(!report.device_lost, "the drain saw a loss already taken");
+    assert_eq!(report.underruns, 1, "taking the loss must leave the counters to the drain");
+}
+
+/// The stall watch compares two reads, so the count is never reset by a drain: resetting it would
+/// read as a callback that stopped.
+#[test]
+fn the_heartbeat_counts_blocks_and_survives_a_drain() {
+    let health = AudioStreamHealth::default();
+    health.beat();
+    health.beat();
+    let _ = health.drain();
+
+    assert_eq!(health.blocks(), 2);
+}

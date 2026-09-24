@@ -2,7 +2,7 @@
 
 Working doc. Delete it when the feature ships. Tracks issue #66.
 
-Status: **Phase 1 in progress** (implemented, awaiting the manual test) · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
+Status: **Phase 1 done** (2026-09-24) · Phase 2 next · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
 
 ## What the user sees today
 
@@ -145,7 +145,7 @@ shared wherever a backend doesn't exist. **Per phase: implement → static gates
 `--workspace`) → Kenan tests by hand → then tests and docs** (memory: manual test gates tests
 and docs).
 
-### Phase 1: Reopen in place, and recover from device loss
+### Phase 1: Reopen in place, and recover from device loss ✅ done
 
 The spine. It is built and shipped against the shared cpal backend, where a bug costs a glitch
 rather than a dead card.
@@ -200,6 +200,18 @@ under parallel tests. Measure peak RSS once (`/usr/bin/time -v`, release).
 **Tests after the go:** a device-free reshape test that pulls `mixer::pair` across a reshape
 and asserts position and sample continuity, plus a reopen-failure test that falls back to the
 previous request.
+
+**Result.** A `PipeWire` restart mid-track resumes at the same position after about a second
+(manual, 2026-09-24). The tests landed are:
+- `mixer_tests`: a reshape continues from the same source frame, and a wider reshape still sums
+  two voices.
+- `crossfade.rs`: a crossfade and a staged gapless handover each survive a mid-transition
+  reshape, both confirmed to fail against a reshape that skips the voices.
+- `stream_health_tests`: `take_device_lost` and the heartbeat.
+- `audio_health_tests`: `StallWatch`.
+
+The reopen-failure fallback test moves to Phase 2 with the fallback itself. The no-device toast
+and the release RSS reading were not run.
 
 ### Phase 2: Source format truth and following the file rate
 

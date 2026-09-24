@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use super::{Mixer, pair};
+use super::{LOCKSTEP_FRAMES, Mixer, pair};
 use crate::player::playback::output::voice::Voice;
 use crate::player::playback::tests::helpers::{TestSource, bits, shape};
 use melodia_audio::player::source::audio::Shape;
@@ -121,4 +121,45 @@ fn a_partial_trailing_frame_is_silenced_rather_than_half_filled() -> Result<(), 
 fn a_voice_past_the_count_is_not_there() {
     let (mixer, _pull) = pair(VOICES, device(2));
     assert!(mixer.voice(VOICES).is_none());
+}
+
+/// A reopen reshapes the puller under a source that is part way through, and the next block has to
+/// pick up at the frame the last one stopped on, laid out for the new device. A rebuild of anything
+/// source-side would restart the track or drop the frames in hand.
+#[test]
+fn a_reshape_carries_on_from_the_same_source_frame() -> Result<(), AppError> {
+    let (mixer, mut pull) = pair(VOICES, device(1));
+    voice_at(&mixer, 0)?.append(TestSource::new(vec![0.5, 0.25, 0.125, -0.0625], 1, RATE));
+
+    let mut before = vec![0.0; 2];
+    pull.fill(&mut before);
+    pull.reshape(device(2));
+    let mut after = vec![0.0; 4];
+    pull.fill(&mut after);
+
+    assert_eq!(bits(&before), bits(&[0.5, 0.25]));
+    assert_eq!(
+        bits(&after),
+        bits(&[0.125, 0.125, -0.0625, -0.0625]),
+        "not continued at the new width"
+    );
+    Ok(())
+}
+
+/// The second voice renders into the sum's own buffer, sized per step at the device's width. A
+/// reshape to more channels that left it at the old width would slice out of bounds on the audio
+/// thread the first time two voices played together.
+#[test]
+fn a_reshape_to_more_channels_still_sums_two_voices() -> Result<(), AppError> {
+    let (mixer, mut pull) = pair(VOICES, device(1));
+    pull.reshape(device(2));
+    for (index, level) in [0.5, 0.25].into_iter().enumerate() {
+        voice_at(&mixer, index)?.append(tone(level, LOCKSTEP_FRAMES, 2));
+    }
+
+    let mut out = vec![0.0; LOCKSTEP_FRAMES * 2];
+    pull.fill(&mut out);
+
+    assert!(out.iter().all(|s| (*s - 0.75).abs() < 1e-6), "{out:?}");
+    Ok(())
 }
