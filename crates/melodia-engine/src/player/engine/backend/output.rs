@@ -68,8 +68,8 @@ impl PlaybackEngine {
 
     /// Reopen the output for a track starting fresh at `rate`.
     ///
-    /// **While following, this reopens even at the rate already asked for.** `PipeWire` picks the
-    /// card's rate only when a stream starts on an idle graph, and ours never idles, so a rate
+    /// **While following, this reopens even at the rate already asked for.** `PipeWire` settles the
+    /// card's rate when a stream starts, not when one leaves, and ours never idles, so a rate
     /// another app held the card at when ours opened would stick after that app left. A same-rate
     /// reopen writes no resync silence, so a track start is the cheap place to take the card back.
     /// A gapless transition doesn't come through here and keeps its rate as it is.

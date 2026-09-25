@@ -2,7 +2,7 @@
 
 Working doc. Delete it when the feature ships. Tracks issue #66.
 
-Status: **Phase 1 done** (2026-09-24) · **Phase 2 built, awaiting manual test** · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
+Status: **Phase 1 done** (2026-09-24) · **Phase 2 done** (2026-09-25) · Phase 3 next · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
 
 ## What the user sees today
 
@@ -213,7 +213,7 @@ previous request.
 The reopen-failure fallback test moves to Phase 2 with the fallback itself. The no-device toast
 and the release RSS reading were not run.
 
-### Phase 2: Source format truth and following the file rate
+### Phase 2: Source format truth and following the file rate ✅ done
 
 1. **`AudioSource::format() -> SourceFormat { bits: Option<u8>, float: bool }`**, read from
    Symphonia's `AudioCodecParameters` (`sample_format`, `bits_per_sample`) in `decode::open`.
@@ -264,19 +264,38 @@ gapless. On macOS, Audio MIDI Setup follows the file. On Linux, the entry check'
   `clock.allowed-rates = [ 48000 ]` and nothing moves. With
   `pw-metadata -n settings 0 clock.allowed-rates "[ 44100 48000 88200 96000 ]"`, opening cpal's
   ALSA default at the file's rate moves the graph: 44.1 → 96 → 48 kHz each showed in `pw-top`
-  and in the card's `hw_params`. Two limits hold:
+  and in the card's `hw_params`. Three limits hold:
   - **A rate the card lacks gets the nearest one**, resampled by PipeWire: 88.2 kHz ran the
     hardware at 96 kHz. Phase 3's panel can't see that from `Negotiated`, which reports the
     PipeWire stream, not the card.
   - **Another app's running stream pins the graph.** Melodia's reopen drops its own stream
     first, so it is only ever other apps that hold it. An `aplay` at 44.1 kHz stayed resampled
     while Melodia's always-on stream ran.
-  - **The pin outlives the app that set it.** `PipeWire` picks a rate only when a stream starts on
-    an idle graph, and Melodia's stream never idles, so the card stayed at 48 kHz after the
-    browser holding it closed. So while following, every fresh track start reopens, same rate
+  - **The pin outlives the app that set it.** `PipeWire` settles the card's rate when a stream
+    starts, not when one leaves, and Melodia's stream never idles, so the card stayed at 48 kHz
+    after the browser holding it closed. So while following, every fresh track start reopens, same rate
     included. That costs no resync silence, because the hold fires only on a rate change.
     Gapless transitions don't reopen, so an album started under the pin stays resampled until
     its next non-gapless start.
+
+**Result.** Manual tests on 2026-09-25, reading `pw-top`, the card's `hw_params` and the log:
+- **Following the rate:** a 44.1 / 96 / 48 kHz sequence moved the card at each boundary.
+- **Gapless:** a 44.1 → 44.1 → 48 kHz queue reopened only at the rate change, so the
+  same-rate transition stayed gapless.
+- **Taking the card back:** once the browser pinning the card at 44.1 kHz closed, a
+  same-rate start moved it to 96 kHz.
+- **Log:** no warnings across the runs.
+
+The tests landed are:
+- `mixer_tests`: the hold plays silence before the source's first frame, the clock stands
+  still through it, and a clear issued during it still lands.
+- `device_tests`: the requested rate leads the ladder, and the fallback walk is unchanged.
+- `backend_tests`: following the rate masks the track-change fades but keeps fade-on-pause,
+  and crossfade comes back when following stops.
+
+Each pinning test was confirmed to fail against a mutation of the code it covers. Two paths need
+a real device and have no unit test: the refused gapless stage, and the fallback to the previous
+request. The queue run above exercised the first.
 
 ### Phase 3: The signal path panel and "Make bit-perfect"
 
