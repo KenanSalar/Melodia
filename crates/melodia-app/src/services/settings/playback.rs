@@ -2,9 +2,11 @@
 
 use serde::{Deserialize, Serialize};
 
+use melodia_engine::player::engine::backend::OutputChoice;
 use melodia_engine::player::engine::types::RepeatMode;
 use melodia_playback::player::playback::crossfade::DEFAULT_CROSSFADE_MS;
 use melodia_playback::player::playback::equalizer::{DEFAULT_PRESET, NUM_BANDS};
+use melodia_playback::player::playback::output::OutputMode;
 use melodia_playback::player::playback::replaygain::{DEFAULT_MODE, RG_DEFAULT_PREAMP_DB};
 
 /// Audio-playback preferences.
@@ -116,10 +118,39 @@ impl Default for CrossfadeFlags {
 /// `output_follow_rate` reopens the output at each track's own sample rate so the system mixer
 /// has no reason to resample it. Off by default: it costs a short silence at every rate
 /// boundary, and crossfade with it.
+///
+/// `output_mode` takes the card from every other application, so it ships shared.
+/// `output_device` is the card's stable id, or `None` for the first one the system lists.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OutputFlags {
     pub output_follow_rate: bool,
+    pub output_mode: OutputModeKey,
+    pub output_device: Option<String>,
+}
+
+impl OutputFlags {
+    pub fn output_choice(&self) -> OutputChoice {
+        OutputChoice { mode: self.output_mode.into(), device: self.output_device.clone() }
+    }
+}
+
+/// [`OutputMode`] as persisted: a key, so reordering the picker repoints nothing.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OutputModeKey {
+    #[default]
+    Shared,
+    Exclusive,
+}
+
+impl From<OutputModeKey> for OutputMode {
+    fn from(key: OutputModeKey) -> Self {
+        match key {
+            OutputModeKey::Shared => Self::Shared,
+            OutputModeKey::Exclusive => Self::Exclusive,
+        }
+    }
 }
 
 /// Audio-visualizer preferences — the one feature here that ships **on**, being

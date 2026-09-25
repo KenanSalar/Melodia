@@ -2,7 +2,7 @@
 
 Working doc. Delete it when the feature ships. Tracks issue #66.
 
-Status: **Phase 1 done** (2026-09-24) · **Phase 2 done** (2026-09-25) · **Phase 3 done** (2026-09-25) · Phase 4 next · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
+Status: **Phase 1 done** (2026-09-24) · **Phase 2 done** (2026-09-25) · **Phase 3 done** (2026-09-25) · **Phase 4 built, awaiting the manual test** (2026-09-25) · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
 
 ## What the user sees today
 
@@ -416,6 +416,34 @@ Each was confirmed to fail against a mutation of the code it covers.
 - Other apps go silent while exclusive holds the card, and recover when the mode is turned off.
 - A card held by another client falls back with the right reason.
 - The resync default is tuned on real hardware.
+
+**Entry check, answered (2026-09-25): `audio_thread_priority` is out.** By default its Linux path
+pulls the `dbus` crate, which brings `libdbus-sys`, a C library the Linux build doesn't link
+today. It is also MPL-2.0. Its other path, a bare `SCHED_FIFO` call, needs `RLIMIT_RTPRIO` or
+`CAP_SYS_NICE`, and desktop sessions have neither. So `output/realtime.rs` asks RealtimeKit over
+`zbus::blocking`, and uses `rustix` (already in the lock) for the thread id and the
+`RLIMIT_RTTIME` cap that rtkit requires.
+
+**As built (2026-09-25), where it departs from the steps above:**
+- **`OutputRequest` is an enum**: `Shared { rate }` or `Exclusive { device, shape, format }`.
+  `Negotiated` gains `fallback` and a `format: OutputFormat` that says which backend opened it,
+  so no separate `mode` field is needed.
+- **`ClaimError` keeps the typed source for the log line. `FallbackReason` is what the panel
+  reads**, because `Negotiated` has to stay `PartialEq` for the watch.
+- **Exclusive output always follows the rate** and masks crossfade the same way. The follow-rate
+  row is hidden under Exclusive, and the crossfade row greys out.
+- **A same-format track start doesn't reopen a claimed card.** The Phase 2 reclaim is about the
+  PipeWire graph, which `hw:` doesn't go through. A fallback is retried at every fresh start,
+  because the card's holder may have let go.
+- **A granted `RequestRelease` closes the card before it answers**, then reports a loss, so the
+  usual recovery meets the new holder and falls back with its name.
+- **With no session bus, the card opens unreserved**, since there is no server to coordinate
+  with.
+- **The mode picker is hidden where there is no backend** rather than greyed, matching the
+  follow-rate row. `ChipGroup` has no per-option disable.
+- **Make Bit-Perfect leaves the mode alone.** Taking the card from every other app is the user's
+  call.
+- Alsa is pinned at `0.11.0`, the version cpal resolves; `0.12` would be a second copy.
 
 **Tests after the go:**
 - `encode` round-trip units for every rung, including sign and full-scale saturation.

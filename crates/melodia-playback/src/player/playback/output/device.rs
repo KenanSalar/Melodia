@@ -34,8 +34,8 @@ use melodia_core::error::AppError;
 use melodia_audio::player::source::audio::{ChannelCount, Sample, SampleRate, Shape};
 
 use super::super::stream_health::{self, AudioStreamHealth};
-use super::Negotiated;
 use super::mixer::MixerPull;
+use super::{Negotiated, OutputFormat};
 
 /// Device frames the host is asked to hand over at a time.
 ///
@@ -49,7 +49,7 @@ const TARGET_BUFFER: Duration = Duration::from_millis(50);
 /// The live stream. Dropping it stops audio and releases the device.
 pub struct DeviceStream {
     _stream: cpal::Stream,
-    negotiated: Negotiated,
+    pub(super) negotiated: Negotiated,
 }
 
 impl DeviceStream {
@@ -119,7 +119,7 @@ impl Feed {
     /// `try_lock` because this is the audio thread. The one holder it can meet is a reopen
     /// reshaping the puller, and that only happens once the stream it would be racing has been
     /// dropped, so the silence arm is reachable in principle and inaudible in practice.
-    fn fill(&self, block: &mut [Sample]) {
+    pub(super) fn fill(&self, block: &mut [Sample]) {
         self.health.beat();
         match self.pull.try_lock() {
             Some(mut pull) => pull.fill(block),
@@ -259,7 +259,14 @@ fn attempt(
 
     Ok(DeviceStream {
         _stream: stream,
-        negotiated: Negotiated { device_name, shape, format, requested_period, period },
+        negotiated: Negotiated {
+            device_name,
+            shape,
+            format: OutputFormat::Shared(format),
+            fallback: None,
+            requested_period,
+            period,
+        },
     })
 }
 

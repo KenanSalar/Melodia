@@ -2374,3 +2374,60 @@ msgstr "Gerät"
 
 msgid "{}, shared: the system mixer may still convert it"
 msgstr "{}, geteilt: Der Systemmixer kann es noch umwandeln"
+
+msgid "Output Mode"
+msgstr "Ausgabemodus"
+
+msgid "Exclusive gives Melodia the audio device alone: other apps can't play through it while Melodia plays, and the system mixer can't change the sound"
+msgstr "Exklusiv überlässt Melodia das Audiogerät allein: Andere Apps können nicht darüber abspielen, solange Melodia spielt, und der Systemmixer kann den Klang nicht verändern"
+
+msgid "Shared"
+msgstr "Geteilt"
+
+msgid "Exclusive"
+msgstr "Exklusiv"
+
+msgid "Exclusive Device"
+msgstr "Exklusives Gerät"
+
+msgid "The sound card exclusive output takes"
+msgstr "Die Soundkarte, die die exklusive Ausgabe belegt"
+
+msgid "Fallback: exclusive output was refused, so the system mixer is in the way"
+msgstr "Ausweichbetrieb: Die exklusive Ausgabe wurde abgelehnt, daher steht der Systemmixer dazwischen"
+
+msgid "the device is in use by another app"
+msgstr "das Gerät wird von einer anderen App verwendet"
+
+msgid "{} holds the device"
+msgstr "{} belegt das Gerät"
+
+msgid "another app holds the device"
+msgstr "eine andere App belegt das Gerät"
+
+msgid "the device can't run at this sample rate"
+msgstr "das Gerät unterstützt diese Abtastrate nicht"
+
+msgid "the device can't play this many channels"
+msgstr "das Gerät kann nicht so viele Kanäle wiedergeben"
+
+msgid "the device takes no sample format that holds this track"
+msgstr "das Gerät akzeptiert kein Sampleformat, das diesen Titel vollständig fasst"
+
+msgid "the chosen device isn't connected"
+msgstr "das gewählte Gerät ist nicht angeschlossen"
+
+msgid "exclusive output isn't available on this system"
+msgstr "exklusive Ausgabe ist auf diesem System nicht verfügbar"
+
+msgid "the device couldn't be opened"
+msgstr "das Gerät konnte nicht geöffnet werden"
+
+msgid "{}, shared: exclusive output was refused because {}"
+msgstr "{}, geteilt: Exklusive Ausgabe abgelehnt ({})"
+
+msgid "{}, exclusive"
+msgstr "{}, exklusiv"
+
+msgid "{}, exclusive, in a format that can't hold the source exactly"
+msgstr "{}, exklusiv, in einem Format, das die Quelle nicht exakt fasst"

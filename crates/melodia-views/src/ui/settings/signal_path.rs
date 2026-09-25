@@ -5,11 +5,13 @@
 //! This module only turns it into the `SignalPathUi` global's numbers and strings.
 
 use async_compat::Compat;
-use slint::ComponentHandle;
+use slint::{ComponentHandle, SharedString};
 
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_engine::player::engine::signal_path::{Grade, SignalPath, Verdict};
+use melodia_playback::player::playback::output::OutputFormat;
+use melodia_playback::player::playback::output::claim::FallbackReason;
 use melodia_ui::{AppWindow, Equalizer, ReplayGain, Settings, SignalPathUi};
 
 pub fn install(ui: &AppWindow, state: &AppState) {
@@ -53,6 +55,7 @@ fn paint(ui: &AppWindow, path: Option<&SignalPath>) {
         Verdict::BitPerfect => 0,
         Verdict::Enhanced => 1,
         Verdict::Converted => 2,
+        Verdict::Fallback => 3,
     });
 
     let stages = path.stages;
@@ -68,6 +71,12 @@ fn paint(ui: &AppWindow, path: Option<&SignalPath>) {
     let inputs = &path.inputs;
     let source = inputs.source.shape;
     let device = &inputs.negotiated;
+    g.set_exclusive(matches!(device.format, OutputFormat::Exclusive(_)));
+    g.set_fallback_reason(device.fallback.as_ref().map_or(-1, fallback_index));
+    g.set_fallback_by(match &device.fallback {
+        Some(FallbackReason::Reserved { by }) => by.into(),
+        _ => SharedString::new(),
+    });
     let source_rate = rate_text(source.rate.get());
     let device_rate = rate_text(device.shape.rate.get());
     let bits = inputs.source.format.bits;
@@ -98,6 +107,21 @@ fn grade_index(grade: Grade) -> i32 {
         Grade::Clean => 0,
         Grade::Enhanced => 1,
         Grade::Converted => 2,
+    }
+}
+
+/// The index of the reason's words in `output-section.slint`'s inline list, which follows this
+/// order.
+fn fallback_index(reason: &FallbackReason) -> i32 {
+    match reason {
+        FallbackReason::Busy => 0,
+        FallbackReason::Reserved { .. } => 1,
+        FallbackReason::RateRefused => 2,
+        FallbackReason::ChannelsRefused => 3,
+        FallbackReason::FormatRefused => 4,
+        FallbackReason::NotConnected => 5,
+        FallbackReason::Unsupported => 6,
+        FallbackReason::Io => 7,
     }
 }
 

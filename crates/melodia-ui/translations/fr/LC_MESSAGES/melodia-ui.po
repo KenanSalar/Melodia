@@ -2368,3 +2368,60 @@ msgstr "Périphérique"
 
 msgid "{}, shared: the system mixer may still convert it"
 msgstr "{}, partagé : le mixeur du système peut encore le convertir"
+
+msgid "Output Mode"
+msgstr "Mode de sortie"
+
+msgid "Exclusive gives Melodia the audio device alone: other apps can't play through it while Melodia plays, and the system mixer can't change the sound"
+msgstr "Exclusif réserve le périphérique audio à Melodia seul : les autres applis ne peuvent pas l'utiliser pendant que Melodia joue, et le mixeur du système ne peut pas modifier le son"
+
+msgid "Shared"
+msgstr "Partagé"
+
+msgid "Exclusive"
+msgstr "Exclusif"
+
+msgid "Exclusive Device"
+msgstr "Périphérique exclusif"
+
+msgid "The sound card exclusive output takes"
+msgstr "La carte son qu'occupe la sortie exclusive"
+
+msgid "Fallback: exclusive output was refused, so the system mixer is in the way"
+msgstr "Repli : la sortie exclusive a été refusée, le mixeur du système reste donc sur le chemin"
+
+msgid "the device is in use by another app"
+msgstr "le périphérique est utilisé par une autre appli"
+
+msgid "{} holds the device"
+msgstr "{} occupe le périphérique"
+
+msgid "another app holds the device"
+msgstr "une autre appli occupe le périphérique"
+
+msgid "the device can't run at this sample rate"
+msgstr "le périphérique ne prend pas en charge cette fréquence d'échantillonnage"
+
+msgid "the device can't play this many channels"
+msgstr "le périphérique ne peut pas lire autant de canaux"
+
+msgid "the device takes no sample format that holds this track"
+msgstr "le périphérique n'accepte aucun format d'échantillon qui contienne ce titre"
+
+msgid "the chosen device isn't connected"
+msgstr "le périphérique choisi n'est pas connecté"
+
+msgid "exclusive output isn't available on this system"
+msgstr "la sortie exclusive n'est pas disponible sur ce système"
+
+msgid "the device couldn't be opened"
+msgstr "le périphérique n'a pas pu être ouvert"
+
+msgid "{}, shared: exclusive output was refused because {}"
+msgstr "{}, partagé : sortie exclusive refusée ({})"
+
+msgid "{}, exclusive"
+msgstr "{}, exclusif"
+
+msgid "{}, exclusive, in a format that can't hold the source exactly"
+msgstr "{}, exclusif, dans un format qui ne contient pas la source exactement"

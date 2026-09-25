@@ -13,6 +13,7 @@ mod controls;
 mod output;
 mod player_backend;
 
+pub use output::OutputChoice;
 pub use player_backend::PlayerBackend;
 
 use std::path::Path;
@@ -61,8 +62,9 @@ pub fn evaluate_playback_check(was_gapless: bool, sources: usize) -> PlaybackChe
 pub struct PlaybackEngine {
     // The device the decks play into, or `None` on the device-free rigs the tests build. First so
     // it drops first: the stream is what stops the callback. Only ever locked under the decks
-    // lock, which is the order `reopen_output` takes them in.
-    output: Mutex<Option<AudioOutput>>,
+    // lock, which is the order `reopen_output` takes them in. `Arc` so the deferred half of a
+    // faded stop can give an exclusive card back once the fade has played out.
+    output: Arc<Mutex<Option<AudioOutput>>>,
     // The mutex is what makes a multi-op sequence atomic (a `Deck` is already
     // Send+Sync on its own); `Arc` so a deferred pause/stop can hold the decks
     // after its sleep.
@@ -109,6 +111,8 @@ pub struct PlaybackEngine {
     // Open the output at each track's own rate. Read only at a track boundary, never by the audio
     // thread.
     follow_rate: AtomicBool,
+    // Shared or exclusive, and which card. Read at a track boundary, never by the audio thread.
+    output_choice: Mutex<OutputChoice>,
     // The last path `preload_gapless` refused for needing a reopen. The monitor asks again every
     // tick until the track ends, and each ask would otherwise decode the file just to refuse it.
     gapless_refused: Mutex<Option<String>>,
@@ -124,7 +128,7 @@ impl PlaybackEngine {
     /// [`AppError::Player`] if `mixer` carries fewer voices than the decks need.
     pub fn new(mixer: &Mixer, runtime: tokio::runtime::Handle) -> Result<Self, AppError> {
         Ok(Self {
-            output: Mutex::new(None),
+            output: Arc::new(Mutex::new(None)),
             decks: Arc::new(std::sync::Mutex::new(Decks::connect(mixer)?)),
             gapless_pending: Arc::new(AtomicBool::new(false)),
             crossfade_armed: AtomicBool::new(false),
@@ -136,6 +140,7 @@ impl PlaybackEngine {
             staged_stream: Mutex::new(None),
             live_stream: Arc::new(Mutex::new(None)),
             follow_rate: AtomicBool::new(false),
+            output_choice: Mutex::new(OutputChoice::default()),
             gapless_refused: Mutex::new(None),
             runtime,
         })
@@ -169,6 +174,7 @@ impl PlaybackEngine {
         let deck_epoch = self.deck_epoch.clone();
         let gapless_pending = self.gapless_pending.clone();
         let live_stream = self.live_stream.clone();
+        let output = self.output.clone();
         self.runtime.spawn(async move {
             tokio::time::sleep(Duration::from_millis(delay_ms)).await;
             // The wait is async and the landing is not: `Deck::clear` blocks until the audio
@@ -197,6 +203,7 @@ impl PlaybackEngine {
                         // The faded half of a stop, so it drops the live-stream cell alongside
                         // the source it removes — the same pairing the flag above gets.
                         *live_stream.lock() = None;
+                        output::release_exclusive(&output);
                     }
                 }
             });
@@ -283,7 +290,7 @@ impl PlaybackEngine {
         self.bump_epoch();
         self.clear_live_stream();
         let mut decks = self.lock_decks();
-        self.reopen_for_track(&decks, decoded.sample_rate());
+        self.reopen_for_track(&decks, decoded.shape(), decoded.format());
         // Backstop for the gapless race: `preload_gapless` sets the flag under
         // this same lock, so a preload that landed during the decode is visible
         // here. Downgrading to a hard cut is always safe — it clears both decks,
@@ -372,7 +379,7 @@ impl PlaybackEngine {
         *self.live_stream.lock() = Some(shared);
         self.bump_epoch();
         let decks = self.lock_decks();
-        self.reopen_for_track(&decks, source.sample_rate());
+        self.reopen_for_track(&decks, source.shape(), source.format());
         // A live mount has no timeline to resume on, so its clock starts where the connection did.
         decks.cut_to(volume, Self::STREAM_SPEED, Duration::ZERO, |deck| {
             self.build_source(source, TrackReplayGain::default(), deck)
@@ -547,6 +554,7 @@ impl PlaybackEngine {
         let decks = self.lock_decks();
         decks.clear_all();
         self.gapless_pending.store(false, Ordering::Release);
+        output::release_exclusive(&self.output);
     }
 
     /// Fade to silence over `fade_ms`, then clear both decks via the deferred
@@ -680,8 +688,8 @@ impl PlaybackEngine {
 
         // A track the output has to reopen for can't be staged behind one still playing: left
         // unstaged, it ends in `EndOfStream` and starts through `play_media`, which reopens.
-        if !self.plays_without_reopen(decoded.sample_rate()) {
-            log::debug!("Not staging {path} gapless: the output reopens for its rate");
+        if !self.plays_without_reopen(decoded.shape(), decoded.format()) {
+            log::debug!("Not staging {path} gapless: the output reopens for its format");
             *self.gapless_refused.lock() = Some(path.to_owned());
             return;
         }

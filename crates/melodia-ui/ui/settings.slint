@@ -112,6 +112,16 @@ export global Settings {
     callback output-follow-rate-changed(bool);
     in property <bool> follow-rate-supported;
 
+    // Shared (0) or exclusive (1), and which card an exclusive claim takes. Rust lists the cards,
+    // whose names are data, and applies a pick off the UI thread, since claiming a card blocks.
+    // The rows are hidden where the platform has no exclusive backend.
+    in property <bool> exclusive-supported;
+    in-out property <int> output-mode-idx: 0;
+    callback output-mode-changed(int);
+    in property <[string]> output-device-names;
+    in-out property <int> output-device-idx: -1;
+    callback output-device-changed(int);
+
     // Rust owns every property here — the `ScrobbleService` status-watch subscriber is the single
     // writer — and the toggles route their events back to persist and refresh the shadow. Connect
     // is opened inline from the section markup rather than through a callback, dodging Slint's

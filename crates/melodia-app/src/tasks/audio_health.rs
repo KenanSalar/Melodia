@@ -120,7 +120,8 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
                 () = shutdown.cancelled() => break,
                 _ = device_ticker.tick() => {
                     let lost = health.take_device_lost();
-                    let stalled = stall.observe(health.blocks());
+                    // A parked output has no stream to beat, which is the point of parking it.
+                    let stalled = !engine.output_parked() && stall.observe(health.blocks());
                     if stalled {
                         log::warn!("audio: output stream stopped asking for samples");
                     }
@@ -185,10 +186,11 @@ async fn reopen_with_backoff(engine: &Arc<PlaybackEngine>) -> bool {
         // Blocking: it opens a device, under the decks lock.
         let engine = Arc::clone(engine);
         match tokio::task::spawn_blocking(move || engine.reopen_output()).await {
-            Ok(Ok(negotiated)) => {
+            Ok(Ok(Some(negotiated))) => {
                 log::info!("audio: output reopened: {negotiated:?}");
                 return true;
             }
+            Ok(Ok(None)) => return true,
             Ok(Err(e)) => log::debug!("audio: reopen attempt failed: {}", describe(&e)),
             Err(e) => {
                 log::warn!("audio: reopen task did not finish: {e}");

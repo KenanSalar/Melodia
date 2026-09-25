@@ -2372,3 +2372,60 @@ msgstr "Συσκευή"
 
 msgid "{}, shared: the system mixer may still convert it"
 msgstr "{}, κοινόχρηστη: ο μίκτης του συστήματος μπορεί ακόμη να το μετατρέψει"
+
+msgid "Output Mode"
+msgstr "Λειτουργία εξόδου"
+
+msgid "Exclusive gives Melodia the audio device alone: other apps can't play through it while Melodia plays, and the system mixer can't change the sound"
+msgstr "Η αποκλειστική δίνει τη συσκευή ήχου μόνο στο Melodia: άλλες εφαρμογές δεν μπορούν να παίξουν μέσω αυτής όσο παίζει το Melodia, και ο μίκτης του συστήματος δεν μπορεί να αλλάξει τον ήχο"
+
+msgid "Shared"
+msgstr "Κοινόχρηστη"
+
+msgid "Exclusive"
+msgstr "Αποκλειστική"
+
+msgid "Exclusive Device"
+msgstr "Αποκλειστική συσκευή"
+
+msgid "The sound card exclusive output takes"
+msgstr "Η κάρτα ήχου που καταλαμβάνει η αποκλειστική έξοδος"
+
+msgid "Fallback: exclusive output was refused, so the system mixer is in the way"
+msgstr "Εναλλακτική: η αποκλειστική έξοδος απορρίφθηκε, οπότε ο μίκτης του συστήματος παρεμβάλλεται"
+
+msgid "the device is in use by another app"
+msgstr "η συσκευή χρησιμοποιείται από άλλη εφαρμογή"
+
+msgid "{} holds the device"
+msgstr "η συσκευή είναι δεσμευμένη από {}"
+
+msgid "another app holds the device"
+msgstr "άλλη εφαρμογή έχει δεσμεύσει τη συσκευή"
+
+msgid "the device can't run at this sample rate"
+msgstr "η συσκευή δεν υποστηρίζει αυτόν τον ρυθμό δειγματοληψίας"
+
+msgid "the device can't play this many channels"
+msgstr "η συσκευή δεν μπορεί να αναπαράγει τόσα κανάλια"
+
+msgid "the device takes no sample format that holds this track"
+msgstr "η συσκευή δεν δέχεται καμία μορφή δειγμάτων που να χωρά αυτό το κομμάτι"
+
+msgid "the chosen device isn't connected"
+msgstr "η επιλεγμένη συσκευή δεν είναι συνδεδεμένη"
+
+msgid "exclusive output isn't available on this system"
+msgstr "η αποκλειστική έξοδος δεν είναι διαθέσιμη σε αυτό το σύστημα"
+
+msgid "the device couldn't be opened"
+msgstr "δεν ήταν δυνατό να ανοίξει η συσκευή"
+
+msgid "{}, shared: exclusive output was refused because {}"
+msgstr "{}, κοινόχρηστη: η αποκλειστική έξοδος απορρίφθηκε ({})"
+
+msgid "{}, exclusive"
+msgstr "{}, αποκλειστική"
+
+msgid "{}, exclusive, in a format that can't hold the source exactly"
+msgstr "{}, αποκλειστική, σε μορφή που δεν χωρά την πηγή ακριβώς"

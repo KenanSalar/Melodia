@@ -4,8 +4,8 @@
 //! brushes and the window-chrome globals rather than a settings row, and **Overflow Menu** and
 //! **Mini Player** sit there only because `window_settings` already owns the window toggles
 //! beside them. Otherwise it is one module per card, with one card split in two:
-//! `playback_settings` wires the Output card's toggle beside its own section's, and
-//! [`signal_path`] wires that card's live readout. [`settings_page`] holds the page's own tab
+//! `playback_settings` wires the Output card's toggle beside its own section's, [`output_mode`]
+//! its two pickers, and [`signal_path`] its live readout. [`settings_page`] holds the page's own tab
 //! index, search predicate and responsive geometry.
 //!
 //! Four modules that look like they belong here stay at the `ui/` root, on what the page
@@ -22,6 +22,7 @@ pub mod library_settings;
 pub mod locale;
 pub mod lyrics_settings;
 pub mod motion;
+pub mod output_mode;
 pub mod playback_settings;
 pub mod radio_settings;
 pub mod rating_writeback;

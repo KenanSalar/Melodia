@@ -55,14 +55,12 @@ impl AudioStreamHealth {
     /// pays for one short string and then nothing.
     pub fn record(&self, err: &Error) {
         match err.kind() {
-            ErrorKind::Xrun => {
-                self.underruns.fetch_add(1, Ordering::Relaxed);
-            }
+            ErrorKind::Xrun => self.record_xrun(),
             // Both mean the stream won't produce sound again on its own and both
             // reach the user the same way, so `StreamInvalidated` earns no
             // counter of its own.
             ErrorKind::DeviceNotAvailable | ErrorKind::StreamInvalidated => {
-                self.device_lost.store(true, Ordering::Relaxed);
+                self.report_device_lost();
             }
             // `ErrorKind` is `#[non_exhaustive]`, so this is a catch-all rather
             // than the rest of the variants spelled out: a kind added upstream
@@ -80,6 +78,17 @@ impl AudioStreamHealth {
                 }
             }
         }
+    }
+
+    /// Record one under/overrun the stream recovered from itself.
+    pub fn record_xrun(&self) {
+        self.underruns.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Record that the stream will not produce sound again on its own. A backend with no cpal
+    /// error to hand over reports here, so every output shares the one recovery path.
+    pub fn report_device_lost(&self) {
+        self.device_lost.store(true, Ordering::Relaxed);
     }
 
     /// Record one data-callback block.

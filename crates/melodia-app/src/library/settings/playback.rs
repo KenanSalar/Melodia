@@ -4,6 +4,7 @@
 
 use crate::library::playback::FOLLOW_RATE_SUPPORTED;
 use crate::services;
+use crate::services::settings::OutputModeKey;
 use crate::state::AppState;
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
@@ -27,6 +28,18 @@ pub fn set_gapless_playback(state: &AppState, on: bool) -> Result<(), AppError> 
 pub fn set_output_follow_rate(state: &AppState, on: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(&state.paths, move |settings| {
         settings.output.output_follow_rate = on;
+    })
+}
+
+/// Persist the Output card's mode and card together, since each pick carries both.
+pub fn set_output_choice(
+    state: &AppState,
+    mode: OutputModeKey,
+    device: Option<String>,
+) -> Result<(), AppError> {
+    services::settings::mutate_settings(&state.paths, move |settings| {
+        settings.output.output_mode = mode;
+        settings.output.output_device = device;
     })
 }
 

@@ -6,7 +6,10 @@ import { SectionCard } from "../../components/settings/section-card.slint";
 import { SectionButton } from "../../components/settings/section-button.slint";
 import { SectionDivider } from "../../components/settings/section-divider.slint";
 import { SettingRow } from "../../components/settings/setting-row.slint";
+import { SettingRowStacked } from "../../components/settings/setting-row-stacked.slint";
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
+import { ChipGroup } from "../../components/settings/chip-group.slint";
+import { Dropdown } from "../../components/settings/dropdown.slint";
 
 // One step of the signal path: a dot in its grade's colour, what the step is, and what it did.
 // Denser than a `SettingRow` because eight of them sit under one heading; the dot takes the icon
@@ -65,21 +68,32 @@ export component OutputSection inherits Rectangle {
                                         SettingsPage.search-query);
     }
 
+    property <string> mode-label: @tr("Output Mode");
+    property <string> mode-desc: @tr("Exclusive gives Melodia the audio device alone: other apps can't play through it while Melodia plays, and the system mixer can't change the sound");
+
+    property <string> device-label: @tr("Exclusive Device");
+    property <string> device-desc: @tr("The sound card exclusive output takes");
+
     property <string> follow-rate-label: @tr("Match the File's Sample Rate");
     property <string> follow-rate-desc: @tr("Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate. Turns crossfade off");
 
     property <string> signal-label: @tr("Signal Path");
     property <string> signal-desc: @tr("What reaches the audio device, and what changes it on the way. Bit-perfect means nothing does");
 
-    property <bool> show-follow-rate: Settings.follow-rate-supported
+    property <bool> exclusive-chosen: Settings.exclusive-supported && Settings.output-mode-idx == 1;
+    property <bool> show-mode: Settings.exclusive-supported && row-visible(mode-label, mode-desc);
+    property <bool> show-device: root.exclusive-chosen && row-visible(device-label, device-desc);
+    // Exclusive output always runs at the file's rate, so the toggle has nothing to add there.
+    property <bool> show-follow-rate: Settings.follow-rate-supported && !root.exclusive-chosen
         && row-visible(follow-rate-label, follow-rate-desc);
     property <bool> show-signal-path: row-visible(signal-label, signal-desc);
 
-    out property <bool> has-matches: show-follow-rate || show-signal-path;
+    out property <bool> has-matches: show-mode || show-device || show-follow-rate || show-signal-path;
 
     property <string> verdict-text: !SignalPathUi.playing ? @tr("Nothing is playing")
         : SignalPathUi.verdict == 0 ? @tr("Bit-perfect: the device receives the decoder's samples untouched")
         : SignalPathUi.verdict == 1 ? @tr("Enhanced: only effects you chose change the sound")
+        : SignalPathUi.verdict == 3 ? @tr("Fallback: exclusive output was refused, so the system mixer is in the way")
         : @tr("Converted: the sound is changed on its way to the device");
 
     // The stages a click can put right. A resample counts only where following the file's rate is
@@ -87,7 +101,19 @@ export component OutputSection inherits Rectangle {
     property <bool> can-reset: SignalPathUi.playing && (SignalPathUi.dsp-grade > 0
         || SignalPathUi.speed-grade > 0
         || SignalPathUi.volume-grade > 0
-        || (SignalPathUi.rate-grade > 0 && Settings.follow-rate-supported && !Settings.output-follow-rate));
+        || (SignalPathUi.rate-grade > 0 && Settings.follow-rate-supported
+            && !root.exclusive-chosen && !Settings.output-follow-rate));
+
+    // Indexed by `SignalPathUi.fallback-reason`; the order is Rust's, see that property.
+    property <string> fallback-text: SignalPathUi.fallback-reason == 0 ? @tr("the device is in use by another app")
+        : SignalPathUi.fallback-reason == 1 && SignalPathUi.fallback-by != "" ? @tr("{} holds the device", SignalPathUi.fallback-by)
+        : SignalPathUi.fallback-reason == 1 ? @tr("another app holds the device")
+        : SignalPathUi.fallback-reason == 2 ? @tr("the device can't run at this sample rate")
+        : SignalPathUi.fallback-reason == 3 ? @tr("the device can't play this many channels")
+        : SignalPathUi.fallback-reason == 4 ? @tr("the device takes no sample format that holds this track")
+        : SignalPathUi.fallback-reason == 5 ? @tr("the chosen device isn't connected")
+        : SignalPathUi.fallback-reason == 6 ? @tr("exclusive output isn't available on this system")
+        : @tr("the device couldn't be opened");
 
     property <string> effects-text: SignalPathUi.dsp-grade == 0 ? @tr("No effects")
         : SignalPathUi.eq-on && SignalPathUi.rg-on ? @tr("Equalizer and ReplayGain")
@@ -103,6 +129,36 @@ export component OutputSection inherits Rectangle {
     if has-matches: SectionCard {
         title: root.card-title;
 
+        if root.show-mode: SettingRowStacked {
+            icon: "volume_up";
+            label: root.mode-label;
+            description: root.mode-desc;
+            ChipGroup {
+                options: [
+                    @tr("Shared"),
+                    @tr("Exclusive"),
+                ];
+                selected-index <=> Settings.output-mode-idx;
+                selected(i) => { Settings.output-mode-changed(i); }
+            }
+        }
+
+        if root.show-mode && root.show-device: SectionDivider {}
+
+        if root.show-device: SettingRow {
+            icon: "tune";
+            label: root.device-label;
+            description: root.device-desc;
+            Dropdown {
+                options: Settings.output-device-names;
+                selected-index <=> Settings.output-device-idx;
+                trigger-width: 200px;
+                selected(idx) => { Settings.output-device-changed(idx); }
+            }
+        }
+
+        if (root.show-mode || root.show-device) && root.show-follow-rate: SectionDivider {}
+
         if root.show-follow-rate: SettingRow {
             icon: "speed";
             label: root.follow-rate-label;
@@ -113,7 +169,7 @@ export component OutputSection inherits Rectangle {
             }
         }
 
-        if root.show-follow-rate && root.show-signal-path: SectionDivider {}
+        if (root.show-mode || root.show-device || root.show-follow-rate) && root.show-signal-path: SectionDivider {}
 
         if root.show-signal-path: SettingRow {
             icon: "graphic_eq";
@@ -170,7 +226,10 @@ export component OutputSection inherits Rectangle {
             StageRow {
                 grade: SignalPathUi.output-grade;
                 label: @tr("Device");
-                value: @tr("{}, shared: the system mixer may still convert it", root.device-text);
+                value: SignalPathUi.fallback-reason >= 0 ? @tr("{}, shared: exclusive output was refused because {}", root.device-text, root.fallback-text)
+                    : !SignalPathUi.exclusive ? @tr("{}, shared: the system mixer may still convert it", root.device-text)
+                    : SignalPathUi.output-grade == 0 ? @tr("{}, exclusive", root.device-text)
+                    : @tr("{}, exclusive, in a format that can't hold the source exactly", root.device-text);
             }
         }
     }

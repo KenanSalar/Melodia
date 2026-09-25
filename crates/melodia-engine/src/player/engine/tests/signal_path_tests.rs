@@ -4,8 +4,8 @@
 use std::num::NonZero;
 
 use melodia_audio::player::source::audio::{Shape, SourceFormat};
-use melodia_playback::player::playback::output::Negotiated;
 use melodia_playback::player::playback::output::voice::PlayingSource;
+use melodia_playback::player::playback::output::{Negotiated, OutputFormat};
 
 use super::{Grade, SignalInputs, Stages, Transport, Verdict, evaluate};
 
@@ -22,7 +22,8 @@ fn clean_inputs() -> SignalInputs {
         negotiated: Negotiated {
             device_name: Some("Test DAC".to_owned()),
             shape: shape(2, 44_100),
-            format: cpal::SampleFormat::F32,
+            format: OutputFormat::Shared(cpal::SampleFormat::F32),
+            fallback: None,
             requested_period: None,
             period: None,
         },

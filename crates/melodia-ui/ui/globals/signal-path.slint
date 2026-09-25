@@ -3,11 +3,18 @@
 // `signal_path::evaluate`. Nothing here decides a grade; the panel only picks the words for one.
 //
 // A grade is 0 clean, 1 enhanced (something the user chose), 2 converted. The verdict takes the
-// same three values, 0 reading as Bit-perfect. The strings are data: rates, formats and the
-// device's own name, none of which translate.
+// same three values, 0 reading as Bit-perfect, plus 3 for an exclusive claim that fell back to
+// shared. The strings are data: rates, formats and the device's own name, none of which translate.
+//
+// `fallback-reason` indexes the inline reason list in `output-section.slint`, in the order of
+// `ui::settings::signal_path::fallback_index`, and is -1 when nothing fell back.
 export global SignalPathUi {
     in property <bool> playing;
     in property <int> verdict;
+    in property <bool> exclusive;
+    in property <int> fallback-reason: -1;
+    // Who holds the card, where the reason is a reservation and the holder named itself.
+    in property <string> fallback-by;
 
     in property <int> source-grade;
     in property <int> dsp-grade;

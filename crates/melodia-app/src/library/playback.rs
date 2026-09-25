@@ -5,10 +5,12 @@ use melodia_audio::player::source::stream_source;
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
 use melodia_core::error::describe;
+use melodia_engine::player::engine::backend::OutputChoice;
 use melodia_engine::player::engine::state::{
     MAX_VOLUME, lock_state, play_track_inner, with_state_emit,
 };
 use melodia_engine::player::engine::types::{PlaybackSource, PlaybackStatus, RadioNowPlaying};
+use melodia_playback::player::playback::output::{self, OutputDevice};
 use melodia_store::database::queries;
 
 /// Which slot of `summaries` playback should start on.
@@ -465,6 +467,21 @@ pub const FOLLOW_RATE_SUPPORTED: bool = !cfg!(target_os = "windows");
 /// Open the output at each track's own sample rate, from the next track on.
 pub fn player_set_follow_rate(ctx: &PlaybackContext, on: bool) {
     ctx.engine.set_follow_rate(on);
+}
+
+/// Whether this platform has an exclusive backend. Where it doesn't, an exclusive choice falls
+/// back to shared on every open, so the picker isn't offered at all.
+pub const EXCLUSIVE_SUPPORTED: bool = cfg!(target_os = "linux");
+
+/// The devices an exclusive claim can be aimed at. Blocking: it asks every sound card.
+pub fn output_devices() -> Vec<OutputDevice> {
+    output::devices()
+}
+
+/// Take the card for ourselves or give it back, now. Blocking: it opens a device, so it belongs
+/// on the blocking pool rather than the UI thread.
+pub fn player_set_output_choice(ctx: &PlaybackContext, choice: OutputChoice) {
+    ctx.engine.set_output_choice(choice);
 }
 
 /// Turn off everything the user chose that changes the samples on their way to the device, and

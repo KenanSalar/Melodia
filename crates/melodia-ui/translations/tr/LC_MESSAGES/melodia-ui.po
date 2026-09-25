@@ -2376,3 +2376,60 @@ msgstr "Aygıt"
 
 msgid "{}, shared: the system mixer may still convert it"
 msgstr "{}, paylaşımlı: sistem mikseri yine de dönüştürebilir"
+
+msgid "Output Mode"
+msgstr "Çıkış Modu"
+
+msgid "Exclusive gives Melodia the audio device alone: other apps can't play through it while Melodia plays, and the system mixer can't change the sound"
+msgstr "Özel, ses aygıtını yalnızca Melodia'ya verir: Melodia çalarken diğer uygulamalar bu aygıttan ses çalamaz ve sistem mikseri sesi değiştiremez"
+
+msgid "Shared"
+msgstr "Paylaşımlı"
+
+msgid "Exclusive"
+msgstr "Özel"
+
+msgid "Exclusive Device"
+msgstr "Özel Aygıt"
+
+msgid "The sound card exclusive output takes"
+msgstr "Özel çıkışın kullandığı ses kartı"
+
+msgid "Fallback: exclusive output was refused, so the system mixer is in the way"
+msgstr "Yedek: özel çıkış reddedildi, bu yüzden sistem mikseri araya giriyor"
+
+msgid "the device is in use by another app"
+msgstr "aygıt başka bir uygulama tarafından kullanılıyor"
+
+msgid "{} holds the device"
+msgstr "aygıtı {} tutuyor"
+
+msgid "another app holds the device"
+msgstr "aygıtı başka bir uygulama tutuyor"
+
+msgid "the device can't run at this sample rate"
+msgstr "aygıt bu örnekleme hızında çalışamıyor"
+
+msgid "the device can't play this many channels"
+msgstr "aygıt bu kadar çok kanalı çalamıyor"
+
+msgid "the device takes no sample format that holds this track"
+msgstr "aygıt bu parçayı tam taşıyan hiçbir örnek biçimini kabul etmiyor"
+
+msgid "the chosen device isn't connected"
+msgstr "seçilen aygıt bağlı değil"
+
+msgid "exclusive output isn't available on this system"
+msgstr "özel çıkış bu sistemde kullanılamıyor"
+
+msgid "the device couldn't be opened"
+msgstr "aygıt açılamadı"
+
+msgid "{}, shared: exclusive output was refused because {}"
+msgstr "{}, paylaşımlı: özel çıkış reddedildi ({})"
+
+msgid "{}, exclusive"
+msgstr "{}, özel"
+
+msgid "{}, exclusive, in a format that can't hold the source exactly"
+msgstr "{}, özel, kaynağı tam olarak taşıyamayan bir biçimde"

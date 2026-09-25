@@ -86,10 +86,14 @@ export component PlaybackSection inherits Rectangle {
     // An `if` rather than `visible`, which would still claim the layout slot.
     property <bool> show-viz-style: root.show-visualizer && Visualizer.enabled;
 
+    // Exclusive output always follows the rate, whatever the toggle says.
+    property <bool> rate-follows: Settings.output-follow-rate
+        || (Settings.exclusive-supported && Settings.output-mode-idx == 1);
+
     // Same reason as the style row above. Following the rate turns crossfade off in the engine,
     // so its details go with it.
     property <bool> show-crossfade-details: root.show-crossfade && Settings.crossfade-enabled
-        && !Settings.output-follow-rate;
+        && !root.rate-follows;
 
     out property <bool> has-matches:
         show-gapless || show-anim || show-resume || show-crossfade || show-visualizer;
@@ -116,8 +120,8 @@ export component PlaybackSection inherits Rectangle {
         if root.show-crossfade: SettingRow {
             icon: "swap_horiz";
             label: root.crossfade-label;
-            description: Settings.output-follow-rate ? root.crossfade-off-desc : root.crossfade-desc;
-            disabled: Settings.output-follow-rate;
+            description: root.rate-follows ? root.crossfade-off-desc : root.crossfade-desc;
+            disabled: root.rate-follows;
             ToggleSwitch {
                 checked <=> Settings.crossfade-enabled;
                 toggled(v) => { Settings.crossfade-enabled-changed(v); }

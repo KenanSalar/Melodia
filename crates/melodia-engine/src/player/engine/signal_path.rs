@@ -4,9 +4,11 @@
 //! tick, and the panel only ever renders what it answered.
 //!
 //! **Shared output never reads Bit-perfect.** The system mixer sits between the stream and the
-//! card and may convert or mix, and nothing here can see past it. Every output is shared until an
-//! exclusive backend exists, so for now the headline is at best Converted and the stages carry
-//! the detail.
+//! card and may convert or mix, and nothing here can see past it. Only an exclusive claim, in a
+//! format that holds the source, grades the output clean.
+//!
+//! **A fallback is the headline whatever the stages say**, since the user asked for exclusive and
+//! didn't get it, and that is the one thing they need to hear first.
 
 use melodia_playback::player::playback::output::Negotiated;
 use melodia_playback::player::playback::output::voice::PlayingSource;
@@ -29,6 +31,8 @@ pub enum Verdict {
     BitPerfect,
     Enhanced,
     Converted,
+    /// Exclusive was asked for and refused; the reason is on the negotiated output.
+    Fallback,
 }
 
 /// Everything the verdict reads, kept on the answer so the panel can name what it saw.
@@ -93,6 +97,7 @@ pub struct SignalPath {
 pub fn evaluate(inputs: SignalInputs) -> SignalPath {
     let stages = grade(&inputs);
     let verdict = match stages.worst() {
+        _ if inputs.negotiated.fallback.is_some() => Verdict::Fallback,
         Grade::Clean => Verdict::BitPerfect,
         Grade::Enhanced => Verdict::Enhanced,
         Grade::Converted => Verdict::Converted,
@@ -120,7 +125,7 @@ fn grade(inputs: &SignalInputs) -> Stages {
         // A source no wider than the device lands on its first channels untouched, the rest
         // silent or a mono duplicate. Wider is a drop, or a mean onto a mono device.
         channels: converted_if(source.channels > device.channels),
-        output: Grade::Converted,
+        output: converted_if(!inputs.negotiated.format.carries(inputs.source.format)),
     }
 }
 
