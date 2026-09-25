@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::player::source::audio::AudioSource;
+use crate::player::source::audio::{AudioSource, SourceFormat};
 use crate::player::source::prebuffer::{PrebufferSource, RingWriter, StreamShared};
 use crate::player::source::tests::helpers::shape;
 
@@ -8,7 +8,7 @@ const RATE: u32 = 48_000;
 
 fn stereo() -> (PrebufferSource, RingWriter, Arc<StreamShared>) {
     let shared = StreamShared::new();
-    let (source, writer) = PrebufferSource::new(shared.clone(), shape(2, RATE));
+    let (source, writer) = PrebufferSource::new(shared.clone(), shape(2, RATE), SourceFormat::F32);
     (source, writer, shared)
 }
 
@@ -93,7 +93,7 @@ fn a_partial_frame_is_never_split_across_the_ring_and_silence() {
 #[test]
 fn the_ring_wraps_without_losing_order() {
     let shared = StreamShared::new();
-    let (mut source, writer) = PrebufferSource::new(shared, shape(1, RATE));
+    let (mut source, writer) = PrebufferSource::new(shared, shape(1, RATE), SourceFormat::F32);
 
     // Well past the capacity the configured prebuffer window buys, so the cursors wrap repeatedly.
     for i in 0..500_000_u32 {
@@ -107,7 +107,7 @@ fn the_ring_wraps_without_losing_order() {
 #[test]
 fn a_blocked_writer_gives_up_once_the_source_is_dropped() {
     let shared = StreamShared::new();
-    let (source, writer) = PrebufferSource::new(shared, shape(1, RATE));
+    let (source, writer) = PrebufferSource::new(shared, shape(1, RATE), SourceFormat::F32);
 
     let feeder = std::thread::spawn(move || {
         let mut pushed = 0_u64;

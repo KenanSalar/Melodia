@@ -3794,6 +3794,7 @@ dependencies = [
 name = "melodia-engine"
 version = "0.17.0"
 dependencies = [
+ "cpal",
  "log",
  "melodia-audio",
  "melodia-core",

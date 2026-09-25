@@ -1,0 +1,33 @@
+// What the playing track goes through on its way to the device, owned by
+// `crates/melodia-views/src/ui/settings/signal_path.rs` and graded in Rust by
+// `signal_path::evaluate`. Nothing here decides a grade; the panel only picks the words for one.
+//
+// A grade is 0 clean, 1 enhanced (something the user chose), 2 converted. The verdict takes the
+// same three values, 0 reading as Bit-perfect. The strings are data: rates, formats and the
+// device's own name, none of which translate.
+export global SignalPathUi {
+    in property <bool> playing;
+    in property <int> verdict;
+
+    in property <int> source-grade;
+    in property <int> dsp-grade;
+    in property <int> speed-grade;
+    in property <int> volume-grade;
+    in property <int> crossfade-grade;
+    in property <int> rate-grade;
+    in property <int> channels-grade;
+    in property <int> output-grade;
+
+    in property <string> source-format;
+    in property <string> source-rate;
+    in property <string> device-rate;
+    in property <string> device-format;
+    in property <string> device-name;
+    in property <bool> eq-on;
+    in property <bool> rg-on;
+    in property <bool> muted;
+    in property <int> volume;
+    in property <string> speed;
+
+    callback make-bit-perfect();
+}

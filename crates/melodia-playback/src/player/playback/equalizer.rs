@@ -25,7 +25,7 @@ use super::crossfade::{self, FadeShared};
 use super::dsp::{AtomicF32, Generation, db_to_linear, linear_to_db};
 use super::replaygain::{self, ReplayGainShared, TrackReplayGain};
 use melodia_audio::player::source::audio::{
-    AudioSource, ChannelCount, Sample, SampleRate, SeekError,
+    AudioSource, ChannelCount, Sample, SampleRate, SeekError, SourceFormat,
 };
 
 /// Number of equalizer bands.
@@ -717,6 +717,17 @@ impl<S: AudioSource> AudioSource for EqSource<S> {
     #[inline]
     fn sample_rate(&self) -> SampleRate {
         self.input.sample_rate()
+    }
+
+    fn format(&self) -> SourceFormat {
+        self.input.format()
+    }
+
+    /// The bypass flag itself rather than the settings behind it, so an EQ that is on but has
+    /// nothing to do at this rate reads as untouched. The fade is left out: the ramp belongs to
+    /// the transport, which reports a crossfade on its own.
+    fn dsp_engaged(&self) -> bool {
+        !self.bypass || self.input.dsp_engaged()
     }
 
     #[inline]

@@ -30,6 +30,8 @@ log.workspace = true
 [dev-dependencies]
 # The persistence suites write a queue into a throwaway directory.
 tempfile.workspace = true
+# The signal path suite spells a negotiated device format.
+cpal.workspace = true
 
 [lints]
 workspace = true

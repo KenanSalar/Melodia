@@ -2310,3 +2310,69 @@ msgstr "Ses aygıtını her parçanın kendi hızında yeniden açar, böylece s
 
 msgid "Off while the output matches each file's sample rate"
 msgstr "Çıkış her dosyanın örnekleme hızını izlerken kapalı"
+
+msgid "Signal Path"
+msgstr "Sinyal Yolu"
+
+msgid "What reaches the audio device, and what changes it on the way. Bit-perfect means nothing does"
+msgstr "Ses aygıtına ne ulaştığı ve yolda onu neyin değiştirdiği. Bit-perfect, hiçbir şeyin değiştirmediği anlamına gelir"
+
+msgid "Nothing is playing"
+msgstr "Hiçbir şey çalmıyor"
+
+msgid "Bit-perfect: the device receives the decoder's samples untouched"
+msgstr "Bit-perfect: aygıt, kod çözücünün örneklerini hiç değişmeden alır"
+
+msgid "Enhanced: only effects you chose change the sound"
+msgstr "İşlenmiş: sesi yalnızca seçtiğiniz efektler değiştirir"
+
+msgid "Converted: the sound is changed on its way to the device"
+msgstr "Dönüştürülmüş: ses aygıta giderken değişir"
+
+msgid "Make Bit-Perfect"
+msgstr "Bit-Perfect Yap"
+
+msgid "Source"
+msgstr "Kaynak"
+
+msgid "{}, rounded to fit 32-bit float"
+msgstr "{}, 32 bit kayan noktaya yuvarlanır"
+
+msgid "Effects"
+msgstr "Efektler"
+
+msgid "No effects"
+msgstr "Efekt yok"
+
+msgid "Equalizer and ReplayGain"
+msgstr "Ekolayzer ve ReplayGain"
+
+msgid "Normal"
+msgstr "Normal"
+
+msgid "Volume"
+msgstr "Ses Düzeyi"
+
+msgid "Muted"
+msgstr "Sessiz"
+
+msgid "Not fading"
+msgstr "Geçiş yok"
+
+msgid "Fading between tracks"
+msgstr "Parçalar arasında geçiş yapılıyor"
+
+msgid "{} resampled to {}"
+msgstr "{}, {} hızına yeniden örneklenir"
+
+msgid "Unchanged"
+msgstr "Değişmedi"
+
+msgid "Mixed down for the device"
+msgstr "Aygıt için daha az kanala indirildi"
+
+msgid "Device"
+msgstr "Aygıt"
+
+msgid "{}, shared: the system mixer may still convert it"
+msgstr "{}, paylaşımlı: sistem mikseri yine de dönüştürebilir"

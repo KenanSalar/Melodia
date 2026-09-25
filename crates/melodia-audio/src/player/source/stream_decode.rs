@@ -19,7 +19,7 @@ use symphonia::core::io::MediaSource;
 
 use melodia_core::error::AppError;
 
-use super::audio::{Sample, Shape};
+use super::audio::{Sample, Shape, SourceFormat};
 use super::decode;
 
 /// The most one read hands the demuxer.
@@ -70,6 +70,7 @@ pub struct StreamDecoder {
     decoder: Box<dyn AudioDecoder>,
     track: u32,
     cursor: decode::Cursor,
+    source_format: SourceFormat,
 }
 
 impl StreamDecoder {
@@ -93,6 +94,7 @@ impl StreamDecoder {
             decoder: opened.decoder,
             track: opened.track,
             cursor: opened.cursor,
+            source_format: opened.source_format,
         })
     }
 
@@ -100,6 +102,12 @@ impl StreamDecoder {
     /// renegotiates one mid-stream ends instead.
     pub fn shape(&self) -> Shape {
         self.cursor.shape()
+    }
+
+    /// What the codec decodes to, as of the open. A reconnect keeps the first answer, since the
+    /// deck plays one `PrebufferSource` across all of them.
+    pub fn format(&self) -> SourceFormat {
+        self.source_format
     }
 
     /// What is actually inside the container, as against what the response's content type named.

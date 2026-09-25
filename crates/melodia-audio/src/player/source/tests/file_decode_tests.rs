@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use super::{FileDecoder, probe_duration};
 use crate::player::source::aac_trim;
-use crate::player::source::audio::AudioSource;
+use crate::player::source::audio::{AudioSource, SourceFormat};
 use crate::player::source::tests::helpers::asset;
 use melodia_core::error::AppError;
 
@@ -58,6 +58,29 @@ fn every_scanned_extension_reaches_a_decoder() -> Result<(), AppError> {
         let decoder = FileDecoder::open(&asset(&format!("silence.{extension}")))?;
         assert!(decoder.sample_rate().get() > 0, "{extension}");
         assert!(decoder.channels().get() > 0, "{extension}");
+    }
+    Ok(())
+}
+
+/// The signal path grades a source on this answer, so each partition is pinned against a real
+/// decoder: integer widths either side of what `f32` carries, and a lossy codec's float.
+///
+/// The 24-bit FLAC is the case the narrowing exists for. Symphonia hands it over in 32-bit
+/// samples, and read at that width it would be reported as losing bits it does not have.
+#[test]
+fn a_decoder_reports_the_format_it_decoded_to() -> Result<(), AppError> {
+    let cases = [
+        ("silence.wav", SourceFormat { bits: 16, float: false }, true),
+        ("silence.flac", SourceFormat { bits: 16, float: false }, true),
+        ("silence-24bit.flac", SourceFormat { bits: 24, float: false }, true),
+        ("silence-32bit.wav", SourceFormat { bits: 32, float: false }, false),
+        ("silence.ogg", SourceFormat::F32, true),
+        ("silence.mp3", SourceFormat::F32, true),
+    ];
+    for (fixture, expected, fits) in cases {
+        let format = FileDecoder::open(&asset(fixture))?.format();
+        assert_eq!(format, expected, "{fixture}");
+        assert_eq!(format.fits_sample(), fits, "{fixture}");
     }
     Ok(())
 }

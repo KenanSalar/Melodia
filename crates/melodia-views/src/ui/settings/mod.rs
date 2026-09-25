@@ -1,10 +1,12 @@
-//! The Settings page: its chrome, and twelve of the fifteen section cards.
+//! The Settings page: its chrome, and every section card but the four that face the window.
 //!
-//! The other three are [`crate::ui::appearance`]'s — Appearance and Window Chrome because
-//! they write `Theme` brushes and the window-chrome globals rather than a settings row,
-//! **Overflow Menu** only because `window_settings` already owns the window toggles beside
-//! it. One module per card, plus [`settings_page`] for the page's own tab index, search
-//! predicate and responsive geometry.
+//! Those four are [`crate::ui::appearance`]'s. Appearance and Window Chrome write `Theme`
+//! brushes and the window-chrome globals rather than a settings row, and **Overflow Menu** and
+//! **Mini Player** sit there only because `window_settings` already owns the window toggles
+//! beside them. Otherwise it is one module per card, with one card split in two:
+//! `playback_settings` wires the Output card's toggle beside its own section's, and
+//! [`signal_path`] wires that card's live readout. [`settings_page`] holds the page's own tab
+//! index, search predicate and responsive geometry.
 //!
 //! Four modules that look like they belong here stay at the `ui/` root, on what the page
 //! *owns* versus what merely serves it: `equalizer` and `replaygain` wire `Dialog`
@@ -25,4 +27,5 @@ pub mod radio_settings;
 pub mod rating_writeback;
 pub mod scrobbling_settings;
 pub mod settings_page;
+pub mod signal_path;
 pub mod updater_settings;

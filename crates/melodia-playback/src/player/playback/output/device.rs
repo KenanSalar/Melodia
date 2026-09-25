@@ -34,6 +34,7 @@ use melodia_core::error::AppError;
 use melodia_audio::player::source::audio::{ChannelCount, Sample, SampleRate, Shape};
 
 use super::super::stream_health::{self, AudioStreamHealth};
+use super::Negotiated;
 use super::mixer::MixerPull;
 
 /// Device frames the host is asked to hand over at a time.
@@ -44,31 +45,6 @@ use super::mixer::MixerPull;
 /// clamps or ignores it. The second pass doesn't ask at all, and keeps this only as the size the
 /// callback's staging buffer starts at.
 const TARGET_BUFFER: Duration = Duration::from_millis(50);
-
-/// What the device actually agreed to, beside what it was asked for.
-///
-/// Reported rather than assumed because every part of it can differ from the request, and because a
-/// bit-perfect mode is only checkable if the negotiated end of it is visible.
-#[derive(Debug, Clone)]
-pub struct Negotiated {
-    /// What the host calls the device, or `None` where it would not say. After a reopen this is
-    /// the only thing telling a bug report which output the audio moved to.
-    pub device_name: Option<String>,
-    pub shape: Shape,
-    pub format: cpal::SampleFormat,
-    /// The period that was asked for, or `None` where the host was left to name its own.
-    ///
-    /// Kept beside the answer because it is the one of the two that says which pass of the ladder
-    /// won, which is the difference between a block this tree sized and one nobody did.
-    pub requested_period: Option<cpal::FrameCount>,
-    /// What the host says it will hand the callback at a time, or `None` where it cannot say.
-    ///
-    /// Asked rather than inferred: `StreamTrait::buffer_size` arrived in cpal 0.18, and before it
-    /// the only place the real block appeared was `data.len()` inside the callback. cpal calls it
-    /// advisory and the hosts that don't track one answer `UnsupportedOperation`, so this is where
-    /// a bug report reads the block back, not a bound anything sizes against.
-    pub period: Option<cpal::FrameCount>,
-}
 
 /// The live stream. Dropping it stops audio and releases the device.
 pub struct DeviceStream {

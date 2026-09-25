@@ -5,7 +5,9 @@ use melodia_audio::player::source::stream_source;
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
 use melodia_core::error::describe;
-use melodia_engine::player::engine::state::{lock_state, play_track_inner, with_state_emit};
+use melodia_engine::player::engine::state::{
+    MAX_VOLUME, lock_state, play_track_inner, with_state_emit,
+};
 use melodia_engine::player::engine::types::{PlaybackSource, PlaybackStatus, RadioNowPlaying};
 use melodia_store::database::queries;
 
@@ -456,9 +458,29 @@ pub fn player_set_crossfade_fade_on_pause(ctx: &PlaybackContext, on: bool) {
     ctx.engine.set_crossfade_fade_on_pause(on);
 }
 
+/// Whether following the file's rate can change anything here. Windows shared mode converts every
+/// stream to the mix format, so there the setting would reopen the device for nothing.
+pub const FOLLOW_RATE_SUPPORTED: bool = !cfg!(target_os = "windows");
+
 /// Open the output at each track's own sample rate, from the next track on.
 pub fn player_set_follow_rate(ctx: &PlaybackContext, on: bool) {
     ctx.engine.set_follow_rate(on);
+}
+
+/// Turn off everything the user chose that changes the samples on their way to the device, and
+/// follow the file's rate where that does anything. The live half only;
+/// `library::settings::reset_for_bit_perfect` persists the same set.
+pub fn player_make_bit_perfect(ctx: &PlaybackContext) {
+    player_set_eq_enabled(ctx, false);
+    player_set_replaygain_enabled(ctx, false);
+    ctx.emit_and_execute(|s| {
+        let mut actions = s.build_set_speed_actions(1.0);
+        actions.extend(s.build_set_volume_actions(MAX_VOLUME));
+        actions
+    });
+    if FOLLOW_RATE_SUPPORTED {
+        player_set_follow_rate(ctx, true);
+    }
 }
 
 // The visualizer has no setter here on purpose: its tap is armed by the

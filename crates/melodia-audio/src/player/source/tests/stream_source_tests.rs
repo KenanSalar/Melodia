@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use reqwest::Url;
 
+use crate::player::source::audio::SourceFormat;
 use crate::player::source::prebuffer::{PrebufferSource, StreamShared};
 use crate::player::source::stream_source::{
     ABANDON_POLL, PREFETCH_FALLBACK_BYTES, PREFETCH_MAX_BYTES, PREFETCH_MIN_BYTES,
@@ -159,7 +160,8 @@ fn the_backoff_grows_to_its_cap_and_then_gives_up() {
 #[test]
 fn a_reconnect_wait_gives_up_as_soon_as_the_source_is_dropped() {
     let shared = StreamShared::new();
-    let (source, _writer) = PrebufferSource::new(shared.clone(), shape(2, 48_000));
+    let (source, _writer) =
+        PrebufferSource::new(shared.clone(), shape(2, 48_000), SourceFormat::F32);
     drop(source);
     let wait = ABANDON_POLL * 40;
 
@@ -181,7 +183,8 @@ fn a_wait_with_nothing_left_to_serve_still_reports_the_source() {
     assert!(sleep_unless_abandoned(&live, Duration::ZERO));
 
     let abandoned = StreamShared::new();
-    let (source, _writer) = PrebufferSource::new(abandoned.clone(), shape(2, 48_000));
+    let (source, _writer) =
+        PrebufferSource::new(abandoned.clone(), shape(2, 48_000), SourceFormat::F32);
     drop(source);
     assert!(!sleep_unless_abandoned(&abandoned, Duration::ZERO));
 }

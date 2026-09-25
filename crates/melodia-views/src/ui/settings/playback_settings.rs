@@ -50,9 +50,7 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
         let g = ui.global::<Settings>();
         g.set_crossfade_min_secs(crossfade::crossfade_ms_to_secs(crossfade::MIN_CROSSFADE_MS));
         g.set_crossfade_max_secs(crossfade::crossfade_ms_to_secs(crossfade::MAX_CROSSFADE_MS));
-        // Windows shared mode converts whatever it is handed to the mix format, so a stream
-        // opened at the file's rate changes nothing there.
-        g.set_follow_rate_supported(!cfg!(target_os = "windows"));
+        g.set_follow_rate_supported(library::playback::FOLLOW_RATE_SUPPORTED);
     }
 
     if let Ok(s) = settings::read_settings(&state.paths) {

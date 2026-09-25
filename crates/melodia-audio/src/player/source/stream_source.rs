@@ -35,7 +35,7 @@ use symphonia::core::codecs::audio::well_known::{
 use melodia_core::error::AppError;
 use melodia_core::error::describe;
 
-use super::audio::Shape;
+use super::audio::{Shape, SourceFormat};
 use super::hls;
 use super::prebuffer::{PrebufferSource, RingWriter, StreamShared};
 use super::stream_decode::{LiveSource, StreamDecoder};
@@ -248,7 +248,7 @@ impl PreparedStream {
 pub fn prepared_stream_for_test(shape: Shape) -> (PreparedStream, std::sync::Weak<StreamShared>) {
     let shared = StreamShared::new();
     let watching = Arc::downgrade(&shared);
-    let (source, _writer) = PrebufferSource::new(Arc::clone(&shared), shape);
+    let (source, _writer) = PrebufferSource::new(Arc::clone(&shared), shape, SourceFormat::F32);
     (PreparedStream { source, shared, codec: String::new() }, watching)
 }
 
@@ -261,7 +261,8 @@ pub async fn open(client: &reqwest::Client, url: &str) -> Result<PreparedStream,
     let shared = StreamShared::new();
     let Resolved { opened, url, reopen } = connect_following_playlist(client, url, &shared).await?;
 
-    let (source, writer) = PrebufferSource::new(shared.clone(), opened.shape);
+    let (source, writer) =
+        PrebufferSource::new(shared.clone(), opened.shape, opened.decoder.format());
     let codec = opened.facts.codec;
     spawn_feed(FeedContext {
         decoder: opened.decoder,

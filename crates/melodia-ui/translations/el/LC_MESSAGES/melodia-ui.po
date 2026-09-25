@@ -2306,3 +2306,69 @@ msgstr "Ανοίγει ξανά τη συσκευή ήχου στον ρυθμό
 
 msgid "Off while the output matches each file's sample rate"
 msgstr "Ανενεργό όσο η έξοδος ακολουθεί τον ρυθμό δειγματοληψίας κάθε αρχείου"
+
+msgid "Signal Path"
+msgstr "Διαδρομή σήματος"
+
+msgid "What reaches the audio device, and what changes it on the way. Bit-perfect means nothing does"
+msgstr "Τι φτάνει στη συσκευή ήχου και τι το αλλάζει στη διαδρομή. Bit-perfect σημαίνει ότι τίποτα δεν το αλλάζει"
+
+msgid "Nothing is playing"
+msgstr "Δεν αναπαράγεται τίποτα"
+
+msgid "Bit-perfect: the device receives the decoder's samples untouched"
+msgstr "Bit-perfect: η συσκευή λαμβάνει τα δείγματα του αποκωδικοποιητή αναλλοίωτα"
+
+msgid "Enhanced: only effects you chose change the sound"
+msgstr "Επεξεργασμένο: μόνο εφέ που επιλέξατε αλλάζουν τον ήχο"
+
+msgid "Converted: the sound is changed on its way to the device"
+msgstr "Μετατρεπόμενο: ο ήχος αλλάζει στη διαδρομή προς τη συσκευή"
+
+msgid "Make Bit-Perfect"
+msgstr "Κάνε το bit-perfect"
+
+msgid "Source"
+msgstr "Πηγή"
+
+msgid "{}, rounded to fit 32-bit float"
+msgstr "{}, στρογγυλεμένο σε float 32 bit"
+
+msgid "Effects"
+msgstr "Εφέ"
+
+msgid "No effects"
+msgstr "Χωρίς εφέ"
+
+msgid "Equalizer and ReplayGain"
+msgstr "Ισοσταθμιστής και ReplayGain"
+
+msgid "Normal"
+msgstr "Κανονική"
+
+msgid "Volume"
+msgstr "Ένταση"
+
+msgid "Muted"
+msgstr "Σε σίγαση"
+
+msgid "Not fading"
+msgstr "Χωρίς μετάβαση"
+
+msgid "Fading between tracks"
+msgstr "Σταδιακή μετάβαση μεταξύ κομματιών"
+
+msgid "{} resampled to {}"
+msgstr "{} με μετατροπή σε {}"
+
+msgid "Unchanged"
+msgstr "Αμετάβλητα"
+
+msgid "Mixed down for the device"
+msgstr "Υπομίξη για τη συσκευή"
+
+msgid "Device"
+msgstr "Συσκευή"
+
+msgid "{}, shared: the system mixer may still convert it"
+msgstr "{}, κοινόχρηστη: ο μίκτης του συστήματος μπορεί ακόμη να το μετατρέψει"

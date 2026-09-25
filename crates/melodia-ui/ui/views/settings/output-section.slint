@@ -1,10 +1,55 @@
+import { Theme } from "../../theme.slint";
 import { Settings } from "../../settings.slint";
 import { SettingsPage } from "../../globals/settings-page.slint";
+import { SignalPathUi } from "../../globals/signal-path.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
+import { SectionButton } from "../../components/settings/section-button.slint";
+import { SectionDivider } from "../../components/settings/section-divider.slint";
 import { SettingRow } from "../../components/settings/setting-row.slint";
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 
-// How the audio device is opened. Search visibility follows `playback-section.slint`.
+// One step of the signal path: a dot in its grade's colour, what the step is, and what it did.
+// Denser than a `SettingRow` because eight of them sit under one heading; the dot takes the icon
+// column so the labels line up with the rows above.
+component StageRow inherits HorizontalLayout {
+    in property <int> grade;
+    in property <string> label;
+    in property <string> value;
+
+    padding-left: Theme.pad-lg;
+    padding-right: Theme.pad-lg;
+    padding-top: Theme.pad-xs;
+    padding-bottom: Theme.pad-xs;
+    spacing: Theme.pad-lg;
+
+    Rectangle {
+        width: SettingsPage.row-icon-w;
+        Rectangle {
+            width: 8px;
+            height: self.width;
+            border-radius: self.width / 2;
+            background: root.grade == 0 ? Theme.green : root.grade == 1 ? Theme.yellow : Theme.red;
+        }
+    }
+    Text {
+        text: root.label;
+        color: Theme.text;
+        font-size: Theme.font-size-sm;
+        vertical-alignment: center;
+    }
+    Text {
+        text: root.value;
+        color: Theme.text-muted;
+        font-size: Theme.font-size-sm;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+        horizontal-stretch: 1;
+        wrap: word-wrap;
+    }
+}
+
+// How the audio device is opened, and what the playing track goes through to reach it. Search
+// visibility follows `playback-section.slint`.
 export component OutputSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -23,10 +68,34 @@ export component OutputSection inherits Rectangle {
     property <string> follow-rate-label: @tr("Match the File's Sample Rate");
     property <string> follow-rate-desc: @tr("Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate. Turns crossfade off");
 
+    property <string> signal-label: @tr("Signal Path");
+    property <string> signal-desc: @tr("What reaches the audio device, and what changes it on the way. Bit-perfect means nothing does");
+
     property <bool> show-follow-rate: Settings.follow-rate-supported
         && row-visible(follow-rate-label, follow-rate-desc);
+    property <bool> show-signal-path: row-visible(signal-label, signal-desc);
 
-    out property <bool> has-matches: show-follow-rate;
+    out property <bool> has-matches: show-follow-rate || show-signal-path;
+
+    property <string> verdict-text: !SignalPathUi.playing ? @tr("Nothing is playing")
+        : SignalPathUi.verdict == 0 ? @tr("Bit-perfect: the device receives the decoder's samples untouched")
+        : SignalPathUi.verdict == 1 ? @tr("Enhanced: only effects you chose change the sound")
+        : @tr("Converted: the sound is changed on its way to the device");
+
+    // The stages a click can put right. A resample counts only where following the file's rate is
+    // the setting that would stop it.
+    property <bool> can-reset: SignalPathUi.playing && (SignalPathUi.dsp-grade > 0
+        || SignalPathUi.speed-grade > 0
+        || SignalPathUi.volume-grade > 0
+        || (SignalPathUi.rate-grade > 0 && Settings.follow-rate-supported && !Settings.output-follow-rate));
+
+    property <string> effects-text: SignalPathUi.dsp-grade == 0 ? @tr("No effects")
+        : SignalPathUi.eq-on && SignalPathUi.rg-on ? @tr("Equalizer and ReplayGain")
+        : SignalPathUi.rg-on ? @tr("ReplayGain")
+        : @tr("Equalizer");
+
+    property <string> device-text: SignalPathUi.device-name == "" ? SignalPathUi.device-format
+        : SignalPathUi.device-name + " · " + SignalPathUi.device-format;
 
     // Wrapper so the root's preferred-height tracks the card's natural height. See
     // `language-section.slint`.
@@ -41,6 +110,67 @@ export component OutputSection inherits Rectangle {
             ToggleSwitch {
                 checked <=> Settings.output-follow-rate;
                 toggled(v) => { Settings.output-follow-rate-changed(v); }
+            }
+        }
+
+        if root.show-follow-rate && root.show-signal-path: SectionDivider {}
+
+        if root.show-signal-path: SettingRow {
+            icon: "graphic_eq";
+            label: root.signal-label;
+            description: root.verdict-text;
+            if root.can-reset: SectionButton {
+                label: @tr("Make Bit-Perfect");
+                icon: "";
+                primary: false;
+                clicked => { SignalPathUi.make-bit-perfect(); }
+            }
+        }
+
+        if root.show-signal-path && SignalPathUi.playing: VerticalLayout {
+            padding-bottom: Theme.pad-md;
+
+            StageRow {
+                grade: SignalPathUi.source-grade;
+                label: @tr("Source");
+                value: SignalPathUi.source-grade == 0 ? SignalPathUi.source-format
+                    : @tr("{}, rounded to fit 32-bit float", SignalPathUi.source-format);
+            }
+            StageRow {
+                grade: SignalPathUi.dsp-grade;
+                label: @tr("Effects");
+                value: root.effects-text;
+            }
+            StageRow {
+                grade: SignalPathUi.speed-grade;
+                label: @tr("Speed");
+                value: SignalPathUi.speed-grade == 0 ? @tr("Normal") : SignalPathUi.speed;
+            }
+            StageRow {
+                grade: SignalPathUi.volume-grade;
+                label: @tr("Volume");
+                value: SignalPathUi.muted ? @tr("Muted") : SignalPathUi.volume + "%";
+            }
+            StageRow {
+                grade: SignalPathUi.crossfade-grade;
+                label: @tr("Crossfade");
+                value: SignalPathUi.crossfade-grade == 0 ? @tr("Not fading") : @tr("Fading between tracks");
+            }
+            StageRow {
+                grade: SignalPathUi.rate-grade;
+                label: @tr("Sample Rate");
+                value: SignalPathUi.rate-grade == 0 ? SignalPathUi.source-rate
+                    : @tr("{} resampled to {}", SignalPathUi.source-rate, SignalPathUi.device-rate);
+            }
+            StageRow {
+                grade: SignalPathUi.channels-grade;
+                label: @tr("Channels");
+                value: SignalPathUi.channels-grade == 0 ? @tr("Unchanged") : @tr("Mixed down for the device");
+            }
+            StageRow {
+                grade: SignalPathUi.output-grade;
+                label: @tr("Device");
+                value: @tr("{}, shared: the system mixer may still convert it", root.device-text);
             }
         }
     }

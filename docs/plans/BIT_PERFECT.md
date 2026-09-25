@@ -2,7 +2,7 @@
 
 Working doc. Delete it when the feature ships. Tracks issue #66.
 
-Status: **Phase 1 done** (2026-09-24) · **Phase 2 done** (2026-09-25) · Phase 3 next · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
+Status: **Phase 1 done** (2026-09-24) · **Phase 2 done** (2026-09-25) · **Phase 3 done** (2026-09-25) · Phase 4 next · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
 
 ## What the user sees today
 
@@ -109,7 +109,7 @@ crates/melodia-playback/src/player/playback/output/
   mod.rs        AudioOutput: open / reopen / close. OutputRequest, OutputMode, Negotiated (moved up)
   device.rs     the cpal backend (shared, plus macOS exclusive via hog.rs). Ladder prefers the requested shape
   mixer.rs      + MixerPull::reshape, MixerPull::hold (resync silence)
-  voice.rs      + VoicePull::reshape. The control side's device shape becomes a shared cell
+  voice.rs      + VoicePull::reshape, Voice::playing (what the signal path reads off a deck)
   convert.rs    unchanged
   encode.rs     NEW: DeviceFormat + the ladder + the one f32 -> device-bytes conversion for owned backends
   claim.rs      NEW: ClaimError (typed fallback reasons, a local std::error::Error)
@@ -297,7 +297,7 @@ Each pinning test was confirmed to fail against a mutation of the code it covers
 a real device and have no unit test: the refused gapless stage, and the fallback to the previous
 request. The queue run above exercised the first.
 
-### Phase 3: The signal path panel and "Make bit-perfect"
+### Phase 3: The signal path panel and "Make bit-perfect" ✅ done
 
 1. **`signal_path::evaluate`** is pure. Its inputs:
    - `Negotiated`
@@ -325,6 +325,51 @@ request. The queue run above exercised the first.
 **Exit:** the panel is right across the toggle matrix: EQ, RG, speed, volume and mute, each
 on and off, over shared, exclusive and fallback.
 **Tests after the go:** a table-driven unit test over `evaluate`.
+
+**As built (2026-09-25), where it departs from the steps above:**
+- **The mode picker, `OutputMode`, `ClaimError` and the Fallback verdict moved to Phase 4**, their
+  first reader. With no exclusive backend the picker would have one live option and the verdict an
+  arm nothing reaches. So until Phase 4 the headline reads Converted whenever something plays, and
+  the stage rows carry the detail.
+- **`SourceFormat` is `{ bits: u8, float: bool }`, and `bits` is always known.** It comes from the
+  first decoded buffer's sample type, narrowed to the track's stated `bits_per_sample`. The
+  narrowing is not optional: Symphonia decodes every FLAC, 16-bit included, into 32-bit samples,
+  so without it every FLAC would read as losing bits. Carried on `decode::Opened` and returned by
+  a new required `AudioSource::format`; `PrebufferSource::new` takes the stream decoder's answer.
+- **The DSP stage reads `EqSource`'s own bypass** through a second required method,
+  `AudioSource::dsp_engaged`. An EQ that is on with nothing to do at this rate stays clean. The
+  fade is left out of it, because a crossfade is its own stage.
+- **The voice reports what it is playing.** `Voice::playing()` returns shape, format and
+  `dsp_engaged`, stored with the clock at takeover and once per render. A gapless handover
+  updates it without the engine having to know when the handover happened.
+- **One `watch` carries the whole `SignalPath`**, not a `Negotiated` watch beside it
+  (`AppState::signal_path_tx`). The playback monitor evaluates it on its 500 ms tick while
+  playing, with `send_if_modified`, and publishes `None` on Stop. A pause keeps the last path,
+  since nothing pulls the source to re-read it. `Negotiated` moved to `output/mod.rs` and gained
+  `PartialEq`.
+- **Make bit-perfect also turns on following the file's rate** where that does anything
+  (`library::playback::FOLLOW_RATE_SUPPORTED`, now the one home of the Windows answer). Everything
+  it resets is persisted in one `mutate_settings`.
+- UI: `globals/signal-path.slint` (`SignalPathUi`), eight stage rows under a verdict row in
+  `output-section.slint`, wired by `ui/settings/signal_path.rs`.
+
+**Result.** Manual toggle matrix over shared output (2026-09-25): each row followed its setting.
+A forwarded 44.1 / 48 / 88.2 / 96 kHz queue reopened at every boundary, with no warnings in the
+log. One limit shows in that run:
+- **The panel cannot see past PipeWire.** At 88.2 kHz the card ran at 96 kHz while `Negotiated`
+  reported the 88.2 kHz stream, so the Sample Rate row read clean. Only the Device row ("shared,
+  the system mixer may still convert it") and the Converted headline stay honest there. Exclusive
+  output removes the gap, since the stream is then the card.
+
+The tests landed are:
+- `file_decode_tests`: the format each fixture decodes to, including the new
+  `silence-24bit.flac` and `silence-32bit.wav`.
+- `equalizer_tests`: `dsp_engaged` against the bypass (EQ off, on and flat, an active band, a
+  band past Nyquist, ReplayGain untagged and tagged) and after a live change.
+- `voice_tests`: nothing is reported before a mount, and the report follows a gapless handover.
+- `signal_path_tests`: shared never reads Bit-perfect, and one row per stage boundary.
+
+Each was confirmed to fail against a mutation of the code it covers.
 
 ### Phase 4: Linux exclusive: ALSA `hw:`, ReserveDevice1, device picker
 
@@ -360,6 +405,11 @@ on and off, over shared, exclusive and fallback.
    It persists the id. A missing device falls back with the reason "not connected".
 6. Put in the module docs that the stream disappears from the sound server's mixer while
    exclusive, and that `PIPEWIRE_ALSA` has no effect here. Users will report both.
+7. **Carried from Phase 3:** `OutputMode` on `OutputRequest` and a persisted `mode` key, the
+   Shared / Exclusive picker in the Output card (exclusive greyed where no backend exists),
+   `ClaimError`, and the Fallback verdict with its reason. `SignalInputs` then takes the mode
+   rather than grading every output as shared, which is also the first time Bit-perfect and
+   Enhanced can read.
 
 **Exit:**
 - `/proc/asound/card*/pcm*p/sub*/hw_params` shows the file's rate and format.
@@ -443,7 +493,8 @@ mode off restores system audio. Unplugging recovers.
 
 ## Open questions
 
-- Does opening cpal's ALSA default at the file rate move the PipeWire graph? (Phase 2 entry check)
+- Can shared output learn the card's own rate under PipeWire (the node's `clock.rate`), so the
+  Sample Rate row stops reading clean when the graph resamples to a rate the card has?
 - Should a long pause give up the exclusive claim, so other apps get the card back?
 - How long does the session manager take to let go of a card after a ReserveDevice1 release?
 - Once cpal 0.19's extension traits ship (#1220), can they replace `wasapi.rs` or add a native

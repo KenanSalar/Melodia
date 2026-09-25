@@ -11,6 +11,7 @@
 //! output samples per half period, which is the ratio of the two rates and nothing else. The span
 //! that used to be the mechanism is gone; the property it protected is what this still asserts.
 
+use melodia_audio::player::source::audio::SourceFormat;
 use melodia_audio::player::source::prebuffer::{PrebufferSource, StreamShared};
 use melodia_playback::player::playback::decks::DECK_COUNT;
 use melodia_playback::player::playback::output::mixer;
@@ -50,7 +51,8 @@ const TOLERANCE: f64 = 0.05;
 /// reaching for the feed thread this test does not have.
 fn station(rate: u32, seconds: u32) -> PrebufferSource {
     let shared = StreamShared::new();
-    let (source, writer) = PrebufferSource::new(shared.clone(), shape(CHANNELS, rate));
+    let (source, writer) =
+        PrebufferSource::new(shared.clone(), shape(CHANNELS, rate), SourceFormat::F32);
 
     let total = usize::try_from(rate * seconds).unwrap_or(0);
     for index in 0..total {

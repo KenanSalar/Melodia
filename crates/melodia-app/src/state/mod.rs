@@ -20,6 +20,7 @@ use melodia_core::error::{AppError, AppResult};
 use melodia_core::utils::self_writes::SelfWrites;
 use melodia_engine::player::engine::backend::PlaybackEngine;
 use melodia_engine::player::engine::event_sink::{MediaControlsSync, PlayerEvent, PlayerSinks};
+use melodia_engine::player::engine::signal_path::SignalPath;
 use melodia_engine::player::engine::state::{
     PlayerStateHandle, PlayerViewModelLight, PositionTick, QueueViewModel, lock_state,
 };
@@ -59,6 +60,8 @@ pub struct AppState {
     pub audio_health: Arc<AudioStreamHealth>,
     pub sinks: Arc<PlayerSinks>,
     pub position_tx: watch::Sender<Option<PositionTick>>,
+    /// What the playing source goes through on its way to the device, `None` while stopped.
+    pub signal_path_tx: watch::Sender<Option<SignalPath>>,
     /// Bumped whenever the track library is mutated by a scan or watcher
     /// event. UI subscribers re-fetch the Tracks model on each tick.
     pub library_changed: Signal,
@@ -224,6 +227,7 @@ impl AppState {
         let (vm_tx, _) = watch::channel::<Option<PlayerViewModelLight>>(None);
         let (q_tx, _) = watch::channel::<Option<QueueViewModel>>(None);
         let (position_tx, _) = watch::channel::<Option<PositionTick>>(None);
+        let (signal_path_tx, _) = watch::channel::<Option<SignalPath>>(None);
         let (scan_progress_tx, _) = watch::channel::<Option<ScanProgressTick>>(None);
 
         let (mc_handle, mc_rx) = media_controls::init_media_controls();
@@ -270,6 +274,7 @@ impl AppState {
             audio_health,
             sinks,
             position_tx,
+            signal_path_tx,
             library_changed: Signal::new(),
             stats_changed: Signal::new(),
             locale_changed: Signal::new(),

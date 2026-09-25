@@ -579,3 +579,100 @@ fn seek_does_not_disturb_an_armed_fade() {
         assert!(approx(g, 0.5), "fade position must survive a seek, got {g}");
     }
 }
+
+// --- dsp_engaged: what the signal path reads -------------------------------
+
+/// Whether a mono source at `rate` reports itself engaged once it has started pulling: the bypass
+/// it reports is only settled by the first rebuild, which the first sample runs.
+fn engaged_after_first_sample(
+    eq: Arc<EqShared>,
+    rg: Arc<ReplayGainShared>,
+    baked: TrackReplayGain,
+    rate: u32,
+) -> bool {
+    let mut src =
+        EqSource::new(TestSource::new(ramp(64), 1, rate), eq, rg, baked, FadeShared::idle());
+    let _ = src.next();
+    src.dsp_engaged()
+}
+
+fn rg_on() -> Arc<ReplayGainShared> {
+    let rg = ReplayGainShared::new();
+    rg.set_enabled(true);
+    rg.set_mode(RgMode::Album);
+    rg
+}
+
+/// The report is the bypass itself rather than the settings behind it, so a setting that is on
+/// and has nothing to do reads as untouched. The two corners worth a row each are an EQ whose only
+/// band sits past Nyquist and a `ReplayGain` with no tags to apply.
+#[test]
+fn dsp_engaged_reports_the_bypass_rather_than_the_settings() {
+    let mut boosted = [0.0; NUM_BANDS];
+    boosted[0] = 6.0;
+    let mut past_nyquist = [0.0; NUM_BANDS];
+    past_nyquist[NUM_BANDS - 1] = 12.0;
+    let tagged = TrackReplayGain { album_gain: Some(-6.0), ..Default::default() };
+    let untagged = TrackReplayGain::default();
+
+    let cases = [
+        (
+            "eq and rg off",
+            EqShared::new(false, &boosted),
+            ReplayGainShared::new(),
+            untagged,
+            44_100,
+            false,
+        ),
+        (
+            "eq on and flat",
+            EqShared::new(true, &[0.0; NUM_BANDS]),
+            ReplayGainShared::new(),
+            untagged,
+            44_100,
+            false,
+        ),
+        (
+            "eq on with a band",
+            EqShared::new(true, &boosted),
+            ReplayGainShared::new(),
+            untagged,
+            44_100,
+            true,
+        ),
+        (
+            "eq band past nyquist",
+            EqShared::new(true, &past_nyquist),
+            ReplayGainShared::new(),
+            untagged,
+            8_000,
+            false,
+        ),
+        ("rg on, untagged", EqShared::new(false, &boosted), rg_on(), untagged, 44_100, false),
+        ("rg on, tagged", EqShared::new(false, &boosted), rg_on(), tagged, 44_100, true),
+    ];
+    for (what, eq, rg, baked, rate, expected) in cases {
+        assert_eq!(engaged_after_first_sample(eq, rg, baked, rate), expected, "{what}");
+    }
+}
+
+/// A live change reaches the report at the next rebuild, which is what lets the panel follow a
+/// toggle made while the track plays.
+#[test]
+fn dsp_engaged_follows_a_live_eq_change() {
+    let eq = EqShared::new(true, &[0.0; NUM_BANDS]);
+    let mut src = EqSource::new(
+        TestSource::new(ramp(64), 1, 44_100),
+        eq.clone(),
+        ReplayGainShared::new(),
+        TrackReplayGain::default(),
+        FadeShared::idle(),
+    );
+    let _ = src.next();
+    assert!(!src.dsp_engaged(), "a flat EQ must read as untouched");
+
+    eq.set_gain(0, 6.0);
+    let _ = src.next();
+
+    assert!(src.dsp_engaged(), "the band raised mid-track must engage the chain");
+}

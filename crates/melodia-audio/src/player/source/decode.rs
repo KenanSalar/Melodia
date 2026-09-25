@@ -21,6 +21,7 @@
 use std::sync::LazyLock;
 use std::time::Duration;
 
+use symphonia::core::audio::GenericAudioBufferRef;
 use symphonia::core::codecs::CodecParameters;
 use symphonia::core::codecs::audio::well_known::{CODEC_ID_PCM_ALAW, CODEC_ID_PCM_MULAW};
 use symphonia::core::codecs::audio::{
@@ -35,7 +36,7 @@ use symphonia::core::meta::MetadataOptions;
 use symphonia::core::units::{Duration as SymphoniaDuration, TimeBase};
 
 use super::aac_config;
-use super::audio::{ChannelCount, SampleRate, Shape};
+use super::audio::{ChannelCount, SampleRate, Shape, SourceFormat};
 
 /// Our own registry, rather than `symphonia::default::get_codecs`.
 ///
@@ -142,6 +143,7 @@ pub(super) struct Opened {
     pub decoder: Box<dyn AudioDecoder>,
     pub track: u32,
     pub cursor: Cursor,
+    pub source_format: SourceFormat,
     pub time_base: Option<TimeBase>,
     pub total_duration: Option<Duration>,
 }
@@ -181,16 +183,52 @@ pub(super) fn open(source: Box<dyn MediaSource>, hint: &Hint) -> Result<Opened, 
 
     let track = audio_track(&*format).ok_or(OpenError::NoAudio)?;
     let params = audio_params(track).ok_or(OpenError::NoCodec)?.clone();
+    let stated_bits = params.bits_per_sample;
     let track_id = track.id;
     let time_base = track.time_base;
     let total_duration = playing_time(&*format, track);
 
     let mut decoder = make_decoder(params).map_err(OpenError::Undecodable)?;
-    let cursor = Cursor::open(&mut *format, &mut *decoder, track_id)
+    let (cursor, decoded) = Cursor::open(&mut *format, &mut *decoder, track_id)
         .map_err(OpenError::Unreadable)?
         .ok_or(OpenError::Empty)?;
+    let source_format = narrowed_to_stated(decoded, stated_bits);
 
-    Ok(Opened { format, decoder, track: track_id, cursor, time_base, total_duration })
+    Ok(Opened {
+        format,
+        decoder,
+        track: track_id,
+        cursor,
+        source_format,
+        time_base,
+        total_duration,
+    })
+}
+
+/// The decoded format with its width taken down to what the track states it carries.
+///
+/// A decoder hands integer PCM over in whatever container it has a buffer type for, so a 24-bit
+/// file can arrive in 32-bit samples. Read at the container width it would count as losing its low
+/// bits on the way to `f32`, which it doesn't.
+fn narrowed_to_stated(decoded: SourceFormat, stated_bits: Option<u32>) -> SourceFormat {
+    let stated = stated_bits.and_then(|bits| u8::try_from(bits).ok());
+    match stated {
+        Some(bits) if !decoded.float && bits < decoded.bits => SourceFormat { bits, ..decoded },
+        _ => decoded,
+    }
+}
+
+/// The width and kind of sample a decoder produced, before the copy flattens it to `f32`.
+fn decoded_format(decoded: &GenericAudioBufferRef<'_>) -> SourceFormat {
+    let (bits, float) = match decoded {
+        GenericAudioBufferRef::U8(_) | GenericAudioBufferRef::S8(_) => (8, false),
+        GenericAudioBufferRef::U16(_) | GenericAudioBufferRef::S16(_) => (16, false),
+        GenericAudioBufferRef::U24(_) | GenericAudioBufferRef::S24(_) => (24, false),
+        GenericAudioBufferRef::U32(_) | GenericAudioBufferRef::S32(_) => (32, false),
+        GenericAudioBufferRef::F32(_) => (32, true),
+        GenericAudioBufferRef::F64(_) => (64, true),
+    };
+    SourceFormat { bits, float }
 }
 
 /// How long the track plays for.
@@ -244,16 +282,19 @@ impl Cursor {
     ///
     /// The first packet is decoded eagerly because the deck builds its converter from the channel
     /// count and sample rate the source reports at the append, and cannot rebuild it mid-source.
+    /// It is also the only place the decoder's own sample format can be read, so that comes back
+    /// beside the cursor.
     pub(super) fn open(
         format: &mut dyn FormatReader,
         decoder: &mut dyn AudioDecoder,
         track: u32,
-    ) -> Result<Option<Self>, SymphoniaError> {
+    ) -> Result<Option<(Self, SourceFormat)>, SymphoniaError> {
         let mut samples = Vec::new();
-        let Some(shape) = fill(format, decoder, track, &mut samples)? else {
+        let Some(packet) = fill(format, decoder, track, &mut samples)? else {
             return Ok(None);
         };
-        Ok(Some(Self { samples, next: 0, shape, ended: false }))
+        let cursor = Self { samples, next: 0, shape: packet.shape, ended: false };
+        Ok(Some((cursor, packet.format)))
     }
 
     pub(super) fn shape(&self) -> Shape {
@@ -282,14 +323,14 @@ impl Cursor {
             // A read that fails and a clean end are one thing from here: this runs on the audio
             // callback thread, where nothing may log and there is no channel back, so both reach
             // the caller as the only move it has.
-            let Ok(Some(shape)) = fill(format, decoder, track, &mut self.samples) else {
+            let Ok(Some(packet)) = fill(format, decoder, track, &mut self.samples) else {
                 self.ended = true;
                 return None;
             };
             // The deck's converter was built from the shape reported at the append, so a source
             // that changes one mid-track ends here rather than playing on at the wrong rate. A
             // mount doing it is a reconnect the feed thread then refuses.
-            if shape != self.shape {
+            if packet.shape != self.shape {
                 self.ended = true;
                 return None;
             }
@@ -321,7 +362,7 @@ fn fill(
     decoder: &mut dyn AudioDecoder,
     track: u32,
     samples: &mut Vec<f32>,
-) -> Result<Option<Shape>, SymphoniaError> {
+) -> Result<Option<Packet>, SymphoniaError> {
     loop {
         let Some(packet) = format.next_packet()? else {
             return Ok(None);
@@ -348,13 +389,20 @@ fn fill(
                             "channel count or sample rate out of range",
                         ));
                     };
-                    return Ok(Some(Shape { channels, rate }));
+                    let shape = Shape { channels, rate };
+                    return Ok(Some(Packet { shape, format: decoded_format(&decoded) }));
                 }
             }
             Err(SymphoniaError::DecodeError(_)) => {}
             Err(e) => return Err(e),
         }
     }
+}
+
+/// What [`fill`] decoded, as far as anything above it asks.
+struct Packet {
+    shape: Shape,
+    format: SourceFormat,
 }
 
 #[cfg(test)]

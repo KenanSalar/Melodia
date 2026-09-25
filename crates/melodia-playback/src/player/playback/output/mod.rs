@@ -18,10 +18,10 @@ pub mod voice;
 use std::sync::Arc;
 use std::time::Duration;
 
-use melodia_audio::player::source::audio::SampleRate;
+use melodia_audio::player::source::audio::{SampleRate, Shape};
 use melodia_core::error::{self, AppError};
 
-use self::device::{DeviceStream, Feed, Negotiated};
+use self::device::{DeviceStream, Feed};
 use self::mixer::Mixer;
 use super::stream_health::AudioStreamHealth;
 
@@ -37,6 +37,31 @@ const RESYNC_HOLD: Duration = Duration::from_millis(200);
 pub struct OutputRequest {
     /// The rate to try first, or `None` for the device's own config.
     pub rate: Option<SampleRate>,
+}
+
+/// What the device actually agreed to, beside what it was asked for.
+///
+/// Reported rather than assumed because every part of it can differ from the request, and because a
+/// bit-perfect mode is only checkable if the negotiated end of it is visible.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Negotiated {
+    /// What the host calls the device, or `None` where it would not say. After a reopen this is
+    /// the only thing telling a bug report which output the audio moved to.
+    pub device_name: Option<String>,
+    pub shape: Shape,
+    pub format: cpal::SampleFormat,
+    /// The period that was asked for, or `None` where the host was left to name its own.
+    ///
+    /// Kept beside the answer because it is the one of the two that says which pass of the ladder
+    /// won, which is the difference between a block this tree sized and one nobody did.
+    pub requested_period: Option<cpal::FrameCount>,
+    /// What the host says it will hand the callback at a time, or `None` where it cannot say.
+    ///
+    /// Asked rather than inferred: `StreamTrait::buffer_size` arrived in cpal 0.18, and before it
+    /// the only place the real block appeared was `data.len()` inside the callback. cpal calls it
+    /// advisory and the hosts that don't track one answer `UnsupportedOperation`, so this is where
+    /// a bug report reads the block back, not a bound anything sizes against.
+    pub period: Option<cpal::FrameCount>,
 }
 
 /// The open device and the voices feeding it.

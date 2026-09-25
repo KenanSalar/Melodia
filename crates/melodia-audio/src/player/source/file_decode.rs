@@ -26,8 +26,8 @@ use melodia_core::error::AppError;
 
 use super::aac_trim;
 use super::audio::{
-    AudioSource, ChannelCount, Sample, SampleRate, SeekError, frames_in, frames_to_duration,
-    interleaved,
+    AudioSource, ChannelCount, Sample, SampleRate, SeekError, SourceFormat, frames_in,
+    frames_to_duration, interleaved,
 };
 use super::decode::{self, Rounding};
 use super::mkv_trim;
@@ -161,6 +161,7 @@ pub struct FileDecoder {
     decoder: Box<dyn AudioDecoder>,
     track: u32,
     cursor: decode::Cursor,
+    source_format: SourceFormat,
     time_base: Option<TimeBase>,
     total_duration: Option<Duration>,
     /// The encoder padding this file states, for the seek that has to add its head back on.
@@ -187,15 +188,23 @@ impl FileDecoder {
             hint.with_extension(extension);
         }
 
-        let decode::Opened { format, decoder, track, cursor, time_base, total_duration } =
-            decode::open(Box::new(FileSource::new(file)), &hint)
-                .map_err(|e| AppError::Player(format!("{} {e}", path.display())))?;
+        let decode::Opened {
+            format,
+            decoder,
+            track,
+            cursor,
+            source_format,
+            time_base,
+            total_duration,
+        } = decode::open(Box::new(FileSource::new(file)), &hint)
+            .map_err(|e| AppError::Player(format!("{} {e}", path.display())))?;
 
         let mut decoded = Self {
             format,
             decoder,
             track,
             cursor,
+            source_format,
             time_base,
             total_duration,
             trim: None,
@@ -422,6 +431,14 @@ impl AudioSource for FileDecoder {
     #[inline]
     fn sample_rate(&self) -> SampleRate {
         self.cursor.shape().rate
+    }
+
+    fn format(&self) -> SourceFormat {
+        self.source_format
+    }
+
+    fn dsp_engaged(&self) -> bool {
+        false
     }
 
     #[inline]

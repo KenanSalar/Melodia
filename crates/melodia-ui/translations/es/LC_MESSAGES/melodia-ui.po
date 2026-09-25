@@ -2302,3 +2302,69 @@ msgstr "Reabre el dispositivo de audio a la frecuencia de cada pista para que el
 
 msgid "Off while the output matches each file's sample rate"
 msgstr "Desactivado mientras la salida sigue la frecuencia de muestreo de cada archivo"
+
+msgid "Signal Path"
+msgstr "Ruta de la señal"
+
+msgid "What reaches the audio device, and what changes it on the way. Bit-perfect means nothing does"
+msgstr "Lo que llega al dispositivo de audio y lo que lo cambia por el camino. Bit-perfect significa que nada lo cambia"
+
+msgid "Nothing is playing"
+msgstr "No se está reproduciendo nada"
+
+msgid "Bit-perfect: the device receives the decoder's samples untouched"
+msgstr "Bit-perfect: el dispositivo recibe intactas las muestras del decodificador"
+
+msgid "Enhanced: only effects you chose change the sound"
+msgstr "Procesado: solo los efectos que elegiste cambian el sonido"
+
+msgid "Converted: the sound is changed on its way to the device"
+msgstr "Convertido: el sonido cambia de camino al dispositivo"
+
+msgid "Make Bit-Perfect"
+msgstr "Hacerlo bit-perfect"
+
+msgid "Source"
+msgstr "Origen"
+
+msgid "{}, rounded to fit 32-bit float"
+msgstr "{}, redondeado a coma flotante de 32 bits"
+
+msgid "Effects"
+msgstr "Efectos"
+
+msgid "No effects"
+msgstr "Sin efectos"
+
+msgid "Equalizer and ReplayGain"
+msgstr "Ecualizador y ReplayGain"
+
+msgid "Normal"
+msgstr "Normal"
+
+msgid "Volume"
+msgstr "Volumen"
+
+msgid "Muted"
+msgstr "Silenciado"
+
+msgid "Not fading"
+msgstr "Sin fundido"
+
+msgid "Fading between tracks"
+msgstr "Fundido entre pistas"
+
+msgid "{} resampled to {}"
+msgstr "{} remuestreado a {}"
+
+msgid "Unchanged"
+msgstr "Sin cambios"
+
+msgid "Mixed down for the device"
+msgstr "Mezclado a menos canales para el dispositivo"
+
+msgid "Device"
+msgstr "Dispositivo"
+
+msgid "{}, shared: the system mixer may still convert it"
+msgstr "{}, compartido: el mezclador del sistema aún puede convertirlo"

@@ -10,6 +10,7 @@ use tokio_util::task::TaskTracker;
 use super::actions::emit_and_execute;
 use super::backend::{PlaybackCheck, PlaybackEngine};
 use super::event_sink::PlayerSinks;
+use super::signal_path::{SignalPath, Transport};
 use super::state::{
     PlayerAction, PlayerState, PlayerStateHandle, PositionTick, lock_state, with_state_emit,
 };
@@ -284,14 +285,22 @@ pub struct PlaybackMonitorContext {
     pub engine: Arc<PlaybackEngine>,
     pub sinks: Arc<PlayerSinks>,
     pub position_tx: watch::Sender<Option<PositionTick>>,
+    pub signal_path_tx: watch::Sender<Option<SignalPath>>,
     pub save: SnapshotSink,
 }
 
 /// Spawns a single background task that handles position polling,
 /// gapless transition detection, and end-of-stream detection.
 pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext) {
-    let PlaybackMonitorContext { shutdown_token, player_state, engine, sinks, position_tx, save } =
-        ctx;
+    let PlaybackMonitorContext {
+        shutdown_token,
+        player_state,
+        engine,
+        sinks,
+        position_tx,
+        signal_path_tx,
+        save,
+    } = ctx;
     tracker.spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_millis(POLL_INTERVAL_MS));
 
@@ -317,10 +326,15 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
             engine.collect_spent();
 
             // Quick check: skip tick when not playing (lock-free via atomic mirror)
-            let is_playing = player_state.status_atomic.load(std::sync::atomic::Ordering::Relaxed)
-                == PlaybackStatus::Playing as u8;
+            let status = player_state.status_atomic.load(std::sync::atomic::Ordering::Relaxed);
+            let is_playing = status == PlaybackStatus::Playing as u8;
 
             if !is_playing {
+                // A pause keeps the last path: nothing pulls the source, so it could not be
+                // re-read anyway.
+                if status == PlaybackStatus::Stopped as u8 {
+                    publish_signal_path(&signal_path_tx, None);
+                }
                 continue;
             }
 
@@ -380,10 +394,18 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                         crossfading: engine.is_crossfading(),
                         xf: engine.crossfade_settings(),
                     };
-                    let decided = {
+                    let crossfading = backend.crossfading;
+                    let (decided, transport) = {
                         let mut state = lock_state(&player_state);
-                        evaluate_playing_tick(&mut state, backend)
+                        let transport = Transport {
+                            volume: state.volume,
+                            muted: state.is_muted,
+                            speed: state.playback_speed,
+                            crossfading,
+                        };
+                        (evaluate_playing_tick(&mut state, backend), transport)
                     };
+                    publish_signal_path(&signal_path_tx, engine.signal_path(transport));
                     let Some(PlayingTick { tick, late_preload, crossfade: crossfade_now }) =
                         decided
                     else {
@@ -438,6 +460,17 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                 save(snapshot).await;
             }
         }
+    });
+}
+
+/// Publish `path` only when it differs, so the panel repaints on a change rather than per tick.
+fn publish_signal_path(tx: &watch::Sender<Option<SignalPath>>, path: Option<SignalPath>) {
+    tx.send_if_modified(|current| {
+        if *current == path {
+            return false;
+        }
+        *current = path;
+        true
     });
 }
 

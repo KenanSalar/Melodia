@@ -229,6 +229,7 @@ pub fn install_library_settings_and_friends(
     })?;
     ui::callbacks::wire_library_settings(app, state);
     ui::settings::playback_settings::install_playback_settings(app, state);
+    ui::settings::signal_path::install(app, state);
     ui::equalizer::install_equalizer(app, state);
     ui::replaygain::install_replaygain(app, state);
     ui::visualizer::install_visualizer(app, state);

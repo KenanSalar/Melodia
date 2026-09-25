@@ -6,9 +6,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use super::{Voice, VoicePull, pair};
+use super::{PlayingSource, Voice, VoicePull, pair};
 use crate::player::playback::tests::helpers::{TestSource, shape};
-use melodia_audio::player::source::audio::Shape;
+use melodia_audio::player::source::audio::{Shape, SourceFormat};
 
 const RATE: u32 = 44_100;
 
@@ -112,6 +112,40 @@ fn the_clock_re_anchors_when_a_staged_source_takes_over() {
         position < Duration::from_millis(10),
         "the successor's clock started at {position:?} rather than at its own beginning"
     );
+}
+
+/// Appending is not mounting: until the callback takes the source over there is nothing to report,
+/// and a rate of zero is what the clock pair says before that.
+#[test]
+fn a_voice_reports_nothing_playing_until_a_source_mounts() {
+    let (voice, mut pull) = pair(mono(RATE));
+    assert_eq!(voice.playing(), None, "an empty voice");
+
+    voice.append(silence(100, RATE));
+    assert_eq!(voice.playing(), None, "appended, not yet serviced");
+
+    pump(&mut pull, 10);
+    assert_eq!(voice.playing().map(|playing| playing.shape), Some(mono(RATE)));
+}
+
+/// A gapless successor takes the voice over inside the callback, with no control op the engine
+/// could hang a report on, so the voice has to answer for it. Rates, formats and processing all
+/// differ between the two so that any one of them left behind shows.
+#[test]
+fn the_report_follows_a_staged_source_when_it_takes_over() {
+    let (voice, mut pull) = pair(mono(RATE));
+    let cd = SourceFormat { bits: 16, float: false };
+    let hi_res = SourceFormat { bits: 24, float: false };
+    voice.append(silence(100, RATE).with_format(cd));
+    voice.append(silence(100, 96_000).with_format(hi_res).engaged());
+
+    pump(&mut pull, 50);
+    let first = Some(PlayingSource { shape: mono(RATE), format: cd, dsp_engaged: false });
+    assert_eq!(voice.playing(), first, "the first track");
+
+    pump(&mut pull, 60);
+    let second = Some(PlayingSource { shape: mono(96_000), format: hi_res, dsp_engaged: true });
+    assert_eq!(voice.playing(), second, "the successor");
 }
 
 /// Media time, whatever the speed. rodio counted output frames after its speed wrapper, so a

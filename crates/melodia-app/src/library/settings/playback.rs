@@ -2,11 +2,12 @@
 //! resume-on-startup). Runtime side effects are applied synchronously by
 //! the matching UI callbacks; these helpers only commit the disk write.
 
+use crate::library::playback::FOLLOW_RATE_SUPPORTED;
 use crate::services;
 use crate::state::AppState;
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
-use melodia_engine::player::engine::state::{MAX_SPEED, MIN_SPEED};
+use melodia_engine::player::engine::state::{MAX_SPEED, MAX_VOLUME, MIN_SPEED};
 
 /// Persist the user toggle for "Gapless Playback". The runtime effect
 /// (gating `preload_gapless` inside the 500 ms position monitor in
@@ -26,6 +27,21 @@ pub fn set_gapless_playback(state: &AppState, on: bool) -> Result<(), AppError> 
 pub fn set_output_follow_rate(state: &AppState, on: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(&state.paths, move |settings| {
         settings.output.output_follow_rate = on;
+    })
+}
+
+/// Persist what `library::playback::player_make_bit_perfect` just applied, in one write so a
+/// failure can't leave half of it on disk.
+pub fn reset_for_bit_perfect(state: &AppState) -> Result<(), AppError> {
+    services::settings::mutate_settings(&state.paths, |settings| {
+        settings.equalizer.eq_enabled = false;
+        settings.replaygain.rg_enabled = false;
+        settings.playback.playback_speed = 1.0;
+        settings.volume = MAX_VOLUME;
+        settings.playback.is_muted = false;
+        if FOLLOW_RATE_SUPPORTED {
+            settings.output.output_follow_rate = true;
+        }
     })
 }
 

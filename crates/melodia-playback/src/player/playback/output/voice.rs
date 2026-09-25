@@ -15,7 +15,9 @@
 
 use std::collections::VecDeque;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{
+    AtomicBool, AtomicU8, AtomicU16, AtomicU32, AtomicU64, AtomicUsize, Ordering,
+};
 use std::sync::mpsc::{Receiver, SyncSender, TryRecvError, sync_channel};
 use std::time::{Duration, Instant};
 
@@ -24,8 +26,18 @@ use parking_lot::Mutex;
 use super::super::dsp::AtomicF64;
 use super::convert::{Converter, Filled};
 use melodia_audio::player::source::audio::{
-    AudioSource, Sample, SampleRate, Shape, frames_in, frames_to_duration,
+    AudioSource, ChannelCount, Sample, SampleRate, Shape, SourceFormat, frames_in,
+    frames_to_duration,
 };
+
+/// What a voice is playing, as the signal path reads it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PlayingSource {
+    pub shape: Shape,
+    pub format: SourceFormat,
+    /// Whether anything between the decoder and the deck changed the samples.
+    pub dsp_engaged: bool,
+}
 
 /// How long a control op waits for the callback before giving up.
 ///
@@ -124,6 +136,13 @@ struct VoiceShared {
     /// behind it; the reverse pairing only ever mis-scales a count near zero.
     frames: AtomicU64,
     rate: AtomicU32,
+    /// The rest of what [`Voice::playing`] reports. The source's own three are written with the
+    /// clock at takeover, ahead of `rate`; `dsp_engaged` once per render. A read that straddles a
+    /// handover can pair two tracks' answers, which the next read puts right.
+    source_channels: AtomicU16,
+    source_bits: AtomicU8,
+    source_float: AtomicBool,
+    dsp_engaged: AtomicBool,
     /// Commands sent, and commands the callback has drained. A control op that must land before it
     /// returns waits for the second to reach the first.
     issued: AtomicU64,
@@ -278,6 +297,25 @@ impl Voice {
         frames_to_duration(self.shared.frames.load(Ordering::Relaxed), rate)
     }
 
+    /// What the playing source is and whether anything above the deck altered its samples, or
+    /// `None` while nothing has mounted.
+    pub fn playing(&self) -> Option<PlayingSource> {
+        if self.is_empty() {
+            return None;
+        }
+        let rate = SampleRate::new(self.shared.rate.load(Ordering::Acquire))?;
+        let channels = ChannelCount::new(self.shared.source_channels.load(Ordering::Relaxed))?;
+        let format = SourceFormat {
+            bits: self.shared.source_bits.load(Ordering::Relaxed),
+            float: self.shared.source_float.load(Ordering::Relaxed),
+        };
+        Some(PlayingSource {
+            shape: Shape { channels, rate },
+            format,
+            dsp_engaged: self.shared.dsp_engaged.load(Ordering::Relaxed),
+        })
+    }
+
     /// Whether the callback will see `command`.
     ///
     /// The bump lands *after* the send, so a ticket the callback can observe is one whose command
@@ -384,6 +422,9 @@ impl VoicePull {
                 *slot *= volume;
             }
         }
+        if let Some(loaded) = &self.current {
+            self.shared.dsp_engaged.store(loaded.source.dsp_engaged(), Ordering::Relaxed);
+        }
         written
     }
 
@@ -438,8 +479,13 @@ impl VoicePull {
     /// Count first, rate last — the pair's ordering is argued on [`VoiceShared::frames`]. The
     /// ticket is its own `Release`, the control side comparing it and nothing else.
     fn start_at(&mut self, loaded: Loaded, frames: u64) {
+        let source = &loaded.source;
+        let format = source.format();
+        self.shared.source_channels.store(source.channels().get(), Ordering::Relaxed);
+        self.shared.source_bits.store(format.bits, Ordering::Relaxed);
+        self.shared.source_float.store(format.float, Ordering::Relaxed);
         self.shared.frames.store(frames, Ordering::Relaxed);
-        self.shared.rate.store(loaded.source.sample_rate().get(), Ordering::Release);
+        self.shared.rate.store(source.sample_rate().get(), Ordering::Release);
         self.shared.mounted.fetch_add(1, Ordering::Release);
         self.current = Some(loaded);
     }
@@ -521,6 +567,10 @@ pub fn pair(device: Shape) -> (Voice, VoicePull) {
         sources: AtomicUsize::new(0),
         frames: AtomicU64::new(0),
         rate: AtomicU32::new(0),
+        source_channels: AtomicU16::new(0),
+        source_bits: AtomicU8::new(0),
+        source_float: AtomicBool::new(false),
+        dsp_engaged: AtomicBool::new(false),
         issued: AtomicU64::new(0),
         serviced: AtomicU64::new(0),
         mounted: AtomicU64::new(0),

@@ -12,10 +12,11 @@ use std::sync::atomic::Ordering;
 use melodia_audio::player::source::audio::SampleRate;
 use melodia_core::error::{AppError, describe};
 use melodia_playback::player::playback::decks::Decks;
-use melodia_playback::player::playback::output::device::Negotiated;
+use melodia_playback::player::playback::output::Negotiated;
 use melodia_playback::player::playback::output::{AudioOutput, OutputRequest};
 
 use super::PlaybackEngine;
+use crate::player::engine::signal_path::{self, SignalInputs, SignalPath, Transport};
 
 impl PlaybackEngine {
     /// Reopen the output on whatever the default device is now, asking for what the last stream
@@ -40,6 +41,20 @@ impl PlaybackEngine {
     /// What the device agreed to, or `None` while no stream is open.
     pub fn negotiated(&self) -> Option<Negotiated> {
         self.output.lock().as_ref().and_then(AudioOutput::negotiated)
+    }
+
+    /// The path the playing source takes to the device, or `None` while nothing plays or no
+    /// stream is open. Takes the decks lock and then the output lock, never both at once.
+    pub fn signal_path(&self, transport: Transport) -> Option<SignalPath> {
+        let source = self.lock_decks().active().voice.playing()?;
+        let negotiated = self.negotiated()?;
+        Some(signal_path::evaluate(SignalInputs {
+            negotiated,
+            source,
+            eq_on: self.eq.enabled(),
+            rg_on: self.rg.enabled(),
+            transport,
+        }))
     }
 
     /// Open the output at each track's own rate from the next track on, or go back to the

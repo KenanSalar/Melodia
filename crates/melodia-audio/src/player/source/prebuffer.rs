@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering}
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use super::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError, Shape};
+use super::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError, Shape, SourceFormat};
 
 /// How much decoded audio the ring holds before the feed thread has to wait for room.
 ///
@@ -299,6 +299,7 @@ pub struct PrebufferSource {
     ring: Arc<SampleRing>,
     shared: Arc<StreamShared>,
     shape: Shape,
+    format: SourceFormat,
     /// Which sample of the current frame comes next. The starvation decision is taken once per
     /// frame at phase 0 and held for the whole frame.
     frame_phase: u16,
@@ -309,14 +310,25 @@ pub struct PrebufferSource {
 
 impl PrebufferSource {
     /// The source and the writer that feeds it, plus the shared cell both report through.
-    pub fn new(shared: Arc<StreamShared>, shape: Shape) -> (Self, RingWriter) {
+    pub fn new(
+        shared: Arc<StreamShared>,
+        shape: Shape,
+        format: SourceFormat,
+    ) -> (Self, RingWriter) {
         let ring = Arc::new(SampleRing::for_format(shape.channels, shape.rate));
         // One source per cell, so a second `set` cannot happen; ignoring it keeps the first ring,
         // which is the one the cell's titles were queued against.
         let _ = shared.ring.set(ring.clone());
         let writer = RingWriter { ring: ring.clone(), shared: shared.clone() };
-        let source =
-            Self { ring, shared, shape, frame_phase: 0, frame_starved: false, starved: false };
+        let source = Self {
+            ring,
+            shared,
+            shape,
+            format,
+            frame_phase: 0,
+            frame_starved: false,
+            starved: false,
+        };
         (source, writer)
     }
 
@@ -376,6 +388,15 @@ impl AudioSource for PrebufferSource {
     #[inline]
     fn sample_rate(&self) -> SampleRate {
         self.shape.rate
+    }
+
+    fn format(&self) -> SourceFormat {
+        self.format
+    }
+
+    /// Starvation silence is not a change to the samples: nothing the station sent is altered.
+    fn dsp_engaged(&self) -> bool {
+        false
     }
 
     #[inline]
