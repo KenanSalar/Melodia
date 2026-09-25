@@ -2290,3 +2290,15 @@ msgstr "ID d'enregistrement MusicBrainz"
 
 msgid "{} can't be saved to {} files"
 msgstr "{} ne peut pas être enregistré dans les fichiers {}"
+
+msgid "Output"
+msgstr "Sortie"
+
+msgid "Match the File's Sample Rate"
+msgstr "Suivre la fréquence d'échantillonnage du fichier"
+
+msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate. Turns crossfade off"
+msgstr "Rouvre le périphérique audio à la fréquence de chaque piste, pour que le système ne la rééchantillonne pas. Le système doit autoriser cette fréquence. Désactive le fondu enchaîné"
+
+msgid "Off while the output matches each file's sample rate"
+msgstr "Désactivé tant que la sortie suit la fréquence d'échantillonnage de chaque fichier"

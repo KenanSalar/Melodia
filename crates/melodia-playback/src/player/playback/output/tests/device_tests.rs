@@ -1,12 +1,14 @@
 //! Tests for what each rung of the device negotiation asks for.
 //!
-//! Opening a stream needs a card, so the ladder's walk and the attempt loop are out of reach here.
-//! What each rung *asks for* is not: the block sizes and the rate list are pure functions, and each
+//! Opening a stream needs a card, so the attempt loop is out of reach here. What each rung *asks
+//! for*, and the order the ladder tries them in, are not: the block sizes, the rate list and the
+//! ranking are pure functions, and each
 //! carries an argument — the halved maximum, the ordering-free clamp, the staging floor that
 //! deliberately does not follow the request down, the strict test that stops a standard rate
 //! duplicating an endpoint — that nothing else in the tree can check.
 
-use super::{period_frames, rates_for, staging_samples, target_frames};
+use super::{Rungs, ladder, period_frames, rates_for, staging_samples, target_frames};
+use melodia_audio::player::source::audio::SampleRate;
 
 const RATE: u32 = 48_000;
 
@@ -118,4 +120,53 @@ fn a_standard_rate_only_earns_a_rung_strictly_inside_the_range() {
     assert_eq!(rates_for(44_100, 48_000).collect::<Vec<_>>(), [48_000, 44_100]);
     assert_eq!(rates_for(48_000, 48_000).collect::<Vec<_>>(), [48_000]);
     assert_eq!(rates_for(96_000, 192_000).collect::<Vec<_>>(), [192_000, 96_000]);
+}
+
+fn supported(min: u32, max: u32) -> cpal::SupportedStreamConfigRange {
+    cpal::SupportedStreamConfigRange::new(
+        2,
+        min,
+        max,
+        cpal::SupportedBufferSize::Unknown,
+        cpal::SampleFormat::F32,
+    )
+}
+
+fn rates(configs: &[cpal::SupportedStreamConfig]) -> Vec<u32> {
+    configs.iter().map(cpal::SupportedStreamConfig::sample_rate).collect()
+}
+
+/// A device that only runs 48 kHz, one that spans the CD rate, and one that tops out at it.
+fn three_ranges() -> Vec<cpal::SupportedStreamConfigRange> {
+    vec![supported(48_000, 48_000), supported(44_100, 192_000), supported(8_000, 44_100)]
+}
+
+/// Following the file means *not* taking the device's default, so every range that can run the
+/// requested rate is tried at exactly that rate before anything else, in the order given.
+#[test]
+fn a_requested_rate_leads_with_every_range_that_can_run_it() {
+    let rate = SampleRate::new(cpal::SAMPLE_RATE_CD);
+    let Rungs { preferred, .. } = ladder(three_ranges(), rate);
+    assert_eq!(rates(&preferred), [cpal::SAMPLE_RATE_CD, cpal::SAMPLE_RATE_CD]);
+}
+
+#[test]
+fn a_rate_no_range_can_run_prefers_nothing() {
+    let Rungs { preferred, .. } = ladder(three_ranges(), SampleRate::new(4_000));
+    assert!(preferred.is_empty(), "{:?}", rates(&preferred));
+}
+
+/// The request only puts rungs in front. What follows is the walk a boot with no request takes, so
+/// a refused rate still lands where the output would have opened anyway.
+#[test]
+fn a_requested_rate_leaves_the_fallback_walk_as_it_was() {
+    let unrequested = ladder(three_ranges(), None);
+    let requested = ladder(three_ranges(), SampleRate::new(cpal::SAMPLE_RATE_CD));
+
+    assert!(unrequested.preferred.is_empty());
+    assert_eq!(rates(&requested.fallback), rates(&unrequested.fallback));
+    assert_eq!(
+        rates(&unrequested.fallback),
+        [48_000, 192_000, cpal::SAMPLE_RATE_48K, 44_100, 44_100, 8_000]
+    );
 }

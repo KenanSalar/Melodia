@@ -3,7 +3,7 @@
 //!
 //! - [`appearance`]: theme / variant / accent, dynamic colour style,
 //!   match-unfocused, corner radius.
-//! - [`playback`]: gapless, play-button animation, resume on startup.
+//! - [`playback`]: gapless, play-button animation, resume on startup, following the file's rate.
 //! - [`crossfade`]: crossfade on/off, duration, manual-change + same-album
 //!   exceptions, fade-on-pause.
 //! - [`view`]: locale, overflow buttons, and per-view UI state — column
@@ -63,7 +63,8 @@ pub use lyrics::{set_lyrics_enabled, set_lyrics_online_enabled, set_lyrics_roman
 pub use motion::set_skip_startup_animation;
 pub use onboarding::set_onboarding_seen;
 pub use playback::{
-    set_gapless_playback, set_play_button_animation, set_playback_speed, set_resume_on_startup,
+    set_gapless_playback, set_output_follow_rate, set_play_button_animation, set_playback_speed,
+    set_resume_on_startup,
 };
 pub use radio::{
     set_radio_enabled, set_radio_hide_segmented, set_radio_scrobble, set_radio_send_clicks,

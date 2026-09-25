@@ -456,6 +456,11 @@ pub fn player_set_crossfade_fade_on_pause(ctx: &PlaybackContext, on: bool) {
     ctx.engine.set_crossfade_fade_on_pause(on);
 }
 
+/// Open the output at each track's own sample rate, from the next track on.
+pub fn player_set_follow_rate(ctx: &PlaybackContext, on: bool) {
+    ctx.engine.set_follow_rate(on);
+}
+
 // The visualizer has no setter here on purpose: its tap is armed by the
 // Now-Playing view's visibility rather than by a persisted setting, so
 // `melodia-views`' `ui/visualizer/` calls `VisualizerShared::set_enabled` on the cell it

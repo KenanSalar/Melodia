@@ -2296,3 +2296,15 @@ msgstr "MusicBrainz-Aufnahme-ID"
 
 msgid "{} can't be saved to {} files"
 msgstr "{} kann nicht in {}-Dateien gespeichert werden"
+
+msgid "Output"
+msgstr "Ausgabe"
+
+msgid "Match the File's Sample Rate"
+msgstr "An die Abtastrate der Datei anpassen"
+
+msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate. Turns crossfade off"
+msgstr "Öffnet das Audiogerät für jedes Lied mit dessen eigener Rate neu, damit das System es nicht umrechnet. Das System muss diese Rate zulassen. Schaltet Überblenden aus"
+
+msgid "Off while the output matches each file's sample rate"
+msgstr "Aus, solange die Ausgabe der Abtastrate jeder Datei folgt"

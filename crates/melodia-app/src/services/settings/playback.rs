@@ -111,6 +111,17 @@ impl Default for CrossfadeFlags {
     }
 }
 
+/// How the output device is opened.
+///
+/// `output_follow_rate` reopens the output at each track's own sample rate so the system mixer
+/// has no reason to resample it. Off by default: it costs a short silence at every rate
+/// boundary, and crossfade with it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OutputFlags {
+    pub output_follow_rate: bool,
+}
+
 /// Audio-visualizer preferences — the one feature here that ships **on**, being
 /// a presentation flourish confined to the Now-Playing view rather than
 /// something that alters what you hear.

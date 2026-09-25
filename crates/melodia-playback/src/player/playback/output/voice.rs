@@ -401,7 +401,7 @@ impl VoicePull {
     /// per callback — so an op lands at the head of the next *step*, part way through a block. That
     /// is the cheap direction: a waiting control thread is released a step early instead of a block
     /// late, and one step of skew between the voices is what `LOCKSTEP_FRAMES` already bounds.
-    fn service(&mut self) {
+    pub(super) fn service(&mut self) {
         let seen = self.shared.issued.load(Ordering::Acquire);
         // Nothing issued since the last drain, which is every step of every block but the ones
         // carrying a transport op. Answering that from the counter keeps the channel, and the

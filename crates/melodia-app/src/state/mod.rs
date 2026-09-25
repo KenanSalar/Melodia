@@ -348,9 +348,9 @@ impl AppState {
 }
 
 /// Seed the playback engine's lock-free cells (graphic EQ, `ReplayGain`,
-/// crossfade) from persisted settings before playback starts, so the first
-/// track is already processed when any of them is enabled. All three live on
-/// the engine (not `PlayerState`). Ordering is deliberate: values first,
+/// crossfade, following the file's rate) from persisted settings before
+/// playback starts, so the first track is already processed when any of them
+/// is enabled. All of them live on the engine (not `PlayerState`). Ordering is deliberate: values first,
 /// `enabled` last, so the enable's generation bump publishes a fully-seeded
 /// state to the audio thread.
 fn hydrate_audio_dsp(engine: &PlaybackEngine, settings: &settings::SettingsData) {
@@ -378,6 +378,7 @@ fn hydrate_audio_dsp(engine: &PlaybackEngine, settings: &settings::SettingsData)
     engine.set_crossfade_skip_same_album(settings.crossfade.crossfade_skip_same_album);
     engine.set_crossfade_fade_on_pause(settings.crossfade.crossfade_fade_on_pause);
     engine.set_crossfade_enabled(settings.crossfade.crossfade_enabled);
+    engine.set_follow_rate(settings.output.output_follow_rate);
 
     // The visualizer is deliberately absent: its tap is armed by the
     // Now-Playing view being on screen, not by a persisted flag, so it must

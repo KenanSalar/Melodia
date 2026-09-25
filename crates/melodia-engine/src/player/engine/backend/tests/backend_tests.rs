@@ -122,3 +122,50 @@ async fn a_play_for_the_wrong_session_refuses_without_taking_the_stage() -> Resu
     assert!(watching.upgrade().is_some(), "the refusal took the stage down with it");
     Ok(())
 }
+
+// --- Following the file's rate ---
+//
+// A fade needs the outgoing track playing across the transition, and a rate change reopens the
+// output under it. So while the output follows the rate, every fade decision reads crossfade as
+// off, automatic and manual alike, and hands the user's own choice back when following stops.
+
+fn crossfade_all_on(engine: &PlaybackEngine) {
+    engine.set_crossfade_enabled(true);
+    engine.set_crossfade_manual(true);
+    engine.set_crossfade_fade_on_pause(true);
+}
+
+#[tokio::test]
+async fn following_the_rate_turns_every_track_change_fade_off() -> Result<(), AppError> {
+    let engine = engine_without_a_card()?;
+    crossfade_all_on(&engine);
+    engine.set_follow_rate(true);
+
+    let settings = engine.crossfade_settings();
+    assert!(!settings.enabled, "an automatic crossfade could cross a reopen");
+    assert!(!settings.manual, "a manual crossfade could cross a reopen");
+    Ok(())
+}
+
+/// A pause changes no track, so nothing reopens under its fade.
+#[tokio::test]
+async fn following_the_rate_keeps_the_fade_on_pause() -> Result<(), AppError> {
+    let engine = engine_without_a_card()?;
+    crossfade_all_on(&engine);
+    engine.set_follow_rate(true);
+
+    assert!(engine.crossfade_settings().fade_on_pause);
+    Ok(())
+}
+
+#[tokio::test]
+async fn crossfade_comes_back_when_following_stops() -> Result<(), AppError> {
+    let engine = engine_without_a_card()?;
+    crossfade_all_on(&engine);
+    engine.set_follow_rate(true);
+    engine.set_follow_rate(false);
+
+    let settings = engine.crossfade_settings();
+    assert!(settings.enabled && settings.manual, "the user's own setting was overwritten");
+    Ok(())
+}

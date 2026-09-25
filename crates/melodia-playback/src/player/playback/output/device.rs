@@ -5,7 +5,8 @@
 //! at all — which is what rodio's `open_stream` did and why this tree always called
 //! `open_sink_or_fallback` instead. What follows is that behaviour, owned: the default first, then
 //! every config the device reports, in cpal's own preference order, taking the first that opens and
-//! reporting the *original* failure if none do.
+//! reporting the *original* failure if none do. Where a rate is asked for, the configs that can run
+//! it go ahead of the default.
 //!
 //! **The block size is one of the things a rung varies, not a constant across them.** rodio asked
 //! for a fixed block only on its first attempt: its retry rungs rebuilt the config from scratch and
@@ -151,7 +152,8 @@ impl Feed {
     }
 }
 
-/// Open a stream on `target`, feeding it from `feed` at whichever config takes.
+/// Open a stream on `target`, feeding it from `feed` at whichever config takes, `rate` first where
+/// one is asked for.
 ///
 /// Each rung reshapes the puller to its own shape before building, because only opening the stream
 /// says whether that shape works.
@@ -159,23 +161,28 @@ impl Feed {
 /// # Errors
 ///
 /// [`AppError::Player`] when nothing opens.
-pub fn open(target: &Target, feed: &Feed) -> Result<DeviceStream, AppError> {
+pub fn open(
+    target: &Target,
+    feed: &Feed,
+    rate: Option<SampleRate>,
+) -> Result<DeviceStream, AppError> {
     let Target { device, default } = target;
 
     // Listed once for both passes, and **not** with `?`: a device that cannot enumerate can still
     // open the config it just named as its default, which is the likeliest rung of all and the one
     // rodio reached first — it only lists inside the fallback its default attempt failed into. A
     // `?` here spends a listing failure on the whole open without trying that config once.
-    let rungs = ladder(device).unwrap_or_else(|e| {
+    let supported = supported_configs(device).unwrap_or_else(|e| {
         log::warn!("Falling back to the default output config alone: {e}");
         Vec::new()
     });
+    let Rungs { preferred, fallback } = ladder(supported, rate);
 
     let mut first = None;
     for buffer in [Buffer::Target, Buffer::HostChoice] {
-        // The device's own config leads each pass: it is the likeliest to open, and on the second
-        // pass it has not been tried at that block size at all.
-        for candidate in std::iter::once(default).chain(&rungs) {
+        // The device's own config leads each pass unless a rate was asked for: it is the likeliest
+        // to open, and on the second pass it has not been tried at that block size at all.
+        for candidate in preferred.iter().chain(std::iter::once(default)).chain(&fallback) {
             match attempt(device, candidate, buffer, feed) {
                 Ok(opened) => return Ok(opened),
                 Err(e) => {
@@ -189,25 +196,44 @@ pub fn open(target: &Target, feed: &Feed) -> Result<DeviceStream, AppError> {
     Err(first.unwrap_or_else(|| AppError::Player("The output device offered no config".to_owned())))
 }
 
-/// Every config the device reports, best first, each at its top rate, then the two standard rates
-/// where those are in range, then its floor. cpal's own ordering, which is what rodio walked.
-fn ladder(device: &cpal::Device) -> Result<Vec<cpal::SupportedStreamConfig>, AppError> {
+/// Every config the device reports, best first by cpal's own ordering, which is what rodio walked.
+fn supported_configs(
+    device: &cpal::Device,
+) -> Result<Vec<cpal::SupportedStreamConfigRange>, AppError> {
     let mut supported: Vec<_> = device
         .supported_output_configs()
         .map_err(|e| AppError::Player(format!("Failed to list the output device's configs: {e}")))?
         .collect();
     supported.sort_by(|a, b| b.cmp_default_heuristics(a));
+    Ok(supported)
+}
 
-    Ok(supported
+/// The configs tried beside the device's own, split around it.
+struct Rungs {
+    /// Every range that can run the requested rate, at exactly that rate. Tried ahead of the
+    /// device's default, since the default is precisely what following the file means not taking.
+    preferred: Vec<cpal::SupportedStreamConfig>,
+    /// Each range at its top rate, then the two standard rates where those are in range, then its
+    /// floor.
+    fallback: Vec<cpal::SupportedStreamConfig>,
+}
+
+/// Rank `supported`, already in preference order, into [`Rungs`] for `rate`.
+///
+/// `try_` rather than `with_sample_rate`, whose out-of-range arm is an `expect` that would take the
+/// boot with it: a range that cannot run a rate answers `None` and drops out.
+fn ladder(supported: Vec<cpal::SupportedStreamConfigRange>, rate: Option<SampleRate>) -> Rungs {
+    let preferred = rate.map_or_else(Vec::new, |rate| {
+        supported.iter().filter_map(|range| range.try_with_sample_rate(rate.get())).collect()
+    });
+    let fallback = supported
         .into_iter()
         .flat_map(|range| {
             let (min, max) = (range.min_sample_rate(), range.max_sample_rate());
-            // `try_` rather than `with_sample_rate`, whose out-of-range arm is an `expect` that
-            // would take the boot with it. Unreachable by construction below is still one
-            // argument further from the code than a rate the range simply answers `None` to.
             rates_for(min, max).filter_map(move |rate| range.try_with_sample_rate(rate))
         })
-        .collect())
+        .collect();
+    Rungs { preferred, fallback }
 }
 
 /// The rates one reported range is tried at: its top, the two standard rates, then its floor.

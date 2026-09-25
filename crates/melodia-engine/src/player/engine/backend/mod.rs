@@ -6,9 +6,11 @@
 //! the transport claims from each carry an argument about one of the others, over the decks lock,
 //! [`PlaybackEngine::deck_epoch`] or the generation a station is opened under, and those read as
 //! arguments only while they sit next to each other. What moved out races nothing: the lock-free
-//! DSP setters ([`controls`]) and the trait a test mocks ([`player_backend`]).
+//! DSP setters ([`controls`]), the trait a test mocks ([`player_backend`]), and the device under
+//! the decks ([`output`]), which a transport op here calls into with the decks lock already held.
 
 mod controls;
+mod output;
 mod player_backend;
 
 pub use player_backend::PlayerBackend;
@@ -30,7 +32,6 @@ use melodia_playback::player::playback::crossfade::{self, CrossfadeShared};
 use melodia_playback::player::playback::decks::{Deck, Decks, DeferredOp, lock_decks};
 use melodia_playback::player::playback::equalizer::{self, EqShared, EqSource};
 use melodia_playback::player::playback::output::AudioOutput;
-use melodia_playback::player::playback::output::device::Negotiated;
 use melodia_playback::player::playback::output::mixer::Mixer;
 use melodia_playback::player::playback::replaygain::{ReplayGainShared, TrackReplayGain};
 use melodia_playback::player::playback::visualizer::{VisualizerShared, VisualizerTap};
@@ -105,6 +106,12 @@ pub struct PlaybackEngine {
     // `gapless_pending` is one: the deferred clear of a faded stop has to drop this alongside the
     // deck contents it removes.
     live_stream: Arc<Mutex<Option<Arc<StreamShared>>>>,
+    // Open the output at each track's own rate. Read only at a track boundary, never by the audio
+    // thread.
+    follow_rate: AtomicBool,
+    // The last path `preload_gapless` refused for needing a reopen. The monitor asks again every
+    // tick until the track ends, and each ask would otherwise decode the file just to refuse it.
+    gapless_refused: Mutex<Option<String>>,
     // Only ever schedules the deferred half of a faded pause / stop.
     runtime: tokio::runtime::Handle,
 }
@@ -128,6 +135,8 @@ impl PlaybackEngine {
             viz: VisualizerShared::new(false),
             staged_stream: Mutex::new(None),
             live_stream: Arc::new(Mutex::new(None)),
+            follow_rate: AtomicBool::new(false),
+            gapless_refused: Mutex::new(None),
             runtime,
         })
     }
@@ -144,30 +153,6 @@ impl PlaybackEngine {
         let engine = Self::new(output.mixer(), runtime)?;
         *engine.output.lock() = Some(output);
         Ok(engine)
-    }
-
-    /// Reopen the output on whatever the default device is now, carrying on from where the decks
-    /// are.
-    ///
-    /// **The decks lock is held across the whole reopen**, so a transport op queues behind it
-    /// instead of sending a command to a stream that isn't there and waiting out
-    /// `output::voice::SERVICE_TIMEOUT` for an answer. Blocking: it opens a device.
-    ///
-    /// # Errors
-    ///
-    /// [`AppError::Player`] when there is no output to reopen, or the device refuses to open.
-    pub fn reopen_output(&self) -> Result<Negotiated, AppError> {
-        let _decks = self.lock_decks();
-        let mut output = self.output.lock();
-        let output = output
-            .as_mut()
-            .ok_or_else(|| AppError::Player("There is no audio output to reopen".to_owned()))?;
-        output.reopen()
-    }
-
-    /// What the device agreed to, or `None` while no stream is open.
-    pub fn negotiated(&self) -> Option<Negotiated> {
-        self.output.lock().as_ref().and_then(AudioOutput::negotiated)
     }
 
     /// Invalidate any deferred pause/stop *and* any in-flight gapless preload,
@@ -252,7 +237,7 @@ impl PlaybackEngine {
     /// staging, so whichever commits second yields.
     fn manual_fade_ms(&self, start_position_ms: Option<u64>) -> u64 {
         crossfade::manual_fade_ms(
-            self.xf.snapshot(),
+            self.crossfade_settings(),
             start_position_ms.is_some(),
             self.active_deck_busy(),
             self.is_gapless_preloaded(),
@@ -298,6 +283,7 @@ impl PlaybackEngine {
         self.bump_epoch();
         self.clear_live_stream();
         let mut decks = self.lock_decks();
+        self.ensure_output_for(&decks, decoded.sample_rate());
         // Backstop for the gapless race: `preload_gapless` sets the flag under
         // this same lock, so a preload that landed during the decode is visible
         // here. Downgrading to a hard cut is always safe — it clears both decks,
@@ -386,6 +372,7 @@ impl PlaybackEngine {
         *self.live_stream.lock() = Some(shared);
         self.bump_epoch();
         let decks = self.lock_decks();
+        self.ensure_output_for(&decks, source.sample_rate());
         // A live mount has no timeline to resume on, so its clock starts where the connection did.
         decks.cut_to(volume, Self::STREAM_SPEED, Duration::ZERO, |deck| {
             self.build_source(source, TrackReplayGain::default(), deck)
@@ -676,6 +663,10 @@ impl PlaybackEngine {
         // deck's ramp cell — possibly one armed to fade out and end.
         let epoch = self.deck_epoch.load(Ordering::Acquire);
 
+        if self.gapless_refused.lock().as_deref() == Some(path) {
+            return;
+        }
+
         // Decode off the deck lock, as in `play_media` — a preload fires right
         // when a stall in position publication would be most visible.
         let decoded = match FileDecoder::open(Path::new(path)) {
@@ -686,6 +677,14 @@ impl PlaybackEngine {
                 return;
             }
         };
+
+        // A track the output has to reopen for can't be staged behind one still playing: left
+        // unstaged, it ends in `EndOfStream` and starts through `play_media`, which reopens.
+        if !self.plays_without_reopen(decoded.sample_rate()) {
+            log::debug!("Not staging {path} gapless: the output reopens for its rate");
+            *self.gapless_refused.lock() = Some(path.to_owned());
+            return;
+        }
 
         // Re-check and stage under one lock. `Deck::stage` takes the builder
         // rather than a source, for the reason the other two appends do.

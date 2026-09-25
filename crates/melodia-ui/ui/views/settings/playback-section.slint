@@ -51,6 +51,7 @@ export component PlaybackSection inherits Rectangle {
     property <string> resume-desc: @tr("Automatically resume the last track from where you left off when the app starts");
     property <string> crossfade-label: @tr("Crossfade");
     property <string> crossfade-desc: @tr("Overlap the end of one track with the start of the next");
+    property <string> crossfade-off-desc: @tr("Off while the output matches each file's sample rate");
     property <string> xf-duration-label: @tr("Crossfade duration");
     property <string> xf-duration-desc: @tr("How long the two tracks overlap");
     property <string> xf-album-label: @tr("Except on the same album");
@@ -85,8 +86,10 @@ export component PlaybackSection inherits Rectangle {
     // An `if` rather than `visible`, which would still claim the layout slot.
     property <bool> show-viz-style: root.show-visualizer && Visualizer.enabled;
 
-    // Same reason as the style row above.
-    property <bool> show-crossfade-details: root.show-crossfade && Settings.crossfade-enabled;
+    // Same reason as the style row above. Following the rate turns crossfade off in the engine,
+    // so its details go with it.
+    property <bool> show-crossfade-details: root.show-crossfade && Settings.crossfade-enabled
+        && !Settings.output-follow-rate;
 
     out property <bool> has-matches:
         show-gapless || show-anim || show-resume || show-crossfade || show-visualizer;
@@ -113,7 +116,8 @@ export component PlaybackSection inherits Rectangle {
         if root.show-crossfade: SettingRow {
             icon: "swap_horiz";
             label: root.crossfade-label;
-            description: root.crossfade-desc;
+            description: Settings.output-follow-rate ? root.crossfade-off-desc : root.crossfade-desc;
+            disabled: Settings.output-follow-rate;
             ToggleSwitch {
                 checked <=> Settings.crossfade-enabled;
                 toggled(v) => { Settings.crossfade-enabled-changed(v); }

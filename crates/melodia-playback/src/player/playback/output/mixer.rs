@@ -54,6 +54,8 @@ pub struct MixerPull {
     /// One voice's contribution before it is summed. Sized for a single [`LOCKSTEP_FRAMES`] step,
     /// which is the longest slice a voice is ever handed, so the audio thread never grows it.
     scratch: Vec<Sample>,
+    /// Device frames still to be written as silence before any voice plays. See [`Self::hold`].
+    held: usize,
 }
 
 impl MixerPull {
@@ -77,6 +79,15 @@ impl MixerPull {
         let out = &mut out[..whole];
 
         for step in out.chunks_mut(LOCKSTEP_FRAMES * width) {
+            if self.held > 0 {
+                // Serviced but not rendered: a clear issued behind a reopen still has to land, and
+                // no source may advance through audio nobody hears.
+                for voice in &mut self.voices {
+                    voice.service();
+                }
+                self.held = self.held.saturating_sub(step.len() / width);
+                continue;
+            }
             let mut written = false;
             for voice in &mut self.voices {
                 if written {
@@ -104,6 +115,15 @@ impl MixerPull {
         }
         self.scratch.resize(LOCKSTEP_FRAMES * usize::from(device.channels.get()), 0.0);
     }
+
+    /// Write `frames` of silence before any voice plays again.
+    ///
+    /// A DAC mutes while its clock relocks to a new rate, so whatever plays first after a rate
+    /// change is lost; held back, it is the silence that gets lost instead. Rounded up to whole
+    /// [`LOCKSTEP_FRAMES`] steps.
+    pub fn hold(&mut self, frames: usize) {
+        self.held = frames;
+    }
 }
 
 /// Build a mixer and its puller, with `voices` many brought to `device`.
@@ -118,6 +138,7 @@ pub fn pair(voices: usize, device: Shape) -> (Mixer, MixerPull) {
             voices: pulls.into_boxed_slice(),
             device,
             scratch: vec![0.0; LOCKSTEP_FRAMES * width],
+            held: 0,
         },
     )
 }

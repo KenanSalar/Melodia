@@ -2298,3 +2298,15 @@ msgstr "MusicBrainz Kayıt Kimliği"
 
 msgid "{} can't be saved to {} files"
 msgstr "{} {} dosyalarına kaydedilemiyor"
+
+msgid "Output"
+msgstr "Çıkış"
+
+msgid "Match the File's Sample Rate"
+msgstr "Dosyanın Örnekleme Hızına Uy"
+
+msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate. Turns crossfade off"
+msgstr "Ses aygıtını her parçanın kendi hızında yeniden açar, böylece sistem yeniden örneklemez. Sistemin bu hıza izin vermesi gerekir. Çapraz geçişi kapatır"
+
+msgid "Off while the output matches each file's sample rate"
+msgstr "Çıkış her dosyanın örnekleme hızını izlerken kapalı"

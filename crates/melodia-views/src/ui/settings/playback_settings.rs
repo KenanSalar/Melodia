@@ -50,6 +50,9 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
         let g = ui.global::<Settings>();
         g.set_crossfade_min_secs(crossfade::crossfade_ms_to_secs(crossfade::MIN_CROSSFADE_MS));
         g.set_crossfade_max_secs(crossfade::crossfade_ms_to_secs(crossfade::MAX_CROSSFADE_MS));
+        // Windows shared mode converts whatever it is handed to the mix format, so a stream
+        // opened at the file's rate changes nothing there.
+        g.set_follow_rate_supported(!cfg!(target_os = "windows"));
     }
 
     if let Ok(s) = settings::read_settings(&state.paths) {
@@ -65,6 +68,8 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
         g.set_crossfade_skip_same_album(s.crossfade.crossfade_skip_same_album);
         g.set_crossfade_manual(s.crossfade.crossfade_manual);
         g.set_crossfade_fade_on_pause(s.crossfade.crossfade_fade_on_pause);
+
+        g.set_output_follow_rate(s.output.output_follow_rate);
     }
 
     let state_clone = state.clone();
@@ -98,6 +103,13 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
             library::settings::set_resume_on_startup(s, on)
         });
     });
+
+    ui.global::<Settings>().on_output_follow_rate_changed(toggle_binding(
+        state,
+        "persist output_follow_rate",
+        library::playback::player_set_follow_rate,
+        library::settings::set_output_follow_rate,
+    ));
 
     install_crossfade_callbacks(ui, state);
 }

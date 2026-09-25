@@ -2,7 +2,7 @@
 
 Working doc. Delete it when the feature ships. Tracks issue #66.
 
-Status: **Phase 1 done** (2026-09-24) · Phase 2 next · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
+Status: **Phase 1 done** (2026-09-24) · **Phase 2 built, awaiting manual test** · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
 
 ## What the user sees today
 
@@ -245,6 +245,32 @@ and the release RSS reading were not run.
 
 **Exit:** a 44.1 / 48 / 96 kHz sequence reopens at each boundary. A same-rate album stays
 gapless. On macOS, Audio MIDI Setup follows the file. On Linux, the entry check's answer holds.
+
+**As built (2026-09-24), where it departs from the steps above:**
+- **`SourceFormat` moved to Phase 3**, its first reader. Nothing here reads bit depth.
+- **Only the rate is followed.** `OutputRequest { rate }` keeps the device's channel count, so a
+  mono or 5.1 file never hands the OS a remix. `mode` and `device` join it in Phases 3 and 4.
+- **`OutputFlags` is `output_follow_rate` alone**, and the resync is `output::RESYNC_HOLD`
+  until Phase 7's knob. The hold services voice commands while it plays silence. Otherwise the
+  `clear` that `cut_to` issues right after the reopen would wait out `SERVICE_TIMEOUT`.
+- **Crossfade is masked in `PlaybackEngine::crossfade_settings`**, not by a new term in
+  `crossfade_eligible`. That covers the manual fade too, which can't cross a reopen either.
+- The reopen-to-previous-request fallback landed in `AudioOutput::reopen`, and the device-loss
+  path now reopens the current request rather than the default.
+- The toggle acts from the next track, in both directions.
+- Engine half in `backend/output.rs`. The Settings card is `output-section.slint`, hidden on
+  Windows.
+- **Entry check, answered (2026-09-25): yes, where PipeWire allows the rate.** By default
+  `clock.allowed-rates = [ 48000 ]` and nothing moves. With
+  `pw-metadata -n settings 0 clock.allowed-rates "[ 44100 48000 88200 96000 ]"`, opening cpal's
+  ALSA default at the file's rate moves the graph: 44.1 → 96 → 48 kHz each showed in `pw-top`
+  and in the card's `hw_params`. Two limits hold:
+  - **A rate the card lacks gets the nearest one**, resampled by PipeWire: 88.2 kHz ran the
+    hardware at 96 kHz. Phase 3's panel can't see that from `Negotiated`, which reports the
+    PipeWire stream, not the card.
+  - **Another app's running stream pins the graph.** Melodia's reopen drops its own stream
+    first, so it is only ever other apps that hold it. An `aplay` at 44.1 kHz stayed resampled
+    while Melodia's always-on stream ran.
 
 ### Phase 3: The signal path panel and "Make bit-perfect"
 

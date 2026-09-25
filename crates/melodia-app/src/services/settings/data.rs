@@ -9,7 +9,8 @@ use super::about::{DiagnosticsFlags, OnboardingFlags, SupportFlags, UpdateFlags}
 use super::interface::{BackdropFlags, LayoutFlags, MotionFlags, TrayFlags, WindowFlags};
 use super::library::LibraryFlags;
 use super::playback::{
-    CrossfadeFlags, EqualizerFlags, PlaybackFlags, QueueFlags, ReplayGainFlags, VisualizerFlags,
+    CrossfadeFlags, EqualizerFlags, OutputFlags, PlaybackFlags, QueueFlags, ReplayGainFlags,
+    VisualizerFlags,
 };
 use super::services::{LyricsFlags, RadioFlags};
 use melodia_core::entities::integrations::{DiscordFlags, ScrobbleFlags};
@@ -144,6 +145,8 @@ pub struct SettingsData {
     #[serde(flatten)]
     pub crossfade: CrossfadeFlags,
     #[serde(flatten)]
+    pub output: OutputFlags,
+    #[serde(flatten)]
     pub visualizer: VisualizerFlags,
     #[serde(flatten)]
     pub queue: QueueFlags,
@@ -211,6 +214,7 @@ impl Default for SettingsData {
             equalizer: EqualizerFlags::default(),
             replaygain: ReplayGainFlags::default(),
             crossfade: CrossfadeFlags::default(),
+            output: OutputFlags::default(),
             visualizer: VisualizerFlags::default(),
             queue: QueueFlags::default(),
             window: WindowFlags::first_launch(desktop),

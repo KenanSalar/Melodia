@@ -105,6 +105,13 @@ export global Settings {
     in-out property <bool> crossfade-fade-on-pause: false;
     callback crossfade-fade-on-pause-changed(bool);
 
+    // Applied to the engine synchronously, acted on at the next track. Crossfade is off while
+    // this is on, since a fade can't cross the reopen a rate change needs. The row is hidden
+    // where following the rate changes nothing, which Rust decides per platform.
+    in-out property <bool> output-follow-rate: false;
+    callback output-follow-rate-changed(bool);
+    in property <bool> follow-rate-supported;
+
     // Rust owns every property here — the `ScrobbleService` status-watch subscriber is the single
     // writer — and the toggles route their events back to persist and refresh the shadow. Connect
     // is opened inline from the section markup rather than through a callback, dodging Slint's

@@ -21,6 +21,14 @@ pub fn set_gapless_playback(state: &AppState, on: bool) -> Result<(), AppError> 
     })
 }
 
+/// Persist "Match the File's Sample Rate". The engine already holds the new value through
+/// `library::playback::player_set_follow_rate`, and acts on it at the next track.
+pub fn set_output_follow_rate(state: &AppState, on: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(&state.paths, move |settings| {
+        settings.output.output_follow_rate = on;
+    })
+}
+
 /// Persist the user's "Play Button Animation" pick (None / Equalizer).
 /// The on-disk value stays a string token so future variants can be
 /// added without a migration; anything outside the known set (including
