@@ -271,6 +271,12 @@ gapless. On macOS, Audio MIDI Setup follows the file. On Linux, the entry check'
   - **Another app's running stream pins the graph.** Melodia's reopen drops its own stream
     first, so it is only ever other apps that hold it. An `aplay` at 44.1 kHz stayed resampled
     while Melodia's always-on stream ran.
+  - **The pin outlives the app that set it.** `PipeWire` picks a rate only when a stream starts on
+    an idle graph, and Melodia's stream never idles, so the card stayed at 48 kHz after the
+    browser holding it closed. So while following, every fresh track start reopens, same rate
+    included. That costs no resync silence, because the hold fires only on a rate change.
+    Gapless transitions don't reopen, so an album started under the pin stays resampled until
+    its next non-gapless start.
 
 ### Phase 3: The signal path panel and "Make bit-perfect"
 

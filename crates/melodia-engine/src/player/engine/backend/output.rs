@@ -66,18 +66,31 @@ impl PlaybackEngine {
             .is_none_or(|output| output.request() == self.wanted_request(rate))
     }
 
-    /// Reopen the output for a source at `rate` if it is not already asking for it.
+    /// Reopen the output for a track starting fresh at `rate`.
+    ///
+    /// **While following, this reopens even at the rate already asked for.** `PipeWire` picks the
+    /// card's rate only when a stream starts on an idle graph, and ours never idles, so a rate
+    /// another app held the card at when ours opened would stick after that app left. A same-rate
+    /// reopen writes no resync silence, so a track start is the cheap place to take the card back.
+    /// A gapless transition doesn't come through here and keeps its rate as it is.
     ///
     /// Takes the decks guard as proof it is held: this runs inside a transport op, between its
     /// decode and its append. A failure is logged and playback carries on over whatever
     /// `AudioOutput::reopen` fell back to.
-    pub(super) fn ensure_output_for(&self, _decks: &MutexGuard<'_, Decks>, rate: SampleRate) {
+    pub(super) fn reopen_for_track(&self, _decks: &MutexGuard<'_, Decks>, rate: SampleRate) {
         let wanted = self.wanted_request(rate);
         let mut output = self.output.lock();
-        let Some(output) = output.as_mut().filter(|output| output.request() != wanted) else {
+        let Some(output) = output.as_mut() else {
             return;
         };
+        if output.request() == wanted && !self.follows_rate() {
+            return;
+        }
+        let previous_rate = output.negotiated().map(|negotiated| negotiated.shape.rate);
         match output.reopen(wanted) {
+            Ok(negotiated) if previous_rate == Some(negotiated.shape.rate) => {
+                log::debug!("Output reopened at {} Hz", negotiated.shape.rate);
+            }
             Ok(negotiated) => {
                 log::info!("Output reopened for {wanted:?}: {} Hz", negotiated.shape.rate);
             }
