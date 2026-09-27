@@ -111,3 +111,7 @@ fn to_integer(sample: Sample, bits: u8) -> i32 {
     let scale = f64::from(1_u32 << (bits - 1));
     (f64::from(sample) * scale).round().clamp(-scale, scale - 1.0) as i32
 }
+
+#[cfg(test)]
+#[path = "tests/encode_tests.rs"]
+mod tests;

@@ -4,6 +4,8 @@
 use std::num::NonZero;
 
 use melodia_audio::player::source::audio::{Shape, SourceFormat};
+use melodia_playback::player::playback::output::claim::FallbackReason;
+use melodia_playback::player::playback::output::encode::DeviceFormat;
 use melodia_playback::player::playback::output::voice::PlayingSource;
 use melodia_playback::player::playback::output::{Negotiated, OutputFormat};
 
@@ -139,5 +141,48 @@ fn each_stage_grades_the_input_that_moves_it() {
         let mut inputs = clean_inputs();
         change(&mut inputs);
         assert_eq!(evaluate(inputs).stages, expected, "{what}");
+    }
+}
+
+/// [`clean_inputs`] on an exclusive claim in the source's own 16-bit format.
+fn exclusive_inputs() -> SignalInputs {
+    let mut inputs = clean_inputs();
+    inputs.negotiated.format = OutputFormat::Exclusive(DeviceFormat::S16);
+    inputs
+}
+
+/// What a row names, the one input it moves, and the headline that should come out.
+type VerdictCase = (&'static str, fn(&mut SignalInputs), Verdict);
+
+/// The headline over an exclusive claim, which is the only output that can earn the claim at all.
+#[test]
+fn an_exclusive_claim_reads_the_worst_stage_and_a_fallback_reads_first() {
+    let cases: [VerdictCase; 6] = [
+        ("nothing in the way", |_| {}, Verdict::BitPerfect),
+        ("only the user's choice", |i| i.transport.volume = 99, Verdict::Enhanced),
+        ("a device at another rate", |i| i.negotiated.shape = shape(2, 48_000), Verdict::Converted),
+        ("a format too narrow for the source", |i| i.source.format.bits = 24, Verdict::Converted),
+        (
+            "refused, with nothing else in the way",
+            |i| {
+                i.negotiated.format = OutputFormat::Shared(cpal::SampleFormat::F32);
+                i.negotiated.fallback = Some(FallbackReason::Busy);
+            },
+            Verdict::Fallback,
+        ),
+        (
+            "refused, over the user's own choice",
+            |i| {
+                i.negotiated.fallback = Some(FallbackReason::RateRefused);
+                i.transport.volume = 99;
+            },
+            Verdict::Fallback,
+        ),
+    ];
+
+    for (what, change, expected) in cases {
+        let mut inputs = exclusive_inputs();
+        change(&mut inputs);
+        assert_eq!(evaluate(inputs).verdict, expected, "{what}");
     }
 }

@@ -1,11 +1,17 @@
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use tokio::sync::watch;
 
+use crate::player::engine::actions::execute_actions;
 use crate::player::engine::backend::PlayerBackend;
 use crate::player::engine::event_sink::{MediaControlsSync, PlayerSinks};
-use crate::player::engine::state::{PlayerAction, PlayerStateHandle, PlayerViewModelLight};
-use crate::player::engine::types::PlaybackStatus;
+use crate::player::engine::fixtures::test_track;
+use crate::player::engine::state::{
+    PlayerAction, PlayerStateHandle, PlayerViewModelLight, lock_state, play_track_inner,
+    with_state_emit,
+};
+use crate::player::engine::types::{PlaybackStatus, RepeatMode};
 use melodia_core::error::AppError;
 use melodia_playback::player::playback::replaygain::TrackReplayGain;
 
@@ -553,5 +559,76 @@ async fn execute_play_stream_failure_clears_the_station() -> Result<(), AppError
     // The failure path is `build_station_failed_actions`, not `enqueue_auto_skip`: there is no
     // next station to fall through to, and reaching into the queue would be a change of source.
     assert!(mock.inner().play_media_calls.is_empty());
+    Ok(())
+}
+
+/// Queues `paths` under `mode` and returns the actions that start the first of them.
+fn start_queue(fx: &ActionsFixture, paths: &[&str], mode: RepeatMode) -> Vec<PlayerAction> {
+    let tracks = paths
+        .iter()
+        .zip(1..)
+        .map(|(path, id)| {
+            let mut track = (*test_track("t", None, None)).clone();
+            track.id = id;
+            (*path).clone_into(&mut track.file_path);
+            Arc::new(track)
+        })
+        .collect();
+    with_state_emit(&fx.player_state, &fx.sinks, |s| {
+        s.queue.add_tracks(tracks);
+        s.queue.set_repeat_mode(mode);
+        match s.queue.skip_to_index(0).cloned() {
+            Some(first) => play_track_inner(s, first, None),
+            None => Vec::new(),
+        }
+    })
+}
+
+/// A repeating queue wraps on a skip, so with nothing playable in it the skip chain has no end of
+/// its own. It held the lock every transport control waits on, so Pause did nothing and the log
+/// filled until the app was killed.
+#[test]
+fn a_repeating_queue_with_nothing_playable_stops_after_one_lap() -> Result<(), AppError> {
+    let fx = fixture()?;
+    let actions = start_queue(
+        &fx,
+        &["/nonexistent/a.flac", "/nonexistent/b.flac", "/nonexistent/c.flac"],
+        RepeatMode::All,
+    );
+
+    let (done, finished) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mock = MockBackend::new();
+        execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
+        let status = lock_state(&fx.player_state).status;
+        let _ = done.send((status, mock.inner().play_media_calls.len()));
+    });
+    let outcome = finished.recv_timeout(Duration::from_secs(5));
+
+    assert!(
+        matches!(outcome, Ok((PlaybackStatus::Stopped, 0))),
+        "expected a stop with nothing started, got {outcome:?}"
+    );
+    Ok(())
+}
+
+/// The bound is a lap, not a count of failures: missing tracks ahead of a playable one are
+/// skipped past rather than giving up on it.
+#[test]
+fn a_playable_track_behind_missing_ones_still_plays() -> Result<(), AppError> {
+    let fx = fixture()?;
+    let playable = fx.track_path.clone();
+    let actions = start_queue(
+        &fx,
+        &["/nonexistent/a.flac", "/nonexistent/b.flac", &playable],
+        RepeatMode::One,
+    );
+    let mock = MockBackend::new();
+
+    execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
+
+    let played: Vec<String> =
+        mock.inner().play_media_calls.iter().map(|call| call.0.clone()).collect();
+    assert_eq!(played, [playable]);
     Ok(())
 }

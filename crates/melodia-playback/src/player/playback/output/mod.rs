@@ -42,9 +42,10 @@ use super::stream_health::AudioStreamHealth;
 
 /// Silence written after a reopen lands on a new rate, before any voice plays.
 ///
-/// A DAC mutes while its clock relocks, which would clip the head of the track that asked for the
-/// rate. A guess until exclusive output meets real hardware; too short clips, too long is a gap
-/// at every rate boundary.
+/// A DAC that mutes while its clock relocks would otherwise clip the head of the track that asked
+/// for the rate. Not every one does, so this is sized for the ones that do: the silence falls only
+/// at a rate boundary, which is never gapless anyway, while too little clips on the DACs it exists
+/// for.
 const RESYNC_HOLD: Duration = Duration::from_millis(200);
 
 /// Whether the output goes through the system mixer or takes the device for itself.

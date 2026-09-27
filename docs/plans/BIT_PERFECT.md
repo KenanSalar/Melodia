@@ -2,7 +2,7 @@
 
 Working doc. Delete it when the feature ships. Tracks issue #66.
 
-Status: **Phase 1 done** (2026-09-24) · **Phase 2 done** (2026-09-25) · **Phase 3 done** (2026-09-25) · **Phase 4 built, awaiting the manual test** (2026-09-25) · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
+Status: **Phase 1 done** (2026-09-24) · **Phase 2 done** (2026-09-25) · **Phase 3 done** (2026-09-25) · **Phase 4 done** (2026-09-27) · Phase 5 next · macOS moved to #113 · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
 
 ## What the user sees today
 
@@ -62,16 +62,12 @@ Checked against the tree at `46ad594a` and against cpal 0.18.2:
   is parked until 0.19's backend-extension traits land (#1220). The PipeWire host exists behind a
   feature flag, but only master sets `node.rate` (#1341, unreleased). So Melodia owns its
   exclusive backends. They sit behind one seam, so a later cpal can replace them one at a time.
-- **cpal's CoreAudio host already switches the device's nominal rate and physical format** to
-  whatever config the stream is built with. On macOS, "match the file rate" is nearly free, and
-  exclusive comes down to hog mode around a cpal stream. The old draft's own IOProc is not needed.
 - **The old spine ("rebuild the decks against a new mixer") is replaced by reshaping in place.**
   See Phase 1. The decks, their fade cells, a staged gapless source and the position all survive
   a reopen, because only the stream is replaced.
 - **Wrapper crates keep the new `unsafe` count at zero.** `alsa` 0.11 is safe. The `wasapi`
-  crate wraps COM. `coreaudio-rs` 0.14.2 (already in the lock through cpal) has safe
-  `toggle_hog_mode` and `get_hogging_pid` helpers. `objc2-core-audio` and a raw `windows`
-  backend would each add dozens of sites against `unsafe_code = "deny"`.
+  crate wraps COM. A raw `windows` backend would add dozens of sites against
+  `unsafe_code = "deny"`.
 - **No ring buffer.** A backend's writer thread owns `MixerPull` and calls `fill` directly. The
   old draft's per-sample ring-drain critique is moot.
 - **Packaging is unaffected.** `libasound` is already linked through cpal.
@@ -82,7 +78,7 @@ Surveyed: the sibling checkouts under `~/Development`, plus current docs and cha
 - Exclusive claims: ALSA `hw:` with resampling off. WASAPI exclusive, **event-driven**,
   `buffer == period`, integer PCM tried before float (many drivers refuse float in exclusive),
   `IsFormatSupported == S_OK` exactly, a fresh client on `BUFFER_SIZE_NOT_ALIGNED`, MMCSS on
-  the writer thread. CoreAudio hog mode with a read-back guard, because a set is a toggle.
+  the writer thread.
 - **The reopen is decided before the track plays**, from the decoder's format. Gapless holds
   within a format, and the gap falls at a format boundary. The weaker design notices the
   mismatch after the track is already audible and rebuilds the whole session.
@@ -107,7 +103,7 @@ Surveyed: the sibling checkouts under `~/Development`, plus current docs and cha
 ```
 crates/melodia-playback/src/player/playback/output/
   mod.rs        AudioOutput: open / reopen / close. OutputRequest, OutputMode, Negotiated (moved up)
-  device.rs     the cpal backend (shared, plus macOS exclusive via hog.rs). Ladder prefers the requested shape
+  device.rs     the cpal backend (shared). Ladder prefers the requested shape
   mixer.rs      + MixerPull::reshape, MixerPull::hold (resync silence)
   voice.rs      + VoicePull::reshape, Voice::playing (what the signal path reads off a deck)
   convert.rs    unchanged
@@ -116,7 +112,6 @@ crates/melodia-playback/src/player/playback/output/
   alsa.rs       NEW  #[cfg(target_os = "linux")]
   reserve.rs    NEW  #[cfg(target_os = "linux")]   ReserveDevice1 over zbus::blocking
   wasapi.rs     NEW  #[cfg(target_os = "windows")]
-  hog.rs        NEW  #[cfg(target_os = "macos")]   hog mode + device-id lookup via coreaudio-rs
 crates/melodia-engine/src/player/engine/
   signal_path.rs NEW: pure evaluate(inputs) -> SignalPath { stages, verdict }
 ```
@@ -140,7 +135,7 @@ Ownership rules:
 
 ## Phases
 
-Each phase leaves the tree shippable. Phases 4 to 6 are independent: the seam falls back to
+Each phase leaves the tree shippable. Phases 4 and 5 are independent: the seam falls back to
 shared wherever a backend doesn't exist. **Per phase: implement → static gates (fmt, clippy
 `--workspace`) → Kenan tests by hand → then tests and docs** (memory: manual test gates tests
 and docs).
@@ -244,7 +239,7 @@ and the release RSS reading were not run.
    panel reports "Converted by system mixer". Record the answer here.
 
 **Exit:** a 44.1 / 48 / 96 kHz sequence reopens at each boundary. A same-rate album stays
-gapless. On macOS, Audio MIDI Setup follows the file. On Linux, the entry check's answer holds.
+gapless. On Linux, the entry check's answer holds.
 
 **As built (2026-09-24), where it departs from the steps above:**
 - **`SourceFormat` moved to Phase 3**, its first reader. Nothing here reads bit depth.
@@ -371,7 +366,7 @@ The tests landed are:
 
 Each was confirmed to fail against a mutation of the code it covers.
 
-### Phase 4: Linux exclusive: ALSA `hw:`, ReserveDevice1, device picker
+### Phase 4: Linux exclusive: ALSA `hw:`, ReserveDevice1, device picker ✅ done
 
 1. **`encode.rs`** is plain Rust with no `cfg`.
    - `DeviceFormat { S16, S24Packed /*S24_3LE*/, S24Low /*S24_LE*/, S32, F32 }`.
@@ -445,12 +440,60 @@ today. It is also MPL-2.0. Its other path, a bare `SCHED_FIFO` call, needs `RLIM
   call.
 - Alsa is pinned at `0.11.0`, the version cpal resolves; `0.12` would be a second copy.
 
-**Tests after the go:**
-- `encode` round-trip units for every rung, including sign and full-scale saturation.
-- `crates/melodia/tests/bit_perfect.rs`: 16-bit and 24-bit WAV fixtures (generated with
-  ffmpeg into `tests/assets/`, with `.gitattributes` binary lines) go through
-  `FileDecoder` → the full chain → `mixer::pair` → `encode`. Assert the result equals the
-  file's PCM, and that enabling EQ breaks the equality.
+**Found in the manual test (2026-09-25 to 2026-09-27), all fixed:**
+- **A hand-back strands the card in the session manager.** Taking a card and giving it back
+  within milliseconds (every reopen, and every claim refused after the take) races the session
+  manager's rebuild of the card. It either gave up on the card, which vanished from the system,
+  or left it under a numbered node name. Desktop renames and the saved default output are keyed
+  on that name, so both were lost until the session manager restarted. Three changes:
+  - A reopen on the same card carries the reservation over (`alsa::Claim`).
+  - A name taken from a holder goes back only once the holder has asked for it, plus a short
+    grace so the refusal reaches it first (`reserve::Asked`).
+  - The first open after a take retries while the card is busy (`alsa::BUSY_WAIT`): the
+    session manager answers a release before it has closed the card.
+- **zbus reports a held name as `Err(NameTaken)`**, not as `RequestNameReply::Exists`, so the
+  first claim never asked the holder at all.
+- **rtkit has no `Properties.GetAll`**, which zbus's default property cache calls, so every
+  real-time request failed. Both proxies are built uncached.
+- **A repeating queue with nothing playable skipped forever**, holding `exec_lock`, so no
+  transport control could land. Not exclusive-specific, but found here: one start now skips at
+  most a lap of the queue, then stops with a toast (`engine/actions.rs`).
+- **The resync hold stays at 200 ms.** Neither test card mutes on a rate change (a beep train
+  at 0 to 600 ms played whole at 0 ms of hold, on both). The hold is for the DACs that do, and it
+  only falls at a rate boundary, which is never gapless.
+
+**Result.** Manual and scripted tests on 2026-09-27 against an onboard ALC897 and a USB PCM2902,
+reading `/proc/asound`, the reservation owner, `wpctl` and the session manager's log at info:
+- `hw_params` shows the file's rate and format: S16 and S32 at 44.1 to 192 kHz, mono as one
+  channel. Rates a card lacks fall back with the reason, as do 24-bit files on the 16-bit card.
+- Rate changes on a held card reopen it without the session manager seeing anything, a
+  same-format album stays gapless, and pause keeps the claim.
+- Stop hands the card back under its own name, and the default output returns by itself.
+- A card held by another client falls back as busy, and the next track start reclaims it.
+- `RequestRelease` is refused at priority 0 and below, and granted above with the card
+  already closed.
+- Twelve rounds of refused claims, claims, rate changes and quick stop and play left no
+  numbered names and no session manager errors.
+- The writer runs `SCHED_RR`, granted by rtkit.
+
+One thing the panel does not see yet: the card's own mixer. A card muted or attenuated there
+plays silence or a quieter signal while the panel reads Bit-perfect. Reading the mixer on a
+claim belongs with Phase 7's hardware volume.
+
+The tests landed are:
+- `encode_tests`: every integer layout hands the decoded extremes back, `S24_LE` is
+  sign-extended low, full scale and beyond saturate, NaN is silence, float passes through, and
+  `carries` over the ladder.
+- `crates/melodia/tests/bit_perfect.rs`: 16-bit and 24-bit noise WAVs, written by the test,
+  through the real engine and `encode` come out equal to the file's PCM, and an active EQ
+  breaks the equality. No committed fixtures.
+- `signal_path_tests`: over an exclusive claim, the headline for clean, a user choice, a
+  conversion, a format too narrow for the source, and a fallback over each.
+- `actions_tests`: a repeating queue of missing files stops after a lap, and a playable track
+  behind missing ones still plays.
+
+Each was confirmed to fail against a mutation of the code it covers. The reservation hand-back
+has no unit test: it needs a real holder on a bus, and the scripted runs above are its coverage.
 
 ### Phase 5: Windows exclusive: WASAPI through the `wasapi` crate
 
@@ -476,19 +519,9 @@ today. It is also MPL-2.0. Its other path, a bare `SCHED_FIFO` call, needs `RLIM
 **Exit:** Melodia disappears from the Windows volume mixer while it plays. With the checkbox
 cleared, it falls back with that reason. An unplug recovers.
 
-### Phase 6: macOS exclusive: hog mode around the cpal stream
+### Phase 6: macOS exclusive: moved to #113
 
-1. **`hog.rs`**, over `coreaudio-rs` pinned to the lock's `0.14.2`:
-   - Map the chosen cpal device to its `AudioDeviceID` by name. Verify this against
-     `coreaudio-rs`'s helpers.
-   - Take hog mode, guarded by `get_hogging_pid` (the set toggles, so re-read to confirm).
-   - Build the cpal stream at the file's shape. cpal sets the nominal rate and physical format
-     and waits for the settle.
-   - Release hog mode **after** the stream drops.
-2. A device that dies arrives as `DeviceNotAvailable` → Phase 1's recovery.
-
-**Exit:** other apps go silent. Audio MIDI Setup shows the file's rate and format. Turning the
-mode off restores system audio. Unplugging recovers.
+Out of this plan, since there is no Mac to test it on. #113 carries the design notes.
 
 ### Phase 7: Polish
 
@@ -499,9 +532,8 @@ mode off restores system audio. Unplugging recovers.
 3. Advanced knobs: period / buffer, resync delay, and WASAPI **compatibility (polling) mode**
    for USB drivers that stutter under event mode. Each knob is bounded by the device's limits
    and reported back as negotiated.
-4. Optional, off by default: **hardware volume** (ALSA simple mixer, `IAudioEndpointVolume`,
-   CoreAudio device volume), so the slider can move without breaking the claim. It may be
-   better as its own issue.
+4. Optional, off by default: **hardware volume** (ALSA simple mixer, `IAudioEndpointVolume`),
+   so the slider can move without breaking the claim. It may be better as its own issue.
 5. Docs:
    - README feature list and CLAUDE.md (AudioOutput ownership, the lock order).
    - `.claude/rules/audio-stack.md` (reshape, the exclusive backends, the verdict).
@@ -512,8 +544,8 @@ mode off restores system audio. Unplugging recovers.
 
 - **Memory.** Each claim adds one writer thread and one staging buffer sized to a period.
   There is no ring and no new cache. A reshape frees the old stream before the new one opens.
-- **Threading.** Backends never touch Slint. A reopen never runs on the UI thread, so
-  CoreAudio's rate settle blocks an engine thread instead.
+- **Threading.** Backends never touch Slint. A reopen never runs on the UI thread, since opening
+  a device can block.
 - **Errors.** `ClaimError` is typed and user-facing. `error::describe` covers the logs.
 - **Logging.** Nothing logs in `fill`, `encode` or a writer loop. The health counters exist for
   that.
@@ -524,7 +556,13 @@ mode off restores system audio. Unplugging recovers.
 - Can shared output learn the card's own rate under PipeWire (the node's `clock.rate`), so the
   Sample Rate row stops reading clean when the graph resamples to a rate the card has?
 - Should a long pause give up the exclusive claim, so other apps get the card back?
-- How long does the session manager take to let go of a card after a ReserveDevice1 release?
+- ~~How long does the session manager take to let go of a card after a ReserveDevice1
+  release?~~ It answers at once and closes the card a moment later, which is what
+  `alsa::BUSY_WAIT` covers. See Phase 4's findings.
+- Should the device picker show the names the desktop gives the cards, so the two lists agree?
+- A 16-bit-only card refuses every lossy file, which decodes to float, and each refusal still
+  takes the card from the session manager for a moment. Learning a card's formats once would
+  skip claims that cannot work.
 - Once cpal 0.19's extension traits ship (#1220), can they replace `wasapi.rs` or add a native
   PipeWire exclusive stream (`PW_STREAM_FLAG_EXCLUSIVE` / `node.force-rate`)?
 
