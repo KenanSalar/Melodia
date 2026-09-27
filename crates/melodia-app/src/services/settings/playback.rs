@@ -1,12 +1,16 @@
 //! The flag structs behind the Settings ▸ Playback tab.
 
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 
 use melodia_engine::player::engine::backend::OutputChoice;
 use melodia_engine::player::engine::types::RepeatMode;
 use melodia_playback::player::playback::crossfade::DEFAULT_CROSSFADE_MS;
 use melodia_playback::player::playback::equalizer::{DEFAULT_PRESET, NUM_BANDS};
-use melodia_playback::player::playback::output::OutputMode;
+use melodia_playback::player::playback::output::{
+    DEFAULT_RESYNC_HOLD, Drive, ExclusiveTuning, OutputMode,
+};
 use melodia_playback::player::playback::replaygain::{DEFAULT_MODE, RG_DEFAULT_PREAMP_DB};
 
 /// Audio-playback preferences.
@@ -121,18 +125,60 @@ impl Default for CrossfadeFlags {
 ///
 /// `output_mode` takes the card from every other application, so it ships shared.
 /// `output_device` is the card's stable id, or `None` for the first one the system lists.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+///
+/// `output_period_ms` and `output_polling` pace an exclusive claim's writer, and
+/// `output_resync_ms` is the silence written after a reopen onto a new rate. Each is held to its
+/// range on the way to the engine, so a hand-edited value can't pin a bad one.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OutputFlags {
     pub output_follow_rate: bool,
     pub output_mode: OutputModeKey,
     pub output_device: Option<String>,
+    pub output_period_ms: u32,
+    pub output_polling: bool,
+    pub output_resync_ms: u32,
+}
+
+impl Default for OutputFlags {
+    fn default() -> Self {
+        Self {
+            output_follow_rate: false,
+            output_mode: OutputModeKey::default(),
+            output_device: None,
+            output_period_ms: duration_ms(ExclusiveTuning::DEFAULT_PERIOD),
+            output_polling: false,
+            output_resync_ms: duration_ms(DEFAULT_RESYNC_HOLD),
+        }
+    }
 }
 
 impl OutputFlags {
-    pub fn output_choice(&self) -> OutputChoice {
-        OutputChoice { mode: self.output_mode.into(), device: self.output_device.clone() }
+    pub fn resync_hold(&self) -> Duration {
+        Duration::from_millis(u64::from(self.output_resync_ms))
     }
+
+    pub fn output_choice(&self) -> OutputChoice {
+        let drive = if self.output_polling { Drive::Polling } else { Drive::Events };
+        let period = Duration::from_millis(u64::from(self.output_period_ms));
+        OutputChoice {
+            mode: self.output_mode.into(),
+            device: self.output_device.clone(),
+            tuning: ExclusiveTuning::new(period, drive),
+        }
+    }
+
+    /// [`Self::output_choice`]'s way back, for persisting what the engine was just handed.
+    pub fn set_output_choice(&mut self, choice: &OutputChoice) {
+        self.output_mode = choice.mode.into();
+        self.output_device.clone_from(&choice.device);
+        self.output_period_ms = duration_ms(choice.tuning.period);
+        self.output_polling = choice.tuning.drive == Drive::Polling;
+    }
+}
+
+fn duration_ms(duration: Duration) -> u32 {
+    u32::try_from(duration.as_millis()).unwrap_or(u32::MAX)
 }
 
 /// [`OutputMode`] as persisted: a key, so reordering the picker repoints nothing.
@@ -149,6 +195,15 @@ impl From<OutputModeKey> for OutputMode {
         match key {
             OutputModeKey::Shared => Self::Shared,
             OutputModeKey::Exclusive => Self::Exclusive,
+        }
+    }
+}
+
+impl From<OutputMode> for OutputModeKey {
+    fn from(mode: OutputMode) -> Self {
+        match mode {
+            OutputMode::Shared => Self::Shared,
+            OutputMode::Exclusive => Self::Exclusive,
         }
     }
 }

@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::state::PlaybackContext;
 use melodia_audio::player::source::stream_source;
@@ -469,9 +470,19 @@ pub fn player_set_follow_rate(ctx: &PlaybackContext, on: bool) {
     ctx.engine.set_follow_rate(on);
 }
 
+/// Write `hold` of silence after each reopen onto a new rate, from the next one on. Blocking: it
+/// waits out any reopen in flight, so it belongs on the blocking pool.
+pub fn player_set_resync_hold(ctx: &PlaybackContext, hold: Duration) {
+    ctx.engine.set_resync_hold(hold);
+}
+
 /// Whether this platform has an exclusive backend. Where it doesn't, an exclusive choice falls
 /// back to shared on every open, so the picker isn't offered at all.
 pub const EXCLUSIVE_SUPPORTED: bool = output::EXCLUSIVE_SUPPORTED;
+
+/// Whether an exclusive claim can be polled instead of event-driven here, which only matters to
+/// the drivers that stutter under events.
+pub const POLLING_SUPPORTED: bool = output::POLLING_SUPPORTED;
 
 /// The devices an exclusive claim can be aimed at. Blocking: it asks every device.
 pub fn output_devices() -> Vec<OutputDevice> {

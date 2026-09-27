@@ -10,6 +10,7 @@ import { SettingRowStacked } from "../../components/settings/setting-row-stacked
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 import { ChipGroup } from "../../components/settings/chip-group.slint";
 import { Dropdown } from "../../components/settings/dropdown.slint";
+import { SliderTrack } from "../../components/slider-track.slint";
 
 // One step of the signal path: a dot in its grade's colour, what the step is, and what it did.
 // Denser than a `SettingRow` because eight of them sit under one heading; the dot takes the icon
@@ -68,11 +69,25 @@ export component OutputSection inherits Rectangle {
                                         SettingsPage.search-query);
     }
 
+    // A slider fraction as the whole ten milliseconds the readout shows.
+    pure function resync-step(fraction: float) -> float {
+        return round(fraction * Settings.output-resync-max-ms / 10) * 10;
+    }
+
     property <string> mode-label: @tr("Output Mode");
     property <string> mode-desc: @tr("Exclusive gives Melodia the audio device alone: other apps can't play through it while Melodia plays, and the system mixer can't change the sound");
 
     property <string> device-label: @tr("Exclusive Device");
     property <string> device-desc: @tr("The sound card exclusive output takes");
+
+    property <string> period-label: @tr("Buffer Period");
+    property <string> period-desc: @tr("How much audio the device is handed at a time. Longer periods ride out a busy system; shorter ones react sooner");
+
+    property <string> polling-label: @tr("Polling Mode");
+    property <string> polling-desc: @tr("Top the device up on a timer instead of waiting for it to ask. Try it if a USB device stutters or crackles in exclusive mode");
+
+    property <string> resync-label: @tr("Silence After a Rate Change");
+    property <string> resync-desc: @tr("Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off");
 
     property <string> follow-rate-label: @tr("Match the File's Sample Rate");
     property <string> follow-rate-desc: @tr("Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate. Turns crossfade off");
@@ -83,12 +98,25 @@ export component OutputSection inherits Rectangle {
     property <bool> exclusive-chosen: Settings.exclusive-supported && Settings.output-mode-idx == 1;
     property <bool> show-mode: Settings.exclusive-supported && row-visible(mode-label, mode-desc);
     property <bool> show-device: root.exclusive-chosen && row-visible(device-label, device-desc);
+    property <bool> show-period: root.exclusive-chosen && row-visible(period-label, period-desc);
+    property <bool> show-polling: root.exclusive-chosen && Settings.polling-supported
+        && row-visible(polling-label, polling-desc);
     // Exclusive output always runs at the file's rate, so the toggle has nothing to add there.
     property <bool> show-follow-rate: Settings.follow-rate-supported && !root.exclusive-chosen
         && row-visible(follow-rate-label, follow-rate-desc);
+    // The hold falls only where the output changes rate, which it does under exclusive and while
+    // following the file's rate.
+    property <bool> show-resync: (root.exclusive-chosen
+            || (Settings.follow-rate-supported && Settings.output-follow-rate))
+        && row-visible(resync-label, resync-desc);
     property <bool> show-signal-path: row-visible(signal-label, signal-desc);
 
-    out property <bool> has-matches: show-mode || show-device || show-follow-rate || show-signal-path;
+    // What the rows above the signal path hand the divider under them.
+    property <bool> shows-exclusive-rows: root.show-mode || root.show-device || root.show-period
+        || root.show-polling;
+    property <bool> shows-rate-rows: root.show-follow-rate || root.show-resync;
+
+    out property <bool> has-matches: shows-exclusive-rows || shows-rate-rows || show-signal-path;
 
     property <string> verdict-text: !SignalPathUi.playing ? @tr("Nothing is playing")
         : SignalPathUi.verdict == 0 ? @tr("Bit-perfect: the device receives the decoder's samples untouched")
@@ -158,7 +186,46 @@ export component OutputSection inherits Rectangle {
             }
         }
 
-        if (root.show-mode || root.show-device) && root.show-follow-rate: SectionDivider {}
+        if (root.show-mode || root.show-device) && root.show-period: SectionDivider {}
+
+        if root.show-period: SettingRowStacked {
+            icon: "history";
+            label: root.period-label;
+            description: root.period-desc;
+            ChipGroup {
+                // The order is `ui::settings::output_mode::PERIOD_PRESETS`'.
+                options: [
+                    @tr("{} ms", 5),
+                    @tr("{} ms", 10),
+                    @tr("{} ms", 20),
+                    @tr("{} ms", 50),
+                    @tr("{} ms", 100),
+                ];
+                selected-index <=> Settings.output-period-idx;
+                selected(i) => { Settings.output-period-changed(i); }
+            }
+            // What the device took, which a driver rounds to its own step.
+            if SignalPathUi.playing && SignalPathUi.exclusive && SignalPathUi.device-period != "": Text {
+                text: @tr("The device is running at {}", SignalPathUi.device-period);
+                color: Theme.text-muted;
+                font-size: Theme.font-size-sm;
+                wrap: word-wrap;
+            }
+        }
+
+        if (root.show-mode || root.show-device || root.show-period) && root.show-polling: SectionDivider {}
+
+        if root.show-polling: SettingRow {
+            icon: "refresh";
+            label: root.polling-label;
+            description: root.polling-desc;
+            ToggleSwitch {
+                checked <=> Settings.output-polling;
+                toggled(v) => { Settings.output-polling-changed(v); }
+            }
+        }
+
+        if root.shows-exclusive-rows && root.show-follow-rate: SectionDivider {}
 
         if root.show-follow-rate: SettingRow {
             icon: "speed";
@@ -170,7 +237,39 @@ export component OutputSection inherits Rectangle {
             }
         }
 
-        if (root.show-mode || root.show-device || root.show-follow-rate) && root.show-signal-path: SectionDivider {}
+        if (root.shows-exclusive-rows || root.show-follow-rate) && root.show-resync: SectionDivider {}
+
+        if root.show-resync: SettingRowStacked {
+            icon: "volume_off";
+            label: root.resync-label;
+            description: root.resync-desc;
+            HorizontalLayout {
+                spacing: Theme.pad-md;
+                alignment: stretch;
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    SliderTrack {
+                        value: Settings.output-resync-ms / Settings.output-resync-max-ms;
+                        seam-mask-color: SettingsPage.card-fill;
+                        changed(v) => { Settings.output-resync-ms = root.resync-step(v); }
+                        committed(v) => { Settings.output-resync-committed(root.resync-step(v)); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: @tr("{} ms", Settings.output-resync-ms);
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-sm;
+                        min-width: 56px;
+                        horizontal-alignment: right;
+                    }
+                }
+            }
+        }
+
+        if (root.shows-exclusive-rows || root.shows-rate-rows) && root.show-signal-path: SectionDivider {}
 
         if root.show-signal-path: SettingRow {
             icon: "graphic_eq";
@@ -227,7 +326,8 @@ export component OutputSection inherits Rectangle {
             StageRow {
                 grade: SignalPathUi.output-grade;
                 label: @tr("Device");
-                value: SignalPathUi.fallback-reason >= 0 ? @tr("{}, shared: exclusive output was refused because {}", root.device-text, root.fallback-text)
+                value: SignalPathUi.fallback-reason >= 0 && SignalPathUi.refused-by != "" ? @tr("{} refused exclusive output because {}. Playing shared on {}", SignalPathUi.refused-by, root.fallback-text, root.device-text)
+                    : SignalPathUi.fallback-reason >= 0 ? @tr("{}, shared: exclusive output was refused because {}", root.device-text, root.fallback-text)
                     : !SignalPathUi.exclusive ? @tr("{}, shared: the system mixer may still convert it", root.device-text)
                     : SignalPathUi.output-grade == 0 ? @tr("{}, exclusive", root.device-text)
                     : @tr("{}, exclusive, in a format that can't hold the source exactly", root.device-text);

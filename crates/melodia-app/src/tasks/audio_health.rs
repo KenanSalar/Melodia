@@ -28,7 +28,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::state::{AppState, Signal};
 use crate::tasks::TaskSpawner;
-use melodia_core::error::describe;
+use melodia_core::error::{AppError, describe};
 use melodia_engine::player::engine::backend::PlaybackEngine;
 
 /// Long enough that an xrun storm collapses into one line.
@@ -123,7 +123,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
                     // A parked output has no stream to beat, which is the point of parking it.
                     let stalled = !engine.output_parked() && stall.observe(health.blocks());
                     if stalled {
-                        log::warn!("audio: output stream stopped asking for samples");
+                        log::info!("audio: output stream stopped asking for samples");
                     }
                     if (lost || stalled) && !recover(&engine, &device_lost, &shutdown).await {
                         break;
@@ -169,18 +169,28 @@ async fn recover(
     device_lost: &Signal,
     shutdown: &CancellationToken,
 ) -> bool {
-    log::warn!("audio: output lost; reopening");
+    // Info: an unplug, or the system moving its default output, recovers in a blink. What warns is
+    // a backoff that ran out, below.
+    log::info!("audio: output lost; reopening");
     let Some(reopened) = shutdown.run_until_cancelled(reopen_with_backoff(engine)).await else {
         return false;
     };
-    if !reopened {
-        log::warn!("audio: no output device could be reopened; playback will produce no sound");
+    if let Err(e) = reopened {
+        // The last attempt's reason rides on this line because it is the one a bug report
+        // carries: the attempts before it log only at debug.
+        log::warn!(
+            "audio: no output device could be reopened; playback will produce no sound: {}",
+            describe(&e)
+        );
         device_lost.bump();
     }
     true
 }
 
-async fn reopen_with_backoff(engine: &Arc<PlaybackEngine>) -> bool {
+/// Reopen the output on [`REOPEN_BACKOFF`], handing back the last attempt's failure where none
+/// took.
+async fn reopen_with_backoff(engine: &Arc<PlaybackEngine>) -> Result<(), AppError> {
+    let mut outcome = Ok(());
     for delay in REOPEN_BACKOFF {
         tokio::time::sleep(delay).await;
         // Blocking: it opens a device, under the decks lock.
@@ -188,17 +198,17 @@ async fn reopen_with_backoff(engine: &Arc<PlaybackEngine>) -> bool {
         match tokio::task::spawn_blocking(move || engine.reopen_output()).await {
             Ok(Ok(Some(negotiated))) => {
                 log::info!("audio: output reopened: {negotiated:?}");
-                return true;
+                return Ok(());
             }
-            Ok(Ok(None)) => return true,
-            Ok(Err(e)) => log::debug!("audio: reopen attempt failed: {}", describe(&e)),
-            Err(e) => {
-                log::warn!("audio: reopen task did not finish: {e}");
-                return false;
+            Ok(Ok(None)) => return Ok(()),
+            Ok(Err(e)) => {
+                log::debug!("audio: reopen attempt failed: {}", describe(&e));
+                outcome = Err(e);
             }
+            Err(e) => return Err(AppError::io_source(e)),
         }
     }
-    false
+    outcome
 }
 
 #[cfg(test)]

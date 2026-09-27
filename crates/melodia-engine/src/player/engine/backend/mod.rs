@@ -33,6 +33,7 @@ use melodia_playback::player::playback::crossfade::{self, CrossfadeShared};
 use melodia_playback::player::playback::decks::{Deck, Decks, DeferredOp, lock_decks};
 use melodia_playback::player::playback::equalizer::{self, EqShared, EqSource};
 use melodia_playback::player::playback::output::AudioOutput;
+use melodia_playback::player::playback::output::device::Lead;
 use melodia_playback::player::playback::output::mixer::Mixer;
 use melodia_playback::player::playback::replaygain::{ReplayGainShared, TrackReplayGain};
 use melodia_playback::player::playback::visualizer::{VisualizerShared, VisualizerTap};
@@ -116,6 +117,10 @@ pub struct PlaybackEngine {
     // The last path `preload_gapless` refused for needing a reopen. The monitor asks again every
     // tick until the track ends, and each ask would otherwise decode the file just to refuse it.
     gapless_refused: Mutex<Option<String>>,
+    // How far the ear is behind the decks' clocks, measured by whichever stream the output has
+    // open. A cell of its own rather than a read through `output`, whose lock a reopen holds for as
+    // long as a device takes to open.
+    lead: Arc<Lead>,
     // Only ever schedules the deferred half of a faded pause / stop.
     runtime: tokio::runtime::Handle,
 }
@@ -142,6 +147,7 @@ impl PlaybackEngine {
             follow_rate: AtomicBool::new(false),
             output_choice: Mutex::new(OutputChoice::default()),
             gapless_refused: Mutex::new(None),
+            lead: Arc::default(),
             runtime,
         })
     }
@@ -155,7 +161,8 @@ impl PlaybackEngine {
         output: AudioOutput,
         runtime: tokio::runtime::Handle,
     ) -> Result<Self, AppError> {
-        let engine = Self::new(output.mixer(), runtime)?;
+        let mut engine = Self::new(output.mixer(), runtime)?;
+        engine.lead = output.lead();
         *engine.output.lock() = Some(output);
         Ok(engine)
     }
@@ -718,9 +725,17 @@ impl PlaybackEngine {
         self.gapless_pending.store(true, Ordering::Release);
     }
 
-    /// Current playback position in milliseconds, on the media timeline.
+    /// How far the active deck has been pulled, in milliseconds on the media timeline. What a
+    /// transition is timed against: a ramp has to land on the source's end, not on the ear's.
     pub fn query_position(&self) -> u64 {
         let position = self.lock_decks().active().voice.position();
+        u64::try_from(position.as_millis()).unwrap_or(u64::MAX)
+    }
+
+    /// [`Self::query_position`] as the user hears it, with what the device still holds taken off.
+    /// What is shown, persisted and reported outward.
+    pub fn query_heard_position(&self) -> u64 {
+        let position = self.lock_decks().active().voice.heard(self.lead.get());
         u64::try_from(position.as_millis()).unwrap_or(u64::MAX)
     }
 

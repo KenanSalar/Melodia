@@ -64,7 +64,7 @@ pub use motion::set_skip_startup_animation;
 pub use onboarding::set_onboarding_seen;
 pub use playback::{
     reset_for_bit_perfect, set_gapless_playback, set_output_choice, set_output_follow_rate,
-    set_play_button_animation, set_playback_speed, set_resume_on_startup,
+    set_output_resync_ms, set_play_button_animation, set_playback_speed, set_resume_on_startup,
 };
 pub use radio::{
     set_radio_enabled, set_radio_hide_segmented, set_radio_scrobble, set_radio_send_clicks,

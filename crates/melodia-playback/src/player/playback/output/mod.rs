@@ -18,8 +18,8 @@ pub mod encode;
 pub mod mixer;
 pub mod voice;
 
-// One exclusive backend per platform, each answering to the same names: `SUPPORTED`, `devices`,
-// `open`, the `ExclusiveStream` it returns and the `Claim` a reopen carries across.
+// One exclusive backend per platform, each answering to the same names: `SUPPORTED`, `POLLING`,
+// `devices`, `open`, the `ExclusiveStream` it returns and the `Claim` a reopen carries across.
 cfg_select! {
     target_os = "linux" => {
         mod alsa;
@@ -42,23 +42,28 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use melodia_audio::player::source::audio::{SampleRate, Shape, SourceFormat};
+use melodia_audio::player::source::audio::{SampleRate, Shape, SourceFormat, frames_in};
 use melodia_core::error::{self, AppError};
 
-use self::claim::{ClaimError, FallbackReason};
-use self::device::{DeviceStream, Feed};
+use self::claim::{ClaimError, Fallback};
+use self::device::{DeviceStream, Feed, Lead};
 use self::encode::DeviceFormat;
 use self::exclusive::{Claim, ExclusiveStream};
 use self::mixer::Mixer;
 use super::stream_health::AudioStreamHealth;
 
-/// Silence written after a reopen lands on a new rate, before any voice plays.
+/// Silence written after a reopen lands on a new rate, before any voice plays, until the user sets
+/// their own.
 ///
 /// A DAC that mutes while its clock relocks would otherwise clip the head of the track that asked
 /// for the rate. Not every one does, so this is sized for the ones that do: the silence falls only
 /// at a rate boundary, which is never gapless anyway, while too little clips on the DACs it exists
 /// for.
-const RESYNC_HOLD: Duration = Duration::from_millis(200);
+pub const DEFAULT_RESYNC_HOLD: Duration = Duration::from_millis(200);
+
+/// The longest hold a user may set. The slowest DACs relock well inside it, and past it the
+/// silence reads as a stall rather than a gap.
+pub const MAX_RESYNC_HOLD: Duration = Duration::from_secs(1);
 
 /// Whether the output goes through the system mixer or takes the device for itself.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -73,10 +78,62 @@ pub enum OutputMode {
 pub enum OutputRequest {
     /// The system's default output, at `rate` where one is given and the device's own config
     /// otherwise.
-    Shared { rate: Option<SampleRate> },
-    /// The device named by `device`, or the first the system lists, opened at exactly the
-    /// source's shape and a format that holds it.
-    Exclusive { device: Option<String>, shape: Shape, format: SourceFormat },
+    Shared {
+        rate: Option<SampleRate>,
+    },
+    Exclusive(ExclusiveRequest),
+}
+
+/// A claim on one device, opened at exactly the source's shape and a format that holds it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExclusiveRequest {
+    /// The device's id, or `None` for the first the system lists.
+    pub device: Option<String>,
+    pub shape: Shape,
+    pub format: SourceFormat,
+    pub tuning: ExclusiveTuning,
+}
+
+/// How an exclusive writer paces the device. Part of the request, so changing it reopens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ExclusiveTuning {
+    /// What the writer hands the device at a time. A device that can't run it gets the nearest
+    /// period it can, which [`Negotiated::period`] reports.
+    pub period: Duration,
+    pub drive: Drive,
+}
+
+impl ExclusiveTuning {
+    /// Short enough that a stop lands quickly, long enough that the writer wakes rarely.
+    pub const DEFAULT_PERIOD: Duration = Duration::from_millis(20);
+    /// Below a couple of milliseconds no device keeps up, and every one rounds it up anyway.
+    pub const MIN_PERIOD: Duration = Duration::from_millis(2);
+    /// A stop waits out a period, and a voice's command waits for a fill, so a longer one would
+    /// start to read as a hang.
+    pub const MAX_PERIOD: Duration = Duration::from_millis(100);
+
+    /// `period` held inside the range a claim asks for.
+    pub fn new(period: Duration, drive: Drive) -> Self {
+        Self { period: period.clamp(Self::MIN_PERIOD, Self::MAX_PERIOD), drive }
+    }
+}
+
+impl Default for ExclusiveTuning {
+    fn default() -> Self {
+        Self { period: Self::DEFAULT_PERIOD, drive: Drive::default() }
+    }
+}
+
+/// What wakes the exclusive writer.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Drive {
+    /// The device signals each time it wants a period, and gets exactly one.
+    #[default]
+    Events,
+    /// The writer wakes on a timer and tops the device's buffer up. Some USB drivers stutter in
+    /// event mode and play cleanly in this one. Only WASAPI tells the two apart; ALSA's writer
+    /// always blocks on the card.
+    Polling,
 }
 
 impl Default for OutputRequest {
@@ -95,6 +152,9 @@ pub struct OutputDevice {
 
 /// Whether this platform has an exclusive backend. Where it doesn't, every claim falls back.
 pub const EXCLUSIVE_SUPPORTED: bool = exclusive::SUPPORTED;
+
+/// Whether the exclusive backend tells [`Drive::Polling`] from [`Drive::Events`].
+pub const POLLING_SUPPORTED: bool = exclusive::POLLING;
 
 /// Every device an exclusive claim can be aimed at, empty where there is no exclusive backend.
 /// Blocking: it asks every device.
@@ -142,7 +202,7 @@ pub struct Negotiated {
     pub shape: Shape,
     pub format: OutputFormat,
     /// Why an exclusive claim fell back to this shared stream, or `None` where none was refused.
-    pub fallback: Option<FallbackReason>,
+    pub fallback: Option<Fallback>,
     /// The period that was asked for, or `None` where the host was left to name its own.
     ///
     /// Kept beside the answer because it is the one of the two that says which pass of the ladder
@@ -173,6 +233,12 @@ pub struct AudioOutput {
     request: OutputRequest,
     /// Closed on purpose rather than lost, so nothing should read the missing stream as a fault.
     parked: bool,
+    /// The refusal last reported, so a claim retried at every track start and refused the same way
+    /// is reported once rather than per track. Cleared by the next claim that takes.
+    reported: Option<Fallback>,
+    /// The silence a reopen onto a new rate writes first. Not part of the request: changing it
+    /// reopens nothing, and only the next rate change hears it.
+    resync_hold: Duration,
     feed: Feed,
     mixer: Mixer,
 }
@@ -216,9 +282,16 @@ impl AudioOutput {
             stream: Some(Stream::Shared(stream)),
             request: OutputRequest::default(),
             parked: false,
+            reported: None,
+            resync_hold: DEFAULT_RESYNC_HOLD,
             feed,
             mixer,
         })
+    }
+
+    /// Write `hold` of silence after a reopen onto a new rate, held under [`MAX_RESYNC_HOLD`].
+    pub fn set_resync_hold(&mut self, hold: Duration) {
+        self.resync_hold = hold.min(MAX_RESYNC_HOLD);
     }
 
     /// Replace the stream with one opened for `request`: an exclusive claim, or the default device.
@@ -237,8 +310,9 @@ impl AudioOutput {
         let held = self.close_for(&request);
         // After the drop and before the open, which is the one window where no stream can report:
         // a loss still flagged here belongs to the stream just dropped, and left standing it would
-        // reopen the new one for nothing.
+        // reopen the new one for nothing. Its lead is that stream's too.
         self.feed.health.take_device_lost();
+        self.feed.lead.clear();
 
         let negotiated = match self.start(&request, held) {
             Ok(negotiated) => {
@@ -260,7 +334,8 @@ impl AudioOutput {
 
         let rate = negotiated.shape.rate;
         if previous_rate != Some(rate) {
-            self.feed.pull.lock().hold(resync_frames(rate));
+            let hold = usize::try_from(frames_in(self.resync_hold, rate)).unwrap_or(usize::MAX);
+            self.feed.pull.lock().hold(hold);
         }
         // The stall watch counts from the last beat, and the old stream's was before the open.
         self.feed.health.beat();
@@ -272,7 +347,7 @@ impl AudioOutput {
     fn close_for(&mut self, request: &OutputRequest) -> Option<Claim> {
         let stream = self.stream.take()?;
         match request {
-            OutputRequest::Exclusive { .. } => stream.into_claim(),
+            OutputRequest::Exclusive(_) => stream.into_claim(),
             OutputRequest::Shared { .. } => None,
         }
     }
@@ -284,39 +359,73 @@ impl AudioOutput {
         held: Option<Claim>,
     ) -> Result<Negotiated, AppError> {
         let stream = match request {
-            OutputRequest::Shared { rate } => Stream::Shared(self.open_shared(*rate)?),
-            OutputRequest::Exclusive { device, shape, format } => {
-                match self.claim(device.as_deref(), *shape, *format, held) {
-                    Ok(stream) => stream,
-                    Err(e) => {
-                        log::warn!(
-                            "Exclusive output refused, playing shared: {}",
-                            error::describe(&e)
-                        );
-                        let mut stream = self.open_shared(Some(shape.rate))?;
-                        stream.negotiated.fallback = Some(e.reason());
-                        Stream::Shared(stream)
-                    }
-                }
+            OutputRequest::Shared { rate } => {
+                self.reported = None;
+                Stream::Shared(self.open_shared(*rate)?)
             }
+            OutputRequest::Exclusive(exclusive) => match self.claim(exclusive, held) {
+                Ok(stream) => {
+                    self.reported = None;
+                    stream
+                }
+                Err(e) => Stream::Shared(self.fall_back(exclusive, &e)?),
+            },
         };
         let negotiated = stream.negotiated();
         self.stream = Some(stream);
         Ok(negotiated)
     }
 
+    /// Open the system's default device shared, logging which device that was where it won't
+    /// open: the error alone can't say, and the default is whatever the system named at the time.
+    /// At debug, since a caller retrying a lost device reports the outcome once it gives up.
     fn open_shared(&self, rate: Option<SampleRate>) -> Result<DeviceStream, AppError> {
-        device::open(&device::default_target()?, &self.feed, rate)
+        let target = device::default_target()
+            .inspect_err(|e| log::debug!("No default output to open: {}", error::describe(e)))?;
+        device::open(&target, &self.feed, rate).inspect_err(|e| {
+            log::debug!(
+                "The default output, {}, would not open: {}",
+                target.name().as_deref().unwrap_or("unnamed"),
+                error::describe(e)
+            );
+        })
     }
 
-    fn claim(
-        &self,
-        device: Option<&str>,
-        shape: Shape,
-        format: SourceFormat,
-        held: Option<Claim>,
-    ) -> Result<Stream, ClaimError> {
-        exclusive::open(device, shape, format, &self.feed, held).map(Stream::Exclusive)
+    fn claim(&self, request: &ExclusiveRequest, held: Option<Claim>) -> Result<Stream, ClaimError> {
+        exclusive::open(request, &self.feed, held).map(Stream::Exclusive)
+    }
+
+    /// Open shared in place of a refused claim, carrying why and which device refused.
+    ///
+    /// The refusing device is looked up rather than carried on the error, so no backend has to
+    /// thread its name through every way a claim can fail.
+    ///
+    /// **A refusal is a warning once, not per track.** A fallback is retried at every track start,
+    /// and a 16-bit card refuses every lossy file, so the same answer again goes to debug.
+    fn fall_back(
+        &mut self,
+        request: &ExclusiveRequest,
+        refusal: &ClaimError,
+    ) -> Result<DeviceStream, AppError> {
+        let fallback = Fallback {
+            reason: refusal.reason(),
+            device: refusing_device(request.device.as_deref()),
+        };
+        let level = if self.reported.as_ref() == Some(&fallback) {
+            log::Level::Debug
+        } else {
+            log::Level::Warn
+        };
+        log::log!(
+            level,
+            "Exclusive output refused by {}, playing shared: {}",
+            fallback.device.as_deref().unwrap_or("a device that isn't connected"),
+            error::describe(refusal)
+        );
+        self.reported = Some(fallback.clone());
+        let mut stream = self.open_shared(Some(request.shape.rate))?;
+        stream.negotiated.fallback = Some(fallback);
+        Ok(stream)
     }
 
     /// Close the stream until the next [`Self::reopen`], giving the device back to everything
@@ -324,6 +433,7 @@ impl AudioOutput {
     pub fn park(&mut self) {
         self.stream = None;
         self.parked = true;
+        self.feed.lead.clear();
     }
 
     /// Whether the missing stream was closed by [`Self::park`] rather than lost.
@@ -341,6 +451,12 @@ impl AudioOutput {
         &self.mixer
     }
 
+    /// How far the ear is behind the voices' clocks on whichever stream is open. The same cell for
+    /// the output's life, so a holder reads each new stream's measurement without asking again.
+    pub fn lead(&self) -> Arc<Lead> {
+        Arc::clone(&self.feed.lead)
+    }
+
     /// What the device agreed to, as opposed to what it was asked for, or `None` while no stream
     /// is open.
     pub fn negotiated(&self) -> Option<Negotiated> {
@@ -348,8 +464,13 @@ impl AudioOutput {
     }
 }
 
-/// [`RESYNC_HOLD`] in device frames at `rate`.
-fn resync_frames(rate: SampleRate) -> usize {
-    let frames = u128::from(rate.get()) * RESYNC_HOLD.as_millis() / 1_000;
-    usize::try_from(frames).unwrap_or(usize::MAX)
+/// The name of the device a claim on `id` was aimed at, or of the first listed where none was
+/// chosen, which is the one a claim with no id takes on every backend.
+fn refusing_device(id: Option<&str>) -> Option<String> {
+    let mut devices = exclusive::devices().into_iter();
+    let device = match id {
+        Some(id) => devices.find(|device| device.id == id),
+        None => devices.next(),
+    };
+    device.map(|device| device.name)
 }

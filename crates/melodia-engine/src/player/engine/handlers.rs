@@ -93,7 +93,11 @@ impl SecondGate {
 /// would nest the decks mutex inside it.
 #[derive(Copy, Clone)]
 pub struct BackendSnapshot {
+    /// Where the ear is, which is what the tick publishes and the state keeps.
     pub position_ms: u64,
+    /// Where the deck has been pulled to, a device's worth ahead of the ear. What the crossfade
+    /// and the gapless stage are timed against, since both act on what is pulled next.
+    pub pulled_ms: u64,
     pub already_preloaded: bool,
     pub crossfading: bool,
     pub xf: crossfade::CrossfadeSettings,
@@ -119,7 +123,7 @@ pub fn evaluate_playing_tick(
     state: &mut PlayerState,
     backend: BackendSnapshot,
 ) -> Option<PlayingTick> {
-    let BackendSnapshot { position_ms, already_preloaded, crossfading, xf } = backend;
+    let BackendSnapshot { position_ms, pulled_ms, already_preloaded, crossfading, xf } = backend;
 
     if state.status != PlaybackStatus::Playing {
         return None;
@@ -161,7 +165,7 @@ pub fn evaluate_playing_tick(
         eligible,
         already_preloaded,
         crossfading,
-        state.position_ms,
+        pulled_ms,
         state.duration_ms,
         xf.duration_ms,
     )
@@ -191,9 +195,9 @@ pub fn evaluate_playing_tick(
         // A deck reads 0 until it has been pulled for the source just started on
         // it, and a track shorter than the lead would read its whole length as
         // remaining and stage a preload on the spot.
-        && state.position_ms > 0
-        && state.position_ms <= state.duration_ms
-        && state.duration_ms.saturating_sub(state.position_ms) < PRELOAD_LEAD_MS
+        && pulled_ms > 0
+        && pulled_ms <= state.duration_ms
+        && state.duration_ms.saturating_sub(pulled_ms) < PRELOAD_LEAD_MS
     {
         // Capture the next track's baked ReplayGain alongside its path — it must
         // travel with *its own* source (the preloaded track has different tags
@@ -389,7 +393,8 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                     // Query the backend BEFORE locking PlayerState to avoid a
                     // nested lock — `evaluate_playing_tick` takes these as inputs.
                     let backend = BackendSnapshot {
-                        position_ms: engine.query_position(),
+                        position_ms: engine.query_heard_position(),
+                        pulled_ms: engine.query_position(),
                         already_preloaded: engine.is_gapless_preloaded(),
                         crossfading: engine.is_crossfading(),
                         xf: engine.crossfade_settings(),

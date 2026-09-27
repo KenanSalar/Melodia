@@ -1,28 +1,39 @@
-//! The Output card's two pickers: shared or exclusive, and which card an exclusive claim takes.
+//! The Output card's exclusive pickers: shared or exclusive, which card a claim takes, and how its
+//! writer paces the card.
 //!
 //! **A pick is applied on the blocking pool, never here**: claiming a card or handing it back
-//! opens a device. Both pickers change the one choice, so each writes a synchronous shadow and
+//! opens a device. Every picker changes the one choice, so each writes a synchronous shadow and
 //! the task reads the shadow when it runs rather than capturing a value. Whichever task runs last
 //! then applies and persists the latest pick, in whatever order the pool ran them.
 
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::Duration;
 
 use parking_lot::Mutex;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::ui::settings_bind::read_or_default;
 use melodia_app::library;
-use melodia_app::services::settings::OutputModeKey;
 use melodia_app::state::AppState;
 use melodia_engine::player::engine::backend::OutputChoice;
-use melodia_playback::player::playback::output::OutputDevice;
+use melodia_playback::player::playback::output::{
+    Drive, ExclusiveTuning, OutputDevice, OutputMode,
+};
 use melodia_ui::{AppWindow, Settings};
+
+/// The period chips, in the order of the inline list in `output-section.slint`.
+const PERIOD_PRESETS: [Duration; 5] = [
+    Duration::from_millis(5),
+    Duration::from_millis(10),
+    Duration::from_millis(20),
+    Duration::from_millis(50),
+    Duration::from_millis(100),
+];
 
 /// The choice as last picked, and the cards the device picker's indices point into.
 struct Picked {
-    mode: OutputModeKey,
-    device: Option<String>,
+    choice: OutputChoice,
     devices: Vec<OutputDevice>,
 }
 
@@ -31,24 +42,23 @@ type Shadow = Arc<Mutex<Picked>>;
 pub fn install(ui: &AppWindow, state: &AppState) {
     let g = ui.global::<Settings>();
     g.set_exclusive_supported(library::playback::EXCLUSIVE_SUPPORTED);
+    g.set_polling_supported(library::playback::POLLING_SUPPORTED);
     if !library::playback::EXCLUSIVE_SUPPORTED {
         return;
     }
 
-    let saved = read_or_default(state, "output mode").output;
-    g.set_output_mode_idx(mode_index(saved.output_mode));
-    let shadow: Shadow = Arc::new(Mutex::new(Picked {
-        mode: saved.output_mode,
-        device: saved.output_device,
-        devices: Vec::new(),
-    }));
+    let choice = read_or_default(state, "output mode").output.output_choice();
+    g.set_output_mode_idx(mode_index(choice.mode));
+    g.set_output_period_idx(period_index(choice.tuning.period));
+    g.set_output_polling(choice.tuning.drive == Drive::Polling);
+    let shadow: Shadow = Arc::new(Mutex::new(Picked { choice, devices: Vec::new() }));
     list_devices(ui, state, &shadow);
 
     let state_mode = state.clone();
     let shadow_mode = Arc::clone(&shadow);
     let weak = ui.as_weak();
     g.on_output_mode_changed(move |idx| {
-        shadow_mode.lock().mode = mode_from_index(idx);
+        shadow_mode.lock().choice.mode = mode_from_index(idx);
         // Cards come and go, and this is the moment the list is about to be looked at.
         if let Some(ui) = weak.upgrade() {
             list_devices(&ui, &state_mode, &shadow_mode);
@@ -57,13 +67,33 @@ pub fn install(ui: &AppWindow, state: &AppState) {
     });
 
     let state_device = state.clone();
+    let shadow_device = Arc::clone(&shadow);
     g.on_output_device_changed(move |idx| {
         {
-            let mut picked = shadow.lock();
+            let mut picked = shadow_device.lock();
             let chosen = usize::try_from(idx).ok().and_then(|i| picked.devices.get(i));
-            picked.device = chosen.map(|device| device.id.clone());
+            picked.choice.device = chosen.map(|device| device.id.clone());
         }
-        apply(&state_device, &shadow);
+        apply(&state_device, &shadow_device);
+    });
+
+    let state_period = state.clone();
+    let shadow_period = Arc::clone(&shadow);
+    g.on_output_period_changed(move |idx| {
+        let Some(&period) = usize::try_from(idx).ok().and_then(|i| PERIOD_PRESETS.get(i)) else {
+            return;
+        };
+        {
+            let mut picked = shadow_period.lock();
+            picked.choice.tuning = ExclusiveTuning::new(period, picked.choice.tuning.drive);
+        }
+        apply(&state_period, &shadow_period);
+    });
+
+    let state_polling = state.clone();
+    g.on_output_polling_changed(move |on| {
+        shadow.lock().choice.tuning.drive = if on { Drive::Polling } else { Drive::Events };
+        apply(&state_polling, &shadow);
     });
 }
 
@@ -72,13 +102,9 @@ fn apply(state: &AppState, shadow: &Shadow) {
     let ctx = state.playback_ctx();
     let shadow = Arc::clone(shadow);
     state.persist_blocking("persist output choice", move |state| {
-        let (mode, device) = {
-            let picked = shadow.lock();
-            (picked.mode, picked.device.clone())
-        };
-        let choice = OutputChoice { mode: mode.into(), device: device.clone() };
-        library::playback::player_set_output_choice(&ctx, choice);
-        library::settings::set_output_choice(state, mode, device)
+        let choice = shadow.lock().choice.clone();
+        library::playback::player_set_output_choice(&ctx, choice.clone());
+        library::settings::set_output_choice(state, &choice)
     });
 }
 
@@ -93,7 +119,7 @@ fn list_devices(ui: &AppWindow, state: &AppState, shadow: &Shadow) {
             devices.iter().map(|device| device.name.as_str().into()).collect();
         let selected = {
             let mut picked = shadow.lock();
-            let selected = match &picked.device {
+            let selected = match &picked.choice.device {
                 Some(id) => devices.iter().position(|device| &device.id == id),
                 // No saved card means the first one listed, which is what the claim takes.
                 None => (!devices.is_empty()).then_some(0),
@@ -111,16 +137,25 @@ fn list_devices(ui: &AppWindow, state: &AppState, shadow: &Shadow) {
 }
 
 /// The chip's index, in the order of the inline list in `output-section.slint`.
-fn mode_index(mode: OutputModeKey) -> i32 {
+fn mode_index(mode: OutputMode) -> i32 {
     match mode {
-        OutputModeKey::Shared => 0,
-        OutputModeKey::Exclusive => 1,
+        OutputMode::Shared => 0,
+        OutputMode::Exclusive => 1,
     }
 }
 
-fn mode_from_index(idx: i32) -> OutputModeKey {
+fn mode_from_index(idx: i32) -> OutputMode {
     match idx {
-        1 => OutputModeKey::Exclusive,
-        _ => OutputModeKey::Shared,
+        1 => OutputMode::Exclusive,
+        _ => OutputMode::Shared,
     }
+}
+
+/// The chip showing `period`, or none where a hand-edited period matches no preset.
+fn period_index(period: Duration) -> i32 {
+    PERIOD_PRESETS
+        .iter()
+        .position(|&preset| preset == period)
+        .and_then(|i| i32::try_from(i).ok())
+        .unwrap_or(-1)
 }

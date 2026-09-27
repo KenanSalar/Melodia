@@ -121,6 +121,20 @@ export global Settings {
     in property <[string]> output-device-names;
     in-out property <int> output-device-idx: -1;
     callback output-device-changed(int);
+    // How an exclusive writer paces the card: a period chip, -1 where the saved period matches
+    // none of them, and polling in place of the card's events where the platform tells the two
+    // apart. Applied like the pickers above, since either reopens the card.
+    in-out property <int> output-period-idx: 2;
+    callback output-period-changed(int);
+    in property <bool> polling-supported;
+    in-out property <bool> output-polling: false;
+    callback output-polling-changed(bool);
+    // The silence a reopen onto a new rate writes first, for the DACs that mute while they relock.
+    // The drag only moves the readout: nothing hears the value until the next rate change, so it
+    // goes to the engine and to disk together on release.
+    in-out property <float> output-resync-ms: 200;
+    in property <float> output-resync-max-ms: 1000;
+    callback output-resync-committed(float /* milliseconds */);
 
     // Rust owns every property here — the `ScrobbleService` status-watch subscriber is the single
     // writer — and the toggles route their events back to persist and refresh the shadow. Connect

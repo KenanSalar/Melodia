@@ -1,13 +1,13 @@
 //! The exclusive backend where there is none: nothing to list, and every claim refused, so the
 //! output plays shared and the panel says why.
 
-use melodia_audio::player::source::audio::{Shape, SourceFormat};
-
 use super::claim::ClaimError;
 use super::device::Feed;
-use super::{Negotiated, OutputDevice};
+use super::{ExclusiveRequest, Negotiated, OutputDevice};
 
 pub(super) const SUPPORTED: bool = false;
+
+pub(super) const POLLING: bool = false;
 
 pub(super) enum Claim {}
 
@@ -28,9 +28,7 @@ pub(super) fn devices() -> Vec<OutputDevice> {
 }
 
 pub(super) fn open(
-    _: Option<&str>,
-    _: Shape,
-    _: SourceFormat,
+    _: &ExclusiveRequest,
     _: &Feed,
     _: Option<Claim>,
 ) -> Result<ExclusiveStream, ClaimError> {

@@ -4,10 +4,10 @@
 
 use crate::library::playback::FOLLOW_RATE_SUPPORTED;
 use crate::services;
-use crate::services::settings::OutputModeKey;
 use crate::state::AppState;
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
+use melodia_engine::player::engine::backend::OutputChoice;
 use melodia_engine::player::engine::state::{MAX_SPEED, MAX_VOLUME, MIN_SPEED};
 
 /// Persist the user toggle for "Gapless Playback". The runtime effect
@@ -31,15 +31,19 @@ pub fn set_output_follow_rate(state: &AppState, on: bool) -> Result<(), AppError
     })
 }
 
-/// Persist the Output card's mode and card together, since each pick carries both.
-pub fn set_output_choice(
-    state: &AppState,
-    mode: OutputModeKey,
-    device: Option<String>,
-) -> Result<(), AppError> {
+/// Persist the silence a reopen onto a new rate writes first, which
+/// `library::playback::player_set_resync_hold` already handed the engine.
+pub fn set_output_resync_ms(state: &AppState, ms: u32) -> Result<(), AppError> {
     services::settings::mutate_settings(&state.paths, move |settings| {
-        settings.output.output_mode = mode;
-        settings.output.output_device = device;
+        settings.output.output_resync_ms = ms;
+    })
+}
+
+/// Persist the whole output choice the engine was just handed, since each of the Output card's
+/// pickers changes one part of it.
+pub fn set_output_choice(state: &AppState, choice: &OutputChoice) -> Result<(), AppError> {
+    services::settings::mutate_settings(&state.paths, |settings| {
+        settings.output.set_output_choice(choice);
     })
 }
 

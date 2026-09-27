@@ -5,6 +5,7 @@
 //! stop naming that crate. What it buys is that the chain now describes itself: an [`AudioSource`]
 //! is something `playback::output` can pull, rather than something a dependency happens to accept.
 
+use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -49,6 +50,18 @@ impl SourceFormat {
     pub fn fits_sample(self) -> bool {
         let widest = if self.float { 32 } else { 24 };
         self.bits <= widest
+    }
+}
+
+/// `16-bit`, `32-bit float`: the float matters, since a lossy track and a 32-bit integer file share
+/// a width and nothing else.
+impl fmt::Display for SourceFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}-bit", self.bits)?;
+        if self.float {
+            f.write_str(" float")?;
+        }
+        Ok(())
     }
 }
 

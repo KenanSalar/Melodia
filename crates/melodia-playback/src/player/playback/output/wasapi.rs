@@ -1,5 +1,6 @@
-//! Exclusive output on Windows: a WASAPI endpoint in exclusive, event-driven mode, opened at the
-//! source's own shape.
+//! Exclusive output on Windows: a WASAPI endpoint in exclusive mode, opened at the source's own
+//! shape. Event-driven by default; polled where the user asks, for the USB drivers that stutter
+//! under events.
 //!
 //! Exclusive mode hands the endpoint's buffer to the driver with no audio engine in between, so
 //! every refusal is final: a rate, channel count or format the device lacks fails the claim rather
@@ -25,8 +26,8 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use wasapi::{
-    AudioClient, AudioRenderClient, Device, DeviceEnumerator, Direction, Handle, SampleType,
-    ShareMode, StreamMode, WasapiError, WaveFormat,
+    AudioClient, AudioClock, AudioRenderClient, Device, DeviceEnumerator, Direction, Handle,
+    SampleType, ShareMode, StreamMode, WasapiError, WaveFormat,
 };
 use windows_sys::Win32::Media::Audio::{
     AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED, AUDCLNT_E_DEVICE_IN_USE, AUDCLNT_E_DEVICE_INVALIDATED,
@@ -34,27 +35,30 @@ use windows_sys::Win32::Media::Audio::{
 };
 
 use melodia_audio::player::source::audio::{
-    ChannelCount, Sample, SampleRate, Shape, SourceFormat,
+    ChannelCount, Sample, SampleRate, Shape, SourceFormat, frames_to_duration,
 };
 use melodia_core::error::describe;
 
 use super::claim::ClaimError;
 use super::device::Feed;
 use super::encode::{self, DeviceFormat};
-use super::{Negotiated, OutputDevice, OutputFormat, mmcss};
+use super::{Drive, ExclusiveRequest, Negotiated, OutputDevice, OutputFormat, mmcss};
 
 pub(super) const SUPPORTED: bool = true;
 
-/// How much the writer hands the device per event. Short enough that a stop lands quickly, long
-/// enough that the thread wakes rarely.
-const PERIOD: Duration = Duration::from_millis(20);
+pub(super) const POLLING: bool = true;
 
 /// Intel HD Audio controllers take buffers only in multiples of this many bytes, and in exclusive
 /// mode the buffer is the controller's own.
 const HDA_ALIGN_BYTES: u32 = 128;
 
 /// How long the writer waits for the device to ask for more before checking it is still there.
+/// Above `ExclusiveTuning::MAX_PERIOD`, so a quiet wait is never just a long period.
 const EVENT_WAIT_MS: u32 = 200;
+
+/// Periods a polled buffer holds, which is how late a timer wake may be before an underrun.
+/// Event mode has none of this slack: its buffer is one period.
+const POLLED_PERIODS: i64 = 4;
 
 const THREAD_NAME: &str = "wasapi-out";
 
@@ -100,20 +104,18 @@ pub(super) fn devices() -> Vec<OutputDevice> {
     }
 }
 
-/// Claim `device`, or the system default where none is named, at exactly `shape` and a format
-/// that holds `source`, and start feeding it from `feed`.
+/// Claim the requested device, or the system default where none is named, at exactly its shape
+/// and a format that holds its source, and start feeding it from `feed`.
 ///
 /// # Errors
 ///
 /// A [`ClaimError`] naming why the device could not be had, which the caller falls back on.
 pub(super) fn open(
-    device: Option<&str>,
-    shape: Shape,
-    source: SourceFormat,
+    request: &ExclusiveRequest,
     feed: &Feed,
     _: Option<Claim>,
 ) -> Result<ExclusiveStream, ClaimError> {
-    let request = Request { device: device.map(str::to_owned), shape, source };
+    let request = request.clone();
     let stop = Arc::new(AtomicBool::new(false));
     let (answer_tx, answer_rx) = mpsc::sync_channel(1);
     let writer = {
@@ -143,17 +145,10 @@ fn join(writer: JoinHandle<()>) {
     }
 }
 
-/// What an open asked for, owned so the writer thread can take it.
-struct Request {
-    device: Option<String>,
-    shape: Shape,
-    source: SourceFormat,
-}
-
 type Answer = Result<Negotiated, ClaimError>;
 
 /// The whole life of the `wasapi-out` thread: claim, answer the opener, feed, release.
-fn run(request: &Request, feed: &Feed, stop: &AtomicBool, answer: &SyncSender<Answer>) {
+fn run(request: &ExclusiveRequest, feed: &Feed, stop: &AtomicBool, answer: &SyncSender<Answer>) {
     let _com = ComApartment::enter();
     let _mmcss = mmcss::register_current_thread();
     let (session, negotiated) = match claim(request, feed) {
@@ -168,17 +163,19 @@ fn run(request: &Request, feed: &Feed, stop: &AtomicBool, answer: &SyncSender<An
     if answer.send(Ok(negotiated)).is_err() {
         return;
     }
+    // Info rather than a warning: a device that went away is recovered from, and only a recovery
+    // that fails is something to warn about.
     if let Err(e) = session.play(feed, stop) {
-        log::warn!("audio: the exclusive output stopped: {}", describe(&e));
+        log::info!("audio: the exclusive output stopped: {}", describe(&e));
         feed.health.report_device_lost();
     }
 }
 
-fn claim(request: &Request, feed: &Feed) -> Result<(Session, Negotiated), ClaimError> {
+fn claim(request: &ExclusiveRequest, feed: &Feed) -> Result<(Session, Negotiated), ClaimError> {
     let enumerator = DeviceEnumerator::new()
         .map_err(|e| ClaimError::io("Failed to reach the audio devices", e))?;
     let endpoint = resolve(&enumerator, request.device.as_deref())?;
-    let session = negotiate(&endpoint, request.shape, request.source)?;
+    let session = negotiate(&endpoint, request)?;
     feed.pull.lock().reshape(session.shape);
     session
         .start()
@@ -188,8 +185,8 @@ fn claim(request: &Request, feed: &Feed) -> Result<(Session, Negotiated), ClaimE
         shape: session.shape,
         format: OutputFormat::Exclusive(session.format),
         fallback: None,
-        requested_period: Some(period_frames(request.shape.rate)),
-        period: u32::try_from(session.frames).ok(),
+        requested_period: Some(frames_in_period(request.tuning.period, request.shape.rate)),
+        period: u32::try_from(session.period_frames).ok(),
     };
     Ok((session, negotiated))
 }
@@ -239,11 +236,8 @@ fn resolve(enumerator: &DeviceEnumerator, device: Option<&str>) -> Result<Endpoi
 }
 
 /// Initialise the first candidate the device takes.
-fn negotiate(
-    endpoint: &Endpoint,
-    shape: Shape,
-    source: SourceFormat,
-) -> Result<Session, ClaimError> {
+fn negotiate(endpoint: &Endpoint, request: &ExclusiveRequest) -> Result<Session, ClaimError> {
+    let ExclusiveRequest { shape, format: source, tuning, .. } = *request;
     let id = endpoint.device.id.as_str();
     let probe = endpoint
         .handle
@@ -254,9 +248,9 @@ fn negotiate(
         .map_err(|e| claim_error("Failed to read the device's own format", id, e))?;
     for (candidate, format, wave) in candidates(shape, source, mix.get_nchannels()) {
         let Some(wave) = exclusive_spelling(&probe, &wave, id)? else { continue };
-        match initialize(&endpoint.handle, &wave) {
-            Ok(client) => {
-                return Session::new(client, candidate, format)
+        match initialize(&endpoint.handle, &wave, hns(tuning.period), tuning.drive) {
+            Ok((client, period_hns)) => {
+                return Session::new(client, candidate, format, tuning.drive, period_hns)
                     .map_err(|e| claim_error("Failed to prepare the audio device", id, e));
             }
             // A driver can pass a format it then refuses, so this is a refusal of the format.
@@ -320,34 +314,63 @@ fn exclusive_spelling(
     Ok(client.is_supported_exclusive_with_quirks(wave).ok())
 }
 
-/// A fresh client initialised for exclusive, event-driven use in `wave`.
+/// A fresh client initialised for exclusive use in `wave`, driven as `drive` asks at a period near
+/// `period_hns`, and the period it took.
 ///
-/// A driver that wants a buffer the period didn't land on refuses with
-/// `AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED`. The client that refused knows the size it wanted, but a
-/// client initialises once, so the retry takes a fresh one, and the refused one goes back first as
-/// Microsoft's recovery sequence has it.
-fn initialize(device: &Device, wave: &WaveFormat) -> Result<AudioClient, WasapiError> {
+/// The crate rounds the period up to the device's minimum. A driver that wants a buffer the period
+/// didn't land on still refuses with `AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED`. The client that refused
+/// knows the size it wanted, but a client initialises once, so the retry takes a fresh one, and
+/// the refused one goes back first as Microsoft's recovery sequence has it.
+fn initialize(
+    device: &Device,
+    wave: &WaveFormat,
+    period_hns: i64,
+    drive: Drive,
+) -> Result<(AudioClient, i64), WasapiError> {
     let mut client = device.get_iaudioclient()?;
-    let period = client.calculate_aligned_period_near(hns(PERIOD), Some(HDA_ALIGN_BYTES), wave)?;
-    let mode = StreamMode::EventsExclusive { period_hns: period };
-    let Err(e) = client.initialize_client(wave, &Direction::Render, &mode) else {
-        return Ok(client);
+    let period = client.calculate_aligned_period_near(period_hns, Some(HDA_ALIGN_BYTES), wave)?;
+    let Err(e) = client.initialize_client(wave, &Direction::Render, &stream_mode(drive, period))
+    else {
+        return Ok((client, period));
     };
     if hresult(&e) != Some(AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED) {
         return Err(e);
     }
-    let aligned = wasapi::calculate_period_100ns(
+    let aligned_buffer = wasapi::calculate_period_100ns(
         i64::from(client.get_buffer_size()?),
         i64::from(wave.get_samplespersec()),
     );
     drop(client);
     let mut client = device.get_iaudioclient()?;
-    client.initialize_client(
-        wave,
-        &Direction::Render,
-        &StreamMode::EventsExclusive { period_hns: aligned },
-    )?;
-    Ok(client)
+    let (mode, period) = aligned_stream_mode(drive, aligned_buffer);
+    client.initialize_client(wave, &Direction::Render, &mode)?;
+    Ok((client, period))
+}
+
+/// Exclusive use at `period_hns`: a buffer of one period under events, a few under polling, where
+/// the timer's lateness is what the slack is for.
+fn stream_mode(drive: Drive, period_hns: i64) -> StreamMode {
+    match drive {
+        Drive::Events => StreamMode::EventsExclusive { period_hns },
+        Drive::Polling => StreamMode::PollingExclusive {
+            period_hns,
+            buffer_duration_hns: period_hns.saturating_mul(POLLED_PERIODS),
+        },
+    }
+}
+
+/// [`stream_mode`] around a buffer the driver has already named, and the period it runs at. A
+/// polled period is cut from the buffer rather than the buffer built up from a period, so the
+/// buffer stays exactly the aligned size.
+fn aligned_stream_mode(drive: Drive, buffer_hns: i64) -> (StreamMode, i64) {
+    match drive {
+        Drive::Events => (StreamMode::EventsExclusive { period_hns: buffer_hns }, buffer_hns),
+        Drive::Polling => {
+            let period_hns = buffer_hns / POLLED_PERIODS;
+            let mode = StreamMode::PollingExclusive { period_hns, buffer_duration_hns: buffer_hns };
+            (mode, period_hns)
+        }
+    }
 }
 
 /// Why no candidate took. WASAPI can't be asked about a rate, a channel count and a format
@@ -368,7 +391,7 @@ fn refusal(
     } else if shape.channels.get() > mix.get_nchannels() {
         ClaimError::ChannelsRefused { channels: shape.channels.get() }
     } else {
-        ClaimError::FormatRefused { bits: source.bits }
+        ClaimError::FormatRefused { format: source }
     }
 }
 
@@ -397,52 +420,124 @@ fn claim_error(context: &'static str, id: &str, e: WasapiError) -> ClaimError {
 struct Session {
     client: AudioClient,
     render: AudioRenderClient,
-    event: Handle,
+    pacing: Pacing,
+    /// The device's own count of what it has played, and the ticks per second it counts in.
+    clock: AudioClock,
+    clock_hz: u64,
     shape: Shape,
     format: DeviceFormat,
-    /// Frames per buffer, which in exclusive event mode is what every event asks for.
-    frames: usize,
+    buffer_frames: usize,
+    /// What the device takes per period: the whole buffer under events, a slice of it polled.
+    period_frames: usize,
+}
+
+/// What wakes the writer.
+enum Pacing {
+    /// The device's own event, signalled each time its one-period buffer wants refilling.
+    Events(Handle),
+    /// A timer at half a period, so the buffer is topped up at least twice per period.
+    Polling(Duration),
 }
 
 impl Session {
-    fn new(client: AudioClient, shape: Shape, format: DeviceFormat) -> Result<Self, WasapiError> {
-        let event = client.set_get_eventhandle()?;
+    fn new(
+        client: AudioClient,
+        shape: Shape,
+        format: DeviceFormat,
+        drive: Drive,
+        period_hns: i64,
+    ) -> Result<Self, WasapiError> {
+        let period = from_hns(period_hns);
+        let pacing = match drive {
+            Drive::Events => Pacing::Events(client.set_get_eventhandle()?),
+            Drive::Polling => Pacing::Polling(period / 2),
+        };
         let render = client.get_audiorenderclient()?;
-        let frames = client.get_buffer_size()? as usize;
-        Ok(Self { client, render, event, shape, format, frames })
+        let clock = client.get_audioclock()?;
+        let clock_hz = clock.get_frequency()?.max(1);
+        let buffer_frames = client.get_buffer_size()? as usize;
+        let period_frames = match drive {
+            Drive::Events => buffer_frames,
+            Drive::Polling => frames_in_period(period, shape.rate) as usize,
+        };
+        Ok(Self {
+            client,
+            render,
+            pacing,
+            clock,
+            clock_hz,
+            shape,
+            format,
+            buffer_frames,
+            period_frames,
+        })
     }
 
     fn samples_per_buffer(&self) -> usize {
-        self.frames * usize::from(self.shape.channels.get())
+        self.buffer_frames * usize::from(self.shape.channels.get())
     }
 
     fn start(&self) -> Result<(), WasapiError> {
         // Silence rather than the mixer's first block: the resync hold is laid in after the open
         // returns, and a block pulled now would play ahead of it.
         let silence = vec![0_u8; self.samples_per_buffer() * self.format.bytes_per_sample()];
-        self.render.write_to_device(self.frames, &silence, None)?;
+        self.render.write_to_device(self.buffer_frames, &silence, None)?;
         self.client.start_stream()
     }
 
-    /// Hand the device one buffer per event until told to stop.
+    /// Hand the device whatever it has room for, each time it has some, until told to stop.
     ///
     /// Nothing here logs: the health counters are how this loop reports, and the one error it
     /// returns is logged once, on the way out.
     fn play(&self, feed: &Feed, stop: &AtomicBool) -> Result<(), WasapiError> {
+        let channels = usize::from(self.shape.channels.get());
         let mut block: Vec<Sample> = vec![0.0; self.samples_per_buffer()];
         let mut bytes = Vec::with_capacity(block.len() * self.format.bytes_per_sample());
+        // The priming silence `start` wrote is on the device's clock too.
+        let mut written = self.buffer_frames as u64;
         while !stop.load(Ordering::Relaxed) {
-            if self.event.wait_for_event(EVENT_WAIT_MS).is_err() {
-                // An endpoint that has gone can stop signalling rather than fail a call, so a
-                // quiet wait asks whether it is still there.
-                self.client.get_current_padding()?;
-                continue;
+            let Some(frames) = self.wait_for_room()? else { continue };
+            let pulled = &mut block[..frames * channels];
+            feed.fill(pulled);
+            encode::encode(pulled, self.format, &mut bytes);
+            self.render.write_to_device(frames, &bytes, None)?;
+            written += frames as u64;
+            // A clock that won't answer leaves the last reading standing: it is the ear's
+            // position that suffers, not the audio, so it doesn't end the stream.
+            if let Ok((played, _)) = self.clock.get_position() {
+                feed.report_lead(self.unplayed(written, played));
             }
-            feed.fill(&mut block);
-            encode::encode(&block, self.format, &mut bytes);
-            self.render.write_to_device(self.frames, &bytes, None)?;
         }
         Ok(())
+    }
+
+    /// How long the `written` frames outlast the `played` clock ticks. The device's own latency
+    /// past its clock is not in it: the crate doesn't expose `GetStreamLatency`.
+    fn unplayed(&self, written: u64, played: u64) -> Duration {
+        let played_nanos = u128::from(played) * 1_000_000_000 / u128::from(self.clock_hz);
+        let played = Duration::from_nanos(u64::try_from(played_nanos).unwrap_or(u64::MAX));
+        frames_to_duration(written, self.shape.rate).saturating_sub(played)
+    }
+
+    /// Frames the device has room for once the writer wakes, or `None` where it woke to none.
+    fn wait_for_room(&self) -> Result<Option<usize>, WasapiError> {
+        match &self.pacing {
+            Pacing::Events(event) => {
+                if event.wait_for_event(EVENT_WAIT_MS).is_err() {
+                    // An endpoint that has gone can stop signalling rather than fail a call, so a
+                    // quiet wait asks whether it is still there.
+                    self.client.get_current_padding()?;
+                    return Ok(None);
+                }
+                Ok(Some(self.buffer_frames))
+            }
+            // A device that has gone fails the room query, which ends the writer as a loss.
+            Pacing::Polling(interval) => {
+                std::thread::sleep(*interval);
+                let room = self.client.get_available_space_in_frames()? as usize;
+                Ok((room > 0).then_some(room.min(self.buffer_frames)))
+            }
+        }
     }
 }
 
@@ -476,15 +571,20 @@ impl Drop for ComApartment {
     }
 }
 
-/// [`PERIOD`] in frames at `rate`.
-fn period_frames(rate: SampleRate) -> u32 {
-    let frames = u128::from(rate.get()) * PERIOD.as_millis() / 1_000;
+/// `period` in frames at `rate`.
+fn frames_in_period(period: Duration, rate: SampleRate) -> u32 {
+    let frames = u128::from(rate.get()) * period.as_micros() / 1_000_000;
     u32::try_from(frames).unwrap_or(u32::MAX)
 }
 
 /// `duration` in the 100 ns units WASAPI counts periods in.
 fn hns(duration: Duration) -> i64 {
     i64::try_from(duration.as_nanos() / 100).unwrap_or(i64::MAX)
+}
+
+/// [`hns`]'s way back.
+fn from_hns(hns: i64) -> Duration {
+    Duration::from_nanos(u64::try_from(hns).unwrap_or(0).saturating_mul(100))
 }
 
 #[cfg(test)]

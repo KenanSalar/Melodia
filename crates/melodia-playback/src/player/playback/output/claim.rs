@@ -5,6 +5,8 @@
 //! the panel, which only ever needs to name the cause, and which has to compare equal across
 //! ticks for the watch it rides on to stay quiet.
 
+use melodia_audio::player::source::audio::SourceFormat;
+
 /// What a backend's own error is carried as. Boxed rather than named because the backends are
 /// per-platform and this type is not.
 pub type ClaimSource = Box<dyn std::error::Error + Send + Sync>;
@@ -21,8 +23,8 @@ pub enum ClaimError {
     RateRefused { rate: u32 },
     #[error("the device cannot run {channels} channels or more")]
     ChannelsRefused { channels: u16 },
-    #[error("the device takes none of the formats a {bits}-bit source can be written in")]
-    FormatRefused { bits: u8 },
+    #[error("the device takes none of the formats a {format} source can be written in")]
+    FormatRefused { format: SourceFormat },
     #[error("the device {id} is not connected")]
     NotConnected { id: String },
     #[error("exclusive output is not available on this platform")]
@@ -53,6 +55,15 @@ impl ClaimError {
             Self::Io { .. } => FallbackReason::Io,
         }
     }
+}
+
+/// An exclusive claim that was refused, as the shared stream opened in its place reports it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Fallback {
+    pub reason: FallbackReason,
+    /// The device that refused, which is not the one the audio went to. `None` where it could not
+    /// be found, as a disconnected one can't.
+    pub device: Option<String>,
 }
 
 /// The cause of a fallback, as the panel names it.

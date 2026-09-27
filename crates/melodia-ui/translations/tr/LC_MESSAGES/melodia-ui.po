@@ -2436,3 +2436,30 @@ msgstr "{}, özel"
 
 msgid "{}, exclusive, in a format that can't hold the source exactly"
 msgstr "{}, özel, kaynağı tam olarak taşıyamayan bir biçimde"
+
+msgid "Buffer Period"
+msgstr "Arabellek Periyodu"
+
+msgid "How much audio the device is handed at a time. Longer periods ride out a busy system; shorter ones react sooner"
+msgstr "Aygıta tek seferde ne kadar ses verildiği. Uzun periyotlar yoğun bir sistemi kaldırır, kısa olanlar daha çabuk tepki verir"
+
+msgid "Polling Mode"
+msgstr "Yoklama Modu"
+
+msgid "Top the device up on a timer instead of waiting for it to ask. Try it if a USB device stutters or crackles in exclusive mode"
+msgstr "Aygıtın istemesini beklemek yerine onu bir zamanlayıcıyla doldur. Bir USB aygıtı özel modda takılıyor veya cızırdıyorsa deneyin"
+
+msgid "{} ms"
+msgstr "{} ms"
+
+msgid "The device is running at {}"
+msgstr "Aygıt {} ile çalışıyor"
+
+msgid "{} refused exclusive output because {}. Playing shared on {}"
+msgstr "{} özel çıkışı reddetti ({}). {} üzerinde paylaşımlı çalınıyor"
+
+msgid "Silence After a Rate Change"
+msgstr "Hız Değişiminden Sonra Sessizlik"
+
+msgid "Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off"
+msgstr "Bazı DAC'ler örnekleme hızını değiştirirken bir an susar. Her değişimde kısa bir sessizlik, parçanın başının kesilmesini önler"

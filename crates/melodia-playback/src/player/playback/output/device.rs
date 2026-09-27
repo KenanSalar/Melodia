@@ -23,6 +23,7 @@
 //! `crates/melodia/tests/headless.rs` fail looking like a scan bug.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -39,11 +40,10 @@ use super::{Negotiated, OutputFormat};
 
 /// Device frames the host is asked to hand over at a time.
 ///
-/// Latency against wakeup cost, and it is what the position runs *ahead of* the ear by: the clock
-/// counts frames handed to the device, which are audible a buffer later. rodio asked for the same
-/// 50 ms; the value is a request rather than a promise, and a host outside its own reported range
-/// clamps or ignores it. The second pass doesn't ask at all, and keeps this only as the size the
-/// callback's staging buffer starts at.
+/// Latency against wakeup cost. rodio asked for the same 50 ms; the value is a request rather than
+/// a promise, and a host outside its own reported range clamps or ignores it. The second pass
+/// doesn't ask at all, and keeps this only as the size the callback's staging buffer starts at.
+/// What the ear lags the clock by is measured per callback instead, into [`Lead`].
 const TARGET_BUFFER: Duration = Duration::from_millis(50);
 
 /// The live stream. Dropping it stops audio and releases the device.
@@ -76,6 +76,15 @@ impl Target {
     pub fn default_shape(&self) -> Result<Shape, AppError> {
         shape_of(&self.default)
     }
+
+    /// What the host calls the device, or `None` where it would not say.
+    pub fn name(&self) -> Option<String> {
+        device_name(&self.device)
+    }
+}
+
+fn device_name(device: &cpal::Device) -> Option<String> {
+    device.description().ok().map(|description| description.name().to_owned())
 }
 
 /// The system's default output device.
@@ -96,7 +105,34 @@ pub fn default_target() -> Result<Target, AppError> {
     Ok(Target { device, default })
 }
 
-/// What every stream's callbacks hold: the puller, and the health cell they report into.
+/// How far the ear is behind the voices' clocks: audio pulled and handed to the device that it has
+/// not played yet.
+///
+/// The clocks count what the mixer pulled, which is what the crossfade and the gapless stage have
+/// to be timed against. What the user hears is this much older, and it depends on the device, so
+/// only the backend feeding one can measure it. Zero until one does, which reads the clock as it
+/// is.
+#[derive(Debug, Default)]
+pub struct Lead {
+    nanos: AtomicU64,
+}
+
+impl Lead {
+    pub fn get(&self) -> Duration {
+        Duration::from_nanos(self.nanos.load(Ordering::Relaxed))
+    }
+
+    fn set(&self, lead: Duration) {
+        self.nanos.store(u64::try_from(lead.as_nanos()).unwrap_or(u64::MAX), Ordering::Relaxed);
+    }
+
+    /// Forget a measurement taken on a stream that has gone, which says nothing about the next.
+    pub(super) fn clear(&self) {
+        self.set(Duration::ZERO);
+    }
+}
+
+/// What every stream's callbacks hold: the puller, and the two cells they report into.
 ///
 /// The puller never leaves its owner: each stream holds a clone of the `Arc`, so dropping the
 /// stream is all it takes to get it back.
@@ -104,11 +140,18 @@ pub fn default_target() -> Result<Target, AppError> {
 pub struct Feed {
     pub(super) pull: Arc<Mutex<MixerPull>>,
     pub(super) health: Arc<AudioStreamHealth>,
+    pub(super) lead: Arc<Lead>,
 }
 
 impl Feed {
     pub fn new(pull: MixerPull, health: Arc<AudioStreamHealth>) -> Self {
-        Self { pull: Arc::new(Mutex::new(pull)), health }
+        Self { pull: Arc::new(Mutex::new(pull)), health, lead: Arc::default() }
+    }
+
+    /// Say how much of what has been pulled the device still holds unplayed. An atomic store, so
+    /// the audio thread may call it.
+    pub(super) fn report_lead(&self, lead: Duration) {
+        self.lead.set(lead);
     }
 
     /// Pull one block, or write silence where the puller is taken.
@@ -255,7 +298,7 @@ fn attempt(
     // A host with no answer is a log line missing one term, never a rung that fails. The name
     // likewise.
     let period = stream.buffer_size().ok();
-    let device_name = device.description().ok().map(|description| description.name().to_owned());
+    let device_name = device_name(device);
 
     Ok(DeviceStream {
         _stream: stream,
@@ -406,12 +449,38 @@ fn direct_stream(
     feed: Feed,
 ) -> Result<cpal::Stream, AppError> {
     let error_callback = stream_health::error_callback(Arc::clone(&feed.health));
+    let clock = SampleClock::of(&config);
     opened(device.build_output_stream::<Sample, _, _>(
         config,
-        move |data, _| feed.fill(data),
+        move |data, info| {
+            feed.fill(data);
+            feed.report_lead(clock.lead_after(info, data.len()));
+        },
         error_callback,
         None,
     ))
+}
+
+/// How long a stream's interleaved samples last, for the lead each callback reports.
+#[derive(Clone, Copy)]
+struct SampleClock {
+    samples_per_second: f64,
+}
+
+impl SampleClock {
+    fn of(config: &cpal::StreamConfig) -> Self {
+        Self { samples_per_second: f64::from(config.sample_rate) * f64::from(config.channels) }
+    }
+
+    /// What is still unplayed once a block of `samples` is written: whatever the host queued ahead
+    /// of it, which is how long until it says the block plays, and the block itself.
+    fn lead_after(self, info: &cpal::OutputCallbackInfo, samples: usize) -> Duration {
+        let timestamp = info.timestamp();
+        let queued = timestamp.playback.duration_since(timestamp.callback);
+        let samples = f64::from(u32::try_from(samples).unwrap_or(u32::MAX));
+        let block = samples / self.samples_per_second.max(1.0);
+        queued + Duration::try_from_secs_f64(block).unwrap_or_default()
+    }
 }
 
 /// The one wording for a stream that would not open, so the two builders can't drift.
@@ -429,11 +498,12 @@ where
     T: SizedSample + FromSample<Sample>,
 {
     let error_callback = stream_health::error_callback(Arc::clone(&feed.health));
+    let clock = SampleClock::of(&config);
     // A host handing over more than `staging_samples` allowed for grows this once and keeps it.
     let mut staging: Vec<Sample> = vec![0.0; staging_samples];
     opened(device.build_output_stream::<T, _, _>(
         config,
-        move |data, _| {
+        move |data, info| {
             if staging.len() < data.len() {
                 staging.resize(data.len(), 0.0);
             }
@@ -442,6 +512,7 @@ where
             for (slot, sample) in data.iter_mut().zip(block.iter()) {
                 *slot = T::from_sample(*sample);
             }
+            feed.report_lead(clock.lead_after(info, data.len()));
         },
         error_callback,
         None,

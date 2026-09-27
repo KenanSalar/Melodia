@@ -4,7 +4,7 @@
 use std::num::NonZero;
 
 use melodia_audio::player::source::audio::{Shape, SourceFormat};
-use melodia_playback::player::playback::output::claim::FallbackReason;
+use melodia_playback::player::playback::output::claim::{Fallback, FallbackReason};
 use melodia_playback::player::playback::output::encode::DeviceFormat;
 use melodia_playback::player::playback::output::voice::PlayingSource;
 use melodia_playback::player::playback::output::{Negotiated, OutputFormat};
@@ -166,14 +166,16 @@ fn an_exclusive_claim_reads_the_worst_stage_and_a_fallback_reads_first() {
             "refused, with nothing else in the way",
             |i| {
                 i.negotiated.format = OutputFormat::Shared(cpal::SampleFormat::F32);
-                i.negotiated.fallback = Some(FallbackReason::Busy);
+                i.negotiated.fallback =
+                    Some(Fallback { reason: FallbackReason::Busy, device: None });
             },
             Verdict::Fallback,
         ),
         (
             "refused, over the user's own choice",
             |i| {
-                i.negotiated.fallback = Some(FallbackReason::RateRefused);
+                i.negotiated.fallback =
+                    Some(Fallback { reason: FallbackReason::RateRefused, device: None });
                 i.transport.volume = 99;
             },
             Verdict::Fallback,

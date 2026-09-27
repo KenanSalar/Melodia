@@ -7,6 +7,7 @@
 use async_compat::Compat;
 use slint::{ComponentHandle, SharedString};
 
+use crate::ui::util;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_engine::player::engine::signal_path::{Grade, SignalPath, Verdict};
@@ -72,26 +73,31 @@ fn paint(ui: &AppWindow, path: Option<&SignalPath>) {
     let source = inputs.source.shape;
     let device = &inputs.negotiated;
     g.set_exclusive(matches!(device.format, OutputFormat::Exclusive(_)));
-    g.set_fallback_reason(device.fallback.as_ref().map_or(-1, fallback_index));
-    g.set_fallback_by(match &device.fallback {
+    let fallback = device.fallback.as_ref();
+    g.set_fallback_reason(fallback.map_or(-1, |fallback| fallback_index(&fallback.reason)));
+    g.set_fallback_by(match fallback.map(|fallback| &fallback.reason) {
         Some(FallbackReason::Reserved { by }) => by.into(),
         _ => SharedString::new(),
     });
+    g.set_refused_by(fallback.and_then(|fallback| fallback.device.as_deref()).unwrap_or("").into());
     let source_rate = rate_text(source.rate.get());
     let device_rate = rate_text(device.shape.rate.get());
-    let bits = inputs.source.format.bits;
-    let depth = if inputs.source.format.float {
-        format!("{bits}-bit float")
-    } else {
-        format!("{bits}-bit")
-    };
-    g.set_source_format(format!("{source_rate} · {depth} · {} ch", source.channels).into());
+    g.set_source_format(
+        format!("{source_rate} · {} · {} ch", inputs.source.format, source.channels).into(),
+    );
     g.set_device_format(
         format!("{device_rate} · {} · {} ch", device.format, device.shape.channels).into(),
     );
     g.set_source_rate(source_rate.into());
     g.set_device_rate(device_rate.into());
     g.set_device_name(device.device_name.clone().unwrap_or_default().into());
+    g.set_device_period(
+        device
+            .period
+            .map(|frames| period_text(frames, device.shape.rate.get()))
+            .unwrap_or_default()
+            .into(),
+    );
 
     g.set_eq_on(inputs.eq_on);
     g.set_rg_on(inputs.rg_on);
@@ -126,7 +132,13 @@ fn fallback_index(reason: &FallbackReason) -> i32 {
     }
 }
 
-/// `44.1 kHz`, `48 kHz`: `f64`'s shortest round-trip form drops a trailing `.0` on its own.
 fn rate_text(hz: u32) -> String {
-    format!("{} kHz", f64::from(hz) / 1000.0)
+    util::format_sample_rate(i32::try_from(hz).unwrap_or(i32::MAX))
+}
+
+/// `20 ms`, `21.3 ms`: what a period of `frames` lasts at `hz`, to the tenth a driver's rounding
+/// shows up in.
+fn period_text(frames: u32, hz: u32) -> String {
+    let ms = f64::from(frames) * 1000.0 / f64::from(hz.max(1));
+    format!("{} ms", (ms * 10.0).round() / 10.0)
 }

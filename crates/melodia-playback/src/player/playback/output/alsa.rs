@@ -30,13 +30,12 @@ use super::super::stream_health::AudioStreamHealth;
 use super::claim::ClaimError;
 use super::device::Feed;
 use super::encode::{self, DeviceFormat};
-use super::{Negotiated, OutputDevice, OutputFormat, realtime, reserve};
+use super::{ExclusiveRequest, Negotiated, OutputDevice, OutputFormat, realtime, reserve};
 
 pub(super) const SUPPORTED: bool = true;
 
-/// How much the writer hands the card at a time. Short enough that a stop lands quickly, long
-/// enough that an RT thread wakes rarely.
-const PERIOD: Duration = Duration::from_millis(20);
+/// The writer always blocks on the card, so there is no event mode to poll instead of.
+pub(super) const POLLING: bool = false;
 
 /// Periods the card's buffer holds, which is how long the writer may be late before an underrun.
 const PERIODS_PER_BUFFER: u32 = 4;
@@ -153,21 +152,19 @@ impl Drop for ExclusiveStream {
     }
 }
 
-/// Claim `device`, or the first card listed where none is named, at exactly `shape` and a format
-/// that holds `source`, and start feeding it from `feed`. `held` is the last stream's claim, reused
-/// when it is on the same card and given back otherwise.
+/// Claim the requested card, or the first listed where none is named, at exactly its shape and a
+/// format that holds its source, and start feeding it from `feed`. `held` is the last stream's
+/// claim, reused when it is on the same card and given back otherwise.
 ///
 /// # Errors
 ///
 /// A [`ClaimError`] naming why the card could not be had, which the caller falls back on.
 pub(super) fn open(
-    device: Option<&str>,
-    shape: Shape,
-    source: SourceFormat,
+    request: &ExclusiveRequest,
     feed: &Feed,
     held: Option<Claim>,
 ) -> Result<ExclusiveStream, ClaimError> {
-    let card = resolve(device)?;
+    let card = resolve(request.device.as_deref())?;
     let control = Arc::new(WriterControl::default());
     let claim = match held {
         Some(claim) if claim.card == card.index => {
@@ -182,8 +179,8 @@ pub(super) fn open(
     };
 
     let pcm = open_pcm(&card.device.id)?;
-    let config = configure(&pcm, shape, source)?;
-    let device_shape = Shape { channels: config.channels, rate: shape.rate };
+    let config = configure(&pcm, request)?;
+    let device_shape = Shape { channels: config.channels, rate: request.shape.rate };
     feed.pull.lock().reshape(device_shape);
 
     let writer = Writer {
@@ -281,7 +278,8 @@ struct Config {
     period_frames: usize,
 }
 
-fn configure(pcm: &PCM, shape: Shape, source: SourceFormat) -> Result<Config, ClaimError> {
+fn configure(pcm: &PCM, request: &ExclusiveRequest) -> Result<Config, ClaimError> {
+    let ExclusiveRequest { shape, format: source, tuning, .. } = *request;
     let rate = shape.rate.get();
     let hw =
         HwParams::any(pcm).map_err(|e| ClaimError::io("Failed to read the card's limits", e))?;
@@ -292,7 +290,7 @@ fn configure(pcm: &PCM, shape: Shape, source: SourceFormat) -> Result<Config, Cl
     let channels = set_channels(&hw, shape.channels)?;
     let format = set_format(&hw, source)?;
 
-    let requested_period = period_frames(rate);
+    let requested_period = frames_in_period(tuning.period, rate);
     let period = hw
         .set_period_size_near(alsa::pcm::Frames::from(requested_period), ValueOr::Nearest)
         .map_err(|e| ClaimError::io("The card refused the period size", e))?;
@@ -345,8 +343,8 @@ fn set_format(hw: &HwParams<'_>, source: SourceFormat) -> Result<DeviceFormat, C
         .iter()
         .filter_map(|&format| alsa_format(format).map(|alsa| (format, alsa)))
         .find(|&(_, alsa)| hw.test_format(alsa).is_ok())
-        .ok_or(ClaimError::FormatRefused { bits: source.bits })?;
-    hw.set_format(alsa).map_err(|_| ClaimError::FormatRefused { bits: source.bits })?;
+        .ok_or(ClaimError::FormatRefused { format: source })?;
+    hw.set_format(alsa).map_err(|_| ClaimError::FormatRefused { format: source })?;
     Ok(format)
 }
 
@@ -363,9 +361,9 @@ fn alsa_format(format: DeviceFormat) -> Option<Format> {
     }
 }
 
-/// [`PERIOD`] in frames at `rate`.
-fn period_frames(rate: u32) -> u32 {
-    let frames = u128::from(rate) * PERIOD.as_millis() / 1_000;
+/// `period` in frames at `rate`.
+fn frames_in_period(period: Duration, rate: u32) -> u32 {
+    let frames = u128::from(rate) * period.as_micros() / 1_000_000;
     u32::try_from(frames).unwrap_or(u32::MAX)
 }
 
@@ -413,8 +411,10 @@ impl Writer {
     fn run(self) {
         realtime::promote_current_thread();
         let Self { pcm, feed, control, format, block_samples } = self;
+        // Info rather than a warning: a card that went away is recovered from, and only a
+        // recovery that fails is something to warn about.
         if let Err(e) = write_until_stopped(&pcm, &feed, &control, format, block_samples) {
-            log::warn!("audio: the exclusive output stopped: {}", describe(&e));
+            log::info!("audio: the exclusive output stopped: {}", describe(&e));
             feed.health.report_device_lost();
         }
         drop(pcm);

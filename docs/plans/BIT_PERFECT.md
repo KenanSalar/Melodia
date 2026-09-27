@@ -2,7 +2,7 @@
 
 Working doc. Delete it when the feature ships. Tracks issue #66.
 
-Status: **Phase 1 done** (2026-09-24) · **Phase 2 done** (2026-09-25) · **Phase 3 done** (2026-09-25) · **Phase 4 done** (2026-09-27) · **Phase 5 done** (2026-09-27) · Phase 7 next · macOS moved to #113 · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
+Status: **Phase 1 done** (2026-09-24) · **Phase 2 done** (2026-09-25) · **Phase 3 done** (2026-09-25) · **Phase 4 done** (2026-09-27) · **Phase 5 done** (2026-09-27) · Phase 7 in progress, Windows half first (see its split) · macOS moved to #113 · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
 
 ## What the user sees today
 
@@ -613,6 +613,55 @@ Out of this plan, since there is no Mac to test it on. #113 carries the design n
    - `.claude/rules/audio-stack.md` (reshape, the exclusive backends, the verdict).
    - `unsafe-rust.md` already carries Phase 5's MMCSS row.
    - Then delete this doc.
+6. **Carried from Phase 5's findings:** a refusal names the device that refused, and
+   `FormatRefused` says "float" for a float source.
+
+Hardware volume stays in this phase, on both platforms. The quality chip goes in the Now Playing
+view and in the bottom bar, where it takes an overflow toggle like the other trailing buttons.
+
+**Split by platform (2026-09-27).** The Windows machine can't compile `alsa.rs`, `reserve.rs` or
+`realtime.rs`: there is no WSL, and `alsa-sys` rules out a cross check. So the work is split:
+- **The Windows half** does everything that compiles on Windows: the engine, the voices, the cpal
+  shared path (which also runs on Linux), settings, UI, i18n and `wasapi.rs`.
+- **A seam change touches the Linux files blind and only mechanically**, and every such edit is
+  listed below.
+- **A backend that hasn't measured or offered something yet reports nothing.** So ALSA exclusive
+  behaves as it did in Phase 4 until the Linux half fills it in.
+
+Windows half, in order:
+1. `ExclusiveRequest { device, shape, format, tuning }` becomes the one argument an exclusive
+   `open` takes. `tuning` is the period and, on Windows, event against polling. Also the refusing
+   device's name, and the float wording.
+2. The period knob and WASAPI polling mode.
+3. The position lead. Each backend reports its lead through `Feed`, a voice clamps the heard
+   position at its anchor, and the crossfade and preload keep the pulled clock.
+4. The resync knob.
+5. **Gate A**, then hardware volume: the shared routing plus `IAudioEndpointVolume`.
+6. The quality chip, then **Gate B**.
+
+**Blind edits the Linux session must check first**, running
+`cargo clippy --all-targets --locked --workspace -- -D warnings` and then `cargo test`. They are in
+`alsa.rs` and `unsupported.rs`:
+- `open`'s signature;
+- the period read from the request;
+- the `FormatRefused` construction;
+- the `Negotiated` literal's new fields;
+- the constants each backend answers;
+- a no-op `set_device_volume`.
+
+The as-built notes list the exact edits.
+
+**Linux half:**
+1. The lead: after each `writei`, report `pcm.delay()` over the rate through
+   `Feed::report_lead`. Also confirm the cpal shared lead on the ALSA host under PipeWire, where
+   htstamp is zero but the delay still holds.
+2. The period knob: bound it with `get_period_size_min/max`, read the buffer back, and check it in
+   `hw_params`.
+3. Hardware volume through the claimed card's simple mixer: dB via `get_playback_db_range` /
+   `set_playback_db_all`, the playback switch for mute, and a restore at release. Also read the
+   mixer at claim, so a muted or attenuated card stops reading Bit-perfect (Phase 4's blind spot).
+4. Manual runs on the ALC897 and the PCM2902, then the tests.
+5. Item 5's docs, then delete this doc.
 
 ## Cross-cutting
 

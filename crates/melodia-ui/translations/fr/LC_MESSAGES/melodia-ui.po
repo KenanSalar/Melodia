@@ -2428,3 +2428,30 @@ msgstr "{}, exclusif"
 
 msgid "{}, exclusive, in a format that can't hold the source exactly"
 msgstr "{}, exclusif, dans un format qui ne contient pas la source exactement"
+
+msgid "Buffer Period"
+msgstr "Période du tampon"
+
+msgid "How much audio the device is handed at a time. Longer periods ride out a busy system; shorter ones react sooner"
+msgstr "La quantité d'audio remise au périphérique à chaque fois. Une période longue résiste à un système chargé ; une courte réagit plus vite"
+
+msgid "Polling Mode"
+msgstr "Mode d'interrogation"
+
+msgid "Top the device up on a timer instead of waiting for it to ask. Try it if a USB device stutters or crackles in exclusive mode"
+msgstr "Alimenter le périphérique au rythme d'une minuterie plutôt que d'attendre qu'il le demande. À essayer si un périphérique USB saccade ou grésille en mode exclusif"
+
+msgid "{} ms"
+msgstr "{} ms"
+
+msgid "The device is running at {}"
+msgstr "Le périphérique tourne à {}"
+
+msgid "{} refused exclusive output because {}. Playing shared on {}"
+msgstr "{} a refusé la sortie exclusive ({}). Lecture partagée sur {}"
+
+msgid "Silence After a Rate Change"
+msgstr "Silence après un changement de fréquence"
+
+msgid "Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off"
+msgstr "Certains DAC se coupent un instant en changeant de fréquence d'échantillonnage. Un court silence à chaque changement évite que le début du morceau soit coupé"

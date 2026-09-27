@@ -136,6 +136,10 @@ struct VoiceShared {
     /// behind it; the reverse pairing only ever mis-scales a count near zero.
     frames: AtomicU64,
     rate: AtomicU32,
+    /// Where the clock last started counting from: a mount, a seek, or a resume. Nothing before it
+    /// can still be in the device, so [`Voice::heard`] never reads earlier. Written with `frames`,
+    /// ahead of `rate`.
+    anchor: AtomicU64,
     /// The rest of what [`Voice::playing`] reports. The source's own three are written with the
     /// clock at takeover, ahead of `rate`; `dsp_engaged` once per render. A read that straddles a
     /// handover can pair two tracks' answers, which the next read puts right.
@@ -242,6 +246,7 @@ impl Voice {
             self.await_service();
         }
         self.shared.frames.store(0, Ordering::Relaxed);
+        self.shared.anchor.store(0, Ordering::Relaxed);
     }
 
     /// Free whatever the callback has finished with, here rather than there.
@@ -254,7 +259,16 @@ impl Voice {
         while spent.try_recv().is_ok() {}
     }
 
+    /// Start pulling again, from where the clock stopped.
+    ///
+    /// A resume re-anchors there first: through the pause the device played out everything the
+    /// voice had handed it, so the ear caught up with the clock and the lead starts over from
+    /// nothing. A voice already playing keeps its anchor, the ear still being a lead behind.
     pub fn play(&self) {
+        if self.is_paused() {
+            let paused_at = self.shared.frames.load(Ordering::Relaxed);
+            self.shared.anchor.store(paused_at, Ordering::Relaxed);
+        }
         self.shared.paused.store(false, Ordering::SeqCst);
     }
 
@@ -295,6 +309,24 @@ impl Voice {
             return Duration::ZERO;
         };
         frames_to_duration(self.shared.frames.load(Ordering::Relaxed), rate)
+    }
+
+    /// Where the ear is in the playing source: [`Self::position`] less the `lead` the device still
+    /// holds, never earlier than the clock's anchor.
+    ///
+    /// The lead is device time, and at a speed other than one the device plays media faster or
+    /// slower than that, so it is scaled into the source's time first. The anchor is what keeps a
+    /// fresh start, a seek or a resume from reading before the point it began at while the device
+    /// is still playing out what came before it.
+    pub fn heard(&self, lead: Duration) -> Duration {
+        let Some(rate) = SampleRate::new(self.shared.rate.load(Ordering::Acquire)) else {
+            return Duration::ZERO;
+        };
+        let pulled = self.shared.frames.load(Ordering::Relaxed);
+        let anchor = self.shared.anchor.load(Ordering::Relaxed).min(pulled);
+        let media_lead = lead.as_secs_f64() * self.shared.speed.load();
+        let behind = frames_in(Duration::try_from_secs_f64(media_lead).unwrap_or_default(), rate);
+        frames_to_duration(pulled.saturating_sub(behind).max(anchor), rate)
     }
 
     /// What the playing source is and whether anything above the deck altered its samples, or
@@ -485,6 +517,7 @@ impl VoicePull {
         self.shared.source_bits.store(format.bits, Ordering::Relaxed);
         self.shared.source_float.store(format.float, Ordering::Relaxed);
         self.shared.frames.store(frames, Ordering::Relaxed);
+        self.shared.anchor.store(frames, Ordering::Relaxed);
         self.shared.rate.store(source.sample_rate().get(), Ordering::Release);
         self.shared.mounted.fetch_add(1, Ordering::Release);
         self.current = Some(loaded);
@@ -543,6 +576,7 @@ impl VoicePull {
         }
         self.shared.sources.fetch_sub(dropped, Ordering::SeqCst);
         self.shared.frames.store(0, Ordering::Relaxed);
+        self.shared.anchor.store(0, Ordering::Relaxed);
     }
 
     /// Give up `spent`'s claims here and hand the rest back to be freed elsewhere.
@@ -567,6 +601,7 @@ pub fn pair(device: Shape) -> (Voice, VoicePull) {
         sources: AtomicUsize::new(0),
         frames: AtomicU64::new(0),
         rate: AtomicU32::new(0),
+        anchor: AtomicU64::new(0),
         source_channels: AtomicU16::new(0),
         source_bits: AtomicU8::new(0),
         source_float: AtomicBool::new(false),

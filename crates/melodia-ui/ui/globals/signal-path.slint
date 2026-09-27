@@ -15,6 +15,9 @@ export global SignalPathUi {
     in property <int> fallback-reason: -1;
     // Who holds the card, where the reason is a reservation and the holder named itself.
     in property <string> fallback-by;
+    // The device that refused, which is not `device-name`: that is where the audio went instead.
+    // Empty where the refusing device couldn't be found, as a disconnected one can't.
+    in property <string> refused-by;
 
     in property <int> source-grade;
     in property <int> dsp-grade;
@@ -30,6 +33,8 @@ export global SignalPathUi {
     in property <string> device-rate;
     in property <string> device-format;
     in property <string> device-name;
+    // What the device takes per period, empty where the host wouldn't say.
+    in property <string> device-period;
     in property <bool> eq-on;
     in property <bool> rg-on;
     in property <bool> muted;

@@ -12,12 +12,13 @@
 
 use std::sync::MutexGuard;
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 use melodia_audio::player::source::audio::{Shape, SourceFormat};
 use melodia_core::error::{AppError, describe};
 use melodia_playback::player::playback::decks::Decks;
 use melodia_playback::player::playback::output::{
-    AudioOutput, Negotiated, OutputMode, OutputRequest,
+    AudioOutput, ExclusiveRequest, ExclusiveTuning, Negotiated, OutputMode, OutputRequest,
 };
 use parking_lot::Mutex;
 
@@ -30,6 +31,7 @@ pub struct OutputChoice {
     pub mode: OutputMode,
     /// The card an exclusive claim is aimed at, or `None` for the first the system lists.
     pub device: Option<String>,
+    pub tuning: ExclusiveTuning,
 }
 
 impl PlaybackEngine {
@@ -85,6 +87,14 @@ impl PlaybackEngine {
         self.follow_rate.store(on, Ordering::Relaxed);
     }
 
+    /// Write `hold` of silence after each reopen onto a new rate, from the next one on. Blocking:
+    /// it waits out any reopen in flight.
+    pub fn set_resync_hold(&self, hold: Duration) {
+        if let Some(output) = self.output.lock().as_mut() {
+            output.set_resync_hold(hold);
+        }
+    }
+
     /// Whether the output is reopened to each track's rate, which exclusive output always is.
     pub(super) fn follows_rate(&self) -> bool {
         self.follow_rate.load(Ordering::Relaxed)
@@ -126,9 +136,12 @@ impl PlaybackEngine {
     fn wanted_request(&self, shape: Shape, format: SourceFormat) -> OutputRequest {
         let choice = self.output_choice.lock();
         match choice.mode {
-            OutputMode::Exclusive => {
-                OutputRequest::Exclusive { device: choice.device.clone(), shape, format }
-            }
+            OutputMode::Exclusive => OutputRequest::Exclusive(ExclusiveRequest {
+                device: choice.device.clone(),
+                shape,
+                format,
+                tuning: choice.tuning,
+            }),
             OutputMode::Shared => OutputRequest::Shared {
                 rate: self.follow_rate.load(Ordering::Relaxed).then_some(shape.rate),
             },
@@ -186,7 +199,7 @@ impl PlaybackEngine {
 /// it holds nothing another application wants.
 pub(super) fn release_exclusive(output: &Mutex<Option<AudioOutput>>) {
     if let Some(output) = output.lock().as_mut()
-        && matches!(output.request(), OutputRequest::Exclusive { .. })
+        && matches!(output.request(), OutputRequest::Exclusive(_))
     {
         output.park();
     }
