@@ -17,8 +17,9 @@ use std::time::Duration;
 use melodia_audio::player::source::audio::{Shape, SourceFormat};
 use melodia_core::error::{AppError, describe};
 use melodia_playback::player::playback::decks::Decks;
+use melodia_playback::player::playback::output::claim::FallbackReason;
 use melodia_playback::player::playback::output::{
-    AudioOutput, ExclusiveRequest, ExclusiveTuning, Negotiated, OutputMode, OutputRequest,
+    self, AudioOutput, ExclusiveRequest, ExclusiveTuning, Negotiated, OutputMode, OutputRequest,
 };
 use parking_lot::Mutex;
 
@@ -65,6 +66,26 @@ impl PlaybackEngine {
     /// What the device agreed to, or `None` while no stream is open.
     pub fn negotiated(&self) -> Option<Negotiated> {
         self.output.lock().as_ref().and_then(AudioOutput::negotiated)
+    }
+
+    /// Whether a claim that fell back because its device wasn't connected can find it listed
+    /// again, so it is worth reclaiming now: a fallback is otherwise retried only at the next
+    /// track start, which a gapless album never reaches. Lists the devices only while such a
+    /// fallback stands. Blocking.
+    pub fn disconnected_device_returned(&self) -> bool {
+        let waiting = self
+            .negotiated()
+            .and_then(|negotiated| negotiated.fallback)
+            .is_some_and(|fallback| fallback.reason == FallbackReason::NotConnected);
+        if !waiting {
+            return false;
+        }
+        let chosen = self.output_choice.lock().device.clone();
+        let listed = output::devices();
+        match chosen {
+            Some(id) => listed.iter().any(|device| device.id == id),
+            None => !listed.is_empty(),
+        }
     }
 
     /// The path the playing source takes to the device, or `None` while nothing plays or no

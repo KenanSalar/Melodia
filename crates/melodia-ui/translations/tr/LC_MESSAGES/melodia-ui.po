@@ -2461,5 +2461,14 @@ msgstr "{} özel çıkışı reddetti ({}). {} üzerinde paylaşımlı çalını
 msgid "Silence After a Rate Change"
 msgstr "Hız Değişiminden Sonra Sessizlik"
 
+msgid "Exclusive output unavailable"
+msgstr "Özel çıkış kullanılamıyor"
+
+msgid "Exclusive output was refused, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "Özel çıkış reddedildi, bu yüzden Melodia şimdilik paylaşımlı çalıyor. Nedeni Ayarlar'daki Çıkış bölümünde yazıyor."
+
+msgid "{} refused exclusive output, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "{} özel çıkışı reddetti, bu yüzden Melodia şimdilik paylaşımlı çalıyor. Nedeni Ayarlar'daki Çıkış bölümünde yazıyor."
+
 msgid "Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off"
 msgstr "Bazı DAC'ler örnekleme hızını değiştirirken bir an susar. Her değişimde kısa bir sessizlik, parçanın başının kesilmesini önler"

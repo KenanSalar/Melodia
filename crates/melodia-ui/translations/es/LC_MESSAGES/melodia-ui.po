@@ -2453,5 +2453,14 @@ msgstr "{} rechazó la salida exclusiva ({}). Reproducción compartida en {}"
 msgid "Silence After a Rate Change"
 msgstr "Silencio tras un cambio de frecuencia"
 
+msgid "Exclusive output unavailable"
+msgstr "Salida exclusiva no disponible"
+
+msgid "Exclusive output was refused, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "Se rechazó la salida exclusiva, así que Melodia reproduce en modo compartido por ahora. La sección «Salida» de Ajustes explica el motivo."
+
+msgid "{} refused exclusive output, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "{} rechazó la salida exclusiva, así que Melodia reproduce en modo compartido por ahora. La sección «Salida» de Ajustes explica el motivo."
+
 msgid "Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off"
 msgstr "Algunos DAC se silencian un momento al cambiar de frecuencia de muestreo. Un breve silencio en cada cambio evita que se corte el inicio de la pista"

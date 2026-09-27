@@ -2457,5 +2457,14 @@ msgstr "{}: η αποκλειστική έξοδος απορρίφθηκε ({})
 msgid "Silence After a Rate Change"
 msgstr "Σιωπή μετά από αλλαγή ρυθμού"
 
+msgid "Exclusive output unavailable"
+msgstr "Η αποκλειστική έξοδος δεν είναι διαθέσιμη"
+
+msgid "Exclusive output was refused, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "Η αποκλειστική έξοδος απορρίφθηκε, οπότε το Melodia παίζει προς το παρόν σε κοινόχρηστη λειτουργία. Η ενότητα «Έξοδος» στις Ρυθμίσεις εξηγεί τον λόγο."
+
+msgid "{} refused exclusive output, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "{}: η αποκλειστική έξοδος απορρίφθηκε, οπότε το Melodia παίζει προς το παρόν σε κοινόχρηστη λειτουργία. Η ενότητα «Έξοδος» στις Ρυθμίσεις εξηγεί τον λόγο."
+
 msgid "Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off"
 msgstr "Ορισμένοι DAC σιγούν για λίγο όταν αλλάζουν ρυθμό δειγματοληψίας. Μια σύντομη σιωπή σε κάθε αλλαγή κρατά την αρχή του κομματιού ανέπαφη"

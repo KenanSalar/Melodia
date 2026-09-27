@@ -45,6 +45,13 @@ const DEVICE_POLL: Duration = Duration::from_millis(250);
 /// silence, so a pause is not a stall.
 const STALL_POLLS: u32 = 4;
 
+/// How often a device a claim fell back from for not being connected is looked for again.
+///
+/// A replug is then heard on the chosen device within about this, rather than at the next track
+/// start. Nothing else would bring it back: Windows only sometimes moves its default output to a
+/// replugged device, which is the one thing that disturbs the shared fallback.
+const RECLAIM_POLL: Duration = Duration::from_secs(1);
+
 /// The wait before each reopen attempt.
 ///
 /// The first is immediate, because a default that moved elsewhere is there to open at once. The
@@ -113,6 +120,8 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
         // Not the default burst: the ticks a recovery sat through would land back to back, too
         // close together for a new stream to have beaten, and read as a stall of their own.
         device_ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        let mut reclaim_ticker = tokio::time::interval(RECLAIM_POLL);
+        reclaim_ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
         let mut stall = StallWatch::default();
         let mut warned = WarnedOnce::default();
         loop {
@@ -129,6 +138,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
                         break;
                     }
                 }
+                _ = reclaim_ticker.tick() => reclaim_if_returned(&engine).await,
                 _ = ticker.tick() => {
                     let report = health.drain();
                     let warn = warned.should_warn(report.other);
@@ -185,6 +195,24 @@ async fn recover(
         device_lost.bump();
     }
     true
+}
+
+/// Reopen the output on the chosen device once it is listed again after a fallback for not being
+/// connected. One attempt per poll: a claim that is still refused falls back as before.
+async fn reclaim_if_returned(engine: &Arc<PlaybackEngine>) {
+    let engine = Arc::clone(engine);
+    let reclaimed = tokio::task::spawn_blocking(move || {
+        if engine.disconnected_device_returned() { engine.reopen_output() } else { Ok(None) }
+    })
+    .await;
+    match reclaimed {
+        Ok(Ok(Some(negotiated))) => {
+            log::info!("audio: the chosen device is listed again; reopened: {negotiated:?}");
+        }
+        Ok(Ok(None)) => {}
+        Ok(Err(e)) => log::debug!("audio: reclaiming the chosen device failed: {}", describe(&e)),
+        Err(e) => log::debug!("audio: the reclaim check did not finish: {e}"),
+    }
 }
 
 /// Reopen the output on [`REOPEN_BACKOFF`], handing back the last attempt's failure where none

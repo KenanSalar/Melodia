@@ -552,6 +552,18 @@ export global Settings {
     toast-radio-vote-title => {
         return @tr("Vote not counted");
     }
+    // The body is translated as well: the detail is only the refusing device's name, empty where
+    // it couldn't be found. The reason is left to the Output settings, where it reads in full.
+    pure callback toast-exclusive-refused-title() -> string;
+    toast-exclusive-refused-title => {
+        return @tr("Exclusive output unavailable");
+    }
+    pure callback toast-exclusive-refused-message(string /* device */) -> string;
+    toast-exclusive-refused-message(device) => {
+        return device == ""
+            ? @tr("Exclusive output was refused, so Melodia is playing shared for now. The Output section of Settings says why.")
+            : @tr("{} refused exclusive output, so Melodia is playing shared for now. The Output section of Settings says why.", device);
+    }
     // The one toast kind whose body is localized too — a restart that couldn't
     // relaunch carries no path or error worth showing, only an instruction.
     pure callback toast-restart-required-title() -> string;

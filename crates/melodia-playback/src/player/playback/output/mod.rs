@@ -44,6 +44,7 @@ use std::time::Duration;
 
 use melodia_audio::player::source::audio::{SampleRate, Shape, SourceFormat, frames_in};
 use melodia_core::error::{self, AppError};
+use melodia_core::utils::toast::{self, ToastKind};
 
 use self::claim::{ClaimError, Fallback};
 use self::device::{DeviceStream, Feed, Lead};
@@ -399,8 +400,9 @@ impl AudioOutput {
     /// The refusing device is looked up rather than carried on the error, so no backend has to
     /// thread its name through every way a claim can fail.
     ///
-    /// **A refusal is a warning once, not per track.** A fallback is retried at every track start,
-    /// and a 16-bit card refuses every lossy file, so the same answer again goes to debug.
+    /// **A refusal is a warning and a toast once, not per track.** A fallback is retried at every
+    /// track start, and a 16-bit card refuses every lossy file, so the same answer again goes to
+    /// debug and says nothing to the user.
     fn fall_back(
         &mut self,
         request: &ExclusiveRequest,
@@ -410,11 +412,11 @@ impl AudioOutput {
             reason: refusal.reason(),
             device: refusing_device(request.device.as_deref()),
         };
-        let level = if self.reported.as_ref() == Some(&fallback) {
-            log::Level::Debug
-        } else {
-            log::Level::Warn
-        };
+        let first_report = self.reported.as_ref() != Some(&fallback);
+        let level = if first_report { log::Level::Warn } else { log::Level::Debug };
+        if first_report {
+            toast::notify(ToastKind::ExclusiveRefused, fallback.device.clone().unwrap_or_default());
+        }
         // No name can also mean no backend or a failed listing, so it isn't read as a disconnect.
         match &fallback.device {
             Some(device) => log::log!(
