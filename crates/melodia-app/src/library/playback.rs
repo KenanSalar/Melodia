@@ -471,9 +471,9 @@ pub fn player_set_follow_rate(ctx: &PlaybackContext, on: bool) {
 
 /// Whether this platform has an exclusive backend. Where it doesn't, an exclusive choice falls
 /// back to shared on every open, so the picker isn't offered at all.
-pub const EXCLUSIVE_SUPPORTED: bool = cfg!(target_os = "linux");
+pub const EXCLUSIVE_SUPPORTED: bool = output::EXCLUSIVE_SUPPORTED;
 
-/// The devices an exclusive claim can be aimed at. Blocking: it asks every sound card.
+/// The devices an exclusive claim can be aimed at. Blocking: it asks every device.
 pub fn output_devices() -> Vec<OutputDevice> {
     output::devices()
 }

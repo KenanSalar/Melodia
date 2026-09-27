@@ -46,6 +46,30 @@ fn s24_low_is_sign_extended_in_the_low_three_bytes() {
     assert_eq!(encoded(&[decoded(1, 24)], DeviceFormat::S24Low), [0x01, 0x00, 0x00, 0x00]);
 }
 
+/// WASAPI's 24-in-32 is the mirror of `S24_LE`: the value in the top three bytes, the low byte
+/// clear. Written LSB-aligned, a device declared this way plays 48 dB too quiet.
+#[test]
+fn s24_high_puts_the_24_bit_value_in_the_top_three_bytes() {
+    let rows = [
+        (decoded(-8_388_608, 24), [0x00, 0x00, 0x00, 0x80]),
+        (decoded(-1, 24), [0x00, 0xFF, 0xFF, 0xFF]),
+        (decoded(1, 24), [0x00, 0x01, 0x00, 0x00]),
+        (decoded(8_388_607, 24), [0x00, 0xFF, 0xFF, 0x7F]),
+    ];
+    for (sample, expected) in rows {
+        assert_eq!(encoded(&[sample], DeviceFormat::S24High), expected, "{sample}");
+    }
+}
+
+/// A sample the chain moved off the 24-bit grid rounds on it, so the byte the device ignores
+/// stays clear rather than carrying a fraction it would truncate.
+#[test]
+fn s24_high_rounds_at_24_bits() {
+    let halfway = decoded(3, 24) / 2.0;
+
+    assert_eq!(encoded(&[halfway], DeviceFormat::S24High), [0x00, 0x02, 0x00, 0x00]);
+}
+
 #[test]
 fn full_scale_and_beyond_saturate_rather_than_wrap() {
     let samples = [1.0, 2.0, -1.0, -2.0];
@@ -76,10 +100,14 @@ fn float_passes_through_bit_for_bit() {
 fn a_format_carries_a_source_only_when_it_holds_every_bit() {
     let s16 = SourceFormat { bits: 16, float: false };
     let s24 = SourceFormat { bits: 24, float: false };
+    let s32 = SourceFormat { bits: 32, float: false };
     let rows = [
         (DeviceFormat::S16, s16, true),
         (DeviceFormat::S16, s24, false),
         (DeviceFormat::S24Packed, s24, true),
+        (DeviceFormat::S24High, s24, true),
+        // Its container is 32 bits wide and its value is not.
+        (DeviceFormat::S24High, s32, false),
         (DeviceFormat::S32, s24, true),
         // A float below 2^-31 has bits no 32-bit integer holds.
         (DeviceFormat::S32, SourceFormat::F32, false),

@@ -2422,6 +2422,9 @@ msgstr "seçilen aygıt bağlı değil"
 msgid "exclusive output isn't available on this system"
 msgstr "özel çıkış bu sistemde kullanılamıyor"
 
+msgid "the device doesn't allow exclusive control, which its Advanced properties in the Sound control panel can turn on"
+msgstr "aygıt özel denetime izin vermiyor; bu, Ses denetim masasında aygıtın özelliklerindeki Gelişmiş sekmesinden açılabilir"
+
 msgid "the device couldn't be opened"
 msgstr "aygıt açılamadı"
 

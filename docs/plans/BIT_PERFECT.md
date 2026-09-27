@@ -2,7 +2,7 @@
 
 Working doc. Delete it when the feature ships. Tracks issue #66.
 
-Status: **Phase 1 done** (2026-09-24) · **Phase 2 done** (2026-09-25) · **Phase 3 done** (2026-09-25) · **Phase 4 done** (2026-09-27) · Phase 5 next · macOS moved to #113 · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
+Status: **Phase 1 done** (2026-09-24) · **Phase 2 done** (2026-09-25) · **Phase 3 done** (2026-09-25) · **Phase 4 done** (2026-09-27) · **Phase 5 done** (2026-09-27) · Phase 7 next · macOS moved to #113 · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
 
 ## What the user sees today
 
@@ -495,7 +495,7 @@ The tests landed are:
 Each was confirmed to fail against a mutation of the code it covers. The reservation hand-back
 has no unit test: it needs a real holder on a bus, and the scripted runs above are its coverage.
 
-### Phase 5: Windows exclusive: WASAPI through the `wasapi` crate
+### Phase 5: Windows exclusive: WASAPI through the `wasapi` crate ✅ done
 
 1. **Entry check:** `cargo search wasapi` and pin it. Confirm its `windows` dependency
    unifies with cpal's `0.62.2`. If it pulls a second copy, weigh the compile cost before
@@ -519,6 +519,80 @@ has no unit test: it needs a real holder on a bus, and the scripted runs above a
 **Exit:** Melodia disappears from the Windows volume mixer while it plays. With the checkbox
 cleared, it falls back with that reason. An unplug recovers.
 
+**Entry check, answered (2026-09-27): adopted.** `wasapi` 0.24.0 (MIT) builds on `windows` 0.62,
+the copy cpal 0.18.2 already resolves, so the lock gains the one crate and no second `windows`.
+MIT puts nothing in `licenses/ATTRIBUTION.txt`.
+
+**As built (2026-09-27), where it departs from the steps above:**
+- **One seam instead of per-variant `cfg`s.** `output/mod.rs` picks a backend module per platform
+  with one `cfg_select!`: `alsa`, `wasapi`, or the new `unsupported` everywhere else. Each answers
+  the same names (`SUPPORTED`, `devices`, `open`, `ExclusiveStream`, `Claim`), so `Stream`, `claim`
+  and `devices` lost every `cfg`, and `library::playback::EXCLUSIVE_SUPPORTED` reads
+  `output::EXCLUSIVE_SUPPORTED` instead of spelling the platform list again. On Linux that was a
+  rename, `AlsaStream` to `ExclusiveStream`.
+- **Every COM call is made on the `wasapi-out` thread.** It opens the endpoint, answers the open
+  over a channel, then feeds it, so no COM object crosses a thread and the caller's apartment
+  doesn't matter. `Claim` is uninhabited there, since an endpoint has no reservation to carry.
+- **`DeviceFormat::S24High` is the MSB-aligned 24-in-32**, encoded as the 24-bit value shifted up
+  so it rounds at 24 bits and leaves the low byte clear. Both integer rows of the ladder carry it
+  after `S24Low`, and each backend skips the rung it has no way to declare: ALSA `S24High`, WASAPI
+  `S24Low`.
+- **A plain `IsFormatSupported` comes before the crate's quirk walk.** The walk swallows every
+  error, so a busy or barred device would read as one refusing the format. The first answer that
+  refuses the whole device ends the claim.
+- **The Windows default endpoint is listed first**, so "no device chosen" and "the first one
+  listed" stay the same device, as they are for a card on Linux.
+- **The pre-fill is silence.** The resync hold is laid in after the open returns, and a block
+  pulled before it would play ahead of the hold.
+- **`NotAllowed` is a new `ClaimError` and `FallbackReason`**, the cleared checkbox. The panel's
+  reason names the device's Advanced properties in the Sound control panel.
+- **A quiet event wait (200 ms) asks the device whether it is still there**, since an endpoint that
+  has gone can stop signalling rather than fail a call. Any error ends the writer and reports a loss.
+- **MMCSS adds two `unsafe` calls**, missing the plan's "new `unsafe` at zero". No crate in the
+  tree wraps `AvSetMmThreadCharacteristicsW`, and a normal-priority exclusive writer would sit below
+  cpal's own shared thread, which runs at `THREAD_PRIORITY_TIME_CRITICAL`. Declarations from
+  `windows-sys`, in `output/mmcss.rs`, listed in `unsafe-rust.md`.
+- **Handing the card back moved into `AudioOutput::close_for`.** The shared arm of `start` had
+  dropped the held claim explicitly, which on Windows drops an uninhabited type and fails clippy's
+  `drop_non_drop`. Closing the old stream whole for a shared request does the same, on both
+  platforms.
+- No busy retry like `alsa::BUSY_WAIT`: nothing in the manual test needed one.
+
+**Found in the manual test (2026-09-27):**
+- **The refusal names the wrong device.** The log line and the panel's Device row name where the
+  audio fell back to, not the device that refused, so two correct refusals on two devices read as
+  one broken claim. And a lossy track is reported as a "32-bit source" with no "float". Both are
+  open below.
+- **Windows' Default Format has nothing to do with exclusive**; the two Exclusive Mode boxes do.
+  They are readable, for a bug report, as the endpoint's registry properties
+  `{b3f8fa53-0004-438e-9003-51a46e139bfc},3` and `,4` under
+  `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render\<id>\Properties`, `0` when
+  cleared. With them cleared, `IsFormatSupported` and `Initialize` both answer
+  `AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED` for every format and rate.
+
+**Result.** Manual tests on 2026-09-27, Windows 11, reading the log and a query-only probe of each
+endpoint:
+- **Behringer UMC22** (a PCM2902, 16-bit at 32, 44.1 and 48 kHz only): a 48 kHz 16-bit file
+  claimed it as `Exclusive(S16)` with a 960-frame (20 ms) period, and nothing else could play
+  through it. Lossy tracks fell back with the format reason, correctly for a 16-bit-only device.
+- **Realtek ALC897**: with the Exclusive Mode boxes cleared, every claim fell back as `NotAllowed`.
+  Ticked, the same file claimed it as `Exclusive(S16)` at 48 kHz, a browser playing meanwhile was
+  moved to another output, and it had the device back once Melodia closed.
+- **Not run:** a rate change mid-queue, unplugging mid-track, Stop as distinct from closing,
+  24-bit or high-rate output (no such files at hand), and the alignment retry.
+
+The tests landed are:
+- `encode_tests`: `S24High` puts the value in the top three bytes, rounds at 24 bits, and carries a
+  24-bit source but not a 32-bit one.
+- `wasapi_tests` (Windows only): what each rung is declared as, frame width included; that a claim
+  asks for the source's channel count first and never for `S24Low`; that a source wider than the
+  device is still asked for; which errors end a claim outright; and that anything else is I/O
+  under the caller's context.
+
+Each was confirmed to fail against a mutation of the code it covers. The claim itself, the
+default-first listing and the writer loop need a device, and the manual runs above are their
+coverage.
+
 ### Phase 6: macOS exclusive: moved to #113
 
 Out of this plan, since there is no Mac to test it on. #113 carries the design notes.
@@ -537,7 +611,7 @@ Out of this plan, since there is no Mac to test it on. #113 carries the design n
 5. Docs:
    - README feature list and CLAUDE.md (AudioOutput ownership, the lock order).
    - `.claude/rules/audio-stack.md` (reshape, the exclusive backends, the verdict).
-   - An `unsafe-rust.md` row only if a site appeared after all.
+   - `unsafe-rust.md` already carries Phase 5's MMCSS row.
    - Then delete this doc.
 
 ## Cross-cutting
@@ -565,4 +639,10 @@ Out of this plan, since there is no Mac to test it on. #113 carries the design n
   skip claims that cannot work.
 - Once cpal 0.19's extension traits ship (#1220), can they replace `wasapi.rs` or add a native
   PipeWire exclusive stream (`PW_STREAM_FLAG_EXCLUSIVE` / `node.force-rate`)?
+- A refusal should name the device that refused. Today the fallback log line and the panel's
+  Device row name only the shared device the audio went to (Phase 5's findings). Carrying the
+  refusing device's name on the fallback reaches `Negotiated`, the panel text and the
+  `signal_path` tests, on both platforms.
+- `ClaimError::FormatRefused` says "a 32-bit source" for a lossy track, which decodes to 32-bit
+  float. Carrying the whole `SourceFormat` would let it say so.
 

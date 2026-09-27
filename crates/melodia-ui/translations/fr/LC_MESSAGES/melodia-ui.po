@@ -2414,6 +2414,9 @@ msgstr "le périphérique choisi n'est pas connecté"
 msgid "exclusive output isn't available on this system"
 msgstr "la sortie exclusive n'est pas disponible sur ce système"
 
+msgid "the device doesn't allow exclusive control, which its Advanced properties in the Sound control panel can turn on"
+msgstr "le périphérique n'autorise pas le contrôle exclusif, qui s'active dans ses propriétés, onglet Avancé du panneau de configuration Son"
+
 msgid "the device couldn't be opened"
 msgstr "le périphérique n'a pas pu être ouvert"
 

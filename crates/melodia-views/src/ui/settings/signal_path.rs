@@ -122,6 +122,7 @@ fn fallback_index(reason: &FallbackReason) -> i32 {
         FallbackReason::NotConnected => 5,
         FallbackReason::Unsupported => 6,
         FallbackReason::Io => 7,
+        FallbackReason::NotAllowed => 8,
     }
 }
 

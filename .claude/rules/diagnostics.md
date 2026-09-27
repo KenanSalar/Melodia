@@ -62,4 +62,4 @@ Settings → About → Diagnostics, unreachable when the thing being reported is
 open. It is a Linux/macOS route: under `windows_subsystem = "windows"` a release build has no
 console, so `GetStdHandle` hands back nothing and the `writeln!` is swallowed (`--version` escapes
 only because the updater spawns it with `Stdio::piped()`). Attaching the parent console was
-declined — one diagnostic for a fourth Win32 FFI site `cfg(windows)` keeps out of CI forever.
+declined: one diagnostic is not worth another Win32 FFI site.

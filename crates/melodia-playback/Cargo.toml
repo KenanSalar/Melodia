@@ -34,8 +34,20 @@ alsa = "0.11.0"
 zbus.workspace = true
 rustix = { version = "1.1.5", features = ["process", "thread"] }
 
+# The exclusive backend on Windows. `wasapi` wraps COM over the same `windows` release cpal
+# resolves, so it adds no second copy of it. `windows-sys` supplies the WASAPI error codes and
+# the MMCSS registration the writer thread asks for.
+[target.'cfg(target_os = "windows")'.dependencies]
+wasapi = "0.24.0"
+windows-sys.workspace = true
+
 [dev-dependencies]
 melodia-testkit = { path = "../melodia-testkit" }
+
+# Builds the `WasapiError` a refused claim arrives as. Held to the release `wasapi` resolves,
+# since the error it wraps is that release's type and any other is a second copy.
+[target.'cfg(target_os = "windows")'.dev-dependencies]
+windows-core = "0.62.2"
 
 [lints]
 workspace = true

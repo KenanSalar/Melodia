@@ -32,6 +32,8 @@ use super::device::Feed;
 use super::encode::{self, DeviceFormat};
 use super::{Negotiated, OutputDevice, OutputFormat, realtime, reserve};
 
+pub(super) const SUPPORTED: bool = true;
+
 /// How much the writer hands the card at a time. Short enough that a stop lands quickly, long
 /// enough that an RT thread wakes rarely.
 const PERIOD: Duration = Duration::from_millis(20);
@@ -119,7 +121,7 @@ pub(super) struct Claim {
 }
 
 /// The live stream. Dropping it stops the writer, closes the card, then gives the claim back.
-pub(super) struct AlsaStream {
+pub(super) struct ExclusiveStream {
     writer: Option<JoinHandle<()>>,
     control: Arc<WriterControl>,
     negotiated: Negotiated,
@@ -127,7 +129,7 @@ pub(super) struct AlsaStream {
     claim: Option<Claim>,
 }
 
-impl AlsaStream {
+impl ExclusiveStream {
     pub(super) fn negotiated(&self) -> Negotiated {
         self.negotiated.clone()
     }
@@ -140,7 +142,7 @@ impl AlsaStream {
     }
 }
 
-impl Drop for AlsaStream {
+impl Drop for ExclusiveStream {
     fn drop(&mut self) {
         self.control.stop();
         if let Some(writer) = self.writer.take()
@@ -164,7 +166,7 @@ pub(super) fn open(
     source: SourceFormat,
     feed: &Feed,
     held: Option<Claim>,
-) -> Result<AlsaStream, ClaimError> {
+) -> Result<ExclusiveStream, ClaimError> {
     let card = resolve(device)?;
     let control = Arc::new(WriterControl::default());
     let claim = match held {
@@ -196,7 +198,7 @@ pub(super) fn open(
         .spawn(move || writer.run())
         .map_err(|e| ClaimError::io("Failed to start the exclusive output thread", e))?;
 
-    Ok(AlsaStream {
+    Ok(ExclusiveStream {
         writer: Some(writer),
         control,
         negotiated: Negotiated {
@@ -339,23 +341,25 @@ fn set_channels(hw: &HwParams<'_>, source: ChannelCount) -> Result<ChannelCount,
 }
 
 fn set_format(hw: &HwParams<'_>, source: SourceFormat) -> Result<DeviceFormat, ClaimError> {
-    let format = DeviceFormat::ladder(source)
+    let (format, alsa) = DeviceFormat::ladder(source)
         .iter()
-        .copied()
-        .find(|&format| hw.test_format(alsa_format(format)).is_ok())
+        .filter_map(|&format| alsa_format(format).map(|alsa| (format, alsa)))
+        .find(|&(_, alsa)| hw.test_format(alsa).is_ok())
         .ok_or(ClaimError::FormatRefused { bits: source.bits })?;
-    hw.set_format(alsa_format(format))
-        .map_err(|_| ClaimError::FormatRefused { bits: source.bits })?;
+    hw.set_format(alsa).map_err(|_| ClaimError::FormatRefused { bits: source.bits })?;
     Ok(format)
 }
 
-fn alsa_format(format: DeviceFormat) -> Format {
+/// The ALSA format for `format`, or `None` for the MSB-aligned 24-in-32, which ALSA only spells
+/// as `S32_LE` and which the ladder already tries as that.
+fn alsa_format(format: DeviceFormat) -> Option<Format> {
     match format {
-        DeviceFormat::S16 => Format::S16LE,
-        DeviceFormat::S24Packed => Format::S243LE,
-        DeviceFormat::S24Low => Format::S24LE,
-        DeviceFormat::S32 => Format::S32LE,
-        DeviceFormat::F32 => Format::FloatLE,
+        DeviceFormat::S16 => Some(Format::S16LE),
+        DeviceFormat::S24Packed => Some(Format::S243LE),
+        DeviceFormat::S24Low => Some(Format::S24LE),
+        DeviceFormat::S24High => None,
+        DeviceFormat::S32 => Some(Format::S32LE),
+        DeviceFormat::F32 => Some(Format::FloatLE),
     }
 }
 

@@ -113,6 +113,7 @@ export component OutputSection inherits Rectangle {
         : SignalPathUi.fallback-reason == 4 ? @tr("the device takes no sample format that holds this track")
         : SignalPathUi.fallback-reason == 5 ? @tr("the chosen device isn't connected")
         : SignalPathUi.fallback-reason == 6 ? @tr("exclusive output isn't available on this system")
+        : SignalPathUi.fallback-reason == 8 ? @tr("the device doesn't allow exclusive control, which its Advanced properties in the Sound control panel can turn on")
         : @tr("the device couldn't be opened");
 
     property <string> effects-text: SignalPathUi.dsp-grade == 0 ? @tr("No effects")

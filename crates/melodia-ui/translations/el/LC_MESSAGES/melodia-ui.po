@@ -2418,6 +2418,9 @@ msgstr "η επιλεγμένη συσκευή δεν είναι συνδεδε�
 msgid "exclusive output isn't available on this system"
 msgstr "η αποκλειστική έξοδος δεν είναι διαθέσιμη σε αυτό το σύστημα"
 
+msgid "the device doesn't allow exclusive control, which its Advanced properties in the Sound control panel can turn on"
+msgstr "η συσκευή δεν επιτρέπει αποκλειστικό έλεγχο, που ενεργοποιείται στις ιδιότητές της, στην καρτέλα Για προχωρημένους του πίνακα ελέγχου Ήχου"
+
 msgid "the device couldn't be opened"
 msgstr "δεν ήταν δυνατό να ανοίξει η συσκευή"
 

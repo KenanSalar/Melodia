@@ -2413,6 +2413,9 @@ msgstr "il dispositivo scelto non è collegato"
 msgid "exclusive output isn't available on this system"
 msgstr "l'uscita esclusiva non è disponibile su questo sistema"
 
+msgid "the device doesn't allow exclusive control, which its Advanced properties in the Sound control panel can turn on"
+msgstr "il dispositivo non consente il controllo esclusivo, che si attiva nelle sue proprietà, scheda Avanzate del pannello di controllo Audio"
+
 msgid "the device couldn't be opened"
 msgstr "impossibile aprire il dispositivo"
 

@@ -13,6 +13,8 @@ pub type ClaimSource = Box<dyn std::error::Error + Send + Sync>;
 pub enum ClaimError {
     #[error("the device is in use by another client")]
     Busy(#[source] ClaimSource),
+    #[error("the system does not allow exclusive control of the device")]
+    NotAllowed(#[source] ClaimSource),
     #[error("{by} holds the device's reservation")]
     Reserved { by: String },
     #[error("the device cannot run at {rate} Hz")]
@@ -41,6 +43,7 @@ impl ClaimError {
     pub fn reason(&self) -> FallbackReason {
         match self {
             Self::Busy(_) => FallbackReason::Busy,
+            Self::NotAllowed(_) => FallbackReason::NotAllowed,
             Self::Reserved { by } => FallbackReason::Reserved { by: by.clone() },
             Self::RateRefused { .. } => FallbackReason::RateRefused,
             Self::ChannelsRefused { .. } => FallbackReason::ChannelsRefused,
@@ -56,6 +59,8 @@ impl ClaimError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FallbackReason {
     Busy,
+    /// The user has switched exclusive control off for the device, which only Windows offers.
+    NotAllowed,
     /// Another application holds the card's reservation at a priority above ours.
     Reserved {
         by: String,

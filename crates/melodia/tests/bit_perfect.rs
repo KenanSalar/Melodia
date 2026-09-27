@@ -2,9 +2,9 @@
 //! in the way, the bytes an exclusive backend writes are the file's own samples.
 //!
 //! Driven through the real engine on a device-free mixer, from decoder through `EqSource`, the
-//! deck and the sum, then through `encode` as the ALSA writer does. The fixtures are written here
-//! rather than committed: noise, so every bit of a sample is exercised, with the format's integer
-//! extremes placed at the start.
+//! deck and the sum, then through `encode` as both exclusive writers do. The fixtures are written
+//! here rather than committed: noise, so every bit of a sample is exercised, with the format's
+//! integer extremes placed at the start.
 
 use std::path::Path;
 use std::sync::Arc;

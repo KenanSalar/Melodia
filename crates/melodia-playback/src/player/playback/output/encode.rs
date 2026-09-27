@@ -15,27 +15,29 @@ use melodia_audio::player::source::audio::{Sample, SourceFormat};
 
 /// A sample layout a device can be opened with, all little-endian.
 ///
-/// **The two 24-bit layouts are different formats, not two spellings of one.** `S24Packed` is
-/// three bytes per sample and is what many USB DACs offer alone; `S24Low` is 24 bits
-/// LSB-aligned in a 32-bit container. WASAPI's 24-in-32 is MSB-aligned, which is neither, and
-/// belongs to that backend when it exists.
+/// **The three 24-bit layouts are different formats, not three spellings of one.** `S24Packed`
+/// is three bytes per sample and is what many USB DACs offer alone. The other two put 24 bits in
+/// a 32-bit container: `S24Low` at the bottom, as ALSA's `S24_LE` does, and `S24High` at the
+/// top, as WASAPI's 24-in-32 does. Writing one where the other was opened plays 48 dB off.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeviceFormat {
     S16,
     S24Packed,
     S24Low,
+    S24High,
     S32,
     F32,
 }
 
 impl DeviceFormat {
     /// The formats to try for a source, best first: its own width, then the widest integer
-    /// that holds it, then the other 24-bit container.
+    /// that holds it, then the 24-in-32 containers. A backend skips whichever of those it has no
+    /// spelling for.
     pub fn ladder(source: SourceFormat) -> &'static [Self] {
-        use DeviceFormat::{F32, S16, S24Low, S24Packed, S32};
+        use DeviceFormat::{F32, S16, S24High, S24Low, S24Packed, S32};
         match source {
-            SourceFormat { float: false, bits: ..=16 } => &[S16, S32, S24Packed, S24Low],
-            SourceFormat { float: false, bits: 17..=24 } => &[S24Packed, S32, S24Low],
+            SourceFormat { float: false, bits: ..=16 } => &[S16, S32, S24Packed, S24Low, S24High],
+            SourceFormat { float: false, bits: 17..=24 } => &[S24Packed, S32, S24Low, S24High],
             SourceFormat { .. } => &[S32, F32],
         }
     }
@@ -56,27 +58,37 @@ impl DeviceFormat {
         match self {
             Self::S16 => 2,
             Self::S24Packed => 3,
-            Self::S24Low | Self::S32 | Self::F32 => 4,
+            Self::S24Low | Self::S24High | Self::S32 | Self::F32 => 4,
         }
     }
 
     fn integer_bits(self) -> Option<u8> {
         match self {
             Self::S16 => Some(16),
-            Self::S24Packed | Self::S24Low => Some(24),
+            Self::S24Packed | Self::S24Low | Self::S24High => Some(24),
             Self::S32 => Some(32),
             Self::F32 => None,
         }
     }
+
+    /// How far the value sits above the bottom of its container.
+    fn msb_padding(self) -> u32 {
+        match self {
+            Self::S24High => 8,
+            _ => 0,
+        }
+    }
 }
 
-/// The ALSA spelling, which is what `/proc/asound/…/hw_params` prints beside it.
+/// The ALSA spelling, which is what `/proc/asound/…/hw_params` prints beside it. ALSA opens
+/// `S24High` as `S32_LE` with 24 significant bits, so that is how it reads.
 impl fmt::Display for DeviceFormat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::S16 => "S16_LE",
             Self::S24Packed => "S24_3LE",
             Self::S24Low => "S24_LE",
+            Self::S24High => "S32_LE (24 valid)",
             Self::S32 => "S32_LE",
             Self::F32 => "FLOAT_LE",
         })
@@ -95,10 +107,13 @@ pub fn encode(samples: &[Sample], format: DeviceFormat, out: &mut Vec<u8>) {
         return;
     };
     // Every integer layout is the low bytes of the sign-extended value: two for `S16`, three for
-    // the packed 24, all four for `S24Low` and `S32`.
+    // the packed 24, all four for the rest. `S24High` shifts it up first, so it rounds at 24 bits
+    // and leaves the low byte clear.
     let width = format.bytes_per_sample();
+    let padding = format.msb_padding();
     for &sample in samples {
-        out.extend_from_slice(&to_integer(sample, bits).to_le_bytes()[..width]);
+        let value = to_integer(sample, bits) << padding;
+        out.extend_from_slice(&value.to_le_bytes()[..width]);
     }
 }
 

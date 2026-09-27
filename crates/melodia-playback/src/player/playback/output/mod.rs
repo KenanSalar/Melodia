@@ -18,14 +18,25 @@ pub mod encode;
 pub mod mixer;
 pub mod voice;
 
-#[cfg(target_os = "linux")]
-mod alsa;
-#[cfg(target_os = "linux")]
-use self::alsa::Claim;
-#[cfg(target_os = "linux")]
-mod realtime;
-#[cfg(target_os = "linux")]
-mod reserve;
+// One exclusive backend per platform, each answering to the same names: `SUPPORTED`, `devices`,
+// `open`, the `ExclusiveStream` it returns and the `Claim` a reopen carries across.
+cfg_select! {
+    target_os = "linux" => {
+        mod alsa;
+        mod realtime;
+        mod reserve;
+        use self::alsa as exclusive;
+    }
+    target_os = "windows" => {
+        mod mmcss;
+        mod wasapi;
+        use self::wasapi as exclusive;
+    }
+    _ => {
+        mod unsupported;
+        use self::unsupported as exclusive;
+    }
+}
 
 use std::fmt;
 use std::sync::Arc;
@@ -37,6 +48,7 @@ use melodia_core::error::{self, AppError};
 use self::claim::{ClaimError, FallbackReason};
 use self::device::{DeviceStream, Feed};
 use self::encode::DeviceFormat;
+use self::exclusive::{Claim, ExclusiveStream};
 use self::mixer::Mixer;
 use super::stream_health::AudioStreamHealth;
 
@@ -81,12 +93,13 @@ pub struct OutputDevice {
     pub name: String,
 }
 
+/// Whether this platform has an exclusive backend. Where it doesn't, every claim falls back.
+pub const EXCLUSIVE_SUPPORTED: bool = exclusive::SUPPORTED;
+
 /// Every device an exclusive claim can be aimed at, empty where there is no exclusive backend.
+/// Blocking: it asks every device.
 pub fn devices() -> Vec<OutputDevice> {
-    cfg_select! {
-        target_os = "linux" => alsa::devices(),
-        _ => Vec::new(),
-    }
+    exclusive::devices()
 }
 
 /// The sample format a stream was opened with.
@@ -167,20 +180,14 @@ pub struct AudioOutput {
 /// The stream on one backend or the other. Dropping it stops audio and releases the device.
 enum Stream {
     Shared(DeviceStream),
-    #[cfg(target_os = "linux")]
-    Exclusive(alsa::AlsaStream),
+    Exclusive(ExclusiveStream),
 }
-
-/// Where there is no exclusive backend there is never a claim to carry across a reopen.
-#[cfg(not(target_os = "linux"))]
-enum Claim {}
 
 impl Stream {
     /// Close the stream, keeping an exclusive one's claim on its card.
     fn into_claim(self) -> Option<Claim> {
         match self {
             Self::Shared(_) => None,
-            #[cfg(target_os = "linux")]
             Self::Exclusive(stream) => stream.into_claim(),
         }
     }
@@ -188,7 +195,6 @@ impl Stream {
     fn negotiated(&self) -> Negotiated {
         match self {
             Self::Shared(stream) => stream.negotiated(),
-            #[cfg(target_os = "linux")]
             Self::Exclusive(stream) => stream.negotiated(),
         }
     }
@@ -228,7 +234,7 @@ impl AudioOutput {
     /// fallback also failed, the error is the request's own.
     pub fn reopen(&mut self, request: OutputRequest) -> Result<Negotiated, AppError> {
         let previous_rate = self.negotiated().map(|negotiated| negotiated.shape.rate);
-        let held = self.stream.take().and_then(Stream::into_claim);
+        let held = self.close_for(&request);
         // After the drop and before the open, which is the one window where no stream can report:
         // a loss still flagged here belongs to the stream just dropped, and left standing it would
         // reopen the new one for nothing.
@@ -261,18 +267,24 @@ impl AudioOutput {
         Ok(negotiated)
     }
 
-    /// Open a stream for `request`, reusing `held` where it claims the card asked for. A shared
-    /// request drops it, which is what hands the card back.
+    /// Close the stream, keeping an exclusive one's claim only where `request` could reuse it. A
+    /// shared request closes it whole, which hands the card back before the shared stream opens.
+    fn close_for(&mut self, request: &OutputRequest) -> Option<Claim> {
+        let stream = self.stream.take()?;
+        match request {
+            OutputRequest::Exclusive { .. } => stream.into_claim(),
+            OutputRequest::Shared { .. } => None,
+        }
+    }
+
+    /// Open a stream for `request`, reusing `held` where it claims the card asked for.
     fn start(
         &mut self,
         request: &OutputRequest,
         held: Option<Claim>,
     ) -> Result<Negotiated, AppError> {
         let stream = match request {
-            OutputRequest::Shared { rate } => {
-                drop(held);
-                Stream::Shared(self.open_shared(*rate)?)
-            }
+            OutputRequest::Shared { rate } => Stream::Shared(self.open_shared(*rate)?),
             OutputRequest::Exclusive { device, shape, format } => {
                 match self.claim(device.as_deref(), *shape, *format, held) {
                     Ok(stream) => stream,
@@ -297,7 +309,6 @@ impl AudioOutput {
         device::open(&device::default_target()?, &self.feed, rate)
     }
 
-    #[cfg(target_os = "linux")]
     fn claim(
         &self,
         device: Option<&str>,
@@ -305,18 +316,7 @@ impl AudioOutput {
         format: SourceFormat,
         held: Option<Claim>,
     ) -> Result<Stream, ClaimError> {
-        alsa::open(device, shape, format, &self.feed, held).map(Stream::Exclusive)
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    fn claim(
-        &self,
-        _: Option<&str>,
-        _: Shape,
-        _: SourceFormat,
-        _: Option<Claim>,
-    ) -> Result<Stream, ClaimError> {
-        Err(ClaimError::Unsupported)
+        exclusive::open(device, shape, format, &self.feed, held).map(Stream::Exclusive)
     }
 
     /// Close the stream until the next [`Self::reopen`], giving the device back to everything
