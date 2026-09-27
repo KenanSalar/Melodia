@@ -7,9 +7,10 @@
 //! block, and nothing else touches it.
 //!
 //! **Two things users will report, and neither is a bug.** While the claim holds, Melodia is gone
-//! from the Windows volume mixer and every other application on that device falls silent. And a
-//! device whose "Allow applications to take exclusive control of this device" box is cleared, in
-//! its Advanced properties in the Sound control panel, refuses every claim; the panel names that.
+//! from the Windows volume mixer, and every other application on that device loses it: some fall
+//! silent, others move to another output. And a device whose "Allow applications to take exclusive
+//! control of this device" box is cleared, in its Advanced properties in the Sound control panel,
+//! refuses every claim; the panel names that.
 //!
 //! **Every COM call is made on the `wasapi-out` thread**, which opens the endpoint, answers the
 //! open with what it agreed to, then feeds it until told to stop. No COM object crosses a thread,
@@ -323,7 +324,8 @@ fn exclusive_spelling(
 ///
 /// A driver that wants a buffer the period didn't land on refuses with
 /// `AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED`. The client that refused knows the size it wanted, but a
-/// client initialises once, so the retry takes a fresh one.
+/// client initialises once, so the retry takes a fresh one, and the refused one goes back first as
+/// Microsoft's recovery sequence has it.
 fn initialize(device: &Device, wave: &WaveFormat) -> Result<AudioClient, WasapiError> {
     let mut client = device.get_iaudioclient()?;
     let period = client.calculate_aligned_period_near(hns(PERIOD), Some(HDA_ALIGN_BYTES), wave)?;
@@ -338,6 +340,7 @@ fn initialize(device: &Device, wave: &WaveFormat) -> Result<AudioClient, WasapiE
         i64::from(client.get_buffer_size()?),
         i64::from(wave.get_samplespersec()),
     );
+    drop(client);
     let mut client = device.get_iaudioclient()?;
     client.initialize_client(
         wave,
