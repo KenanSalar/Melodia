@@ -134,7 +134,7 @@ export global Settings {
     // goes to the engine and to disk together on release.
     in-out property <float> output-resync-ms: 200;
     in property <float> output-resync-max-ms: 1000;
-    callback output-resync-committed(float /* milliseconds */);
+    callback output-resync-committed(int /* milliseconds */);
 
     // Rust owns every property here — the `ScrobbleService` status-watch subscriber is the single
     // writer — and the toggles route their events back to persist and refresh the shadow. Connect

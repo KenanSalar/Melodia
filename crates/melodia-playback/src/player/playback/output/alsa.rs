@@ -23,7 +23,7 @@ use alsa::pcm::{Access, Format, HwParams, IO, PCM};
 use alsa::{Direction, ValueOr};
 use parking_lot::{Condvar, Mutex};
 
-use melodia_audio::player::source::audio::{ChannelCount, Sample, Shape, SourceFormat};
+use melodia_audio::player::source::audio::{ChannelCount, Sample, Shape, SourceFormat, frames_in};
 use melodia_core::error::describe;
 
 use super::super::stream_health::AudioStreamHealth;
@@ -290,7 +290,7 @@ fn configure(pcm: &PCM, request: &ExclusiveRequest) -> Result<Config, ClaimError
     let channels = set_channels(&hw, shape.channels)?;
     let format = set_format(&hw, source)?;
 
-    let requested_period = frames_in_period(tuning.period, rate);
+    let requested_period = u32::try_from(frames_in(tuning.period, shape.rate)).unwrap_or(u32::MAX);
     let period = hw
         .set_period_size_near(alsa::pcm::Frames::from(requested_period), ValueOr::Nearest)
         .map_err(|e| ClaimError::io("The card refused the period size", e))?;
@@ -359,12 +359,6 @@ fn alsa_format(format: DeviceFormat) -> Option<Format> {
         DeviceFormat::S32 => Some(Format::S32LE),
         DeviceFormat::F32 => Some(Format::FloatLE),
     }
-}
-
-/// `period` in frames at `rate`.
-fn frames_in_period(period: Duration, rate: u32) -> u32 {
-    let frames = u128::from(rate) * period.as_micros() / 1_000_000;
-    u32::try_from(frames).unwrap_or(u32::MAX)
 }
 
 /// The stop flag the writer polls, and the latch it sets once the card is closed.

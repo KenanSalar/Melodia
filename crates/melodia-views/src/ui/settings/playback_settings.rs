@@ -118,11 +118,10 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
     // Engine and disk together, on the pool: setting the hold waits out any reopen in flight.
     let state_resync = state.clone();
     ui.global::<Settings>().on_output_resync_committed(move |ms| {
-        let hold = Duration::try_from_secs_f32(ms / 1000.0).unwrap_or_default();
+        let ms = u32::try_from(ms).unwrap_or(0);
         let ctx = state_resync.playback_ctx();
         state_resync.persist_blocking("persist output_resync_ms", move |s| {
-            library::playback::player_set_resync_hold(&ctx, hold);
-            let ms = u32::try_from(hold.as_millis()).unwrap_or(u32::MAX);
+            library::playback::player_set_resync_hold(&ctx, Duration::from_millis(u64::from(ms)));
             library::settings::set_output_resync_ms(s, ms)
         });
     });

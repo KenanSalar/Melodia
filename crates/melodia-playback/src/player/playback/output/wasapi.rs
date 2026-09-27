@@ -35,7 +35,7 @@ use windows_sys::Win32::Media::Audio::{
 };
 
 use melodia_audio::player::source::audio::{
-    ChannelCount, Sample, SampleRate, Shape, SourceFormat, frames_to_duration,
+    ChannelCount, Sample, SampleRate, Shape, SourceFormat, frames_in, frames_to_duration,
 };
 use melodia_core::error::describe;
 
@@ -185,7 +185,7 @@ fn claim(request: &ExclusiveRequest, feed: &Feed) -> Result<(Session, Negotiated
         shape: session.shape,
         format: OutputFormat::Exclusive(session.format),
         fallback: None,
-        requested_period: Some(frames_in_period(request.tuning.period, request.shape.rate)),
+        requested_period: u32::try_from(frames_in(request.tuning.period, request.shape.rate)).ok(),
         period: u32::try_from(session.period_frames).ok(),
     };
     Ok((session, negotiated))
@@ -458,7 +458,7 @@ impl Session {
         let buffer_frames = client.get_buffer_size()? as usize;
         let period_frames = match drive {
             Drive::Events => buffer_frames,
-            Drive::Polling => frames_in_period(period, shape.rate) as usize,
+            Drive::Polling => usize::try_from(frames_in(period, shape.rate)).unwrap_or(usize::MAX),
         };
         Ok(Self {
             client,
@@ -569,12 +569,6 @@ impl Drop for ComApartment {
             wasapi::deinitialize();
         }
     }
-}
-
-/// `period` in frames at `rate`.
-fn frames_in_period(period: Duration, rate: SampleRate) -> u32 {
-    let frames = u128::from(rate.get()) * period.as_micros() / 1_000_000;
-    u32::try_from(frames).unwrap_or(u32::MAX)
 }
 
 /// `duration` in the 100 ns units WASAPI counts periods in.

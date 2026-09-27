@@ -234,7 +234,8 @@ pub struct AudioOutput {
     /// Closed on purpose rather than lost, so nothing should read the missing stream as a fault.
     parked: bool,
     /// The refusal last reported, so a claim retried at every track start and refused the same way
-    /// is reported once rather than per track. Cleared by the next claim that takes.
+    /// is reported once rather than per track. A claim that takes in between leaves it standing, or
+    /// a mixed queue on a 16-bit card warns at every lossy track; going shared clears it.
     reported: Option<Fallback>,
     /// The silence a reopen onto a new rate writes first. Not part of the request: changing it
     /// reopens nothing, and only the next rate change hears it.
@@ -364,10 +365,7 @@ impl AudioOutput {
                 Stream::Shared(self.open_shared(*rate)?)
             }
             OutputRequest::Exclusive(exclusive) => match self.claim(exclusive, held) {
-                Ok(stream) => {
-                    self.reported = None;
-                    stream
-                }
+                Ok(stream) => stream,
                 Err(e) => Stream::Shared(self.fall_back(exclusive, &e)?),
             },
         };
@@ -380,11 +378,12 @@ impl AudioOutput {
     /// open: the error alone can't say, and the default is whatever the system named at the time.
     /// At debug, since a caller retrying a lost device reports the outcome once it gives up.
     fn open_shared(&self, rate: Option<SampleRate>) -> Result<DeviceStream, AppError> {
-        let target = device::default_target()
-            .inspect_err(|e| log::debug!("No default output to open: {}", error::describe(e)))?;
+        let target = device::default_target().inspect_err(|e| {
+            log::debug!("audio: no default output to open: {}", error::describe(e));
+        })?;
         device::open(&target, &self.feed, rate).inspect_err(|e| {
             log::debug!(
-                "The default output, {}, would not open: {}",
+                "audio: the default output, {}, would not open: {}",
                 target.name().as_deref().unwrap_or("unnamed"),
                 error::describe(e)
             );
@@ -416,12 +415,19 @@ impl AudioOutput {
         } else {
             log::Level::Warn
         };
-        log::log!(
-            level,
-            "Exclusive output refused by {}, playing shared: {}",
-            fallback.device.as_deref().unwrap_or("a device that isn't connected"),
-            error::describe(refusal)
-        );
+        // No name can also mean no backend or a failed listing, so it isn't read as a disconnect.
+        match &fallback.device {
+            Some(device) => log::log!(
+                level,
+                "audio: exclusive output refused by {device}, playing shared: {}",
+                error::describe(refusal)
+            ),
+            None => log::log!(
+                level,
+                "audio: exclusive output refused, playing shared: {}",
+                error::describe(refusal)
+            ),
+        }
         self.reported = Some(fallback.clone());
         let mut stream = self.open_shared(Some(request.shape.rate))?;
         stream.negotiated.fallback = Some(fallback);

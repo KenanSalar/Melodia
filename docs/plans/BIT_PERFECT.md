@@ -628,7 +628,7 @@ view and in the bottom bar, where it takes an overflow toggle like the other tra
 - **A backend that hasn't measured or offered something yet reports nothing.** So ALSA exclusive
   behaves as it did in Phase 4 until the Linux half fills it in.
 
-Windows half, in order:
+Windows half, in order (1 to 4 done 2026-09-28):
 1. `ExclusiveRequest { device, shape, format, tuning }` becomes the one argument an exclusive
    `open` takes. `tuning` is the period and, on Windows, event against polling. Also the refusing
    device's name, and the float wording.
@@ -636,20 +636,69 @@ Windows half, in order:
 3. The position lead. Each backend reports its lead through `Feed`, a voice clamps the heard
    position at its anchor, and the crossfade and preload keep the pulled clock.
 4. The resync knob.
-5. **Gate A**, then hardware volume: the shared routing plus `IAudioEndpointVolume`.
-6. The quality chip, then **Gate B**.
+5. **Gate A** (passed, see its result below), then a toast when a claim falls back, raised on the
+   same once-per-refusal check the warning is.
+6. The quality chip.
+7. Hardware volume: the shared routing plus `IAudioEndpointVolume`. Then **Gate B**.
 
 **Blind edits the Linux session must check first**, running
 `cargo clippy --all-targets --locked --workspace -- -D warnings` and then `cargo test`. They are in
-`alsa.rs` and `unsupported.rs`:
-- `open`'s signature;
-- the period read from the request;
-- the `FormatRefused` construction;
-- the `Negotiated` literal's new fields;
-- the constants each backend answers;
-- a no-op `set_device_volume`.
+`alsa.rs` and `unsupported.rs`. Steps 1 to 4 made the ones in the as-built note below; step 7 adds
+the `Negotiated` literal's new fields and a no-op `set_device_volume`.
 
-The as-built notes list the exact edits.
+**As built (2026-09-28), Windows steps 1 to 4:**
+- **The blind edits, exactly.** `alsa.rs`:
+  - `open(request: &ExclusiveRequest, feed, held)` in place of `open(device, shape, source, feed,
+    held)`, resolving `request.device`.
+  - `configure(pcm, request)` destructures the request, and asks the card for
+    `frames_in(tuning.period, shape.rate)` where it asked for the fixed 20 ms `PERIOD`. So the period
+    chips reach ALSA before the Linux half bounds them; `set_period_size_near` still clamps.
+  - `ClaimError::FormatRefused { format: source }`, was `{ bits: source.bits }`.
+  - `pub(super) const POLLING: bool = false`.
+  - **Not mechanical:** `Writer::run` logs a stopped writer at `info`, was `warn`. A lost card is
+    recovered from, and `tasks::audio_health` warns only when the recovery runs out.
+
+  `unsupported.rs`: the same `open` signature, and `POLLING = false`.
+- **One `Lead` cell per `AudioOutput`**, cleared on every reopen and park. Both cpal builders feed
+  it the host's `playback - callback` plus the block just written; the WASAPI writer feeds it the
+  frames written less `IAudioClock`'s position. The crate exposes no `GetStreamLatency`, so the
+  device's own latency past its clock isn't in it.
+- **`Voice::heard` scales the lead by speed** into media time, and never reads before its anchor.
+- **Polling is a timer at half a period over a four-period buffer.** After an alignment refusal
+  the period is cut from the aligned buffer, so the buffer stays the size the driver named.
+- **The period is five chips**, 5 to 100 ms, and `ExclusiveTuning::new` clamps to 2 to 100 ms. A
+  hand-edited period off the chips selects none.
+- **The resync hold is a slider up to `MAX_RESYNC_HOLD` (1 s)**, applied on release. Nothing
+  reopens for it; the next rate change hears it.
+- **A refusal warns once per distinct reason and device**, then logs at debug until the output goes
+  shared. The device is looked up through `exclusive::devices()` rather than carried on the error.
+- **Recovery logs at `info`, and only a recovery that runs out warns.** `tasks::audio_health` logs
+  the loss and the stall at `info`, as both writers do the stopped stream, since an unplug or the
+  system moving its default output recovers in a blink. The give-up line carries the last attempt's
+  error, and `AudioOutput::open_shared` names the default device it tried at debug on each failure.
+
+**Result, Gate A.** Scripted runs on 2026-09-27, Windows 11, reading the log. The app was driven
+by its command line (a forwarded file replaces the queue and plays) over three generated tones:
+44.1 kHz 16-bit, 48 kHz 16-bit and 48 kHz float.
+- **Rate changes:** on both the ALC897 and the UMC22, 44.1 and 48 kHz opened as `Exclusive(S16)`,
+  and each rate change reopened at the boundary rather than staging gapless.
+- **Refusals name the refusing device:** the float tone was refused by both cards, logged as "a
+  32-bit float source". On the UMC22 the fallback named the UMC22 while the audio went to the
+  ALC897. Clearing the ALC897's exclusive-mode box fell back as `NotAllowed`, naming it.
+- **Lead**, measured as pulled less heard:
+  - about 39 ms exclusive at the 20 ms period;
+  - 10 ms at 5 ms, which the ALC897 took as 224 frames;
+  - 200 ms at 100 ms;
+  - 75 to 80 ms polled on the UMC22 at 10 ms, which it took as 415 frames at 44.1 kHz;
+  - 42 ms shared.
+- **Polling:** the UMC22 played polled with no warnings, stalls or losses.
+- **Resync:** at 1000 ms the clock held at 0 for a second after each rate change, and at 0 ms it
+  started at once. The heard position stayed on the anchor until the pulled clock passed it.
+- **Pause:** a media-key pause and resume kept the claim with no reopen, and the heard position
+  never went backwards.
+- **Unplug, by hand:** five unplugs of the UMC22 in polled mode fell back to the ALC897 within
+  40 ms of the loss being seen, and each replug reclaimed the UMC22 without being asked. One more,
+  on 2026-09-27 at 23:32, didn't; see Open questions.
 
 **Linux half:**
 1. The lead: after each `writei`, report `pcm.delay()` over the rate through
@@ -688,10 +737,21 @@ The as-built notes list the exact edits.
   skip claims that cannot work.
 - Once cpal 0.19's extension traits ship (#1220), can they replace `wasapi.rs` or add a native
   PipeWire exclusive stream (`PW_STREAM_FLAG_EXCLUSIVE` / `node.force-rate`)?
-- A refusal should name the device that refused. Today the fallback log line and the panel's
-  Device row name only the shared device the audio went to (Phase 5's findings). Carrying the
-  refusing device's name on the fallback reaches `Negotiated`, the panel text and the
-  `signal_path` tests, on both platforms.
-- `ClaimError::FormatRefused` says "a 32-bit source" for a lossy track, which decodes to 32-bit
-  float. Carrying the whole `SourceFormat` would let it say so.
+- ~~A refusal should name the device that refused.~~ It does since Phase 7: `Negotiated.fallback`
+  is a `Fallback` carrying the refusing device, looked up through `exclusive::devices()`, and the
+  log line and the panel's Device row name it beside the device the audio went to.
+- ~~`ClaimError::FormatRefused` says "a 32-bit source" for a lossy track.~~ It carries the whole
+  `SourceFormat` since Phase 7, whose `Display` says "32-bit float".
+- **Why did one unplug end in 15 seconds of silence?** On 2026-09-27 at 23:32 the UMC22 was
+  unplugged while claimed. Every reopen attempt fell back and then failed to open the shared
+  default, until the UMC22 came back and was reclaimed. Five other unplugs, across four sessions,
+  recovered at once. What was ruled out:
+  - the device picker resolving a pick to the wrong device;
+  - a claim left unreleased after switching from the ALC897;
+  - a Stop and Play between the claim and the unplug.
+
+  The likeliest cause is Windows moving its default output between the two cards around a
+  replug, leaving the fallback asking for a default that had just gone. The give-up line now
+  carries the last attempt's error, so the next occurrence names its cause. If it is the default,
+  the fix is for the fallback to try any other connected output when the default won't open.
 
