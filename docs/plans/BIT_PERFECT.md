@@ -2,7 +2,7 @@
 
 Working doc. Delete it when the feature ships. Tracks issue #66.
 
-Status: **Phase 1 done** (2026-09-24) · **Phase 2 done** (2026-09-25) · **Phase 3 done** (2026-09-25) · **Phase 4 done** (2026-09-27) · **Phase 5 done** (2026-09-27) · Phase 7 in progress, Windows half first (see its split) · macOS moved to #113 · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
+Status: **Phase 1 done** (2026-09-24) · **Phase 2 done** (2026-09-25) · **Phase 3 done** (2026-09-25) · **Phase 4 done** (2026-09-27) · **Phase 5 done** (2026-09-27) · Phase 7 in progress: Windows steps 1 to 5 done, the rest sorted by platform under "What's left of Phase 7" · macOS moved to #113 · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
 
 ## What the user sees today
 
@@ -615,9 +615,24 @@ Out of this plan, since there is no Mac to test it on. #113 carries the design n
    - Then delete this doc.
 6. **Carried from Phase 5's findings:** a refusal names the device that refused, and
    `FormatRefused` says "float" for a float source.
+7. **Found in Gate A:** a toast when a claim falls back, and reclaiming a disconnected device as
+   soon as it is listed again rather than at the next track start.
+8. **Later: the chip in Shared mode too.** Until then it shows only while the Output Mode is
+   Exclusive, because shared output always reads Converted and a red chip there would read as a
+   fault on every default install. The later step shows it always:
+   - in Shared mode, a neutral grey "Shared · 48 kHz" with no verdict colour;
+   - under Exclusive, the verdict colours as now, red kept for a real conversion or a fallback.
+
+   It needs a fifth label and a grey brush the chip takes as an input, like its others. The
+   verdict itself doesn't change: the chip picks its words from the output mode and the verdict
+   together.
+9. **Later, optional: a Details button on the refusal toast**, opening the Output card through the
+   chip's "open Settings on a tab" helper. The toast's action row already routes by
+   `action_kind`, so it is a kind and a handler.
 
 Hardware volume stays in this phase, on both platforms. The quality chip goes in the Now Playing
-view and in the bottom bar, where it takes an overflow toggle like the other trailing buttons.
+view and in the bottom bar, where it takes an overflow toggle like the other trailing buttons, and
+it shows only under Exclusive until item 8.
 
 **Split by platform (2026-09-27).** The Windows machine can't compile `alsa.rs`, `reserve.rs` or
 `realtime.rs`: there is no WSL, and `alsa-sys` rules out a cross check. So the work is split:
@@ -628,7 +643,7 @@ view and in the bottom bar, where it takes an overflow toggle like the other tra
 - **A backend that hasn't measured or offered something yet reports nothing.** So ALSA exclusive
   behaves as it did in Phase 4 until the Linux half fills it in.
 
-Windows half, in order (1 to 4 done 2026-09-28):
+Windows half, done (2026-09-28):
 1. `ExclusiveRequest { device, shape, format, tuning }` becomes the one argument an exclusive
    `open` takes. `tuning` is the period and, on Windows, event against polling. Also the refusing
    device's name, and the float wording.
@@ -637,14 +652,130 @@ Windows half, in order (1 to 4 done 2026-09-28):
    position at its anchor, and the crossfade and preload keep the pulled clock.
 4. The resync knob.
 5. **Gate A** (passed, see its result below), then a toast when a claim falls back, raised on the
-   same once-per-refusal check the warning is.
-6. The quality chip.
-7. Hardware volume: the shared routing plus `IAudioEndpointVolume`. Then **Gate B**.
+   same once-per-refusal check the warning is, and reclaiming a replugged device.
+
+**What's left of Phase 7, by where it can be done.** Most of it is cross-platform. Only the WASAPI
+pieces need the Windows machine, and only the Linux half's list below needs Linux.
+
+*Either platform:*
+- **The quality chip** (item 2), shown only while the Output Mode is Exclusive; item 8 is the
+  Shared-mode follow-up.
+  - `components/quality-chip.slint`:
+    - a verdict dot: green Bit-perfect, yellow Enhanced, red Converted and Fallback;
+    - a short translated label: four new msgids in all six catalogs;
+    - `SignalPathUi.device-rate`;
+    - a `Tooltip` inside the component, which `tooltip_mounts.rs` requires.
+
+    Its brushes are defaulted `in` properties, `MetaChip`'s idiom, and its hover eases a float,
+    never a brush (`slint-pitfalls.md`).
+  - Shown while something plays and `Settings.exclusive-supported && Settings.output-mode-idx ==
+    1`, a Fallback included.
+  - Mounts:
+    - **The Now Playing view's header row**, after the spacer and left of the stars, on the
+      `Player.np-*` brushes.
+    - **The bottom bar**, before the trailing buttons, under `if !Settings.overflow-quality`. That
+      needs a row in `components/now-playing/overflow-menu.slint`, a checkbox in
+      `views/settings/overflow-menu-section.slint`, and the `"quality"` id seeded in
+      `ui/appearance/install.rs` beside the other overflow ids.
+    - **Not the miniplayer**, which can't navigate to Settings.
+  - **A click opens Settings on the Playback tab** through one Rust helper:
+    - `ui::settings::settings_page::open_on(ui, SettingsTab::Playback)`, extracted from the
+      onboarding card's `wire_open_services`, which moves onto it.
+    - Tab first (`set_tab_idx` + `invoke_tab_changed`), then `nav_transition::mark(Above)`, closing
+      Now Playing, and nav 9 (`set_selected_index` + `invoke_persist_selected_index`).
+    - Not in Slint: a `SettingsPage` global importing `Nav` would be a third global importing a
+      sibling, which the root `CLAUDE.md` rules out.
+  - Walks it has to pass: `translations.rs`, `nav_transition.rs`, `tooltip_mounts.rs`,
+    `index_persist.rs`, and `hero_chips_tests.rs` (the `np-*` brushes).
+- **Hardware volume, the shared half** (item 4). Capability is negotiated, use is a setting:
+  - The backend probes for a hardware control at open, and `Negotiated` reports it with its dB
+    range. The setting `output_hardware_volume` (off by default, shown under Exclusive where
+    `output::HARDWARE_VOLUME_SUPPORTED`) decides whether to use it, and toggling it reopens
+    nothing.
+  - **The engine routes volume in one place:**
+    - While the hardware route is live, every deck gets exactly `1.0`, and
+      `AudioOutput::set_device_volume(amplitude)` gets the level.
+    - The mapping is applied in `set_volume` and in the `volume` argument of `play_media`,
+      `begin_crossfade` and `play_stream`.
+    - It is re-applied after every reopen: `reopen_for_track`, `set_output_choice`, device-loss
+      recovery and the replug reclaim.
+  - **The level is `20·log10(amplitude)`**, clamped to the device's range, so the slider feels as
+    it does in software. `0.0` uses the mute switch. The device's own level and mute are saved at
+    claim and restored at release.
+  - **Grading:** `signal_path::evaluate` grades the Volume stage clean while the route is
+    hardware, and the row reads "on the device". Make Bit-Perfect (`player_make_bit_perfect`, and
+    `can-reset` in `output-section.slint`) leaves volume alone then.
+  - **The seam:** each backend answers `HARDWARE_VOLUME_SUPPORTED` and
+    `ExclusiveStream::set_device_volume`. `alsa.rs` and `unsupported.rs` get a no-op stub and the
+    `Negotiated` literal's new fields until the Linux half fills them in (blind on Windows,
+    mechanical).
+- **The cross-platform tests owed since Gate A**, for steps 1 to 5:
+  - `voice_tests`: `heard` never reads before the anchor, scales the lead by speed, and
+    re-anchors on a resume but not on a `play` over a voice already playing.
+  - `handlers_tests`: the crossfade and the late preload read `pulled_ms`, and the tick publishes
+    `position_ms`.
+  - `claim` and `SourceFormat`: the float wording.
+  - `settings`: `OutputFlags` round-trips a choice through `set_output_choice`, and a
+    hand-edited period is held to the claim's range.
+  - `AudioOutput`'s once-per-refusal rule has no device-free seam, since `AudioOutput::open` needs
+    a device. Gate A's runs are its coverage unless the rule moves somewhere a test can reach.
+- **Items 8 and 9**: the chip in Shared mode, and the Details button on the refusal toast.
+- **Item 5's docs**: the README feature list, the root `CLAUDE.md` (`AudioOutput` ownership, the
+  lock order), and the rest of `.claude/rules/audio-stack.md` (reshape, the exclusive backends,
+  the verdict; the two positions a deck reports are already there).
+
+*Windows only:*
+- **Hardware volume, the WASAPI half** (`output/endpoint_volume.rs`, `cfg(windows)`):
+  - **Hardware support** comes from the crate's safe
+    `get_audiometerinformation().query_hardware_support()`. A device reporting no hardware volume
+    stays on software: endpoint volume there is the audio engine's, which exclusive mode bypasses.
+  - **Everything else goes through `windows` 0.62.2**, pinned to the copy `wasapi` already resolves
+    (the argument alsa 0.11.0 made), with features `Win32_Media_Audio_Endpoints` and
+    `Win32_System_Com`: `CoCreateInstance(MMDeviceEnumerator)` → `GetDevice(id)` →
+    `Activate::<IAudioEndpointVolume>` → `GetVolumeRange`, `Get/SetMasterVolumeLevel` and
+    `Get/SetMute`.
+  - **Every call is made on `wasapi-out`.** The level is published through an atomic and applied
+    after a write when it changed, so no COM object crosses a thread and the writer loop still
+    logs nothing.
+  - **Each `unsafe` call** gets its own `#[allow(unsafe_code, reason = "…")]` and `// SAFETY:`.
+    `unsafe-rust.md` gains the rows, the counts, and a note that COM vtables are in `windows`,
+    not `windows-sys`.
+  - **The endpoint's master volume is also Windows' volume for that device**, so a claim moves
+    it; restoring it at release is what makes that acceptable.
+- **`wasapi_tests`**: `stream_mode` and `aligned_stream_mode` for both drives, and `from_hns`
+  against `hns`.
+- **24-bit and high-rate output through WASAPI**, never run (Phase 5's "Not run"). The ALC897
+  reaches 192 kHz; the UMC22 is 16-bit at 48 kHz or below. Generated 24-bit WAVs at 96 kHz and
+  192 kHz, run the Gate A way, should claim at those rates as whichever of the ladder's 24-bit
+  rungs the ALC897 takes first: `S24Packed`, `S32` or `S24High`.
+- **The WASAPI alignment retry**, never run: only a driver refusing an unaligned buffer
+  (`AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED`) takes that path, and neither test device does. It stays
+  untested unless such a device turns up; `aligned_stream_mode` is its unit-testable half.
+- **Gate B, by hand, after the chip and hardware volume:**
+  - **Hardware volume:** the slider moves the device's own level while the verdict stays
+    Bit-perfect, release restores the level, and a device with no hardware control stays on
+    software.
+  - **Chip:**
+    - It shows only under Exclusive, and its colour matches the panel.
+    - A click from Now Playing and from the bar lands on Settings ▸ Playback.
+    - The overflow toggle moves it into the menu.
+
+*Linux only:* the Linux half's list below.
+
+**The Gate A way**, for the runs above:
+- Write test tones as WAVs.
+- With the app closed, set the `output_*` keys and `repeat_mode` in the dev build's
+  `settings.json`.
+- Launch `target\debug\Melodia.exe "<file>" …`, which makes the files the queue and plays from the
+  top.
+- Read `%APPDATA%\Melodia-dev\logs\melodia_rCURRENT.log` under `RUST_LOG=info` plus debug for the
+  module in question.
+- Back up `settings.json` and `queue.json` first, and restore them after.
 
 **Blind edits the Linux session must check first**, running
 `cargo clippy --all-targets --locked --workspace -- -D warnings` and then `cargo test`. They are in
-`alsa.rs` and `unsupported.rs`. Steps 1 to 4 made the ones in the as-built note below; step 7 adds
-the `Negotiated` literal's new fields and a no-op `set_device_volume`.
+`alsa.rs` and `unsupported.rs`. Steps 1 to 4 made the ones in the as-built note below. Hardware
+volume's shared half adds the `Negotiated` literal's new fields and a no-op `set_device_volume`.
 
 **As built (2026-09-28), Windows steps 1 to 4:**
 - **The blind edits, exactly.** `alsa.rs`:
@@ -700,6 +831,25 @@ by its command line (a forwarded file replaces the queue and plays) over three g
   40 ms of the loss being seen, and each replug reclaimed the UMC22 without being asked. One more,
   on 2026-09-27 at 23:32, didn't; see Open questions.
 
+**As built (2026-09-28), Windows step 5:**
+- **The refusal toast** (`ToastKind::ExclusiveRefused`) is raised in `AudioOutput::fall_back` on
+  the check that decides the warning, so it fires once per distinct reason and device.
+  - Its detail is the refusing device's name.
+  - Title and body are translated through two `Settings` pure callbacks.
+  - It points at the Output settings for the reason. The reason's translated words live in the
+    Slint panel and can't ride the toast channel.
+  - It auto-dismisses after 6 s, since the music carries on shared.
+- **The replugs in Gate A came back only by accident.** Windows moved its default output to the
+  replugged UMC22, which knocked out the shared fallback and made the recovery re-ask for the
+  claim. With the ALC897 left as the Windows default, a replug did nothing until the next track
+  start, which a gapless album never reaches. Now `tasks::audio_health` polls
+  `PlaybackEngine::disconnected_device_returned` once a second. It lists devices only while a
+  `NotConnected` fallback stands, and reopens as soon as the chosen device is listed again,
+  mid-track. Tested by hand with the ALC897 as the Windows default.
+- **Only `NotConnected` is polled for.** Retrying a busy or refused device would keep taking it
+  from its holder, which on Linux is the session manager. Those still wait for the next track
+  start.
+
 **Linux half:**
 1. The lead: after each `writei`, report `pcm.delay()` over the rate through
    `Feed::report_lead`. Also confirm the cpal shared lead on the ALSA host under PipeWire, where
@@ -709,8 +859,16 @@ by its command line (a forwarded file replaces the queue and plays) over three g
 3. Hardware volume through the claimed card's simple mixer: dB via `get_playback_db_range` /
    `set_playback_db_all`, the playback switch for mute, and a restore at release. Also read the
    mixer at claim, so a muted or attenuated card stops reading Bit-perfect (Phase 4's blind spot).
-4. Manual runs on the ALC897 and the PCM2902, then the tests.
-5. Item 5's docs, then delete this doc.
+4. **Step 5's shared code on Linux**, none of which has run there yet:
+   - **Replug reclaim:** unplug the PCM2902 while claimed and plug it back. It should come back
+     within a second, through `alsa::devices` listing the card again. Watch for the session
+     manager taking the card on replug and the reclaim meeting it busy: the claim has to go
+     through `alsa::BUSY_WAIT` rather than fall back as busy and stop polling.
+   - **Toasts:** a refusal toasts once. That includes `Reserved`, whose holder's name is only in
+     the Output settings.
+   - **Log levels:** an unplug that recovers logs no warning.
+5. Manual runs on the ALC897 and the PCM2902, then the tests.
+6. Item 5's docs. Delete this doc only once items 8 and 9 are done or moved to their own issues.
 
 ## Cross-cutting
 
