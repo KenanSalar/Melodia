@@ -66,8 +66,12 @@ pub fn current_index_from_i32(idx: i32) -> Option<usize> {
 
 impl QueueState {
     /// Number of tracks in the current play order.
-    fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.play_order.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.play_order.is_empty()
     }
 
     /// Resolve an index in `play_order` to the actual track.

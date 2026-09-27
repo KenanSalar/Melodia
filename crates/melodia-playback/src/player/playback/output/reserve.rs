@@ -9,8 +9,19 @@
 //! application above us asks, and we close the card before saying yes, or it meets the same
 //! `EBUSY` we just avoided. What closing means is the caller's, handed in as `release`.
 //!
+//! **A name taken from a holder goes back only once the holder has asked for it.** A holder that
+//! loses the name asks for it back at once, and the session manager's cleanup of the card hangs on
+//! getting that answer. A claim that fails a millisecond later and drops the name first leaves the
+//! ask unanswered: the manager gives up on the card, which vanishes from the system until it
+//! restarts, and strands the card's node name, so the card returns under a numbered one that no
+//! rename or saved default output matches.
+//!
 //! Blocking D-Bus, on `zbus::blocking` only; see the root manifest for why never its `tokio`.
 
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use parking_lot::{Condvar, Mutex};
 use zbus::blocking::Connection;
 use zbus::fdo::{RequestNameFlags, RequestNameReply};
 use zbus::names::WellKnownName;
@@ -26,14 +37,26 @@ const PRIORITY: i32 = 0;
 
 const APPLICATION_NAME: &str = "Melodia";
 
+/// How long a hand-back waits for the previous holder to ask. It asks within milliseconds of
+/// losing the name; this only bounds a holder that never does.
+const HANDBACK_WAIT: Duration = Duration::from_secs(1);
+
+/// How long after the ask the name is kept, so the refusal reaches the holder before the name
+/// does. Microseconds would do on a local bus; this is cheap and far clear of it.
+const REPLY_GRACE: Duration = Duration::from_millis(100);
+
 /// A held reservation. Dropping it gives the name back.
 pub(super) struct Reservation {
     bus: Connection,
     name: WellKnownName<'static>,
+    asked: Arc<Asked>,
 }
 
 impl Drop for Reservation {
     fn drop(&mut self) {
+        if !self.asked.wait(HANDBACK_WAIT) {
+            log::debug!("audio: the card's previous holder never asked for it back");
+        }
         // After a release we granted, the name is already someone else's, so a refusal here is
         // the expected answer rather than a fault.
         if let Err(e) = self.bus.release_name(self.name.as_ref()) {
@@ -69,13 +92,18 @@ pub(super) fn acquire(
     let path = format!("/org/freedesktop/ReserveDevice1/Audio{card}");
 
     // Served before the name is taken, so a request arriving the moment it is ours finds it.
+    let asked = Arc::new(Asked::default());
+    let reservable =
+        Reservable { device_name, release: Box::new(release), asked: Arc::clone(&asked) };
     bus.object_server()
-        .at(path.as_str(), Reservable { device_name, release: Box::new(release) })
+        .at(path.as_str(), reservable)
         .map_err(|e| ClaimError::io("Failed to serve the card reservation", e))?;
 
     let polite = RequestNameFlags::DoNotQueue | RequestNameFlags::AllowReplacement;
     if owns(bus.request_name_with_flags(name.as_ref(), polite))? {
-        return Ok(Some(Reservation { bus, name }));
+        // Nobody held it, so nobody will ask for it back.
+        asked.set();
+        return Ok(Some(Reservation { bus, name, asked }));
     }
 
     let holder = uncached_proxy(&bus, name.clone(), path.as_str(), INTERFACE)
@@ -90,7 +118,7 @@ pub(super) fn acquire(
 
     let taking = polite | RequestNameFlags::ReplaceExisting;
     if owns(bus.request_name_with_flags(name.as_ref(), taking))? {
-        Ok(Some(Reservation { bus, name }))
+        Ok(Some(Reservation { bus, name, asked }))
     } else {
         Err(ClaimError::Reserved { by: String::new() })
     }
@@ -128,12 +156,14 @@ fn owns(reply: zbus::Result<RequestNameReply>) -> Result<bool, ClaimError> {
 struct Reservable {
     device_name: String,
     release: Box<dyn Fn() -> bool + Send + Sync>,
+    asked: Arc<Asked>,
 }
 
 #[zbus::interface(name = "org.freedesktop.ReserveDevice1")]
 impl Reservable {
     /// Say yes to anything that outranks us, once the card is closed.
     fn request_release(&self, priority: i32) -> bool {
+        self.asked.set();
         priority > PRIORITY && (self.release)()
     }
 
@@ -152,5 +182,36 @@ impl Reservable {
     #[zbus(property)]
     fn application_device_name(&self) -> &str {
         &self.device_name
+    }
+}
+
+/// When the previous holder asked for the name back, if it has.
+#[derive(Default)]
+struct Asked {
+    at: Mutex<Option<Instant>>,
+    changed: Condvar,
+}
+
+impl Asked {
+    fn set(&self) {
+        self.at.lock().get_or_insert_with(Instant::now);
+        self.changed.notify_all();
+    }
+
+    /// Wait up to `timeout` for the ask, then until our answer to it has had [`REPLY_GRACE`] to
+    /// reach the holder. `false` when it never asked.
+    fn wait(&self, timeout: Duration) -> bool {
+        let mut at = self.at.lock();
+        self.changed.wait_while_for(&mut at, |at| at.is_none(), timeout);
+        let Some(asked_at) = *at else {
+            return false;
+        };
+        drop(at);
+        // The answer is sent once the handler returns, on the bus's own thread, so a hand-back
+        // straight after the ask can overtake it.
+        if let Some(left) = REPLY_GRACE.checked_sub(asked_at.elapsed()) {
+            std::thread::sleep(left);
+        }
+        true
     }
 }

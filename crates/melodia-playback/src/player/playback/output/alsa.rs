@@ -16,7 +16,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use alsa::ctl::{Ctl, DeviceIter};
 use alsa::pcm::{Access, Format, HwParams, IO, PCM};
@@ -26,6 +26,7 @@ use parking_lot::{Condvar, Mutex};
 use melodia_audio::player::source::audio::{ChannelCount, Sample, Shape, SourceFormat};
 use melodia_core::error::describe;
 
+use super::super::stream_health::AudioStreamHealth;
 use super::claim::ClaimError;
 use super::device::Feed;
 use super::encode::{self, DeviceFormat};
@@ -45,6 +46,12 @@ const RECOVER_ATTEMPTS: u32 = 3;
 const RELEASE_WAIT: Duration = Duration::from_secs(1);
 
 const THREAD_NAME: &str = "alsa-out";
+
+/// How long an open waits for the sound server to finish closing a card it has just let go.
+/// Past it the card is someone else's, and the claim falls back as busy.
+const BUSY_WAIT: Duration = Duration::from_secs(1);
+
+const BUSY_RETRY: Duration = Duration::from_millis(50);
 
 /// A card's playback device, as the picker lists it and as an open resolves it.
 struct Card {
@@ -96,18 +103,40 @@ fn cards() -> Vec<Card> {
     found
 }
 
-/// The live claim. Dropping it stops the writer, closes the card, then gives the reservation back.
+/// A card's reservation, kept apart from the stream on it so a reopen on the same card can carry
+/// it over rather than hand the card back and take it again.
+///
+/// **The hand-back is what breaks the desktop, not the claim.** The session manager rebuilds a
+/// card in the background once it has it back, and a claim landing mid-rebuild strands the card's
+/// node name, so the card returns under a numbered one: every rename and the saved default output
+/// are keyed on the old name, and both are lost until the session manager restarts. A reopen is
+/// exactly that pattern, milliseconds apart.
+pub(super) struct Claim {
+    card: i32,
+    /// The writer a granted release stops, which is whichever stream holds the claim now.
+    writer: Arc<Mutex<Arc<WriterControl>>>,
+    _reservation: Option<reserve::Reservation>,
+}
+
+/// The live stream. Dropping it stops the writer, closes the card, then gives the claim back.
 pub(super) struct AlsaStream {
     writer: Option<JoinHandle<()>>,
     control: Arc<WriterControl>,
     negotiated: Negotiated,
     /// Dropped after the writer is joined, so the name is never free while the card is open.
-    _reservation: Option<reserve::Reservation>,
+    claim: Option<Claim>,
 }
 
 impl AlsaStream {
     pub(super) fn negotiated(&self) -> Negotiated {
         self.negotiated.clone()
+    }
+
+    /// Close the card and keep its reservation, for a reopen that may land on the same card.
+    pub(super) fn into_claim(mut self) -> Option<Claim> {
+        let claim = self.claim.take();
+        drop(self);
+        claim
     }
 }
 
@@ -123,7 +152,8 @@ impl Drop for AlsaStream {
 }
 
 /// Claim `device`, or the first card listed where none is named, at exactly `shape` and a format
-/// that holds `source`, and start feeding it from `feed`.
+/// that holds `source`, and start feeding it from `feed`. `held` is the last stream's claim, reused
+/// when it is on the same card and given back otherwise.
 ///
 /// # Errors
 ///
@@ -133,23 +163,23 @@ pub(super) fn open(
     shape: Shape,
     source: SourceFormat,
     feed: &Feed,
+    held: Option<Claim>,
 ) -> Result<AlsaStream, ClaimError> {
     let card = resolve(device)?;
     let control = Arc::new(WriterControl::default());
-    let reservation = reserve::acquire(card.index, card.device.name.clone(), {
-        let control = Arc::clone(&control);
-        let health = Arc::clone(&feed.health);
-        move || {
-            let closed = control.stop_and_wait(RELEASE_WAIT);
-            // Reported as a loss so the usual recovery reopens, meets the new holder's claim and
-            // falls back to shared with its name.
-            health.report_device_lost();
-            closed
+    let claim = match held {
+        Some(claim) if claim.card == card.index => {
+            *claim.writer.lock() = Arc::clone(&control);
+            claim
         }
-    })?;
+        other => {
+            // Another card's name goes back before this one is asked for.
+            drop(other);
+            reserve_card(&card, &control, &feed.health)?
+        }
+    };
 
-    let pcm = PCM::new(&card.device.id, Direction::Playback, false)
-        .map_err(|e| open_error(&card.device.id, e))?;
+    let pcm = open_pcm(&card.device.id)?;
     let config = configure(&pcm, shape, source)?;
     let device_shape = Shape { channels: config.channels, rate: shape.rate };
     feed.pull.lock().reshape(device_shape);
@@ -177,8 +207,30 @@ pub(super) fn open(
             requested_period: Some(config.requested_period),
             period: u32::try_from(config.period_frames).ok(),
         },
-        _reservation: reservation,
+        claim: Some(claim),
     })
+}
+
+fn reserve_card(
+    card: &Card,
+    control: &Arc<WriterControl>,
+    health: &Arc<AudioStreamHealth>,
+) -> Result<Claim, ClaimError> {
+    let writer = Arc::new(Mutex::new(Arc::clone(control)));
+    let reservation = reserve::acquire(card.index, card.device.name.clone(), {
+        let writer = Arc::clone(&writer);
+        let health = Arc::clone(health);
+        move || {
+            // Cloned out so the slot isn't held through the wait.
+            let control = Arc::clone(&writer.lock());
+            let closed = control.stop_and_wait(RELEASE_WAIT);
+            // Reported as a loss so the usual recovery reopens, meets the new holder's claim and
+            // falls back to shared with its name.
+            health.report_device_lost();
+            closed
+        }
+    })?;
+    Ok(Claim { card: card.index, writer, _reservation: reservation })
 }
 
 fn resolve(device: Option<&str>) -> Result<Card, ClaimError> {
@@ -188,6 +240,25 @@ fn resolve(device: Option<&str>) -> Result<Card, ClaimError> {
         None => cards.next(),
     };
     found.ok_or_else(|| ClaimError::NotConnected { id: device.unwrap_or_default().to_owned() })
+}
+
+/// Open the card, waiting out a busy one for up to [`BUSY_WAIT`].
+///
+/// The sound server answers a release once it has let the card go, but closes it a moment later,
+/// so the first open after taking the card over can meet it still open.
+fn open_pcm(id: &str) -> Result<PCM, ClaimError> {
+    let deadline = Instant::now() + BUSY_WAIT;
+    loop {
+        match PCM::new(id, Direction::Playback, false) {
+            Ok(pcm) => return Ok(pcm),
+            Err(e) if is_busy(&e) && Instant::now() < deadline => std::thread::sleep(BUSY_RETRY),
+            Err(e) => return Err(open_error(id, e)),
+        }
+    }
+}
+
+fn is_busy(e: &alsa::Error) -> bool {
+    rustix::io::Errno::from_raw_os_error(e.errno()) == rustix::io::Errno::BUSY
 }
 
 fn open_error(id: &str, e: alsa::Error) -> ClaimError {
