@@ -1,5 +1,6 @@
-//! The Output card's signal path: what the playing track goes through to reach the device, and
-//! the button that turns off whatever the user chose that changes it.
+//! The Output card's signal path: what the playing track goes through to reach the device, the
+//! button that turns off whatever the user chose that changes it, and the way to the card from the
+//! quality chip and the refused claim's toast.
 //!
 //! The grading is `signal_path::evaluate`'s and arrives finished on `AppState::signal_path_tx`.
 //! This module only turns it into the `SignalPathUi` global's numbers and strings.
@@ -7,6 +8,7 @@
 use async_compat::Compat;
 use slint::{ComponentHandle, SharedString};
 
+use crate::ui::settings::settings_page::{self, SettingsTab};
 use crate::ui::util;
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -14,6 +16,11 @@ use melodia_engine::player::engine::signal_path::{Grade, SignalPath, Verdict};
 use melodia_playback::player::playback::output::OutputFormat;
 use melodia_playback::player::playback::output::claim::FallbackReason;
 use melodia_ui::{AppWindow, Equalizer, ReplayGain, Settings, SignalPathUi};
+
+/// The refused claim's toast kind, one string with its branch in the `Notifications.action`
+/// dispatcher (`globals/updater.slint`). A mismatch still paints the Details button, which then
+/// does nothing.
+pub const REFUSAL_TOAST_KIND: &str = "exclusive-refused";
 
 pub fn install(ui: &AppWindow, state: &AppState) {
     let mut rx = state.signal_path_tx.subscribe();
@@ -25,6 +32,13 @@ pub fn install(ui: &AppWindow, state: &AppState) {
             paint(&ui, rx.borrow().as_ref());
         }
     }));
+
+    let weak = ui.as_weak();
+    ui.global::<Settings>().on_open_signal_path(move || {
+        if let Some(ui) = weak.upgrade() {
+            settings_page::open_on(&ui, SettingsTab::Playback);
+        }
+    });
 
     let state = state.clone();
     let weak = ui.as_weak();

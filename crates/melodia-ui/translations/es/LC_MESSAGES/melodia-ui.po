@@ -2321,6 +2321,18 @@ msgstr "Procesado: solo los efectos que elegiste cambian el sonido"
 msgid "Converted: the sound is changed on its way to the device"
 msgstr "Convertido: el sonido cambia de camino al dispositivo"
 
+msgid "Bit-perfect"
+msgstr "Bit-perfect"
+
+msgid "Enhanced"
+msgstr "Procesado"
+
+msgid "Fallback"
+msgstr "Alternativa"
+
+msgid "Converted"
+msgstr "Convertido"
+
 msgid "Make Bit-Perfect"
 msgstr "Hacerlo bit-perfect"
 

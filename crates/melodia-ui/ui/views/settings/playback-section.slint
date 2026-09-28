@@ -87,8 +87,7 @@ export component PlaybackSection inherits Rectangle {
     property <bool> show-viz-style: root.show-visualizer && Visualizer.enabled;
 
     // Exclusive output always follows the rate, whatever the toggle says.
-    property <bool> rate-follows: Settings.output-follow-rate
-        || (Settings.exclusive-supported && Settings.output-mode-idx == 1);
+    property <bool> rate-follows: Settings.output-follow-rate || Settings.exclusive-chosen;
 
     // Same reason as the style row above. Following the rate turns crossfade off in the engine,
     // so its details go with it.

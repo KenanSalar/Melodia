@@ -168,11 +168,13 @@ pub fn install_toast_bridge(
                 // Output settings keep saying why for as long as it stays that way.
                 ToastKind::ExclusiveRefused => {
                     notifications.show_auto_dismiss(
-                        NotificationParams::plain(
-                            "warning",
-                            g.invoke_toast_exclusive_refused_title(),
-                            g.invoke_toast_exclusive_refused_message(detail.into()),
-                        ),
+                        NotificationParams {
+                            variant: "warning".into(),
+                            title: g.invoke_toast_exclusive_refused_title(),
+                            message: g.invoke_toast_exclusive_refused_message(detail.into()),
+                            action_label: g.invoke_toast_exclusive_refused_action_label(),
+                            action_kind: ui::settings::signal_path::REFUSAL_TOAST_KIND.into(),
+                        },
                         6000,
                     );
                 }

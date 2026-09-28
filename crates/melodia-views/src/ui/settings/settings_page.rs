@@ -8,11 +8,16 @@ use std::sync::Arc;
 use slint::ComponentHandle;
 
 use crate::ui::callbacks::index_persist::IndexPersist;
+use crate::ui::nav_transition;
 use crate::ui::row_match::{self, Needle};
 use crate::ui::tab_bar::clamp_tab;
 use melodia_app::library;
 use melodia_app::state::AppState;
-use melodia_ui::{AppWindow, SettingsPage};
+use melodia_ui::{AppWindow, Nav, NavEnterFrom, SettingsPage};
+
+/// Settings' own nav index. Spelled here rather than reached for, as `ui::my_library` and
+/// `ui::radio` spell theirs: none is another's to publish.
+const NAV_SETTINGS: i32 = 9;
 
 /// Which Settings tab is showing. The `FavoritesTab` / `RecentlyPlayedTab` shape.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -44,6 +49,40 @@ pub fn tab_from_index(page: &SettingsPage<'_>, idx: i32) -> SettingsTab {
         SettingsTab::About
     } else {
         SettingsTab::Library
+    }
+}
+
+/// The page's index for `tab`, read off the same constants as [`tab_from_index`].
+fn tab_index(page: &SettingsPage<'_>, tab: SettingsTab) -> i32 {
+    match tab {
+        SettingsTab::Library => page.get_tab_library(),
+        SettingsTab::Playback => page.get_tab_playback(),
+        SettingsTab::Interface => page.get_tab_interface(),
+        SettingsTab::Services => page.get_tab_services(),
+        SettingsTab::About => page.get_tab_about(),
+    }
+}
+
+/// Opens Settings on `tab` from anywhere, Now Playing included.
+///
+/// Tab first, then nav, so the page mounts on the body it is meant to show, `my_library::go_to_tab`
+/// for the same reason. Both writes go through the callbacks that already own an `IndexPersist`;
+/// calling the disk setters directly would be a seventh writer, which
+/// `crates/melodia/tests/index_persist.rs` pins against. The index moves only where it has to, as
+/// in `nav_history`'s `PendingNav::apply`: with Settings already under Now Playing, closing that is
+/// the whole of the navigation.
+pub fn open_on(ui: &AppWindow, tab: SettingsTab) {
+    let page = ui.global::<SettingsPage>();
+    let idx = tab_index(&page, tab);
+    page.set_tab_idx(idx);
+    page.invoke_tab_changed(idx);
+
+    nav_transition::mark(ui, NavEnterFrom::Above);
+    let nav = ui.global::<Nav>();
+    nav.set_now_playing_open(false);
+    if nav.get_selected_index() != NAV_SETTINGS {
+        nav.set_selected_index(NAV_SETTINGS);
+        nav.invoke_persist_selected_index(NAV_SETTINGS);
     }
 }
 

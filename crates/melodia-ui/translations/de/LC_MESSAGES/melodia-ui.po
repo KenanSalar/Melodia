@@ -2327,6 +2327,18 @@ msgstr "Bearbeitet: Nur von dir gewählte Effekte verändern den Klang"
 msgid "Converted: the sound is changed on its way to the device"
 msgstr "Umgewandelt: Der Klang wird auf dem Weg zum Gerät verändert"
 
+msgid "Bit-perfect"
+msgstr "Bitgenau"
+
+msgid "Enhanced"
+msgstr "Bearbeitet"
+
+msgid "Fallback"
+msgstr "Ausweichbetrieb"
+
+msgid "Converted"
+msgstr "Umgewandelt"
+
 msgid "Make Bit-Perfect"
 msgstr "Bitgenau machen"
 

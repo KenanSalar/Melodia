@@ -2320,6 +2320,18 @@ msgstr "Elaborato: solo gli effetti che hai scelto cambiano il suono"
 msgid "Converted: the sound is changed on its way to the device"
 msgstr "Convertito: il suono viene modificato verso il dispositivo"
 
+msgid "Bit-perfect"
+msgstr "Bit-perfect"
+
+msgid "Enhanced"
+msgstr "Elaborato"
+
+msgid "Fallback"
+msgstr "Ripiego"
+
+msgid "Converted"
+msgstr "Convertito"
+
 msgid "Make Bit-Perfect"
 msgstr "Rendi bit-perfect"
 

@@ -2,7 +2,7 @@
 
 Working doc. Delete it when the feature ships. Tracks issue #66.
 
-Status: **Phase 1 done** (2026-09-24) · **Phase 2 done** (2026-09-25) · **Phase 3 done** (2026-09-25) · **Phase 4 done** (2026-09-27) · **Phase 5 done** (2026-09-27) · Phase 7 in progress: Windows steps 1 to 6 done (step 6 is hardware volume, Gate B's volume half passed), 24-bit and 192 kHz WASAPI output verified, the Linux half done (2026-09-28: hardware volume on ALSA, the lead, the period bound, the card's own level in the panel), the rest sorted by platform under "What's left of Phase 7" · macOS moved to #113 · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
+Status: **Phase 1 done** (2026-09-24) · **Phase 2 done** (2026-09-25) · **Phase 3 done** (2026-09-25) · **Phase 4 done** (2026-09-27) · **Phase 5 done** (2026-09-27) · Phase 7 in progress: Windows steps 1 to 6 done (step 6 is hardware volume, Gate B's volume half passed), 24-bit and 192 kHz WASAPI output verified, the Linux half done (2026-09-28: hardware volume on ALSA, the lead, the period bound, the card's own level in the panel), the quality chip, the refusal toast's Details button and the docs done (2026-09-28), only the Windows session left under "What's left of Phase 7" · macOS moved to #113 · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
 
 ## What the user sees today
 
@@ -606,37 +606,29 @@ Out of this plan, since there is no Mac to test it on. #113 carries the design n
 1. **Take the position lead out.** Subtract the negotiated device latency: cpal's
    `buffer_size`, `snd_pcm_delay`, or the padding. This is the audio-stack.md bullet that
    deferred the change to this feature.
-2. A **Now Playing quality chip** (verdict + rate) that opens the signal path panel.
+2. A **quality chip** in the player bar (verdict + rate) that opens the signal path panel. It shows only
+   while the Output Mode is Exclusive: shared output always reads Converted, and a red chip on every
+   default install would read as a fault.
 3. Advanced knobs: period / buffer, resync delay, and WASAPI **compatibility (polling) mode**
    for USB drivers that stutter under event mode. Each knob is bounded by the device's limits
    and reported back as negotiated.
 4. Optional, off by default: **hardware volume** (ALSA simple mixer, `IAudioEndpointVolume`),
    so the slider can move without breaking the claim. It may be better as its own issue.
-5. Docs:
+5. Docs, done (2026-09-28) but for the last step:
    - README feature list and CLAUDE.md (AudioOutput ownership, the lock order).
    - `.claude/rules/audio-stack.md` (reshape, the exclusive backends, the verdict).
    - `unsafe-rust.md` already carries Phase 5's MMCSS row.
-   - Then delete this doc.
+   - Then delete this doc, once the Windows session is done.
 6. **Carried from Phase 5's findings:** a refusal names the device that refused, and
    `FormatRefused` says "float" for a float source.
 7. **Found in Gate A:** a toast when a claim falls back, and reclaiming a disconnected device as
    soon as it is listed again rather than at the next track start.
-8. **Later: the chip in Shared mode too.** Until then it shows only while the Output Mode is
-   Exclusive, because shared output always reads Converted and a red chip there would read as a
-   fault on every default install. The later step shows it always:
-   - in Shared mode, a neutral grey "Shared · 48 kHz" with no verdict colour;
-   - under Exclusive, the verdict colours as now, red kept for a real conversion or a fallback.
+8. **A Details button on the refusal toast**, opening the Output card through the chip's "open
+   Settings on a tab" helper. The toast's action row already routes by `action_kind`, so it is a
+   kind and a handler.
 
-   It needs a fifth label and a grey brush the chip takes as an input, like its others. The
-   verdict itself doesn't change: the chip picks its words from the output mode and the verdict
-   together.
-9. **Later, optional: a Details button on the refusal toast**, opening the Output card through the
-   chip's "open Settings on a tab" helper. The toast's action row already routes by
-   `action_kind`, so it is a kind and a handler.
-
-Hardware volume stays in this phase, on both platforms. The quality chip goes in the Now Playing
-view and in the bottom bar, where it takes an overflow toggle like the other trailing buttons, and
-it shows only under Exclusive until item 8.
+Hardware volume stays in this phase, on both platforms. The quality chip goes in the bottom bar,
+where it takes an overflow toggle like the other trailing buttons.
 
 **Split by platform (2026-09-27).** The Windows machine can't compile `alsa.rs`, `reserve.rs` or
 `realtime.rs`: there is no WSL, and `alsa-sys` rules out a cross check. So the work is split:
@@ -663,60 +655,51 @@ Windows half, done (2026-09-28):
 7. **The performance pass**, and the fix for 24-bit output playing fast on the ALC897 that it
    turned up. Both are below, after the 24-bit result they correct.
 
-**What's left of Phase 7, by where it can be done.** Most of it is cross-platform. Only the WASAPI
-pieces need the Windows machine. The Linux half is done, see below.
-
-*Either platform:*
-- **The quality chip** (item 2), shown only while the Output Mode is Exclusive; item 8 is the
-  Shared-mode follow-up.
-  - `components/quality-chip.slint`:
-    - a verdict dot: green Bit-perfect, yellow Enhanced, red Converted and Fallback;
-    - a short translated label: four new msgids in all six catalogs;
-    - `SignalPathUi.device-rate`;
-    - a `Tooltip` inside the component, which `tooltip_mounts.rs` requires.
-
-    Its brushes are defaulted `in` properties, `MetaChip`'s idiom, and its hover eases a float,
-    never a brush (`slint-pitfalls.md`).
-  - Shown while something plays and `Settings.exclusive-supported && Settings.output-mode-idx ==
-    1`, a Fallback included.
-  - Mounts:
-    - **The Now Playing view's header row**, after the spacer and left of the stars, on the
-      `Player.np-*` brushes.
-    - **The bottom bar**, before the trailing buttons, under `if !Settings.overflow-quality`. That
-      needs a row in `components/now-playing/overflow-menu.slint`, a checkbox in
-      `views/settings/overflow-menu-section.slint`, and the `"quality"` id seeded in
-      `ui/appearance/install.rs` beside the other overflow ids.
-    - **Not the miniplayer**, which can't navigate to Settings.
-  - **A click opens Settings on the Playback tab** through one Rust helper:
-    - `ui::settings::settings_page::open_on(ui, SettingsTab::Playback)`, extracted from the
-      onboarding card's `wire_open_services`, which moves onto it.
-    - Tab first (`set_tab_idx` + `invoke_tab_changed`), then `nav_transition::mark(Above)`, closing
-      Now Playing, and nav 9 (`set_selected_index` + `invoke_persist_selected_index`).
-    - Not in Slint: a `SettingsPage` global importing `Nav` would be a third global importing a
-      sibling, which the root `CLAUDE.md` rules out.
-  - Walks it has to pass: `translations.rs`, `nav_transition.rs`, `tooltip_mounts.rs`,
-    `index_persist.rs`, and `hero_chips_tests.rs` (the `np-*` brushes).
-- **`AudioOutput`'s once-per-refusal rule has no device-free seam**, since `AudioOutput::open`
-  needs a device. Gate A's runs and the Linux half's are its coverage unless the rule moves
-  somewhere a test can reach. The other tests owed since Gate A landed with the Linux half.
-- **Items 8 and 9**: the chip in Shared mode, and the Details button on the refusal toast.
-- **Item 5's docs**: the README feature list, the root `CLAUDE.md` (`AudioOutput` ownership, the
-  lock order), and the rest of `.claude/rules/audio-stack.md` (reshape, the exclusive backends,
-  the verdict; the two positions a deck reports are already there).
-
-*Windows only:*
-- **The Linux half's blind edits**, listed at the end of its result below, then a short re-run of
-  Gate B's volume half and a replug with the device picker open.
+**What's left of Phase 7: the Windows session.** Everything else is done: the Linux half below,
+and the quality chip, the Details button and item 5's docs, whose note follows this list.
+- **The Linux half's blind edits**, listed at the end of its result below: fmt, clippy and the
+  suite on Windows, then a short re-run of Gate B's volume half and a replug with the device picker
+  open.
 - **The WASAPI alignment retry**, never run on a device: only a driver refusing an unaligned
   buffer (`AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED`) takes that path, and neither test device does.
   Windows returns that code only to an event-driven claim, so the retry is the event mode's
   `stream_mode` at the buffer the driver named, which `wasapi_tests` pins.
-- **Gate B's chip half, by hand, after the chip** (its hardware-volume half passed, see below):
-  - It shows only under Exclusive, and its colour matches the panel.
-  - A click from Now Playing and from the bar lands on Settings ▸ Playback.
-  - The overflow toggle moves it into the menu.
+- **A look at the chip and the Details button on Windows**, which passed by hand on Linux.
 
-*Linux only:* nothing.
+**As built (2026-09-28), the quality chip (item 2), the Details button (item 8) and the docs
+(item 5):**
+- **The chip lives in the player bar only.** A mount in the Now Playing view's header was built
+  and dropped: the bar under it already carries the chip, and the second copy looked out of place.
+  Not the miniplayer either, which can't navigate to Settings.
+- **Outlined on the bar's own ground** (`Theme.surface2`, the tree's outline token), so the verdict
+  dot is the only colour it carries. A fill in the accent reads as a toggle left on beside repeat
+  and shuffle. Its hover is the fill the bar's round buttons take.
+- **One gate, `SignalPathUi.chip-shown`**: something playing under Exclusive, a Fallback included.
+  The bar, the overflow row and the menu's height all read it. `Settings.exclusive-chosen`
+  replaced three copies of the mode test in the Output and Playback cards.
+- **The verdict's words live on `SignalPathUi`** (`verdict-text`, `verdict-label`), moved out of
+  the Output card so the card and the chip can't say two different things. The four short labels
+  are new msgids, each catalogue taking the word from its own verdict sentence.
+- **`GradeDot`** (`components/grade-dot.slint`) is the one grade-to-colour mapping, shared with
+  the stage rows.
+- **The overflow toggle** is a "Signal Path" checkbox and the `"quality"` id. The menu row carries
+  the word and the rate, without the dot.
+- **`settings_page::open_on(ui, tab)` is the one way into Settings on a tab**: the tab first through
+  `invoke_tab_changed`, then `mark(Above)`, Now Playing closed, and nav 9 only where the index has
+  to move. The chip, the toast and the onboarding card's Services link all take it; the link used
+  to leave Settings hidden under an open Now Playing. The deep-link ordering pin moved with it,
+  into `settings_page_tests`.
+- **The Details button** is `REFUSAL_TOAST_KIND` on the refusal toast and its branch in the
+  `Notifications.action` dispatcher, which calls `Settings.open-signal-path`. On `Settings`
+  because that dispatcher already reaches it and no sibling global.
+- **No scroll to the Output card on a click.** On a two-column page the card is already at the top
+  of its column; only the stacked layout would need it, and not enough to pay for the timing work.
+- **Item 5's docs:** the README's "Bit-perfect output" section and its architecture paragraph, an
+  "Exclusive output and the verdict" section in `.claude/rules/audio-stack.md`, the chip and
+  `GradeDot` in `.claude/rules/ui-patterns.md`, and the exclusive backends in the root
+  `CLAUDE.md`'s module map. `AudioOutput` ownership and the lock order were already there.
+
+**Result.** By hand on Linux, 2026-09-28: the chip and the Details button behaved as described.
 
 **The Gate A way**, for the runs above:
 - Write test tones as WAVs.
@@ -1032,9 +1015,6 @@ boot and the lookup by id need a device, and the runs above are their coverage.
    Linux.
 5. Step 5's and the performance pass's shared code, run on Linux for the first time.
 6. Found in the replug run: the device picker's list went stale.
-
-Item 5's docs remain. Delete this doc only once items 8 and 9 are done or moved to their own
-issues.
 
 **As built (2026-09-28), the Linux half:**
 - **The volume rules are shared, not copied.** `output/hardware_volume.rs` holds everything

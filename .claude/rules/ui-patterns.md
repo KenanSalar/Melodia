@@ -149,6 +149,14 @@ silently miss the other.
   *interactive* pill is `chip-group.slint`'s `Chip`. Deliberately not one component: one states a
   fact, the other configures something.
 
+- **`QualityChip` is the third, and neither of those**: it states the signal path's verdict and
+  opens the Output card, in the player bar only. It is outlined on the bar's ground so its dot is
+  the only colour it carries; an accent fill reads as a toggle left on beside repeat and shuffle.
+  With one mount it reads `SignalPathUi` and `Theme` directly, where a second mount on another
+  ground would take its brushes as inputs, `MetaChip`'s idiom. **The dot is `GradeDot`**
+  (`components/grade-dot.slint`), the one grade-to-colour mapping, shared with the Output card's
+  stage rows; a verdict's Fallback falls into the red arm with a conversion.
+
 - **`PopupSurface`** — every `PopupWindow` body wraps it. `pill: true` for vertical-pill.
 
 - **A surface that floats over the app edges with `Theme.surface2`, never `Theme.border`.** All

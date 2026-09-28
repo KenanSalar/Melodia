@@ -2329,6 +2329,18 @@ msgstr "İşlenmiş: sesi yalnızca seçtiğiniz efektler değiştirir"
 msgid "Converted: the sound is changed on its way to the device"
 msgstr "Dönüştürülmüş: ses aygıta giderken değişir"
 
+msgid "Bit-perfect"
+msgstr "Bit-perfect"
+
+msgid "Enhanced"
+msgstr "İşlenmiş"
+
+msgid "Fallback"
+msgstr "Yedek"
+
+msgid "Converted"
+msgstr "Dönüştürülmüş"
+
 msgid "Make Bit-Perfect"
 msgstr "Bit-Perfect Yap"
 

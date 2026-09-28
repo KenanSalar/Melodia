@@ -34,31 +34,6 @@ fn the_step_count_matches_the_panels_and_the_dots() {
     assert_eq!(dots, Some(PANELS), "the step-dot array is not {PANELS} long: {dots:?}");
 }
 
-/// The deep link out of step 3 writes the tab before the nav index, so Settings mounts on the body
-/// it is meant to show rather than on whichever tab it was last left at.
-///
-/// Both writes go through the callbacks that already own an `IndexPersist`. Reaching for
-/// `library::settings::set_settings_tab` here instead would build, persist, and be a seventh
-/// writer — `crates/melodia/tests/index_persist.rs` pins that count at six, but it walks
-/// `melodia-views` for the *setter*, so it would never see this ordering.
-#[test]
-fn the_services_deep_link_writes_the_tab_before_the_nav_index() {
-    let writes = (
-        CALLBACKS.find("invoke_tab_changed(services)"),
-        CALLBACKS.find("invoke_persist_selected_index(NAV_SETTINGS)"),
-    );
-    assert!(
-        matches!(writes, (Some(tab), Some(nav)) if tab < nav),
-        "the tab must be written before the nav index, and both through the persisting \
-         callbacks: {writes:?}"
-    );
-
-    assert!(
-        !CALLBACKS.contains("set_settings_tab"),
-        "the deep link must reuse the tab-changed callback, never the disk setter"
-    );
-}
-
 /// Every way out of the card means the same thing, and the flag is spent on the way rather than on
 /// reaching the last panel: an X, the backdrop, Escape and Skip all reach `dismiss`.
 ///

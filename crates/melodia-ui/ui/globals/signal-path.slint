@@ -1,6 +1,9 @@
+import { Settings } from "../settings.slint";
+
 // What the playing track goes through on its way to the device, owned by
 // `crates/melodia-views/src/ui/settings/signal_path.rs` and graded in Rust by
-// `signal_path::evaluate`. Nothing here decides a grade; the panel only picks the words for one.
+// `signal_path::evaluate`. Nothing here decides a grade. The verdict's words live here rather than
+// in the Output card, so the card and the quality chip can't say two different things.
 //
 // A grade is 0 clean, 1 enhanced (something the user chose), 2 converted. The verdict takes the
 // same three values, 0 reading as Bit-perfect, plus 3 for an exclusive claim that fell back to
@@ -48,6 +51,20 @@ export global SignalPathUi {
     in property <bool> muted;
     in property <int> volume;
     in property <string> speed;
+
+    out property <string> verdict-text: !root.playing ? @tr("Nothing is playing")
+        : root.verdict == 0 ? @tr("Bit-perfect: the device receives the decoder's samples untouched")
+        : root.verdict == 1 ? @tr("Enhanced: only effects you chose change the sound")
+        : root.verdict == 3 ? @tr("Fallback: exclusive output was refused, so the system mixer is in the way")
+        : @tr("Converted: the sound is changed on its way to the device");
+    out property <string> verdict-label: root.verdict == 0 ? @tr("Bit-perfect")
+        : root.verdict == 1 ? @tr("Enhanced")
+        : root.verdict == 3 ? @tr("Fallback")
+        : @tr("Converted");
+
+    // Whether the quality chip has anything to say. Only under exclusive output: shared output
+    // always grades Converted, and a red chip on every default install would read as a fault.
+    out property <bool> chip-shown: root.playing && Settings.exclusive-chosen;
 
     callback make-bit-perfect();
 }

@@ -2321,6 +2321,18 @@ msgstr "Traité : seuls les effets que vous avez choisis modifient le son"
 msgid "Converted: the sound is changed on its way to the device"
 msgstr "Converti : le son est modifié en chemin vers le périphérique"
 
+msgid "Bit-perfect"
+msgstr "Bit-perfect"
+
+msgid "Enhanced"
+msgstr "Traité"
+
+msgid "Fallback"
+msgstr "Repli"
+
+msgid "Converted"
+msgstr "Converti"
+
 msgid "Make Bit-Perfect"
 msgstr "Rendre bit-perfect"
 

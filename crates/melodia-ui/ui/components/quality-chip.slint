@@ -1,0 +1,58 @@
+import { Theme } from "../theme.slint";
+import { Settings } from "../settings.slint";
+import { SignalPathUi } from "../globals/signal-path.slint";
+import { GradeDot } from "grade-dot.slint";
+import { Tooltip } from "tooltip.slint";
+
+// The signal path's verdict at a glance in the player bar, and the way to the Output card that
+// explains it. Not a `MetaChip` variant: that one states a fact and takes no pointer.
+//
+// **Outlined on the bar's own ground, so the dot is the only colour it carries.** An accent fill
+// reads as a toggle left on beside repeat and shuffle, and puts a second colour behind a red or
+// yellow dot. The host gates the mount on `SignalPathUi.chip-shown`, so an `if` there vacates the
+// slot.
+export component QualityChip inherits Rectangle {
+    property <float> hover-t: touch.has-hover ? 1.0 : 0.0;
+    animate hover-t { duration: Theme.dur-fast; easing: ease-in-out; }
+
+    height: 26px;
+    border-radius: self.height / 2;
+    // The hover fill the bar's round buttons take. On this element rather than a child, so the
+    // renderer tucks it under the opaque stroke instead of stacking a second curve on the edge.
+    background: Theme.surface0.transparentize(1.0 - root.hover-t);
+    border-width: 1px;
+    border-color: Theme.surface2;
+
+    HorizontalLayout {
+        padding-left: Theme.pad-sm;
+        padding-right: Theme.pad-md;
+        spacing: Theme.pad-sm;
+
+        VerticalLayout {
+            alignment: center;
+            GradeDot { grade: SignalPathUi.verdict; }
+        }
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: SignalPathUi.verdict-label + " · " + SignalPathUi.device-rate;
+                color: Theme.text;
+                font-size: Theme.font-size-sm;
+                // The bar can squeeze it, and a clipped line box would cut the marks off a
+                // translated word.
+                overflow: elide;
+            }
+        }
+    }
+
+    Tooltip {
+        text: SignalPathUi.verdict-text;
+        hovered: touch.has-hover;
+        host-width: root.width;
+        host-height: root.height;
+    }
+
+    touch := TouchArea {
+        clicked => { Settings.open-signal-path(); }
+    }
+}

@@ -89,6 +89,16 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Playback speed 0.25×–2.0×, a playback-linked sleep timer, resume on startup, media keys
 - Responsive mini-player: shrink the window and the UI collapses to a strip, a card or a column with Up Next or lyrics, one layout that rearranges as you resize instead of jumping between them
 
+### Bit-perfect output
+- **Exclusive output** on Linux and Windows, off until you choose it under Settings ▸ Playback ▸ Output. Melodia takes the audio device for itself and hands it the decoder's samples at each file's own sample rate and bit depth, with no system mixer in between: an ALSA `hw:` device on Linux, asked of the sound server so it is handed back cleanly, and WASAPI exclusive mode on Windows
+- A **Signal Path** panel follows the playing track from the file to the device, grades every stage that can change it (the decoded format, EQ and ReplayGain, speed, volume, a crossfade, the sample rate, the channel layout and the output itself), and sums it up as Bit-perfect, Enhanced (only effects you chose), Converted, or Fallback. **Make Bit-Perfect** switches off whatever you chose that changes the sound
+- A quality chip in the player bar carries that verdict and the device's rate, and opens the panel in one click. It shows only under exclusive output, and moves into the overflow menu if you'd rather
+- A device that refuses the claim never costs you the music: playback carries on shared, a notification names the device, and the panel says why. A device you unplug is taken back as soon as it returns
+- **Hardware Volume** turns the device's own volume control instead of scaling the samples, so the slider keeps the sound bit-perfect, and the system's own volume keys move Melodia's slider with it
+- A buffer period to choose, a short silence for the DACs that mute while they switch sample rates, and on Windows a polling mode for USB devices that stutter under exclusive output
+- In shared mode on Linux, **Match the File's Sample Rate** reopens the device at each track's own rate wherever the sound server allows it
+- Unplugging the device or restarting the sound server picks playback up on the new output at the same position
+
 ### Lyrics
 - A panel in the Now Playing column in place of Up Next, turned on from the switch in that view's header or under Settings ▸ Services ▸ Lyrics. A timed sheet follows the song line by line, and clicking a line seeks to it
 - **Off by default, and off means off**: while lyrics are switched off, Now Playing shows Up Next and nothing looks a sheet up or keeps one in memory
@@ -270,13 +280,13 @@ build". A fork wanting its own Discord presence sets `MELODIA_DISCORD_APP_ID`.
 The Slint UI runs on the main thread and a single multi-threaded Tokio runtime handles the database,
 scanner, watcher, player control, and HTTP. There is no WebView and no IPC boundary: UI callbacks
 spawn async work, state flows back over `watch` and `mpsc` channels consumed by UI-thread tasks, and
-cpal's device callback pulls the mixer directly, so decoding, the DSP chain, and the mix stay off the
-runtime entirely.
+cpal's device callback, or an exclusive claim's own writer thread, pulls the mixer directly, so
+decoding, the DSP chain, and the mix stay off the runtime entirely.
 
 Fourteen crates, layered so the compiler enforces the direction rather than a convention: the UI
 names no database or socket, the decoders name no mixer, the tag writer names no state machine.
-Slint 1.16 on FemtoVG, Tokio, Symphonia and cpal, SQLite via SQLx with WAL and FTS5, Lofty for tags,
-Rayon, BLAKE3, and minisign for the updater.
+Slint 1.16 on FemtoVG, Tokio, Symphonia and cpal (with ALSA and WASAPI directly for exclusive output),
+SQLite via SQLx with WAL and FTS5, Lofty for tags, Rayon, BLAKE3, and minisign for the updater.
 
 [`CLAUDE.md`](CLAUDE.md) is the architecture reference; [`docs/adr/`](docs/adr/) records why each
 piece was chosen over the alternatives.

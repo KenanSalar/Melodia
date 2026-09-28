@@ -11,6 +11,7 @@ import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 import { ChipGroup } from "../../components/settings/chip-group.slint";
 import { Dropdown } from "../../components/settings/dropdown.slint";
 import { SliderTrack } from "../../components/slider-track.slint";
+import { GradeDot } from "../../components/grade-dot.slint";
 
 // One step of the signal path: a dot in its grade's colour, what the step is, and what it did.
 // Denser than a `SettingRow` because eight of them sit under one heading; the dot takes the icon
@@ -28,12 +29,7 @@ component StageRow inherits HorizontalLayout {
 
     Rectangle {
         width: SettingsPage.row-icon-w;
-        Rectangle {
-            width: 8px;
-            height: self.width;
-            border-radius: self.width / 2;
-            background: root.grade == 0 ? Theme.green : root.grade == 1 ? Theme.yellow : Theme.red;
-        }
+        GradeDot { grade: root.grade; }
     }
     Text {
         text: root.label;
@@ -98,20 +94,19 @@ export component OutputSection inherits Rectangle {
     property <string> signal-label: @tr("Signal Path");
     property <string> signal-desc: @tr("What reaches the audio device, and what changes it on the way. Bit-perfect means nothing does");
 
-    property <bool> exclusive-chosen: Settings.exclusive-supported && Settings.output-mode-idx == 1;
     property <bool> show-mode: Settings.exclusive-supported && row-visible(mode-label, mode-desc);
-    property <bool> show-device: root.exclusive-chosen && row-visible(device-label, device-desc);
-    property <bool> show-period: root.exclusive-chosen && row-visible(period-label, period-desc);
-    property <bool> show-polling: root.exclusive-chosen && Settings.polling-supported
+    property <bool> show-device: Settings.exclusive-chosen && row-visible(device-label, device-desc);
+    property <bool> show-period: Settings.exclusive-chosen && row-visible(period-label, period-desc);
+    property <bool> show-polling: Settings.exclusive-chosen && Settings.polling-supported
         && row-visible(polling-label, polling-desc);
-    property <bool> show-hardware-volume: root.exclusive-chosen && Settings.hardware-volume-supported
+    property <bool> show-hardware-volume: Settings.exclusive-chosen && Settings.hardware-volume-supported
         && row-visible(hardware-volume-label, hardware-volume-desc);
     // Exclusive output always runs at the file's rate, so the toggle has nothing to add there.
-    property <bool> show-follow-rate: Settings.follow-rate-supported && !root.exclusive-chosen
+    property <bool> show-follow-rate: Settings.follow-rate-supported && !Settings.exclusive-chosen
         && row-visible(follow-rate-label, follow-rate-desc);
     // The hold falls only where the output changes rate, which it does under exclusive and while
     // following the file's rate.
-    property <bool> show-resync: (root.exclusive-chosen
+    property <bool> show-resync: (Settings.exclusive-chosen
             || (Settings.follow-rate-supported && Settings.output-follow-rate))
         && row-visible(resync-label, resync-desc);
     property <bool> show-signal-path: row-visible(signal-label, signal-desc);
@@ -123,12 +118,6 @@ export component OutputSection inherits Rectangle {
 
     out property <bool> has-matches: shows-exclusive-rows || shows-rate-rows || show-signal-path;
 
-    property <string> verdict-text: !SignalPathUi.playing ? @tr("Nothing is playing")
-        : SignalPathUi.verdict == 0 ? @tr("Bit-perfect: the device receives the decoder's samples untouched")
-        : SignalPathUi.verdict == 1 ? @tr("Enhanced: only effects you chose change the sound")
-        : SignalPathUi.verdict == 3 ? @tr("Fallback: exclusive output was refused, so the system mixer is in the way")
-        : @tr("Converted: the sound is changed on its way to the device");
-
     // The stages a click can put right. A resample counts only where following the file's rate is
     // the setting that would stop it, and a volume on the device's own control only while muted:
     // the reset never raises the device, only unmutes it.
@@ -137,7 +126,7 @@ export component OutputSection inherits Rectangle {
         || (SignalPathUi.volume-grade > 0
             && (SignalPathUi.muted || !SignalPathUi.volume-on-device))
         || (SignalPathUi.rate-grade > 0 && Settings.follow-rate-supported
-            && !root.exclusive-chosen && !Settings.output-follow-rate));
+            && !Settings.exclusive-chosen && !Settings.output-follow-rate));
 
     // Indexed by `SignalPathUi.fallback-reason`; the order is Rust's, see that property.
     property <string> fallback-text: SignalPathUi.fallback-reason == 0 ? @tr("the device is in use by another app")
@@ -297,7 +286,7 @@ export component OutputSection inherits Rectangle {
         if root.show-signal-path: SettingRow {
             icon: "graphic_eq";
             label: root.signal-label;
-            description: root.verdict-text;
+            description: SignalPathUi.verdict-text;
             if root.can-reset: SectionButton {
                 label: @tr("Make Bit-Perfect");
                 icon: "";
