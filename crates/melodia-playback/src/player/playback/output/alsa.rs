@@ -199,7 +199,7 @@ pub(super) fn open(
     let volume =
         if request.hardware_volume { hardware_volume(&card, feed.volume.load()) } else { None };
     let hardware_volume = volume.is_some();
-    let device_level = if hardware_volume { None } else { alsa_volume::read(&card) };
+    let device_level = alsa_volume::read(&card);
     let lowered = volume.as_ref().and_then(CardVolume::lowered);
 
     let writer = Writer {

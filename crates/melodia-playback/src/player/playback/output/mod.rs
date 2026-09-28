@@ -220,10 +220,10 @@ pub struct Negotiated {
     /// Whether the device's own control carries the volume, so the voices hand it the samples at
     /// unity. Only an exclusive claim that asked for it, on a device with one in hardware.
     pub hardware_volume: bool,
-    /// Where the system left the device's own control, read at the claim, on a claim that doesn't
-    /// carry the volume there. The samples reach the device untouched either way, but a device the
-    /// system left low or muted plays them quieter or not at all. `None` where the backend can't
-    /// read one, and on every shared stream.
+    /// The device's own control, read at the claim. The samples reach the device untouched either
+    /// way, but one the system left low or muted plays them quieter or not at all. Where the
+    /// control carries the volume its level is Melodia's, and only the switch is the system's.
+    /// `None` where the backend can't read one, and on every shared stream.
     pub device_level: Option<DeviceLevel>,
     /// The period that was asked for, or `None` where the host was left to name its own.
     ///

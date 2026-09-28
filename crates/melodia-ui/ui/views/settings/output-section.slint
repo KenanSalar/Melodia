@@ -329,8 +329,8 @@ export component OutputSection inherits Rectangle {
                 grade: SignalPathUi.volume-grade;
                 label: @tr("Volume");
                 value: SignalPathUi.muted ? @tr("Muted")
-                    : SignalPathUi.volume-on-device ? @tr("{}% on the device", SignalPathUi.volume)
                     : SignalPathUi.device-muted ? @tr("{}% (the device muted)", SignalPathUi.volume)
+                    : SignalPathUi.volume-on-device ? @tr("{}% on the device", SignalPathUi.volume)
                     : SignalPathUi.device-level >= 0 && SignalPathUi.device-level < 100
                         ? @tr("{}% (the device at {}%)", SignalPathUi.volume, SignalPathUi.device-level)
                     : SignalPathUi.volume + "%";

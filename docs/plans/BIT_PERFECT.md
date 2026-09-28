@@ -1064,8 +1064,10 @@ issues.
   buffered period plays at the original, and a granted `RequestRelease` hands the card back at its
   own level. A reopen on the same card carries the reservation but, as on Windows, each stream
   takes and restores its own volume, and the resuming rule stops that dragging the slider.
-- **`Negotiated::device_level`** is the blind spot answered on Linux. On a claim whose device's
-  control doesn't carry the volume, it reports where the system left that element and its switch.
+- **`Negotiated::device_level`** is the blind spot answered on Linux. Every claim reports the
+  element and its switch as it read them. Where the control carries the volume the level is
+  Melodia's own and only the switch is the system's, so a card muted under Hardware Volume reads
+  "(the device muted)" rather than "on the device".
   - **It grades nothing**, departing from "stops reading Bit-perfect" above. The samples reach the
     device untouched, and Gate B already grades a level on the device clean.
   - The Volume row names it instead: "39% (the device at 71%)" or "39% (the device muted)".

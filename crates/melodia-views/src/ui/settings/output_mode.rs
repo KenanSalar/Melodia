@@ -124,21 +124,22 @@ fn list_devices(weak: Weak<AppWindow>, state: &AppState, shadow: &Shadow) {
         let devices = library::playback::output_devices();
         let names: Vec<SharedString> =
             devices.iter().map(|device| device.name.as_str().into()).collect();
-        let selected = {
-            let mut picked = shadow.lock();
-            let selected = match &picked.choice.device {
-                Some(id) => devices.iter().position(|device| &device.id == id),
-                // No saved card means the first one listed, which is what the claim takes.
-                None => (!devices.is_empty()).then_some(0),
-            };
-            picked.devices = devices;
-            selected
-        };
-        let selected = selected.and_then(|i| i32::try_from(i).ok()).unwrap_or(-1);
         let _ = weak.upgrade_in_event_loop(move |ui| {
+            // Here rather than on the pool, so a pick resolves against the list on screen and the
+            // selection reads the choice as it stands.
+            let selected = {
+                let mut picked = shadow.lock();
+                let selected = match &picked.choice.device {
+                    Some(id) => devices.iter().position(|device| &device.id == id),
+                    // No saved card means the first one listed, which is what the claim takes.
+                    None => (!devices.is_empty()).then_some(0),
+                };
+                picked.devices = devices;
+                selected
+            };
             let g = ui.global::<Settings>();
             g.set_output_device_names(ModelRc::from(Rc::new(VecModel::from(names))));
-            g.set_output_device_idx(selected);
+            g.set_output_device_idx(selected.and_then(|i| i32::try_from(i).ok()).unwrap_or(-1));
         });
     });
 }

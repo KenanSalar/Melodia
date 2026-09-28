@@ -68,8 +68,8 @@ pub(super) fn take(card: &Card, volume: f64) -> Result<Option<CardVolume>, alsa:
     HardwareVolume::take(control, &card.device.id, volume).map(Some)
 }
 
-/// Where the system left the element a claim on `card` would carry the volume on, for a claim that
-/// doesn't. `None` where the card has none, or won't say.
+/// The element a claim on `card` carries the volume on, or would, as it stands. `None` where the
+/// card has none, or won't say.
 pub(super) fn read(card: &Card) -> Option<DeviceLevel> {
     read_level(card).unwrap_or_else(|e| {
         log::debug!("audio: {}'s own volume couldn't be read: {}", card.device.name, describe(&e));

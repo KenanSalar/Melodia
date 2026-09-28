@@ -84,15 +84,15 @@ impl<C: VolumeControl> HardwareVolume<C> {
         let current = control.level()?;
         remember_original(id, current);
         let resuming = restored_level(id).is_some_and(|restored| already_at(current, restored));
+        let now = Instant::now();
         let mut taken = Self {
             control,
             id: id.to_owned(),
             applied: None,
             reported: current,
-            watched: Instant::now(),
+            watched: now,
             lowered: None,
         };
-        let now = Instant::now();
         if !resuming && would_raise(level_for(volume), current) {
             // Marked applied, or the next `follow` would raise it before the slider comes down.
             taken.applied = Some((volume, now));

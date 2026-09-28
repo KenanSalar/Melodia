@@ -39,9 +39,10 @@ export global SignalPathUi {
     in property <bool> rg-on;
     // The device's own control carries the volume, which then changes no sample.
     in property <bool> volume-on-device;
-    // Where the system left that control on a claim that doesn't carry the volume there, as the
-    // percentage its own slider shows, or -1 where nothing was read. It changes no sample either,
-    // so it grades nothing and only explains a quiet or silent device.
+    // That control as the claim read it, as the percentage its own slider shows, or -1 where
+    // nothing was read. It changes no sample either, so it grades nothing and only explains a
+    // quiet or silent device. With the volume on the device the level is Melodia's own, and only
+    // the switch says anything.
     in property <int> device-level: -1;
     in property <bool> device-muted;
     in property <bool> muted;
