@@ -101,3 +101,7 @@ impl FallbackReason {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/claim_tests.rs"]
+mod tests;

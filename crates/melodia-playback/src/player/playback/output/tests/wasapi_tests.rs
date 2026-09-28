@@ -1,6 +1,6 @@
-//! Tests for the WASAPI backend's pure half: what each rung is declared as, the order a claim asks
-//! in, which refusals end one, and the stream mode each drive asks for. Opening a device needs a
-//! device, and is tested by hand.
+//! Tests for the WASAPI backend's pure half: what each rung is declared as, which layouts may be
+//! respelled in the short header, the order a claim asks in, which refusals end one, and the
+//! stream mode each drive asks for. Opening a device needs a device, and is tested by hand.
 
 use std::time::Duration;
 
@@ -11,7 +11,10 @@ use windows_sys::Win32::Media::Audio::{
     AUDCLNT_E_UNSUPPORTED_FORMAT,
 };
 
-use super::{candidates, claim_error, device_refusal, from_hns, hns, stream_mode, wave_format};
+use super::{
+    candidates, claim_error, device_refusal, from_hns, hns, short_header_defined, stream_mode,
+    wave_format,
+};
 use crate::player::playback::output::Drive;
 use crate::player::playback::output::claim::{ClaimError, FallbackReason};
 use crate::player::playback::output::encode::DeviceFormat;
@@ -50,6 +53,26 @@ fn each_rung_is_declared_as_the_layout_encode_writes() {
         });
 
         assert_eq!(declared, expected, "{format}");
+    }
+}
+
+/// Windows defines the short header for 16-bit PCM and for float. A wider integer layout stated in
+/// it is what the Realtek HD Audio driver takes and then drains as 32-bit samples, a track playing
+/// fast and garbled, so no respelling offers it.
+#[test]
+fn the_short_header_is_offered_only_for_the_layouts_windows_defines_it_for() {
+    let stereo = shape(2, 44_100);
+    let rows = [
+        (DeviceFormat::S16, true),
+        (DeviceFormat::S24Packed, false),
+        (DeviceFormat::S24High, false),
+        (DeviceFormat::S32, false),
+        (DeviceFormat::F32, true),
+    ];
+    for (format, expected) in rows {
+        let offered = wave_format(format, stereo).map(|wave| short_header_defined(&wave));
+
+        assert_eq!(offered, Some(expected), "{format}");
     }
 }
 

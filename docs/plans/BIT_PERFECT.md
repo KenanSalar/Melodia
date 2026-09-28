@@ -539,7 +539,8 @@ MIT puts nothing in `licenses/ATTRIBUTION.txt`.
   `S24Low`.
 - **A plain `IsFormatSupported` comes before the crate's quirk walk.** The walk swallows every
   error, so a busy or barred device would read as one refusing the format. The first answer that
-  refuses the whole device ends the claim.
+  refuses the whole device ends the claim. Phase 7's performance pass replaced the crate's walk with
+  Melodia's own, which never offers the short header for integer PCM wider than 16 bits.
 - **The Windows default endpoint is listed first**, so "no device chosen" and "the first one
   listed" stay the same device, as they are for a card on Linux.
 - **The pre-fill is silence.** The resync hold is laid in after the open returns, and a block
@@ -658,6 +659,8 @@ Windows half, done (2026-09-28):
 6. **Hardware volume** (item 4), on WASAPI and through the shared half every backend answers to.
    Gate B's volume half passed, see below. The `wasapi_tests` owed since Gate A and the
    `OutputFlags` round-trip landed alongside it.
+7. **The performance pass**, and the fix for 24-bit output playing fast on the ALC897 that it
+   turned up. Both are below, after the 24-bit result they correct.
 
 **What's left of Phase 7, by where it can be done.** Most of it is cross-platform. Only the WASAPI
 pieces need the Windows machine, and only the Linux half's list below needs Linux.
@@ -725,7 +728,12 @@ pieces need the Windows machine, and only the Linux half's list below needs Linu
 - Launch `target\debug\Melodia.exe "<file>" …`, which makes the files the queue and plays from the
   top.
 - Read `%APPDATA%\Melodia-dev\logs\melodia_rCURRENT.log` under `RUST_LOG=info` plus debug for the
-  module in question.
+  module in question. Debug on `melodia_engine` logs every `player:` action, which dates a track
+  start.
+- Files handed over together queue in name order, not in the order given, so name them to sort
+  the way the run needs.
+- For a Busy test, a second Melodia with `MELODIA_DATA_DIR` set to a scratch folder is a separate
+  instance and can hold the device.
 - Back up `settings.json` and `queue.json` first, and restore them after.
 
 **Blind edits the Linux session must check first**, running
@@ -927,11 +935,98 @@ so it would refuse every tone.
   Polled, 20 ms period, Hardware Volume on.
 - **Each 24-bit tone claimed at its own rate as `Exclusive(S24Packed)`**, the ladder's first 24-bit
   rung, with `hardware_volume: true`, no fallback and no warning.
+- **Corrected by the performance pass below: every one of those claims played a third fast.** The
+  ALC897 took `S24Packed` only in a spelling its driver misreads. Each six-second tone moved on
+  after 5.0 s, which this run read as a pass. They now claim `Exclusive(S24High)` at speed.
 - **Periods:** the ALC897 took 831 frames at 44.1 kHz against the 882 asked for, and exactly the
   1920 and 3840 asked for at 96 and 192 kHz.
 - **Each rate change reopened at the boundary**, as in Gate A.
 - **The 16-bit control:** its reopen keeps the rate, so it logs at debug, which the run didn't
   record for the engine. It logged no refusal and played through.
+
+**As built (2026-09-28), the Windows performance pass.** A review of this branch for CPU, memory
+and latency, the Windows half measured. The writer's loop was already clean: per period it
+allocates nothing, takes one uncontended `try_lock` and logs nothing. What changed is on the
+control side:
+- **A refused claim is retried at a track start only where the refusal can pass**
+  (`FallbackReason::may_pass_later`): busy, reserved, not allowed, not connected, or a fault. A
+  rate, channel count or format the device lacks is refused again, and retrying it tore down and
+  reopened the shared stream at every skip, under the decks and output locks.
+- **A claim that already holds the next track keeps playing** (`AudioOutput::serves`). A same-rate,
+  same-shape track in another format stays on the open claim where the claim's format is on the new
+  source's ladder, so a 16-bit track after a 24-bit one plays gapless. The reverse still reopens.
+  `request()` stays what the open stream was asked for.
+- **`OutputStatus` is a lock-free cell** for "parked" and "waiting on a disconnected device",
+  shared like `Lead`.
+  - The 250 ms health tick read the parked flag through the output mutex, on one of the runtime's
+    two workers, and a reopen holds that mutex.
+  - The 1 s reclaim tick does nothing outside a disconnect. It used to hop to the blocking pool
+    every second, for every user.
+  - `close_output` parks on the way, so the stall watch doesn't take the closed output for a lost
+    one.
+- **A boot under Exclusive starts parked** (`AudioOutput::open_parked`), where it opened the
+  default device shared only to close it before anything played. `AppState::init` reads the
+  settings first.
+- **A chosen device is resolved by id** (`get_device`, then an active-state check) rather than by
+  listing and naming every endpoint on each claim. Only `ERROR_NOT_FOUND` or an inactive device is
+  `NotConnected`. Any other failure is I/O, so a COM error can't set the reclaim poll going on a
+  device that is plugged in.
+- **One COM call per polled wake:** the room is the cached buffer size less `GetCurrentPadding`.
+- **Deferred until measured:**
+  - a per-format encoder, since `f64::round` is a CRT call on baseline x86-64;
+  - moving transport ops that can reopen off the runtime's two workers;
+  - the endpoint-volume calls on a thread of their own (Gate B heard no dropout at 5 ms);
+  - fewer `GetPosition` calls.
+
+  Older than this branch and out of its scope: the file decoder is still pulled on the MMCSS
+  thread.
+
+**Found in the performance pass: 24-bit output on the ALC897 played a third fast.** A 20-second
+24-bit tone ended after 15.5 s, events and polled alike, where 16-bit took 20.5 s. A throwaway probe
+that claimed each spelling and drained silence found the cause:
+- The Realtek HD Audio driver refuses 24-bit packed in `WAVEFORMATEXTENSIBLE`: `Initialize`
+  answers `0x88890008`.
+- It takes the same format in the short `WAVEFORMATEX` header, which the crate's quirk walk offers
+  next, and drains it as 32-bit samples. Its own `IAudioClock` ran at 1.333 times wall time at 44.1
+  and 96 kHz, so the track plays fast and garbled while every call succeeds.
+- Windows defines the short header for 8- and 16-bit PCM only.
+- `S24High` (a 32-bit container with 24 valid bits, extensible) is taken and drains at exactly wall
+  time. `S32` and `F32` are refused.
+
+The fix is in `wasapi.rs`, which now walks the respellings itself: the crate's order, less the
+short header for integer PCM wider than 16 bits. The claim then moves down the ladder to `S24High`.
+ALSA has no such header, so only the Windows backend changed.
+
+**Result, the performance pass.** Scripted on 2026-09-28 the Gate A way, with 5 s tones at −30 dBFS:
+- **The refusal retry:** on the UMC22, the first of two MP3s was refused once, the claim attempt
+  and the shared fallback taking about 28 ms. The second neither retried nor reopened. A 16-bit WAV
+  after them claimed `Exclusive(S16)`. After the queue stopped, an MP3 was refused again at debug,
+  and the one after it wasn't retried.
+- **Busy is still retried:** a second Melodia held the ALC897.
+  - The first's claim fell back as Busy (`0x8889000A`).
+  - The next track retried and was Busy again.
+  - Once the second quit, the next track claimed `Exclusive(S16)`.
+- **A format change:** on the ALC897, 24 → 16 → 24 → 16-bit ran on one claim, every boundary
+  gapless and 5.0 s apart. 16 → 24 still reopened, after "Not staging … gapless".
+- **24-bit speed:** a 20 s 24-bit tone now claims `Exclusive(S24High)` and ends after 20.55 s under
+  events and 20.52 s polled.
+- **Not connected:** a device Windows knows but that isn't present, and an id that never existed,
+  both fell back as `NotConnected` rather than I/O. The reclaim poll listed the devices once a
+  second while that fallback stood, and stopped when the output parked.
+- **The boot:** with Exclusive saved it logs "parked until the first play claims the device". With
+  Shared saved it still opens at launch.
+- **Polled mode:** 16-bit played in real time on both devices, with no stall.
+- **Quits:** none of about a dozen logged "output lost; reopening".
+- **Unplug and replug**, by hand: recovered as before.
+
+The tests landed are:
+- `claim_tests`: which reasons `may_pass_later`.
+- `output/mod_tests`: `claim_serves` across format changes both ways, a float source on `S32` and
+  `F32`, and never for a request that differs in more than the format.
+- `wasapi_tests`: the short header is offered only for 16-bit PCM and float.
+
+Each was confirmed to fail against a mutation of the code it covers. The status cell, the parked
+boot and the lookup by id need a device, and the runs above are their coverage.
 
 **Linux half:**
 1. The lead: after each `writei`, report `pcm.delay()` over the rate through
@@ -980,8 +1075,15 @@ so it would refuse every tone.
    - **Log levels:** an unplug that recovers logs no warning.
    - **Quit:** `close_output` hands the card and its reservation back before exit, where they used
      to go with the process. The default output should come back under its own name.
-5. Manual runs on the ALC897 and the PCM2902, then the tests.
-6. Item 5's docs. Delete this doc only once items 8 and 9 are done or moved to their own issues.
+5. **The performance pass's shared code on Linux**, which has only run on Windows:
+   - A lossy file after a lossy one on the PCM2902 asks the card once, not per track, so the
+     session manager keeps it between them.
+   - A 16-bit track after a 24-bit one stays on the open claim and plays gapless. The reverse
+     reopens.
+   - `Reserved` is still retried at a track start.
+   - A boot under Exclusive starts parked and claims at the first play.
+6. Manual runs on the ALC897 and the PCM2902, then the tests.
+7. Item 5's docs. Delete this doc only once items 8 and 9 are done or moved to their own issues.
 
 ## Cross-cutting
 
@@ -1003,9 +1105,14 @@ so it would refuse every tone.
   release?~~ It answers at once and closes the card a moment later, which is what
   `alsa::BUSY_WAIT` covers. See Phase 4's findings.
 - Should the device picker show the names the desktop gives the cards, so the two lists agree?
-- A 16-bit-only card refuses every lossy file, which decodes to float, and each refusal still
-  takes the card from the session manager for a moment. Learning a card's formats once would
-  skip claims that cannot work.
+- A 16-bit-only card refuses every lossy file, which decodes to float. Since the performance pass
+  a refusal isn't retried for the same request, so a run of lossy files asks once. Each lossy file
+  after a lossless one still asks, and on Linux takes the card from the session manager for a
+  moment. Learning a card's formats once would skip claims that cannot work.
+- **Should a claim check its own clock?** The ALC897 misread a spelling it had accepted, and only
+  its clock running off wall time showed it. A writer could compare `IAudioClock` against the wall
+  clock over its first second and move down the ladder when they disagree. The short-header rule
+  covers the one case seen, so it isn't built.
 - Once cpal 0.19's extension traits ship (#1220), can they replace `wasapi.rs` or add a native
   PipeWire exclusive stream (`PW_STREAM_FLAG_EXCLUSIVE` / `node.force-rate`)?
 - **With Hardware Volume off, a Windows device with its own control still plays at its Windows

@@ -27,7 +27,7 @@ use std::time::Duration;
 
 use wasapi::{
     AudioClient, AudioClock, AudioRenderClient, Device, DeviceEnumerator, DeviceState, Direction,
-    Handle, SampleType, ShareMode, StreamMode, WasapiError, WaveFormat,
+    Handle, SampleType, ShareMode, StreamMode, WasapiError, WaveFormat, make_channelmasks,
 };
 use windows_sys::Win32::Foundation::ERROR_NOT_FOUND;
 use windows_sys::Win32::Media::Audio::{
@@ -353,7 +353,7 @@ fn wave_format(format: DeviceFormat, shape: Shape) -> Option<WaveFormat> {
 
 /// The spelling of `wave` the device takes for exclusive use, or `None` where it takes none.
 ///
-/// Asked plainly first: the quirk walk behind it swallows every error, so a busy or barred device
+/// Asked plainly first: the respellings behind it swallow every error, so a busy or barred device
 /// would read as one refusing the format.
 fn exclusive_spelling(
     client: &AudioClient,
@@ -366,7 +366,42 @@ fn exclusive_spelling(
     if let Ok(refused) = device_refusal(e, id) {
         return Err(refused);
     }
-    Ok(client.is_supported_exclusive_with_quirks(wave).ok())
+    Ok(respelled(client, wave))
+}
+
+/// Whether the device takes `wave` for exclusive use, as asked or respelled.
+fn takes_exclusive(client: &AudioClient, wave: &WaveFormat) -> bool {
+    client.is_supported(wave, &ShareMode::Exclusive).is_ok() || respelled(client, wave).is_some()
+}
+
+/// Another spelling of `wave` the device takes where it refused the one asked: the short header,
+/// then each channel mask the crate suggests. The crate's own quirk walk, less one rung.
+///
+/// **The short header is never offered for integer PCM wider than 16 bits.** Windows defines it
+/// for 8- and 16-bit PCM only, and a driver can take a wider one and misread it: the Realtek HD
+/// Audio driver refuses 24-bit packed in the extensible header, takes it in the short one, and
+/// drains it as 32-bit samples, so the track plays fast and garbled while every call succeeds.
+/// Refused here instead, the claim moves on to the 24-in-32 rung, which that driver plays right.
+fn respelled(client: &AudioClient, wave: &WaveFormat) -> Option<WaveFormat> {
+    let takes = |spelling: &WaveFormat| client.is_supported(spelling, &ShareMode::Exclusive).is_ok();
+    if wave.get_nchannels() <= 2
+        && short_header_defined(wave)
+        && let Ok(short) = wave.to_waveformatex()
+        && takes(&short)
+    {
+        return Some(short);
+    }
+    make_channelmasks(usize::from(wave.get_nchannels())).into_iter().find_map(|mask| {
+        let mut masked = wave.clone();
+        masked.wave_fmt.dwChannelMask = mask;
+        takes(&masked).then_some(masked)
+    })
+}
+
+/// Whether the short `WAVEFORMATEX` header can state `wave`: IEEE float, or integer PCM of at most
+/// 16 bits.
+fn short_header_defined(wave: &WaveFormat) -> bool {
+    matches!(wave.get_subformat(), Ok(SampleType::Float)) || wave.get_bitspersample() <= 16
 }
 
 /// A fresh client initialised for exclusive use in `wave`, driven as `drive` asks at a period near
@@ -425,7 +460,7 @@ fn refusal(
     let own_rate = SampleRate::new(mix.get_samplespersec()).filter(|&rate| rate != shape.rate);
     let takes_own_rate = own_rate.is_some_and(|rate| {
         candidates(Shape { rate, ..shape }, source, mix.get_nchannels())
-            .any(|(_, _, wave)| client.is_supported_exclusive_with_quirks(&wave).is_ok())
+            .any(|(_, _, wave)| takes_exclusive(client, &wave))
     });
     if takes_own_rate {
         ClaimError::RateRefused { rate: shape.rate.get() }
