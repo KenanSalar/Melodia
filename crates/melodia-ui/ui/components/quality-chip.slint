@@ -53,6 +53,7 @@ export component QualityChip inherits Rectangle {
     }
 
     touch := TouchArea {
+        mouse-cursor: pointer;
         clicked => { Settings.open-signal-path(); }
     }
 }

@@ -15,8 +15,7 @@ use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Nav, NavEnterFrom, SettingsPage};
 
-/// Settings' own nav index. Spelled here rather than reached for, as `ui::my_library` and
-/// `ui::radio` spell theirs: none is another's to publish.
+/// This page's `Nav.selected-index`, spelled once in Rust. The map itself is `globals/nav.slint`'s.
 const NAV_SETTINGS: i32 = 9;
 
 /// Which Settings tab is showing. The `FavoritesTab` / `RecentlyPlayedTab` shape.

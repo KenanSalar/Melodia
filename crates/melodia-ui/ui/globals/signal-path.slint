@@ -7,7 +7,8 @@ import { Settings } from "../settings.slint";
 //
 // A grade is 0 clean, 1 enhanced (something the user chose), 2 converted. The verdict takes the
 // same three values, 0 reading as Bit-perfect, plus 3 for an exclusive claim that fell back to
-// shared. The strings are data: rates, formats and the device's own name, none of which translate.
+// shared. The `in` strings are data: rates, formats and the device's own name, none of which
+// translate.
 //
 // `fallback-reason` indexes the inline reason list in `output-section.slint`, in the order of
 // `ui::settings::signal_path::fallback_index`, and is -1 when nothing fell back.

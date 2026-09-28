@@ -676,7 +676,8 @@ and the quality chip, the Details button and item 5's docs, whose note follows t
   and shuffle. Its hover is the fill the bar's round buttons take.
 - **One gate, `SignalPathUi.chip-shown`**: something playing under Exclusive, a Fallback included.
   The bar, the overflow row and the menu's height all read it. `Settings.exclusive-chosen`
-  replaced three copies of the mode test in the Output and Playback cards.
+  replaced the two copies of the mode test in the Output and Playback cards, and saved the chip a
+  third.
 - **The verdict's words live on `SignalPathUi`** (`verdict-text`, `verdict-label`), moved out of
   the Output card so the card and the chip can't say two different things. The four short labels
   are new msgids, each catalogue taking the word from its own verdict sentence.
