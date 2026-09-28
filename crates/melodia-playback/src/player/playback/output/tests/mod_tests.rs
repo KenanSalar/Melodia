@@ -1,10 +1,10 @@
-//! Tests for the output's own decisions: where the user's volume is applied, and whether an open
-//! claim plays the next track without a reopen.
+//! Tests for the output's own decisions: where the user's volume is applied, whether an open claim
+//! plays the next track without a reopen, and how the device's own level is reported.
 
 use std::time::Duration;
 
 use super::encode::DeviceFormat;
-use super::{Drive, ExclusiveRequest, ExclusiveTuning, claim_serves, voice_gain};
+use super::{DeviceLevel, Drive, ExclusiveRequest, ExclusiveTuning, claim_serves, voice_gain};
 use crate::player::playback::tests::helpers::shape;
 use melodia_audio::player::source::audio::SourceFormat;
 
@@ -81,5 +81,24 @@ fn a_claim_never_serves_a_request_that_differs_in_more_than_the_format() {
     ];
     for next in changes {
         assert!(!claim_serves(&opened, DeviceFormat::S24Packed, &next), "{next:?}");
+    }
+}
+
+/// The row reads a percentage off the device, so the fraction the system's slider shows rounds to
+/// its nearest whole one, and anything past either end is held to it.
+#[test]
+fn a_device_level_is_the_nearest_whole_percent_the_system_shows() {
+    let rows = [
+        (0.7058, 71),
+        (0.994, 99),
+        (0.996, 100),
+        (0.0, 0),
+        (1.0, 100),
+        (1.2, 100),
+        (-0.1, 0),
+        (f32::NAN, 0),
+    ];
+    for (level, percent) in rows {
+        assert_eq!(DeviceLevel::new(level, false).percent, percent, "{level}");
     }
 }

@@ -104,6 +104,8 @@ fn paint(ui: &AppWindow, path: Option<&SignalPath>) {
     g.set_rg_on(inputs.rg_on);
     let transport = inputs.transport;
     g.set_volume_on_device(device.hardware_volume);
+    g.set_device_level(device.device_level.map_or(-1, |level| i32::from(level.percent)));
+    g.set_device_muted(device.device_level.is_some_and(|level| level.muted));
     g.set_muted(transport.muted);
     g.set_volume(i32::try_from(transport.volume).unwrap_or(i32::MAX));
     g.set_speed(format!("{}×", transport.speed).into());

@@ -2473,3 +2473,9 @@ msgstr "Tourner le propre réglage de volume du périphérique au lieu de mettre
 
 msgid "{}% on the device"
 msgstr "{} % sur le périphérique"
+
+msgid "{}% (the device muted)"
+msgstr "{} % (le périphérique en sourdine)"
+
+msgid "{}% (the device at {}%)"
+msgstr "{} % (le périphérique à {} %)"

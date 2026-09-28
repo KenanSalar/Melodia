@@ -58,6 +58,9 @@ component DropdownOption inherits Rectangle {
 // callback — `ToggleSwitch`'s controlled pattern. Reach for it when the index is
 // a one-way binding to an owned model value, where a self-write would orphan the
 // binding and stop it tracking the model.
+//
+// `about-to-open` is for a host whose options can change with nothing to announce
+// it, so it can refresh them as they are about to be read.
 export component Dropdown inherits Rectangle {
     in property <[string]> options;
     in-out property <int> selected-index;
@@ -65,6 +68,7 @@ export component Dropdown inherits Rectangle {
     in property <bool> manual: false;
 
     callback selected(int);
+    callback about-to-open();
 
     width: root.trigger-width;
     height: trigger.height;
@@ -115,7 +119,10 @@ export component Dropdown inherits Rectangle {
 
         touch := TouchArea {
             mouse-cursor: pointer;
-            clicked => { popup.show(); }
+            clicked => {
+                root.about-to-open();
+                popup.show();
+            }
         }
     }
 

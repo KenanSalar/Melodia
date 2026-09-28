@@ -72,6 +72,11 @@ fn backend(position_ms: u64, xf: CrossfadeSettings) -> BackendSnapshot {
     }
 }
 
+/// A backend whose device still holds what was pulled past `heard_ms`.
+fn backend_behind(heard_ms: u64, pulled_ms: u64, xf: CrossfadeSettings) -> BackendSnapshot {
+    BackendSnapshot { pulled_ms, ..backend(heard_ms, xf) }
+}
+
 /// The position at which `remaining_ms` of the 180 s fixture track are left.
 fn at_remaining(remaining_ms: u64) -> u64 {
     180_000 - remaining_ms
@@ -116,6 +121,49 @@ fn a_normal_tick_publishes_the_position_and_does_nothing_else() {
     assert_eq!(state.position_ms, 30_000);
     assert_eq!(fade_ms(t.as_ref()), None);
     assert_eq!(staged(t.as_ref()), None, "far from the end, nothing to stage");
+}
+
+/// Everything published, persisted or reported outward is where the ear is, which is a device's
+/// lead behind what the voices have pulled.
+#[test]
+fn the_tick_publishes_what_the_ear_hears_not_what_was_pulled() {
+    let mut state = playing_state();
+
+    let t = tick(&mut state, backend_behind(30_000, 30_080, crossfade_off()));
+
+    assert_eq!(t.as_ref().map(|t| t.tick.position_ms), Some(30_000));
+    assert_eq!(state.position_ms, 30_000);
+}
+
+/// The preload stages what the voice pulls next, so it times against the pulled clock: an ear still
+/// outside the lead window must not hold it back once the pull is inside.
+#[test]
+fn the_late_preload_times_against_the_pulled_clock() {
+    let rows = [
+        ("pulled inside the window", PRELOAD_LEAD_MS + 100, PRELOAD_LEAD_MS - 100, true),
+        ("pulled outside it", PRELOAD_LEAD_MS - 100, PRELOAD_LEAD_MS + 100, false),
+    ];
+    for (what, heard_left, pulled_left, stages) in rows {
+        let mut state = playing_state();
+        let backend =
+            backend_behind(at_remaining(heard_left), at_remaining(pulled_left), crossfade_off());
+
+        let t = tick(&mut state, backend);
+
+        assert_eq!(staged(t.as_ref()).is_some(), stages, "{what}");
+    }
+}
+
+/// The ramp is laid over what the voice pulls next, so it has to land on the track's real end as
+/// pulled, not on where the ear still is.
+#[test]
+fn the_crossfade_times_against_the_pulled_clock() {
+    let mut state = playing_state();
+    let xf = crossfade_on(2_000);
+
+    let t = tick(&mut state, backend_behind(at_remaining(2_100), at_remaining(1_900), xf));
+
+    assert_eq!(fade_ms(t.as_ref()), Some(1_900));
 }
 
 // --- gapless preload -------------------------------------------------------

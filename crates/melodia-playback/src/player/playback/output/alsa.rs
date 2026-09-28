@@ -23,10 +23,13 @@ use alsa::pcm::{Access, Format, HwParams, IO, PCM};
 use alsa::{Direction, ValueOr};
 use parking_lot::{Condvar, Mutex};
 
-use melodia_audio::player::source::audio::{ChannelCount, Sample, Shape, SourceFormat, frames_in};
+use melodia_audio::player::source::audio::{
+    ChannelCount, Sample, SampleRate, Shape, SourceFormat, frames_in, frames_to_duration,
+};
 use melodia_core::error::describe;
 
 use super::super::stream_health::AudioStreamHealth;
+use super::alsa_volume::{self, CardVolume};
 use super::claim::ClaimError;
 use super::device::Feed;
 use super::encode::{self, DeviceFormat};
@@ -37,8 +40,8 @@ pub(super) const SUPPORTED: bool = true;
 /// The writer always blocks on the card, so there is no event mode to poll instead of.
 pub(super) const POLLING: bool = false;
 
-/// The card's simple mixer isn't driven yet, so the voices always carry the volume.
-pub(super) const HARDWARE_VOLUME: bool = false;
+/// A claim carries the volume on the card's simple mixer where it has an element to trust.
+pub(super) const HARDWARE_VOLUME: bool = true;
 
 /// Periods the card's buffer holds, which is how long the writer may be late before an underrun.
 const PERIODS_PER_BUFFER: u32 = 4;
@@ -58,9 +61,11 @@ const BUSY_WAIT: Duration = Duration::from_secs(1);
 const BUSY_RETRY: Duration = Duration::from_millis(50);
 
 /// A card's playback device, as the picker lists it and as an open resolves it.
-struct Card {
-    device: OutputDevice,
-    index: i32,
+pub(super) struct Card {
+    pub(super) device: OutputDevice,
+    pub(super) index: i32,
+    /// The device's number on its card, the `DEV` in its id.
+    pub(super) number: u32,
 }
 
 /// Every playback device on every card, by the stable `hw:CARD=<id>,DEV=<n>` spelling.
@@ -101,6 +106,7 @@ fn cards() -> Vec<Card> {
             found.push(Card {
                 device: OutputDevice { id: format!("hw:CARD={card_id},DEV={number}"), name },
                 index: card.get_index(),
+                number,
             });
         }
     }
@@ -189,18 +195,30 @@ pub(super) fn open(
     let config = configure(&pcm, request)?;
     let device_shape = Shape { channels: config.channels, rate: request.shape.rate };
     feed.pull.lock().reshape(device_shape);
+    // Before the writer starts, so the first period already plays at the level.
+    let volume =
+        if request.hardware_volume { hardware_volume(&card, feed.volume.load()) } else { None };
+    let hardware_volume = volume.is_some();
+    let device_level = if hardware_volume { None } else { alsa_volume::read(&card) };
+    let lowered = volume.as_ref().and_then(CardVolume::lowered);
 
     let writer = Writer {
         pcm,
         feed: feed.clone(),
         control: Arc::clone(&control),
         format: config.format,
+        rate: device_shape.rate,
         block_samples: config.period_frames * usize::from(config.channels.get()),
+        volume,
     };
     let writer = std::thread::Builder::new()
         .name(THREAD_NAME.to_owned())
         .spawn(move || writer.run())
         .map_err(|e| ClaimError::io("Failed to start the exclusive output thread", e))?;
+    // After the start, so a claim that failed leaves the slider where the user had it.
+    if let Some(level) = lowered {
+        feed.external_volume.report(level);
+    }
 
     Ok(ExclusiveStream {
         writer: Some(writer),
@@ -210,11 +228,25 @@ pub(super) fn open(
             shape: device_shape,
             format: OutputFormat::Exclusive(config.format),
             fallback: None,
-            hardware_volume: false,
+            hardware_volume,
+            device_level,
             requested_period: Some(config.requested_period),
             period: u32::try_from(config.period_frames).ok(),
         },
         claim: Some(claim),
+    })
+}
+
+/// The card's volume element, set to `volume`, or `None` where it has none a claim can trust or
+/// won't hand it over. Either way the claim goes ahead, with the voices carrying the level.
+fn hardware_volume(card: &Card, volume: f64) -> Option<CardVolume> {
+    alsa_volume::take(card, volume).unwrap_or_else(|e| {
+        log::info!(
+            "audio: {} keeps the volume in software, its own control refused: {}",
+            card.device.name,
+            describe(&e)
+        );
+        None
     })
 }
 
@@ -299,8 +331,17 @@ fn configure(pcm: &PCM, request: &ExclusiveRequest) -> Result<Config, ClaimError
     let format = set_format(&hw, source)?;
 
     let requested_period = u32::try_from(frames_in(tuning.period, shape.rate)).unwrap_or(u32::MAX);
+    // The buffer's periods have to fit the card's largest buffer, and the period is set first, so a
+    // long one at a high rate is held down here rather than left to shorten the buffer.
+    let longest_period = hw
+        .get_buffer_size_max()
+        .map_err(|e| ClaimError::io("Failed to read the card's largest buffer", e))?
+        / alsa::pcm::Frames::from(PERIODS_PER_BUFFER);
     let period = hw
-        .set_period_size_near(alsa::pcm::Frames::from(requested_period), ValueOr::Nearest)
+        .set_period_size_near(
+            alsa::pcm::Frames::from(requested_period).min(longest_period),
+            ValueOr::Nearest,
+        )
         .map_err(|e| ClaimError::io("The card refused the period size", e))?;
     hw.set_buffer_size_near(period * alsa::pcm::Frames::from(PERIODS_PER_BUFFER))
         .map_err(|e| ClaimError::io("The card refused the buffer size", e))?;
@@ -406,46 +447,65 @@ struct Writer {
     feed: Feed,
     control: Arc<WriterControl>,
     format: DeviceFormat,
+    rate: SampleRate,
     block_samples: usize,
+    /// The card's own volume where it carries the level.
+    volume: Option<CardVolume>,
 }
 
 impl Writer {
-    fn run(self) {
+    fn run(mut self) {
         realtime::promote_current_thread();
-        let Self { pcm, feed, control, format, block_samples } = self;
         // Info rather than a warning: a card that went away is recovered from, and only a
         // recovery that fails is something to warn about.
-        if let Err(e) = write_until_stopped(&pcm, &feed, &control, format, block_samples) {
+        if let Err(e) = self.write_until_stopped() {
             log::info!("audio: the exclusive output stopped: {}", describe(&e));
-            feed.health.report_device_lost();
+            self.feed.health.report_device_lost();
         }
+        let Self { pcm, volume, control, .. } = self;
+        // The card stops before its level goes back, so no buffered period plays at the original.
         drop(pcm);
+        drop(volume);
         control.mark_closed();
     }
-}
 
-/// Pull, encode and write one period at a time until told to stop.
-///
-/// Nothing here logs: the health counters are how this loop reports, and the one error it returns
-/// is logged once, on the way out.
-fn write_until_stopped(
-    pcm: &PCM,
-    feed: &Feed,
-    control: &WriterControl,
-    format: DeviceFormat,
-    block_samples: usize,
-) -> Result<(), alsa::Error> {
-    let io = pcm.io_bytes();
-    let frame_bytes =
-        usize::try_from(pcm.frames_to_bytes(1)).unwrap_or(format.bytes_per_sample()).max(1);
-    let mut block: Vec<Sample> = vec![0.0; block_samples];
-    let mut bytes = Vec::with_capacity(block_samples * format.bytes_per_sample());
-    while !control.stopping() {
-        feed.fill(&mut block);
-        encode::encode(&block, format, &mut bytes);
-        write_all(pcm, &io, &bytes, frame_bytes, feed)?;
+    /// Pull, encode and write one period at a time until told to stop.
+    ///
+    /// Nothing here logs: the health counters are how this loop reports, and the one error it
+    /// returns is logged once, on the way out. A volume element that stops taking or reporting the
+    /// level ends the stream like a write refused, and the claim that follows decides again whether
+    /// to use it.
+    fn write_until_stopped(&mut self) -> Result<(), alsa::Error> {
+        let io = self.pcm.io_bytes();
+        let frame_bytes = usize::try_from(self.pcm.frames_to_bytes(1))
+            .unwrap_or(self.format.bytes_per_sample())
+            .max(1);
+        let mut block: Vec<Sample> = vec![0.0; self.block_samples];
+        let mut bytes = Vec::with_capacity(self.block_samples * self.format.bytes_per_sample());
+        while !self.control.stopping() {
+            self.feed.fill(&mut block);
+            encode::encode(&block, self.format, &mut bytes);
+            write_all(&self.pcm, &io, &bytes, frame_bytes, &self.feed)?;
+            // After the write, where the period's slack is.
+            if let Some(volume) = &mut self.volume {
+                volume.follow(self.feed.volume.load())?;
+                if let Some(level) = volume.take_move()? {
+                    self.feed.external_volume.report(level);
+                }
+            }
+            self.report_lead();
+        }
+        Ok(())
     }
-    Ok(())
+
+    /// Say how long the card holds what was just written before it is heard. A card that won't
+    /// answer leaves the last reading standing: it is the ear's position that suffers, not the audio.
+    fn report_lead(&self) {
+        if let Ok(delay) = self.pcm.delay() {
+            let frames = u64::try_from(delay).unwrap_or(0);
+            self.feed.report_lead(frames_to_duration(frames, self.rate));
+        }
+    }
 }
 
 /// Write the whole of `bytes`, recovering an underrun rather than giving up on it.

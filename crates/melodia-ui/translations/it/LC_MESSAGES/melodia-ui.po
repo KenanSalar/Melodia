@@ -2472,3 +2472,9 @@ msgstr "Regolare il controllo del volume del dispositivo stesso invece di scalar
 
 msgid "{}% on the device"
 msgstr "{}% sul dispositivo"
+
+msgid "{}% (the device muted)"
+msgstr "{}% (il dispositivo silenziato)"
+
+msgid "{}% (the device at {}%)"
+msgstr "{}% (il dispositivo al {}%)"

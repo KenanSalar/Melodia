@@ -7,7 +7,7 @@ use melodia_audio::player::source::audio::{Shape, SourceFormat};
 use melodia_playback::player::playback::output::claim::{Fallback, FallbackReason};
 use melodia_playback::player::playback::output::encode::DeviceFormat;
 use melodia_playback::player::playback::output::voice::PlayingSource;
-use melodia_playback::player::playback::output::{Negotiated, OutputFormat};
+use melodia_playback::player::playback::output::{DeviceLevel, Negotiated, OutputFormat};
 
 use super::{Grade, SignalInputs, Stages, Transport, Verdict, evaluate};
 
@@ -27,6 +27,7 @@ fn clean_inputs() -> SignalInputs {
             format: OutputFormat::Shared(cpal::SampleFormat::F32),
             fallback: None,
             hardware_volume: false,
+            device_level: None,
             requested_period: None,
             period: None,
         },
@@ -165,6 +166,27 @@ fn a_volume_on_the_device_grades_clean_except_its_silence() {
         let stages = evaluate(inputs).stages;
 
         assert_eq!(stages.volume, expected, "{what}");
+    }
+}
+
+/// Where the system left the device's own control changes no sample: the device receives them
+/// untouched and then plays them quieter or not at all. The row names it, and the grade stays out
+/// of it, as it does for a level Melodia set there.
+#[test]
+fn the_level_the_system_left_on_the_device_grades_nothing() {
+    let levels = [
+        ("attenuated", DeviceLevel::new(0.2, false)),
+        ("muted", DeviceLevel::new(1.0, true)),
+        ("at its floor", DeviceLevel::new(0.0, false)),
+    ];
+    for (what, level) in levels {
+        let mut inputs = exclusive_inputs();
+        inputs.negotiated.device_level = Some(level);
+
+        let path = evaluate(inputs);
+
+        assert_eq!(path.stages.volume, Grade::Clean, "{what}");
+        assert_eq!(path.verdict, Verdict::BitPerfect, "{what}");
     }
 }
 

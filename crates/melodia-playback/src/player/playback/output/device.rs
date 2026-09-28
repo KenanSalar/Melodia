@@ -363,6 +363,7 @@ fn attempt(
             format: OutputFormat::Shared(format),
             fallback: None,
             hardware_volume: false,
+            device_level: None,
             requested_period,
             period,
         },

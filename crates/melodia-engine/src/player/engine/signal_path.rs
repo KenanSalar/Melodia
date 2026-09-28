@@ -112,7 +112,8 @@ fn grade(inputs: &SignalInputs) -> Stages {
     let chosen_if = |touched: bool| if touched { Grade::Enhanced } else { Grade::Clean };
     let converted_if = |touched: bool| if touched { Grade::Converted } else { Grade::Clean };
     // With the device's own control carrying the level, only the silence at zero reaches the
-    // samples, and the voices apply that themselves.
+    // samples, and the voices apply that themselves. Where the system left that control grades
+    // nothing either way: the samples arrive untouched, and `device_level` only names it.
     let attenuated = if inputs.negotiated.hardware_volume {
         transport.volume == 0
     } else {

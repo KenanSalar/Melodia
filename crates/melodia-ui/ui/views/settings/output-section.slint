@@ -189,6 +189,9 @@ export component OutputSection inherits Rectangle {
                 options: Settings.output-device-names;
                 selected-index <=> Settings.output-device-idx;
                 trigger-width: 200px;
+                // The row mounts on arriving at the page and on choosing exclusive output.
+                init => { Settings.list-output-devices(); }
+                about-to-open => { Settings.list-output-devices(); }
                 selected(idx) => { Settings.output-device-changed(idx); }
             }
         }
@@ -327,6 +330,9 @@ export component OutputSection inherits Rectangle {
                 label: @tr("Volume");
                 value: SignalPathUi.muted ? @tr("Muted")
                     : SignalPathUi.volume-on-device ? @tr("{}% on the device", SignalPathUi.volume)
+                    : SignalPathUi.device-muted ? @tr("{}% (the device muted)", SignalPathUi.volume)
+                    : SignalPathUi.device-level >= 0 && SignalPathUi.device-level < 100
+                        ? @tr("{}% (the device at {}%)", SignalPathUi.volume, SignalPathUi.device-level)
                     : SignalPathUi.volume + "%";
             }
             StageRow {

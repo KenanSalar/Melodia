@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 
 use crate::ui::settings_bind::read_or_default;
 use melodia_app::library;
@@ -54,17 +54,16 @@ pub fn install(ui: &AppWindow, state: &AppState) {
     g.set_output_polling(choice.tuning.drive == Drive::Polling);
     g.set_output_hardware_volume(choice.hardware_volume);
     let shadow: Shadow = Arc::new(Mutex::new(Picked { choice, devices: Vec::new() }));
-    list_devices(ui, state, &shadow);
+
+    let state_list = state.clone();
+    let shadow_list = Arc::clone(&shadow);
+    let weak = ui.as_weak();
+    g.on_list_output_devices(move || list_devices(weak.clone(), &state_list, &shadow_list));
 
     let state_mode = state.clone();
     let shadow_mode = Arc::clone(&shadow);
-    let weak = ui.as_weak();
     g.on_output_mode_changed(move |idx| {
         shadow_mode.lock().choice.mode = mode_from_index(idx);
-        // Cards come and go, and this is the moment the list is about to be looked at.
-        if let Some(ui) = weak.upgrade() {
-            list_devices(&ui, &state_mode, &shadow_mode);
-        }
         apply(&state_mode, &shadow_mode);
     });
 
@@ -119,8 +118,7 @@ fn apply(state: &AppState, shadow: &Shadow) {
 
 /// Ask the cards for themselves off the UI thread, then fill the picker. A saved card that isn't
 /// connected selects nothing, and the signal path says why.
-fn list_devices(ui: &AppWindow, state: &AppState, shadow: &Shadow) {
-    let weak = ui.as_weak();
+fn list_devices(weak: Weak<AppWindow>, state: &AppState, shadow: &Shadow) {
     let shadow = Arc::clone(shadow);
     state.runtime.spawn_blocking(move || {
         let devices = library::playback::output_devices();

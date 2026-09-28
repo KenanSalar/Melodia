@@ -2477,3 +2477,9 @@ msgstr "Ρύθμιση του ελέγχου έντασης της ίδιας τ
 
 msgid "{}% on the device"
 msgstr "{}% στη συσκευή"
+
+msgid "{}% (the device muted)"
+msgstr "{}% (η συσκευή σε σίγαση)"
+
+msgid "{}% (the device at {}%)"
+msgstr "{}% (η συσκευή στο {}%)"

@@ -428,6 +428,88 @@ fn the_clock_follows_the_source_rate_not_the_device_rate() {
     );
 }
 
+/// What the device still holds when the ear is read, in the device's own time.
+const LEAD: Duration = Duration::from_millis(100);
+
+/// Past its anchor, the ear is the device's lead behind what the voice has pulled.
+#[test]
+fn the_ear_trails_the_pulled_clock_by_the_lead() {
+    let (voice, mut pull) = pair(mono(RATE));
+    voice.append(seconds_of(4, RATE));
+    pump(&mut pull, 44_100);
+
+    let heard = voice.heard(LEAD);
+
+    assert!(heard.abs_diff(Duration::from_millis(900)) < Duration::from_millis(1), "{heard:?}");
+}
+
+/// A resumed track is still pouring its first blocks into the device, which is playing out the
+/// silence before it. The ear reads the point it started at until the clock is a lead past it.
+#[test]
+fn the_ear_never_reads_before_where_the_voice_started() {
+    let (voice, mut pull) = pair(mono(RATE));
+    let resume = Duration::from_secs(2);
+    voice.append_at(seconds_of(4, RATE), resume);
+    pump(&mut pull, 441);
+
+    let heard = voice.heard(LEAD);
+
+    assert!(heard.abs_diff(resume) < Duration::from_millis(1), "{heard:?}");
+}
+
+/// The lead is device time, and at another speed the device plays media faster or slower than
+/// that, so the ear trails by the lead scaled into the source's time.
+#[test]
+fn the_lead_is_scaled_into_the_sources_time_by_the_speed() {
+    let rows = [
+        (0.5, Duration::from_millis(450)),
+        (1.0, Duration::from_millis(900)),
+        (2.0, Duration::from_millis(1_800)),
+    ];
+    for (speed, expected) in rows {
+        let (voice, mut pull) = pair(mono(RATE));
+        voice.append(seconds_of(4, RATE));
+        voice.set_speed(speed);
+        pump(&mut pull, 44_100);
+
+        let heard = voice.heard(LEAD);
+
+        assert!(
+            heard.abs_diff(expected) < Duration::from_millis(2),
+            "at speed {speed} the ear read {heard:?}"
+        );
+    }
+}
+
+/// Through a pause the device played out everything it held, so the ear caught up with the clock.
+/// A resume starts the lead over from there rather than jumping the ear back by it.
+#[test]
+fn a_resume_re_anchors_the_ear_where_the_pause_left_the_clock() {
+    let (voice, mut pull) = pair(mono(RATE));
+    voice.append(seconds_of(4, RATE));
+    pump(&mut pull, 44_100);
+    voice.pause();
+
+    voice.play();
+    let heard = voice.heard(LEAD);
+
+    assert!(heard.abs_diff(Duration::from_secs(1)) < Duration::from_millis(1), "{heard:?}");
+}
+
+/// A `play` over a voice that never paused is not a resume: the device still holds its lead, so the
+/// ear stays that far behind.
+#[test]
+fn a_play_over_a_voice_already_playing_keeps_its_anchor() {
+    let (voice, mut pull) = pair(mono(RATE));
+    voice.append(seconds_of(4, RATE));
+    pump(&mut pull, 44_100);
+
+    voice.play();
+    let heard = voice.heard(LEAD);
+
+    assert!(heard.abs_diff(Duration::from_millis(900)) < Duration::from_millis(1), "{heard:?}");
+}
+
 /// Both halves cross a thread boundary at boot — the pull into the output callback, the voice into
 /// whichever task drives the transport — so losing `Send` on either is a compile error here rather
 /// than at the one call site that moves them.

@@ -2481,3 +2481,9 @@ msgstr "Örnekleri ölçeklemek yerine aygıtın kendi ses düzeyi denetimini ç
 
 msgid "{}% on the device"
 msgstr "aygıtta %{}"
+
+msgid "{}% (the device muted)"
+msgstr "%{} (aygıt sessizde)"
+
+msgid "{}% (the device at {}%)"
+msgstr "%{} (aygıt %{} düzeyinde)"

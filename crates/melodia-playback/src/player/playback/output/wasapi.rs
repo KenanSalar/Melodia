@@ -43,7 +43,7 @@ use melodia_core::error::describe;
 use super::claim::ClaimError;
 use super::device::Feed;
 use super::encode::{self, DeviceFormat};
-use super::endpoint_volume::EndpointVolume;
+use super::endpoint_volume::{self, EndpointVolume};
 use super::{Drive, ExclusiveRequest, Negotiated, OutputDevice, OutputFormat, mmcss};
 
 pub(super) const SUPPORTED: bool = true;
@@ -206,6 +206,7 @@ fn claim(request: &ExclusiveRequest, feed: &Feed) -> Result<(Session, Negotiated
         format: OutputFormat::Exclusive(session.format),
         fallback: None,
         hardware_volume: session.volume.is_some(),
+        device_level: None,
         requested_period: u32::try_from(frames_in(request.tuning.period, request.shape.rate)).ok(),
         period: u32::try_from(session.period_frames).ok(),
     };
@@ -215,7 +216,7 @@ fn claim(request: &ExclusiveRequest, feed: &Feed) -> Result<(Session, Negotiated
 /// The endpoint's volume control in hardware, set to `volume`, or `None` where it has none or
 /// won't hand it over. Either way the claim goes ahead, with the voices carrying the level.
 fn hardware_volume(endpoint: &Endpoint, volume: f64) -> Option<EndpointVolume> {
-    EndpointVolume::take(&endpoint.handle, &endpoint.device.id, volume).unwrap_or_else(|e| {
+    endpoint_volume::take(&endpoint.handle, &endpoint.device.id, volume).unwrap_or_else(|e| {
         log::info!(
             "audio: {} keeps the volume in software, its own control refused: {}",
             endpoint.device.name,

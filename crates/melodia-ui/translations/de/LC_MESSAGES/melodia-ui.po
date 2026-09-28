@@ -2479,3 +2479,9 @@ msgstr "Den eigenen Lautstärkeregler des Geräts verstellen, statt die Samples 
 
 msgid "{}% on the device"
 msgstr "{} % am Gerät"
+
+msgid "{}% (the device muted)"
+msgstr "{} % (Gerät stummgeschaltet)"
+
+msgid "{}% (the device at {}%)"
+msgstr "{} % (Gerät auf {} %)"

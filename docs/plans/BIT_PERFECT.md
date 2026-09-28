@@ -2,7 +2,7 @@
 
 Working doc. Delete it when the feature ships. Tracks issue #66.
 
-Status: **Phase 1 done** (2026-09-24) · **Phase 2 done** (2026-09-25) · **Phase 3 done** (2026-09-25) · **Phase 4 done** (2026-09-27) · **Phase 5 done** (2026-09-27) · Phase 7 in progress: Windows steps 1 to 6 done (step 6 is hardware volume, Gate B's volume half passed), 24-bit and 192 kHz WASAPI output verified, the rest sorted by platform under "What's left of Phase 7" · macOS moved to #113 · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
+Status: **Phase 1 done** (2026-09-24) · **Phase 2 done** (2026-09-25) · **Phase 3 done** (2026-09-25) · **Phase 4 done** (2026-09-27) · **Phase 5 done** (2026-09-27) · Phase 7 in progress: Windows steps 1 to 6 done (step 6 is hardware volume, Gate B's volume half passed), 24-bit and 192 kHz WASAPI output verified, the Linux half done (2026-09-28: hardware volume on ALSA, the lead, the period bound, the card's own level in the panel), the rest sorted by platform under "What's left of Phase 7" · macOS moved to #113 · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
 
 ## What the user sees today
 
@@ -478,7 +478,8 @@ reading `/proc/asound`, the reservation owner, `wpctl` and the session manager's
 
 One thing the panel does not see yet: the card's own mixer. A card muted or attenuated there
 plays silence or a quieter signal while the panel reads Bit-perfect. Reading the mixer on a
-claim belongs with Phase 7's hardware volume.
+claim belongs with Phase 7's hardware volume. Answered in Phase 7's Linux half: the Volume row
+names the card's level and mute, and the grade stays out of it.
 
 The tests landed are:
 - `encode_tests`: every integer layout hands the decoded extremes back, `S24_LE` is
@@ -663,7 +664,7 @@ Windows half, done (2026-09-28):
    turned up. Both are below, after the 24-bit result they correct.
 
 **What's left of Phase 7, by where it can be done.** Most of it is cross-platform. Only the WASAPI
-pieces need the Windows machine, and only the Linux half's list below needs Linux.
+pieces need the Windows machine. The Linux half is done, see below.
 
 *Either platform:*
 - **The quality chip** (item 2), shown only while the Output Mode is Exclusive; item 8 is the
@@ -695,21 +696,17 @@ pieces need the Windows machine, and only the Linux half's list below needs Linu
       sibling, which the root `CLAUDE.md` rules out.
   - Walks it has to pass: `translations.rs`, `nav_transition.rs`, `tooltip_mounts.rs`,
     `index_persist.rs`, and `hero_chips_tests.rs` (the `np-*` brushes).
-- **The cross-platform tests still owed since Gate A**, for steps 1 to 5 (the `OutputFlags`
-  round-trip and the hand-edited period landed with step 6):
-  - `voice_tests`: `heard` never reads before the anchor, scales the lead by speed, and
-    re-anchors on a resume but not on a `play` over a voice already playing.
-  - `handlers_tests`: the crossfade and the late preload read `pulled_ms`, and the tick publishes
-    `position_ms`.
-  - `claim` and `SourceFormat`: the float wording.
-  - `AudioOutput`'s once-per-refusal rule has no device-free seam, since `AudioOutput::open` needs
-    a device. Gate A's runs are its coverage unless the rule moves somewhere a test can reach.
+- **`AudioOutput`'s once-per-refusal rule has no device-free seam**, since `AudioOutput::open`
+  needs a device. Gate A's runs and the Linux half's are its coverage unless the rule moves
+  somewhere a test can reach. The other tests owed since Gate A landed with the Linux half.
 - **Items 8 and 9**: the chip in Shared mode, and the Details button on the refusal toast.
 - **Item 5's docs**: the README feature list, the root `CLAUDE.md` (`AudioOutput` ownership, the
   lock order), and the rest of `.claude/rules/audio-stack.md` (reshape, the exclusive backends,
   the verdict; the two positions a deck reports are already there).
 
 *Windows only:*
+- **The Linux half's blind edits**, listed at the end of its result below, then a short re-run of
+  Gate B's volume half and a replug with the device picker open.
 - **The WASAPI alignment retry**, never run on a device: only a driver refusing an unaligned
   buffer (`AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED`) takes that path, and neither test device does.
   Windows returns that code only to an event-driven claim, so the retry is the event mode's
@@ -719,7 +716,7 @@ pieces need the Windows machine, and only the Linux half's list below needs Linu
   - A click from Now Playing and from the bar lands on Settings ▸ Playback.
   - The overflow toggle moves it into the menu.
 
-*Linux only:* the Linux half's list below.
+*Linux only:* nothing.
 
 **The Gate A way**, for the runs above:
 - Write test tones as WAVs.
@@ -736,10 +733,9 @@ pieces need the Windows machine, and only the Linux half's list below needs Linu
   instance and can hold the device.
 - Back up `settings.json` and `queue.json` first, and restore them after.
 
-**Blind edits the Linux session must check first**, running
-`cargo clippy --all-targets --locked --workspace -- -D warnings` and then `cargo test`. Steps 1 to 4
-made the ones in `alsa.rs` and `unsupported.rs` listed in their as-built note below. Step 6 made
-these:
+**Blind edits the Linux session had to check first**, which it did on 2026-09-28: clippy and the
+whole suite passed on Linux before anything else changed. Steps 1 to 4 made the ones in `alsa.rs`
+and `unsupported.rs` listed in their as-built note below. Step 6 made these:
 - `alsa.rs`: `pub(super) const HARDWARE_VOLUME: bool = false`, an
   `ExclusiveStream::hardware_volume()` that reads `negotiated.hardware_volume`, and
   `hardware_volume: false` in its `Negotiated` literal.
@@ -1028,62 +1024,137 @@ The tests landed are:
 Each was confirmed to fail against a mutation of the code it covers. The status cell, the parked
 boot and the lookup by id need a device, and the runs above are their coverage.
 
-**Linux half:**
-1. The lead: after each `writei`, report `pcm.delay()` over the rate through
-   `Feed::report_lead`. Also confirm the cpal shared lead on the ALSA host under PipeWire, where
-   htstamp is zero but the delay still holds.
-2. The period knob: bound it with `get_period_size_min/max`, read the buffer back, and check it in
-   `hw_params`.
-3. **Hardware volume, to parity with Windows.** Step 6's as-built note is the spec, and everything
-   above the backend already runs on Linux: the setting and the reopen it causes, `voice_gain`,
-   `reopen_routed`, grading, Make Bit-Perfect, `tasks::device_volume` and the close at quit. What
-   `alsa.rs` owes:
-   - **`HARDWARE_VOLUME = true`,** and on a claim that asks, the card's playback simple-mixer
-     element. Prefer `Master`, then `PCM`, then the first element with a playback volume.
-     `Negotiated::hardware_volume` is true only where one was found. A card without one keeps the
-     volume in the voices, and the claim goes ahead.
-   - **The level on the curve `alsamixer` shows**, so the two read the same number. This is the
-     Windows parity target, since a claimed card leaves the desktop's own mixer. The curve is
-     alsa-utils' `volume_mapping.c`:
-     - linear in dB for a range of 24 dB or less;
-     - linear in amplitude above that, with the floor at zero;
-     - raw steps for an element with no dB range.
+**Linux half, done (2026-09-28):**
+1. The lead, from `pcm.delay()` after each write.
+2. The period bound.
+3. **Hardware volume, at parity with Windows**, through the same rules rather than a copy of them.
+4. **The card's own level with Hardware Volume off**, which is Phase 4's blind spot, answered on
+   Linux.
+5. Step 5's and the performance pass's shared code, run on Linux for the first time.
+6. Found in the replug run: the device picker's list went stale.
 
-     Set through `set_playback_db_all` or `set_playback_volume_all` accordingly. Its pure half
-     gets a test.
-   - **Zero puts the element at its floor and leaves the playback switch alone,** as on Windows;
-     the voices already silence it.
-   - **The element's original level is saved at claim and put back at release,** kept by card id
-     until it is back, like `endpoint_volume::ORIGINAL_LEVELS`. Check it against the session
-     manager, which re-applies its own route volume to the mixer when it takes the card back.
-   - **Set after a `writei`, at most every 20 ms,** and read back. Every 250 ms, check for a move
-     made outside Melodia (`alsamixer`, or a DAC whose knob reports through the mixer), and report
-     it through `Feed::external_volume`. The mixer handle stays on the writer thread, like the PCM.
-   - **Read the element at claim with the setting off too,** so a muted or attenuated card stops
-     reading Bit-perfect. That is Phase 4's blind spot. Windows has the same one, listed under Open
-     questions.
-   - **Manual runs** on the ALC897 and the PCM2902: `alsamixer` reads Melodia's percentage, a move
-     there moves Melodia's slider, stop and quit put the element back, and the toggle reopens
-     without a jump.
-4. **Step 5's shared code on Linux**, none of which has run there yet:
-   - **Replug reclaim:** unplug the PCM2902 while claimed and plug it back. It should come back
-     within a second, through `alsa::devices` listing the card again. Watch for the session
-     manager taking the card on replug and the reclaim meeting it busy: the claim has to go
-     through `alsa::BUSY_WAIT` rather than fall back as busy and stop polling.
-   - **Toasts:** a refusal toasts once. That includes `Reserved`, whose holder's name is only in
-     the Output settings.
-   - **Log levels:** an unplug that recovers logs no warning.
-   - **Quit:** `close_output` hands the card and its reservation back before exit, where they used
-     to go with the process. The default output should come back under its own name.
-5. **The performance pass's shared code on Linux**, which has only run on Windows:
-   - A lossy file after a lossy one on the PCM2902 asks the card once, not per track, so the
-     session manager keeps it between them.
-   - A 16-bit track after a 24-bit one stays on the open claim and plays gapless. The reverse
-     reopens.
-   - `Reserved` is still retried at a track start.
-   - A boot under Exclusive starts parked and claims at the first play.
-6. Manual runs on the ALC897 and the PCM2902, then the tests.
-7. Item 5's docs. Delete this doc only once items 8 and 9 are done or moved to their own issues.
+Item 5's docs remain. Delete this doc only once items 8 and 9 are done or moved to their own
+issues.
+
+**As built (2026-09-28), the Linux half:**
+- **The volume rules are shared, not copied.** `output/hardware_volume.rs` holds everything
+  `endpoint_volume.rs` had that isn't Windows': never raising, resuming, the originals kept until a
+  release puts them back, the follow pacing, and the move watch. It is generic over a
+  `VolumeControl` that reads and sets the fraction the system's own slider shows.
+  `endpoint_volume.rs` keeps the COM half and `alsa_volume.rs` is the ALSA one. The same five
+  `unsafe` calls sit under the same three attributes, so `unsafe-rust.md`'s counts hold.
+- **Which element: `Master`, else the card's only element with a playback volume, and only on a
+  claim of the card's device 0.** The list's "then `PCM`, then the first" would have played at full
+  volume on this machine:
+  - `PCM` on both HD Audio cards is alsa-lib's softvol user control (`HDA-Intel.conf`), which does
+    nothing on `hw:`.
+  - HDMI and S/PDIF devices share their card's mixer, and no element on it acts on them.
+  - The ALC897 lists a dozen elements with a playback volume, mic loopbacks included.
+
+  The alsa crate can't tell a user control from a driver's without new `unsafe`, so the rule is
+  structural. The ALC897 takes `Master` (−65.25 to 0 dB) and the PCM2902 `PCM` (−128 to 0 dB).
+- **The curve, corrected.** Past 24 dB of range, `volume_mapping.c` is a cube-root taper,
+  `10^((dB − max)/60)`, with the floor moved to zero unless it is `SND_CTL_TLV_DB_GAIN_MUTE`. It is
+  not linear amplitude, as the list said. A set lands on the nearest step, so the two read the same
+  whole percent.
+- **Each read drains the mixer's events first**, since the simple mixer caches an element until its
+  events are read and a move made elsewhere arrives as one. Draining never blocks, which was checked
+  on both cards.
+- **The writer owns the volume, and closes the card before putting the level back.** That way no
+  buffered period plays at the original, and a granted `RequestRelease` hands the card back at its
+  own level. A reopen on the same card carries the reservation but, as on Windows, each stream
+  takes and restores its own volume, and the resuming rule stops that dragging the slider.
+- **`Negotiated::device_level`** is the blind spot answered on Linux. On a claim whose device's
+  control doesn't carry the volume, it reports where the system left that element and its switch.
+  - **It grades nothing**, departing from "stops reading Bit-perfect" above. The samples reach the
+    device untouched, and Gate B already grades a level on the device clean.
+  - The Volume row names it instead: "39% (the device at 71%)" or "39% (the device muted)".
+  - WASAPI reports `None` until its read is written.
+- **The lead** is `pcm.delay()` after each write, over the rate. A read that fails leaves the last
+  one standing.
+- **The period is clamped** so the buffer's four periods fit the largest buffer the card offers.
+- **The rules take the clock as a parameter** (`follow_at`, `take_move_at`), so their pacing is
+  tested without a sleep.
+- **The device picker lists the cards when it is about to be read**: on the device row's mount and
+  on the dropdown opening (`Dropdown.about-to-open`, `Settings.list-output-devices`). It listed them
+  at boot and on a mode change only, so a card plugged in after launch never appeared, on either
+  platform.
+
+**Result, the Linux half.** Runs on 2026-09-28 against the UMC22 (PCM2902) and the ALC897, reading
+`amixer -M`, `/proc/asound`, MPRIS and the log. The unplug and replug were by hand.
+- **Hardware volume:**
+  - A first claim with Melodia at 80 % over the card's 71 % left the card there, and the slider
+    followed it down.
+  - Melodia's slider at 50, 25, 37, 10 and 60 % read the same on `amixer -M`, 37 as 36 since the
+    card steps in whole dB. `amixer` moves to 44, 20, 79 and 34 % moved Melodia's slider, and none
+    was written back.
+  - 0 % put the element at its −128 dB floor with the switch left on.
+  - Stop and quit put the element back at 71 % and the card back to the session manager under its
+    own name. Play after Stop, and a rate change mid-queue, resumed Melodia's level. Between the two
+    streams of a rate change the card sits at its original for about 50 ms, before the new writer
+    starts.
+  - The ALC897's `Master` followed Melodia's 39 % to 38 %, its nearest step, and went back to
+    100 % at stop.
+  - An HDMI claim took no hardware volume and left the softvol `PCM` alone.
+  - Turning it off mid-track reopened with the card back at its own level. The same slider position
+    then plays about 7 dB louder, the card's curve and the voices' amplitude disagreeing there. By
+    design, as on Windows.
+- **The card's own level:** the claim read 71 %, and a switch muted over a rate change read
+  `muted: true`. Both rows read as worded. **The session manager unmutes a card when it takes it
+  back**, so a mute set during a claim shows only over a reopen that keeps the reservation.
+- **The lead:** the published position sat within 10 to 15 ms of what the card had played, where
+  the card held 76 to 95 ms.
+- **Periods:** every chip at 192 kHz on the ALC897 left four periods in the buffer, 960 to 19200
+  frames. The bound never engaged, since neither card's largest buffer is short of four 100 ms
+  periods.
+- **Formats:** 16 → 24-bit reopened, and 24 → 16-bit stayed on the claim gapless. A 24-bit
+  192 kHz file claimed `Exclusive(S32)`.
+- **Step 5 and the performance pass:**
+  - A float after a float asked the card once. The refusal warned and toasted once, and after a
+    stop logged at debug.
+  - `Reserved`, against a second Melodia holding the card, warned once, was retried at the next
+    track, and claimed once the holder quit.
+  - A boot under Exclusive started parked.
+  - An unplug logged the loss and the recovery at info, and the fallback warned once with its toast.
+    A replug reclaimed the card within a second, straight past the session manager, and a second
+    unplug warned again.
+  - Quitting handed the card and its reservation back.
+  - No underruns in any run.
+- **The first replug of the session never reached the kernel.** No USB enumeration followed it,
+  which read as a failed reclaim. The unplug itself logs ALSA's `EBADFD` as "Unknown errno (77)",
+  at info.
+- **Not run:** the cpal shared lead under PipeWire.
+
+The tests landed are:
+- `hardware_volume_tests`, over a fake control and so on both platforms: never raising, resuming, a
+  level the system chose after a release, a failed restore kept for the next claim, the follow
+  pacing, no write-back over a system move, and a move reported once but never the read-back of a
+  set. The two tables from `endpoint_volume_tests` moved here.
+- `alsa_volume_tests`: the element pick, the scale from the stated ranges, readings against
+  `amixer -M`, and a level reading back as itself.
+- `output/mod_tests`: `DeviceLevel`'s rounding. `signal_path_tests`: a device level never moves the
+  grade.
+- The ones owed since Gate A:
+  - `voice_tests`: the ear trails by the lead, never reads before the anchor, scales the lead by
+    speed, and re-anchors on a resume but not on a `play` over a playing voice.
+  - `handlers_tests`: the tick publishes the heard position, and the preload and the crossfade time
+    against the pulled one.
+  - `claim_tests`: the float wording.
+
+Each was confirmed to fail against a mutation of the code it covers. Opening a mixer, the device-0
+rule and the writer's loop need a card, and the runs above are their coverage.
+
+**Blind edits the Windows session must check first.** CI's `clippy-windows` and `test-windows`
+compile them on push:
+- `endpoint_volume.rs` became the COM half: `EndpointControl` implementing `VolumeControl`,
+  `take(device, id, volume)`, `activate`, and `EndpointVolume` as an alias for
+  `HardwareVolume<EndpointControl>`.
+- `wasapi.rs`: the import (`endpoint_volume::{self, EndpointVolume}`), `endpoint_volume::take`, and
+  `device_level: None` in its `Negotiated` literal.
+- `tests/endpoint_volume_tests.rs` is gone, its two tables now in `hardware_volume_tests.rs`.
+
+Then a short re-run of Gate B's volume half, since the rules moved, and a replug with the device
+picker open.
 
 ## Cross-cutting
 
@@ -1118,7 +1189,8 @@ boot and the lookup by id need a device, and the runs above are their coverage.
 - **With Hardware Volume off, a Windows device with its own control still plays at its Windows
   level**, while the panel reads Bit-perfect. It is Phase 4's blind spot on Windows: exclusive mode
   bypasses the audio engine, not the device. Reading the endpoint level at claim, as `take` already
-  does, would let the Volume row name it.
+  does, would let the Volume row name it. Linux does since its half of Phase 7, through
+  `Negotiated::device_level`; WASAPI fills that field with `None`, and the read would go there.
 - **A crash while the device carries the volume leaves Windows at Melodia's level.** Only a release
   puts the original back. Persisting the original would cover a crash, at the cost of a file
   written on every claim.

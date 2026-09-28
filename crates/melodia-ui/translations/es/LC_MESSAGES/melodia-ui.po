@@ -2473,3 +2473,9 @@ msgstr "Mover el control de volumen del propio dispositivo en lugar de escalar l
 
 msgid "{}% on the device"
 msgstr "{} % en el dispositivo"
+
+msgid "{}% (the device muted)"
+msgstr "{} % (el dispositivo silenciado)"
+
+msgid "{}% (the device at {}%)"
+msgstr "{} % (el dispositivo al {} %)"

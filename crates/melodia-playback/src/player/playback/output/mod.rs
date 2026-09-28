@@ -24,12 +24,15 @@ pub mod voice;
 cfg_select! {
     target_os = "linux" => {
         mod alsa;
+        mod alsa_volume;
+        mod hardware_volume;
         mod realtime;
         mod reserve;
         use self::alsa as exclusive;
     }
     target_os = "windows" => {
         mod endpoint_volume;
+        mod hardware_volume;
         mod mmcss;
         mod wasapi;
         use self::wasapi as exclusive;
@@ -217,6 +220,11 @@ pub struct Negotiated {
     /// Whether the device's own control carries the volume, so the voices hand it the samples at
     /// unity. Only an exclusive claim that asked for it, on a device with one in hardware.
     pub hardware_volume: bool,
+    /// Where the system left the device's own control, read at the claim, on a claim that doesn't
+    /// carry the volume there. The samples reach the device untouched either way, but a device the
+    /// system left low or muted plays them quieter or not at all. `None` where the backend can't
+    /// read one, and on every shared stream.
+    pub device_level: Option<DeviceLevel>,
     /// The period that was asked for, or `None` where the host was left to name its own.
     ///
     /// Kept beside the answer because it is the one of the two that says which pass of the ladder
@@ -229,6 +237,27 @@ pub struct Negotiated {
     /// advisory and the hosts that don't track one answer `UnsupportedOperation`, so this is where
     /// a bug report reads the block back, not a bound anything sizes against.
     pub period: Option<cpal::FrameCount>,
+}
+
+/// A device's own volume control, as the system left it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DeviceLevel {
+    /// The percentage the system's own slider shows for it.
+    pub percent: u8,
+    pub muted: bool,
+}
+
+impl DeviceLevel {
+    /// `level`, the fraction the system's slider shows, held to `0..=1`.
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a fraction held to 0..=1, scaled to 100 and rounded, fits a u8 exactly"
+    )]
+    pub fn new(level: f32, muted: bool) -> Self {
+        let percent = (level.clamp(0.0, 1.0) * 100.0).round() as u8;
+        Self { percent, muted }
+    }
 }
 
 /// The open device and the voices feeding it.
