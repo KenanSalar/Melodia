@@ -14,12 +14,13 @@
 //!
 //! **The level is Windows' own volume for that device** for as long as the claim holds it, so the
 //! system's slider and volume keys move it too. Those moves are watched for and handed back, so
-//! Melodia's slider follows them. Polled rather than subscribed to: `IAudioEndpointVolumeCallback`
-//! is called on a thread of the audio service's own, where a poll stays on the writer's. A release
-//! puts back what the device had before the claim
-//! regardless. That original outlives the claim until a release has put it back, because Windows
-//! persists an endpoint's level: a device unplugged mid-claim can't be restored, and replugged it
-//! reports Melodia's level as its own. A crash still leaves it there.
+//! Melodia's slider follows them. Polled rather than subscribed to: a subscription means
+//! implementing `IAudioEndpointVolumeCallback` and reading the notification through a raw pointer,
+//! more `unsafe` for no gain, on a COM worker thread rather than the writer's. A release puts back
+//! what the device had before the claim regardless. That original outlives the claim until a
+//! release has put it back, because Windows persists an endpoint's level: a device unplugged
+//! mid-claim can't be restored, and replugged it reports Melodia's level as its own. A crash still
+//! leaves it there.
 //!
 //! **Every call is made on `wasapi-out`**, which entered the MTA first, like the rest of the
 //! backend. The interface comes from the `windows` crate: `wasapi` wraps none of it and keeps its
