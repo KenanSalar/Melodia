@@ -17,7 +17,6 @@ use std::time::Duration;
 use melodia_audio::player::source::audio::{Shape, SourceFormat};
 use melodia_core::error::{AppError, describe};
 use melodia_playback::player::playback::decks::Decks;
-use melodia_playback::player::playback::output::claim::FallbackReason;
 use melodia_playback::player::playback::output::device::ExternalVolume;
 use melodia_playback::player::playback::output::{
     self, AudioOutput, ExclusiveRequest, ExclusiveTuning, Negotiated, OutputMode, OutputRequest,
@@ -64,10 +63,13 @@ impl PlaybackEngine {
 
     /// Close the output for good, giving an exclusive claim back and the device's own volume with
     /// it. For the way out: `process::exit` runs no destructor, and a parked output would be
-    /// reopened by a track starting while the monitor still runs.
+    /// reopened by a track starting while the monitor still runs. Parked on the way, so the stall
+    /// watch doesn't take the missing stream for a lost one while the process exits.
     pub fn close_output(&self) {
         let closed = self.output.lock().take();
-        drop(closed);
+        if let Some(mut output) = closed {
+            output.park();
+        }
     }
 
     /// Hand the user's volume, as an amplitude, to the output for a claim carrying it on the
@@ -91,8 +93,15 @@ impl PlaybackEngine {
     }
 
     /// Whether the output was closed on purpose, so a stream that stopped beating is not a fault.
+    /// Lock-free, so a health check never waits out a reopen.
     pub fn output_parked(&self) -> bool {
-        self.output.lock().as_ref().is_some_and(AudioOutput::is_parked)
+        self.output_status.parked()
+    }
+
+    /// Whether the output stands in for a claim whose device wasn't connected, which is the only
+    /// case [`Self::disconnected_device_returned`] has anything to look for. Lock-free.
+    pub fn awaiting_disconnected_device(&self) -> bool {
+        self.output_status.awaiting_device()
     }
 
     /// What the device agreed to, or `None` while no stream is open.
@@ -105,11 +114,7 @@ impl PlaybackEngine {
     /// track start, which a gapless album never reaches. Lists the devices only while such a
     /// fallback stands. Blocking.
     pub fn disconnected_device_returned(&self) -> bool {
-        let waiting = self
-            .negotiated()
-            .and_then(|negotiated| negotiated.fallback)
-            .is_some_and(|fallback| fallback.reason == FallbackReason::NotConnected);
-        if !waiting {
+        if !self.awaiting_disconnected_device() {
             return false;
         }
         let chosen = self.output_choice.lock().device.clone();
@@ -177,7 +182,7 @@ impl PlaybackEngine {
             output.park();
             return;
         };
-        if output.request() == &wanted && !output.is_parked() {
+        if output.serves(&wanted) && !output.is_parked() {
             return;
         }
         match reopen_routed(&decks, output, wanted) {
@@ -207,7 +212,7 @@ impl PlaybackEngine {
     /// Always true with no output, which is the device-free rigs the tests build.
     pub(super) fn plays_without_reopen(&self, shape: Shape, format: SourceFormat) -> bool {
         let wanted = self.wanted_request(shape, format);
-        self.output.lock().as_ref().is_none_or(|output| output.request() == &wanted)
+        self.output.lock().as_ref().is_none_or(|output| output.serves(&wanted))
     }
 
     /// Reopen the output for a track starting fresh in `shape` and `format`.
@@ -217,8 +222,10 @@ impl PlaybackEngine {
     /// never idles, so a rate another app held the card at when ours opened would stick after that
     /// app left. A same-rate reopen writes no resync silence, so a track start is the cheap place
     /// to take the card back. An exclusive claim that fell back is retried here for the same
-    /// reason: whatever held the card may have let go. A gapless transition doesn't come through
-    /// here and keeps the output as it is.
+    /// reason, since whatever held the card may have let go, but only where the refusal can pass:
+    /// a rate or format the card lacks is refused again, and retrying it would restart the shared
+    /// stream at every skip. A gapless transition doesn't come through here and keeps the output
+    /// as it is.
     ///
     /// Takes the decks guard as proof it is held: this runs inside a transport op, between its
     /// decode and its append. A failure is logged and playback carries on over whatever
@@ -235,8 +242,11 @@ impl PlaybackEngine {
             return;
         };
         let reclaim = matches!(wanted, OutputRequest::Shared { rate: Some(_) })
-            || output.negotiated().is_some_and(|negotiated| negotiated.fallback.is_some());
-        if output.request() == &wanted && !output.is_parked() && !reclaim {
+            || output
+                .negotiated()
+                .and_then(|negotiated| negotiated.fallback)
+                .is_some_and(|fallback| fallback.reason.may_pass_later());
+        if output.serves(&wanted) && !output.is_parked() && !reclaim {
             return;
         }
         let previous_rate = output.negotiated().map(|negotiated| negotiated.shape.rate);

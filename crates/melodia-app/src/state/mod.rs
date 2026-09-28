@@ -30,7 +30,7 @@ use melodia_integrations::services::integrations::scrobble::ScrobbleService;
 use melodia_net::services::net::pacer::RequestPacer;
 use melodia_platform::services::platform::always_on_top::{self, AlwaysOnTopCapability};
 use melodia_playback::player::playback::decks::DECK_COUNT;
-use melodia_playback::player::playback::output::AudioOutput;
+use melodia_playback::player::playback::output::{AudioOutput, OutputMode};
 use melodia_playback::player::playback::stream_health::AudioStreamHealth;
 use melodia_store::database::{self, DbPool};
 use melodia_store::media::ingest::watcher::{FileEvent, FolderWatcher};
@@ -186,21 +186,21 @@ pub struct StartupChannels {
 
 impl AppState {
     pub async fn init(paths: Paths, runtime: Handle) -> AppResult<(Self, StartupChannels)> {
+        // Ahead of the output, which opens differently under exclusive output.
+        let settings = settings::read_settings(&paths).unwrap_or_else(|e| {
+            log::warn!("Failed to read settings on startup: {e}; using defaults");
+            settings::SettingsData::default()
+        });
+
         // The error callback records into counters rather than logging, because cpal calls it on
         // the output worker thread; `player::playback::stream_health` argues that.
         let audio_health = Arc::new(AudioStreamHealth::default());
-        let audio_output = AudioOutput::open(DECK_COUNT, audio_health.clone())?;
-        log::info!("Audio output: {:?}", audio_output.negotiated());
+        let audio_output = open_output(&settings, audio_health.clone())?;
         // The runtime handle is only used to schedule the deferred half of a
         // faded pause / stop (arm the ramp now, pause the decks once it lands).
         let engine = Arc::new(PlaybackEngine::with_output(audio_output, runtime.clone())?);
 
         let db = database::init_database(&paths).await?;
-
-        let settings = settings::read_settings(&paths).unwrap_or_else(|e| {
-            log::warn!("Failed to read settings on startup: {e}; using defaults");
-            settings::SettingsData::default()
-        });
 
         let player_state = Arc::new(PlayerStateHandle::default());
         {
@@ -352,6 +352,21 @@ impl AppState {
     }
 }
 
+/// Open the output the saved choice will play through. Parked under exclusive output, which claims
+/// the card at the first play: opening the default device shared would only close it again.
+fn open_output(
+    settings: &settings::SettingsData,
+    health: Arc<AudioStreamHealth>,
+) -> AppResult<AudioOutput> {
+    if settings.output.output_choice().mode == OutputMode::Exclusive {
+        log::info!("Audio output: parked until the first play claims the device");
+        return AudioOutput::open_parked(DECK_COUNT, health);
+    }
+    let output = AudioOutput::open(DECK_COUNT, health)?;
+    log::info!("Audio output: {:?}", output.negotiated());
+    Ok(output)
+}
+
 /// Seed the playback engine's lock-free cells (graphic EQ, `ReplayGain`,
 /// crossfade, following the file's rate) from persisted settings before
 /// playback starts, so the first track is already processed when any of them
@@ -385,8 +400,8 @@ fn hydrate_audio_dsp(engine: &PlaybackEngine, settings: &settings::SettingsData)
     engine.set_crossfade_enabled(settings.crossfade.crossfade_enabled);
     engine.set_follow_rate(settings.output.output_follow_rate);
     engine.set_resync_hold(settings.output.resync_hold());
-    // Nothing is loaded yet, so an exclusive choice closes the shared stream `open` started on
-    // and claims the card at the first play.
+    // Nothing is loaded yet, so an exclusive choice leaves the output parked as `open_output` left
+    // it, and claims the card at the first play.
     engine.set_output_choice(settings.output.output_choice());
 
     // The visualizer is deliberately absent: its tap is armed by the

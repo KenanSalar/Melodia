@@ -26,9 +26,10 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use wasapi::{
-    AudioClient, AudioClock, AudioRenderClient, Device, DeviceEnumerator, Direction, Handle,
-    SampleType, ShareMode, StreamMode, WasapiError, WaveFormat,
+    AudioClient, AudioClock, AudioRenderClient, Device, DeviceEnumerator, DeviceState, Direction,
+    Handle, SampleType, ShareMode, StreamMode, WasapiError, WaveFormat,
 };
+use windows_sys::Win32::Foundation::ERROR_NOT_FOUND;
 use windows_sys::Win32::Media::Audio::{
     AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED, AUDCLNT_E_DEVICE_IN_USE, AUDCLNT_E_DEVICE_INVALIDATED,
     AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED, AUDCLNT_E_UNSUPPORTED_FORMAT,
@@ -64,6 +65,9 @@ const EVENT_WAIT_MS: u32 = 200;
 const POLLED_PERIODS: i64 = 4;
 
 const THREAD_NAME: &str = "wasapi-out";
+
+/// What the device enumerator answers for an id it has no endpoint for.
+const ENDPOINT_NOT_FOUND: i32 = windows::core::HRESULT::from_win32(ERROR_NOT_FOUND).0;
 
 /// Nothing outlives a stream here: an endpoint has no reservation to carry across a reopen.
 pub(super) enum Claim {}
@@ -254,15 +258,36 @@ fn endpoints(enumerator: &DeviceEnumerator) -> Result<Vec<Endpoint>, WasapiError
     Ok(found)
 }
 
+/// The endpoint a claim is aimed at: the chosen one looked up by id, or the system default.
+///
+/// By id rather than through [`endpoints`], which reads every device's name to find one. Only a
+/// device the system doesn't know or doesn't have active is `NotConnected`, the two cases the
+/// listing would leave out. Any other failure read as a disconnect would have the reclaim poll
+/// retrying a device that is plugged in, since the listing still shows it.
 fn resolve(enumerator: &DeviceEnumerator, device: Option<&str>) -> Result<Endpoint, ClaimError> {
-    let mut endpoints = endpoints(enumerator)
-        .map_err(|e| ClaimError::io("Failed to list the audio devices", e))?
-        .into_iter();
-    let found = match device {
-        Some(id) => endpoints.find(|endpoint| endpoint.device.id == id),
-        None => endpoints.next(),
+    let Some(id) = device else {
+        return endpoints(enumerator)
+            .map_err(|e| ClaimError::io("Failed to list the audio devices", e))?
+            .into_iter()
+            .next()
+            .ok_or_else(|| ClaimError::NotConnected { id: String::new() });
     };
-    found.ok_or_else(|| ClaimError::NotConnected { id: device.unwrap_or_default().to_owned() })
+    let not_connected = || ClaimError::NotConnected { id: id.to_owned() };
+    let handle = match enumerator.get_device(id) {
+        Ok(handle) => handle,
+        Err(e) if hresult(&e) == Some(ENDPOINT_NOT_FOUND) => return Err(not_connected()),
+        Err(e) => return Err(ClaimError::io("Failed to reach the chosen audio device", e)),
+    };
+    let state = handle
+        .get_state()
+        .map_err(|e| ClaimError::io("Failed to read the chosen audio device's state", e))?;
+    if state != DeviceState::Active {
+        return Err(not_connected());
+    }
+    let name = handle
+        .get_friendlyname()
+        .map_err(|e| ClaimError::io("Failed to read the chosen audio device's name", e))?;
+    Ok(Endpoint { device: OutputDevice { id: id.to_owned(), name }, handle })
 }
 
 /// Initialise the first candidate the device takes.
@@ -561,11 +586,13 @@ impl Session {
                 }
                 Ok(Some(self.buffer_frames))
             }
-            // A device that has gone fails the room query, which ends the writer as a loss.
+            // A device that has gone fails the padding query, which ends the writer as a loss. The
+            // crate's room query asks the buffer size again on every call, and it never changes.
             Pacing::Polling(interval) => {
                 std::thread::sleep(*interval);
-                let room = self.client.get_available_space_in_frames()? as usize;
-                Ok((room > 0).then_some(room.min(self.buffer_frames)))
+                let queued = self.client.get_current_padding()? as usize;
+                let room = self.buffer_frames.saturating_sub(queued);
+                Ok((room > 0).then_some(room))
             }
         }
     }

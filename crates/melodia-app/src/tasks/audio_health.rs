@@ -199,7 +199,13 @@ async fn recover(
 
 /// Reopen the output on the chosen device once it is listed again after a fallback for not being
 /// connected. One attempt per poll: a claim that is still refused falls back as before.
+///
+/// Asked lock-free first: outside a disconnect the tick does nothing, rather than a blocking-pool
+/// hop every second for the life of the process.
 async fn reclaim_if_returned(engine: &Arc<PlaybackEngine>) {
+    if !engine.awaiting_disconnected_device() {
+        return;
+    }
     let engine = Arc::clone(engine);
     let reclaimed = tokio::task::spawn_blocking(move || {
         if engine.disconnected_device_returned() { engine.reopen_output() } else { Ok(None) }

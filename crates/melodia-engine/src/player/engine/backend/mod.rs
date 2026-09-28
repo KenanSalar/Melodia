@@ -32,9 +32,9 @@ use melodia_audio::player::source::stream_source::PreparedStream;
 use melodia_playback::player::playback::crossfade::{self, CrossfadeShared};
 use melodia_playback::player::playback::decks::{Deck, Decks, DeferredOp, lock_decks};
 use melodia_playback::player::playback::equalizer::{self, EqShared, EqSource};
-use melodia_playback::player::playback::output::AudioOutput;
 use melodia_playback::player::playback::output::device::{ExternalVolume, Lead};
 use melodia_playback::player::playback::output::mixer::Mixer;
+use melodia_playback::player::playback::output::{AudioOutput, OutputStatus};
 use melodia_playback::player::playback::replaygain::{ReplayGainShared, TrackReplayGain};
 use melodia_playback::player::playback::visualizer::{VisualizerShared, VisualizerTap};
 
@@ -124,6 +124,9 @@ pub struct PlaybackEngine {
     // Where a claim carrying the volume on the device reports the system moved it, held for the
     // same reason as `lead`.
     external_volume: Arc<ExternalVolume>,
+    // Whether the output is parked or waiting on a disconnected device, held for the same reason
+    // as `lead`: the health checks ask on every tick, from a runtime worker.
+    output_status: Arc<OutputStatus>,
     // Only ever schedules the deferred half of a faded pause / stop.
     runtime: tokio::runtime::Handle,
 }
@@ -152,6 +155,7 @@ impl PlaybackEngine {
             gapless_refused: Mutex::new(None),
             lead: Arc::default(),
             external_volume: Arc::default(),
+            output_status: Arc::default(),
             runtime,
         })
     }
@@ -168,6 +172,7 @@ impl PlaybackEngine {
         let mut engine = Self::new(output.mixer(), runtime)?;
         engine.lead = output.lead();
         engine.external_volume = output.external_volume();
+        engine.output_status = output.status();
         *engine.output.lock() = Some(output);
         Ok(engine)
     }

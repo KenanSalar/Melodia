@@ -83,3 +83,21 @@ pub enum FallbackReason {
     Unsupported,
     Io,
 }
+
+impl FallbackReason {
+    /// Whether the same request can be claimed later without anything in it changing: the holder
+    /// lets go, the user allows exclusive control, the device comes back, or a fault clears. A
+    /// rate, channel count or format the device lacks is refused the same way every time.
+    pub fn may_pass_later(&self) -> bool {
+        match self {
+            Self::Busy
+            | Self::NotAllowed
+            | Self::Reserved { .. }
+            | Self::NotConnected
+            | Self::Io => true,
+            Self::RateRefused | Self::ChannelsRefused | Self::FormatRefused | Self::Unsupported => {
+                false
+            }
+        }
+    }
+}
