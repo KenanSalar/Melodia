@@ -407,13 +407,8 @@ impl AudioOutput {
             }
             OutputRequest::Exclusive(exclusive) => match self.claim(exclusive, held) {
                 Ok(stream) => {
-                    let after_disconnect = self
-                        .reported
-                        .as_ref()
-                        .is_some_and(|fallback| fallback.reason == FallbackReason::NotConnected);
-                    if after_disconnect {
-                        self.reported = None;
-                    }
+                    self.reported
+                        .take_if(|fallback| fallback.reason == FallbackReason::NotConnected);
                     stream
                 }
                 Err(e) => Stream::Shared(self.fall_back(exclusive, &e)?),

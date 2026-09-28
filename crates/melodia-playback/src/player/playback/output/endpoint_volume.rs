@@ -12,9 +12,12 @@
 //! with the voices carrying it; set in dB instead, the two sliders disagree at every position but
 //! the ends.
 //!
-//! **A claim never turns the device up.** Where the system had it quieter than Melodia's slider,
-//! it stays there and the slider follows it down. Otherwise a device the system keeps low would
-//! jump to a slider left at full the moment the control was taken.
+//! **A claim never turns the device up past what the system chose.** Where the system had it
+//! quieter than Melodia's slider, it stays there and the slider follows it down. Otherwise a device
+//! the system keeps low would jump to a slider left at full the moment the control was taken. A
+//! device still at the level a release put back is resuming rather than chosen: every reopen
+//! releases first, and capping there would drag the slider down at each rate change. Only a release
+//! in this run counts, so the first claim after a launch caps again.
 //!
 //! **The level is Windows' own volume for that device** for as long as the claim holds it, so the
 //! system's slider and volume keys move it too. Those moves are watched for and handed back, so
@@ -61,6 +64,10 @@ const FOLLOWED_TOLERANCE: f32 = 0.005;
 /// put it back.
 static ORIGINAL_LEVELS: Mutex<Vec<(String, f32)>> = Mutex::new(Vec::new());
 
+/// The level a release last put each device back to, by endpoint id. A claim finding the device
+/// still there is resuming Melodia's own hand-back rather than meeting a level the system chose.
+static RESTORED_LEVELS: Mutex<Vec<(String, f32)>> = Mutex::new(Vec::new());
+
 /// A claimed device's hardware volume, put back to its original level when dropped.
 pub(super) struct EndpointVolume {
     control: IAudioEndpointVolume,
@@ -77,8 +84,8 @@ pub(super) struct EndpointVolume {
 }
 
 impl EndpointVolume {
-    /// The hardware control of the endpoint `id`, set to `volume` unless it was already quieter,
-    /// or `None` where it has none.
+    /// The hardware control of the endpoint `id`, set to `volume` unless the system had it
+    /// quieter, or `None` where it has none.
     ///
     /// # Errors
     ///
@@ -94,6 +101,7 @@ impl EndpointVolume {
         let control = activate(id)?;
         let current = level(&control)?;
         remember_original(id, current);
+        let resuming = restored_level(id).is_some_and(|restored| already_at(current, restored));
         let mut taken = Self {
             control,
             id: id.to_owned(),
@@ -102,7 +110,7 @@ impl EndpointVolume {
             watched: Instant::now(),
             lowered: None,
         };
-        if would_raise(level_for(volume), current) {
+        if !resuming && would_raise(level_for(volume), current) {
             // Marked applied, or the next `follow` would raise it before the slider comes down.
             taken.applied = Some((volume, Instant::now()));
             taken.lowered = Some(f64::from(current));
@@ -175,7 +183,8 @@ impl Drop for EndpointVolume {
         let Some(index) = originals.iter().position(|(id, _)| *id == self.id) else { return };
         match set_level(&self.control, originals[index].1) {
             Ok(()) => {
-                originals.swap_remove(index);
+                let (_, restored) = originals.swap_remove(index);
+                remember_restored(&self.id, restored);
             }
             // Kept for the next claim of the device: one that has gone can't be set either.
             Err(e) => log::debug!("audio: the device's own volume wasn't put back: {}", describe(&e)),
@@ -189,6 +198,20 @@ fn remember_original(id: &str, level: f32) {
     if !originals.iter().any(|(known, _)| known == id) {
         originals.push((id.to_owned(), level));
     }
+}
+
+/// Note `level` as the one a release just put the device `id` back to.
+fn remember_restored(id: &str, level: f32) {
+    let mut restored = RESTORED_LEVELS.lock();
+    match restored.iter_mut().find(|(known, _)| known == id) {
+        Some(entry) => entry.1 = level,
+        None => restored.push((id.to_owned(), level)),
+    }
+}
+
+/// The level a release last put the device `id` back to, or `None` where none has in this run.
+fn restored_level(id: &str) -> Option<f32> {
+    RESTORED_LEVELS.lock().iter().find(|(known, _)| known == id).map(|(_, level)| *level)
 }
 
 /// `volume`, the slider's fraction, as the device level Windows shows as the same percentage.

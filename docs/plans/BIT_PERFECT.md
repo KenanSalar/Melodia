@@ -709,7 +709,8 @@ pieces need the Windows machine, and only the Linux half's list below needs Linu
 *Windows only:*
 - **The WASAPI alignment retry**, never run on a device: only a driver refusing an unaligned
   buffer (`AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED`) takes that path, and neither test device does.
-  `aligned_stream_mode`, its unit-testable half, is pinned by `wasapi_tests`.
+  Windows returns that code only to an event-driven claim, so the retry is the event mode's
+  `stream_mode` at the buffer the driver named, which `wasapi_tests` pins.
 - **Gate B's chip half, by hand, after the chip** (its hardware-volume half passed, see below):
   - It shows only under Exclusive, and its colour matches the panel.
   - A click from Now Playing and from the bar lands on Settings ▸ Playback.
@@ -757,14 +758,17 @@ these:
   frames written less `IAudioClock`'s position. The crate exposes no `GetStreamLatency`, so the
   device's own latency past its clock isn't in it.
 - **`Voice::heard` scales the lead by speed** into media time, and never reads before its anchor.
-- **Polling is a timer at half a period over a four-period buffer.** After an alignment refusal
-  the period is cut from the aligned buffer, so the buffer stays the size the driver named.
+- **Polling is a timer at half a period over a four-period buffer.** No alignment refusal reaches
+  it: Windows returns `AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED` only to an event-driven claim, whose
+  buffer is its period, so only that mode retries at the buffer the driver named.
 - **The period is five chips**, 5 to 100 ms, and `ExclusiveTuning::new` clamps to 2 to 100 ms. A
   hand-edited period off the chips selects none.
 - **The resync hold is a slider up to `MAX_RESYNC_HOLD` (1 s)**, applied on release. Nothing
   reopens for it; the next rate change hears it.
 - **A refusal warns once per distinct reason and device**, then logs at debug until the output goes
-  shared. The device is looked up through `exclusive::devices()` rather than carried on the error.
+  shared, the user makes a new output choice, or a claim takes after a disconnect, so a second
+  unplug is reported too. The device is looked up through `exclusive::devices()` rather than
+  carried on the error.
 - **Recovery logs at `info`, and only a recovery that runs out warns.** `tasks::audio_health` logs
   the loss and the stall at `info`, as both writers do the stopped stream, since an unplug or the
   system moving its default output recovers in a blink. The give-up line carries the last attempt's
@@ -844,6 +848,13 @@ by its command line (a forwarded file replaces the queue and plays) over three g
   by endpoint id until it is back, so an unplug and replug still restores what the device had
   before the first claim. Windows persists an endpoint's level, and the replug would otherwise
   report Melodia's as its own. A crash still leaves Melodia's level.
+- **A claim never turns the device up past what the system chose.** Where Windows has the device
+  quieter than Melodia's slider, `EndpointVolume::take` leaves it there and the claim reports the
+  level through `ExternalVolume`, so the slider follows it down. Without that, a slider left at
+  full in shared mode blasts a device Windows keeps low the moment the claim takes the control.
+  - A device still at the level a release put back is resuming, and takes Melodia's level. Every
+    reopen releases first, so capping there would drag the slider down at each rate change.
+  - Only a release in this run counts. The first claim after a launch caps again.
 - **Every COM call is on `wasapi-out`.** The level is set after a write, at most every 20 ms, since
   each set is a call into the audio service. A failure ends the stream like a failed write, and
   the reclaim decides again.
@@ -891,8 +902,8 @@ by its command line (a forwarded file replaces the queue and plays) over three g
   `voice_gain`'s test covers the rule that keeps the voices carrying the level there.
 
 The tests landed are:
-- `wasapi_tests`: `stream_mode` and `aligned_stream_mode` under both drives, and `hns` against
-  `from_hns` at the period chips and past both ends.
+- `wasapi_tests`: `stream_mode` under both drives, and `hns` against `from_hns` at the period
+  chips and past both ends.
 - `output/mod_tests`: `voice_gain`, and `endpoint_volume_tests`: `level_for` across `0..=1`, past
   both ends and at NaN, and `already_at` either side of half a percent.
 - `device_tests`: `ExternalVolume` hands over a report, waits with none, keeps only the latest of
@@ -1009,6 +1020,10 @@ so it would refuse every tone.
   dropout there is heard rather than logged.
 - **Windows' mute button isn't followed.** Only the level is watched. Following it would take
   `GetMute`, a sixth COM call, and a decision about whether it mutes Melodia or only the device.
+- **A claim made while muted or at 0 % escapes the never-raise rule.** The device goes to its floor,
+  which raises nothing, and the unmute then `follow`s it straight to Melodia's slider, however low
+  Windows had it before the claim. Capping it would mean carrying the pre-claim level as a ceiling
+  until the user moves the slider.
 - ~~A refusal should name the device that refused.~~ It does since Phase 7: `Negotiated.fallback`
   is a `Fallback` carrying the refusing device, looked up through `exclusive::devices()`, and the
   log line and the panel's Device row name it beside the device the audio went to.
