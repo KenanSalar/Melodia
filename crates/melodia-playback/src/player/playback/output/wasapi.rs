@@ -192,6 +192,10 @@ fn claim(request: &ExclusiveRequest, feed: &Feed) -> Result<(Session, Negotiated
     session
         .start()
         .map_err(|e| claim_error("Failed to start the audio device", &endpoint.device.id, e))?;
+    // After the start, so a claim that failed leaves the slider where the user had it.
+    if let Some(level) = session.volume.as_ref().and_then(EndpointVolume::lowered) {
+        feed.external_volume.report(level);
+    }
     let negotiated = Negotiated {
         device_name: Some(endpoint.device.name),
         shape: session.shape,
@@ -344,9 +348,10 @@ fn exclusive_spelling(
 /// `period_hns`, and the period it took.
 ///
 /// The crate rounds the period up to the device's minimum. A driver that wants a buffer the period
-/// didn't land on still refuses with `AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED`. The client that refused
-/// knows the size it wanted, but a client initialises once, so the retry takes a fresh one, and
-/// the refused one goes back first as Microsoft's recovery sequence has it.
+/// didn't land on still refuses with `AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED`, which Windows returns
+/// only to an event-driven claim, whose buffer is its period. The client that refused knows the
+/// size it wanted, but a client initialises once, so the retry takes a fresh one, and the refused
+/// one goes back first as Microsoft's recovery sequence has it.
 fn initialize(
     device: &Device,
     wave: &WaveFormat,
@@ -362,15 +367,14 @@ fn initialize(
     if hresult(&e) != Some(AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED) {
         return Err(e);
     }
-    let aligned_buffer = wasapi::calculate_period_100ns(
+    let aligned_period = wasapi::calculate_period_100ns(
         i64::from(client.get_buffer_size()?),
         i64::from(wave.get_samplespersec()),
     );
     drop(client);
     let mut client = device.get_iaudioclient()?;
-    let (mode, period) = aligned_stream_mode(drive, aligned_buffer);
-    client.initialize_client(wave, &Direction::Render, &mode)?;
-    Ok((client, period))
+    client.initialize_client(wave, &Direction::Render, &stream_mode(drive, aligned_period))?;
+    Ok((client, aligned_period))
 }
 
 /// Exclusive use at `period_hns`: a buffer of one period under events, a few under polling, where
@@ -382,20 +386,6 @@ fn stream_mode(drive: Drive, period_hns: i64) -> StreamMode {
             period_hns,
             buffer_duration_hns: period_hns.saturating_mul(POLLED_PERIODS),
         },
-    }
-}
-
-/// [`stream_mode`] around a buffer the driver has already named, and the period it runs at. A
-/// polled period is cut from the buffer rather than the buffer built up from a period, so the
-/// buffer stays exactly the aligned size.
-fn aligned_stream_mode(drive: Drive, buffer_hns: i64) -> (StreamMode, i64) {
-    match drive {
-        Drive::Events => (StreamMode::EventsExclusive { period_hns: buffer_hns }, buffer_hns),
-        Drive::Polling => {
-            let period_hns = buffer_hns / POLLED_PERIODS;
-            let mode = StreamMode::PollingExclusive { period_hns, buffer_duration_hns: buffer_hns };
-            (mode, period_hns)
-        }
     }
 }
 

@@ -11,10 +11,7 @@ use windows_sys::Win32::Media::Audio::{
     AUDCLNT_E_UNSUPPORTED_FORMAT,
 };
 
-use super::{
-    aligned_stream_mode, candidates, claim_error, device_refusal, from_hns, hns, stream_mode,
-    wave_format,
-};
+use super::{candidates, claim_error, device_refusal, from_hns, hns, stream_mode, wave_format};
 use crate::player::playback::output::Drive;
 use crate::player::playback::output::claim::{ClaimError, FallbackReason};
 use crate::player::playback::output::encode::DeviceFormat;
@@ -146,31 +143,6 @@ fn a_polled_claim_asks_for_a_buffer_four_periods_deep() {
             mode,
             StreamMode::PollingExclusive { period_hns, buffer_duration_hns },
             "{period_hns}"
-        );
-    }
-}
-
-/// After `AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED` the driver has named the buffer it wants, so an
-/// event-driven retry runs at exactly that size.
-#[test]
-fn an_aligned_event_driven_retry_runs_at_the_buffer_the_driver_named() {
-    let aligned = aligned_stream_mode(Drive::Events, 106_667);
-
-    assert_eq!(aligned, (StreamMode::EventsExclusive { period_hns: 106_667 }, 106_667));
-}
-
-/// A polled retry cuts its period from the named buffer rather than building a buffer up from a
-/// period, so the buffer stays exactly the aligned size even where it doesn't divide evenly.
-#[test]
-fn an_aligned_polled_retry_keeps_the_named_buffer_and_runs_a_quarter_of_it() {
-    let rows = [(400_000, 100_000), (106_667, 26_666)];
-    for (buffer_duration_hns, period_hns) in rows {
-        let aligned = aligned_stream_mode(Drive::Polling, buffer_duration_hns);
-
-        assert_eq!(
-            aligned,
-            (StreamMode::PollingExclusive { period_hns, buffer_duration_hns }, period_hns),
-            "{buffer_duration_hns}"
         );
     }
 }

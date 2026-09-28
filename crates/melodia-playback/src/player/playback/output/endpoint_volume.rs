@@ -12,6 +12,10 @@
 //! with the voices carrying it; set in dB instead, the two sliders disagree at every position but
 //! the ends.
 //!
+//! **A claim never turns the device up.** Where the system had it quieter than Melodia's slider,
+//! it stays there and the slider follows it down. Otherwise a device the system keeps low would
+//! jump to a slider left at full the moment the control was taken.
+//!
 //! **The level is Windows' own volume for that device** for as long as the claim holds it, so the
 //! system's slider and volume keys move it too. Those moves are watched for and handed back, so
 //! Melodia's slider follows them. Polled rather than subscribed to: a subscription means
@@ -68,11 +72,13 @@ pub(super) struct EndpointVolume {
     reported: f32,
     /// When the device was last asked whether something else moved it.
     watched: Instant,
+    /// The level the claim kept the device at, where Melodia's volume was higher.
+    lowered: Option<f64>,
 }
 
 impl EndpointVolume {
-    /// The hardware control of the endpoint `id`, already set to `volume`, or `None` where it has
-    /// none.
+    /// The hardware control of the endpoint `id`, set to `volume` unless it was already quieter,
+    /// or `None` where it has none.
     ///
     /// # Errors
     ///
@@ -86,17 +92,30 @@ impl EndpointVolume {
             return Ok(None);
         }
         let control = activate(id)?;
-        let original = level(&control)?;
-        remember_original(id, original);
+        let current = level(&control)?;
+        remember_original(id, current);
         let mut taken = Self {
             control,
             id: id.to_owned(),
             applied: None,
-            reported: original,
+            reported: current,
             watched: Instant::now(),
+            lowered: None,
         };
-        taken.set(volume)?;
+        if would_raise(level_for(volume), current) {
+            // Marked applied, or the next `follow` would raise it before the slider comes down.
+            taken.applied = Some((volume, Instant::now()));
+            taken.lowered = Some(f64::from(current));
+        } else {
+            taken.set(volume)?;
+        }
         Ok(Some(taken))
+    }
+
+    /// The level the claim kept the device at rather than raise it to Melodia's, for the slider
+    /// to follow down. `None` where the device took Melodia's level.
+    pub(super) fn lowered(&self) -> Option<f64> {
+        self.lowered
     }
 
     /// Set the device to `volume` where it has moved, at most once per [`FOLLOW_INTERVAL`]. A move
@@ -190,6 +209,12 @@ fn level_for(volume: f64) -> f32 {
 /// the slider can say.
 fn already_at(level: f32, reported: f32) -> bool {
     (level - reported).abs() < FOLLOWED_TOLERANCE
+}
+
+/// Whether setting a device at `current` to `level` would turn it up by more than the slider's
+/// rounding, which a claim never does.
+fn would_raise(level: f32, current: f32) -> bool {
+    level > current && !already_at(level, current)
 }
 
 #[allow(

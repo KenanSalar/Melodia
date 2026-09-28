@@ -172,6 +172,7 @@ impl PlaybackEngine {
         let Some(output) = output.as_mut() else {
             return;
         };
+        output.forget_refusal();
         let Some(wanted) = wanted else {
             output.park();
             return;

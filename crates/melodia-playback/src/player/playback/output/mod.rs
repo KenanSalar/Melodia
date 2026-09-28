@@ -48,7 +48,7 @@ use melodia_audio::player::source::audio::{SampleRate, Shape, SourceFormat, fram
 use melodia_core::error::{self, AppError};
 use melodia_core::utils::toast::{self, ToastKind};
 
-use self::claim::{ClaimError, Fallback};
+use self::claim::{ClaimError, Fallback, FallbackReason};
 use self::device::{DeviceStream, ExternalVolume, Feed, Lead};
 use self::encode::DeviceFormat;
 use self::exclusive::{Claim, ExclusiveStream};
@@ -248,7 +248,9 @@ pub struct AudioOutput {
     parked: bool,
     /// The refusal last reported, so a claim retried at every track start and refused the same way
     /// is reported once rather than per track. A claim that takes in between leaves it standing, or
-    /// a mixed queue on a 16-bit card warns at every lossy track; going shared clears it.
+    /// a mixed queue on a 16-bit card warns at every lossy track. Going shared clears it, as do a
+    /// new output choice and a claim taking after a disconnect: each is news, where a format
+    /// refused again is not.
     reported: Option<Fallback>,
     /// The silence a reopen onto a new rate writes first. Not part of the request: changing it
     /// reopens nothing, and only the next rate change hears it.
@@ -404,7 +406,16 @@ impl AudioOutput {
                 Stream::Shared(self.open_shared(*rate)?)
             }
             OutputRequest::Exclusive(exclusive) => match self.claim(exclusive, held) {
-                Ok(stream) => stream,
+                Ok(stream) => {
+                    let after_disconnect = self
+                        .reported
+                        .as_ref()
+                        .is_some_and(|fallback| fallback.reason == FallbackReason::NotConnected);
+                    if after_disconnect {
+                        self.reported = None;
+                    }
+                    stream
+                }
                 Err(e) => Stream::Shared(self.fall_back(exclusive, &e)?),
             },
         };
@@ -472,6 +483,12 @@ impl AudioOutput {
         let mut stream = self.open_shared(Some(request.shape.rate))?;
         stream.negotiated.fallback = Some(fallback);
         Ok(stream)
+    }
+
+    /// Report the next refusal whatever was reported before, for an output choice the user just
+    /// made: a device they picked again is asked again.
+    pub fn forget_refusal(&mut self) {
+        self.reported = None;
     }
 
     /// Close the stream until the next [`Self::reopen`], giving the device back to everything
