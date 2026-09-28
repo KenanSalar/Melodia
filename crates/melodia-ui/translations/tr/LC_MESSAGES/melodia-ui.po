@@ -2472,3 +2472,12 @@ msgstr "{} özel çıkışı reddetti, bu yüzden Melodia şimdilik paylaşıml�
 
 msgid "Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off"
 msgstr "Bazı DAC'ler örnekleme hızını değiştirirken bir an susar. Her değişimde kısa bir sessizlik, parçanın başının kesilmesini önler"
+
+msgid "Hardware Volume"
+msgstr "Donanım Ses Düzeyi"
+
+msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
+msgstr "Örnekleri ölçeklemek yerine aygıtın kendi ses düzeyi denetimini çevir, böylece ses kaydırıcısı sesi bit-perfect tutar. Bu denetim aygıtın sistem ses düzeyidir ve Melodia aygıtı bıraktığında eski hâline döner. Kendi denetimi olmayan aygıtlar Melodia'nın ses düzeyini kullanmaya devam eder"
+
+msgid "{}% on the device"
+msgstr "aygıtta %{}"

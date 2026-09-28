@@ -37,6 +37,8 @@ export global SignalPathUi {
     in property <string> device-period;
     in property <bool> eq-on;
     in property <bool> rg-on;
+    // The device's own control carries the volume, which then changes no sample.
+    in property <bool> volume-on-device;
     in property <bool> muted;
     in property <int> volume;
     in property <string> speed;

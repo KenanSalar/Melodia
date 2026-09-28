@@ -1251,6 +1251,20 @@ fn set_volume_clamps_and_unmutes() {
     assert_eq!(state.volume, 75, "a level inside the band passes through untouched");
 }
 
+/// souvlaki states that a host may send a value outside `[0, 1]`, so the clamp is the whole of
+/// what stands between an OS panel and a volume of 200. Half a percent is the other half:
+/// rounding is what makes the quietest step reachable, where a truncating cast needs a full
+/// percent before anything moves.
+#[test]
+fn the_volume_scale_clamps_its_input_and_rounds_its_output() {
+    assert_eq!(amplitude_to_volume(-0.5), 0, "below the floor");
+    assert_eq!(amplitude_to_volume(0.0), 0);
+    assert_eq!(amplitude_to_volume(0.004), 0, "under half a percent");
+    assert_eq!(amplitude_to_volume(0.005), 1, "and on it");
+    assert_eq!(amplitude_to_volume(1.0), 100);
+    assert_eq!(amplitude_to_volume(2.0), 100, "above the ceiling");
+}
+
 /// The unmute reads `pre_mute_volume`, so the mute edge has to save it and the unmute must
 /// not overwrite it — a toggle-off that re-stamped it would pin the volume at zero.
 #[test]

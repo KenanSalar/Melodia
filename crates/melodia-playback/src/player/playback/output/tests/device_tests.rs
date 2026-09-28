@@ -7,7 +7,12 @@
 //! deliberately does not follow the request down, the strict test that stops a standard rate
 //! duplicating an endpoint — that nothing else in the tree can check.
 
-use super::{Rungs, ladder, period_frames, rates_for, staging_samples, target_frames};
+use std::pin::{Pin, pin};
+use std::task::{Context, Poll, Waker};
+
+use super::{
+    ExternalVolume, Rungs, ladder, period_frames, rates_for, staging_samples, target_frames,
+};
 use melodia_audio::player::source::audio::SampleRate;
 
 const RATE: u32 = 48_000;
@@ -169,4 +174,59 @@ fn a_requested_rate_leaves_the_fallback_walk_as_it_was() {
         rates(&unrequested.fallback),
         [48_000, 192_000, cpal::SAMPLE_RATE_48K, 44_100, 44_100, 8_000]
     );
+}
+
+/// Polls `take` once, with nothing to wake: what the task awaiting it would see on that poll.
+/// Handed back as bits, since a level has to arrive exactly as reported.
+fn poll_take(take: Pin<&mut impl Future<Output = f64>>) -> Poll<u64> {
+    take.poll(&mut Context::from_waker(Waker::noop())).map(f64::to_bits)
+}
+
+#[test]
+fn a_reported_level_is_what_the_next_take_returns() {
+    let volume = ExternalVolume::default();
+    volume.report(0.39);
+
+    let taken = poll_take(pin!(volume.next()));
+
+    assert_eq!(taken, Poll::Ready(0.39_f64.to_bits()));
+}
+
+/// Nothing reported is nothing to take, zero included: an empty slot can't read as a device
+/// turned all the way down.
+#[test]
+fn a_take_with_nothing_reported_waits() {
+    let volume = ExternalVolume::default();
+
+    let taken = poll_take(pin!(volume.next()));
+
+    assert_eq!(taken, Poll::Pending);
+}
+
+/// Only the latest level means anything, so a move landing before the last was taken replaces it,
+/// and taking it empties the slot.
+#[test]
+fn two_reports_before_a_take_hand_over_only_the_latest() {
+    let volume = ExternalVolume::default();
+    volume.report(0.2);
+    volume.report(0.7);
+
+    let first = poll_take(pin!(volume.next()));
+    let second = poll_take(pin!(volume.next()));
+
+    assert_eq!((first, second), (Poll::Ready(0.7_f64.to_bits()), Poll::Pending));
+}
+
+/// The task waits on the slot for as long as the claim holds, so a report landing while it waits
+/// has to wake it, not sit there until the next one.
+#[test]
+fn a_report_landing_while_the_take_waits_is_taken() {
+    let volume = ExternalVolume::default();
+    let mut take = pin!(volume.next());
+    let before = poll_take(take.as_mut());
+
+    volume.report(0.5);
+    let after = poll_take(take.as_mut());
+
+    assert_eq!((before, after), (Poll::Pending, Poll::Ready(0.5_f64.to_bits())));
 }

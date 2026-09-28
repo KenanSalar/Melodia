@@ -26,6 +26,7 @@ fn clean_inputs() -> SignalInputs {
             shape: shape(2, 44_100),
             format: OutputFormat::Shared(cpal::SampleFormat::F32),
             fallback: None,
+            hardware_volume: false,
             requested_period: None,
             period: None,
         },
@@ -141,6 +142,29 @@ fn each_stage_grades_the_input_that_moves_it() {
         let mut inputs = clean_inputs();
         change(&mut inputs);
         assert_eq!(evaluate(inputs).stages, expected, "{what}");
+    }
+}
+
+/// On the device's own control the volume changes no sample, so any audible level grades clean.
+/// The silence at zero and a mute are still the voices', and still the user's choice.
+#[test]
+fn a_volume_on_the_device_grades_clean_except_its_silence() {
+    let cases = [
+        ("full volume", 100, false, Grade::Clean),
+        ("one step under full", 99, false, Grade::Clean),
+        ("the quietest step", 1, false, Grade::Clean),
+        ("zero is a silence in the voices", 0, false, Grade::Enhanced),
+        ("muted at a level", 60, true, Grade::Enhanced),
+    ];
+    for (what, volume, muted, expected) in cases {
+        let mut inputs = clean_inputs();
+        inputs.negotiated.hardware_volume = true;
+        inputs.transport.volume = volume;
+        inputs.transport.muted = muted;
+
+        let stages = evaluate(inputs).stages;
+
+        assert_eq!(stages.volume, expected, "{what}");
     }
 }
 

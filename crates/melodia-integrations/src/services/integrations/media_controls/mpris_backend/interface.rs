@@ -10,11 +10,11 @@ use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{ObjectPath, Value};
 
 use melodia_engine::player::engine::event_sink::PlayerEvent;
-use melodia_engine::player::engine::state::volume_to_amplitude;
+use melodia_engine::player::engine::state::{amplitude_to_volume, volume_to_amplitude};
 use melodia_engine::player::engine::types::{PlaybackStatus, RepeatMode};
 
 use crate::services::integrations::media_controls::published::Published;
-use crate::services::integrations::media_controls::{cover_url, forward, volume_percent};
+use crate::services::integrations::media_controls::{cover_url, forward};
 
 /// One id for every source, so `SetPosition`'s stale-id check only turns away an id this player
 /// never published.
@@ -169,7 +169,7 @@ impl Player {
     /// player unmutes on any set, so this is the state its own sync will find.
     #[zbus(property)]
     fn set_volume(&self, volume: f64) {
-        let percent = volume_percent(volume);
+        let percent = amplitude_to_volume(volume);
         {
             let mut published = self.published.lock();
             published.volume = percent;

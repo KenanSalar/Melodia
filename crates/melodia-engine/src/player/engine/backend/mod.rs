@@ -33,7 +33,7 @@ use melodia_playback::player::playback::crossfade::{self, CrossfadeShared};
 use melodia_playback::player::playback::decks::{Deck, Decks, DeferredOp, lock_decks};
 use melodia_playback::player::playback::equalizer::{self, EqShared, EqSource};
 use melodia_playback::player::playback::output::AudioOutput;
-use melodia_playback::player::playback::output::device::Lead;
+use melodia_playback::player::playback::output::device::{ExternalVolume, Lead};
 use melodia_playback::player::playback::output::mixer::Mixer;
 use melodia_playback::player::playback::replaygain::{ReplayGainShared, TrackReplayGain};
 use melodia_playback::player::playback::visualizer::{VisualizerShared, VisualizerTap};
@@ -121,6 +121,9 @@ pub struct PlaybackEngine {
     // open. A cell of its own rather than a read through `output`, whose lock a reopen holds for as
     // long as a device takes to open.
     lead: Arc<Lead>,
+    // Where a claim carrying the volume on the device reports the system moved it, held for the
+    // same reason as `lead`.
+    external_volume: Arc<ExternalVolume>,
     // Only ever schedules the deferred half of a faded pause / stop.
     runtime: tokio::runtime::Handle,
 }
@@ -148,6 +151,7 @@ impl PlaybackEngine {
             output_choice: Mutex::new(OutputChoice::default()),
             gapless_refused: Mutex::new(None),
             lead: Arc::default(),
+            external_volume: Arc::default(),
             runtime,
         })
     }
@@ -163,6 +167,7 @@ impl PlaybackEngine {
     ) -> Result<Self, AppError> {
         let mut engine = Self::new(output.mixer(), runtime)?;
         engine.lead = output.lead();
+        engine.external_volume = output.external_volume();
         *engine.output.lock() = Some(output);
         Ok(engine)
     }
@@ -297,7 +302,10 @@ impl PlaybackEngine {
         self.bump_epoch();
         self.clear_live_stream();
         let mut decks = self.lock_decks();
+        // Handed over ahead of the reopen, so a claim sets the device's own control to it.
+        self.set_output_volume(volume);
         self.reopen_for_track(&decks, decoded.shape(), decoded.format());
+        let volume = self.voice_gain(volume);
         // Backstop for the gapless race: `preload_gapless` sets the flag under
         // this same lock, so a preload that landed during the decode is visible
         // here. Downgrading to a hard cut is always safe — it clears both decks,
@@ -386,7 +394,9 @@ impl PlaybackEngine {
         *self.live_stream.lock() = Some(shared);
         self.bump_epoch();
         let decks = self.lock_decks();
+        self.set_output_volume(volume);
         self.reopen_for_track(&decks, source.shape(), source.format());
+        let volume = self.voice_gain(volume);
         // A live mount has no timeline to resume on, so its clock starts where the connection did.
         decks.cut_to(volume, Self::STREAM_SPEED, Duration::ZERO, |deck| {
             self.build_source(source, TrackReplayGain::default(), deck)
@@ -418,6 +428,8 @@ impl PlaybackEngine {
         self.bump_epoch();
         self.clear_live_stream();
         let mut decks = self.lock_decks();
+        self.set_output_volume(volume);
+        let volume = self.voice_gain(volume);
         // A staged gapless source sits on the *active* deck and inherits its
         // fade cell, so it would fade out alongside the track it was meant to
         // follow. `crossfade_eligible` gates the preload off for exactly this
@@ -638,8 +650,12 @@ impl PlaybackEngine {
         deck.voice.replace(self.build_source(decoded, baked_rg, deck), position, mounted);
     }
 
+    /// Set the user's volume, as an amplitude: on the device's own control where an exclusive claim
+    /// carries it there, leaving the voices at unity, and on the voices otherwise.
     pub fn set_volume(&self, volume: f64) {
-        self.lock_decks().set_volume_all(volume);
+        let decks = self.lock_decks();
+        self.set_output_volume(volume);
+        decks.set_volume_all(self.voice_gain(volume));
     }
 
     /// Both decks must run at the same speed or a crossfade would drift.

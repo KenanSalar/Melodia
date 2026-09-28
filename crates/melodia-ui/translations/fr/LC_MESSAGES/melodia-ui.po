@@ -2464,3 +2464,12 @@ msgstr "{} a refusé la sortie exclusive, Melodia joue donc en mode partagé pou
 
 msgid "Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off"
 msgstr "Certains DAC se coupent un instant en changeant de fréquence d'échantillonnage. Un court silence à chaque changement évite que le début du morceau soit coupé"
+
+msgid "Hardware Volume"
+msgstr "Volume matériel"
+
+msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
+msgstr "Tourner le propre réglage de volume du périphérique au lieu de mettre les échantillons à l'échelle, pour que le curseur de volume garde le son bit-perfect. Ce réglage est le volume système du périphérique, et il est rétabli quand Melodia libère le périphérique. Les périphériques qui n'en ont pas gardent le volume de Melodia"
+
+msgid "{}% on the device"
+msgstr "{} % sur le périphérique"

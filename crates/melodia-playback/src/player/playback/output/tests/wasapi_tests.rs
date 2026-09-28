@@ -1,14 +1,21 @@
 //! Tests for the WASAPI backend's pure half: what each rung is declared as, the order a claim asks
-//! in, and which refusals end one. Opening a device needs a device, and is tested by hand.
+//! in, which refusals end one, and the stream mode each drive asks for. Opening a device needs a
+//! device, and is tested by hand.
 
-use wasapi::{SampleType, WasapiError};
+use std::time::Duration;
+
+use wasapi::{SampleType, StreamMode, WasapiError};
 use windows_core::HRESULT;
 use windows_sys::Win32::Media::Audio::{
     AUDCLNT_E_DEVICE_IN_USE, AUDCLNT_E_DEVICE_INVALIDATED, AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED,
     AUDCLNT_E_UNSUPPORTED_FORMAT,
 };
 
-use super::{candidates, claim_error, device_refusal, wave_format};
+use super::{
+    aligned_stream_mode, candidates, claim_error, device_refusal, from_hns, hns, stream_mode,
+    wave_format,
+};
+use crate::player::playback::output::Drive;
 use crate::player::playback::output::claim::{ClaimError, FallbackReason};
 use crate::player::playback::output::encode::DeviceFormat;
 use crate::player::playback::tests::helpers::shape;
@@ -110,5 +117,96 @@ fn any_other_failure_is_io_under_the_callers_context() {
         let refused = claim_error(context, ENDPOINT, failure);
 
         assert!(matches!(refused, ClaimError::Io { context: c, .. } if c == context), "{refused}");
+    }
+}
+
+/// Under events the device signals once per buffer, so the buffer is the period.
+#[test]
+fn an_event_driven_claim_asks_for_one_period_as_its_whole_buffer() {
+    let mode = stream_mode(Drive::Events, 200_000);
+
+    assert_eq!(mode, StreamMode::EventsExclusive { period_hns: 200_000 });
+}
+
+/// A polled writer wakes on a timer that can run late, and the buffer's depth past one period is
+/// all the lateness it can absorb before an underrun.
+#[test]
+fn a_polled_claim_asks_for_a_buffer_four_periods_deep() {
+    let rows = [
+        (50_000, 200_000),
+        (200_000, 800_000),
+        (1_000_000, 4_000_000),
+        // Past any period a claim asks for, but the multiply must not be the thing that panics.
+        (i64::MAX, i64::MAX),
+    ];
+    for (period_hns, buffer_duration_hns) in rows {
+        let mode = stream_mode(Drive::Polling, period_hns);
+
+        assert_eq!(
+            mode,
+            StreamMode::PollingExclusive { period_hns, buffer_duration_hns },
+            "{period_hns}"
+        );
+    }
+}
+
+/// After `AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED` the driver has named the buffer it wants, so an
+/// event-driven retry runs at exactly that size.
+#[test]
+fn an_aligned_event_driven_retry_runs_at_the_buffer_the_driver_named() {
+    let aligned = aligned_stream_mode(Drive::Events, 106_667);
+
+    assert_eq!(aligned, (StreamMode::EventsExclusive { period_hns: 106_667 }, 106_667));
+}
+
+/// A polled retry cuts its period from the named buffer rather than building a buffer up from a
+/// period, so the buffer stays exactly the aligned size even where it doesn't divide evenly.
+#[test]
+fn an_aligned_polled_retry_keeps_the_named_buffer_and_runs_a_quarter_of_it() {
+    let rows = [(400_000, 100_000), (106_667, 26_666)];
+    for (buffer_duration_hns, period_hns) in rows {
+        let aligned = aligned_stream_mode(Drive::Polling, buffer_duration_hns);
+
+        assert_eq!(
+            aligned,
+            (StreamMode::PollingExclusive { period_hns, buffer_duration_hns }, period_hns),
+            "{buffer_duration_hns}"
+        );
+    }
+}
+
+/// The period chips, in the 100 ns units WASAPI takes them in, and back unchanged: the writer
+/// paces a polled claim off `from_hns` of the period the device agreed to.
+#[test]
+fn every_period_chip_goes_to_hundred_nanosecond_units_and_back_unchanged() {
+    let rows = [(5, 50_000), (10, 100_000), (20, 200_000), (50, 500_000), (100, 1_000_000)];
+    for (millis, expected_hns) in rows {
+        let period = Duration::from_millis(millis);
+
+        let there = hns(period);
+        let back = from_hns(there);
+
+        assert_eq!((there, back), (expected_hns, period), "{millis} ms");
+    }
+}
+
+/// A duration finer than WASAPI's unit truncates, and one too long for it saturates rather than
+/// wrapping into a negative period.
+#[test]
+fn a_duration_outside_what_wasapi_counts_truncates_or_saturates() {
+    let rows = [(Duration::from_nanos(99), 0), (Duration::MAX, i64::MAX)];
+    for (duration, expected_hns) in rows {
+        assert_eq!(hns(duration), expected_hns, "{duration:?}");
+    }
+}
+
+/// A negative period can only be a driver's nonsense, and reads as none rather than as a panic.
+/// One too long to count in nanoseconds saturates.
+#[test]
+fn a_period_outside_what_nanoseconds_hold_reads_as_zero_or_saturates() {
+    let longest = Duration::from_nanos(u64::MAX);
+    let rows = [(-1, Duration::ZERO), (i64::MIN, Duration::ZERO), (i64::MAX, longest)];
+    for (period_hns, expected) in rows {
+        assert_eq!(from_hns(period_hns), expected, "{period_hns}");
     }
 }

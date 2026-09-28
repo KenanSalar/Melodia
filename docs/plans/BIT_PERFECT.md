@@ -2,7 +2,7 @@
 
 Working doc. Delete it when the feature ships. Tracks issue #66.
 
-Status: **Phase 1 done** (2026-09-24) · **Phase 2 done** (2026-09-25) · **Phase 3 done** (2026-09-25) · **Phase 4 done** (2026-09-27) · **Phase 5 done** (2026-09-27) · Phase 7 in progress: Windows steps 1 to 5 done, the rest sorted by platform under "What's left of Phase 7" · macOS moved to #113 · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
+Status: **Phase 1 done** (2026-09-24) · **Phase 2 done** (2026-09-25) · **Phase 3 done** (2026-09-25) · **Phase 4 done** (2026-09-27) · **Phase 5 done** (2026-09-27) · Phase 7 in progress: Windows steps 1 to 6 done (step 6 is hardware volume, Gate B's volume half passed), 24-bit and 192 kHz WASAPI output verified, the rest sorted by platform under "What's left of Phase 7" · macOS moved to #113 · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
 
 ## What the user sees today
 
@@ -579,7 +579,9 @@ endpoint:
   Ticked, the same file claimed it as `Exclusive(S16)` at 48 kHz, a browser playing meanwhile was
   moved to another output, and it had the device back once Melodia closed.
 - **Not run:** a rate change mid-queue, unplugging mid-track, Stop as distinct from closing,
-  24-bit or high-rate output (no such files at hand), and the alignment retry.
+  24-bit or high-rate output (no such files at hand), and the alignment retry. All but the last
+  were run in Phase 7: the first three in Gate A, and 24-bit and high-rate output in its own run
+  after Gate B.
 
 The tests landed are:
 - `encode_tests`: `S24High` puts the value in the top three bytes, rounds at 24 bits, and carries a
@@ -653,6 +655,9 @@ Windows half, done (2026-09-28):
 4. The resync knob.
 5. **Gate A** (passed, see its result below), then a toast when a claim falls back, raised on the
    same once-per-refusal check the warning is, and reclaiming a replugged device.
+6. **Hardware volume** (item 4), on WASAPI and through the shared half every backend answers to.
+   Gate B's volume half passed, see below. The `wasapi_tests` owed since Gate A and the
+   `OutputFlags` round-trip landed alongside it.
 
 **What's left of Phase 7, by where it can be done.** Most of it is cross-platform. Only the WASAPI
 pieces need the Windows machine, and only the Linux half's list below needs Linux.
@@ -687,36 +692,13 @@ pieces need the Windows machine, and only the Linux half's list below needs Linu
       sibling, which the root `CLAUDE.md` rules out.
   - Walks it has to pass: `translations.rs`, `nav_transition.rs`, `tooltip_mounts.rs`,
     `index_persist.rs`, and `hero_chips_tests.rs` (the `np-*` brushes).
-- **Hardware volume, the shared half** (item 4). Capability is negotiated, use is a setting:
-  - The backend probes for a hardware control at open, and `Negotiated` reports it with its dB
-    range. The setting `output_hardware_volume` (off by default, shown under Exclusive where
-    `output::HARDWARE_VOLUME_SUPPORTED`) decides whether to use it, and toggling it reopens
-    nothing.
-  - **The engine routes volume in one place:**
-    - While the hardware route is live, every deck gets exactly `1.0`, and
-      `AudioOutput::set_device_volume(amplitude)` gets the level.
-    - The mapping is applied in `set_volume` and in the `volume` argument of `play_media`,
-      `begin_crossfade` and `play_stream`.
-    - It is re-applied after every reopen: `reopen_for_track`, `set_output_choice`, device-loss
-      recovery and the replug reclaim.
-  - **The level is `20·log10(amplitude)`**, clamped to the device's range, so the slider feels as
-    it does in software. `0.0` uses the mute switch. The device's own level and mute are saved at
-    claim and restored at release.
-  - **Grading:** `signal_path::evaluate` grades the Volume stage clean while the route is
-    hardware, and the row reads "on the device". Make Bit-Perfect (`player_make_bit_perfect`, and
-    `can-reset` in `output-section.slint`) leaves volume alone then.
-  - **The seam:** each backend answers `HARDWARE_VOLUME_SUPPORTED` and
-    `ExclusiveStream::set_device_volume`. `alsa.rs` and `unsupported.rs` get a no-op stub and the
-    `Negotiated` literal's new fields until the Linux half fills them in (blind on Windows,
-    mechanical).
-- **The cross-platform tests owed since Gate A**, for steps 1 to 5:
+- **The cross-platform tests still owed since Gate A**, for steps 1 to 5 (the `OutputFlags`
+  round-trip and the hand-edited period landed with step 6):
   - `voice_tests`: `heard` never reads before the anchor, scales the lead by speed, and
     re-anchors on a resume but not on a `play` over a voice already playing.
   - `handlers_tests`: the crossfade and the late preload read `pulled_ms`, and the tick publishes
     `position_ms`.
   - `claim` and `SourceFormat`: the float wording.
-  - `settings`: `OutputFlags` round-trips a choice through `set_output_choice`, and a
-    hand-edited period is held to the claim's range.
   - `AudioOutput`'s once-per-refusal rule has no device-free seam, since `AudioOutput::open` needs
     a device. Gate A's runs are its coverage unless the rule moves somewhere a test can reach.
 - **Items 8 and 9**: the chip in Shared mode, and the Details button on the refusal toast.
@@ -725,40 +707,13 @@ pieces need the Windows machine, and only the Linux half's list below needs Linu
   the verdict; the two positions a deck reports are already there).
 
 *Windows only:*
-- **Hardware volume, the WASAPI half** (`output/endpoint_volume.rs`, `cfg(windows)`):
-  - **Hardware support** comes from the crate's safe
-    `get_audiometerinformation().query_hardware_support()`. A device reporting no hardware volume
-    stays on software: endpoint volume there is the audio engine's, which exclusive mode bypasses.
-  - **Everything else goes through `windows` 0.62.2**, pinned to the copy `wasapi` already resolves
-    (the argument alsa 0.11.0 made), with features `Win32_Media_Audio_Endpoints` and
-    `Win32_System_Com`: `CoCreateInstance(MMDeviceEnumerator)` → `GetDevice(id)` →
-    `Activate::<IAudioEndpointVolume>` → `GetVolumeRange`, `Get/SetMasterVolumeLevel` and
-    `Get/SetMute`.
-  - **Every call is made on `wasapi-out`.** The level is published through an atomic and applied
-    after a write when it changed, so no COM object crosses a thread and the writer loop still
-    logs nothing.
-  - **Each `unsafe` call** gets its own `#[allow(unsafe_code, reason = "…")]` and `// SAFETY:`.
-    `unsafe-rust.md` gains the rows, the counts, and a note that COM vtables are in `windows`,
-    not `windows-sys`.
-  - **The endpoint's master volume is also Windows' volume for that device**, so a claim moves
-    it; restoring it at release is what makes that acceptable.
-- **`wasapi_tests`**: `stream_mode` and `aligned_stream_mode` for both drives, and `from_hns`
-  against `hns`.
-- **24-bit and high-rate output through WASAPI**, never run (Phase 5's "Not run"). The ALC897
-  reaches 192 kHz; the UMC22 is 16-bit at 48 kHz or below. Generated 24-bit WAVs at 96 kHz and
-  192 kHz, run the Gate A way, should claim at those rates as whichever of the ladder's 24-bit
-  rungs the ALC897 takes first: `S24Packed`, `S32` or `S24High`.
-- **The WASAPI alignment retry**, never run: only a driver refusing an unaligned buffer
-  (`AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED`) takes that path, and neither test device does. It stays
-  untested unless such a device turns up; `aligned_stream_mode` is its unit-testable half.
-- **Gate B, by hand, after the chip and hardware volume:**
-  - **Hardware volume:** the slider moves the device's own level while the verdict stays
-    Bit-perfect, release restores the level, and a device with no hardware control stays on
-    software.
-  - **Chip:**
-    - It shows only under Exclusive, and its colour matches the panel.
-    - A click from Now Playing and from the bar lands on Settings ▸ Playback.
-    - The overflow toggle moves it into the menu.
+- **The WASAPI alignment retry**, never run on a device: only a driver refusing an unaligned
+  buffer (`AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED`) takes that path, and neither test device does.
+  `aligned_stream_mode`, its unit-testable half, is pinned by `wasapi_tests`.
+- **Gate B's chip half, by hand, after the chip** (its hardware-volume half passed, see below):
+  - It shows only under Exclusive, and its colour matches the panel.
+  - A click from Now Playing and from the bar lands on Settings ▸ Playback.
+  - The overflow toggle moves it into the menu.
 
 *Linux only:* the Linux half's list below.
 
@@ -773,9 +728,16 @@ pieces need the Windows machine, and only the Linux half's list below needs Linu
 - Back up `settings.json` and `queue.json` first, and restore them after.
 
 **Blind edits the Linux session must check first**, running
-`cargo clippy --all-targets --locked --workspace -- -D warnings` and then `cargo test`. They are in
-`alsa.rs` and `unsupported.rs`. Steps 1 to 4 made the ones in the as-built note below. Hardware
-volume's shared half adds the `Negotiated` literal's new fields and a no-op `set_device_volume`.
+`cargo clippy --all-targets --locked --workspace -- -D warnings` and then `cargo test`. Steps 1 to 4
+made the ones in `alsa.rs` and `unsupported.rs` listed in their as-built note below. Step 6 made
+these:
+- `alsa.rs`: `pub(super) const HARDWARE_VOLUME: bool = false`, an
+  `ExclusiveStream::hardware_volume()` that reads `negotiated.hardware_volume`, and
+  `hardware_volume: false` in its `Negotiated` literal.
+- `unsupported.rs`: the same const, and `hardware_volume()` as `match *self {}`.
+- `melodia-integrations`' `mpris_backend/interface.rs` imports `amplitude_to_volume` from
+  `engine::state`, where `media_controls::volume_percent` moved once the device-volume task became
+  its second consumer.
 
 **As built (2026-09-28), Windows steps 1 to 4:**
 - **The blind edits, exactly.** `alsa.rs`:
@@ -850,15 +812,143 @@ by its command line (a forwarded file replaces the queue and plays) over three g
   from its holder, which on Linux is the session manager. Those still wait for the next track
   start.
 
+**As built (2026-09-28), Windows step 6, hardware volume:**
+- **The toggle is part of the request** (`ExclusiveRequest::hardware_volume`), so a change reopens
+  the claim, as the period and polling chips do. This retires "toggling it reopens nothing". A live
+  switch between the voices' gain and the device's can play a period at the wrong level. At 5 %,
+  turning it on would send unity samples to a device still at full volume for up to 100 ms.
+- **`Negotiated::hardware_volume` is the capability and the route in one.** It is true only on a
+  claim that asked and found a control in hardware. The dB range stays inside the backend.
+- **There is no `ExclusiveStream::set_device_volume`.** The level rides a cell on `Feed` that every
+  stream holds, like `Lead`, so a reopen claims at the level already set.
+- **`AudioOutput::voice_gain` is the one rule.** The voices run at unity while the device carries
+  the level, except at zero, which stays a silence in the voices.
+  - The device's mute switch is never touched. At zero the device goes to its floor, so a rise
+    from silence starts low.
+  - `PlaybackEngine::set_volume` and the three track starts hand the amplitude to the output
+    before any reopen, and take the gain after it.
+- **`reopen_routed` wraps every reopen.** It holds the voices at the software gain across the
+  reopen, and sets unity after only where the new stream took the control. So a change of route,
+  a fallback to shared included, dips rather than jumps.
+- **The level is Windows' own percentage** (`SetMasterVolumeLevelScalar`), not dB.
+  - It was built first as `20·log10(amplitude)` in dB. Gate B found Melodia at 50 % reading 67 %
+    in Windows, whose slider is its own audio taper over the device's range.
+  - Now the two sliders read the same number. A position follows Windows' curve rather than the
+    voices' linear one.
+- **Only a control in hardware.** Without one, the endpoint volume is the audio engine's, which
+  exclusive mode bypasses.
+  - The query is `wasapi`'s safe `query_hardware_support`.
+  - The rest goes through `windows` 0.62.2, the copy `wasapi` and cpal resolve: five `unsafe` COM
+    calls in `output/endpoint_volume.rs`, listed in `unsafe-rust.md`.
+- **The original level is put back at release**, and outlives a release that couldn't. It is kept
+  by endpoint id until it is back, so an unplug and replug still restores what the device had
+  before the first claim. Windows persists an endpoint's level, and the replug would otherwise
+  report Melodia's as its own. A crash still leaves Melodia's level.
+- **Every COM call is on `wasapi-out`.** The level is set after a write, at most every 20 ms, since
+  each set is a call into the audio service. A failure ends the stream like a failed write, and
+  the reclaim decides again.
+- **The system moving the control moves Melodia's slider**, added after Gate B's first run.
+  - The writer reads the level every 250 ms, against what it read back after its own last set, so
+    the device's rounding never reads as a move.
+  - A move goes through `Feed`'s `ExternalVolume` (a one-slot atomic and a `Notify`) to
+    `tasks::device_volume`. That applies it the way an OS media panel's volume is applied,
+    `settings.json` included.
+  - `media_controls::volume_percent` moved to `engine::state::amplitude_to_volume` for its second
+    consumer.
+  - Windows' mute button isn't followed.
+- **Make Bit-Perfect leaves a volume on the device alone** and only unmutes. `can-reset` offers it
+  for the volume only while muted. The live half now returns the level it left and runs in the same
+  blocking task as the persist, which closes a race between the two.
+- **Quitting closes the output** (`PlaybackEngine::close_output`, after `save_state_on_exit`).
+  `process::exit` runs no destructor, and a parked output would be reopened by a track starting
+  while the monitor still runs. On Linux this also hands the card and its reservation back at quit.
+
+**Result, Gate B's volume half.** By hand on 2026-09-28, Windows 11, reading the log:
+- **Both test devices have a control in hardware.** Every claim on the UMC22 and the ALC897 read
+  `hardware_volume: true`.
+- **Percentages:** Melodia's slider and Windows' read the same at every position, and the panel
+  stayed Bit-perfect while the slider moved.
+- **Silence:** 0 % and mute went silent at once, and a rise from them didn't blip.
+- **The toggle:**
+  - Mid-track it reopened with a short gap and no loud blip.
+  - Off, it put Windows' level back, and Melodia kept its own.
+- **Release:** closing Melodia put Windows' level back.
+- **Unplug:** the UMC22 fell back to the ALC897 within 40 ms of the loss, and was reclaimed on
+  replug. A stop afterwards put its level back. The loss logs `0x80004005` (E_FAIL), as every
+  unplug has since Gate A.
+- **Sync back:** Windows' slider and volume keys moved Melodia's.
+- **Not run:** a device with no control in hardware, since neither test device lacks one.
+  `voice_gain`'s test covers the rule that keeps the voices carrying the level there.
+
+The tests landed are:
+- `wasapi_tests`: `stream_mode` and `aligned_stream_mode` under both drives, and `hns` against
+  `from_hns` at the period chips and past both ends.
+- `output/mod_tests`: `voice_gain`, and `endpoint_volume_tests`: `level_for` across `0..=1`, past
+  both ends and at NaN.
+- `device_tests`: `ExternalVolume` hands over a report, waits with none, keeps only the latest of
+  two, and wakes a take already waiting.
+- `signal_path_tests`: on the device, any audible level grades clean, while zero and mute stay
+  the user's.
+- `settings_tests`: an output choice comes back from `settings.json` whole, a hand-edited period is
+  held to the claim's range, and a file from before the setting leaves it off.
+- `main_order_tests`: the output is closed before either way out of `main()`.
+
+Each was confirmed to fail against a mutation of the code it covers. Taking the control, watching
+it and restoring it need a device, and the Gate B runs above are their coverage.
+
+**Result, 24-bit and high-rate output through WASAPI**, which Phase 5 left unrun. A scripted run on
+2026-09-28, Windows 11, run the Gate A way on the ALC897. The UMC22 is 16-bit at 48 kHz or below,
+so it would refuse every tone.
+- **The setup:** generated 440 Hz stereo tones at −20 dBFS, six seconds each:
+  - 24-bit at 44.1, 96 and 192 kHz;
+  - a 16-bit 192 kHz control.
+
+  Polled, 20 ms period, Hardware Volume on.
+- **Each 24-bit tone claimed at its own rate as `Exclusive(S24Packed)`**, the ladder's first 24-bit
+  rung, with `hardware_volume: true`, no fallback and no warning.
+- **Periods:** the ALC897 took 831 frames at 44.1 kHz against the 882 asked for, and exactly the
+  1920 and 3840 asked for at 96 and 192 kHz.
+- **Each rate change reopened at the boundary**, as in Gate A.
+- **The 16-bit control:** its reopen keeps the rate, so it logs at debug, which the run didn't
+  record for the engine. It logged no refusal and played through.
+
 **Linux half:**
 1. The lead: after each `writei`, report `pcm.delay()` over the rate through
    `Feed::report_lead`. Also confirm the cpal shared lead on the ALSA host under PipeWire, where
    htstamp is zero but the delay still holds.
 2. The period knob: bound it with `get_period_size_min/max`, read the buffer back, and check it in
    `hw_params`.
-3. Hardware volume through the claimed card's simple mixer: dB via `get_playback_db_range` /
-   `set_playback_db_all`, the playback switch for mute, and a restore at release. Also read the
-   mixer at claim, so a muted or attenuated card stops reading Bit-perfect (Phase 4's blind spot).
+3. **Hardware volume, to parity with Windows.** Step 6's as-built note is the spec, and everything
+   above the backend already runs on Linux: the setting and the reopen it causes, `voice_gain`,
+   `reopen_routed`, grading, Make Bit-Perfect, `tasks::device_volume` and the close at quit. What
+   `alsa.rs` owes:
+   - **`HARDWARE_VOLUME = true`,** and on a claim that asks, the card's playback simple-mixer
+     element. Prefer `Master`, then `PCM`, then the first element with a playback volume.
+     `Negotiated::hardware_volume` is true only where one was found. A card without one keeps the
+     volume in the voices, and the claim goes ahead.
+   - **The level on the curve `alsamixer` shows**, so the two read the same number. This is the
+     Windows parity target, since a claimed card leaves the desktop's own mixer. The curve is
+     alsa-utils' `volume_mapping.c`:
+     - linear in dB for a range of 24 dB or less;
+     - linear in amplitude above that, with the floor at zero;
+     - raw steps for an element with no dB range.
+
+     Set through `set_playback_db_all` or `set_playback_volume_all` accordingly. Its pure half
+     gets a test.
+   - **Zero puts the element at its floor and leaves the playback switch alone,** as on Windows;
+     the voices already silence it.
+   - **The element's original level is saved at claim and put back at release,** kept by card id
+     until it is back, like `endpoint_volume::ORIGINAL_LEVELS`. Check it against the session
+     manager, which re-applies its own route volume to the mixer when it takes the card back.
+   - **Set after a `writei`, at most every 20 ms,** and read back. Every 250 ms, check for a move
+     made outside Melodia (`alsamixer`, or a DAC whose knob reports through the mixer), and report
+     it through `Feed::external_volume`. The mixer handle stays on the writer thread, like the PCM.
+   - **Read the element at claim with the setting off too,** so a muted or attenuated card stops
+     reading Bit-perfect. That is Phase 4's blind spot. Windows has the same one, listed under Open
+     questions.
+   - **Manual runs** on the ALC897 and the PCM2902: `alsamixer` reads Melodia's percentage, a move
+     there moves Melodia's slider, stop and quit put the element back, and the toggle reopens
+     without a jump.
 4. **Step 5's shared code on Linux**, none of which has run there yet:
    - **Replug reclaim:** unplug the PCM2902 while claimed and plug it back. It should come back
      within a second, through `alsa::devices` listing the card again. Watch for the session
@@ -867,6 +957,8 @@ by its command line (a forwarded file replaces the queue and plays) over three g
    - **Toasts:** a refusal toasts once. That includes `Reserved`, whose holder's name is only in
      the Output settings.
    - **Log levels:** an unplug that recovers logs no warning.
+   - **Quit:** `close_output` hands the card and its reservation back before exit, where they used
+     to go with the process. The default output should come back under its own name.
 5. Manual runs on the ALC897 and the PCM2902, then the tests.
 6. Item 5's docs. Delete this doc only once items 8 and 9 are done or moved to their own issues.
 
@@ -895,6 +987,15 @@ by its command line (a forwarded file replaces the queue and plays) over three g
   skip claims that cannot work.
 - Once cpal 0.19's extension traits ship (#1220), can they replace `wasapi.rs` or add a native
   PipeWire exclusive stream (`PW_STREAM_FLAG_EXCLUSIVE` / `node.force-rate`)?
+- **With Hardware Volume off, a Windows device with its own control still plays at its Windows
+  level**, while the panel reads Bit-perfect. It is Phase 4's blind spot on Windows: exclusive mode
+  bypasses the audio engine, not the device. Reading the endpoint level at claim, as `take` already
+  does, would let the Volume row name it.
+- **A crash while the device carries the volume leaves Windows at Melodia's level.** Only a release
+  puts the original back. Persisting the original would cover a crash, at the cost of a file
+  written on every claim.
+- **Windows' mute button isn't followed.** Only the level is watched. Following it would take
+  `GetMute`, a sixth COM call, and a decision about whether it mutes Melodia or only the device.
 - ~~A refusal should name the device that refused.~~ It does since Phase 7: `Negotiated.fallback`
   is a `Fallback` carrying the refusing device, looked up through `exclusive::devices()`, and the
   log line and the panel's Device row name it beside the device the audio went to.

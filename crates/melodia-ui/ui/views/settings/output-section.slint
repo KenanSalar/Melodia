@@ -86,6 +86,9 @@ export component OutputSection inherits Rectangle {
     property <string> polling-label: @tr("Polling Mode");
     property <string> polling-desc: @tr("Top the device up on a timer instead of waiting for it to ask. Try it if a USB device stutters or crackles in exclusive mode");
 
+    property <string> hardware-volume-label: @tr("Hardware Volume");
+    property <string> hardware-volume-desc: @tr("Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume");
+
     property <string> resync-label: @tr("Silence After a Rate Change");
     property <string> resync-desc: @tr("Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off");
 
@@ -101,6 +104,8 @@ export component OutputSection inherits Rectangle {
     property <bool> show-period: root.exclusive-chosen && row-visible(period-label, period-desc);
     property <bool> show-polling: root.exclusive-chosen && Settings.polling-supported
         && row-visible(polling-label, polling-desc);
+    property <bool> show-hardware-volume: root.exclusive-chosen && Settings.hardware-volume-supported
+        && row-visible(hardware-volume-label, hardware-volume-desc);
     // Exclusive output always runs at the file's rate, so the toggle has nothing to add there.
     property <bool> show-follow-rate: Settings.follow-rate-supported && !root.exclusive-chosen
         && row-visible(follow-rate-label, follow-rate-desc);
@@ -113,7 +118,7 @@ export component OutputSection inherits Rectangle {
 
     // What the rows above the signal path hand the divider under them.
     property <bool> shows-exclusive-rows: root.show-mode || root.show-device || root.show-period
-        || root.show-polling;
+        || root.show-polling || root.show-hardware-volume;
     property <bool> shows-rate-rows: root.show-follow-rate || root.show-resync;
 
     out property <bool> has-matches: shows-exclusive-rows || shows-rate-rows || show-signal-path;
@@ -125,10 +130,12 @@ export component OutputSection inherits Rectangle {
         : @tr("Converted: the sound is changed on its way to the device");
 
     // The stages a click can put right. A resample counts only where following the file's rate is
-    // the setting that would stop it.
+    // the setting that would stop it, and a volume on the device's own control only while muted:
+    // the reset never raises the device, only unmutes it.
     property <bool> can-reset: SignalPathUi.playing && (SignalPathUi.dsp-grade > 0
         || SignalPathUi.speed-grade > 0
-        || SignalPathUi.volume-grade > 0
+        || (SignalPathUi.volume-grade > 0
+            && (SignalPathUi.muted || !SignalPathUi.volume-on-device))
         || (SignalPathUi.rate-grade > 0 && Settings.follow-rate-supported
             && !root.exclusive-chosen && !Settings.output-follow-rate));
 
@@ -225,6 +232,19 @@ export component OutputSection inherits Rectangle {
             }
         }
 
+        if (root.show-mode || root.show-device || root.show-period || root.show-polling)
+            && root.show-hardware-volume: SectionDivider {}
+
+        if root.show-hardware-volume: SettingRow {
+            icon: "volume_down";
+            label: root.hardware-volume-label;
+            description: root.hardware-volume-desc;
+            ToggleSwitch {
+                checked <=> Settings.output-hardware-volume;
+                toggled(v) => { Settings.output-hardware-volume-changed(v); }
+            }
+        }
+
         if root.shows-exclusive-rows && root.show-follow-rate: SectionDivider {}
 
         if root.show-follow-rate: SettingRow {
@@ -305,7 +325,9 @@ export component OutputSection inherits Rectangle {
             StageRow {
                 grade: SignalPathUi.volume-grade;
                 label: @tr("Volume");
-                value: SignalPathUi.muted ? @tr("Muted") : SignalPathUi.volume + "%";
+                value: SignalPathUi.muted ? @tr("Muted")
+                    : SignalPathUi.volume-on-device ? @tr("{}% on the device", SignalPathUi.volume)
+                    : SignalPathUi.volume + "%";
             }
             StageRow {
                 grade: SignalPathUi.crossfade-grade;

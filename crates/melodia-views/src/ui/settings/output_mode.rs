@@ -1,5 +1,5 @@
-//! The Output card's exclusive pickers: shared or exclusive, which card a claim takes, and how its
-//! writer paces the card.
+//! The Output card's exclusive pickers: shared or exclusive, which card a claim takes, how its
+//! writer paces the card, and whether the card's own control carries the volume.
 //!
 //! **A pick is applied on the blocking pool, never here**: claiming a card or handing it back
 //! opens a device. Every picker changes the one choice, so each writes a synchronous shadow and
@@ -43,6 +43,7 @@ pub fn install(ui: &AppWindow, state: &AppState) {
     let g = ui.global::<Settings>();
     g.set_exclusive_supported(library::playback::EXCLUSIVE_SUPPORTED);
     g.set_polling_supported(library::playback::POLLING_SUPPORTED);
+    g.set_hardware_volume_supported(library::playback::HARDWARE_VOLUME_SUPPORTED);
     if !library::playback::EXCLUSIVE_SUPPORTED {
         return;
     }
@@ -51,6 +52,7 @@ pub fn install(ui: &AppWindow, state: &AppState) {
     g.set_output_mode_idx(mode_index(choice.mode));
     g.set_output_period_idx(period_index(choice.tuning.period));
     g.set_output_polling(choice.tuning.drive == Drive::Polling);
+    g.set_output_hardware_volume(choice.hardware_volume);
     let shadow: Shadow = Arc::new(Mutex::new(Picked { choice, devices: Vec::new() }));
     list_devices(ui, state, &shadow);
 
@@ -91,9 +93,16 @@ pub fn install(ui: &AppWindow, state: &AppState) {
     });
 
     let state_polling = state.clone();
+    let shadow_polling = Arc::clone(&shadow);
     g.on_output_polling_changed(move |on| {
-        shadow.lock().choice.tuning.drive = if on { Drive::Polling } else { Drive::Events };
-        apply(&state_polling, &shadow);
+        shadow_polling.lock().choice.tuning.drive = if on { Drive::Polling } else { Drive::Events };
+        apply(&state_polling, &shadow_polling);
+    });
+
+    let state_volume = state.clone();
+    g.on_output_hardware_volume_changed(move |on| {
+        shadow.lock().choice.hardware_volume = on;
+        apply(&state_volume, &shadow);
     });
 }
 

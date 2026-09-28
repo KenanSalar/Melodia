@@ -36,10 +36,19 @@ rustix = { version = "1.1.5", features = ["process", "thread"] }
 
 # The exclusive backend on Windows. `wasapi` wraps COM over the same `windows` release cpal
 # resolves, so it adds no second copy of it. `windows-sys` supplies the WASAPI error codes and
-# the MMCSS registration the writer thread asks for.
+# the MMCSS registration the writer thread asks for. `windows` itself is named for the one COM
+# interface `wasapi` doesn't wrap, the endpoint volume, and is held to that same release; every
+# feature it asks for is already on through the two above it.
 [target.'cfg(target_os = "windows")'.dependencies]
 wasapi = "0.24.0"
 windows-sys.workspace = true
+windows = { version = "0.62.2", features = [
+    "Win32_Media_Audio",
+    "Win32_Media_Audio_Endpoints",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
+] }
 
 [dev-dependencies]
 melodia-testkit = { path = "../melodia-testkit" }

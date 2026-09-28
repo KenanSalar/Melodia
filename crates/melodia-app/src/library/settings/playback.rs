@@ -47,14 +47,14 @@ pub fn set_output_choice(state: &AppState, choice: &OutputChoice) -> Result<(), 
     })
 }
 
-/// Persist what `library::playback::player_make_bit_perfect` just applied, in one write so a
-/// failure can't leave half of it on disk.
-pub fn reset_for_bit_perfect(state: &AppState) -> Result<(), AppError> {
+/// Persist what `library::playback::player_make_bit_perfect` just applied, the `volume` it left
+/// included, in one write so a failure can't leave half of it on disk.
+pub fn reset_for_bit_perfect(state: &AppState, volume: u32) -> Result<(), AppError> {
     services::settings::mutate_settings(&state.paths, |settings| {
         settings.equalizer.eq_enabled = false;
         settings.replaygain.rg_enabled = false;
         settings.playback.playback_speed = 1.0;
-        settings.volume = MAX_VOLUME;
+        settings.volume = volume.min(MAX_VOLUME);
         settings.playback.is_muted = false;
         if FOLLOW_RATE_SUPPORTED {
             settings.output.output_follow_rate = true;

@@ -2470,3 +2470,12 @@ msgstr "{} hat die exklusive Ausgabe abgelehnt, daher spielt Melodia vorerst get
 
 msgid "Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off"
 msgstr "Manche DACs verstummen kurz, während sie die Abtastrate wechseln. Eine kurze Stille bei jedem Wechsel verhindert, dass der Anfang des Titels abgeschnitten wird"
+
+msgid "Hardware Volume"
+msgstr "Hardware-Lautstärke"
+
+msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
+msgstr "Den eigenen Lautstärkeregler des Geräts verstellen, statt die Samples zu skalieren, damit der Klang beim Regeln der Lautstärke bitgenau bleibt. Dieser Regler ist die Systemlautstärke des Geräts und wird zurückgesetzt, sobald Melodia das Gerät freigibt. Geräte ohne eigenen Regler behalten Melodias Lautstärke"
+
+msgid "{}% on the device"
+msgstr "{} % am Gerät"

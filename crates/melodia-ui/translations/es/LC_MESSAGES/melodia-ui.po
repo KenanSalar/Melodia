@@ -2464,3 +2464,12 @@ msgstr "{} rechazó la salida exclusiva, así que Melodia reproduce en modo comp
 
 msgid "Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off"
 msgstr "Algunos DAC se silencian un momento al cambiar de frecuencia de muestreo. Un breve silencio en cada cambio evita que se corte el inicio de la pista"
+
+msgid "Hardware Volume"
+msgstr "Volumen por hardware"
+
+msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
+msgstr "Mover el control de volumen del propio dispositivo en lugar de escalar las muestras, para que el control de volumen mantenga el sonido bit-perfect. Ese control es el volumen del sistema para el dispositivo, y se restablece cuando Melodia libera el dispositivo. Los dispositivos sin uno propio conservan el volumen de Melodia"
+
+msgid "{}% on the device"
+msgstr "{} % en el dispositivo"

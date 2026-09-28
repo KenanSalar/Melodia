@@ -2468,3 +2468,12 @@ msgstr "{}: η αποκλειστική έξοδος απορρίφθηκε, ο�
 
 msgid "Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off"
 msgstr "Ορισμένοι DAC σιγούν για λίγο όταν αλλάζουν ρυθμό δειγματοληψίας. Μια σύντομη σιωπή σε κάθε αλλαγή κρατά την αρχή του κομματιού ανέπαφη"
+
+msgid "Hardware Volume"
+msgstr "Ένταση υλικού"
+
+msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
+msgstr "Ρύθμιση του ελέγχου έντασης της ίδιας της συσκευής αντί για κλιμάκωση των δειγμάτων, ώστε το ρυθμιστικό έντασης να κρατά τον ήχο bit-perfect. Αυτός ο έλεγχος είναι η ένταση συστήματος της συσκευής και επανέρχεται όταν το Melodia αφήσει τη συσκευή. Οι συσκευές χωρίς δικό τους έλεγχο κρατούν την ένταση του Melodia"
+
+msgid "{}% on the device"
+msgstr "{}% στη συσκευή"

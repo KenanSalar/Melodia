@@ -129,6 +129,9 @@ impl Default for CrossfadeFlags {
 /// `output_period_ms` and `output_polling` pace an exclusive claim's writer, and
 /// `output_resync_ms` is the silence written after a reopen onto a new rate. Each is held to its
 /// range on the way to the engine, so a hand-edited value can't pin a bad one.
+///
+/// `output_hardware_volume` has a claim carry the volume on the device's own control, which is
+/// also that device's system volume while the claim holds it, so it ships off.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OutputFlags {
@@ -138,6 +141,7 @@ pub struct OutputFlags {
     pub output_period_ms: u32,
     pub output_polling: bool,
     pub output_resync_ms: u32,
+    pub output_hardware_volume: bool,
 }
 
 impl Default for OutputFlags {
@@ -149,6 +153,7 @@ impl Default for OutputFlags {
             output_period_ms: duration_ms(ExclusiveTuning::DEFAULT_PERIOD),
             output_polling: false,
             output_resync_ms: duration_ms(DEFAULT_RESYNC_HOLD),
+            output_hardware_volume: false,
         }
     }
 }
@@ -165,6 +170,7 @@ impl OutputFlags {
             mode: self.output_mode.into(),
             device: self.output_device.clone(),
             tuning: ExclusiveTuning::new(period, drive),
+            hardware_volume: self.output_hardware_volume,
         }
     }
 
@@ -174,6 +180,7 @@ impl OutputFlags {
         self.output_device.clone_from(&choice.device);
         self.output_period_ms = duration_ms(choice.tuning.period);
         self.output_polling = choice.tuning.drive == Drive::Polling;
+        self.output_hardware_volume = choice.hardware_volume;
     }
 }
 

@@ -40,6 +40,20 @@ pub fn volume_to_amplitude(volume: u32, is_muted: bool) -> f64 {
     if is_muted { 0.0 } else { f64::from(volume) / 100.0 }
 }
 
+/// [`volume_to_amplitude`]'s way back, for an amplitude set outside the player: an OS media panel,
+/// or the device's own volume control.
+///
+/// Clamped, because a host may send a value outside `[0, 1]`, and rounded rather than truncated,
+/// so the quietest step is reachable from half a percent rather than a full one.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "clamped to [0, 1] before the scale, so the rounded value fits a u32"
+)]
+pub fn amplitude_to_volume(amplitude: f64) -> u32 {
+    (amplitude.clamp(0.0, 1.0) * 100.0).round() as u32
+}
+
 pub struct PlayerState {
     pub status: PlaybackStatus,
     /// What is on the deck, and what may be done with it — see [`PlaybackSource`]. Reach for

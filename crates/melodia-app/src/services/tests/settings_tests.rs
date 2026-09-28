@@ -1,4 +1,8 @@
+use std::time::Duration;
+
 use melodia_core::error::AppError;
+use melodia_engine::player::engine::backend::OutputChoice;
+use melodia_playback::player::playback::output::{Drive, ExclusiveTuning, OutputMode};
 use melodia_testkit::{reading_env, with_env_set};
 // Only the desktop probes need it, and Windows has no desktop to ask.
 #[cfg(not(target_os = "windows"))]
@@ -827,5 +831,54 @@ fn the_tag_backfill_marker_ships_unset_and_survives_being_set() -> Result<(), Ap
     let recorded = r#"{"theme_id": "catppuccin", "tags_backfilled": true}"#;
     let settings: SettingsData = serde_json::from_str(recorded).map_err(|e| json_err(&e))?;
     assert!(settings.library.tags_backfilled);
+    Ok(())
+}
+
+/// The Output card persists each pick through `set_output_choice`, and the boot hands the engine
+/// what `output_choice` reads back off disk, so every part of a choice has to survive the trip.
+/// A part that doesn't comes back at its default on the next launch, silently.
+#[test]
+fn an_output_choice_comes_back_from_settings_json_whole() -> Result<(), AppError> {
+    let choice = OutputChoice {
+        mode: OutputMode::Exclusive,
+        device: Some("{0.0.0.00000000}.{a-test-endpoint}".to_owned()),
+        tuning: ExclusiveTuning::new(Duration::from_millis(50), Drive::Polling),
+        hardware_volume: true,
+    };
+    let mut flags = OutputFlags::default();
+    flags.set_output_choice(&choice);
+
+    let json = serde_json::to_string(&flags).map_err(|e| json_err(&e))?;
+    let read: OutputFlags = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
+
+    assert_eq!(read.output_choice(), choice);
+    Ok(())
+}
+
+/// A hand-edited period reaches the claim held to the range a claim asks for, rather than as a
+/// period no device keeps up with or a stop that reads as a hang.
+#[test]
+fn a_hand_edited_period_is_held_to_the_claims_range() -> Result<(), AppError> {
+    let rows = [
+        (r#"{"output_period_ms": 0}"#, ExclusiveTuning::MIN_PERIOD),
+        (r#"{"output_period_ms": 20}"#, Duration::from_millis(20)),
+        (r#"{"output_period_ms": 5000}"#, ExclusiveTuning::MAX_PERIOD),
+    ];
+    for (json, expected) in rows {
+        let flags: OutputFlags = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+
+        assert_eq!(flags.output_choice().tuning.period, expected, "{json}");
+    }
+    Ok(())
+}
+
+/// Hardware volume moves the device's system volume, so a settings file from before it must not
+/// read as asking for it.
+#[test]
+fn a_settings_file_from_before_hardware_volume_leaves_it_off() -> Result<(), AppError> {
+    let json = r#"{"output_mode": "exclusive"}"#;
+    let flags: OutputFlags = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+
+    assert!(!flags.output_choice().hardware_volume);
     Ok(())
 }

@@ -10,14 +10,15 @@
 //! **An exclusive claim is held through a pause and given back on stop**, so a stopped player
 //! never keeps other applications off the card.
 
-use std::sync::MutexGuard;
 use std::sync::atomic::Ordering;
+use std::sync::{Arc, MutexGuard};
 use std::time::Duration;
 
 use melodia_audio::player::source::audio::{Shape, SourceFormat};
 use melodia_core::error::{AppError, describe};
 use melodia_playback::player::playback::decks::Decks;
 use melodia_playback::player::playback::output::claim::FallbackReason;
+use melodia_playback::player::playback::output::device::ExternalVolume;
 use melodia_playback::player::playback::output::{
     self, AudioOutput, ExclusiveRequest, ExclusiveTuning, Negotiated, OutputMode, OutputRequest,
 };
@@ -33,6 +34,8 @@ pub struct OutputChoice {
     /// The card an exclusive claim is aimed at, or `None` for the first the system lists.
     pub device: Option<String>,
     pub tuning: ExclusiveTuning,
+    /// Carry the volume on the device's own control where an exclusive claim can.
+    pub hardware_volume: bool,
 }
 
 impl PlaybackEngine {
@@ -47,7 +50,7 @@ impl PlaybackEngine {
     ///
     /// [`AppError::Player`] when there is no output to reopen, or the device refuses to open.
     pub fn reopen_output(&self) -> Result<Option<Negotiated>, AppError> {
-        let _decks = self.lock_decks();
+        let decks = self.lock_decks();
         let mut output = self.output.lock();
         let output = output
             .as_mut()
@@ -55,7 +58,36 @@ impl PlaybackEngine {
         if output.is_parked() {
             return Ok(None);
         }
-        output.reopen(output.request().clone()).map(Some)
+        let request = output.request().clone();
+        reopen_routed(&decks, output, request).map(Some)
+    }
+
+    /// Close the output for good, giving an exclusive claim back and the device's own volume with
+    /// it. For the way out: `process::exit` runs no destructor, and a parked output would be
+    /// reopened by a track starting while the monitor still runs.
+    pub fn close_output(&self) {
+        let closed = self.output.lock().take();
+        drop(closed);
+    }
+
+    /// Hand the user's volume, as an amplitude, to the output for a claim carrying it on the
+    /// device's own control.
+    pub(super) fn set_output_volume(&self, volume: f64) {
+        if let Some(output) = self.output.lock().as_ref() {
+            output.set_volume(volume);
+        }
+    }
+
+    /// The gain the voices apply for `volume` on the output as it is. `volume` itself with no
+    /// output, which is the device-free rigs the tests build.
+    pub(super) fn voice_gain(&self, volume: f64) -> f64 {
+        self.output.lock().as_ref().map_or(volume, |output| output.voice_gain(volume))
+    }
+
+    /// Where the system moving the device's own volume control is reported, while a claim carries
+    /// the volume there, for the player to follow. Lock-free, and the same cell across reopens.
+    pub fn external_volume(&self) -> Arc<ExternalVolume> {
+        Arc::clone(&self.external_volume)
     }
 
     /// Whether the output was closed on purpose, so a stream that stopped beating is not a fault.
@@ -147,7 +179,7 @@ impl PlaybackEngine {
         if output.request() == &wanted && !output.is_parked() {
             return;
         }
-        match output.reopen(wanted) {
+        match reopen_routed(&decks, output, wanted) {
             Ok(negotiated) => log::info!("Output reopened for a new output choice: {negotiated:?}"),
             Err(e) => log::warn!("Failed to reopen the output: {}", describe(&e)),
         }
@@ -162,6 +194,7 @@ impl PlaybackEngine {
                 shape,
                 format,
                 tuning: choice.tuning,
+                hardware_volume: choice.hardware_volume,
             }),
             OutputMode::Shared => OutputRequest::Shared {
                 rate: self.follow_rate.load(Ordering::Relaxed).then_some(shape.rate),
@@ -191,7 +224,7 @@ impl PlaybackEngine {
     /// `AudioOutput::reopen` fell back to.
     pub(super) fn reopen_for_track(
         &self,
-        _decks: &MutexGuard<'_, Decks>,
+        decks: &MutexGuard<'_, Decks>,
         shape: Shape,
         format: SourceFormat,
     ) {
@@ -206,7 +239,7 @@ impl PlaybackEngine {
             return;
         }
         let previous_rate = output.negotiated().map(|negotiated| negotiated.shape.rate);
-        match output.reopen(wanted) {
+        match reopen_routed(decks, output, wanted) {
             Ok(negotiated) if previous_rate == Some(negotiated.shape.rate) => {
                 log::debug!("Output reopened: {negotiated:?}");
             }
@@ -214,6 +247,24 @@ impl PlaybackEngine {
             Err(e) => log::warn!("Failed to reopen the output: {}", describe(&e)),
         }
     }
+}
+
+/// Reopen `output` for `request`, with the voices' gain on whichever side of the device carries
+/// the volume once it has.
+///
+/// **The software gain across the reopen, unity only after it**, and only where the new stream took
+/// the device's own control. Whatever plays in between is attenuated twice or at the software
+/// gain, so a change of route, a fallback to shared included, dips and never jumps.
+fn reopen_routed(
+    decks: &Decks,
+    output: &mut AudioOutput,
+    request: OutputRequest,
+) -> Result<Negotiated, AppError> {
+    let volume = output.volume();
+    decks.set_volume_all(volume);
+    let reopened = output.reopen(request);
+    decks.set_volume_all(output.voice_gain(volume));
+    reopened
 }
 
 /// Close an exclusive stream so the card goes back to everything else. A shared one stays open:

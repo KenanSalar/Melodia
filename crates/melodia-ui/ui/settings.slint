@@ -129,6 +129,12 @@ export global Settings {
     in property <bool> polling-supported;
     in-out property <bool> output-polling: false;
     callback output-polling-changed(bool);
+    // The card's own control carrying the volume, so the samples reach it untouched. Applied like
+    // the pickers above: a change reopens the claim, since moving the gain between the samples and
+    // the card mid-stream could play a period at the wrong level.
+    in property <bool> hardware-volume-supported;
+    in-out property <bool> output-hardware-volume: false;
+    callback output-hardware-volume-changed(bool);
     // The silence a reopen onto a new rate writes first, for the DACs that mute while they relock.
     // The drag only moves the readout: nothing hears the value until the next rate change, so it
     // goes to the engine and to disk together on release.

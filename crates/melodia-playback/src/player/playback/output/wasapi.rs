@@ -42,11 +42,14 @@ use melodia_core::error::describe;
 use super::claim::ClaimError;
 use super::device::Feed;
 use super::encode::{self, DeviceFormat};
+use super::endpoint_volume::EndpointVolume;
 use super::{Drive, ExclusiveRequest, Negotiated, OutputDevice, OutputFormat, mmcss};
 
 pub(super) const SUPPORTED: bool = true;
 
 pub(super) const POLLING: bool = true;
+
+pub(super) const HARDWARE_VOLUME: bool = true;
 
 /// Intel HD Audio controllers take buffers only in multiples of this many bytes, and in exclusive
 /// mode the buffer is the controller's own.
@@ -75,6 +78,10 @@ pub(super) struct ExclusiveStream {
 impl ExclusiveStream {
     pub(super) fn negotiated(&self) -> Negotiated {
         self.negotiated.clone()
+    }
+
+    pub(super) fn hardware_volume(&self) -> bool {
+        self.negotiated.hardware_volume
     }
 
     pub(super) fn into_claim(self) -> Option<Claim> {
@@ -151,7 +158,7 @@ type Answer = Result<Negotiated, ClaimError>;
 fn run(request: &ExclusiveRequest, feed: &Feed, stop: &AtomicBool, answer: &SyncSender<Answer>) {
     let _com = ComApartment::enter();
     let _mmcss = mmcss::register_current_thread();
-    let (session, negotiated) = match claim(request, feed) {
+    let (mut session, negotiated) = match claim(request, feed) {
         Ok(claimed) => claimed,
         Err(e) => {
             // A refusal opened nothing, so an opener that has gone leaves nothing to release.
@@ -175,7 +182,12 @@ fn claim(request: &ExclusiveRequest, feed: &Feed) -> Result<(Session, Negotiated
     let enumerator = DeviceEnumerator::new()
         .map_err(|e| ClaimError::io("Failed to reach the audio devices", e))?;
     let endpoint = resolve(&enumerator, request.device.as_deref())?;
-    let session = negotiate(&endpoint, request)?;
+    let mut session = negotiate(&endpoint, request)?;
+    // Before the start, so the first sample already plays at the level and a start that fails
+    // still puts the device's own back.
+    if request.hardware_volume {
+        session.volume = hardware_volume(&endpoint, feed.volume.load());
+    }
     feed.pull.lock().reshape(session.shape);
     session
         .start()
@@ -185,10 +197,24 @@ fn claim(request: &ExclusiveRequest, feed: &Feed) -> Result<(Session, Negotiated
         shape: session.shape,
         format: OutputFormat::Exclusive(session.format),
         fallback: None,
+        hardware_volume: session.volume.is_some(),
         requested_period: u32::try_from(frames_in(request.tuning.period, request.shape.rate)).ok(),
         period: u32::try_from(session.period_frames).ok(),
     };
     Ok((session, negotiated))
+}
+
+/// The endpoint's volume control in hardware, set to `volume`, or `None` where it has none or
+/// won't hand it over. Either way the claim goes ahead, with the voices carrying the level.
+fn hardware_volume(endpoint: &Endpoint, volume: f64) -> Option<EndpointVolume> {
+    EndpointVolume::take(&endpoint.handle, &endpoint.device.id, volume).unwrap_or_else(|e| {
+        log::info!(
+            "audio: {} keeps the volume in software, its own control refused: {}",
+            endpoint.device.name,
+            describe(&e)
+        );
+        None
+    })
 }
 
 /// An active playback endpoint, as the picker lists it and as an open resolves it.
@@ -418,6 +444,10 @@ fn claim_error(context: &'static str, id: &str, e: WasapiError) -> ClaimError {
 
 /// An initialised exclusive client and what it was opened with.
 struct Session {
+    /// The device's own volume where it carries the level. First, so it is put back once the
+    /// stream has stopped but before the client goes: released first, other applications could
+    /// resume on the device at Melodia's level.
+    volume: Option<EndpointVolume>,
     client: AudioClient,
     render: AudioRenderClient,
     pacing: Pacing,
@@ -461,6 +491,7 @@ impl Session {
             Drive::Polling => usize::try_from(frames_in(period, shape.rate)).unwrap_or(usize::MAX),
         };
         Ok(Self {
+            volume: None,
             client,
             render,
             pacing,
@@ -488,8 +519,10 @@ impl Session {
     /// Hand the device whatever it has room for, each time it has some, until told to stop.
     ///
     /// Nothing here logs: the health counters are how this loop reports, and the one error it
-    /// returns is logged once, on the way out.
-    fn play(&self, feed: &Feed, stop: &AtomicBool) -> Result<(), WasapiError> {
+    /// returns is logged once, on the way out. A volume control that stops taking or reporting the
+    /// level ends the stream like a write refused, and the claim that follows decides again whether
+    /// to use it.
+    fn play(&mut self, feed: &Feed, stop: &AtomicBool) -> Result<(), WasapiError> {
         let channels = usize::from(self.shape.channels.get());
         let mut block: Vec<Sample> = vec![0.0; self.samples_per_buffer()];
         let mut bytes = Vec::with_capacity(block.len() * self.format.bytes_per_sample());
@@ -502,6 +535,13 @@ impl Session {
             encode::encode(pulled, self.format, &mut bytes);
             self.render.write_to_device(frames, &bytes, None)?;
             written += frames as u64;
+            // After the write, where the period's slack is.
+            if let Some(volume) = &mut self.volume {
+                volume.follow(feed.volume.load())?;
+                if let Some(level) = volume.take_move()? {
+                    feed.external_volume.report(level);
+                }
+            }
             // A clock that won't answer leaves the last reading standing: it is the ear's
             // position that suffers, not the audio, so it doesn't end the stream.
             if let Ok((played, _)) = self.clock.get_position() {

@@ -111,6 +111,13 @@ fn grade(inputs: &SignalInputs) -> Stages {
     let transport = inputs.transport;
     let chosen_if = |touched: bool| if touched { Grade::Enhanced } else { Grade::Clean };
     let converted_if = |touched: bool| if touched { Grade::Converted } else { Grade::Clean };
+    // With the device's own control carrying the level, only the silence at zero reaches the
+    // samples, and the voices apply that themselves.
+    let attenuated = if inputs.negotiated.hardware_volume {
+        transport.volume == 0
+    } else {
+        transport.volume != MAX_VOLUME
+    };
 
     Stages {
         source: converted_if(!inputs.source.format.fits_sample()),
@@ -119,7 +126,7 @@ fn grade(inputs: &SignalInputs) -> Stages {
         // samples through only at a step of exactly one, and the voice skips its multiply only at
         // bitwise unity.
         speed: chosen_if(transport.speed.to_bits() != 1.0_f64.to_bits()),
-        volume: chosen_if(transport.muted || transport.volume != MAX_VOLUME),
+        volume: chosen_if(transport.muted || attenuated),
         crossfade: chosen_if(transport.crossfading),
         rate: converted_if(source.rate != device.rate),
         // A source no wider than the device lands on its first channels untouched, the rest

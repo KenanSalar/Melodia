@@ -484,6 +484,9 @@ pub const EXCLUSIVE_SUPPORTED: bool = output::EXCLUSIVE_SUPPORTED;
 /// the drivers that stutter under events.
 pub const POLLING_SUPPORTED: bool = output::POLLING_SUPPORTED;
 
+/// Whether an exclusive claim can carry the volume on the device's own control here.
+pub const HARDWARE_VOLUME_SUPPORTED: bool = output::HARDWARE_VOLUME_SUPPORTED;
+
 /// The devices an exclusive claim can be aimed at. Blocking: it asks every device.
 pub fn output_devices() -> Vec<OutputDevice> {
     output::devices()
@@ -496,19 +499,30 @@ pub fn player_set_output_choice(ctx: &PlaybackContext, choice: OutputChoice) {
 }
 
 /// Turn off everything the user chose that changes the samples on their way to the device, and
-/// follow the file's rate where that does anything. The live half only;
-/// `library::settings::reset_for_bit_perfect` persists the same set.
-pub fn player_make_bit_perfect(ctx: &PlaybackContext) {
+/// follow the file's rate where that does anything, returning the volume it left. The live half
+/// only; `library::settings::reset_for_bit_perfect` persists the same set.
+///
+/// **A volume on the device's own control is left where it is**, only unmuted: it changes no
+/// sample, and raising it would be raising the user's speakers. Blocking: it reads the output,
+/// which a reopen holds for as long as a device takes to open.
+pub fn player_make_bit_perfect(ctx: &PlaybackContext) -> u32 {
     player_set_eq_enabled(ctx, false);
     player_set_replaygain_enabled(ctx, false);
+    let volume_on_device =
+        ctx.engine.negotiated().is_some_and(|negotiated| negotiated.hardware_volume);
+    let mut volume = MAX_VOLUME;
     ctx.emit_and_execute(|s| {
+        if volume_on_device {
+            volume = s.volume;
+        }
         let mut actions = s.build_set_speed_actions(1.0);
-        actions.extend(s.build_set_volume_actions(MAX_VOLUME));
+        actions.extend(s.build_set_volume_actions(volume));
         actions
     });
     if FOLLOW_RATE_SUPPORTED {
         player_set_follow_rate(ctx, true);
     }
+    volume
 }
 
 // The visualizer has no setter here on purpose: its tap is armed by the

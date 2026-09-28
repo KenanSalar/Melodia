@@ -37,6 +37,9 @@ pub(super) const SUPPORTED: bool = true;
 /// The writer always blocks on the card, so there is no event mode to poll instead of.
 pub(super) const POLLING: bool = false;
 
+/// The card's simple mixer isn't driven yet, so the voices always carry the volume.
+pub(super) const HARDWARE_VOLUME: bool = false;
+
 /// Periods the card's buffer holds, which is how long the writer may be late before an underrun.
 const PERIODS_PER_BUFFER: u32 = 4;
 
@@ -133,6 +136,10 @@ impl ExclusiveStream {
         self.negotiated.clone()
     }
 
+    pub(super) fn hardware_volume(&self) -> bool {
+        self.negotiated.hardware_volume
+    }
+
     /// Close the card and keep its reservation, for a reopen that may land on the same card.
     pub(super) fn into_claim(mut self) -> Option<Claim> {
         let claim = self.claim.take();
@@ -203,6 +210,7 @@ pub(super) fn open(
             shape: device_shape,
             format: OutputFormat::Exclusive(config.format),
             fallback: None,
+            hardware_volume: false,
             requested_period: Some(config.requested_period),
             period: u32::try_from(config.period_frames).ok(),
         },

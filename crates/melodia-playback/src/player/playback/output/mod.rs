@@ -19,7 +19,8 @@ pub mod mixer;
 pub mod voice;
 
 // One exclusive backend per platform, each answering to the same names: `SUPPORTED`, `POLLING`,
-// `devices`, `open`, the `ExclusiveStream` it returns and the `Claim` a reopen carries across.
+// `HARDWARE_VOLUME`, `devices`, `open`, the `ExclusiveStream` it returns and the `Claim` a reopen
+// carries across.
 cfg_select! {
     target_os = "linux" => {
         mod alsa;
@@ -28,6 +29,7 @@ cfg_select! {
         use self::alsa as exclusive;
     }
     target_os = "windows" => {
+        mod endpoint_volume;
         mod mmcss;
         mod wasapi;
         use self::wasapi as exclusive;
@@ -47,7 +49,7 @@ use melodia_core::error::{self, AppError};
 use melodia_core::utils::toast::{self, ToastKind};
 
 use self::claim::{ClaimError, Fallback};
-use self::device::{DeviceStream, Feed, Lead};
+use self::device::{DeviceStream, ExternalVolume, Feed, Lead};
 use self::encode::DeviceFormat;
 use self::exclusive::{Claim, ExclusiveStream};
 use self::mixer::Mixer;
@@ -93,6 +95,10 @@ pub struct ExclusiveRequest {
     pub shape: Shape,
     pub format: SourceFormat,
     pub tuning: ExclusiveTuning,
+    /// Carry the volume on the device's own control where it has one in hardware, leaving the
+    /// samples untouched. Part of the request so a change reopens the claim: the gain moving
+    /// between the voices and the device mid-stream can play a period at the wrong level.
+    pub hardware_volume: bool,
 }
 
 /// How an exclusive writer paces the device. Part of the request, so changing it reopens.
@@ -157,6 +163,9 @@ pub const EXCLUSIVE_SUPPORTED: bool = exclusive::SUPPORTED;
 /// Whether the exclusive backend tells [`Drive::Polling`] from [`Drive::Events`].
 pub const POLLING_SUPPORTED: bool = exclusive::POLLING;
 
+/// Whether an exclusive claim can carry the volume on the device's own control.
+pub const HARDWARE_VOLUME_SUPPORTED: bool = exclusive::HARDWARE_VOLUME;
+
 /// Every device an exclusive claim can be aimed at, empty where there is no exclusive backend.
 /// Blocking: it asks every device.
 pub fn devices() -> Vec<OutputDevice> {
@@ -204,6 +213,9 @@ pub struct Negotiated {
     pub format: OutputFormat,
     /// Why an exclusive claim fell back to this shared stream, or `None` where none was refused.
     pub fallback: Option<Fallback>,
+    /// Whether the device's own control carries the volume, so the voices hand it the samples at
+    /// unity. Only an exclusive claim that asked for it, on a device with one in hardware.
+    pub hardware_volume: bool,
     /// The period that was asked for, or `None` where the host was left to name its own.
     ///
     /// Kept beside the answer because it is the one of the two that says which pass of the ladder
@@ -266,6 +278,15 @@ impl Stream {
             Self::Exclusive(stream) => stream.negotiated(),
         }
     }
+
+    /// [`Negotiated::hardware_volume`], asked without cloning the rest: the volume slider asks it
+    /// on every move.
+    fn hardware_volume(&self) -> bool {
+        match self {
+            Self::Shared(_) => false,
+            Self::Exclusive(stream) => stream.hardware_volume(),
+        }
+    }
 }
 
 impl AudioOutput {
@@ -294,6 +315,23 @@ impl AudioOutput {
     /// Write `hold` of silence after a reopen onto a new rate, held under [`MAX_RESYNC_HOLD`].
     pub fn set_resync_hold(&mut self, hold: Duration) {
         self.resync_hold = hold.min(MAX_RESYNC_HOLD);
+    }
+
+    /// Take the user's volume, as an amplitude, for a claim carrying it on the device's own
+    /// control. The voices apply [`Self::voice_gain`] of it instead.
+    pub fn set_volume(&self, volume: f64) {
+        self.feed.volume.store(volume);
+    }
+
+    /// The user's volume, as an amplitude.
+    pub fn volume(&self) -> f64 {
+        self.feed.volume.load()
+    }
+
+    /// The gain the voices apply for `volume` on the stream open now.
+    pub fn voice_gain(&self, volume: f64) -> f64 {
+        let on_device = self.stream.as_ref().is_some_and(Stream::hardware_volume);
+        voice_gain(volume, on_device)
     }
 
     /// Replace the stream with one opened for `request`: an exclusive claim, or the default device.
@@ -465,11 +503,23 @@ impl AudioOutput {
         Arc::clone(&self.feed.lead)
     }
 
+    /// Where a claim carrying the volume on the device's own control reports it was moved from
+    /// outside Melodia. The same cell for the output's life, like [`Self::lead`].
+    pub fn external_volume(&self) -> Arc<ExternalVolume> {
+        Arc::clone(&self.feed.external_volume)
+    }
+
     /// What the device agreed to, as opposed to what it was asked for, or `None` while no stream
     /// is open.
     pub fn negotiated(&self) -> Option<Negotiated> {
         self.stream.as_ref().map(Stream::negotiated)
     }
+}
+
+/// The voices' gain for `volume`: unity while the device's own control carries it, except at zero,
+/// which stays a silence in the voices so a mute is instant and needs no switch on the device.
+fn voice_gain(volume: f64, on_device: bool) -> f64 {
+    if on_device && volume > 0.0 { 1.0 } else { volume }
 }
 
 /// The name of the device a claim on `id` was aimed at, or of the first listed where none was
@@ -482,3 +532,7 @@ fn refusing_device(id: Option<&str>) -> Option<String> {
     };
     device.map(|device| device.name)
 }
+
+#[cfg(test)]
+#[path = "tests/mod_tests.rs"]
+mod tests;

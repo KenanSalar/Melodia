@@ -29,11 +29,13 @@ use std::time::Duration;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SizedSample};
 use parking_lot::Mutex;
+use tokio::sync::Notify;
 
 use melodia_core::error::AppError;
 
 use melodia_audio::player::source::audio::{ChannelCount, Sample, SampleRate, Shape};
 
+use super::super::dsp::AtomicF64;
 use super::super::stream_health::{self, AudioStreamHealth};
 use super::mixer::MixerPull;
 use super::{Negotiated, OutputFormat};
@@ -132,7 +134,49 @@ impl Lead {
     }
 }
 
-/// What every stream's callbacks hold: the puller, and the two cells they report into.
+/// A level the device's own volume control was moved to from outside Melodia, by the system's
+/// volume slider or its keys, waiting for the player to take it.
+///
+/// One slot rather than a queue: only the latest level means anything, so a move landing before
+/// the last was taken replaces it.
+#[derive(Debug)]
+pub struct ExternalVolume {
+    /// The level's bits, or [`ExternalVolume::NONE`] while nothing waits.
+    level: AtomicU64,
+    moved: Notify,
+}
+
+impl ExternalVolume {
+    /// A NaN, which no level a device reports can be.
+    const NONE: u64 = u64::MAX;
+
+    /// Hand over `level`, the fraction the system shows the device's volume at. A store and a wake,
+    /// so a writer thread may call it.
+    pub fn report(&self, level: f64) {
+        self.level.store(level.to_bits(), Ordering::Release);
+        self.moved.notify_one();
+    }
+
+    /// The next level [`Self::report`] hands over, waiting for one where none is waiting yet.
+    pub async fn next(&self) -> f64 {
+        loop {
+            let bits = self.level.swap(Self::NONE, Ordering::AcqRel);
+            if bits != Self::NONE {
+                return f64::from_bits(bits);
+            }
+            self.moved.notified().await;
+        }
+    }
+}
+
+impl Default for ExternalVolume {
+    fn default() -> Self {
+        Self { level: AtomicU64::new(Self::NONE), moved: Notify::new() }
+    }
+}
+
+/// What every stream's callbacks hold: the puller, the two cells they report into, and the
+/// volume a claim carrying it on the device reads and reports back.
 ///
 /// The puller never leaves its owner: each stream holds a clone of the `Arc`, so dropping the
 /// stream is all it takes to get it back.
@@ -141,11 +185,22 @@ pub struct Feed {
     pub(super) pull: Arc<Mutex<MixerPull>>,
     pub(super) health: Arc<AudioStreamHealth>,
     pub(super) lead: Arc<Lead>,
+    /// The user's volume, as an amplitude. The voices take theirs from the engine; this is the copy
+    /// a writer thread can read, and it outlives every stream so a reopen claims at the level set.
+    pub(super) volume: Arc<AtomicF64>,
+    /// Where a claim carrying the volume on the device reports it moved without Melodia.
+    pub(super) external_volume: Arc<ExternalVolume>,
 }
 
 impl Feed {
     pub fn new(pull: MixerPull, health: Arc<AudioStreamHealth>) -> Self {
-        Self { pull: Arc::new(Mutex::new(pull)), health, lead: Arc::default() }
+        Self {
+            pull: Arc::new(Mutex::new(pull)),
+            health,
+            lead: Arc::default(),
+            volume: Arc::new(AtomicF64::new(1.0)),
+            external_volume: Arc::default(),
+        }
     }
 
     /// Say how much of what has been pulled the device still holds unplayed. An atomic store, so
@@ -307,6 +362,7 @@ fn attempt(
             shape,
             format: OutputFormat::Shared(format),
             fallback: None,
+            hardware_volume: false,
             requested_period,
             period,
         },

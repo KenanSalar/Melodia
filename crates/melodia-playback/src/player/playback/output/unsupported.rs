@@ -9,12 +9,18 @@ pub(super) const SUPPORTED: bool = false;
 
 pub(super) const POLLING: bool = false;
 
+pub(super) const HARDWARE_VOLUME: bool = false;
+
 pub(super) enum Claim {}
 
 pub(super) enum ExclusiveStream {}
 
 impl ExclusiveStream {
     pub(super) fn negotiated(&self) -> Negotiated {
+        match *self {}
+    }
+
+    pub(super) fn hardware_volume(&self) -> bool {
         match *self {}
     }
 

@@ -30,11 +30,12 @@ pub fn install(ui: &AppWindow, state: &AppState) {
     let weak = ui.as_weak();
     ui.global::<SignalPathUi>().on_make_bit_perfect(move || {
         let ctx = state.playback_ctx();
-        state.runtime.spawn(async move { library::playback::player_make_bit_perfect(&ctx) });
-        state.persist_blocking(
-            "persist bit-perfect reset",
-            library::settings::reset_for_bit_perfect,
-        );
+        // One task, the live half first: the persist writes the volume the live half left, and
+        // reading the output can wait out a reopen.
+        state.persist_blocking("persist bit-perfect reset", move |state| {
+            let volume = library::playback::player_make_bit_perfect(&ctx);
+            library::settings::reset_for_bit_perfect(state, volume)
+        });
         // Volume and speed come back through the player's view model; these three are seeded
         // from Rust and repaint only when told.
         if let Some(ui) = weak.upgrade() {
@@ -102,6 +103,7 @@ fn paint(ui: &AppWindow, path: Option<&SignalPath>) {
     g.set_eq_on(inputs.eq_on);
     g.set_rg_on(inputs.rg_on);
     let transport = inputs.transport;
+    g.set_volume_on_device(device.hardware_volume);
     g.set_muted(transport.muted);
     g.set_volume(i32::try_from(transport.volume).unwrap_or(i32::MAX));
     g.set_speed(format!("{}×", transport.speed).into());

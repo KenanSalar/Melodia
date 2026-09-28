@@ -490,6 +490,10 @@ fn main() -> AppResult<()> {
     log::info!("Melodia shutting down — flushing player state");
     shutdown::save_state_on_exit(&app, &state, &runtime);
 
+    // Before `process::exit(0)` skips destructors: an exclusive claim hands the device back with
+    // the volume it had, rather than leaving it at Melodia's.
+    state.engine.close_output();
+
     // Before `process::exit(0)` skips destructors — a leaked `tray-icon` ghosts
     // in the Windows notification area. No-op on Linux, whose ksni handle its
     // subscriber drops during `flush_tasks_and_db`. Main thread, as the `!Send`
