@@ -14,7 +14,9 @@
 //!
 //! **The level is Windows' own volume for that device** for as long as the claim holds it, so the
 //! system's slider and volume keys move it too. Those moves are watched for and handed back, so
-//! Melodia's slider follows them. A release puts back what the device had before the claim
+//! Melodia's slider follows them. Polled rather than subscribed to: `IAudioEndpointVolumeCallback`
+//! is called on a thread of the audio service's own, where a poll stays on the writer's. A release
+//! puts back what the device had before the claim
 //! regardless. That original outlives the claim until a release has put it back, because Windows
 //! persists an endpoint's level: a device unplugged mid-claim can't be restored, and replugged it
 //! reports Melodia's level as its own. A crash still leaves it there.
@@ -45,6 +47,10 @@ const WATCH_INTERVAL: Duration = Duration::from_millis(250);
 /// How far the device's level has to move to count as someone moving it: well under the whole
 /// percent the system's slider steps in, and well over any rounding of a level Melodia set.
 const MOVE_THRESHOLD: f32 = 0.001;
+
+/// How near the device has to sit to a volume already for setting it to be skipped: under the half
+/// percent a followed move comes back rounded to.
+const FOLLOWED_TOLERANCE: f32 = 0.005;
 
 /// Each device's level from before Melodia first claimed it, by endpoint id, until a release has
 /// put it back.
@@ -95,6 +101,10 @@ impl EndpointVolume {
     /// Set the device to `volume` where it has moved, at most once per [`FOLLOW_INTERVAL`]. A move
     /// held back lands on a later call, so it only ever arrives late.
     ///
+    /// **A level the device already sits at is not written.** A system move handed back returns as
+    /// the slider's rounding of it, and writing that would undo any move the system made meanwhile,
+    /// which the read-back would then take as Melodia's own and never report.
+    ///
     /// # Errors
     ///
     /// The device refusing the level, which the caller treats like a write it refused.
@@ -102,7 +112,14 @@ impl EndpointVolume {
         let due = self.applied.is_none_or(|(applied, at)| {
             applied.to_bits() != volume.to_bits() && at.elapsed() >= FOLLOW_INTERVAL
         });
-        if due { self.set(volume) } else { Ok(()) }
+        if !due {
+            return Ok(());
+        }
+        if already_at(level_for(volume), self.reported) {
+            self.applied = Some((volume, Instant::now()));
+            return Ok(());
+        }
+        self.set(volume)
     }
 
     /// The level something outside Melodia moved the device to since the last call, looked for at
@@ -166,6 +183,12 @@ fn level_for(volume: f64) -> f32 {
         return 0.0;
     }
     volume.clamp(0.0, 1.0) as f32
+}
+
+/// Whether a device reporting `reported` already plays at `level`, as near as a whole percent on
+/// the slider can say.
+fn already_at(level: f32, reported: f32) -> bool {
+    (level - reported).abs() < FOLLOWED_TOLERANCE
 }
 
 #[allow(

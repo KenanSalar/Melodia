@@ -850,6 +850,10 @@ by its command line (a forwarded file replaces the queue and plays) over three g
 - **The system moving the control moves Melodia's slider**, added after Gate B's first run.
   - The writer reads the level every 250 ms, against what it read back after its own last set, so
     the device's rounding never reads as a move.
+  - A level the device already sits at, within half a percent, isn't written back
+    (`endpoint_volume::already_at`). A move handed back returns as the slider's rounding of it, and
+    writing that would undo any move the system made meanwhile, which the read-back then took as
+    Melodia's own and never reported. Found in review after Gate B, not reproduced before the fix.
   - A move goes through `Feed`'s `ExternalVolume` (a one-slot atomic and a `Notify`) to
     `tasks::device_volume`. That applies it the way an OS media panel's volume is applied,
     `settings.json` included.
@@ -877,6 +881,12 @@ by its command line (a forwarded file replaces the queue and plays) over three g
   replug. A stop afterwards put its level back. The loss logs `0x80004005` (E_FAIL), as every
   unplug has since Gate A.
 - **Sync back:** Windows' slider and volume keys moved Melodia's.
+- **Sync back, re-run after the write-back fix:**
+  - A held volume key moved both sliders with no step back.
+  - The flyout slider stayed where it was released.
+  - Event mode at 5 ms, dragging Melodia's slider, played with no audible dropout. That one is by
+    ear: the WASAPI writer counts no underruns (see Open questions).
+  - Toggling off and quitting both still put Windows' level back.
 - **Not run:** a device with no control in hardware, since neither test device lacks one.
   `voice_gain`'s test covers the rule that keeps the voices carrying the level there.
 
@@ -884,7 +894,7 @@ The tests landed are:
 - `wasapi_tests`: `stream_mode` and `aligned_stream_mode` under both drives, and `hns` against
   `from_hns` at the period chips and past both ends.
 - `output/mod_tests`: `voice_gain`, and `endpoint_volume_tests`: `level_for` across `0..=1`, past
-  both ends and at NaN.
+  both ends and at NaN, and `already_at` either side of half a percent.
 - `device_tests`: `ExternalVolume` hands over a report, waits with none, keeps only the latest of
   two, and wakes a take already waiting.
 - `signal_path_tests`: on the device, any audible level grades clean, while zero and mute stay
@@ -994,6 +1004,9 @@ so it would refuse every tone.
 - **A crash while the device carries the volume leaves Windows at Melodia's level.** Only a release
   puts the original back. Persisting the original would cover a crash, at the cost of a file
   written on every claim.
+- **The WASAPI exclusive writer counts no underruns.** Only ALSA's writer and the cpal callbacks
+  call `record_xrun`, so `audio_health`'s underrun line never fires for a WASAPI claim, and a
+  dropout there is heard rather than logged.
 - **Windows' mute button isn't followed.** Only the level is watched. Following it would take
   `GetMute`, a sixth COM call, and a decision about whether it mutes Melodia or only the device.
 - ~~A refusal should name the device that refused.~~ It does since Phase 7: `Negotiated.fallback`
