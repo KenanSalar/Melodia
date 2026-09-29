@@ -2,7 +2,7 @@
 //!
 //! Everything here is seeded from one `settings.json` read, and most of it takes the
 //! two-phase shape the equalizer and `ReplayGain` callbacks use: apply to the live
-//! backend synchronously, then persist on the blocking pool. Four exceptions:
+//! backend synchronously, then persist on the blocking pool. Three exceptions:
 //!
 //! - **Play-button animation** needs no runtime mirror — `PlayButton` binds its overlays
 //!   to the Slint global, so the chip click repaints reactively.
@@ -10,14 +10,10 @@
 //!   once, by `main.rs` after `restore_persisted_playback`.
 //! - **The crossfade duration slider** splits `changed` (live, no disk) from `committed`
 //!   (drag release, persists), as `set-volume` / `commit-volume` do.
-//! - **The resync slider** applies on the pool too, on release: setting it waits on the output
-//!   lock a reopen holds, and nothing hears it before the next rate change anyway.
 //!
 //! Gapless defaults to `true` in two places that already agree — `PlaybackFlags::default()`
 //! and `PlayerState::default()` — so a first launch reads no file, falls through to
 //! both, and paints the toggle on.
-
-use std::time::Duration;
 
 use slint::ComponentHandle;
 
@@ -25,7 +21,7 @@ use crate::ui::settings_bind::toggle_binding;
 use melodia_app::library;
 use melodia_app::services::settings;
 use melodia_app::state::AppState;
-use melodia_playback::player::playback::{crossfade, output};
+use melodia_playback::player::playback::crossfade;
 use melodia_ui::{AppWindow, Settings};
 
 /// The on-disk token as a Slint chip index, in lock-step with the inline literal in
@@ -54,8 +50,6 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
         let g = ui.global::<Settings>();
         g.set_crossfade_min_secs(crossfade::crossfade_ms_to_secs(crossfade::MIN_CROSSFADE_MS));
         g.set_crossfade_max_secs(crossfade::crossfade_ms_to_secs(crossfade::MAX_CROSSFADE_MS));
-        g.set_follow_rate_supported(library::playback::FOLLOW_RATE_SUPPORTED);
-        g.set_output_resync_max_ms(millis(output::MAX_RESYNC_HOLD));
     }
 
     if let Ok(s) = settings::read_settings(&state.paths) {
@@ -71,9 +65,6 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
         g.set_crossfade_skip_same_album(s.crossfade.crossfade_skip_same_album);
         g.set_crossfade_manual(s.crossfade.crossfade_manual);
         g.set_crossfade_fade_on_pause(s.crossfade.crossfade_fade_on_pause);
-
-        g.set_output_follow_rate(s.output.output_follow_rate);
-        g.set_output_resync_ms(millis(s.output.resync_hold().min(output::MAX_RESYNC_HOLD)));
     }
 
     let state_clone = state.clone();
@@ -108,30 +99,7 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
         });
     });
 
-    ui.global::<Settings>().on_output_follow_rate_changed(toggle_binding(
-        state,
-        "persist output_follow_rate",
-        library::playback::player_set_follow_rate,
-        library::settings::set_output_follow_rate,
-    ));
-
-    // Engine and disk together, on the pool: setting the hold waits out any reopen in flight.
-    let state_resync = state.clone();
-    ui.global::<Settings>().on_output_resync_committed(move |ms| {
-        let ms = u32::try_from(ms).unwrap_or(0);
-        let ctx = state_resync.playback_ctx();
-        state_resync.persist_blocking("persist output_resync_ms", move |s| {
-            library::playback::player_set_resync_hold(&ctx, Duration::from_millis(u64::from(ms)));
-            library::settings::set_output_resync_ms(s, ms)
-        });
-    });
-
     install_crossfade_callbacks(ui, state);
-}
-
-/// `span` as the whole milliseconds a slider reads. The spans here are a second at most.
-fn millis(span: Duration) -> f32 {
-    f32::from(u16::try_from(span.as_millis()).unwrap_or(u16::MAX))
 }
 
 /// The five crossfade callbacks. The four toggles take [`toggle_binding`]'s shared

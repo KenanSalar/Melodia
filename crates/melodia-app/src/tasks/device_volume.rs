@@ -2,8 +2,8 @@
 //! claim has that control carry the volume. Without it Melodia's slider goes on showing a level the
 //! device no longer plays at, and the next touch of it jumps the device back.
 //!
-//! A move takes the path an OS media panel's does, `player_set_volume` and then the settings
-//! commit, so the state, the view model, the device and `settings.json` all land on the same level.
+//! A move takes the path an OS media panel's does, `player_set_volume_committed`, so the state, the
+//! view model, the device and `settings.json` all land on the same level.
 
 use crate::library;
 use crate::state::AppState;
@@ -19,11 +19,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
         while let Some(level) = shutdown.run_until_cancelled(moves.next()).await {
             let volume = amplitude_to_volume(level);
             log::debug!("audio: the device's own volume moved to {volume}%; following it");
-            let followed = async {
-                library::playback::player_set_volume(&ctx, volume)?;
-                library::playback::commit_player_settings(&ctx).await
-            };
-            if let Err(e) = followed.await {
+            if let Err(e) = library::playback::player_set_volume_committed(&ctx, volume).await {
                 log::warn!("audio: following the device's own volume failed: {}", describe(&e));
             }
         }

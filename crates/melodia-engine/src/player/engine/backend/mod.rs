@@ -16,6 +16,8 @@ mod player_backend;
 pub use output::OutputChoice;
 pub use player_backend::PlayerBackend;
 
+use output::EngineOutput;
+
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -32,9 +34,8 @@ use melodia_audio::player::source::stream_source::PreparedStream;
 use melodia_playback::player::playback::crossfade::{self, CrossfadeShared};
 use melodia_playback::player::playback::decks::{Deck, Decks, DeferredOp, lock_decks};
 use melodia_playback::player::playback::equalizer::{self, EqShared, EqSource};
-use melodia_playback::player::playback::output::device::{ExternalVolume, Lead};
+use melodia_playback::player::playback::output::AudioOutput;
 use melodia_playback::player::playback::output::mixer::Mixer;
-use melodia_playback::player::playback::output::{AudioOutput, OutputStatus};
 use melodia_playback::player::playback::replaygain::{ReplayGainShared, TrackReplayGain};
 use melodia_playback::player::playback::visualizer::{VisualizerShared, VisualizerTap};
 
@@ -61,11 +62,9 @@ pub fn evaluate_playback_check(was_gapless: bool, sources: usize) -> PlaybackChe
 }
 
 pub struct PlaybackEngine {
-    // The device the decks play into, or `None` on the device-free rigs the tests build. First so
-    // it drops first: the stream is what stops the callback. Only ever locked under the decks
-    // lock, which is the order `reopen_output` takes them in. `Arc` so the deferred half of a
-    // faded stop can give an exclusive card back once the fade has played out.
-    output: Arc<Mutex<Option<AudioOutput>>>,
+    // The device the decks play into. First so it drops first: the stream is what stops the
+    // callback.
+    output: EngineOutput,
     // The mutex is what makes a multi-op sequence atomic (a `Deck` is already
     // Send+Sync on its own); `Arc` so a deferred pause/stop can hold the decks
     // after its sleep.
@@ -109,24 +108,9 @@ pub struct PlaybackEngine {
     // `gapless_pending` is one: the deferred clear of a faded stop has to drop this alongside the
     // deck contents it removes.
     live_stream: Arc<Mutex<Option<Arc<StreamShared>>>>,
-    // Open the output at each track's own rate. Read only at a track boundary, never by the audio
-    // thread.
-    follow_rate: AtomicBool,
-    // Shared or exclusive, and which card. Read at a track boundary, never by the audio thread.
-    output_choice: Mutex<OutputChoice>,
     // The last path `preload_gapless` refused for needing a reopen. The monitor asks again every
     // tick until the track ends, and each ask would otherwise decode the file just to refuse it.
     gapless_refused: Mutex<Option<String>>,
-    // How far the ear is behind the decks' clocks, measured by whichever stream the output has
-    // open. A cell of its own rather than a read through `output`, whose lock a reopen holds for as
-    // long as a device takes to open.
-    lead: Arc<Lead>,
-    // Where a claim carrying the volume on the device reports the system moved it, held for the
-    // same reason as `lead`.
-    external_volume: Arc<ExternalVolume>,
-    // Whether the output is parked or waiting on a disconnected device, held for the same reason
-    // as `lead`: the health checks ask on every tick, from a runtime worker.
-    output_status: Arc<OutputStatus>,
     // Only ever schedules the deferred half of a faded pause / stop.
     runtime: tokio::runtime::Handle,
 }
@@ -139,7 +123,7 @@ impl PlaybackEngine {
     /// [`AppError::Player`] if `mixer` carries fewer voices than the decks need.
     pub fn new(mixer: &Mixer, runtime: tokio::runtime::Handle) -> Result<Self, AppError> {
         Ok(Self {
-            output: Arc::new(Mutex::new(None)),
+            output: EngineOutput::default(),
             decks: Arc::new(std::sync::Mutex::new(Decks::connect(mixer)?)),
             gapless_pending: Arc::new(AtomicBool::new(false)),
             crossfade_armed: AtomicBool::new(false),
@@ -150,12 +134,7 @@ impl PlaybackEngine {
             viz: VisualizerShared::new(false),
             staged_stream: Mutex::new(None),
             live_stream: Arc::new(Mutex::new(None)),
-            follow_rate: AtomicBool::new(false),
-            output_choice: Mutex::new(OutputChoice::default()),
             gapless_refused: Mutex::new(None),
-            lead: Arc::default(),
-            external_volume: Arc::default(),
-            output_status: Arc::default(),
             runtime,
         })
     }
@@ -170,10 +149,7 @@ impl PlaybackEngine {
         runtime: tokio::runtime::Handle,
     ) -> Result<Self, AppError> {
         let mut engine = Self::new(output.mixer(), runtime)?;
-        engine.lead = output.lead();
-        engine.external_volume = output.external_volume();
-        engine.output_status = output.status();
-        *engine.output.lock() = Some(output);
+        engine.output = EngineOutput::over(output);
         Ok(engine)
     }
 
@@ -191,7 +167,7 @@ impl PlaybackEngine {
         let deck_epoch = self.deck_epoch.clone();
         let gapless_pending = self.gapless_pending.clone();
         let live_stream = self.live_stream.clone();
-        let output = self.output.clone();
+        let output = Arc::clone(&self.output.device);
         self.runtime.spawn(async move {
             tokio::time::sleep(Duration::from_millis(delay_ms)).await;
             // The wait is async and the landing is not: `Deck::clear` blocks until the audio
@@ -307,10 +283,7 @@ impl PlaybackEngine {
         self.bump_epoch();
         self.clear_live_stream();
         let mut decks = self.lock_decks();
-        // Handed over ahead of the reopen, so a claim sets the device's own control to it.
-        self.set_output_volume(volume);
-        self.reopen_for_track(&decks, decoded.shape(), decoded.format());
-        let volume = self.voice_gain(volume);
+        let volume = self.prepare_output_for(&decks, &decoded, volume);
         // Backstop for the gapless race: `preload_gapless` sets the flag under
         // this same lock, so a preload that landed during the decode is visible
         // here. Downgrading to a hard cut is always safe — it clears both decks,
@@ -399,9 +372,7 @@ impl PlaybackEngine {
         *self.live_stream.lock() = Some(shared);
         self.bump_epoch();
         let decks = self.lock_decks();
-        self.set_output_volume(volume);
-        self.reopen_for_track(&decks, source.shape(), source.format());
-        let volume = self.voice_gain(volume);
+        let volume = self.prepare_output_for(&decks, &source, volume);
         // A live mount has no timeline to resume on, so its clock starts where the connection did.
         decks.cut_to(volume, Self::STREAM_SPEED, Duration::ZERO, |deck| {
             self.build_source(source, TrackReplayGain::default(), deck)
@@ -433,8 +404,7 @@ impl PlaybackEngine {
         self.bump_epoch();
         self.clear_live_stream();
         let mut decks = self.lock_decks();
-        self.set_output_volume(volume);
-        let volume = self.voice_gain(volume);
+        let volume = self.route_volume(volume);
         // A staged gapless source sits on the *active* deck and inherits its
         // fade cell, so it would fade out alongside the track it was meant to
         // follow. `crossfade_eligible` gates the preload off for exactly this
@@ -578,7 +548,7 @@ impl PlaybackEngine {
         let decks = self.lock_decks();
         decks.clear_all();
         self.gapless_pending.store(false, Ordering::Release);
-        output::release_exclusive(&self.output);
+        output::release_exclusive(&self.output.device);
     }
 
     /// Fade to silence over `fade_ms`, then clear both decks via the deferred
@@ -659,8 +629,7 @@ impl PlaybackEngine {
     /// carries it there, leaving the voices at unity, and on the voices otherwise.
     pub fn set_volume(&self, volume: f64) {
         let decks = self.lock_decks();
-        self.set_output_volume(volume);
-        decks.set_volume_all(self.voice_gain(volume));
+        decks.set_volume_all(self.route_volume(volume));
     }
 
     /// Both decks must run at the same speed or a crossfade would drift.
@@ -756,7 +725,7 @@ impl PlaybackEngine {
     /// [`Self::query_position`] as the user hears it, with what the device still holds taken off.
     /// What is shown, persisted and reported outward.
     pub fn query_heard_position(&self) -> u64 {
-        let position = self.lock_decks().active().voice.heard(self.lead.get());
+        let position = self.lock_decks().active().voice.heard(self.output.lead.get());
         u64::try_from(position.as_millis()).unwrap_or(u64::MAX)
     }
 

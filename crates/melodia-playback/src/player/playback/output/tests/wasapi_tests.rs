@@ -117,11 +117,8 @@ fn a_source_wider_than_the_device_is_asked_for_at_its_own_width() {
 #[test]
 fn a_claim_asks_for_each_integer_width_through_the_rungs_wasapi_declares() {
     use DeviceFormat::{F32, S24High, S24Packed, S32};
-    let rows: [(u8, &[DeviceFormat]); 3] = [
-        (17, &[S24Packed, S32, S24High]),
-        (24, &[S24Packed, S32, S24High]),
-        (25, &[S32, F32]),
-    ];
+    let rows: [(u8, &[DeviceFormat]); 3] =
+        [(17, &[S24Packed, S32, S24High]), (24, &[S24Packed, S32, S24High]), (25, &[S32, F32])];
     for (bits, expected) in rows {
         let asked: Vec<DeviceFormat> =
             candidates(shape(2, 96_000), SourceFormat { bits, float: false }, 2)
@@ -191,7 +188,8 @@ fn a_device_refusal_keeps_its_reason_whichever_step_it_arrives_at() {
         (AUDCLNT_E_DEVICE_INVALIDATED, FallbackReason::NotConnected),
     ];
     for (code, expected) in rows {
-        let refused = claim_error("Failed to start the audio device", ENDPOINT, windows_error(code));
+        let refused =
+            claim_error("Failed to start the audio device", ENDPOINT, windows_error(code));
 
         assert_eq!(refused.reason(), expected, "{code:#010x}");
     }

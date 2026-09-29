@@ -305,6 +305,16 @@ pub fn player_set_volume(ctx: &PlaybackContext, level: u32) -> Result<(), AppErr
     Ok(())
 }
 
+/// [`player_set_volume`] and its commit at once, for a move that arrives whole rather than as a
+/// drag: the OS media panel's, or the device's own control's.
+pub async fn player_set_volume_committed(
+    ctx: &PlaybackContext,
+    level: u32,
+) -> Result<(), AppError> {
+    player_set_volume(ctx, level)?;
+    commit_player_settings(ctx).await
+}
+
 pub async fn player_toggle_mute(ctx: &PlaybackContext) -> Result<(), AppError> {
     ctx.emit_and_execute(
         melodia_engine::player::engine::state::PlayerState::build_toggle_mute_actions,
@@ -314,8 +324,7 @@ pub async fn player_toggle_mute(ctx: &PlaybackContext) -> Result<(), AppError> {
 
 /// Persist the current `PlayerState`'s volume + `is_muted` into settings.json.
 /// Called once from the volume slider's `pointer-event Up` (after a drag or
-/// click), and inline from the mute mutators / the OS media controls'
-/// `SetVolume`.
+/// click), and inline from the mute mutators and [`player_set_volume_committed`].
 ///
 /// Writes on a `spawn_blocking` thread so the async runtime worker isn't
 /// blocked, under the settings lock so a concurrent `mutate_settings` isn't
@@ -461,9 +470,8 @@ pub fn player_set_crossfade_fade_on_pause(ctx: &PlaybackContext, on: bool) {
     ctx.engine.set_crossfade_fade_on_pause(on);
 }
 
-/// Whether following the file's rate can change anything here. Windows shared mode converts every
-/// stream to the mix format, so there the setting would reopen the device for nothing.
-pub const FOLLOW_RATE_SUPPORTED: bool = !cfg!(target_os = "windows");
+/// Whether following the file's rate can change anything here, so the toggle is offered at all.
+pub const FOLLOW_RATE_SUPPORTED: bool = output::FOLLOW_RATE_SUPPORTED;
 
 /// Open the output at each track's own sample rate, from the next track on.
 pub fn player_set_follow_rate(ctx: &PlaybackContext, on: bool) {
@@ -519,9 +527,7 @@ pub fn player_make_bit_perfect(ctx: &PlaybackContext) -> u32 {
         actions.extend(s.build_set_volume_actions(volume));
         actions
     });
-    if FOLLOW_RATE_SUPPORTED {
-        player_set_follow_rate(ctx, true);
-    }
+    player_set_follow_rate(ctx, true);
     volume
 }
 

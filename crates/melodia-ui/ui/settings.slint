@@ -118,6 +118,10 @@ export global Settings {
     in property <bool> exclusive-supported;
     in-out property <int> output-mode-idx: 0;
     out property <bool> exclusive-chosen: root.exclusive-supported && root.output-mode-idx == 1;
+    // The engine's own answer: exclusive output always runs at the file's rate, and the toggle
+    // counts only where it can do anything.
+    out property <bool> rate-follows: root.exclusive-chosen
+        || (root.follow-rate-supported && root.output-follow-rate);
     callback output-mode-changed(int);
     in property <[string]> output-device-names;
     in-out property <int> output-device-idx: -1;

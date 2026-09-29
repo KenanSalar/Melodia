@@ -33,6 +33,19 @@ pub struct ThemePreference {
     pub last_static_accent: Option<String>,
 }
 
+impl ThemePreference {
+    /// `variant` and `accent` for one theme, keeping `previous_static` as its last real accent
+    /// while `accent` is Material You's, which is generated rather than picked.
+    pub fn new(variant: String, accent: String, previous_static: Option<String>) -> Self {
+        let last_static_accent = if accent == themes::MATERIAL_YOU_ACCENT_ID {
+            previous_static
+        } else {
+            Some(accent.clone())
+        };
+        Self { variant, accent, last_static_accent }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum SortDir {

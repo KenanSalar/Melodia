@@ -28,20 +28,12 @@ fn seed_preference(paths: &Paths) -> Result<(), AppError> {
         if settings.theme_preferences.contains_key(&settings.theme_id) {
             return false;
         }
-        let last_static_accent =
-            if settings.accent_color == melodia_core::themes::MATERIAL_YOU_ACCENT_ID {
-                None
-            } else {
-                Some(settings.accent_color.clone())
-            };
-        settings.theme_preferences.insert(
-            settings.theme_id.clone(),
-            ThemePreference {
-                variant: settings.theme_variant.clone(),
-                accent: settings.accent_color.clone(),
-                last_static_accent,
-            },
+        let preference = ThemePreference::new(
+            settings.theme_variant.clone(),
+            settings.accent_color.clone(),
+            None,
         );
+        settings.theme_preferences.insert(settings.theme_id.clone(), preference);
         true
     })
 }
@@ -51,12 +43,8 @@ fn seed_preference(paths: &Paths) -> Result<(), AppError> {
 /// `theme_preferences[theme_id]` so each theme remembers its last
 /// variant + accent across switches (Tauri's per-theme memory). The
 /// read-mutate-write window is serialized by `mutate_settings`, so a
-/// burst of accent / variant clicks can't lose updates.
-///
-/// `last_static_accent` is updated only when `accent_color` is *not*
-/// `MATERIAL_YOU_ACCENT_ID` — Material You picks shouldn't overwrite
-/// the user's last real accent, so disabling Color Style (or losing
-/// artwork) can fall back to it.
+/// burst of accent / variant clicks can't lose updates. A Material You pick
+/// keeps the theme's last real accent, as [`ThemePreference::new`] argues.
 pub fn set_appearance(
     state: &AppState,
     theme_id: String,
@@ -75,19 +63,9 @@ fn write_appearance(
 ) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |settings| {
         let preserved_static = settings.last_static_accent(&theme_id).map(str::to_owned);
-        let last_static_accent = if accent_color == melodia_core::themes::MATERIAL_YOU_ACCENT_ID {
-            preserved_static
-        } else {
-            Some(accent_color.clone())
-        };
-        settings.theme_preferences.insert(
-            theme_id.clone(),
-            ThemePreference {
-                variant: theme_variant.clone(),
-                accent: accent_color.clone(),
-                last_static_accent,
-            },
-        );
+        let preference =
+            ThemePreference::new(theme_variant.clone(), accent_color.clone(), preserved_static);
+        settings.theme_preferences.insert(theme_id.clone(), preference);
         settings.theme_id = theme_id;
         settings.theme_variant = theme_variant;
         settings.accent_color = accent_color;

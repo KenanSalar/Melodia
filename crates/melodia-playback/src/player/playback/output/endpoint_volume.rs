@@ -56,7 +56,10 @@ impl VolumeControl for EndpointControl {
     type Error = windows::core::Error;
 
     /// The device's level, as the percentage Windows shows for it over 100.
-    #[allow(unsafe_code, reason = "COM call to GetMasterVolumeLevelScalar, which takes no pointer.")]
+    #[allow(
+        unsafe_code,
+        reason = "COM call to GetMasterVolumeLevelScalar, which takes no pointer."
+    )]
     fn level(&self) -> windows::core::Result<f32> {
         // SAFETY: the interface is live, owned by the smart pointer, and nothing is handed over.
         unsafe { self.0.GetMasterVolumeLevelScalar() }

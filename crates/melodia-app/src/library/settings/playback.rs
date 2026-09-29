@@ -1,6 +1,7 @@
-//! Playback-section setters (gapless playback, play-button animation,
-//! resume-on-startup). Runtime side effects are applied synchronously by
-//! the matching UI callbacks; these helpers only commit the disk write.
+//! Setters for the Playback tab's Playback and Output cards, plus the persisted
+//! playback speed. Each only commits the disk write: the matching UI callback
+//! applies the runtime side, synchronously for a toggle and on the blocking pool
+//! where it has to wait on the output device.
 
 use crate::library::playback::FOLLOW_RATE_SUPPORTED;
 use crate::services;

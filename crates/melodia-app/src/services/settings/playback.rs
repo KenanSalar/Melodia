@@ -164,12 +164,11 @@ impl OutputFlags {
     }
 
     pub fn output_choice(&self) -> OutputChoice {
-        let drive = if self.output_polling { Drive::Polling } else { Drive::Events };
         let period = Duration::from_millis(u64::from(self.output_period_ms));
         OutputChoice {
             mode: self.output_mode.into(),
             device: self.output_device.clone(),
-            tuning: ExclusiveTuning::new(period, drive),
+            tuning: ExclusiveTuning::new(period, Drive::from_polling(self.output_polling)),
             hardware_volume: self.output_hardware_volume,
         }
     }

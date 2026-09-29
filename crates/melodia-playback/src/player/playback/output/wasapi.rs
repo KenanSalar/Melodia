@@ -44,7 +44,9 @@ use super::claim::ClaimError;
 use super::device::Feed;
 use super::encode::{self, DeviceFormat};
 use super::endpoint_volume::{self, EndpointVolume};
-use super::{Drive, ExclusiveRequest, Negotiated, OutputDevice, OutputFormat, mmcss};
+use super::{
+    Drive, ExclusiveRequest, Negotiated, OutputDevice, OutputFormat, hardware_volume, mmcss,
+};
 
 pub(super) const SUPPORTED: bool = true;
 
@@ -63,8 +65,6 @@ const EVENT_WAIT_MS: u32 = 200;
 /// Periods a polled buffer holds, which is how late a timer wake may be before an underrun.
 /// Event mode has none of this slack: its buffer is one period.
 const POLLED_PERIODS: i64 = 4;
-
-const THREAD_NAME: &str = "wasapi-out";
 
 /// What the device enumerator answers for an id it has no endpoint for.
 const ENDPOINT_NOT_FOUND: i32 = windows::core::HRESULT::from_win32(ERROR_NOT_FOUND).0;
@@ -133,7 +133,7 @@ pub(super) fn open(
         let feed = feed.clone();
         let stop = Arc::clone(&stop);
         std::thread::Builder::new()
-            .name(THREAD_NAME.to_owned())
+            .name("wasapi-out".to_owned())
             .spawn(move || run(&request, &feed, &stop, &answer_tx))
             .map_err(|e| ClaimError::io("Failed to start the exclusive output thread", e))?
     };
@@ -190,7 +190,9 @@ fn claim(request: &ExclusiveRequest, feed: &Feed) -> Result<(Session, Negotiated
     // Before the start, so the first sample already plays at the level and a start that fails
     // still puts the device's own back.
     if request.hardware_volume {
-        session.volume = hardware_volume(&endpoint, feed.volume.load());
+        let taken =
+            endpoint_volume::take(&endpoint.handle, &endpoint.device.id, feed.volume.load());
+        session.volume = hardware_volume::or_software(&endpoint.device.name, taken);
     }
     feed.pull.lock().reshape(session.shape);
     session
@@ -211,19 +213,6 @@ fn claim(request: &ExclusiveRequest, feed: &Feed) -> Result<(Session, Negotiated
         period: u32::try_from(session.period_frames).ok(),
     };
     Ok((session, negotiated))
-}
-
-/// The endpoint's volume control in hardware, set to `volume`, or `None` where it has none or
-/// won't hand it over. Either way the claim goes ahead, with the voices carrying the level.
-fn hardware_volume(endpoint: &Endpoint, volume: f64) -> Option<EndpointVolume> {
-    endpoint_volume::take(&endpoint.handle, &endpoint.device.id, volume).unwrap_or_else(|e| {
-        log::info!(
-            "audio: {} keeps the volume in software, its own control refused: {}",
-            endpoint.device.name,
-            describe(&e)
-        );
-        None
-    })
 }
 
 /// An active playback endpoint, as the picker lists it and as an open resolves it.
@@ -384,7 +373,8 @@ fn takes_exclusive(client: &AudioClient, wave: &WaveFormat) -> bool {
 /// drains it as 32-bit samples, so the track plays fast and garbled while every call succeeds.
 /// Refused here instead, the claim moves on to the 24-in-32 rung, which that driver plays right.
 fn respelled(client: &AudioClient, wave: &WaveFormat) -> Option<WaveFormat> {
-    let takes = |spelling: &WaveFormat| client.is_supported(spelling, &ShareMode::Exclusive).is_ok();
+    let takes =
+        |spelling: &WaveFormat| client.is_supported(spelling, &ShareMode::Exclusive).is_ok();
     if wave.get_nchannels() <= 2
         && short_header_defined(wave)
         && let Ok(short) = wave.to_waveformatex()
@@ -586,12 +576,8 @@ impl Session {
             encode::encode(pulled, self.format, &mut bytes);
             self.render.write_to_device(frames, &bytes, None)?;
             written += frames as u64;
-            // After the write, where the period's slack is.
             if let Some(volume) = &mut self.volume {
-                volume.follow(feed.volume.load())?;
-                if let Some(level) = volume.take_move()? {
-                    feed.external_volume.report(level);
-                }
+                volume.sync(feed)?;
             }
             // A clock that won't answer leaves the last reading standing: it is the ear's
             // position that suffers, not the audio, so it doesn't end the stream.

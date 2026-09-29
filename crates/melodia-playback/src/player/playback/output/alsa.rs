@@ -33,7 +33,9 @@ use super::alsa_volume::{self, CardVolume};
 use super::claim::ClaimError;
 use super::device::Feed;
 use super::encode::{self, DeviceFormat};
-use super::{ExclusiveRequest, Negotiated, OutputDevice, OutputFormat, realtime, reserve};
+use super::{
+    ExclusiveRequest, Negotiated, OutputDevice, OutputFormat, hardware_volume, realtime, reserve,
+};
 
 pub(super) const SUPPORTED: bool = true;
 
@@ -51,8 +53,6 @@ const RECOVER_ATTEMPTS: u32 = 3;
 
 /// How long a granted release waits for the writer to close the card before answering anyway.
 const RELEASE_WAIT: Duration = Duration::from_secs(1);
-
-const THREAD_NAME: &str = "alsa-out";
 
 /// How long an open waits for the sound server to finish closing a card it has just let go.
 /// Past it the card is someone else's, and the claim falls back as busy.
@@ -196,8 +196,12 @@ pub(super) fn open(
     let device_shape = Shape { channels: config.channels, rate: request.shape.rate };
     feed.pull.lock().reshape(device_shape);
     // Before the writer starts, so the first period already plays at the level.
-    let volume =
-        if request.hardware_volume { hardware_volume(&card, feed.volume.load()) } else { None };
+    let volume = if request.hardware_volume {
+        let taken = alsa_volume::take(&card, feed.volume.load());
+        hardware_volume::or_software(&card.device.name, taken)
+    } else {
+        None
+    };
     let hardware_volume = volume.is_some();
     let device_level = alsa_volume::read(&card);
     let lowered = volume.as_ref().and_then(CardVolume::lowered);
@@ -212,7 +216,7 @@ pub(super) fn open(
         volume,
     };
     let writer = std::thread::Builder::new()
-        .name(THREAD_NAME.to_owned())
+        .name("alsa-out".to_owned())
         .spawn(move || writer.run())
         .map_err(|e| ClaimError::io("Failed to start the exclusive output thread", e))?;
     // After the start, so a claim that failed leaves the slider where the user had it.
@@ -234,19 +238,6 @@ pub(super) fn open(
             period: u32::try_from(config.period_frames).ok(),
         },
         claim: Some(claim),
-    })
-}
-
-/// The card's volume element, set to `volume`, or `None` where it has none a claim can trust or
-/// won't hand it over. Either way the claim goes ahead, with the voices carrying the level.
-fn hardware_volume(card: &Card, volume: f64) -> Option<CardVolume> {
-    alsa_volume::take(card, volume).unwrap_or_else(|e| {
-        log::info!(
-            "audio: {} keeps the volume in software, its own control refused: {}",
-            card.device.name,
-            describe(&e)
-        );
-        None
     })
 }
 
@@ -486,12 +477,8 @@ impl Writer {
             self.feed.fill(&mut block);
             encode::encode(&block, self.format, &mut bytes);
             write_all(&self.pcm, &io, &bytes, frame_bytes, &self.feed)?;
-            // After the write, where the period's slack is.
             if let Some(volume) = &mut self.volume {
-                volume.follow(self.feed.volume.load())?;
-                if let Some(level) = volume.take_move()? {
-                    self.feed.external_volume.report(level);
-                }
+                volume.sync(&self.feed)?;
             }
             self.report_lead();
         }

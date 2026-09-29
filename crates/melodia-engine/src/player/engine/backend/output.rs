@@ -10,16 +10,17 @@
 //! **An exclusive claim is held through a pause and given back on stop**, so a stopped player
 //! never keeps other applications off the card.
 
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, MutexGuard};
 use std::time::Duration;
 
-use melodia_audio::player::source::audio::{Shape, SourceFormat};
+use melodia_audio::player::source::audio::{AudioSource, Shape, SourceFormat};
 use melodia_core::error::{AppError, describe};
 use melodia_playback::player::playback::decks::Decks;
-use melodia_playback::player::playback::output::device::ExternalVolume;
+use melodia_playback::player::playback::output::device::{ExternalVolume, Lead};
 use melodia_playback::player::playback::output::{
     self, AudioOutput, ExclusiveRequest, ExclusiveTuning, Negotiated, OutputMode, OutputRequest,
+    OutputStatus,
 };
 use parking_lot::Mutex;
 
@@ -37,6 +38,42 @@ pub struct OutputChoice {
     pub hardware_volume: bool,
 }
 
+/// The device under the decks, and the cells read of it without its lock, which a reopen holds
+/// for as long as a device takes to open.
+#[derive(Default)]
+pub(super) struct EngineOutput {
+    /// `None` on the device-free rigs the tests build. Only ever locked under the decks lock,
+    /// which is the order `reopen_output` takes them in. `Arc` so the deferred half of a faded
+    /// stop can give an exclusive card back once the fade has played out.
+    pub(super) device: Arc<Mutex<Option<AudioOutput>>>,
+    /// Open the output at each track's own rate. Read only at a track boundary, never by the audio
+    /// thread.
+    follow_rate: AtomicBool,
+    /// Shared or exclusive, and which card. Read at a track boundary, never by the audio thread.
+    choice: Mutex<OutputChoice>,
+    /// How far the ear is behind the decks' clocks, measured by whichever stream is open.
+    pub(super) lead: Arc<Lead>,
+    /// Where a claim carrying the volume on the device reports the system moved it.
+    external_volume: Arc<ExternalVolume>,
+    /// Whether the output is parked, waiting on a disconnected device, or reopening: the health
+    /// checks ask on every tick, from a runtime worker.
+    status: Arc<OutputStatus>,
+}
+
+impl EngineOutput {
+    /// `output`, with the cells it publishes for every stream it opens.
+    pub(super) fn over(output: AudioOutput) -> Self {
+        Self {
+            lead: output.lead(),
+            external_volume: output.external_volume(),
+            status: output.status(),
+            device: Arc::new(Mutex::new(Some(output))),
+            follow_rate: AtomicBool::new(false),
+            choice: Mutex::default(),
+        }
+    }
+}
+
 impl PlaybackEngine {
     /// Reopen the output on what the last stream was asked for, and carry on from where the
     /// decks are. `Ok(None)` while the output is parked, which nothing should reopen.
@@ -50,7 +87,7 @@ impl PlaybackEngine {
     /// [`AppError::Player`] when there is no output to reopen, or the device refuses to open.
     pub fn reopen_output(&self) -> Result<Option<Negotiated>, AppError> {
         let decks = self.lock_decks();
-        let mut output = self.output.lock();
+        let mut output = self.output.device.lock();
         let output = output
             .as_mut()
             .ok_or_else(|| AppError::Player("There is no audio output to reopen".to_owned()))?;
@@ -66,53 +103,74 @@ impl PlaybackEngine {
     /// reopened by a track starting while the monitor still runs. Parked on the way, so the stall
     /// watch doesn't take the missing stream for a lost one while the process exits.
     pub fn close_output(&self) {
-        let closed = self.output.lock().take();
+        let closed = self.output.device.lock().take();
         if let Some(mut output) = closed {
             output.park();
         }
     }
 
+    /// Hand the user's `volume`, as an amplitude, to the output and answer the gain the voices
+    /// apply for it on the stream open now.
+    pub(super) fn route_volume(&self, volume: f64) -> f64 {
+        self.set_output_volume(volume);
+        self.voice_gain(volume)
+    }
+
+    /// [`Self::route_volume`] for a track starting fresh from `source`, reopening the output for it
+    /// in between: handed over first, so a claim opens with the device's own control already
+    /// there, and the gain read after, off whichever route the reopen landed on.
+    pub(super) fn prepare_output_for(
+        &self,
+        decks: &MutexGuard<'_, Decks>,
+        source: &impl AudioSource,
+        volume: f64,
+    ) -> f64 {
+        self.set_output_volume(volume);
+        self.reopen_for_track(decks, source.shape(), source.format());
+        self.voice_gain(volume)
+    }
+
     /// Hand the user's volume, as an amplitude, to the output for a claim carrying it on the
     /// device's own control.
-    pub(super) fn set_output_volume(&self, volume: f64) {
-        if let Some(output) = self.output.lock().as_ref() {
+    fn set_output_volume(&self, volume: f64) {
+        if let Some(output) = self.output.device.lock().as_ref() {
             output.set_volume(volume);
         }
     }
 
     /// The gain the voices apply for `volume` on the output as it is. `volume` itself with no
     /// output, which is the device-free rigs the tests build.
-    pub(super) fn voice_gain(&self, volume: f64) -> f64 {
-        self.output.lock().as_ref().map_or(volume, |output| output.voice_gain(volume))
+    fn voice_gain(&self, volume: f64) -> f64 {
+        self.output.device.lock().as_ref().map_or(volume, |output| output.voice_gain(volume))
     }
 
     /// Where the system moving the device's own volume control is reported, while a claim carries
     /// the volume there, for the player to follow. Lock-free, and the same cell across reopens.
     pub fn external_volume(&self) -> Arc<ExternalVolume> {
-        Arc::clone(&self.external_volume)
+        Arc::clone(&self.output.external_volume)
     }
 
     /// Whether the output was closed on purpose, so a stream that stopped beating is not a fault.
     /// Lock-free, so a health check never waits out a reopen.
     pub fn output_parked(&self) -> bool {
-        self.output_status.parked()
+        self.output.status.parked()
     }
 
     /// Whether the output stands in for a claim whose device wasn't connected, which is the only
     /// case [`Self::disconnected_device_returned`] has anything to look for. Lock-free.
     pub fn awaiting_disconnected_device(&self) -> bool {
-        self.output_status.awaiting_device()
+        self.output.status.awaiting_device()
     }
 
     /// Whether a reopen is holding the decks lock across a device open, for a poll that would
     /// rather skip a round than wait on it or read its silent gap as a stall. Lock-free.
     pub fn output_reopening(&self) -> bool {
-        self.output_status.reopening()
+        self.output.status.reopening()
     }
 
     /// What the device agreed to, or `None` while no stream is open.
     pub fn negotiated(&self) -> Option<Negotiated> {
-        self.output.lock().as_ref().and_then(AudioOutput::negotiated)
+        self.output.device.lock().as_ref().and_then(AudioOutput::negotiated)
     }
 
     /// Whether a claim that fell back because its device wasn't connected can find it listed
@@ -123,7 +181,7 @@ impl PlaybackEngine {
         if !self.awaiting_disconnected_device() {
             return false;
         }
-        let chosen = self.output_choice.lock().device.clone();
+        let chosen = self.output.choice.lock().device.clone();
         let listed = output::devices();
         match chosen {
             Some(id) => listed.iter().any(|device| device.id == id),
@@ -147,22 +205,25 @@ impl PlaybackEngine {
 
     /// Open the output at each track's own rate from the next track on, or go back to the
     /// device's own config. Lock-free; nothing reopens until a track boundary asks.
+    ///
+    /// Stays off where that changes nothing ([`output::FOLLOW_RATE_SUPPORTED`]), whatever a
+    /// settings file says: it would only reopen the output at every track and turn crossfade off.
     pub fn set_follow_rate(&self, on: bool) {
-        self.follow_rate.store(on, Ordering::Relaxed);
+        self.output.follow_rate.store(on && output::FOLLOW_RATE_SUPPORTED, Ordering::Relaxed);
     }
 
     /// Write `hold` of silence after each reopen onto a new rate, from the next one on. Blocking:
     /// it waits out any reopen in flight.
     pub fn set_resync_hold(&self, hold: Duration) {
-        if let Some(output) = self.output.lock().as_mut() {
+        if let Some(output) = self.output.device.lock().as_mut() {
             output.set_resync_hold(hold);
         }
     }
 
     /// Whether the output is reopened to each track's rate, which exclusive output always is.
     pub(super) fn follows_rate(&self) -> bool {
-        self.follow_rate.load(Ordering::Relaxed)
-            || self.output_choice.lock().mode == OutputMode::Exclusive
+        self.output.follow_rate.load(Ordering::Relaxed)
+            || self.output.choice.lock().mode == OutputMode::Exclusive
     }
 
     /// Take the card for ourselves or give it back, now rather than at the next track.
@@ -172,14 +233,14 @@ impl PlaybackEngine {
     /// device, which is what hands the card back to everything else. Blocking: it opens a device.
     pub fn set_output_choice(&self, choice: OutputChoice) {
         let exclusive = choice.mode == OutputMode::Exclusive;
-        *self.output_choice.lock() = choice;
+        *self.output.choice.lock() = choice;
         let decks = self.lock_decks();
         let wanted = match decks.active().voice.playing() {
             Some(playing) => Some(self.wanted_request(playing.shape, playing.format)),
             None if exclusive => None,
             None => Some(OutputRequest::default()),
         };
-        let mut output = self.output.lock();
+        let mut output = self.output.device.lock();
         let Some(output) = output.as_mut() else {
             return;
         };
@@ -199,7 +260,7 @@ impl PlaybackEngine {
 
     /// What the output should be asked for while a source in `shape` and `format` plays.
     fn wanted_request(&self, shape: Shape, format: SourceFormat) -> OutputRequest {
-        let choice = self.output_choice.lock();
+        let choice = self.output.choice.lock();
         match choice.mode {
             OutputMode::Exclusive => OutputRequest::Exclusive(ExclusiveRequest {
                 device: choice.device.clone(),
@@ -209,7 +270,7 @@ impl PlaybackEngine {
                 hardware_volume: choice.hardware_volume,
             }),
             OutputMode::Shared => OutputRequest::Shared {
-                rate: self.follow_rate.load(Ordering::Relaxed).then_some(shape.rate),
+                rate: self.output.follow_rate.load(Ordering::Relaxed).then_some(shape.rate),
             },
         }
     }
@@ -218,7 +279,7 @@ impl PlaybackEngine {
     /// Always true with no output, which is the device-free rigs the tests build.
     pub(super) fn plays_without_reopen(&self, shape: Shape, format: SourceFormat) -> bool {
         let wanted = self.wanted_request(shape, format);
-        self.output.lock().as_ref().is_none_or(|output| output.serves(&wanted))
+        self.output.device.lock().as_ref().is_none_or(|output| output.serves(&wanted))
     }
 
     /// Reopen the output for a track starting fresh in `shape` and `format`.
@@ -236,14 +297,9 @@ impl PlaybackEngine {
     /// Takes the decks guard as proof it is held: this runs inside a transport op, between its
     /// decode and its append. A failure is logged and playback carries on over whatever
     /// `AudioOutput::reopen` fell back to.
-    pub(super) fn reopen_for_track(
-        &self,
-        decks: &MutexGuard<'_, Decks>,
-        shape: Shape,
-        format: SourceFormat,
-    ) {
+    fn reopen_for_track(&self, decks: &MutexGuard<'_, Decks>, shape: Shape, format: SourceFormat) {
         let wanted = self.wanted_request(shape, format);
-        let mut output = self.output.lock();
+        let mut output = self.output.device.lock();
         let Some(output) = output.as_mut() else {
             return;
         };

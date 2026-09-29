@@ -1,15 +1,14 @@
 import { Settings } from "../../settings.slint";
 import { SettingsPage } from "../../globals/settings-page.slint";
 import { Visualizer } from "../../globals/audio.slint";
-import { Theme } from "../../theme.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
 import { SectionDivider } from "../../components/settings/section-divider.slint";
 import { SettingRow } from "../../components/settings/setting-row.slint";
 import { SettingRowStacked } from "../../components/settings/setting-row-stacked.slint";
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 import { ChipGroup } from "../../components/settings/chip-group.slint";
+import { SettingSlider } from "../../components/settings/setting-slider.slint";
 import { VizStylePresets } from "../../components/now-playing/flyout-presets.slint";
-import { SliderTrack } from "../../components/slider-track.slint";
 
 // Three plain rows, plus two clusters whose sub-rows mount only while their
 // toggle is on: crossfade (duration slider + three sub-toggles) and the
@@ -86,13 +85,10 @@ export component PlaybackSection inherits Rectangle {
     // An `if` rather than `visible`, which would still claim the layout slot.
     property <bool> show-viz-style: root.show-visualizer && Visualizer.enabled;
 
-    // Exclusive output always follows the rate, whatever the toggle says.
-    property <bool> rate-follows: Settings.output-follow-rate || Settings.exclusive-chosen;
-
     // Same reason as the style row above. Following the rate turns crossfade off in the engine,
     // so its details go with it.
     property <bool> show-crossfade-details: root.show-crossfade && Settings.crossfade-enabled
-        && !root.rate-follows;
+        && !Settings.rate-follows;
 
     out property <bool> has-matches:
         show-gapless || show-anim || show-resume || show-crossfade || show-visualizer;
@@ -119,8 +115,8 @@ export component PlaybackSection inherits Rectangle {
         if root.show-crossfade: SettingRow {
             icon: "swap_horiz";
             label: root.crossfade-label;
-            description: root.rate-follows ? root.crossfade-off-desc : root.crossfade-desc;
-            disabled: root.rate-follows;
+            description: Settings.rate-follows ? root.crossfade-off-desc : root.crossfade-desc;
+            disabled: Settings.rate-follows;
             ToggleSwitch {
                 checked <=> Settings.crossfade-enabled;
                 toggled(v) => { Settings.crossfade-enabled-changed(v); }
@@ -131,30 +127,13 @@ export component PlaybackSection inherits Rectangle {
             icon: "history";
             label: root.xf-duration-label;
             description: root.xf-duration-desc;
-            HorizontalLayout {
-                spacing: Theme.pad-md;
-                alignment: stretch;
-                VerticalLayout {
-                    alignment: center;
-                    horizontal-stretch: 1;
-                    SliderTrack {
-                        value: root.secs-to-frac(Settings.crossfade-duration-secs);
-                        seam-mask-color: SettingsPage.card-fill;
-                        // Live during the drag, persist on release.
-                        changed(v) => { Settings.crossfade-duration-changed(root.frac-to-secs(v)); }
-                        committed(v) => { Settings.crossfade-duration-committed(root.frac-to-secs(v)); }
-                    }
-                }
-                VerticalLayout {
-                    alignment: center;
-                    Text {
-                        text: @tr("{} s", round(Settings.crossfade-duration-secs * 10) / 10);
-                        color: Theme.subtext0;
-                        font-size: Theme.font-size-sm;
-                        min-width: 48px;
-                        horizontal-alignment: right;
-                    }
-                }
+            SettingSlider {
+                value: root.secs-to-frac(Settings.crossfade-duration-secs);
+                readout: @tr("{} s", round(Settings.crossfade-duration-secs * 10) / 10);
+                readout-width: 48px;
+                // Live during the drag, persist on release.
+                changed(v) => { Settings.crossfade-duration-changed(root.frac-to-secs(v)); }
+                committed(v) => { Settings.crossfade-duration-committed(root.frac-to-secs(v)); }
             }
         }
 

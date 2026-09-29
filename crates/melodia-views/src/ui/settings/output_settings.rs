@@ -1,5 +1,7 @@
-//! The Output card's exclusive pickers: shared or exclusive, which card a claim takes, how its
-//! writer paces the card, and whether the card's own control carries the volume.
+//! The Output card's settings: following the file's rate and the silence a rate change writes
+//! first, then the exclusive pickers (shared or exclusive, which card a claim takes, how its writer
+//! paces the card, and whether the card's own control carries the volume). The card's live
+//! readout is [`super::signal_path`]'s.
 //!
 //! **A pick is applied on the blocking pool, never here**: claiming a card or handing it back
 //! opens a device. Every picker changes the one choice, so each writes a synchronous shadow and
@@ -13,13 +15,14 @@ use std::time::Duration;
 use parking_lot::Mutex;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 
-use crate::ui::settings_bind::read_or_default;
+use crate::ui::settings_bind::{read_or_default, toggle_binding};
 use crate::ui::shell::tray_bridge;
 use melodia_app::library;
+use melodia_app::services::settings::OutputFlags;
 use melodia_app::state::AppState;
 use melodia_engine::player::engine::backend::OutputChoice;
 use melodia_playback::player::playback::output::{
-    Drive, ExclusiveTuning, OutputDevice, OutputMode,
+    self, Drive, ExclusiveTuning, OutputDevice, OutputMode,
 };
 use melodia_ui::{AppWindow, Settings};
 
@@ -45,14 +48,47 @@ type Shadow = Arc<Mutex<Picked>>;
 
 pub fn install(ui: &AppWindow, state: &AppState) {
     let g = ui.global::<Settings>();
+    g.set_follow_rate_supported(library::playback::FOLLOW_RATE_SUPPORTED);
     g.set_exclusive_supported(library::playback::EXCLUSIVE_SUPPORTED);
     g.set_polling_supported(library::playback::POLLING_SUPPORTED);
     g.set_hardware_volume_supported(library::playback::HARDWARE_VOLUME_SUPPORTED);
-    if !library::playback::EXCLUSIVE_SUPPORTED {
-        return;
-    }
 
-    let choice = read_or_default(state, "output mode").output.output_choice();
+    let flags = read_or_default(state, "output").output;
+    install_rate_rows(ui, state, &flags);
+    if library::playback::EXCLUSIVE_SUPPORTED {
+        install_pickers(ui, state, flags.output_choice());
+    }
+}
+
+/// Following the file's rate and the resync hold, which apply whether or not a card can be claimed.
+fn install_rate_rows(ui: &AppWindow, state: &AppState, flags: &OutputFlags) {
+    let g = ui.global::<Settings>();
+    // The range first, so the value seeded after it lands inside the slider's track.
+    g.set_output_resync_max_ms(millis(output::MAX_RESYNC_HOLD));
+    g.set_output_follow_rate(flags.output_follow_rate);
+    g.set_output_resync_ms(millis(flags.resync_hold().min(output::MAX_RESYNC_HOLD)));
+
+    g.on_output_follow_rate_changed(toggle_binding(
+        state,
+        "persist output_follow_rate",
+        library::playback::player_set_follow_rate,
+        library::settings::set_output_follow_rate,
+    ));
+
+    // Engine and disk together, on the pool: setting the hold waits out any reopen in flight.
+    let state = state.clone();
+    g.on_output_resync_committed(move |ms| {
+        let ms = u32::try_from(ms).unwrap_or(0);
+        let ctx = state.playback_ctx();
+        state.persist_blocking("persist output_resync_ms", move |s| {
+            library::playback::player_set_resync_hold(&ctx, Duration::from_millis(u64::from(ms)));
+            library::settings::set_output_resync_ms(s, ms)
+        });
+    });
+}
+
+fn install_pickers(ui: &AppWindow, state: &AppState, choice: OutputChoice) {
+    let g = ui.global::<Settings>();
     g.set_output_mode_idx(mode_index(choice.mode));
     g.set_output_period_idx(period_index(choice.tuning.period));
     g.set_output_polling(choice.tuning.drive == Drive::Polling);
@@ -69,49 +105,38 @@ pub fn install(ui: &AppWindow, state: &AppState) {
     let weak = ui.as_weak();
     g.on_list_output_devices(move || list_devices(weak.clone(), &state_list, &shadow_list));
 
-    let state_mode = state.clone();
-    let shadow_mode = Arc::clone(&shadow);
-    g.on_output_mode_changed(move |idx| {
-        shadow_mode.lock().choice.mode = mode_from_index(idx);
-        apply(&state_mode, &shadow_mode);
-    });
-
-    let state_device = state.clone();
-    let shadow_device = Arc::clone(&shadow);
-    g.on_output_device_changed(move |idx| {
-        {
-            let mut picked = shadow_device.lock();
-            let chosen = usize::try_from(idx).ok().and_then(|i| picked.devices.get(i));
-            picked.choice.device = chosen.map(|device| device.id.clone());
-        }
-        apply(&state_device, &shadow_device);
-    });
-
-    let state_period = state.clone();
-    let shadow_period = Arc::clone(&shadow);
-    g.on_output_period_changed(move |idx| {
-        let Some(&period) = usize::try_from(idx).ok().and_then(|i| PERIOD_PRESETS.get(i)) else {
-            return;
-        };
-        {
-            let mut picked = shadow_period.lock();
+    g.on_output_mode_changed(pick(state, &shadow, |picked: &mut Picked, idx: i32| {
+        picked.choice.mode = mode_from_index(idx);
+    }));
+    g.on_output_device_changed(pick(state, &shadow, |picked: &mut Picked, idx: i32| {
+        let chosen = usize::try_from(idx).ok().and_then(|i| picked.devices.get(i));
+        picked.choice.device = chosen.map(|device| device.id.clone());
+    }));
+    g.on_output_period_changed(pick(state, &shadow, |picked: &mut Picked, idx: i32| {
+        if let Some(&period) = usize::try_from(idx).ok().and_then(|i| PERIOD_PRESETS.get(i)) {
             picked.choice.tuning = ExclusiveTuning::new(period, picked.choice.tuning.drive);
         }
-        apply(&state_period, &shadow_period);
-    });
+    }));
+    g.on_output_polling_changed(pick(state, &shadow, |picked: &mut Picked, on: bool| {
+        picked.choice.tuning.drive = Drive::from_polling(on);
+    }));
+    g.on_output_hardware_volume_changed(pick(state, &shadow, |picked: &mut Picked, on: bool| {
+        picked.choice.hardware_volume = on;
+    }));
+}
 
-    let state_polling = state.clone();
-    let shadow_polling = Arc::clone(&shadow);
-    g.on_output_polling_changed(move |on| {
-        shadow_polling.lock().choice.tuning.drive = if on { Drive::Polling } else { Drive::Events };
-        apply(&state_polling, &shadow_polling);
-    });
-
-    let state_volume = state.clone();
-    g.on_output_hardware_volume_changed(move |on| {
-        shadow.lock().choice.hardware_volume = on;
-        apply(&state_volume, &shadow);
-    });
+/// A picker's callback: `edit` the shadow with what was picked, then [`apply`] it.
+fn pick<T>(
+    state: &AppState,
+    shadow: &Shadow,
+    edit: impl Fn(&mut Picked, T) + 'static,
+) -> impl Fn(T) + 'static {
+    let state = state.clone();
+    let shadow = Arc::clone(shadow);
+    move |value| {
+        edit(&mut shadow.lock(), value);
+        apply(&state, &shadow);
+    }
 }
 
 /// Apply the shadow's choice to the engine and persist it, off the UI thread.
@@ -198,6 +223,11 @@ fn mode_from_index(idx: i32) -> OutputMode {
         1 => OutputMode::Exclusive,
         _ => OutputMode::Shared,
     }
+}
+
+/// `span` as the whole milliseconds a slider reads. The spans here are a second at most.
+fn millis(span: Duration) -> f32 {
+    f32::from(u16::try_from(span.as_millis()).unwrap_or(u16::MAX))
 }
 
 /// The chip showing `period`, or none where a hand-edited period matches no preset.

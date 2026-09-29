@@ -147,6 +147,13 @@ pub enum Drive {
     Polling,
 }
 
+impl Drive {
+    /// The drive a polling toggle stands for.
+    pub fn from_polling(polling: bool) -> Self {
+        if polling { Self::Polling } else { Self::Events }
+    }
+}
+
 impl Default for OutputRequest {
     fn default() -> Self {
         Self::Shared { rate: None }
@@ -169,6 +176,10 @@ pub const POLLING_SUPPORTED: bool = exclusive::POLLING;
 
 /// Whether an exclusive claim can carry the volume on the device's own control.
 pub const HARDWARE_VOLUME_SUPPORTED: bool = exclusive::HARDWARE_VOLUME;
+
+/// Whether opening a shared stream at the file's rate can change what the device runs at. Windows
+/// shared mode converts every stream to the mix format, so there it would reopen for nothing.
+pub const FOLLOW_RATE_SUPPORTED: bool = !cfg!(target_os = "windows");
 
 /// Every device an exclusive claim can be aimed at, empty where there is no exclusive backend.
 /// Blocking: it asks every device.
@@ -362,9 +373,7 @@ impl AudioOutput {
     ///
     /// [`AppError::Player`] when there is no device, or no config it offers can be opened.
     pub fn open(voices: usize, health: Arc<AudioStreamHealth>) -> Result<Self, AppError> {
-        let host = cpal::default_host();
-        let target = device::default_target(&host)?;
-        let mut output = Self::unopened(host, &target, voices, health)?;
+        let (mut output, target) = Self::unopened(voices, health)?;
         output.stream = Some(Stream::Shared(device::open(&target, &output.feed, None)?));
         Ok(output)
     }
@@ -377,21 +386,17 @@ impl AudioOutput {
     ///
     /// [`AppError::Player`] when there is no device, as for [`Self::open`].
     pub fn open_parked(voices: usize, health: Arc<AudioStreamHealth>) -> Result<Self, AppError> {
-        let host = cpal::default_host();
-        let target = device::default_target(&host)?;
-        let mut output = Self::unopened(host, &target, voices, health)?;
+        let (mut output, _) = Self::unopened(voices, health)?;
         output.park();
         Ok(output)
     }
 
-    fn unopened(
-        host: cpal::Host,
-        target: &Target,
-        voices: usize,
-        health: Arc<AudioStreamHealth>,
-    ) -> Result<Self, AppError> {
+    /// `voices` many built against the default device, which comes back beside them to open.
+    fn unopened(voices: usize, health: Arc<AudioStreamHealth>) -> Result<(Self, Target), AppError> {
+        let host = cpal::default_host();
+        let target = device::default_target(&host)?;
         let (mixer, pull) = mixer::pair(voices, target.default_shape()?);
-        Ok(Self {
+        let output = Self {
             stream: None,
             request: OutputRequest::default(),
             status: Arc::default(),
@@ -400,7 +405,8 @@ impl AudioOutput {
             host,
             feed: Feed::new(pull, health),
             mixer,
-        })
+        };
+        Ok((output, target))
     }
 
     /// Write `hold` of silence after a reopen onto a new rate, held under [`MAX_RESYNC_HOLD`].

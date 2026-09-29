@@ -81,8 +81,8 @@ fn read_level(card: &Card) -> Result<Option<DeviceLevel>, alsa::Error> {
     let Some(control) = MixerControl::open(card)? else { return Ok(None) };
     let element = control.element()?;
     let level = control.scale.level_of(control.reading(&element)?);
-    let muted = element.has_playback_switch()
-        && element.get_playback_switch(SelemChannelId::mono())? == 0;
+    let muted =
+        element.has_playback_switch() && element.get_playback_switch(SelemChannelId::mono())? == 0;
     Ok(Some(DeviceLevel::new(level, muted)))
 }
 

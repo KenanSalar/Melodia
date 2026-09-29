@@ -26,6 +26,8 @@ use parking_lot::Mutex;
 
 use melodia_core::error::describe;
 
+use super::device::Feed;
+
 /// How often a moving volume reaches the device. Each set is a call into the system, made on the
 /// thread with a period to refill, so a slider drag mustn't cost one per period.
 const FOLLOW_INTERVAL: Duration = Duration::from_millis(20);
@@ -109,17 +111,28 @@ impl<C: VolumeControl> HardwareVolume<C> {
         self.lowered
     }
 
+    /// A writer's turn, once per period after its write, where the period's slack is: follow the
+    /// slider, then hand back a move made outside Melodia.
+    ///
+    /// # Errors
+    ///
+    /// The device refusing to take or report the level, which the writer treats like a write it
+    /// refused.
+    pub(super) fn sync(&mut self, feed: &Feed) -> Result<(), C::Error> {
+        self.follow(feed.volume.load())?;
+        if let Some(level) = self.take_move()? {
+            feed.external_volume.report(level);
+        }
+        Ok(())
+    }
+
     /// Set the device to `volume` where it has moved, at most once per [`FOLLOW_INTERVAL`]. A move
     /// held back lands on a later call, so it only ever arrives late.
     ///
     /// **A level the device already sits at is not written.** A system move handed back returns as
     /// the slider's rounding of it, and writing that would undo any move the system made meanwhile,
     /// which the read-back would then take as Melodia's own and never report.
-    ///
-    /// # Errors
-    ///
-    /// The device refusing the level, which the caller treats like a write it refused.
-    pub(super) fn follow(&mut self, volume: f64) -> Result<(), C::Error> {
+    fn follow(&mut self, volume: f64) -> Result<(), C::Error> {
         self.follow_at(volume, Instant::now())
     }
 
@@ -140,11 +153,7 @@ impl<C: VolumeControl> HardwareVolume<C> {
 
     /// The level something outside Melodia moved the device to since the last call, looked for at
     /// most once per [`WATCH_INTERVAL`].
-    ///
-    /// # Errors
-    ///
-    /// The device refusing to say, which the caller treats like a write it refused.
-    pub(super) fn take_move(&mut self) -> Result<Option<f64>, C::Error> {
+    fn take_move(&mut self) -> Result<Option<f64>, C::Error> {
         self.take_move_at(Instant::now())
     }
 
@@ -180,9 +189,26 @@ impl<C: VolumeControl> Drop for HardwareVolume<C> {
                 remember_restored(&self.id, restored);
             }
             // Kept for the next claim of the device: one that has gone can't be set either.
-            Err(e) => log::debug!("audio: the device's own volume wasn't put back: {}", describe(&e)),
+            Err(e) => {
+                log::debug!("audio: the device's own volume wasn't put back: {}", describe(&e));
+            }
         }
     }
+}
+
+/// `taken`, or `None` where `device_name`'s own control refused, which is logged: the claim goes
+/// ahead either way, with the voices carrying the level.
+pub(super) fn or_software<C: VolumeControl>(
+    device_name: &str,
+    taken: Result<Option<HardwareVolume<C>>, impl std::error::Error>,
+) -> Option<HardwareVolume<C>> {
+    taken.unwrap_or_else(|e| {
+        log::info!(
+            "audio: {device_name} keeps the volume in software, its own control refused: {}",
+            describe(&e)
+        );
+        None
+    })
 }
 
 /// Note `level` as the device's original, unless a claim that couldn't put one back already did.

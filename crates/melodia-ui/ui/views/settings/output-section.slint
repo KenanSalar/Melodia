@@ -10,7 +10,7 @@ import { SettingRowStacked } from "../../components/settings/setting-row-stacked
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 import { ChipGroup } from "../../components/settings/chip-group.slint";
 import { Dropdown } from "../../components/settings/dropdown.slint";
-import { SliderTrack } from "../../components/slider-track.slint";
+import { SettingSlider } from "../../components/settings/setting-slider.slint";
 import { GradeDot } from "../../components/grade-dot.slint";
 
 // One step of the signal path: a dot in its grade's colour, what the step is, and what it did.
@@ -104,16 +104,18 @@ export component OutputSection inherits Rectangle {
     // Exclusive output always runs at the file's rate, so the toggle has nothing to add there.
     property <bool> show-follow-rate: Settings.follow-rate-supported && !Settings.exclusive-chosen
         && row-visible(follow-rate-label, follow-rate-desc);
-    // The hold falls only where the output changes rate, which it does under exclusive and while
-    // following the file's rate.
-    property <bool> show-resync: (Settings.exclusive-chosen
-            || (Settings.follow-rate-supported && Settings.output-follow-rate))
-        && row-visible(resync-label, resync-desc);
+    // The hold falls only where the output changes rate.
+    property <bool> show-resync: Settings.rate-follows && row-visible(resync-label, resync-desc);
     property <bool> show-signal-path: row-visible(signal-label, signal-desc);
 
+    // Whether any row above each exclusive row is shown, for the divider over it.
+    property <bool> any-above-period: root.show-mode || root.show-device;
+    property <bool> any-above-polling: root.any-above-period || root.show-period;
+    property <bool> any-above-hardware-volume: root.any-above-polling || root.show-polling;
+
     // What the rows above the signal path hand the divider under them.
-    property <bool> shows-exclusive-rows: root.show-mode || root.show-device || root.show-period
-        || root.show-polling || root.show-hardware-volume;
+    property <bool> shows-exclusive-rows: root.any-above-hardware-volume
+        || root.show-hardware-volume;
     property <bool> shows-rate-rows: root.show-follow-rate || root.show-resync;
 
     out property <bool> has-matches: shows-exclusive-rows || shows-rate-rows || show-signal-path;
@@ -126,7 +128,7 @@ export component OutputSection inherits Rectangle {
         || (SignalPathUi.volume-grade > 0
             && (SignalPathUi.muted || !SignalPathUi.volume-on-device))
         || (SignalPathUi.rate-grade > 0 && Settings.follow-rate-supported
-            && !Settings.exclusive-chosen && !Settings.output-follow-rate));
+            && !Settings.rate-follows));
 
     // Indexed by `SignalPathUi.fallback-reason`; the order is Rust's, see that property.
     property <string> fallback-text: SignalPathUi.fallback-reason == 0 ? @tr("the device is in use by another app")
@@ -194,7 +196,7 @@ export component OutputSection inherits Rectangle {
             }
         }
 
-        if (root.show-mode || root.show-device) && root.show-period: SectionDivider {}
+        if root.any-above-period && root.show-period: SectionDivider {}
 
         if root.show-period: SettingRowStacked {
             icon: "history";
@@ -221,7 +223,7 @@ export component OutputSection inherits Rectangle {
             }
         }
 
-        if (root.show-mode || root.show-device || root.show-period) && root.show-polling: SectionDivider {}
+        if root.any-above-polling && root.show-polling: SectionDivider {}
 
         if root.show-polling: SettingRow {
             icon: "refresh";
@@ -233,8 +235,7 @@ export component OutputSection inherits Rectangle {
             }
         }
 
-        if (root.show-mode || root.show-device || root.show-period || root.show-polling)
-            && root.show-hardware-volume: SectionDivider {}
+        if root.any-above-hardware-volume && root.show-hardware-volume: SectionDivider {}
 
         if root.show-hardware-volume: SettingRow {
             icon: "volume_down";
@@ -264,29 +265,12 @@ export component OutputSection inherits Rectangle {
             icon: "volume_off";
             label: root.resync-label;
             description: root.resync-desc;
-            HorizontalLayout {
-                spacing: Theme.pad-md;
-                alignment: stretch;
-                VerticalLayout {
-                    alignment: center;
-                    horizontal-stretch: 1;
-                    SliderTrack {
-                        value: Settings.output-resync-ms / Settings.output-resync-max-ms;
-                        seam-mask-color: SettingsPage.card-fill;
-                        changed(v) => { Settings.output-resync-ms = root.resync-step(v); }
-                        committed(v) => { Settings.output-resync-committed(root.resync-step(v)); }
-                    }
-                }
-                VerticalLayout {
-                    alignment: center;
-                    Text {
-                        text: @tr("{} ms", Settings.output-resync-ms);
-                        color: Theme.subtext0;
-                        font-size: Theme.font-size-sm;
-                        min-width: 56px;
-                        horizontal-alignment: right;
-                    }
-                }
+            SettingSlider {
+                value: Settings.output-resync-ms / Settings.output-resync-max-ms;
+                readout: @tr("{} ms", Settings.output-resync-ms);
+                readout-width: 56px;
+                changed(v) => { Settings.output-resync-ms = root.resync-step(v); }
+                committed(v) => { Settings.output-resync-committed(root.resync-step(v)); }
             }
         }
 

@@ -1,0 +1,39 @@
+import { Theme } from "../../theme.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
+import { SliderTrack } from "../slider-track.slint";
+
+// A slider on a settings card with its value read out beside it. The host owns the mapping between
+// its setting and the track's 0..1, and splits the drag (`changed`) from the release (`committed`).
+export component SettingSlider inherits HorizontalLayout {
+    in property <float> value; // 0..1
+    in property <string> readout;
+    // Wide enough for the longest readout, so the track doesn't shift while it is dragged.
+    in property <length> readout-width;
+
+    callback changed(float /* 0..1 */);
+    callback committed(float /* 0..1 */);
+
+    spacing: Theme.pad-md;
+    alignment: stretch;
+
+    VerticalLayout {
+        alignment: center;
+        horizontal-stretch: 1;
+        SliderTrack {
+            value: root.value;
+            seam-mask-color: SettingsPage.card-fill;
+            changed(v) => { root.changed(v); }
+            committed(v) => { root.committed(v); }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        Text {
+            text: root.readout;
+            color: Theme.subtext0;
+            font-size: Theme.font-size-sm;
+            min-width: root.readout-width;
+            horizontal-alignment: right;
+        }
+    }
+}
