@@ -43,10 +43,23 @@ library's adapter traits require `unsafe` and this workspace denies it outside p
 
 Two things it bought beyond the bug. Owning the decode path means owning the codec registry, so
 adding a decoder is one registration call rather than a dependency's feature flag. Owning the output
-is most of what a bit-perfect mode needs, and `docs/plans/BIT_PERFECT.md` was largely a list of
+is most of what a bit-perfect mode needs, and the bit-perfect working doc was largely a list of
 workarounds for a mixer that is no longer in the way.
 
 It went in two phases on purpose. Decode first, shippable on its own, which collapsed the two majors
 and left the output layer small enough to understand completely before replacing it, rather than
 changing the decoder and the output in one release in the part of the app with the least visible
 failure modes.
+
+**Amendment, 2026-09-30:** the bit-perfect mode anticipated above has shipped on Linux and
+Windows, and the working doc it names was deleted when it did. The prediction held for the samples.
+Exclusive output, through ALSA's `hw:` devices on Linux and WASAPI's exclusive mode on Windows, is
+one more backend under the same mixer, and `output::encode` is the only place a sample becomes the
+bytes a device receives. Nothing above the output had to change for a file to reach the device
+untouched, which `crates/melodia/tests/bit_perfect.rs` holds by playing a file through the real
+engine and finding its PCM whole in what `encode` writes. It held less for the device itself, where
+the rest of the work was per platform: taking the device from the system, asking the Linux sound
+server for the card and handing it back, and carrying the volume on the device's own control. The
+cost is that each backend compiles only on its own platform, so a change to what they share has to
+pass CI's Linux and Windows jobs, no single build checking both. macOS has no backend, so the mode
+is not offered there.
