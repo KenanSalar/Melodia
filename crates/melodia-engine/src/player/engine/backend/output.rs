@@ -105,7 +105,7 @@ impl PlaybackEngine {
     }
 
     /// Whether a reopen is holding the decks lock across a device open, for a poll that would
-    /// rather skip a round than wait. Lock-free.
+    /// rather skip a round than wait on it or read its silent gap as a stall. Lock-free.
     pub fn output_reopening(&self) -> bool {
         self.output_status.reopening()
     }

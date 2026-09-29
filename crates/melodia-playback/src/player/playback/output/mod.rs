@@ -315,8 +315,8 @@ impl OutputStatus {
         self.awaiting_device.load(Ordering::Relaxed)
     }
 
-    /// Whether a reopen is under way, so a reader that only polls can skip a round rather than
-    /// wait out the device open behind the locks the reopen holds.
+    /// Whether a reopen is under way. No stream beats meanwhile, and anything else touching the
+    /// output waits out the device open behind the locks it holds, so a poll skips the round.
     pub fn reopening(&self) -> bool {
         self.reopening.load(Ordering::Relaxed)
     }

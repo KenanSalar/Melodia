@@ -143,7 +143,7 @@ impl MixerPull {
     /// A DAC mutes while its clock relocks to a new rate, so whatever plays first after a rate
     /// change is lost; held back, it is the silence that gets lost instead. Rounded up to whole
     /// [`LOCKSTEP_FRAMES`] steps.
-    pub fn hold(&mut self, frames: usize) {
+    fn hold(&mut self, frames: usize) {
         self.held = frames;
     }
 

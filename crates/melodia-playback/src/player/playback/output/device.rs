@@ -217,9 +217,9 @@ impl Feed {
     /// **The beat comes first and unconditionally**, silence included: a callback that has stopped
     /// being called is the one failure no host reports, and the beat is how it is seen.
     ///
-    /// `try_lock` because this is the audio thread. The one holder it can meet is a reopen
-    /// reshaping the puller, and that only happens once the stream it would be racing has been
-    /// dropped, so the silence arm is reachable in principle and inaudible in practice.
+    /// `try_lock` because this is the audio thread. Every reshape lands before a stream pulls, so
+    /// the one holder it can meet is its own reopen disarming the resync as it starts, where a
+    /// block of silence is lost in the reopen's own gap.
     pub(super) fn fill(&self, block: &mut [Sample]) {
         self.health.beat();
         match self.pull.try_lock() {

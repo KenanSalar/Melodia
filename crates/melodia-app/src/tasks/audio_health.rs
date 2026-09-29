@@ -129,8 +129,11 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
                 () = shutdown.cancelled() => break,
                 _ = device_ticker.tick() => {
                     let lost = health.take_device_lost();
-                    // A parked output has no stream to beat, which is the point of parking it.
-                    let stalled = !engine.output_parked() && stall.observe(health.blocks());
+                    // A parked output has no stream to beat, which is the point of parking it, and a
+                    // reopen has none until it lands: a recovery queued behind one could only redo it.
+                    let stalled = !engine.output_parked()
+                        && !engine.output_reopening()
+                        && stall.observe(health.blocks());
                     if stalled {
                         log::info!("audio: output stream stopped asking for samples");
                     }
