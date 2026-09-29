@@ -2,17 +2,8 @@
 //! style, match-unfocused, corner radius). Every *setter* persists through
 //! [`crate::services::settings::mutate_settings`] so a burst of clicks
 //! can't race over the read-mutate-write window.
-//!
-//! [`seed_theme_preference`] is the one exception and writes the whole file:
-//! it is a boot-time migration over settings the caller has already read, and
-//! `mutate_settings` writes unconditionally — which would turn a one-off into
-//! a rewrite of `settings.json` on every launch. Nothing else is writing at
-//! that point in the boot, so there is no window to serialise against.
 
-use crate::services::{
-    self,
-    settings::{SettingsData, ThemePreference},
-};
+use crate::services::{self, settings::ThemePreference};
 use crate::state::AppState;
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
@@ -26,35 +17,33 @@ use melodia_core::error::AppError;
 /// missing and falling back to defaults. Distinct from [`set_appearance`],
 /// which records a pick the user just made — this writes what an earlier build
 /// never did, and no-ops once it has.
-///
-/// Takes the settings the caller already read rather than re-reading them:
-/// `mutate_settings` writes unconditionally, which would turn a one-off
-/// migration into a full rewrite of `settings.json` on every launch.
-pub fn seed_theme_preference(state: &AppState, settings: SettingsData) -> Result<(), AppError> {
-    seed_preference(&state.paths, settings)
+pub fn seed_theme_preference(state: &AppState) -> Result<(), AppError> {
+    seed_preference(&state.paths)
 }
 
 /// [`seed_theme_preference`]'s body, narrowed to the one field of `AppState` it reaches so the
 /// no-op guard and the Material You arm can be driven without one.
-fn seed_preference(paths: &Paths, mut settings: SettingsData) -> Result<(), AppError> {
-    if settings.theme_preferences.contains_key(&settings.theme_id) {
-        return Ok(());
-    }
-    let last_static_accent =
-        if settings.accent_color == melodia_core::themes::MATERIAL_YOU_ACCENT_ID {
-            None
-        } else {
-            Some(settings.accent_color.clone())
-        };
-    settings.theme_preferences.insert(
-        settings.theme_id.clone(),
-        ThemePreference {
-            variant: settings.theme_variant.clone(),
-            accent: settings.accent_color.clone(),
-            last_static_accent,
-        },
-    );
-    services::settings::write_settings(paths, &settings)
+fn seed_preference(paths: &Paths) -> Result<(), AppError> {
+    services::settings::mutate_settings_if(paths, |settings| {
+        if settings.theme_preferences.contains_key(&settings.theme_id) {
+            return false;
+        }
+        let last_static_accent =
+            if settings.accent_color == melodia_core::themes::MATERIAL_YOU_ACCENT_ID {
+                None
+            } else {
+                Some(settings.accent_color.clone())
+            };
+        settings.theme_preferences.insert(
+            settings.theme_id.clone(),
+            ThemePreference {
+                variant: settings.theme_variant.clone(),
+                accent: settings.accent_color.clone(),
+                last_static_accent,
+            },
+        );
+        true
+    })
 }
 
 /// Persist the user's appearance picks (theme / variant / accent) into

@@ -36,37 +36,35 @@ fn rooted_at_accent(accent: &str) -> Result<(tempfile::TempDir, Paths), AppError
     })
 }
 
-/// The migration runs once and writes the whole file, so the guard is what stops a settled install
-/// rewriting `settings.json` on every launch — and, worse, writing back whatever snapshot the
-/// caller happened to be holding.
+/// The guard is what keeps the migration a backfill: an entry already there is what the user last
+/// picked for the theme, and rebuilding it from the top-level fields would overwrite that.
 #[test]
-fn seeding_over_an_entry_that_exists_writes_nothing() -> Result<(), AppError> {
-    let (_tmp, paths) = rooted_at_accent(STATIC_ACCENT)?;
-    let mut settings = services::settings::read_settings(&paths)?;
-    settings.theme_preferences.insert(
-        THEME.to_owned(),
-        ThemePreference {
-            variant: VARIANT.to_owned(),
-            accent: STATIC_ACCENT.to_owned(),
-            last_static_accent: Some(STATIC_ACCENT.to_owned()),
-        },
-    );
-    settings.accent_color = "mauve".to_owned();
+fn seeding_over_an_entry_that_exists_leaves_it_alone() -> Result<(), AppError> {
+    let (_tmp, paths) = seeded_root_with(|s| {
+        s.theme_id = THEME.to_owned();
+        s.theme_variant = VARIANT.to_owned();
+        s.accent_color = "mauve".to_owned();
+        s.theme_preferences.insert(
+            THEME.to_owned(),
+            ThemePreference {
+                variant: VARIANT.to_owned(),
+                accent: STATIC_ACCENT.to_owned(),
+                last_static_accent: Some(STATIC_ACCENT.to_owned()),
+            },
+        );
+    })?;
 
-    seed_preference(&paths, settings)?;
+    seed_preference(&paths)?;
 
-    let on_disk = services::settings::read_settings(&paths)?;
-    assert_eq!(on_disk.accent_color, STATIC_ACCENT, "the snapshot never reached the file");
-    assert!(on_disk.theme_preferences.is_empty(), "and neither did its entry");
+    assert_eq!(stored_preference(&paths)?.accent, STATIC_ACCENT);
     Ok(())
 }
 
 #[test]
 fn seeding_records_a_static_accent_as_the_one_to_fall_back_to() -> Result<(), AppError> {
     let (_tmp, paths) = rooted_at_accent(STATIC_ACCENT)?;
-    let settings = services::settings::read_settings(&paths)?;
 
-    seed_preference(&paths, settings)?;
+    seed_preference(&paths)?;
 
     assert_eq!(stored_preference(&paths)?.last_static_accent, Some(STATIC_ACCENT.to_owned()));
     Ok(())
@@ -77,9 +75,8 @@ fn seeding_records_a_static_accent_as_the_one_to_fall_back_to() -> Result<(), Ap
 #[test]
 fn seeding_a_material_you_accent_records_no_fallback() -> Result<(), AppError> {
     let (_tmp, paths) = rooted_at_accent(MATERIAL_YOU_ACCENT_ID)?;
-    let settings = services::settings::read_settings(&paths)?;
 
-    seed_preference(&paths, settings)?;
+    seed_preference(&paths)?;
 
     assert_eq!(stored_preference(&paths)?.last_static_accent, None);
     Ok(())
