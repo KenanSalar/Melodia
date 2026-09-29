@@ -379,13 +379,18 @@ fn set_channels(hw: &HwParams<'_>, source: ChannelCount) -> Result<ChannelCount,
 }
 
 fn set_format(hw: &HwParams<'_>, source: SourceFormat) -> Result<DeviceFormat, ClaimError> {
-    let (format, alsa) = DeviceFormat::ladder(source)
-        .iter()
-        .filter_map(|&format| alsa_format(format).map(|alsa| (format, alsa)))
+    let (format, alsa) = candidates(source)
         .find(|&(_, alsa)| hw.test_format(alsa).is_ok())
         .ok_or(ClaimError::FormatRefused { format: source })?;
     hw.set_format(alsa).map_err(|_| ClaimError::FormatRefused { format: source })?;
     Ok(format)
+}
+
+/// The rungs of `source`'s ladder ALSA can spell, best first, each beside that spelling.
+fn candidates(source: SourceFormat) -> impl Iterator<Item = (DeviceFormat, Format)> {
+    DeviceFormat::ladder(source)
+        .iter()
+        .filter_map(|&format| alsa_format(format).map(|alsa| (format, alsa)))
 }
 
 /// The ALSA format for `format`, or `None` for the MSB-aligned 24-in-32, which ALSA only spells
@@ -522,3 +527,7 @@ fn write_all(
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "tests/alsa_tests.rs"]
+mod tests;

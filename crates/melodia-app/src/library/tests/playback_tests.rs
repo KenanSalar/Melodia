@@ -293,6 +293,29 @@ async fn setting_a_volume_already_held_publishes_nothing_unless_it_is_muted() ->
     Ok(())
 }
 
+/// With no device control carrying it, the volume is a gain on the samples like the speed is, so
+/// the reset takes both to where they change nothing and hands back the volume for the settings
+/// write, which persists whatever it is told.
+#[tokio::test]
+async fn the_bit_perfect_reset_takes_a_software_volume_and_the_speed_to_unity()
+-> Result<(), AppError> {
+    let fx = TestPlayback::empty().await?;
+    player_set_volume(&fx.ctx, 40)?;
+    player_set_playback_speed(&fx.ctx, 1.5)?;
+    seat(&fx, PlayerState::build_toggle_mute_actions);
+
+    let left = player_make_bit_perfect(&fx.ctx);
+
+    let state = lock_state(&fx.ctx.player_state);
+    let landed = (left, state.volume, state.is_muted, state.playback_speed.to_bits());
+    assert_eq!(
+        landed,
+        (MAX_VOLUME, MAX_VOLUME, false, 1.0_f64.to_bits()),
+        "(handed back, volume, muted, speed bits)"
+    );
+    Ok(())
+}
+
 // --- session flags ---
 
 /// A live source has no track end, so the monitor would never fire the flag and the sleep row

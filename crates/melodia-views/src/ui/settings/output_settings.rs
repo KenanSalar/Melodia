@@ -105,24 +105,11 @@ fn install_pickers(ui: &AppWindow, state: &AppState, choice: OutputChoice) {
     let weak = ui.as_weak();
     g.on_list_output_devices(move || list_devices(weak.clone(), &state_list, &shadow_list));
 
-    g.on_output_mode_changed(pick(state, &shadow, |picked: &mut Picked, idx: i32| {
-        picked.choice.mode = mode_from_index(idx);
-    }));
-    g.on_output_device_changed(pick(state, &shadow, |picked: &mut Picked, idx: i32| {
-        let chosen = usize::try_from(idx).ok().and_then(|i| picked.devices.get(i));
-        picked.choice.device = chosen.map(|device| device.id.clone());
-    }));
-    g.on_output_period_changed(pick(state, &shadow, |picked: &mut Picked, idx: i32| {
-        if let Some(&period) = usize::try_from(idx).ok().and_then(|i| PERIOD_PRESETS.get(i)) {
-            picked.choice.tuning = ExclusiveTuning::new(period, picked.choice.tuning.drive);
-        }
-    }));
-    g.on_output_polling_changed(pick(state, &shadow, |picked: &mut Picked, on: bool| {
-        picked.choice.tuning.drive = Drive::from_polling(on);
-    }));
-    g.on_output_hardware_volume_changed(pick(state, &shadow, |picked: &mut Picked, on: bool| {
-        picked.choice.hardware_volume = on;
-    }));
+    g.on_output_mode_changed(pick(state, &shadow, Picked::pick_mode));
+    g.on_output_device_changed(pick(state, &shadow, Picked::pick_device));
+    g.on_output_period_changed(pick(state, &shadow, Picked::pick_period));
+    g.on_output_polling_changed(pick(state, &shadow, Picked::pick_polling));
+    g.on_output_hardware_volume_changed(pick(state, &shadow, Picked::pick_hardware_volume));
 }
 
 /// A picker's callback: `edit` the shadow with what was picked, then [`apply`] it.
@@ -174,40 +161,79 @@ fn list_devices(weak: Weak<AppWindow>, state: &AppState, shadow: &Shadow) -> i32
     revision
 }
 
-/// Fill the picker from the listing asked for at `revision`. A saved card that isn't connected
-/// selects nothing, and the picker says so in place of a name.
-///
-/// **The options are replaced only when the cards changed, and never by an older listing.** The
-/// picker lists on a timer while it is on screen, and an open popup keeps the size it was shown
-/// at, so options replaced under it paint into a box measured for others.
+/// Fill the picker from the listing asked for at `revision`, unless a newer one is on screen.
 fn apply_listing(ui: &AppWindow, shadow: &Shadow, devices: Vec<OutputDevice>, revision: i32) {
-    let (names, selected, missing) = {
-        let mut picked = shadow.lock();
-        if revision < picked.listing_applied {
-            return;
-        }
-        picked.listing_applied = revision;
-        let names = (picked.devices != devices).then(|| {
-            devices
-                .iter()
-                .map(|device| SharedString::from(device.name.as_str()))
-                .collect::<Vec<_>>()
-        });
-        picked.devices = devices;
-        let selected = match &picked.choice.device {
-            Some(id) => picked.devices.iter().position(|device| &device.id == id),
-            // No saved card means the first one listed, which is what the claim takes.
-            None => (!picked.devices.is_empty()).then_some(0),
-        };
-        (names, selected, picked.choice.device.is_some() && selected.is_none())
-    };
+    let Some(listing) = shadow.lock().take_listing(devices, revision) else { return };
     let g = ui.global::<Settings>();
-    if let Some(names) = names {
+    if let Some(names) = listing.names {
         g.set_output_device_names(ModelRc::from(Rc::new(VecModel::from(names))));
     }
-    g.set_output_device_idx(selected.and_then(|i| i32::try_from(i).ok()).unwrap_or(-1));
-    g.set_output_device_missing(missing);
+    g.set_output_device_idx(listing.selected);
+    g.set_output_device_missing(listing.missing);
     g.set_output_devices_revision(revision);
+}
+
+/// What the device picker shows for one listing.
+struct Listing {
+    /// The options, or `None` where the cards are the ones on screen already.
+    names: Option<Vec<SharedString>>,
+    /// The chosen card's row, or -1 for none.
+    selected: i32,
+    missing: bool,
+}
+
+impl Picked {
+    fn pick_mode(&mut self, idx: i32) {
+        self.choice.mode = mode_from_index(idx);
+    }
+
+    /// The card at `idx` in the listing on screen, which is the one the user clicked.
+    fn pick_device(&mut self, idx: i32) {
+        let chosen = usize::try_from(idx).ok().and_then(|i| self.devices.get(i));
+        self.choice.device = chosen.map(|device| device.id.clone());
+    }
+
+    fn pick_period(&mut self, idx: i32) {
+        if let Some(&period) = usize::try_from(idx).ok().and_then(|i| PERIOD_PRESETS.get(i)) {
+            self.choice.tuning = ExclusiveTuning::new(period, self.choice.tuning.drive);
+        }
+    }
+
+    fn pick_polling(&mut self, on: bool) {
+        self.choice.tuning.drive = Drive::from_polling(on);
+    }
+
+    fn pick_hardware_volume(&mut self, on: bool) {
+        self.choice.hardware_volume = on;
+    }
+
+    /// Take the listing asked for at `revision`, answering what the picker shows for it, or `None`
+    /// where a newer one is on screen already. A saved card that isn't connected selects nothing,
+    /// and the picker says so in place of a name.
+    ///
+    /// **The options are replaced only when the cards changed, and never by an older listing.**
+    /// The picker lists on a timer while it is on screen, and an open popup keeps the size it was
+    /// shown at, so options replaced under it paint into a box measured for others.
+    fn take_listing(&mut self, devices: Vec<OutputDevice>, revision: i32) -> Option<Listing> {
+        if revision < self.listing_applied {
+            return None;
+        }
+        self.listing_applied = revision;
+        let names = (self.devices != devices).then(|| {
+            devices.iter().map(|device| SharedString::from(device.name.as_str())).collect()
+        });
+        self.devices = devices;
+        let selected = match &self.choice.device {
+            Some(id) => self.devices.iter().position(|device| &device.id == id),
+            // No saved card means the first one listed, which is what the claim takes.
+            None => (!self.devices.is_empty()).then_some(0),
+        };
+        Some(Listing {
+            names,
+            selected: selected.and_then(|i| i32::try_from(i).ok()).unwrap_or(-1),
+            missing: self.choice.device.is_some() && selected.is_none(),
+        })
+    }
 }
 
 /// The chip's index, in the order of the inline list in `output-section.slint`.
@@ -238,3 +264,7 @@ fn period_index(period: Duration) -> i32 {
         .and_then(|i| i32::try_from(i).ok())
         .unwrap_or(-1)
 }
+
+#[cfg(test)]
+#[path = "tests/output_settings_tests.rs"]
+mod tests;

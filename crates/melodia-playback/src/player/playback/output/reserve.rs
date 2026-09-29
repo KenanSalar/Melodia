@@ -215,3 +215,7 @@ impl Asked {
         true
     }
 }
+
+#[cfg(test)]
+#[path = "tests/reserve_tests.rs"]
+mod tests;

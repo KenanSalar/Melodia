@@ -114,3 +114,15 @@ fn windows_binds_the_wasapi_backend_with_every_option_it_offers() {
 
     assert_eq!(offered, (true, true, true), "(exclusive, polling, hardware volume)");
 }
+
+/// The Linux twin: a claim and the card's own volume, but no polling row, since the ALSA writer
+/// always blocks on the card and has no event mode to trade for one. Losing the arm would take the
+/// ALSA, reservation and card volume suites out of the build with it.
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_binds_the_alsa_backend_with_every_option_its_writer_has() {
+    let offered =
+        (super::EXCLUSIVE_SUPPORTED, super::POLLING_SUPPORTED, super::HARDWARE_VOLUME_SUPPORTED);
+
+    assert_eq!(offered, (true, false, true), "(exclusive, polling, hardware volume)");
+}

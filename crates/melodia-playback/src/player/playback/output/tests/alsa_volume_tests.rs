@@ -72,6 +72,30 @@ fn a_reading_lands_on_the_percentage_alsamixer_shows() {
     }
 }
 
+/// An element can report a reading outside the range it states: the lowest step under a floor that
+/// isn't silence may still answer with the mute gain, and a driver can round past the top. Left
+/// unheld, the claim would read a level below silence or above full, which every never-raise
+/// comparison takes at its word.
+#[test]
+fn a_reading_past_either_end_of_the_range_is_held_to_it() {
+    let alc897 = Scale::Taper { min: -6525, max: 0 };
+    let linear = Scale::Decibels { min: -2400, max: 0 };
+    let steps = Scale::Steps { min: 0, max: 128 };
+    let rows = [
+        ("the mute gain under a taper's floor", alc897, DB_GAIN_MUTE, 0.0),
+        ("past a taper's top", alc897, 100, 1.0),
+        ("under a linear range", linear, -2500, 0.0),
+        ("past a linear range", linear, 50, 1.0),
+        ("under the raw steps", steps, -1, 0.0),
+        ("past the raw steps", steps, 129, 1.0),
+    ];
+    for (what, scale, reading, expected) in rows {
+        let level = scale.level_of(reading);
+
+        assert!((level - expected).abs() < SAME_PERCENT, "{what}: {level} against {expected}");
+    }
+}
+
 /// A level set and read back has to come back as itself, or Melodia's slider and `alsamixer` would
 /// drift apart after every move.
 #[test]

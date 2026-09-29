@@ -2,21 +2,18 @@
 //!
 //! The first two guard the same thing from opposite directions: a value the UI should never send,
 //! landing in `settings.json` where the next launch has to make sense of it. The bit-perfect reset
-//! decides by platform what it may turn on. The rest of the module is a field assignment whose
-//! round trip `services/tests/settings_tests.rs` already covers.
+//! decides by platform what it may turn on, and has to turn stages off without forgetting how
+//! they were set. The rest of the module is a field assignment whose round trip
+//! `services/tests/settings_tests.rs` already covers.
 
 use crate::services;
-use crate::state::fixtures::seeded_root;
+use crate::services::settings::SettingsData;
+use crate::state::fixtures::{seeded_root, seeded_root_with};
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
-use melodia_engine::player::engine::state::{MAX_SPEED, MIN_SPEED};
+use melodia_engine::player::engine::state::{MAX_SPEED, MAX_VOLUME, MIN_SPEED};
 
-use super::{write_play_button_animation, write_playback_speed};
-// Only the reset's Windows half has a test here.
-#[cfg(target_os = "windows")]
-use super::write_bit_perfect_reset;
-#[cfg(target_os = "windows")]
-use melodia_engine::player::engine::state::MAX_VOLUME;
+use super::{write_bit_perfect_reset, write_play_button_animation, write_playback_speed};
 
 fn stored_token(paths: &Paths) -> Result<String, AppError> {
     Ok(services::settings::read_settings(paths)?.play_button_animation)
@@ -105,5 +102,79 @@ fn the_bit_perfect_reset_leaves_follow_rate_off_on_windows() -> Result<(), AppEr
 
     let settings = services::settings::read_settings(&paths)?;
     assert!(!settings.output.output_follow_rate, "the reset turned on a row Windows hides");
+    Ok(())
+}
+
+/// Everywhere else the system resamples a stream to the rate it runs at, so following the file's
+/// rate is part of what the reset calls bit-perfect: the one row it turns on rather than off.
+#[cfg(not(target_os = "windows"))]
+#[test]
+fn the_bit_perfect_reset_follows_the_files_rate_where_the_system_resamples() -> Result<(), AppError>
+{
+    let (_tmp, paths) = seeded_root()?;
+
+    write_bit_perfect_reset(&paths, MAX_VOLUME)?;
+
+    let settings = services::settings::read_settings(&paths)?;
+    assert!(settings.output.output_follow_rate, "the reset left the system resampling the file");
+    Ok(())
+}
+
+/// Every stage the live reset cleared is written in the one go, or the next launch brings back
+/// one the panel said it had cleared.
+#[test]
+fn the_bit_perfect_reset_writes_every_stage_it_cleared() -> Result<(), AppError> {
+    let (_tmp, paths) = seeded_root_with(|settings| {
+        settings.equalizer.eq_enabled = true;
+        settings.replaygain.rg_enabled = true;
+        settings.playback.playback_speed = 1.5;
+        settings.playback.is_muted = true;
+        settings.volume = 30;
+    })?;
+
+    write_bit_perfect_reset(&paths, MAX_VOLUME)?;
+
+    let s = services::settings::read_settings(&paths)?;
+    let written = (
+        s.equalizer.eq_enabled,
+        s.replaygain.rg_enabled,
+        s.playback.playback_speed.to_bits(),
+        s.playback.is_muted,
+        s.volume,
+    );
+    assert_eq!(
+        written,
+        (false, false, 1.0_f64.to_bits(), false, MAX_VOLUME),
+        "(equalizer, ReplayGain, speed bits, muted, volume)"
+    );
+    Ok(())
+}
+
+/// The reset switches a stage off and nothing more, so turning it back on finds it as the user left
+/// it. A flattened curve or a zeroed preamp would be a second reset nobody asked for.
+#[test]
+fn the_bit_perfect_reset_keeps_how_each_stage_it_cleared_was_set() -> Result<(), AppError> {
+    let (_tmp, paths) = seeded_root_with(|settings| {
+        settings.equalizer.eq_enabled = true;
+        settings.equalizer.eq_band_gains.fill(6.0);
+        settings.equalizer.eq_preamp = -4.0;
+        settings.replaygain.rg_enabled = true;
+        settings.replaygain.rg_preamp = 3.0;
+    })?;
+    let tuning = |s: &SettingsData| {
+        (
+            s.equalizer.eq_band_gains.clone(),
+            s.equalizer.eq_preamp.to_bits(),
+            s.equalizer.eq_selected_preset.clone(),
+            s.replaygain.rg_preamp.to_bits(),
+            s.replaygain.rg_mode.clone(),
+        )
+    };
+    let before = tuning(&services::settings::read_settings(&paths)?);
+
+    write_bit_perfect_reset(&paths, MAX_VOLUME)?;
+
+    let after = tuning(&services::settings::read_settings(&paths)?);
+    assert_eq!(after, before, "(curve, preamp bits, preset, ReplayGain preamp bits, mode)");
     Ok(())
 }
