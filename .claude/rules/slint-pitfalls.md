@@ -422,6 +422,16 @@ this file is what builds, looks right, and is wrong.
   before first layout — popup lands above trigger top, expands downward. Canonical:
   `components/now-playing/overflow-menu.slint`.
 
+- **A `PopupWindow` is sized and placed once, as it opens, so content that changes while it is open
+  paints into the old box.** `WindowInner::show_popup` reads the popup's layout info and `set()`s
+  the size into its root as a plain value, replacing any binding on its `height`, and
+  `place_popup` fixes the origin; nothing re-flows it after that. A child with no width of its own,
+  as `PopupSurface` is, re-centres in the frozen box as its content narrows, so a shrinking list
+  reads as an empty slot plus the popup sliding sideways. Only a reopen re-measures. Bites any
+  popup whose model is refreshed as it opens: `Dropdown`'s `about-to-open` returns the revision its
+  refresh will publish and shows the popup once that lands, the output device picker being the
+  host that needed it (`components/settings/dropdown.slint`).
+
 - **A child with no `x`/`y` in a non-layout parent is *centred*, not at the origin** — Slint
   generates `(parent.width - self.width) / 2`, which reads as 0 only for a child as wide as its
   parent. **A zero-size wrapper therefore lands at half the parent**, and anything positioned

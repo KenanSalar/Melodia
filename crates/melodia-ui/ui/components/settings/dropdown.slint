@@ -60,23 +60,52 @@ component DropdownOption inherits Rectangle {
 // binding and stop it tracking the model.
 //
 // `about-to-open` is for a host whose options can change with nothing to announce
-// it, so it can refresh them as they are about to be read.
+// it, so it can refresh them as they are about to be read. A refresh that lands
+// later returns the `options-revision` it will publish, and the popup waits for
+// it: Slint sizes and places a popup once, as it opens, so options arriving after
+// that paint into a box measured for the old ones. The wait is bounded, so a
+// refresh that never lands costs a stale list rather than a dead control.
 export component Dropdown inherits Rectangle {
     in property <[string]> options;
     in-out property <int> selected-index;
     in property <length> trigger-width: 160px;
     in property <bool> manual: false;
+    // What the trigger reads while nothing is selected.
+    in property <string> placeholder;
+    in property <int> options-revision;
 
     callback selected(int);
-    callback about-to-open();
+    callback about-to-open() -> int;
+
+    property <int> awaited-revision;
+    property <bool> awaiting: false;
+    property <duration> waited;
+    property <duration> refresh-poll: 16ms;
+    property <duration> refresh-timeout: 500ms;
 
     width: root.trigger-width;
     height: trigger.height;
 
+    function has-selection() -> bool {
+        return root.selected-index >= 0 && root.selected-index < root.options.length;
+    }
+
     function current-label() -> string {
-        return root.selected-index >= 0 && root.selected-index < root.options.length
-            ? root.options[root.selected-index]
-            : "";
+        return root.has-selection() ? root.options[root.selected-index] : root.placeholder;
+    }
+
+    // Polled rather than watched: `options-revision` is usually fed from a global, and a
+    // `changed` tracker on one outlives the `if` branch a host mounts this in.
+    Timer {
+        interval: root.refresh-poll;
+        running: root.awaiting;
+        triggered => {
+            root.waited += root.refresh-poll;
+            if root.options-revision >= root.awaited-revision || root.waited >= root.refresh-timeout {
+                root.awaiting = false;
+                popup.show();
+            }
+        }
     }
 
     trigger := Rectangle {
@@ -102,7 +131,7 @@ export component Dropdown inherits Rectangle {
                 horizontal-stretch: 1;
                 Text {
                     text: root.current-label();
-                    color: Theme.text;
+                    color: root.has-selection() ? Theme.text : Theme.overlay2;
                     font-size: Theme.font-size-md;
                     overflow: elide;
                 }
@@ -120,8 +149,13 @@ export component Dropdown inherits Rectangle {
         touch := TouchArea {
             mouse-cursor: pointer;
             clicked => {
-                root.about-to-open();
-                popup.show();
+                root.awaited-revision = root.about-to-open();
+                if root.options-revision >= root.awaited-revision {
+                    popup.show();
+                } else {
+                    root.waited = 0ms;
+                    root.awaiting = true;
+                }
             }
         }
     }

@@ -2,7 +2,7 @@
 
 Working doc. Delete it when the feature ships. Tracks issue #66.
 
-Status: **Phase 1 done** (2026-09-24) · **Phase 2 done** (2026-09-25) · **Phase 3 done** (2026-09-25) · **Phase 4 done** (2026-09-27) · **Phase 5 done** (2026-09-27) · Phase 7 in progress: Windows steps 1 to 6 done (step 6 is hardware volume, Gate B's volume half passed), 24-bit and 192 kHz WASAPI output verified, the Linux half done (2026-09-28: hardware volume on ALSA, the lead, the period bound, the card's own level in the panel), the quality chip, the refusal toast's Details button and the docs done (2026-09-28), only the Windows session left under "What's left of Phase 7" · macOS moved to #113 · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
+Status: **Phase 1 done** (2026-09-24) · **Phase 2 done** (2026-09-25) · **Phase 3 done** (2026-09-25) · **Phase 4 done** (2026-09-27) · **Phase 5 done** (2026-09-27) · Phase 7 in progress: Windows steps 1 to 6 done (step 6 is hardware volume, Gate B's volume half passed), 24-bit and 192 kHz WASAPI output verified, the Linux half done (2026-09-28: hardware volume on ALSA, the lead, the period bound, the card's own level in the panel), the quality chip, the refusal toast's Details button and the docs done (2026-09-28), the Windows session done (2026-09-29), only the ADR and deleting this doc left under "What's left of Phase 7" · macOS moved to #113 · Rewritten: 2026-09-23 (replaces the 2026-08-14 draft)
 
 ## What the user sees today
 
@@ -581,9 +581,9 @@ endpoint:
   Ticked, the same file claimed it as `Exclusive(S16)` at 48 kHz, a browser playing meanwhile was
   moved to another output, and it had the device back once Melodia closed.
 - **Not run:** a rate change mid-queue, unplugging mid-track, Stop as distinct from closing,
-  24-bit or high-rate output (no such files at hand), and the alignment retry. All but the last
-  were run in Phase 7: the first three in Gate A, and 24-bit and high-rate output in its own run
-  after Gate B.
+  24-bit or high-rate output (no such files at hand), and the alignment retry. All were run in
+  Phase 7: the first three in Gate A, 24-bit and high-rate output in its own run after Gate B, and
+  the alignment retry in the Windows session.
 
 The tests landed are:
 - `encode_tests`: `S24High` puts the value in the top three bytes, rounds at 24 bits, and carries a
@@ -655,16 +655,9 @@ Windows half, done (2026-09-28):
 7. **The performance pass**, and the fix for 24-bit output playing fast on the ALC897 that it
    turned up. Both are below, after the 24-bit result they correct.
 
-**What's left of Phase 7: the Windows session.** Everything else is done: the Linux half below,
-and the quality chip, the Details button and item 5's docs, whose note follows this list.
-- **The Linux half's blind edits**, listed at the end of its result below: fmt, clippy and the
-  suite on Windows, then a short re-run of Gate B's volume half and a replug with the device picker
-  open.
-- **The WASAPI alignment retry**, never run on a device: only a driver refusing an unaligned
-  buffer (`AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED`) takes that path, and neither test device does.
-  Windows returns that code only to an event-driven claim, so the retry is the event mode's
-  `stream_mode` at the buffer the driver named, which `wasapi_tests` pins.
-- **A look at the chip and the Details button on Windows**, which passed by hand on Linux.
+**What's left of Phase 7: the ADR, then deleting this doc.** The Windows session is done, its
+result at the end of the Linux half below, and so is everything before it. It left one thing owed:
+tests for the device picker fix it found, which wait for Kenan's go.
 
 **As built (2026-09-28), the quality chip (item 2), the Details button (item 8) and the docs
 (item 5):**
@@ -715,7 +708,11 @@ and the quality chip, the Details button and item 5's docs, whose note follows t
   the way the run needs.
 - For a Busy test, a second Melodia with `MELODIA_DATA_DIR` set to a scratch folder is a separate
   instance and can hold the device.
-- Back up `settings.json` and `queue.json` first, and restore them after.
+- Back up `settings.json` and `queue.json` first, and restore them after. A forwarded file is
+  imported, so `melodia.db` too, with its `-wal` and `-shm`.
+- Quit with `CloseMainWindow()`, which runs the whole shutdown. The debug build opens a console
+  window of its own, and closing that kills Melodia with no log line, crash report or Windows event,
+  skipping the release that puts a device's volume back.
 
 **Blind edits the Linux session had to check first**, which it did on 2026-09-28: clippy and the
 whole suite passed on Linux before anything else changed. Steps 1 to 4 made the ones in `alsa.rs`
@@ -1139,6 +1136,70 @@ compile them on push:
 Then a short re-run of Gate B's volume half, since the rules moved, and a replug with the device
 picker open.
 
+**As built (2026-09-29), the device picker, found in the Windows session.** With the picker open
+across a replug, its first open after the change showed a stale popup: an empty slot where the
+pulled card had been, shifted right over the scrollbar, and one row short after the replug. The
+second open was right. Nothing here is Windows': `dropdown.slint` and `ui::settings::output_mode`
+are shared, so Linux had it too.
+- **The cause is Slint's popup and the order of two lines.** `about-to-open` lists the cards on the
+  blocking pool and `popup.show()` ran straight after it, so the popup always opened on the
+  previous list. Slint sizes and places a popup once, as it opens (`WindowInner::show_popup` sets
+  the size into its root as a plain value), so the new list painted into a box measured for the
+  old one. `PopupSurface` takes its widest label's width and is centred in that box, which is the
+  sideways shift.
+- **The open waits for its own listing.** `about-to-open` returns the revision
+  `list-output-devices` will publish in `Settings.output-devices-revision`, and `Dropdown` shows
+  the popup once that lands, bounded so a listing that never lands costs a stale list rather than a
+  dead control. The wait is polled rather than watched: the row sits in an `if`, and a `changed`
+  tracker on a global outlives it. A host with nothing to refresh returns nothing and opens at once,
+  as the other seven mounts do.
+- **The row lists every 2 s while it is on screen**, so the label follows a replug without an open.
+  A listing replaces the options only when the cards changed, and one landing after a newer one is
+  dropped (`apply_listing`), so the timer leaves an open popup alone unless a card comes or goes
+  while it is open.
+- **A saved card that isn't listed reads "Not connected"**, greyed, where the label used to be
+  empty, through `Settings.output-device-missing` and a `placeholder` on `Dropdown`. The msgid was
+  already in all six catalogues, from the scrobbling card.
+- Passed by hand on Windows, opening at once after a replug included. No tests yet; they wait for
+  Kenan's go.
+
+**Result, the Windows session.** 2026-09-29, Windows 11, on the debug build the Gate A way,
+reading the log, each endpoint's Windows level read over COM every 200 ms, and Kenan's ears and
+eyes. The quality chip had already passed by hand on Windows before the session.
+- **The blind edits:** fmt, clippy and the whole suite passed on Windows before anything changed,
+  `wasapi_tests`, the moved `hardware_volume_tests` and `output::tests` among them.
+- **The alignment retry**, reached through a temporary patch that dropped the pre-alignment and
+  logged the retry, reverted afterwards:
+  - The ALC897 in event mode refused an unaligned buffer with `0x88890019`
+    (`AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED`), named 896 frames for 882 at 44.1 kHz and 448 for 441,
+    and the fresh client took them. Each claimed `Exclusive(S16)` with no fallback, and a 20 s tone
+    ended after 20.5 s.
+  - 960 frames at 48 kHz, already a multiple of 128 bytes, initialised on the first try.
+- **Gate B's volume half, on the ALC897** with Hardware Volume on:
+  - A first claim with Melodia at 80 % over Windows at 30 % left the device there, and the slider
+    followed it down.
+  - Melodia at 50, 25, 10 and 60 % read the same in Windows, the panel stayed Bit-perfect, and no
+    drag came back as a move.
+  - At 5 ms, which the ALC897 took as 192 frames, a drag played with no dropout, by ear.
+  - A rate change with the slider at 60 % came back at 60 %, not at the 30 % the release put back.
+  - Windows' level set from outside, and the flyout, moved Melodia's slider with nothing written
+    back. Injected volume keys never reach the shell, so the keys weren't rerun; Gate B had them.
+  - 0 % and mute went silent at once, the device at its floor, with no blip on the rise.
+  - Hardware Volume off put Windows' 30 % back, and on again resumed Melodia's level, neither with a
+    loud blip. A graceful quit put 30 % back.
+- **The UMC22:**
+  - The float tone was refused as "a 32-bit float source", warned and toasted once naming the
+    UMC22, and the toast's Details button opened the Output card. The release put the device's
+    35 % back.
+  - Four unplugs, three with the UMC22 as the Windows default: each fell back to the ALC897 within
+    45 ms of the loss being seen, warned once per disconnect, and was reclaimed on replug, by the
+    reclaim poll or by the recovery where Windows moved its default back first. Stop afterwards put
+    the original 35 % back across two replugs.
+  - Every unplug logged `0x88890026` (`AUDCLNT_E_RESOURCES_INVALIDATED`), where Gates A and B saw
+    `0x80004005`. Both end in the same recovery.
+  - The 15 s silence did not come back; see Open questions.
+- **The device picker** broke across a replug, fixed as above.
+
 ## Cross-cutting
 
 - **Memory.** Each claim adds one writer thread and one staging buffer sized to a period.
@@ -1203,4 +1264,8 @@ picker open.
   replug, leaving the fallback asking for a default that had just gone. The give-up line now
   carries the last attempt's error, so the next occurrence names its cause. If it is the default,
   the fix is for the fallback to try any other connected output when the default won't open.
+
+  The Windows session (2026-09-29) went after that cause: three unplugs with the UMC22 as the
+  Windows default, so each one moved the default, and a fourth without. All recovered at once, with
+  no give-up line and no failed open of the default logged, so it didn't reproduce.
 

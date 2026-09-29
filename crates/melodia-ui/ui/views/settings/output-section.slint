@@ -176,12 +176,21 @@ export component OutputSection inherits Rectangle {
             description: root.device-desc;
             Dropdown {
                 options: Settings.output-device-names;
+                options-revision: Settings.output-devices-revision;
                 selected-index <=> Settings.output-device-idx;
+                placeholder: Settings.output-device-missing ? @tr("Not connected") : "";
                 trigger-width: 200px;
                 // The row mounts on arriving at the page and on choosing exclusive output.
                 init => { Settings.list-output-devices(); }
-                about-to-open => { Settings.list-output-devices(); }
+                about-to-open => { Settings.list-output-devices() }
                 selected(idx) => { Settings.output-device-changed(idx); }
+            }
+            // Keeps the label true across a replug with the row on screen. Rust rewrites the
+            // options only when the cards changed, so an open popup is left alone otherwise.
+            Timer {
+                interval: 2s;
+                running: true;
+                triggered => { Settings.list-output-devices(); }
             }
         }
 

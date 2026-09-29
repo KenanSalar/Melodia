@@ -122,9 +122,14 @@ export global Settings {
     in property <[string]> output-device-names;
     in-out property <int> output-device-idx: -1;
     callback output-device-changed(int);
-    // Asked each time the picker is about to be read: a card plugged in or pulled announces
-    // nothing, so a list taken earlier can be missing it.
-    callback list-output-devices();
+    // Asked as the picker mounts, as it opens and while it is on screen: a card plugged in or
+    // pulled announces nothing, so a list taken earlier can be missing it. Returns the
+    // `output-devices-revision` the answer will be published under, which the picker's popup
+    // waits for.
+    callback list-output-devices() -> int;
+    in property <int> output-devices-revision;
+    // The saved card is not among those listed.
+    in property <bool> output-device-missing;
     // How an exclusive writer paces the card: a period chip, -1 where the saved period matches
     // none of them, and polling in place of the card's events where the platform tells the two
     // apart. Applied like the pickers above, since either reopens the card.
