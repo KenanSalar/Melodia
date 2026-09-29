@@ -57,3 +57,17 @@ where
     write_settings(paths, &settings)?;
     Ok(out)
 }
+
+/// [`mutate_settings`] for a caller that often changes nothing: the file is written only when the
+/// closure returns `true`, still under `MUTATE_LOCK`.
+pub fn mutate_settings_if<F>(paths: &Paths, mutate: F) -> AppResult<()>
+where
+    F: FnOnce(&mut SettingsData) -> bool,
+{
+    let _guard = MUTATE_LOCK.lock();
+    let mut settings = read_settings(paths)?;
+    if mutate(&mut settings) {
+        write_settings(paths, &settings)?;
+    }
+    Ok(())
+}

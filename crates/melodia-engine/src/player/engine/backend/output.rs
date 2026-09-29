@@ -104,6 +104,12 @@ impl PlaybackEngine {
         self.output_status.awaiting_device()
     }
 
+    /// Whether a reopen is holding the decks lock across a device open, for a poll that would
+    /// rather skip a round than wait. Lock-free.
+    pub fn output_reopening(&self) -> bool {
+        self.output_status.reopening()
+    }
+
     /// What the device agreed to, or `None` while no stream is open.
     pub fn negotiated(&self) -> Option<Negotiated> {
         self.output.lock().as_ref().and_then(AudioOutput::negotiated)

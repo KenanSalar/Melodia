@@ -11,8 +11,9 @@
 //! stops being reachable that way stops being testable without a sound card.
 
 use std::sync::Arc;
+use std::time::Duration;
 
-use melodia_audio::player::source::audio::{Sample, Shape};
+use melodia_audio::player::source::audio::{Sample, SampleRate, Shape, frames_in};
 
 use super::voice::{Voice, VoicePull};
 
@@ -55,6 +56,19 @@ pub struct MixerPull {
     /// which is the longest slice a voice is ever handed, so the audio thread never grows it.
     scratch: Vec<Sample>,
     /// Device frames still to be written as silence before any voice plays. See [`Self::hold`].
+    held: usize,
+    /// The silence a reopen owes a rate change, while it is trying streams. See
+    /// [`Self::arm_resync`].
+    resync: Option<Resync>,
+}
+
+/// A reopen's rate-change silence, decided at each stream's reshape.
+#[derive(Clone, Copy)]
+struct Resync {
+    /// The rate the device ran at before the reopen, or `None` where no stream was open.
+    from: Option<SampleRate>,
+    hold: Duration,
+    /// What was still held when the reopen began, which a stream at the same rate carries on.
     held: usize,
 }
 
@@ -114,6 +128,14 @@ impl MixerPull {
             voice.reshape(device);
         }
         self.scratch.resize(LOCKSTEP_FRAMES * usize::from(device.channels.get()), 0.0);
+        if let Some(Resync { from, hold, held }) = self.resync {
+            let frames = if from == Some(device.rate) {
+                held
+            } else {
+                usize::try_from(frames_in(hold, device.rate)).unwrap_or(usize::MAX)
+            };
+            self.hold(frames);
+        }
     }
 
     /// Write `frames` of silence before any voice plays again.
@@ -123,6 +145,19 @@ impl MixerPull {
     /// [`LOCKSTEP_FRAMES`] steps.
     pub fn hold(&mut self, frames: usize) {
         self.held = frames;
+    }
+
+    /// Have every [`Self::reshape`] until [`Self::disarm_resync`] hold `hold` of silence where the
+    /// new rate differs from `from`, the one the device ran at before.
+    ///
+    /// Settled at the reshape because that is the last step before a stream starts pulling, and
+    /// per reshape because a reopen can try several rates before one opens.
+    pub fn arm_resync(&mut self, from: Option<SampleRate>, hold: Duration) {
+        self.resync = Some(Resync { from, hold, held: self.held });
+    }
+
+    pub fn disarm_resync(&mut self) {
+        self.resync = None;
     }
 }
 
@@ -139,6 +174,7 @@ pub fn pair(voices: usize, device: Shape) -> (Mixer, MixerPull) {
             device,
             scratch: vec![0.0; LOCKSTEP_FRAMES * width],
             held: 0,
+            resync: None,
         },
     )
 }

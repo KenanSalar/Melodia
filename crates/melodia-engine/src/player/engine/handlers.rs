@@ -325,6 +325,12 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                 _ = interval.tick() => {}
             }
 
+            // Every read below takes the decks lock, which a reopen holds across a device open, and
+            // waiting for it would block a runtime worker as long. The next tick reads the new stream.
+            if engine.output_reopening() {
+                continue;
+            }
+
             // Ahead of the not-playing short circuit below, because a stop is what retires the
             // most sources at once and it lands on exactly the ticks that circuit skips.
             engine.collect_spent();

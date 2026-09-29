@@ -14,6 +14,7 @@ use parking_lot::Mutex;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 
 use crate::ui::settings_bind::read_or_default;
+use crate::ui::shell::tray_bridge;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_engine::player::engine::backend::OutputChoice;
@@ -127,6 +128,11 @@ fn apply(state: &AppState, shadow: &Shadow) {
 /// Ask the cards for themselves off the UI thread, then fill the picker, and return the revision
 /// the answer will be published under.
 fn list_devices(weak: Weak<AppWindow>, state: &AppState, shadow: &Shadow) -> i32 {
+    // The picker's timer keeps firing behind a window hidden to the tray, where nobody reads it.
+    // The listing it already shows is the answer, so a waiting dropdown opens at once.
+    if !tray_bridge::is_window_visible() {
+        return shadow.lock().listing_applied;
+    }
     let revision = {
         let mut picked = shadow.lock();
         picked.listing_asked = picked.listing_asked.saturating_add(1);

@@ -48,7 +48,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use melodia_audio::player::source::audio::{SampleRate, Shape, SourceFormat, frames_in};
+use melodia_audio::player::source::audio::{SampleRate, Shape, SourceFormat};
 use melodia_core::error::{self, AppError};
 use melodia_core::utils::toast::{self, ToastKind};
 
@@ -286,16 +286,20 @@ pub struct AudioOutput {
     /// The silence a reopen onto a new rate writes first. Not part of the request: changing it
     /// reopens nothing, and only the next rate change hears it.
     resync_hold: Duration,
+    /// Held for the output's life so ALSA's config is parsed once, not at every reopen; see
+    /// [`device::default_target`].
+    host: cpal::Host,
     feed: Feed,
     mixer: Mixer,
 }
 
-/// What the health checks ask of the output, readable without its lock, which a reopen holds for
+/// What the periodic checks ask of the output, readable without its lock, which a reopen holds for
 /// as long as a device takes to open. The same cell for the output's life, like [`Lead`].
 #[derive(Debug, Default)]
 pub struct OutputStatus {
     parked: AtomicBool,
     awaiting_device: AtomicBool,
+    reopening: AtomicBool,
 }
 
 impl OutputStatus {
@@ -309,6 +313,12 @@ impl OutputStatus {
     /// is worth looking for again.
     pub fn awaiting_device(&self) -> bool {
         self.awaiting_device.load(Ordering::Relaxed)
+    }
+
+    /// Whether a reopen is under way, so a reader that only polls can skip a round rather than
+    /// wait out the device open behind the locks the reopen holds.
+    pub fn reopening(&self) -> bool {
+        self.reopening.load(Ordering::Relaxed)
     }
 }
 
@@ -352,8 +362,9 @@ impl AudioOutput {
     ///
     /// [`AppError::Player`] when there is no device, or no config it offers can be opened.
     pub fn open(voices: usize, health: Arc<AudioStreamHealth>) -> Result<Self, AppError> {
-        let target = device::default_target()?;
-        let mut output = Self::unopened(&target, voices, health)?;
+        let host = cpal::default_host();
+        let target = device::default_target(&host)?;
+        let mut output = Self::unopened(host, &target, voices, health)?;
         output.stream = Some(Stream::Shared(device::open(&target, &output.feed, None)?));
         Ok(output)
     }
@@ -366,12 +377,15 @@ impl AudioOutput {
     ///
     /// [`AppError::Player`] when there is no device, as for [`Self::open`].
     pub fn open_parked(voices: usize, health: Arc<AudioStreamHealth>) -> Result<Self, AppError> {
-        let mut output = Self::unopened(&device::default_target()?, voices, health)?;
+        let host = cpal::default_host();
+        let target = device::default_target(&host)?;
+        let mut output = Self::unopened(host, &target, voices, health)?;
         output.park();
         Ok(output)
     }
 
     fn unopened(
+        host: cpal::Host,
         target: &Target,
         voices: usize,
         health: Arc<AudioStreamHealth>,
@@ -383,6 +397,7 @@ impl AudioOutput {
             status: Arc::default(),
             reported: None,
             resync_hold: DEFAULT_RESYNC_HOLD,
+            host,
             feed: Feed::new(pull, health),
             mixer,
         })
@@ -422,6 +437,13 @@ impl AudioOutput {
     /// [`AppError::Player`] when there is no device to open, or it refuses every config. Where the
     /// fallback also failed, the error is the request's own.
     pub fn reopen(&mut self, request: OutputRequest) -> Result<Negotiated, AppError> {
+        self.status.reopening.store(true, Ordering::Relaxed);
+        let reopened = self.replace_stream(request);
+        self.status.reopening.store(false, Ordering::Relaxed);
+        reopened
+    }
+
+    fn replace_stream(&mut self, request: OutputRequest) -> Result<Negotiated, AppError> {
         let previous_rate = self.negotiated().map(|negotiated| negotiated.shape.rate);
         let held = self.close_for(&request);
         // After the drop and before the open, which is the one window where no stream can report:
@@ -430,10 +452,13 @@ impl AudioOutput {
         self.feed.health.take_device_lost();
         self.feed.lead.clear();
 
-        let negotiated = match self.start(&request, held) {
+        // Armed rather than applied once the stream is up: a stream pulls as soon as it starts,
+        // so the silence has to be in place before then, which is when each open reshapes.
+        self.feed.pull.lock().arm_resync(previous_rate, self.resync_hold);
+        let opened = match self.start(&request, held) {
             Ok(negotiated) => {
                 self.request = request;
-                negotiated
+                Ok(negotiated)
             }
             Err(e) if request != self.request => {
                 log::warn!(
@@ -442,17 +467,14 @@ impl AudioOutput {
                     error::describe(&e)
                 );
                 let previous = self.request.clone();
-                self.start(&previous, None).map_err(|_| e)?
+                self.start(&previous, None).map_err(|_| e)
             }
-            Err(e) => return Err(e),
+            Err(e) => Err(e),
         };
+        self.feed.pull.lock().disarm_resync();
+        let negotiated = opened?;
         self.status.parked.store(false, Ordering::Relaxed);
 
-        let rate = negotiated.shape.rate;
-        if previous_rate != Some(rate) {
-            let hold = usize::try_from(frames_in(self.resync_hold, rate)).unwrap_or(usize::MAX);
-            self.feed.pull.lock().hold(hold);
-        }
         // The stall watch counts from the last beat, and the old stream's was before the open.
         self.feed.health.beat();
         Ok(negotiated)
@@ -503,7 +525,7 @@ impl AudioOutput {
     /// open: the error alone can't say, and the default is whatever the system named at the time.
     /// At debug, since a caller retrying a lost device reports the outcome once it gives up.
     fn open_shared(&self, rate: Option<SampleRate>) -> Result<DeviceStream, AppError> {
-        let target = device::default_target().inspect_err(|e| {
+        let target = device::default_target(&self.host).inspect_err(|e| {
             log::debug!("audio: no default output to open: {}", error::describe(e));
         })?;
         device::open(&target, &self.feed, rate).inspect_err(|e| {

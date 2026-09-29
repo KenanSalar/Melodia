@@ -317,9 +317,10 @@ pub async fn player_toggle_mute(ctx: &PlaybackContext) -> Result<(), AppError> {
 /// click), and inline from the mute mutators / the OS media controls'
 /// `SetVolume`.
 ///
-/// Reads-then-writes settings.json on a `spawn_blocking` thread so the
-/// async runtime worker isn't blocked. Short-circuits when settings already
-/// match (common — e.g. a click that didn't change the value).
+/// Writes on a `spawn_blocking` thread so the async runtime worker isn't
+/// blocked, under the settings lock so a concurrent `mutate_settings` isn't
+/// overwritten. Skips the write when settings already match (common — e.g. a
+/// click that didn't change the value).
 pub async fn commit_player_settings(ctx: &PlaybackContext) -> Result<(), AppError> {
     let (volume, is_muted) = {
         let s = lock_state(&ctx.player_state);
@@ -327,13 +328,12 @@ pub async fn commit_player_settings(ctx: &PlaybackContext) -> Result<(), AppErro
     };
     let paths = ctx.paths.clone();
     tokio::task::spawn_blocking(move || -> Result<(), AppError> {
-        let mut s = crate::services::settings::read_settings(&paths)?;
-        if s.volume == volume && s.playback.is_muted == is_muted {
-            return Ok(());
-        }
-        s.volume = volume;
-        s.playback.is_muted = is_muted;
-        crate::services::settings::write_settings(&paths, &s)
+        crate::services::settings::mutate_settings_if(&paths, |s| {
+            let changed = s.volume != volume || s.playback.is_muted != is_muted;
+            s.volume = volume;
+            s.playback.is_muted = is_muted;
+            changed
+        })
     })
     .await
     .map_err(|e| AppError::Settings(format!("commit_player_settings join: {e}")))?

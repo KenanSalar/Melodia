@@ -89,14 +89,17 @@ fn device_name(device: &cpal::Device) -> Option<String> {
     device.description().ok().map(|description| description.name().to_owned())
 }
 
-/// The system's default output device.
+/// The system's default output device, as `host` sees it.
+///
+/// `host` is the caller's to keep between opens: on ALSA, cpal frees alsa-lib's parsed config once
+/// its last host, device and stream are gone, which a host made per open reaches at every reopen.
 ///
 /// # Errors
 ///
 /// [`AppError::Player`] when there is no output device, or when it cannot name its own default
 /// config.
-pub fn default_target() -> Result<Target, AppError> {
-    let device = cpal::default_host()
+pub fn default_target(host: &cpal::Host) -> Result<Target, AppError> {
+    let device = host
         .default_output_device()
         .ok_or_else(|| AppError::Player("No audio output device".to_owned()))?;
 
