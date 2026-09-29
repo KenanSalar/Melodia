@@ -391,7 +391,8 @@ impl AudioOutput {
         Ok(output)
     }
 
-    /// `voices` many built against the default device, which comes back beside them to open.
+    /// An output mixing `voices` voices for the default device, returned beside that device for the
+    /// caller to open.
     fn unopened(voices: usize, health: Arc<AudioStreamHealth>) -> Result<(Self, Target), AppError> {
         let host = cpal::default_host();
         let target = device::default_target(&host)?;

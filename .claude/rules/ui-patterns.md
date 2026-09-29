@@ -1363,3 +1363,7 @@ edit would otherwise reverse.
   that is what keeps a resize cheap. Every width change re-runs the strip's binding through
   `SettingsPage.page-w`, and a repeater handed a model it can't match by pointer rebuilds every chip
   and swatch under it, tooltips included; see the repeater entry in `slint-pitfalls.md`.
+
+- **A slider on a card is `components/settings/setting-slider.slint`'s `SettingSlider`**, never a
+  `SliderTrack` and a `Text` laid out by hand. The crossfade duration and the resync hold are its
+  two mounts, and the component's header says what stays the host's.

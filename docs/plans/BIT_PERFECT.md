@@ -343,8 +343,9 @@ on and off, over shared, exclusive and fallback.
   since nothing pulls the source to re-read it. `Negotiated` moved to `output/mod.rs` and gained
   `PartialEq`.
 - **Make bit-perfect also turns on following the file's rate** where that does anything
-  (`library::playback::FOLLOW_RATE_SUPPORTED`, now the one home of the Windows answer). Everything
-  it resets is persisted in one `mutate_settings`.
+  (`output::FOLLOW_RATE_SUPPORTED`, the one home of the Windows answer, which
+  `PlaybackEngine::set_follow_rate` enforces whatever a settings file says). Everything it resets
+  is persisted in one `mutate_settings`.
 - UI: `globals/signal-path.slint` (`SignalPathUi`), eight stage rows under a verdict row in
   `output-section.slint`, wired by `ui/settings/signal_path.rs`.
 
@@ -1139,7 +1140,7 @@ picker open.
 **As built (2026-09-29), the device picker, found in the Windows session.** With the picker open
 across a replug, its first open after the change showed a stale popup: an empty slot where the
 pulled card had been, shifted right over the scrollbar, and one row short after the replug. The
-second open was right. Nothing here is Windows': `dropdown.slint` and `ui::settings::output_mode`
+second open was right. Nothing here is Windows': `dropdown.slint` and `ui::settings::output_settings`
 are shared, so Linux had it too.
 - **The cause is Slint's popup and the order of two lines.** `about-to-open` lists the cards on the
   blocking pool and `popup.show()` ran straight after it, so the popup always opened on the

@@ -38,12 +38,12 @@ pub struct OutputChoice {
     pub hardware_volume: bool,
 }
 
-/// The device under the decks, and the cells read of it without its lock, which a reopen holds
-/// for as long as a device takes to open.
+/// The device under the decks, what it is asked to open for, and the cells it publishes. Those
+/// are read without the device's lock, which a reopen holds for as long as a device takes to open.
 #[derive(Default)]
 pub(super) struct EngineOutput {
-    /// `None` on the device-free rigs the tests build. Only ever locked under the decks lock,
-    /// which is the order `reopen_output` takes them in. `Arc` so the deferred half of a faded
+    /// `None` on the device-free rigs the tests build. Taken after the decks lock wherever both
+    /// are held, the order `reopen_output` takes them in. `Arc` so the deferred half of a faded
     /// stop can give an exclusive card back once the fade has played out.
     pub(super) device: Arc<Mutex<Option<AudioOutput>>>,
     /// Open the output at each track's own rate. Read only at a track boundary, never by the audio

@@ -128,13 +128,16 @@ async fn a_play_for_the_wrong_session_refuses_without_taking_the_stage() -> Resu
 // A fade needs the outgoing track playing across the transition, and a rate change reopens the
 // output under it. So while the output follows the rate, every fade decision reads crossfade as
 // off, automatic and manual alike, and hands the user's own choice back when following stops.
+// Windows can't follow the rate (`output::FOLLOW_RATE_SUPPORTED`), so none of this runs there.
 
+#[cfg(not(target_os = "windows"))]
 fn crossfade_all_on(engine: &PlaybackEngine) {
     engine.set_crossfade_enabled(true);
     engine.set_crossfade_manual(true);
     engine.set_crossfade_fade_on_pause(true);
 }
 
+#[cfg(not(target_os = "windows"))]
 #[tokio::test]
 async fn following_the_rate_turns_every_track_change_fade_off() -> Result<(), AppError> {
     let engine = engine_without_a_card()?;
@@ -148,6 +151,7 @@ async fn following_the_rate_turns_every_track_change_fade_off() -> Result<(), Ap
 }
 
 /// A pause changes no track, so nothing reopens under its fade.
+#[cfg(not(target_os = "windows"))]
 #[tokio::test]
 async fn following_the_rate_keeps_the_fade_on_pause() -> Result<(), AppError> {
     let engine = engine_without_a_card()?;
@@ -158,6 +162,7 @@ async fn following_the_rate_keeps_the_fade_on_pause() -> Result<(), AppError> {
     Ok(())
 }
 
+#[cfg(not(target_os = "windows"))]
 #[tokio::test]
 async fn crossfade_comes_back_when_following_stops() -> Result<(), AppError> {
     let engine = engine_without_a_card()?;
