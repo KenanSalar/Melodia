@@ -1,8 +1,9 @@
-//! The two playback setters that decide something before the write.
+//! The playback setters that decide something before the write.
 //!
-//! Both guard the same thing from opposite directions: a value the UI should never send, landing
-//! in `settings.json` where the next launch has to make sense of it. The rest of the module is a
-//! field assignment whose round trip `services/tests/settings_tests.rs` already covers.
+//! The first two guard the same thing from opposite directions: a value the UI should never send,
+//! landing in `settings.json` where the next launch has to make sense of it. The bit-perfect reset
+//! decides by platform what it may turn on. The rest of the module is a field assignment whose
+//! round trip `services/tests/settings_tests.rs` already covers.
 
 use crate::services;
 use crate::state::fixtures::seeded_root;
@@ -11,6 +12,11 @@ use melodia_core::error::AppError;
 use melodia_engine::player::engine::state::{MAX_SPEED, MIN_SPEED};
 
 use super::{write_play_button_animation, write_playback_speed};
+// Only the reset's Windows half has a test here.
+#[cfg(target_os = "windows")]
+use super::write_bit_perfect_reset;
+#[cfg(target_os = "windows")]
+use melodia_engine::player::engine::state::MAX_VOLUME;
 
 fn stored_token(paths: &Paths) -> Result<String, AppError> {
     Ok(services::settings::read_settings(paths)?.play_button_animation)
@@ -84,5 +90,20 @@ fn a_speed_that_is_not_a_number_is_refused_and_never_written() -> Result<(), App
 
     assert!(matches!(refused, Err(AppError::Validation(_))));
     assert!((stored_speed(&paths)? - before).abs() < f64::EPSILON);
+    Ok(())
+}
+
+/// Windows shared mode converts every stream to the mix format, so the row is hidden there. A
+/// reset that switched it on would reopen the device at every rate change for nothing, behind a
+/// setting nobody can see to turn back off.
+#[cfg(target_os = "windows")]
+#[test]
+fn the_bit_perfect_reset_leaves_follow_rate_off_on_windows() -> Result<(), AppError> {
+    let (_tmp, paths) = seeded_root()?;
+
+    write_bit_perfect_reset(&paths, MAX_VOLUME)?;
+
+    let settings = services::settings::read_settings(&paths)?;
+    assert!(!settings.output.output_follow_rate, "the reset turned on a row Windows hides");
     Ok(())
 }

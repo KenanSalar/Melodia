@@ -160,3 +160,7 @@ fn period_text(frames: u32, hz: u32) -> String {
     let ms = f64::from(frames) * 1000.0 / f64::from(hz.max(1));
     format!("{} ms", (ms * 10.0).round() / 10.0)
 }
+
+#[cfg(test)]
+#[path = "tests/signal_path_tests.rs"]
+mod tests;

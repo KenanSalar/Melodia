@@ -111,6 +111,46 @@ fn a_source_wider_than_the_device_is_asked_for_at_its_own_width() {
     assert_eq!(asked, [(6, DeviceFormat::S32), (6, DeviceFormat::F32)]);
 }
 
+/// The 17 to 24-bit partition with a step either side of it, 16 being the mono case above. Packed
+/// is asked first because it is what many USB DACs offer alone, and the LSB-aligned rung is never
+/// asked, WASAPI having no way to declare it.
+#[test]
+fn a_claim_asks_for_each_integer_width_through_the_rungs_wasapi_declares() {
+    use DeviceFormat::{F32, S24High, S24Packed, S32};
+    let rows: [(u8, &[DeviceFormat]); 3] = [
+        (17, &[S24Packed, S32, S24High]),
+        (24, &[S24Packed, S32, S24High]),
+        (25, &[S32, F32]),
+    ];
+    for (bits, expected) in rows {
+        let asked: Vec<DeviceFormat> =
+            candidates(shape(2, 96_000), SourceFormat { bits, float: false }, 2)
+                .map(|(_, format, _)| format)
+                .collect();
+
+        assert_eq!(asked, expected, "a {bits}-bit source");
+    }
+}
+
+/// A device already as wide as the source has no wider layout to offer, and a mix format reporting
+/// no channels at all is a driver's nonsense. Either way the claim still asks at the source's own
+/// width rather than asking for nothing.
+#[test]
+fn a_claim_asks_only_at_the_sources_width_where_the_device_reports_nothing_wider() {
+    for device_channels in [2, 0] {
+        let asked: Vec<(u16, DeviceFormat)> =
+            candidates(shape(2, 48_000), SourceFormat::F32, device_channels)
+                .map(|(shape, format, _)| (shape.channels.get(), format))
+                .collect();
+
+        assert_eq!(
+            asked,
+            [(2, DeviceFormat::S32), (2, DeviceFormat::F32)],
+            "a mix format of {device_channels} channels"
+        );
+    }
+}
+
 /// The answers that end a claim whatever format it asked in. A device with its exclusive-control
 /// box cleared answers every query that way, and read as a refused format the panel would blame
 /// the track instead of the setting.
@@ -137,6 +177,23 @@ fn any_other_failure_is_io_under_the_callers_context() {
         let refused = claim_error(context, ENDPOINT, failure);
 
         assert!(matches!(refused, ClaimError::Io { context: c, .. } if c == context), "{refused}");
+    }
+}
+
+/// The step a refusal arrives at is only context. A device lost as the stream starts has to read as
+/// not connected, the one reason the reclaim poll watches for, so the claim comes back with the
+/// device rather than at the next track start.
+#[test]
+fn a_device_refusal_keeps_its_reason_whichever_step_it_arrives_at() {
+    let rows = [
+        (AUDCLNT_E_DEVICE_IN_USE, FallbackReason::Busy),
+        (AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED, FallbackReason::NotAllowed),
+        (AUDCLNT_E_DEVICE_INVALIDATED, FallbackReason::NotConnected),
+    ];
+    for (code, expected) in rows {
+        let refused = claim_error("Failed to start the audio device", ENDPOINT, windows_error(code));
+
+        assert_eq!(refused.reason(), expected, "{code:#010x}");
     }
 }
 

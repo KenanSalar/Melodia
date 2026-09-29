@@ -50,7 +50,12 @@ pub fn set_output_choice(state: &AppState, choice: &OutputChoice) -> Result<(), 
 /// Persist what `library::playback::player_make_bit_perfect` just applied, the `volume` it left
 /// included, in one write so a failure can't leave half of it on disk.
 pub fn reset_for_bit_perfect(state: &AppState, volume: u32) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, |settings| {
+    write_bit_perfect_reset(&state.paths, volume)
+}
+
+/// [`reset_for_bit_perfect`]'s body, narrowed so what it leaves alone can be read back.
+fn write_bit_perfect_reset(paths: &Paths, volume: u32) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, |settings| {
         settings.equalizer.eq_enabled = false;
         settings.replaygain.rg_enabled = false;
         settings.playback.playback_speed = 1.0;

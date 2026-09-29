@@ -122,6 +122,37 @@ fn a_claim_never_turns_the_device_up_past_the_systems_level() -> Result<(), Refu
     Ok(())
 }
 
+/// The slider comes down to the system's level through a round trip that lands periods later, and
+/// the writer follows the volume every period meanwhile. The level the claim refused has to count as
+/// applied, or the first follow raises the device to it anyway.
+#[test]
+fn a_lowered_claim_is_not_raised_by_the_volume_it_was_asked_at() -> Result<(), Refused> {
+    let device = FakeDevice::at(0.4);
+    let mut claim = HardwareVolume::take(device.clone(), "lowered-follow", 0.8)?;
+
+    claim.follow_at(0.8, Instant::now() + FOLLOW_INTERVAL)?;
+
+    assert_eq!(device.sets.get(), 0, "the volume the claim refused reached the device");
+    Ok(())
+}
+
+/// Within half a percent of the system's level, the rounding both sliders share, taking Melodia's
+/// level is no raise anyone can hear, so the slider isn't dragged down to match. Past it, it is.
+#[test]
+fn a_volume_within_the_sliders_rounding_of_the_system_is_not_a_raise() -> Result<(), Refused> {
+    let rows = [
+        ("raise-at-the-level", 0.4, None),
+        ("raise-inside-rounding", 0.404, None),
+        ("raise-past-rounding", 0.406, Some(f64::from(0.4_f32))),
+    ];
+    for (id, volume, expected) in rows {
+        let claim = HardwareVolume::take(FakeDevice::at(0.4), id, volume)?;
+
+        assert_eq!(claim.lowered(), expected, "{volume} over a device at 0.4");
+    }
+    Ok(())
+}
+
 #[test]
 fn a_claim_quieter_than_the_system_takes_melodias_level() -> Result<(), Refused> {
     let device = FakeDevice::at(0.7);
@@ -198,6 +229,20 @@ fn a_moving_volume_reaches_the_device_at_most_once_per_interval() -> Result<(), 
     Ok(())
 }
 
+/// The writer follows the volume every period for as long as the claim holds, so a volume that
+/// isn't moving must cost the system nothing, not one call per interval.
+#[test]
+fn an_unchanged_volume_costs_no_call_however_long_it_holds() -> Result<(), Refused> {
+    let device = FakeDevice::at(0.5);
+    let mut claim = HardwareVolume::take(device.clone(), "follow-unchanged", 0.3)?;
+    let sets = device.sets.get();
+
+    claim.follow_at(0.3, Instant::now() + FOLLOW_INTERVAL * 50)?;
+
+    assert_eq!(device.sets.get(), sets, "an unchanged volume was written again");
+    Ok(())
+}
+
 /// A system move handed back returns as the slider's rounding of it. Writing that would undo any
 /// move the system made meanwhile, so a level the device already sits at is never written.
 #[test]
@@ -235,5 +280,26 @@ fn only_a_move_made_outside_melodia_is_reported_and_only_once() -> Result<(), Re
     assert_eq!(too_soon, None, "the device was asked inside the watch interval");
     assert_eq!(moved, Some(f64::from(0.6_f32)));
     assert_eq!(again, None, "one move was reported twice");
+    Ok(())
+}
+
+/// Either side of the threshold. The system's slider steps in whole percents, so a move under a
+/// tenth of one is noise in what the device reports, and following it would nudge Melodia's slider
+/// with nobody touching either.
+#[test]
+fn only_a_move_past_the_threshold_is_reported() -> Result<(), Refused> {
+    let rows = [
+        ("move-under-threshold", 0.5009, None),
+        ("move-over-threshold", 0.5011, Some(f64::from(0.5011_f32))),
+    ];
+    for (id, moved_to, expected) in rows {
+        let device = FakeDevice::at(0.5);
+        let mut claim = HardwareVolume::take(device.clone(), id, 0.5)?;
+        device.moved_to(moved_to);
+
+        let reported = claim.take_move_at(Instant::now() + WATCH_INTERVAL)?;
+
+        assert_eq!(reported, expected, "a device moved from 0.5 to {moved_to}");
+    }
     Ok(())
 }
