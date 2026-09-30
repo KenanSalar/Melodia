@@ -16,6 +16,7 @@ pub mod convert;
 pub mod device;
 pub mod encode;
 pub mod mixer;
+mod resample;
 pub mod voice;
 
 // One exclusive backend per platform, each answering to the same names: `SUPPORTED`, `POLLING`,

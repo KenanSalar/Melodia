@@ -161,7 +161,8 @@ fn the_position_counts_media_frames_rather_than_output_frames() {
         pump(&mut pull, usize::try_from(output_frames).unwrap_or(0));
 
         let want = Duration::from_secs_f64(f64::from(output_frames) * speed / f64::from(RATE));
-        let got = voice.position();
+        // At the ear, which is off the converter's lookahead where it interpolates.
+        let got = voice.heard(Duration::ZERO);
         assert!(
             got.abs_diff(want) < Duration::from_millis(2),
             "at speed {speed} the voice read {got:?}, expected about {want:?}"

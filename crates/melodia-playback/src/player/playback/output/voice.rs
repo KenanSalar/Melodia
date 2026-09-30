@@ -140,6 +140,9 @@ struct VoiceShared {
     /// can still be in the device, so [`Voice::heard`] never reads earlier. Written with `frames`,
     /// ahead of `rate`.
     anchor: AtomicU64,
+    /// Frames the playing source's converter has pulled past the one it is writing, which the ear
+    /// trails the clock by as well as the device's lead. Written once per render.
+    converter_ahead: AtomicU64,
     /// The rest of what [`Voice::playing`] reports. The source's own three are written with the
     /// clock at takeover, ahead of `rate`; `dsp_engaged` once per render. A read that straddles a
     /// handover can pair two tracks' answers, which the next read puts right.
@@ -312,7 +315,8 @@ impl Voice {
     }
 
     /// Where the ear is in the playing source: [`Self::position`] less the `lead` the device still
-    /// holds, never earlier than the clock's anchor.
+    /// holds and the frames the converter pulled ahead of the one it is writing, never earlier
+    /// than the clock's anchor.
     ///
     /// The lead is device time, and at a speed other than one the device plays media faster or
     /// slower than that, so it is scaled into the source's time first. The anchor is what keeps a
@@ -325,7 +329,8 @@ impl Voice {
         let pulled = self.shared.frames.load(Ordering::Relaxed);
         let anchor = self.shared.anchor.load(Ordering::Relaxed).min(pulled);
         let media_lead = lead.as_secs_f64() * self.shared.speed.load();
-        let behind = frames_in(Duration::try_from_secs_f64(media_lead).unwrap_or_default(), rate);
+        let behind = frames_in(Duration::try_from_secs_f64(media_lead).unwrap_or_default(), rate)
+            .saturating_add(self.shared.converter_ahead.load(Ordering::Relaxed));
         frames_to_duration(pulled.saturating_sub(behind).max(anchor), rate)
     }
 
@@ -445,6 +450,8 @@ impl VoicePull {
             self.shared.frames.fetch_add(source_frames, Ordering::Relaxed);
             if loaded.converter.is_done() {
                 self.finish_current();
+            } else if loaded.converter.is_starved() {
+                self.hand_over_or_drain();
             }
         }
 
@@ -456,6 +463,7 @@ impl VoicePull {
         }
         if let Some(loaded) = &self.current {
             self.shared.dsp_engaged.store(loaded.source.dsp_engaged(), Ordering::Relaxed);
+            self.shared.converter_ahead.store(loaded.converter.frames_ahead(), Ordering::Relaxed);
         }
         written
     }
@@ -552,6 +560,27 @@ impl VoicePull {
         self.shared.sources.fetch_sub(1, Ordering::SeqCst);
     }
 
+    /// The playing source ran dry with its converter still owed frames.
+    ///
+    /// A staged successor of the same shape takes that converter over, so the frames the window
+    /// still holds play out against the successor's first ones and the seam is converted as one
+    /// stream. Anything else lets the window drain, and the successor starts on its own.
+    fn hand_over_or_drain(&mut self) {
+        let Some(current) = self.current.as_mut() else {
+            return;
+        };
+        let shape = current.source.shape();
+        if let Some(next) = self.staged.front_mut().filter(|next| next.source.shape() == shape) {
+            std::mem::swap(&mut current.converter, &mut next.converter);
+        } else {
+            current.converter.drain();
+            if !current.converter.is_done() {
+                return;
+            }
+        }
+        self.finish_current();
+    }
+
     /// The playing source ran out: retire it and take the staged one, if any.
     ///
     /// Retiring rather than dropping is what keeps the free off this thread while the visualizer's
@@ -602,6 +631,7 @@ pub fn pair(device: Shape) -> (Voice, VoicePull) {
         frames: AtomicU64::new(0),
         rate: AtomicU32::new(0),
         anchor: AtomicU64::new(0),
+        converter_ahead: AtomicU64::new(0),
         source_channels: AtomicU16::new(0),
         source_bits: AtomicU8::new(0),
         source_float: AtomicBool::new(false),

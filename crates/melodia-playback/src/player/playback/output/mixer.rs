@@ -25,7 +25,9 @@ use super::voice::{Voice, VoicePull};
 /// outgoing track stays at full gain for that whole period while the incoming one ramps up, and the
 /// sum — which nothing clamps, deliberately — goes past unity by the period over the fade length.
 /// Stepping every voice through the block together bounds that to this many frames instead, which
-/// against the shortest crossfade the settings allow is a fraction of a percent. rodio's mixer
+/// against the shortest crossfade the settings allow is a fraction of a percent. An outgoing voice
+/// whose converter interpolates adds its lookahead to that: those frames were pulled before the
+/// arm, so they play out at full gain. rodio's mixer
 /// pulled one sample from every voice in turn, so this is the same property at a coarser grain,
 /// chosen so the loop costs a few dozen iterations per callback rather than a few thousand.
 pub const LOCKSTEP_FRAMES: usize = 64;

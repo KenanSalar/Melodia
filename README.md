@@ -87,6 +87,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Queue with shuffle and repeat; playing from any list queues that list behind your pick
 - Full-screen Now Playing with an up-next list and a spectrum, mirrored, or waveform visualizer tinted to the album's own colors
 - Playback speed 0.25×–2.0×, a playback-linked sleep timer, resume on startup, media keys
+- Band-limited sample-rate conversion wherever a file's rate isn't the output's or the speed isn't 1×, carried across gapless track changes, and skipped entirely where the rates already match
 - Responsive mini-player: shrink the window and the UI collapses to a strip, a card or a column with Up Next or lyrics, one layout that rearranges as you resize instead of jumping between them
 
 ### Bit-perfect output

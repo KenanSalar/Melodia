@@ -2,7 +2,8 @@
 
 Working doc. Delete it when the last phase that's taken on ships.
 
-Status: **not started** · Created: 2026-09-30
+Status: **Phases 1 and 2 complete** (tests held back, see Phase 2) · Created: 2026-09-30 ·
+Revised: 2026-09-30
 
 > Facts below were checked on **2026-09-30** against `a0b9978b` on `feat/bit-perfect-output`,
 > and against the pinned `cpal 0.18.2` sources. Line counts are from `wc -l` on that commit.
@@ -50,8 +51,8 @@ Smaller gaps, each a phase of its own below:
 
 | # | Phase | Depends on | What the listener gets |
 |---|---|---|---|
-| 1 | The converter's state crosses a gapless seam | – | Nothing audible yet. It is what makes Phase 2 seamless. |
-| 2 | A band-limited kernel in place of linear interpolation | 1 | Clean rate conversion and speed changes, in the default setup |
+| 1 ✅ | The converter's state crosses a gapless seam | – | Nothing audible yet. It is what makes Phase 2 seamless. |
+| 2 ✅ | A band-limited kernel in place of linear interpolation | 1 | Clean rate conversion and speed changes, in the default setup |
 | 3 | Keep the claim on a rate the device lacks (a picker, default = today) | 2 | A hi-res album on a capped DAC stays exclusive and gapless |
 | 4 | TPDF dither where changed samples are narrowed | – | Noise instead of distortion on 16-bit output |
 | 5 | Crossfade under exclusive when no reopen is needed | – | Crossfade works with exclusive between same-format tracks |
@@ -89,7 +90,7 @@ Where each change lives, and how big each file is today. Production files stay u
 
 ---
 
-## Phase 1 - The converter's state crosses a gapless seam
+## Phase 1 - The converter's state crosses a gapless seam ✅
 
 **Why first:** Phase 2 widens the converter's window from two frames to a kernel's worth. Under
 today's handover that would leave half a kernel of silence on each side of every gapless seam, and
@@ -128,7 +129,17 @@ validated by the existing suite before any sound changes.
 **Tests, after the manual go:** at a ratio other than 1, a sine split across two sources must
 render exactly like the unsplit one.
 
-## Phase 2 - A band-limited kernel
+**As built** (static gates green):
+- The protocol is `Converter::{is_starved, drain}` plus `VoicePull::hand_over_or_drain`. The
+  successor takes the converter over by a `mem::swap`.
+- The window is paid straight after each write rather than before the next. That keeps a source
+  whose last frame was just written from lingering a callback longer, which
+  `voice_tests::a_staged_source_starts_when_the_one_ahead_of_it_ends` caught.
+- A pre-existing fault was fixed on the way. Once a speed change had left the position part way
+  between two frames, a return to exactly 1.0 kept interpolating while the verdict read
+  Bit-perfect. A step of exactly one now drops that fraction.
+
+## Phase 2 - A band-limited kernel ✅
 
 **What changes**
 - **New `output/resample.rs`.**
@@ -177,6 +188,120 @@ width. No new caches.
 
 **Docs, after the manual go:** the chain line in `.claude/rules/audio-stack.md`, and the module
 docs of `convert.rs` and `resample.rs`.
+
+**As built** (static gates green). Where it differs from the plan above:
+
+**Kernel**
+- 128 taps, Blackman-Harris. The cutoff is placed half the window's main lobe below Nyquist.
+- The table has 1024 rows per frame. It is laid out so a row holds every tap one side of the
+  point sits at: an unstretched side reads two rows straight through, and takes its sum from
+  precomputed row sums.
+- A stretched side walks the table in 16-bit fixed point. `MAX_STRETCH` is 4.
+- The table is forced by `Converter::new` rather than `AudioOutput`, since every converter is built
+  on the control thread.
+
+**Converter**
+- Lookahead is pulled only while interpolating. At a step of exactly one the output copies the
+  centre frame with no lookahead at all, so a bit-perfect path runs no later than the source, and
+  the crossfade and bit-perfect suites see the same timing as before.
+- A lookahead left behind when the step returns to one drains away as the centre moves through it.
+- The end of a source drains against silence, and the converter is done when the centre reaches
+  it.
+- `Voice::heard` subtracts `converter_ahead`, published per render.
+
+**Tests adapted**
+- `voice_tests::the_position_counts_media_frames_rather_than_output_frames` reads `heard(ZERO)`.
+  While interpolating, the pulled clock now runs the lookahead ahead of what was written.
+- `crossfade.rs::a_staged_gapless_track_takes_over_through_an_output_reopen` allows the step
+  between its two DC levels to ring by up to the Gibbs overshoot. The reopen puts that seam through
+  the kernel, which rings on a hard step by design. A frame of silence would still dip almost to
+  zero.
+
+**Measured** in a throwaway release harness outside the repo, one stereo stream, on the Linux
+machine.
+
+CPU, as a share of one core:
+
+| Conversion | Linear (before) | Kernel |
+|---|---|---|
+| Rates equal, speed 1 | 0.07 % | 0.06 % |
+| 44.1 → 48 kHz | | 0.25 % |
+| 48 → 44.1 kHz | | 0.66 % |
+| 1.25× speed | | 0.72 % |
+| 2× speed | | 1.09 % |
+| 96 → 48 kHz | | 1.17 % |
+| 192 → 48 kHz | | 2.30 % |
+
+Error against the ideal sine, or leakage of a tone past the output's Nyquist:
+
+| Case | Linear | Kernel |
+|---|---|---|
+| 44.1 → 48 kHz, 10 kHz tone, error | −15 dB | −130 dB |
+| 44.1 → 48 kHz, 19 kHz tone, error | −4.9 dB | −123.5 dB |
+| 48 → 44.1 kHz, 18 kHz tone, error | −7 dB | −117.5 dB |
+| 96 → 48 kHz, 30 kHz tone, leakage | 0 dB | −140.7 dB |
+| 2× speed, 15 kHz tone, leakage | 0 dB | −138.3 dB |
+
+At integer ratios linear was near-exact in band (−157 dB at 96 → 48 kHz, 10 kHz), since it only
+picks samples, but it aliased everything above. The kernel lands at −134 dB there.
+
+**In-app run** (debug build, dev data folder backed up and restored). Shared output went to a
+temporary null sink at 48 kHz, recorded from its monitor. Exclusive output went to the silent
+PCM2902.
+
+| Check | Result |
+|---|---|
+| 44.1 kHz 10 kHz tone → 48 kHz, image at 13.9 kHz | −166 dB; the only spur, −107 dB, is the 16-bit source's own |
+| 19 kHz tone | full amplitude; image at 22.9 kHz −125 dB |
+| 96 kHz file with 10 + 30 kHz | 30 kHz alias at 18 kHz −142.7 dB; 10 kHz level exact |
+| 48 kHz noise at 48 kHz | bit-identical to the file over 3.68 s, both channels |
+| Gapless pair split mid-waveform, through 44.1 → 48 kHz | one sine fits the whole run; no window above the source's −95 dB floor |
+| 1.5× speed | 10 kHz plays at 15 kHz at full level |
+| 1.5× speed, 19 kHz tone (28.5 kHz, past Nyquist) | steady leak −93 dB, the window's sidelobe floor |
+| Exclusive | rate followed per track (44100, 48000, 44100 S16_LE); card released at the queue's end |
+| Exclusive at 1.5× | claim held, no underruns logged |
+
+In the scratch harness, eight live speed changes across one produced no step past a sine's
+steepest slope, so nothing skipped or repeated.
+
+**Listening pass** (Kenan, 2026-09-30, debug build). Each B track is the old linear converter's
+output for the same decoded samples, rendered offline with the code from `HEAD` and played through
+Melodia's copy path.
+
+Shared, on the Elegiant speakers at 48 kHz:
+
+| Test | Heard |
+|---|---|
+| Log sweep, new (A) against old (B) | A one clean tone; B a ghost tone rising beside it near the top |
+| 96 kHz file with a 34 kHz tone, new against old | A only the quiet 1 kHz reference; B a 14 kHz whistle, measured at the output 18 dB above the reference |
+| Gapless chord split mid-waveform | seamless |
+| Speed drag across 1.0× | smooth |
+
+Exclusive, on the Elegiant speakers (`hw:CARD=Generic_1,DEV=0`, ALC897):
+
+| Test | Heard |
+|---|---|
+| Gapless chord | seamless, card held at 44100 S16_LE |
+| 44.1 kHz chord then a 48 kHz one | a clean resync silence between them, card moved 44100 → 48000 |
+| Speed drag across 1.0× | smooth |
+
+No underruns were logged, and the card was handed back when Melodia quit.
+
+**Still open**
+- Tests: none written. They wait for Kenan's instruction or come from him. The candidates listed
+  above still stand, plus a pin that a live speed change neither skips nor repeats a frame.
+- Docs: the README Playback bullet and the two `.claude/rules/audio-stack.md` fixes are in.
+- Release-build RSS.
+- Found on the way, fixed separately: MPRIS reported `Rate` 1.0 at any speed, all three rate
+  properties being hardcoded, so a client's progress bar ran at 1× until the next position update.
+  - `Rate` now carries the live speed, and `MinimumRate`/`MaximumRate` carry the engine's bounds,
+    closing on 1.0 while a station plays.
+  - A change is announced with both bounds.
+  - `Rate` is writable: 0.0 pauses, a negative or non-finite rate is refused, a set during a
+    station is refused, and anything else is clamped, applied and persisted as the speed control
+    does, through a new `PlayerEvent::SetSpeed`.
+  - Checked live over D-Bus: 1.5 plays a 10 kHz tone at 15 kHz and persists; 3.0 clamps to 2; −1
+    is refused; 0 pauses. The station case was not exercised live.
 
 ## Phase 3 - Keep the claim on a rate the device lacks
 

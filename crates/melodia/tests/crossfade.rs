@@ -738,6 +738,10 @@ async fn a_crossfade_carries_on_through_an_output_reopen() -> std::io::Result<()
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_staged_gapless_track_takes_over_through_an_output_reopen() -> std::io::Result<()> {
     const NEXT_LEVEL: f32 = AMPLITUDE / 2.0;
+    /// The reopened rate puts the seam through the band-limited kernel, which rings on the step
+    /// between the two levels by up to the Gibbs overshoot of a sharp filter. A frame of silence
+    /// dips almost to zero, far past that.
+    const RINGING: f32 = (AMPLITUDE - NEXT_LEVEL) * 0.09;
     /// How far into the successor the pull runs past the first track's one second.
     const INTO_NEXT_MS: u64 = 500;
     /// The handover lands inside a lockstep step, and both position reads floor.
@@ -762,7 +766,7 @@ async fn a_staged_gapless_track_takes_over_through_an_output_reopen() -> std::io
     let across = pull(&mut mix, frames_at(REOPENED_RATE, remaining_ms + INTO_NEXT_MS));
     let quietest = across.iter().fold(f32::MAX, |low, s| low.min(*s));
     assert!(
-        quietest >= NEXT_LEVEL - 1e-3,
+        quietest >= NEXT_LEVEL - RINGING,
         "the handover after a reopen dipped to {quietest}: a gap between the two tracks"
     );
     assert_eq!(

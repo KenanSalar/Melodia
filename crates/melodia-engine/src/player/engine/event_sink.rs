@@ -18,6 +18,7 @@ pub enum PlayerEvent {
     SetVolume(u32),
     SetShuffle(bool),
     SetRepeat(RepeatMode),
+    SetSpeed(f64),
 }
 
 pub trait EventSink: Send + Sync + 'static {
