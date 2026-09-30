@@ -550,8 +550,8 @@ impl Session {
     }
 
     fn start(&self) -> Result<(), WasapiError> {
-        // Silence rather than the mixer's first block: the resync hold is laid in after the open
-        // returns, and a block pulled now would play ahead of it.
+        // The device wants a filled buffer before it starts. Silence rather than the mixer's first
+        // block keeps every pull in `play`.
         let silence = vec![0_u8; self.samples_per_buffer() * self.format.bytes_per_sample()];
         self.render.write_to_device(self.buffer_frames, &silence, None)?;
         self.client.start_stream()

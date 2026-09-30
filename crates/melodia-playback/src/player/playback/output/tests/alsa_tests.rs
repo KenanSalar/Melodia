@@ -64,7 +64,7 @@ fn a_claim_asks_for_each_source_through_the_rungs_alsa_spells() {
         (SourceFormat { bits: 17, float: false }, &[S24Packed, S32, S24Low]),
         (SourceFormat { bits: 24, float: false }, &[S24Packed, S32, S24Low]),
         (SourceFormat { bits: 25, float: false }, &[S32, F32]),
-        (SourceFormat::F32, &[S32, F32]),
+        (SourceFormat::F32, &[S32, F32, S24Packed, S24Low, S16]),
     ];
     for (source, expected) in rows {
         let asked: Vec<DeviceFormat> = candidates(source).map(|(format, _)| format).collect();
@@ -73,9 +73,9 @@ fn a_claim_asks_for_each_source_through_the_rungs_alsa_spells() {
     }
 }
 
-/// A card unplugged has to read as not connected, the one reason the reclaim poll watches for, so
-/// the claim comes back with the card rather than at the next track start. A busy one is asked
-/// again at every track start, and anything else is a fault in the open itself.
+/// A card unplugged has to read as not connected, the one reason the reclaim poll watches for and
+/// the only thing that brings the claim back with the card. A busy one is asked again at every
+/// track start, and anything else is a fault in the open itself.
 #[test]
 fn an_open_names_a_busy_or_vanished_card_and_anything_else_is_io() {
     let rows = [

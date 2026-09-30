@@ -290,7 +290,7 @@ pub struct AudioOutput {
     status: Arc<OutputStatus>,
     /// The refusal last reported, so a claim refused the same way at a later track start is
     /// reported once rather than per track. A claim that takes in between leaves it standing, or
-    /// a mixed queue on a 16-bit card warns at every lossy track. Going shared clears it, as do a
+    /// a mixed queue on a 16-bit card warns at every 24-bit track. Going shared clears it, as do a
     /// new output choice and a claim taking after a disconnect: each is news, where a format
     /// refused again is not.
     reported: Option<Fallback>,
@@ -554,7 +554,7 @@ impl AudioOutput {
     /// thread its name through every way a claim can fail.
     ///
     /// **A refusal is a warning and a toast once, not per track.** A busy device is retried at
-    /// every track start, and a 16-bit card refuses each lossy file that follows a lossless one, so
+    /// every track start, and a 16-bit card refuses each 24-bit file that follows a 16-bit one, so
     /// the same answer again goes to debug and says nothing to the user.
     fn fall_back(
         &mut self,
@@ -622,9 +622,12 @@ impl AudioOutput {
 
     /// Whether the stream open now plays what `wanted` asks for, so no reopen is owed: the request
     /// it was opened for, or a claim differing from it only in the source's format, where the
-    /// device already runs in a format that holds the new source or that a fresh claim would land
-    /// on anyway. A shared stream standing in for a refused claim serves only its own request.
+    /// device already runs in a format on the new source's ladder. A shared stream standing in for
+    /// a refused claim serves only its own request, and no stream, parked or lost, serves anything.
     pub fn serves(&self, wanted: &OutputRequest) -> bool {
+        if self.stream.is_none() {
+            return false;
+        }
         if self.request == *wanted {
             return true;
         }
@@ -640,7 +643,8 @@ impl AudioOutput {
         claim_serves(open, format, next)
     }
 
-    /// The voices, as one mixer. Handed to `player::playback::decks` at boot and not reachable any other way.
+    /// The voices, as one mixer. Handed to `player::playback::decks` at boot and not reachable any
+    /// other way.
     pub fn mixer(&self) -> &Mixer {
         &self.mixer
     }
@@ -675,8 +679,9 @@ fn voice_gain(volume: f64, on_device: bool) -> f64 {
 /// Everything but the source's format has to match, and `format` has to be on that format's
 /// ladder. For an integer source that means a container holding every bit of it, so a 16-bit track
 /// after a 24-bit one keeps the 24-bit claim and plays gapless. A float source is carried only by
-/// F32, but its ladder is S32 then F32, so the claim it finds is the one a fresh claim on the same
-/// device would land on anyway.
+/// F32 and converted by every other rung, so a lossy track keeps whatever integer claim the track
+/// before it opened and plays gapless, even where a fresh claim would have found F32 and carried
+/// it exactly: a lossy decode isn't worth a reopen.
 fn claim_serves(open: &ExclusiveRequest, format: DeviceFormat, next: &ExclusiveRequest) -> bool {
     let same_claim = *next == ExclusiveRequest { format: next.format, ..open.clone() };
     same_claim && DeviceFormat::ladder(next.format).contains(&format)

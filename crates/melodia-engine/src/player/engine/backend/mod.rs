@@ -108,9 +108,11 @@ pub struct PlaybackEngine {
     // `gapless_pending` is one: the deferred clear of a faded stop has to drop this alongside the
     // deck contents it removes.
     live_stream: Arc<Mutex<Option<Arc<StreamShared>>>>,
-    // The last path `preload_gapless` refused for needing a reopen. The monitor asks again every
-    // tick until the track ends, and each ask would otherwise decode the file just to refuse it.
-    gapless_refused: Mutex<Option<String>>,
+    // The last path `preload_gapless` refused for needing a reopen, and the epoch it was refused
+    // under. The monitor asks again every tick until the track ends, and each ask would otherwise
+    // decode the file just to refuse it. A newer epoch may have reopened the output since, so the
+    // refusal stands only for its own.
+    gapless_refused: Mutex<Option<(u64, String)>>,
     // Only ever schedules the deferred half of a faded pause / stop.
     runtime: tokio::runtime::Handle,
 }
@@ -283,12 +285,17 @@ impl PlaybackEngine {
         self.bump_epoch();
         self.clear_live_stream();
         let mut decks = self.lock_decks();
-        let volume = self.prepare_output_for(&decks, &decoded, volume);
         // Backstop for the gapless race: `preload_gapless` sets the flag under
         // this same lock, so a preload that landed during the decode is visible
         // here. Downgrading to a hard cut is always safe — it clears both decks,
         // staged source included.
         let fade_ms = if self.gapless_pending.load(Ordering::Acquire) { 0 } else { fade_ms };
+        if fade_ms == 0 {
+            // A reopen keeps the voices, so the new stream would play on from the outgoing track
+            // until the cut's clear lands. A fade needs that track to keep playing.
+            decks.pause_all();
+        }
+        let volume = self.prepare_output_for(&decks, &decoded, volume);
         // The deck primitives hand this closure the *target* deck under the one
         // lock they append through, so the ramp cell the source carries always
         // belongs to the deck it lands on. `EqSource::new` does no I/O, so
@@ -372,6 +379,8 @@ impl PlaybackEngine {
         *self.live_stream.lock() = Some(shared);
         self.bump_epoch();
         let decks = self.lock_decks();
+        // What was playing must not carry on into a reopened stream; see `play_media`.
+        decks.pause_all();
         let volume = self.prepare_output_for(&decks, &source, volume);
         // A live mount has no timeline to resume on, so its clock starts where the connection did.
         decks.cut_to(volume, Self::STREAM_SPEED, Duration::ZERO, |deck| {
@@ -668,7 +677,12 @@ impl PlaybackEngine {
         // deck's ramp cell — possibly one armed to fade out and end.
         let epoch = self.deck_epoch.load(Ordering::Acquire);
 
-        if self.gapless_refused.lock().as_deref() == Some(path) {
+        let refused_already = self
+            .gapless_refused
+            .lock()
+            .as_ref()
+            .is_some_and(|(refused_at, refused)| *refused_at == epoch && refused == path);
+        if refused_already {
             return;
         }
 
@@ -687,7 +701,7 @@ impl PlaybackEngine {
         // unstaged, it ends in `EndOfStream` and starts through `play_media`, which reopens.
         if !self.plays_without_reopen(decoded.shape(), decoded.format()) {
             log::debug!("Not staging {path} gapless: the output reopens for its format");
-            *self.gapless_refused.lock() = Some(path.to_owned());
+            *self.gapless_refused.lock() = Some((epoch, path.to_owned()));
             return;
         }
 

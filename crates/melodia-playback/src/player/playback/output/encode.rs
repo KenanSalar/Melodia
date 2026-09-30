@@ -33,12 +33,17 @@ impl DeviceFormat {
     /// The formats to try for a source, best first: its own width, then the widest integer
     /// that holds it, then the 24-in-32 containers. A backend skips whichever of those it has no
     /// spelling for.
+    ///
+    /// **A float source takes the narrower integers last.** Only F32 holds it, so every other rung
+    /// converts it anyway, and one a device lacks would otherwise send a lossy track to the shared
+    /// mixer, which converts it too and resamples besides.
     pub fn ladder(source: SourceFormat) -> &'static [Self] {
         use DeviceFormat::{F32, S16, S24High, S24Low, S24Packed, S32};
         match source {
             SourceFormat { float: false, bits: ..=16 } => &[S16, S32, S24Packed, S24Low, S24High],
             SourceFormat { float: false, bits: 17..=24 } => &[S24Packed, S32, S24Low, S24High],
-            SourceFormat { .. } => &[S32, F32],
+            SourceFormat { float: false, .. } => &[S32, F32],
+            SourceFormat { float: true, .. } => &[S32, F32, S24Packed, S24Low, S24High, S16],
         }
     }
 

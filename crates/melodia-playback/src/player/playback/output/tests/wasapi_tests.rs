@@ -108,7 +108,16 @@ fn a_source_wider_than_the_device_is_asked_for_at_its_own_width() {
         .map(|(shape, format, _)| (shape.channels.get(), format))
         .collect();
 
-    assert_eq!(asked, [(6, DeviceFormat::S32), (6, DeviceFormat::F32)]);
+    assert_eq!(
+        asked,
+        [
+            (6, DeviceFormat::S32),
+            (6, DeviceFormat::F32),
+            (6, DeviceFormat::S24Packed),
+            (6, DeviceFormat::S24High),
+            (6, DeviceFormat::S16),
+        ]
+    );
 }
 
 /// The 17 to 24-bit partition with a step either side of it, 16 being the mono case above. Packed
@@ -142,7 +151,13 @@ fn a_claim_asks_only_at_the_sources_width_where_the_device_reports_nothing_wider
 
         assert_eq!(
             asked,
-            [(2, DeviceFormat::S32), (2, DeviceFormat::F32)],
+            [
+                (2, DeviceFormat::S32),
+                (2, DeviceFormat::F32),
+                (2, DeviceFormat::S24Packed),
+                (2, DeviceFormat::S24High),
+                (2, DeviceFormat::S16),
+            ],
             "a mix format of {device_channels} channels"
         );
     }
@@ -178,8 +193,8 @@ fn any_other_failure_is_io_under_the_callers_context() {
 }
 
 /// The step a refusal arrives at is only context. A device lost as the stream starts has to read as
-/// not connected, the one reason the reclaim poll watches for, so the claim comes back with the
-/// device rather than at the next track start.
+/// not connected, the one reason the reclaim poll watches for and the only thing that brings the
+/// claim back with the device.
 #[test]
 fn a_device_refusal_keeps_its_reason_whichever_step_it_arrives_at() {
     let rows = [

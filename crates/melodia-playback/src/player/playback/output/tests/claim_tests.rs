@@ -25,16 +25,16 @@ fn a_format_refusal_names_a_float_source_as_float() {
 }
 
 /// A retry can only succeed where the answer can change: the holder lets go, the user allows
-/// exclusive control, the device comes back, or a fault clears. A rate, channel count or format
-/// the device lacks is refused the same way, and retrying it restarted the shared stream at every
-/// skip.
+/// exclusive control, or a fault clears. A rate, channel count or format the device lacks is
+/// refused the same way, and retrying it restarted the shared stream at every skip. So did a
+/// device that wasn't connected, which the reclaim poll asks for once it is listed again.
 #[test]
-fn only_a_refusal_that_can_pass_is_retried() {
+fn a_track_start_retries_only_a_refusal_that_can_pass_and_no_poll_watches() {
     let rows = [
         (FallbackReason::Busy, true),
         (FallbackReason::NotAllowed, true),
         (FallbackReason::Reserved { by: "PipeWire".to_owned() }, true),
-        (FallbackReason::NotConnected, true),
+        (FallbackReason::NotConnected, false),
         (FallbackReason::Io, true),
         (FallbackReason::RateRefused, false),
         (FallbackReason::ChannelsRefused, false),
@@ -42,6 +42,6 @@ fn only_a_refusal_that_can_pass_is_retried() {
         (FallbackReason::Unsupported, false),
     ];
     for (reason, expected) in rows {
-        assert_eq!(reason.may_pass_later(), expected, "{reason:?}");
+        assert_eq!(reason.retry_at_track_start(), expected, "{reason:?}");
     }
 }

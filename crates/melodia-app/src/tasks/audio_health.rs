@@ -48,8 +48,9 @@ const STALL_POLLS: u32 = 4;
 /// How often a device a claim fell back from for not being connected is looked for again.
 ///
 /// A replug is then heard on the chosen device within about this, rather than at the next track
-/// start. Nothing else would bring it back: Windows only sometimes moves its default output to a
-/// replugged device, which is the one thing that disturbs the shared fallback.
+/// in another format, the only track start that asks again. Windows only sometimes moves its
+/// default output to a replugged device, so the system can't be relied on to disturb the fallback
+/// either.
 const RECLAIM_POLL: Duration = Duration::from_secs(1);
 
 /// The wait before each reopen attempt.
@@ -129,8 +130,9 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
                 () = shutdown.cancelled() => break,
                 _ = device_ticker.tick() => {
                     let lost = health.take_device_lost();
-                    // A parked output has no stream to beat, which is the point of parking it, and a
-                    // reopen has none until it lands: a recovery queued behind one could only redo it.
+                    // A parked output has no stream to beat, which is the point of parking it, and
+                    // a reopen has none until it lands: a recovery queued behind one could only
+                    // redo it.
                     let stalled = !engine.output_parked()
                         && !engine.output_reopening()
                         && stall.observe(health.blocks());

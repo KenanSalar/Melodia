@@ -174,9 +174,9 @@ impl PlaybackEngine {
     }
 
     /// Whether a claim that fell back because its device wasn't connected can find it listed
-    /// again, so it is worth reclaiming now: a fallback is otherwise retried only at the next
-    /// track start, which a gapless album never reaches. Lists the devices only while such a
-    /// fallback stands. Blocking.
+    /// again, so it is worth reclaiming now. A track start asks again only where it reopens for
+    /// another format anyway, which a gapless album never does. Lists the devices only while such
+    /// a fallback stands. Blocking.
     pub fn disconnected_device_returned(&self) -> bool {
         if !self.awaiting_disconnected_device() {
             return false;
@@ -249,7 +249,7 @@ impl PlaybackEngine {
             output.park();
             return;
         };
-        if output.serves(&wanted) && !output.is_parked() {
+        if output.serves(&wanted) {
             return;
         }
         match reopen_routed(&decks, output, wanted) {
@@ -289,10 +289,9 @@ impl PlaybackEngine {
     /// never idles, so a rate another app held the card at when ours opened would stick after that
     /// app left. A same-rate reopen writes no resync silence, so a track start is the cheap place
     /// to take the card back. An exclusive claim that fell back is retried here for the same
-    /// reason, since whatever held the card may have let go, but only where the refusal can pass:
-    /// a rate or format the card lacks is refused again, and retrying it would restart the shared
-    /// stream at every skip. A gapless transition doesn't come through here and keeps the output
-    /// as it is.
+    /// reason, since whatever held the card may have let go, wherever
+    /// `FallbackReason::retry_at_track_start` allows. A gapless transition doesn't come through
+    /// here and keeps the output as it is.
     ///
     /// Takes the decks guard as proof it is held: this runs inside a transport op, between its
     /// decode and its append. A failure is logged and playback carries on over whatever
@@ -303,15 +302,15 @@ impl PlaybackEngine {
         let Some(output) = output.as_mut() else {
             return;
         };
-        let reclaim = matches!(wanted, OutputRequest::Shared { rate: Some(_) })
-            || output
-                .negotiated()
-                .and_then(|negotiated| negotiated.fallback)
-                .is_some_and(|fallback| fallback.reason.may_pass_later());
-        if output.serves(&wanted) && !output.is_parked() && !reclaim {
+        let open = output.negotiated();
+        let previous_rate = open.as_ref().map(|negotiated| negotiated.shape.rate);
+        let retry_claim = open
+            .and_then(|negotiated| negotiated.fallback)
+            .is_some_and(|fallback| fallback.reason.retry_at_track_start());
+        let reclaim = matches!(wanted, OutputRequest::Shared { rate: Some(_) }) || retry_claim;
+        if output.serves(&wanted) && !reclaim {
             return;
         }
-        let previous_rate = output.negotiated().map(|negotiated| negotiated.shape.rate);
         match reopen_routed(decks, output, wanted) {
             Ok(negotiated) if previous_rate == Some(negotiated.shape.rate) => {
                 log::debug!("Output reopened: {negotiated:?}");

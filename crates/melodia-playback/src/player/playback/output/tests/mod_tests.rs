@@ -43,9 +43,9 @@ fn the_voices_run_at_unity_only_while_the_device_carries_an_audible_volume() {
 }
 
 /// A 16-bit track after a 24-bit one keeps the 24-bit claim and plays gapless, where the reverse
-/// reopens: a narrower container can't hold it. A float source is carried by F32 alone, but its
-/// ladder opens on S32, so a claim already in either is the one a fresh claim would land on, and
-/// a claim in anything else reopens for it.
+/// reopens: a narrower container can't hold it. A float source is carried by F32 alone and
+/// converted by every integer rung, so any integer claim serves it, and a float claim serves no
+/// 16- or 24-bit source.
 #[test]
 fn a_claim_serves_a_new_format_only_where_it_runs_on_that_format_s_ladder() {
     let rows = [
@@ -55,8 +55,8 @@ fn a_claim_serves_a_new_format_only_where_it_runs_on_that_format_s_ladder() {
         (S16_SOURCE, DeviceFormat::S16, S24_SOURCE, false),
         (S16_SOURCE, DeviceFormat::S32, SourceFormat::F32, true),
         (SourceFormat::F32, DeviceFormat::F32, SourceFormat::F32, true),
-        (S16_SOURCE, DeviceFormat::S16, SourceFormat::F32, false),
-        (S24_SOURCE, DeviceFormat::S24Packed, SourceFormat::F32, false),
+        (S16_SOURCE, DeviceFormat::S16, SourceFormat::F32, true),
+        (S24_SOURCE, DeviceFormat::S24Packed, SourceFormat::F32, true),
         (SourceFormat::F32, DeviceFormat::F32, S16_SOURCE, false),
     ];
     for (opened_for, running_in, next, expected) in rows {

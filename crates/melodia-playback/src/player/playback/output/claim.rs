@@ -85,19 +85,18 @@ pub enum FallbackReason {
 }
 
 impl FallbackReason {
-    /// Whether the same request can be claimed later without anything in it changing: the holder
-    /// lets go, the user allows exclusive control, the device comes back, or a fault clears. A
-    /// rate, channel count or format the device lacks is refused the same way every time.
-    pub fn may_pass_later(&self) -> bool {
+    /// Whether a track start asks for the same claim again: the holder may have let go, the user
+    /// allowed exclusive control, or a fault cleared. A rate, channel count or format the device
+    /// lacks is refused the same way every time, and a device that wasn't connected is the reclaim
+    /// poll's, which asks only once it is listed again.
+    pub fn retry_at_track_start(&self) -> bool {
         match self {
-            Self::Busy
-            | Self::NotAllowed
-            | Self::Reserved { .. }
-            | Self::NotConnected
-            | Self::Io => true,
-            Self::RateRefused | Self::ChannelsRefused | Self::FormatRefused | Self::Unsupported => {
-                false
-            }
+            Self::Busy | Self::NotAllowed | Self::Reserved { .. } | Self::Io => true,
+            Self::NotConnected
+            | Self::RateRefused
+            | Self::ChannelsRefused
+            | Self::FormatRefused
+            | Self::Unsupported => false,
         }
     }
 }
