@@ -4,7 +4,9 @@
 use std::time::Duration;
 
 use super::encode::DeviceFormat;
-use super::{DeviceLevel, Drive, ExclusiveRequest, ExclusiveTuning, claim_serves, voice_gain};
+use super::{
+    DeviceLevel, Drive, ExclusiveRequest, ExclusiveTuning, RateFallback, claim_serves, voice_gain,
+};
 use crate::player::playback::tests::helpers::shape;
 use melodia_audio::player::source::audio::SourceFormat;
 
@@ -18,6 +20,7 @@ fn request(format: SourceFormat) -> ExclusiveRequest {
         format,
         tuning: ExclusiveTuning::default(),
         hardware_volume: true,
+        rate_fallback: RateFallback::Shared,
     }
 }
 

@@ -2,8 +2,8 @@
 
 Working doc. Delete it when the last phase that's taken on ships.
 
-Status: **Phases 1 and 2 complete** (tests held back, see Phase 2) · Created: 2026-09-30 ·
-Revised: 2026-09-30
+Status: **Phases 1 and 2 complete** (tests held back, see Phase 2) · **Phase 3: Linux half
+built, WASAPI half open** · Created: 2026-09-30 · Revised: 2026-09-30
 
 > Facts below were checked on **2026-09-30** against `a0b9978b` on `feat/bit-perfect-output`,
 > and against the pinned `cpal 0.18.2` sources. Line counts are from `wc -l` on that commit.
@@ -53,7 +53,7 @@ Smaller gaps, each a phase of its own below:
 |---|---|---|---|
 | 1 ✅ | The converter's state crosses a gapless seam | – | Nothing audible yet. It is what makes Phase 2 seamless. |
 | 2 ✅ | A band-limited kernel in place of linear interpolation | 1 | Clean rate conversion and speed changes, in the default setup |
-| 3 | Keep the claim on a rate the device lacks (a picker, default = today) | 2 | A hi-res album on a capped DAC stays exclusive and gapless |
+| 3 | Keep the claim on a rate the device lacks (a picker, default = today). **Linux half built, WASAPI half open** | 2 | A hi-res album on a capped DAC stays exclusive and gapless |
 | 4 | TPDF dither where changed samples are narrowed | – | Noise instead of distortion on 16-bit output |
 | 5 | Crossfade under exclusive when no reopen is needed | – | Crossfade works with exclusive between same-format tracks |
 | 6 | A device picker for shared output | – | Music can go to a DAC without changing the system default |
@@ -303,7 +303,7 @@ No underruns were logged, and the card was handed back when Melodia quit.
   - Checked live over D-Bus: 1.5 plays a 10 kHz tone at 15 kHz and persists; 3.0 clamps to 2; −1
     is refused; 0 pauses. The station case was not exercised live.
 
-## Phase 3 - Keep the claim on a rate the device lacks
+## Phase 3 - Keep the claim on a rate the device lacks (Linux half built, WASAPI half open)
 
 **What changes**
 - **New `output/rates.rs`:** the standard rate ladder, plus a pure
@@ -343,6 +343,64 @@ and the new key's round-trip.
 
 ⚠️ **re-verify** that `wasapi`'s `is_supported` at a non-mix rate answers without an
 `Initialize`, as the refusal classifier already assumes.
+
+**As built, Linux half** (static gates green). Where it differs from the plan above, or pins what
+the plan left open:
+
+**Names**
+- `RateFallback { Shared, Resample }` rides `ExclusiveRequest.rate_fallback` and
+  `OutputChoice.rate_fallback`. It is persisted as `output_rate_fallback`, `"shared"` or
+  `"resample"`, through `RateFallbackKey`, which mirrors `OutputModeKey`.
+- The backend seam gains `RATE_FALLBACK`, surfaced as `RATE_FALLBACK_SUPPORTED`: true for ALSA,
+  false for WASAPI and the unsupported backend. The picker row shows only where it is true.
+
+**Policy (`rates.rs`)**
+- `LADDER` runs from 8 kHz to 768 kHz. `device_rate_for(source: SampleRate, supported: &[u32])`.
+- A rate's family is decided by divisibility: by 11 025 for the 44.1 kHz family, by 8 000 for the
+  48 kHz one.
+- Step 3 is "the nearest of the rest", ties going to the higher rate. That also covers a source in
+  neither family.
+- `mod rates` is declared in the Linux arm of `cfg_select!`, since nothing on Windows reads it yet.
+  The WASAPI half adds it to its own arm, the way `hardware_volume` is listed in both.
+
+**ALSA**
+- `pick_rate` tests the source's rate first. Under Resample it then probes the ladder with
+  `test_rate` on the same `HwParams`, sets the pick and reads it back.
+- Only an exact-rate refusal takes that path. A driver that accepts a rate and then rounds it
+  still refuses as `RateRefused`, as before.
+- `Config` carries the device's rate, so `Negotiated.shape`, the reshape and the writer's lead all
+  follow it, and `requested_period` is in device frames.
+
+**UI**
+- An "Unsupported Sample Rates" row sits under Exclusive Device, with the chips "Play Through the
+  System Mixer" (the default) and "Resample and Keep Exclusive". The strings are in all six
+  catalogues.
+
+**Tests adapted:** `mod_tests::request` and the `alsa_tests` configure rows take `Shared`. The
+settings round-trip carries `Resample`, since its contract is that every part of a choice
+survives.
+
+**In-app run** (debug build, dev data folder backed up and restored, on the silent UMC22,
+`hw:CARD=CODEC,DEV=0`):
+
+| File | Picker | Card (`hw_params`) |
+|---|---|---|
+| `04_s16_96000.wav` | Resample | 48000, S16_LE, period 960; `fallback: None` |
+| `03_s16_88200.wav` | Resample | 44100, S16_LE, period 882; `fallback: None` |
+| `04_s16_96000.wav` | Shared (default) | Refused as `RateRefused`, warned once, played shared at 96000 through the sound server (the UMC22 made the default output for the run) |
+
+On quit through the tray the card was released, its own volume put back, and it returned to the
+sound server under its original node name.
+
+**Still open**
+- The WASAPI half. That means the `negotiate`/`refusal` probe, flipping its `RATE_FALLBACK`,
+  adding `mod rates` to the Windows arm, and sizing `requested_period` at the device's rate
+  (it still reads the source's).
+- The ⚠️ re-verify above.
+- Tests: the `device_rate_for` table, the key's round-trip, and `RATE_FALLBACK_SUPPORTED` in the
+  per-platform capability tests.
+- Docs: `.claude/rules/audio-stack.md`'s list of seam names wants `RATE_FALLBACK`.
+- Kenan's own check of the chip, which should read Converted with no toast.
 
 ## Phase 4 - TPDF dither where changed samples are narrowed
 

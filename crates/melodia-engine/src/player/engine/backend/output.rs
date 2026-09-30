@@ -20,7 +20,7 @@ use melodia_playback::player::playback::decks::Decks;
 use melodia_playback::player::playback::output::device::{ExternalVolume, Lead};
 use melodia_playback::player::playback::output::{
     self, AudioOutput, ExclusiveRequest, ExclusiveTuning, Negotiated, OutputMode, OutputRequest,
-    OutputStatus,
+    OutputStatus, RateFallback,
 };
 use parking_lot::Mutex;
 
@@ -36,6 +36,7 @@ pub struct OutputChoice {
     pub tuning: ExclusiveTuning,
     /// Carry the volume on the device's own control where an exclusive claim can.
     pub hardware_volume: bool,
+    pub rate_fallback: RateFallback,
 }
 
 /// The device under the decks, what it is asked to open for, and the cells it publishes. Those
@@ -268,6 +269,7 @@ impl PlaybackEngine {
                 format,
                 tuning: choice.tuning,
                 hardware_volume: choice.hardware_volume,
+                rate_fallback: choice.rate_fallback,
             }),
             OutputMode::Shared => OutputRequest::Shared {
                 rate: self.output.follow_rate.load(Ordering::Relaxed).then_some(shape.rate),

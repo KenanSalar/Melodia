@@ -495,6 +495,10 @@ pub const POLLING_SUPPORTED: bool = output::POLLING_SUPPORTED;
 /// Whether an exclusive claim can carry the volume on the device's own control here.
 pub const HARDWARE_VOLUME_SUPPORTED: bool = output::HARDWARE_VOLUME_SUPPORTED;
 
+/// Whether an exclusive claim can keep a device lacking the file's rate by converting to one it
+/// has, here.
+pub const RATE_FALLBACK_SUPPORTED: bool = output::RATE_FALLBACK_SUPPORTED;
+
 /// The devices an exclusive claim can be aimed at. Blocking: it asks every device.
 pub fn output_devices() -> Vec<OutputDevice> {
     output::devices()

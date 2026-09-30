@@ -1,7 +1,7 @@
 //! The Output card's settings: following the file's rate and the silence a rate change writes
-//! first, then the exclusive pickers (shared or exclusive, which card a claim takes, how its writer
-//! paces the card, and whether the card's own control carries the volume). The card's live
-//! readout is [`super::signal_path`]'s.
+//! first, then the exclusive pickers (shared or exclusive, which card a claim takes, what it does
+//! about a rate the card lacks, how its writer paces the card, and whether the card's own control
+//! carries the volume). The card's live readout is [`super::signal_path`]'s.
 //!
 //! **A pick is applied on the blocking pool, never here**: claiming a card or handing it back
 //! opens a device. Every picker changes the one choice, so each writes a synchronous shadow and
@@ -22,7 +22,7 @@ use melodia_app::services::settings::OutputFlags;
 use melodia_app::state::AppState;
 use melodia_engine::player::engine::backend::OutputChoice;
 use melodia_playback::player::playback::output::{
-    self, Drive, ExclusiveTuning, OutputDevice, OutputMode,
+    self, Drive, ExclusiveTuning, OutputDevice, OutputMode, RateFallback,
 };
 use melodia_ui::{AppWindow, Settings};
 
@@ -52,6 +52,7 @@ pub fn install(ui: &AppWindow, state: &AppState) {
     g.set_exclusive_supported(library::playback::EXCLUSIVE_SUPPORTED);
     g.set_polling_supported(library::playback::POLLING_SUPPORTED);
     g.set_hardware_volume_supported(library::playback::HARDWARE_VOLUME_SUPPORTED);
+    g.set_rate_fallback_supported(library::playback::RATE_FALLBACK_SUPPORTED);
 
     let flags = read_or_default(state, "output").output;
     install_rate_rows(ui, state, &flags);
@@ -90,6 +91,7 @@ fn install_rate_rows(ui: &AppWindow, state: &AppState, flags: &OutputFlags) {
 fn install_pickers(ui: &AppWindow, state: &AppState, choice: OutputChoice) {
     let g = ui.global::<Settings>();
     g.set_output_mode_idx(mode_index(choice.mode));
+    g.set_output_rate_fallback_idx(rate_fallback_index(choice.rate_fallback));
     g.set_output_period_idx(period_index(choice.tuning.period));
     g.set_output_polling(choice.tuning.drive == Drive::Polling);
     g.set_output_hardware_volume(choice.hardware_volume);
@@ -107,6 +109,7 @@ fn install_pickers(ui: &AppWindow, state: &AppState, choice: OutputChoice) {
 
     g.on_output_mode_changed(pick(state, &shadow, Picked::pick_mode));
     g.on_output_device_changed(pick(state, &shadow, Picked::pick_device));
+    g.on_output_rate_fallback_changed(pick(state, &shadow, Picked::pick_rate_fallback));
     g.on_output_period_changed(pick(state, &shadow, Picked::pick_period));
     g.on_output_polling_changed(pick(state, &shadow, Picked::pick_polling));
     g.on_output_hardware_volume_changed(pick(state, &shadow, Picked::pick_hardware_volume));
@@ -193,6 +196,10 @@ impl Picked {
         self.choice.device = chosen.map(|device| device.id.clone());
     }
 
+    fn pick_rate_fallback(&mut self, idx: i32) {
+        self.choice.rate_fallback = rate_fallback_from_index(idx);
+    }
+
     fn pick_period(&mut self, idx: i32) {
         if let Some(&period) = usize::try_from(idx).ok().and_then(|i| PERIOD_PRESETS.get(i)) {
             self.choice.tuning = ExclusiveTuning::new(period, self.choice.tuning.drive);
@@ -248,6 +255,21 @@ fn mode_from_index(idx: i32) -> OutputMode {
     match idx {
         1 => OutputMode::Exclusive,
         _ => OutputMode::Shared,
+    }
+}
+
+/// The chip's index, in the order of the inline list in `output-section.slint`.
+fn rate_fallback_index(fallback: RateFallback) -> i32 {
+    match fallback {
+        RateFallback::Shared => 0,
+        RateFallback::Resample => 1,
+    }
+}
+
+fn rate_fallback_from_index(idx: i32) -> RateFallback {
+    match idx {
+        1 => RateFallback::Resample,
+        _ => RateFallback::Shared,
     }
 }
 

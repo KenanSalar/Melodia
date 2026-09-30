@@ -2,7 +2,9 @@ use std::time::Duration;
 
 use melodia_core::error::AppError;
 use melodia_engine::player::engine::backend::OutputChoice;
-use melodia_playback::player::playback::output::{Drive, ExclusiveTuning, OutputMode};
+use melodia_playback::player::playback::output::{
+    Drive, ExclusiveTuning, OutputMode, RateFallback,
+};
 use melodia_testkit::{reading_env, with_env_set};
 // Only the desktop probes need it, and Windows has no desktop to ask.
 #[cfg(not(target_os = "windows"))]
@@ -844,6 +846,7 @@ fn an_output_choice_comes_back_from_settings_json_whole() -> Result<(), AppError
         device: Some("{0.0.0.00000000}.{a-test-endpoint}".to_owned()),
         tuning: ExclusiveTuning::new(Duration::from_millis(50), Drive::Polling),
         hardware_volume: true,
+        rate_fallback: RateFallback::Resample,
     };
     let mut flags = OutputFlags::default();
     flags.set_output_choice(&choice);

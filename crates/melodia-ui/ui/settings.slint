@@ -118,7 +118,7 @@ export global Settings {
     in property <bool> exclusive-supported;
     in-out property <int> output-mode-idx: 0;
     out property <bool> exclusive-chosen: root.exclusive-supported && root.output-mode-idx == 1;
-    // The engine's own answer: exclusive output always runs at the file's rate, and the toggle
+    // The engine's own answer: exclusive output always follows the file's rate, and the toggle
     // counts only where it can do anything.
     out property <bool> rate-follows: root.exclusive-chosen
         || (root.follow-rate-supported && root.output-follow-rate);
@@ -132,6 +132,12 @@ export global Settings {
     // waits for.
     callback list-output-devices() -> int;
     in property <int> output-devices-revision;
+    // What a claim does where the card lacks the file's rate: play shared (0), or resample to one
+    // of the card's rates and keep it (1). Applied like the pickers above, since a change reopens
+    // the claim, and hidden where the backend can't ask a card which other rates it runs.
+    in property <bool> rate-fallback-supported;
+    in-out property <int> output-rate-fallback-idx: 0;
+    callback output-rate-fallback-changed(int);
     // The saved card is not among those listed.
     in property <bool> output-device-missing;
     // How an exclusive writer paces the card: a period chip, -1 where the saved period matches

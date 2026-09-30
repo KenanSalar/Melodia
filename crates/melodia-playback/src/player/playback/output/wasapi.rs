@@ -54,6 +54,8 @@ pub(super) const POLLING: bool = true;
 
 pub(super) const HARDWARE_VOLUME: bool = true;
 
+pub(super) const RATE_FALLBACK: bool = false;
+
 /// Intel HD Audio controllers take buffers only in multiples of this many bytes, and in exclusive
 /// mode the buffer is the controller's own.
 const HDA_ALIGN_BYTES: u32 = 128;

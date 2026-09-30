@@ -9,7 +9,7 @@ use melodia_engine::player::engine::types::RepeatMode;
 use melodia_playback::player::playback::crossfade::DEFAULT_CROSSFADE_MS;
 use melodia_playback::player::playback::equalizer::{DEFAULT_PRESET, NUM_BANDS};
 use melodia_playback::player::playback::output::{
-    DEFAULT_RESYNC_HOLD, Drive, ExclusiveTuning, OutputMode,
+    DEFAULT_RESYNC_HOLD, Drive, ExclusiveTuning, OutputMode, RateFallback,
 };
 use melodia_playback::player::playback::replaygain::{DEFAULT_MODE, RG_DEFAULT_PREAMP_DB};
 
@@ -132,6 +132,9 @@ impl Default for CrossfadeFlags {
 ///
 /// `output_hardware_volume` has a claim carry the volume on the device's own control, which is
 /// also that device's system volume while the claim holds it, so it ships off.
+///
+/// `output_rate_fallback` keeps a claim on a device lacking the file's rate by converting to one
+/// it has. It ships giving the claim up instead, as every claim did before it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OutputFlags {
@@ -142,6 +145,7 @@ pub struct OutputFlags {
     pub output_polling: bool,
     pub output_resync_ms: u32,
     pub output_hardware_volume: bool,
+    pub output_rate_fallback: RateFallbackKey,
 }
 
 impl Default for OutputFlags {
@@ -154,6 +158,7 @@ impl Default for OutputFlags {
             output_polling: false,
             output_resync_ms: duration_ms(DEFAULT_RESYNC_HOLD),
             output_hardware_volume: false,
+            output_rate_fallback: RateFallbackKey::default(),
         }
     }
 }
@@ -170,6 +175,7 @@ impl OutputFlags {
             device: self.output_device.clone(),
             tuning: ExclusiveTuning::new(period, Drive::from_polling(self.output_polling)),
             hardware_volume: self.output_hardware_volume,
+            rate_fallback: self.output_rate_fallback.into(),
         }
     }
 
@@ -180,6 +186,7 @@ impl OutputFlags {
         self.output_period_ms = duration_ms(choice.tuning.period);
         self.output_polling = choice.tuning.drive == Drive::Polling;
         self.output_hardware_volume = choice.hardware_volume;
+        self.output_rate_fallback = choice.rate_fallback.into();
     }
 }
 
@@ -210,6 +217,33 @@ impl From<OutputMode> for OutputModeKey {
         match mode {
             OutputMode::Shared => Self::Shared,
             OutputMode::Exclusive => Self::Exclusive,
+        }
+    }
+}
+
+/// [`RateFallback`] as persisted, a key for the same reason as [`OutputModeKey`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RateFallbackKey {
+    #[default]
+    Shared,
+    Resample,
+}
+
+impl From<RateFallbackKey> for RateFallback {
+    fn from(key: RateFallbackKey) -> Self {
+        match key {
+            RateFallbackKey::Shared => Self::Shared,
+            RateFallbackKey::Resample => Self::Resample,
+        }
+    }
+}
+
+impl From<RateFallback> for RateFallbackKey {
+    fn from(fallback: RateFallback) -> Self {
+        match fallback {
+            RateFallback::Shared => Self::Shared,
+            RateFallback::Resample => Self::Resample,
         }
     }
 }

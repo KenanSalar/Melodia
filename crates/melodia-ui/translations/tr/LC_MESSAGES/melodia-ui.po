@@ -2491,6 +2491,18 @@ msgstr "Donanım Ses Düzeyi"
 msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
 msgstr "Örnekleri ölçeklemek yerine aygıtın kendi ses düzeyi denetimini çevir, böylece ses kaydırıcısı sesi bit-perfect tutar. Bu denetim aygıtın sistem ses düzeyidir ve Melodia aygıtı bıraktığında eski hâline döner. Kendi denetimi olmayan aygıtlar Melodia'nın ses düzeyini kullanmaya devam eder"
 
+msgid "Unsupported Sample Rates"
+msgstr "Desteklenmeyen Örnekleme Hızları"
+
+msgid "What exclusive output does when the device can't run a track's sample rate: hand the device back and play that track through the system mixer, or keep the device and convert the track to a rate it can run"
+msgstr "Aygıt bir parçanın örnekleme hızında çalışamadığında özel çıkışın ne yapacağı: aygıtı bırakıp o parçayı sistem mikseri üzerinden çalmak ya da aygıtı tutup parçayı aygıtın çalışabildiği bir hıza dönüştürmek"
+
+msgid "Play Through the System Mixer"
+msgstr "Sistem Mikseri Üzerinden Çal"
+
+msgid "Resample and Keep Exclusive"
+msgstr "Yeniden Örnekle ve Özel Kal"
+
 msgid "{}% on the device"
 msgstr "aygıtta %{}"
 

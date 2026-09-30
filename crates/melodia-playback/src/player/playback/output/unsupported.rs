@@ -11,6 +11,8 @@ pub(super) const POLLING: bool = false;
 
 pub(super) const HARDWARE_VOLUME: bool = false;
 
+pub(super) const RATE_FALLBACK: bool = false;
+
 pub(super) enum Claim {}
 
 pub(super) enum ExclusiveStream {}

@@ -2483,6 +2483,18 @@ msgstr "Volume matériel"
 msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
 msgstr "Tourner le propre réglage de volume du périphérique au lieu de mettre les échantillons à l'échelle, pour que le curseur de volume garde le son bit-perfect. Ce réglage est le volume système du périphérique, et il est rétabli quand Melodia libère le périphérique. Les périphériques qui n'en ont pas gardent le volume de Melodia"
 
+msgid "Unsupported Sample Rates"
+msgstr "Fréquences d'échantillonnage non prises en charge"
+
+msgid "What exclusive output does when the device can't run a track's sample rate: hand the device back and play that track through the system mixer, or keep the device and convert the track to a rate it can run"
+msgstr "Ce que fait la sortie exclusive quand le périphérique ne prend pas en charge la fréquence d'échantillonnage d'une piste : rendre le périphérique et lire cette piste via le mixeur du système, ou garder le périphérique et convertir la piste vers une fréquence qu'il prend en charge"
+
+msgid "Play Through the System Mixer"
+msgstr "Lire via le mixeur du système"
+
+msgid "Resample and Keep Exclusive"
+msgstr "Rééchantillonner et rester exclusif"
+
 msgid "{}% on the device"
 msgstr "{} % sur le périphérique"
 

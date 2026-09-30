@@ -1,9 +1,10 @@
 //! Exclusive output on Linux: an ALSA `hw:` device, opened at the source's own shape.
 //!
-//! `hw:` is the card with nothing in between, so every refusal is final: a rate, channel count or
-//! format the card lacks fails the claim rather than being converted on the way, which is the
-//! whole difference from the shared path. What reaches the card is [`encode`]'s output of the
-//! mixer's block, and nothing else touches it.
+//! `hw:` is the card with nothing in between, so nothing on the way converts, which is the whole
+//! difference from the shared path: a channel count or format the card lacks fails the claim, and
+//! so does a rate, unless the request lets the claim run the card at another of its own for the
+//! voices to convert to. What reaches the card is [`encode`]'s output of the mixer's block, and
+//! nothing else touches it.
 //!
 //! **Two things users will report, and neither is a bug.** While the claim holds, Melodia's
 //! stream is gone from the sound server, so it is missing from its mixer and its volume, and
@@ -34,7 +35,8 @@ use super::claim::ClaimError;
 use super::device::Feed;
 use super::encode::{self, DeviceFormat};
 use super::{
-    ExclusiveRequest, Negotiated, OutputDevice, OutputFormat, hardware_volume, realtime, reserve,
+    ExclusiveRequest, Negotiated, OutputDevice, OutputFormat, RateFallback, hardware_volume, rates,
+    realtime, reserve,
 };
 
 pub(super) const SUPPORTED: bool = true;
@@ -44,6 +46,9 @@ pub(super) const POLLING: bool = false;
 
 /// A claim carries the volume on the card's simple mixer where it has an element to trust.
 pub(super) const HARDWARE_VOLUME: bool = true;
+
+/// A card lacking the source's rate is asked which of the others it runs.
+pub(super) const RATE_FALLBACK: bool = true;
 
 /// Periods the card's buffer holds, which is how long the writer may be late before an underrun.
 const PERIODS_PER_BUFFER: u32 = 4;
@@ -165,9 +170,10 @@ impl Drop for ExclusiveStream {
     }
 }
 
-/// Claim the requested card, or the first listed where none is named, at exactly its shape and a
-/// format that holds its source, and start feeding it from `feed`. `held` is the last stream's
-/// claim, reused when it is on the same card and given back otherwise.
+/// Claim the requested card, or the first listed where none is named, at its shape, or another
+/// rate where the request allows one, and a format that holds its source, and start feeding it
+/// from `feed`. `held` is the last stream's claim, reused when it is on the same card and given
+/// back otherwise.
 ///
 /// # Errors
 ///
@@ -193,7 +199,7 @@ pub(super) fn open(
 
     let pcm = open_pcm(&card.device.id)?;
     let config = configure(&pcm, request)?;
-    let device_shape = Shape { channels: config.channels, rate: request.shape.rate };
+    let device_shape = Shape { channels: config.channels, rate: config.rate };
     feed.pull.lock().reshape(device_shape);
     // Before the writer starts, so the first period already plays at the level.
     let volume = if request.hardware_volume {
@@ -303,6 +309,7 @@ fn open_error(id: &str, e: alsa::Error) -> ClaimError {
 
 /// What the card agreed to.
 struct Config {
+    rate: SampleRate,
     channels: ChannelCount,
     format: DeviceFormat,
     requested_period: u32,
@@ -310,18 +317,19 @@ struct Config {
 }
 
 fn configure(pcm: &PCM, request: &ExclusiveRequest) -> Result<Config, ClaimError> {
-    let ExclusiveRequest { shape, format: source, tuning, .. } = *request;
-    let rate = shape.rate.get();
+    let ExclusiveRequest { shape, format: source, tuning, rate_fallback, .. } = *request;
     let hw =
         HwParams::any(pcm).map_err(|e| ClaimError::io("Failed to read the card's limits", e))?;
     hw.set_access(Access::RWInterleaved)
         .map_err(|e| ClaimError::io("The card refused interleaved access", e))?;
     hw.set_rate_resample(false).map_err(|e| ClaimError::io("Failed to turn resampling off", e))?;
+    let device_rate = pick_rate(&hw, shape.rate, rate_fallback)?;
+    let rate = device_rate.get();
     hw.set_rate(rate, ValueOr::Nearest).map_err(|_| ClaimError::RateRefused { rate })?;
     let channels = set_channels(&hw, shape.channels)?;
     let format = set_format(&hw, source)?;
 
-    let requested_period = u32::try_from(frames_in(tuning.period, shape.rate)).unwrap_or(u32::MAX);
+    let requested_period = u32::try_from(frames_in(tuning.period, device_rate)).unwrap_or(u32::MAX);
     // The buffer's periods have to fit the card's largest buffer, and the period is set first, so a
     // long one at a high rate is held down here rather than left to shorten the buffer.
     let longest_period = hw
@@ -363,7 +371,26 @@ fn configure(pcm: &PCM, request: &ExclusiveRequest) -> Result<Config, ClaimError
 
     let period_frames = usize::try_from(period)
         .map_err(|e| ClaimError::io("The card reported a negative period", e))?;
-    Ok(Config { channels, format, requested_period, period_frames })
+    Ok(Config { rate: device_rate, channels, format, requested_period, period_frames })
+}
+
+/// The source's own rate where the card runs it, else, where the request allows, the rate
+/// [`rates::device_rate_for`] picks out of the ladder's rungs the card offers.
+fn pick_rate(
+    hw: &HwParams<'_>,
+    source: SampleRate,
+    fallback: RateFallback,
+) -> Result<SampleRate, ClaimError> {
+    let refused = || ClaimError::RateRefused { rate: source.get() };
+    if hw.test_rate(source.get()).is_ok() {
+        return Ok(source);
+    }
+    if fallback == RateFallback::Shared {
+        return Err(refused());
+    }
+    let offered: Vec<u32> =
+        rates::LADDER.into_iter().filter(|&rate| hw.test_rate(rate).is_ok()).collect();
+    rates::device_rate_for(source, &offered).ok_or_else(refused)
 }
 
 /// The source's own channel count, else the narrowest wider one the card offers. The mixer lays

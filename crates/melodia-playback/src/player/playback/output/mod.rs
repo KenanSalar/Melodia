@@ -20,13 +20,14 @@ mod resample;
 pub mod voice;
 
 // One exclusive backend per platform, each answering to the same names: `SUPPORTED`, `POLLING`,
-// `HARDWARE_VOLUME`, `devices`, `open`, the `ExclusiveStream` it returns and the `Claim` a reopen
-// carries across.
+// `HARDWARE_VOLUME`, `RATE_FALLBACK`, `devices`, `open`, the `ExclusiveStream` it returns and the
+// `Claim` a reopen carries across.
 cfg_select! {
     target_os = "linux" => {
         mod alsa;
         mod alsa_volume;
         mod hardware_volume;
+        mod rates;
         mod realtime;
         mod reserve;
         use self::alsa as exclusive;
@@ -92,7 +93,7 @@ pub enum OutputRequest {
     Exclusive(ExclusiveRequest),
 }
 
-/// A claim on one device, opened at exactly the source's shape and a format that holds it.
+/// A claim on one device, asked for at the source's shape and a format that holds it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExclusiveRequest {
     /// The device's id, or `None` for the first the system lists.
@@ -104,6 +105,9 @@ pub struct ExclusiveRequest {
     /// samples untouched. Part of the request so a change reopens the claim: the gain moving
     /// between the voices and the device mid-stream can play a period at the wrong level.
     pub hardware_volume: bool,
+    /// Part of the request so a change reopens the claim: one that fell back to shared can take
+    /// the device at another rate, and one converting gives it back.
+    pub rate_fallback: RateFallback,
 }
 
 /// How an exclusive writer paces the device. Part of the request, so changing it reopens.
@@ -155,6 +159,16 @@ impl Drive {
     }
 }
 
+/// What a claim does where the device lacks the source's rate.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum RateFallback {
+    /// Give the claim up and play shared, as a refused channel count or format does.
+    #[default]
+    Shared,
+    /// Keep the claim at another of the device's rates, which the voices convert to.
+    Resample,
+}
+
 impl Default for OutputRequest {
     fn default() -> Self {
         Self::Shared { rate: None }
@@ -177,6 +191,9 @@ pub const POLLING_SUPPORTED: bool = exclusive::POLLING;
 
 /// Whether an exclusive claim can carry the volume on the device's own control.
 pub const HARDWARE_VOLUME_SUPPORTED: bool = exclusive::HARDWARE_VOLUME;
+
+/// Whether an exclusive claim can run the device at another rate where it lacks the source's.
+pub const RATE_FALLBACK_SUPPORTED: bool = exclusive::RATE_FALLBACK;
 
 /// Whether opening a shared stream at the file's rate can change what the device runs at. Windows
 /// shared mode converts every stream to the mix format, so there it would reopen for nothing.

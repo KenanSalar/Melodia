@@ -2489,6 +2489,18 @@ msgstr "Hardware-Lautstärke"
 msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
 msgstr "Den eigenen Lautstärkeregler des Geräts verstellen, statt die Samples zu skalieren, damit der Klang beim Regeln der Lautstärke bitgenau bleibt. Dieser Regler ist die Systemlautstärke des Geräts und wird zurückgesetzt, sobald Melodia das Gerät freigibt. Geräte ohne eigenen Regler behalten Melodias Lautstärke"
 
+msgid "Unsupported Sample Rates"
+msgstr "Nicht unterstützte Abtastraten"
+
+msgid "What exclusive output does when the device can't run a track's sample rate: hand the device back and play that track through the system mixer, or keep the device and convert the track to a rate it can run"
+msgstr "Was die exklusive Ausgabe tut, wenn das Gerät die Abtastrate eines Lieds nicht unterstützt: das Gerät zurückgeben und dieses Lied über den Systemmixer abspielen oder das Gerät behalten und das Lied auf eine Rate umrechnen, die es unterstützt"
+
+msgid "Play Through the System Mixer"
+msgstr "Über den Systemmixer abspielen"
+
+msgid "Resample and Keep Exclusive"
+msgstr "Umrechnen und exklusiv bleiben"
+
 msgid "{}% on the device"
 msgstr "{} % am Gerät"
 

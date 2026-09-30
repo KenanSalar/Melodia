@@ -14,7 +14,7 @@ use rustix::io::Errno;
 use super::{WriterControl, alsa_format, candidates, configure, is_busy, open_error};
 use crate::player::playback::output::claim::{ClaimSource, FallbackReason};
 use crate::player::playback::output::encode::DeviceFormat;
-use crate::player::playback::output::{ExclusiveRequest, ExclusiveTuning};
+use crate::player::playback::output::{ExclusiveRequest, ExclusiveTuning, RateFallback};
 use crate::player::playback::tests::helpers::shape;
 use melodia_audio::player::source::audio::SourceFormat;
 
@@ -171,6 +171,7 @@ fn a_card_that_takes_anything_opens_at_exactly_what_the_claim_asks_for() -> Resu
             format,
             tuning: ExclusiveTuning::default(),
             hardware_volume: false,
+            rate_fallback: RateFallback::Shared,
         };
 
         let config = configure(&pcm, &request)?;

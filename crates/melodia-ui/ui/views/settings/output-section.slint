@@ -76,6 +76,9 @@ export component OutputSection inherits Rectangle {
     property <string> device-label: @tr("Exclusive Device");
     property <string> device-desc: @tr("The sound card exclusive output takes");
 
+    property <string> rate-fallback-label: @tr("Unsupported Sample Rates");
+    property <string> rate-fallback-desc: @tr("What exclusive output does when the device can't run a track's sample rate: hand the device back and play that track through the system mixer, or keep the device and convert the track to a rate it can run");
+
     property <string> period-label: @tr("Buffer Period");
     property <string> period-desc: @tr("How much audio the device is handed at a time. Longer periods ride out a busy system; shorter ones react sooner");
 
@@ -96,12 +99,14 @@ export component OutputSection inherits Rectangle {
 
     property <bool> show-mode: Settings.exclusive-supported && row-visible(mode-label, mode-desc);
     property <bool> show-device: Settings.exclusive-chosen && row-visible(device-label, device-desc);
+    property <bool> show-rate-fallback: Settings.exclusive-chosen && Settings.rate-fallback-supported
+        && row-visible(rate-fallback-label, rate-fallback-desc);
     property <bool> show-period: Settings.exclusive-chosen && row-visible(period-label, period-desc);
     property <bool> show-polling: Settings.exclusive-chosen && Settings.polling-supported
         && row-visible(polling-label, polling-desc);
     property <bool> show-hardware-volume: Settings.exclusive-chosen && Settings.hardware-volume-supported
         && row-visible(hardware-volume-label, hardware-volume-desc);
-    // Exclusive output always runs at the file's rate, so the toggle has nothing to add there.
+    // Exclusive output always follows the file's rate, so the toggle has nothing to add there.
     property <bool> show-follow-rate: Settings.follow-rate-supported && !Settings.exclusive-chosen
         && row-visible(follow-rate-label, follow-rate-desc);
     // The hold falls only where the output changes rate.
@@ -109,7 +114,8 @@ export component OutputSection inherits Rectangle {
     property <bool> show-signal-path: row-visible(signal-label, signal-desc);
 
     // Whether any row above each exclusive row is shown, for the divider over it.
-    property <bool> any-above-period: root.show-mode || root.show-device;
+    property <bool> any-above-rate-fallback: root.show-mode || root.show-device;
+    property <bool> any-above-period: root.any-above-rate-fallback || root.show-rate-fallback;
     property <bool> any-above-polling: root.any-above-period || root.show-period;
     property <bool> any-above-hardware-volume: root.any-above-polling || root.show-polling;
 
@@ -193,6 +199,23 @@ export component OutputSection inherits Rectangle {
                 interval: 2s;
                 running: true;
                 triggered => { Settings.list-output-devices(); }
+            }
+        }
+
+        if root.any-above-rate-fallback && root.show-rate-fallback: SectionDivider {}
+
+        if root.show-rate-fallback: SettingRowStacked {
+            icon: "swap_horiz";
+            label: root.rate-fallback-label;
+            description: root.rate-fallback-desc;
+            ChipGroup {
+                // The order is `ui::settings::output_settings::rate_fallback_index`'.
+                options: [
+                    @tr("Play Through the System Mixer"),
+                    @tr("Resample and Keep Exclusive"),
+                ];
+                selected-index <=> Settings.output-rate-fallback-idx;
+                selected(i) => { Settings.output-rate-fallback-changed(i); }
             }
         }
 

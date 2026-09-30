@@ -2487,6 +2487,18 @@ msgstr "Ένταση υλικού"
 msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
 msgstr "Ρύθμιση του ελέγχου έντασης της ίδιας της συσκευής αντί για κλιμάκωση των δειγμάτων, ώστε το ρυθμιστικό έντασης να κρατά τον ήχο bit-perfect. Αυτός ο έλεγχος είναι η ένταση συστήματος της συσκευής και επανέρχεται όταν το Melodia αφήσει τη συσκευή. Οι συσκευές χωρίς δικό τους έλεγχο κρατούν την ένταση του Melodia"
 
+msgid "Unsupported Sample Rates"
+msgstr "Μη υποστηριζόμενοι ρυθμοί δειγματοληψίας"
+
+msgid "What exclusive output does when the device can't run a track's sample rate: hand the device back and play that track through the system mixer, or keep the device and convert the track to a rate it can run"
+msgstr "Τι κάνει η αποκλειστική έξοδος όταν η συσκευή δεν υποστηρίζει τον ρυθμό δειγματοληψίας ενός κομματιού: επιστρέφει τη συσκευή και παίζει αυτό το κομμάτι μέσω του μίκτη του συστήματος ή κρατά τη συσκευή και μετατρέπει το κομμάτι σε έναν ρυθμό που υποστηρίζει"
+
+msgid "Play Through the System Mixer"
+msgstr "Αναπαραγωγή μέσω του μίκτη του συστήματος"
+
+msgid "Resample and Keep Exclusive"
+msgstr "Μετατροπή και διατήρηση αποκλειστικότητας"
+
 msgid "{}% on the device"
 msgstr "{}% στη συσκευή"
 
