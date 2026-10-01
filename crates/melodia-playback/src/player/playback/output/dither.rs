@@ -12,7 +12,7 @@
 
 use melodia_audio::player::source::audio::Sample;
 
-use super::encode::{DeviceFormat, full_scale};
+use super::encode::{DeviceFormat, full_scale, nearest_step};
 
 /// The widest grid dithered. An `f32` carries 24 significant bits, so rounding one to 32 moves it
 /// by at most 2⁻³², under any converter's own noise.
@@ -54,7 +54,7 @@ impl Dither {
         }
         for sample in block {
             let level = f64::from(*sample) * scale + self.triangular();
-            *sample = narrow(level.round().clamp(-scale, scale - 1.0) / scale);
+            *sample = narrow(nearest_step(level, scale) / scale);
         }
     }
 
