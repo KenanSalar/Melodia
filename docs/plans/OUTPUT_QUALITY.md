@@ -792,9 +792,13 @@ platform-neutral, so exclusive output on Windows gets them too; CI's `clippy-win
   skips the system mixer, so with the system volume at 40% one press would hit the DAC about
   24 dB louder. So the press opens the existing confirm `Dialog` (kind `bit-perfect-exclusive`),
   which names both costs.
-- Confirming goes through the mode chip's own callback, index first as the chip writes it, so its
-  `Picked` shadow can't revert the mode on the next pick. Then comes the usual reset.
-- Slint only: `output-section.slint`, the dispatcher in `globals/dialog.slint`, the dialog's icon.
+- Confirming writes the chip's index and calls `Settings.output-switch-to-bit-perfect`. That
+  moves the `Picked` shadow, so the next pick can't revert the mode, then claims and resets in one
+  blocking task. The reset reads off the claim whether the device carries the volume. Run as two
+  tasks, the reset could land first, and a claim on a device a release earlier in the run put back
+  then opens at full volume, `HardwareVolume::take` treating that device as resuming.
+- Slint: `output-section.slint`, the dispatcher in `globals/dialog.slint`, the dialog's icon. Rust:
+  the switch in `output_settings.rs`, sharing `signal_path.rs`'s repaint of the reset.
   Three new strings, in all six catalogues.
 
 **8b**

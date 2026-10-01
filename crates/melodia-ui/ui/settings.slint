@@ -123,6 +123,9 @@ export global Settings {
     out property <bool> rate-follows: root.exclusive-chosen
         || (root.follow-rate-supported && root.output-follow-rate);
     callback output-mode-changed(int);
+    // The confirmed Make Bit-Perfect from shared output: a pick of exclusive and the reset, in that
+    // order in one task, since the reset keeps the volume only where the claim carries it.
+    callback output-switch-to-bit-perfect();
     in property <[string]> output-device-names;
     in-out property <int> output-device-idx: -1;
     callback output-device-changed(int);

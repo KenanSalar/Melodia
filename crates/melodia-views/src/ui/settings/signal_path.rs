@@ -50,16 +50,20 @@ pub fn install(ui: &AppWindow, state: &AppState) {
             let volume = library::playback::player_make_bit_perfect(&ctx);
             library::settings::reset_for_bit_perfect(state, volume)
         });
-        // Volume and speed come back through the player's view model; these three are seeded
-        // from Rust and repaint only when told.
         if let Some(ui) = weak.upgrade() {
-            ui.global::<Equalizer>().set_enabled(false);
-            ui.global::<ReplayGain>().set_enabled(false);
-            if library::playback::FOLLOW_RATE_SUPPORTED {
-                ui.global::<Settings>().set_output_follow_rate(true);
-            }
+            show_bit_perfect_reset(&ui);
         }
     });
+}
+
+/// Repaint what a bit-perfect reset switched. Volume and speed come back through the player's view
+/// model; these three are seeded from Rust and repaint only when told.
+pub(super) fn show_bit_perfect_reset(ui: &AppWindow) {
+    ui.global::<Equalizer>().set_enabled(false);
+    ui.global::<ReplayGain>().set_enabled(false);
+    if library::playback::FOLLOW_RATE_SUPPORTED {
+        ui.global::<Settings>().set_output_follow_rate(true);
+    }
 }
 
 fn paint(ui: &AppWindow, path: Option<&SignalPath>) {

@@ -16,6 +16,7 @@ use std::time::Duration;
 use parking_lot::Mutex;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 
+use crate::ui::settings::signal_path;
 use crate::ui::settings_bind::{read_or_default, toggle_binding};
 use crate::ui::shell::tray_bridge;
 use melodia_app::library;
@@ -128,6 +129,34 @@ fn install_pickers(ui: &AppWindow, state: &AppState, choice: OutputChoice) {
     g.on_output_period_changed(pick(state, &shadow, Picked::pick_period));
     g.on_output_polling_changed(pick(state, &shadow, Picked::pick_polling));
     g.on_output_hardware_volume_changed(pick(state, &shadow, Picked::pick_hardware_volume));
+    install_bit_perfect_switch(ui, state, &shadow);
+}
+
+/// The confirmed Make Bit-Perfect from shared output: pick exclusive, then reset.
+///
+/// **One task, the claim first.** The reset keeps the volume only where the claim carries it on the
+/// device, which it can't know before the claim opens. Run first, it raises the voices to full and
+/// the claim opens at that level, which on a device a release in this run put back is the device
+/// raised to full.
+fn install_bit_perfect_switch(ui: &AppWindow, state: &AppState, shadow: &Shadow) {
+    let state = state.clone();
+    let shadow = Arc::clone(shadow);
+    let weak = ui.as_weak();
+    ui.global::<Settings>().on_output_switch_to_bit_perfect(move || {
+        shadow.lock().choice.mode = OutputMode::Exclusive;
+        let ctx = state.playback_ctx();
+        let shadow = Arc::clone(&shadow);
+        state.persist_blocking("persist bit-perfect switch", move |state| {
+            let choice = shadow.lock().choice.clone();
+            library::playback::player_set_output_choice(&ctx, choice.clone());
+            let volume = library::playback::player_make_bit_perfect(&ctx);
+            library::settings::set_output_choice(state, &choice)?;
+            library::settings::reset_for_bit_perfect(state, volume)
+        });
+        if let Some(ui) = weak.upgrade() {
+            signal_path::show_bit_perfect_reset(&ui);
+        }
+    });
 }
 
 /// A picker's callback: `edit` the shadow with what was picked, then [`apply`] it.
