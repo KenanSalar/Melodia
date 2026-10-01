@@ -33,6 +33,7 @@ use super::super::stream_health::AudioStreamHealth;
 use super::alsa_volume::{self, CardVolume};
 use super::claim::ClaimError;
 use super::device::Feed;
+use super::dither::Dither;
 use super::encode::{self, DeviceFormat};
 use super::{
     ExclusiveRequest, Negotiated, OutputDevice, OutputFormat, RateFallback, hardware_volume, rates,
@@ -492,7 +493,7 @@ impl Writer {
         control.mark_closed();
     }
 
-    /// Pull, encode and write one period at a time until told to stop.
+    /// Pull, dither, encode and write one period at a time until told to stop.
     ///
     /// Nothing here logs: the health counters are how this loop reports, and the one error it
     /// returns is logged once, on the way out. A volume element that stops taking or reporting the
@@ -504,9 +505,11 @@ impl Writer {
             .unwrap_or(self.format.bytes_per_sample())
             .max(1);
         let mut block: Vec<Sample> = vec![0.0; self.block_samples];
+        let mut dither = Dither::default();
         let mut bytes = Vec::with_capacity(self.block_samples * self.format.bytes_per_sample());
         while !self.control.stopping() {
             self.feed.fill(&mut block);
+            dither.quantize(&mut block, self.format);
             encode::encode(&block, self.format, &mut bytes);
             write_all(&self.pcm, &io, &bytes, frame_bytes, &self.feed)?;
             if let Some(volume) = &mut self.volume {

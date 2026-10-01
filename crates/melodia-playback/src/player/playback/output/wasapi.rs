@@ -42,6 +42,7 @@ use melodia_core::error::describe;
 
 use super::claim::ClaimError;
 use super::device::Feed;
+use super::dither::Dither;
 use super::encode::{self, DeviceFormat};
 use super::endpoint_volume::{self, EndpointVolume};
 use super::{
@@ -568,6 +569,7 @@ impl Session {
     fn play(&mut self, feed: &Feed, stop: &AtomicBool) -> Result<(), WasapiError> {
         let channels = usize::from(self.shape.channels.get());
         let mut block: Vec<Sample> = vec![0.0; self.samples_per_buffer()];
+        let mut dither = Dither::default();
         let mut bytes = Vec::with_capacity(block.len() * self.format.bytes_per_sample());
         // The priming silence `start` wrote is on the device's clock too.
         let mut written = self.buffer_frames as u64;
@@ -575,6 +577,7 @@ impl Session {
             let Some(frames) = self.wait_for_room()? else { continue };
             let pulled = &mut block[..frames * channels];
             feed.fill(pulled);
+            dither.quantize(pulled, self.format);
             encode::encode(pulled, self.format, &mut bytes);
             self.render.write_to_device(frames, &bytes, None)?;
             written += frames as u64;

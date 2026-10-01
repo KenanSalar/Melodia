@@ -5,7 +5,7 @@
 //! itself where it lives: [`convert`] for the rate, the channel map and the speed ratio, [`voice`]
 //! for pause, volume and the clock, [`mixer`] for the unclamped sum, [`device`] for the shared
 //! stream and the ladder that opens it. An exclusive claim is its own backend per platform, fed
-//! through [`encode`], and falls back to [`device`] whenever it is refused.
+//! through [`dither`] and [`encode`], and falls back to [`device`] whenever it is refused.
 //!
 //! [`AudioOutput`] is the whole public surface: build it, hand [`Mixer`] to the decks, reopen it
 //! when the device goes away. `crates/melodia/tests/crossfade.rs` skips it and drives
@@ -14,6 +14,7 @@
 pub mod claim;
 pub mod convert;
 pub mod device;
+pub mod dither;
 pub mod encode;
 pub mod mixer;
 mod resample;

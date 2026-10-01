@@ -2,8 +2,8 @@
 
 Working doc. Delete it when the last phase that's taken on ships.
 
-Status: **Phases 1 and 2 complete** (tests held back, see Phase 2) · **Phase 3: Linux half
-built, WASAPI half open** · Created: 2026-09-30 · Revised: 2026-09-30
+Status: **Phases 1, 2 and 4 complete** (tests held back, see Phases 2 and 4) · **Phase 3: Linux
+half built, WASAPI half open** · Created: 2026-09-30 · Revised: 2026-10-01
 
 > Facts below were checked on **2026-09-30** against `a0b9978b` on `feat/bit-perfect-output`,
 > and against the pinned `cpal 0.18.2` sources. Line counts are from `wc -l` on that commit.
@@ -54,7 +54,7 @@ Smaller gaps, each a phase of its own below:
 | 1 ✅ | The converter's state crosses a gapless seam | – | Nothing audible yet. It is what makes Phase 2 seamless. |
 | 2 ✅ | A band-limited kernel in place of linear interpolation | 1 | Clean rate conversion and speed changes, in the default setup |
 | 3 | Keep the claim on a rate the device lacks (a picker, default = today). **Linux half built, WASAPI half open** | 2 | A hi-res album on a capped DAC stays exclusive and gapless |
-| 4 | TPDF dither where changed samples are narrowed | – | Noise instead of distortion on 16-bit output |
+| 4 ✅ | TPDF dither where changed samples are narrowed | – | Noise instead of distortion on 16-bit output |
 | 5 | Crossfade under exclusive when no reopen is needed | – | Crossfade works with exclusive between same-format tracks |
 | 6 | A device picker for shared output | – | Music can go to a DAC without changing the system default |
 | 7 | File reads on the writer thread: measure, then decide | – | Possibly nothing; a read-ahead only if the measurement shows stalls |
@@ -72,11 +72,12 @@ Where each change lives, and how big each file is today. Production files stay u
 | `…/output/convert.rs` | 209 | 1, 2 | Keeps the stepping, the `Filled` accounting and the channel mapping. Its window is handed across a seam (Phase 1) and widened (Phase 2) |
 | `…/output/voice.rs` | 628 | 1 | The handover passes the converter's state on when the successor's shape matches |
 | `…/output/rates.rs` | new | 3 | The standard rate ladder and `device_rate_for`, the one rate policy both backends read |
-| `…/output/alsa.rs` | 533 | 3 | Probes the ladder when the exact rate is refused |
-| `…/output/wasapi.rs` | 665 | 3, 8c | Probes the ladder where `refusal` would say `RateRefused`; counts underruns |
+| `…/output/alsa.rs` | 533 | 3, 4 | Probes the ladder when the exact rate is refused; dithers ahead of `encode` |
+| `…/output/wasapi.rs` | 665 | 3, 4, 8c | Probes the ladder where `refusal` would say `RateRefused`; dithers ahead of `encode`; counts underruns |
 | `…/output/mod.rs` | 703 | 3, 6 | `ExclusiveRequest` carries the rate policy; `OutputRequest::Shared` carries a device |
-| `…/output/encode.rs` | 137 | 4 | `encode` takes a `Dither` |
-| `…/output/device.rs` | 584 | 4, 6 | The shared `i16` arm takes the same `Dither`; the shared target by id |
+| `…/output/dither.rs` | new | 4 | Owns the dither: which formats and blocks take it, the noise, and the quantize every writer calls before its conversion |
+| `…/output/encode.rs` | 137 | 4 | Unchanged but for sharing `integer_bits` and `full_scale` with `dither` |
+| `…/output/device.rs` | 584 | 4, 6 | The shared 16- and 24-bit arms take the same `Dither`; the shared target by id |
 | `crates/melodia-engine/src/player/engine/backend/mod.rs` | **784** | 5, 8d | Close to the cap: Phase 5 moves the refusal latch out before adding anything |
 | `…/engine/backend/output.rs` | 350 | 5, 8d | Home of both reopen-refusal latches after Phase 5; a resume reclaims a parked claim |
 | `…/engine/backend/controls.rs` | 106 | 5 | `crossfade_settings` stops blanket-disabling |
@@ -402,7 +403,7 @@ sound server under its original node name.
 - Docs: `.claude/rules/audio-stack.md`'s list of seam names wants `RATE_FALLBACK`.
 - Kenan's own check of the chip, which should read Converted with no toast.
 
-## Phase 4 - TPDF dither where changed samples are narrowed
+## Phase 4 - TPDF dither where changed samples are narrowed ✅
 
 **What changes**
 - **`encode.rs`:** `encode` takes a `&mut Dither`, a small per-stream PRNG with no new dependency.
@@ -423,6 +424,132 @@ sound server under its original node name.
 - an on-grid block comes out bit-identical;
 - an off-grid block's error stays within the dither's bound;
 - the error of a low-level sine is uncorrelated with the sine.
+
+**As built** (static gates green). Where it differs from the plan above:
+
+**Shape**
+- The dither is its own step ahead of `encode`, in a new `output/dither.rs`, rather than a
+  parameter of `encode`. So `encode` and `encode_tests.rs` are untouched, and the shared path
+  makes the same call where cpal makes the integers rather than `encode`.
+- `Dither::quantize(block, format)` runs between `fill` and the conversion in all three places a
+  block is narrowed:
+  - the ALSA writer;
+  - the WASAPI writer, a blind cross-`cfg` edit left to CI's `clippy-windows` and `test-windows`;
+  - the shared `output_stream`.
+- The generator is a 64-bit LCG with Knuth's MMIX constants. Each sample takes one step, whose
+  high 32 bits make two 16-bit uniform draws. Their difference is the TPDF.
+- The math is in `f64`. A dithered sample is written back as an integer over a power of two, which
+  `f32` holds exactly, so `encode`'s round and cpal's truncating cast both land on the integer meant.
+
+**Which blocks**
+- A block is left untouched when the format holds it exactly: every sample on a step of the grid
+  *and short of full scale*. A sample at or past full scale counts as not held, so its block is
+  dithered and clamped.
+- S32 and F32 are never touched (`WIDEST_DITHERED_BITS` is 24).
+
+**The shared path**
+- `dithered_rung` maps `I16`/`U16` to the 16-bit grid and `I24`/`U24` to the 24-bit one. Every
+  other format converts as before.
+- **Found on the way, fixed by the same step.** cpal's `f32 → I24` conversion is unchecked, so a
+  sample at or past full scale wrapped to the negative end, a click wherever one clipped. The EQ's
+  clamp lands exactly on 1.0, and Phase 2's kernel overshoots on a loud master. Clamping the block
+  first fixes it.
+- cpal's `i16` conversion also truncates toward zero, which turned anything under one step into
+  silence. A dithered block reaches it already on the grid.
+
+**Measured** in a throwaway release harness outside the repo, driving `Dither::quantize` and
+`encode` directly.
+
+Passthrough:
+
+| Block | Result |
+|---|---|
+| 16-bit noise into S16 and S24_3LE; 24-bit noise into S24_LE and S32_LE (24 valid), 2²⁰ samples each | bit-identical |
+| 16-bit noise with one sample nudged off the grid, into S16 | the whole block dithered: 1059 of 4096 samples moved, the quarter TPDF takes off an integer |
+| A changed block into S32 and F32 | untouched |
+
+A 1 kHz sine into S16 at 48 kHz (dBFS; FFT of 65 536 samples, Blackman-Harris):
+
+| Case | Path | Tone | Highest of harmonics 2 to 20 | Error's correlation with the signal |
+|---|---|---|---|---|
+| 16-bit source at −60 dBFS, volume 0.5 | input | −66.4 | −110.7 | |
+| | rounded | −66.4 | −104.9 | +0.415 |
+| | dithered | −66.4 | −110.6 | +0.002 |
+| 16-bit source at −80 dBFS, volume 0.5 | input | −86.5 | −109.9 | |
+| | rounded | −84.3 | −104.0 | +0.848 |
+| | dithered | −86.5 | −110.4 | −0.001 |
+| Float source at −85 dBFS (a lossy decode) | input | −85.4 | −235.1 | |
+| | rounded | −85.0 | −101.6 | +0.172 |
+| | dithered | −85.4 | −128.9 | −0.001 |
+
+- In the 16-bit cases the harmonics at about −110 dBFS are the source's own 16-bit rounding,
+  already in the input. Dithered output keeps exactly those and adds none.
+- Rounding adds about 6 dB on top, and at −80 dBFS it moves the tone's level by 2.2 dB.
+- For the float source, rounding leaves harmonics at −101.6 dBFS. Dithered, the highest bin near
+  a harmonic is the noise, whose median bin sits at −137 dBFS.
+- The error grows from 0.23 to 0.40 LSB rms rounded to 0.50 LSB rms dithered. Its largest value is
+  1.48 LSB, inside the 1.5 bound, and its mean stays within 0.003 LSB of zero.
+
+CPU at 96 kHz stereo, as a share of one core:
+
+| Block | Per sample | Share |
+|---|---|---|
+| Changed, into S16, dithered | 2.00 ns | 0.038 % |
+| Changed, into S24_LE, dithered | 1.35 ns | 0.026 % |
+| Bit-perfect, into S16: the check alone | 1.38 ns | 0.027 % |
+| `encode` alone into S16, for scale | 2.78 ns | 0.053 % |
+
+A shared `I24` stream, the value the device reads:
+
+| Sample | cpal alone | After `quantize` |
+|---|---|---|
+| 0.9999999 | 8 388 607 | 8 388 607 |
+| 1.0 | −8 388 608 | 8 388 607 |
+| 1.05 | −7 969 178 | 8 388 607 |
+| −1.05 | 7 969 178 | −8 388 608 |
+
+**In-app run** (debug build, dev data folder backed up and restored, Hardware Volume off, EQ,
+ReplayGain and speed neutral). 48 kHz fixtures: 16- and 24-bit noise, and a 1 kHz sine at
+−60 dBFS. The shared runs gave Melodia's process its own `ALSA_CONFIG_PATH`, which narrowed the
+default PCM to one format and pointed it at a temporary null sink, recorded from its monitor as
+float. The exclusive runs claimed `snd-aloop`'s card and recorded its capture side with `arecord`.
+
+| Path | Case | Result |
+|---|---|---|
+| Shared `I16` | 16-bit noise, volume 100 | bit-identical to the file over all 240 000 frames |
+| Shared `I16` | 16-bit sine, volume 50 | on the grid; error uncorrelated (+0.003, against −0.42 for the truncation it replaced); harmonics only the file's own (−110.1 dBFS); noise −136.9 dBFS per bin |
+| Shared `I24` | full-scale 44.1 kHz square, resampled to 48 kHz | about 60 000 samples per channel past full scale, all held at the 24-bit limits, no sign flips |
+| Shared `I24` | 16-bit noise, volume 100 | bit-identical, low 8 bits clear |
+| Exclusive S16 (loopback) | 16-bit noise, volume 100 | bit-identical over all 240 000 frames |
+| Exclusive S16 (loopback) | 16-bit sine, volume 50 | sample for sample the shared capture: 432 000 of 432 000 equal |
+| Exclusive S24_3LE (loopback) | 24-bit noise, volume 100 | bit-identical over all 240 000 frames |
+| Exclusive S24_3LE (loopback) | 24-bit sine, volume 50 | on the grid; error uncorrelated (−0.002, against ±0.76 rounded or truncated); harmonics only the file's own (−163.4 dBFS); noise −185.2 dBFS per bin |
+| Exclusive S16 (PCM2902) | 16-bit sine, volume 50 | claim at 48 kHz, period 960, no fallback; no underruns at debug level; card released |
+
+- The two dithered 16-bit captures are equal because the generator starts from its seed with every
+  stream and draws nothing for silence or an on-grid block, so it meets a track's first sample in
+  the same state on either path.
+- The sound server reads the old `I24` containers as wrapped too. `aplay` of what cpal used to
+  write for 1.0 and 1.05 came back from the null sink's monitor as −8 388 608 and −7 969 178.
+- No underrun or warning was logged in any run.
+
+**Listening pass** (Kenan, 2026-10-01, debug build). Exclusive on the Elegiant speakers
+(`hw:CARD=Generic_1,DEV=0`, ALC897), held at 48000 S16_LE, Hardware Volume off:
+
+| Test | Heard |
+|---|---|
+| A tone fading from −60 to −110 dBFS, quantized to 16 bits dithered (A) and rounded (B) by the harness, raised 40 dB after the quantize, played at volume 100 | as expected: A a clean fade into steady hiss, B rough and cutting to silence |
+| A 16-bit 48 kHz track at volume 15, with the slider moved across 100 and back, pauses, resumes and seeks | as expected: no clicks or crackles, the dither switching on and off unheard |
+
+No underrun was logged, and the card was handed back when Melodia quit.
+
+**Still open**
+- The WASAPI writer's two lines, on CI or the Windows machine.
+- Tests: none written. The candidates above stand, plus: S32 and F32 come out untouched; a shared
+  `I24` sample past full scale holds at the maximum; `bit_perfect.rs` runs `quantize` the way the
+  writers do.
+- Docs: the chain line in `.claude/rules/audio-stack.md` (`dither → encode`), and the README
+  Playback bullet.
 
 ## Phase 5 - Crossfade under exclusive when no reopen is needed
 

@@ -37,6 +37,8 @@ use melodia_audio::player::source::audio::{ChannelCount, Sample, SampleRate, Sha
 
 use super::super::dsp::AtomicF64;
 use super::super::stream_health::{self, AudioStreamHealth};
+use super::dither::Dither;
+use super::encode::DeviceFormat;
 use super::mixer::MixerPull;
 use super::{Negotiated, OutputFormat};
 
@@ -561,6 +563,8 @@ where
     let clock = SampleClock::of(&config);
     // A host handing over more than `staging_samples` allowed for grows this once and keeps it.
     let mut staging: Vec<Sample> = vec![0.0; staging_samples];
+    let rung = dithered_rung(T::FORMAT);
+    let mut dither = Dither::default();
     opened(device.build_output_stream::<T, _, _>(
         config,
         move |data, info| {
@@ -569,6 +573,9 @@ where
             }
             let block = &mut staging[..data.len()];
             feed.fill(block);
+            if let Some(rung) = rung {
+                dither.quantize(block, rung);
+            }
             for (slot, sample) in data.iter_mut().zip(block.iter()) {
                 *slot = T::from_sample(*sample);
             }
@@ -577,6 +584,19 @@ where
         error_callback,
         None,
     ))
+}
+
+/// The rung whose grid a shared integer format puts samples on, where it is narrow enough to
+/// dither. Only the grid is read, so the 24-bit container a host packs into doesn't matter.
+///
+/// Putting a block on that grid first is also what makes cpal's conversion exact. Alone it
+/// truncates toward zero, and wraps a 24-bit sample at or past full scale to the negative end.
+fn dithered_rung(format: cpal::SampleFormat) -> Option<DeviceFormat> {
+    match format {
+        cpal::SampleFormat::I16 | cpal::SampleFormat::U16 => Some(DeviceFormat::S16),
+        cpal::SampleFormat::I24 | cpal::SampleFormat::U24 => Some(DeviceFormat::S24Low),
+        _ => None,
+    }
 }
 
 #[cfg(test)]

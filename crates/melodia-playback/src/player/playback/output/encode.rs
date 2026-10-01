@@ -8,6 +8,9 @@
 //! power of two on the way to `f32`, and multiplying back by the same power lands on the same
 //! integer. Anything the chain changed rounds to nearest and saturates, so a full-scale `+1.0`
 //! becomes the positive maximum rather than wrapping to the negative one.
+//!
+//! Each writer runs a block through [`super::dither`] first, which leaves alone any block the
+//! layout holds exactly, so the bit-perfect claim still rests on this function.
 
 use std::fmt;
 
@@ -67,7 +70,7 @@ impl DeviceFormat {
         }
     }
 
-    fn integer_bits(self) -> Option<u8> {
+    pub(super) fn integer_bits(self) -> Option<u8> {
         match self {
             Self::S16 => Some(16),
             Self::S24Packed | Self::S24Low | Self::S24High => Some(24),
@@ -128,8 +131,13 @@ pub fn encode(samples: &[Sample], format: DeviceFormat, out: &mut Vec<u8>) {
 /// representable, which `f32` can't say of `2³¹ − 1`. A NaN lands on zero through the cast.
 #[expect(clippy::cast_possible_truncation, reason = "clamped to the target width first")]
 fn to_integer(sample: Sample, bits: u8) -> i32 {
-    let scale = f64::from(1_u32 << (bits - 1));
+    let scale = full_scale(bits);
     (f64::from(sample) * scale).round().clamp(-scale, scale - 1.0) as i32
+}
+
+/// What a `bits`-wide integer counts to at `1.0`, the power of two the decoder divided by.
+pub(super) fn full_scale(bits: u8) -> f64 {
+    f64::from(1_u32 << (bits - 1))
 }
 
 #[cfg(test)]
