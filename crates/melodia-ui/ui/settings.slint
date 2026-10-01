@@ -154,6 +154,10 @@ export global Settings {
     in property <bool> hardware-volume-supported;
     in-out property <bool> output-hardware-volume: false;
     callback output-hardware-volume-changed(bool);
+    // Give the card back once a pause has held it long enough. Not one of the pickers: it changes
+    // nothing about the claim, so a toggle applies at once and reopens nothing.
+    in-out property <bool> output-release-paused: false;
+    callback output-release-paused-changed(bool);
     // Lands on the Playback tab, where the signal path reads in full: the quality chip's click and
     // the refused claim's toast action. Here rather than on `SignalPathUi` because the toast's
     // dispatcher already reaches this global and no sibling.

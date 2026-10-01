@@ -5,6 +5,7 @@
 
 use crate::library::playback::FOLLOW_RATE_SUPPORTED;
 use crate::services;
+use crate::services::settings::PausedDevice;
 use crate::state::AppState;
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
@@ -29,6 +30,14 @@ pub fn set_gapless_playback(state: &AppState, on: bool) -> Result<(), AppError> 
 pub fn set_output_follow_rate(state: &AppState, on: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(&state.paths, move |settings| {
         settings.output.output_follow_rate = on;
+    })
+}
+
+/// Persist "Give the Device Back When Paused". The engine already holds the new value through
+/// `library::playback::player_set_release_when_paused`, and the monitor reads it on its next tick.
+pub fn set_output_paused_device(state: &AppState, on: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(&state.paths, move |settings| {
+        settings.output.output_paused_device = PausedDevice::from_toggle(on);
     })
 }
 

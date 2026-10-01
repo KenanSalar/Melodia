@@ -9,9 +9,9 @@ use super::{ClaimError, FallbackReason};
 #[test]
 fn a_format_refusal_names_a_float_source_as_float() {
     let rows = [
-        (SourceFormat { bits: 32, float: true }, "a 32-bit float source"),
-        (SourceFormat { bits: 32, float: false }, "a 32-bit source"),
-        (SourceFormat { bits: 24, float: false }, "a 24-bit source"),
+        (SourceFormat { bits: 32, float: true, lossy: false }, "a 32-bit float source"),
+        (SourceFormat { bits: 32, float: false, lossy: false }, "a 32-bit source"),
+        (SourceFormat { bits: 24, float: false, lossy: false }, "a 24-bit source"),
     ];
     for (format, named) in rows {
         let message = ClaimError::FormatRefused { format }.to_string();

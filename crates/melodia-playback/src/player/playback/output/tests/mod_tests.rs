@@ -10,8 +10,8 @@ use super::{
 use crate::player::playback::tests::helpers::shape;
 use melodia_audio::player::source::audio::SourceFormat;
 
-const S16_SOURCE: SourceFormat = SourceFormat { bits: 16, float: false };
-const S24_SOURCE: SourceFormat = SourceFormat { bits: 24, float: false };
+const S16_SOURCE: SourceFormat = SourceFormat { bits: 16, float: false, lossy: false };
+const S24_SOURCE: SourceFormat = SourceFormat { bits: 24, float: false, lossy: false };
 
 fn request(format: SourceFormat) -> ExclusiveRequest {
     ExclusiveRequest {

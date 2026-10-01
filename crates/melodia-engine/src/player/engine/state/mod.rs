@@ -17,7 +17,7 @@ mod view_model;
 pub use action::PlayerAction;
 pub use persistence::{restore_queue, restore_station};
 pub use summary_sync::{any_tracked, sync_current_track_if_in, sync_track_summaries};
-pub use transport::{play_track_inner, resume_from_stopped, stop_end_of_queue};
+pub use transport::{ReleaseDecision, play_track_inner, resume_from_stopped, stop_end_of_queue};
 pub use view_model::{PlayerViewModel, PlayerViewModelLight, PositionTick, QueueViewModel};
 
 /// Restart-from-beginning threshold for Previous command (ms).

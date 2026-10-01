@@ -134,8 +134,8 @@ fn a_voice_reports_nothing_playing_until_a_source_mounts() {
 #[test]
 fn the_report_follows_a_staged_source_when_it_takes_over() {
     let (voice, mut pull) = pair(mono(RATE));
-    let cd = SourceFormat { bits: 16, float: false };
-    let hi_res = SourceFormat { bits: 24, float: false };
+    let cd = SourceFormat { bits: 16, float: false, lossy: false };
+    let hi_res = SourceFormat { bits: 24, float: false, lossy: false };
     voice.append(silence(100, RATE).with_format(cd));
     voice.append(silence(100, 96_000).with_format(hi_res).engaged());
 

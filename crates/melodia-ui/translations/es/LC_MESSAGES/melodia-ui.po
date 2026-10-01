@@ -2333,14 +2333,32 @@ msgstr "Alternativa"
 msgid "Converted"
 msgstr "Convertido"
 
+msgid "Lossy: the file is compressed, so the device gets the decoder's reconstruction of the recording"
+msgstr "Con pérdida: el archivo está comprimido, así que el dispositivo recibe la reconstrucción de la grabación que hace el decodificador"
+
+msgid "Lossy"
+msgstr "Con pérdida"
+
 msgid "Make Bit-Perfect"
 msgstr "Hacerlo bit-perfect"
+
+msgid "Switch to Exclusive Output?"
+msgstr "¿Cambiar a salida exclusiva?"
+
+msgid "Bit-perfect playback needs exclusive output. Other apps can't play through the device while Melodia does, and the system volume stops applying: Melodia's own volume goes to full unless Hardware Volume is on."
+msgstr "La reproducción bit-perfect necesita salida exclusiva. Otras apps no pueden reproducir a través del dispositivo mientras Melodia suena, y el volumen del sistema deja de aplicarse: el volumen propio de Melodia sube al máximo, salvo que el volumen por hardware esté activado."
+
+msgid "Switch"
+msgstr "Cambiar"
 
 msgid "Source"
 msgstr "Origen"
 
 msgid "{}, rounded to fit 32-bit float"
 msgstr "{}, redondeado a coma flotante de 32 bits"
+
+msgid "{}, decoded from a lossy codec"
+msgstr "{}, decodificado de un códec con pérdida"
 
 msgid "Effects"
 msgstr "Efectos"
@@ -2482,6 +2500,12 @@ msgstr "Volumen por hardware"
 
 msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
 msgstr "Mover el control de volumen del propio dispositivo en lugar de escalar las muestras, para que el control de volumen mantenga el sonido bit-perfect. Ese control es el volumen del sistema para el dispositivo, y se restablece cuando Melodia libera el dispositivo. Los dispositivos sin uno propio conservan el volumen de Melodia"
+
+msgid "Give the Device Back When Paused"
+msgstr "Liberar el dispositivo en pausa"
+
+msgid "After five minutes paused, hand the device back so other apps can play through it. Pressing play takes it again"
+msgstr "Tras cinco minutos en pausa, liberar el dispositivo para que otras apps puedan reproducir a través de él. Al reanudar, Melodia lo vuelve a tomar"
 
 msgid "Unsupported Sample Rates"
 msgstr "Frecuencias de muestreo no admitidas"

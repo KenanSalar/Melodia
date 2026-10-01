@@ -9,7 +9,8 @@
 //! and one that needs a reopen starts at `EndOfStream` instead.
 //!
 //! **An exclusive claim is held through a pause and given back on stop**, so a stopped player
-//! never keeps other applications off the card.
+//! never keeps other applications off the card. Where the user asks for it, a long pause ends in
+//! that stop too, the track left on screen paused.
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -60,6 +61,9 @@ pub(super) struct EngineOutput {
     /// Open the output at each track's own rate. Read only at a track boundary, never by the audio
     /// thread.
     follow_rate: AtomicBool,
+    /// Give an exclusive device back once a pause has held it long enough. Read by the monitor on
+    /// its paused ticks, never by the audio thread.
+    release_when_paused: AtomicBool,
     /// Shared or exclusive, and which card. Read at a track boundary, never by the audio thread.
     choice: Mutex<OutputChoice>,
     /// How far the ear is behind the decks' clocks, measured by whichever stream is open.
@@ -84,6 +88,7 @@ impl EngineOutput {
             status: output.status(),
             device: Arc::new(Mutex::new(Some(output))),
             follow_rate: AtomicBool::new(false),
+            release_when_paused: AtomicBool::new(false),
             choice: Mutex::default(),
             probed: Mutex::default(),
         }
@@ -172,6 +177,18 @@ impl PlaybackEngine {
         self.output.status.parked()
     }
 
+    /// Whether a pause would be keeping an exclusive device from everything else and the user
+    /// asked for it back: the setting is on, exclusive output is chosen, and the output is open.
+    ///
+    /// The choice rather than the open stream, so a shared one standing in for a refused claim
+    /// counts too. Giving that back costs nothing, and the track start that follows retries the
+    /// claim. Never takes the device's lock, which a reopen holds.
+    pub fn holds_releasable_claim(&self) -> bool {
+        self.output.release_when_paused.load(Ordering::Relaxed)
+            && self.output.choice.lock().mode == OutputMode::Exclusive
+            && !self.output_parked()
+    }
+
     /// Whether the output stands in for a claim whose device wasn't connected, which is the only
     /// case [`Self::disconnected_device_returned`] has anything to look for. Lock-free.
     pub fn awaiting_disconnected_device(&self) -> bool {
@@ -226,6 +243,12 @@ impl PlaybackEngine {
     /// settings file says: it would only reopen the output at every track.
     pub fn set_follow_rate(&self, on: bool) {
         self.output.follow_rate.store(on && output::FOLLOW_RATE_SUPPORTED, Ordering::Relaxed);
+    }
+
+    /// Give an exclusive device back once a pause has held it long enough, from the next pause
+    /// on. Lock-free. Stays off where nothing can be claimed, whatever a settings file says.
+    pub fn set_release_when_paused(&self, on: bool) {
+        self.output.release_when_paused.store(on && output::EXCLUSIVE_SUPPORTED, Ordering::Relaxed);
     }
 
     /// Write `hold` of silence after each reopen onto a new rate, from the next one on. Blocking:

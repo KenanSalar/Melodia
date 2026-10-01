@@ -2,6 +2,7 @@ import { Theme } from "../../theme.slint";
 import { Settings } from "../../settings.slint";
 import { SettingsPage } from "../../globals/settings-page.slint";
 import { SignalPathUi } from "../../globals/signal-path.slint";
+import { Dialog } from "../../globals/dialog.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
 import { SectionButton } from "../../components/settings/section-button.slint";
 import { SectionDivider } from "../../components/settings/section-divider.slint";
@@ -88,6 +89,9 @@ export component OutputSection inherits Rectangle {
     property <string> hardware-volume-label: @tr("Hardware Volume");
     property <string> hardware-volume-desc: @tr("Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume");
 
+    property <string> release-label: @tr("Give the Device Back When Paused");
+    property <string> release-desc: @tr("After five minutes paused, hand the device back so other apps can play through it. Pressing play takes it again");
+
     property <string> resync-label: @tr("Silence After a Rate Change");
     property <string> resync-desc: @tr("Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off");
 
@@ -106,6 +110,7 @@ export component OutputSection inherits Rectangle {
         && row-visible(polling-label, polling-desc);
     property <bool> show-hardware-volume: Settings.exclusive-chosen && Settings.hardware-volume-supported
         && row-visible(hardware-volume-label, hardware-volume-desc);
+    property <bool> show-release: Settings.exclusive-chosen && row-visible(release-label, release-desc);
     // Exclusive output always follows the file's rate, so the toggle has nothing to add there.
     property <bool> show-follow-rate: Settings.follow-rate-supported && !Settings.exclusive-chosen
         && row-visible(follow-rate-label, follow-rate-desc);
@@ -118,23 +123,29 @@ export component OutputSection inherits Rectangle {
     property <bool> any-above-period: root.any-above-rate-fallback || root.show-rate-fallback;
     property <bool> any-above-polling: root.any-above-period || root.show-period;
     property <bool> any-above-hardware-volume: root.any-above-polling || root.show-polling;
+    property <bool> any-above-release: root.any-above-hardware-volume || root.show-hardware-volume;
 
     // What the rows above the signal path hand the divider under them.
-    property <bool> shows-exclusive-rows: root.any-above-hardware-volume
-        || root.show-hardware-volume;
+    property <bool> shows-exclusive-rows: root.any-above-release || root.show-release;
     property <bool> shows-rate-rows: root.show-follow-rate || root.show-resync;
 
     out property <bool> has-matches: shows-exclusive-rows || shows-rate-rows || show-signal-path;
 
     // The stages a click can put right. A resample counts only where following the file's rate is
-    // the setting that would stop it, and a volume on the device's own control only while muted:
-    // the reset never raises the device, only unmutes it.
+    // the setting that would stop it, a volume on the device's own control only while muted (the
+    // reset never raises the device, only unmutes it), and shared output only where exclusive is
+    // there to switch to.
     property <bool> can-reset: SignalPathUi.playing && (SignalPathUi.dsp-grade > 0
         || SignalPathUi.speed-grade > 0
         || (SignalPathUi.volume-grade > 0
             && (SignalPathUi.muted || !SignalPathUi.volume-on-device))
         || (SignalPathUi.rate-grade > 0 && Settings.follow-rate-supported
-            && !Settings.rate-follows));
+            && !Settings.rate-follows)
+        || (SignalPathUi.output-grade > 0 && root.switches-to-exclusive));
+
+    // The reset leaves shared output by taking the device, which also takes the system volume out
+    // of the path, so the switch is asked for rather than made.
+    property <bool> switches-to-exclusive: Settings.exclusive-supported && !Settings.exclusive-chosen;
 
     // Indexed by `SignalPathUi.fallback-reason`; the order is Rust's, see that property.
     property <string> fallback-text: SignalPathUi.fallback-reason == 0 ? @tr("the device is in use by another app")
@@ -270,6 +281,18 @@ export component OutputSection inherits Rectangle {
             }
         }
 
+        if root.any-above-release && root.show-release: SectionDivider {}
+
+        if root.show-release: SettingRow {
+            icon: "pause";
+            label: root.release-label;
+            description: root.release-desc;
+            ToggleSwitch {
+                checked <=> Settings.output-release-paused;
+                toggled(v) => { Settings.output-release-paused-changed(v); }
+            }
+        }
+
         if root.shows-exclusive-rows && root.show-follow-rate: SectionDivider {}
 
         if root.show-follow-rate: SettingRow {
@@ -307,7 +330,19 @@ export component OutputSection inherits Rectangle {
                 label: @tr("Make Bit-Perfect");
                 icon: "";
                 primary: false;
-                clicked => { SignalPathUi.make-bit-perfect(); }
+                clicked => {
+                    if !root.switches-to-exclusive {
+                        SignalPathUi.make-bit-perfect();
+                        return;
+                    }
+                    Dialog.kind = "bit-perfect-exclusive";
+                    Dialog.title = @tr("Switch to Exclusive Output?");
+                    Dialog.message = @tr("Bit-perfect playback needs exclusive output. Other apps can't play through the device while Melodia does, and the system volume stops applying: Melodia's own volume goes to full unless Hardware Volume is on.");
+                    Dialog.confirm-label = @tr("Switch");
+                    Dialog.cancel-label = @tr("Cancel");
+                    Dialog.destructive = false;
+                    Dialog.open = true;
+                }
             }
         }
 
@@ -318,6 +353,7 @@ export component OutputSection inherits Rectangle {
                 grade: SignalPathUi.source-grade;
                 label: @tr("Source");
                 value: SignalPathUi.source-grade == 0 ? SignalPathUi.source-format
+                    : SignalPathUi.source-lossy ? @tr("{}, decoded from a lossy codec", SignalPathUi.source-format)
                     : @tr("{}, rounded to fit 32-bit float", SignalPathUi.source-format);
             }
             StageRow {

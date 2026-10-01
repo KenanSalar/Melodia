@@ -81,7 +81,7 @@ fn the_short_header_is_offered_only_for_the_layouts_windows_defines_it_for() {
 #[test]
 fn a_claim_asks_for_the_source_channel_count_first_and_never_the_lsb_rung() {
     let asked: Vec<(u16, DeviceFormat)> =
-        candidates(shape(1, 44_100), SourceFormat { bits: 16, float: false }, 2)
+        candidates(shape(1, 44_100), SourceFormat { bits: 16, float: false, lossy: false }, 2)
             .map(|(shape, format, _)| (shape.channels.get(), format))
             .collect();
 
@@ -130,7 +130,7 @@ fn a_claim_asks_for_each_integer_width_through_the_rungs_wasapi_declares() {
         [(17, &[S24Packed, S32, S24High]), (24, &[S24Packed, S32, S24High]), (25, &[S32, F32])];
     for (bits, expected) in rows {
         let asked: Vec<DeviceFormat> =
-            candidates(shape(2, 96_000), SourceFormat { bits, float: false }, 2)
+            candidates(shape(2, 96_000), SourceFormat { bits, float: false, lossy: false }, 2)
                 .map(|(_, format, _)| format)
                 .collect();
 

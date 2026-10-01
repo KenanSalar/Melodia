@@ -6,9 +6,9 @@ use melodia_audio::player::source::stream_source;
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
 use melodia_core::error::describe;
-use melodia_engine::player::engine::backend::OutputChoice;
+use melodia_engine::player::engine::backend::{OutputChoice, PlaybackEngine};
 use melodia_engine::player::engine::state::{
-    MAX_VOLUME, lock_state, play_track_inner, with_state_emit,
+    MAX_VOLUME, PlayerAction, PlayerState, lock_state, play_track_inner, with_state_emit,
 };
 use melodia_engine::player::engine::types::{PlaybackSource, PlaybackStatus, RadioNowPlaying};
 use melodia_playback::player::playback::output::{self, OutputDevice};
@@ -96,8 +96,20 @@ pub fn player_play(ctx: &PlaybackContext) -> Result<(), AppError> {
     if resume_station(ctx) {
         return Ok(());
     }
-    ctx.emit_and_execute(melodia_engine::player::engine::state::PlayerState::build_play_actions);
+    ctx.emit_and_execute(|s| play_actions(s, &ctx.engine));
     Ok(())
+}
+
+/// Resume the paused track, or start it again where its deck no longer holds it, which is what a
+/// pause long enough to give an exclusive device back leaves.
+///
+/// The deck is asked with the state lock held, the lock order's own direction, so the answer and
+/// the actions it picks can't be split by anything that goes through the emit.
+fn play_actions(s: &mut PlayerState, engine: &PlaybackEngine) -> Vec<PlayerAction> {
+    if s.status == PlaybackStatus::Paused && !engine.holds_source() {
+        return s.build_replay_actions();
+    }
+    s.build_play_actions()
 }
 
 /// Whether a play command has to re-open a station instead of resuming the deck.
@@ -241,9 +253,10 @@ pub fn player_toggle_play_pause(ctx: &PlaybackContext) -> Result<(), AppError> {
         return Ok(());
     }
     let fade_ms = transport_fade_ms(ctx);
+    let engine = &ctx.engine;
     ctx.emit_and_execute(move |s| match s.status {
         PlaybackStatus::Playing | PlaybackStatus::Loading => s.build_pause_actions(fade_ms),
-        PlaybackStatus::Paused | PlaybackStatus::Stopped => s.build_play_actions(),
+        PlaybackStatus::Paused | PlaybackStatus::Stopped => play_actions(s, engine),
     });
     Ok(())
 }
@@ -476,6 +489,11 @@ pub const FOLLOW_RATE_SUPPORTED: bool = output::FOLLOW_RATE_SUPPORTED;
 /// Open the output at each track's own sample rate, from the next track on.
 pub fn player_set_follow_rate(ctx: &PlaybackContext, on: bool) {
     ctx.engine.set_follow_rate(on);
+}
+
+/// Give an exclusive device back once a pause has held it long enough, from the next pause on.
+pub fn player_set_release_when_paused(ctx: &PlaybackContext, on: bool) {
+    ctx.engine.set_release_when_paused(on);
 }
 
 /// Write `hold` of silence after each reopen onto a new rate, from the next one on. Blocking: it

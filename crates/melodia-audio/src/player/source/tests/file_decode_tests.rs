@@ -70,12 +70,12 @@ fn every_scanned_extension_reaches_a_decoder() -> Result<(), AppError> {
 #[test]
 fn a_decoder_reports_the_format_it_decoded_to() -> Result<(), AppError> {
     let cases = [
-        ("silence.wav", SourceFormat { bits: 16, float: false }, true),
-        ("silence.flac", SourceFormat { bits: 16, float: false }, true),
-        ("silence-24bit.flac", SourceFormat { bits: 24, float: false }, true),
-        ("silence-32bit.wav", SourceFormat { bits: 32, float: false }, false),
-        ("silence.ogg", SourceFormat::F32, true),
-        ("silence.mp3", SourceFormat::F32, true),
+        ("silence.wav", SourceFormat { bits: 16, float: false, lossy: false }, true),
+        ("silence.flac", SourceFormat { bits: 16, float: false, lossy: false }, true),
+        ("silence-24bit.flac", SourceFormat { bits: 24, float: false, lossy: false }, true),
+        ("silence-32bit.wav", SourceFormat { bits: 32, float: false, lossy: false }, false),
+        ("silence.ogg", SourceFormat { lossy: true, ..SourceFormat::F32 }, true),
+        ("silence.mp3", SourceFormat { lossy: true, ..SourceFormat::F32 }, true),
     ];
     for (fixture, expected, fits) in cases {
         let format = FileDecoder::open(&asset(fixture))?.format();

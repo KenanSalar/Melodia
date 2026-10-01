@@ -33,7 +33,7 @@ fn clean_inputs() -> SignalInputs {
         },
         source: PlayingSource {
             shape: shape(2, 44_100),
-            format: SourceFormat { bits: 16, float: false },
+            format: SourceFormat { bits: 16, float: false, lossy: false },
             dsp_engaged: false,
         },
         eq_on: false,
@@ -80,7 +80,7 @@ fn each_stage_grades_the_input_that_moves_it() {
         ("32-bit float fits", |i| i.source.format = SourceFormat::F32, CLEAN),
         (
             "64-bit float is narrowed",
-            |i| i.source.format = SourceFormat { bits: 64, float: true },
+            |i| i.source.format = SourceFormat { bits: 64, float: true, lossy: false },
             Stages { source: Grade::Converted, ..CLEAN },
         ),
         (

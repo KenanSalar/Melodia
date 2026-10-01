@@ -98,9 +98,9 @@ fn float_passes_through_bit_for_bit() {
 
 #[test]
 fn a_format_carries_a_source_only_when_it_holds_every_bit() {
-    let s16 = SourceFormat { bits: 16, float: false };
-    let s24 = SourceFormat { bits: 24, float: false };
-    let s32 = SourceFormat { bits: 32, float: false };
+    let s16 = SourceFormat { bits: 16, float: false, lossy: false };
+    let s24 = SourceFormat { bits: 24, float: false, lossy: false };
+    let s32 = SourceFormat { bits: 32, float: false, lossy: false };
     let rows = [
         (DeviceFormat::S16, s16, true),
         (DeviceFormat::S16, s24, false),

@@ -7,8 +7,8 @@ import { Settings } from "../settings.slint";
 //
 // A grade is 0 clean, 1 enhanced (something the user chose), 2 converted. The verdict takes the
 // same three values, 0 reading as Bit-perfect, plus 3 for an exclusive claim that fell back to
-// shared. The `in` strings are data: rates, formats and the device's own name, none of which
-// translate.
+// shared and 4 for a lossy source. The `in` strings are data: rates, formats and the device's own
+// name, none of which translate.
 //
 // `fallback-reason` indexes the inline reason list in `output-section.slint`, in the order of
 // `ui::settings::signal_path::fallback_index`, and is -1 when nothing fell back.
@@ -33,6 +33,9 @@ export global SignalPathUi {
     in property <int> output-grade;
 
     in property <string> source-format;
+    // Decoded from a lossy codec. Its own property, since a fallback outranks the verdict that
+    // would otherwise say so.
+    in property <bool> source-lossy;
     in property <string> source-rate;
     in property <string> device-rate;
     in property <string> device-format;
@@ -57,10 +60,12 @@ export global SignalPathUi {
         : root.verdict == 0 ? @tr("Bit-perfect: the device receives the decoder's samples untouched")
         : root.verdict == 1 ? @tr("Enhanced: only effects you chose change the sound")
         : root.verdict == 3 ? @tr("Fallback: exclusive output was refused, so the system mixer is in the way")
+        : root.verdict == 4 ? @tr("Lossy: the file is compressed, so the device gets the decoder's reconstruction of the recording")
         : @tr("Converted: the sound is changed on its way to the device");
     out property <string> verdict-label: root.verdict == 0 ? @tr("Bit-perfect")
         : root.verdict == 1 ? @tr("Enhanced")
         : root.verdict == 3 ? @tr("Fallback")
+        : root.verdict == 4 ? @tr("Lossy")
         : @tr("Converted");
 
     // Whether the quality chip has anything to say. Only under exclusive output: shared output

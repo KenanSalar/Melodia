@@ -135,6 +135,10 @@ impl Default for CrossfadeFlags {
 ///
 /// `output_rate_fallback` keeps a claim on a device lacking the file's rate by converting to one
 /// it has. It ships giving the claim up instead, as every claim did before it.
+///
+/// `output_paused_device` gives a claimed device back once a pause has held it for a while. It
+/// ships keeping it, since play then has to reopen the device, and it sits outside the choice so
+/// a toggle never reopens a claim.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OutputFlags {
@@ -146,6 +150,7 @@ pub struct OutputFlags {
     pub output_resync_ms: u32,
     pub output_hardware_volume: bool,
     pub output_rate_fallback: RateFallbackKey,
+    pub output_paused_device: PausedDevice,
 }
 
 impl Default for OutputFlags {
@@ -159,6 +164,7 @@ impl Default for OutputFlags {
             output_resync_ms: duration_ms(DEFAULT_RESYNC_HOLD),
             output_hardware_volume: false,
             output_rate_fallback: RateFallbackKey::default(),
+            output_paused_device: PausedDevice::default(),
         }
     }
 }
@@ -245,6 +251,28 @@ impl From<RateFallback> for RateFallbackKey {
             RateFallback::Shared => Self::Shared,
             RateFallback::Resample => Self::Resample,
         }
+    }
+}
+
+/// What a long pause does with an exclusive device. A token rather than a `bool`, [`OutputFlags`]
+/// already sitting at clippy's `struct_excessive_bools` cap.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PausedDevice {
+    #[default]
+    Keep,
+    Release,
+}
+
+impl PausedDevice {
+    /// The token for the Output card's toggle, which is on for [`Self::Release`].
+    pub fn from_toggle(release: bool) -> Self {
+        if release { Self::Release } else { Self::Keep }
+    }
+
+    /// [`Self::from_toggle`]'s way back, which is also what the engine is handed.
+    pub fn releases(self) -> bool {
+        self == Self::Release
     }
 }
 

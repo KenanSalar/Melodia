@@ -143,12 +143,13 @@ struct VoiceShared {
     /// Frames the playing source's converter has pulled past the one it is writing, which the ear
     /// trails the clock by as well as the device's lead. Written once per render.
     converter_ahead: AtomicU64,
-    /// The rest of what [`Voice::playing`] reports. The source's own three are written with the
+    /// The rest of what [`Voice::playing`] reports. The source's own four are written with the
     /// clock at takeover, ahead of `rate`; `dsp_engaged` once per render. A read that straddles a
     /// handover can pair two tracks' answers, which the next read puts right.
     source_channels: AtomicU16,
     source_bits: AtomicU8,
     source_float: AtomicBool,
+    source_lossy: AtomicBool,
     dsp_engaged: AtomicBool,
     /// Commands sent, and commands the callback has drained. A control op that must land before it
     /// returns waits for the second to reach the first.
@@ -345,6 +346,7 @@ impl Voice {
         let format = SourceFormat {
             bits: self.shared.source_bits.load(Ordering::Relaxed),
             float: self.shared.source_float.load(Ordering::Relaxed),
+            lossy: self.shared.source_lossy.load(Ordering::Relaxed),
         };
         Some(PlayingSource {
             shape: Shape { channels, rate },
@@ -524,6 +526,7 @@ impl VoicePull {
         self.shared.source_channels.store(source.channels().get(), Ordering::Relaxed);
         self.shared.source_bits.store(format.bits, Ordering::Relaxed);
         self.shared.source_float.store(format.float, Ordering::Relaxed);
+        self.shared.source_lossy.store(format.lossy, Ordering::Relaxed);
         self.shared.frames.store(frames, Ordering::Relaxed);
         self.shared.anchor.store(frames, Ordering::Relaxed);
         self.shared.rate.store(source.sample_rate().get(), Ordering::Release);
@@ -635,6 +638,7 @@ pub fn pair(device: Shape) -> (Voice, VoicePull) {
         source_channels: AtomicU16::new(0),
         source_bits: AtomicU8::new(0),
         source_float: AtomicBool::new(false),
+        source_lossy: AtomicBool::new(false),
         dsp_engaged: AtomicBool::new(false),
         issued: AtomicU64::new(0),
         serviced: AtomicU64::new(0),

@@ -39,11 +39,15 @@ pub struct Shape {
 pub struct SourceFormat {
     pub bits: u8,
     pub float: bool,
+    /// Decoded from a lossy codec, so no path from here delivers the recording itself, only the
+    /// decoder's reconstruction of it. Lossy and float coincide often enough to be confused, and
+    /// a float WAV is neither.
+    pub lossy: bool,
 }
 
 impl SourceFormat {
-    /// What a lossy codec decodes to, and what a source with nothing to say for itself reports.
-    pub const F32: Self = Self { bits: 32, float: true };
+    /// What a source with nothing to say for itself reports.
+    pub const F32: Self = Self { bits: 32, float: true, lossy: false };
 
     /// Whether widening to [`Sample`] is exact: `f32` carries 24 bits of integer and any float
     /// no wider than itself.

@@ -43,8 +43,10 @@ impl DeviceFormat {
     pub fn ladder(source: SourceFormat) -> &'static [Self] {
         use DeviceFormat::{F32, S16, S24High, S24Low, S24Packed, S32};
         match source {
-            SourceFormat { float: false, bits: ..=16 } => &[S16, S32, S24Packed, S24Low, S24High],
-            SourceFormat { float: false, bits: 17..=24 } => &[S24Packed, S32, S24Low, S24High],
+            SourceFormat { float: false, bits: ..=16, .. } => {
+                &[S16, S32, S24Packed, S24Low, S24High]
+            }
+            SourceFormat { float: false, bits: 17..=24, .. } => &[S24Packed, S32, S24Low, S24High],
             SourceFormat { float: false, .. } => &[S32, F32],
             SourceFormat { float: true, .. } => &[S32, F32, S24Packed, S24Low, S24High, S16],
         }

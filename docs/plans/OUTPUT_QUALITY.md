@@ -3,7 +3,9 @@
 Working doc. Delete it when the last phase that's taken on ships.
 
 Status: **Phases 1, 2, 4 and 5 complete** (tests held back, see Phases 2, 4 and 5) · **Phase 3:
-Linux half built, WASAPI half open** · Created: 2026-09-30 · Revised: 2026-10-01
+Linux half built, WASAPI half open** · **Phase 6: Linux half closed with no code, Windows half
+open** · **Phase 7: dropped** · **Phase 8: 8a, 8b and 8d built, 8c open** · Created: 2026-09-30 ·
+Revised: 2026-10-01
 
 > Facts below were checked on **2026-09-30** against `a0b9978b` on `feat/bit-perfect-output`,
 > and against the pinned `cpal 0.18.2` sources. Line counts are from `wc -l` on that commit.
@@ -56,9 +58,9 @@ Smaller gaps, each a phase of its own below:
 | 3 | Keep the claim on a rate the device lacks (a picker, default = today). **Linux half built, WASAPI half open** | 2 | A hi-res album on a capped DAC stays exclusive and gapless |
 | 4 ✅ | TPDF dither where changed samples are narrowed | – | Noise instead of distortion on 16-bit output |
 | 5 ✅ | Crossfade under exclusive when no reopen is needed | – | Crossfade works with exclusive between same-format tracks |
-| 6 | A device picker for shared output | – | Music can go to a DAC without changing the system default |
-| 7 | File reads on the writer thread: measure, then decide | – | Possibly nothing; a read-ahead only if the measurement shows stalls |
-| 8 | Signal-path and claim polish (four small, independent items) | – | Honest words and parity fixes |
+| 6 | A device picker for shared output. **Linux closed with no code (the sound server routes it), Windows open** | – | Music can go to a DAC without changing the system default |
+| 7 | File reads on the writer thread: measure, then decide. **Dropped (Kenan, 2026-10-01)** | – | Possibly nothing; a read-ahead only if the measurement shows stalls |
+| 8 | Signal-path and claim polish (four small, independent items). **8a, 8b, 8d built, 8c open** | – | Honest words and parity fixes |
 
 ---
 
@@ -74,20 +76,23 @@ Where each change lives, and how big each file is today. Production files stay u
 | `…/output/rates.rs` | new | 3 | The standard rate ladder and `device_rate_for`, the one rate policy both backends read |
 | `…/output/alsa.rs` | 533 | 3, 4 | Probes the ladder when the exact rate is refused; dithers ahead of `encode` |
 | `…/output/wasapi.rs` | 665 | 3, 4, 8c | Probes the ladder where `refusal` would say `RateRefused`; dithers ahead of `encode`; counts underruns |
-| `…/output/mod.rs` | 703 | 3, 6 | `ExclusiveRequest` carries the rate policy; `OutputRequest::Shared` carries a device |
+| `…/output/mod.rs` | 703 | 3, 6 | `ExclusiveRequest` carries the rate policy; `OutputRequest::Shared` carries a device (Windows only) |
 | `…/output/dither.rs` | new | 4 | Owns the dither: which formats and blocks take it, the noise, and the quantize every writer calls before its conversion |
 | `…/output/encode.rs` | 137 | 4 | Unchanged but for sharing `integer_bits` and `full_scale` with `dither` |
-| `…/output/device.rs` | 584 | 4, 6 | The shared 16- and 24-bit arms take the same `Dither`; the shared target by id |
-| `crates/melodia-engine/src/player/engine/backend/mod.rs` | **798** after Phase 5 | 5, 8d | At the cap: 8d moves something out before adding anything |
-| `…/engine/backend/output.rs` | 405 after Phase 5 | 5, 8d | Home of the format latch both reopen refusals read; a resume reclaims a parked claim |
+| `…/output/device.rs` | 584 | 4, 6 | The shared 16- and 24-bit arms take the same `Dither`; the shared target by id (Windows only) |
+| `crates/melodia-engine/src/player/engine/backend/mod.rs` | 786 after Phase 8 | 5 | The two position queries moved out to `reads.rs` |
+| `…/engine/backend/reads.rs` | 29, new | 8d | The decks' read-only answers: the two positions, and whether the active deck holds a source |
+| `…/engine/backend/output.rs` | 428 after Phase 8 | 5, 8d | Home of the format latch both reopen refusals read; the pause-release setting's cell |
 | `…/engine/backend/controls.rs` | 106 | 5 | `crossfade_settings` stops blanket-disabling |
+| `…/engine/handlers.rs` | 595 after Phase 8 | 8d | `PauseWatch` and the release |
+| `…/engine/state/transport.rs` | 456 after Phase 8 | 8d | `build_release_actions`, `build_replay_actions` |
 | `crates/melodia-playback/src/player/playback/crossfade.rs` | 384 | 5 | `crossfade_eligible` takes whether the next track plays without a reopen |
 | `crates/melodia-engine/src/player/engine/signal_path.rs` | 142 | 8b | Names a lossy source |
 | `crates/melodia-audio/src/player/source/audio.rs` | 171 | 8b | `SourceFormat` learns whether the codec was lossy |
-| `crates/melodia-app/src/services/settings/playback.rs` | 258 | 3, 6, 8d | `OutputFlags` keys, all `#[serde(default)]` |
-| `crates/melodia-app/src/library/playback.rs` | 541 | 8a | `player_make_bit_perfect` |
-| `crates/melodia-views/src/ui/settings/output_settings.rs` | 270 | 3, 6, 8d | Output card wiring |
-| `crates/melodia-ui/ui/views/settings/output-section.slint` | 348 | 3, 6, 8a, 8d | Output card rows |
+| `crates/melodia-app/src/services/settings/playback.rs` | 320 after Phase 8 | 3, 6, 8d | `OutputFlags` keys, all `#[serde(default)]` |
+| `crates/melodia-app/src/library/playback.rs` | 563 after Phase 8 | 8d | Play and toggle start a paused track its deck no longer holds |
+| `crates/melodia-views/src/ui/settings/output_settings.rs` | 307 after Phase 8 | 3, 6, 8d | Output card wiring |
+| `crates/melodia-ui/ui/views/settings/output-section.slint` | 407 after Phase 8 | 3, 6, 8a, 8b, 8d | Output card rows |
 
 ---
 
@@ -692,7 +697,43 @@ exclusive one is.
 **Done when:** the spike's decision is recorded here, then the static gates pass, then Kenan picks
 a non-default device on each platform.
 
+**Spike, Linux (2026-10-01): no in-app picker. The sound server is the picker.**
+
+What already works:
+- `main.rs` sets `PIPEWIRE_ALSA` so Melodia's stream carries `application.name` and `node.name`
+  "Melodia" on every open.
+- WirePlumber 0.5 remembers the sink a user moves a stream to, keyed on that name
+  (`node.stream.restore-target`, on by default). It applies that sink to every stream Melodia opens
+  afterwards, so a reopen at a new rate and a relaunch both land back on it.
+- PulseAudio's `module-stream-restore` does the same with the ALSA plugin's client name.
+- Plasma's audio applet and pavucontrol both move a stream.
+
+Every in-app route costs more than it gives:
+
+| Route | Why not |
+|---|---|
+| cpal's `pulseaudio` host (pure Rust) | The callback runs on the protocol client's one network thread, holding its state lock, never real-time. Dropping a stream the server killed can hang inside a reopen that holds the output mutex. It prefills about 2 s of server buffer, and drops underflow, move and kill events. The client is named `cpal-pulseaudio-<pid>`, which renames Melodia in every mixer and defeats the routing memory above. The feature also changes what `cpal::default_host()` returns. |
+| cpal's `pipewire` host | libclang, the PipeWire headers and pkg-config at build time, in CI and for all five package formats. A hard link to `libpipewire-0.3`, so the binary won't start without PipeWire (Ubuntu 22.04 ships PulseAudio). Its device list is a snapshot taken at host creation, and includes other apps' streams. |
+| Our own `alsa` open of `pipewire:NODE=<name>`, with a pure-Rust pulse client to list sinks | A second shared writer beside cpal's. Works only where pipewire-alsa is installed, and PulseAudio installs no equivalent PCM by default. A new dependency just to list the sinks. |
+| Moving our own stream over the pulse protocol after cpal opens it | Races WirePlumber's own memory of the stream's target, and the crate wraps no move command. |
+
+So the shared-device setting and its row are Windows-only, built with the Windows half the way
+`RATE_FALLBACK_SUPPORTED` is ALSA-only.
+
+**Checked in-app** (debug build, dev data folder backed up and restored, shared output, Match the
+File's Sample Rate on, volume 0):
+
+| Step | Melodia's stream |
+|---|---|
+| Launch | on the default sink |
+| `pactl move-sink-input` to a temporary null sink, as Plasma's applet does | moved; WirePlumber stored `"target"` under `application.name:Melodia` |
+| Next, onto a 44.1 kHz track (a reopen) | the new stream came up on the null sink at 44100 |
+| Quit and relaunch | the new stream came up on the null sink |
+| `pw-metadata -d <node> target.object` | back on the default sink; the stored target cleared |
+
 ## Phase 7 - File reads on the writer thread: measure, then decide
+
+**Dropped** (Kenan, 2026-10-01). Not taken on; the design below is kept only for the record.
 
 A file is decoded inline, on whichever thread pulls the mixer, which under exclusive is the
 real-time writer. On a local SSD that's fine. On a network share, or a disk spinning up, a read
@@ -740,6 +781,122 @@ Four independent items. Each lands on its own.
 - `resume` then has to reclaim, which it doesn't today: `reopen_output` answers `None` for a parked
   output. The resume gains the reopen `reopen_for_track` does, for the source already on the deck.
 
+**As built, 8a, 8b and 8d** (static gates green). 8c waits for the Windows machine. All three are
+platform-neutral, so exclusive output on Windows gets them too; CI's `clippy-windows` and
+`test-windows` check them, and the ear check there waits for the Windows machine.
+
+**8a**
+- In shared mode where exclusive exists, the button shows whenever something plays, since the
+  shared output stage always converts.
+- One press can't take the device silently. Hardware Volume ships off, and exclusive output
+  skips the system mixer, so with the system volume at 40% one press would hit the DAC about
+  24 dB louder. So the press opens the existing confirm `Dialog` (kind `bit-perfect-exclusive`),
+  which names both costs.
+- Confirming goes through the mode chip's own callback, index first as the chip writes it, so its
+  `Picked` shadow can't revert the mode on the next pick. Then comes the usual reset.
+- Slint only: `output-section.slint`, the dispatcher in `globals/dialog.slint`, the dialog's icon.
+  Three new strings, in all six catalogues.
+
+**8b**
+- `SourceFormat` gains `lossy`, set in `decode::open` from the codec through `lossy_codec`.
+  - That function is an explicit list of the lossy codecs `CODECS` opens: MP1, MP2, MP3, AAC,
+    Vorbis, Opus, the three ADPCMs, A-law and μ-law.
+  - Symphonia carries no such flag, and `AudioCodecId`'s field is private.
+- The voice publishes it with the other source atomics.
+- A lossy source grades the Source stage Converted, and `Verdict::Lossy` becomes the headline,
+  after a fallback. The Device row keeps its own true fact.
+- The UI:
+  - verdict index 4, labelled "Lossy";
+  - the Source row reads "{}, decoded from a lossy codec";
+  - the chip's dot is red, as an MP3's already was.
+- That row also corrects ADPCM, which read "rounded to fit 32-bit float" for a 32-bit integer
+  container holding 16-bit samples.
+- The claim ladder, `carries` and `claim_serves` ignore the field, so no new reopens.
+- Three new strings, in all six catalogues.
+- Tests adapted: every `SourceFormat` literal takes `lossy: false`. `file_decode_tests` expects
+  `lossy` on its Ogg and MP3 fixtures.
+
+**8d** differs from the design above. Parking with the decks still loaded leaves a state no path
+handles:
+- `Voice::clear` waits out `SERVICE_TIMEOUT` per voice with no callback to service it.
+- Queued seeks mount only the first.
+- A ninth queued op is dropped.
+- Make Bit-Perfect would read a parked claim as software volume and raise the device on the
+  reclaim.
+
+So the long pause takes the track off the deck instead, the way a station's pause does:
+- **Release.** The monitor's `PauseWatch` counts paused ticks while
+  `PlaybackEngine::holds_releasable_claim` holds (the setting on, exclusive chosen, the output not
+  parked). At `RELEASE_AFTER_PAUSE_MS`, five minutes, it calls `build_release_actions`.
+  - That builder re-verifies what the monitor saw: still paused, same track, same position.
+  - It then writes the position the deck stopped pulling at (everything before it has played
+    out) and returns `Stop { fade_ms: 0 }`.
+  - That stop clears the decks while the stream can still service it, then parks.
+- **The chip.** The monitor publishes no signal path for a paused, parked output, so the chip and
+  the button hide.
+- **Play.** The state stays Paused. `library::playback`'s play and toggle ask the engine
+  `holds_source()` under the state lock. A paused track its deck no longer holds takes
+  `build_replay_actions`: the track starts again from its position, reclaiming through
+  `reopen_for_track`. That is the path `resume_from_stopped` takes, and both now share
+  `replay_current_track`.
+- **Seeks.** A seek while released moves the position only, since `PlaybackEngine::seek` already
+  returns on an empty deck.
+- **No state flag.** The predicate is the deck, not a flag on `PlayerState`, which clippy's bool
+  cap also rules out. So the rule is general: play on a paused track with nothing seated starts
+  it, however it got there.
+- **Where it lives.** `backend/mod.rs` is untouched but for moving its two position queries to a
+  new `backend/reads.rs`, beside `holds_source`.
+- **The setting.**
+  - Persisted as `output_paused_device`, `"keep"` (the default) or `"release"`. It is a token
+    because `OutputFlags` is at clippy's bool cap.
+  - The row "Give the Device Back When Paused" sits under Hardware Volume, exclusive only.
+  - It stays off `OutputChoice`, so a toggle reopens nothing.
+  - Two new strings, in all six catalogues. The constant's doc names the figure the row's words
+    spell.
+
+**In-app run** (2026-10-01, debug build, dev data folder backed up and restored). Exclusive
+runs went to the silent PCM2902 (`hw:CARD=CODEC,DEV=0`, Hardware Volume on), watched through
+its `hw_params`. Shared runs went to a temporary null sink. Each step was driven over MPRIS,
+or clicked through `ydotool`, and read off window captures.
+
+| Item | Check | Result |
+|---|---|---|
+| 8b | 48 kHz 16-bit FLAC on the claim | chip "Bit-perfect · 48 kHz", every stage green |
+| 8b | 48 kHz MP3 on the same S16 claim | chip "Lossy · 48 kHz"; Signal Path "Lossy: the file is compressed…"; Source "48 kHz · 32-bit float · 2 ch, decoded from a lossy codec"; Device still "…can't hold the source exactly" |
+| 8d, on | MP3 paused at 20:31:46 | card closed at 20:36:46.857 (`player: stop (fade 0ms)`); player still Paused on the track; the sound server took the card back |
+| 8d, on | `paplay` to the card's sink while released | played (exit 0) |
+| 8d, on | `SetPosition` to 8 s while released | position 8.0 s, still Paused, card still closed |
+| 8d, on | `Play` | `play … from 8000ms`, claim reopened at S16_LE 48000 |
+| 8d, on | second pause, then `PlayPause` (the media key's and the bar button's path) | released at 20:43:30.473, five minutes on; replayed `from 25440ms` and reclaimed |
+| 8d, off | 5.5 min paused | card held throughout, no release |
+| 8a | shared, FLAC playing | "Make Bit-Perfect" shown beside "Converted…" |
+| 8a | press it | the dialog, with its text, icon, Cancel and Switch |
+| 8a | Cancel | dialog closed; `output_mode` still `shared`, volume 10, card untouched |
+| 8a | press it, then Switch | chip on Exclusive, exclusive rows shown, Signal Path and chip Bit-perfect, `output_mode: exclusive` persisted, claim at S16_LE 48000. The volume stayed at 10, Hardware Volume carrying it |
+| 8a | pick Buffer Period 10 ms afterwards | `output_mode` still `exclusive`, `output_period_ms: 10`, period 480 frames |
+
+No warning or error was logged in any run, and each quit through the tray handed the card back.
+
+Not exercised: Next or Stop while released (both land on paths an empty deck already takes), and
+8b on shared output, where the chip is hidden.
+
+Found on the way, not touched: MPRIS's relative `Seek` is ignored ("needs library API
+support"), so only `SetPosition` moves the position from a media panel.
+
+**Still open**
+- 8c, on CI or the Windows machine.
+- Tests, none written:
+  - `lossy_codec`'s table;
+  - the Lossy verdict rows;
+  - `PauseWatch`;
+  - `build_release_actions`' re-verify;
+  - `build_replay_actions`, and play and toggle routing on an empty deck;
+  - `PausedDevice`'s round-trip.
+- Docs:
+  - the README;
+  - `.claude/rules/audio-stack.md`'s verdict bullet (the lossy headline) and its exclusive bullet
+    (a long pause's release, and the replay on an empty deck).
+
 ---
 
 ## Not planned
@@ -777,7 +934,7 @@ Four independent items. Each lands on its own.
 
 - Phase 2: the kernel length, window and stretch cap, all settled by measurement.
 - Phase 3: whether Resample should be the default once it has shipped a release.
-- Phase 6: the Linux mechanism, which the spike decides.
+- Phase 6: the Linux mechanism. Decided 2026-10-01: none in the app, the sound server routes it.
 
 ## Verification
 

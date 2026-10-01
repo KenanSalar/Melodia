@@ -23,9 +23,13 @@ use std::time::Duration;
 
 use symphonia::core::audio::GenericAudioBufferRef;
 use symphonia::core::codecs::CodecParameters;
-use symphonia::core::codecs::audio::well_known::{CODEC_ID_PCM_ALAW, CODEC_ID_PCM_MULAW};
+use symphonia::core::codecs::audio::well_known::{
+    CODEC_ID_AAC, CODEC_ID_ADPCM_IMA_QT, CODEC_ID_ADPCM_IMA_WAV, CODEC_ID_ADPCM_MS, CODEC_ID_MP1,
+    CODEC_ID_MP2, CODEC_ID_MP3, CODEC_ID_OPUS, CODEC_ID_PCM_ALAW, CODEC_ID_PCM_MULAW,
+    CODEC_ID_VORBIS,
+};
 use symphonia::core::codecs::audio::{
-    AudioCodecParameters, AudioDecoder, AudioDecoderOptions, CODEC_ID_NULL_AUDIO,
+    AudioCodecId, AudioCodecParameters, AudioDecoder, AudioDecoderOptions, CODEC_ID_NULL_AUDIO,
 };
 use symphonia::core::codecs::registry::CodecRegistry;
 use symphonia::core::errors::Error as SymphoniaError;
@@ -132,6 +136,28 @@ fn drop_companded_sample_width(params: &mut AudioCodecParameters) {
     }
 }
 
+/// Whether `codec` throws part of the signal away, so its decode is a reconstruction.
+///
+/// Spelled out because Symphonia carries no such flag, only an id whose numbering groups the
+/// lossy codecs in a comment. The companded PCMs count: they code a 13- or 14-bit signal in 8. A
+/// codec added to [`CODECS`] belongs here too if it is lossy, or its tracks read as lossless.
+fn lossy_codec(codec: AudioCodecId) -> bool {
+    matches!(
+        codec,
+        CODEC_ID_MP1
+            | CODEC_ID_MP2
+            | CODEC_ID_MP3
+            | CODEC_ID_AAC
+            | CODEC_ID_VORBIS
+            | CODEC_ID_OPUS
+            | CODEC_ID_ADPCM_MS
+            | CODEC_ID_ADPCM_IMA_WAV
+            | CODEC_ID_ADPCM_IMA_QT
+            | CODEC_ID_PCM_ALAW
+            | CODEC_ID_PCM_MULAW
+    )
+}
+
 /// A demuxer, a decoder for its audio track, and enough of that track decoded to know its shape.
 ///
 /// [`super::file_decode`] and [`super::stream_decode`] hold the first four of these verbatim and
@@ -184,6 +210,7 @@ pub(super) fn open(source: Box<dyn MediaSource>, hint: &Hint) -> Result<Opened, 
     let track = audio_track(&*format).ok_or(OpenError::NoAudio)?;
     let params = audio_params(track).ok_or(OpenError::NoCodec)?.clone();
     let stated_bits = params.bits_per_sample;
+    let lossy = lossy_codec(params.codec);
     let track_id = track.id;
     let time_base = track.time_base;
     let total_duration = playing_time(&*format, track);
@@ -192,7 +219,7 @@ pub(super) fn open(source: Box<dyn MediaSource>, hint: &Hint) -> Result<Opened, 
     let (cursor, decoded) = Cursor::open(&mut *format, &mut *decoder, track_id)
         .map_err(OpenError::Unreadable)?
         .ok_or(OpenError::Empty)?;
-    let source_format = narrowed_to_stated(decoded, stated_bits);
+    let source_format = SourceFormat { lossy, ..narrowed_to_stated(decoded, stated_bits) };
 
     Ok(Opened {
         format,
@@ -228,7 +255,7 @@ fn decoded_format(decoded: &GenericAudioBufferRef<'_>) -> SourceFormat {
         GenericAudioBufferRef::F32(_) => (32, true),
         GenericAudioBufferRef::F64(_) => (64, true),
     };
-    SourceFormat { bits, float }
+    SourceFormat { bits, float, lossy: false }
 }
 
 /// How long the track plays for.

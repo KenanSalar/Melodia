@@ -2333,14 +2333,32 @@ msgstr "Repli"
 msgid "Converted"
 msgstr "Converti"
 
+msgid "Lossy: the file is compressed, so the device gets the decoder's reconstruction of the recording"
+msgstr "Avec perte : le fichier est compressé, donc le périphérique reçoit la reconstruction de l'enregistrement faite par le décodeur"
+
+msgid "Lossy"
+msgstr "Avec perte"
+
 msgid "Make Bit-Perfect"
 msgstr "Rendre bit-perfect"
+
+msgid "Switch to Exclusive Output?"
+msgstr "Passer en sortie exclusive ?"
+
+msgid "Bit-perfect playback needs exclusive output. Other apps can't play through the device while Melodia does, and the system volume stops applying: Melodia's own volume goes to full unless Hardware Volume is on."
+msgstr "La lecture bit-perfect nécessite la sortie exclusive. Les autres applis ne peuvent pas utiliser le périphérique pendant que Melodia joue, et le volume système ne s'applique plus : le volume de Melodia passe au maximum, sauf si le volume matériel est activé."
+
+msgid "Switch"
+msgstr "Basculer"
 
 msgid "Source"
 msgstr "Source"
 
 msgid "{}, rounded to fit 32-bit float"
 msgstr "{}, arrondi en flottant 32 bits"
+
+msgid "{}, decoded from a lossy codec"
+msgstr "{}, décodé depuis un codec avec perte"
 
 msgid "Effects"
 msgstr "Effets"
@@ -2482,6 +2500,12 @@ msgstr "Volume matériel"
 
 msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
 msgstr "Tourner le propre réglage de volume du périphérique au lieu de mettre les échantillons à l'échelle, pour que le curseur de volume garde le son bit-perfect. Ce réglage est le volume système du périphérique, et il est rétabli quand Melodia libère le périphérique. Les périphériques qui n'en ont pas gardent le volume de Melodia"
+
+msgid "Give the Device Back When Paused"
+msgstr "Libérer le périphérique en pause"
+
+msgid "After five minutes paused, hand the device back so other apps can play through it. Pressing play takes it again"
+msgstr "Après cinq minutes de pause, libérer le périphérique pour que les autres applis puissent l'utiliser. La lecture le reprend"
 
 msgid "Unsupported Sample Rates"
 msgstr "Fréquences d'échantillonnage non prises en charge"

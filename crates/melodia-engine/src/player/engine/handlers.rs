@@ -12,7 +12,8 @@ use super::backend::{PlaybackCheck, PlaybackEngine};
 use super::event_sink::PlayerSinks;
 use super::signal_path::{SignalPath, Transport};
 use super::state::{
-    PlayerAction, PlayerState, PlayerStateHandle, PositionTick, lock_state, with_state_emit,
+    PlayerAction, PlayerState, PlayerStateHandle, PositionTick, ReleaseDecision, lock_state,
+    with_state_emit,
 };
 use super::types::{PersistedPlayback, PlaybackSource, PlaybackStatus};
 use melodia_audio::player::source::prebuffer::StreamShared;
@@ -58,6 +59,14 @@ const _: () = assert!(
     "the save cadence must span at least one poll, or its modulus is zero"
 );
 
+/// How long a pause may keep an exclusive device from everything else before the monitor gives
+/// it back, where the user asked for that. Long enough that a short break keeps the claim, and
+/// with it a resume that needs no reopen. The Output card's row spells the figure in its words.
+const RELEASE_AFTER_PAUSE_MS: u64 = 5 * 60 * 1000;
+
+/// Polls spanning [`RELEASE_AFTER_PAUSE_MS`], derived for the reason [`SAVE_EVERY_N_TICKS`] is.
+const RELEASE_AFTER_N_TICKS: u64 = RELEASE_AFTER_PAUSE_MS / POLL_INTERVAL_MS;
+
 /// Rate limiter on the position publish, admitting one tick per whole second.
 ///
 /// The monitor wakes at [`POLL_INTERVAL_MS`] so the crossfade and gapless windows stay tight,
@@ -85,6 +94,31 @@ impl SecondGate {
         let moved = second != self.0;
         self.0 = second;
         moved
+    }
+}
+
+/// The polls a pause has held an exclusive device for.
+///
+/// It starts over once it answers, so a release the state machine turned down, a seek having
+/// landed in the gap, is asked for again a full period later rather than never. One that went
+/// through parks the output, which stops the count before it gets that far.
+#[derive(Default)]
+struct PauseWatch(u64);
+
+impl PauseWatch {
+    /// Whether this poll ends a hold long enough to give the device back. Anything but a held
+    /// pause starts the count over, so a play in between never lets two pauses add up.
+    fn due(&mut self, holding: bool) -> bool {
+        if !holding {
+            self.0 = 0;
+            return false;
+        }
+        self.0 += 1;
+        if self.0 < RELEASE_AFTER_N_TICKS {
+            return false;
+        }
+        self.0 = 0;
+        true
     }
 }
 
@@ -345,6 +379,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
 
         let mut save_tick_counter: u64 = 0;
         let mut publish = SecondGate::default();
+        let mut pause_watch = PauseWatch::default();
 
         // Last ICY title generation reconciled into `PlayerState`. Generations are process-wide
         // tickets starting at 1, so this holds across stations and `0` means nothing seen yet.
@@ -373,11 +408,16 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
             // Quick check: skip tick when not playing (lock-free via atomic mirror)
             let status = player_state.status_atomic.load(std::sync::atomic::Ordering::Relaxed);
             let is_playing = status == PlaybackStatus::Playing as u8;
+            let paused = status == PlaybackStatus::Paused as u8;
+            let release_due = pause_watch.due(paused && engine.holds_releasable_claim());
 
             if !is_playing {
+                if release_due {
+                    release_paused_track(&engine, &player_state, &sinks);
+                }
                 // A pause keeps the last path: nothing pulls the source, so it could not be
-                // re-read anyway.
-                if status == PlaybackStatus::Stopped as u8 {
+                // re-read anyway. One whose device went back has none left to describe.
+                if status == PlaybackStatus::Stopped as u8 || (paused && engine.output_parked()) {
                     publish_signal_path(&signal_path_tx, None);
                 }
                 continue;
@@ -511,6 +551,32 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
             }
         }
     });
+}
+
+/// Take a long-paused track off the deck so its exclusive device goes back, leaving it paused
+/// where the deck stopped.
+///
+/// The deck is read before the state lock rather than under it, which would nest the decks mutex
+/// inside the state's.
+fn release_paused_track(
+    engine: &PlaybackEngine,
+    player_state: &PlayerStateHandle,
+    sinks: &PlayerSinks,
+) {
+    let resume_ms = engine.query_position();
+    let decision = {
+        let state = lock_state(player_state);
+        state.current_track().map(|track| ReleaseDecision {
+            track_id: track.id,
+            position_ms: state.position_ms,
+            resume_ms,
+        })
+    };
+    if let Some(decision) = decision {
+        emit_and_execute(engine, player_state, sinks, |state| {
+            state.build_release_actions(decision)
+        });
+    }
 }
 
 /// Publish `path` only when it differs, so the panel repaints on a change rather than per tick.

@@ -2341,14 +2341,32 @@ msgstr "Yedek"
 msgid "Converted"
 msgstr "Dönüştürülmüş"
 
+msgid "Lossy: the file is compressed, so the device gets the decoder's reconstruction of the recording"
+msgstr "Kayıplı: dosya sıkıştırılmış, bu yüzden aygıt kaydın kod çözücü tarafından yeniden oluşturulmuş hâlini alır"
+
+msgid "Lossy"
+msgstr "Kayıplı"
+
 msgid "Make Bit-Perfect"
 msgstr "Bit-Perfect Yap"
+
+msgid "Switch to Exclusive Output?"
+msgstr "Özel çıkışa geçilsin mi?"
+
+msgid "Bit-perfect playback needs exclusive output. Other apps can't play through the device while Melodia does, and the system volume stops applying: Melodia's own volume goes to full unless Hardware Volume is on."
+msgstr "Bit-perfect çalma özel çıkış gerektirir. Melodia çalarken diğer uygulamalar bu aygıttan ses çalamaz ve sistem ses düzeyi artık uygulanmaz: Donanım Ses Düzeyi açık değilse Melodia'nın kendi ses düzeyi en yükseğe çıkar."
+
+msgid "Switch"
+msgstr "Geç"
 
 msgid "Source"
 msgstr "Kaynak"
 
 msgid "{}, rounded to fit 32-bit float"
 msgstr "{}, 32 bit kayan noktaya yuvarlanır"
+
+msgid "{}, decoded from a lossy codec"
+msgstr "{}, kayıplı bir kodekten çözülür"
 
 msgid "Effects"
 msgstr "Efektler"
@@ -2490,6 +2508,12 @@ msgstr "Donanım Ses Düzeyi"
 
 msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
 msgstr "Örnekleri ölçeklemek yerine aygıtın kendi ses düzeyi denetimini çevir, böylece ses kaydırıcısı sesi bit-perfect tutar. Bu denetim aygıtın sistem ses düzeyidir ve Melodia aygıtı bıraktığında eski hâline döner. Kendi denetimi olmayan aygıtlar Melodia'nın ses düzeyini kullanmaya devam eder"
+
+msgid "Give the Device Back When Paused"
+msgstr "Duraklatınca Aygıtı Bırak"
+
+msgid "After five minutes paused, hand the device back so other apps can play through it. Pressing play takes it again"
+msgstr "Beş dakika duraklatıldıktan sonra aygıtı bırak, böylece diğer uygulamalar bu aygıttan ses çalabilir. Oynat'a basınca Melodia onu yeniden alır"
 
 msgid "Unsupported Sample Rates"
 msgstr "Desteklenmeyen Örnekleme Hızları"

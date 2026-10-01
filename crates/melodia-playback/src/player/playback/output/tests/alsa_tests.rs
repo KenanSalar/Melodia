@@ -60,10 +60,10 @@ fn each_rung_opens_in_the_layout_encode_writes_and_the_panel_names() {
 fn a_claim_asks_for_each_source_through_the_rungs_alsa_spells() {
     use DeviceFormat::{F32, S16, S24Low, S24Packed, S32};
     let rows: [(SourceFormat, &[DeviceFormat]); 5] = [
-        (SourceFormat { bits: 16, float: false }, &[S16, S32, S24Packed, S24Low]),
-        (SourceFormat { bits: 17, float: false }, &[S24Packed, S32, S24Low]),
-        (SourceFormat { bits: 24, float: false }, &[S24Packed, S32, S24Low]),
-        (SourceFormat { bits: 25, float: false }, &[S32, F32]),
+        (SourceFormat { bits: 16, float: false, lossy: false }, &[S16, S32, S24Packed, S24Low]),
+        (SourceFormat { bits: 17, float: false, lossy: false }, &[S24Packed, S32, S24Low]),
+        (SourceFormat { bits: 24, float: false, lossy: false }, &[S24Packed, S32, S24Low]),
+        (SourceFormat { bits: 25, float: false, lossy: false }, &[S32, F32]),
         (SourceFormat::F32, &[S32, F32, S24Packed, S24Low, S16]),
     ];
     for (source, expected) in rows {
@@ -147,13 +147,13 @@ fn a_card_that_takes_anything_opens_at_exactly_what_the_claim_asks_for() -> Resu
         (
             "mono 16-bit at 44.1 kHz",
             shape(1, 44_100),
-            SourceFormat { bits: 16, float: false },
+            SourceFormat { bits: 16, float: false, lossy: false },
             (1, DeviceFormat::S16, 882, 882),
         ),
         (
             "stereo 24-bit at 96 kHz",
             shape(2, 96_000),
-            SourceFormat { bits: 24, float: false },
+            SourceFormat { bits: 24, float: false, lossy: false },
             (2, DeviceFormat::S24Packed, 1_920, 1_920),
         ),
         (

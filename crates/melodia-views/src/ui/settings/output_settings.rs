@@ -1,7 +1,8 @@
 //! The Output card's settings: following the file's rate and the silence a rate change writes
 //! first, then the exclusive pickers (shared or exclusive, which card a claim takes, what it does
 //! about a rate the card lacks, how its writer paces the card, and whether the card's own control
-//! carries the volume). The card's live readout is [`super::signal_path`]'s.
+//! carries the volume), and whether a long pause gives the card back. The card's live readout is
+//! [`super::signal_path`]'s.
 //!
 //! **A pick is applied on the blocking pool, never here**: claiming a card or handing it back
 //! opens a device. Every picker changes the one choice, so each writes a synchronous shadow and
@@ -58,7 +59,21 @@ pub fn install(ui: &AppWindow, state: &AppState) {
     install_rate_rows(ui, state, &flags);
     if library::playback::EXCLUSIVE_SUPPORTED {
         install_pickers(ui, state, flags.output_choice());
+        install_release_row(ui, state, &flags);
     }
+}
+
+/// Giving the device back after a long pause. A toggle beside the pickers rather than one of them,
+/// since it changes nothing about the claim and so has nothing to reopen.
+fn install_release_row(ui: &AppWindow, state: &AppState, flags: &OutputFlags) {
+    let g = ui.global::<Settings>();
+    g.set_output_release_paused(flags.output_paused_device.releases());
+    g.on_output_release_paused_changed(toggle_binding(
+        state,
+        "persist output_paused_device",
+        library::playback::player_set_release_when_paused,
+        library::settings::set_output_paused_device,
+    ));
 }
 
 /// Following the file's rate and the resync hold, which apply whether or not a card can be claimed.

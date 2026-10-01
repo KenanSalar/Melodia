@@ -72,6 +72,7 @@ fn paint(ui: &AppWindow, path: Option<&SignalPath>) {
         Verdict::Enhanced => 1,
         Verdict::Converted => 2,
         Verdict::Fallback => 3,
+        Verdict::Lossy => 4,
     });
 
     let stages = path.stages;
@@ -100,6 +101,7 @@ fn paint(ui: &AppWindow, path: Option<&SignalPath>) {
     g.set_source_format(
         format!("{source_rate} · {} · {} ch", inputs.source.format, source.channels).into(),
     );
+    g.set_source_lossy(inputs.source.format.lossy);
     g.set_device_format(
         format!("{device_rate} · {} · {} ch", device.format, device.shape.channels).into(),
     );

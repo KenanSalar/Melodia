@@ -2337,14 +2337,32 @@ msgstr "Εναλλακτική"
 msgid "Converted"
 msgstr "Μετατρεπόμενο"
 
+msgid "Lossy: the file is compressed, so the device gets the decoder's reconstruction of the recording"
+msgstr "Απωλεστικό: το αρχείο είναι συμπιεσμένο, οπότε η συσκευή λαμβάνει την ανακατασκευή της ηχογράφησης από τον αποκωδικοποιητή"
+
+msgid "Lossy"
+msgstr "Απωλεστικό"
+
 msgid "Make Bit-Perfect"
 msgstr "Κάνε το bit-perfect"
+
+msgid "Switch to Exclusive Output?"
+msgstr "Μετάβαση σε αποκλειστική έξοδο;"
+
+msgid "Bit-perfect playback needs exclusive output. Other apps can't play through the device while Melodia does, and the system volume stops applying: Melodia's own volume goes to full unless Hardware Volume is on."
+msgstr "Η αναπαραγωγή bit-perfect χρειάζεται αποκλειστική έξοδο. Άλλες εφαρμογές δεν μπορούν να παίξουν μέσω της συσκευής όσο παίζει το Melodia, και η ένταση συστήματος παύει να ισχύει: η ένταση του ίδιου του Melodia πηγαίνει στο μέγιστο, εκτός αν είναι ενεργή η Ένταση υλικού."
+
+msgid "Switch"
+msgstr "Μετάβαση"
 
 msgid "Source"
 msgstr "Πηγή"
 
 msgid "{}, rounded to fit 32-bit float"
 msgstr "{}, στρογγυλεμένο σε float 32 bit"
+
+msgid "{}, decoded from a lossy codec"
+msgstr "{}, αποκωδικοποιημένο από απωλεστικό codec"
 
 msgid "Effects"
 msgstr "Εφέ"
@@ -2486,6 +2504,12 @@ msgstr "Ένταση υλικού"
 
 msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
 msgstr "Ρύθμιση του ελέγχου έντασης της ίδιας της συσκευής αντί για κλιμάκωση των δειγμάτων, ώστε το ρυθμιστικό έντασης να κρατά τον ήχο bit-perfect. Αυτός ο έλεγχος είναι η ένταση συστήματος της συσκευής και επανέρχεται όταν το Melodia αφήσει τη συσκευή. Οι συσκευές χωρίς δικό τους έλεγχο κρατούν την ένταση του Melodia"
+
+msgid "Give the Device Back When Paused"
+msgstr "Επιστροφή της συσκευής σε παύση"
+
+msgid "After five minutes paused, hand the device back so other apps can play through it. Pressing play takes it again"
+msgstr "Μετά από πέντε λεπτά σε παύση, η συσκευή επιστρέφεται ώστε άλλες εφαρμογές να μπορούν να παίξουν μέσω αυτής. Με την αναπαραγωγή το Melodia την ξαναπαίρνει"
 
 msgid "Unsupported Sample Rates"
 msgstr "Μη υποστηριζόμενοι ρυθμοί δειγματοληψίας"

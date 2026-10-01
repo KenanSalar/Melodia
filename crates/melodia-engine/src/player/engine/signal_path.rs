@@ -9,6 +9,9 @@
 //!
 //! **A fallback is the headline whatever the stages say**, since the user asked for exclusive and
 //! didn't get it, and that is the one thing they need to hear first.
+//!
+//! **A lossy source is the headline after it.** No setting puts a lossy file right, so whatever
+//! the later stages do, the answer that matters is that the device gets a reconstruction.
 
 use melodia_playback::player::playback::output::Negotiated;
 use melodia_playback::player::playback::output::voice::PlayingSource;
@@ -33,6 +36,8 @@ pub enum Verdict {
     Converted,
     /// Exclusive was asked for and refused; the reason is on the negotiated output.
     Fallback,
+    /// The source was decoded from a lossy codec.
+    Lossy,
 }
 
 /// Everything the verdict reads, kept on the answer so the panel can name what it saw.
@@ -98,6 +103,7 @@ pub fn evaluate(inputs: SignalInputs) -> SignalPath {
     let stages = grade(&inputs);
     let verdict = match stages.worst() {
         _ if inputs.negotiated.fallback.is_some() => Verdict::Fallback,
+        _ if inputs.source.format.lossy => Verdict::Lossy,
         Grade::Clean => Verdict::BitPerfect,
         Grade::Enhanced => Verdict::Enhanced,
         Grade::Converted => Verdict::Converted,
@@ -120,8 +126,9 @@ fn grade(inputs: &SignalInputs) -> Stages {
         transport.volume != MAX_VOLUME
     };
 
+    let format = inputs.source.format;
     Stages {
-        source: converted_if(!inputs.source.format.fits_sample()),
+        source: converted_if(format.lossy || !format.fits_sample()),
         dsp: chosen_if(inputs.source.dsp_engaged),
         // Exact comparisons, because the chain's own short circuits are: the converter passes
         // samples through only at a step of exactly one, and the voice skips its multiply only at
@@ -133,7 +140,7 @@ fn grade(inputs: &SignalInputs) -> Stages {
         // A source no wider than the device lands on its first channels untouched, the rest
         // silent or a mono duplicate. Wider is a drop, or a mean onto a mono device.
         channels: converted_if(source.channels > device.channels),
-        output: converted_if(!inputs.negotiated.format.carries(inputs.source.format)),
+        output: converted_if(!inputs.negotiated.format.carries(format)),
     }
 }
 

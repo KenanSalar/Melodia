@@ -399,6 +399,7 @@ fn hydrate_audio_dsp(engine: &PlaybackEngine, settings: &settings::SettingsData)
     engine.set_crossfade_fade_on_pause(settings.crossfade.crossfade_fade_on_pause);
     engine.set_crossfade_enabled(settings.crossfade.crossfade_enabled);
     engine.set_follow_rate(settings.output.output_follow_rate);
+    engine.set_release_when_paused(settings.output.output_paused_device.releases());
     engine.set_resync_hold(settings.output.resync_hold());
     // Nothing is loaded yet, so an exclusive choice leaves the output parked as `open_output` left
     // it, and claims the card at the first play.

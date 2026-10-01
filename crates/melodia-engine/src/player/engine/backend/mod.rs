@@ -6,12 +6,14 @@
 //! the transport claims from each carry an argument about one of the others, over the decks lock,
 //! [`PlaybackEngine::deck_epoch`] or the generation a station is opened under, and those read as
 //! arguments only while they sit next to each other. What moved out races nothing: the lock-free
-//! DSP setters ([`controls`]), the trait a test mocks ([`player_backend`]), and the device under
-//! the decks ([`output`]), which a transport op here calls into with the decks lock already held.
+//! DSP setters ([`controls`]), the decks' read-only answers ([`reads`]), the trait a test mocks
+//! ([`player_backend`]), and the device under the decks ([`output`]), which a transport op here
+//! calls into with the decks lock already held.
 
 mod controls;
 mod output;
 mod player_backend;
+mod reads;
 
 pub use output::OutputChoice;
 pub use player_backend::PlayerBackend;
@@ -741,20 +743,6 @@ impl PlaybackEngine {
         }
         deck.stage(|d| self.build_source(decoded, baked_rg, d));
         self.gapless_pending.store(true, Ordering::Release);
-    }
-
-    /// How far the active deck has been pulled, in milliseconds on the media timeline. What a
-    /// transition is timed against: a ramp has to land on the source's end, not on the ear's.
-    pub fn query_position(&self) -> u64 {
-        let position = self.lock_decks().active().voice.position();
-        u64::try_from(position.as_millis()).unwrap_or(u64::MAX)
-    }
-
-    /// [`Self::query_position`] as the user hears it, with what the device still holds taken off.
-    /// What is shown, persisted and reported outward.
-    pub fn query_heard_position(&self) -> u64 {
-        let position = self.lock_decks().active().voice.heard(self.output.lead.get());
-        u64::try_from(position.as_millis()).unwrap_or(u64::MAX)
     }
 
     /// Free the sources the audio callback has finished with.
