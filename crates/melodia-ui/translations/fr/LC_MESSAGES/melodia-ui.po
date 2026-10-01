@@ -2297,11 +2297,11 @@ msgstr "Sortie"
 msgid "Match the File's Sample Rate"
 msgstr "Suivre la fréquence d'échantillonnage du fichier"
 
-msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate. Turns crossfade off"
-msgstr "Rouvre le périphérique audio à la fréquence de chaque piste, pour que le système ne la rééchantillonne pas. Le système doit autoriser cette fréquence. Désactive le fondu enchaîné"
+msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate"
+msgstr "Rouvre le périphérique audio à la fréquence de chaque piste, pour que le système ne la rééchantillonne pas. Le système doit autoriser cette fréquence"
 
-msgid "Off while the output matches each file's sample rate"
-msgstr "Désactivé tant que la sortie suit la fréquence d'échantillonnage de chaque fichier"
+msgid "Overlap the end of one track with the start of the next, unless the device has to change format between them"
+msgstr "Superposer la fin d'une piste avec le début de la suivante, sauf si le périphérique doit changer de format entre les deux"
 
 msgid "Signal Path"
 msgstr "Chemin du signal"

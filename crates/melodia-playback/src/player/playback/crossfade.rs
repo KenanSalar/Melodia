@@ -295,19 +295,21 @@ impl CrossfadeShared {
 /// read the current position. Gated on [`should_crossfade`] instead, any crossfade shorter than
 /// `PRELOAD_LEAD_MS` would fire the preload first — setting `gapless_pending` and permanently
 /// blocking the crossfade through its own `!gapless_pending` gate.
+///
+/// `drains_to_end` is a track that has to reach `EndOfStream`, for either of two reasons: the
+/// sleep timer's "pause at end of track" can only catch it there, and a next track the output has
+/// to reopen for starts from the `PlayMedia` that follows it, no fade being able to cross a reopen.
 #[must_use]
 pub fn crossfade_eligible(
     xf: CrossfadeSettings,
-    pause_at_end: bool,
+    drains_to_end: bool,
     has_next: bool,
     same_album: bool,
 ) -> bool {
     xf.enabled
         && xf.duration_ms > 0
         && has_next
-        // Sleep-timer "pause at end of track" needs the track to drain to `EndOfStream`, the only
-        // boundary that gate can catch.
-        && !pause_at_end
+        && !drains_to_end
         && !(xf.skip_same_album && same_album)
 }
 

@@ -69,6 +69,7 @@ fn backend(position_ms: u64, xf: CrossfadeSettings) -> BackendSnapshot {
         already_preloaded: false,
         crossfading: false,
         xf,
+        next_needs_reopen: false,
     }
 }
 

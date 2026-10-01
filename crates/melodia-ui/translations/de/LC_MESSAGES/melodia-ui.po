@@ -2303,11 +2303,11 @@ msgstr "Ausgabe"
 msgid "Match the File's Sample Rate"
 msgstr "An die Abtastrate der Datei anpassen"
 
-msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate. Turns crossfade off"
-msgstr "Öffnet das Audiogerät für jedes Lied mit dessen eigener Rate neu, damit das System es nicht umrechnet. Das System muss diese Rate zulassen. Schaltet Überblenden aus"
+msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate"
+msgstr "Öffnet das Audiogerät für jedes Lied mit dessen eigener Rate neu, damit das System es nicht umrechnet. Das System muss diese Rate zulassen"
 
-msgid "Off while the output matches each file's sample rate"
-msgstr "Aus, solange die Ausgabe der Abtastrate jeder Datei folgt"
+msgid "Overlap the end of one track with the start of the next, unless the device has to change format between them"
+msgstr "Das Ende eines Titels mit dem Anfang des nächsten überlappen, außer wenn das Gerät dazwischen das Format wechseln muss"
 
 msgid "Signal Path"
 msgstr "Signalweg"

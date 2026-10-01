@@ -2301,11 +2301,11 @@ msgstr "Έξοδος"
 msgid "Match the File's Sample Rate"
 msgstr "Αντιστοίχιση ρυθμού δειγματοληψίας αρχείου"
 
-msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate. Turns crossfade off"
-msgstr "Ανοίγει ξανά τη συσκευή ήχου στον ρυθμό κάθε κομματιού, ώστε το σύστημα να μην τον μετατρέπει. Το σύστημα πρέπει να επιτρέπει αυτόν τον ρυθμό. Απενεργοποιεί τη σταδιακή μετάβαση"
+msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate"
+msgstr "Ανοίγει ξανά τη συσκευή ήχου στον ρυθμό κάθε κομματιού, ώστε το σύστημα να μην τον μετατρέπει. Το σύστημα πρέπει να επιτρέπει αυτόν τον ρυθμό"
 
-msgid "Off while the output matches each file's sample rate"
-msgstr "Ανενεργό όσο η έξοδος ακολουθεί τον ρυθμό δειγματοληψίας κάθε αρχείου"
+msgid "Overlap the end of one track with the start of the next, unless the device has to change format between them"
+msgstr "Επικάλυψε το τέλος ενός κομματιού με την αρχή του επόμενου, εκτός αν η συσκευή πρέπει να αλλάξει μορφή ανάμεσά τους"
 
 msgid "Signal Path"
 msgstr "Διαδρομή σήματος"

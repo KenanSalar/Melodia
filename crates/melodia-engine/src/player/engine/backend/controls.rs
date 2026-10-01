@@ -68,15 +68,8 @@ impl PlaybackEngine {
     }
 
     /// Snapshot the live crossfade settings for every fade decision, automatic and manual.
-    ///
-    /// Reported off while the output follows the rate, since a fade can't cross the reopen a rate
-    /// change needs. A fade on pause stays: it changes no track.
     pub fn crossfade_settings(&self) -> crossfade::CrossfadeSettings {
-        let settings = self.xf.snapshot();
-        if !self.follows_rate() {
-            return settings;
-        }
-        crossfade::CrossfadeSettings { enabled: false, manual: false, ..settings }
+        self.xf.snapshot()
     }
 
     /// Enable / disable crossfade. Lock-free, like the EQ setters.

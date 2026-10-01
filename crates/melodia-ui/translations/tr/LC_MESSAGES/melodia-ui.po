@@ -2305,11 +2305,11 @@ msgstr "Çıkış"
 msgid "Match the File's Sample Rate"
 msgstr "Dosyanın Örnekleme Hızına Uy"
 
-msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate. Turns crossfade off"
-msgstr "Ses aygıtını her parçanın kendi hızında yeniden açar, böylece sistem yeniden örneklemez. Sistemin bu hıza izin vermesi gerekir. Çapraz geçişi kapatır"
+msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate"
+msgstr "Ses aygıtını her parçanın kendi hızında yeniden açar, böylece sistem yeniden örneklemez. Sistemin bu hıza izin vermesi gerekir"
 
-msgid "Off while the output matches each file's sample rate"
-msgstr "Çıkış her dosyanın örnekleme hızını izlerken kapalı"
+msgid "Overlap the end of one track with the start of the next, unless the device has to change format between them"
+msgstr "Bir parçanın sonunu sonraki parçanın başıyla üst üste bindir, aygıtın aralarında biçim değiştirmesi gerekmedikçe"
 
 msgid "Signal Path"
 msgstr "Sinyal Yolu"

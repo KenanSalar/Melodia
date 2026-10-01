@@ -101,6 +101,8 @@ pub struct BackendSnapshot {
     pub already_preloaded: bool,
     pub crossfading: bool,
     pub xf: crossfade::CrossfadeSettings,
+    /// The output has to reopen for the track queued next, which no crossfade can cross.
+    pub next_needs_reopen: bool,
 }
 
 /// What one `Playing` tick decided: the position to publish, and at most one of
@@ -123,7 +125,14 @@ pub fn evaluate_playing_tick(
     state: &mut PlayerState,
     backend: BackendSnapshot,
 ) -> Option<PlayingTick> {
-    let BackendSnapshot { position_ms, pulled_ms, already_preloaded, crossfading, xf } = backend;
+    let BackendSnapshot {
+        position_ms,
+        pulled_ms,
+        already_preloaded,
+        crossfading,
+        xf,
+        next_needs_reopen,
+    } = backend;
 
     if state.status != PlaybackStatus::Playing {
         return None;
@@ -149,9 +158,12 @@ pub fn evaluate_playing_tick(
     // depend on the position — a crossfade shorter than PRELOAD_LEAD_MS would
     // otherwise let the preload fire first, set `gapless_pending`, and
     // permanently block the crossfade via its own gate.
+    //
+    // A next track the output reopens for still reaches the preload below, which refuses it, so
+    // the transition ends at `EndOfStream` either way.
     let eligible = crossfade::crossfade_eligible(
         xf,
-        state.pause_after_current_track,
+        state.pause_after_current_track || next_needs_reopen,
         next.is_some(),
         same_album,
     );
@@ -208,6 +220,30 @@ pub fn evaluate_playing_tick(
     };
 
     Some(PlayingTick { tick, late_preload, crossfade })
+}
+
+/// Whether the output has to reopen for the track queued next, which no crossfade can cross.
+///
+/// The first ask about a track opens its file, so it is asked only where the answer can be yes and
+/// a crossfade could use it. That ask lands on the track's first tick, well ahead of any crossfade
+/// window, and the engine answers the rest from what it found. The file is opened with the state
+/// lock released.
+fn next_needs_reopen(
+    engine: &PlaybackEngine,
+    player_state: &PlayerStateHandle,
+    xf: crossfade::CrossfadeSettings,
+) -> bool {
+    if !xf.enabled || !engine.follows_rate() {
+        return false;
+    }
+    let next_path = {
+        let state = lock_state(player_state);
+        if !state.source_allows(PlaybackSource::advances_queue) {
+            return false;
+        }
+        state.queue.peek_next().map(|track| track.file_path.clone())
+    };
+    next_path.is_some_and(|path| engine.reopens_for(&path))
 }
 
 /// Tell the user a station gave up, which is otherwise a silence with no explanation.
@@ -398,12 +434,14 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                     // Normal tick: update position with lightweight event.
                     // Query the backend BEFORE locking PlayerState to avoid a
                     // nested lock — `evaluate_playing_tick` takes these as inputs.
+                    let xf = engine.crossfade_settings();
                     let backend = BackendSnapshot {
                         position_ms: engine.query_heard_position(),
                         pulled_ms: engine.query_position(),
                         already_preloaded: engine.is_gapless_preloaded(),
                         crossfading: engine.is_crossfading(),
-                        xf: engine.crossfade_settings(),
+                        xf,
+                        next_needs_reopen: next_needs_reopen(&engine, &player_state, xf),
                     };
                     let crossfading = backend.crossfading;
                     let (decided, transport) = {

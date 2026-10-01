@@ -2,8 +2,8 @@
 
 Working doc. Delete it when the last phase that's taken on ships.
 
-Status: **Phases 1, 2 and 4 complete** (tests held back, see Phases 2 and 4) · **Phase 3: Linux
-half built, WASAPI half open** · Created: 2026-09-30 · Revised: 2026-10-01
+Status: **Phases 1, 2, 4 and 5 complete** (tests held back, see Phases 2, 4 and 5) · **Phase 3:
+Linux half built, WASAPI half open** · Created: 2026-09-30 · Revised: 2026-10-01
 
 > Facts below were checked on **2026-09-30** against `a0b9978b` on `feat/bit-perfect-output`,
 > and against the pinned `cpal 0.18.2` sources. Line counts are from `wc -l` on that commit.
@@ -55,7 +55,7 @@ Smaller gaps, each a phase of its own below:
 | 2 ✅ | A band-limited kernel in place of linear interpolation | 1 | Clean rate conversion and speed changes, in the default setup |
 | 3 | Keep the claim on a rate the device lacks (a picker, default = today). **Linux half built, WASAPI half open** | 2 | A hi-res album on a capped DAC stays exclusive and gapless |
 | 4 ✅ | TPDF dither where changed samples are narrowed | – | Noise instead of distortion on 16-bit output |
-| 5 | Crossfade under exclusive when no reopen is needed | – | Crossfade works with exclusive between same-format tracks |
+| 5 ✅ | Crossfade under exclusive when no reopen is needed | – | Crossfade works with exclusive between same-format tracks |
 | 6 | A device picker for shared output | – | Music can go to a DAC without changing the system default |
 | 7 | File reads on the writer thread: measure, then decide | – | Possibly nothing; a read-ahead only if the measurement shows stalls |
 | 8 | Signal-path and claim polish (four small, independent items) | – | Honest words and parity fixes |
@@ -78,8 +78,8 @@ Where each change lives, and how big each file is today. Production files stay u
 | `…/output/dither.rs` | new | 4 | Owns the dither: which formats and blocks take it, the noise, and the quantize every writer calls before its conversion |
 | `…/output/encode.rs` | 137 | 4 | Unchanged but for sharing `integer_bits` and `full_scale` with `dither` |
 | `…/output/device.rs` | 584 | 4, 6 | The shared 16- and 24-bit arms take the same `Dither`; the shared target by id |
-| `crates/melodia-engine/src/player/engine/backend/mod.rs` | **784** | 5, 8d | Close to the cap: Phase 5 moves the refusal latch out before adding anything |
-| `…/engine/backend/output.rs` | 350 | 5, 8d | Home of both reopen-refusal latches after Phase 5; a resume reclaims a parked claim |
+| `crates/melodia-engine/src/player/engine/backend/mod.rs` | **798** after Phase 5 | 5, 8d | At the cap: 8d moves something out before adding anything |
+| `…/engine/backend/output.rs` | 411 after Phase 5 | 5, 8d | Home of the format latch both reopen refusals read; a resume reclaims a parked claim |
 | `…/engine/backend/controls.rs` | 106 | 5 | `crossfade_settings` stops blanket-disabling |
 | `crates/melodia-playback/src/player/playback/crossfade.rs` | 384 | 5 | `crossfade_eligible` takes whether the next track plays without a reopen |
 | `crates/melodia-engine/src/player/engine/signal_path.rs` | 142 | 8b | Names a lossy source |
@@ -400,7 +400,8 @@ sound server under its original node name.
 - The ⚠️ re-verify above.
 - Tests: the `device_rate_for` table, the key's round-trip, and `RATE_FALLBACK_SUPPORTED` in the
   per-platform capability tests.
-- Docs: `.claude/rules/audio-stack.md`'s list of seam names wants `RATE_FALLBACK`.
+- Docs: done. `.claude/rules/audio-stack.md`'s seam names carry `RATE_FALLBACK`, and the README
+  names the Unsupported Sample Rates setting as Linux-only.
 - Kenan's own check of the chip, which should read Converted with no toast.
 
 ## Phase 4 - TPDF dither where changed samples are narrowed ✅
@@ -548,10 +549,10 @@ No underrun was logged, and the card was handed back when Melodia quit.
 - Tests: none written. The candidates above stand, plus: S32 and F32 come out untouched; a shared
   `I24` sample past full scale holds at the maximum; `bit_perfect.rs` runs `quantize` the way the
   writers do.
-- Docs: the chain line in `.claude/rules/audio-stack.md` (`dither → encode`), and the README
-  Playback bullet.
+- Docs: done. The chain line and a bullet in `.claude/rules/audio-stack.md` (every narrowing
+  site calls `Dither::quantize` first), and a README bullet under Bit-perfect output.
 
-## Phase 5 - Crossfade under exclusive when no reopen is needed
+## Phase 5 - Crossfade under exclusive when no reopen is needed ✅
 
 **The constraint that shapes it:** the crossfade builder can't refuse on its own.
 `build_crossfade_actions` advances the queue when the fade *starts*. So if `begin_crossfade`
@@ -582,6 +583,84 @@ decides the crossfade, not a failure after it.
   - Settings no longer greys the crossfade rows out under exclusive.
 
 **Tests, after the manual go:** the predicate's new input, and the latch's epoch handling.
+
+**As built** (static gates green). Where it differs from the plan above:
+
+**The latch**
+- `gapless_refused` is gone. `EngineOutput.probed` holds the last file a track-boundary decision
+  opened and what it found: `Decodes(Shape, SourceFormat)`, or `Unreadable`.
+- It keeps the format, not the verdict. `plays_without_reopen` is asked again each time, of the
+  output as it stands, so there is no epoch key and an output-choice change can't leave a stale
+  answer behind.
+- `reopens_for(path)` is the monitor's way in. `preload_gapless` reads the same record through
+  `recorded_answer` and opens through `open_recorded`, so a refused or unreadable next track is
+  opened once rather than on every tick.
+
+**The decision**
+- Before its snapshot, the monitor asks `reopens_for` about the track queued next. It asks only
+  while crossfade is on and the output follows the rate, and not while a station plays.
+  `BackendSnapshot.next_needs_reopen` carries the answer.
+- The answer is folded into `crossfade_eligible`'s existing term rather than added as a fifth.
+  `pause_at_end` became `drains_to_end`: both mean the track has to reach `EndOfStream`. The
+  predicate's tests are unchanged.
+- `crossfade_settings` passes the user's settings through.
+
+**Where it commits**
+- `play_media` and `begin_crossfade` share `start_track`, which takes an `Entry::{Fade, Cut}`.
+  Under the decks lock it turns a fade into a cut from the top when a gapless source is staged or
+  the output has to reopen. So a manual skip into such a track is a hard cut, and an automatic
+  crossfade whose decision went stale becomes one too.
+- A fade never reopens. A shared follow-rate stream's same-rate reclaim, and a fallen-back
+  claim's retry, wait for the next cut, as they already do across a gapless transition.
+- `backend/mod.rs` ends at 798 lines. The latch moved out, but the shared helper took most of
+  that back.
+
+**UI**
+- The Crossfade rows stay live while the output follows the rate. The toggle's description there
+  reads "Overlap the end of one track with the start of the next, unless the device has to change
+  format between them". "Match the File's Sample Rate" no longer says it turns crossfade off.
+  Both strings are in all six catalogues, and the two they replace are removed.
+
+**Tests adapted:** the three `backend_tests` that pinned crossfade off under following the rate
+are deleted, and `handlers_tests::backend` sets `next_needs_reopen: false`.
+
+**In-app run** (debug build, dev data folder backed up and restored, crossfade 2 s with "Except
+on the same album" off, volume 100). The fixtures were 16 s sines, a different tone per track:
+01 and 02 at 48 kHz, 03 and 04 at 44.1 kHz, 05 at 44.1 kHz 24-bit, and 06 at 48 kHz. Shared
+output went to a temporary null sink, recorded from its monitor. Exclusive output went to the
+silent PCM2902, watched through its `hw_params`, and to `snd-aloop`, recorded from its capture
+side. A crossfade shows as an overlap of the two tones whose levels sum to 0.500, the level of
+either tone alone.
+
+| Run | 01→02 | 02→03 | 03→04 | 04→05 |
+|---|---|---|---|---|
+| Shared, rate not followed (the baseline) | fade | fade | fade | fade |
+| Shared, rate followed | fade | no fade; 0.21 s silence; reopened at 44100 | fade | fade |
+| Shared, rate followed, manual skips | fade, no reopen | hard cut; 0.21 s silence; reopened at 44100 | fade, no reopen | |
+| Exclusive (PCM2902) | fade; card held at S16_LE 48000 | no fade; card reopened at 44100 | fade; card held at 44100 | no fade; the 24-bit claim was refused and the track played shared, as before |
+| Exclusive (PCM2902), manual skips | card held | card reopened at 44100 | card held | |
+
+- On `snd-aloop` (all three tracks at 48 kHz), the automatic 01→02 fade and a manual skip 02→06
+  both overlapped with levels summing to 0.500, and the card stayed at S16_LE 48000.
+- Outside the fades the capture was bit-identical to the source: 14 s of 01 before its fade, and
+  13 s of 06 between its fade-in and its end. Inside a fade the channels differ by at most 2 LSB,
+  which is the dither working on changed samples.
+- In every fade the two levels summed to exactly 0.500, so no step clipped or dipped.
+
+**Settings check** (Kenan, 2026-10-01): under Exclusive, the Crossfade toggle is live with the
+format note, and turning it on shows the four detail rows.
+
+**Still open**
+- Tests. The epoch candidate above no longer applies. In its place:
+  - an `evaluate_playing_tick` row where `next_needs_reopen` blocks the crossfade and lets the
+    preload through;
+  - `crossfade_settings` passing the user's choice through under following the rate;
+  - the latch answering a second ask after the file is deleted, which shows it opened once.
+- Docs: done. `.claude/rules/audio-stack.md`'s "A format change is decided at the boundary"
+  bullet is rewritten around `plays_without_reopen` and the record both readers share, its gapless
+  note names `start_track`, and the README crossfade bullet covers exclusive output.
+- Windows: the change carries no `cfg`, so exclusive output there gets it too. CI's
+  `clippy-windows` and `test-windows` check it, and the ear check waits for the Windows machine.
 
 ## Phase 6 - A device picker for shared output
 

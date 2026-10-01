@@ -61,6 +61,15 @@ pub fn evaluate_playback_check(was_gapless: bool, sources: usize) -> PlaybackChe
     PlaybackCheck::Playing
 }
 
+/// How a track joins the decks.
+#[derive(Clone, Copy)]
+enum Entry {
+    /// On the idle deck, over this many media milliseconds, as the playing track fades out.
+    Fade(u64),
+    /// Alone, from this far into the track.
+    Cut(Duration),
+}
+
 pub struct PlaybackEngine {
     // The device the decks play into. First so it drops first: the stream is what stops the
     // callback.
@@ -108,11 +117,6 @@ pub struct PlaybackEngine {
     // `gapless_pending` is one: the deferred clear of a faded stop has to drop this alongside the
     // deck contents it removes.
     live_stream: Arc<Mutex<Option<Arc<StreamShared>>>>,
-    // The last path `preload_gapless` refused for needing a reopen, and the epoch it was refused
-    // under. The monitor asks again every tick until the track ends, and each ask would otherwise
-    // decode the file just to refuse it. A newer epoch may have reopened the output since, so the
-    // refusal stands only for its own.
-    gapless_refused: Mutex<Option<(u64, String)>>,
     // Only ever schedules the deferred half of a faded pause / stop.
     runtime: tokio::runtime::Handle,
 }
@@ -136,7 +140,6 @@ impl PlaybackEngine {
             viz: VisualizerShared::new(false),
             staged_stream: Mutex::new(None),
             live_stream: Arc::new(Mutex::new(None)),
-            gapless_refused: Mutex::new(None),
             runtime,
         })
     }
@@ -233,10 +236,10 @@ impl PlaybackEngine {
     /// Fade length for a *manual* track change, or `0` for a hard cut. Gathers
     /// the live inputs; [`crossfade::manual_fade_ms`] documents each gate.
     ///
-    /// The `gapless_pending` read is advisory — the monitor's preload isn't
-    /// under the `exec_lock`, so it can land mid-decision. `play_media`
-    /// re-checks under the deck lock and the preload re-checks the epoch before
-    /// staging, so whichever commits second yields.
+    /// Only a wish: the `gapless_pending` read is advisory, the monitor's preload not being under
+    /// the `exec_lock`, and whether the output reopens for the track is unknown until it is
+    /// decoded. [`Self::start_track`] settles both under the deck lock, and the preload re-checks
+    /// the epoch before staging, so whichever commits second yields.
     fn manual_fade_ms(&self, start_position_ms: Option<u64>) -> u64 {
         crossfade::manual_fade_ms(
             self.crossfade_settings(),
@@ -261,7 +264,7 @@ impl PlaybackEngine {
         // Decode outside the deck lock — the position monitor's `query_position`
         // shares this mutex, so a synchronous Symphonia probe under it stalls
         // position publication. It is the only step that can be hoisted out;
-        // everything depending on *which* deck we land on happens below.
+        // everything depending on *which* deck we land on is `start_track`'s.
         let mut decoded = FileDecoder::open(Path::new(file_path))?;
 
         // One value for the decoder's seek and the deck's clock anchor both, so the two cannot
@@ -282,36 +285,59 @@ impl PlaybackEngine {
             }
         }
 
+        // A manual fade is never asked for with a resume position, so the two can't both apply.
+        let entry = if fade_ms > 0 { Entry::Fade(fade_ms) } else { Entry::Cut(start) };
+        self.start_track(decoded, baked_rg, entry, volume, speed);
+        Ok(())
+    }
+
+    /// Put `decoded` on the decks as `entry` asks, cutting from the top where a fade can't go.
+    ///
+    /// Two things stop a fade, and neither is settled when the caller picks one: a gapless source
+    /// staged since (its flag is set under this same lock), and an output that has to reopen for
+    /// the track. A cut is always safe, clearing both decks with any staged source in them. A fade
+    /// never reopens, so whatever a track start would reclaim waits for the next cut.
+    fn start_track(
+        &self,
+        decoded: FileDecoder,
+        baked_rg: TrackReplayGain,
+        entry: Entry,
+        volume: f64,
+        speed: f64,
+    ) {
         self.bump_epoch();
         self.clear_live_stream();
         let mut decks = self.lock_decks();
-        // Backstop for the gapless race: `preload_gapless` sets the flag under
-        // this same lock, so a preload that landed during the decode is visible
-        // here. Downgrading to a hard cut is always safe — it clears both decks,
-        // staged source included.
-        let fade_ms = if self.gapless_pending.load(Ordering::Acquire) { 0 } else { fade_ms };
-        if fade_ms == 0 {
-            // A reopen keeps the voices, so the new stream would play on from the outgoing track
-            // until the cut's clear lands. A fade needs that track to keep playing.
-            decks.pause_all();
-        }
-        let volume = self.prepare_output_for(&decks, &decoded, volume);
-        // The deck primitives hand this closure the *target* deck under the one
-        // lock they append through, so the ramp cell the source carries always
-        // belongs to the deck it lands on. `EqSource::new` does no I/O, so
-        // building there costs the lock nothing.
-        let build = |deck: &Deck| self.build_source(decoded, baked_rg, deck);
-        if fade_ms > 0 {
-            decks.crossfade_to(fade_ms, volume, speed, build);
-            self.crossfade_armed.store(true, Ordering::Release);
-        } else {
-            // The clock is anchored where the decoder was seeked to above, not at zero: the deck
-            // counts frames handed out, and a resumed source hands out its first frame minutes in.
-            decks.cut_to(volume, speed, start, build);
-            self.crossfade_armed.store(false, Ordering::Release);
+        let fade_blocked = self.gapless_pending.load(Ordering::Acquire)
+            || !self.plays_without_reopen(decoded.shape(), decoded.format());
+        let entry = match entry {
+            Entry::Fade(_) if fade_blocked => Entry::Cut(Duration::ZERO),
+            entry => entry,
+        };
+        // The deck primitives hand the builder the *target* deck under the lock they append
+        // through, so a source's ramp cell is its own deck's. `EqSource::new` does no I/O.
+        match entry {
+            Entry::Fade(fade_ms) => {
+                let volume = self.route_volume(volume);
+                decks.crossfade_to(fade_ms, volume, speed, |deck| {
+                    self.build_source(decoded, baked_rg, deck)
+                });
+                self.crossfade_armed.store(true, Ordering::Release);
+            }
+            Entry::Cut(start) => {
+                // A reopen keeps the voices, so the new stream would play on from the outgoing
+                // track until the cut's clear lands.
+                decks.pause_all();
+                let volume = self.prepare_output_for(&decks, &decoded, volume);
+                // Anchored where the decoder was seeked to, not at zero: the deck counts frames
+                // handed out, and a resumed source hands out its first frame minutes in.
+                decks.cut_to(volume, speed, start, |deck| {
+                    self.build_source(decoded, baked_rg, deck)
+                });
+                self.crossfade_armed.store(false, Ordering::Release);
+            }
         }
         self.gapless_pending.store(false, Ordering::Release);
-        Ok(())
     }
 
     /// Playback speed while a station plays.
@@ -398,6 +424,9 @@ impl PlaybackEngine {
     ///
     /// A decode failure returns before any deck is touched, so the outgoing
     /// track keeps playing and the caller can fall back to a plain skip.
+    ///
+    /// A track the output has to reopen for is cut to instead, the state machine being on it
+    /// already: the monitor found it plays without one, so that decision has gone stale.
     pub fn begin_crossfade(
         &self,
         file_path: &str,
@@ -406,27 +435,17 @@ impl PlaybackEngine {
         volume: f64,
         speed: f64,
     ) -> Result<(), AppError> {
-        // Decode outside the lock, pick the deck and build inside it — see the
-        // same note in `play_media`.
+        // Decode outside the deck lock, as `play_media` does.
         let decoded = FileDecoder::open(Path::new(file_path))?;
 
-        self.bump_epoch();
-        self.clear_live_stream();
-        let mut decks = self.lock_decks();
-        let volume = self.route_volume(volume);
-        // A staged gapless source sits on the *active* deck and inherits its
-        // fade cell, so it would fade out alongside the track it was meant to
-        // follow. `crossfade_eligible` gates the preload off for exactly this
-        // reason; assert rather than silently mis-fade.
+        // A staged gapless source shares the active deck's fade cell and would fade out with the
+        // track it follows. `crossfade_eligible` keeps the preload off for that, so one here is a
+        // bug that `start_track`'s fallback cut would hide.
         debug_assert!(
             !self.gapless_pending.load(Ordering::Acquire),
             "crossfade must never race a staged gapless preload"
         );
-        decks.crossfade_to(fade_ms, volume, speed, |deck| {
-            self.build_source(decoded, baked_rg, deck)
-        });
-        self.crossfade_armed.store(true, Ordering::Release);
-        self.gapless_pending.store(false, Ordering::Release);
+        self.start_track(decoded, baked_rg, Entry::Fade(fade_ms), volume, speed);
         Ok(())
     }
 
@@ -677,21 +696,17 @@ impl PlaybackEngine {
         // deck's ramp cell — possibly one armed to fade out and end.
         let epoch = self.deck_epoch.load(Ordering::Acquire);
 
-        let refused_already = self
-            .gapless_refused
-            .lock()
-            .as_ref()
-            .is_some_and(|(refused_at, refused)| *refused_at == epoch && refused == path);
-        if refused_already {
+        // Asked again every tick until the track ends, so a refusal stands on the first open.
+        if self.recorded_answer(path) == Some(false) {
             return;
         }
 
         // Decode off the deck lock, as in `play_media` — a preload fires right
         // when a stall in position publication would be most visible.
-        let decoded = match FileDecoder::open(Path::new(path)) {
+        let decoded = match self.open_recorded(path) {
             Ok(decoded) => decoded,
             Err(e) => {
-                log::warn!("Failed to preload gapless track {path}: {e}");
+                log::warn!("Failed to preload gapless track {path}: {}", describe(&e));
                 self.gapless_pending.store(false, Ordering::Release);
                 return;
             }
@@ -701,7 +716,6 @@ impl PlaybackEngine {
         // unstaged, it ends in `EndOfStream` and starts through `play_media`, which reopens.
         if !self.plays_without_reopen(decoded.shape(), decoded.format()) {
             log::debug!("Not staging {path} gapless: the output reopens for its format");
-            *self.gapless_refused.lock() = Some((epoch, path.to_owned()));
             return;
         }
 

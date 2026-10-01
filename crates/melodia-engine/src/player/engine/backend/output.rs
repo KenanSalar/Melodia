@@ -5,16 +5,19 @@
 //! It happens under the decks lock, ahead of the append that starts the track, so nothing of it
 //! plays in the old format. That is also why a crossfade and a reopen cannot share a transition,
 //! and why a gapless stage refuses a track that needs one: both would need the outgoing track
-//! still playing across it.
+//! still playing across it. So each asks of the next track whether the stream open now plays it,
+//! and one that needs a reopen starts at `EndOfStream` instead.
 //!
 //! **An exclusive claim is held through a pause and given back on stop**, so a stopped player
 //! never keeps other applications off the card.
 
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, MutexGuard};
 use std::time::Duration;
 
 use melodia_audio::player::source::audio::{AudioSource, Shape, SourceFormat};
+use melodia_audio::player::source::file_decode::FileDecoder;
 use melodia_core::error::{AppError, describe};
 use melodia_playback::player::playback::decks::Decks;
 use melodia_playback::player::playback::output::device::{ExternalVolume, Lead};
@@ -39,6 +42,13 @@ pub struct OutputChoice {
     pub rate_fallback: RateFallback,
 }
 
+/// What opening a file for a track-boundary decision found.
+#[derive(Debug, Clone, Copy)]
+enum Probed {
+    Decodes(Shape, SourceFormat),
+    Unreadable,
+}
+
 /// The device under the decks, what it is asked to open for, and the cells it publishes. Those
 /// are read without the device's lock, which a reopen holds for as long as a device takes to open.
 #[derive(Default)]
@@ -59,6 +69,10 @@ pub(super) struct EngineOutput {
     /// Whether the output is parked, waiting on a disconnected device, or reopening: the health
     /// checks ask on every tick, from a runtime worker.
     status: Arc<OutputStatus>,
+    /// The last file a track-boundary decision opened, and what it held. The monitor asks about
+    /// the next track on every tick until it starts, and this keeps that to one open. The format
+    /// is kept rather than the verdict, which is asked again of the output as it stands.
+    probed: Mutex<Option<(String, Probed)>>,
 }
 
 impl EngineOutput {
@@ -71,6 +85,7 @@ impl EngineOutput {
             device: Arc::new(Mutex::new(Some(output))),
             follow_rate: AtomicBool::new(false),
             choice: Mutex::default(),
+            probed: Mutex::default(),
         }
     }
 }
@@ -222,7 +237,7 @@ impl PlaybackEngine {
     }
 
     /// Whether the output is reopened to each track's rate, which exclusive output always is.
-    pub(super) fn follows_rate(&self) -> bool {
+    pub fn follows_rate(&self) -> bool {
         self.output.follow_rate.load(Ordering::Relaxed)
             || self.output.choice.lock().mode == OutputMode::Exclusive
     }
@@ -282,6 +297,50 @@ impl PlaybackEngine {
     pub(super) fn plays_without_reopen(&self, shape: Shape, format: SourceFormat) -> bool {
         let wanted = self.wanted_request(shape, format);
         self.output.device.lock().as_ref().is_none_or(|output| output.serves(&wanted))
+    }
+
+    /// Whether the output has to reopen for the file at `path`, which no crossfade can cross. A
+    /// file that won't open counts as one, so nothing fades into it. Blocking: it opens the file
+    /// the first time it is asked about.
+    pub fn reopens_for(&self, path: &str) -> bool {
+        let plays = self.recorded_answer(path).unwrap_or_else(|| match self.open_recorded(path) {
+            Ok(decoded) => self.plays_without_reopen(decoded.shape(), decoded.format()),
+            Err(e) => {
+                log::debug!("Not crossfading into {path}, which won't open: {}", describe(&e));
+                false
+            }
+        });
+        !plays
+    }
+
+    /// Whether the file at `path` plays on the output as it is, by what opening it last found.
+    /// `None` until something has opened it.
+    pub(super) fn recorded_answer(&self, path: &str) -> Option<bool> {
+        let found = self
+            .output
+            .probed
+            .lock()
+            .as_ref()
+            .and_then(|(probed, found)| (probed == path).then_some(*found))?;
+        Some(match found {
+            Probed::Decodes(shape, format) => self.plays_without_reopen(shape, format),
+            Probed::Unreadable => false,
+        })
+    }
+
+    /// Open the file at `path` for a track boundary, recording what it holds for the asks after.
+    ///
+    /// # Errors
+    ///
+    /// Whatever [`FileDecoder::open`] refuses the file with.
+    pub(super) fn open_recorded(&self, path: &str) -> Result<FileDecoder, AppError> {
+        let opened = FileDecoder::open(Path::new(path));
+        let found = match &opened {
+            Ok(decoded) => Probed::Decodes(decoded.shape(), decoded.format()),
+            Err(_) => Probed::Unreadable,
+        };
+        *self.output.probed.lock() = Some((path.to_owned(), found));
+        opened
     }
 
     /// Reopen the output for a track starting fresh in `shape` and `format`.

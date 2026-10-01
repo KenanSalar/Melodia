@@ -92,7 +92,7 @@ export component OutputSection inherits Rectangle {
     property <string> resync-desc: @tr("Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off");
 
     property <string> follow-rate-label: @tr("Match the File's Sample Rate");
-    property <string> follow-rate-desc: @tr("Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate. Turns crossfade off");
+    property <string> follow-rate-desc: @tr("Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate");
 
     property <string> signal-label: @tr("Signal Path");
     property <string> signal-desc: @tr("What reaches the audio device, and what changes it on the way. Bit-perfect means nothing does");
