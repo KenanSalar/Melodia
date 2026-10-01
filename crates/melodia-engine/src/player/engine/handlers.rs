@@ -224,16 +224,15 @@ pub fn evaluate_playing_tick(
 
 /// Whether the output has to reopen for the track queued next, which no crossfade can cross.
 ///
-/// The first ask about a track opens its file, so it is asked only where the answer can be yes and
-/// a crossfade could use it. That ask lands on the track's first tick, well ahead of any crossfade
-/// window, and the engine answers the rest from what it found. The file is opened with the state
-/// lock released.
+/// The first ask about a track opens its file, so it is asked only while crossfade is on. That ask
+/// usually lands on the track's first tick, well ahead of any crossfade window, and the engine
+/// answers the rest from what it found. The file is opened with the state lock released.
 fn next_needs_reopen(
     engine: &PlaybackEngine,
     player_state: &PlayerStateHandle,
     xf: crossfade::CrossfadeSettings,
 ) -> bool {
-    if !xf.enabled || !engine.follows_rate() {
+    if !xf.enabled {
         return false;
     }
     let next_path = {
@@ -435,13 +434,15 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                     // Query the backend BEFORE locking PlayerState to avoid a
                     // nested lock — `evaluate_playing_tick` takes these as inputs.
                     let xf = engine.crossfade_settings();
+                    // Ahead of the positions, which a first open of the next file would leave stale.
+                    let next_needs_reopen = next_needs_reopen(&engine, &player_state, xf);
                     let backend = BackendSnapshot {
                         position_ms: engine.query_heard_position(),
                         pulled_ms: engine.query_position(),
                         already_preloaded: engine.is_gapless_preloaded(),
                         crossfading: engine.is_crossfading(),
                         xf,
-                        next_needs_reopen: next_needs_reopen(&engine, &player_state, xf),
+                        next_needs_reopen,
                     };
                     let crossfading = backend.crossfading;
                     let (decided, transport) = {

@@ -223,7 +223,7 @@ impl PlaybackEngine {
     /// device's own config. Lock-free; nothing reopens until a track boundary asks.
     ///
     /// Stays off where that changes nothing ([`output::FOLLOW_RATE_SUPPORTED`]), whatever a
-    /// settings file says: it would only reopen the output at every track and turn crossfade off.
+    /// settings file says: it would only reopen the output at every track.
     pub fn set_follow_rate(&self, on: bool) {
         self.output.follow_rate.store(on && output::FOLLOW_RATE_SUPPORTED, Ordering::Relaxed);
     }
@@ -234,12 +234,6 @@ impl PlaybackEngine {
         if let Some(output) = self.output.device.lock().as_mut() {
             output.set_resync_hold(hold);
         }
-    }
-
-    /// Whether the output is reopened to each track's rate, which exclusive output always is.
-    pub fn follows_rate(&self) -> bool {
-        self.output.follow_rate.load(Ordering::Relaxed)
-            || self.output.choice.lock().mode == OutputMode::Exclusive
     }
 
     /// Take the card for ourselves or give it back, now rather than at the next track.

@@ -79,7 +79,7 @@ Where each change lives, and how big each file is today. Production files stay u
 | `…/output/encode.rs` | 137 | 4 | Unchanged but for sharing `integer_bits` and `full_scale` with `dither` |
 | `…/output/device.rs` | 584 | 4, 6 | The shared 16- and 24-bit arms take the same `Dither`; the shared target by id |
 | `crates/melodia-engine/src/player/engine/backend/mod.rs` | **798** after Phase 5 | 5, 8d | At the cap: 8d moves something out before adding anything |
-| `…/engine/backend/output.rs` | 411 after Phase 5 | 5, 8d | Home of the format latch both reopen refusals read; a resume reclaims a parked claim |
+| `…/engine/backend/output.rs` | 405 after Phase 5 | 5, 8d | Home of the format latch both reopen refusals read; a resume reclaims a parked claim |
 | `…/engine/backend/controls.rs` | 106 | 5 | `crossfade_settings` stops blanket-disabling |
 | `crates/melodia-playback/src/player/playback/crossfade.rs` | 384 | 5 | `crossfade_eligible` takes whether the next track plays without a reopen |
 | `crates/melodia-engine/src/player/engine/signal_path.rs` | 142 | 8b | Names a lossy source |
@@ -597,9 +597,11 @@ decides the crossfade, not a failure after it.
   opened once rather than on every tick.
 
 **The decision**
-- Before its snapshot, the monitor asks `reopens_for` about the track queued next. It asks only
-  while crossfade is on and the output follows the rate, and not while a station plays.
-  `BackendSnapshot.next_needs_reopen` carries the answer.
+- Before its snapshot, and ahead of the positions in it, the monitor asks `reopens_for` about the
+  track queued next. It asks only while crossfade is on, and not while a station plays. It asks
+  whether the output follows the rate or not: turning that off leaves the stream open at the
+  followed rate until the next cut, and `start_track` would cut a crossfade the monitor had let
+  through. `BackendSnapshot.next_needs_reopen` carries the answer.
 - The answer is folded into `crossfade_eligible`'s existing term rather than added as a fifth.
   `pause_at_end` became `drains_to_end`: both mean the track has to reach `EndOfStream`. The
   predicate's tests are unchanged.
@@ -646,6 +648,12 @@ either tone alone.
   13 s of 06 between its fade-in and its end. Inside a fade the channels differ by at most 2 LSB,
   which is the dither working on changed samples.
 - In every fade the two levels summed to exactly 0.500, so no step clipped or dipped.
+- Re-run after the probe stopped gating on whether the output follows the rate:
+  - The default Shared baseline still faded at all four hand-overs, with no reopen.
+  - With rate-matching switched off mid-track (Kenan's click), the stream was still open at
+    44100. The track ended at `EndOfStream`, logged as `play` rather than `crossfade`, and the
+    output reopened at the default 48000 with 0.49 s of silence. The next transition faded.
+    Before the change, that hand-over decided a crossfade that `start_track` then cut.
 
 **Settings check** (Kenan, 2026-10-01): under Exclusive, the Crossfade toggle is live with the
 format note, and turning it on shows the four detail rows.

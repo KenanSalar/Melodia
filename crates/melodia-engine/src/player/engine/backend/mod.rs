@@ -405,7 +405,7 @@ impl PlaybackEngine {
         *self.live_stream.lock() = Some(shared);
         self.bump_epoch();
         let decks = self.lock_decks();
-        // What was playing must not carry on into a reopened stream; see `play_media`.
+        // What was playing must not carry on into a reopened stream; see `start_track`.
         decks.pause_all();
         let volume = self.prepare_output_for(&decks, &source, volume);
         // A live mount has no timeline to resume on, so its clock starts where the connection did.
@@ -544,7 +544,7 @@ impl PlaybackEngine {
         let epoch = self.bump_epoch();
         {
             let decks = self.lock_decks();
-            // Backstop for the gapless race, mirroring `play_media`: the read in
+            // Backstop for the gapless race, mirroring `start_track`: the read in
             // `can_fade_out` is lock-free and the bump is a separate step, so a
             // preload can complete between the two and only this re-read sees
             // it. One arriving *after* the bump is benign — the pause path just
@@ -734,7 +734,7 @@ impl PlaybackEngine {
         // which `check_playback_state` reads as a phantom `GaplessTransition`.
         // Never rejects a legitimate stage: the only caller passing a path is
         // the monitor's late preload, from its `Playing` branch, and
-        // `play_media` appends under this same lock.
+        // `start_track` appends under this same lock.
         if deck.voice.is_empty() {
             log::debug!("Dropping gapless preload of {path}: nothing left to follow");
             return;
