@@ -111,19 +111,30 @@ pub fn default_target(host: &cpal::Host) -> Result<Target, AppError> {
 ///
 /// Anything short of "not listed" is an error rather than `None`: a caller waiting for a missing
 /// device to come back would otherwise find it listed and reopen it forever. Hence the listing by
-/// hand, since cpal's `device_by_id` answers `None` for a listing that failed too.
+/// hand, since cpal's `device_by_id` answers `None` for a listing that failed too, and a miss
+/// where some device's id couldn't be read is an error too, since that device may be this one.
 ///
 /// # Errors
 ///
-/// [`AppError::Player`] when the devices can't be listed, or the device cannot name its own default
-/// config.
+/// [`AppError::Player`] when the devices can't be listed, the device cannot name its own default
+/// config, or it isn't found while a listed device's id couldn't be read.
 pub fn named_target(host: &cpal::Host, id: &str) -> Result<Option<Target>, AppError> {
     let wanted = cpal::DeviceId::new(host.id(), id);
-    host.output_devices()
-        .map_err(|e| AppError::Player(format!("Failed to list the output devices: {e}")))?
-        .find(|device| device.id().is_ok_and(|found| found == wanted))
-        .map(target_of)
-        .transpose()
+    let devices = host
+        .output_devices()
+        .map_err(|e| AppError::Player(format!("Failed to list the output devices: {e}")))?;
+    let mut unreadable = None;
+    for device in devices {
+        match device.id() {
+            Ok(found) if found == wanted => return target_of(device).map(Some),
+            Ok(_) => {}
+            Err(e) => unreadable = Some(e),
+        }
+    }
+    match unreadable {
+        Some(e) => Err(AppError::Player(format!("Failed to read an output device's id: {e}"))),
+        None => Ok(None),
+    }
 }
 
 fn target_of(device: cpal::Device) -> Result<Target, AppError> {

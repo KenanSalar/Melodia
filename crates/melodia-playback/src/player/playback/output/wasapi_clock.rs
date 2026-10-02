@@ -13,6 +13,11 @@ const STALL_TOLERANCE: Duration = Duration::from_millis(2);
 /// time; a device left running dry by a stall shows it at every reading after.
 const STALLS_WHEN_STUCK: u32 = 2;
 
+/// Restarts in a row the clock never recovered between, after which a stuck clock is only counted.
+/// A restart that doesn't bring the clock back is a clock stepping coarser than a period or a stall
+/// no restart cures, and either way another one only adds a period of silence.
+const FUTILE_RESTARTS: u32 = 2;
+
 /// One answer from the device's clock: what it had played, in its own ticks, and the performance
 /// counter at the moment it read that, in 100 ns units.
 #[derive(Clone, Copy)]
@@ -26,7 +31,8 @@ pub(super) struct ClockReading {
 pub(super) enum Clock {
     Moving,
     Stalled,
-    /// Stalled at [`STALLS_WHEN_STUCK`] readings in a row, so it isn't recovering by itself.
+    /// Stalled at [`STALLS_WHEN_STUCK`] readings in a row, so it isn't recovering by itself, and
+    /// fewer than [`FUTILE_RESTARTS`] restarts have gone by without it recovering.
     Stuck,
 }
 
@@ -35,24 +41,33 @@ pub(super) enum Clock {
 pub(super) struct StallWatch {
     last: Option<ClockReading>,
     stalls_in_a_row: u32,
+    restarts_without_recovery: u32,
 }
 
 impl StallWatch {
     /// Take `now` off a clock counting `clock_hz` a second, answering what it says.
     pub(super) fn read(&mut self, now: ClockReading, clock_hz: u64) -> Clock {
+        let compared = self.last.is_some_and(|last| last.played != 0);
         let stalled = self.last.is_some_and(|last| stood_still(last, now, clock_hz));
         self.last = Some(now);
+        if compared && !stalled {
+            self.restarts_without_recovery = 0;
+        }
         self.stalls_in_a_row = if stalled { self.stalls_in_a_row + 1 } else { 0 };
         match self.stalls_in_a_row {
             0 => Clock::Moving,
             n if n < STALLS_WHEN_STUCK => Clock::Stalled,
+            _ if self.restarts_without_recovery >= FUTILE_RESTARTS => Clock::Stalled,
             _ => Clock::Stuck,
         }
     }
 
-    /// Start over against a clock a reset set back to zero.
+    /// Start over against a clock a reset set back to zero, remembering that this restart has yet
+    /// to bring it back.
     pub(super) fn restart(&mut self) {
-        *self = Self::default();
+        self.last = None;
+        self.stalls_in_a_row = 0;
+        self.restarts_without_recovery += 1;
     }
 }
 

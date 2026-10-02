@@ -3,7 +3,9 @@
 
 use std::time::Duration;
 
-use super::{Clock, ClockReading, STALL_TOLERANCE, StallWatch, clock_duration, from_hns, hns};
+use super::{
+    Clock, ClockReading, FUTILE_RESTARTS, STALL_TOLERANCE, StallWatch, clock_duration, from_hns, hns,
+};
 
 /// A clock counting in the 100 ns units the performance counter is read in, so both halves of a
 /// reading count alike.
@@ -23,6 +25,36 @@ fn reading(played_ms: u64, at_ms: u64) -> ClockReading {
 /// What `watch` answers to each of `readings`, in turn.
 fn answers(watch: &mut StallWatch, readings: &[ClockReading]) -> Vec<Clock> {
     readings.iter().map(|&now| watch.read(now, CLOCK_HZ)).collect()
+}
+
+/// What a watch answers to each of `readings` where every `Stuck` restarts the stream, as the event
+/// writer does, and how many restarts that took.
+fn answers_restarting_when_stuck(readings: &[ClockReading]) -> (Vec<Clock>, u32) {
+    let mut watch = StallWatch::default();
+    let mut restarts = 0;
+    let clocks = readings
+        .iter()
+        .map(|&now| {
+            let clock = watch.read(now, CLOCK_HZ);
+            if clock == Clock::Stuck {
+                watch.restart();
+                restarts += 1;
+            }
+            clock
+        })
+        .collect();
+    (clocks, restarts)
+}
+
+/// What a stuck clock's third reading answers once `restarts` have gone by without it recovering.
+fn third_stall_after(restarts: u32) -> Clock {
+    let mut watch = StallWatch::default();
+    for _ in 0..restarts {
+        watch.restart();
+    }
+    watch.read(reading(10, 10), CLOCK_HZ);
+    watch.read(reading(10, 30), CLOCK_HZ);
+    watch.read(reading(10, 50), CLOCK_HZ)
 }
 
 /// What a second reading says where the device played 20 ms while the counter moved on 20 ms and
@@ -108,6 +140,101 @@ fn a_restart_measures_nothing_against_the_clock_before_it() {
     let clock = watch.read(reading(5, 140), CLOCK_HZ);
 
     assert_eq!(clock, Clock::Moving);
+}
+
+/// The cap's edge and a restart either side. A restart the clock never recovered from is one more
+/// period of silence that bought nothing, so past the cap a stuck clock is only counted.
+#[test]
+fn a_stuck_clock_asks_for_no_restart_once_the_cap_is_spent() {
+    let rows = [
+        (FUTILE_RESTARTS - 1, Clock::Stuck),
+        (FUTILE_RESTARTS, Clock::Stalled),
+        (FUTILE_RESTARTS + 1, Clock::Stalled),
+    ];
+    for (restarts, expected) in rows {
+        assert_eq!(third_stall_after(restarts), expected, "{restarts} restarts without recovery");
+    }
+}
+
+/// A clock stepping coarser than a period stands still at every reading but the step, which reads
+/// as stuck however often the stream restarts. Left uncapped, the writer would restart it every few
+/// readings for the life of the stream. The clock's first step off zero after a reset is not
+/// recovery, nothing being measured against a zero clock; only a reading that keeps up with the one
+/// before it is.
+#[test]
+fn a_clock_no_restart_brings_back_is_restarted_only_up_to_the_cap() {
+    let readings = [
+        reading(10, 10),
+        reading(10, 30),
+        reading(10, 50),
+        reading(0, 60),
+        reading(10, 70),
+        reading(10, 90),
+        reading(10, 110),
+        reading(0, 120),
+        reading(10, 130),
+        reading(10, 150),
+        reading(10, 170),
+        reading(10, 190),
+    ];
+
+    let answered = answers_restarting_when_stuck(&readings);
+
+    let clocks = vec![
+        Clock::Moving,
+        Clock::Stalled,
+        Clock::Stuck,
+        Clock::Moving,
+        Clock::Moving,
+        Clock::Stalled,
+        Clock::Stuck,
+        Clock::Moving,
+        Clock::Moving,
+        Clock::Stalled,
+        Clock::Stalled,
+        Clock::Stalled,
+    ];
+    assert_eq!(answered, (clocks, FUTILE_RESTARTS));
+}
+
+/// A device a restart brings back, as the UMC22 in event mode is, keeps its restarts however many
+/// stalls the stream meets, since each recovery starts the count over. Three here, one past the cap.
+#[test]
+fn a_clock_that_recovers_after_each_restart_is_restarted_every_time() {
+    let readings = [
+        reading(10, 10),
+        reading(10, 30),
+        reading(10, 50),
+        reading(0, 60),
+        reading(10, 70),
+        reading(30, 90),
+        reading(30, 110),
+        reading(30, 130),
+        reading(0, 140),
+        reading(10, 150),
+        reading(30, 170),
+        reading(30, 190),
+        reading(30, 210),
+    ];
+
+    let answered = answers_restarting_when_stuck(&readings);
+
+    let clocks = vec![
+        Clock::Moving,
+        Clock::Stalled,
+        Clock::Stuck,
+        Clock::Moving,
+        Clock::Moving,
+        Clock::Moving,
+        Clock::Stalled,
+        Clock::Stuck,
+        Clock::Moving,
+        Clock::Moving,
+        Clock::Moving,
+        Clock::Stalled,
+        Clock::Stuck,
+    ];
+    assert_eq!(answered, (clocks, FUTILE_RESTARTS + 1));
 }
 
 /// A device counts its clock at a rate it names beside it, so a reading is time only once divided

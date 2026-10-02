@@ -211,11 +211,13 @@ const SWEEP_THREADS: usize = 4;
 /// The [`rates::LADDER`] rates the device takes, asked through `own` on the calling thread and
 /// through `helper` on each of the others, all working one queue.
 ///
-/// A refusal anywhere ends the sweep with it. So does a helper that panics, since the rate it held
-/// would be missing from the set. A helper that couldn't be started leaves its share of the queue
-/// to the threads that did start.
+/// A refusal anywhere stops every thread, and a helper that panics leaves the rate it held unasked,
+/// so either way the sweep is asked again through `own` alone, whose answer stands. A device that
+/// is busy, barred or gone refuses that run's first ask, while one refusing only asks made from
+/// several threads at once still answers in full. A helper that couldn't be started leaves its
+/// share of the queue to the threads that did start.
 fn sweep_ladder(
-    own: impl FnMut(SampleRate) -> Result<bool, ClaimError>,
+    mut own: impl FnMut(SampleRate) -> Result<bool, ClaimError>,
     helper: impl Fn(&RateQueue) -> Result<Vec<u32>, ClaimError> + Sync,
 ) -> Result<RateSet, ClaimError> {
     let queue = RateQueue::default();
@@ -231,7 +233,7 @@ fn sweep_ladder(
                     .ok()
             })
             .collect();
-        let mut swept = vec![queue.drain(own)];
+        let mut swept = vec![queue.drain(&mut own)];
         swept.extend(helpers.into_iter().map(|helper| {
             helper.join().unwrap_or_else(|_| {
                 Err(ClaimError::io("A rate sweep thread panicked", io::Error::other("panicked")))
@@ -239,8 +241,13 @@ fn sweep_ladder(
         }));
         swept
     });
-    let swept: Vec<Vec<u32>> = swept.into_iter().collect::<Result<_, _>>()?;
-    Ok(swept.into_iter().flatten().collect())
+    match swept.into_iter().collect::<Result<Vec<Vec<u32>>, _>>() {
+        Ok(swept) => Ok(swept.into_iter().flatten().collect()),
+        Err(e) => {
+            log::debug!("audio: a rate sweep across threads failed, asking on one: {}", describe(&e));
+            Ok(RateQueue::default().drain(own)?.into_iter().collect())
+        }
+    }
 }
 
 /// The [`rates::LADDER`] rates one sweep has still to ask about, taken one at a time by every

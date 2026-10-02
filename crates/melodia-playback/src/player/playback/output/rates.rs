@@ -99,3 +99,7 @@ pub(super) fn device_rate_for(source: SampleRate, supported: &[u32]) -> Option<S
 fn same_family(a: u32, b: u32) -> bool {
     FAMILY_BASES.iter().any(|&base| a.is_multiple_of(base) && b.is_multiple_of(base))
 }
+
+#[cfg(test)]
+#[path = "tests/rates_tests.rs"]
+mod tests;

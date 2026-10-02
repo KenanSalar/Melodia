@@ -81,18 +81,18 @@ Where each change lives, and how big each file is today. Production files stay u
 | `…/output/voice.rs` | 628 | 1 | The handover passes the converter's state on when the successor's shape matches |
 | `…/output/rates.rs` | new | 3, 9 | The standard rate ladder and `device_rate_for`, the one rate policy both backends read; 9B adds `RateSet` and `claim_rate` |
 | `…/output/alsa.rs` | 533 | 3, 4, 9 | Probes the ladder when the exact rate is refused; dithers ahead of `encode`; 9B keeps the offered set (open, Linux) |
-| `…/output/wasapi.rs` | 653 after the split | 3, 4, 6, 8c, 9 | Dithers ahead of `encode`; counts underruns and restarts an event-driven stream stuck after a stall; 9B probes the offered set before the first `Initialize`, once per device and layout, and picks a retry rate out of it; `SHARED_DEVICE` |
-| `…/output/wasapi_formats.rs` | 194, new | 3, 9 | What an endpoint takes for exclusive use: the candidate layouts and their spellings, the ladder probe where `refusal` would say `RateRefused`, the offered-rate sweep, and the refusal classification |
-| `…/output/wasapi_offered.rs` | 59, new | 9 | The offered sets remembered for the process's life, keyed by what each sweep asked with; a failed sweep is not kept; what a stale answer costs |
-| `…/output/wasapi_clock.rs` | 89, new | 8c | The device's clock read against the performance counter (`stood_still`, `StallWatch`), and WASAPI's 100 ns units |
+| `…/output/wasapi.rs` | 673 | 3, 4, 6, 8c, 9 | Dithers ahead of `encode`; counts underruns and restarts an event-driven stream stuck after a stall; 9B probes the offered set before the first `Initialize`, once per device and layout, and picks a retry rate out of it; `SHARED_DEVICE` |
+| `…/output/wasapi_formats.rs` | 311, new | 3, 9 | What an endpoint takes for exclusive use: the candidate layouts and their spellings, the ladder probe where `refusal` would say `RateRefused`, the offered-rate sweep across threads and its one-thread confirm, and the refusal classification |
+| `…/output/wasapi_offered.rs` | 87, new | 9 | The offered sets remembered for the process's life, keyed by what each sweep asked with; a failed sweep is not kept; what a stale answer costs |
+| `…/output/wasapi_clock.rs` | 108, new | 8c | The device's clock read against the performance counter (`stood_still`, `StallWatch` and its cap on restarts), and WASAPI's 100 ns units |
 | `…/output/mod.rs` | 782 after the split | 3, 6, 9 | `ExclusiveRequest` carries the rate policy; `OutputRequest::Shared` carries a device (Windows only), opened by `open_shared` |
 | `…/output/claim.rs` | 144 after Phase 6 | 6, 9 | `claim_serves`, moved out of `mod.rs` to keep it under 800 lines, asks about the device's rate (9A) and the offered set (9B) |
 | `…/output/dither.rs` | new | 4 | Owns the dither: which formats and blocks take it, the noise, and the quantize every writer calls before its conversion |
 | `…/output/encode.rs` | 137 | 4 | Unchanged but for sharing `integer_bits` and `full_scale` with `dither` |
-| `…/output/device.rs` | 626 after Phase 6 | 4, 6 | The shared 16- and 24-bit arms take the same `Dither`; `named_target`, the shared target by id |
+| `…/output/device.rs` | 637 | 4, 6 | The shared 16- and 24-bit arms take the same `Dither`; `named_target`, the shared target by id |
 | `crates/melodia-engine/src/player/engine/backend/mod.rs` | 786 after Phase 8 | 5 | The two position queries moved out to `reads.rs` |
 | `…/engine/backend/reads.rs` | 29, new | 8d | The decks' read-only answers: the two positions, and whether the active deck holds a source |
-| `…/engine/backend/output.rs` | 442 after Phase 6 | 5, 6, 8d | Home of the format latch both reopen refusals read; the pause-release setting's cell; `OutputChoice::shared_request` |
+| `…/engine/backend/output.rs` | 446 | 5, 6, 8d | Home of the format latch both reopen refusals read; the pause-release setting's cell; `OutputChoice::shared_request` |
 | `…/engine/backend/controls.rs` | 106 | 5 | `crossfade_settings` stops blanket-disabling |
 | `…/engine/handlers.rs` | 595 after Phase 8 | 8d | `PauseWatch` and the release |
 | `…/engine/state/transport.rs` | 456 after Phase 8 | 8d | `build_release_actions`, `build_replay_actions` |
@@ -492,11 +492,9 @@ sine was cut mid-waveform at sample 701 760 into two files. It played as one unb
 click, gap or crackle.
 
 **Still open**
-- Tests:
-  - the `device_rate_for` table;
-  - the key's round-trip.
-
-  `RATE_FALLBACK_SUPPORTED` is pinned in `mod_tests`' two per-platform capability tests.
+- Tests: the key's round-trip. The `device_rate_for` table is written (2026-10-02, in
+  `rates_tests`, with Phase 9's), and `RATE_FALLBACK_SUPPORTED` is pinned in `mod_tests`' two
+  per-platform capability tests.
 - Docs: done. The README's Unsupported Sample Rates bullet no longer says Linux only, and
   `.claude/rules/audio-stack.md` already names `RATE_FALLBACK` among the seam's names.
 
@@ -856,8 +854,9 @@ after updating.
 
 **The open**
 - `device::named_target` finds the id among cpal's `output_devices`, which is platform-neutral.
-  It answers `None` only where no active device has that id. A listing that fails, or a device
-  that is listed but can't name its config, is an error, because the reclaim poll would otherwise
+  It answers `None` only where no active device has that id. A listing that fails, a device that
+  is listed but can't name its config, or a miss beside a device whose id can't be read (made an
+  error after validation, 2026-10-02) is an error, because the reclaim poll would otherwise
   find it listed and reopen it every second. That is also why it doesn't call cpal's
   `device_by_id`, which answers `None` for a failed listing (found in review, 2026-10-02).
 - `AudioOutput::open_shared(rate, device)`:
@@ -1093,6 +1092,28 @@ the freeze.
 Should a device turn up whose stalled readings come interleaved with clean ones, the criterion wants
 to become a count over a window rather than a run.
 
+**Capped after validation** (2026-10-02). A restart still had no limit. A driver whose clock steps
+coarser than a period, or a stall no restart cures, would read as stuck every few readings and
+restart for the life of the stream, a period of silence each time. `StallWatch` now stops answering
+`Stuck` after `FUTILE_RESTARTS` (2) restarts with no recovery between them, and only counts from
+then on. Recovery is a reading that keeps up with the one before it, never the clock's first step
+off zero after a reset. So the UMC22, which recovers after each restart, keeps every restart it
+needs. Static gates and the suite green.
+
+Re-run with the cap (2026-10-02, debug build, muted, events, Hardware Volume on, 12 s of play
+before the same one-second freeze and 16 s after it, the ALC897 read back at 7.1 first):
+
+| Device, drive, period | Before the freeze | The freeze | After it |
+|---|---|---|---|
+| UMC22, events, 20 ms | 0 | 2 | 0 |
+| UMC22, events, 5 ms | 0 | 2 | 0 |
+| ALC897 at 7.1, events, 5 ms | 0 | 1 | 0 |
+| ALC897 at 7.1, events, 20 ms | 0 | 1 | 0 |
+
+The same counts as the run before the cap: the UMC22 restarts once and plays clean after it, the
+ALC897 recovers by itself, and neither counts anything in plain play. No reopen, stall or warning
+was logged.
+
 **8a**
 - In shared mode where exclusive exists, the button shows whenever something plays, since the
   shared output stage always converts.
@@ -1206,8 +1227,9 @@ support"), so only `SetPosition` moves the position from a media panel.
 
 **Still open**
 - Tests. 8c's are written (2026-10-02), in `wasapi_clock_tests`: `stood_still`'s table, read
-  through `StallWatch`, and the watch's runs and restart. The rest are platform-neutral, for the
-  Linux machine:
+  through `StallWatch`, the watch's runs and restart, and the cap (its boundary, a clock no restart
+  brings back, and one that recovers after each). The rest are platform-neutral, for the Linux
+  machine:
   - `lossy_codec`'s table;
   - the Lossy verdict rows;
   - `PauseWatch`;
@@ -1296,7 +1318,7 @@ stream holds the endpoint never matters, and was not checked.
   example: a device taking 96 kHz only at 24 bits is running S16 at 48 kHz, and a 16-bit 96 kHz
   track comes next, whose ladder includes the 24-bit rungs.
 - So a rung counts as offered where the device takes **any** layout WASAPI can declare, at any
-  channel count `candidates` would ask, through `takes_exclusive`, respellings included. That is
+  channel count `candidates` would ask, through `exclusive_spelling`, respellings included. That is
   `takes_at` with `ANY_LAYOUT`, the F32 source, whose ladder is every rung.
 - **Why the superset is safe:**
   - A serve needs the next source's rate to be missing from the set. A fresh claim can't play it
@@ -1599,11 +1621,24 @@ refusal. The stand-in played shared on the UMC22 itself (Phase 6).
       where it started while the rest of startup ran beside it. Ten seconds in, 28 threads and
       94.1–96.1 MB commit, against 28 threads and 94.1 MB before.
     - No warning, error or helper failure was logged, and every quit was clean.
-- **Tests.** The WASAPI superset's pin is written (2026-10-02), as the sweep asking every rung
-  WASAPI declares (`wasapi_formats_tests`). The rest are platform-neutral, for the Linux machine:
-  - `claim_serves` rows for both rules, including an off-ladder rate falling back to 9A's;
-  - `claim_rate`'s table;
-  - `RateSet`'s round trip through `LADDER`.
+  - **Confirmed on one thread after validation** (2026-10-02). A refusal on any thread failed the
+    claim, so a driver refusing asks made from several clients at once would have read as busy at
+    every claim, and swept again at every track start. Where the threaded sweep ends in any error,
+    `sweep_ladder` now asks again through the claim's own client alone, and that answer stands. A
+    device really busy, barred or gone refuses its first ask, one call more. A panicked helper's
+    rate is asked again rather than failing the claim. The run that ends that way logs at debug.
+    Static gates and the suite green. Run on the ALC897 at 7.1 (2026-10-02, 8 first claims, the
+    layout read back first): the sweep took 273–286 ms, every claim offered the same four rates,
+    and the one-thread confirm never ran, its debug line absent. That is about 15 ms above the
+    earlier runs over the same code path, which puts it on the device or the machine.
+- **Tests.** Written on Windows (2026-10-02):
+  - the WASAPI superset's pin, as the sweep asking every rung WASAPI declares, and the one-thread
+    confirm (`wasapi_formats_tests`);
+  - `claim_serves` rows for both rules, including an off-ladder rate falling back to 9A's, and no
+    conversion without a set or under "Play Through the System Mixer" (`claim_tests`, where the
+    format rows moved from `mod_tests`);
+  - `claim_rate`'s table, `RateSet`'s round trip through `LADDER`, and `device_rate_for`'s order
+    (`rates_tests`).
 
 ---
 
@@ -1631,8 +1666,9 @@ refusal. The stand-in played shared on the UMC22 itself (Phase 6).
   coverage.
 - **Commits:** one commit per phase. Phase 1 and Phase 2 could be one commit if Phase 1's seam
   can't be validated on its own. It should be, through the existing suite.
-- **Memory:** no phase adds a cache. Phase 2 adds one process-wide table and wider per-source
-  windows; Phase 7 adds a bounded buffer only if measured.
+- **Memory:** Phase 2 adds one process-wide table and wider per-source windows; Phase 7 adds a
+  bounded buffer only if measured. Phase 9 adds the one cache, `wasapi_offered`'s answers, held to
+  16 entries of an endpoint id and a `RateSet` each.
 - **Settings (Phases 3, 6, 8d):** new keys are `#[serde(default)]`, persisted as keys rather than
   indices, and ship off (today's behaviour).
 - **Platform code:** the ALSA half is checked here and the WASAPI half on the Windows machine or by

@@ -27,6 +27,10 @@ fn windows_error(code: i32) -> WasapiError {
     WasapiError::Windows(windows_core::Error::from_hresult(HRESULT(code)))
 }
 
+fn busy() -> ClaimError {
+    ClaimError::Busy("held by another application".into())
+}
+
 /// A device that takes `takes`, refuses to be asked at all at `refuses`, and notes every rate it
 /// is asked about, from whichever thread asks.
 struct FakeDevice {
@@ -48,7 +52,7 @@ impl FakeDevice {
     fn ask(&self, rate: SampleRate) -> Result<bool, ClaimError> {
         self.asked.lock().push(rate.get());
         if self.refuses == Some(rate.get()) {
-            return Err(ClaimError::Busy("held by another application".into()));
+            return Err(busy());
         }
         Ok(self.takes.contains(&rate.get()))
     }
@@ -266,8 +270,8 @@ fn the_rates_every_thread_found_are_in_the_set() {
     assert_eq!(swept, Ok(offered(&[44_100, 96_000])));
 }
 
-/// A device taken or unplugged part way answers every ask that way, and a set short of the rates
-/// left to ask would stand for the session.
+/// A device taken or unplugged part way answers every ask that way, the one on the calling thread
+/// alone included, and a set short of the rates left to ask would stand for the session.
 #[test]
 fn a_refusal_ends_the_sweep_with_it() {
     let device = FakeDevice::taken_at(96_000);
@@ -275,6 +279,28 @@ fn a_refusal_ends_the_sweep_with_it() {
     let swept = sweep(&device);
 
     assert_eq!(swept, Err(FallbackReason::Busy));
+}
+
+/// A driver may refuse asks made from several clients at once while answering one at a time. Taken
+/// at its word, every claim on it would fall back as busy, and sweep again at every track start.
+#[test]
+fn a_refusal_only_a_helper_meets_leaves_the_sweep_to_the_claims_own_thread() {
+    let device = FakeDevice::taking(&[44_100, 48_000, 96_000]);
+
+    let swept = sweep_ladder(|rate| device.ask(rate), |_| Err(busy()));
+
+    assert_eq!(swept.map_err(|e| e.reason()), Ok(offered(&[44_100, 48_000, 96_000])));
+}
+
+/// A device that really is busy refuses the calling thread's first ask again, so confirming the
+/// refusal costs one ask rather than a sweep.
+#[test]
+fn a_device_busy_from_the_start_is_asked_once_more_and_no_further() {
+    let device = FakeDevice::taken_at(8_000);
+
+    let swept = sweep_ladder(|rate| device.ask(rate), |_| Ok(Vec::new())).map_err(|e| e.reason());
+
+    assert_eq!((swept, device.asked()), (Err(FallbackReason::Busy), vec![8_000, 8_000]));
 }
 
 /// Every ask after a refusal is a call the device refuses too, so the next thread to reach the
@@ -301,15 +327,15 @@ fn a_helper_that_cant_reach_the_device_leaves_its_rates_to_the_others() {
     assert_eq!(swept, Ok(offered(&[44_100, 48_000, 96_000, 192_000])));
 }
 
-/// A helper that panics may have taken a rate off the queue without asking about it, so the sweep
-/// fails whenever one does rather than keep a set that could be short.
+/// A helper that panics may have taken a rate off the queue without asking about it, so the set the
+/// threads found could be short, and the calling thread asks every rate again.
 #[test]
-fn a_helper_that_panics_fails_the_sweep() {
+fn a_helper_that_panics_leaves_the_sweep_to_the_claims_own_thread() {
     let device = FakeDevice::taking(&[44_100, 48_000]);
 
     let swept = sweep_ladder(|rate| device.ask(rate), panics).map_err(|e| e.reason());
 
-    assert_eq!(swept, Err(FallbackReason::Io));
+    assert_eq!(swept, Ok(offered(&[44_100, 48_000])));
 }
 
 /// The answers that end a claim whatever format it asked in. A device with its exclusive-control

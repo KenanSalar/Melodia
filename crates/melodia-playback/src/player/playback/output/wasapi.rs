@@ -600,7 +600,7 @@ impl Session {
     /// the signals that landed while the writer was stalled come back as one wake, and the half of
     /// the buffer they stood for is never refilled. Left running, the device runs dry every period,
     /// which sounds as a buzz until the stream is reopened. The reset also sets its clock back to
-    /// zero.
+    /// zero. Restarts that don't bring the clock back stop being asked for, as [`StallWatch`] says.
     fn restart(&self) -> Result<(), WasapiError> {
         self.client.stop_stream()?;
         self.client.reset_stream()?;

@@ -1,45 +1,7 @@
-//! Tests for the output's own decisions: where the user's volume is applied, whether an open claim
-//! plays the next track without a reopen, and how the device's own level is reported.
+//! Tests for the output's own decisions: where the user's volume is applied, how the device's own
+//! level is reported, and which backend each platform binds.
 
-use std::time::Duration;
-
-use super::claim::claim_serves;
-use super::encode::DeviceFormat;
-use super::{
-    DeviceLevel, Drive, ExclusiveRequest, ExclusiveTuning, Negotiated, OutputFormat, RateFallback,
-    voice_gain,
-};
-use crate::player::playback::tests::helpers::shape;
-use melodia_audio::player::source::audio::SourceFormat;
-
-const S16_SOURCE: SourceFormat = SourceFormat { bits: 16, float: false, lossy: false };
-const S24_SOURCE: SourceFormat = SourceFormat { bits: 24, float: false, lossy: false };
-
-fn request(format: SourceFormat) -> ExclusiveRequest {
-    ExclusiveRequest {
-        device: Some("{0.0.0.00000000}.{a-test-endpoint}".to_owned()),
-        shape: shape(2, 44_100),
-        format,
-        tuning: ExclusiveTuning::default(),
-        hardware_volume: true,
-        rate_fallback: RateFallback::Shared,
-    }
-}
-
-/// A claim running the device in `format` at the rate [`request`] asks for.
-fn running(format: DeviceFormat) -> Negotiated {
-    Negotiated {
-        device_name: None,
-        shape: shape(2, 44_100),
-        format: OutputFormat::Exclusive(format),
-        fallback: None,
-        hardware_volume: true,
-        device_level: None,
-        offered: None,
-        requested_period: None,
-        period: None,
-    }
-}
+use super::{DeviceLevel, voice_gain};
 
 /// With the device's control carrying the volume the voices hand over the samples at unity, which
 /// is the whole point, except at zero: that silence stays in the voices, so a mute is instant and
@@ -59,49 +21,6 @@ fn the_voices_run_at_unity_only_while_the_device_carries_an_audible_volume() {
         let gain = voice_gain(volume, on_device);
 
         assert_eq!(gain.to_bits(), f64::to_bits(expected), "{volume} on device: {on_device}");
-    }
-}
-
-/// A 16-bit track after a 24-bit one keeps the 24-bit claim and plays gapless, where the reverse
-/// reopens: a narrower container can't hold it. A float source is carried by F32 alone and
-/// converted by every integer rung, so any integer claim serves it, and a float claim serves no
-/// 16- or 24-bit source.
-#[test]
-fn a_claim_serves_a_new_format_only_where_it_runs_on_that_format_s_ladder() {
-    let rows = [
-        (S24_SOURCE, DeviceFormat::S24Packed, S16_SOURCE, true),
-        (S24_SOURCE, DeviceFormat::S24High, S16_SOURCE, true),
-        (SourceFormat::F32, DeviceFormat::S32, S24_SOURCE, true),
-        (S16_SOURCE, DeviceFormat::S16, S24_SOURCE, false),
-        (S16_SOURCE, DeviceFormat::S32, SourceFormat::F32, true),
-        (SourceFormat::F32, DeviceFormat::F32, SourceFormat::F32, true),
-        (S16_SOURCE, DeviceFormat::S16, SourceFormat::F32, true),
-        (S24_SOURCE, DeviceFormat::S24Packed, SourceFormat::F32, true),
-        (SourceFormat::F32, DeviceFormat::F32, S16_SOURCE, false),
-    ];
-    for (opened_for, running_in, next, expected) in rows {
-        let serves = claim_serves(&request(opened_for), &running(running_in), &request(next));
-
-        assert_eq!(serves, expected, "a {next} track on a {running_in} claim");
-    }
-}
-
-/// Only the source's format may differ, and its rate where the device already runs that rate.
-/// Another device, channel count, rate, pacing or volume route is another claim, whatever the
-/// device runs in.
-#[test]
-fn a_claim_never_serves_a_request_for_another_device_shape_or_route() {
-    let opened = request(S24_SOURCE);
-    let polled = ExclusiveTuning::new(Duration::from_millis(5), Drive::Polling);
-    let changes = [
-        ExclusiveRequest { device: None, ..request(S16_SOURCE) },
-        ExclusiveRequest { shape: shape(2, 48_000), ..request(S16_SOURCE) },
-        ExclusiveRequest { shape: shape(1, 44_100), ..request(S16_SOURCE) },
-        ExclusiveRequest { tuning: polled, ..request(S16_SOURCE) },
-        ExclusiveRequest { hardware_volume: false, ..request(S16_SOURCE) },
-    ];
-    for next in changes {
-        assert!(!claim_serves(&opened, &running(DeviceFormat::S24Packed), &next), "{next:?}");
     }
 }
 
@@ -148,7 +67,8 @@ fn windows_binds_the_wasapi_backend_with_every_option_it_offers() {
 
 /// The Linux twin: a claim, the card's own volume and the rate fallback, but no polling row, since
 /// the ALSA writer always blocks on the card and has no event mode to trade for one. Losing the
-/// arm would take the ALSA, reservation and card volume suites out of the build with it.
+/// arm would take the ALSA, reservation and card volume suites out of the build with it. No shared
+/// device either: a card's `hw:` name would take a shared stream past the sound server.
 #[cfg(target_os = "linux")]
 #[test]
 fn linux_binds_the_alsa_backend_with_every_option_its_writer_has() {
@@ -157,11 +77,12 @@ fn linux_binds_the_alsa_backend_with_every_option_its_writer_has() {
         super::POLLING_SUPPORTED,
         super::HARDWARE_VOLUME_SUPPORTED,
         super::RATE_FALLBACK_SUPPORTED,
+        super::SHARED_DEVICE_SUPPORTED,
     );
 
     assert_eq!(
         offered,
-        (true, false, true, true),
-        "(exclusive, polling, hardware volume, rate fallback)"
+        (true, false, true, true, false),
+        "(exclusive, polling, hardware volume, rate fallback, shared device)"
     );
 }
