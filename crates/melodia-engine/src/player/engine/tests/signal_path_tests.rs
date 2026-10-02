@@ -28,6 +28,7 @@ fn clean_inputs() -> SignalInputs {
             fallback: None,
             hardware_volume: false,
             device_level: None,
+            offered: None,
             requested_period: None,
             period: None,
         },

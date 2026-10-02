@@ -17,6 +17,7 @@ pub mod device;
 pub mod dither;
 pub mod encode;
 pub mod mixer;
+mod rates;
 mod resample;
 pub mod voice;
 
@@ -28,7 +29,6 @@ cfg_select! {
         mod alsa;
         mod alsa_volume;
         mod hardware_volume;
-        mod rates;
         mod realtime;
         mod reserve;
         use self::alsa as exclusive;
@@ -37,7 +37,6 @@ cfg_select! {
         mod endpoint_volume;
         mod hardware_volume;
         mod mmcss;
-        mod rates;
         mod wasapi;
         use self::wasapi as exclusive;
     }
@@ -61,6 +60,7 @@ use self::device::{DeviceStream, ExternalVolume, Feed, Lead, Target};
 use self::encode::DeviceFormat;
 use self::exclusive::{Claim, ExclusiveStream};
 use self::mixer::Mixer;
+use self::rates::RateSet;
 use super::stream_health::AudioStreamHealth;
 
 /// Silence written after a reopen lands on a new rate, before any voice plays, until the user sets
@@ -256,6 +256,10 @@ pub struct Negotiated {
     /// control carries the volume its level is Melodia's, and only the switch is the system's.
     /// `None` where the backend can't read one, and on every shared stream.
     pub device_level: Option<DeviceLevel>,
+    /// The standard rates the device offered a claim allowed to resample, which is what says
+    /// whether a track at another rate would land the device where it runs now. `None` where no
+    /// claim asked.
+    pub offered: Option<RateSet>,
     /// The period that was asked for, or `None` where the host was left to name its own.
     ///
     /// Kept beside the answer because it is the one of the two that says which pass of the ladder
@@ -641,9 +645,10 @@ impl AudioOutput {
     }
 
     /// Whether the stream open now plays what `wanted` asks for, so no reopen is owed: the request
-    /// it was opened for, or a claim differing from it only in the source's format, where the
-    /// device already runs in a format on the new source's ladder. A shared stream standing in for
-    /// a refused claim serves only its own request, and no stream, parked or lost, serves anything.
+    /// it was opened for, or a claim differing from it only in the source's format and rate, where
+    /// the device already runs a format on the new source's ladder at a rate a fresh claim would
+    /// take. A shared stream standing in for a refused claim serves only its own request, and no
+    /// stream, parked or lost, serves anything.
     pub fn serves(&self, wanted: &OutputRequest) -> bool {
         if self.stream.is_none() {
             return false;
@@ -656,11 +661,10 @@ impl AudioOutput {
         else {
             return false;
         };
-        let Some(Negotiated { format: OutputFormat::Exclusive(format), .. }) = self.negotiated()
-        else {
+        let Some(running) = self.negotiated() else {
             return false;
         };
-        claim_serves(open, format, next)
+        claim_serves(open, &running, next)
     }
 
     /// The voices, as one mixer. Handed to `player::playback::decks` at boot and not reachable any
@@ -694,17 +698,34 @@ fn voice_gain(volume: f64, on_device: bool) -> f64 {
     if on_device && volume > 0.0 { 1.0 } else { volume }
 }
 
-/// Whether a claim opened for `open`, running in `format`, plays a source `next` asks for.
+/// Whether a claim opened for `open`, which negotiated `running`, plays a source `next` asks for.
 ///
-/// Everything but the source's format has to match, and `format` has to be on that format's
-/// ladder. For an integer source that means a container holding every bit of it, so a 16-bit track
-/// after a 24-bit one keeps the 24-bit claim and plays gapless. A float source is carried only by
-/// F32 and converted by every other rung, so a lossy track keeps whatever integer claim the track
-/// before it opened and plays gapless, even where a fresh claim would have found F32 and carried
-/// it exactly: a lossy decode isn't worth a reopen.
-fn claim_serves(open: &ExclusiveRequest, format: DeviceFormat, next: &ExclusiveRequest) -> bool {
-    let same_claim = *next == ExclusiveRequest { format: next.format, ..open.clone() };
-    same_claim && DeviceFormat::ladder(next.format).contains(&format)
+/// Everything but the source's format and rate has to match. The rate has to be the open
+/// request's, or one a fresh claim would run the device at where it runs now: its own rate, which
+/// a fresh claim tries first, or one the device lacks that the claim's offered rates convert to
+/// the device's. So a 48 kHz track after a 96 kHz one the device converts to 48 kHz plays gapless
+/// on the same claim, and so does a 96 kHz track after a 48 kHz one.
+///
+/// The device's format has to be on the source format's ladder. For an integer source that means a
+/// container holding every bit of it, so a 16-bit track after a 24-bit one keeps the 24-bit claim
+/// and plays gapless. A float source is carried only by F32 and converted by every other rung, so a
+/// lossy track keeps whatever integer claim the track before it opened and plays gapless, even
+/// where a fresh claim would have found F32 and carried it exactly: a lossy decode isn't worth a
+/// reopen.
+fn claim_serves(open: &ExclusiveRequest, running: &Negotiated, next: &ExclusiveRequest) -> bool {
+    let OutputFormat::Exclusive(format) = running.format else {
+        return false;
+    };
+    let at_next_rate = Shape { rate: next.shape.rate, ..open.shape };
+    let same_claim =
+        *next == ExclusiveRequest { shape: at_next_rate, format: next.format, ..open.clone() };
+    let same_device_rate = next.shape.rate == open.shape.rate
+        || next.shape.rate == running.shape.rate
+        || running.offered.is_some_and(|offered| {
+            rates::claim_rate(next.shape.rate, offered, next.rate_fallback)
+                == Some(running.shape.rate)
+        });
+    same_claim && same_device_rate && DeviceFormat::ladder(next.format).contains(&format)
 }
 
 /// The name of the device a claim on `id` was aimed at, or of the first listed where none was

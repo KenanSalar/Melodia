@@ -241,6 +241,7 @@ pub(super) fn open(
             fallback: None,
             hardware_volume,
             device_level,
+            offered: None,
             requested_period: Some(config.requested_period),
             period: u32::try_from(config.period_frames).ok(),
         },

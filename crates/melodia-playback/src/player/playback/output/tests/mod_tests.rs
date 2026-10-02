@@ -5,7 +5,8 @@ use std::time::Duration;
 
 use super::encode::DeviceFormat;
 use super::{
-    DeviceLevel, Drive, ExclusiveRequest, ExclusiveTuning, RateFallback, claim_serves, voice_gain,
+    DeviceLevel, Drive, ExclusiveRequest, ExclusiveTuning, Negotiated, OutputFormat, RateFallback,
+    claim_serves, voice_gain,
 };
 use crate::player::playback::tests::helpers::shape;
 use melodia_audio::player::source::audio::SourceFormat;
@@ -21,6 +22,21 @@ fn request(format: SourceFormat) -> ExclusiveRequest {
         tuning: ExclusiveTuning::default(),
         hardware_volume: true,
         rate_fallback: RateFallback::Shared,
+    }
+}
+
+/// A claim running the device in `format` at the rate [`request`] asks for.
+fn running(format: DeviceFormat) -> Negotiated {
+    Negotiated {
+        device_name: None,
+        shape: shape(2, 44_100),
+        format: OutputFormat::Exclusive(format),
+        fallback: None,
+        hardware_volume: true,
+        device_level: None,
+        offered: None,
+        requested_period: None,
+        period: None,
     }
 }
 
@@ -63,16 +79,17 @@ fn a_claim_serves_a_new_format_only_where_it_runs_on_that_format_s_ladder() {
         (SourceFormat::F32, DeviceFormat::F32, S16_SOURCE, false),
     ];
     for (opened_for, running_in, next, expected) in rows {
-        let serves = claim_serves(&request(opened_for), running_in, &request(next));
+        let serves = claim_serves(&request(opened_for), &running(running_in), &request(next));
 
         assert_eq!(serves, expected, "a {next} track on a {running_in} claim");
     }
 }
 
-/// Only the source's format may differ. Another device, shape, pacing or volume route is another
-/// claim, whatever the device runs in.
+/// Only the source's format may differ, and its rate where the device already runs that rate.
+/// Another device, channel count, rate, pacing or volume route is another claim, whatever the
+/// device runs in.
 #[test]
-fn a_claim_never_serves_a_request_that_differs_in_more_than_the_format() {
+fn a_claim_never_serves_a_request_for_another_device_shape_or_route() {
     let opened = request(S24_SOURCE);
     let polled = ExclusiveTuning::new(Duration::from_millis(5), Drive::Polling);
     let changes = [
@@ -83,7 +100,7 @@ fn a_claim_never_serves_a_request_that_differs_in_more_than_the_format() {
         ExclusiveRequest { hardware_volume: false, ..request(S16_SOURCE) },
     ];
     for next in changes {
-        assert!(!claim_serves(&opened, DeviceFormat::S24Packed, &next), "{next:?}");
+        assert!(!claim_serves(&opened, &running(DeviceFormat::S24Packed), &next), "{next:?}");
     }
 }
 

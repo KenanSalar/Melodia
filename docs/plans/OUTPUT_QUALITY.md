@@ -4,14 +4,16 @@ Working doc. Delete it when the last phase that's taken on ships.
 
 Status: **Phases 1 to 5 complete** (tests held back, see Phases 2 to 5) · **Phase 6: Linux half
 closed with no code, Windows half open** · **Phase 7: dropped** · **Phase 8: 8a, 8b and 8d built,
-8c open** · Created: 2026-09-30 · Revised: 2026-10-02
+8c open** · **Phase 9: 9B chosen, WASAPI half built, ALSA half open (Linux)** · Created: 2026-09-30 ·
+Revised: 2026-10-02
 
 > Facts below were checked on **2026-09-30** against `a0b9978b` on `feat/bit-perfect-output`,
 > and against the pinned `cpal 0.18.2` sources. Line counts are from `wc -l` on that commit.
 > Anything marked ⚠️ **re-verify** was not reachable without writing the code; check it on the day.
 
 Every phase is sized to land on its own and be tried by ear before the next one starts. Only
-Phases 1 → 2 → 3 depend on each other. Phases 4 to 8 can be taken in any order, or skipped.
+Phases 1 → 2 → 3 depend on each other, and Phase 9 on 3. Phases 4 to 8 can be taken in any order,
+or skipped.
 
 ---
 
@@ -60,6 +62,7 @@ Smaller gaps, each a phase of its own below:
 | 6 | A device picker for shared output. **Linux closed with no code (the sound server routes it), Windows open** | – | Music can go to a DAC without changing the system default |
 | 7 | File reads on the writer thread: measure, then decide. **Dropped (Kenan, 2026-10-01)** | – | Possibly nothing; a read-ahead only if the measurement shows stalls |
 | 8 | Signal-path and claim polish (four small, independent items). **8a, 8b, 8d built, 8c open** | – | Honest words and parity fixes |
+| 9 | Gapless across a rate change the device doesn't see. **9B chosen; WASAPI half built, ALSA half open (Linux)** | 3 | A mixed-rate album stays gapless wherever the device's own rate doesn't change |
 
 ---
 
@@ -72,10 +75,10 @@ Where each change lives, and how big each file is today. Production files stay u
 | `crates/melodia-playback/src/player/playback/output/resample.rs` | new | 2 | Owns the kernel: the windowed-sinc table and the one function that evaluates a channel's window at a fractional position |
 | `…/output/convert.rs` | 209 | 1, 2 | Keeps the stepping, the `Filled` accounting and the channel mapping. Its window is handed across a seam (Phase 1) and widened (Phase 2) |
 | `…/output/voice.rs` | 628 | 1 | The handover passes the converter's state on when the successor's shape matches |
-| `…/output/rates.rs` | new | 3 | The standard rate ladder and `device_rate_for`, the one rate policy both backends read |
-| `…/output/alsa.rs` | 533 | 3, 4 | Probes the ladder when the exact rate is refused; dithers ahead of `encode` |
-| `…/output/wasapi.rs` | 721 after Phase 3 | 3, 4, 8c | Probes the ladder where `refusal` would say `RateRefused`; dithers ahead of `encode`; counts underruns |
-| `…/output/mod.rs` | 703 | 3, 6 | `ExclusiveRequest` carries the rate policy; `OutputRequest::Shared` carries a device (Windows only) |
+| `…/output/rates.rs` | new | 3, 9 | The standard rate ladder and `device_rate_for`, the one rate policy both backends read; 9B adds `RateSet` and `claim_rate` |
+| `…/output/alsa.rs` | 533 | 3, 4, 9 | Probes the ladder when the exact rate is refused; dithers ahead of `encode`; 9B keeps the offered set (open, Linux) |
+| `…/output/wasapi.rs` | 721 after Phase 3 | 3, 4, 8c, 9 | Probes the ladder where `refusal` would say `RateRefused`; dithers ahead of `encode`; counts underruns; 9B probes the offered set before the first `Initialize` |
+| `…/output/mod.rs` | 703 | 3, 6, 9 | `ExclusiveRequest` carries the rate policy; `OutputRequest::Shared` carries a device (Windows only); `claim_serves` asks about the device's rate (9A) and the offered set (9B) |
 | `…/output/dither.rs` | new | 4 | Owns the dither: which formats and blocks take it, the noise, and the quantize every writer calls before its conversion |
 | `…/output/encode.rs` | 137 | 4 | Unchanged but for sharing `integer_bits` and `full_scale` with `dither` |
 | `…/output/device.rs` | 584 | 4, 6 | The shared 16- and 24-bit arms take the same `Dither`; the shared target by id (Windows only) |
@@ -981,6 +984,199 @@ support"), so only `SetPosition` moves the position from a media panel.
   - the README;
   - `.claude/rules/audio-stack.md`'s verdict bullet (the lossy headline) and its exclusive bullet
     (a long pause's release, and the replay on an empty deck).
+
+## Phase 9 - Gapless across a rate change the device doesn't see
+
+**The problem.** Measured on 2026-10-02 on the UMC22, with Resample and slices of one continuous
+sine:
+- 96 → 48 kHz, 48 → 96 kHz and 88.2 → 44.1 kHz each refused gapless staging and reopened the
+  device, at the rate it was already running. A 48 → 48 kHz pair stayed gapless.
+- Each reopen took 145 to 205 ms. With the monitor's tick before it and the new claim's priming
+  after it, the seam costs roughly 0.25 to 0.8 s of silence.
+
+ALSA behaves the same, since both backends go through `claim_serves`.
+
+**Why.** `claim_serves` reuses the open claim only for a request that differs from the open one
+in the source's format. A different source rate is a different request, whatever the device would
+run at for it.
+
+**The question both approaches answer:** would a fresh claim for the next track run the device at
+the rate it runs now, with everything else `claim_serves` already checks still holding? If so, the
+open claim plays the track, through the voices' converter where the rates differ, and the seam is
+gapless.
+
+**Two approaches, tried in turn.** 9B extends 9A rather than replacing it. Both were built and run
+on 2026-10-02, and **9B was kept**, with 9A's rule living on inside it as the answer where no
+offered set is known. The WASAPI half is built; the ALSA half is open, for the Linux machine (see
+Still open).
+
+### 9A - Serve a track at the rate the device already runs
+
+- `claim_serves` (`output/mod.rs`) takes the device's rate (`Negotiated.shape.rate`) beside its
+  format. It compares requests ignoring the source's rate as well as its format.
+- It serves where the format check holds and the next source's rate is either the open request's
+  (as today) or the device's.
+- That is exact rather than a guess: a fresh claim tries the source's own rate first, and the
+  device is running that rate now.
+- Under "Play Through the System Mixer" the device always runs the open request's rate, so nothing
+  changes there.
+- `AudioOutput::serves` passes the rate from the `Negotiated` it already reads. There is no new
+  state, no backend code and nothing platform-specific.
+
+**What 9A leaves.** A served track doesn't replace the open request. So once a claim was opened
+for a 96 kHz track, every 48 and 96 kHz track after it is served. The gap that remains is the first
+96 kHz track after a claim opened for a 48 kHz one, where the device runs the source's own rate.
+A fresh claim for 96 kHz would pick 48 kHz there, but 9A can't know that without knowing what else
+the device offers. So 9A leaves one gap per claim that starts at the device's own rate, rather
+than one per seam.
+
+### 9B - Remember which rates the device offered
+
+**Pieces**
+- **`RateSet`** (`rates.rs`): the `LADDER` rungs a device took, as a bitmask. The 15 rungs fit a
+  `u16`, so `Negotiated` stays cheap to clone. Its `Debug` lists the rates, so the log's
+  `Output reopened` line shows them.
+- **`rates::claim_rate(source, offered, fallback) -> Option<SampleRate>`**: the rate a fresh claim
+  runs the device at.
+  - The source's own rate where the device offers it.
+  - Otherwise, under Resample, `device_rate_for` over the rest.
+  - Otherwise none.
+
+  On WASAPI, `negotiate` keeps its own decision and `claim_rate` only predicts it, since a fresh
+  WASAPI claim decides per layout, then falls back to the mix rate. On ALSA, `pick_rate` is
+  `claim_rate` over the card's set and can become a call to it (Still open).
+- **`Negotiated` gains `offered: Option<RateSet>`.** An exclusive claim under Resample sets it.
+  It is `None` everywhere else: shared streams, the Shared fallback, the unsupported backend, and
+  for now ALSA. The `Negotiated` literals in `alsa.rs`, `wasapi.rs`, `device.rs`,
+  `signal_path_tests.rs` and `mod_tests.rs` each gained the field.
+- **`claim_serves`** serves where `claim_rate` of the next source's rate is the device's rate.
+  Where `offered` is unknown, it keeps 9A's rule.
+- `mod rates` moves out of `cfg_select!` to the top of `mod.rs`, since `claim_serves` is
+  platform-neutral and now calls it.
+
+**The probe on ALSA.** Open, for the Linux machine. The steps are under Still open.
+
+**The probe on WASAPI** (`offered_rates`, called from `negotiate`). Under Resample, the probe runs
+before anything initialises. So whether `IsFormatSupported` still answers while our own exclusive
+stream holds the endpoint never matters, and was not checked.
+- **The set has to be a superset of what a fresh claim for any next track could see.** Otherwise
+  9B would keep a track converted that a fresh claim would have played at its own rate. For
+  example: a device taking 96 kHz only at 24 bits is running S16 at 48 kHz, and a 16-bit 96 kHz
+  track comes next, whose ladder includes the 24-bit rungs.
+- So a rung counts as offered where the device takes **any** layout WASAPI can declare, at any
+  channel count `candidates` would ask, through `takes_exclusive`, respellings included. That is
+  `takes_at` with `ANY_LAYOUT`, the F32 source, whose ladder is every rung.
+- **Why the superset is safe:**
+  - A serve needs the next source's rate to be missing from the set. A fresh claim can't play it
+    at its own rate either.
+  - A serve also needs the device's current rate to be the policy's best pick from the set.
+  - The fresh claim picks from a subset that still holds the current rate, since `claim_serves`
+    checks that the running layout is on the next format's ladder. So its best pick is that rate
+    too.
+  - Where the superset is wider than the fresh claim's set, 9B reopens as today. It never serves
+    where a fresh claim would choose another rate.
+  - **The one divergence found:** a device taking none of the next track's layouts at its own mix
+    rate. There a fresh claim stops at `FormatRefused` and plays shared, where 9B keeps the claim
+    at the rate the device runs. That errs towards staying exclusive, and no real device is known
+    to do it.
+- **Cost:** up to every declarable rung × 15 rates of `IsFormatSupported` calls, once per claim
+  under Resample, before the device opens. Measured below at about 35 ms on the UMC22.
+
+**What stays the same, under both**
+- The decks, the converter and the verdict.
+  - A served track at the device's rate plays at step 1, so the chip reads Bit-perfect.
+  - A served track at another rate reads Converted, as the claim's first track did.
+- The seam itself.
+  - Tracks of different source shapes don't hand the converter over
+    (`VoicePull::hand_over_or_drain`). The outgoing track drains against silence and the next
+    starts fresh.
+  - So there is no gap, but there may be a sub-millisecond taper either side of the seam.
+  - Shared output already plays every cross-rate gapless seam this way. The ear check listens for
+    it; this phase doesn't change it.
+- Crossfade between such tracks. `reopens_for` asks the same `serves`, so under exclusive output
+  they fade where they used to cut.
+- A device-loss reopen. It still asks for `AudioOutput::request`, the open claim's own request,
+  which lands on the same device rate.
+
+**As built** (static gates green on Windows, 2026-10-02). Where it differs from the plan above:
+- `claim_serves` takes the claim's whole `Negotiated` rather than its format and rate, so the
+  shared-stream case is its own early return. Its two tests were adapted to that, with a
+  `running(format)` helper; no new rows.
+- `negotiate` is split. The outer half opens the probe client and, under Resample, asks for the
+  offered set. `open_session` holds the two attempts, unchanged.
+- `RateSet::contains` answers `None` for a rate off the ladder, and so `claim_rate` does too. A
+  24 kHz MP3 has no bit in the set, so the set can't say whether a fresh claim would run the device
+  at that rate itself, and 9A's rule decides alone. Found while writing this up, after the run;
+  every fixture rate is on the ladder, so the run below is unaffected.
+
+**In-app run** (2026-10-02, debug build, Windows). The UMC22 ran exclusive with Resample, polling
+and Hardware Volume on. Each queue was a fresh launch. The fixtures were slices of one 440 Hz sine
+at −20 dBFS, cut at whole samples so the tone runs on across every seam. The Today column is the
+earlier same-day run where it measured that seam, and the unchanged code's answer elsewhere.
+
+| Queue | Today | 9A | 9B |
+|---|---|---|---|
+| 96k → 48k → 48k → 96k | 2 reopens, at 48000 | one claim, gapless | one claim, gapless |
+| 48k → 96k → 48k | 2 reopens, at 48000 | 1 reopen into the 96k, then gapless | one claim, gapless |
+| 88.2k → 44.1k | reopen, at 44100 | gapless | gapless |
+| 44.1k → 88.2k | reopen, at 44100 | reopen, at 44100 | gapless |
+| 96k → 44.1k (must reopen) | reopen | reopen | reopen |
+| 96k → 88.2k (must reopen) | reopen | reopen | reopen |
+| 48k → 96k under "Play Through the System Mixer" (must not serve) | refused, played shared | the same | the same |
+| 96k → 48k, crossfade on | cut and reopened | faded (1573 ms) | faded (1610 ms) |
+
+- 9B logged `offered: Some([32000, 44100, 48000])`, the UMC22's three rates, on every Resample
+  claim, and `None` under "Play Through the System Mixer".
+- A 48 kHz track served on the claim opened for 96 kHz read "Bit-perfect · 48 kHz".
+- Claim latency, from play to `Output reopened`:
+  - a first claim, from a parked output, took 15 to 44 ms under 9A and 50 to 74 ms under 9B;
+  - the two reopens went from 180 to 210 ms and from 203 to 229 ms;
+  - so the probe costs about 35 ms per Resample claim. A claim under "Play Through the System
+    Mixer" probes nothing and took 20 ms either way.
+- No warning or error was logged apart from the expected refusal, and every quit was clean.
+
+**Listening pass** (Kenan, 2026-10-02, 9B). On the UMC22, the 48 → 96 → 48 kHz slices played as
+one unbroken tone, with no gap or tick at either seam.
+
+**Chosen: 9B.** It is the only one that closed every same-rate seam, its probe costs about 35 ms
+per Resample claim, and it falls back to 9A's rule wherever no offered set is known.
+
+**Still open**
+- **Linux: 9B's ALSA half.** Until it lands, ALSA fills no offered set and Linux has 9A's
+  behaviour: a 96 kHz track after a claim opened for a 48 kHz one still reopens. On the Linux
+  machine:
+  1. **`alsa.rs`, `pick_rate`.** Under Resample, test every `rates::LADDER` rung with `test_rate`
+     on the same `HwParams`, and collect the answers into a `RateSet` rather than the `Vec` the
+     refusal path builds today. Do it whether or not the source's rate is refused, since a later
+     track needs the set either way. Keep testing the source's own rate first and directly: a rate
+     off the ladder has no bit in a `RateSet`, so `claim_rate` alone would refuse a rate the card
+     runs.
+  2. **The pick.** Keep `device_rate_for` over the set's rates, or call `rates::claim_rate`, which
+     is the same policy.
+  3. **Carry the set** through `Config` into `Negotiated.offered`, replacing the `offered: None` in
+     `open`'s literal. That line was written blind on Windows, so the first Linux build is also
+     what checks it compiles.
+  4. **No superset argument is needed.** `test_rate` on that `HwParams` ignores format and
+     channels, and it is the very set a fresh `pick_rate` decides from. So the prediction is
+     exactly the fresh claim's decision.
+  5. **Tests:** adapt `alsa_tests`' configure rows if `Config` changes shape.
+  6. **Run the same eight queues** on the UMC22 (`hw:CARD=CODEC,DEV=0`) with Resample. Expect the
+     9B column, and the card's rates in the log's `offered`. Note the claim latency too.
+     - Fixtures: `sine=frequency=440:duration=16` at each rate, cut with
+       `atrim=start_sample=…:end_sample=…` at 0, 5.31, 7.31, 10.62 and 16 s. Each cut is a whole
+       sample at every rate used.
+     - Queues, in order: 96k a → 48k b → 48k a → 96k b; 48k (0 to 5.31 s) → 96k (5.31 to 10.62 s)
+       → 48k (10.62 to 16 s); 88.2k a → 44.1k b; 44.1k a → 88.2k b; 96k a → 44.1k b; 96k a →
+       88.2k b. Here "a" is 0 to 7.31 s and "b" is 7.31 to 16 s.
+  7. **Then the README.** Extend the Unsupported Sample Rates bullet with "and an album mixing
+     such rates stays gapless wherever the device's own rate doesn't change". It waits for the
+     ALSA half, since until then that is true on Windows only.
+- **Tests:**
+  - `claim_serves` rows for both rules, including an off-ladder rate falling back to 9A's;
+  - `claim_rate`'s table;
+  - `RateSet`'s round trip through `LADDER`;
+  - a pin that F32's ladder holds every `DeviceFormat` rung, since the WASAPI superset
+    (`ANY_LAYOUT`) rests on it.
 
 ---
 

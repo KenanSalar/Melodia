@@ -45,6 +45,7 @@ use super::device::Feed;
 use super::dither::Dither;
 use super::encode::{self, DeviceFormat};
 use super::endpoint_volume::{self, EndpointVolume};
+use super::rates::RateSet;
 use super::{
     Drive, ExclusiveRequest, ExclusiveTuning, Negotiated, OutputDevice, OutputFormat, RateFallback,
     hardware_volume, mmcss, rates,
@@ -214,6 +215,7 @@ fn claim(request: &ExclusiveRequest, feed: &Feed) -> Result<(Session, Negotiated
         fallback: None,
         hardware_volume: session.volume.is_some(),
         device_level: None,
+        offered: session.offered,
         requested_period: u32::try_from(frames_in(request.tuning.period, session.shape.rate)).ok(),
         period: u32::try_from(session.period_frames).ok(),
     };
@@ -285,11 +287,8 @@ fn resolve(enumerator: &DeviceEnumerator, device: Option<&str>) -> Result<Endpoi
     Ok(Endpoint { device: OutputDevice { id: id.to_owned(), name }, handle })
 }
 
-/// Initialise the first candidate the device takes at the source's rate, or, where the device lacks
-/// that rate and the request allows, at the one [`rates::device_rate_for`] picks, and then at the
-/// device's own.
+/// Initialise the device for `request`, noting the rates it offers where the claim may resample.
 fn negotiate(endpoint: &Endpoint, request: &ExclusiveRequest) -> Result<Session, ClaimError> {
-    let ExclusiveRequest { shape, format: source, tuning, rate_fallback, .. } = *request;
     let id = endpoint.device.id.as_str();
     let probe = endpoint
         .handle
@@ -298,12 +297,30 @@ fn negotiate(endpoint: &Endpoint, request: &ExclusiveRequest) -> Result<Session,
     let mix = probe
         .get_mixformat()
         .map_err(|e| claim_error("Failed to read the device's own format", id, e))?;
+    // Asked before anything initialises, so nothing of ours holds the device while it answers.
+    let offered = (request.rate_fallback == RateFallback::Resample)
+        .then(|| offered_rates(&probe, &mix, request.shape));
+    let mut session = open_session(endpoint, &probe, &mix, request)?;
+    session.offered = offered;
+    Ok(session)
+}
+
+/// Initialise the first candidate the device takes at the source's rate, or, where the device lacks
+/// that rate and the request allows, at the one [`rates::device_rate_for`] picks, and then at the
+/// device's own.
+fn open_session(
+    endpoint: &Endpoint,
+    probe: &AudioClient,
+    mix: &WaveFormat,
+    request: &ExclusiveRequest,
+) -> Result<Session, ClaimError> {
+    let ExclusiveRequest { shape, format: source, tuning, rate_fallback, .. } = *request;
     let device_channels = mix.get_nchannels();
     let at_source_rate = candidates(shape, source, device_channels);
-    if let Some(session) = open_first(endpoint, &probe, at_source_rate, tuning)? {
+    if let Some(session) = open_first(endpoint, probe, at_source_rate, tuning)? {
         return Ok(session);
     }
-    let refused = refusal(&probe, &mix, shape, source);
+    let refused = refusal(probe, mix, shape, source);
     let converts = rate_fallback == RateFallback::Resample
         && matches!(refused, ClaimError::RateRefused { .. });
     if !converts {
@@ -312,10 +329,10 @@ fn negotiate(endpoint: &Endpoint, request: &ExclusiveRequest) -> Result<Session,
     // A driver can pass a rate it then won't initialise. The mix rate is the one the audio engine
     // already runs the device at, so it stands behind the pick.
     let own_rate = SampleRate::new(mix.get_samplespersec());
-    let picked = device_rate(&probe, &mix, shape, source);
+    let picked = device_rate(probe, mix, shape, source);
     for rate in picked.into_iter().chain(own_rate.filter(|&own| Some(own) != picked)) {
         let at_rate = candidates(Shape { rate, ..shape }, source, device_channels);
-        if let Some(session) = open_first(endpoint, &probe, at_rate, tuning)? {
+        if let Some(session) = open_first(endpoint, probe, at_rate, tuning)? {
             return Ok(session);
         }
     }
@@ -525,6 +542,24 @@ fn takes_at(client: &AudioClient, mix: &WaveFormat, shape: Shape, source: Source
         .any(|(_, _, wave)| takes_exclusive(client, &wave))
 }
 
+/// The source format whose ladder is every rung, a float source converting to all of them.
+const ANY_LAYOUT: SourceFormat = SourceFormat::F32;
+
+/// The ladder's rungs the device takes in any layout WASAPI can declare, at any channel count a
+/// claim for `shape` asks for.
+///
+/// Any layout rather than the source's own ladder, because the set answers for the tracks after
+/// this one, whatever their format. A set wider than a later track's own costs that track a reopen
+/// at most, where a narrower one could keep it converted that a fresh claim would play at its rate.
+fn offered_rates(client: &AudioClient, mix: &WaveFormat, shape: Shape) -> RateSet {
+    rates::LADDER
+        .into_iter()
+        .filter_map(SampleRate::new)
+        .filter(|&rate| takes_at(client, mix, Shape { rate, ..shape }, ANY_LAYOUT))
+        .map(SampleRate::get)
+        .collect()
+}
+
 fn hresult(e: &WasapiError) -> Option<i32> {
     match e {
         WasapiError::Windows(e) => Some(e.code().0),
@@ -563,6 +598,8 @@ struct Session {
     buffer_frames: usize,
     /// What the device takes per period: the whole buffer under events, a slice of it polled.
     period_frames: usize,
+    /// The rates the device offered, where the claim may resample.
+    offered: Option<RateSet>,
 }
 
 /// What wakes the writer.
@@ -605,6 +642,7 @@ impl Session {
             format,
             buffer_frames,
             period_frames,
+            offered: None,
         })
     }
 

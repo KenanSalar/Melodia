@@ -369,6 +369,7 @@ fn attempt(
             fallback: None,
             hardware_volume: false,
             device_level: None,
+            offered: None,
             requested_period,
             period,
         },
