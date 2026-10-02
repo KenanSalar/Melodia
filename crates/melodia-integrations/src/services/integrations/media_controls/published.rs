@@ -102,6 +102,7 @@ pub(super) struct Published {
 impl Published {
     /// Whether a client may move the rate. Nothing published yet is nothing playing, which the
     /// player lets it do.
+    #[cfg(target_os = "linux")]
     pub(super) fn rate_varies(&self) -> bool {
         self.rate.is_none_or(|rate| rate.variable)
     }

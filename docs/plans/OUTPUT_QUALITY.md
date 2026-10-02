@@ -2,10 +2,9 @@
 
 Working doc. Delete it when the last phase that's taken on ships.
 
-Status: **Phases 1, 2, 4 and 5 complete** (tests held back, see Phases 2, 4 and 5) · **Phase 3:
-Linux half built, WASAPI half open** · **Phase 6: Linux half closed with no code, Windows half
-open** · **Phase 7: dropped** · **Phase 8: 8a, 8b and 8d built, 8c open** · Created: 2026-09-30 ·
-Revised: 2026-10-01
+Status: **Phases 1 to 5 complete** (tests held back, see Phases 2 to 5) · **Phase 6: Linux half
+closed with no code, Windows half open** · **Phase 7: dropped** · **Phase 8: 8a, 8b and 8d built,
+8c open** · Created: 2026-09-30 · Revised: 2026-10-02
 
 > Facts below were checked on **2026-09-30** against `a0b9978b` on `feat/bit-perfect-output`,
 > and against the pinned `cpal 0.18.2` sources. Line counts are from `wc -l` on that commit.
@@ -55,7 +54,7 @@ Smaller gaps, each a phase of its own below:
 |---|---|---|---|
 | 1 ✅ | The converter's state crosses a gapless seam | – | Nothing audible yet. It is what makes Phase 2 seamless. |
 | 2 ✅ | A band-limited kernel in place of linear interpolation | 1 | Clean rate conversion and speed changes, in the default setup |
-| 3 | Keep the claim on a rate the device lacks (a picker, default = today). **Linux half built, WASAPI half open** | 2 | A hi-res album on a capped DAC stays exclusive and gapless |
+| 3 ✅ | Keep the claim on a rate the device lacks (a picker, default = today) | 2 | A hi-res album on a capped DAC stays exclusive and gapless |
 | 4 ✅ | TPDF dither where changed samples are narrowed | – | Noise instead of distortion on 16-bit output |
 | 5 ✅ | Crossfade under exclusive when no reopen is needed | – | Crossfade works with exclusive between same-format tracks |
 | 6 | A device picker for shared output. **Linux closed with no code (the sound server routes it), Windows open** | – | Music can go to a DAC without changing the system default |
@@ -75,7 +74,7 @@ Where each change lives, and how big each file is today. Production files stay u
 | `…/output/voice.rs` | 628 | 1 | The handover passes the converter's state on when the successor's shape matches |
 | `…/output/rates.rs` | new | 3 | The standard rate ladder and `device_rate_for`, the one rate policy both backends read |
 | `…/output/alsa.rs` | 533 | 3, 4 | Probes the ladder when the exact rate is refused; dithers ahead of `encode` |
-| `…/output/wasapi.rs` | 665 | 3, 4, 8c | Probes the ladder where `refusal` would say `RateRefused`; dithers ahead of `encode`; counts underruns |
+| `…/output/wasapi.rs` | 721 after Phase 3 | 3, 4, 8c | Probes the ladder where `refusal` would say `RateRefused`; dithers ahead of `encode`; counts underruns |
 | `…/output/mod.rs` | 703 | 3, 6 | `ExclusiveRequest` carries the rate policy; `OutputRequest::Shared` carries a device (Windows only) |
 | `…/output/dither.rs` | new | 4 | Owns the dither: which formats and blocks take it, the noise, and the quantize every writer calls before its conversion |
 | `…/output/encode.rs` | 137 | 4 | Unchanged but for sharing `integer_bits` and `full_scale` with `dither` |
@@ -309,7 +308,7 @@ No underruns were logged, and the card was handed back when Melodia quit.
   - Checked live over D-Bus: 1.5 plays a 10 kHz tone at 15 kHz and persists; 3.0 clamps to 2; −1
     is refused; 0 pauses. The station case was not exercised live.
 
-## Phase 3 - Keep the claim on a rate the device lacks (Linux half built, WASAPI half open)
+## Phase 3 - Keep the claim on a rate the device lacks ✅
 
 **What changes**
 - **New `output/rates.rs`:** the standard rate ladder, plus a pure
@@ -398,16 +397,92 @@ survives.
 On quit through the tray the card was released, its own volume put back, and it returned to the
 sound server under its original node name.
 
+**As built, WASAPI half** (static gates green on Windows, 2026-10-02). Only `wasapi.rs` changed,
+plus `mod rates` in the Windows arm of `cfg_select!`. The setting, its row and its strings were
+already platform-neutral, so there is nothing new to translate.
+
+**Two attempts**
+- `negotiate` first tries the source's rate through `open_first`, which is the old candidate loop.
+- It tries again only when all three hold:
+  - nothing took at the source's rate;
+  - the request is Resample;
+  - `refusal` answers `RateRefused`.
+
+  The second attempt runs `open_first` at the rate `device_rate` picks. If that fails too, the
+  claim returns the first refusal.
+- The gate is `RateRefused` because that verdict already means the device takes a candidate at
+  its own mix rate. So the ladder probe always finds a rate, and a refused channel count or format
+  never pays for a ladder of `IsFormatSupported` calls.
+- `device_rate` asks each `LADDER` rung except the source's own through `takes_at`, then hands
+  what takes to `device_rate_for`. `takes_at` is the same question `refusal` now asks of the mix
+  rate. The source's rate is left out because it has already been refused, and a driver can pass
+  `IsFormatSupported` for it and still refuse `Initialize`.
+- `RATE_FALLBACK` is true, so the picker row shows on Windows.
+- `requested_period` is sized at the negotiated rate. `Session` already read every other size off
+  the negotiated shape.
+
+**The ⚠️ re-verify, settled statically.** `wasapi 0.24.0`'s `is_supported` under
+`ShareMode::Exclusive` is a bare `IsFormatSupported` call. `negotiate` makes it on a probe client
+that is never initialised, so no `Initialize` is involved at any rate. Whether a driver answers
+honestly at a rate other than its mix rate is left to the in-app run.
+
+**Found on the way, fixed beside it.** The Windows build was already red before this change, from
+two leftovers of Phase 2's MPRIS `Rate` fix:
+- `Published::rate_varies` is read only by the MPRIS backend, so it was dead code on Windows. It
+  is now `#[cfg(target_os = "linux")]`.
+- `souvlaki_backend_tests`' exhaustive match had no `PlayerEvent::SetSpeed` arm. It has one now.
+
+**In-app run** (2026-10-02, debug build, Windows). The run used a scratch data folder through
+`MELODIA_DATA_DIR`, seeded with the dev settings: exclusive output, polling, Hardware Volume on,
+volume 25, crossfade off. Files were opened from the command line and the window was driven by
+clicks. The fixtures were 16-bit stereo sines, 8 s each at −20 dBFS. Each claim was read off the
+log's `Output reopened` line.
+
+On the UMC22 (`Lautsprecher (2- USB Audio CODEC )`):
+
+| File | Picker | Claim |
+|---|---|---|
+| 96 kHz | Resample | 48000 S16, `fallback: None`, `requested_period` 960; chip "Converted · 48 kHz", no toast |
+| the same file repeated four times, then a second 96 kHz file | Resample | all gapless on that one claim, no reopen |
+| 88.2 kHz | Resample | gapless staging refused for the format; reopened at 44100 S16, `requested_period` 882 |
+| 48 kHz, then 44.1 kHz | Resample | 48000 and 44100, the files' own rates |
+| 96 kHz, cold start | Shared (default) | refused as `RateRefused` and played shared on the system default; chip "Fallback · 96 kHz". No toast, since a cold start's toast is dropped before the bridge is up |
+| 96 kHz, handed to the running window | Shared (default) | the same refusal, with the toast |
+| the picker moved to Resample mid-track | | "Reopened for a new output choice" at 48000 S16 exclusive; the track carried on and the key persisted as `resample` |
+
+- On that last claim the Signal Path panel read "96 kHz resampled to 48 kHz", and the Device row
+  read "… 48 kHz · S16_LE · 2 ch, exclusive".
+- The probe's cost:
+  - the first claim, from a parked output, took 39 ms from play to the claim;
+  - the reopen onto 88.2 kHz took 210 ms;
+  - plain reopens at native rates took 162 and 186 ms.
+
+On the ALC897 (`Elegiant speaker (Realtek(R) Audio)`), with Resample:
+
+| File | Claim |
+|---|---|
+| 352.8 kHz | 44100 S16 |
+| 176.4 kHz | 44100 S16 |
+| 88.2 kHz | 44100 S16 |
+| 192 kHz | 192000 S16, the file's own rate |
+
+The Windows Realtek driver turns down 88.2 and 176.4 kHz even at the source's own rate, before
+the ladder is asked. So the 44.1 kHz family stops at 44.1 kHz there, and the policy takes it over
+the 96 and 192 kHz the device does have.
+
+No warning or error was logged apart from the expected refusals, and every quit was clean.
+
+**Listening pass** (Kenan, 2026-10-02). On the UMC22 at 48 kHz, converting from 96 kHz, one 440 Hz
+sine was cut mid-waveform at sample 701 760 into two files. It played as one unbroken tone, with no
+click, gap or crackle.
+
 **Still open**
-- The WASAPI half. That means the `negotiate`/`refusal` probe, flipping its `RATE_FALLBACK`,
-  adding `mod rates` to the Windows arm, and sizing `requested_period` at the device's rate
-  (it still reads the source's).
-- The ⚠️ re-verify above.
-- Tests: the `device_rate_for` table, the key's round-trip, and `RATE_FALLBACK_SUPPORTED` in the
-  per-platform capability tests.
-- Docs: done. `.claude/rules/audio-stack.md`'s seam names carry `RATE_FALLBACK`, and the README
-  names the Unsupported Sample Rates setting as Linux-only.
-- Kenan's own check of the chip, which should read Converted with no toast.
+- Tests:
+  - the `device_rate_for` table;
+  - the key's round-trip;
+  - `RATE_FALLBACK_SUPPORTED` in `mod_tests`' two per-platform capability tests.
+- Docs: done. The README's Unsupported Sample Rates bullet no longer says Linux only, and
+  `.claude/rules/audio-stack.md` already names `RATE_FALLBACK` among the seam's names.
 
 ## Phase 4 - TPDF dither where changed samples are narrowed ✅
 
@@ -550,7 +625,8 @@ float. The exclusive runs claimed `snd-aloop`'s card and recorded its capture si
 No underrun was logged, and the card was handed back when Melodia quit.
 
 **Still open**
-- The WASAPI writer's two lines, on CI or the Windows machine.
+- The WASAPI writer's two lines: the static gates passed on the Windows machine (2026-10-02). The
+  ear check there is still owed.
 - Tests: none written. The candidates above stand, plus: S32 and F32 come out untouched; a shared
   `I24` sample past full scale holds at the maximum; `bit_perfect.rs` runs `quantize` the way the
   writers do.
@@ -717,8 +793,8 @@ Every in-app route costs more than it gives:
 | Our own `alsa` open of `pipewire:NODE=<name>`, with a pure-Rust pulse client to list sinks | A second shared writer beside cpal's. Works only where pipewire-alsa is installed, and PulseAudio installs no equivalent PCM by default. A new dependency just to list the sinks. |
 | Moving our own stream over the pulse protocol after cpal opens it | Races WirePlumber's own memory of the stream's target, and the crate wraps no move command. |
 
-So the shared-device setting and its row are Windows-only, built with the Windows half the way
-`RATE_FALLBACK_SUPPORTED` is ALSA-only.
+So the shared-device setting and its row are Windows-only, built with the Windows half behind a
+capability constant, the way `FOLLOW_RATE_SUPPORTED` leaves Windows out.
 
 **Checked in-app** (debug build, dev data folder backed up and restored, shared output, Match the
 File's Sample Rate on, volume 0):
@@ -938,6 +1014,10 @@ support"), so only `SetPosition` moves the position from a media panel.
 
 - Phase 2: the kernel length, window and stretch cap, all settled by measurement.
 - Phase 3: whether Resample should be the default once it has shipped a release.
+- Phase 3: whether `device_rate_for` should take a rate above the source, of either family, before
+  dropping below it. On the Windows Realtek, which lacks 88.2 and 176.4 kHz, every 44.1 kHz-family
+  hi-res file lands on 44.1 kHz while the device offers 96 and 192 kHz. The kernel converts any
+  ratio equally well, so the family buys nothing audible there.
 - Phase 6: the Linux mechanism. Decided 2026-10-01: none in the app, the sound server routes it.
 
 ## Verification

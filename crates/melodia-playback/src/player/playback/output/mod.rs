@@ -37,6 +37,7 @@ cfg_select! {
         mod endpoint_volume;
         mod hardware_volume;
         mod mmcss;
+        mod rates;
         mod wasapi;
         use self::wasapi as exclusive;
     }

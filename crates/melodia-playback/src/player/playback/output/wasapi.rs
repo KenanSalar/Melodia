@@ -3,9 +3,9 @@
 //! under events.
 //!
 //! Exclusive mode hands the endpoint's buffer to the driver with no audio engine in between, so
-//! every refusal is final: a rate, channel count or format the device lacks fails the claim rather
-//! than being converted on the way. What reaches the device is [`encode`]'s output of the mixer's
-//! block, and nothing else touches it.
+//! nothing converts on the way: a channel count or format the device lacks fails the claim, and so
+//! does a rate, unless the request lets the voices convert to one the device has. What reaches the
+//! device is [`encode`]'s output of the mixer's block, and nothing else touches it.
 //!
 //! **Two things users will report, and neither is a bug.** While the claim holds, Melodia is gone
 //! from the Windows volume mixer, and every other application on that device loses it: some fall
@@ -46,7 +46,8 @@ use super::dither::Dither;
 use super::encode::{self, DeviceFormat};
 use super::endpoint_volume::{self, EndpointVolume};
 use super::{
-    Drive, ExclusiveRequest, Negotiated, OutputDevice, OutputFormat, hardware_volume, mmcss,
+    Drive, ExclusiveRequest, ExclusiveTuning, Negotiated, OutputDevice, OutputFormat, RateFallback,
+    hardware_volume, mmcss, rates,
 };
 
 pub(super) const SUPPORTED: bool = true;
@@ -55,7 +56,7 @@ pub(super) const POLLING: bool = true;
 
 pub(super) const HARDWARE_VOLUME: bool = true;
 
-pub(super) const RATE_FALLBACK: bool = false;
+pub(super) const RATE_FALLBACK: bool = true;
 
 /// Intel HD Audio controllers take buffers only in multiples of this many bytes, and in exclusive
 /// mode the buffer is the controller's own.
@@ -118,8 +119,9 @@ pub(super) fn devices() -> Vec<OutputDevice> {
     }
 }
 
-/// Claim the requested device, or the system default where none is named, at exactly its shape
-/// and a format that holds its source, and start feeding it from `feed`.
+/// Claim the requested device, or the system default where none is named, at the source's shape,
+/// or at another of the device's rates where the request allows, in a format that holds the
+/// source, and start feeding it from `feed`.
 ///
 /// # Errors
 ///
@@ -212,7 +214,7 @@ fn claim(request: &ExclusiveRequest, feed: &Feed) -> Result<(Session, Negotiated
         fallback: None,
         hardware_volume: session.volume.is_some(),
         device_level: None,
-        requested_period: u32::try_from(frames_in(request.tuning.period, request.shape.rate)).ok(),
+        requested_period: u32::try_from(frames_in(request.tuning.period, session.shape.rate)).ok(),
         period: u32::try_from(session.period_frames).ok(),
     };
     Ok((session, negotiated))
@@ -283,9 +285,10 @@ fn resolve(enumerator: &DeviceEnumerator, device: Option<&str>) -> Result<Endpoi
     Ok(Endpoint { device: OutputDevice { id: id.to_owned(), name }, handle })
 }
 
-/// Initialise the first candidate the device takes.
+/// Initialise the first candidate the device takes at the source's rate, or, where the device lacks
+/// that rate and the request allows, at the one [`rates::device_rate_for`] picks.
 fn negotiate(endpoint: &Endpoint, request: &ExclusiveRequest) -> Result<Session, ClaimError> {
-    let ExclusiveRequest { shape, format: source, tuning, .. } = *request;
+    let ExclusiveRequest { shape, format: source, tuning, rate_fallback, .. } = *request;
     let id = endpoint.device.id.as_str();
     let probe = endpoint
         .handle
@@ -294,11 +297,36 @@ fn negotiate(endpoint: &Endpoint, request: &ExclusiveRequest) -> Result<Session,
     let mix = probe
         .get_mixformat()
         .map_err(|e| claim_error("Failed to read the device's own format", id, e))?;
-    for (candidate, format, wave) in candidates(shape, source, mix.get_nchannels()) {
-        let Some(wave) = exclusive_spelling(&probe, &wave, id)? else { continue };
+    let device_channels = mix.get_nchannels();
+    let at_source_rate = candidates(shape, source, device_channels);
+    if let Some(session) = open_first(endpoint, &probe, at_source_rate, tuning)? {
+        return Ok(session);
+    }
+    let refused = refusal(&probe, &mix, shape, source);
+    let converts = rate_fallback == RateFallback::Resample
+        && matches!(refused, ClaimError::RateRefused { .. });
+    if !converts {
+        return Err(refused);
+    }
+    let Some(rate) = device_rate(&probe, &mix, shape, source) else { return Err(refused) };
+    let at_device_rate = candidates(Shape { rate, ..shape }, source, device_channels);
+    open_first(endpoint, &probe, at_device_rate, tuning)?.ok_or(refused)
+}
+
+/// Initialise the first of `wanted` the device takes, or `None` where it takes none of them.
+fn open_first(
+    endpoint: &Endpoint,
+    probe: &AudioClient,
+    wanted: impl Iterator<Item = (Shape, DeviceFormat, WaveFormat)>,
+    tuning: ExclusiveTuning,
+) -> Result<Option<Session>, ClaimError> {
+    let id = endpoint.device.id.as_str();
+    for (shape, format, wave) in wanted {
+        let Some(wave) = exclusive_spelling(probe, &wave, id)? else { continue };
         match initialize(&endpoint.handle, &wave, hns(tuning.period), tuning.drive) {
             Ok((client, period_hns)) => {
-                return Session::new(client, candidate, format, tuning.drive, period_hns)
+                return Session::new(client, shape, format, tuning.drive, period_hns)
+                    .map(Some)
                     .map_err(|e| claim_error("Failed to prepare the audio device", id, e));
             }
             // A driver can pass a format it then refuses, so this is a refusal of the format.
@@ -306,7 +334,7 @@ fn negotiate(endpoint: &Endpoint, request: &ExclusiveRequest) -> Result<Session,
             Err(e) => return Err(claim_error("The device refused its configuration", id, e)),
         }
     }
-    Err(refusal(&probe, &mix, shape, source))
+    Ok(None)
 }
 
 /// Every shape and format worth asking for, best first: the source's own channel count before a
@@ -452,10 +480,8 @@ fn refusal(
     source: SourceFormat,
 ) -> ClaimError {
     let own_rate = SampleRate::new(mix.get_samplespersec()).filter(|&rate| rate != shape.rate);
-    let takes_own_rate = own_rate.is_some_and(|rate| {
-        candidates(Shape { rate, ..shape }, source, mix.get_nchannels())
-            .any(|(_, _, wave)| takes_exclusive(client, &wave))
-    });
+    let takes_own_rate =
+        own_rate.is_some_and(|rate| takes_at(client, mix, Shape { rate, ..shape }, source));
     if takes_own_rate {
         ClaimError::RateRefused { rate: shape.rate.get() }
     } else if shape.channels.get() > mix.get_nchannels() {
@@ -463,6 +489,31 @@ fn refusal(
     } else {
         ClaimError::FormatRefused { format: source }
     }
+}
+
+/// The rate [`rates::device_rate_for`] picks out of the ladder's rungs the device takes the source
+/// at. The source's own rate is left out: it has already been refused, and a driver can pass it
+/// here and still refuse to initialise it.
+fn device_rate(
+    client: &AudioClient,
+    mix: &WaveFormat,
+    shape: Shape,
+    source: SourceFormat,
+) -> Option<SampleRate> {
+    let offered: Vec<u32> = rates::LADDER
+        .into_iter()
+        .filter_map(SampleRate::new)
+        .filter(|&rate| rate != shape.rate)
+        .filter(|&rate| takes_at(client, mix, Shape { rate, ..shape }, source))
+        .map(SampleRate::get)
+        .collect();
+    rates::device_rate_for(shape.rate, &offered)
+}
+
+/// Whether the device takes `source` at `shape` in any layout a claim would ask for.
+fn takes_at(client: &AudioClient, mix: &WaveFormat, shape: Shape, source: SourceFormat) -> bool {
+    candidates(shape, source, mix.get_nchannels())
+        .any(|(_, _, wave)| takes_exclusive(client, &wave))
 }
 
 fn hresult(e: &WasapiError) -> Option<i32> {

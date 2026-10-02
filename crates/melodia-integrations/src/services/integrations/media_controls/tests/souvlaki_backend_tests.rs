@@ -20,6 +20,7 @@ fn tag(event: MediaControlEvent) -> Option<&'static str> {
         PlayerEvent::SetVolume(_) => Some("set-volume"),
         PlayerEvent::SetShuffle(_) => Some("set-shuffle"),
         PlayerEvent::SetRepeat(_) => Some("set-repeat"),
+        PlayerEvent::SetSpeed(_) => Some("set-speed"),
     }
 }
 
