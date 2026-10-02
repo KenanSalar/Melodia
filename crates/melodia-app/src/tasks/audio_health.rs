@@ -202,8 +202,9 @@ async fn recover(
     true
 }
 
-/// Reopen the output on the chosen device once it is listed again after a fallback for not being
-/// connected. One attempt per poll: a claim that is still refused falls back as before.
+/// Reopen the output on the chosen device once it is listed again, after a claim fell back or a
+/// shared stream stood in on the default for want of it. One attempt per poll: a claim that is
+/// still refused falls back as before.
 ///
 /// Asked lock-free first: outside a disconnect the tick does nothing, rather than a blocking-pool
 /// hop every second for the life of the process.

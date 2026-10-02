@@ -109,14 +109,21 @@ pub fn default_target(host: &cpal::Host) -> Result<Target, AppError> {
 
 /// The device `host` lists under `id`, or `None` where no active device has that id.
 ///
-/// A device that is there but can't name its config is an error rather than `None`: a caller
-/// waiting for a missing device to come back would otherwise find it listed and reopen it forever.
+/// Anything short of "not listed" is an error rather than `None`: a caller waiting for a missing
+/// device to come back would otherwise find it listed and reopen it forever. Hence the listing by
+/// hand, since cpal's `device_by_id` answers `None` for a listing that failed too.
 ///
 /// # Errors
 ///
-/// [`AppError::Player`] when the device cannot name its own default config.
+/// [`AppError::Player`] when the devices can't be listed, or the device cannot name its own default
+/// config.
 pub fn named_target(host: &cpal::Host, id: &str) -> Result<Option<Target>, AppError> {
-    host.device_by_id(&cpal::DeviceId::new(host.id(), id)).map(target_of).transpose()
+    let wanted = cpal::DeviceId::new(host.id(), id);
+    host.output_devices()
+        .map_err(|e| AppError::Player(format!("Failed to list the output devices: {e}")))?
+        .find(|device| device.id().is_ok_and(|found| found == wanted))
+        .map(target_of)
+        .transpose()
 }
 
 fn target_of(device: cpal::Device) -> Result<Target, AppError> {

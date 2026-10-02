@@ -208,8 +208,8 @@ pub const SHARED_DEVICE_SUPPORTED: bool = exclusive::SHARED_DEVICE;
 /// shared mode converts every stream to the mix format, so there it would reopen for nothing.
 pub const FOLLOW_RATE_SUPPORTED: bool = !cfg!(target_os = "windows");
 
-/// Every device an exclusive claim can be aimed at, empty where there is no exclusive backend.
-/// Blocking: it asks every device.
+/// Every device an exclusive claim can be aimed at, and where [`SHARED_DEVICE_SUPPORTED`] a shared
+/// stream too, empty where there is no exclusive backend. Blocking: it asks every device.
 pub fn devices() -> Vec<OutputDevice> {
     exclusive::devices()
 }
@@ -355,8 +355,8 @@ impl OutputStatus {
         self.parked.load(Ordering::Relaxed)
     }
 
-    /// Whether the open stream stands in for a claim whose device wasn't connected, so the device
-    /// is worth looking for again.
+    /// Whether the open stream stands in for a chosen device that wasn't connected, a claim's or a
+    /// shared stream's, so the device is worth looking for again.
     pub fn awaiting_device(&self) -> bool {
         self.awaiting_device.load(Ordering::Relaxed)
     }
@@ -476,7 +476,8 @@ impl AudioOutput {
         voice_gain(volume, on_device)
     }
 
-    /// Replace the stream with one opened for `request`: an exclusive claim, or the default device.
+    /// Replace the stream with one opened for `request`: an exclusive claim, or a shared stream on
+    /// the named device or the default.
     ///
     /// An exclusive claim that is refused opens shared instead and says why on the answer, so the
     /// mode never costs the audio. A request that cannot be opened at all falls back to the one

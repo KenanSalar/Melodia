@@ -46,7 +46,7 @@ use super::dither::Dither;
 use super::encode::{self, DeviceFormat};
 use super::endpoint_volume::{self, EndpointVolume};
 use super::rates::RateSet;
-use super::wasapi_clock::{ClockReading, clock_duration, from_hns, hns, stood_still};
+use super::wasapi_clock::{Clock, ClockReading, StallWatch, clock_duration, from_hns, hns};
 use super::{
     Drive, ExclusiveRequest, ExclusiveTuning, Negotiated, OutputDevice, OutputFormat, RateFallback,
     hardware_volume, mmcss, rates,
@@ -685,7 +685,7 @@ impl Session {
         let mut bytes = Vec::with_capacity(block.len() * self.format.bytes_per_sample());
         // The priming silence `start` wrote is on the device's clock too.
         let mut written = self.buffer_frames as u64;
-        let mut last_reading: Option<ClockReading> = None;
+        let mut stalls = StallWatch::default();
         while !stop.load(Ordering::Relaxed) {
             let Some(frames) = self.wait_for_room()? else { continue };
             let pulled = &mut block[..frames * channels];
@@ -700,19 +700,16 @@ impl Session {
             // A clock that won't answer leaves the last reading standing: it is the ear's
             // position that suffers, not the audio, so it doesn't end the stream.
             if let Ok((played, at)) = self.clock.get_position() {
-                let reading = ClockReading { played, at };
-                let stalled =
-                    last_reading.is_some_and(|last| stood_still(last, reading, self.clock_hz));
-                last_reading = Some(reading);
+                let clock = stalls.read(ClockReading { played, at }, self.clock_hz);
                 feed.report_lead(self.unplayed(written, played));
-                if stalled {
+                if clock != Clock::Moving {
                     feed.health.record_xrun();
                 }
                 // A polled stream tops up whatever room it finds, so it recovers by itself.
-                if stalled && matches!(self.pacing, Pacing::Events(_)) {
+                if clock == Clock::Stuck && matches!(self.pacing, Pacing::Events(_)) {
                     self.restart()?;
                     written = self.buffer_frames as u64;
-                    last_reading = None;
+                    stalls.restart();
                 }
             }
         }
@@ -721,10 +718,11 @@ impl Session {
 
     /// Stop the device, drop what it holds and start it again from silence.
     ///
-    /// An event-driven stream needs this after a stall. Its event resets itself, so the signals
-    /// that landed while the writer was stalled come back as one wake, and the half of the buffer
-    /// they stood for is never refilled. Left running, the device runs dry every period, which
-    /// sounds as a buzz until the stream is reopened. The reset also sets its clock back to zero.
+    /// An event-driven stream needs this once a stall leaves it stuck. Its event resets itself, so
+    /// the signals that landed while the writer was stalled come back as one wake, and the half of
+    /// the buffer they stood for is never refilled. Left running, the device runs dry every period,
+    /// which sounds as a buzz until the stream is reopened. The reset also sets its clock back to
+    /// zero.
     fn restart(&self) -> Result<(), WasapiError> {
         self.client.stop_stream()?;
         self.client.reset_stream()?;

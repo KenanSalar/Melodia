@@ -8,12 +8,52 @@ use std::time::Duration;
 /// the steps its clock advances in, which a USB device takes coarser than a sample.
 const STALL_TOLERANCE: Duration = Duration::from_millis(2);
 
+/// Stalls in a row before the device counts as stuck. One alone can be a driver whose clock steps
+/// coarser than [`STALL_TOLERANCE`], and restarting for it would cost a period of silence each
+/// time; a device left running dry by a stall shows it at every reading after.
+const STALLS_WHEN_STUCK: u32 = 2;
+
 /// One answer from the device's clock: what it had played, in its own ticks, and the performance
 /// counter at the moment it read that, in 100 ns units.
 #[derive(Clone, Copy)]
 pub(super) struct ClockReading {
     pub(super) played: u64,
     pub(super) at: u64,
+}
+
+/// What a reading of the device's clock says about it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Clock {
+    Moving,
+    Stalled,
+    /// Stalled at [`STALLS_WHEN_STUCK`] readings in a row, so it isn't recovering by itself.
+    Stuck,
+}
+
+/// The device's clock across one stream's readings.
+#[derive(Default)]
+pub(super) struct StallWatch {
+    last: Option<ClockReading>,
+    stalls_in_a_row: u32,
+}
+
+impl StallWatch {
+    /// Take `now` off a clock counting `clock_hz` a second, answering what it says.
+    pub(super) fn read(&mut self, now: ClockReading, clock_hz: u64) -> Clock {
+        let stalled = self.last.is_some_and(|last| stood_still(last, now, clock_hz));
+        self.last = Some(now);
+        self.stalls_in_a_row = if stalled { self.stalls_in_a_row + 1 } else { 0 };
+        match self.stalls_in_a_row {
+            0 => Clock::Moving,
+            n if n < STALLS_WHEN_STUCK => Clock::Stalled,
+            _ => Clock::Stuck,
+        }
+    }
+
+    /// Start over against a clock a reset set back to zero.
+    pub(super) fn restart(&mut self) {
+        *self = Self::default();
+    }
 }
 
 /// Whether the device sat with nothing to play between `last` and `now`: its clock advanced less
@@ -23,7 +63,7 @@ pub(super) struct ClockReading {
 /// clock with samples still queued, and come back from a stall with fewer queued than before, so a
 /// count against what was written misses one stall and repeats another. Not asked before the clock
 /// moves at all, since a stream's first period passes before it does.
-pub(super) fn stood_still(last: ClockReading, now: ClockReading, clock_hz: u64) -> bool {
+fn stood_still(last: ClockReading, now: ClockReading, clock_hz: u64) -> bool {
     if last.played == 0 {
         return false;
     }

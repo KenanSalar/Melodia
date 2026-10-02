@@ -78,13 +78,13 @@ Where each change lives, and how big each file is today. Production files stay u
 | `…/output/voice.rs` | 628 | 1 | The handover passes the converter's state on when the successor's shape matches |
 | `…/output/rates.rs` | new | 3, 9 | The standard rate ladder and `device_rate_for`, the one rate policy both backends read; 9B adds `RateSet` and `claim_rate` |
 | `…/output/alsa.rs` | 533 | 3, 4, 9 | Probes the ladder when the exact rate is refused; dithers ahead of `encode`; 9B keeps the offered set (open, Linux) |
-| `…/output/wasapi.rs` | 797 after 8c | 3, 4, 6, 8c, 9 | Probes the ladder where `refusal` would say `RateRefused`; dithers ahead of `encode`; counts underruns and restarts an event-driven stream after a stall; 9B probes the offered set before the first `Initialize`; `SHARED_DEVICE` |
-| `…/output/wasapi_clock.rs` | 48, new | 8c | The device's clock read against the performance counter (`stood_still`), and WASAPI's 100 ns units |
-| `…/output/mod.rs` | 779 after 8c | 3, 6, 9 | `ExclusiveRequest` carries the rate policy; `OutputRequest::Shared` carries a device (Windows only), opened by `open_shared` |
+| `…/output/wasapi.rs` | 795 after 8c | 3, 4, 6, 8c, 9 | Probes the ladder where `refusal` would say `RateRefused`; dithers ahead of `encode`; counts underruns and restarts an event-driven stream stuck after a stall; 9B probes the offered set before the first `Initialize`; `SHARED_DEVICE` |
+| `…/output/wasapi_clock.rs` | 89, new | 8c | The device's clock read against the performance counter (`stood_still`, `StallWatch`), and WASAPI's 100 ns units |
+| `…/output/mod.rs` | 780 after 8c | 3, 6, 9 | `ExclusiveRequest` carries the rate policy; `OutputRequest::Shared` carries a device (Windows only), opened by `open_shared` |
 | `…/output/claim.rs` | 144 after Phase 6 | 6, 9 | `claim_serves`, moved out of `mod.rs` to keep it under 800 lines, asks about the device's rate (9A) and the offered set (9B) |
 | `…/output/dither.rs` | new | 4 | Owns the dither: which formats and blocks take it, the noise, and the quantize every writer calls before its conversion |
 | `…/output/encode.rs` | 137 | 4 | Unchanged but for sharing `integer_bits` and `full_scale` with `dither` |
-| `…/output/device.rs` | 619 after Phase 6 | 4, 6 | The shared 16- and 24-bit arms take the same `Dither`; `named_target`, the shared target by id |
+| `…/output/device.rs` | 626 after Phase 6 | 4, 6 | The shared 16- and 24-bit arms take the same `Dither`; `named_target`, the shared target by id |
 | `crates/melodia-engine/src/player/engine/backend/mod.rs` | 786 after Phase 8 | 5 | The two position queries moved out to `reads.rs` |
 | `…/engine/backend/reads.rs` | 29, new | 8d | The decks' read-only answers: the two positions, and whether the active deck holds a source |
 | `…/engine/backend/output.rs` | 442 after Phase 6 | 5, 6, 8d | Home of the format latch both reopen refusals read; the pause-release setting's cell; `OutputChoice::shared_request` |
@@ -850,10 +850,11 @@ after updating.
   nothing, since it compares requests whole.
 
 **The open**
-- `device::named_target` resolves the id through cpal's `device_by_id`, which is platform-neutral.
-  It answers `None` only where no active device has that id. A device that is listed but can't
-  name its config is an error, because the reclaim poll would otherwise find it listed and reopen
-  it every second.
+- `device::named_target` finds the id among cpal's `output_devices`, which is platform-neutral.
+  It answers `None` only where no active device has that id. A listing that fails, or a device
+  that is listed but can't name its config, is an error, because the reclaim poll would otherwise
+  find it listed and reopen it every second. That is also why it doesn't call cpal's
+  `device_by_id`, which answers `None` for a failed listing (found in review, 2026-10-02).
 - `AudioOutput::open_shared(rate, device)`:
   - a device that refuses to open, held exclusively by another app for example, logs at debug and
     plays on the default;
@@ -978,7 +979,7 @@ Four independent items. Each lands on its own.
 
 **As built, 8a, 8b and 8d** (static gates green). 8c is below, built on the Windows machine. All
 three are platform-neutral, so exclusive output on Windows gets them too; CI's `clippy-windows`
-and `test-windows` check them, and the ear check there waits for the Windows machine.
+and `test-windows` check them, and the Windows run closes this phase.
 
 **As built, 8c** (static gates green on Windows, 2026-10-02)
 - After each write, `Session::play` reads the device's clock, which it already did for the lead.
@@ -990,11 +991,13 @@ and `test-windows` check them, and the ear check there waits for the Windows mac
   does.
 - It shows only in `tasks::audio_health`'s debug line, every 5 s. cpal raises no `Xrun` for a
   WASAPI render stream, so before this Windows counted no underruns in either mode.
-- **In event mode, a stall restarts the stream** (`Session::restart`: stop, reset, prime, start),
-  and the writer starts its count and readings over against the reset clock. The run below is why.
-  A polled stream is left alone, since it tops up whatever room it finds.
-- The clock arithmetic (`ClockReading`, `stood_still`, the tick and 100 ns conversions) lives in
-  `output/wasapi_clock.rs`, Windows only, which keeps `wasapi.rs` under 800 lines.
+- **In event mode, a stall the device doesn't recover from restarts the stream** (`Session::restart`:
+  stop, reset, prime, start), and the writer starts its count and readings over against the reset
+  clock. The run below is why. A polled stream is left alone, since it tops up whatever room it
+  finds.
+- The clock arithmetic (`ClockReading`, `StallWatch` over `stood_still`, the tick and 100 ns
+  conversions) lives in `output/wasapi_clock.rs`, Windows only, which keeps `wasapi.rs` under 800
+  lines.
 
 **The first design was wrong, and the in-app run showed why.** It compared the clock with the count
 of frames written. Measured with temporary instrumentation through a one-second process freeze:
@@ -1041,6 +1044,18 @@ counter only makes it visible.
 
 **Listening pass** (Kenan, 2026-10-02, UMC22, events, 20 ms, volume 50). A generated arpeggio
 (C–E–G–C over a C3 hum, `melody_48k.wav`) played clean after the freeze, where the sine had buzzed.
+
+**Hardened after review** (Kenan, 2026-10-02). As run above, every stalled reading restarted the
+stream. The 2 ms tolerance stands on two devices, and a driver whose clock steps coarser would
+trip it on single readings, paying a period of silence at each. So `StallWatch` now restarts only
+at `STALLS_WHEN_STUCK` (2) stalled readings in a row, and still counts every one as an underrun.
+The UMC22's state after a freeze stalls at every reading, so it should still restart. The ALC897
+recovers by itself, so it should no longer need a restart at all. The freeze table needs a re-run:
+- expected on the UMC22, events, 5 ms and 20 ms: about 2 at the freeze, then 0;
+- expected on the ALC897, events, 5 ms: 1 at the freeze, then 0, with no restart.
+
+If the UMC22 still buzzes afterwards, its stalled readings are interleaved with clean ones, and the
+criterion wants to become a count over a window rather than a run.
 
 **8a**
 - In shared mode where exclusive exists, the button shows whenever something plays, since the
@@ -1154,9 +1169,12 @@ support"), so only `SetPosition` moves the position from a media panel.
 | 8d, on | Play | `play … from 38680ms`, claim reopened at S16 48 kHz |
 
 **Still open**
+- 8c's hardened restart: the freeze table's re-run and an ear check on the UMC22 (above).
 - Tests, none written:
   - `stood_still`'s table: the tolerance's edge, a clock that hasn't started, a counter that went
     backwards;
+  - `StallWatch`: one stall reads `Stalled`, two in a row `Stuck`, and a clean reading between them
+    starts the run over;
   - `lossy_codec`'s table;
   - the Lossy verdict rows;
   - `PauseWatch`;
@@ -1390,7 +1408,7 @@ refusal. The stand-in played shared on the UMC22 itself (Phase 6).
   7. **Then the README.** Extend the Unsupported Sample Rates bullet with "and an album mixing
      such rates stays gapless wherever the device's own rate doesn't change". It waits for the
      ALSA half, since until then that is true on Windows only.
-- **Windows: the probe costs over a second a claim on a 7.1 output.** Measured below; the fix
+- **Windows: the probe costs over a second a claim on a 7.1 output.** Measured above; the fix
   waits for Kenan's call. The likely shape: remember each device's offered set for the session,
   keyed by its id and its mix format. Then only the first Resample claim on a device pays the
   probe, and a change of speaker layout probes again. Narrowing the channel counts the probe asks
