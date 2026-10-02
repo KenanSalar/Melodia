@@ -1079,8 +1079,14 @@ stream holds the endpoint never matters, and was not checked.
     rate. There a fresh claim stops at `FormatRefused` and plays shared, where 9B keeps the claim
     at the rate the device runs. That errs towards staying exclusive, and no real device is known
     to do it.
-- **Cost:** up to every declarable rung × 15 rates of `IsFormatSupported` calls, once per claim
-  under Resample, before the device opens. Measured below at about 35 ms on the UMC22.
+- **Cost:** `IsFormatSupported` calls once per claim under Resample, before the device opens, up
+  to 15 rates × every declarable rung × every channel count `candidates` spans (the source's up to
+  the device's own) × each rung's respellings. A rate the device takes stops at the first layout
+  it takes, which on the UMC22 is still S16 after four refused rungs, so the rates it lacks are most
+  of the cost. Measured below at about 35 ms on the UMC22, a 2-channel device, where a missing
+  rate costs 17 calls: a short header for S16 and F32, and two channel masks for every rung. A 7.1
+  endpoint playing stereo also asks 3 to 8 channels, where `make_channelmasks` offers three or
+  four masks a rung, so 162 calls per missing rate, about ten times as many.
 
 **What stays the same, under both**
 - The decks, the converter and the verdict.
@@ -1108,6 +1114,11 @@ stream holds the endpoint never matters, and was not checked.
   24 kHz MP3 has no bit in the set, so the set can't say whether a fresh claim would run the device
   at that rate itself, and 9A's rule decides alone. Found while writing this up, after the run;
   every fixture rate is on the ladder, so the run below is unaffected.
+- Under Resample, `negotiate` asks the claim's first candidate through `exclusive_spelling` ahead
+  of the probe, so a busy or barred device refuses in one call rather than after the whole sweep.
+  `retry_at_track_start` retries both refusals at every track start, so a device with exclusive
+  control barred in Windows would otherwise pay the sweep on every track. Found in review, after
+  the run.
 
 **In-app run** (2026-10-02, debug build, Windows). The UMC22 ran exclusive with Resample, polling
 and Hardware Volume on. Each queue was a fresh launch. The fixtures were slices of one 440 Hz sine
@@ -1171,6 +1182,10 @@ per Resample claim, and it falls back to 9A's rule wherever no offered set is kn
   7. **Then the README.** Extend the Unsupported Sample Rates bullet with "and an album mixing
      such rates stays gapless wherever the device's own rate doesn't change". It waits for the
      ALSA half, since until then that is true on Windows only.
+- **Windows: measure the probe where it costs most.** From play to the log line, time:
+  - one Resample claim on a multichannel endpoint (a 7.1 Realtek or HDMI output playing stereo);
+  - a refused claim on the UMC22 with "Allow applications to take exclusive control" cleared,
+    which should now match 9A's refusal.
 - **Tests:**
   - `claim_serves` rows for both rules, including an off-ladder rate falling back to 9A's;
   - `claim_rate`'s table;

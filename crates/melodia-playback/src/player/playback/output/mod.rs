@@ -259,6 +259,10 @@ pub struct Negotiated {
     /// The standard rates the device offered a claim allowed to resample, which is what says
     /// whether a track at another rate would land the device where it runs now. `None` where no
     /// claim asked.
+    ///
+    /// A backend filling it owes a superset of what its own fresh claim could see, whatever the
+    /// next source's format: a narrower set keeps a track converted that a fresh claim would play
+    /// at its own rate, where a wider one costs a reopen at most.
     pub offered: Option<RateSet>,
     /// The period that was asked for, or `None` where the host was left to name its own.
     ///

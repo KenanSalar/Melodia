@@ -298,8 +298,18 @@ fn negotiate(endpoint: &Endpoint, request: &ExclusiveRequest) -> Result<Session,
         .get_mixformat()
         .map_err(|e| claim_error("Failed to read the device's own format", id, e))?;
     // Asked before anything initialises, so nothing of ours holds the device while it answers.
-    let offered = (request.rate_fallback == RateFallback::Resample)
-        .then(|| offered_rates(&probe, &mix, request.shape));
+    let offered = match request.rate_fallback {
+        RateFallback::Resample => {
+            // A busy or barred device fails every probe alike, and is retried at each track start,
+            // so the claim's own first ask goes ahead of the sweep and refuses in one call.
+            let first = candidates(request.shape, request.format, mix.get_nchannels()).next();
+            if let Some((_, _, wave)) = first {
+                exclusive_spelling(&probe, &wave, id)?;
+            }
+            Some(offered_rates(&probe, &mix, request.shape))
+        }
+        RateFallback::Shared => None,
+    };
     let mut session = open_session(endpoint, &probe, &mix, request)?;
     session.offered = offered;
     Ok(session)
