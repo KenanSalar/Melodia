@@ -39,6 +39,7 @@ cfg_select! {
         mod mmcss;
         mod wasapi;
         mod wasapi_clock;
+        mod wasapi_offered;
         use self::wasapi as exclusive;
     }
     _ => {

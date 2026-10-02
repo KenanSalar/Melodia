@@ -5,8 +5,9 @@ Working doc. Delete it when the last phase that's taken on ships.
 Status: **Phases 1 to 5 complete**, Windows ear checks included (tests held back, see Phases 2 to
 5) · **Phase 6: Linux half closed with no code, Windows half built and run** · **Phase 7:
 dropped** · **Phase 8: all four built and run on Windows**, 8c's run having fixed event mode's
-recovery from a stall · **Phase 9: 9B chosen, WASAPI half built and measured, its probe too slow
-on a 7.1 output (open); ALSA half open (Linux)** · Created: 2026-09-30 · Revised: 2026-10-02
+recovery from a stall · **Phase 9: 9B chosen, WASAPI half built and measured, its probe's cost
+on a 7.1 output cut to one sweep per device and layout (built and run); ALSA half open
+(Linux)** · Created: 2026-09-30 · Revised: 2026-10-02
 
 > Facts below were checked on **2026-09-30** against `a0b9978b` on `feat/bit-perfect-output`,
 > and against the pinned `cpal 0.18.2` sources. Line counts are from `wc -l` on that commit.
@@ -78,9 +79,10 @@ Where each change lives, and how big each file is today. Production files stay u
 | `…/output/voice.rs` | 628 | 1 | The handover passes the converter's state on when the successor's shape matches |
 | `…/output/rates.rs` | new | 3, 9 | The standard rate ladder and `device_rate_for`, the one rate policy both backends read; 9B adds `RateSet` and `claim_rate` |
 | `…/output/alsa.rs` | 533 | 3, 4, 9 | Probes the ladder when the exact rate is refused; dithers ahead of `encode`; 9B keeps the offered set (open, Linux) |
-| `…/output/wasapi.rs` | 795 after 8c | 3, 4, 6, 8c, 9 | Probes the ladder where `refusal` would say `RateRefused`; dithers ahead of `encode`; counts underruns and restarts an event-driven stream stuck after a stall; 9B probes the offered set before the first `Initialize`; `SHARED_DEVICE` |
+| `…/output/wasapi.rs` | 791 after 9B's cache | 3, 4, 6, 8c, 9 | Probes the ladder where `refusal` would say `RateRefused`; dithers ahead of `encode`; counts underruns and restarts an event-driven stream stuck after a stall; 9B probes the offered set before the first `Initialize`, once per device and layout, and picks a retry rate out of it; `SHARED_DEVICE` |
+| `…/output/wasapi_offered.rs` | 48, new | 9 | The offered sets remembered for the process's life, keyed by what each sweep asked with |
 | `…/output/wasapi_clock.rs` | 89, new | 8c | The device's clock read against the performance counter (`stood_still`, `StallWatch`), and WASAPI's 100 ns units |
-| `…/output/mod.rs` | 780 after 8c | 3, 6, 9 | `ExclusiveRequest` carries the rate policy; `OutputRequest::Shared` carries a device (Windows only), opened by `open_shared` |
+| `…/output/mod.rs` | 781 after 9B's cache | 3, 6, 9 | `ExclusiveRequest` carries the rate policy; `OutputRequest::Shared` carries a device (Windows only), opened by `open_shared` |
 | `…/output/claim.rs` | 144 after Phase 6 | 6, 9 | `claim_serves`, moved out of `mod.rs` to keep it under 800 lines, asks about the device's rate (9A) and the offered set (9B) |
 | `…/output/dither.rs` | new | 4 | Owns the dither: which formats and blocks take it, the noise, and the quantize every writer calls before its conversion |
 | `…/output/encode.rs` | 137 | 4 | Unchanged but for sharing `integer_bits` and `full_scale` with `dither` |
@@ -1049,13 +1051,25 @@ counter only makes it visible.
 stream. The 2 ms tolerance stands on two devices, and a driver whose clock steps coarser would
 trip it on single readings, paying a period of silence at each. So `StallWatch` now restarts only
 at `STALLS_WHEN_STUCK` (2) stalled readings in a row, and still counts every one as an underrun.
-The UMC22's state after a freeze stalls at every reading, so it should still restart. The ALC897
-recovers by itself, so it should no longer need a restart at all. The freeze table needs a re-run:
-- expected on the UMC22, events, 5 ms and 20 ms: about 2 at the freeze, then 0;
-- expected on the ALC897, events, 5 ms: 1 at the freeze, then 0, with no restart.
+The UMC22's state after a freeze stalls at nearly every reading, so it still restarts. The ALC897
+recovers by itself, so it no longer needs a restart at all.
 
-If the UMC22 still buzzes afterwards, its stalled readings are interleaved with clean ones, and the
-criterion wants to become a count over a window rather than a run.
+Re-run (2026-10-02, the same one-second freeze):
+
+| Device, drive, period | The freeze | After it |
+|---|---|---|
+| UMC22, events, 20 ms | 2 | 0 |
+| UMC22, events, 5 ms | 2 | 0 |
+| ALC897 at 7.1, events, 5 ms | 1 | 0 |
+
+The ALC897's single count shows it never restarted, since a restart takes two stalled readings in a
+row and both are counted.
+
+**Listening pass** (Kenan, 2026-10-02, UMC22, events, 20 ms, volume 50, the arpeggio): smooth after
+the freeze.
+
+Should a device turn up whose stalled readings come interleaved with clean ones, the criterion wants
+to become a count over a window rather than a run.
 
 **8a**
 - In shared mode where exclusive exists, the button shows whenever something plays, since the
@@ -1169,7 +1183,6 @@ support"), so only `SetPosition` moves the position from a media panel.
 | 8d, on | Play | `play … from 38680ms`, claim reopened at S16 48 kHz |
 
 **Still open**
-- 8c's hardened restart: the freeze table's re-run and an ear check on the UMC22 (above).
 - Tests, none written:
   - `stood_still`'s table: the tolerance's edge, a clock that hasn't started, a counter that went
     backwards;
@@ -1408,11 +1421,53 @@ refusal. The stand-in played shared on the UMC22 itself (Phase 6).
   7. **Then the README.** Extend the Unsupported Sample Rates bullet with "and an album mixing
      such rates stays gapless wherever the device's own rate doesn't change". It waits for the
      ALSA half, since until then that is true on Windows only.
-- **Windows: the probe costs over a second a claim on a 7.1 output.** Measured above; the fix
-  waits for Kenan's call. The likely shape: remember each device's offered set for the session,
-  keyed by its id and its mix format. Then only the first Resample claim on a device pays the
-  probe, and a change of speaker layout probes again. Narrowing the channel counts the probe asks
-  would cost the superset its guarantee, so it isn't the first choice.
+- **Windows: the probe's cost on a 7.1 output, built and not yet run.** The run that measured it
+  is above. What was found:
+  - **Two sweeps, not one.** `offered_rates` asked every rung in every layout. Where the source's
+    own rate was refused, as with an 88.2 kHz file on the ALC897, `device_rate` then ran a second
+    sweep with the source's formats. That case was never timed, but it should have cost both.
+  - **A rate the device lacks is the expensive answer.** It is only known once every channel count,
+    rung and respelling has been refused. The ALC897 lacks 11 of the 15 rungs, and 7.1 asks 2 to 8
+    channels at each.
+  - **Nothing cheaper keeps the guarantee.** Narrowing the channel counts or dropping the
+    respellings would make the set narrower than a fresh claim's. An HDMI sink that takes
+    192 kHz in stereo and not in 7.1 is the real case that breaks.
+
+  As built:
+  - **`wasapi_offered::remembered`** keeps each sweep's answer for the process's life, keyed by
+    exactly what the sweep asks with: the endpoint id, the source's channel count it starts from,
+    and the device's own. So the first Resample claim on a device in a layout pays the sweep, and
+    every later one reads it.
+  - A change in Speaker Setup moves the device's channel count and asks again. The cache holds at
+    most 16 answers.
+  - The sweep logs its time at debug ("asked … for its rates in …").
+  - **`device_rate` is gone.** `open_session` picks the retry rate out of the offered set, less the
+    source's refused rate. That set answers for any layout, so the pick can be a rate the source's
+    own formats can't open. The mix rate stands behind it then, as for a driver that passes a rate
+    and refuses to initialise it.
+  - `RateSet::rates` is now `pub(super)`.
+
+  Run (2026-10-02, debug build, the ALC897 at 7.1, Resample, from the play line to
+  `Output reopened`):
+
+  | Session, claim | Before | Now |
+  |---|---|---|
+  | First, an 88.2 kHz file converted to 44.1 kHz | about 1.3 s, plus a second sweep | 1,074 ms, 988 ms of it the one sweep |
+  | Then a 48 kHz reopen | 1,015–1,377 ms a claim | 23.5 ms, no sweep |
+  | Then a 44.1 kHz reopen | | 23.3 ms, no sweep |
+  | Relaunched: first, 48 kHz | | 996 ms, the sweep again (985 ms) |
+  | Then an 88.2 kHz reopen, converted to 44.1 kHz | | 128 ms, no sweep |
+
+  - Every claim offered the same four rates.
+  - The shared stand-in still worked: the UMC22 picked by id, disabled and enabled again, with the
+    ALC897 standing in at its 8-channel mix.
+
+  Still open:
+  - **The first claim on a 7.1 output still pays one sweep**, at its first play in a session. A
+    background sweep could hide that, but it would need `IsFormatSupported` to answer while
+    Melodia's own exclusive stream holds the endpoint, which was never checked.
+  - **Tests:** the remembered set answers a second key without probing; a key differing in the
+    device's channel count probes again; the oldest of 17 is the one dropped.
 - **Tests:**
   - `claim_serves` rows for both rules, including an off-ladder rate falling back to 9A's;
   - `claim_rate`'s table;

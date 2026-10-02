@@ -39,7 +39,7 @@ impl RateSet {
         rung(rate).map(|bit| self.0 & bit != 0)
     }
 
-    fn rates(self) -> impl Iterator<Item = u32> {
+    pub(super) fn rates(self) -> impl Iterator<Item = u32> {
         LADDER.into_iter().filter(move |&rate| self.contains(rate) == Some(true))
     }
 }
