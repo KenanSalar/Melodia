@@ -13,9 +13,10 @@
 //! control of this device" box is cleared, in its Advanced properties in the Sound control panel,
 //! refuses every claim; the panel names that.
 //!
-//! **Every COM call is made on the `wasapi-out` thread**, which opens the endpoint, answers the
-//! open with what it agreed to, then feeds it until told to stop. No COM object crosses a thread,
-//! and nothing depends on the apartment of whichever thread asked for the claim.
+//! **A claim's COM calls are made on the `wasapi-out` thread**, which opens the endpoint, answers
+//! the open with what it agreed to, then feeds it until told to stop, and on the helpers its rate
+//! sweep starts, each in an apartment and with a client of its own. No COM object crosses a
+//! thread, and nothing depends on the apartment of whichever thread asked for the claim.
 //!
 //! [`encode`]: super::encode
 
@@ -649,12 +650,12 @@ impl Drop for Session {
 /// COM on the calling thread while this lives, balanced only where `enter` succeeded: a thread
 /// already in a single-threaded apartment is refused, stays as it was, and reaches the endpoints
 /// from there.
-struct ComApartment {
+pub(super) struct ComApartment {
     entered: bool,
 }
 
 impl ComApartment {
-    fn enter() -> Self {
+    pub(super) fn enter() -> Self {
         Self { entered: wasapi::initialize_mta().is_ok() }
     }
 }

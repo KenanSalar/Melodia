@@ -1,7 +1,9 @@
 //! Tests for what a claim asks a WASAPI endpoint: what each rung is declared as, which layouts may
-//! be respelled in the short header, the order a claim asks in, the rungs the rate sweep asks, and
-//! which refusals end a claim. Asking a device needs a device, and is tested by hand.
+//! be respelled in the short header, the order a claim asks in, the rungs the rate sweep asks, how
+//! its threads share the ladder, and which refusals end a claim. Asking a real device needs one,
+//! and is tested by hand; the sweep's threads ask a fake.
 
+use parking_lot::Mutex;
 use wasapi::{SampleType, WasapiError};
 use windows_core::HRESULT;
 use windows_sys::Win32::Media::Audio::{
@@ -10,17 +12,68 @@ use windows_sys::Win32::Media::Audio::{
 };
 
 use super::{
-    ANY_LAYOUT, candidates, claim_error, device_refusal, short_header_defined, wave_format,
+    ANY_LAYOUT, RateQueue, candidates, claim_error, device_refusal, short_header_defined,
+    sweep_ladder, wave_format,
 };
 use crate::player::playback::output::claim::{ClaimError, FallbackReason};
 use crate::player::playback::output::encode::DeviceFormat;
+use crate::player::playback::output::rates::{LADDER, RateSet};
 use crate::player::playback::tests::helpers::shape;
-use melodia_audio::player::source::audio::SourceFormat;
+use melodia_audio::player::source::audio::{SampleRate, SourceFormat};
 
 const ENDPOINT: &str = "{0.0.0.00000000}.{a-test-endpoint}";
 
 fn windows_error(code: i32) -> WasapiError {
     WasapiError::Windows(windows_core::Error::from_hresult(HRESULT(code)))
+}
+
+/// A device that takes `takes`, refuses to be asked at all at `refuses`, and notes every rate it
+/// is asked about, from whichever thread asks.
+struct FakeDevice {
+    takes: &'static [u32],
+    refuses: Option<u32>,
+    asked: Mutex<Vec<u32>>,
+}
+
+impl FakeDevice {
+    fn taking(takes: &'static [u32]) -> Self {
+        Self { takes, refuses: None, asked: Mutex::new(Vec::new()) }
+    }
+
+    /// A device another application takes as the sweep reaches `rate`.
+    fn taken_at(rate: u32) -> Self {
+        Self { takes: &[], refuses: Some(rate), asked: Mutex::new(Vec::new()) }
+    }
+
+    fn ask(&self, rate: SampleRate) -> Result<bool, ClaimError> {
+        self.asked.lock().push(rate.get());
+        if self.refuses == Some(rate.get()) {
+            return Err(ClaimError::Busy("held by another application".into()));
+        }
+        Ok(self.takes.contains(&rate.get()))
+    }
+
+    /// Every rate asked about, in ladder order whichever thread asked first.
+    fn asked(&self) -> Vec<u32> {
+        let mut asked = self.asked.lock().clone();
+        asked.sort_unstable();
+        asked
+    }
+}
+
+/// `device` swept as a claim sweeps it, every helper asking it too.
+fn sweep(device: &FakeDevice) -> Result<RateSet, FallbackReason> {
+    sweep_ladder(|rate| device.ask(rate), |queue| queue.drain(|rate| device.ask(rate)))
+        .map_err(|e| e.reason())
+}
+
+fn offered(rates: &[u32]) -> RateSet {
+    rates.iter().copied().collect()
+}
+
+#[expect(clippy::panic, reason = "a sweep thread panicking is the case under test")]
+fn panics(_: &RateQueue) -> Result<Vec<u32>, ClaimError> {
+    panic!("a sweep thread failed");
 }
 
 /// Container bits, valid bits, sample type and bytes per stereo frame, for every rung.
@@ -178,6 +231,85 @@ fn the_rate_sweep_asks_every_rung_wasapi_declares() {
     for (format, expected) in rows {
         assert_eq!(swept.contains(&format), expected, "{format}");
     }
+}
+
+/// A rate lost between threads would leave a later track converted that a fresh claim plays at its
+/// own rate, and the ladder's two ends are where a queue drops one.
+#[test]
+fn a_sweep_across_threads_answers_exactly_the_rates_the_device_takes() {
+    let device = FakeDevice::taking(&[8_000, 44_100, 48_000, 768_000]);
+
+    let swept = sweep(&device);
+
+    assert_eq!(swept, Ok(offered(&[8_000, 44_100, 48_000, 768_000])));
+}
+
+/// A rate the device lacks costs a walk of every layout, so one asked twice pays that twice, and
+/// one never asked is a rate the set can't hold.
+#[test]
+fn a_sweep_across_threads_asks_about_each_rate_once() {
+    let device = FakeDevice::taking(&[44_100, 48_000]);
+
+    let _ = sweep(&device);
+
+    assert_eq!(device.asked(), LADDER);
+}
+
+/// Each helper answers for the rates it asked about, which the claim's own thread never sees.
+#[test]
+fn the_rates_every_thread_found_are_in_the_set() {
+    let device = FakeDevice::taking(&[44_100]);
+
+    let swept =
+        sweep_ladder(|rate| device.ask(rate), |_| Ok(vec![96_000])).map_err(|e| e.reason());
+
+    assert_eq!(swept, Ok(offered(&[44_100, 96_000])));
+}
+
+/// A device taken or unplugged part way answers every ask that way, and a set short of the rates
+/// left to ask would stand for the session.
+#[test]
+fn a_refusal_ends_the_sweep_with_it() {
+    let device = FakeDevice::taken_at(96_000);
+
+    let swept = sweep(&device);
+
+    assert_eq!(swept, Err(FallbackReason::Busy));
+}
+
+/// Every ask after a refusal is a call the device refuses too, so the next thread to reach the
+/// queue takes nothing off it.
+#[test]
+fn after_a_refusal_no_thread_takes_another_rate() {
+    let device = FakeDevice::taken_at(16_000);
+    let queue = RateQueue::default();
+    let _ = queue.drain(|rate| device.ask(rate));
+
+    let _ = queue.drain(|rate| device.ask(rate));
+
+    assert_eq!(device.asked(), [8_000, 11_025, 16_000]);
+}
+
+/// A helper that can't reach the device takes nothing off the queue, and the claim's own thread
+/// asks what it would have.
+#[test]
+fn a_helper_that_cant_reach_the_device_leaves_its_rates_to_the_others() {
+    let device = FakeDevice::taking(&[44_100, 48_000, 96_000, 192_000]);
+
+    let swept = sweep_ladder(|rate| device.ask(rate), |_| Ok(Vec::new())).map_err(|e| e.reason());
+
+    assert_eq!(swept, Ok(offered(&[44_100, 48_000, 96_000, 192_000])));
+}
+
+/// A helper that panics may have taken a rate off the queue without asking about it, so the sweep
+/// fails whenever one does rather than keep a set that could be short.
+#[test]
+fn a_helper_that_panics_fails_the_sweep() {
+    let device = FakeDevice::taking(&[44_100, 48_000]);
+
+    let swept = sweep_ladder(|rate| device.ask(rate), panics).map_err(|e| e.reason());
+
+    assert_eq!(swept, Err(FallbackReason::Io));
 }
 
 /// The answers that end a claim whatever format it asked in. A device with its exclusive-control

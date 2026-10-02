@@ -6,8 +6,9 @@ Status: **Phases 1 to 5 complete**, Windows ear checks included (tests held back
 5) · **Phase 6: Linux half closed with no code, Windows half built and run** · **Phase 7:
 dropped** · **Phase 8: all four built and run on Windows**, 8c's run having fixed event mode's
 recovery from a stall · **Phase 9: 9B chosen, WASAPI half built and measured, its probe's cost
-on a 7.1 output cut to one sweep per device and layout (built and run), and a perf pass on the
-claim path built and run; ALSA half open (Linux)** · Created: 2026-09-30 · Revised:
+on a 7.1 output cut to one sweep per device and layout (built and run), a perf pass on the
+claim path built and run, and the sweep run across threads (built and run); ALSA half open
+(Linux)** · Created: 2026-09-30 · Revised:
 2026-10-02
 
 > Facts below were checked on **2026-09-30** against `a0b9978b` on `feat/bit-perfect-output`,
@@ -1482,10 +1483,12 @@ refusal. The stand-in played shared on the UMC22 itself (Phase 6).
   - The shared stand-in still worked: the UMC22 picked by id, disabled and enabled again, with the
     ALC897 standing in at its 8-channel mix.
 
-  Still open:
-  - **The first claim on a 7.1 output still pays one sweep**, at its first play in a session. A
-    background sweep could hide that, but it would need `IsFormatSupported` to answer while
-    Melodia's own exclusive stream holds the endpoint, which was never checked.
+  Since then:
+  - **The first claim on a 7.1 output still pays one sweep**, at its first play in a session,
+    about 0.27 s since the sweep runs across threads (below). **Accepted (Kenan, 2026-10-02).**
+    Sweeping after the claim would hide the rest, and the check below found it possible, but it
+    would put a sweep beside playback and a wait for a sweep already running into the claim path,
+    for a quarter second once per device and layout in a session. Not taken.
   - **Tests:** written (2026-10-02), in `wasapi_offered_tests`. Each test holds an `Answers` of
     its own, the type the process's set moved into, since one static would be shared by the
     whole test binary.
@@ -1547,6 +1550,55 @@ refusal. The stand-in played shared on the UMC22 itself (Phase 6).
       was clean.
   - **Tests:** written (2026-10-02). The second is `source_rate_lacking`, which `open_session` now
     asks, beside `retry_rates`, the order a refused rate is retried in.
+- **Windows: the sweep across threads** (2026-10-02, static gates green, built and run).
+  - **What a standalone probe found first**, on both devices, with a C# harness outside Melodia:
+    - `IsFormatSupported` in exclusive mode answers truthfully while the same process's own
+      exclusive stream is open and running: supported for 48 and 44.1 kHz, unsupported for the
+      rate the device lacks. A third client's exclusive `Initialize` was refused with
+      `AUDCLNT_E_DEVICE_IN_USE` at the same moment, so the hold was real. This settles the open
+      question above.
+    - Asks on one endpoint overlap across threads. 400 refused asks on the ALC897 at 7.1 took
+      216–236 ms on one thread, 123 ms on two, 75 ms on four and 57 ms on eight, every one
+      answered.
+  - **As built.** `offered_rates` shares the ladder's rates out across `SWEEP_THREADS` (4): the
+    claim's own thread, with its probe client, and three helpers named `wasapi-sweep`, each in an
+    MTA of its own with a client of its own, so no COM object crosses a thread. Each takes the
+    next rate off one `RateQueue`. The first device refusal anywhere stops every thread and ends
+    the sweep with that refusal, as before. A helper that can't start or can't reach the device
+    takes nothing, and the others empty the queue. A helper that panics fails the sweep, since the
+    rate it held would be missing. The helpers are scoped and joined before the claim goes on, so
+    the sweep still runs before anything initialises and never overlaps playback. `takes_at` takes
+    the device's channel count rather than its mix format, which the helpers don't have.
+  - **The seam.** The threads, the queue and the merge are `sweep_ladder`, which takes the ask as
+    a parameter: `offered_rates` hands it `takes_at` on each thread's own client, the tests a fake
+    device.
+  - **Tests** (`wasapi_formats_tests`, 2026-10-02): the set a sweep across threads answers is the
+    device's own, the ladder's two ends included; each rate is asked once; every thread's rates
+    reach the set; a refusal ends the sweep with it; after a refusal no thread takes another rate;
+    a helper that can't reach the device leaves its rates to the others; a helper that panics
+    fails the sweep. None depends on which thread asks what, so the scheduler can't make one
+    flaky: 200 runs, no failure. Breaking the code each one guards made it fail, and no test
+    outside the sweep's.
+  - **Run** (the same setup as the perf pass's run above):
+
+    | Device, claim | Perf pass | Across threads |
+    |---|---|---|
+    | UMC22, the sweep | 24.3–25.0 ms | 7.8–9.1 ms |
+    | UMC22, a first claim at 48 kHz | 40.5–42.6 ms | 23.0–24.7 ms, 44.7 on the first launch after the build |
+    | UMC22, a first claim at 96 kHz, converted to 48 | 40.7–43.6 ms | 23.4–27.6 ms |
+    | ALC897 at 7.1, the sweep, over 14 first claims | 712–987 ms | 254–273 ms |
+    | ALC897 at 7.1, a first claim at 88.2 kHz or 48 kHz | 727–1,001 ms | 267–287 ms |
+    | ALC897 at 7.1, a reopen with no sweep | 19.3–29.7 ms | 20.8–37.8 ms |
+
+    - Every claim offered the same sets as before and landed on the rate it did before.
+    - The two groups the single-thread sweep fell into are gone: all 14 sweeps sit within 19 ms
+      of each other.
+    - **Threads and memory**, sampled every millisecond or so through three first claims on the
+      ALC897 at 7.1: the three helpers lived for 260–270 ms, the thread count went from 16 to 19
+      and back to 16, and commit rose by 0.26–0.47 MB at the sweep's peak, ending 0.1–0.3 MB above
+      where it started while the rest of startup ran beside it. Ten seconds in, 28 threads and
+      94.1–96.1 MB commit, against 28 threads and 94.1 MB before.
+    - No warning, error or helper failure was logged, and every quit was clean.
 - **Tests.** The WASAPI superset's pin is written (2026-10-02), as the sweep asking every rung
   WASAPI declares (`wasapi_formats_tests`). The rest are platform-neutral, for the Linux machine:
   - `claim_serves` rows for both rules, including an off-ladder rate falling back to 9A's;
