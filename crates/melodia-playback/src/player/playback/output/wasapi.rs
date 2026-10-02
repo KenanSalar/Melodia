@@ -286,7 +286,8 @@ fn resolve(enumerator: &DeviceEnumerator, device: Option<&str>) -> Result<Endpoi
 }
 
 /// Initialise the first candidate the device takes at the source's rate, or, where the device lacks
-/// that rate and the request allows, at the one [`rates::device_rate_for`] picks.
+/// that rate and the request allows, at the one [`rates::device_rate_for`] picks, and then at the
+/// device's own.
 fn negotiate(endpoint: &Endpoint, request: &ExclusiveRequest) -> Result<Session, ClaimError> {
     let ExclusiveRequest { shape, format: source, tuning, rate_fallback, .. } = *request;
     let id = endpoint.device.id.as_str();
@@ -308,9 +309,17 @@ fn negotiate(endpoint: &Endpoint, request: &ExclusiveRequest) -> Result<Session,
     if !converts {
         return Err(refused);
     }
-    let Some(rate) = device_rate(&probe, &mix, shape, source) else { return Err(refused) };
-    let at_device_rate = candidates(Shape { rate, ..shape }, source, device_channels);
-    open_first(endpoint, &probe, at_device_rate, tuning)?.ok_or(refused)
+    // A driver can pass a rate it then won't initialise. The mix rate is the one the audio engine
+    // already runs the device at, so it stands behind the pick.
+    let own_rate = SampleRate::new(mix.get_samplespersec());
+    let picked = device_rate(&probe, &mix, shape, source);
+    for rate in picked.into_iter().chain(own_rate.filter(|&own| Some(own) != picked)) {
+        let at_rate = candidates(Shape { rate, ..shape }, source, device_channels);
+        if let Some(session) = open_first(endpoint, &probe, at_rate, tuning)? {
+            return Ok(session);
+        }
+    }
+    Err(refused)
 }
 
 /// Initialise the first of `wanted` the device takes, or `None` where it takes none of them.

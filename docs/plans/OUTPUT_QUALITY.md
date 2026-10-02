@@ -356,8 +356,9 @@ the plan left open:
 - `RateFallback { Shared, Resample }` rides `ExclusiveRequest.rate_fallback` and
   `OutputChoice.rate_fallback`. It is persisted as `output_rate_fallback`, `"shared"` or
   `"resample"`, through `RateFallbackKey`, which mirrors `OutputModeKey`.
-- The backend seam gains `RATE_FALLBACK`, surfaced as `RATE_FALLBACK_SUPPORTED`: true for ALSA,
-  false for WASAPI and the unsupported backend. The picker row shows only where it is true.
+- The backend seam gains `RATE_FALLBACK`, surfaced as `RATE_FALLBACK_SUPPORTED`: true for ALSA
+  and, since its own half, WASAPI; false for the unsupported backend. The picker row shows only
+  where it is true.
 
 **Policy (`rates.rs`)**
 - `LADDER` runs from 8 kHz to 768 kHz. `device_rate_for(source: SampleRate, supported: &[u32])`.
@@ -365,8 +366,8 @@ the plan left open:
   48 kHz one.
 - Step 3 is "the nearest of the rest", ties going to the higher rate. That also covers a source in
   neither family.
-- `mod rates` is declared in the Linux arm of `cfg_select!`, since nothing on Windows reads it yet.
-  The WASAPI half adds it to its own arm, the way `hardware_volume` is listed in both.
+- `mod rates` was declared in the Linux arm of `cfg_select!` first. The WASAPI half added it to
+  the Windows arm, the way `hardware_volume` is listed in both.
 
 **ALSA**
 - `pick_rate` tests the source's rate first. Under Resample it then probes the ladder with
@@ -408,11 +409,14 @@ already platform-neutral, so there is nothing new to translate.
   - the request is Resample;
   - `refusal` answers `RateRefused`.
 
-  The second attempt runs `open_first` at the rate `device_rate` picks. If that fails too, the
-  claim returns the first refusal.
+  The second attempt runs `open_first` at the rate `device_rate` picks. If that fails too, it
+  tries the device's mix rate, the one the audio engine already runs the device at, since a
+  driver can pass `IsFormatSupported` and still refuse `Initialize`. Only then does the claim
+  return the first refusal. Where the pick is the mix rate, it is tried once.
 - The gate is `RateRefused` because that verdict already means the device takes a candidate at
-  its own mix rate. So the ladder probe always finds a rate, and a refused channel count or format
-  never pays for a ladder of `IsFormatSupported` calls.
+  its own mix rate. So a claim always has the mix rate to fall back on, even one off the ladder
+  where `device_rate` finds nothing, and a refused channel count or format never pays for a
+  ladder of `IsFormatSupported` calls.
 - `device_rate` asks each `LADDER` rung except the source's own through `takes_at`, then hands
   what takes to `device_rate_for`. `takes_at` is the same question `refusal` now asks of the mix
   rate. The source's rate is left out because it has already been refused, and a driver can pass
@@ -479,8 +483,9 @@ click, gap or crackle.
 **Still open**
 - Tests:
   - the `device_rate_for` table;
-  - the key's round-trip;
-  - `RATE_FALLBACK_SUPPORTED` in `mod_tests`' two per-platform capability tests.
+  - the key's round-trip.
+
+  `RATE_FALLBACK_SUPPORTED` is pinned in `mod_tests`' two per-platform capability tests.
 - Docs: done. The README's Unsupported Sample Rates bullet no longer says Linux only, and
   `.claude/rules/audio-stack.md` already names `RATE_FALLBACK` among the seam's names.
 
