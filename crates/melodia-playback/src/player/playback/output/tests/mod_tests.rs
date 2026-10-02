@@ -126,7 +126,8 @@ fn a_device_level_is_the_nearest_whole_percent_the_system_shows() {
 
 /// Every option the Output card offers on Windows is the WASAPI backend's answer. Were the
 /// `cfg_select!` arm to stop binding it, every claim would fall back to shared and the WASAPI and
-/// hardware volume suites would stop compiling in, leaving the rest of the run green.
+/// hardware volume suites would stop compiling in, leaving the rest of the run green. Losing the
+/// shared device would send shared output, and every refused claim, back to the system default.
 #[cfg(target_os = "windows")]
 #[test]
 fn windows_binds_the_wasapi_backend_with_every_option_it_offers() {
@@ -135,12 +136,13 @@ fn windows_binds_the_wasapi_backend_with_every_option_it_offers() {
         super::POLLING_SUPPORTED,
         super::HARDWARE_VOLUME_SUPPORTED,
         super::RATE_FALLBACK_SUPPORTED,
+        super::SHARED_DEVICE_SUPPORTED,
     );
 
     assert_eq!(
         offered,
-        (true, true, true, true),
-        "(exclusive, polling, hardware volume, rate fallback)"
+        (true, true, true, true, true),
+        "(exclusive, polling, hardware volume, rate fallback, shared device)"
     );
 }
 

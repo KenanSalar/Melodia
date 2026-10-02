@@ -22,7 +22,7 @@ pub(super) struct ClockReading {
 }
 
 /// What a reading of the device's clock says about it.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Clock {
     Moving,
     Stalled,
@@ -87,3 +87,7 @@ pub(super) fn hns(duration: Duration) -> i64 {
 pub(super) fn from_hns(hns: i64) -> Duration {
     Duration::from_nanos(u64::try_from(hns).unwrap_or(0).saturating_mul(100))
 }
+
+#[cfg(test)]
+#[path = "tests/wasapi_clock_tests.rs"]
+mod tests;

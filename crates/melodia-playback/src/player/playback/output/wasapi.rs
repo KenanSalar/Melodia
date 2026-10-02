@@ -352,12 +352,8 @@ fn open_session(
     let id = endpoint.device.id.as_str();
     let device_channels = mix.get_nchannels();
     let own_rate = SampleRate::new(mix.get_samplespersec());
-    // Only where `refusal` asks at the device's own rate instead, so a device that won't be asked
-    // at all, busy or barred, still says so rather than reading as one refusing the format.
-    let source_rate_lacking = own_rate.is_some_and(|own| own != shape.rate)
-        && offered.is_some_and(|offered| offered.contains(shape.rate.get()) == Some(false));
     let at_source_rate = candidates(shape, source, device_channels);
-    if !source_rate_lacking
+    if !source_rate_lacking(shape.rate, own_rate, offered)
         && let Some(session) = open_first(endpoint, probe, at_source_rate, tuning)?
     {
         return Ok(session);
@@ -368,20 +364,43 @@ fn open_session(
     if !converts {
         return Err(refused);
     }
-    // A driver can pass a rate it then won't initialise. The mix rate is the one the audio engine
-    // already runs the device at, so it stands behind the pick. The source's rate is left out even
-    // where it was offered: it has just been refused.
-    let picked = offered.and_then(|offered| {
-        let others: Vec<u32> = offered.rates().filter(|&rate| rate != shape.rate.get()).collect();
-        rates::device_rate_for(shape.rate, &others)
-    });
-    for rate in picked.into_iter().chain(own_rate.filter(|&own| Some(own) != picked)) {
+    for rate in retry_rates(shape.rate, own_rate, offered) {
         let at_rate = candidates(Shape { rate, ..shape }, source, device_channels);
         if let Some(session) = open_first(endpoint, probe, at_rate, tuning)? {
             return Ok(session);
         }
     }
     Err(refused)
+}
+
+/// Whether the rates the device `offered` already say it lacks the `source` rate. Only where its
+/// `own` rate is another, which is where [`refusal`] asks instead, so a device that won't be asked
+/// at all, busy or barred, still says so rather than reading as one refusing the format.
+fn source_rate_lacking(
+    source: SampleRate,
+    own: Option<SampleRate>,
+    offered: Option<RateSet>,
+) -> bool {
+    own.is_some_and(|own| own != source)
+        && offered.is_some_and(|offered| offered.contains(source.get()) == Some(false))
+}
+
+/// The rates a claim refused at the `source` rate tries next: the one [`rates::device_rate_for`]
+/// picks out of the others `offered`, then the device's `own`.
+///
+/// A driver can pass a rate it then won't initialise. The mix rate is the one the audio engine
+/// already runs the device at, so it stands behind the pick. The source's rate is left out even
+/// where it was offered: it has just been refused.
+fn retry_rates(
+    source: SampleRate,
+    own: Option<SampleRate>,
+    offered: Option<RateSet>,
+) -> impl Iterator<Item = SampleRate> {
+    let picked = offered.and_then(|offered| {
+        let others: Vec<u32> = offered.rates().filter(|&rate| rate != source.get()).collect();
+        rates::device_rate_for(source, &others)
+    });
+    picked.into_iter().chain(own.filter(|&own| Some(own) != picked))
 }
 
 /// Initialise the first of `wanted` the device takes, or `None` where it takes none of them.

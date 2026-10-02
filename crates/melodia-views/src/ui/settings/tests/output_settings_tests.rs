@@ -41,6 +41,12 @@ fn options_named(names: &[&str]) -> Vec<SharedString> {
     names.iter().map(|&name| SharedString::from(name)).collect()
 }
 
+/// The row leading the picker where it chooses for shared output too, Windows, which saves no
+/// device.
+fn system_default() -> SharedString {
+    SharedString::from("System Default")
+}
+
 /// The arguments of each `@tr(…)` in the inline `options` list of the chip group whose selection
 /// is `index_property`, in the order the card shows them.
 fn chip_options(src: &str, index_property: &str) -> Vec<String> {
@@ -122,6 +128,73 @@ fn the_picker_lights_the_card_a_claim_would_take() {
 
         let lit = shown.map(|shown| (shown.selected, shown.missing));
         assert_eq!(lit, Some(expected), "{what}: (row lit, not connected)");
+    }
+}
+
+/// With the System Default row leading, none saved lights that row whatever is listed, since the
+/// output follows the system default, and every device sits one row lower than it would without
+/// it.
+#[test]
+fn with_the_system_default_row_the_picker_lights_where_the_audio_goes() {
+    let rows = [
+        (
+            "the saved device, listed second",
+            Some("USB DAC"),
+            cards(&["HDA Intel", "USB DAC"]),
+            (2, false),
+        ),
+        ("a saved device unplugged", Some("USB DAC"), cards(&["HDA Intel"]), (-1, true)),
+        ("none saved", None, cards(&["HDA Intel", "USB DAC"]), (0, false)),
+        ("none saved and no devices", None, Vec::new(), (0, false)),
+    ];
+    for (what, saved, listed, expected) in rows {
+        let mut picked = picked(saved);
+
+        let shown = picked.take_listing(listed, Some(system_default()), 1);
+
+        let lit = shown.map(|shown| (shown.selected, shown.missing));
+        assert_eq!(lit, Some(expected), "{what}: (row lit, not connected)");
+    }
+}
+
+#[test]
+fn the_system_default_row_leads_the_devices_as_listed() {
+    let mut picked = picked(None);
+
+    let options = picked
+        .take_listing(cards(&["HDA Intel", "USB DAC"]), Some(system_default()), 1)
+        .and_then(|shown| shown.names);
+
+    assert_eq!(options, Some(options_named(&["System Default", "HDA Intel", "USB DAC"])));
+}
+
+/// The row is translated, so a language switch rewords it while the same devices are listed, and
+/// only rebuilt options carry the new words to the picker.
+#[test]
+fn the_options_are_rebuilt_when_the_system_default_row_is_reworded() {
+    let mut picked = picked(None);
+    picked.take_listing(cards(&["HDA Intel"]), Some(system_default()), 1);
+
+    let reworded = picked
+        .take_listing(cards(&["HDA Intel"]), Some(SharedString::from("Systemstandard")), 2)
+        .and_then(|shown| shown.names);
+
+    assert_eq!(reworded, Some(options_named(&["Systemstandard", "HDA Intel"])));
+}
+
+/// The System Default row saves no device, which is what lets a pick go back to following the
+/// system default, and each row under it saves the device listed there. The saved device is one
+/// no row names, so every row's pick is a change.
+#[test]
+fn a_pick_under_the_system_default_row_saves_the_device_listed_there() {
+    let rows = [(0, None), (1, Some(card("HDA Intel").id)), (2, Some(card("USB DAC").id))];
+    for (row, expected) in rows {
+        let mut picked = picked(Some("Bluetooth Headset"));
+        picked.take_listing(cards(&["HDA Intel", "USB DAC"]), Some(system_default()), 1);
+
+        picked.pick_device(row);
+
+        assert_eq!(picked.choice.device, expected, "row {row}");
     }
 }
 

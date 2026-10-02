@@ -192,3 +192,7 @@ pub(super) fn device_refusal(e: WasapiError, id: &str) -> Result<ClaimError, Was
 pub(super) fn claim_error(context: &'static str, id: &str, e: WasapiError) -> ClaimError {
     device_refusal(e, id).unwrap_or_else(|e| ClaimError::io(context, e))
 }
+
+#[cfg(test)]
+#[path = "tests/wasapi_formats_tests.rs"]
+mod tests;

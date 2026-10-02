@@ -440,3 +440,7 @@ pub(super) fn release_exclusive(output: &Mutex<Option<AudioOutput>>) {
         output.park();
     }
 }
+
+#[cfg(all(test, target_os = "windows"))]
+#[path = "tests/output_tests.rs"]
+mod tests;

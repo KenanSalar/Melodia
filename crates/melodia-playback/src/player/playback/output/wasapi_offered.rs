@@ -30,30 +30,58 @@ pub(super) struct ProbeKey {
     pub(super) device_channels: u16,
 }
 
-static REMEMBERED: Mutex<Vec<(ProbeKey, RateSet)>> = Mutex::new(Vec::new());
+static REMEMBERED: Answers = Answers::new();
 
 /// The rates `key`'s sweep found, running `probe` for them the first time they are asked for.
-///
-/// A sweep that fails is not kept: one cut short by the device being taken or unplugged would
-/// otherwise stand for the rest of the session, short of rates the device has.
-///
-/// The lock isn't held across `probe`: claims come one at a time, through the output's own lock,
-/// and a sweep can take the better part of a second.
 pub(super) fn remembered<E>(
     key: ProbeKey,
     probe: impl FnOnce() -> Result<RateSet, E>,
 ) -> Result<RateSet, E> {
-    let known = REMEMBERED.lock().iter().find(|(asked, _)| *asked == key).map(|&(_, offered)| offered);
-    if let Some(offered) = known {
-        return Ok(offered);
-    }
-    let started = Instant::now();
-    let offered = probe()?;
-    log::debug!("audio: asked {} for its rates in {:?}: {offered:?}", key.device, started.elapsed());
-    let mut remembered = REMEMBERED.lock();
-    if remembered.len() == CAPACITY {
-        remembered.remove(0);
-    }
-    remembered.push((key, offered));
-    Ok(offered)
+    REMEMBERED.answer(key, probe)
 }
+
+/// Each sweep's answer under the key it asked with, oldest first. A type of its own so a test can
+/// hold a set that nothing else in the binary writes to.
+struct Answers(Mutex<Vec<(ProbeKey, RateSet)>>);
+
+impl Answers {
+    const fn new() -> Self {
+        Self(Mutex::new(Vec::new()))
+    }
+
+    /// `key`'s answer, running `probe` for it where none is kept.
+    ///
+    /// A sweep that fails is not kept: one cut short by the device being taken or unplugged would
+    /// otherwise stand for the rest of the session, short of rates the device has.
+    ///
+    /// The lock isn't held across `probe`: claims come one at a time, through the output's own
+    /// lock, and a sweep can take the better part of a second.
+    fn answer<E>(
+        &self,
+        key: ProbeKey,
+        probe: impl FnOnce() -> Result<RateSet, E>,
+    ) -> Result<RateSet, E> {
+        let known =
+            self.0.lock().iter().find(|(asked, _)| *asked == key).map(|&(_, offered)| offered);
+        if let Some(offered) = known {
+            return Ok(offered);
+        }
+        let started = Instant::now();
+        let offered = probe()?;
+        log::debug!(
+            "audio: asked {} for its rates in {:?}: {offered:?}",
+            key.device,
+            started.elapsed()
+        );
+        let mut answers = self.0.lock();
+        if answers.len() == CAPACITY {
+            answers.remove(0);
+        }
+        answers.push((key, offered));
+        Ok(offered)
+    }
+}
+
+#[cfg(test)]
+#[path = "tests/wasapi_offered_tests.rs"]
+mod tests;

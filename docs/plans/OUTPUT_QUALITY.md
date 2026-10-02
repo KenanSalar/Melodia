@@ -7,7 +7,7 @@ Status: **Phases 1 to 5 complete**, Windows ear checks included (tests held back
 dropped** · **Phase 8: all four built and run on Windows**, 8c's run having fixed event mode's
 recovery from a stall · **Phase 9: 9B chosen, WASAPI half built and measured, its probe's cost
 on a 7.1 output cut to one sweep per device and layout (built and run), and a perf pass on the
-claim path built and not yet run; ALSA half open (Linux)** · Created: 2026-09-30 · Revised:
+claim path built and run; ALSA half open (Linux)** · Created: 2026-09-30 · Revised:
 2026-10-02
 
 > Facts below were checked on **2026-09-30** against `a0b9978b` on `feat/bit-perfect-output`,
@@ -921,13 +921,32 @@ alongside the log.
 
 No warning or error was logged apart from the expected refusals, and every quit was clean.
 
+**Physical unplug** (2026-10-02, debug build, Windows, scratch data folder, the UMC22 chosen,
+volume 40). Kenan pulled and replugged its USB cable while the arpeggio looped, and listened
+through each step. The UMC22 read `NOTPRESENT` while out, where the run above could only reach
+`DISABLED`.
+
+| Step | Result |
+|---|---|
+| Shared, the UMC22 also the Windows default: unplug | "output lost; reopening", then "the chosen output isn't connected, playing on the system default", reopened on the Elegiant 27 ms after the loss; the picker read "Not connected"; the track carried on rather than restarting |
+| Replug | Windows made the UMC22 its default again, so the stand-in following the default reopened, back on the UMC22 in 29 ms. The reclaim poll had no turn |
+| Shared, the Elegiant the Windows default: unplug, then replug | the same stand-in; then "the chosen device is listed again; reopened" on the UMC22, the reclaim poll's path |
+| Exclusive on the UMC22 with Resample: unplug | the writer stopped on `0x88890026`; refused as `NotConnected` (the one warning, as designed) and shared on the Elegiant 241 ms after the writer stopped |
+| Replug | "the chosen device is listed again; reopened" as Exclusive S16 at 48 kHz, its offered set read from the remembered sweep |
+| Quit | the UMC22's own volume went from Melodia's 40% back to 70%, its level before the first claim |
+
+- The unplug under the claim logged "the device's own volume wasn't put back: The device has been
+  removed", at debug. That is the case `hardware_volume` keeps the original for, and the quit
+  shows it did: the replugged device was put back to its level from before the claim, not to
+  Melodia's.
+- Nothing else was logged at warning or above, and the quit was clean.
+
 **Still open**
-- A physical unplug of the UMC22. The run disabled the endpoint, which is the same state change
-  for every reader here, but a USB removal goes through `NOTPRESENT` rather than `DISABLED`.
-- Tests:
-  - `take_listing` and `pick_device` with the lead row;
+- Tests. The Windows half is written (2026-10-02): `take_listing` and `pick_device` with the lead
+  row, `shared_request` carrying the chosen device, and `SHARED_DEVICE_SUPPORTED` in the Windows
+  capability pin. For the Linux machine:
   - `shared_request`'s Linux filter;
-  - `SHARED_DEVICE_SUPPORTED` in `mod_tests`' per-platform capability pins.
+  - `SHARED_DEVICE_SUPPORTED` in the Linux capability pin.
 - Docs: done. The README's Bit-perfect output section has the device bullet and the fallback's
   device, and `.claude/rules/audio-stack.md` names `SHARED_DEVICE` and the shared stream's device.
 
@@ -1185,11 +1204,9 @@ support"), so only `SetPosition` moves the position from a media panel.
 | 8d, on | Play | `play … from 38680ms`, claim reopened at S16 48 kHz |
 
 **Still open**
-- Tests, none written:
-  - `stood_still`'s table: the tolerance's edge, a clock that hasn't started, a counter that went
-    backwards;
-  - `StallWatch`: one stall reads `Stalled`, two in a row `Stuck`, and a clean reading between them
-    starts the run over;
+- Tests. 8c's are written (2026-10-02), in `wasapi_clock_tests`: `stood_still`'s table, read
+  through `StallWatch`, and the watch's runs and restart. The rest are platform-neutral, for the
+  Linux machine:
   - `lossy_codec`'s table;
   - the Lossy verdict rows;
   - `PauseWatch`;
@@ -1424,8 +1441,8 @@ refusal. The stand-in played shared on the UMC22 itself (Phase 6).
   7. **Then the README.** Extend the Unsupported Sample Rates bullet with "and an album mixing
      such rates stays gapless wherever the device's own rate doesn't change". It waits for the
      ALSA half, since until then that is true on Windows only.
-- **Windows: the probe's cost on a 7.1 output, built and not yet run.** The run that measured it
-  is above. What was found:
+- **Windows: the probe's cost on a 7.1 output, built and run.** The run that measured it is
+  above. What was found:
   - **Two sweeps, not one.** `offered_rates` asked every rung in every layout. Where the source's
     own rate was refused, as with an 88.2 kHz file on the ALC897, `device_rate` then ran a second
     sweep with the source's formats. That case was never timed, but it should have cost both.
@@ -1469,9 +1486,10 @@ refusal. The stand-in played shared on the UMC22 itself (Phase 6).
   - **The first claim on a 7.1 output still pays one sweep**, at its first play in a session. A
     background sweep could hide that, but it would need `IsFormatSupported` to answer while
     Melodia's own exclusive stream holds the endpoint, which was never checked.
-  - **Tests:** the remembered set answers a second key without probing; a key differing in the
-    device's channel count probes again; the oldest of 17 is the one dropped.
-- **Windows: a perf pass on the claim path** (2026-10-02, static gates green, not yet run).
+  - **Tests:** written (2026-10-02), in `wasapi_offered_tests`. Each test holds an `Answers` of
+    its own, the type the process's set moved into, since one static would be shared by the
+    whole test binary.
+- **Windows: a perf pass on the claim path** (2026-10-02, static gates green, built and run).
   Before it, an 88.2 kHz reopen converted to 44.1 kHz took 128 ms on the ALC897 at 7.1, where a
   same-rate reopen took 23.5 ms.
   - **One mask was asked twice.** `WaveFormat::new` gives a format the crate's default mask, and
@@ -1500,18 +1518,40 @@ refusal. The stand-in played shared on the UMC22 itself (Phase 6).
     until Melodia restarts.
   - **Split on the way.** The format probing (`candidates`, the spellings, `refusal`, the sweep
     and the refusal classification) moved to `output/wasapi_formats.rs`, which brings `wasapi.rs`
-    back under 800 lines. `wasapi_tests` imports those items from there.
-  - **To run:** the UMC22 and the ALC897 at 7.1 as above, with Resample. The offered sets must
-    log as before, `[32000, 44100, 48000]` on the UMC22. Note the first claim's sweep time, and
-    the 88.2 kHz reopen against its 128 ms.
-  - **Tests:** a failed sweep is not remembered; `open_session` makes no ask at a rate the offered
-    set lacks.
-- **Tests:**
+    back under 800 lines. Their tests followed them into `wasapi_formats_tests`.
+  - **Run** (2026-10-02, debug build, Windows, scratch data folder, Resample, events, 20 ms,
+    Hardware Volume on, muted). Driven from the command line and timed off the log, from the play
+    line to `Output reopened`, three fresh launches per row unless counted otherwise:
+
+    | Device, claim | Before | Now |
+    |---|---|---|
+    | UMC22, a first claim at 48 kHz | 52–56 ms | 40.5–42.6 ms, its sweep 24.7–25.0 ms |
+    | UMC22, a first claim at 96 kHz, converted to 48 | 71–81 ms | 40.7–43.6 ms |
+    | ALC897 at 7.1, a first claim at 88.2 kHz, converted to 44.1 | 1,074 ms, 988 of it the sweep | 727–1,001 ms over 7 launches |
+    | ALC897 at 7.1, then a 48 kHz reopen | 23.5 ms | 21.9–27.2 ms, no sweep |
+    | ALC897 at 7.1, then a 44.1 kHz reopen | 23.3 ms | 19.3–24.3 ms, no sweep |
+    | ALC897 at 7.1, relaunched: a first claim at 48 kHz | 996 ms, 985 of it the sweep | 726–936 ms over 7 launches |
+    | ALC897 at 7.1, then an 88.2 kHz reopen, converted to 44.1 | 128 ms | 20.6–29.7 ms, no sweep |
+
+    - Every claim offered the same sets as before: `[32000, 44100, 48000]` on the UMC22 and
+      `[44100, 48000, 96000, 192000]` on the ALC897, and landed on the rate it did before.
+    - **The 88.2 kHz reopen is the skip at work.** It no longer asks each candidate at a rate the
+      set already lacks, and now costs what a reopen at a rate the device has does.
+    - **The sweep on the ALC897 at 7.1 took 712 to 987 ms over 14 first claims** (median 750),
+      against 985 and 988 ms in the two earlier runs. It falls in two groups, about 712 to 750 ms
+      and about 890 to 990 ms, whichever rate the first claim is for and in whichever order the
+      launches came, so the spread is the driver's. The lower group is the 714 ms that cutting
+      45 of 162 calls predicts.
+    - The ALC897 stayed at 7.1 throughout (8 channels, mask `0x63F`, mix format at 192 kHz),
+      as it was found. No warning, error or underrun was logged in 21 launches, and every quit
+      was clean.
+  - **Tests:** written (2026-10-02). The second is `source_rate_lacking`, which `open_session` now
+    asks, beside `retry_rates`, the order a refused rate is retried in.
+- **Tests.** The WASAPI superset's pin is written (2026-10-02), as the sweep asking every rung
+  WASAPI declares (`wasapi_formats_tests`). The rest are platform-neutral, for the Linux machine:
   - `claim_serves` rows for both rules, including an off-ladder rate falling back to 9A's;
   - `claim_rate`'s table;
-  - `RateSet`'s round trip through `LADDER`;
-  - a pin that F32's ladder holds every `DeviceFormat` rung, since the WASAPI superset
-    (`ANY_LAYOUT`) rests on it.
+  - `RateSet`'s round trip through `LADDER`.
 
 ---
 
