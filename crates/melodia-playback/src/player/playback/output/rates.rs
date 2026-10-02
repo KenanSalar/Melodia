@@ -35,7 +35,7 @@ impl RateSet {
 
     /// Whether the device offered `rate`, or `None` for a rate off the ladder, which the set has no
     /// bit to say either way for.
-    fn contains(self, rate: u32) -> Option<bool> {
+    pub(super) fn contains(self, rate: u32) -> Option<bool> {
         rung(rate).map(|bit| self.0 & bit != 0)
     }
 

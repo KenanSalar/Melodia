@@ -27,16 +27,15 @@ use std::time::Duration;
 
 use wasapi::{
     AudioClient, AudioClock, AudioRenderClient, Device, DeviceEnumerator, DeviceState, Direction,
-    Handle, SampleType, ShareMode, StreamMode, WasapiError, WaveFormat, make_channelmasks,
+    Handle, StreamMode, WasapiError, WaveFormat,
 };
 use windows_sys::Win32::Foundation::ERROR_NOT_FOUND;
 use windows_sys::Win32::Media::Audio::{
-    AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED, AUDCLNT_E_DEVICE_IN_USE, AUDCLNT_E_DEVICE_INVALIDATED,
-    AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED, AUDCLNT_E_UNSUPPORTED_FORMAT,
+    AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED, AUDCLNT_E_UNSUPPORTED_FORMAT,
 };
 
 use melodia_audio::player::source::audio::{
-    ChannelCount, Sample, SampleRate, Shape, SourceFormat, frames_in, frames_to_duration,
+    Sample, SampleRate, Shape, frames_in, frames_to_duration,
 };
 use melodia_core::error::describe;
 
@@ -47,6 +46,9 @@ use super::encode::{self, DeviceFormat};
 use super::endpoint_volume::{self, EndpointVolume};
 use super::rates::RateSet;
 use super::wasapi_clock::{Clock, ClockReading, StallWatch, clock_duration, from_hns, hns};
+use super::wasapi_formats::{
+    candidates, claim_error, exclusive_spelling, hresult, offered_rates, refusal,
+};
 use super::wasapi_offered::{self, ProbeKey};
 use super::{
     Drive, ExclusiveRequest, ExclusiveTuning, Negotiated, OutputDevice, OutputFormat, RateFallback,
@@ -305,18 +307,21 @@ fn negotiate(endpoint: &Endpoint, request: &ExclusiveRequest) -> Result<Session,
     // Asked before anything initialises, so nothing of ours holds the device while it answers.
     let offered = match request.rate_fallback {
         RateFallback::Resample => {
-            // A busy or barred device fails every probe alike, and is retried at each track start,
-            // so the claim's own first ask goes ahead of the sweep and refuses in one call.
-            let first = candidates(request.shape, request.format, mix.get_nchannels()).next();
-            if let Some((_, _, wave)) = first {
-                exclusive_spelling(&probe, &wave, id)?;
-            }
             let key = ProbeKey {
                 device: id.to_owned(),
                 from_channels: request.shape.channels.get(),
                 device_channels: mix.get_nchannels(),
             };
-            Some(wasapi_offered::remembered(key, || offered_rates(&probe, &mix, request.shape)))
+            Some(wasapi_offered::remembered(key, || {
+                // A busy or barred device fails every probe alike, and is retried at each track
+                // start, so the claim's own first ask goes ahead of the sweep and refuses in one
+                // call.
+                let first = candidates(request.shape, request.format, mix.get_nchannels()).next();
+                if let Some((_, _, wave)) = first {
+                    exclusive_spelling(&probe, &wave, id)?;
+                }
+                offered_rates(&probe, &mix, request.shape, id)
+            })?)
         }
         RateFallback::Shared => None,
     };
@@ -332,6 +337,10 @@ fn negotiate(endpoint: &Endpoint, request: &ExclusiveRequest) -> Result<Session,
 /// `offered` answers for any layout rather than this source's, so the pick can be a rate the device
 /// takes only in a format this source can't use. Nothing opens there, and the device's own rate
 /// stands behind it, as it does for a driver that passes a rate and then won't initialise it.
+///
+/// It also answers for every layout the source's rate would be asked in, so a rate it lacks isn't
+/// asked again: each of those asks would be refused, one candidate at a time. [`wasapi_offered`]
+/// says what an answer gone stale costs.
 fn open_session(
     endpoint: &Endpoint,
     probe: &AudioClient,
@@ -340,21 +349,28 @@ fn open_session(
     offered: Option<RateSet>,
 ) -> Result<Session, ClaimError> {
     let ExclusiveRequest { shape, format: source, tuning, rate_fallback, .. } = *request;
+    let id = endpoint.device.id.as_str();
     let device_channels = mix.get_nchannels();
+    let own_rate = SampleRate::new(mix.get_samplespersec());
+    // Only where `refusal` asks at the device's own rate instead, so a device that won't be asked
+    // at all, busy or barred, still says so rather than reading as one refusing the format.
+    let source_rate_lacking = own_rate.is_some_and(|own| own != shape.rate)
+        && offered.is_some_and(|offered| offered.contains(shape.rate.get()) == Some(false));
     let at_source_rate = candidates(shape, source, device_channels);
-    if let Some(session) = open_first(endpoint, probe, at_source_rate, tuning)? {
+    if !source_rate_lacking
+        && let Some(session) = open_first(endpoint, probe, at_source_rate, tuning)?
+    {
         return Ok(session);
     }
-    let refused = refusal(probe, mix, shape, source);
+    let refused = refusal(probe, mix, shape, source, id);
     let converts = rate_fallback == RateFallback::Resample
         && matches!(refused, ClaimError::RateRefused { .. });
     if !converts {
         return Err(refused);
     }
     // A driver can pass a rate it then won't initialise. The mix rate is the one the audio engine
-    // already runs the device at, so it stands behind the pick.
-    let own_rate = SampleRate::new(mix.get_samplespersec());
-    // The source's rate is left out even where it was offered: it has just been refused.
+    // already runs the device at, so it stands behind the pick. The source's rate is left out even
+    // where it was offered: it has just been refused.
     let picked = offered.and_then(|offered| {
         let others: Vec<u32> = offered.rates().filter(|&rate| rate != shape.rate.get()).collect();
         rates::device_rate_for(shape.rate, &others)
@@ -390,95 +406,6 @@ fn open_first(
         }
     }
     Ok(None)
-}
-
-/// Every shape and format worth asking for, best first: the source's own channel count before a
-/// wider one, since the mixer lays a narrower source on the first channels at no cost, and each
-/// through the ladder's rungs WASAPI can declare.
-fn candidates(
-    shape: Shape,
-    source: SourceFormat,
-    device_channels: u16,
-) -> impl Iterator<Item = (Shape, DeviceFormat, WaveFormat)> {
-    let widest = device_channels.max(shape.channels.get());
-    (shape.channels.get()..=widest)
-        .filter_map(ChannelCount::new)
-        .map(move |channels| Shape { channels, ..shape })
-        .flat_map(move |shape| {
-            DeviceFormat::ladder(source).iter().filter_map(move |&format| {
-                wave_format(format, shape).map(|wave| (shape, format, wave))
-            })
-        })
-}
-
-/// `format` at `shape` as WASAPI declares it, or `None` for `S24Low`: WASAPI's 24-in-32 is
-/// MSB-aligned, which is `S24High`, and it has no way to declare the other.
-fn wave_format(format: DeviceFormat, shape: Shape) -> Option<WaveFormat> {
-    let (container, valid, sample_type) = match format {
-        DeviceFormat::S16 => (16, 16, SampleType::Int),
-        DeviceFormat::S24Packed => (24, 24, SampleType::Int),
-        DeviceFormat::S24Low => return None,
-        DeviceFormat::S24High => (32, 24, SampleType::Int),
-        DeviceFormat::S32 => (32, 32, SampleType::Int),
-        DeviceFormat::F32 => (32, 32, SampleType::Float),
-    };
-    let rate = shape.rate.get() as usize;
-    let channels = usize::from(shape.channels.get());
-    Some(WaveFormat::new(container, valid, &sample_type, rate, channels, None))
-}
-
-/// The spelling of `wave` the device takes for exclusive use, or `None` where it takes none.
-///
-/// Asked plainly first: the respellings behind it swallow every error, so a busy or barred device
-/// would read as one refusing the format.
-fn exclusive_spelling(
-    client: &AudioClient,
-    wave: &WaveFormat,
-    id: &str,
-) -> Result<Option<WaveFormat>, ClaimError> {
-    let Err(e) = client.is_supported(wave, &ShareMode::Exclusive) else {
-        return Ok(Some(wave.clone()));
-    };
-    if let Ok(refused) = device_refusal(e, id) {
-        return Err(refused);
-    }
-    Ok(respelled(client, wave))
-}
-
-/// Whether the device takes `wave` for exclusive use, as asked or respelled.
-fn takes_exclusive(client: &AudioClient, wave: &WaveFormat) -> bool {
-    client.is_supported(wave, &ShareMode::Exclusive).is_ok() || respelled(client, wave).is_some()
-}
-
-/// Another spelling of `wave` the device takes where it refused the one asked: the short header,
-/// then each channel mask the crate suggests. The crate's own quirk walk, less one rung.
-///
-/// **The short header is never offered for integer PCM wider than 16 bits.** Windows defines it
-/// for 8- and 16-bit PCM only, and a driver can take a wider one and misread it: the Realtek HD
-/// Audio driver refuses 24-bit packed in the extensible header, takes it in the short one, and
-/// drains it as 32-bit samples, so the track plays fast and garbled while every call succeeds.
-/// Refused here instead, the claim moves on to the 24-in-32 rung, which that driver plays right.
-fn respelled(client: &AudioClient, wave: &WaveFormat) -> Option<WaveFormat> {
-    let takes =
-        |spelling: &WaveFormat| client.is_supported(spelling, &ShareMode::Exclusive).is_ok();
-    if wave.get_nchannels() <= 2
-        && short_header_defined(wave)
-        && let Ok(short) = wave.to_waveformatex()
-        && takes(&short)
-    {
-        return Some(short);
-    }
-    make_channelmasks(usize::from(wave.get_nchannels())).into_iter().find_map(|mask| {
-        let mut masked = wave.clone();
-        masked.wave_fmt.dwChannelMask = mask;
-        takes(&masked).then_some(masked)
-    })
-}
-
-/// Whether the short `WAVEFORMATEX` header can state `wave`: IEEE float, or integer PCM of at most
-/// 16 bits.
-fn short_header_defined(wave: &WaveFormat) -> bool {
-    matches!(wave.get_subformat(), Ok(SampleType::Float)) || wave.get_bitspersample() <= 16
 }
 
 /// A fresh client initialised for exclusive use in `wave`, driven as `drive` asks at a period near
@@ -524,71 +451,6 @@ fn stream_mode(drive: Drive, period_hns: i64) -> StreamMode {
             buffer_duration_hns: period_hns.saturating_mul(POLLED_PERIODS),
         },
     }
-}
-
-/// Why no candidate took. WASAPI can't be asked about a rate, a channel count and a format
-/// separately, so a rung the device takes at its own rate is what says the rate was the problem.
-fn refusal(
-    client: &AudioClient,
-    mix: &WaveFormat,
-    shape: Shape,
-    source: SourceFormat,
-) -> ClaimError {
-    let own_rate = SampleRate::new(mix.get_samplespersec()).filter(|&rate| rate != shape.rate);
-    let takes_own_rate =
-        own_rate.is_some_and(|rate| takes_at(client, mix, Shape { rate, ..shape }, source));
-    if takes_own_rate {
-        ClaimError::RateRefused { rate: shape.rate.get() }
-    } else if shape.channels.get() > mix.get_nchannels() {
-        ClaimError::ChannelsRefused { channels: shape.channels.get() }
-    } else {
-        ClaimError::FormatRefused { format: source }
-    }
-}
-
-/// Whether the device takes `source` at `shape` in any layout a claim would ask for.
-fn takes_at(client: &AudioClient, mix: &WaveFormat, shape: Shape, source: SourceFormat) -> bool {
-    candidates(shape, source, mix.get_nchannels())
-        .any(|(_, _, wave)| takes_exclusive(client, &wave))
-}
-
-/// The source format whose ladder is every rung, a float source converting to all of them.
-const ANY_LAYOUT: SourceFormat = SourceFormat::F32;
-
-/// The ladder's rungs the device takes in any layout WASAPI can declare, at any channel count a
-/// claim for `shape` asks for.
-///
-/// Any layout rather than the source's own ladder, because the set answers for the tracks after
-/// this one, whatever their format. A set wider than a later track's own costs that track a reopen
-/// at most, where a narrower one could keep it converted that a fresh claim would play at its rate.
-fn offered_rates(client: &AudioClient, mix: &WaveFormat, shape: Shape) -> RateSet {
-    rates::LADDER
-        .into_iter()
-        .filter_map(SampleRate::new)
-        .filter(|&rate| takes_at(client, mix, Shape { rate, ..shape }, ANY_LAYOUT))
-        .map(SampleRate::get)
-        .collect()
-}
-
-fn hresult(e: &WasapiError) -> Option<i32> {
-    match e {
-        WasapiError::Windows(e) => Some(e.code().0),
-        _ => None,
-    }
-}
-
-/// `e` as a refusal of the whole device, or `e` back where it only refuses what was asked of it.
-fn device_refusal(e: WasapiError, id: &str) -> Result<ClaimError, WasapiError> {
-    Ok(match hresult(&e) {
-        Some(AUDCLNT_E_DEVICE_IN_USE) => ClaimError::Busy(e.into()),
-        Some(AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED) => ClaimError::NotAllowed(e.into()),
-        Some(AUDCLNT_E_DEVICE_INVALIDATED) => ClaimError::NotConnected { id: id.to_owned() },
-        _ => return Err(e),
-    })
-}
-
-fn claim_error(context: &'static str, id: &str, e: WasapiError) -> ClaimError {
-    device_refusal(e, id).unwrap_or_else(|e| ClaimError::io(context, e))
 }
 
 /// An initialised exclusive client and what it was opened with.

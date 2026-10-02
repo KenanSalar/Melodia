@@ -6,8 +6,9 @@ Status: **Phases 1 to 5 complete**, Windows ear checks included (tests held back
 5) · **Phase 6: Linux half closed with no code, Windows half built and run** · **Phase 7:
 dropped** · **Phase 8: all four built and run on Windows**, 8c's run having fixed event mode's
 recovery from a stall · **Phase 9: 9B chosen, WASAPI half built and measured, its probe's cost
-on a 7.1 output cut to one sweep per device and layout (built and run); ALSA half open
-(Linux)** · Created: 2026-09-30 · Revised: 2026-10-02
+on a 7.1 output cut to one sweep per device and layout (built and run), and a perf pass on the
+claim path built and not yet run; ALSA half open (Linux)** · Created: 2026-09-30 · Revised:
+2026-10-02
 
 > Facts below were checked on **2026-09-30** against `a0b9978b` on `feat/bit-perfect-output`,
 > and against the pinned `cpal 0.18.2` sources. Line counts are from `wc -l` on that commit.
@@ -79,10 +80,11 @@ Where each change lives, and how big each file is today. Production files stay u
 | `…/output/voice.rs` | 628 | 1 | The handover passes the converter's state on when the successor's shape matches |
 | `…/output/rates.rs` | new | 3, 9 | The standard rate ladder and `device_rate_for`, the one rate policy both backends read; 9B adds `RateSet` and `claim_rate` |
 | `…/output/alsa.rs` | 533 | 3, 4, 9 | Probes the ladder when the exact rate is refused; dithers ahead of `encode`; 9B keeps the offered set (open, Linux) |
-| `…/output/wasapi.rs` | 791 after 9B's cache | 3, 4, 6, 8c, 9 | Probes the ladder where `refusal` would say `RateRefused`; dithers ahead of `encode`; counts underruns and restarts an event-driven stream stuck after a stall; 9B probes the offered set before the first `Initialize`, once per device and layout, and picks a retry rate out of it; `SHARED_DEVICE` |
-| `…/output/wasapi_offered.rs` | 48, new | 9 | The offered sets remembered for the process's life, keyed by what each sweep asked with |
+| `…/output/wasapi.rs` | 653 after the split | 3, 4, 6, 8c, 9 | Dithers ahead of `encode`; counts underruns and restarts an event-driven stream stuck after a stall; 9B probes the offered set before the first `Initialize`, once per device and layout, and picks a retry rate out of it; `SHARED_DEVICE` |
+| `…/output/wasapi_formats.rs` | 194, new | 3, 9 | What an endpoint takes for exclusive use: the candidate layouts and their spellings, the ladder probe where `refusal` would say `RateRefused`, the offered-rate sweep, and the refusal classification |
+| `…/output/wasapi_offered.rs` | 59, new | 9 | The offered sets remembered for the process's life, keyed by what each sweep asked with; a failed sweep is not kept; what a stale answer costs |
 | `…/output/wasapi_clock.rs` | 89, new | 8c | The device's clock read against the performance counter (`stood_still`, `StallWatch`), and WASAPI's 100 ns units |
-| `…/output/mod.rs` | 781 after 9B's cache | 3, 6, 9 | `ExclusiveRequest` carries the rate policy; `OutputRequest::Shared` carries a device (Windows only), opened by `open_shared` |
+| `…/output/mod.rs` | 782 after the split | 3, 6, 9 | `ExclusiveRequest` carries the rate policy; `OutputRequest::Shared` carries a device (Windows only), opened by `open_shared` |
 | `…/output/claim.rs` | 144 after Phase 6 | 6, 9 | `claim_serves`, moved out of `mod.rs` to keep it under 800 lines, asks about the device's rate (9A) and the offered set (9B) |
 | `…/output/dither.rs` | new | 4 | Owns the dither: which formats and blocks take it, the noise, and the quantize every writer calls before its conversion |
 | `…/output/encode.rs` | 137 | 4 | Unchanged but for sharing `integer_bits` and `full_scale` with `dither` |
@@ -1296,9 +1298,10 @@ stream holds the endpoint never matters, and was not checked.
   the device's own) × each rung's respellings. A rate the device takes stops at the first layout
   it takes, which on the UMC22 is still S16 after four refused rungs, so the rates it lacks are most
   of the cost. Measured below at about 35 ms on the UMC22, a 2-channel device, where a missing
-  rate costs 17 calls: a short header for S16 and F32, and two channel masks for every rung. A 7.1
+  rate cost 17 calls: a short header for S16 and F32, and two channel masks for every rung. A 7.1
   endpoint playing stereo also asks 3 to 8 channels, where `make_channelmasks` offers three or
-  four masks a rung, so 162 calls per missing rate, about ten times as many.
+  four masks a rung, so 162 calls per missing rate, about ten times as many. Since the perf pass
+  below, the mask each plain ask already carried isn't asked again: 12 calls and 117.
 
 **What stays the same, under both**
 - The decks, the converter and the verdict.
@@ -1468,6 +1471,41 @@ refusal. The stand-in played shared on the UMC22 itself (Phase 6).
     Melodia's own exclusive stream holds the endpoint, which was never checked.
   - **Tests:** the remembered set answers a second key without probing; a key differing in the
     device's channel count probes again; the oldest of 17 is the one dropped.
+- **Windows: a perf pass on the claim path** (2026-10-02, static gates green, not yet run).
+  Before it, an 88.2 kHz reopen converted to 44.1 kHz took 128 ms on the ALC897 at 7.1, where a
+  same-rate reopen took 23.5 ms.
+  - **One mask was asked twice.** `WaveFormat::new` gives a format the crate's default mask, and
+    `make_channelmasks` lists that same mask at every channel count, twice at 6 and 8 channels,
+    where the 5.1 and 7.1 masks equal it. So `respelled` repeated the plain ask for every refused
+    candidate: 5 of the 17 calls per missing rate in stereo, 45 of 162 at 7.1. It skips that mask
+    now, every copy of it, which trims the sweep and every refused walk alike.
+  - **The sweep ends at a device refusal, and only a finished sweep is remembered.** It used to
+    swallow every error, so a device taken or unplugged part way ran on through the rest of the
+    sweep, and the set it answered stood for the session short of rates the device has.
+    `takes_at` and `offered_rates` now ask through `exclusive_spelling`, so a busy, barred or
+    vanished device ends the claim with that refusal, and the next claim sweeps again.
+    `refusal` answers with it too, where it used to read as a refused rate, channel count or
+    format. The busy check ahead of the sweep runs only where the cache misses. On a hit the same
+    classified ask comes first anyway: the claim's own at the source's rate, or, where that is
+    skipped (below), `refusal`'s at the device's own.
+  - **A source rate the offered set lacks isn't asked again.** The set covers every layout and
+    channel count that walk asks, under the same key, so `open_session` goes straight to
+    `refusal` and the pick. This is safe only because of the change above: a set cut short by a
+    failure would otherwise keep the device off its own rates for the session. It is skipped only
+    where the device's own rate differs from the source's, since `refusal` asks nothing at all
+    otherwise, and a busy device would read as one refusing the format.
+  - **What a stale answer costs**, now argued in `wasapi_offered`'s module doc. Before the skip, a
+    remembered set gone stale could only mispredict a seam or a retry pick. Now a rate the device
+    gained mid-session without its layout changing, through a driver setting say, plays converted
+    until Melodia restarts.
+  - **Split on the way.** The format probing (`candidates`, the spellings, `refusal`, the sweep
+    and the refusal classification) moved to `output/wasapi_formats.rs`, which brings `wasapi.rs`
+    back under 800 lines. `wasapi_tests` imports those items from there.
+  - **To run:** the UMC22 and the ALC897 at 7.1 as above, with Resample. The offered sets must
+    log as before, `[32000, 44100, 48000]` on the UMC22. Note the first claim's sweep time, and
+    the 88.2 kHz reopen against its 128 ms.
+  - **Tests:** a failed sweep is not remembered; `open_session` makes no ask at a rate the offered
+    set lacks.
 - **Tests:**
   - `claim_serves` rows for both rules, including an off-ladder rate falling back to 9A's;
   - `claim_rate`'s table;

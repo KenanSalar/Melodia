@@ -11,13 +11,13 @@ use windows_sys::Win32::Media::Audio::{
     AUDCLNT_E_UNSUPPORTED_FORMAT,
 };
 
-use super::{
-    candidates, claim_error, device_refusal, from_hns, hns, short_header_defined, stream_mode,
-    wave_format,
-};
+use super::{from_hns, hns, stream_mode};
 use crate::player::playback::output::Drive;
 use crate::player::playback::output::claim::{ClaimError, FallbackReason};
 use crate::player::playback::output::encode::DeviceFormat;
+use crate::player::playback::output::wasapi_formats::{
+    candidates, claim_error, device_refusal, short_header_defined, wave_format,
+};
 use crate::player::playback::tests::helpers::shape;
 use melodia_audio::player::source::audio::SourceFormat;
 

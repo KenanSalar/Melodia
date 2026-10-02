@@ -5,6 +5,11 @@
 //! surround that is several times the stereo sweep, long enough to hear as a stall before every
 //! claim. An endpoint's rates don't move while it stays in the same layout, so the first claim asks
 //! and the rest read the answer.
+//!
+//! **Where they do move anyway, the answer stays stale until Melodia restarts.** A driver setting
+//! changed mid-session can do it without touching the layout. A rate the device gained is then
+//! never asked for and plays converted; a rate it lost is asked for and refused before the claim
+//! moves on to another.
 
 use std::time::Instant;
 
@@ -29,20 +34,26 @@ static REMEMBERED: Mutex<Vec<(ProbeKey, RateSet)>> = Mutex::new(Vec::new());
 
 /// The rates `key`'s sweep found, running `probe` for them the first time they are asked for.
 ///
+/// A sweep that fails is not kept: one cut short by the device being taken or unplugged would
+/// otherwise stand for the rest of the session, short of rates the device has.
+///
 /// The lock isn't held across `probe`: claims come one at a time, through the output's own lock,
 /// and a sweep can take the better part of a second.
-pub(super) fn remembered(key: ProbeKey, probe: impl FnOnce() -> RateSet) -> RateSet {
+pub(super) fn remembered<E>(
+    key: ProbeKey,
+    probe: impl FnOnce() -> Result<RateSet, E>,
+) -> Result<RateSet, E> {
     let known = REMEMBERED.lock().iter().find(|(asked, _)| *asked == key).map(|&(_, offered)| offered);
     if let Some(offered) = known {
-        return offered;
+        return Ok(offered);
     }
     let started = Instant::now();
-    let offered = probe();
+    let offered = probe()?;
     log::debug!("audio: asked {} for its rates in {:?}: {offered:?}", key.device, started.elapsed());
     let mut remembered = REMEMBERED.lock();
     if remembered.len() == CAPACITY {
         remembered.remove(0);
     }
     remembered.push((key, offered));
-    offered
+    Ok(offered)
 }
