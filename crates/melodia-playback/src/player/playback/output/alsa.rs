@@ -51,6 +51,9 @@ pub(super) const HARDWARE_VOLUME: bool = true;
 /// A card lacking the source's rate is asked which of the others it runs.
 pub(super) const RATE_FALLBACK: bool = true;
 
+/// A card's `hw:` name would take a shared stream past the sound server, which routes it already.
+pub(super) const SHARED_DEVICE: bool = false;
+
 /// Periods the card's buffer holds, which is how long the writer may be late before an underrun.
 const PERIODS_PER_BUFFER: u32 = 4;
 

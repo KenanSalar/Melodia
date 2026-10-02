@@ -105,17 +105,25 @@ export global Settings {
     in-out property <bool> crossfade-fade-on-pause: false;
     callback crossfade-fade-on-pause-changed(bool);
 
-    // Applied to the engine synchronously, acted on at the next track. Crossfade is off while
-    // this is on, since a fade can't cross the reopen a rate change needs. The row is hidden
-    // where following the rate changes nothing, which Rust decides per platform.
+    // Applied to the engine synchronously, acted on at the next track. A rate change then plays
+    // without a crossfade, since a fade can't cross the reopen it needs. The row is hidden where
+    // following the rate changes nothing, which Rust decides per platform.
     in-out property <bool> output-follow-rate: false;
     callback output-follow-rate-changed(bool);
     in property <bool> follow-rate-supported;
 
-    // Shared (0) or exclusive (1), and which card an exclusive claim takes. Rust lists the cards,
-    // whose names are data, and applies a pick off the UI thread, since claiming a card blocks.
-    // The rows are hidden where the platform has no exclusive backend.
+    // Shared (0) or exclusive (1), and which card an exclusive claim takes, and shared output too
+    // where `shared-device-supported`. Rust lists the cards, whose names are data, and applies a
+    // pick off the UI thread, since claiming a card blocks. The rows are hidden where the platform
+    // has no exclusive backend.
     in property <bool> exclusive-supported;
+    in property <bool> shared-device-supported;
+    // The picker's first row where it chooses for shared output too, standing for no saved card.
+    // Translated here because the rest of the list is Rust's.
+    pure callback output-device-system-default() -> string;
+    output-device-system-default => {
+        return @tr("System Default");
+    }
     in-out property <int> output-mode-idx: 0;
     out property <bool> exclusive-chosen: root.exclusive-supported && root.output-mode-idx == 1;
     // The engine's own answer: exclusive output always follows the file's rate, and the toggle

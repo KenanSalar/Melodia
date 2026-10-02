@@ -1,8 +1,8 @@
 //! The Output card's settings: following the file's rate and the silence a rate change writes
-//! first, then the exclusive pickers (shared or exclusive, which card a claim takes, what it does
-//! about a rate the card lacks, how its writer paces the card, and whether the card's own control
-//! carries the volume), and whether a long pause gives the card back. The card's live readout is
-//! [`super::signal_path`]'s.
+//! first, then the exclusive pickers (shared or exclusive, which card a claim takes, and shared
+//! output too where the platform can aim it, what a claim does about a rate the card lacks, how its
+//! writer paces the card, and whether the card's own control carries the volume), and whether a
+//! long pause gives the card back. The card's live readout is [`super::signal_path`]'s.
 //!
 //! **A pick is applied on the blocking pool, never here**: claiming a card or handing it back
 //! opens a device. Every picker changes the one choice, so each writes a synchronous shadow and
@@ -41,6 +41,9 @@ const PERIOD_PRESETS: [Duration; 5] = [
 struct Picked {
     choice: OutputChoice,
     devices: Vec<OutputDevice>,
+    /// The row ahead of the cards that stands for no saved card, as it reads on screen, where the
+    /// picker chooses for shared output too.
+    default_label: Option<SharedString>,
     /// The newest listing asked for, and the newest applied, as `Settings.output-devices-revision`.
     listing_asked: i32,
     listing_applied: i32,
@@ -55,6 +58,7 @@ pub fn install(ui: &AppWindow, state: &AppState) {
     g.set_polling_supported(library::playback::POLLING_SUPPORTED);
     g.set_hardware_volume_supported(library::playback::HARDWARE_VOLUME_SUPPORTED);
     g.set_rate_fallback_supported(library::playback::RATE_FALLBACK_SUPPORTED);
+    g.set_shared_device_supported(library::playback::SHARED_DEVICE_SUPPORTED);
 
     let flags = read_or_default(state, "output").output;
     install_rate_rows(ui, state, &flags);
@@ -114,6 +118,7 @@ fn install_pickers(ui: &AppWindow, state: &AppState, choice: OutputChoice) {
     let shadow: Shadow = Arc::new(Mutex::new(Picked {
         choice,
         devices: Vec::new(),
+        default_label: None,
         listing_asked: 0,
         listing_applied: 0,
     }));
@@ -210,8 +215,12 @@ fn list_devices(weak: Weak<AppWindow>, state: &AppState, shadow: &Shadow) -> i32
 
 /// Fill the picker from the listing asked for at `revision`, unless a newer one is on screen.
 fn apply_listing(ui: &AppWindow, shadow: &Shadow, devices: Vec<OutputDevice>, revision: i32) {
-    let Some(listing) = shadow.lock().take_listing(devices, revision) else { return };
     let g = ui.global::<Settings>();
+    let default_label =
+        library::playback::SHARED_DEVICE_SUPPORTED.then(|| g.invoke_output_device_system_default());
+    let Some(listing) = shadow.lock().take_listing(devices, default_label, revision) else {
+        return;
+    };
     if let Some(names) = listing.names {
         g.set_output_device_names(ModelRc::from(Rc::new(VecModel::from(names))));
     }
@@ -234,10 +243,19 @@ impl Picked {
         self.choice.mode = mode_from_index(idx);
     }
 
-    /// The card at `idx` in the listing on screen, which is the one the user clicked.
+    /// The card at `idx` in the listing on screen, which is the one the user clicked, or none for
+    /// the system default's row.
     fn pick_device(&mut self, idx: i32) {
-        let chosen = usize::try_from(idx).ok().and_then(|i| self.devices.get(i));
+        let chosen = usize::try_from(idx)
+            .ok()
+            .and_then(|row| row.checked_sub(self.lead_rows()))
+            .and_then(|i| self.devices.get(i));
         self.choice.device = chosen.map(|device| device.id.clone());
+    }
+
+    /// How many rows the picker shows ahead of the cards.
+    fn lead_rows(&self) -> usize {
+        usize::from(self.default_label.is_some())
     }
 
     fn pick_rate_fallback(&mut self, idx: i32) {
@@ -258,26 +276,38 @@ impl Picked {
         self.choice.hardware_volume = on;
     }
 
-    /// Take the listing asked for at `revision`, answering what the picker shows for it, or `None`
-    /// where a newer one is on screen already. A saved card that isn't connected selects nothing,
-    /// and the picker says so in place of a name.
+    /// Take the listing asked for at `revision`, led by `default_label` where there is one,
+    /// answering what the picker shows for it, or `None` where a newer one is on screen already. A
+    /// saved card that isn't connected selects nothing, and the picker says so in place of a name.
     ///
-    /// **The options are replaced only when the cards changed, and never by an older listing.**
-    /// The picker lists on a timer while it is on screen, and an open popup keeps the size it was
-    /// shown at, so options replaced under it paint into a box measured for others.
-    fn take_listing(&mut self, devices: Vec<OutputDevice>, revision: i32) -> Option<Listing> {
+    /// **The options are replaced only when the cards or the lead row changed, and never by an
+    /// older listing.** The picker lists on a timer while it is on screen, and an open popup keeps
+    /// the size it was shown at, so options replaced under it paint into a box measured for others.
+    fn take_listing(
+        &mut self,
+        devices: Vec<OutputDevice>,
+        default_label: Option<SharedString>,
+        revision: i32,
+    ) -> Option<Listing> {
         if revision < self.listing_applied {
             return None;
         }
         self.listing_applied = revision;
-        let names = (self.devices != devices).then(|| {
-            devices.iter().map(|device| SharedString::from(device.name.as_str())).collect()
+        let names = (self.devices != devices || self.default_label != default_label).then(|| {
+            let cards = devices.iter().map(|device| SharedString::from(device.name.as_str()));
+            default_label.iter().cloned().chain(cards).collect()
         });
         self.devices = devices;
+        self.default_label = default_label;
         let selected = match &self.choice.device {
-            Some(id) => self.devices.iter().position(|device| &device.id == id),
-            // No saved card means the first one listed, which is what the claim takes.
-            None => (!self.devices.is_empty()).then_some(0),
+            Some(id) => self
+                .devices
+                .iter()
+                .position(|device| &device.id == id)
+                .map(|i| i + self.lead_rows()),
+            // No saved card means the system default's row where there is one, or else the first
+            // card listed, which is what the claim takes.
+            None => (self.lead_rows() > 0 || !self.devices.is_empty()).then_some(0),
         };
         Some(Listing {
             names,

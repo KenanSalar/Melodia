@@ -517,7 +517,11 @@ pub const HARDWARE_VOLUME_SUPPORTED: bool = output::HARDWARE_VOLUME_SUPPORTED;
 /// has, here.
 pub const RATE_FALLBACK_SUPPORTED: bool = output::RATE_FALLBACK_SUPPORTED;
 
-/// The devices an exclusive claim can be aimed at. Blocking: it asks every device.
+/// Whether the device picker chooses where shared output plays too, rather than exclusive alone.
+pub const SHARED_DEVICE_SUPPORTED: bool = output::SHARED_DEVICE_SUPPORTED;
+
+/// The devices an exclusive claim can be aimed at, and where [`SHARED_DEVICE_SUPPORTED`] a shared
+/// stream too. Blocking: it asks every device.
 pub fn output_devices() -> Vec<OutputDevice> {
     output::devices()
 }

@@ -120,11 +120,12 @@ impl Default for CrossfadeFlags {
 /// How the output device is opened.
 ///
 /// `output_follow_rate` reopens the output at each track's own sample rate so the system mixer
-/// has no reason to resample it. Off by default: it costs a short silence at every rate
-/// boundary, and crossfade with it.
+/// has no reason to resample it. Off by default: it costs a short silence, and the crossfade, at
+/// every rate boundary.
 ///
 /// `output_mode` takes the card from every other application, so it ships shared.
-/// `output_device` is the card's stable id, or `None` for the first one the system lists.
+/// `output_device` is the card's stable id, or `None` for the first one the system lists. Where
+/// the ids name a shared target too (Windows), both modes play through it.
 ///
 /// `output_period_ms` and `output_polling` pace an exclusive claim's writer, and
 /// `output_resync_ms` is the silence written after a reopen onto a new rate. Each is held to its

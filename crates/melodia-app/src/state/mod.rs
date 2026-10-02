@@ -30,7 +30,7 @@ use melodia_integrations::services::integrations::scrobble::ScrobbleService;
 use melodia_net::services::net::pacer::RequestPacer;
 use melodia_platform::services::platform::always_on_top::{self, AlwaysOnTopCapability};
 use melodia_playback::player::playback::decks::DECK_COUNT;
-use melodia_playback::player::playback::output::{AudioOutput, OutputMode};
+use melodia_playback::player::playback::output::{self, AudioOutput, OutputMode};
 use melodia_playback::player::playback::stream_health::AudioStreamHealth;
 use melodia_store::database::{self, DbPool};
 use melodia_store::media::ingest::watcher::{FileEvent, FolderWatcher};
@@ -353,13 +353,19 @@ impl AppState {
 }
 
 /// Open the output the saved choice will play through. Parked under exclusive output, which claims
-/// the card at the first play: opening the default device shared would only close it again.
+/// the card at the first play, and for a chosen shared device, which [`hydrate_audio_dsp`] opens:
+/// opening the default device shared would only close it again.
 fn open_output(
     settings: &settings::SettingsData,
     health: Arc<AudioStreamHealth>,
 ) -> AppResult<AudioOutput> {
-    if settings.output.output_choice().mode == OutputMode::Exclusive {
+    let choice = settings.output.output_choice();
+    if choice.mode == OutputMode::Exclusive {
         log::info!("Audio output: parked until the first play claims the device");
+        return AudioOutput::open_parked(DECK_COUNT, health);
+    }
+    if output::SHARED_DEVICE_SUPPORTED && choice.device.is_some() {
+        log::info!("Audio output: parked until the chosen device opens");
         return AudioOutput::open_parked(DECK_COUNT, health);
     }
     let output = AudioOutput::open(DECK_COUNT, health)?;
@@ -402,7 +408,7 @@ fn hydrate_audio_dsp(engine: &PlaybackEngine, settings: &settings::SettingsData)
     engine.set_release_when_paused(settings.output.output_paused_device.releases());
     engine.set_resync_hold(settings.output.resync_hold());
     // Nothing is loaded yet, so an exclusive choice leaves the output parked as `open_output` left
-    // it, and claims the card at the first play.
+    // it, and claims the card at the first play. A shared one opens its chosen device here.
     engine.set_output_choice(settings.output.output_choice());
 
     // The visualizer is deliberately absent: its tap is armed by the

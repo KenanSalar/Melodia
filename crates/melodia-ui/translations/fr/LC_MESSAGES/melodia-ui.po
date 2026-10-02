@@ -2417,6 +2417,15 @@ msgstr "Périphérique exclusif"
 msgid "The sound card exclusive output takes"
 msgstr "La carte son qu'occupe la sortie exclusive"
 
+msgid "Output Device"
+msgstr "Périphérique de sortie"
+
+msgid "The sound card Melodia plays through"
+msgstr "La carte son par laquelle Melodia joue"
+
+msgid "System Default"
+msgstr "Par défaut du système"
+
 msgid "Fallback: exclusive output was refused, so the system mixer is in the way"
 msgstr "Repli : la sortie exclusive a été refusée, le mixeur du système reste donc sur le chemin"
 

@@ -74,8 +74,11 @@ export component OutputSection inherits Rectangle {
     property <string> mode-label: @tr("Output Mode");
     property <string> mode-desc: @tr("Exclusive gives Melodia the audio device alone: other apps can't play through it while Melodia plays, and the system mixer can't change the sound");
 
-    property <string> device-label: @tr("Exclusive Device");
-    property <string> device-desc: @tr("The sound card exclusive output takes");
+    property <string> device-label: Settings.shared-device-supported ? @tr("Output Device")
+        : @tr("Exclusive Device");
+    property <string> device-desc: Settings.shared-device-supported
+        ? @tr("The sound card Melodia plays through")
+        : @tr("The sound card exclusive output takes");
 
     property <string> rate-fallback-label: @tr("Unsupported Sample Rates");
     property <string> rate-fallback-desc: @tr("What exclusive output does when the device can't run a track's sample rate: hand the device back and play that track through the system mixer, or keep the device and convert the track to a rate it can run");
@@ -102,7 +105,8 @@ export component OutputSection inherits Rectangle {
     property <string> signal-desc: @tr("What reaches the audio device, and what changes it on the way. Bit-perfect means nothing does");
 
     property <bool> show-mode: Settings.exclusive-supported && row-visible(mode-label, mode-desc);
-    property <bool> show-device: Settings.exclusive-chosen && row-visible(device-label, device-desc);
+    property <bool> show-device: (Settings.exclusive-chosen || Settings.shared-device-supported)
+        && row-visible(device-label, device-desc);
     property <bool> show-rate-fallback: Settings.exclusive-chosen && Settings.rate-fallback-supported
         && row-visible(rate-fallback-label, rate-fallback-desc);
     property <bool> show-period: Settings.exclusive-chosen && row-visible(period-label, period-desc);
@@ -199,7 +203,8 @@ export component OutputSection inherits Rectangle {
                 selected-index <=> Settings.output-device-idx;
                 placeholder: Settings.output-device-missing ? @tr("Not connected") : "";
                 trigger-width: 200px;
-                // The row mounts on arriving at the page and on choosing exclusive output.
+                // The row mounts on arriving at the page, and on choosing exclusive output where it
+                // picks for exclusive alone.
                 init => { Settings.list-output-devices(); }
                 about-to-open => { Settings.list-output-devices() }
                 selected(idx) => { Settings.output-device-changed(idx); }

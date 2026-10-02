@@ -31,6 +31,7 @@ fn picked(saved: Option<&str>) -> Picked {
     Picked {
         choice: OutputChoice { device: saved.map(|name| card(name).id), ..OutputChoice::default() },
         devices: Vec::new(),
+        default_label: None,
         listing_asked: 0,
         listing_applied: 0,
     }
@@ -59,9 +60,9 @@ fn chip_options(src: &str, index_property: &str) -> Vec<String> {
 #[test]
 fn a_listing_older_than_the_one_on_screen_leaves_the_picker_alone() {
     let mut picked = picked(None);
-    picked.take_listing(cards(&["Newer"]), 2);
+    picked.take_listing(cards(&["Newer"]), None, 2);
 
-    let late = picked.take_listing(cards(&["Older"]), 1);
+    let late = picked.take_listing(cards(&["Older"]), None, 1);
 
     assert!(late.is_none(), "an older listing reached the picker");
 }
@@ -71,8 +72,8 @@ fn a_listing_older_than_the_one_on_screen_leaves_the_picker_alone() {
 #[test]
 fn a_device_pick_resolves_against_the_listing_on_screen() {
     let mut picked = picked(None);
-    picked.take_listing(cards(&["USB DAC", "HDA Intel"]), 2);
-    picked.take_listing(cards(&["HDA Intel", "USB DAC"]), 1);
+    picked.take_listing(cards(&["USB DAC", "HDA Intel"]), None, 2);
+    picked.take_listing(cards(&["HDA Intel", "USB DAC"]), None, 1);
 
     picked.pick_device(0);
 
@@ -85,10 +86,12 @@ fn a_device_pick_resolves_against_the_listing_on_screen() {
 fn the_options_are_rebuilt_only_when_the_cards_change() {
     let mut picked = picked(None);
 
-    let first = picked.take_listing(cards(&["HDA Intel"]), 1).and_then(|shown| shown.names);
-    let unchanged = picked.take_listing(cards(&["HDA Intel"]), 2).and_then(|shown| shown.names);
-    let plugged_in =
-        picked.take_listing(cards(&["HDA Intel", "USB DAC"]), 3).and_then(|shown| shown.names);
+    let first = picked.take_listing(cards(&["HDA Intel"]), None, 1).and_then(|shown| shown.names);
+    let unchanged =
+        picked.take_listing(cards(&["HDA Intel"]), None, 2).and_then(|shown| shown.names);
+    let plugged_in = picked
+        .take_listing(cards(&["HDA Intel", "USB DAC"]), None, 3)
+        .and_then(|shown| shown.names);
 
     assert_eq!(first, Some(options_named(&["HDA Intel"])), "the first listing");
     assert_eq!(unchanged, None, "the same cards rebuilt the options");
@@ -115,7 +118,7 @@ fn the_picker_lights_the_card_a_claim_would_take() {
     for (what, saved, listed, expected) in rows {
         let mut picked = picked(saved);
 
-        let shown = picked.take_listing(listed, 1);
+        let shown = picked.take_listing(listed, None, 1);
 
         let lit = shown.map(|shown| (shown.selected, shown.missing));
         assert_eq!(lit, Some(expected), "{what}: (row lit, not connected)");

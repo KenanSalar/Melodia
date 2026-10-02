@@ -64,8 +64,8 @@ impl DeviceStream {
 
 /// The device an open is aimed at, and the config it names as its own.
 ///
-/// Resolved afresh for every open rather than kept, so a reopen after the device went away lands
-/// on whatever the system calls its default *now*.
+/// Resolved afresh for every open rather than kept, so a reopen after the device went away asks
+/// the system again: for the device named, or for whatever it calls its default *now*.
 pub struct Target {
     device: cpal::Device,
     default: cpal::SupportedStreamConfig,
@@ -104,11 +104,25 @@ pub fn default_target(host: &cpal::Host) -> Result<Target, AppError> {
     let device = host
         .default_output_device()
         .ok_or_else(|| AppError::Player("No audio output device".to_owned()))?;
+    target_of(device)
+}
 
+/// The device `host` lists under `id`, or `None` where no active device has that id.
+///
+/// A device that is there but can't name its config is an error rather than `None`: a caller
+/// waiting for a missing device to come back would otherwise find it listed and reopen it forever.
+///
+/// # Errors
+///
+/// [`AppError::Player`] when the device cannot name its own default config.
+pub fn named_target(host: &cpal::Host, id: &str) -> Result<Option<Target>, AppError> {
+    host.device_by_id(&cpal::DeviceId::new(host.id(), id)).map(target_of).transpose()
+}
+
+fn target_of(device: cpal::Device) -> Result<Target, AppError> {
     let default = device
         .default_output_config()
         .map_err(|e| AppError::Player(format!("Failed to read the output device's config: {e}")))?;
-
     Ok(Target { device, default })
 }
 

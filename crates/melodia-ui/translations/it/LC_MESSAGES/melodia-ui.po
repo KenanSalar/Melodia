@@ -2416,6 +2416,15 @@ msgstr "Dispositivo esclusivo"
 msgid "The sound card exclusive output takes"
 msgstr "La scheda audio occupata dall'uscita esclusiva"
 
+msgid "Output Device"
+msgstr "Dispositivo di uscita"
+
+msgid "The sound card Melodia plays through"
+msgstr "La scheda audio da cui suona Melodia"
+
+msgid "System Default"
+msgstr "Predefinito di sistema"
+
 msgid "Fallback: exclusive output was refused, so the system mixer is in the way"
 msgstr "Ripiego: l'uscita esclusiva è stata rifiutata, quindi il mixer di sistema resta in mezzo"
 

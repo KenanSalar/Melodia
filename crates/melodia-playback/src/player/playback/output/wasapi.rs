@@ -46,6 +46,7 @@ use super::dither::Dither;
 use super::encode::{self, DeviceFormat};
 use super::endpoint_volume::{self, EndpointVolume};
 use super::rates::RateSet;
+use super::wasapi_clock::{ClockReading, clock_duration, from_hns, hns, stood_still};
 use super::{
     Drive, ExclusiveRequest, ExclusiveTuning, Negotiated, OutputDevice, OutputFormat, RateFallback,
     hardware_volume, mmcss, rates,
@@ -58,6 +59,9 @@ pub(super) const POLLING: bool = true;
 pub(super) const HARDWARE_VOLUME: bool = true;
 
 pub(super) const RATE_FALLBACK: bool = true;
+
+/// An endpoint's id is the one cpal opens it by, so the picker's list serves shared output too.
+pub(super) const SHARED_DEVICE: bool = true;
 
 /// Intel HD Audio controllers take buffers only in multiples of this many bytes, and in exclusive
 /// mode the buffer is the controller's own.
@@ -681,6 +685,7 @@ impl Session {
         let mut bytes = Vec::with_capacity(block.len() * self.format.bytes_per_sample());
         // The priming silence `start` wrote is on the device's clock too.
         let mut written = self.buffer_frames as u64;
+        let mut last_reading: Option<ClockReading> = None;
         while !stop.load(Ordering::Relaxed) {
             let Some(frames) = self.wait_for_room()? else { continue };
             let pulled = &mut block[..frames * channels];
@@ -694,19 +699,43 @@ impl Session {
             }
             // A clock that won't answer leaves the last reading standing: it is the ear's
             // position that suffers, not the audio, so it doesn't end the stream.
-            if let Ok((played, _)) = self.clock.get_position() {
+            if let Ok((played, at)) = self.clock.get_position() {
+                let reading = ClockReading { played, at };
+                let stalled =
+                    last_reading.is_some_and(|last| stood_still(last, reading, self.clock_hz));
+                last_reading = Some(reading);
                 feed.report_lead(self.unplayed(written, played));
+                if stalled {
+                    feed.health.record_xrun();
+                }
+                // A polled stream tops up whatever room it finds, so it recovers by itself.
+                if stalled && matches!(self.pacing, Pacing::Events(_)) {
+                    self.restart()?;
+                    written = self.buffer_frames as u64;
+                    last_reading = None;
+                }
             }
         }
         Ok(())
     }
 
+    /// Stop the device, drop what it holds and start it again from silence.
+    ///
+    /// An event-driven stream needs this after a stall. Its event resets itself, so the signals
+    /// that landed while the writer was stalled come back as one wake, and the half of the buffer
+    /// they stood for is never refilled. Left running, the device runs dry every period, which
+    /// sounds as a buzz until the stream is reopened. The reset also sets its clock back to zero.
+    fn restart(&self) -> Result<(), WasapiError> {
+        self.client.stop_stream()?;
+        self.client.reset_stream()?;
+        self.start()
+    }
+
     /// How long the `written` frames outlast the `played` clock ticks. The device's own latency
     /// past its clock is not in it: the crate doesn't expose `GetStreamLatency`.
     fn unplayed(&self, written: u64, played: u64) -> Duration {
-        let played_nanos = u128::from(played) * 1_000_000_000 / u128::from(self.clock_hz);
-        let played = Duration::from_nanos(u64::try_from(played_nanos).unwrap_or(u64::MAX));
-        frames_to_duration(written, self.shape.rate).saturating_sub(played)
+        frames_to_duration(written, self.shape.rate)
+            .saturating_sub(clock_duration(played, self.clock_hz))
     }
 
     /// Frames the device has room for once the writer wakes, or `None` where it woke to none.
@@ -761,16 +790,6 @@ impl Drop for ComApartment {
             wasapi::deinitialize();
         }
     }
-}
-
-/// `duration` in the 100 ns units WASAPI counts periods in.
-fn hns(duration: Duration) -> i64 {
-    i64::try_from(duration.as_nanos() / 100).unwrap_or(i64::MAX)
-}
-
-/// [`hns`]'s way back.
-fn from_hns(hns: i64) -> Duration {
-    Duration::from_nanos(u64::try_from(hns).unwrap_or(0).saturating_mul(100))
 }
 
 #[cfg(test)]

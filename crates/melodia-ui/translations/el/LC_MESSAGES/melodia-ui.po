@@ -2421,6 +2421,15 @@ msgstr "Αποκλειστική συσκευή"
 msgid "The sound card exclusive output takes"
 msgstr "Η κάρτα ήχου που καταλαμβάνει η αποκλειστική έξοδος"
 
+msgid "Output Device"
+msgstr "Συσκευή εξόδου"
+
+msgid "The sound card Melodia plays through"
+msgstr "Η κάρτα ήχου από την οποία παίζει το Melodia"
+
+msgid "System Default"
+msgstr "Προεπιλογή συστήματος"
+
 msgid "Fallback: exclusive output was refused, so the system mixer is in the way"
 msgstr "Εναλλακτική: η αποκλειστική έξοδος απορρίφθηκε, οπότε ο μίκτης του συστήματος παρεμβάλλεται"
 

@@ -13,6 +13,8 @@ pub(super) const HARDWARE_VOLUME: bool = false;
 
 pub(super) const RATE_FALLBACK: bool = false;
 
+pub(super) const SHARED_DEVICE: bool = false;
+
 pub(super) enum Claim {}
 
 pub(super) enum ExclusiveStream {}

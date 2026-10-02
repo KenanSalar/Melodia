@@ -2425,6 +2425,15 @@ msgstr "Özel Aygıt"
 msgid "The sound card exclusive output takes"
 msgstr "Özel çıkışın kullandığı ses kartı"
 
+msgid "Output Device"
+msgstr "Çıkış Aygıtı"
+
+msgid "The sound card Melodia plays through"
+msgstr "Melodia'nın çaldığı ses kartı"
+
+msgid "System Default"
+msgstr "Sistem Varsayılanı"
+
 msgid "Fallback: exclusive output was refused, so the system mixer is in the way"
 msgstr "Yedek: özel çıkış reddedildi, bu yüzden sistem mikseri araya giriyor"
 

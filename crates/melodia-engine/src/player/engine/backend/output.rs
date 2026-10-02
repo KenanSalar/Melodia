@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, MutexGuard};
 use std::time::Duration;
 
-use melodia_audio::player::source::audio::{AudioSource, Shape, SourceFormat};
+use melodia_audio::player::source::audio::{AudioSource, SampleRate, Shape, SourceFormat};
 use melodia_audio::player::source::file_decode::FileDecoder;
 use melodia_core::error::{AppError, describe};
 use melodia_playback::player::playback::decks::Decks;
@@ -35,12 +35,23 @@ use crate::player::engine::signal_path::{self, SignalInputs, SignalPath, Transpo
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct OutputChoice {
     pub mode: OutputMode,
-    /// The card an exclusive claim is aimed at, or `None` for the first the system lists.
+    /// The card an exclusive claim is aimed at, and where [`output::SHARED_DEVICE_SUPPORTED`] the
+    /// one shared output plays through too. `None` for the first the system lists, which a shared
+    /// stream reads as following the system default.
     pub device: Option<String>,
     pub tuning: ExclusiveTuning,
     /// Carry the volume on the device's own control where an exclusive claim can.
     pub hardware_volume: bool,
     pub rate_fallback: RateFallback,
+}
+
+impl OutputChoice {
+    /// A shared stream at `rate` on the chosen device, which a backend whose ids can't name a
+    /// shared target never gets: a Linux card's would go round the sound server.
+    fn shared_request(&self, rate: Option<SampleRate>) -> OutputRequest {
+        let device = self.device.clone().filter(|_| output::SHARED_DEVICE_SUPPORTED);
+        OutputRequest::Shared { rate, device }
+    }
 }
 
 /// What opening a file for a track-boundary decision found.
@@ -189,8 +200,9 @@ impl PlaybackEngine {
             && !self.output_parked()
     }
 
-    /// Whether the output stands in for a claim whose device wasn't connected, which is the only
-    /// case [`Self::disconnected_device_returned`] has anything to look for. Lock-free.
+    /// Whether the output stands in for a chosen device that wasn't connected, as a claim's
+    /// fallback or a shared stream on the default, which is the only case
+    /// [`Self::disconnected_device_returned`] has anything to look for. Lock-free.
     pub fn awaiting_disconnected_device(&self) -> bool {
         self.output.status.awaiting_device()
     }
@@ -206,10 +218,10 @@ impl PlaybackEngine {
         self.output.device.lock().as_ref().and_then(AudioOutput::negotiated)
     }
 
-    /// Whether a claim that fell back because its device wasn't connected can find it listed
-    /// again, so it is worth reclaiming now. A track start asks again only where it reopens for
+    /// Whether an output standing in for a chosen device that wasn't connected can find it listed
+    /// again, so it is worth reopening now. A track start asks again only where it reopens for
     /// another format anyway, which a gapless album never does. Lists the devices only while such
-    /// a fallback stands. Blocking.
+    /// a stand-in lasts. Blocking.
     pub fn disconnected_device_returned(&self) -> bool {
         if !self.awaiting_disconnected_device() {
             return false;
@@ -262,8 +274,9 @@ impl PlaybackEngine {
     /// Take the card for ourselves or give it back, now rather than at the next track.
     ///
     /// Whatever is loaded, paused included, reopens under the new choice. With nothing loaded an
-    /// exclusive choice waits for the first play to claim, and a shared one reopens the default
-    /// device, which is what hands the card back to everything else. Blocking: it opens a device.
+    /// exclusive choice waits for the first play to claim, and a shared one reopens the chosen
+    /// device shared, which is what hands the card back to everything else. Blocking: it opens a
+    /// device.
     pub fn set_output_choice(&self, choice: OutputChoice) {
         let exclusive = choice.mode == OutputMode::Exclusive;
         *self.output.choice.lock() = choice;
@@ -271,7 +284,7 @@ impl PlaybackEngine {
         let wanted = match decks.active().voice.playing() {
             Some(playing) => Some(self.wanted_request(playing.shape, playing.format)),
             None if exclusive => None,
-            None => Some(OutputRequest::default()),
+            None => Some(self.output.choice.lock().shared_request(None)),
         };
         let mut output = self.output.device.lock();
         let Some(output) = output.as_mut() else {
@@ -303,9 +316,10 @@ impl PlaybackEngine {
                 hardware_volume: choice.hardware_volume,
                 rate_fallback: choice.rate_fallback,
             }),
-            OutputMode::Shared => OutputRequest::Shared {
-                rate: self.output.follow_rate.load(Ordering::Relaxed).then_some(shape.rate),
-            },
+            OutputMode::Shared => {
+                let rate = self.output.follow_rate.load(Ordering::Relaxed).then_some(shape.rate);
+                choice.shared_request(rate)
+            }
         }
     }
 
@@ -385,7 +399,7 @@ impl PlaybackEngine {
         let retry_claim = open
             .and_then(|negotiated| negotiated.fallback)
             .is_some_and(|fallback| fallback.reason.retry_at_track_start());
-        let reclaim = matches!(wanted, OutputRequest::Shared { rate: Some(_) }) || retry_claim;
+        let reclaim = matches!(wanted, OutputRequest::Shared { rate: Some(_), .. }) || retry_claim;
         if output.serves(&wanted) && !reclaim {
             return;
         }

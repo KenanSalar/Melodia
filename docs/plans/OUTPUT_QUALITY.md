@@ -2,10 +2,11 @@
 
 Working doc. Delete it when the last phase that's taken on ships.
 
-Status: **Phases 1 to 5 complete** (tests held back, see Phases 2 to 5) · **Phase 6: Linux half
-closed with no code, Windows half open** · **Phase 7: dropped** · **Phase 8: 8a, 8b and 8d built,
-8c open** · **Phase 9: 9B chosen, WASAPI half built, ALSA half open (Linux)** · Created: 2026-09-30 ·
-Revised: 2026-10-02
+Status: **Phases 1 to 5 complete**, Windows ear checks included (tests held back, see Phases 2 to
+5) · **Phase 6: Linux half closed with no code, Windows half built and run** · **Phase 7:
+dropped** · **Phase 8: all four built and run on Windows**, 8c's run having fixed event mode's
+recovery from a stall · **Phase 9: 9B chosen, WASAPI half built and measured, its probe too slow
+on a 7.1 output (open); ALSA half open (Linux)** · Created: 2026-09-30 · Revised: 2026-10-02
 
 > Facts below were checked on **2026-09-30** against `a0b9978b` on `feat/bit-perfect-output`,
 > and against the pinned `cpal 0.18.2` sources. Line counts are from `wc -l` on that commit.
@@ -59,9 +60,9 @@ Smaller gaps, each a phase of its own below:
 | 3 ✅ | Keep the claim on a rate the device lacks (a picker, default = today) | 2 | A hi-res album on a capped DAC stays exclusive and gapless |
 | 4 ✅ | TPDF dither where changed samples are narrowed | – | Noise instead of distortion on 16-bit output |
 | 5 ✅ | Crossfade under exclusive when no reopen is needed | – | Crossfade works with exclusive between same-format tracks |
-| 6 | A device picker for shared output. **Linux closed with no code (the sound server routes it), Windows open** | – | Music can go to a DAC without changing the system default |
+| 6 | A device picker for shared output. **Linux closed with no code (the sound server routes it), Windows built: one device for both modes** | – | Music can go to a DAC without changing the system default |
 | 7 | File reads on the writer thread: measure, then decide. **Dropped (Kenan, 2026-10-01)** | – | Possibly nothing; a read-ahead only if the measurement shows stalls |
-| 8 | Signal-path and claim polish (four small, independent items). **8a, 8b, 8d built, 8c open** | – | Honest words and parity fixes |
+| 8 | Signal-path and claim polish (four small, independent items). **All four built** | – | Honest words and parity fixes |
 | 9 | Gapless across a rate change the device doesn't see. **9B chosen; WASAPI half built, ALSA half open (Linux)** | 3 | A mixed-rate album stays gapless wherever the device's own rate doesn't change |
 
 ---
@@ -77,24 +78,26 @@ Where each change lives, and how big each file is today. Production files stay u
 | `…/output/voice.rs` | 628 | 1 | The handover passes the converter's state on when the successor's shape matches |
 | `…/output/rates.rs` | new | 3, 9 | The standard rate ladder and `device_rate_for`, the one rate policy both backends read; 9B adds `RateSet` and `claim_rate` |
 | `…/output/alsa.rs` | 533 | 3, 4, 9 | Probes the ladder when the exact rate is refused; dithers ahead of `encode`; 9B keeps the offered set (open, Linux) |
-| `…/output/wasapi.rs` | 721 after Phase 3 | 3, 4, 8c, 9 | Probes the ladder where `refusal` would say `RateRefused`; dithers ahead of `encode`; counts underruns; 9B probes the offered set before the first `Initialize` |
-| `…/output/mod.rs` | 703 | 3, 6, 9 | `ExclusiveRequest` carries the rate policy; `OutputRequest::Shared` carries a device (Windows only); `claim_serves` asks about the device's rate (9A) and the offered set (9B) |
+| `…/output/wasapi.rs` | 797 after 8c | 3, 4, 6, 8c, 9 | Probes the ladder where `refusal` would say `RateRefused`; dithers ahead of `encode`; counts underruns and restarts an event-driven stream after a stall; 9B probes the offered set before the first `Initialize`; `SHARED_DEVICE` |
+| `…/output/wasapi_clock.rs` | 48, new | 8c | The device's clock read against the performance counter (`stood_still`), and WASAPI's 100 ns units |
+| `…/output/mod.rs` | 779 after 8c | 3, 6, 9 | `ExclusiveRequest` carries the rate policy; `OutputRequest::Shared` carries a device (Windows only), opened by `open_shared` |
+| `…/output/claim.rs` | 144 after Phase 6 | 6, 9 | `claim_serves`, moved out of `mod.rs` to keep it under 800 lines, asks about the device's rate (9A) and the offered set (9B) |
 | `…/output/dither.rs` | new | 4 | Owns the dither: which formats and blocks take it, the noise, and the quantize every writer calls before its conversion |
 | `…/output/encode.rs` | 137 | 4 | Unchanged but for sharing `integer_bits` and `full_scale` with `dither` |
-| `…/output/device.rs` | 584 | 4, 6 | The shared 16- and 24-bit arms take the same `Dither`; the shared target by id (Windows only) |
+| `…/output/device.rs` | 619 after Phase 6 | 4, 6 | The shared 16- and 24-bit arms take the same `Dither`; `named_target`, the shared target by id |
 | `crates/melodia-engine/src/player/engine/backend/mod.rs` | 786 after Phase 8 | 5 | The two position queries moved out to `reads.rs` |
 | `…/engine/backend/reads.rs` | 29, new | 8d | The decks' read-only answers: the two positions, and whether the active deck holds a source |
-| `…/engine/backend/output.rs` | 428 after Phase 8 | 5, 8d | Home of the format latch both reopen refusals read; the pause-release setting's cell |
+| `…/engine/backend/output.rs` | 442 after Phase 6 | 5, 6, 8d | Home of the format latch both reopen refusals read; the pause-release setting's cell; `OutputChoice::shared_request` |
 | `…/engine/backend/controls.rs` | 106 | 5 | `crossfade_settings` stops blanket-disabling |
 | `…/engine/handlers.rs` | 595 after Phase 8 | 8d | `PauseWatch` and the release |
 | `…/engine/state/transport.rs` | 456 after Phase 8 | 8d | `build_release_actions`, `build_replay_actions` |
 | `crates/melodia-playback/src/player/playback/crossfade.rs` | 384 | 5 | `crossfade_eligible` takes whether the next track plays without a reopen |
 | `crates/melodia-engine/src/player/engine/signal_path.rs` | 142 | 8b | Names a lossy source |
 | `crates/melodia-audio/src/player/source/audio.rs` | 171 | 8b | `SourceFormat` learns whether the codec was lossy |
-| `crates/melodia-app/src/services/settings/playback.rs` | 320 after Phase 8 | 3, 6, 8d | `OutputFlags` keys, all `#[serde(default)]` |
-| `crates/melodia-app/src/library/playback.rs` | 563 after Phase 8 | 8d | Play and toggle start a paused track its deck no longer holds |
-| `crates/melodia-views/src/ui/settings/output_settings.rs` | 307 after Phase 8 | 3, 6, 8d | Output card wiring |
-| `crates/melodia-ui/ui/views/settings/output-section.slint` | 407 after Phase 8 | 3, 6, 8a, 8b, 8d | Output card rows |
+| `crates/melodia-app/src/services/settings/playback.rs` | 321 after Phase 6 | 3, 8d | `OutputFlags` keys, all `#[serde(default)]`. Phase 6 added none |
+| `crates/melodia-app/src/library/playback.rs` | 567 after Phase 6 | 6, 8d | Play and toggle start a paused track its deck no longer holds; `SHARED_DEVICE_SUPPORTED` |
+| `crates/melodia-views/src/ui/settings/output_settings.rs` | 366 after Phase 6 | 3, 6, 8d | Output card wiring |
+| `crates/melodia-ui/ui/views/settings/output-section.slint` | 412 after Phase 6 | 3, 6, 8a, 8b, 8d | Output card rows |
 
 ---
 
@@ -632,9 +635,12 @@ float. The exclusive runs claimed `snd-aloop`'s card and recorded its capture si
 
 No underrun was logged, and the card was handed back when Melodia quit.
 
+**Listening pass, Windows** (Kenan, 2026-10-02). The UMC22 ran exclusive at 48000 S16, Hardware
+Volume off so the voices scaled the samples and the WASAPI writer dithered them. The arpeggio fixture
+looped at volume 15. Kenan moved the slider to 100 and back, paused and resumed three times, and
+sought twice. There were no clicks or crackles, and none of it logged an underrun or a warning.
+
 **Still open**
-- The WASAPI writer's two lines: the static gates passed on the Windows machine (2026-10-02). The
-  ear check there is still owed.
 - Tests: none written. The candidates above stand, plus: S32 and F32 come out untouched; a shared
   `I24` sample past full scale holds at the maximum; `bit_perfect.rs` runs `quantize` the way the
   writers do.
@@ -756,8 +762,14 @@ format note, and turning it on shows the four detail rows.
 - Docs: done. `.claude/rules/audio-stack.md`'s "A format change is decided at the boundary"
   bullet is rewritten around `plays_without_reopen` and the record both readers share, its gapless
   note names `start_track`, and the README crossfade bullet covers exclusive output.
-- Windows: the change carries no `cfg`, so exclusive output there gets it too. CI's
-  `clippy-windows` and `test-windows` check it, and the ear check waits for the Windows machine.
+
+**Windows run and listening pass** (2026-10-02). The UMC22 ran exclusive, crossfade 3 s, through a
+queue of three 12 s tones: 440 Hz and 660 Hz at 48 kHz, then 550 Hz at 44.1 kHz.
+- The log read `crossfade 2720ms` into the second tone, the time the first had left, with no reopen.
+- The third tone came by `play`, with the claim reopened at 44100.
+- Kenan heard the first pair blend smoothly, and the second play through with a short gap and no
+  click.
+- Settings under Exclusive showed the Crossfade toggle live with the format note, and its four rows.
 
 ## Phase 6 - A device picker for shared output
 
@@ -815,6 +827,105 @@ File's Sample Rate on, volume 0):
 | Quit and relaunch | the new stream came up on the null sink |
 | `pw-metadata -d <node> target.object` | back on the default sink; the stored target cleared |
 
+**Windows, decided 2026-10-02 (Kenan): one device for both modes.** The existing `output_device`
+key also routes shared output on Windows, in place of a separate `output_shared_device`. So Make
+Bit-Perfect claims the device already playing, and a refused claim falls back to shared on that same
+device. The cost: anyone on Windows who already picked an exclusive device hears shared output there
+after updating.
+
+**As built, Windows half** (static gates green on Windows, 2026-10-02).
+
+**The seam**
+- It gains `SHARED_DEVICE`: true for WASAPI, whose endpoint ids are the ones cpal opens by (both
+  are `IMMDevice::GetId`); false for ALSA, whose `hw:` names would go round the sound server; false
+  for the unsupported backend. It is surfaced as `SHARED_DEVICE_SUPPORTED` and re-read by
+  `library::playback`.
+- The `alsa.rs` line was written blind on Windows, for CI's Linux jobs to check.
+
+**The request**
+- `OutputRequest::Shared { rate, device }`, where the device is one of `devices()`' ids.
+- `OutputChoice::shared_request` fills it from the choice, and only where `SHARED_DEVICE_SUPPORTED`
+  holds, so a Linux card's id never reaches a shared open.
+- Both `wanted_request` and `set_output_choice`'s nothing-loaded arm use it. `serves` needed
+  nothing, since it compares requests whole.
+
+**The open**
+- `device::named_target` resolves the id through cpal's `device_by_id`, which is platform-neutral.
+  It answers `None` only where no active device has that id. A device that is listed but can't
+  name its config is an error, because the reclaim poll would otherwise find it listed and reopen
+  it every second.
+- `AudioOutput::open_shared(rate, device)`:
+  - a device that refuses to open, held exclusively by another app for example, logs at debug and
+    plays on the default;
+  - a device that isn't connected logs once at info, plays on the default, and comes back marked
+    `Named::Missing`.
+- `start` folds that into `awaiting_device` beside a `NotConnected` claim, so the existing reclaim
+  poll returns the stream to the device when it is plugged back in. `disconnected_device_returned`
+  needed no change, since it already compares `choice.device` against `devices()`.
+- A stand-in raises no `Fallback`, no toast and no verdict, since shared output already grades
+  Converted. The Device row names where the audio went, and the picker reads "Not connected".
+- `fall_back` opens shared on the refused claim's own device. Where that device isn't connected it
+  goes straight to the default, and on Linux it passes none, as before.
+- A stream on a named device is cpal's `Specific` handle, so it ignores changes to the Windows
+  default. An unplug arrives as `DeviceNotAvailable`, which the error callback already reads as a
+  lost device.
+
+**Boot.** `open_output` parks where a shared device is chosen, so `hydrate_audio_dsp`'s
+`set_output_choice` opens it directly rather than waking the default first.
+
+**The picker**
+- On Windows the row shows in both modes, as "Output Device" with the description "The sound card
+  Melodia plays through".
+- It leads with "System Default", which stands for no saved device. That makes following the
+  Windows default reachable again; before, picking the first row saved the default endpoint's id.
+- The label comes from a `pure callback` on `Settings`, since the rest of the list is Rust's.
+- `Picked.default_label` holds that row as it reads on screen, and `pick_device` offsets by it.
+  The options are rebuilt when the devices or the label change.
+- Linux is unchanged: "Exclusive Device", no lead row.
+- Three new strings, in all six catalogues.
+
+**Moved on the way.** `claim_serves` moved to `claim.rs`, which keeps `mod.rs` under 800 lines.
+`mod_tests` imports it from there.
+
+**Tests adapted:** `output_settings_tests`' `picked` helper and its `take_listing` calls take the
+new field and argument, passing `None`, so every row keeps its meaning.
+
+**In-app run** (2026-10-02, debug build, Windows, scratch data folder). The window was driven by
+clicks. Where the audio went was read off each endpoint's peak meter (`IAudioMeterInformation`),
+alongside the log.
+- An unplug was a disable of the endpoint through `IPolicyConfig::SetEndpointVisibility`, as the
+  Sound control panel's Disable does.
+- The Windows default was moved through `IPolicyConfig::SetDefaultEndpoint`, and restored after.
+
+| Step | Result |
+|---|---|
+| Shared, nothing saved | the row reads "Output Device", "System Default" lit; played on the Elegiant, the default |
+| The list | "System Default", then the two active endpoints |
+| Pick the UMC22 | "Output reopened for a new output choice" on the UMC22; its meter moved, the Elegiant's read zero; the id persisted; the Device row named it |
+| Windows default to the UMC22, then back | no reopen; the stream stayed on the UMC22 throughout |
+| Pick System Default | `output_device` saved as `null`; played on the default, and followed two default changes ("output lost; reopening" onto each) |
+| Pick the UMC22, then disable it | "the chosen output isn't connected, playing on the system default"; the picker read "Not connected"; the Device row named the Elegiant |
+| Enable it again | "the chosen device is listed again; reopened" on the UMC22, 0.7 s later |
+| Relaunch with the UMC22 saved | "parked until the chosen device opens", then one open on the UMC22, with no default open first |
+| Mode to Exclusive, then back | claimed the UMC22 at S16 48 kHz, chip Bit-perfect; shared again on the UMC22 |
+| Make Bit-Perfect from shared | the dialog, then Switch: claimed the UMC22; mode and device persisted |
+| A 24-bit file under exclusive | refused as `FormatRefused`, played shared on the UMC22, not the default |
+| A 96 kHz file, "Play Through the System Mixer" | refused as `RateRefused`, played shared on the UMC22 |
+| Disable the UMC22 under a claim | refused as `NotConnected`, shared on the default with no second lookup; re-claimed exclusive once it was back |
+| "Allow exclusive control" cleared (Phase 9's run) | refused as `NotAllowed`, played shared on the UMC22 |
+
+No warning or error was logged apart from the expected refusals, and every quit was clean.
+
+**Still open**
+- A physical unplug of the UMC22. The run disabled the endpoint, which is the same state change
+  for every reader here, but a USB removal goes through `NOTPRESENT` rather than `DISABLED`.
+- Tests:
+  - `take_listing` and `pick_device` with the lead row;
+  - `shared_request`'s Linux filter;
+  - `SHARED_DEVICE_SUPPORTED` in `mod_tests`' per-platform capability pins.
+- Docs: done. The README's Bit-perfect output section has the device bullet and the fallback's
+  device, and `.claude/rules/audio-stack.md` names `SHARED_DEVICE` and the shared stream's device.
+
 ## Phase 7 - File reads on the writer thread: measure, then decide
 
 **Dropped** (Kenan, 2026-10-01). Not taken on; the design below is kept only for the record.
@@ -865,9 +976,71 @@ Four independent items. Each lands on its own.
 - `resume` then has to reclaim, which it doesn't today: `reopen_output` answers `None` for a parked
   output. The resume gains the reopen `reopen_for_track` does, for the source already on the deck.
 
-**As built, 8a, 8b and 8d** (static gates green). 8c waits for the Windows machine. All three are
-platform-neutral, so exclusive output on Windows gets them too; CI's `clippy-windows` and
-`test-windows` check them, and the ear check there waits for the Windows machine.
+**As built, 8a, 8b and 8d** (static gates green). 8c is below, built on the Windows machine. All
+three are platform-neutral, so exclusive output on Windows gets them too; CI's `clippy-windows`
+and `test-windows` check them, and the ear check there waits for the Windows machine.
+
+**As built, 8c** (static gates green on Windows, 2026-10-02)
+- After each write, `Session::play` reads the device's clock, which it already did for the lead.
+  The reading also carries the performance counter at the moment the device read its position.
+- `stood_still` compares two consecutive readings. Where the device's clock advanced less than the
+  wall clock, by more than `STALL_TOLERANCE` (2 ms), the device sat with nothing to play, and the
+  write counts one `record_xrun`. That is the same counter ALSA's writer feeds.
+- It is not asked before the clock first moves, since a stream's first period passes before it
+  does.
+- It shows only in `tasks::audio_health`'s debug line, every 5 s. cpal raises no `Xrun` for a
+  WASAPI render stream, so before this Windows counted no underruns in either mode.
+- **In event mode, a stall restarts the stream** (`Session::restart`: stop, reset, prime, start),
+  and the writer starts its count and readings over against the reset clock. The run below is why.
+  A polled stream is left alone, since it tops up whatever room it finds.
+- The clock arithmetic (`ClockReading`, `stood_still`, the tick and 100 ns conversions) lives in
+  `output/wasapi_clock.rs`, Windows only, which keeps `wasapi.rs` under 800 lines.
+
+**The first design was wrong, and the in-app run showed why.** It compared the clock with the count
+of frames written. Measured with temporary instrumentation through a one-second process freeze:
+- Both devices hold their clock still while starved. The UMC22 moved 9 ms over the freeze, the
+  ALC897 7 ms.
+- The ALC897 halts with samples still queued, so the old check never saw that stall.
+- The UMC22 comes back with less queued than before, so the old check counted about 4 false
+  underruns a second for as long as the stream lasted.
+- Clock against counter, in steady playback, stayed within ±0.75 ms on the UMC22 in both drive
+  modes, which is what the 2 ms tolerance stands on.
+
+**In-app run** (2026-10-02, debug build, Windows, scratch data folder, exclusive, volume 5 to 50).
+The freeze was `NtSuspendProcess` for one second.
+
+| Device, drive, period | Steady playback | The freeze | After it |
+|---|---|---|---|
+| UMC22, events, 5 ms (224 frames) | 0 over 2 min | counted | about 110 a second, without end |
+| UMC22, events, 20 ms | 0 | counted | about 40 a second, without end |
+| UMC22, polling, 5 ms and 20 ms | 0 | 2 | 0 |
+| ALC897, events, 5 ms | 0 | 1 | 0 |
+| ALC897, polling, 5 ms | 0 | 1 | 0 |
+
+No run counted anything at the stream's start.
+
+**Found by it: event mode on the UMC22 never recovers from a stall.** This predates 8c; the
+counter only makes it visible.
+- After the freeze, the writer's wakes drop to about half the rate, and the device runs dry every
+  period until the stream reopens. The writer keeps reading the clock throughout, which is what the
+  counter sees.
+- The likeliest cause is the endpoint's auto-reset event: signals that land while the writer is
+  stalled coalesce into one wake, so one buffer of the pair is never refilled.
+- **Listening pass** (Kenan, 2026-10-02, UMC22 at volume 50): event mode was a clean tone before
+  the freeze and buzzy after it. Polling mode was clean after the freeze.
+- The ALC897 recovers in event mode. This is likely the stutter some USB drivers show under events,
+  which the Polling Mode row exists for.
+
+**Fixed: the restart above.** Re-run after it, through the same one-second freeze:
+
+| Device, drive, period | The freeze | After it |
+|---|---|---|
+| UMC22, events, 20 ms | 1 | 0 |
+| UMC22, events, 5 ms | 1 | 0 |
+| ALC897, events, 5 ms | 1 | 0 |
+
+**Listening pass** (Kenan, 2026-10-02, UMC22, events, 20 ms, volume 50). A generated arpeggio
+(C–E–G–C over a C3 hum, `melody_48k.wav`) played clean after the freeze, where the sine had buzzed.
 
 **8a**
 - In shared mode where exclusive exists, the button shows whenever something plays, since the
@@ -971,19 +1144,27 @@ Not exercised: Next or Stop while released (both land on paths an empty deck alr
 Found on the way, not touched: MPRIS's relative `Seek` is ignored ("needs library API
 support"), so only `SetPosition` moves the position from a media panel.
 
+**Windows run** (2026-10-02, debug build, UMC22 exclusive, Hardware Volume on):
+
+| Item | Check | Result |
+|---|---|---|
+| 8a | Make Bit-Perfect from shared, then Switch | the dialog, then a claim at S16 48 kHz on the same device shared output was playing through; mode and device persisted |
+| 8b | a 192 kbps MP3 on the claim | chip "Lossy · 48 kHz", red dot; Signal Path "Lossy: the file is compressed, so the device gets the decoder's reconstruction of the recording"; Source "48 kHz · 32-bit float · 2 ch, decoded from a lossy codec"; Device "…in a format that can't hold the source exactly" |
+| 8d, on | paused at 17:11:18.558 | `player: stop (fade 0ms)` at 17:16:18.088; still paused at 0:38; chip hidden, Signal Path "Nothing is playing" |
+| 8d, on | Play | `play … from 38680ms`, claim reopened at S16 48 kHz |
+
 **Still open**
-- 8c, on CI or the Windows machine.
 - Tests, none written:
+  - `stood_still`'s table: the tolerance's edge, a clock that hasn't started, a counter that went
+    backwards;
   - `lossy_codec`'s table;
   - the Lossy verdict rows;
   - `PauseWatch`;
   - `build_release_actions`' re-verify;
   - `build_replay_actions`, and play and toggle routing on an empty deck;
   - `PausedDevice`'s round-trip.
-- Docs:
-  - the README;
-  - `.claude/rules/audio-stack.md`'s verdict bullet (the lossy headline) and its exclusive bullet
-    (a long pause's release, and the replay on an empty deck).
+- Docs: done. The README's Bit-perfect output section names the Lossy verdict and the long
+  pause's release, and `.claude/rules/audio-stack.md`'s verdict and exclusive bullets carry both.
 
 ## Phase 9 - Gapless across a rate change the device doesn't see
 
@@ -1152,6 +1333,33 @@ one unbroken tone, with no gap or tick at either seam.
 **Chosen: 9B.** It is the only one that closed every same-rate seam, its probe costs about 35 ms
 per Resample claim, and it falls back to 9A's rule wherever no offered set is known.
 
+**The probe where it costs most** (2026-10-02, debug build, Windows). Each figure runs from the
+play line to `Output reopened`, three fresh launches each:
+
+| Device, layout | File | "Play Through the System Mixer" | Resample (probe) |
+|---|---|---|---|
+| UMC22, stereo | 48 kHz | 20 ms | 52–56 ms |
+| UMC22, stereo | 96 kHz, converted to 48 | | 71–81 ms |
+| ALC897, stereo | 44.1 kHz | 10 ms | 135 ms |
+| ALC897, **7.1** (Kenan set it in Speaker Setup, then back) | 44.1 kHz | 10 ms | **1,273–1,377 ms** |
+| ALC897, **7.1** | 96 kHz | | 1,015–1,041 ms |
+
+- The probe already costs the ALC897 about 125 ms in stereo, since it lacks 11 of the 15 rungs. A
+  7.1 layout asks every channel count from 2 to 8 at each of them, which is the "about ten times"
+  the cost note above predicted.
+- Under 7.1 the claims still took the stereo layout, and offered the same four rates.
+
+A refused claim, with "Allow applications to take exclusive control" cleared on the UMC22 (Kenan
+cleared it, then set it again):
+
+| Unsupported Sample Rates | Play to the shared stand-in |
+|---|---|
+| "Play Through the System Mixer" | 28–34 ms |
+| Resample | 32–34 ms |
+
+So `negotiate`'s first ask refuses a barred device in one call, ahead of the sweep, matching 9A's
+refusal. The stand-in played shared on the UMC22 itself (Phase 6).
+
 **Still open**
 - **Linux: 9B's ALSA half.** Until it lands, ALSA fills no offered set and Linux has 9A's
   behaviour: a 96 kHz track after a claim opened for a 48 kHz one still reopens. On the Linux
@@ -1182,10 +1390,11 @@ per Resample claim, and it falls back to 9A's rule wherever no offered set is kn
   7. **Then the README.** Extend the Unsupported Sample Rates bullet with "and an album mixing
      such rates stays gapless wherever the device's own rate doesn't change". It waits for the
      ALSA half, since until then that is true on Windows only.
-- **Windows: measure the probe where it costs most.** From play to the log line, time:
-  - one Resample claim on a multichannel endpoint (a 7.1 Realtek or HDMI output playing stereo);
-  - a refused claim on the UMC22 with "Allow applications to take exclusive control" cleared,
-    which should now match 9A's refusal.
+- **Windows: the probe costs over a second a claim on a 7.1 output.** Measured below; the fix
+  waits for Kenan's call. The likely shape: remember each device's offered set for the session,
+  keyed by its id and its mix format. Then only the first Resample claim on a device pays the
+  probe, and a change of speaker layout probes again. Narrowing the channel counts the probe asks
+  would cost the superset its guarantee, so it isn't the first choice.
 - **Tests:**
   - `claim_serves` rows for both rules, including an off-ladder rate falling back to 9A's;
   - `claim_rate`'s table;
@@ -1248,6 +1457,7 @@ cargo test --locked --workspace
 
 - **Tests that stay green:** `crates/melodia/tests/bit_perfect.rs`, `stream_rate.rs` and
   `crossfade.rs`, both `…through_an_output_reopen` cases included.
-- **Kenan runs the app** for the phase's own ear check. The app is never launched from here.
+- **The listening is Kenan's.** The in-app runs are driven from here where he allows it, in a
+  scratch data folder, and he is called in for whatever only an ear can answer.
 - **At the end of Phase 2:** a release build's CPU at the capped worst case, and `/usr/bin/time -v`
   peak RSS.

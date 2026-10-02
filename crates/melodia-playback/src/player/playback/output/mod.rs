@@ -22,8 +22,8 @@ mod resample;
 pub mod voice;
 
 // One exclusive backend per platform, each answering to the same names: `SUPPORTED`, `POLLING`,
-// `HARDWARE_VOLUME`, `RATE_FALLBACK`, `devices`, `open`, the `ExclusiveStream` it returns and the
-// `Claim` a reopen carries across.
+// `HARDWARE_VOLUME`, `RATE_FALLBACK`, `SHARED_DEVICE`, `devices`, `open`, the `ExclusiveStream` it
+// returns and the `Claim` a reopen carries across.
 cfg_select! {
     target_os = "linux" => {
         mod alsa;
@@ -38,6 +38,7 @@ cfg_select! {
         mod hardware_volume;
         mod mmcss;
         mod wasapi;
+        mod wasapi_clock;
         use self::wasapi as exclusive;
     }
     _ => {
@@ -55,7 +56,7 @@ use melodia_audio::player::source::audio::{SampleRate, Shape, SourceFormat};
 use melodia_core::error::{self, AppError};
 use melodia_core::utils::toast::{self, ToastKind};
 
-use self::claim::{ClaimError, Fallback, FallbackReason};
+use self::claim::{ClaimError, Fallback, FallbackReason, claim_serves};
 use self::device::{DeviceStream, ExternalVolume, Feed, Lead, Target};
 use self::encode::DeviceFormat;
 use self::exclusive::{Claim, ExclusiveStream};
@@ -87,10 +88,12 @@ pub enum OutputMode {
 /// What an open asks the device for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OutputRequest {
-    /// The system's default output, at `rate` where one is given and the device's own config
-    /// otherwise.
+    /// The named device, or the system's default where none is, at `rate` where one is given and
+    /// the device's own config otherwise.
     Shared {
         rate: Option<SampleRate>,
+        /// One of [`devices`]' ids, only where [`SHARED_DEVICE_SUPPORTED`].
+        device: Option<String>,
     },
     Exclusive(ExclusiveRequest),
 }
@@ -173,11 +176,12 @@ pub enum RateFallback {
 
 impl Default for OutputRequest {
     fn default() -> Self {
-        Self::Shared { rate: None }
+        Self::Shared { rate: None, device: None }
     }
 }
 
-/// A device an exclusive claim can be aimed at.
+/// A device an exclusive claim can be aimed at, and where [`SHARED_DEVICE_SUPPORTED`] a shared
+/// stream too.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OutputDevice {
     /// Stable across reboots and replugs, which is what makes it the persisted choice.
@@ -196,6 +200,9 @@ pub const HARDWARE_VOLUME_SUPPORTED: bool = exclusive::HARDWARE_VOLUME;
 
 /// Whether an exclusive claim can run the device at another rate where it lacks the source's.
 pub const RATE_FALLBACK_SUPPORTED: bool = exclusive::RATE_FALLBACK;
+
+/// Whether a shared stream can be aimed at one of [`devices`] rather than the system default.
+pub const SHARED_DEVICE_SUPPORTED: bool = exclusive::SHARED_DEVICE;
 
 /// Whether opening a shared stream at the file's rate can change what the device runs at. Windows
 /// shared mode converts every stream to the mix format, so there it would reopen for nothing.
@@ -359,6 +366,15 @@ impl OutputStatus {
     pub fn reopening(&self) -> bool {
         self.reopening.load(Ordering::Relaxed)
     }
+}
+
+/// Whether a shared stream's named device was there, which is what says to wait for it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Named {
+    /// Opened, or none was named, or it was there and refused: nothing to wait for.
+    Present,
+    /// Not connected, with the system default standing in until it comes back.
+    Missing,
 }
 
 /// The stream on one backend or the other. Dropping it stops audio and releases the device.
@@ -532,40 +548,80 @@ impl AudioOutput {
         request: &OutputRequest,
         held: Option<Claim>,
     ) -> Result<Negotiated, AppError> {
-        let stream = match request {
-            OutputRequest::Shared { rate } => {
+        let (stream, named) = match request {
+            OutputRequest::Shared { rate, device } => {
                 self.reported = None;
-                Stream::Shared(self.open_shared(*rate)?)
+                let (stream, named) = self.open_shared(*rate, device.as_deref())?;
+                (Stream::Shared(stream), named)
             }
             OutputRequest::Exclusive(exclusive) => match self.claim(exclusive, held) {
                 Ok(stream) => {
                     self.reported
                         .take_if(|fallback| fallback.reason == FallbackReason::NotConnected);
-                    stream
+                    (stream, Named::Present)
                 }
-                Err(e) => Stream::Shared(self.fall_back(exclusive, &e)?),
+                Err(e) => {
+                    let (stream, named) = self.fall_back(exclusive, &e)?;
+                    (Stream::Shared(stream), named)
+                }
             },
         };
         let negotiated = stream.negotiated();
-        let awaiting_device = negotiated
+        let refused_as_missing = negotiated
             .fallback
             .as_ref()
             .is_some_and(|fallback| fallback.reason == FallbackReason::NotConnected);
+        let awaiting_device = named == Named::Missing || refused_as_missing;
         self.status.awaiting_device.store(awaiting_device, Ordering::Relaxed);
         self.stream = Some(stream);
         Ok(negotiated)
     }
 
-    /// Open the system's default device shared, logging which device that was where it won't
-    /// open: the error alone can't say, and the default is whatever the system named at the time.
-    /// At debug, since a caller retrying a lost device reports the outcome once it gives up.
-    fn open_shared(&self, rate: Option<SampleRate>) -> Result<DeviceStream, AppError> {
+    /// Open `device` shared, or the system default where none is named, where it isn't connected,
+    /// or where it won't open: a device that refuses costs the route, never the audio.
+    fn open_shared(
+        &self,
+        rate: Option<SampleRate>,
+        device: Option<&str>,
+    ) -> Result<(DeviceStream, Named), AppError> {
+        let Some(id) = device else {
+            return Ok((self.open_default(rate)?, Named::Present));
+        };
+        match device::named_target(&self.host, id) {
+            Ok(Some(target)) => {
+                if let Ok(stream) = self.open_target(&target, rate) {
+                    return Ok((stream, Named::Present));
+                }
+            }
+            Ok(None) => {
+                log::info!(
+                    "audio: the chosen output isn't connected, playing on the system default"
+                );
+                return Ok((self.open_default(rate)?, Named::Missing));
+            }
+            Err(e) => log::debug!("audio: the chosen output won't open: {}", error::describe(&e)),
+        }
+        Ok((self.open_default(rate)?, Named::Present))
+    }
+
+    fn open_default(&self, rate: Option<SampleRate>) -> Result<DeviceStream, AppError> {
         let target = device::default_target(&self.host).inspect_err(|e| {
             log::debug!("audio: no default output to open: {}", error::describe(e));
         })?;
-        device::open(&target, &self.feed, rate).inspect_err(|e| {
+        self.open_target(&target, rate)
+    }
+
+    /// Open `target` shared, logging which device that was where it won't open: the error alone
+    /// can't say, and the default is whatever the system named at the time. At debug, since a
+    /// caller retrying a lost device reports the outcome once it gives up.
+    fn open_target(
+        &self,
+        target: &Target,
+        rate: Option<SampleRate>,
+    ) -> Result<DeviceStream, AppError> {
+        device::open(target, &self.feed, rate).inspect_err(|e| {
             log::debug!(
-                "audio: the default output, {}, would not open: {}",
+                "audio: the output {} would not open: {}",
                 target.name().as_deref().unwrap_or("unnamed"),
                 error::describe(e)
             );
@@ -588,7 +644,7 @@ impl AudioOutput {
         &mut self,
         request: &ExclusiveRequest,
         refusal: &ClaimError,
-    ) -> Result<DeviceStream, AppError> {
+    ) -> Result<(DeviceStream, Named), AppError> {
         let fallback = Fallback {
             reason: refusal.reason(),
             device: refusing_device(request.device.as_deref()),
@@ -612,9 +668,14 @@ impl AudioOutput {
             ),
         }
         self.reported = Some(fallback.clone());
-        let mut stream = self.open_shared(Some(request.shape.rate))?;
+        // On the device the claim was for, where a shared stream can be aimed at it and it is there.
+        let device = request
+            .device
+            .as_deref()
+            .filter(|_| SHARED_DEVICE_SUPPORTED && fallback.reason != FallbackReason::NotConnected);
+        let (mut stream, named) = self.open_shared(Some(request.shape.rate), device)?;
         stream.negotiated.fallback = Some(fallback);
-        Ok(stream)
+        Ok((stream, named))
     }
 
     /// Report the next refusal whatever was reported before, for an output choice the user just
@@ -700,36 +761,6 @@ impl AudioOutput {
 /// which stays a silence in the voices so a mute is instant and needs no switch on the device.
 fn voice_gain(volume: f64, on_device: bool) -> f64 {
     if on_device && volume > 0.0 { 1.0 } else { volume }
-}
-
-/// Whether a claim opened for `open`, which negotiated `running`, plays a source `next` asks for.
-///
-/// Everything but the source's format and rate has to match. The rate has to be the open
-/// request's, or one a fresh claim would run the device at where it runs now: its own rate, which
-/// a fresh claim tries first, or one the device lacks that the claim's offered rates convert to
-/// the device's. So a 48 kHz track after a 96 kHz one the device converts to 48 kHz plays gapless
-/// on the same claim, and so does a 96 kHz track after a 48 kHz one.
-///
-/// The device's format has to be on the source format's ladder. For an integer source that means a
-/// container holding every bit of it, so a 16-bit track after a 24-bit one keeps the 24-bit claim
-/// and plays gapless. A float source is carried only by F32 and converted by every other rung, so a
-/// lossy track keeps whatever integer claim the track before it opened and plays gapless, even
-/// where a fresh claim would have found F32 and carried it exactly: a lossy decode isn't worth a
-/// reopen.
-fn claim_serves(open: &ExclusiveRequest, running: &Negotiated, next: &ExclusiveRequest) -> bool {
-    let OutputFormat::Exclusive(format) = running.format else {
-        return false;
-    };
-    let at_next_rate = Shape { rate: next.shape.rate, ..open.shape };
-    let same_claim =
-        *next == ExclusiveRequest { shape: at_next_rate, format: next.format, ..open.clone() };
-    let same_device_rate = next.shape.rate == open.shape.rate
-        || next.shape.rate == running.shape.rate
-        || running.offered.is_some_and(|offered| {
-            rates::claim_rate(next.shape.rate, offered, next.rate_fallback)
-                == Some(running.shape.rate)
-        });
-    same_claim && same_device_rate && DeviceFormat::ladder(next.format).contains(&format)
 }
 
 /// The name of the device a claim on `id` was aimed at, or of the first listed where none was

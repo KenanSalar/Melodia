@@ -1,11 +1,15 @@
-//! Why an exclusive claim on a device did not go through.
+//! Why an exclusive claim on a device did not go through, and whether one that did plays the next
+//! track.
 //!
 //! Two types because two readers want different things. [`ClaimError`] keeps the typed cause for
 //! the log line the fallback writes; [`FallbackReason`] is what [`super::Negotiated`] carries to
 //! the panel, which only ever needs to name the cause, and which has to compare equal across
 //! ticks for the watch it rides on to stay quiet.
 
-use melodia_audio::player::source::audio::SourceFormat;
+use melodia_audio::player::source::audio::{Shape, SourceFormat};
+
+use super::encode::DeviceFormat;
+use super::{ExclusiveRequest, Negotiated, OutputFormat, rates};
 
 /// What a backend's own error is carried as. Boxed rather than named because the backends are
 /// per-platform and this type is not.
@@ -99,6 +103,40 @@ impl FallbackReason {
             | Self::Unsupported => false,
         }
     }
+}
+
+/// Whether a claim opened for `open`, which negotiated `running`, plays a source `next` asks for.
+///
+/// Everything but the source's format and rate has to match. The rate has to be the open
+/// request's, or one a fresh claim would run the device at where it runs now: its own rate, which
+/// a fresh claim tries first, or one the device lacks that the claim's offered rates convert to
+/// the device's. So a 48 kHz track after a 96 kHz one the device converts to 48 kHz plays gapless
+/// on the same claim, and so does a 96 kHz track after a 48 kHz one.
+///
+/// The device's format has to be on the source format's ladder. For an integer source that means a
+/// container holding every bit of it, so a 16-bit track after a 24-bit one keeps the 24-bit claim
+/// and plays gapless. A float source is carried only by F32 and converted by every other rung, so a
+/// lossy track keeps whatever integer claim the track before it opened and plays gapless, even
+/// where a fresh claim would have found F32 and carried it exactly: a lossy decode isn't worth a
+/// reopen.
+pub(super) fn claim_serves(
+    open: &ExclusiveRequest,
+    running: &Negotiated,
+    next: &ExclusiveRequest,
+) -> bool {
+    let OutputFormat::Exclusive(format) = running.format else {
+        return false;
+    };
+    let at_next_rate = Shape { rate: next.shape.rate, ..open.shape };
+    let same_claim =
+        *next == ExclusiveRequest { shape: at_next_rate, format: next.format, ..open.clone() };
+    let same_device_rate = next.shape.rate == open.shape.rate
+        || next.shape.rate == running.shape.rate
+        || running.offered.is_some_and(|offered| {
+            rates::claim_rate(next.shape.rate, offered, next.rate_fallback)
+                == Some(running.shape.rate)
+        });
+    same_claim && same_device_rate && DeviceFormat::ladder(next.format).contains(&format)
 }
 
 #[cfg(test)]

@@ -3,10 +3,11 @@
 
 use std::time::Duration;
 
+use super::claim::claim_serves;
 use super::encode::DeviceFormat;
 use super::{
     DeviceLevel, Drive, ExclusiveRequest, ExclusiveTuning, Negotiated, OutputFormat, RateFallback,
-    claim_serves, voice_gain,
+    voice_gain,
 };
 use crate::player::playback::tests::helpers::shape;
 use melodia_audio::player::source::audio::SourceFormat;
