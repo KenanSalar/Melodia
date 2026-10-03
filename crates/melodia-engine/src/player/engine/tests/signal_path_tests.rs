@@ -11,6 +11,9 @@ use melodia_playback::player::playback::output::{DeviceLevel, Negotiated, Output
 
 use super::{Grade, SignalInputs, Stages, Transport, Verdict, evaluate};
 
+/// What an MP3 or an Ogg Vorbis file decodes to.
+const LOSSY: SourceFormat = SourceFormat { lossy: true, ..SourceFormat::F32 };
+
 fn shape(channels: u16, rate: u32) -> Shape {
     Shape {
         channels: NonZero::new(channels).unwrap_or(NonZero::<u16>::MIN),
@@ -71,8 +74,13 @@ type Case = (&'static str, fn(&mut SignalInputs), Stages);
 /// draw, so a row failing names the stage whose rule moved.
 #[test]
 fn each_stage_grades_the_input_that_moves_it() {
-    let cases: [Case; 18] = [
+    let cases: [Case; 19] = [
         ("24-bit integer fits f32", |i| i.source.format.bits = 24, CLEAN),
+        (
+            "a lossy decode is a reconstruction",
+            |i| i.source.format = LOSSY,
+            Stages { source: Grade::Converted, ..CLEAN },
+        ),
         (
             "32-bit integer loses its low bits",
             |i| i.source.format.bits = 32,
@@ -231,6 +239,38 @@ fn an_exclusive_claim_reads_the_worst_stage_and_a_fallback_reads_first() {
 
     for (what, change, expected) in cases {
         let mut inputs = exclusive_inputs();
+        change(&mut inputs);
+        assert_eq!(evaluate(inputs).verdict, expected, "{what}");
+    }
+}
+
+/// No setting puts a lossy file right, so that is the headline over whatever the later stages did,
+/// and only a refused claim, which the user asked for and didn't get, reads ahead of it.
+#[test]
+fn a_lossy_source_reads_lossy_over_every_stage_but_a_fallback() {
+    let cases: [VerdictCase; 5] = [
+        (
+            "on a claim that carries it whole",
+            |i| i.negotiated.format = OutputFormat::Exclusive(DeviceFormat::F32),
+            Verdict::Lossy,
+        ),
+        ("narrowed to the claim's 16 bits", |_| {}, Verdict::Lossy),
+        ("at another device rate", |i| i.negotiated.shape = shape(2, 48_000), Verdict::Lossy),
+        ("under the user's own choice", |i| i.transport.volume = 99, Verdict::Lossy),
+        (
+            "refused, and played shared",
+            |i| {
+                i.negotiated.format = OutputFormat::Shared(cpal::SampleFormat::F32);
+                i.negotiated.fallback =
+                    Some(Fallback { reason: FallbackReason::FormatRefused, device: None });
+            },
+            Verdict::Fallback,
+        ),
+    ];
+
+    for (what, change, expected) in cases {
+        let mut inputs = exclusive_inputs();
+        inputs.source.format = LOSSY;
         change(&mut inputs);
         assert_eq!(evaluate(inputs).verdict, expected, "{what}");
     }

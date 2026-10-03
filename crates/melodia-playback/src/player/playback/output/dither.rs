@@ -80,3 +80,7 @@ fn holds_exactly(sample: Sample, scale: f64) -> bool {
 fn narrow(sample: f64) -> Sample {
     sample as Sample
 }
+
+#[cfg(test)]
+#[path = "tests/dither_tests.rs"]
+mod tests;

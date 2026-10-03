@@ -3799,6 +3799,7 @@ dependencies = [
  "melodia-audio",
  "melodia-core",
  "melodia-playback",
+ "melodia-testkit",
  "parking_lot",
  "rand 0.10.2",
  "serde",

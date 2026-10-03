@@ -7,7 +7,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use super::{PlayingSource, Voice, VoicePull, pair};
-use crate::player::playback::tests::helpers::{TestSource, shape};
+use crate::player::playback::tests::helpers::{TestSource, bits, fill_sine, shape};
 use melodia_audio::player::source::audio::{Shape, SourceFormat};
 
 const RATE: u32 = 44_100;
@@ -412,6 +412,27 @@ fn a_second_source_is_converted_from_its_own_rate() {
     let out = pump(&mut pull, 64);
     let voiced = out.iter().filter(|s| **s != 0.0).count();
     assert_eq!(voiced, 36, "each source must be converted from the rate it reports");
+}
+
+/// A gapless seam at another rate is converted as one stream: the successor takes the converter
+/// over, window and fraction both. Restarting the kernel at the seam would leave half its width of
+/// silence either side, a tick on every continuous album the device can't play at its own rate.
+#[test]
+fn a_gapless_seam_at_another_rate_renders_exactly_like_the_unsplit_source() {
+    const SEAM: usize = 1_001;
+    let device = mono(48_000);
+    let mut tone = vec![0.0; 4_410];
+    fill_sine(&mut tone, 1_000.0, 44_100.0, 0.5);
+    let (unsplit, mut unsplit_pull) = pair(device);
+    unsplit.append(TestSource::new(tone.clone(), 1, RATE));
+    let (split, mut split_pull) = pair(device);
+    split.append(TestSource::new(tone[..SEAM].to_vec(), 1, RATE));
+    split.append(TestSource::new(tone[SEAM..].to_vec(), 1, RATE));
+
+    let whole = pump(&mut unsplit_pull, 8_192);
+    let seamed = pump(&mut split_pull, 8_192);
+
+    assert_eq!(bits(&seamed), bits(&whole));
 }
 
 /// A source's own `sample_rate` is what the clock divides by, so it has to follow the source rather

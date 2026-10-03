@@ -398,8 +398,8 @@ fn retry_rates(
     offered: Option<RateSet>,
 ) -> impl Iterator<Item = SampleRate> {
     let picked = offered.and_then(|offered| {
-        let others: Vec<u32> = offered.rates().filter(|&rate| rate != source.get()).collect();
-        rates::device_rate_for(source, &others)
+        let others: RateSet = offered.rates().filter(|&rate| rate != source.get()).collect();
+        rates::device_rate_for(source, others)
     });
     picked.into_iter().chain(own.filter(|&own| Some(own) != picked))
 }

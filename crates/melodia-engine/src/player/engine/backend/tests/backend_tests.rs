@@ -46,6 +46,7 @@ fn playing_when_single_source_no_gapless() {
 // refusal path before it does. The mixer is device-free and nothing pulls it.
 
 use std::num::NonZero;
+use std::path::Path;
 use std::sync::Weak;
 
 use melodia_audio::player::source::audio::Shape;
@@ -57,6 +58,7 @@ use melodia_audio::player::source::prebuffer::StreamShared;
 
 use super::PlaybackEngine;
 use melodia_core::error::AppError;
+use melodia_testkit::ASSETS_DIR;
 
 /// The session the tests treat as current. Any number does; two that differ is the whole subject.
 const CURRENT: u64 = 7;
@@ -120,5 +122,55 @@ async fn a_play_for_the_wrong_session_refuses_without_taking_the_stage() -> Resu
 
     assert!(matches!(refused, Err(AppError::Player(_))), "got {refused:?}");
     assert!(watching.upgrade().is_some(), "the refusal took the stage down with it");
+    Ok(())
+}
+
+// --- What a track boundary decides from ---
+//
+// With no device under the mixer every source plays without a reopen, which leaves the probe's
+// record and the crossfade settings as the only things these answers turn on.
+
+/// Crossfade used to be switched off wholesale while the output followed each file's rate. Each
+/// transition now asks about its own next track instead, so the user's settings pass through.
+#[tokio::test]
+async fn following_the_files_rate_leaves_the_crossfade_as_the_user_set_it() -> Result<(), AppError>
+{
+    let engine = engine_without_a_card()?;
+    engine.set_crossfade_enabled(true);
+    engine.set_follow_rate(true);
+
+    let enabled = engine.crossfade_settings().enabled;
+
+    assert!(enabled, "following the rate switched crossfade off");
+    Ok(())
+}
+
+/// The monitor asks about the next track on every poll near the end of the current one, so what
+/// opening its file found is kept rather than found again. Deleting the file after the first ask
+/// shows it: a second open would fail, and a file that won't open reads as needing a reopen.
+#[tokio::test]
+async fn the_next_tracks_file_is_opened_once_for_every_ask_about_it() -> Result<(), AppError> {
+    let engine = engine_without_a_card()?;
+    let dir = tempfile::tempdir()?;
+    let next = dir.path().join("next.wav");
+    std::fs::copy(Path::new(ASSETS_DIR).join("silence.wav"), &next)?;
+    let first = engine.reopens_for(&next.to_string_lossy());
+    std::fs::remove_file(&next)?;
+
+    let second = engine.reopens_for(&next.to_string_lossy());
+
+    assert_eq!((first, second), (false, false), "(before the delete, after it)");
+    Ok(())
+}
+
+/// A file that won't open counts as one the output reopens for, so nothing fades into it.
+#[tokio::test]
+async fn a_next_track_that_wont_open_is_never_faded_into() -> Result<(), AppError> {
+    let engine = engine_without_a_card()?;
+    let dir = tempfile::tempdir()?;
+
+    let reopens = engine.reopens_for(&dir.path().join("gone.wav").to_string_lossy());
+
+    assert!(reopens);
     Ok(())
 }

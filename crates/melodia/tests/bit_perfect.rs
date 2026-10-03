@@ -2,9 +2,9 @@
 //! in the way, the bytes an exclusive backend writes are the file's own samples.
 //!
 //! Driven through the real engine on a device-free mixer, from decoder through `EqSource`, the
-//! deck and the sum, then through `encode` as both exclusive writers do. The fixtures are written
-//! here rather than committed: noise, so every bit of a sample is exercised, with the format's
-//! integer extremes placed at the start.
+//! deck and the sum, then through the dither and `encode` as both exclusive writers do. The
+//! fixtures are written here rather than committed: noise, so every bit of a sample is exercised,
+//! with the format's integer extremes placed at the start.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 
 use melodia_engine::player::engine::backend::PlaybackEngine;
 use melodia_playback::player::playback::decks::DECK_COUNT;
+use melodia_playback::player::playback::output::dither::Dither;
 use melodia_playback::player::playback::output::encode::{self, DeviceFormat};
 use melodia_playback::player::playback::output::mixer::{self, MixerPull};
 use melodia_playback::player::playback::replaygain::TrackReplayGain;
@@ -23,6 +24,10 @@ const FRAMES: usize = 8_192;
 
 /// How long an append may take to land while the mixer is turned by hand.
 const START_BUDGET: Duration = Duration::from_secs(5);
+
+/// A writer's block, the default period at 48 kHz. Its size only decides which samples share a
+/// block, and a bit-perfect stream has none for the dither to move.
+const WRITER_BLOCK_FRAMES: usize = 960;
 
 /// One fixture: a WAV of `bits`-wide noise, and the device format that should carry it back out.
 struct Case {
@@ -104,6 +109,10 @@ fn play_through(path: &Path, case: &Case, eq_on: bool) -> std::io::Result<Vec<u8
     started.map_err(std::io::Error::other)?;
     out.extend(drain(&mut pull));
 
+    let mut dither = Dither::default();
+    for block in out.chunks_mut(WRITER_BLOCK_FRAMES * usize::from(CHANNELS)) {
+        dither.quantize(block, case.format);
+    }
     let mut bytes = Vec::new();
     encode::encode(&out, case.format, &mut bytes);
     Ok(bytes)

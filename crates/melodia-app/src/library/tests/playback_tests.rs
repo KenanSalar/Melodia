@@ -259,6 +259,33 @@ async fn the_toggle_does_nothing_with_nothing_to_play() -> Result<(), AppError> 
     Ok(())
 }
 
+/// A transport door a press goes through.
+type Door = fn(&PlaybackContext) -> Result<(), AppError>;
+
+/// A long pause gives an exclusive device back by taking the track off its deck and leaving it
+/// paused, the `stop` here standing in for that release. A resume would carry on over a deck
+/// holding nothing and play silence, so both doors start the track again instead.
+#[tokio::test]
+async fn play_and_the_toggle_start_a_paused_track_again_once_its_deck_holds_nothing()
+-> Result<(), AppError> {
+    let doors: [(&str, Door); 2] = [("play", player_play), ("toggle", player_toggle_play_pause)];
+    for (door, press) in doors {
+        let (fx, _ids) = playing(1).await?;
+        player_pause(&fx.ctx)?;
+        fx.ctx.engine.stop();
+
+        press(&fx.ctx)?;
+
+        let status = lock_state(&fx.ctx.player_state).status;
+        assert_eq!(
+            (fx.ctx.engine.holds_source(), status),
+            (true, PlaybackStatus::Playing),
+            "{door}"
+        );
+    }
+    Ok(())
+}
+
 /// The short-circuit is only reachable through the door: it reads the state and returns before
 /// `with_state_emit`, so a slider firing the value it already holds costs no publish. Both halves
 /// of the guard are here, and the second is the one that bites: the same volume *while muted* has

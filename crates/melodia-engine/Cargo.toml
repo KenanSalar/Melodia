@@ -32,6 +32,8 @@ log.workspace = true
 tempfile.workspace = true
 # The signal path suite spells a negotiated device format.
 cpal.workspace = true
+# The backend suite opens a real file for the track-boundary probe.
+melodia-testkit = { path = "../melodia-testkit" }
 
 [lints]
 workspace = true

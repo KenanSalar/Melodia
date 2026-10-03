@@ -35,6 +35,7 @@ use super::claim::ClaimError;
 use super::device::Feed;
 use super::dither::Dither;
 use super::encode::{self, DeviceFormat};
+use super::rates::RateSet;
 use super::{
     ExclusiveRequest, Negotiated, OutputDevice, OutputFormat, RateFallback, hardware_volume, rates,
     realtime, reserve,
@@ -244,7 +245,7 @@ pub(super) fn open(
             fallback: None,
             hardware_volume,
             device_level,
-            offered: None,
+            offered: config.offered,
             requested_period: Some(config.requested_period),
             period: u32::try_from(config.period_frames).ok(),
         },
@@ -315,6 +316,7 @@ fn open_error(id: &str, e: alsa::Error) -> ClaimError {
 /// What the card agreed to.
 struct Config {
     rate: SampleRate,
+    offered: Option<RateSet>,
     channels: ChannelCount,
     format: DeviceFormat,
     requested_period: u32,
@@ -328,7 +330,7 @@ fn configure(pcm: &PCM, request: &ExclusiveRequest) -> Result<Config, ClaimError
     hw.set_access(Access::RWInterleaved)
         .map_err(|e| ClaimError::io("The card refused interleaved access", e))?;
     hw.set_rate_resample(false).map_err(|e| ClaimError::io("Failed to turn resampling off", e))?;
-    let device_rate = pick_rate(&hw, shape.rate, rate_fallback)?;
+    let (device_rate, offered) = pick_rate(&hw, shape.rate, rate_fallback)?;
     let rate = device_rate.get();
     hw.set_rate(rate, ValueOr::Nearest).map_err(|_| ClaimError::RateRefused { rate })?;
     let channels = set_channels(&hw, shape.channels)?;
@@ -376,26 +378,34 @@ fn configure(pcm: &PCM, request: &ExclusiveRequest) -> Result<Config, ClaimError
 
     let period_frames = usize::try_from(period)
         .map_err(|e| ClaimError::io("The card reported a negative period", e))?;
-    Ok(Config { rate: device_rate, channels, format, requested_period, period_frames })
+    Ok(Config { rate: device_rate, offered, channels, format, requested_period, period_frames })
 }
 
-/// The source's own rate where the card runs it, else, where the request allows, the rate
-/// [`rates::device_rate_for`] picks out of the ladder's rungs the card offers.
+/// The rate to run the card at: the source's own where the card runs it, else, where the request
+/// allows, the one [`rates::device_rate_for`] picks out of the ladder's rungs the card offers.
+/// Under Resample those rungs come back too, even where the source's rate runs, since they are
+/// what tells a later track whether this claim plays it.
+///
+/// Asked before the channels and format narrow `hw`, they are exactly what a fresh claim picks
+/// from. The source's rate is asked directly, as a rate off the ladder has no bit in the set.
 fn pick_rate(
     hw: &HwParams<'_>,
     source: SampleRate,
     fallback: RateFallback,
-) -> Result<SampleRate, ClaimError> {
+) -> Result<(SampleRate, Option<RateSet>), ClaimError> {
     let refused = || ClaimError::RateRefused { rate: source.get() };
-    if hw.test_rate(source.get()).is_ok() {
-        return Ok(source);
-    }
+    let runs_source = hw.test_rate(source.get()).is_ok();
     if fallback == RateFallback::Shared {
-        return Err(refused());
+        return if runs_source { Ok((source, None)) } else { Err(refused()) };
     }
-    let offered: Vec<u32> =
+    let offered: RateSet =
         rates::LADDER.into_iter().filter(|&rate| hw.test_rate(rate).is_ok()).collect();
-    rates::device_rate_for(source, &offered).ok_or_else(refused)
+    let rate = if runs_source {
+        source
+    } else {
+        rates::device_rate_for(source, offered).ok_or_else(refused)?
+    };
+    Ok((rate, Some(offered)))
 }
 
 /// The source's own channel count, else the narrowest wider one the card offers. The mixer lays

@@ -14,11 +14,14 @@ use rustix::io::Errno;
 use super::{WriterControl, alsa_format, candidates, configure, is_busy, open_error};
 use crate::player::playback::output::claim::{ClaimSource, FallbackReason};
 use crate::player::playback::output::encode::DeviceFormat;
+use crate::player::playback::output::rates::{LADDER, RateSet};
 use crate::player::playback::output::{ExclusiveRequest, ExclusiveTuning, RateFallback};
 use crate::player::playback::tests::helpers::shape;
-use melodia_audio::player::source::audio::SourceFormat;
+use melodia_audio::player::source::audio::{Shape, SourceFormat};
 
 const CARD: &str = "hw:CARD=Test,DEV=0";
+
+const S16_SOURCE: SourceFormat = SourceFormat { bits: 16, float: false, lossy: false };
 
 /// Long past any scheduler delay, so only a release that never sees the close runs it out.
 const PATIENCE: Duration = Duration::from_secs(10);
@@ -165,20 +168,55 @@ fn a_card_that_takes_anything_opens_at_exactly_what_the_claim_asks_for() -> Resu
     ];
     for (what, shape, format, expected) in rows {
         let pcm = PCM::new("null", Direction::Playback, false)?;
-        let request = ExclusiveRequest {
-            device: None,
-            shape,
-            format,
-            tuning: ExclusiveTuning::default(),
-            hardware_volume: false,
-            rate_fallback: RateFallback::Shared,
-        };
 
-        let config = configure(&pcm, &request)?;
+        let config = configure(&pcm, &claim(shape, format, RateFallback::Shared))?;
 
         let landed =
             (config.channels.get(), config.format, config.requested_period, config.period_frames);
         assert_eq!(landed, expected, "{what}: (channels, format, period asked, period taken)");
     }
+    Ok(())
+}
+
+/// A claim on any card, at `shape` and `format`, with `rate_fallback` as the rate policy.
+fn claim(shape: Shape, format: SourceFormat, rate_fallback: RateFallback) -> ExclusiveRequest {
+    ExclusiveRequest {
+        device: None,
+        shape,
+        format,
+        tuning: ExclusiveTuning::default(),
+        hardware_volume: false,
+        rate_fallback,
+    }
+}
+
+/// Under Resample a claim keeps the ladder rates the card offers, so a later track can ask
+/// whether a fresh claim would land where this one runs. `null` offers every rate, so the whole
+/// ladder comes back. Playing through the system mixer converts nothing, so nothing is asked.
+#[test]
+fn a_claim_that_may_resample_keeps_every_ladder_rate_the_card_offers() -> Result<(), ClaimSource> {
+    let rows = [
+        (RateFallback::Resample, Some(LADDER.into_iter().collect::<RateSet>())),
+        (RateFallback::Shared, None),
+    ];
+    for (rate_fallback, expected) in rows {
+        let pcm = PCM::new("null", Direction::Playback, false)?;
+
+        let config = configure(&pcm, &claim(shape(2, 44_100), S16_SOURCE, rate_fallback))?;
+
+        assert_eq!(config.offered, expected, "{rate_fallback:?}");
+    }
+    Ok(())
+}
+
+/// A rate off the ladder has no bit in the set, so a claim asks the card about the source's own
+/// rate directly. Read off the set alone, a 24 kHz track would be converted on a card that runs it.
+#[test]
+fn a_source_rate_off_the_ladder_runs_where_the_card_takes_it() -> Result<(), ClaimSource> {
+    let pcm = PCM::new("null", Direction::Playback, false)?;
+
+    let config = configure(&pcm, &claim(shape(2, 24_000), S16_SOURCE, RateFallback::Resample))?;
+
+    assert_eq!(config.rate.get(), 24_000);
     Ok(())
 }

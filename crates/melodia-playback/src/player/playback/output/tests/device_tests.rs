@@ -10,9 +10,14 @@
 use std::pin::{Pin, pin};
 use std::task::{Context, Poll, Waker};
 
+use cpal::Sample as _;
+
 use super::{
-    ExternalVolume, Rungs, ladder, period_frames, rates_for, staging_samples, target_frames,
+    ExternalVolume, Rungs, dithered_rung, ladder, period_frames, rates_for, staging_samples,
+    target_frames,
 };
+use crate::player::playback::output::dither::Dither;
+use crate::player::playback::output::encode::DeviceFormat;
 use melodia_audio::player::source::audio::SampleRate;
 
 const RATE: u32 = 48_000;
@@ -229,4 +234,34 @@ fn a_report_landing_while_the_take_waits_is_taken() {
     let after = poll_take(take.as_mut());
 
     assert_eq!((before, after), (Poll::Pending, Poll::Ready(0.5_f64.to_bits())));
+}
+
+/// A shared integer stream is dithered onto the grid its width gives, whatever container the host
+/// packs it into. A format with no rung is converted by cpal alone.
+#[test]
+fn a_shared_integer_format_is_dithered_onto_the_grid_of_its_width() {
+    let rows = [
+        (cpal::SampleFormat::I16, Some(DeviceFormat::S16)),
+        (cpal::SampleFormat::U16, Some(DeviceFormat::S16)),
+        (cpal::SampleFormat::I24, Some(DeviceFormat::S24Low)),
+        (cpal::SampleFormat::U24, Some(DeviceFormat::S24Low)),
+        (cpal::SampleFormat::I32, None),
+        (cpal::SampleFormat::F32, None),
+    ];
+    for (format, rung) in rows {
+        assert_eq!(dithered_rung(format), rung, "{format:?}");
+    }
+}
+
+/// cpal's own conversion to a 24-bit sample is unchecked, so one at or past full scale wrapped to
+/// the negative end, a click wherever the chain clipped. Put on the grid first, it holds at the
+/// limit instead.
+#[test]
+fn a_shared_24_bit_sample_past_full_scale_holds_at_the_limit() {
+    let mut block = [1.0, 1.05, -1.05];
+    Dither::default().quantize(&mut block, DeviceFormat::S24Low);
+
+    let written: Vec<i32> = block.iter().map(|&s| cpal::I24::from_sample(s).inner()).collect();
+
+    assert_eq!(written, [8_388_607, 8_388_607, -8_388_608]);
 }

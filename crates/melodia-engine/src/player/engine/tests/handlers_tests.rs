@@ -311,6 +311,73 @@ fn the_last_track_neither_crossfades_nor_preloads() {
     assert_eq!(staged(t.as_ref()), None);
 }
 
+/// No fade can cross a reopen, so a next track the output reopens for drains to its end instead,
+/// and the tick still offers the preload, which the backend refuses for the same reason. Without
+/// the reopen the crossfade takes the transition as before, and with crossfade off the reopen
+/// changes nothing.
+#[test]
+fn a_next_track_the_output_reopens_for_is_never_crossfaded_into() {
+    let rows = [
+        ("crossfade on, a reopen ahead", crossfade_on(2_000), true, None, Some("/music/2.mp3")),
+        ("crossfade on, no reopen", crossfade_on(2_000), false, Some(1_000), None),
+        ("crossfade off, a reopen ahead", crossfade_off(), true, None, Some("/music/2.mp3")),
+    ];
+    for (what, xf, next_needs_reopen, expected_fade, expected_staged) in rows {
+        let mut state = playing_state();
+        let snapshot = BackendSnapshot { next_needs_reopen, ..backend(at_remaining(1_000), xf) };
+
+        let t = tick(&mut state, snapshot);
+
+        assert_eq!(
+            (fade_ms(t.as_ref()), staged(t.as_ref())),
+            (expected_fade, expected_staged),
+            "{what}"
+        );
+    }
+}
+
+// --- a long pause giving an exclusive device back --------------------------
+
+/// The polls up to and including the first that answers due, or `None` past a hold and a half.
+fn polls_until_due(watch: &mut PauseWatch) -> Option<u64> {
+    (1..=RELEASE_AFTER_N_TICKS * 3 / 2).find(|_| watch.due(true))
+}
+
+#[test]
+fn a_held_pause_is_due_on_the_poll_that_completes_the_hold() {
+    let mut watch = PauseWatch::default();
+
+    let due_after = polls_until_due(&mut watch);
+
+    assert_eq!(due_after, Some(RELEASE_AFTER_N_TICKS));
+}
+
+/// The state machine can turn a release down, a seek having landed in the gap, so the count starts
+/// over once it answers and asks again a whole hold later rather than never.
+#[test]
+fn a_release_turned_down_is_asked_for_again_a_whole_hold_later() {
+    let mut watch = PauseWatch::default();
+    let _first = polls_until_due(&mut watch);
+
+    let due_after = polls_until_due(&mut watch);
+
+    assert_eq!(due_after, Some(RELEASE_AFTER_N_TICKS));
+}
+
+/// A play in between ends the hold, so two pauses either side of it never add up to one.
+#[test]
+fn a_poll_that_is_not_holding_starts_the_count_over() {
+    let mut watch = PauseWatch::default();
+    for _ in 1..RELEASE_AFTER_N_TICKS {
+        watch.due(true);
+    }
+    watch.due(false);
+
+    let due_after = polls_until_due(&mut watch);
+
+    assert_eq!(due_after, Some(RELEASE_AFTER_N_TICKS));
+}
+
 // --- Live sources ----------------------------------------------------------
 
 /// A station playing over the same two-track queue, which stays untouched underneath it. Both

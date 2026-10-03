@@ -12,7 +12,8 @@ use melodia_testkit::with_env_var;
 
 use super::*;
 use crate::services::settings::{
-    ONBOARDING_VERSION, TitlebarButtonStyle, WINDOW_BORDER_SYSTEM_COLOR, WindowBorder,
+    ONBOARDING_VERSION, PausedDevice, RateFallbackKey, TitlebarButtonStyle,
+    WINDOW_BORDER_SYSTEM_COLOR, WindowBorder,
 };
 
 fn json_err(e: &serde_json::Error) -> AppError {
@@ -884,4 +885,65 @@ fn a_settings_file_from_before_hardware_volume_leaves_it_off() -> Result<(), App
 
     assert!(!flags.output_choice().hardware_volume);
     Ok(())
+}
+
+/// A file from before the setting reads as what every claim did then: a rate the device lacks
+/// hands it back and plays through the system mixer.
+#[test]
+fn a_settings_file_from_before_the_rate_fallback_plays_through_the_mixer() -> Result<(), AppError> {
+    let json = r#"{"output_mode": "exclusive"}"#;
+    let flags: OutputFlags = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+
+    assert_eq!(flags.output_choice().rate_fallback, RateFallback::Shared);
+    Ok(())
+}
+
+/// A file from before the setting reads as what every pause did then: the claim is held.
+#[test]
+fn a_settings_file_from_before_the_paused_device_keeps_it() -> Result<(), AppError> {
+    let json = r#"{"output_mode": "exclusive"}"#;
+    let flags: OutputFlags = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+
+    assert_eq!(flags.output_paused_device, PausedDevice::Keep);
+    Ok(())
+}
+
+/// The tokens are what every saved file holds, so renaming a variant would turn each of those back
+/// into the default on the next launch, silently.
+#[test]
+fn the_rate_fallback_is_written_and_read_by_its_token() -> Result<(), AppError> {
+    let rows = [(RateFallbackKey::Shared, "shared"), (RateFallbackKey::Resample, "resample")];
+    for (key, token) in rows {
+        let written = serde_json::to_value(key).map_err(|e| json_err(&e))?;
+        let read: RateFallbackKey =
+            serde_json::from_value(serde_json::json!(token)).map_err(|e| json_err(&e))?;
+
+        assert_eq!((written, read), (serde_json::json!(token), key), "{token}");
+    }
+    Ok(())
+}
+
+/// The long pause's token, held for the same reason as the rate fallback's.
+#[test]
+fn the_paused_device_is_written_and_read_by_its_token() -> Result<(), AppError> {
+    let rows = [(PausedDevice::Keep, "keep"), (PausedDevice::Release, "release")];
+    for (key, token) in rows {
+        let written = serde_json::to_value(key).map_err(|e| json_err(&e))?;
+        let read: PausedDevice =
+            serde_json::from_value(serde_json::json!(token)).map_err(|e| json_err(&e))?;
+
+        assert_eq!((written, read), (serde_json::json!(token), key), "{token}");
+    }
+    Ok(())
+}
+
+/// The Output card's toggle writes the token and reads it back, and the engine is handed the same
+/// reading, so the two directions have to agree for both positions.
+#[test]
+fn the_paused_device_toggle_comes_back_as_it_was_set() {
+    for release in [false, true] {
+        let token = PausedDevice::from_toggle(release);
+
+        assert_eq!(token.releases(), release, "{token:?}");
+    }
 }

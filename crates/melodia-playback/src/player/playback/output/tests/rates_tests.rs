@@ -68,7 +68,7 @@ fn a_missing_rate_is_converted_within_its_family_before_the_nearest() {
         ("nothing offered", 44_100, &[], None),
     ];
     for (what, source, supported, expected) in rows {
-        let rate = device_rate_for(nz_u32(source), supported);
+        let rate = device_rate_for(nz_u32(source), offered(supported));
 
         assert_eq!(rate.map(SampleRate::get), expected, "{what}");
     }

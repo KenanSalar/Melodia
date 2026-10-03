@@ -77,19 +77,19 @@ pub(super) fn claim_rate(
     }
     match fallback {
         RateFallback::Shared => None,
-        RateFallback::Resample => device_rate_for(source, &offered.rates().collect::<Vec<_>>()),
+        RateFallback::Resample => device_rate_for(source, offered),
     }
 }
 
-/// The rate to run a device at for a `source` rate it lacks, out of the `supported` rungs of
-/// [`LADDER`] it offers, or `None` where it offers none.
+/// The rate to run a device at for a `source` rate it lacks, out of the rates it `offered`, or
+/// `None` where it offers none.
 ///
 /// The source's family first: the lowest multiple above it, then the highest rate below it. Past
 /// those, the nearest of the rest, taking the higher of two equally near, which gives up less of
 /// the band.
-pub(super) fn device_rate_for(source: SampleRate, supported: &[u32]) -> Option<SampleRate> {
+pub(super) fn device_rate_for(source: SampleRate, offered: RateSet) -> Option<SampleRate> {
     let hz = source.get();
-    let rates = || supported.iter().copied();
+    let rates = || offered.rates();
     let multiple = rates().filter(|&rate| rate > hz && rate.is_multiple_of(hz)).min();
     let below = || rates().filter(|&rate| rate < hz && same_family(rate, hz)).max();
     let nearest = || rates().min_by_key(|&rate| (rate.abs_diff(hz), Reverse(rate)));
