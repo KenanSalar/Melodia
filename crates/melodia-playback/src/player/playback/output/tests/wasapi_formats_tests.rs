@@ -1,19 +1,23 @@
 //! Tests for what a claim asks a WASAPI endpoint: what each rung is declared as, which layouts may
 //! be respelled in the short header, the order a claim asks in, the rungs the rate sweep asks, how
-//! its threads share the ladder, and which refusals end a claim. Asking a real device needs one,
-//! and is tested by hand; the sweep's threads ask a fake.
+//! its threads share the ladder, which refusals end a claim, and the COM apartment each asking
+//! thread enters. Asking a real device needs one, and is tested by hand; the sweep's threads ask a
+//! fake. The apartment is asked of COM itself, which needs no device.
+
+use std::thread;
 
 use parking_lot::Mutex;
 use wasapi::{SampleType, WasapiError};
 use windows_core::HRESULT;
+use windows_sys::Win32::Foundation::{RPC_E_CHANGED_MODE, S_FALSE, S_OK};
 use windows_sys::Win32::Media::Audio::{
     AUDCLNT_E_DEVICE_IN_USE, AUDCLNT_E_DEVICE_INVALIDATED, AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED,
     AUDCLNT_E_UNSUPPORTED_FORMAT,
 };
 
 use super::{
-    ANY_LAYOUT, RateQueue, candidates, claim_error, device_refusal, short_header_defined,
-    sweep_ladder, wave_format,
+    ANY_LAYOUT, ComApartment, RateQueue, candidates, claim_error, device_refusal,
+    short_header_defined, sweep_ladder, wave_format,
 };
 use crate::player::playback::output::claim::{ClaimError, FallbackReason};
 use crate::player::playback::output::encode::DeviceFormat;
@@ -78,6 +82,58 @@ fn offered(rates: &[u32]) -> RateSet {
 #[expect(clippy::panic, reason = "a sweep thread panicking is the case under test")]
 fn panics(_: &RateQueue) -> Result<Vec<u32>, ClaimError> {
     panic!("a sweep thread failed");
+}
+
+/// Where a thread stands with COM.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Apartment {
+    Outside,
+    Single,
+    Multi,
+}
+
+impl Apartment {
+    /// Enter it on the calling thread, answering whether there is an entry to undo.
+    fn enter(self) -> bool {
+        match self {
+            Self::Outside => false,
+            Self::Single => wasapi::initialize_sta().is_ok(),
+            Self::Multi => wasapi::initialize_mta().is_ok(),
+        }
+    }
+
+    /// The calling thread's, read off an STA entry: COM answers one differently in each, and the
+    /// entry is undone at once wherever it took. `None` for an answer that is none of the three.
+    fn current() -> Option<Self> {
+        let asked = wasapi::initialize_sta();
+        if asked.is_ok() {
+            wasapi::deinitialize();
+        }
+        match asked.0 {
+            S_OK => Some(Self::Outside),
+            S_FALSE => Some(Self::Single),
+            RPC_E_CHANGED_MODE => Some(Self::Multi),
+            _ => None,
+        }
+    }
+}
+
+/// What `body` answers on a thread of its own entered into `prior`, which it leaves again after.
+/// COM keeps the apartment per thread, so each case needs one nothing has entered yet.
+fn in_apartment<T: Send>(prior: Apartment, body: impl FnOnce() -> T + Send) -> Option<T> {
+    thread::scope(|scope| {
+        scope
+            .spawn(move || {
+                let entered = prior.enter();
+                let answer = body();
+                if entered {
+                    wasapi::deinitialize();
+                }
+                answer
+            })
+            .join()
+            .ok()
+    })
 }
 
 /// Container bits, valid bits, sample type and bytes per stereo frame, for every rung.
@@ -214,6 +270,21 @@ fn a_claim_asks_only_at_the_sources_width_where_the_device_reports_nothing_wider
             "a mix format of {device_channels} channels"
         );
     }
+}
+
+/// The voices are reshaped to a candidate's shape and the device opened at its declaration, so the
+/// two agree at every candidate, the widened ones included. Declared at another rate, the claim
+/// opens and plays at the wrong speed with every call succeeding; at another width, every write is
+/// refused.
+#[test]
+fn every_candidate_is_declared_at_the_shape_it_hands_the_voices() {
+    let asked: Vec<_> = candidates(shape(1, 88_200), SourceFormat::F32, 2).collect();
+
+    let handed: Vec<(u16, u32)> =
+        asked.iter().map(|(shape, _, _)| (shape.channels.get(), shape.rate.get())).collect();
+    let declared: Vec<(u16, u32)> =
+        asked.iter().map(|(_, _, wave)| (wave.get_nchannels(), wave.get_samplespersec())).collect();
+    assert_eq!(declared, handed);
 }
 
 /// The offered set answers for every track after the claim's, whatever its format, so the sweep
@@ -381,5 +452,40 @@ fn a_device_refusal_keeps_its_reason_whichever_step_it_arrives_at() {
             claim_error("Failed to start the audio device", ENDPOINT, windows_error(code));
 
         assert_eq!(refused.reason(), expected, "{code:#010x}");
+    }
+}
+
+/// The writer, the sweep's helpers and the device listing each make their calls in the MTA,
+/// entered on the thread making them. A thread already in a single-threaded apartment can't join
+/// it, and makes them from there.
+#[test]
+fn a_com_guard_holds_its_thread_in_the_mta_unless_it_was_in_an_sta() {
+    let rows = [
+        (Apartment::Outside, Apartment::Multi),
+        (Apartment::Single, Apartment::Single),
+        (Apartment::Multi, Apartment::Multi),
+    ];
+    for (prior, expected) in rows {
+        let held = in_apartment(prior, || {
+            let _com = ComApartment::enter();
+            Apartment::current()
+        });
+
+        assert_eq!(held.flatten(), Some(expected), "from {prior:?}");
+    }
+}
+
+/// A guard that was refused undoes nothing. COM counts entries per thread, so undoing one the guard
+/// never made would take the caller's apartment down from under it, with every object it holds
+/// there.
+#[test]
+fn a_com_guard_leaves_its_thread_in_the_apartment_it_found() {
+    for prior in [Apartment::Outside, Apartment::Single, Apartment::Multi] {
+        let after = in_apartment(prior, || {
+            drop(ComApartment::enter());
+            Apartment::current()
+        });
+
+        assert_eq!(after.flatten(), Some(prior), "from {prior:?}");
     }
 }
