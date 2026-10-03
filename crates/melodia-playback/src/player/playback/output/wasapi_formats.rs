@@ -1,5 +1,6 @@
 //! What a WASAPI endpoint takes for exclusive use, asked before anything initialises: the layouts a
 //! claim tries and how each is spelled, the rates the device offers, and why a claim was refused.
+//! Also the COM apartment each thread that asks enters, the sweep's helpers and the writer alike.
 
 use std::io;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -16,10 +17,10 @@ use windows_sys::Win32::Media::Audio::{
 use melodia_audio::player::source::audio::{ChannelCount, SampleRate, Shape, SourceFormat};
 use melodia_core::error::describe;
 
+use super::ExclusiveRequest;
 use super::claim::ClaimError;
 use super::encode::DeviceFormat;
 use super::rates::{self, RateSet};
-use super::wasapi::ComApartment;
 
 /// Every shape and format worth asking for, best first: the source's own channel count before a
 /// wider one, since the mixer lays a narrower source on the first channels at no cost, and each
@@ -122,11 +123,12 @@ pub(super) fn refusal(
 ) -> ClaimError {
     let own_rate = SampleRate::new(mix.get_samplespersec()).filter(|&rate| rate != shape.rate);
     let takes_own_rate = match own_rate {
-        Some(rate) => match takes_at(client, mix.get_nchannels(), Shape { rate, ..shape }, source, id)
-        {
-            Ok(takes) => takes,
-            Err(refused) => return refused,
-        },
+        Some(rate) => {
+            match takes_at(client, mix.get_nchannels(), Shape { rate, ..shape }, source, id) {
+                Ok(takes) => takes,
+                Err(refused) => return refused,
+            }
+        }
         None => false,
     };
     if takes_own_rate {
@@ -158,6 +160,22 @@ fn takes_at(
 /// The source format whose ladder is every rung, a float source converting to all of them.
 const ANY_LAYOUT: SourceFormat = SourceFormat::F32;
 
+/// [`offered_rates`] for a claim on `request`, after asking the device for the claim's own first
+/// layout. A busy or barred device fails every probe alike, and is retried at each track start, so
+/// it refuses in that one call rather than across the sweep.
+pub(super) fn sweep_offered(
+    client: &AudioClient,
+    mix: &WaveFormat,
+    request: &ExclusiveRequest,
+    id: &str,
+) -> Result<RateSet, ClaimError> {
+    let first = candidates(request.shape, request.format, mix.get_nchannels()).next();
+    if let Some((_, _, wave)) = first {
+        exclusive_spelling(client, &wave, id)?;
+    }
+    offered_rates(client, mix, request.shape, id)
+}
+
 /// The ladder's rungs the device takes in any layout WASAPI can declare, at any channel count a
 /// claim for `shape` asks for.
 ///
@@ -171,7 +189,7 @@ const ANY_LAYOUT: SourceFormat = SourceFormat::F32;
 /// The rates are shared out across [`SWEEP_THREADS`] threads, `client`'s own among them. Proving a
 /// rate missing takes every layout at every channel count, one ask each, and the device answers
 /// asks from several threads at once.
-pub(super) fn offered_rates(
+fn offered_rates(
     client: &AudioClient,
     mix: &WaveFormat,
     shape: Shape,
@@ -244,7 +262,10 @@ fn sweep_ladder(
     match swept.into_iter().collect::<Result<Vec<Vec<u32>>, _>>() {
         Ok(swept) => Ok(swept.into_iter().flatten().collect()),
         Err(e) => {
-            log::debug!("audio: a rate sweep across threads failed, asking on one: {}", describe(&e));
+            log::debug!(
+                "audio: a rate sweep across threads failed, asking on one: {}",
+                describe(&e)
+            );
             Ok(RateQueue::default().drain(own)?.into_iter().collect())
         }
     }
@@ -282,6 +303,27 @@ impl RateQueue {
             }
         }
         Ok(offered)
+    }
+}
+
+/// COM on the calling thread while this lives, balanced only where `enter` succeeded: a thread
+/// already in a single-threaded apartment is refused, stays as it was, and reaches the endpoints
+/// from there.
+pub(super) struct ComApartment {
+    entered: bool,
+}
+
+impl ComApartment {
+    pub(super) fn enter() -> Self {
+        Self { entered: wasapi::initialize_mta().is_ok() }
+    }
+}
+
+impl Drop for ComApartment {
+    fn drop(&mut self) {
+        if self.entered {
+            wasapi::deinitialize();
+        }
     }
 }
 

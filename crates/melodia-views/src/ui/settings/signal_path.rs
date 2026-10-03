@@ -71,13 +71,7 @@ fn paint(ui: &AppWindow, path: Option<&SignalPath>) {
     g.set_playing(path.is_some());
     let Some(path) = path else { return };
 
-    g.set_verdict(match path.verdict {
-        Verdict::BitPerfect => 0,
-        Verdict::Enhanced => 1,
-        Verdict::Converted => 2,
-        Verdict::Fallback => 3,
-        Verdict::Lossy => 4,
-    });
+    g.set_verdict(verdict_index(path.verdict));
 
     let stages = path.stages;
     g.set_source_grade(grade_index(stages.source));
@@ -129,6 +123,17 @@ fn paint(ui: &AppWindow, path: Option<&SignalPath>) {
     g.set_muted(transport.muted);
     g.set_volume(i32::try_from(transport.volume).unwrap_or(i32::MAX));
     g.set_speed(format!("{}×", transport.speed).into());
+}
+
+/// The global's encoding of a verdict, which `signal-path.slint` indexes its words by.
+fn verdict_index(verdict: Verdict) -> i32 {
+    match verdict {
+        Verdict::BitPerfect => 0,
+        Verdict::Enhanced => 1,
+        Verdict::Converted => 2,
+        Verdict::Fallback => 3,
+        Verdict::Lossy => 4,
+    }
 }
 
 /// The global's encoding of a grade, which the `.slint` side documents beside the properties.

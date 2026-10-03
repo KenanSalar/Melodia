@@ -42,13 +42,12 @@ use melodia_core::error::describe;
 
 use super::claim::ClaimError;
 use super::device::Feed;
-use super::dither::Dither;
-use super::encode::{self, DeviceFormat};
+use super::encode::{BlockEncoder, DeviceFormat};
 use super::endpoint_volume::{self, EndpointVolume};
 use super::rates::RateSet;
 use super::wasapi_clock::{Clock, ClockReading, StallWatch, clock_duration, from_hns, hns};
 use super::wasapi_formats::{
-    candidates, claim_error, exclusive_spelling, hresult, offered_rates, refusal,
+    ComApartment, candidates, claim_error, exclusive_spelling, hresult, refusal, sweep_offered,
 };
 use super::wasapi_offered::{self, ProbeKey};
 use super::{
@@ -313,16 +312,7 @@ fn negotiate(endpoint: &Endpoint, request: &ExclusiveRequest) -> Result<Session,
                 from_channels: request.shape.channels.get(),
                 device_channels: mix.get_nchannels(),
             };
-            Some(wasapi_offered::remembered(key, || {
-                // A busy or barred device fails every probe alike, and is retried at each track
-                // start, so the claim's own first ask goes ahead of the sweep and refuses in one
-                // call.
-                let first = candidates(request.shape, request.format, mix.get_nchannels()).next();
-                if let Some((_, _, wave)) = first {
-                    exclusive_spelling(&probe, &wave, id)?;
-                }
-                offered_rates(&probe, &mix, request.shape, id)
-            })?)
+            Some(wasapi_offered::remembered(key, || sweep_offered(&probe, &mix, request, id))?)
         }
         RateFallback::Shared => None,
     };
@@ -559,8 +549,7 @@ impl Session {
     fn play(&mut self, feed: &Feed, stop: &AtomicBool) -> Result<(), WasapiError> {
         let channels = usize::from(self.shape.channels.get());
         let mut block: Vec<Sample> = vec![0.0; self.samples_per_buffer()];
-        let mut dither = Dither::default();
-        let mut bytes = Vec::with_capacity(block.len() * self.format.bytes_per_sample());
+        let mut encoder = BlockEncoder::new(self.format, block.len());
         // The priming silence `start` wrote is on the device's clock too.
         let mut written = self.buffer_frames as u64;
         let mut stalls = StallWatch::default();
@@ -568,9 +557,8 @@ impl Session {
             let Some(frames) = self.wait_for_room()? else { continue };
             let pulled = &mut block[..frames * channels];
             feed.fill(pulled);
-            dither.quantize(pulled, self.format);
-            encode::encode(pulled, self.format, &mut bytes);
-            self.render.write_to_device(frames, &bytes, None)?;
+            let bytes = encoder.encode(pulled);
+            self.render.write_to_device(frames, bytes, None)?;
             written += frames as u64;
             if let Some(volume) = &mut self.volume {
                 volume.sync(feed)?;
@@ -643,27 +631,6 @@ impl Drop for Session {
         if let Err(e) = self.client.stop_stream() {
             // A device that has gone can't be stopped either, and it is released regardless.
             log::debug!("audio: the exclusive output didn't stop cleanly: {}", describe(&e));
-        }
-    }
-}
-
-/// COM on the calling thread while this lives, balanced only where `enter` succeeded: a thread
-/// already in a single-threaded apartment is refused, stays as it was, and reaches the endpoints
-/// from there.
-pub(super) struct ComApartment {
-    entered: bool,
-}
-
-impl ComApartment {
-    pub(super) fn enter() -> Self {
-        Self { entered: wasapi::initialize_mta().is_ok() }
-    }
-}
-
-impl Drop for ComApartment {
-    fn drop(&mut self) {
-        if self.entered {
-            wasapi::deinitialize();
         }
     }
 }

@@ -30,13 +30,8 @@ impl EventSink for SlintEventSink {
                 }
                 PlayerEvent::SetShuffle(enabled) => library::queue::queue_set_shuffle(&s, enabled),
                 PlayerEvent::SetRepeat(mode) => library::queue::queue_set_repeat(&s, mode),
-                // Applied and then persisted, the two steps the speed control's own callback takes.
                 PlayerEvent::SetSpeed(speed) => {
-                    let applied = library::playback::player_set_playback_speed(&ctx, speed);
-                    s.persist_blocking("persist playback_speed", move |st| {
-                        library::settings::set_playback_speed(st, speed)
-                    });
-                    applied
+                    library::playback::player_set_playback_speed_committed(&s, speed)
                 }
             };
             if let Err(e) = r {

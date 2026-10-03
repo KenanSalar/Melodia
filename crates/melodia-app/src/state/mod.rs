@@ -30,7 +30,7 @@ use melodia_integrations::services::integrations::scrobble::ScrobbleService;
 use melodia_net::services::net::pacer::RequestPacer;
 use melodia_platform::services::platform::always_on_top::{self, AlwaysOnTopCapability};
 use melodia_playback::player::playback::decks::DECK_COUNT;
-use melodia_playback::player::playback::output::{self, AudioOutput, OutputMode};
+use melodia_playback::player::playback::output::{AudioOutput, OutputMode};
 use melodia_playback::player::playback::stream_health::AudioStreamHealth;
 use melodia_store::database::{self, DbPool};
 use melodia_store::media::ingest::watcher::{FileEvent, FolderWatcher};
@@ -364,7 +364,7 @@ fn open_output(
         log::info!("Audio output: parked until the first play claims the device");
         return AudioOutput::open_parked(DECK_COUNT, health);
     }
-    if output::SHARED_DEVICE_SUPPORTED && choice.device.is_some() {
+    if choice.shared_device().is_some() {
         log::info!("Audio output: parked until the chosen device opens");
         return AudioOutput::open_parked(DECK_COUNT, health);
     }

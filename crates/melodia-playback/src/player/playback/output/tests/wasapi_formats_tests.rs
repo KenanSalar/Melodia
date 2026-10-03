@@ -264,8 +264,7 @@ fn a_sweep_across_threads_asks_about_each_rate_once() {
 fn the_rates_every_thread_found_are_in_the_set() {
     let device = FakeDevice::taking(&[44_100]);
 
-    let swept =
-        sweep_ladder(|rate| device.ask(rate), |_| Ok(vec![96_000])).map_err(|e| e.reason());
+    let swept = sweep_ladder(|rate| device.ask(rate), |_| Ok(vec![96_000])).map_err(|e| e.reason());
 
     assert_eq!(swept, Ok(offered(&[44_100, 96_000])));
 }

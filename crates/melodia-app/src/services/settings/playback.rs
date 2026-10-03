@@ -144,13 +144,15 @@ impl Default for CrossfadeFlags {
 #[serde(default)]
 pub struct OutputFlags {
     pub output_follow_rate: bool,
-    pub output_mode: OutputModeKey,
+    #[serde(with = "OutputModeKey")]
+    pub output_mode: OutputMode,
     pub output_device: Option<String>,
     pub output_period_ms: u32,
     pub output_polling: bool,
     pub output_resync_ms: u32,
     pub output_hardware_volume: bool,
-    pub output_rate_fallback: RateFallbackKey,
+    #[serde(with = "RateFallbackKey")]
+    pub output_rate_fallback: RateFallback,
     pub output_paused_device: PausedDevice,
 }
 
@@ -158,13 +160,13 @@ impl Default for OutputFlags {
     fn default() -> Self {
         Self {
             output_follow_rate: false,
-            output_mode: OutputModeKey::default(),
+            output_mode: OutputMode::default(),
             output_device: None,
             output_period_ms: duration_ms(ExclusiveTuning::DEFAULT_PERIOD),
             output_polling: false,
             output_resync_ms: duration_ms(DEFAULT_RESYNC_HOLD),
             output_hardware_volume: false,
-            output_rate_fallback: RateFallbackKey::default(),
+            output_rate_fallback: RateFallback::default(),
             output_paused_device: PausedDevice::default(),
         }
     }
@@ -178,22 +180,22 @@ impl OutputFlags {
     pub fn output_choice(&self) -> OutputChoice {
         let period = Duration::from_millis(u64::from(self.output_period_ms));
         OutputChoice {
-            mode: self.output_mode.into(),
+            mode: self.output_mode,
             device: self.output_device.clone(),
             tuning: ExclusiveTuning::new(period, Drive::from_polling(self.output_polling)),
             hardware_volume: self.output_hardware_volume,
-            rate_fallback: self.output_rate_fallback.into(),
+            rate_fallback: self.output_rate_fallback,
         }
     }
 
     /// [`Self::output_choice`]'s way back, for persisting what the engine was just handed.
     pub fn set_output_choice(&mut self, choice: &OutputChoice) {
-        self.output_mode = choice.mode.into();
+        self.output_mode = choice.mode;
         self.output_device.clone_from(&choice.device);
         self.output_period_ms = duration_ms(choice.tuning.period);
         self.output_polling = choice.tuning.drive == Drive::Polling;
         self.output_hardware_volume = choice.hardware_volume;
-        self.output_rate_fallback = choice.rate_fallback.into();
+        self.output_rate_fallback = choice.rate_fallback;
     }
 }
 
@@ -201,58 +203,21 @@ fn duration_ms(duration: Duration) -> u32 {
     u32::try_from(duration.as_millis()).unwrap_or(u32::MAX)
 }
 
-/// [`OutputMode`] as persisted: a key, so reordering the picker repoints nothing.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum OutputModeKey {
-    #[default]
+/// [`OutputMode`] as persisted: a key, so reordering the picker repoints nothing. A mirror rather
+/// than a derive, `melodia-playback` naming no serde.
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "OutputMode", rename_all = "lowercase")]
+enum OutputModeKey {
     Shared,
     Exclusive,
 }
 
-impl From<OutputModeKey> for OutputMode {
-    fn from(key: OutputModeKey) -> Self {
-        match key {
-            OutputModeKey::Shared => Self::Shared,
-            OutputModeKey::Exclusive => Self::Exclusive,
-        }
-    }
-}
-
-impl From<OutputMode> for OutputModeKey {
-    fn from(mode: OutputMode) -> Self {
-        match mode {
-            OutputMode::Shared => Self::Shared,
-            OutputMode::Exclusive => Self::Exclusive,
-        }
-    }
-}
-
-/// [`RateFallback`] as persisted, a key for the same reason as [`OutputModeKey`].
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum RateFallbackKey {
-    #[default]
+/// [`RateFallback`] as persisted, mirrored for the same reasons as [`OutputModeKey`].
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "RateFallback", rename_all = "lowercase")]
+enum RateFallbackKey {
     Shared,
     Resample,
-}
-
-impl From<RateFallbackKey> for RateFallback {
-    fn from(key: RateFallbackKey) -> Self {
-        match key {
-            RateFallbackKey::Shared => Self::Shared,
-            RateFallbackKey::Resample => Self::Resample,
-        }
-    }
-}
-
-impl From<RateFallback> for RateFallbackKey {
-    fn from(fallback: RateFallback) -> Self {
-        match fallback {
-            RateFallback::Shared => Self::Shared,
-            RateFallback::Resample => Self::Resample,
-        }
-    }
 }
 
 /// What a long pause does with an exclusive device. A token rather than a `bool`, [`OutputFlags`]

@@ -17,7 +17,9 @@ pub mod device;
 pub mod dither;
 pub mod encode;
 pub mod mixer;
+mod negotiated;
 mod rates;
+mod request;
 mod resample;
 pub mod voice;
 
@@ -49,21 +51,23 @@ cfg_select! {
     }
 }
 
-use std::fmt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use melodia_audio::player::source::audio::{SampleRate, Shape, SourceFormat};
+use melodia_audio::player::source::audio::SampleRate;
 use melodia_core::error::{self, AppError};
 use melodia_core::utils::toast::{self, ToastKind};
 
+pub use self::negotiated::{DeviceLevel, Negotiated, OutputFormat};
+pub use self::request::{
+    Drive, ExclusiveRequest, ExclusiveTuning, OutputDevice, OutputMode, OutputRequest, RateFallback,
+};
+
 use self::claim::{ClaimError, Fallback, FallbackReason, claim_serves};
 use self::device::{DeviceStream, ExternalVolume, Feed, Lead, Target};
-use self::encode::DeviceFormat;
 use self::exclusive::{Claim, ExclusiveStream};
 use self::mixer::Mixer;
-use self::rates::RateSet;
 use super::stream_health::AudioStreamHealth;
 
 /// Silence written after a reopen lands on a new rate, before any voice plays, until the user sets
@@ -78,118 +82,6 @@ pub const DEFAULT_RESYNC_HOLD: Duration = Duration::from_millis(200);
 /// The longest hold a user may set. The slowest DACs relock well inside it, and past it the
 /// silence reads as a stall rather than a gap.
 pub const MAX_RESYNC_HOLD: Duration = Duration::from_secs(1);
-
-/// Whether the output goes through the system mixer or takes the device for itself.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum OutputMode {
-    #[default]
-    Shared,
-    Exclusive,
-}
-
-/// What an open asks the device for.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum OutputRequest {
-    /// The named device, or the system's default where none is, at `rate` where one is given and
-    /// the device's own config otherwise.
-    Shared {
-        rate: Option<SampleRate>,
-        /// One of [`devices`]' ids, only where [`SHARED_DEVICE_SUPPORTED`].
-        device: Option<String>,
-    },
-    Exclusive(ExclusiveRequest),
-}
-
-/// A claim on one device, asked for at the source's shape and a format that holds it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ExclusiveRequest {
-    /// The device's id, or `None` for the first the system lists.
-    pub device: Option<String>,
-    pub shape: Shape,
-    pub format: SourceFormat,
-    pub tuning: ExclusiveTuning,
-    /// Carry the volume on the device's own control where it has one in hardware, leaving the
-    /// samples untouched. Part of the request so a change reopens the claim: the gain moving
-    /// between the voices and the device mid-stream can play a period at the wrong level.
-    pub hardware_volume: bool,
-    /// Part of the request so a change reopens the claim: one that fell back to shared can take
-    /// the device at another rate, and one converting gives it back.
-    pub rate_fallback: RateFallback,
-}
-
-/// How an exclusive writer paces the device. Part of the request, so changing it reopens.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ExclusiveTuning {
-    /// What the writer hands the device at a time. A device that can't run it gets the nearest
-    /// period it can, which [`Negotiated::period`] reports.
-    pub period: Duration,
-    pub drive: Drive,
-}
-
-impl ExclusiveTuning {
-    /// Short enough that a stop lands quickly, long enough that the writer wakes rarely.
-    pub const DEFAULT_PERIOD: Duration = Duration::from_millis(20);
-    /// Below a couple of milliseconds no device keeps up, and every one rounds it up anyway.
-    pub const MIN_PERIOD: Duration = Duration::from_millis(2);
-    /// A stop waits out a period, and a voice's command waits for a fill, so a longer one would
-    /// start to read as a hang.
-    pub const MAX_PERIOD: Duration = Duration::from_millis(100);
-
-    /// `period` held inside the range a claim asks for.
-    pub fn new(period: Duration, drive: Drive) -> Self {
-        Self { period: period.clamp(Self::MIN_PERIOD, Self::MAX_PERIOD), drive }
-    }
-}
-
-impl Default for ExclusiveTuning {
-    fn default() -> Self {
-        Self { period: Self::DEFAULT_PERIOD, drive: Drive::default() }
-    }
-}
-
-/// What wakes the exclusive writer.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum Drive {
-    /// The device signals each time it wants a period, and gets exactly one.
-    #[default]
-    Events,
-    /// The writer wakes on a timer and tops the device's buffer up. Some USB drivers stutter in
-    /// event mode and play cleanly in this one. Only WASAPI tells the two apart; ALSA's writer
-    /// always blocks on the card.
-    Polling,
-}
-
-impl Drive {
-    /// The drive a polling toggle stands for.
-    pub fn from_polling(polling: bool) -> Self {
-        if polling { Self::Polling } else { Self::Events }
-    }
-}
-
-/// What a claim does where the device lacks the source's rate.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum RateFallback {
-    /// Give the claim up and play shared, as a refused channel count or format does.
-    #[default]
-    Shared,
-    /// Keep the claim at another of the device's rates, which the voices convert to.
-    Resample,
-}
-
-impl Default for OutputRequest {
-    fn default() -> Self {
-        Self::Shared { rate: None, device: None }
-    }
-}
-
-/// A device an exclusive claim can be aimed at, and where [`SHARED_DEVICE_SUPPORTED`] a shared
-/// stream too.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OutputDevice {
-    /// Stable across reboots and replugs, which is what makes it the persisted choice.
-    pub id: String,
-    pub name: String,
-}
 
 /// Whether this platform has an exclusive backend. Where it doesn't, every claim falls back.
 pub const EXCLUSIVE_SUPPORTED: bool = exclusive::SUPPORTED;
@@ -214,98 +106,6 @@ pub const FOLLOW_RATE_SUPPORTED: bool = !cfg!(target_os = "windows");
 /// stream too, empty where there is no exclusive backend. Blocking: it asks every device.
 pub fn devices() -> Vec<OutputDevice> {
     exclusive::devices()
-}
-
-/// The sample format a stream was opened with.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OutputFormat {
-    /// cpal's, on a shared stream. The system mixer sits past it, so it proves nothing about what
-    /// the card receives.
-    Shared(cpal::SampleFormat),
-    Exclusive(DeviceFormat),
-}
-
-impl OutputFormat {
-    /// Whether a source in `source` reaches the card unchanged through this format.
-    pub fn carries(self, source: SourceFormat) -> bool {
-        match self {
-            Self::Shared(_) => false,
-            Self::Exclusive(format) => format.carries(source),
-        }
-    }
-}
-
-impl fmt::Display for OutputFormat {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Shared(format) => format.fmt(f),
-            Self::Exclusive(format) => format.fmt(f),
-        }
-    }
-}
-
-/// What the device actually agreed to, beside what it was asked for.
-///
-/// Reported rather than assumed because every part of it can differ from the request, and because a
-/// bit-perfect mode is only checkable if the negotiated end of it is visible.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Negotiated {
-    /// What the host calls the device, or `None` where it would not say. After a reopen this is
-    /// the only thing telling a bug report which output the audio moved to.
-    pub device_name: Option<String>,
-    pub shape: Shape,
-    pub format: OutputFormat,
-    /// Why an exclusive claim fell back to this shared stream, or `None` where none was refused.
-    pub fallback: Option<Fallback>,
-    /// Whether the device's own control carries the volume, so the voices hand it the samples at
-    /// unity. Only an exclusive claim that asked for it, on a device with one in hardware.
-    pub hardware_volume: bool,
-    /// The device's own control, read at the claim. The samples reach the device untouched either
-    /// way, but one the system left low or muted plays them quieter or not at all. Where the
-    /// control carries the volume its level is Melodia's, and only the switch is the system's.
-    /// `None` where the backend can't read one, and on every shared stream.
-    pub device_level: Option<DeviceLevel>,
-    /// The standard rates the device offered a claim allowed to resample, which is what says
-    /// whether a track at another rate would land the device where it runs now. `None` where no
-    /// claim asked.
-    ///
-    /// A backend filling it owes a superset of what its own fresh claim could see, whatever the
-    /// next source's format: a narrower set keeps a track converted that a fresh claim would play
-    /// at its own rate, where a wider one costs a reopen at most.
-    pub offered: Option<RateSet>,
-    /// The period that was asked for, or `None` where the host was left to name its own.
-    ///
-    /// Kept beside the answer because it is the one of the two that says which pass of the ladder
-    /// won, which is the difference between a block this tree sized and one nobody did.
-    pub requested_period: Option<cpal::FrameCount>,
-    /// What the host says it will hand the callback at a time, or `None` where it cannot say.
-    ///
-    /// Asked rather than inferred: `StreamTrait::buffer_size` arrived in cpal 0.18, and before it
-    /// the only place the real block appeared was `data.len()` inside the callback. cpal calls it
-    /// advisory and the hosts that don't track one answer `UnsupportedOperation`, so this is where
-    /// a bug report reads the block back, not a bound anything sizes against.
-    pub period: Option<cpal::FrameCount>,
-}
-
-/// A device's own volume control, as the system left it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct DeviceLevel {
-    /// The percentage the system's own slider shows for it.
-    pub percent: u8,
-    pub muted: bool,
-}
-
-impl DeviceLevel {
-    /// `level`, the fraction the system's slider shows, held to `0..=1`.
-    #[expect(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "a fraction held to 0..=1, scaled to 100 and rounded, fits a u8 exactly"
-    )]
-    pub fn new(level: f32, muted: bool) -> Self {
-        let percent = (level.clamp(0.0, 1.0) * 100.0).round() as u8;
-        Self { percent, muted }
-    }
 }
 
 /// The open device and the voices feeding it.

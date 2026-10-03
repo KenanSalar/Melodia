@@ -166,8 +166,7 @@ impl Converter {
         }
         self.state = State::Draining;
         while self.owed > 0 && self.pads <= self.ahead {
-            self.window.push_silence();
-            self.pads += 1;
+            self.pad();
             self.owed -= 1;
         }
         if self.pads > self.ahead {
@@ -245,13 +244,16 @@ impl Converter {
                 self.window.push(&self.incoming);
                 *taken += 1;
             }
-            State::Draining => {
-                self.window.push_silence();
-                self.pads += 1;
-            }
+            State::Draining => self.pad(),
             State::Done => return false,
         }
         true
+    }
+
+    /// Take a silent frame in past the source's end.
+    fn pad(&mut self) {
+        self.window.push_silence();
+        self.pads += 1;
     }
 
     /// Write the centre frame, or the kernel's interpolation around it where it has been
@@ -327,7 +329,12 @@ impl Window {
 
     /// `channel`'s frame `ahead` frames before the newest.
     fn behind_newest(&self, channel: usize, ahead: usize) -> Sample {
-        self.samples[channel * 2 * SPAN + self.head + SPAN - 1 - ahead]
+        self.samples[self.slot(channel, ahead)]
+    }
+
+    /// Where in `samples` [`Self::behind_newest`] reads.
+    fn slot(&self, channel: usize, ahead: usize) -> usize {
+        channel * 2 * SPAN + self.head + SPAN - 1 - ahead
     }
 
     /// `channel`'s frames under the `weighed` taps, laid out as [`Kernel::weigh`] lays its
@@ -340,7 +347,7 @@ impl Window {
         weights: &[f32],
     ) -> Sample {
         let Weighed { taps, gain } = weighed;
-        let start = channel * 2 * SPAN + self.head + SPAN - 1 - ahead - CENTRE;
+        let start = self.slot(channel, ahead) - CENTRE;
         let frames = &self.samples[start + taps.start..start + taps.end];
         dot(frames, &weights[taps.clone()]) * gain
     }

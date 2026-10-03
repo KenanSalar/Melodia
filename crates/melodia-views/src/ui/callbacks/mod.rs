@@ -275,23 +275,16 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
     }
 
     // set_playback_speed: apply to the live player *and* persist, speed surviving restarts
-    // as repeat, shuffle and volume do. Two steps, as the gapless callback takes: a fast
-    // synchronous apply, then a blocking-pool write.
+    // as repeat, shuffle and volume do.
     {
-        let s = state.clone();
+        let state = state.clone();
         player.on_set_playback_speed(move |speed| {
-            let speed = f64::from(speed);
-            let s_apply = s.clone();
+            let s = state.clone();
             spawn_logged_sync!(
-                s_apply,
+                s,
                 "set_playback_speed",
-                library::playback::player_set_playback_speed(&s_apply.playback_ctx(), speed)
+                library::playback::player_set_playback_speed_committed(&s, f64::from(speed))
             );
-            // `persist_blocking`, not the macro beside it: this writes `settings.json`,
-            // where the macro is the `views.json` shape.
-            s.persist_blocking("persist playback_speed", move |st| {
-                library::settings::set_playback_speed(st, speed)
-            });
         });
     }
 

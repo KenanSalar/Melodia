@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::state::PlaybackContext;
+use crate::state::{AppState, PlaybackContext};
 use melodia_audio::player::source::stream_source;
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
@@ -363,6 +363,16 @@ pub async fn commit_player_settings(ctx: &PlaybackContext) -> Result<(), AppErro
 
 pub fn player_set_playback_speed(ctx: &PlaybackContext, speed: f64) -> Result<(), AppError> {
     ctx.emit_and_execute(|s| s.build_set_speed_actions(speed));
+    Ok(())
+}
+
+/// [`player_set_playback_speed`] and the write that has it survive a restart, as volume and repeat
+/// do. The write goes to the blocking pool, so the caller waits on the engine alone.
+pub fn player_set_playback_speed_committed(state: &AppState, speed: f64) -> Result<(), AppError> {
+    player_set_playback_speed(&state.playback_ctx(), speed)?;
+    state.persist_blocking("persist playback_speed", move |state| {
+        crate::library::settings::set_playback_speed(state, speed)
+    });
     Ok(())
 }
 

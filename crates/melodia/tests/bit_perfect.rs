@@ -2,7 +2,7 @@
 //! in the way, the bytes an exclusive backend writes are the file's own samples.
 //!
 //! Driven through the real engine on a device-free mixer, from decoder through `EqSource`, the
-//! deck and the sum, then through the dither and `encode` as both exclusive writers do. The
+//! deck and the sum, then through the `BlockEncoder` both exclusive writers encode with. The
 //! fixtures are written here rather than committed: noise, so every bit of a sample is exercised,
 //! with the format's integer extremes placed at the start.
 
@@ -12,8 +12,7 @@ use std::time::{Duration, Instant};
 
 use melodia_engine::player::engine::backend::PlaybackEngine;
 use melodia_playback::player::playback::decks::DECK_COUNT;
-use melodia_playback::player::playback::output::dither::Dither;
-use melodia_playback::player::playback::output::encode::{self, DeviceFormat};
+use melodia_playback::player::playback::output::encode::{BlockEncoder, DeviceFormat};
 use melodia_playback::player::playback::output::mixer::{self, MixerPull};
 use melodia_playback::player::playback::replaygain::TrackReplayGain;
 
@@ -109,12 +108,12 @@ fn play_through(path: &Path, case: &Case, eq_on: bool) -> std::io::Result<Vec<u8
     started.map_err(std::io::Error::other)?;
     out.extend(drain(&mut pull));
 
-    let mut dither = Dither::default();
-    for block in out.chunks_mut(WRITER_BLOCK_FRAMES * usize::from(CHANNELS)) {
-        dither.quantize(block, case.format);
-    }
+    let block_samples = WRITER_BLOCK_FRAMES * usize::from(CHANNELS);
+    let mut encoder = BlockEncoder::new(case.format, block_samples);
     let mut bytes = Vec::new();
-    encode::encode(&out, case.format, &mut bytes);
+    for block in out.chunks_mut(block_samples) {
+        bytes.extend_from_slice(encoder.encode(block));
+    }
     Ok(bytes)
 }
 

@@ -24,10 +24,14 @@ impl PlaybackEngine {
 
     /// [`Self::query_position`] once the active deck has acted on everything sent to it, or `None`
     /// while it hasn't, a seek's swap being sent before the deck takes it.
+    ///
+    /// Also `None` for a deck holding nothing: a clear zeroes the clock, and that zero is no
+    /// source's position. A release that already took the track off would otherwise write it back
+    /// as where to resume.
     pub fn query_settled_position(&self) -> Option<u64> {
         let decks = self.lock_decks();
         let voice = &decks.active().voice;
-        voice.is_settled().then(|| millis(voice.position()))
+        (voice.is_settled() && !voice.is_empty()).then(|| millis(voice.position()))
     }
 
     /// Whether the active deck holds a source for a resume to carry on with. A pause long enough

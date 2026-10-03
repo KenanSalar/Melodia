@@ -46,11 +46,15 @@ pub struct OutputChoice {
 }
 
 impl OutputChoice {
-    /// A shared stream at `rate` on the chosen device, which a backend whose ids can't name a
-    /// shared target never gets: a Linux card's would go round the sound server.
+    /// The chosen device as shared output's target, which a backend whose ids can't name one never
+    /// gets: a Linux card's would go round the sound server.
+    pub fn shared_device(&self) -> Option<&str> {
+        self.device.as_deref().filter(|_| output::SHARED_DEVICE_SUPPORTED)
+    }
+
+    /// A shared stream at `rate` on [`Self::shared_device`].
     fn shared_request(&self, rate: Option<SampleRate>) -> OutputRequest {
-        let device = self.device.clone().filter(|_| output::SHARED_DEVICE_SUPPORTED);
-        OutputRequest::Shared { rate, device }
+        OutputRequest::Shared { rate, device: self.shared_device().map(str::to_owned) }
     }
 }
 
@@ -139,6 +143,13 @@ impl PlaybackEngine {
         if let Some(mut output) = closed {
             output.park();
         }
+    }
+
+    /// Set the user's volume, as an amplitude: on the device's own control where an exclusive claim
+    /// carries it there, leaving the voices at unity, and on the voices otherwise.
+    pub fn set_volume(&self, volume: f64) {
+        let decks = self.lock_decks();
+        decks.set_volume_all(self.route_volume(volume));
     }
 
     /// Hand the user's `volume`, as an amplitude, to the output and answer the gain the voices
@@ -344,9 +355,29 @@ impl PlaybackEngine {
         !plays
     }
 
+    /// Open the file at `path` to stage behind the playing track, or `None` where the output would
+    /// have to reopen for it. Asked every tick until the track ends, so a refusal opens the file
+    /// once.
+    ///
+    /// # Errors
+    ///
+    /// Whatever [`FileDecoder::open`] refuses the file with, the first time it is asked about.
+    pub(super) fn open_for_gapless(&self, path: &str) -> Result<Option<FileDecoder>, AppError> {
+        if self.recorded_answer(path) == Some(false) {
+            return Ok(None);
+        }
+        let decoded = self.open_recorded(path)?;
+        // Left unstaged, it ends in `EndOfStream` and starts through `play_media`, which reopens.
+        if !self.plays_without_reopen(decoded.shape(), decoded.format()) {
+            log::debug!("Not staging {path} gapless: the output reopens for its format");
+            return Ok(None);
+        }
+        Ok(Some(decoded))
+    }
+
     /// Whether the file at `path` plays on the output as it is, by what opening it last found.
     /// `None` until something has opened it.
-    pub(super) fn recorded_answer(&self, path: &str) -> Option<bool> {
+    fn recorded_answer(&self, path: &str) -> Option<bool> {
         let found = self
             .output
             .probed
@@ -364,7 +395,7 @@ impl PlaybackEngine {
     /// # Errors
     ///
     /// Whatever [`FileDecoder::open`] refuses the file with.
-    pub(super) fn open_recorded(&self, path: &str) -> Result<FileDecoder, AppError> {
+    fn open_recorded(&self, path: &str) -> Result<FileDecoder, AppError> {
         let opened = FileDecoder::open(Path::new(path));
         let found = match &opened {
             Ok(decoded) => Probed::Decodes(decoded.shape(), decoded.format()),

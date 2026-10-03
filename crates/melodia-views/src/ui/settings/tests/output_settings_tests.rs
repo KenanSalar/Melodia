@@ -28,13 +28,7 @@ fn cards(names: &[&str]) -> Vec<OutputDevice> {
 
 /// The picker with `saved` as the card last chosen, before any listing has landed.
 fn picked(saved: Option<&str>) -> Picked {
-    Picked {
-        choice: OutputChoice { device: saved.map(|name| card(name).id), ..OutputChoice::default() },
-        devices: Vec::new(),
-        default_label: None,
-        listing_asked: 0,
-        listing_applied: 0,
-    }
+    Picked::new(OutputChoice { device: saved.map(|name| card(name).id), ..OutputChoice::default() })
 }
 
 fn options_named(names: &[&str]) -> Vec<SharedString> {

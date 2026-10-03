@@ -9,12 +9,14 @@
 //! integer. Anything the chain changed rounds to nearest and saturates, so a full-scale `+1.0`
 //! becomes the positive maximum rather than wrapping to the negative one.
 //!
-//! Each writer runs a block through [`super::dither`] first, which hands on unchanged any block the
-//! layout holds exactly.
+//! A writer encodes through [`BlockEncoder`], which runs each block through [`super::dither`] first
+//! and hands on unchanged any block the layout holds exactly.
 
 use std::fmt;
 
 use melodia_audio::player::source::audio::{Sample, SourceFormat};
+
+use super::dither::Dither;
 
 /// A sample layout a device can be opened with, all little-endian.
 ///
@@ -102,6 +104,31 @@ impl fmt::Display for DeviceFormat {
             Self::S32 => "S32_LE",
             Self::F32 => "FLOAT_LE",
         })
+    }
+}
+
+/// What an exclusive writer turns each block it pulls into: dithered where the chain moved it off
+/// the format's grid, then encoded. One type for both steps, so no writer can narrow a block
+/// without the dither.
+pub struct BlockEncoder {
+    format: DeviceFormat,
+    dither: Dither,
+    bytes: Vec<u8>,
+}
+
+impl BlockEncoder {
+    /// An encoder into `format` whose buffer already holds a block of `block_samples`, so a writer
+    /// on a real-time thread allocates nothing once it starts.
+    pub fn new(format: DeviceFormat, block_samples: usize) -> Self {
+        let bytes = Vec::with_capacity(block_samples * format.bytes_per_sample());
+        Self { format, dither: Dither::default(), bytes }
+    }
+
+    /// `block` as the device's bytes, dithering it in place first.
+    pub fn encode(&mut self, block: &mut [Sample]) -> &[u8] {
+        self.dither.quantize(block, self.format);
+        encode(block, self.format, &mut self.bytes);
+        &self.bytes
     }
 }
 

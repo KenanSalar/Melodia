@@ -115,13 +115,7 @@ fn install_pickers(ui: &AppWindow, state: &AppState, choice: OutputChoice) {
     g.set_output_period_idx(period_index(choice.tuning.period));
     g.set_output_polling(choice.tuning.drive == Drive::Polling);
     g.set_output_hardware_volume(choice.hardware_volume);
-    let shadow: Shadow = Arc::new(Mutex::new(Picked {
-        choice,
-        devices: Vec::new(),
-        default_label: None,
-        listing_asked: 0,
-        listing_applied: 0,
-    }));
+    let shadow: Shadow = Arc::new(Mutex::new(Picked::new(choice)));
 
     let state_list = state.clone();
     let shadow_list = Arc::clone(&shadow);
@@ -137,7 +131,8 @@ fn install_pickers(ui: &AppWindow, state: &AppState, choice: OutputChoice) {
     install_bit_perfect_switch(ui, state, &shadow);
 }
 
-/// The confirmed Make Bit-Perfect from shared output: pick exclusive, then reset.
+/// The confirmed Make Bit-Perfect from shared output: pick exclusive, as the chip would, then
+/// reset.
 ///
 /// **One task, the claim first.** The reset keeps the volume only where the claim carries it on the
 /// device, which it can't know before the claim opens. Run first, it raises the voices to full and
@@ -148,6 +143,8 @@ fn install_bit_perfect_switch(ui: &AppWindow, state: &AppState, shadow: &Shadow)
     let shadow = Arc::clone(shadow);
     let weak = ui.as_weak();
     ui.global::<Settings>().on_output_switch_to_bit_perfect(move || {
+        let Some(ui) = weak.upgrade() else { return };
+        ui.global::<Settings>().set_output_mode_idx(mode_index(OutputMode::Exclusive));
         shadow.lock().choice.mode = OutputMode::Exclusive;
         let ctx = state.playback_ctx();
         let shadow = Arc::clone(&shadow);
@@ -155,12 +152,9 @@ fn install_bit_perfect_switch(ui: &AppWindow, state: &AppState, shadow: &Shadow)
             let choice = shadow.lock().choice.clone();
             library::playback::player_set_output_choice(&ctx, choice.clone());
             let volume = library::playback::player_make_bit_perfect(&ctx);
-            library::settings::set_output_choice(state, &choice)?;
-            library::settings::reset_for_bit_perfect(state, volume)
+            library::settings::switch_to_bit_perfect(state, &choice, volume)
         });
-        if let Some(ui) = weak.upgrade() {
-            signal_path::show_bit_perfect_reset(&ui);
-        }
+        signal_path::show_bit_perfect_reset(&ui);
     });
 }
 
@@ -239,6 +233,17 @@ struct Listing {
 }
 
 impl Picked {
+    /// `choice` as saved, before any listing has landed.
+    fn new(choice: OutputChoice) -> Self {
+        Self {
+            choice,
+            devices: Vec::new(),
+            default_label: None,
+            listing_asked: 0,
+            listing_applied: 0,
+        }
+    }
+
     fn pick_mode(&mut self, idx: i32) {
         self.choice.mode = mode_from_index(idx);
     }

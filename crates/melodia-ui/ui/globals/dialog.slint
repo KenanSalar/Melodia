@@ -112,10 +112,9 @@ export global Dialog {
         } else if (root.kind == "clear-queue") {
             Queue.clear-queue();
         } else if (root.kind == "bit-perfect-exclusive") {
-            // Index first, as the chip writes it. The claim and the reset are one Rust task rather
-            // than the chip's pick beside the button's, since the reset reads off the claim
-            // whether the device carries the volume, and run first it would raise the device.
-            Settings.output-mode-idx = 1;
+            // One Rust task, which moves the chip too, rather than the chip's pick beside the
+            // button's: the reset reads off the claim whether the device carries the volume, and
+            // run first it would raise the device.
             Settings.output-switch-to-bit-perfect();
         } else if (root.kind == "create-playlist") {
             // Name, optional description, and the ids to auto-add once it exists.

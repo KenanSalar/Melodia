@@ -21,8 +21,8 @@ pub use player_backend::PlayerBackend;
 use output::EngineOutput;
 
 use std::path::Path;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, MutexGuard};
 use std::time::Duration;
 
 use melodia_core::error::AppError;
@@ -326,20 +326,32 @@ impl PlaybackEngine {
                 });
                 self.crossfade_armed.store(true, Ordering::Release);
             }
+            // Anchored where the decoder was seeked to, not at zero: the deck counts frames handed
+            // out, and a resumed source hands out its first frame minutes in.
             Entry::Cut(start) => {
-                // A reopen keeps the voices, so the new stream would play on from the outgoing
-                // track until the cut's clear lands.
-                decks.pause_all();
-                let volume = self.prepare_output_for(&decks, &decoded, volume);
-                // Anchored where the decoder was seeked to, not at zero: the deck counts frames
-                // handed out, and a resumed source hands out its first frame minutes in.
-                decks.cut_to(volume, speed, start, |deck| {
-                    self.build_source(decoded, baked_rg, deck)
-                });
-                self.crossfade_armed.store(false, Ordering::Release);
+                self.cut_to_source(&decks, decoded, baked_rg, volume, speed, start);
             }
         }
         self.gapless_pending.store(false, Ordering::Release);
+    }
+
+    /// Play `source` alone from `start`, reopening the output for it first.
+    ///
+    /// The decks are paused ahead of the reopen: it keeps the voices, so the new stream would play
+    /// on from the outgoing source until the cut's clear lands.
+    fn cut_to_source<S: AudioSource + 'static>(
+        &self,
+        decks: &MutexGuard<'_, Decks>,
+        source: S,
+        baked_rg: TrackReplayGain,
+        volume: f64,
+        speed: f64,
+        start: Duration,
+    ) {
+        decks.pause_all();
+        let volume = self.prepare_output_for(decks, &source, volume);
+        decks.cut_to(volume, speed, start, |deck| self.build_source(source, baked_rg, deck));
+        self.crossfade_armed.store(false, Ordering::Release);
     }
 
     /// Playback speed while a station plays.
@@ -407,14 +419,16 @@ impl PlaybackEngine {
         *self.live_stream.lock() = Some(shared);
         self.bump_epoch();
         let decks = self.lock_decks();
-        // What was playing must not carry on into a reopened stream; see `start_track`.
-        decks.pause_all();
-        let volume = self.prepare_output_for(&decks, &source, volume);
         // A live mount has no timeline to resume on, so its clock starts where the connection did.
-        decks.cut_to(volume, Self::STREAM_SPEED, Duration::ZERO, |deck| {
-            self.build_source(source, TrackReplayGain::default(), deck)
-        });
-        self.crossfade_armed.store(false, Ordering::Release);
+        let start = Duration::ZERO;
+        self.cut_to_source(
+            &decks,
+            source,
+            TrackReplayGain::default(),
+            volume,
+            Self::STREAM_SPEED,
+            start,
+        );
         self.gapless_pending.store(false, Ordering::Release);
         Ok(())
     }
@@ -655,13 +669,6 @@ impl PlaybackEngine {
         deck.voice.replace(self.build_source(decoded, baked_rg, deck), position, mounted);
     }
 
-    /// Set the user's volume, as an amplitude: on the device's own control where an exclusive claim
-    /// carries it there, leaving the voices at unity, and on the voices otherwise.
-    pub fn set_volume(&self, volume: f64) {
-        let decks = self.lock_decks();
-        decks.set_volume_all(self.route_volume(volume));
-    }
-
     /// Both decks must run at the same speed or a crossfade would drift.
     ///
     /// **No re-anchoring seek.** rodio needed one because its position tracker sat after its speed
@@ -698,28 +705,17 @@ impl PlaybackEngine {
         // deck's ramp cell — possibly one armed to fade out and end.
         let epoch = self.deck_epoch.load(Ordering::Acquire);
 
-        // Asked again every tick until the track ends, so a refusal stands on the first open.
-        if self.recorded_answer(path) == Some(false) {
-            return;
-        }
-
         // Decode off the deck lock, as in `play_media` — a preload fires right
         // when a stall in position publication would be most visible.
-        let decoded = match self.open_recorded(path) {
-            Ok(decoded) => decoded,
+        let decoded = match self.open_for_gapless(path) {
+            Ok(Some(decoded)) => decoded,
+            Ok(None) => return,
             Err(e) => {
                 log::warn!("Failed to preload gapless track {path}: {}", describe(&e));
                 self.gapless_pending.store(false, Ordering::Release);
                 return;
             }
         };
-
-        // A track the output has to reopen for can't be staged behind one still playing: left
-        // unstaged, it ends in `EndOfStream` and starts through `play_media`, which reopens.
-        if !self.plays_without_reopen(decoded.shape(), decoded.format()) {
-            log::debug!("Not staging {path} gapless: the output reopens for its format");
-            return;
-        }
 
         // Re-check and stage under one lock. `Deck::stage` takes the builder
         // rather than a source, for the reason the other two appends do.
@@ -776,7 +772,7 @@ impl PlaybackEngine {
     }
 
     /// Lock the decks mutex, recovering from poison rather than panicking.
-    fn lock_decks(&self) -> std::sync::MutexGuard<'_, Decks> {
+    fn lock_decks(&self) -> MutexGuard<'_, Decks> {
         lock_decks(&self.decks)
     }
 }

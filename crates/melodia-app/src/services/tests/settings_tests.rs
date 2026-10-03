@@ -12,8 +12,7 @@ use melodia_testkit::with_env_var;
 
 use super::*;
 use crate::services::settings::{
-    ONBOARDING_VERSION, PausedDevice, RateFallbackKey, TitlebarButtonStyle,
-    WINDOW_BORDER_SYSTEM_COLOR, WindowBorder,
+    ONBOARDING_VERSION, PausedDevice, TitlebarButtonStyle, WINDOW_BORDER_SYSTEM_COLOR, WindowBorder,
 };
 
 fn json_err(e: &serde_json::Error) -> AppError {
@@ -912,13 +911,19 @@ fn a_settings_file_from_before_the_paused_device_keeps_it() -> Result<(), AppErr
 /// into the default on the next launch, silently.
 #[test]
 fn the_rate_fallback_is_written_and_read_by_its_token() -> Result<(), AppError> {
-    let rows = [(RateFallbackKey::Shared, "shared"), (RateFallbackKey::Resample, "resample")];
-    for (key, token) in rows {
-        let written = serde_json::to_value(key).map_err(|e| json_err(&e))?;
-        let read: RateFallbackKey =
-            serde_json::from_value(serde_json::json!(token)).map_err(|e| json_err(&e))?;
+    let rows = [(RateFallback::Shared, "shared"), (RateFallback::Resample, "resample")];
+    for (fallback, token) in rows {
+        let flags = OutputFlags { output_rate_fallback: fallback, ..OutputFlags::default() };
+        let written = serde_json::to_value(&flags).map_err(|e| json_err(&e))?;
+        let read: OutputFlags =
+            serde_json::from_value(serde_json::json!({ "output_rate_fallback": token }))
+                .map_err(|e| json_err(&e))?;
 
-        assert_eq!((written, read), (serde_json::json!(token), key), "{token}");
+        assert_eq!(
+            (written["output_rate_fallback"].clone(), read.output_rate_fallback),
+            (serde_json::json!(token), fallback),
+            "{token}"
+        );
     }
     Ok(())
 }

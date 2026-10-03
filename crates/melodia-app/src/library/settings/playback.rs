@@ -5,7 +5,7 @@
 
 use crate::library::playback::FOLLOW_RATE_SUPPORTED;
 use crate::services;
-use crate::services::settings::PausedDevice;
+use crate::services::settings::{PausedDevice, SettingsData};
 use crate::state::AppState;
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
@@ -63,18 +63,35 @@ pub fn reset_for_bit_perfect(state: &AppState, volume: u32) -> Result<(), AppErr
     write_bit_perfect_reset(&state.paths, volume)
 }
 
+/// Persist Make Bit-Perfect's switch to exclusive output: the `choice` the engine was handed and
+/// the reset beside it, in the one write [`reset_for_bit_perfect`] takes for the same reason.
+pub fn switch_to_bit_perfect(
+    state: &AppState,
+    choice: &OutputChoice,
+    volume: u32,
+) -> Result<(), AppError> {
+    services::settings::mutate_settings(&state.paths, |settings| {
+        settings.output.set_output_choice(choice);
+        apply_bit_perfect_reset(settings, volume);
+    })
+}
+
 /// [`reset_for_bit_perfect`]'s body, narrowed so what it leaves alone can be read back.
 fn write_bit_perfect_reset(paths: &Paths, volume: u32) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, |settings| {
-        settings.equalizer.eq_enabled = false;
-        settings.replaygain.rg_enabled = false;
-        settings.playback.playback_speed = 1.0;
-        settings.volume = volume.min(MAX_VOLUME);
-        settings.playback.is_muted = false;
-        if FOLLOW_RATE_SUPPORTED {
-            settings.output.output_follow_rate = true;
-        }
+        apply_bit_perfect_reset(settings, volume);
     })
+}
+
+fn apply_bit_perfect_reset(settings: &mut SettingsData, volume: u32) {
+    settings.equalizer.eq_enabled = false;
+    settings.replaygain.rg_enabled = false;
+    settings.playback.playback_speed = 1.0;
+    settings.volume = volume.min(MAX_VOLUME);
+    settings.playback.is_muted = false;
+    if FOLLOW_RATE_SUPPORTED {
+        settings.output.output_follow_rate = true;
+    }
 }
 
 /// Persist the user's "Play Button Animation" pick (None / Equalizer).
