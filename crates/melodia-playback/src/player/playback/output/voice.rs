@@ -315,6 +315,13 @@ impl Voice {
         frames_to_duration(self.shared.frames.load(Ordering::Relaxed), rate)
     }
 
+    /// Whether the callback has drained every command sent so far. Until it has, the clock can
+    /// still read where the voice was: a seek's swap re-anchors it only once serviced.
+    pub fn is_settled(&self) -> bool {
+        let issued = self.shared.issued.load(Ordering::Acquire);
+        self.shared.serviced.load(Ordering::Acquire) >= issued
+    }
+
     /// Where the ear is in the playing source: [`Self::position`] less the `lead` the device still
     /// holds and the frames the converter pulled ahead of the one it is writing, never earlier
     /// than the clock's anchor.

@@ -556,27 +556,28 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
 /// Take a long-paused track off the deck so its exclusive device goes back, leaving it paused
 /// where the deck stopped.
 ///
-/// The deck is read before the state lock rather than under it, which would nest the decks mutex
-/// inside the state's.
+/// The deck is read under the emit, in the lock order's own direction, and only once it has acted
+/// on what it was sent. A seek the emit waited out has sent its swap without the deck having taken
+/// it, so the deck still reads its old position, which the release would write back over the
+/// seek's. A deck still catching up turns the release down, as a seek in the gap does.
 fn release_paused_track(
     engine: &PlaybackEngine,
     player_state: &PlayerStateHandle,
     sinks: &PlayerSinks,
 ) {
-    let resume_ms = engine.query_position();
-    let decision = {
+    let seen = {
         let state = lock_state(player_state);
-        state.current_track().map(|track| ReleaseDecision {
-            track_id: track.id,
-            position_ms: state.position_ms,
-            resume_ms,
-        })
+        state.current_track().map(|track| (track.id, state.position_ms))
     };
-    if let Some(decision) = decision {
-        emit_and_execute(engine, player_state, sinks, |state| {
-            state.build_release_actions(decision)
-        });
-    }
+    let Some((track_id, position_ms)) = seen else {
+        return;
+    };
+    emit_and_execute(engine, player_state, sinks, |state| {
+        let Some(resume_ms) = engine.query_settled_position() else {
+            return Vec::new();
+        };
+        state.build_release_actions(ReleaseDecision { track_id, position_ms, resume_ms })
+    });
 }
 
 /// Publish `path` only when it differs, so the panel repaints on a change rather than per tick.
