@@ -5,7 +5,8 @@
 //! cursor, with [`file_decode`] and [`stream_decode`] differing only in the `MediaSource` and
 //! `Hint` they hand it. [`opus`] is the one codec that registry carries itself, Symphonia
 //! shipping none. The live trio ([`stream_source`], [`prebuffer`], [`hls`]) is the network's
-//! end, the ring keeping a blocking socket read off the audio callback thread.
+//! end, the ring keeping a blocking socket read off the audio callback thread and `stall_watch`
+//! ending a connection that has gone quiet.
 
 pub mod aac_config;
 pub mod aac_trim;
@@ -16,6 +17,7 @@ pub mod hls;
 pub mod mkv_trim;
 pub mod opus;
 pub mod prebuffer;
+mod stall_watch;
 pub mod stream_decode;
 pub mod stream_source;
 

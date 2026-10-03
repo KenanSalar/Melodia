@@ -26,6 +26,8 @@ reqwest.workspace = true
 stream-download.workspace = true
 icy-metadata.workspace = true
 tokio.workspace = true
+# The `CancellationToken` stream-download hands out, which `stall_watch` holds.
+tokio-util.workspace = true
 parking_lot.workspace = true
 # `SeekError`, the one error in this crate that is its own type rather than `AppError`.
 thiserror.workspace = true
