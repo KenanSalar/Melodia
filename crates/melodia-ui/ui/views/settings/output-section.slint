@@ -203,6 +203,7 @@ export component OutputSection inherits Rectangle {
                 selected-index <=> Settings.output-device-idx;
                 placeholder: Settings.output-device-missing ? @tr("Not connected") : "";
                 trigger-width: 200px;
+                popup-align-end: true;
                 // The row mounts on arriving at the page, and on choosing exclusive output where it
                 // picks for exclusive alone.
                 init => { Settings.list-output-devices(); }

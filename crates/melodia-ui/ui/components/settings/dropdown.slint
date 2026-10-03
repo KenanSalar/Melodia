@@ -24,10 +24,13 @@ component DropdownOption inherits Rectangle {
         VerticalLayout {
             alignment: center;
             horizontal-stretch: 1;
+            // Elided, not clipped: a clipped label's layout minimum is the whole string, and
+            // Slint widens a popup to its content's minimum past the width bound on it.
             Text {
                 text: root.label;
                 color: Theme.text;
                 font-size: Theme.font-size-md;
+                overflow: elide;
             }
         }
         VerticalLayout {
@@ -65,11 +68,16 @@ component DropdownOption inherits Rectangle {
 // it: Slint sizes and places a popup once, as it opens, so options arriving after
 // that paint into a box measured for the old ones. The wait is bounded, so a
 // refresh that never lands costs a stale list rather than a dead control.
+//
+// `popup-align-end` lines a popup wider than the trigger up with its trailing
+// edge, for a trigger with no room on its right: Slint clamps an overflowing
+// popup flush to the window edge, over whatever scrollbar sits there.
 export component Dropdown inherits Rectangle {
     in property <[string]> options;
     in-out property <int> selected-index;
     in property <length> trigger-width: 160px;
     in property <bool> manual: false;
+    in property <bool> popup-align-end: false;
     // What the trigger reads while nothing is selected.
     in property <string> placeholder;
     in property <int> options-revision;
@@ -163,9 +171,11 @@ export component Dropdown inherits Rectangle {
     popup := PopupWindow {
         // Always under the trigger; flipping above near the viewport's bottom
         // edge is polish nobody has asked for yet.
-        x: 0;
+        x: root.popup-align-end ? root.trigger-width - self.width : 0;
         y: trigger.height + 4px;
-        width: root.trigger-width;
+        // Bound on the popup, the only scope that may read its descendant's
+        // `preferred-width`.
+        width: max(root.trigger-width, rows.preferred-width);
         // See above — the rows need their handlers to run before it closes.
         close-policy: close-on-click-outside;
 
@@ -177,7 +187,7 @@ export component Dropdown inherits Rectangle {
         }
 
         PopupSurface {
-            VerticalLayout {
+            rows := VerticalLayout {
                 padding: Theme.pad-xs;
                 spacing: 0;
 
