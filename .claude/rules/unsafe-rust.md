@@ -112,15 +112,18 @@ copy at some point, and the restore is the one that goes first.
   guaranteeing nothing. Consolidating assertions into one *test* doesn't help either; it
   only stops that test racing itself. Keeping the lock private is what stops the next
   copy: there is nothing to take but the helpers.
-- **A reader races a writer just as a second writer does, and that half is opt-in.** std
-  spells the contract "no other threads concurrently writing or *reading*(!) the
-  environment" — the `(!)` is theirs. Serialising the mutators buys nothing against a
-  sibling test that merely *reads*, and consolidating the three locks did not close that:
-  four tests in `settings_tests.rs` built a `SettingsData::default()` — which reaches
-  `XDG_CURRENT_DESKTOP` and all four locale variables through its serde defaults — beside
-  the tests mutating both. **`melodia_testkit::reading_env(body)`** takes the same lock
-  without touching a variable and is how such a test opts in. Nothing enforces it, so a
-  reader you find unwrapped is a live race, not a style nit.
+- **A reader is a different hazard from a second writer, and its opt-in is about what it
+  reads.** std's contract is "no other threads concurrently writing or *reading*(!) the
+  environment through functions or global variables other than the ones in this module", the
+  `(!)` being theirs. `std::env::var` and `set_var` share one internal lock, so the reads
+  that are undefined behaviour beside a mutator are the ones that skip it: C code, and libc
+  calls such as a DNS lookup, reaching `getenv` directly. A test reading through `std::env`
+  is safe beside one and can still read the value it set: four tests in `settings_tests.rs`
+  built a `SettingsData::default()`, which reaches `XDG_CURRENT_DESKTOP` and all four locale
+  variables through its serde defaults, beside the tests mutating both.
+  **`melodia_testkit::reading_env(body)`** takes the same lock without touching a variable
+  and is how such a test opts in. Nothing enforces it, so an unwrapped reader whose
+  assertion turns on what it read is a flaky test, not a style nit.
 - **It is not reentrant, and that is the cost of one lock.** A helper called from inside
   another helper's body would deadlock the test binary — which is why a thread-local flag
   now turns that into a named panic instead of a silent hang with no failing assertion. A

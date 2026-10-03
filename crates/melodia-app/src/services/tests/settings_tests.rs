@@ -972,3 +972,31 @@ fn the_paused_device_toggle_comes_back_as_it_was_set() {
         assert_eq!(token.releases(), release, "{token:?}");
     }
 }
+
+/// What a downgrade leaves: a caption style a newer build added, beside settings this one knows.
+/// The file is flat, every flag struct flattened into it, so this is the shape the load has to
+/// reset one setting in.
+#[test]
+fn a_token_a_newer_build_wrote_resets_only_its_own_setting() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let paths = melodia_core::config::Paths::rooted_at(tmp.path().to_path_buf());
+    paths.create_dirs()?;
+    let json = r#"{"volume": 40, "titlebar_button_style": "a_newer_style",
+        "always_on_top": true, "output_mode": "exclusive"}"#;
+    std::fs::write(&paths.settings_path, json)?;
+
+    let settings = reading_env(|| crate::services::settings::read_settings(&paths))?;
+
+    let read = (
+        settings.volume,
+        settings.window.titlebar_button_style,
+        settings.window.always_on_top,
+        settings.output.output_mode,
+    );
+    assert_eq!(
+        read,
+        (40, TitlebarButtonStyle::Standard, true, OutputMode::Exclusive),
+        "(volume, caption style, always on top, output mode)"
+    );
+    Ok(())
+}

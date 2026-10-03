@@ -12,20 +12,24 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde_json::{Map, Value};
 
 use crate::error::{AppError, AppResult};
 
-/// Read JSON from `path`, falling back to `T::default()` on a missing file or a parse error. The
-/// sync variant, for startup before the runtime exists.
+/// Read JSON from `path`, falling back to `T::default()` on a missing file. The sync variant, for
+/// startup before the runtime exists.
+///
+/// **A value this build can't read resets alone**, rather than the file: a token a newer build
+/// added, a field whose type has changed, a bad hand edit. Read whole, any one of them defaults
+/// the file, and the next write persists that over everything in it. Only a file that isn't a JSON
+/// object still falls back whole. The reset leans on `T`'s `#[serde(default)]`, which is what lets
+/// a document missing every field but one read at all.
 pub fn load_json_or_default_sync<T: DeserializeOwned + Default>(path: &Path) -> AppResult<T> {
     if !path.exists() {
         return Ok(T::default());
     }
     let content = std::fs::read_to_string(path)?;
-    Ok(serde_json::from_str::<T>(&content).unwrap_or_else(|e| {
-        log::warn!("Failed to parse {}, using defaults: {e}", path.display());
-        T::default()
-    }))
+    Ok(parse_resetting_unreadable(&content, path))
 }
 
 /// [`load_json_or_default_sync`]'s async twin.
@@ -33,10 +37,52 @@ pub async fn load_json_or_default<T: DeserializeOwned + Default>(path: &Path) ->
     let Ok(content) = tokio::fs::read_to_string(path).await else {
         return Ok(T::default());
     };
-    Ok(serde_json::from_str::<T>(&content).unwrap_or_else(|e| {
-        log::warn!("Failed to parse {}, using defaults: {e}", path.display());
-        T::default()
-    }))
+    Ok(parse_resetting_unreadable(&content, path))
+}
+
+/// `content` as a `T`, with every top-level field that won't read on its own left out so its
+/// default stands in.
+///
+/// Asked a field at a time rather than led to the failing one, because serde reads a
+/// `#[serde(flatten)]` struct out of a buffered copy that no deserializer wrapper sees into, and
+/// `settings.json` is every flag struct flattened. One level for the same reason: that is where
+/// its settings sit, and a value nested deeper resets with the field holding it.
+///
+/// Logs which fields went and never what they held, a scrobbler's session key being among the
+/// files read here.
+fn parse_resetting_unreadable<T: DeserializeOwned + Default>(content: &str, path: &Path) -> T {
+    if let Ok(parsed) = serde_json::from_str(content) {
+        return parsed;
+    }
+    let fields = match serde_json::from_str::<Value>(content) {
+        Ok(Value::Object(fields)) => fields,
+        Ok(_) => {
+            log::warn!("Failed to read {}, using defaults", path.display());
+            return T::default();
+        }
+        Err(e) => {
+            log::warn!("Failed to parse {}, using defaults: {e}", path.display());
+            return T::default();
+        }
+    };
+    let (readable, unreadable): (Map<String, Value>, Map<String, Value>) =
+        fields.into_iter().partition(|(key, value)| reads_alone::<T>(key, value));
+    let Ok(salvaged) = serde_json::from_value(Value::Object(readable)) else {
+        log::warn!("Failed to read {}, using defaults", path.display());
+        return T::default();
+    };
+    // Empty for a file whose only fault was a duplicate key, the `Value` having kept the last.
+    if !unreadable.is_empty() {
+        let reset = unreadable.keys().map(String::as_str).collect::<Vec<_>>().join(", ");
+        log::warn!("{}: {reset} won't read, so they take their defaults", path.display());
+    }
+    salvaged
+}
+
+/// Whether a document holding `key` and nothing else reads as a `T`.
+fn reads_alone<T: DeserializeOwned>(key: &str, value: &Value) -> bool {
+    let alone = Map::from_iter([(key.to_owned(), value.clone())]);
+    T::deserialize(&Value::Object(alone)).is_ok()
 }
 
 /// Write `value` as pretty JSON through a temp file in the same directory, renaming on success.

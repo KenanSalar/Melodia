@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 use std::io::{Seek, SeekFrom};
 
+use serde::Deserialize;
+
 use super::*;
 
 fn entries_in(dir: &Path) -> Result<BTreeSet<String>, AppError> {
@@ -9,6 +11,152 @@ fn entries_in(dir: &Path) -> Result<BTreeSet<String>, AppError> {
         names.insert(entry?.file_name().to_string_lossy().into_owned());
     }
     Ok(names)
+}
+
+/// A state file in the shapes a load meets: a token, a struct flattened into the top level as
+/// `settings.json` flattens its flag structs, a nested struct and a list. Every default is a zero,
+/// so a field that kept the file's value is told apart from one that reset.
+#[derive(Debug, Default, PartialEq, Deserialize)]
+#[serde(default)]
+struct Saved {
+    volume: u32,
+    style: Style,
+    #[serde(flatten)]
+    window: Window,
+    geometry: Geometry,
+    recent: Vec<String>,
+}
+
+#[derive(Debug, Default, PartialEq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum Style {
+    #[default]
+    Standard,
+    Macos,
+}
+
+#[derive(Debug, Default, PartialEq, Deserialize)]
+#[serde(default)]
+struct Window {
+    width: u32,
+    maximized: bool,
+}
+
+#[derive(Debug, Default, PartialEq, Deserialize)]
+#[serde(default)]
+struct Geometry {
+    x: i32,
+    y: i32,
+}
+
+fn loaded(json: &str) -> Result<Saved, AppError> {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("state.json");
+    std::fs::write(&path, json)?;
+    load_json_or_default_sync(&path)
+}
+
+#[test]
+fn a_file_this_build_wrote_reads_back_whole() -> Result<(), AppError> {
+    let json = r#"{"volume": 40, "style": "macos", "width": 900, "maximized": true,
+        "geometry": {"x": 10, "y": 20}, "recent": ["first"]}"#;
+
+    let saved = loaded(json)?;
+
+    let whole = Saved {
+        volume: 40,
+        style: Style::Macos,
+        window: Window { width: 900, maximized: true },
+        geometry: Geometry { x: 10, y: 20 },
+        recent: vec!["first".to_owned()],
+    };
+    assert_eq!(saved, whole);
+    Ok(())
+}
+
+/// The downgrade case: a token a newer build added. Read whole, the file defaulted and the next
+/// write persisted that over every setting the user had.
+#[test]
+fn a_token_this_build_does_not_know_resets_that_field_alone() -> Result<(), AppError> {
+    let saved = loaded(r#"{"volume": 40, "style": "a_newer_style", "width": 900}"#)?;
+
+    let expected =
+        Saved { volume: 40, window: Window { width: 900, maximized: false }, ..Saved::default() };
+    assert_eq!(saved, expected);
+    Ok(())
+}
+
+#[test]
+fn a_field_whose_type_changed_resets_alone() -> Result<(), AppError> {
+    let saved = loaded(r#"{"volume": true, "style": "macos"}"#)?;
+
+    assert_eq!(saved, Saved { style: Style::Macos, ..Saved::default() });
+    Ok(())
+}
+
+/// A flattened struct's fields sit at the top level, which is where every setting is, so one that
+/// won't read leaves the rest of its struct standing.
+#[test]
+fn a_flattened_field_that_wont_read_resets_alone() -> Result<(), AppError> {
+    let saved = loaded(r#"{"width": "wide", "maximized": true}"#)?;
+
+    assert_eq!(saved.window, Window { width: 0, maximized: true });
+    Ok(())
+}
+
+/// Below the top level the field holding the value is what resets, the struct or list whole.
+#[test]
+fn a_value_nested_deeper_resets_the_field_holding_it() -> Result<(), AppError> {
+    let rows = [
+        ("a struct", r#"{"volume": 40, "geometry": {"x": "left", "y": 20}}"#),
+        ("a list", r#"{"volume": 40, "recent": ["first", 7]}"#),
+    ];
+    for (what, json) in rows {
+        let saved = loaded(json)?;
+
+        assert_eq!(saved, Saved { volume: 40, ..Saved::default() }, "{what}");
+    }
+    Ok(())
+}
+
+#[test]
+fn every_value_that_wont_read_resets_and_the_rest_still_reads() -> Result<(), AppError> {
+    let json = r#"{"volume": "loud", "style": "a_newer_style", "width": -5, "maximized": true,
+        "recent": ["first"]}"#;
+
+    let saved = loaded(json)?;
+
+    let expected = Saved {
+        window: Window { width: 0, maximized: true },
+        recent: vec!["first".to_owned()],
+        ..Saved::default()
+    };
+    assert_eq!(saved, expected);
+    Ok(())
+}
+
+/// Nothing to salvage from a file that isn't JSON, nor from one that isn't an object at the top.
+#[test]
+fn a_file_with_nothing_to_salvage_falls_back_whole() -> Result<(), AppError> {
+    let rows = [("not JSON", r#"{"volume": 40,"#), ("a list", "[40]"), ("a number", "40")];
+    for (what, json) in rows {
+        let saved = loaded(json)?;
+
+        assert_eq!(saved, Saved::default(), "{what}");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_async_load_resets_a_value_alone_too() -> Result<(), AppError> {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("state.json");
+    std::fs::write(&path, r#"{"volume": 40, "style": "a_newer_style"}"#)?;
+
+    let saved: Saved = load_json_or_default(&path).await?;
+
+    assert_eq!(saved, Saved { volume: 40, ..Saved::default() });
+    Ok(())
 }
 
 /// The rename is what keeps a reader from ever seeing half a settings file, so a write that fails

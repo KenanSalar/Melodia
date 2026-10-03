@@ -8,8 +8,9 @@ use melodia_platform::services::platform::desktop::{HostDesktop, is_kde_desktop}
 /// Style of the custom titlebar's decoration buttons: `Standard` paints
 /// Windows 11's caption glyphs, `Macos` the three traffic-light circles,
 /// `Kde` Breeze's glyphs. Persisted as a token so a future style needs no
-/// schema change, which is also why the chip reading "Windows" is still
-/// `Standard` here: the token is what a shipped `settings.json` holds.
+/// schema change, and a build that predates one reads it as `Standard`. That
+/// is also why the chip reading "Windows" is still `Standard` here: the token
+/// is what a shipped `settings.json` holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TitlebarButtonStyle {

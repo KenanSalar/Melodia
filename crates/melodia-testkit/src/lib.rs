@@ -705,8 +705,9 @@ pub fn with_appimage_env<F: FnOnce() -> R, R>(value: Option<&str>, body: F) -> R
 /// variable.
 ///
 /// For a test that only *reads* the environment, directly or through production code that
-/// does: `set_var`'s contract is symmetric, so such a test races a sibling's mutation exactly
-/// as a second mutator would. `SettingsData::default()` is the reader in this tree, reaching
+/// does: a read through `std::env` is safe beside a sibling's mutation, std locking the two
+/// against each other, but it can see the value that sibling set, which a test asserting on
+/// what it read can't afford. `SettingsData::default()` is the reader in this tree, reaching
 /// `XDG_CURRENT_DESKTOP` and all four locale variables through its serde defaults.
 pub fn reading_env<F: FnOnce() -> R, R>(body: F) -> R {
     let _guard = EnvGuard::acquire();
