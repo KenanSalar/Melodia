@@ -117,8 +117,8 @@ pub struct BlockEncoder {
 }
 
 impl BlockEncoder {
-    /// An encoder into `format` whose buffer already holds a block of `block_samples`, so a writer
-    /// on a real-time thread allocates nothing once it starts.
+    /// An encoder into `format` with room for a block of `block_samples`, so a writer on a
+    /// real-time thread allocates nothing once it starts.
     pub fn new(format: DeviceFormat, block_samples: usize) -> Self {
         let bytes = Vec::with_capacity(block_samples * format.bytes_per_sample());
         Self { format, dither: Dither::default(), bytes }
@@ -132,9 +132,9 @@ impl BlockEncoder {
     }
 }
 
-/// Replace `out` with `samples` in `format`. `out` keeps its capacity, so a writer that reuses it
-/// allocates only on its first block.
-pub fn encode(samples: &[Sample], format: DeviceFormat, out: &mut Vec<u8>) {
+/// Replace `out` with `samples` in `format`, keeping its capacity. Reached only through
+/// [`BlockEncoder`], so nothing encodes a block the dither hasn't seen.
+fn encode(samples: &[Sample], format: DeviceFormat, out: &mut Vec<u8>) {
     out.clear();
     out.reserve(samples.len() * format.bytes_per_sample());
     let Some(bits) = format.integer_bits() else {

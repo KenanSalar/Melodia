@@ -130,24 +130,16 @@ pub fn set_resume_on_startup(state: &AppState, on: bool) -> Result<(), AppError>
     })
 }
 
-/// Persist the user's chosen playback speed so it survives restarts
-/// (mirrors how repeat / shuffle / volume persist). The runtime effect
-/// (applying the multiplier to the live playback engine) is done synchronously
-/// by the UI callback through `library::playback::player_set_playback_speed`
-/// *before* this disk write is scheduled. Clamped to the player's
-/// `MIN_SPEED..=MAX_SPEED` range here too, so a malformed UI write can't
-/// pin an out-of-range value the boot restore would then have to clamp.
-pub fn set_playback_speed(state: &AppState, speed: f64) -> Result<(), AppError> {
-    write_playback_speed(&state.paths, speed)
-}
-
-/// [`set_playback_speed`]'s body, narrowed so both bounds and the refusal can be driven.
+/// Persist the playback speed so it survives restarts, as repeat, shuffle and volume do. Clamped to
+/// the player's `MIN_SPEED..=MAX_SPEED` here too, so a malformed write can't pin an out-of-range
+/// value the boot restore would then have to clamp. Takes the paths rather than the state because
+/// its caller, `library::playback::player_set_playback_speed_committed`, holds a `PlaybackContext`.
 ///
 /// NaN is refused rather than clamped, unlike the two bounds either side of it: `f64::clamp`
 /// passes it through, `serde_json` writes a non-finite float as `null`, and the next launch fails
 /// to parse `settings.json` and falls back to defaults — one malformed write costing the user
 /// every setting they have. `clamp_preamp` and `clamp_rg_preamp` each carry the same arm.
-fn write_playback_speed(paths: &Paths, speed: f64) -> Result<(), AppError> {
+pub fn set_playback_speed(paths: &Paths, speed: f64) -> Result<(), AppError> {
     if speed.is_nan() {
         return Err(AppError::Validation("Playback speed is not a number".to_owned()));
     }

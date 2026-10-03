@@ -31,7 +31,7 @@ use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Dialog, Nav, Player};
 
 use index_persist::IndexPersist;
-use macros::{spawn_logged_sync, wire_pb, wire_sync, wire_sync_pb};
+use macros::{spawn_logged, spawn_logged_sync, wire_pb, wire_sync, wire_sync_pb};
 
 pub use cross_tab_nav::wire_cross_tab_nav;
 pub use library_settings::wire_library_settings;
@@ -277,13 +277,16 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
     // set_playback_speed: apply to the live player *and* persist, speed surviving restarts
     // as repeat, shuffle and volume do.
     {
-        let state = state.clone();
+        let s = state.clone();
         player.on_set_playback_speed(move |speed| {
-            let s = state.clone();
-            spawn_logged_sync!(
+            let s = s.clone();
+            spawn_logged!(
                 s,
                 "set_playback_speed",
-                library::playback::player_set_playback_speed_committed(&s, f64::from(speed))
+                library::playback::player_set_playback_speed_committed(
+                    &s.playback_ctx(),
+                    f64::from(speed)
+                )
             );
         });
     }

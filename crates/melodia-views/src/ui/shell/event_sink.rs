@@ -31,7 +31,7 @@ impl EventSink for SlintEventSink {
                 PlayerEvent::SetShuffle(enabled) => library::queue::queue_set_shuffle(&s, enabled),
                 PlayerEvent::SetRepeat(mode) => library::queue::queue_set_repeat(&s, mode),
                 PlayerEvent::SetSpeed(speed) => {
-                    library::playback::player_set_playback_speed_committed(&s, speed)
+                    library::playback::player_set_playback_speed_committed(&ctx, speed).await
                 }
             };
             if let Err(e) = r {

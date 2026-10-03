@@ -573,7 +573,7 @@ fn release_paused_track(
         return;
     };
     emit_and_execute(engine, player_state, sinks, |state| {
-        let Some(resume_ms) = engine.query_settled_position() else {
+        let Some(resume_ms) = engine.query_settled_position(position_ms) else {
             return Vec::new();
         };
         state.build_release_actions(ReleaseDecision { track_id, position_ms, resume_ms })

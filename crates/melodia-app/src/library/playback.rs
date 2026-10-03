@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::state::{AppState, PlaybackContext};
+use crate::state::PlaybackContext;
 use melodia_audio::player::source::stream_source;
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
@@ -366,14 +366,17 @@ pub fn player_set_playback_speed(ctx: &PlaybackContext, speed: f64) -> Result<()
     Ok(())
 }
 
-/// [`player_set_playback_speed`] and the write that has it survive a restart, as volume and repeat
-/// do. The write goes to the blocking pool, so the caller waits on the engine alone.
-pub fn player_set_playback_speed_committed(state: &AppState, speed: f64) -> Result<(), AppError> {
-    player_set_playback_speed(&state.playback_ctx(), speed)?;
-    state.persist_blocking("persist playback_speed", move |state| {
-        crate::library::settings::set_playback_speed(state, speed)
-    });
-    Ok(())
+/// [`player_set_playback_speed`] and the write that has it survive a restart, as
+/// [`player_set_volume_committed`] is for the volume.
+pub async fn player_set_playback_speed_committed(
+    ctx: &PlaybackContext,
+    speed: f64,
+) -> Result<(), AppError> {
+    player_set_playback_speed(ctx, speed)?;
+    let paths = Arc::clone(&ctx.paths);
+    tokio::task::spawn_blocking(move || crate::library::settings::set_playback_speed(&paths, speed))
+        .await
+        .map_err(AppError::io_source)?
 }
 
 pub fn player_set_gapless(ctx: &PlaybackContext, enabled: bool) -> Result<(), AppError> {

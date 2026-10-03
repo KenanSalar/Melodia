@@ -13,7 +13,7 @@ use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 use melodia_engine::player::engine::state::{MAX_SPEED, MAX_VOLUME, MIN_SPEED};
 
-use super::{write_bit_perfect_reset, write_play_button_animation, write_playback_speed};
+use super::{set_playback_speed, write_bit_perfect_reset, write_play_button_animation};
 
 fn stored_token(paths: &Paths) -> Result<String, AppError> {
     Ok(services::settings::read_settings(paths)?.play_button_animation)
@@ -60,7 +60,7 @@ fn an_unknown_animation_token_falls_back_to_none() -> Result<(), AppError> {
 fn a_speed_below_the_floor_is_raised_to_it() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root()?;
 
-    write_playback_speed(&paths, MIN_SPEED / 2.0)?;
+    set_playback_speed(&paths, MIN_SPEED / 2.0)?;
 
     assert!((stored_speed(&paths)? - MIN_SPEED).abs() < f64::EPSILON);
     Ok(())
@@ -70,7 +70,7 @@ fn a_speed_below_the_floor_is_raised_to_it() -> Result<(), AppError> {
 fn a_speed_above_the_ceiling_is_lowered_to_it() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root()?;
 
-    write_playback_speed(&paths, MAX_SPEED * 2.0)?;
+    set_playback_speed(&paths, MAX_SPEED * 2.0)?;
 
     assert!((stored_speed(&paths)? - MAX_SPEED).abs() < f64::EPSILON);
     Ok(())
@@ -83,7 +83,7 @@ fn a_speed_that_is_not_a_number_is_refused_and_never_written() -> Result<(), App
     let (_tmp, paths) = seeded_root()?;
     let before = stored_speed(&paths)?;
 
-    let refused = write_playback_speed(&paths, f64::NAN);
+    let refused = set_playback_speed(&paths, f64::NAN);
 
     assert!(matches!(refused, Err(AppError::Validation(_))));
     assert!((stored_speed(&paths)? - before).abs() < f64::EPSILON);

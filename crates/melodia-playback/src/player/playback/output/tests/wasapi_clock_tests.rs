@@ -4,7 +4,8 @@
 use std::time::Duration;
 
 use super::{
-    Clock, ClockReading, FUTILE_RESTARTS, STALL_TOLERANCE, StallWatch, clock_duration, from_hns, hns,
+    Clock, ClockReading, FUTILE_RESTARTS, STALL_TOLERANCE, StallWatch, clock_duration, from_hns,
+    hns,
 };
 
 /// A clock counting in the 100 ns units the performance counter is read in, so both halves of a
