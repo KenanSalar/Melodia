@@ -105,10 +105,14 @@ impl Kernel {
         // Half the window's main lobe below Nyquist, so the stopband opens at Nyquist rather than
         // straddling it. The four-term window's main lobe is four bins either side.
         let cutoff = 1.0 - 4.0 / count(HALF_TAPS);
-        let table: Box<[f32]> = (0..=PHASES)
-            .flat_map(|row| (0..ROW).map(move |tap| count(tap) + count(row) / count(PHASES)))
-            .map(|distance| prototype(distance, cutoff) as f32)
-            .collect();
+        // Sized up front: a `flat_map` hints nothing, so a collect doubles its way past the table.
+        let mut table = Vec::with_capacity((PHASES + 1) * ROW);
+        table.extend(
+            (0..=PHASES)
+                .flat_map(|row| (0..ROW).map(move |tap| count(tap) + count(row) / count(PHASES)))
+                .map(|distance| prototype(distance, cutoff) as f32),
+        );
+        let table = table.into_boxed_slice();
         let row_sums = table.chunks_exact(ROW).map(|row| row.iter().sum()).collect();
         Self { table, row_sums }
     }

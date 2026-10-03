@@ -52,9 +52,11 @@ impl Dither {
         if block.iter().all(|&sample| holds_exactly(sample, scale)) {
             return;
         }
+        // Exact in place of the division, `scale` being a power of two.
+        let step = scale.recip();
         for sample in block {
             let level = f64::from(*sample) * scale + self.triangular();
-            *sample = narrow(nearest_step(level, scale) / scale);
+            *sample = narrow(nearest_step(level, scale) * step);
         }
     }
 

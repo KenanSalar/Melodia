@@ -252,15 +252,19 @@ impl Converter {
             return;
         }
 
+        if from == 1 {
+            // Duplicated at unity, not attenuated: this is the path every mono file on an
+            // ordinary stereo device takes, so a pan-law trim here would quietly restage the
+            // whole library, and each channel would stop being the source's own sample.
+            let sample = source(0);
+            for (channel, slot) in frame.iter_mut().enumerate() {
+                *slot = if channel < 2 { sample } else { 0.0 };
+            }
+            return;
+        }
+
         for (channel, slot) in frame.iter_mut().enumerate() {
-            *slot = match channel {
-                c if c < from => source(c),
-                // Duplicated at unity, not attenuated: this is the path every mono file on an
-                // ordinary stereo device takes, so a pan-law trim here would quietly restage the
-                // whole library, and each channel would stop being the source's own sample.
-                1 if from == 1 => source(0),
-                _ => 0.0,
-            };
+            *slot = if channel < from { source(channel) } else { 0.0 };
         }
     }
 }
