@@ -8,10 +8,10 @@
 //! crate's `state_tests.rs`; what is left here is the layer above them.
 
 use super::*;
-use crate::services::settings::read_settings;
+use crate::services::settings::{SettingsData, read_settings, write_settings};
 use crate::state::fixtures::TestPlayback;
 use melodia_engine::player::engine::fixtures::test_station;
-use melodia_engine::player::engine::state::PlayerState;
+use melodia_engine::player::engine::state::{MAX_SPEED, MIN_SPEED, PlayerState};
 
 fn make_summary(id: i64, duration_ms: i64) -> Arc<TrackSummary> {
     Arc::new(TrackSummary {
@@ -259,6 +259,33 @@ async fn the_toggle_does_nothing_with_nothing_to_play() -> Result<(), AppError> 
     Ok(())
 }
 
+/// A transport door a press goes through.
+type Door = fn(&PlaybackContext) -> Result<(), AppError>;
+
+/// A long pause gives an exclusive device back by taking the track off its deck and leaving it
+/// paused, the `stop` here standing in for that release. A resume would carry on over a deck
+/// holding nothing and play silence, so both doors start the track again instead.
+#[tokio::test]
+async fn play_and_the_toggle_start_a_paused_track_again_once_its_deck_holds_nothing()
+-> Result<(), AppError> {
+    let doors: [(&str, Door); 2] = [("play", player_play), ("toggle", player_toggle_play_pause)];
+    for (door, press) in doors {
+        let (fx, _ids) = playing(1).await?;
+        player_pause(&fx.ctx)?;
+        fx.ctx.engine.stop();
+
+        press(&fx.ctx)?;
+
+        let status = lock_state(&fx.ctx.player_state).status;
+        assert_eq!(
+            (fx.ctx.engine.holds_source(), status),
+            (true, PlaybackStatus::Playing),
+            "{door}"
+        );
+    }
+    Ok(())
+}
+
 /// The short-circuit is only reachable through the door: it reads the state and returns before
 /// `with_state_emit`, so a slider firing the value it already holds costs no publish. Both halves
 /// of the guard are here, and the second is the one that bites: the same volume *while muted* has
@@ -290,6 +317,29 @@ async fn setting_a_volume_already_held_publishes_nothing_unless_it_is_muted() ->
     let state = lock_state(&fx.ctx.player_state);
     assert!(!state.is_muted);
     assert_eq!(state.volume, held - 30);
+    Ok(())
+}
+
+/// With no device control carrying it, the volume is a gain on the samples like the speed is, so
+/// the reset takes both to where they change nothing and hands back the volume for the settings
+/// write, which persists whatever it is told.
+#[tokio::test]
+async fn the_bit_perfect_reset_takes_a_software_volume_and_the_speed_to_unity()
+-> Result<(), AppError> {
+    let fx = TestPlayback::empty().await?;
+    player_set_volume(&fx.ctx, 40)?;
+    player_set_playback_speed(&fx.ctx, 1.5)?;
+    seat(&fx, PlayerState::build_toggle_mute_actions);
+
+    let left = player_make_bit_perfect(&fx.ctx);
+
+    let state = lock_state(&fx.ctx.player_state);
+    let landed = (left, state.volume, state.is_muted, state.playback_speed.to_bits());
+    assert_eq!(
+        landed,
+        (MAX_VOLUME, MAX_VOLUME, false, 1.0_f64.to_bits()),
+        "(handed back, volume, muted, speed bits)"
+    );
     Ok(())
 }
 
@@ -327,11 +377,18 @@ async fn the_gapless_flag_round_trips_through_its_door() -> Result<(), AppError>
 
 // --- settings write-through ---
 
+/// A `settings.json` in the fixture's root for a write-through to read. Missing, it is answered
+/// with `SettingsData::default()`, which reads the environment the sibling suites mutate.
+fn seed_settings(fx: &TestPlayback) -> Result<(), AppError> {
+    write_settings(&fx.ctx.paths, &melodia_testkit::reading_env(SettingsData::default))
+}
+
 /// The mute the OS media key, the tray and the transport share has to outlive the session, so the
 /// toggle writes through rather than only publishing.
 #[tokio::test]
 async fn toggling_mute_writes_through_to_settings() -> Result<(), AppError> {
     let fx = TestPlayback::empty().await?;
+    seed_settings(&fx)?;
 
     player_toggle_mute(&fx.ctx).await?;
     assert!(read_settings(&fx.ctx.paths)?.playback.is_muted);
@@ -350,6 +407,43 @@ async fn a_commit_that_would_change_nothing_writes_nothing() -> Result<(), AppEr
     commit_player_settings(&fx.ctx).await?;
 
     assert!(!fx.ctx.paths.settings_path.exists(), "nothing differed, so nothing was written");
+    Ok(())
+}
+
+/// The slider and the media panels commit through this one door, and the player and the file
+/// clamp each on their own, so both bounds are where the two could part and the next launch
+/// restore a speed the session never played at.
+#[tokio::test]
+async fn a_committed_speed_lands_on_the_player_and_in_settings_alike() -> Result<(), AppError> {
+    let rows = [(1.5, 1.5), (MAX_SPEED * 2.0, MAX_SPEED), (MIN_SPEED / 2.0, MIN_SPEED)];
+    for (asked, landed) in rows {
+        let fx = TestPlayback::empty().await?;
+        seed_settings(&fx)?;
+
+        player_set_playback_speed_committed(&fx.ctx, asked).await?;
+
+        let played = lock_state(&fx.ctx.player_state).playback_speed;
+        let saved = read_settings(&fx.ctx.paths)?.playback.playback_speed;
+        assert_eq!(
+            (played.to_bits(), saved.to_bits()),
+            (landed.to_bits(), landed.to_bits()),
+            "asked for {asked}: (player, settings)"
+        );
+    }
+    Ok(())
+}
+
+/// The write is awaited rather than left to the blocking pool, so a file that won't take it is
+/// reported through the caller's own log line, the slider's or the media panel's.
+#[tokio::test]
+async fn a_speed_the_settings_file_wont_take_is_reported_to_the_caller() -> Result<(), AppError> {
+    let fx = TestPlayback::empty().await?;
+    // A directory where the file goes, which no read or write can take for one.
+    std::fs::create_dir(&fx.ctx.paths.settings_path)?;
+
+    let committed = player_set_playback_speed_committed(&fx.ctx, 1.5).await;
+
+    assert!(matches!(committed, Err(AppError::Io(_))), "got {committed:?}");
     Ok(())
 }
 

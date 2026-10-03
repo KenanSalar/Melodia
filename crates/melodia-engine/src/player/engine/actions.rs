@@ -20,15 +20,15 @@ use melodia_playback::player::playback::replaygain::TrackReplayGain;
 /// appended to the pending action set so a single stale double-click within
 /// the watcher debounce window doesn't dead-end playback. The bad track
 /// stays in the queue until the watcher catches up and `tasks::queue_prune`
-/// removes it.
+/// removes it, which for a file outside the watched folders is never.
 pub fn execute_actions<B: PlayerBackend>(
     actions: Vec<PlayerAction>,
     engine: &B,
     player_state: &PlayerStateHandle,
     sinks: &PlayerSinks,
 ) {
-    let mut pending: VecDeque<PlayerAction> = actions.into();
-    while let Some(action) = pending.pop_front() {
+    let mut pending = Pending { actions: actions.into(), skipped: 0 };
+    while let Some(action) = pending.actions.pop_front() {
         // Safe per action because nothing periodic reaches here: the position
         // tick decides in `evaluate_playing_tick` and the 30 s queue save writes
         // its file directly.
@@ -131,6 +131,24 @@ pub fn emit_and_execute<B, F>(
     execute_actions(actions, engine, player_state, sinks);
 }
 
+/// What is left to run of one [`execute_actions`] call.
+struct Pending {
+    actions: VecDeque<PlayerAction>,
+    /// Tracks this call has skipped as unplayable. A repeating queue wraps on a skip, so without
+    /// a bound a queue with nothing playable in it skips forever, holding the lock every
+    /// transport control waits on.
+    skipped: usize,
+}
+
+impl Pending {
+    /// Run `actions` next, in their order, ahead of anything still queued from the batch.
+    fn prepend(&mut self, actions: Vec<PlayerAction>) {
+        for (i, a) in actions.into_iter().enumerate() {
+            self.actions.insert(i, a);
+        }
+    }
+}
+
 /// How a track is being started — the only thing that differs between the
 /// [`PlayerAction::PlayMedia`] and [`PlayerAction::BeginCrossfade`] arms of
 /// [`execute_actions`].
@@ -174,11 +192,12 @@ impl StartMode {
 /// Start a track on the backend, auto-skipping past it if it can't be played.
 ///
 /// Shared by the two start actions. A file that has vanished is skipped
-/// *silently* — the auto-skip recovers on its own, and the usual cause is a
-/// stale double-click inside the watcher's debounce window. A decode failure is
-/// louder: the music silently stopping is otherwise invisible, so it toasts.
+/// *silently* while the skip lands on something playable — the usual cause is a
+/// stale double-click inside the watcher's debounce window — and toasts only
+/// when nothing in the queue plays. A decode failure is louder: the music
+/// silently stopping is otherwise invisible, so it always toasts.
 fn start_or_skip<B: PlayerBackend>(
-    pending: &mut VecDeque<PlayerAction>,
+    pending: &mut Pending,
     engine: &B,
     player_state: &PlayerStateHandle,
     sinks: &PlayerSinks,
@@ -191,20 +210,26 @@ fn start_or_skip<B: PlayerBackend>(
         if mode.stops_on_failure() {
             engine.stop();
         }
-        enqueue_auto_skip(pending, player_state, sinks);
+        if enqueue_auto_skip(pending, player_state, sinks) {
+            toast_playback_failed(file_path);
+        }
         return;
     }
     if let Err(e) = start() {
         log::error!("Failed to {} {file_path}: {e}", mode.verb());
-        melodia_core::utils::toast::notify(
-            melodia_core::utils::toast::ToastKind::PlaybackFailed,
-            toast_track_name(file_path),
-        );
+        toast_playback_failed(file_path);
         if mode.stops_on_failure() {
             engine.stop();
         }
         enqueue_auto_skip(pending, player_state, sinks);
     }
+}
+
+fn toast_playback_failed(file_path: &str) {
+    melodia_core::utils::toast::notify(
+        melodia_core::utils::toast::ToastKind::PlaybackFailed,
+        toast_track_name(file_path),
+    );
 }
 
 /// The file name alone, for the failure toast — the full path is too long to
@@ -222,40 +247,47 @@ fn toast_track_name(file_path: &str) -> String {
 /// the user has already moved off, neither of which is theirs to act on. A stream that failed to
 /// *open* is the user-visible case, and `library::radio` says so there.
 fn enqueue_station_failure(
-    pending: &mut VecDeque<PlayerAction>,
+    pending: &mut Pending,
     player_state: &PlayerStateHandle,
     sinks: &PlayerSinks,
     generation: u64,
 ) {
-    let actions =
-        with_state_emit(player_state, sinks, |s| s.build_station_failed_actions(generation));
-    for (i, a) in actions.into_iter().enumerate() {
-        pending.insert(i, a);
-    }
+    pending.prepend(with_state_emit(player_state, sinks, |s| {
+        s.build_station_failed_actions(generation)
+    }));
 }
 
-/// Advance past a track that turned out to be unplayable (file missing or
-/// decode error) and append the resulting actions to the pending set.
-/// On an empty queue this emits `Stop` only — the `with_state_emit` call
-/// took the lock to do that, so the state machine and `ViewModel` both reflect
-/// the end-of-queue state.
+/// Advance past a track that turned out to be unplayable (missing or
+/// undecodable) and run whatever that produces next. Returns whether it gave up
+/// instead.
+///
+/// It gives up once the batch has skipped a whole lap of the queue, since
+/// nothing left in it will play. On an empty queue this emits `Stop` only.
+/// Either way the `with_state_emit` call took the lock to do it, so the state
+/// machine and `ViewModel` both reflect the end-of-queue state.
 fn enqueue_auto_skip(
-    pending: &mut VecDeque<PlayerAction>,
+    pending: &mut Pending,
     player_state: &PlayerStateHandle,
     sinks: &PlayerSinks,
-) {
+) -> bool {
+    pending.skipped += 1;
+    let skipped = pending.skipped;
+    let mut gave_up = false;
     let actions = with_state_emit(player_state, sinks, |s| {
-        if let Some(track) = s.queue.advance_skip().cloned() {
-            play_track_inner(s, track, None)
-        } else {
-            stop_end_of_queue(s)
+        if !s.queue.is_empty() && skipped >= s.queue.len() {
+            gave_up = true;
+            return stop_end_of_queue(s);
+        }
+        match s.queue.advance_skip().cloned() {
+            Some(track) => play_track_inner(s, track, None),
+            None => stop_end_of_queue(s),
         }
     });
-    // Walk the new actions in order so they keep their relative ordering
-    // ahead of anything still queued from the original batch.
-    for (i, a) in actions.into_iter().enumerate() {
-        pending.insert(i, a);
+    if gave_up {
+        log::warn!("Stopping: none of the {skipped} track(s) tried could be played");
     }
+    pending.prepend(actions);
+    gave_up
 }
 
 #[cfg(test)]

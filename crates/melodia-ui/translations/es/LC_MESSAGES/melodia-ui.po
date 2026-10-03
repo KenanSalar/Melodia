@@ -2290,3 +2290,249 @@ msgstr "ID de grabación de MusicBrainz"
 
 msgid "{} can't be saved to {} files"
 msgstr "{} no se puede guardar en archivos {}"
+
+msgid "Output"
+msgstr "Salida"
+
+msgid "Match the File's Sample Rate"
+msgstr "Ajustar a la frecuencia de muestreo del archivo"
+
+msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate"
+msgstr "Reabre el dispositivo de audio a la frecuencia de cada pista para que el sistema no la remuestree. El sistema debe admitir esa frecuencia"
+
+msgid "Overlap the end of one track with the start of the next, unless the device has to change format between them"
+msgstr "Superpone el final de una pista con el principio de la siguiente, salvo que el dispositivo tenga que cambiar de formato entre ellas"
+
+msgid "Signal Path"
+msgstr "Ruta de la señal"
+
+msgid "What reaches the audio device, and what changes it on the way. Bit-perfect means nothing does"
+msgstr "Lo que llega al dispositivo de audio y lo que lo cambia por el camino. Bit-perfect significa que nada lo cambia"
+
+msgid "Nothing is playing"
+msgstr "No se está reproduciendo nada"
+
+msgid "Bit-perfect: the device receives the decoder's samples untouched"
+msgstr "Bit-perfect: el dispositivo recibe intactas las muestras del decodificador"
+
+msgid "Enhanced: only effects you chose change the sound"
+msgstr "Procesado: solo los efectos que elegiste cambian el sonido"
+
+msgid "Converted: the sound is changed on its way to the device"
+msgstr "Convertido: el sonido cambia de camino al dispositivo"
+
+msgid "Bit-perfect"
+msgstr "Bit-perfect"
+
+msgid "Enhanced"
+msgstr "Procesado"
+
+msgid "Fallback"
+msgstr "Alternativa"
+
+msgid "Converted"
+msgstr "Convertido"
+
+msgid "Lossy: the file is compressed, so the device gets the decoder's reconstruction of the recording"
+msgstr "Con pérdida: el archivo está comprimido, así que el dispositivo recibe la reconstrucción de la grabación que hace el decodificador"
+
+msgid "Lossy"
+msgstr "Con pérdida"
+
+msgid "Make Bit-Perfect"
+msgstr "Hacerlo bit-perfect"
+
+msgid "Switch to Exclusive Output?"
+msgstr "¿Cambiar a salida exclusiva?"
+
+msgid "Bit-perfect playback needs exclusive output. Other apps can't play through the device while Melodia does, and the system volume stops applying: Melodia's own volume goes to full unless Hardware Volume is on."
+msgstr "La reproducción bit-perfect necesita salida exclusiva. Otras apps no pueden reproducir a través del dispositivo mientras Melodia suena, y el volumen del sistema deja de aplicarse: el volumen propio de Melodia sube al máximo, salvo que el volumen por hardware esté activado."
+
+msgid "Switch"
+msgstr "Cambiar"
+
+msgid "Source"
+msgstr "Origen"
+
+msgid "{}, rounded to fit 32-bit float"
+msgstr "{}, redondeado a coma flotante de 32 bits"
+
+msgid "{}, decoded from a lossy codec"
+msgstr "{}, decodificado de un códec con pérdida"
+
+msgid "Effects"
+msgstr "Efectos"
+
+msgid "No effects"
+msgstr "Sin efectos"
+
+msgid "Equalizer and ReplayGain"
+msgstr "Ecualizador y ReplayGain"
+
+msgid "Normal"
+msgstr "Normal"
+
+msgid "Volume"
+msgstr "Volumen"
+
+msgid "Muted"
+msgstr "Silenciado"
+
+msgid "Not fading"
+msgstr "Sin fundido"
+
+msgid "Fading between tracks"
+msgstr "Fundido entre pistas"
+
+msgid "{} resampled to {}"
+msgstr "{} remuestreado a {}"
+
+msgid "Unchanged"
+msgstr "Sin cambios"
+
+msgid "Mixed down for the device"
+msgstr "Mezclado a menos canales para el dispositivo"
+
+msgid "Device"
+msgstr "Dispositivo"
+
+msgid "{}, shared: the system mixer may still convert it"
+msgstr "{}, compartido: el mezclador del sistema aún puede convertirlo"
+
+msgid "Output Mode"
+msgstr "Modo de salida"
+
+msgid "Exclusive gives Melodia the audio device alone: other apps can't play through it while Melodia plays, and the system mixer can't change the sound"
+msgstr "Exclusivo deja el dispositivo de audio solo para Melodia: otras apps no pueden reproducir a través de él mientras Melodia suena, y el mezclador del sistema no puede alterar el sonido"
+
+msgid "Shared"
+msgstr "Compartido"
+
+msgid "Exclusive"
+msgstr "Exclusivo"
+
+msgid "Exclusive Device"
+msgstr "Dispositivo exclusivo"
+
+msgid "The sound card exclusive output takes"
+msgstr "La tarjeta de sonido que ocupa la salida exclusiva"
+
+msgid "Output Device"
+msgstr "Dispositivo de salida"
+
+msgid "The sound card Melodia plays through"
+msgstr "La tarjeta de sonido por la que suena Melodia"
+
+msgid "System Default"
+msgstr "Predeterminado del sistema"
+
+msgid "Fallback: exclusive output was refused, so the system mixer is in the way"
+msgstr "Alternativa: se rechazó la salida exclusiva, así que el mezclador del sistema está en medio"
+
+msgid "the device is in use by another app"
+msgstr "otra app está usando el dispositivo"
+
+msgid "{} holds the device"
+msgstr "{} ocupa el dispositivo"
+
+msgid "another app holds the device"
+msgstr "otra app ocupa el dispositivo"
+
+msgid "the device can't run at this sample rate"
+msgstr "el dispositivo no admite esta frecuencia de muestreo"
+
+msgid "the device can't play this many channels"
+msgstr "el dispositivo no puede reproducir tantos canales"
+
+msgid "the device takes no sample format that holds this track"
+msgstr "el dispositivo no acepta ningún formato de muestra que contenga esta pista"
+
+msgid "the chosen device isn't connected"
+msgstr "el dispositivo elegido no está conectado"
+
+msgid "exclusive output isn't available on this system"
+msgstr "la salida exclusiva no está disponible en este sistema"
+
+msgid "the device doesn't allow exclusive control, which its Advanced properties in the Sound control panel can turn on"
+msgstr "el dispositivo no permite el control exclusivo, que se activa en sus propiedades, en Opciones avanzadas del panel de control Sonido"
+
+msgid "the device couldn't be opened"
+msgstr "no se pudo abrir el dispositivo"
+
+msgid "{}, shared: exclusive output was refused because {}"
+msgstr "{}, compartido: salida exclusiva rechazada ({})"
+
+msgid "{}, exclusive"
+msgstr "{}, exclusivo"
+
+msgid "{}, exclusive, in a format that can't hold the source exactly"
+msgstr "{}, exclusivo, en un formato que no contiene la fuente con exactitud"
+
+msgid "Buffer Period"
+msgstr "Periodo de búfer"
+
+msgid "How much audio the device is handed at a time. Longer periods ride out a busy system; shorter ones react sooner"
+msgstr "Cuánto audio recibe el dispositivo de una vez. Los periodos largos aguantan un sistema ocupado; los cortos responden antes"
+
+msgid "Polling Mode"
+msgstr "Modo de sondeo"
+
+msgid "Top the device up on a timer instead of waiting for it to ask. Try it if a USB device stutters or crackles in exclusive mode"
+msgstr "Rellenar el dispositivo con un temporizador en lugar de esperar a que lo pida. Pruébalo si un dispositivo USB se entrecorta o chasquea en modo exclusivo"
+
+msgid "{} ms"
+msgstr "{} ms"
+
+msgid "The device is running at {}"
+msgstr "El dispositivo funciona a {}"
+
+msgid "{} refused exclusive output because {}. Playing shared on {}"
+msgstr "{} rechazó la salida exclusiva ({}). Reproducción compartida en {}"
+
+msgid "Silence After a Rate Change"
+msgstr "Silencio tras un cambio de frecuencia"
+
+msgid "Exclusive output unavailable"
+msgstr "Salida exclusiva no disponible"
+
+msgid "Exclusive output was refused, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "Se rechazó la salida exclusiva, así que Melodia reproduce en modo compartido por ahora. La sección «Salida» de Ajustes explica el motivo."
+
+msgid "{} refused exclusive output, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "{} rechazó la salida exclusiva, así que Melodia reproduce en modo compartido por ahora. La sección «Salida» de Ajustes explica el motivo."
+
+msgid "Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off"
+msgstr "Algunos DAC se silencian un momento al cambiar de frecuencia de muestreo. Un breve silencio en cada cambio evita que se corte el inicio de la pista"
+
+msgid "Hardware Volume"
+msgstr "Volumen por hardware"
+
+msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
+msgstr "Mover el control de volumen del propio dispositivo en lugar de escalar las muestras, para que el control de volumen mantenga el sonido bit-perfect. Ese control es el volumen del sistema para el dispositivo, y se restablece cuando Melodia libera el dispositivo. Los dispositivos sin uno propio conservan el volumen de Melodia"
+
+msgid "Give the Device Back When Paused"
+msgstr "Liberar el dispositivo en pausa"
+
+msgid "After five minutes paused, hand the device back so other apps can play through it. Pressing play takes it again"
+msgstr "Tras cinco minutos en pausa, liberar el dispositivo para que otras apps puedan reproducir a través de él. Al reanudar, Melodia lo vuelve a tomar"
+
+msgid "Unsupported Sample Rates"
+msgstr "Frecuencias de muestreo no admitidas"
+
+msgid "What exclusive output does when the device can't run a track's sample rate: hand the device back and play that track through the system mixer, or keep the device and convert the track to a rate it can run"
+msgstr "Qué hace la salida exclusiva cuando el dispositivo no admite la frecuencia de muestreo de una pista: devolver el dispositivo y reproducir esa pista a través del mezclador del sistema, o conservar el dispositivo y convertir la pista a una frecuencia que admita"
+
+msgid "Play Through the System Mixer"
+msgstr "Reproducir con el mezclador del sistema"
+
+msgid "Resample and Keep Exclusive"
+msgstr "Remuestrear y mantener exclusivo"
+
+msgid "{}% on the device"
+msgstr "{} % en el dispositivo"
+
+msgid "{}% (the device muted)"
+msgstr "{} % (el dispositivo silenciado)"
+
+msgid "{}% (the device at {}%)"
+msgstr "{} % (el dispositivo al {} %)"

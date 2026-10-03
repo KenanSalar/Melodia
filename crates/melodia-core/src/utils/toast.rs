@@ -47,6 +47,11 @@ pub enum ToastKind {
     /// instruction rather than a failure report: it sticks, and it is the one kind
     /// carrying **no** detail — there being no path or error worth showing.
     RestartRequired,
+    /// An exclusive claim was refused and the audio went to the shared output instead. Raised once
+    /// per distinct refusal rather than at every track start that retries it. The detail is the
+    /// refusing device's name, or empty where it couldn't be found; the reason stays in the
+    /// Output settings, whose words for it are translated where this detail is not.
+    ExclusiveRefused,
 }
 
 /// A queued toast. [`kind`](Self::kind) picks the localized title on the UI side;

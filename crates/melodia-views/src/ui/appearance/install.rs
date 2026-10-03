@@ -147,11 +147,12 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
         g.set_overflow_shuffle(v.iter().any(|x| x == "shuffle"));
         g.set_overflow_pin(v.iter().any(|x| x == "pin"));
         g.set_overflow_queue(v.iter().any(|x| x == "queue"));
+        g.set_overflow_quality(v.iter().any(|x| x == "quality"));
     }
 
     // The boot migration for a `settings.json` written before `theme_preferences`
-    // existed; it takes the settings read above rather than re-reading them.
-    if let Err(e) = library::settings::seed_theme_preference(state, settings) {
+    // existed.
+    if let Err(e) = library::settings::seed_theme_preference(state) {
         log::warn!("seed theme_preferences: {e}");
     }
 

@@ -1,10 +1,16 @@
 //! The flag structs behind the Settings ▸ Playback tab.
 
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 
+use melodia_engine::player::engine::backend::OutputChoice;
 use melodia_engine::player::engine::types::RepeatMode;
 use melodia_playback::player::playback::crossfade::DEFAULT_CROSSFADE_MS;
 use melodia_playback::player::playback::equalizer::{DEFAULT_PRESET, NUM_BANDS};
+use melodia_playback::player::playback::output::{
+    DEFAULT_RESYNC_HOLD, Drive, ExclusiveTuning, OutputMode, RateFallback,
+};
 use melodia_playback::player::playback::replaygain::{DEFAULT_MODE, RG_DEFAULT_PREAMP_DB};
 
 /// Audio-playback preferences.
@@ -108,6 +114,131 @@ impl Default for CrossfadeFlags {
             crossfade_skip_same_album: true,
             crossfade_fade_on_pause: false,
         }
+    }
+}
+
+/// How the output device is opened.
+///
+/// `output_follow_rate` reopens the output at each track's own sample rate so the system mixer
+/// has no reason to resample it. Off by default: it costs a short silence, and the crossfade, at
+/// every rate boundary.
+///
+/// `output_mode` takes the card from every other application, so it ships shared.
+/// `output_device` is the card's stable id, or `None` for the first one the system lists. Where
+/// the ids name a shared target too (Windows), both modes play through it.
+///
+/// `output_period_ms` and `output_polling` pace an exclusive claim's writer, and
+/// `output_resync_ms` is the silence written after a reopen onto a new rate. Each is held to its
+/// range on the way to the engine, so a hand-edited value can't pin a bad one.
+///
+/// `output_hardware_volume` has a claim carry the volume on the device's own control, which is
+/// also that device's system volume while the claim holds it, so it ships off.
+///
+/// `output_rate_fallback` keeps a claim on a device lacking the file's rate by converting to one
+/// it has. It ships giving the claim up instead, as every claim did before it.
+///
+/// `output_paused_device` gives a claimed device back once a pause has held it for a while. It
+/// ships keeping it, since play then has to reopen the device, and it sits outside the choice so
+/// a toggle never reopens a claim.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OutputFlags {
+    pub output_follow_rate: bool,
+    #[serde(with = "OutputModeKey")]
+    pub output_mode: OutputMode,
+    pub output_device: Option<String>,
+    pub output_period_ms: u32,
+    pub output_polling: bool,
+    pub output_resync_ms: u32,
+    pub output_hardware_volume: bool,
+    #[serde(with = "RateFallbackKey")]
+    pub output_rate_fallback: RateFallback,
+    pub output_paused_device: PausedDevice,
+}
+
+impl Default for OutputFlags {
+    fn default() -> Self {
+        Self {
+            output_follow_rate: false,
+            output_mode: OutputMode::default(),
+            output_device: None,
+            output_period_ms: duration_ms(ExclusiveTuning::DEFAULT_PERIOD),
+            output_polling: false,
+            output_resync_ms: duration_ms(DEFAULT_RESYNC_HOLD),
+            output_hardware_volume: false,
+            output_rate_fallback: RateFallback::default(),
+            output_paused_device: PausedDevice::default(),
+        }
+    }
+}
+
+impl OutputFlags {
+    pub fn resync_hold(&self) -> Duration {
+        Duration::from_millis(u64::from(self.output_resync_ms))
+    }
+
+    pub fn output_choice(&self) -> OutputChoice {
+        let period = Duration::from_millis(u64::from(self.output_period_ms));
+        OutputChoice {
+            mode: self.output_mode,
+            device: self.output_device.clone(),
+            tuning: ExclusiveTuning::new(period, Drive::from_polling(self.output_polling)),
+            hardware_volume: self.output_hardware_volume,
+            rate_fallback: self.output_rate_fallback,
+        }
+    }
+
+    /// [`Self::output_choice`]'s way back, for persisting what the engine was just handed.
+    pub fn set_output_choice(&mut self, choice: &OutputChoice) {
+        self.output_mode = choice.mode;
+        self.output_device.clone_from(&choice.device);
+        self.output_period_ms = duration_ms(choice.tuning.period);
+        self.output_polling = choice.tuning.drive == Drive::Polling;
+        self.output_hardware_volume = choice.hardware_volume;
+        self.output_rate_fallback = choice.rate_fallback;
+    }
+}
+
+fn duration_ms(duration: Duration) -> u32 {
+    u32::try_from(duration.as_millis()).unwrap_or(u32::MAX)
+}
+
+/// [`OutputMode`] as persisted: a key, so reordering the picker repoints nothing. A mirror rather
+/// than a derive, `melodia-playback` naming no serde.
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "OutputMode", rename_all = "lowercase")]
+enum OutputModeKey {
+    Shared,
+    Exclusive,
+}
+
+/// [`RateFallback`] as persisted, mirrored for the same reasons as [`OutputModeKey`].
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "RateFallback", rename_all = "lowercase")]
+enum RateFallbackKey {
+    Shared,
+    Resample,
+}
+
+/// What a long pause does with an exclusive device. A token rather than a `bool`, [`OutputFlags`]
+/// already sitting at clippy's `struct_excessive_bools` cap.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PausedDevice {
+    #[default]
+    Keep,
+    Release,
+}
+
+impl PausedDevice {
+    /// The token for the Output card's toggle, which is on for [`Self::Release`].
+    pub fn from_toggle(release: bool) -> Self {
+        if release { Self::Release } else { Self::Keep }
+    }
+
+    /// [`Self::from_toggle`]'s way back, which is also what the engine is handed.
+    pub fn releases(self) -> bool {
+        self == Self::Release
     }
 }
 

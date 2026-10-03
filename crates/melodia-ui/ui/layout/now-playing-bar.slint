@@ -11,6 +11,8 @@ import { SeekRow } from "../components/now-playing/seek-row.slint";
 import { VolumePopup } from "../components/now-playing/volume-popup.slint";
 import { OverflowMenu } from "../components/now-playing/overflow-menu.slint";
 import { PlayButton } from "../components/now-playing/play-button.slint";
+import { QualityChip } from "../components/quality-chip.slint";
+import { SignalPathUi } from "../globals/signal-path.slint";
 
 export component NowPlayingBar inherits Rectangle {
     // Pinned with min/max and no stretch so the parent always reserves this slot —
@@ -295,7 +297,13 @@ export component NowPlayingBar inherits Rectangle {
                 alignment: end;
 
                 // `if` rather than `visible: false`, so a button moved into the overflow
-                // menu vacates its layout slot instead of leaving a hole.
+                // menu vacates its layout slot instead of leaving a hole. The chip's padding
+                // stands in for the gap this row's spacing is too tight to give it.
+                if SignalPathUi.chip-shown && !Settings.overflow-quality: VerticalLayout {
+                    alignment: center;
+                    padding-right: Theme.pad-sm;
+                    QualityChip { }
+                }
                 if !Settings.overflow-repeat: VerticalLayout {
                     alignment: center;
                     IconButton {

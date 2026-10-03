@@ -1,12 +1,18 @@
-//! Tests for the shared decode primitives.
+//! Tests for the shared decode primitives: the tick-to-frame rounding and which codecs are lossy.
 //!
 //! [`super::ticks_to_frames`] is the one with two callers wanting opposite answers — `aac_trim`
 //! trims the head and must never overshoot into real audio, `file_decode` trims after a seek and
 //! must never undershoot into the previous packet's tail — so the rounding is the whole subject.
 
+use symphonia::core::codecs::audio::well_known::{
+    CODEC_ID_AAC, CODEC_ID_ADPCM_IMA_QT, CODEC_ID_ADPCM_IMA_WAV, CODEC_ID_ADPCM_MS, CODEC_ID_ALAC,
+    CODEC_ID_FLAC, CODEC_ID_MP1, CODEC_ID_MP2, CODEC_ID_MP3, CODEC_ID_OPUS, CODEC_ID_PCM_ALAW,
+    CODEC_ID_PCM_F32LE, CODEC_ID_PCM_F64BE, CODEC_ID_PCM_MULAW, CODEC_ID_PCM_S16LE,
+    CODEC_ID_PCM_S24BE, CODEC_ID_PCM_S32LE_PLANAR, CODEC_ID_PCM_U8, CODEC_ID_VORBIS,
+};
 use symphonia::core::units::TimeBase;
 
-use super::{Rounding, ticks_to_frames};
+use super::{Rounding, lossy_codec, ticks_to_frames};
 use crate::player::source::audio::SampleRate;
 
 /// `ticks` against a `1/denom` timebase decoded at `rate`, the shape an MP4 audio track carries.
@@ -92,4 +98,36 @@ fn a_result_too_large_for_a_frame_count_is_refused() {
 fn a_zero_tick_count_converts_to_no_frames() {
     assert_eq!(frames(0, 1_000, 44_100, Rounding::Down), Some(0));
     assert_eq!(frames(0, 1_000, 44_100, Rounding::Up), Some(0));
+}
+
+/// Every codec the registry can open that throws signal away reads as lossy, the companded PCMs
+/// and the ADPCMs among them, and none that keeps it does. A lossy codec missing here plays as a
+/// lossless file to the signal path panel, and a lossless one wrongly here loses its Bit-perfect.
+/// The lossless rows take PCM across width, sign, byte order, float and planar layout.
+#[test]
+fn a_codec_reads_as_lossy_exactly_when_it_throws_signal_away() {
+    let rows = [
+        ("MP1", CODEC_ID_MP1, true),
+        ("MP2", CODEC_ID_MP2, true),
+        ("MP3", CODEC_ID_MP3, true),
+        ("AAC", CODEC_ID_AAC, true),
+        ("Vorbis", CODEC_ID_VORBIS, true),
+        ("Opus", CODEC_ID_OPUS, true),
+        ("Microsoft ADPCM", CODEC_ID_ADPCM_MS, true),
+        ("IMA ADPCM in WAV", CODEC_ID_ADPCM_IMA_WAV, true),
+        ("IMA ADPCM in QuickTime", CODEC_ID_ADPCM_IMA_QT, true),
+        ("A-law", CODEC_ID_PCM_ALAW, true),
+        ("mu-law", CODEC_ID_PCM_MULAW, true),
+        ("FLAC", CODEC_ID_FLAC, false),
+        ("ALAC", CODEC_ID_ALAC, false),
+        ("PCM 16-bit", CODEC_ID_PCM_S16LE, false),
+        ("PCM 24-bit big-endian", CODEC_ID_PCM_S24BE, false),
+        ("PCM unsigned 8-bit", CODEC_ID_PCM_U8, false),
+        ("PCM 32-bit float", CODEC_ID_PCM_F32LE, false),
+        ("PCM 64-bit float", CODEC_ID_PCM_F64BE, false),
+        ("PCM 32-bit planar", CODEC_ID_PCM_S32LE_PLANAR, false),
+    ];
+    for (what, codec, lossy) in rows {
+        assert_eq!(lossy_codec(codec), lossy, "{what}");
+    }
 }

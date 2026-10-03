@@ -67,7 +67,7 @@ impl PlaybackEngine {
         self.viz.clone()
     }
 
-    /// Snapshot the live crossfade settings for the playback monitor's decision.
+    /// Snapshot the live crossfade settings for every fade decision, automatic and manual.
     pub fn crossfade_settings(&self) -> crossfade::CrossfadeSettings {
         self.xf.snapshot()
     }

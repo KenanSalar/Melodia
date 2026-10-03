@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -50,6 +51,10 @@ async fn import_files(
             failed_paths.push(file_path.clone());
         }
     }
+    // A file given twice, or a link beside its target, is one track: left in, the batch insert
+    // meets its own row and the whole import fails on `tracks.file_path`.
+    let mut seen = HashSet::with_capacity(valid_paths.len());
+    valid_paths.retain(|path| seen.insert(path.clone()));
 
     if valid_paths.is_empty() {
         return Ok(ImportFilesResult {

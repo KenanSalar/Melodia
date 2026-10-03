@@ -142,7 +142,13 @@ export component OverflowMenuSection inherits Rectangle {
                         checked <=> Settings.overflow-queue;
                         toggled => { Settings.overflow-buttons-changed(self.id, self.checked); }
                     }
-                    Rectangle { }
+                    OverflowCheckCell {
+                        id: "quality";
+                        icon: "graphic_eq";
+                        label: @tr("Signal Path");
+                        checked <=> Settings.overflow-quality;
+                        toggled => { Settings.overflow-buttons-changed(self.id, self.checked); }
+                    }
                 }
             }
         }

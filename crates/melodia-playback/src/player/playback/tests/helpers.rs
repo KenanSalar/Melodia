@@ -20,7 +20,7 @@ use std::num::NonZero;
 use std::time::Duration;
 
 use melodia_audio::player::source::audio::{
-    AudioSource, ChannelCount, Sample, SampleRate, SeekError, Shape,
+    AudioSource, ChannelCount, Sample, SampleRate, SeekError, Shape, SourceFormat,
 };
 
 pub(crate) fn nz_u16(v: u16) -> ChannelCount {
@@ -76,11 +76,23 @@ pub(crate) struct TestSource {
     pos: usize,
     channels: u16,
     sample_rate: u32,
+    format: SourceFormat,
+    dsp_engaged: bool,
 }
 
 impl TestSource {
     pub(crate) fn new(data: Vec<f32>, channels: u16, sample_rate: u32) -> Self {
-        Self { data, pos: 0, channels, sample_rate }
+        Self { data, pos: 0, channels, sample_rate, format: SourceFormat::F32, dsp_engaged: false }
+    }
+
+    /// Report `format` as what the decoder produced.
+    pub(crate) fn with_format(self, format: SourceFormat) -> Self {
+        Self { format, ..self }
+    }
+
+    /// Report the samples as processed, as a wrapper with its DSP engaged would.
+    pub(crate) fn engaged(self) -> Self {
+        Self { dsp_engaged: true, ..self }
     }
 }
 
@@ -101,6 +113,12 @@ impl AudioSource for TestSource {
     }
     fn sample_rate(&self) -> SampleRate {
         nz_u32(self.sample_rate)
+    }
+    fn format(&self) -> SourceFormat {
+        self.format
+    }
+    fn dsp_engaged(&self) -> bool {
+        self.dsp_engaged
     }
     fn total_duration(&self) -> Option<Duration> {
         None

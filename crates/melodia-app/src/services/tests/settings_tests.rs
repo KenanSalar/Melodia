@@ -1,4 +1,10 @@
+use std::time::Duration;
+
 use melodia_core::error::AppError;
+use melodia_engine::player::engine::backend::OutputChoice;
+use melodia_playback::player::playback::output::{
+    Drive, ExclusiveTuning, OutputMode, RateFallback,
+};
 use melodia_testkit::{reading_env, with_env_set};
 // Only the desktop probes need it, and Windows has no desktop to ask.
 #[cfg(not(target_os = "windows"))]
@@ -6,7 +12,7 @@ use melodia_testkit::with_env_var;
 
 use super::*;
 use crate::services::settings::{
-    ONBOARDING_VERSION, TitlebarButtonStyle, WINDOW_BORDER_SYSTEM_COLOR, WindowBorder,
+    ONBOARDING_VERSION, PausedDevice, TitlebarButtonStyle, WINDOW_BORDER_SYSTEM_COLOR, WindowBorder,
 };
 
 fn json_err(e: &serde_json::Error) -> AppError {
@@ -827,5 +833,170 @@ fn the_tag_backfill_marker_ships_unset_and_survives_being_set() -> Result<(), Ap
     let recorded = r#"{"theme_id": "catppuccin", "tags_backfilled": true}"#;
     let settings: SettingsData = serde_json::from_str(recorded).map_err(|e| json_err(&e))?;
     assert!(settings.library.tags_backfilled);
+    Ok(())
+}
+
+/// The Output card persists each pick through `set_output_choice`, and the boot hands the engine
+/// what `output_choice` reads back off disk, so every part of a choice has to survive the trip.
+/// A part that doesn't comes back at its default on the next launch, silently.
+#[test]
+fn an_output_choice_comes_back_from_settings_json_whole() -> Result<(), AppError> {
+    let choice = OutputChoice {
+        mode: OutputMode::Exclusive,
+        device: Some("{0.0.0.00000000}.{a-test-endpoint}".to_owned()),
+        tuning: ExclusiveTuning::new(Duration::from_millis(50), Drive::Polling),
+        hardware_volume: true,
+        rate_fallback: RateFallback::Resample,
+    };
+    let mut flags = OutputFlags::default();
+    flags.set_output_choice(&choice);
+
+    let json = serde_json::to_string(&flags).map_err(|e| json_err(&e))?;
+    let read: OutputFlags = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
+
+    assert_eq!(read.output_choice(), choice);
+    Ok(())
+}
+
+/// A hand-edited period reaches the claim held to the range a claim asks for, rather than as a
+/// period no device keeps up with or a stop that reads as a hang.
+#[test]
+fn a_hand_edited_period_is_held_to_the_claims_range() -> Result<(), AppError> {
+    let rows = [
+        (r#"{"output_period_ms": 0}"#, ExclusiveTuning::MIN_PERIOD),
+        (r#"{"output_period_ms": 20}"#, Duration::from_millis(20)),
+        (r#"{"output_period_ms": 5000}"#, ExclusiveTuning::MAX_PERIOD),
+    ];
+    for (json, expected) in rows {
+        let flags: OutputFlags = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+
+        assert_eq!(flags.output_choice().tuning.period, expected, "{json}");
+    }
+    Ok(())
+}
+
+/// Hardware volume moves the device's system volume, so a settings file from before it must not
+/// read as asking for it.
+#[test]
+fn a_settings_file_from_before_hardware_volume_leaves_it_off() -> Result<(), AppError> {
+    let json = r#"{"output_mode": "exclusive"}"#;
+    let flags: OutputFlags = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+
+    assert!(!flags.output_choice().hardware_volume);
+    Ok(())
+}
+
+/// A file from before the setting reads as what every claim did then: a rate the device lacks
+/// hands it back and plays through the system mixer.
+#[test]
+fn a_settings_file_from_before_the_rate_fallback_plays_through_the_mixer() -> Result<(), AppError> {
+    let json = r#"{"output_mode": "exclusive"}"#;
+    let flags: OutputFlags = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+
+    assert_eq!(flags.output_choice().rate_fallback, RateFallback::Shared);
+    Ok(())
+}
+
+/// A file from before the setting reads as what every pause did then: the claim is held.
+#[test]
+fn a_settings_file_from_before_the_paused_device_keeps_it() -> Result<(), AppError> {
+    let json = r#"{"output_mode": "exclusive"}"#;
+    let flags: OutputFlags = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+
+    assert_eq!(flags.output_paused_device, PausedDevice::Keep);
+    Ok(())
+}
+
+/// The tokens are what every saved file holds, so renaming a variant would turn each of those back
+/// into the default on the next launch, silently.
+#[test]
+fn the_rate_fallback_is_written_and_read_by_its_token() -> Result<(), AppError> {
+    let rows = [(RateFallback::Shared, "shared"), (RateFallback::Resample, "resample")];
+    for (fallback, token) in rows {
+        let flags = OutputFlags { output_rate_fallback: fallback, ..OutputFlags::default() };
+        let written = serde_json::to_value(&flags).map_err(|e| json_err(&e))?;
+        let read: OutputFlags =
+            serde_json::from_value(serde_json::json!({ "output_rate_fallback": token }))
+                .map_err(|e| json_err(&e))?;
+
+        assert_eq!(
+            (written["output_rate_fallback"].clone(), read.output_rate_fallback),
+            (serde_json::json!(token), fallback),
+            "{token}"
+        );
+    }
+    Ok(())
+}
+
+/// The mode's token, held for the same reason as the rate fallback's: an exclusive install that
+/// read back as shared would quietly stop claiming its device.
+#[test]
+fn the_output_mode_is_written_and_read_by_its_token() -> Result<(), AppError> {
+    let rows = [(OutputMode::Shared, "shared"), (OutputMode::Exclusive, "exclusive")];
+    for (mode, token) in rows {
+        let flags = OutputFlags { output_mode: mode, ..OutputFlags::default() };
+        let written = serde_json::to_value(&flags).map_err(|e| json_err(&e))?;
+        let read: OutputFlags = serde_json::from_value(serde_json::json!({ "output_mode": token }))
+            .map_err(|e| json_err(&e))?;
+
+        assert_eq!(
+            (written["output_mode"].clone(), read.output_mode),
+            (serde_json::json!(token), mode),
+            "{token}"
+        );
+    }
+    Ok(())
+}
+
+/// The long pause's token, held for the same reason as the rate fallback's.
+#[test]
+fn the_paused_device_is_written_and_read_by_its_token() -> Result<(), AppError> {
+    let rows = [(PausedDevice::Keep, "keep"), (PausedDevice::Release, "release")];
+    for (key, token) in rows {
+        let written = serde_json::to_value(key).map_err(|e| json_err(&e))?;
+        let read: PausedDevice =
+            serde_json::from_value(serde_json::json!(token)).map_err(|e| json_err(&e))?;
+
+        assert_eq!((written, read), (serde_json::json!(token), key), "{token}");
+    }
+    Ok(())
+}
+
+/// The Output card's toggle writes the token and reads it back, and the engine is handed the same
+/// reading, so the two directions have to agree for both positions.
+#[test]
+fn the_paused_device_toggle_comes_back_as_it_was_set() {
+    for release in [false, true] {
+        let token = PausedDevice::from_toggle(release);
+
+        assert_eq!(token.releases(), release, "{token:?}");
+    }
+}
+
+/// What a downgrade leaves: a caption style a newer build added, beside settings this one knows.
+/// The file is flat, every flag struct flattened into it, so this is the shape the load has to
+/// reset one setting in.
+#[test]
+fn a_token_a_newer_build_wrote_resets_only_its_own_setting() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let paths = melodia_core::config::Paths::rooted_at(tmp.path().to_path_buf());
+    paths.create_dirs()?;
+    let json = r#"{"volume": 40, "titlebar_button_style": "a_newer_style",
+        "always_on_top": true, "output_mode": "exclusive"}"#;
+    std::fs::write(&paths.settings_path, json)?;
+
+    let settings = reading_env(|| crate::services::settings::read_settings(&paths))?;
+
+    let read = (
+        settings.volume,
+        settings.window.titlebar_button_style,
+        settings.window.always_on_top,
+        settings.output.output_mode,
+    );
+    assert_eq!(
+        read,
+        (40, TitlebarButtonStyle::Standard, true, OutputMode::Exclusive),
+        "(volume, caption style, always on top, output mode)"
+    );
     Ok(())
 }

@@ -8,11 +8,11 @@ use souvlaki::{
 use tokio::sync::mpsc;
 
 use melodia_engine::player::engine::event_sink::{MediaControlsSync, PlayerEvent};
-use melodia_engine::player::engine::state::PlayerViewModelLight;
+use melodia_engine::player::engine::state::{PlayerViewModelLight, amplitude_to_volume};
 use melodia_engine::player::engine::types::PlaybackStatus;
 
 use super::published::Published;
-use super::{cover_url, forward, volume_percent};
+use super::{cover_url, forward};
 
 /// How often a playing position is handed over. Both panels advance their own clock between
 /// updates, so this only has to keep the two from visibly diverging.
@@ -157,7 +157,7 @@ fn translate_event(event: MediaControlEvent) -> Option<PlayerEvent> {
         MediaControlEvent::SetPosition(MediaPosition(pos)) => {
             Some(PlayerEvent::SeekTo(u64::try_from(pos.as_millis()).unwrap_or(u64::MAX)))
         }
-        MediaControlEvent::SetVolume(vol) => Some(PlayerEvent::SetVolume(volume_percent(vol))),
+        MediaControlEvent::SetVolume(vol) => Some(PlayerEvent::SetVolume(amplitude_to_volume(vol))),
         // Relative seeks need current position; revisit when the library API lands a
         // SeekRelative variant or the sink can resolve it from state.
         MediaControlEvent::Seek(_) | MediaControlEvent::SeekBy(_, _) => {

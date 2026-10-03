@@ -1,4 +1,8 @@
+use melodia_testkit::{block_body, strip_line_comments};
+
 use super::SettingsTab;
+
+const SETTINGS_PAGE: &str = include_str!("../settings_page.rs");
 
 /// The tab count Slint declares today. Kept local so a change to
 /// `SettingsPage.tab-count` doesn't silently rewrite what these assert.
@@ -291,4 +295,35 @@ fn every_column_takes_its_own_cell() {
             );
         }
     }
+}
+
+/// Every deep link into Settings writes the tab before the nav index, so the page mounts on the
+/// body it is meant to show rather than on whichever tab it was last left at.
+///
+/// Both writes go through the callbacks that already own an `IndexPersist`. Reaching for
+/// `library::settings::set_settings_tab` here instead would build, persist, and be a seventh
+/// writer: `crates/melodia/tests/index_persist.rs` pins that count at six, but it walks
+/// `melodia-views` for the *setter*, so it would never see this ordering.
+#[test]
+fn opening_settings_on_a_tab_writes_the_tab_before_the_nav_index() {
+    let src = strip_line_comments(SETTINGS_PAGE);
+    let body = src
+        .find("pub fn open_on(")
+        .and_then(|at| src[at..].find("{\n").map(|rel| at + rel))
+        .and_then(|open| block_body(&src, open))
+        .unwrap_or_default();
+
+    let writes = (
+        body.find("invoke_tab_changed(idx)"),
+        body.find("invoke_persist_selected_index(NAV_SETTINGS)"),
+    );
+    assert!(
+        matches!(writes, (Some(tab), Some(nav)) if tab < nav),
+        "the tab must be written before the nav index, and both through the persisting \
+         callbacks: {writes:?}"
+    );
+    assert!(
+        !body.contains("set_settings_tab"),
+        "the deep link must reuse the tab-changed callback, never the disk setter"
+    );
 }

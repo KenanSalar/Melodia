@@ -31,7 +31,7 @@ use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Dialog, Nav, Player};
 
 use index_persist::IndexPersist;
-use macros::{spawn_logged_sync, wire_pb, wire_sync, wire_sync_pb};
+use macros::{spawn_logged, spawn_logged_sync, wire_pb, wire_sync, wire_sync_pb};
 
 pub use cross_tab_nav::wire_cross_tab_nav;
 pub use library_settings::wire_library_settings;
@@ -275,23 +275,19 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
     }
 
     // set_playback_speed: apply to the live player *and* persist, speed surviving restarts
-    // as repeat, shuffle and volume do. Two steps, as the gapless callback takes: a fast
-    // synchronous apply, then a blocking-pool write.
+    // as repeat, shuffle and volume do.
     {
         let s = state.clone();
         player.on_set_playback_speed(move |speed| {
-            let speed = f64::from(speed);
-            let s_apply = s.clone();
-            spawn_logged_sync!(
-                s_apply,
+            let s = s.clone();
+            spawn_logged!(
+                s,
                 "set_playback_speed",
-                library::playback::player_set_playback_speed(&s_apply.playback_ctx(), speed)
+                library::playback::player_set_playback_speed_committed(
+                    &s.playback_ctx(),
+                    f64::from(speed)
+                )
             );
-            // `persist_blocking`, not the macro beside it: this writes `settings.json`,
-            // where the macro is the `views.json` shape.
-            s.persist_blocking("persist playback_speed", move |st| {
-                library::settings::set_playback_speed(st, speed)
-            });
         });
     }
 

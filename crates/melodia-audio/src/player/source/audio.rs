@@ -5,6 +5,7 @@
 //! stop naming that crate. What it buys is that the chain now describes itself: an [`AudioSource`]
 //! is something `playback::output` can pull, rather than something a dependency happens to accept.
 
+use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -27,6 +28,45 @@ pub type SampleRate = std::num::NonZero<u32>;
 pub struct Shape {
     pub channels: ChannelCount,
     pub rate: SampleRate,
+}
+
+/// What a decoder produced before it became [`Sample`]s: the width it decoded at, and whether that
+/// was float.
+///
+/// The chain is `f32` from the decoder down, so this is the one place that says whether getting
+/// there cost anything.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SourceFormat {
+    pub bits: u8,
+    pub float: bool,
+    /// Decoded from a lossy codec, so no path from here delivers the recording itself, only the
+    /// decoder's reconstruction of it. Lossy and float coincide often enough to be confused, and
+    /// a float WAV is neither.
+    pub lossy: bool,
+}
+
+impl SourceFormat {
+    /// What a source with nothing to say for itself reports.
+    pub const F32: Self = Self { bits: 32, float: true, lossy: false };
+
+    /// Whether widening to [`Sample`] is exact: `f32` carries 24 bits of integer and any float
+    /// no wider than itself.
+    pub fn fits_sample(self) -> bool {
+        let widest = if self.float { 32 } else { 24 };
+        self.bits <= widest
+    }
+}
+
+/// `16-bit`, `32-bit float`: the float matters, since a lossy track and a 32-bit integer file share
+/// a width and nothing else.
+impl fmt::Display for SourceFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}-bit", self.bits)?;
+        if self.float {
+            f.write_str(" float")?;
+        }
+        Ok(())
+    }
 }
 
 const NANOS_PER_SEC: u64 = 1_000_000_000;
@@ -99,6 +139,16 @@ pub trait AudioSource: Iterator<Item = Sample> + Send {
     fn shape(&self) -> Shape {
         Shape { channels: self.channels(), rate: self.sample_rate() }
     }
+
+    /// What the decoder at the bottom of this source produced. A wrapper forwards it.
+    fn format(&self) -> SourceFormat;
+
+    /// Whether this source hands on anything other than the samples it pulled. A decoder never
+    /// does; a wrapper that can alter them answers for itself and forwards otherwise.
+    ///
+    /// Required rather than defaulted, as is [`Self::format`]: a wrapper that forgot to forward
+    /// would report a processed signal as untouched.
+    fn dsp_engaged(&self) -> bool;
 
     /// How long the source runs for, when it is the kind of thing that ends.
     fn total_duration(&self) -> Option<Duration>;

@@ -20,6 +20,7 @@ use melodia_core::error::{AppError, AppResult};
 use melodia_core::utils::self_writes::SelfWrites;
 use melodia_engine::player::engine::backend::PlaybackEngine;
 use melodia_engine::player::engine::event_sink::{MediaControlsSync, PlayerEvent, PlayerSinks};
+use melodia_engine::player::engine::signal_path::SignalPath;
 use melodia_engine::player::engine::state::{
     PlayerStateHandle, PlayerViewModelLight, PositionTick, QueueViewModel, lock_state,
 };
@@ -29,8 +30,8 @@ use melodia_integrations::services::integrations::scrobble::ScrobbleService;
 use melodia_net::services::net::pacer::RequestPacer;
 use melodia_platform::services::platform::always_on_top::{self, AlwaysOnTopCapability};
 use melodia_playback::player::playback::decks::DECK_COUNT;
-use melodia_playback::player::playback::output::AudioOutput;
-use melodia_playback::player::playback::stream_health::{self, AudioStreamHealth};
+use melodia_playback::player::playback::output::{AudioOutput, OutputMode};
+use melodia_playback::player::playback::stream_health::AudioStreamHealth;
 use melodia_store::database::{self, DbPool};
 use melodia_store::media::ingest::watcher::{FileEvent, FolderWatcher};
 
@@ -53,14 +54,14 @@ pub struct AppState {
     pub cover_cache: CoverCache,
     pub player_state: Arc<PlayerStateHandle>,
     pub engine: Arc<PlaybackEngine>,
-    /// The open device. Held because dropping it stops the stream and releases the card, which is
-    /// what a device picker will need.
-    pub audio_output: Arc<AudioOutput>,
     /// Fault counters the output device's error callback writes into, on the
-    /// audio thread. Drained by `tasks::audio_health` and read nowhere else.
+    /// audio thread. Drained by `tasks::audio_health`, the output's reopen being the
+    /// one other reader.
     pub audio_health: Arc<AudioStreamHealth>,
     pub sinks: Arc<PlayerSinks>,
     pub position_tx: watch::Sender<Option<PositionTick>>,
+    /// What the playing source goes through on its way to the device, `None` while stopped.
+    pub signal_path_tx: watch::Sender<Option<SignalPath>>,
     /// Bumped whenever the track library is mutated by a scan or watcher
     /// event. UI subscribers re-fetch the Tracks model on each tick.
     pub library_changed: Signal,
@@ -185,22 +186,21 @@ pub struct StartupChannels {
 
 impl AppState {
     pub async fn init(paths: Paths, runtime: Handle) -> AppResult<(Self, StartupChannels)> {
-        // The error callback records into counters rather than logging, because cpal calls it on
-        // the output worker thread; `player::playback::stream_health` argues that.
-        let audio_health = Arc::new(AudioStreamHealth::default());
-        let audio_output =
-            AudioOutput::open(DECK_COUNT, stream_health::error_callback(audio_health.clone()))?;
-        log::info!("Audio output: {:?}", audio_output.negotiated());
-        // The runtime handle is only used to schedule the deferred half of a
-        // faded pause / stop (arm the ramp now, pause the decks once it lands).
-        let engine = Arc::new(PlaybackEngine::new(audio_output.mixer(), runtime.clone())?);
-
-        let db = database::init_database(&paths).await?;
-
+        // Ahead of the output, which opens differently under exclusive output.
         let settings = settings::read_settings(&paths).unwrap_or_else(|e| {
             log::warn!("Failed to read settings on startup: {e}; using defaults");
             settings::SettingsData::default()
         });
+
+        // The error callback records into counters rather than logging, because cpal calls it on
+        // the output worker thread; `player::playback::stream_health` argues that.
+        let audio_health = Arc::new(AudioStreamHealth::default());
+        let audio_output = open_output(&settings, audio_health.clone())?;
+        // The runtime handle is only used to schedule the deferred half of a
+        // faded pause / stop (arm the ramp now, pause the decks once it lands).
+        let engine = Arc::new(PlaybackEngine::with_output(audio_output, runtime.clone())?);
+
+        let db = database::init_database(&paths).await?;
 
         let player_state = Arc::new(PlayerStateHandle::default());
         {
@@ -227,6 +227,7 @@ impl AppState {
         let (vm_tx, _) = watch::channel::<Option<PlayerViewModelLight>>(None);
         let (q_tx, _) = watch::channel::<Option<QueueViewModel>>(None);
         let (position_tx, _) = watch::channel::<Option<PositionTick>>(None);
+        let (signal_path_tx, _) = watch::channel::<Option<SignalPath>>(None);
         let (scan_progress_tx, _) = watch::channel::<Option<ScanProgressTick>>(None);
 
         let (mc_handle, mc_rx) = media_controls::init_media_controls();
@@ -270,10 +271,10 @@ impl AppState {
             cover_cache,
             player_state,
             engine,
-            audio_output: Arc::new(audio_output),
             audio_health,
             sinks,
             position_tx,
+            signal_path_tx,
             library_changed: Signal::new(),
             stats_changed: Signal::new(),
             locale_changed: Signal::new(),
@@ -351,10 +352,31 @@ impl AppState {
     }
 }
 
+/// Open the output the saved choice will play through. Parked under exclusive output, which claims
+/// the card at the first play, and for a chosen shared device, which [`hydrate_audio_dsp`] opens:
+/// opening the default device shared would only close it again.
+fn open_output(
+    settings: &settings::SettingsData,
+    health: Arc<AudioStreamHealth>,
+) -> AppResult<AudioOutput> {
+    let choice = settings.output.output_choice();
+    if choice.mode == OutputMode::Exclusive {
+        log::info!("Audio output: parked until the first play claims the device");
+        return AudioOutput::open_parked(DECK_COUNT, health);
+    }
+    if choice.shared_device().is_some() {
+        log::info!("Audio output: parked until the chosen device opens");
+        return AudioOutput::open_parked(DECK_COUNT, health);
+    }
+    let output = AudioOutput::open(DECK_COUNT, health)?;
+    log::info!("Audio output: {:?}", output.negotiated());
+    Ok(output)
+}
+
 /// Seed the playback engine's lock-free cells (graphic EQ, `ReplayGain`,
-/// crossfade) from persisted settings before playback starts, so the first
-/// track is already processed when any of them is enabled. All three live on
-/// the engine (not `PlayerState`). Ordering is deliberate: values first,
+/// crossfade, following the file's rate) from persisted settings before
+/// playback starts, so the first track is already processed when any of them
+/// is enabled. All of them live on the engine (not `PlayerState`). Ordering is deliberate: values first,
 /// `enabled` last, so the enable's generation bump publishes a fully-seeded
 /// state to the audio thread.
 fn hydrate_audio_dsp(engine: &PlaybackEngine, settings: &settings::SettingsData) {
@@ -382,6 +404,12 @@ fn hydrate_audio_dsp(engine: &PlaybackEngine, settings: &settings::SettingsData)
     engine.set_crossfade_skip_same_album(settings.crossfade.crossfade_skip_same_album);
     engine.set_crossfade_fade_on_pause(settings.crossfade.crossfade_fade_on_pause);
     engine.set_crossfade_enabled(settings.crossfade.crossfade_enabled);
+    engine.set_follow_rate(settings.output.output_follow_rate);
+    engine.set_release_when_paused(settings.output.output_paused_device.releases());
+    engine.set_resync_hold(settings.output.resync_hold());
+    // Nothing is loaded yet, so an exclusive choice leaves the output parked as `open_output` left
+    // it, and claims the card at the first play. A shared one opens its chosen device here.
+    engine.set_output_choice(settings.output.output_choice());
 
     // The visualizer is deliberately absent: its tap is armed by the
     // Now-Playing view being on screen, not by a persisted flag, so it must

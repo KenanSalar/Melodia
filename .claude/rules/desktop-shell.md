@@ -322,7 +322,9 @@ The other way paths arrive from outside, and the one that can arrive before ther
 
 - **Force-exit.** `main()` ends in `std::process::exit(0)`; a normal return lets accesskit's a11y
   thread and any tokio worker parked on a blocking call pin the process.
-  The audio output used to be a third and no longer is — `AudioOutput` is owned on `AppState` since
-  #90 — which changes nothing here. `tracker.wait()` + `db.close()` in a 3 s
-  `timeout`, runtime dropped on a background thread; `save_state_on_exit` flushes synchronously
-  *before* the timeout.
+  The audio output used to be a third and no longer is: `PlaybackEngine` owns it, and `main()`
+  closes it explicitly after `save_state_on_exit` (`PlaybackEngine::close_output`), since an
+  exclusive claim hands the device back, and the device's own volume with it, only in a destructor
+  the exit skips. `main_order_tests` pins it ahead of both ways out.
+  `tracker.wait()` + `db.close()` in a 3 s `timeout`, runtime dropped on a background thread;
+  `save_state_on_exit` flushes synchronously *before* the timeout.

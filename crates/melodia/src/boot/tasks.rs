@@ -39,6 +39,9 @@ pub fn spawn_background_tasks(
     // Folds the output device's fault counters into one line per window, and is
     // the only thing watching for a device that goes away mid-session.
     tasks::audio_health::spawn(spawner, state);
+    // Follows the system moving a device whose own control carries the volume. Inert until a
+    // claim with hardware volume reports a move.
+    tasks::device_volume::spawn(spawner, state);
     // Batches `play_count` / `skip_count` UPDATEs so a fast skip burst is one
     // write. Before any playback can fire an `UpdatePlayCount`.
     tasks::play_count_flusher::spawn(spawner, state.db.clone(), state.stats_changed.clone());

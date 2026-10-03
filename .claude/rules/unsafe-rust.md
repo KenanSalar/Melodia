@@ -26,11 +26,12 @@ effect would be to move every allow into a `build.rs`-shaped workaround.
 ## The one sanctioned category: platform FFI
 
 Every `unsafe` in production is a call into an OS the type system can't reach. There is
-no other kind, and the list is short enough to keep here. **Eleven calls, in nine `unsafe`
-blocks, across six files, under eight `#[allow(unsafe_code)]` attributes.** Say which of
+no other kind, and the list is short enough to keep here. **Eighteen calls, in sixteen `unsafe`
+blocks, across eight files, under thirteen `#[allow(unsafe_code)]` attributes.** Say which of
 the four you mean when you quote a number, and re-derive it the same way — they differ,
-and none of them is the count of rows below. (The attributes fall one short of the blocks
-because `dwm_titlebar.rs`'s first `#[allow]` sits on a function holding two of them.)
+and none of them is the count of rows below. (The attributes fall three short of the blocks
+because `dwm_titlebar.rs`'s first `#[allow]` sits on a function holding two of them, and
+`endpoint_volume.rs`'s `activate` on one holding three.)
 
 | site | what |
 |---|---|
@@ -40,6 +41,8 @@ because `dwm_titlebar.rs`'s first `#[allow]` sits on a function holding two of t
 | `crates/melodia-platform/…/registry.rs` | `RegGetValueW` (the DWM accent a window border takes, and the Windows app mode) |
 | `crates/melodia-app/…/settings/data.rs` | `GetUserDefaultLocaleName` |
 | `crates/melodia-app/…/updater/install/swap.rs` | `MoveFileExW` |
+| `crates/melodia-playback/…/output/mmcss.rs` | `AvSetMmThreadCharacteristicsW` and `AvRevertMmThreadCharacteristics` (the exclusive writer's MMCSS registration, reverted on the same thread) |
+| `crates/melodia-playback/…/output/endpoint_volume.rs` | `CoCreateInstance`, `IMMDeviceEnumerator::GetDevice` and `IMMDevice::Activate` (reaching the endpoint volume `wasapi` doesn't wrap), `Get`/`SetMasterVolumeLevelScalar` (the claimed device's own volume control, on the exclusive writer's thread) |
 
 A new site outside that shape is a different *kind* of thing rather than one more of the
 same, and owes a justification somewhere a reviewer will read — not only in the
@@ -70,6 +73,9 @@ is safe, and so is every `*mut c_void` that is only *stored* — `media_controls
   `unsafe extern "system"` block. There are none left in the tree, so a second would be the
   first: a mistyped signature is UB the compiler will happily agree with, and it is the one
   half of an FFI site no `// SAFETY:` comment can make checkable.
+  **A COM interface is the exception, and it comes from `windows`**, which is where the vtables
+  are: `windows-sys` declares none. `endpoint_volume.rs` is the one site, held to the `windows`
+  release `wasapi` and cpal already resolve, so it adds no second copy.
 - **`cfg`-gate at the call site *and* check the manifest.** `libc` is declared under
   `[target.'cfg(target_os = "linux")']`, so a `cfg(unix)` call site compiles on Linux
   and fails to resolve on macOS. That exact mismatch shipped once in a test.
@@ -106,15 +112,18 @@ copy at some point, and the restore is the one that goes first.
   guaranteeing nothing. Consolidating assertions into one *test* doesn't help either; it
   only stops that test racing itself. Keeping the lock private is what stops the next
   copy: there is nothing to take but the helpers.
-- **A reader races a writer just as a second writer does, and that half is opt-in.** std
-  spells the contract "no other threads concurrently writing or *reading*(!) the
-  environment" — the `(!)` is theirs. Serialising the mutators buys nothing against a
-  sibling test that merely *reads*, and consolidating the three locks did not close that:
-  four tests in `settings_tests.rs` built a `SettingsData::default()` — which reaches
-  `XDG_CURRENT_DESKTOP` and all four locale variables through its serde defaults — beside
-  the tests mutating both. **`melodia_testkit::reading_env(body)`** takes the same lock
-  without touching a variable and is how such a test opts in. Nothing enforces it, so a
-  reader you find unwrapped is a live race, not a style nit.
+- **A reader is a different hazard from a second writer, and its opt-in is about what it
+  reads.** std's contract is "no other threads concurrently writing or *reading*(!) the
+  environment through functions or global variables other than the ones in this module", the
+  `(!)` being theirs. `std::env::var` and `set_var` share one internal lock, so the reads
+  that are undefined behaviour beside a mutator are the ones that skip it: C code, and libc
+  calls such as a DNS lookup, reaching `getenv` directly. A test reading through `std::env`
+  is safe beside one and can still read the value it set: four tests in `settings_tests.rs`
+  built a `SettingsData::default()`, which reaches `XDG_CURRENT_DESKTOP` and all four locale
+  variables through its serde defaults, beside the tests mutating both.
+  **`melodia_testkit::reading_env(body)`** takes the same lock without touching a variable
+  and is how such a test opts in. Nothing enforces it, so an unwrapped reader whose
+  assertion turns on what it read is a flaky test, not a style nit.
 - **It is not reentrant, and that is the cost of one lock.** A helper called from inside
   another helper's body would deadlock the test binary — which is why a thread-local flag
   now turns that into a named panic instead of a silent hang with no failing assertion. A

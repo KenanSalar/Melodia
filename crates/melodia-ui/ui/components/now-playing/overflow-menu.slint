@@ -4,6 +4,7 @@ import { Equalizer, ReplayGain } from "../../globals/audio.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { Player } from "../../globals/player.slint";
 import { Queue } from "../../globals/queue.slint";
+import { SignalPathUi } from "../../globals/signal-path.slint";
 import { WindowChrome, PopupHighlight } from "../../globals/shell.slint";
 import { IconButton } from "../icon-button.slint";
 import { MaterialIcon } from "../material-icon.slint";
@@ -47,14 +48,15 @@ export component OverflowMenu inherits Rectangle {
     }
 
     // The overflowed buttons only; the permanent rows are counted separately below. The
-    // pin row is gated on always-on-top support, so it counts **only when mounted** —
-    // otherwise the menu reserves an empty slot.
+    // pin and quality rows are gated on more than their setting, so each counts **only when
+    // mounted** — otherwise the menu reserves an empty slot.
     property <int> overflow-count:
         (Settings.overflow-favorite ? 1 : 0)
         + (Settings.overflow-repeat ? 1 : 0)
         + (Settings.overflow-shuffle ? 1 : 0)
         + ((WindowChrome.always-on-top-supported && Settings.overflow-pin) ? 1 : 0)
-        + (Settings.overflow-queue ? 1 : 0);
+        + (Settings.overflow-queue ? 1 : 0)
+        + ((SignalPathUi.chip-shown && Settings.overflow-quality) ? 1 : 0);
 
     // One slot per permanent row, plus the overflowed buttons, plus the chrome. The
     // content-driven *width* is declared on the popup below instead: Slint forbids the
@@ -343,6 +345,13 @@ export component OverflowMenu inherits Rectangle {
                     label: @tr("Queue");
                     active: Queue.open;
                     clicked => { Queue.open = !Queue.open; root.dismiss(); }
+                }
+                // The chip's words without its dot, which a menu row has no slot for.
+                if SignalPathUi.chip-shown && Settings.overflow-quality: OverflowRow {
+                    icon: "graphic_eq";
+                    label: SignalPathUi.verdict-label;
+                    trailing-text: SignalPathUi.device-rate;
+                    clicked => { Settings.open-signal-path(); root.dismiss(); }
                 }
             }
         }

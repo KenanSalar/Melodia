@@ -98,6 +98,22 @@ fn the_tick_counter_is_handed_over_before_the_backend_is_selected() {
     assert!(install < select, "the tick counter is added to the builder after `select()`");
 }
 
+/// For the same reason the log is flushed below, an exclusive claim gives the device back only
+/// because the output is closed explicitly. Where the claim carried the volume on the device's own
+/// control, that close is also what puts the system volume back.
+///
+/// Missed, the app still exits cleanly. The device keeps Melodia's level, which reads as the system
+/// volume having moved on its own, and nothing in the log says why.
+#[test]
+fn the_output_is_closed_before_either_way_out_of_main() {
+    let close = offset_of("close_output(");
+    let respawn = offset_of("respawn_if_requested(");
+    let exit = offset_of("std::process::exit(0);");
+
+    assert!(close < respawn, "`exec` replaces the image with the claim and the device level held");
+    assert!(close < exit, "`process::exit` runs no destructor that would hand the device back");
+}
+
 /// Neither of the two ways out of `main()` runs a destructor: `respawn_if_requested` `exec`s on
 /// Unix and never returns, and `process::exit` unwinds nothing. So the log's buffered tail is
 /// only on disk if it was flushed explicitly, ahead of both.

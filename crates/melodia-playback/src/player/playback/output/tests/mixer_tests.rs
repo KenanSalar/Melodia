@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use super::{Mixer, pair};
+use super::{LOCKSTEP_FRAMES, Mixer, pair};
 use crate::player::playback::output::voice::Voice;
 use crate::player::playback::tests::helpers::{TestSource, bits, shape};
 use melodia_audio::player::source::audio::Shape;
@@ -121,4 +121,109 @@ fn a_partial_trailing_frame_is_silenced_rather_than_half_filled() -> Result<(), 
 fn a_voice_past_the_count_is_not_there() {
     let (mixer, _pull) = pair(VOICES, device(2));
     assert!(mixer.voice(VOICES).is_none());
+}
+
+/// A reopen reshapes the puller under a source that is part way through, and the next block has to
+/// pick up at the frame the last one stopped on, laid out for the new device. A rebuild of anything
+/// source-side would restart the track or drop the frames in hand.
+#[test]
+fn a_reshape_carries_on_from_the_same_source_frame() -> Result<(), AppError> {
+    let (mixer, mut pull) = pair(VOICES, device(1));
+    voice_at(&mixer, 0)?.append(TestSource::new(vec![0.5, 0.25, 0.125, -0.0625], 1, RATE));
+
+    let mut before = vec![0.0; 2];
+    pull.fill(&mut before);
+    pull.reshape(device(2));
+    let mut after = vec![0.0; 4];
+    pull.fill(&mut after);
+
+    assert_eq!(bits(&before), bits(&[0.5, 0.25]));
+    assert_eq!(
+        bits(&after),
+        bits(&[0.125, 0.125, -0.0625, -0.0625]),
+        "not continued at the new width"
+    );
+    Ok(())
+}
+
+/// The second voice renders into the sum's own buffer, sized per step at the device's width. A
+/// reshape to more channels that left it at the old width would slice out of bounds on the audio
+/// thread the first time two voices played together.
+#[test]
+fn a_reshape_to_more_channels_still_sums_two_voices() -> Result<(), AppError> {
+    let (mixer, mut pull) = pair(VOICES, device(1));
+    pull.reshape(device(2));
+    for (index, level) in [0.5, 0.25].into_iter().enumerate() {
+        voice_at(&mixer, index)?.append(tone(level, LOCKSTEP_FRAMES, 2));
+    }
+
+    let mut out = vec![0.0; LOCKSTEP_FRAMES * 2];
+    pull.fill(&mut out);
+
+    assert!(out.iter().all(|s| (*s - 0.75).abs() < 1e-6), "{out:?}");
+    Ok(())
+}
+
+/// Frames numbered by position, so a block read back says exactly which source frames it carries.
+fn counting(frames: usize) -> TestSource {
+    #[expect(clippy::cast_precision_loss, reason = "a few hundred frames index exactly in an f32")]
+    let data = (0..frames).map(|i| i as f32 / 1_000.0).collect();
+    TestSource::new(data, 1, RATE)
+}
+
+/// The resync hold is silence *before* the track, not silence written over it: a source that
+/// advanced through the hold would lose its head to the DAC's relock anyway, just somewhere else.
+#[test]
+fn a_hold_plays_silence_then_the_source_from_its_first_frame() -> Result<(), AppError> {
+    let (mixer, mut pull) = pair(VOICES, device(1));
+    let voice = voice_at(&mixer, 0)?;
+    voice.append(counting(LOCKSTEP_FRAMES * 2));
+    pull.hold(LOCKSTEP_FRAMES);
+
+    let mut out = vec![9.0; LOCKSTEP_FRAMES * 2];
+    pull.fill(&mut out);
+
+    let (held, played) = out.split_at(LOCKSTEP_FRAMES);
+    assert!(held.iter().all(|s| *s == 0.0), "the hold was not silent: {held:?}");
+    let expected: Vec<f32> = counting(LOCKSTEP_FRAMES).collect();
+    assert_eq!(bits(played), bits(&expected), "the source moved during the hold");
+    Ok(())
+}
+
+#[test]
+fn the_clock_stands_still_through_a_hold() -> Result<(), AppError> {
+    let (mixer, mut pull) = pair(VOICES, device(1));
+    let voice = voice_at(&mixer, 0)?;
+    voice.append(counting(LOCKSTEP_FRAMES * 4));
+    pull.hold(LOCKSTEP_FRAMES * 4);
+
+    let mut out = vec![0.0; LOCKSTEP_FRAMES * 2];
+    pull.fill(&mut out);
+
+    assert_eq!(voice.position(), std::time::Duration::ZERO);
+    Ok(())
+}
+
+/// `play_media` reopens and then clears the decks, and `clear` blocks until the callback services
+/// it. A hold that skipped the voices would park that clear for its whole timeout and then leave
+/// the old track loaded, which is what `is_empty` tells apart: the hold here outlasts the test.
+#[test]
+fn a_clear_issued_during_a_hold_still_lands() -> Result<(), AppError> {
+    let (mixer, mut pull) = pair(VOICES, device(1));
+    let voice = voice_at(&mixer, 0)?;
+    voice.append(counting(LOCKSTEP_FRAMES));
+    pull.hold(usize::MAX);
+
+    let clearing = std::thread::spawn({
+        let voice = Arc::clone(&voice);
+        move || voice.clear()
+    });
+    let mut out = vec![0.0; LOCKSTEP_FRAMES];
+    while !clearing.is_finished() {
+        pull.fill(&mut out);
+    }
+    clearing.join().map_err(|_| AppError::Player("the clearing thread panicked".to_owned()))?;
+
+    assert!(voice.is_empty(), "the clear was not serviced during the hold");
+    Ok(())
 }

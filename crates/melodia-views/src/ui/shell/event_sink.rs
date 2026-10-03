@@ -26,17 +26,13 @@ impl EventSink for SlintEventSink {
                 PlayerEvent::Stop => library::playback::player_stop(&ctx),
                 PlayerEvent::SeekTo(ms) => library::playback::player_seek(&ctx, ms),
                 PlayerEvent::SetVolume(v) => {
-                    let r = library::playback::player_set_volume(&ctx, v);
-                    // OS media controls are single discrete events; commit
-                    // settings.json inline (no slider-style drag thrashing).
-                    if r.is_ok() {
-                        library::playback::commit_player_settings(&ctx).await
-                    } else {
-                        r
-                    }
+                    library::playback::player_set_volume_committed(&ctx, v).await
                 }
                 PlayerEvent::SetShuffle(enabled) => library::queue::queue_set_shuffle(&s, enabled),
                 PlayerEvent::SetRepeat(mode) => library::queue::queue_set_repeat(&s, mode),
+                PlayerEvent::SetSpeed(speed) => {
+                    library::playback::player_set_playback_speed_committed(&ctx, speed).await
+                }
             };
             if let Err(e) = r {
                 log::warn!("media controls -> library error: {e}");

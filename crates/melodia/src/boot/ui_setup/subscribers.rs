@@ -164,6 +164,20 @@ pub fn install_toast_bridge(
                         4000,
                     );
                 }
+                // Auto-dismissing: the music carries on through the shared output, and the
+                // Output settings keep saying why for as long as it stays that way.
+                ToastKind::ExclusiveRefused => {
+                    notifications.show_auto_dismiss(
+                        NotificationParams {
+                            variant: "warning".into(),
+                            title: g.invoke_toast_exclusive_refused_title(),
+                            message: g.invoke_toast_exclusive_refused_message(detail.into()),
+                            action_label: g.invoke_toast_exclusive_refused_action_label(),
+                            action_kind: ui::settings::signal_path::REFUSAL_TOAST_KIND.into(),
+                        },
+                        6000,
+                    );
+                }
                 // A vote the directory would not take. Auto-dismissing: nothing is broken
                 // and there is nothing for the user to do about it.
                 ToastKind::RadioVote => {

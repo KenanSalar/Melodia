@@ -18,6 +18,7 @@ fn tag(emit: Emit) -> &'static str {
         Emit::Volume => "volume",
         Emit::LoopStatus => "loop-status",
         Emit::Shuffle => "shuffle",
+        Emit::Rate => "rate",
         Emit::Seeked(_) => "seeked",
     }
 }

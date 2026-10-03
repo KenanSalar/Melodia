@@ -21,7 +21,7 @@ use std::time::Duration;
 
 use super::decks::DECK_COUNT;
 use melodia_audio::player::source::audio::{
-    AudioSource, ChannelCount, Sample, SampleRate, SeekError,
+    AudioSource, ChannelCount, Sample, SampleRate, SeekError, SourceFormat,
 };
 
 /// Ring capacity, in mono samples. A power of two so the wrap is a mask, and comfortably wider
@@ -403,6 +403,14 @@ impl<S: AudioSource> AudioSource for VisualizerTap<S> {
     #[inline]
     fn sample_rate(&self) -> SampleRate {
         self.input.sample_rate()
+    }
+
+    fn format(&self) -> SourceFormat {
+        self.input.format()
+    }
+
+    fn dsp_engaged(&self) -> bool {
+        self.input.dsp_engaged()
     }
 
     #[inline]

@@ -34,6 +34,19 @@ impl PlayerState {
         }
     }
 
+    /// Build actions for a play command over a paused track its deck no longer holds, which is
+    /// what a pause long enough to give an exclusive device back leaves. Nothing is there to
+    /// resume, so the track starts again from its position, reclaiming the device on the way.
+    ///
+    /// The deck is the backend's to answer, so `library::playback` picks this over
+    /// [`Self::build_play_actions`] with the state lock held.
+    pub fn build_replay_actions(&mut self) -> Vec<PlayerAction> {
+        if self.status != PlaybackStatus::Paused {
+            return vec![];
+        }
+        replay_current_track(self).unwrap_or_default()
+    }
+
     /// Build actions for pause command. `fade_ms` is the pause-fade length when
     /// that setting is on, else `0` — same contract as [`Self::build_stop_actions`].
     ///
@@ -53,6 +66,26 @@ impl PlayerState {
         } else {
             vec![]
         }
+    }
+
+    /// Take a long-paused track off the deck so the exclusive device it holds goes back to the
+    /// system, leaving it paused where the deck stopped for [`Self::build_replay_actions`] to
+    /// start it again from.
+    ///
+    /// The `Stop` is what gives the device back: it clears the decks while the stream can still
+    /// service the clear, then parks. The monitor decided this outside the emit lock, so what it
+    /// saw is checked again: still paused on the same track at the same position, a seek in the
+    /// gap having moved only the last of those.
+    pub fn build_release_actions(&mut self, decision: ReleaseDecision) -> Vec<PlayerAction> {
+        let same_track = self.current_track().map(|track| track.id) == Some(decision.track_id);
+        if self.status != PlaybackStatus::Paused
+            || !same_track
+            || self.position_ms != decision.position_ms
+        {
+            return vec![];
+        }
+        self.position_ms = decision.resume_ms;
+        vec![PlayerAction::Stop { fade_ms: 0 }]
     }
 
     /// Build actions for user-initiated stop (preserves position for resume).
@@ -302,6 +335,19 @@ impl PlayerState {
     }
 }
 
+/// What the monitor saw when it decided a pause had held the device long enough, for
+/// [`PlayerState::build_release_actions`] to check again under the emit lock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReleaseDecision {
+    pub track_id: i64,
+    /// The state's own position, which only a seek moves while paused.
+    pub position_ms: u64,
+    /// Where the deck stopped pulling, read before it is cleared: what a resume would have carried
+    /// on from, everything before it having played out by now. The state's position is the last
+    /// playing tick's and trails it, so play starts the track again from here instead.
+    pub resume_ms: u64,
+}
+
 /// Everything a start action needs about the track the state now points at.
 /// Produced by [`begin_track`], which is the single writer of the
 /// "`current_track` + duration + position" trio.
@@ -392,12 +438,19 @@ pub fn resume_from_stopped(state: &mut PlayerState) -> Vec<PlayerAction> {
     if state.status != PlaybackStatus::Stopped {
         return vec![];
     }
-    if let Some(track) = state.current_track().cloned() {
-        let resume_pos = (state.position_ms > 0).then_some(state.position_ms);
-        return play_track_inner(state, track, resume_pos);
+    if let Some(actions) = replay_current_track(state) {
+        return actions;
     }
     match state.queue.get_current().cloned() {
         Some(track) => play_track_inner(state, track, None),
         None => vec![],
     }
+}
+
+/// Start the track the state points at again from its position, or `None` where it points at
+/// none. A stop and a paused track taken off the deck both come back this way.
+fn replay_current_track(state: &mut PlayerState) -> Option<Vec<PlayerAction>> {
+    let track = state.current_track().cloned()?;
+    let resume_pos = (state.position_ms > 0).then_some(state.position_ms);
+    Some(play_track_inner(state, track, resume_pos))
 }

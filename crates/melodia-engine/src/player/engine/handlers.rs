@@ -10,8 +10,10 @@ use tokio_util::task::TaskTracker;
 use super::actions::emit_and_execute;
 use super::backend::{PlaybackCheck, PlaybackEngine};
 use super::event_sink::PlayerSinks;
+use super::signal_path::{SignalPath, Transport};
 use super::state::{
-    PlayerAction, PlayerState, PlayerStateHandle, PositionTick, lock_state, with_state_emit,
+    PlayerAction, PlayerState, PlayerStateHandle, PositionTick, ReleaseDecision, lock_state,
+    with_state_emit,
 };
 use super::types::{PersistedPlayback, PlaybackSource, PlaybackStatus};
 use melodia_audio::player::source::prebuffer::StreamShared;
@@ -57,6 +59,14 @@ const _: () = assert!(
     "the save cadence must span at least one poll, or its modulus is zero"
 );
 
+/// How long a pause may keep an exclusive device from everything else before the monitor gives
+/// it back, where the user asked for that. Long enough that a short break keeps the claim, and
+/// with it a resume that needs no reopen. The Output card's row spells the figure in its words.
+const RELEASE_AFTER_PAUSE_MS: u64 = 5 * 60 * 1000;
+
+/// Polls spanning [`RELEASE_AFTER_PAUSE_MS`], derived for the reason [`SAVE_EVERY_N_TICKS`] is.
+const RELEASE_AFTER_N_TICKS: u64 = RELEASE_AFTER_PAUSE_MS / POLL_INTERVAL_MS;
+
 /// Rate limiter on the position publish, admitting one tick per whole second.
 ///
 /// The monitor wakes at [`POLL_INTERVAL_MS`] so the crossfade and gapless windows stay tight,
@@ -87,15 +97,46 @@ impl SecondGate {
     }
 }
 
+/// The polls a pause has held an exclusive device for.
+///
+/// It starts over once it answers, so a release the state machine turned down, a seek having
+/// landed in the gap, is asked for again a full period later rather than never. One that went
+/// through parks the output, which stops the count before it gets that far.
+#[derive(Default)]
+struct PauseWatch(u64);
+
+impl PauseWatch {
+    /// Whether this poll ends a hold long enough to give the device back. Anything but a held
+    /// pause starts the count over, so a play in between never lets two pauses add up.
+    fn due(&mut self, holding: bool) -> bool {
+        if !holding {
+            self.0 = 0;
+            return false;
+        }
+        self.0 += 1;
+        if self.0 < RELEASE_AFTER_N_TICKS {
+            return false;
+        }
+        self.0 = 0;
+        true
+    }
+}
+
 /// What the monitor read off the audio backend before taking the `PlayerState`
 /// lock. Gathered first, deliberately: querying the backend under the state lock
 /// would nest the decks mutex inside it.
 #[derive(Copy, Clone)]
 pub struct BackendSnapshot {
+    /// Where the ear is, which is what the tick publishes and the state keeps.
     pub position_ms: u64,
+    /// Where the deck has been pulled to, a device's worth ahead of the ear. What the crossfade
+    /// and the gapless stage are timed against, since both act on what is pulled next.
+    pub pulled_ms: u64,
     pub already_preloaded: bool,
     pub crossfading: bool,
     pub xf: crossfade::CrossfadeSettings,
+    /// The output has to reopen for the track queued next, which no crossfade can cross.
+    pub next_needs_reopen: bool,
 }
 
 /// What one `Playing` tick decided: the position to publish, and at most one of
@@ -118,7 +159,14 @@ pub fn evaluate_playing_tick(
     state: &mut PlayerState,
     backend: BackendSnapshot,
 ) -> Option<PlayingTick> {
-    let BackendSnapshot { position_ms, already_preloaded, crossfading, xf } = backend;
+    let BackendSnapshot {
+        position_ms,
+        pulled_ms,
+        already_preloaded,
+        crossfading,
+        xf,
+        next_needs_reopen,
+    } = backend;
 
     if state.status != PlaybackStatus::Playing {
         return None;
@@ -144,9 +192,12 @@ pub fn evaluate_playing_tick(
     // depend on the position — a crossfade shorter than PRELOAD_LEAD_MS would
     // otherwise let the preload fire first, set `gapless_pending`, and
     // permanently block the crossfade via its own gate.
+    //
+    // A next track the output reopens for still reaches the preload below, which refuses it, so
+    // the transition ends at `EndOfStream` either way.
     let eligible = crossfade::crossfade_eligible(
         xf,
-        state.pause_after_current_track,
+        state.pause_after_current_track || next_needs_reopen,
         next.is_some(),
         same_album,
     );
@@ -160,7 +211,7 @@ pub fn evaluate_playing_tick(
         eligible,
         already_preloaded,
         crossfading,
-        state.position_ms,
+        pulled_ms,
         state.duration_ms,
         xf.duration_ms,
     )
@@ -190,9 +241,9 @@ pub fn evaluate_playing_tick(
         // A deck reads 0 until it has been pulled for the source just started on
         // it, and a track shorter than the lead would read its whole length as
         // remaining and stage a preload on the spot.
-        && state.position_ms > 0
-        && state.position_ms <= state.duration_ms
-        && state.duration_ms.saturating_sub(state.position_ms) < PRELOAD_LEAD_MS
+        && pulled_ms > 0
+        && pulled_ms <= state.duration_ms
+        && state.duration_ms.saturating_sub(pulled_ms) < PRELOAD_LEAD_MS
     {
         // Capture the next track's baked ReplayGain alongside its path — it must
         // travel with *its own* source (the preloaded track has different tags
@@ -203,6 +254,29 @@ pub fn evaluate_playing_tick(
     };
 
     Some(PlayingTick { tick, late_preload, crossfade })
+}
+
+/// Whether the output has to reopen for the track queued next, which no crossfade can cross.
+///
+/// The first ask about a track opens its file, so it is asked only while crossfade is on. That ask
+/// usually lands on the track's first tick, well ahead of any crossfade window, and the engine
+/// answers the rest from what it found. The file is opened with the state lock released.
+fn next_needs_reopen(
+    engine: &PlaybackEngine,
+    player_state: &PlayerStateHandle,
+    xf: crossfade::CrossfadeSettings,
+) -> bool {
+    if !xf.enabled {
+        return false;
+    }
+    let next_path = {
+        let state = lock_state(player_state);
+        if !state.source_allows(PlaybackSource::advances_queue) {
+            return false;
+        }
+        state.queue.peek_next().map(|track| track.file_path.clone())
+    };
+    next_path.is_some_and(|path| engine.reopens_for(&path))
 }
 
 /// Tell the user a station gave up, which is otherwise a silence with no explanation.
@@ -284,19 +358,28 @@ pub struct PlaybackMonitorContext {
     pub engine: Arc<PlaybackEngine>,
     pub sinks: Arc<PlayerSinks>,
     pub position_tx: watch::Sender<Option<PositionTick>>,
+    pub signal_path_tx: watch::Sender<Option<SignalPath>>,
     pub save: SnapshotSink,
 }
 
 /// Spawns a single background task that handles position polling,
 /// gapless transition detection, and end-of-stream detection.
 pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext) {
-    let PlaybackMonitorContext { shutdown_token, player_state, engine, sinks, position_tx, save } =
-        ctx;
+    let PlaybackMonitorContext {
+        shutdown_token,
+        player_state,
+        engine,
+        sinks,
+        position_tx,
+        signal_path_tx,
+        save,
+    } = ctx;
     tracker.spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_millis(POLL_INTERVAL_MS));
 
         let mut save_tick_counter: u64 = 0;
         let mut publish = SecondGate::default();
+        let mut pause_watch = PauseWatch::default();
 
         // Last ICY title generation reconciled into `PlayerState`. Generations are process-wide
         // tickets starting at 1, so this holds across stations and `0` means nothing seen yet.
@@ -312,15 +395,31 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                 _ = interval.tick() => {}
             }
 
+            // Every read below takes the decks lock, which a reopen holds across a device open, and
+            // waiting for it would block a runtime worker as long. The next tick reads the new stream.
+            if engine.output_reopening() {
+                continue;
+            }
+
             // Ahead of the not-playing short circuit below, because a stop is what retires the
             // most sources at once and it lands on exactly the ticks that circuit skips.
             engine.collect_spent();
 
             // Quick check: skip tick when not playing (lock-free via atomic mirror)
-            let is_playing = player_state.status_atomic.load(std::sync::atomic::Ordering::Relaxed)
-                == PlaybackStatus::Playing as u8;
+            let status = player_state.status_atomic.load(std::sync::atomic::Ordering::Relaxed);
+            let is_playing = status == PlaybackStatus::Playing as u8;
+            let paused = status == PlaybackStatus::Paused as u8;
+            let release_due = pause_watch.due(paused && engine.holds_releasable_claim());
 
             if !is_playing {
+                if release_due {
+                    release_paused_track(&engine, &player_state, &sinks);
+                }
+                // A pause keeps the last path: nothing pulls the source, so it could not be
+                // re-read anyway. One whose device went back has none left to describe.
+                if status == PlaybackStatus::Stopped as u8 || (paused && engine.output_parked()) {
+                    publish_signal_path(&signal_path_tx, None);
+                }
                 continue;
             }
 
@@ -374,16 +473,29 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                     // Normal tick: update position with lightweight event.
                     // Query the backend BEFORE locking PlayerState to avoid a
                     // nested lock — `evaluate_playing_tick` takes these as inputs.
+                    let xf = engine.crossfade_settings();
+                    // Ahead of the positions, which a first open of the next file would leave stale.
+                    let next_needs_reopen = next_needs_reopen(&engine, &player_state, xf);
                     let backend = BackendSnapshot {
-                        position_ms: engine.query_position(),
+                        position_ms: engine.query_heard_position(),
+                        pulled_ms: engine.query_position(),
                         already_preloaded: engine.is_gapless_preloaded(),
                         crossfading: engine.is_crossfading(),
-                        xf: engine.crossfade_settings(),
+                        xf,
+                        next_needs_reopen,
                     };
-                    let decided = {
+                    let crossfading = backend.crossfading;
+                    let (decided, transport) = {
                         let mut state = lock_state(&player_state);
-                        evaluate_playing_tick(&mut state, backend)
+                        let transport = Transport {
+                            volume: state.volume,
+                            muted: state.is_muted,
+                            speed: state.playback_speed,
+                            crossfading,
+                        };
+                        (evaluate_playing_tick(&mut state, backend), transport)
                     };
+                    publish_signal_path(&signal_path_tx, engine.signal_path(transport));
                     let Some(PlayingTick { tick, late_preload, crossfade: crossfade_now }) =
                         decided
                     else {
@@ -438,6 +550,44 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                 save(snapshot).await;
             }
         }
+    });
+}
+
+/// Take a long-paused track off the deck so its exclusive device goes back, leaving it paused
+/// where the deck stopped.
+///
+/// The deck is read under the emit, in the lock order's own direction, and only once it has acted
+/// on what it was sent. A seek the emit waited out has sent its swap without the deck having taken
+/// it, so the deck still reads its old position, which the release would write back over the
+/// seek's. A deck still catching up turns the release down, as a seek in the gap does.
+fn release_paused_track(
+    engine: &PlaybackEngine,
+    player_state: &PlayerStateHandle,
+    sinks: &PlayerSinks,
+) {
+    let seen = {
+        let state = lock_state(player_state);
+        state.current_track().map(|track| (track.id, state.position_ms))
+    };
+    let Some((track_id, position_ms)) = seen else {
+        return;
+    };
+    emit_and_execute(engine, player_state, sinks, |state| {
+        let Some(resume_ms) = engine.query_settled_position(position_ms) else {
+            return Vec::new();
+        };
+        state.build_release_actions(ReleaseDecision { track_id, position_ms, resume_ms })
+    });
+}
+
+/// Publish `path` only when it differs, so the panel repaints on a change rather than per tick.
+fn publish_signal_path(tx: &watch::Sender<Option<SignalPath>>, path: Option<SignalPath>) {
+    tx.send_if_modified(|current| {
+        if *current == path {
+            return false;
+        }
+        *current = path;
+        true
     });
 }
 

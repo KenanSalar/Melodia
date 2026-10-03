@@ -1251,6 +1251,20 @@ fn set_volume_clamps_and_unmutes() {
     assert_eq!(state.volume, 75, "a level inside the band passes through untouched");
 }
 
+/// souvlaki states that a host may send a value outside `[0, 1]`, so the clamp is the whole of
+/// what stands between an OS panel and a volume of 200. Half a percent is the other half:
+/// rounding is what makes the quietest step reachable, where a truncating cast needs a full
+/// percent before anything moves.
+#[test]
+fn the_volume_scale_clamps_its_input_and_rounds_its_output() {
+    assert_eq!(amplitude_to_volume(-0.5), 0, "below the floor");
+    assert_eq!(amplitude_to_volume(0.0), 0);
+    assert_eq!(amplitude_to_volume(0.004), 0, "under half a percent");
+    assert_eq!(amplitude_to_volume(0.005), 1, "and on it");
+    assert_eq!(amplitude_to_volume(1.0), 100);
+    assert_eq!(amplitude_to_volume(2.0), 100, "above the ceiling");
+}
+
 /// The unmute reads `pre_mute_volume`, so the mute edge has to save it and the unmute must
 /// not overwrite it — a toggle-off that re-stamped it would pin the volume at zero.
 #[test]
@@ -1756,4 +1770,96 @@ fn a_restart_puts_the_queue_back_under_the_station() -> Result<(), AppError> {
     assert_eq!(after.station().map(|s| s.name.as_str()), Some("Example FM"));
     assert_eq!(read.station_id, Some(42), "and the id that found it survived the file");
     Ok(())
+}
+
+// --- a long pause giving an exclusive device back ---
+
+/// The state's own position when the monitor decided to release, the last playing tick's.
+const PAUSED_AT: u64 = 30_000;
+
+/// Where the deck had stopped pulling by then, past [`PAUSED_AT`] by what the device held.
+const STOPPED_PULLING_AT: u64 = 30_400;
+
+/// Paused on track `id` at `position_ms`, as the monitor finds a long pause.
+fn paused_on(id: i64, position_ms: u64) -> PlayerState {
+    PlayerState {
+        status: PlaybackStatus::Paused,
+        source: Some(PlaybackSource::Track(make_summary(id, "Song", 180_000))),
+        duration_ms: 180_000,
+        position_ms,
+        ..Default::default()
+    }
+}
+
+/// What the monitor saw when it decided to release track 1.
+fn release_decision() -> ReleaseDecision {
+    ReleaseDecision { track_id: 1, position_ms: PAUSED_AT, resume_ms: STOPPED_PULLING_AT }
+}
+
+/// The track comes off the deck but stays paused, at the point the deck stopped pulling, since
+/// everything before it has played out and play carries on from there.
+#[test]
+fn a_release_stops_the_deck_and_keeps_the_track_paused_where_it_stopped_pulling() {
+    let mut state = paused_on(1, PAUSED_AT);
+
+    let actions = state.build_release_actions(release_decision());
+
+    assert_eq!(
+        (actions, state.status, state.position_ms),
+        (vec![PlayerAction::Stop { fade_ms: 0 }], PlaybackStatus::Paused, STOPPED_PULLING_AT)
+    );
+}
+
+/// The monitor decides outside the emit lock, so anything that moved the pause in the gap turns
+/// the release down: a play, another track, or a seek, the one thing that moves a paused position.
+#[test]
+fn a_release_is_refused_once_the_pause_it_was_decided_for_has_moved() {
+    let rows = [
+        (
+            "playing again",
+            PlayerState { status: PlaybackStatus::Playing, ..paused_on(1, PAUSED_AT) },
+            PAUSED_AT,
+        ),
+        ("another track", paused_on(2, PAUSED_AT), PAUSED_AT),
+        ("a seek in the gap", paused_on(1, 45_000), 45_000),
+    ];
+    for (what, mut state, position_ms) in rows {
+        let actions = state.build_release_actions(release_decision());
+
+        assert_eq!((actions, state.position_ms), (Vec::new(), position_ms), "{what}");
+    }
+}
+
+/// A released track has nothing on the deck to resume, so play starts it again from its position,
+/// reclaiming the device on the way. One paused at its very start starts fresh.
+#[test]
+fn a_replay_starts_the_paused_track_again_from_its_position() {
+    let rows = [(STOPPED_PULLING_AT, Some(STOPPED_PULLING_AT)), (0, None)];
+    for (position_ms, expected_start) in rows {
+        let mut state = paused_on(1, position_ms);
+
+        let actions = state.build_replay_actions();
+
+        let started = actions.iter().find_map(|action| match action {
+            PlayerAction::PlayMedia { start_position_ms, .. } => Some(*start_position_ms),
+            _ => None,
+        });
+        assert_eq!(
+            (started, state.status),
+            (Some(expected_start), PlaybackStatus::Playing),
+            "paused at {position_ms} ms"
+        );
+    }
+}
+
+/// Only a paused track can have been released, so a replay asked of any other state does nothing.
+#[test]
+fn a_replay_is_refused_unless_the_track_is_paused() {
+    for status in [PlaybackStatus::Playing, PlaybackStatus::Stopped, PlaybackStatus::Loading] {
+        let mut state = PlayerState { status, ..paused_on(1, PAUSED_AT) };
+
+        let actions = state.build_replay_actions();
+
+        assert_eq!((actions, state.status), (Vec::new(), status), "{status:?}");
+    }
 }

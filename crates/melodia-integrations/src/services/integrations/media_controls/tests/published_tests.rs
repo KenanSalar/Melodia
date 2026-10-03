@@ -85,6 +85,7 @@ const NO_CHANGES: Changes = Changes {
     volume: false,
     shuffle: false,
     repeat: false,
+    rate: false,
 };
 
 fn playing() -> PlayerViewModelLight {

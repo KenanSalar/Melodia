@@ -16,7 +16,7 @@ use melodia_store::database::queries;
 ///      `FolderWatcher` with the persisted folder paths so file events resume
 ///      flowing into the `file_event_processor`.
 pub async fn run(state: &AppState) -> AppResult<()> {
-    let mut settings = services::settings::read_settings(&state.paths).unwrap_or_else(|e| {
+    let settings = services::settings::read_settings(&state.paths).unwrap_or_else(|e| {
         log::warn!("Failed to read settings during first-launch init: {e}");
         services::settings::SettingsData::default()
     });
@@ -50,8 +50,12 @@ pub async fn run(state: &AppState) -> AppResult<()> {
             }
         }
 
-        settings.library.music_folder_auto_added = true;
-        if let Err(e) = services::settings::write_settings(&state.paths, &settings) {
+        // Not the snapshot above: the scan can run for minutes, and anything the user changed
+        // meanwhile would be written back over.
+        let marked = services::settings::mutate_settings(&state.paths, |settings| {
+            settings.library.music_folder_auto_added = true;
+        });
+        if let Err(e) = marked {
             log::warn!("Failed to save music_folder_auto_added flag: {e}");
         }
     }

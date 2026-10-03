@@ -77,6 +77,9 @@ export global Notifications {
         } else if (kind == "support-melodia") {
             Settings.open-kofi();
             Notifications.dismiss(id);
+        } else if (kind == "exclusive-refused") {
+            Settings.open-signal-path();
+            Notifications.dismiss(id);
         }
     }
 }

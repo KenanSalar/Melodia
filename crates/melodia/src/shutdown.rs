@@ -37,21 +37,20 @@ pub fn save_state_on_exit(app: &AppWindow, state: &AppState, runtime: &tokio::ru
 
     // Volume, mute, sidebar width and window geometry live only in
     // UI/PlayerState during a session, so they need flushing to survive one.
-    match services::settings::read_settings(&state.paths) {
-        Ok(mut settings) => {
-            settings.volume = volume;
-            settings.playback.is_muted = is_muted;
-            settings.sidebar_width = sidebar_width;
-            settings.layout.sidebar_collapsed = sidebar_collapsed;
-            // For the next launch's `BackendSelector` attributes hook and
-            // `geometry::restore`. Size and position are skipped while maximized, so
-            // the user's real restore geometry survives.
-            ui::window_chrome::geometry::snapshot_into(&mut settings);
-            if let Err(e) = services::settings::write_settings(&state.paths, &settings) {
-                log::warn!("save_state_on_exit: write settings.json: {e}");
-            }
-        }
-        Err(e) => log::warn!("save_state_on_exit: read settings.json: {e}"),
+    // Under the settings lock, so a toggle still persisting as the window
+    // closed isn't written back over.
+    let flushed = services::settings::mutate_settings(&state.paths, |settings| {
+        settings.volume = volume;
+        settings.playback.is_muted = is_muted;
+        settings.sidebar_width = sidebar_width;
+        settings.layout.sidebar_collapsed = sidebar_collapsed;
+        // For the next launch's `BackendSelector` attributes hook and
+        // `geometry::restore`. Size and position are skipped while maximized, so
+        // the user's real restore geometry survives.
+        ui::window_chrome::geometry::snapshot_into(settings);
+    });
+    if let Err(e) = flushed {
+        log::warn!("save_state_on_exit: settings.json: {e}");
     }
 
     // Column widths and visibility into views.json. `ui::track_columns` clamps

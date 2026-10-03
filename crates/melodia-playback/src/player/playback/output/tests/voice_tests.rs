@@ -6,9 +6,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use super::{Voice, VoicePull, pair};
-use crate::player::playback::tests::helpers::{TestSource, shape};
-use melodia_audio::player::source::audio::Shape;
+use super::{PlayingSource, Voice, VoicePull, pair};
+use crate::player::playback::tests::helpers::{TestSource, bits, fill_sine, shape};
+use melodia_audio::player::source::audio::{Shape, SourceFormat};
 
 const RATE: u32 = 44_100;
 
@@ -114,6 +114,40 @@ fn the_clock_re_anchors_when_a_staged_source_takes_over() {
     );
 }
 
+/// Appending is not mounting: until the callback takes the source over there is nothing to report,
+/// and a rate of zero is what the clock pair says before that.
+#[test]
+fn a_voice_reports_nothing_playing_until_a_source_mounts() {
+    let (voice, mut pull) = pair(mono(RATE));
+    assert_eq!(voice.playing(), None, "an empty voice");
+
+    voice.append(silence(100, RATE));
+    assert_eq!(voice.playing(), None, "appended, not yet serviced");
+
+    pump(&mut pull, 10);
+    assert_eq!(voice.playing().map(|playing| playing.shape), Some(mono(RATE)));
+}
+
+/// A gapless successor takes the voice over inside the callback, with no control op the engine
+/// could hang a report on, so the voice has to answer for it. Rates, formats and processing all
+/// differ between the two so that any one of them left behind shows.
+#[test]
+fn the_report_follows_a_staged_source_when_it_takes_over() {
+    let (voice, mut pull) = pair(mono(RATE));
+    let cd = SourceFormat { bits: 16, float: false, lossy: false };
+    let hi_res = SourceFormat { bits: 24, float: false, lossy: false };
+    voice.append(silence(100, RATE).with_format(cd));
+    voice.append(silence(100, 96_000).with_format(hi_res).engaged());
+
+    pump(&mut pull, 50);
+    let first = Some(PlayingSource { shape: mono(RATE), format: cd, dsp_engaged: false });
+    assert_eq!(voice.playing(), first, "the first track");
+
+    pump(&mut pull, 60);
+    let second = Some(PlayingSource { shape: mono(96_000), format: hi_res, dsp_engaged: true });
+    assert_eq!(voice.playing(), second, "the successor");
+}
+
 /// Media time, whatever the speed. rodio counted output frames after its speed wrapper, so a
 /// position had to be read on one timeline and reported on another; there is one timeline here.
 #[test]
@@ -127,7 +161,8 @@ fn the_position_counts_media_frames_rather_than_output_frames() {
         pump(&mut pull, usize::try_from(output_frames).unwrap_or(0));
 
         let want = Duration::from_secs_f64(f64::from(output_frames) * speed / f64::from(RATE));
-        let got = voice.position();
+        // At the ear, which is off the converter's lookahead where it interpolates.
+        let got = voice.heard(Duration::ZERO);
         assert!(
             got.abs_diff(want) < Duration::from_millis(2),
             "at speed {speed} the voice read {got:?}, expected about {want:?}"
@@ -362,6 +397,20 @@ fn a_replace_lands_while_a_successor_is_only_staged() {
     assert_eq!(voice.len(), 2, "the staged successor should still be waiting behind the seek");
 }
 
+/// A seek's swap re-anchors the clock only once the callback takes it, so until then the voice
+/// reads where it was. A voice nothing was sent to has nothing outstanding.
+#[test]
+fn a_voice_is_unsettled_from_a_send_until_the_callback_takes_it() {
+    let (voice, mut pull) = pair(mono(RATE));
+    let fresh = voice.is_settled();
+    voice.append(seconds_of(1, RATE));
+    let sent = voice.is_settled();
+
+    pump(&mut pull, 64);
+
+    assert_eq!((fresh, sent, voice.is_settled()), (true, false, true), "(fresh, sent, taken)");
+}
+
 /// The converter is built against the source's own shape, so a second source at a different rate
 /// gets its own rather than inheriting whatever the first one negotiated. This is the fault
 /// `crates/melodia/tests/stream_rate.rs` covers end to end, asked at the level it now lives at.
@@ -379,6 +428,30 @@ fn a_second_source_is_converted_from_its_own_rate() {
     assert_eq!(voiced, 36, "each source must be converted from the rate it reports");
 }
 
+/// A gapless seam at another rate is converted as one stream: the successor takes the converter
+/// over, window, fraction and weights. Restarting the kernel at the seam would leave half its width
+/// of silence either side, a tick on every continuous album the device can't play at its own rate.
+/// A whole-number step is a row of its own, being the one that keeps its weights frame to frame.
+#[test]
+fn a_gapless_seam_at_another_rate_renders_exactly_like_the_unsplit_source() {
+    const SEAM: usize = 1_001;
+    let device = mono(48_000);
+    for (rate, rate_hz) in [(RATE, 44_100.0), (96_000, 96_000.0)] {
+        let mut tone = vec![0.0; 4_410];
+        fill_sine(&mut tone, 1_000.0, rate_hz, 0.5);
+        let (unsplit, mut unsplit_pull) = pair(device);
+        unsplit.append(TestSource::new(tone.clone(), 1, rate));
+        let (split, mut split_pull) = pair(device);
+        split.append(TestSource::new(tone[..SEAM].to_vec(), 1, rate));
+        split.append(TestSource::new(tone[SEAM..].to_vec(), 1, rate));
+
+        let whole = pump(&mut unsplit_pull, 8_192);
+        let seamed = pump(&mut split_pull, 8_192);
+
+        assert_eq!(bits(&seamed), bits(&whole), "{rate} Hz");
+    }
+}
+
 /// A source's own `sample_rate` is what the clock divides by, so it has to follow the source rather
 /// than the device — otherwise a 24 kHz station reads back at half its elapsed time.
 #[test]
@@ -392,6 +465,88 @@ fn the_clock_follows_the_source_rate_not_the_device_rate() {
         got.abs_diff(Duration::from_secs(1)) < Duration::from_millis(10),
         "a one-second 24 kHz source read back as {got:?}"
     );
+}
+
+/// What the device still holds when the ear is read, in the device's own time.
+const LEAD: Duration = Duration::from_millis(100);
+
+/// Past its anchor, the ear is the device's lead behind what the voice has pulled.
+#[test]
+fn the_ear_trails_the_pulled_clock_by_the_lead() {
+    let (voice, mut pull) = pair(mono(RATE));
+    voice.append(seconds_of(4, RATE));
+    pump(&mut pull, 44_100);
+
+    let heard = voice.heard(LEAD);
+
+    assert!(heard.abs_diff(Duration::from_millis(900)) < Duration::from_millis(1), "{heard:?}");
+}
+
+/// A resumed track is still pouring its first blocks into the device, which is playing out the
+/// silence before it. The ear reads the point it started at until the clock is a lead past it.
+#[test]
+fn the_ear_never_reads_before_where_the_voice_started() {
+    let (voice, mut pull) = pair(mono(RATE));
+    let resume = Duration::from_secs(2);
+    voice.append_at(seconds_of(4, RATE), resume);
+    pump(&mut pull, 441);
+
+    let heard = voice.heard(LEAD);
+
+    assert!(heard.abs_diff(resume) < Duration::from_millis(1), "{heard:?}");
+}
+
+/// The lead is device time, and at another speed the device plays media faster or slower than
+/// that, so the ear trails by the lead scaled into the source's time.
+#[test]
+fn the_lead_is_scaled_into_the_sources_time_by_the_speed() {
+    let rows = [
+        (0.5, Duration::from_millis(450)),
+        (1.0, Duration::from_millis(900)),
+        (2.0, Duration::from_millis(1_800)),
+    ];
+    for (speed, expected) in rows {
+        let (voice, mut pull) = pair(mono(RATE));
+        voice.append(seconds_of(4, RATE));
+        voice.set_speed(speed);
+        pump(&mut pull, 44_100);
+
+        let heard = voice.heard(LEAD);
+
+        assert!(
+            heard.abs_diff(expected) < Duration::from_millis(2),
+            "at speed {speed} the ear read {heard:?}"
+        );
+    }
+}
+
+/// Through a pause the device played out everything it held, so the ear caught up with the clock.
+/// A resume starts the lead over from there rather than jumping the ear back by it.
+#[test]
+fn a_resume_re_anchors_the_ear_where_the_pause_left_the_clock() {
+    let (voice, mut pull) = pair(mono(RATE));
+    voice.append(seconds_of(4, RATE));
+    pump(&mut pull, 44_100);
+    voice.pause();
+
+    voice.play();
+    let heard = voice.heard(LEAD);
+
+    assert!(heard.abs_diff(Duration::from_secs(1)) < Duration::from_millis(1), "{heard:?}");
+}
+
+/// A `play` over a voice that never paused is not a resume: the device still holds its lead, so the
+/// ear stays that far behind.
+#[test]
+fn a_play_over_a_voice_already_playing_keeps_its_anchor() {
+    let (voice, mut pull) = pair(mono(RATE));
+    voice.append(seconds_of(4, RATE));
+    pump(&mut pull, 44_100);
+
+    voice.play();
+    let heard = voice.heard(LEAD);
+
+    assert!(heard.abs_diff(Duration::from_millis(900)) < Duration::from_millis(1), "{heard:?}");
 }
 
 /// Both halves cross a thread boundary at boot — the pull into the output callback, the voice into

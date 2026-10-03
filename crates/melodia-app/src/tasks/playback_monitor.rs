@@ -25,6 +25,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
             engine: state.engine.clone(),
             sinks: state.sinks.clone(),
             position_tx: state.position_tx.clone(),
+            signal_path_tx: state.signal_path_tx.clone(),
             save,
         },
     );

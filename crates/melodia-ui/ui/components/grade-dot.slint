@@ -1,0 +1,13 @@
+import { Theme } from "../theme.slint";
+
+// A signal-path grade as a traffic light: 0 clean, 1 enhanced, anything above converted. A verdict
+// reads the same way, its 3 (a refused exclusive claim) and 4 (a lossy source) falling into the red
+// arm with a conversion, so the stage rows and the quality chip can't disagree about a colour.
+export component GradeDot inherits Rectangle {
+    in property <int> grade;
+
+    width: 8px;
+    height: self.width;
+    border-radius: self.width / 2;
+    background: root.grade == 0 ? Theme.green : root.grade == 1 ? Theme.yellow : Theme.red;
+}

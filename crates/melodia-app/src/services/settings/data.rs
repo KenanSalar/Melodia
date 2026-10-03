@@ -9,7 +9,8 @@ use super::about::{DiagnosticsFlags, OnboardingFlags, SupportFlags, UpdateFlags}
 use super::interface::{BackdropFlags, LayoutFlags, MotionFlags, TrayFlags, WindowFlags};
 use super::library::LibraryFlags;
 use super::playback::{
-    CrossfadeFlags, EqualizerFlags, PlaybackFlags, QueueFlags, ReplayGainFlags, VisualizerFlags,
+    CrossfadeFlags, EqualizerFlags, OutputFlags, PlaybackFlags, QueueFlags, ReplayGainFlags,
+    VisualizerFlags,
 };
 use super::services::{LyricsFlags, RadioFlags};
 use melodia_core::entities::integrations::{DiscordFlags, ScrobbleFlags};
@@ -30,6 +31,19 @@ pub struct ThemePreference {
     /// with no dynamic palette available, and disabling Color Style outright.
     #[serde(default)]
     pub last_static_accent: Option<String>,
+}
+
+impl ThemePreference {
+    /// `variant` and `accent` for one theme, keeping `previous_static` as its last real accent
+    /// while `accent` is Material You's, which is generated rather than picked.
+    pub fn new(variant: String, accent: String, previous_static: Option<String>) -> Self {
+        let last_static_accent = if accent == themes::MATERIAL_YOU_ACCENT_ID {
+            previous_static
+        } else {
+            Some(accent.clone())
+        };
+        Self { variant, accent, last_static_accent }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
@@ -144,6 +158,8 @@ pub struct SettingsData {
     #[serde(flatten)]
     pub crossfade: CrossfadeFlags,
     #[serde(flatten)]
+    pub output: OutputFlags,
+    #[serde(flatten)]
     pub visualizer: VisualizerFlags,
     #[serde(flatten)]
     pub queue: QueueFlags,
@@ -211,6 +227,7 @@ impl Default for SettingsData {
             equalizer: EqualizerFlags::default(),
             replaygain: ReplayGainFlags::default(),
             crossfade: CrossfadeFlags::default(),
+            output: OutputFlags::default(),
             visualizer: VisualizerFlags::default(),
             queue: QueueFlags::default(),
             window: WindowFlags::first_launch(desktop),

@@ -70,20 +70,6 @@ fn forward(tx: &mpsc::Sender<PlayerEvent>, event: PlayerEvent) {
     }
 }
 
-/// The player's volume step for an amplitude an OS panel sent.
-#[expect(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "clamped to [0, 1] before the scale, so the rounded value fits a u32"
-)]
-fn volume_percent(amplitude: f64) -> u32 {
-    (amplitude.clamp(0.0, 1.0) * 100.0).round() as u32
-}
-
 fn cover_url(artwork_path: &str) -> String {
     format!("file://{artwork_path}")
 }
-
-#[cfg(test)]
-#[path = "tests/mod_tests.rs"]
-mod tests;

@@ -34,6 +34,8 @@ enum Emit {
     Volume,
     LoopStatus,
     Shuffle,
+    /// The rate and both of its bounds, which a station closes on 1.0.
+    Rate,
     Seeked(u64),
 }
 
@@ -128,6 +130,12 @@ fn send(player: &InterfaceRef<Player>, emit: Emit) -> zbus::Result<()> {
         Emit::Volume => zbus::block_on(player.get().volume_changed(emitter)),
         Emit::LoopStatus => zbus::block_on(player.get().loop_status_changed(emitter)),
         Emit::Shuffle => zbus::block_on(player.get().shuffle_changed(emitter)),
+        Emit::Rate => zbus::block_on(async {
+            let player = player.get();
+            player.rate_changed(emitter).await?;
+            player.minimum_rate_changed(emitter).await?;
+            player.maximum_rate_changed(emitter).await
+        }),
         Emit::Seeked(position_ms) => zbus::block_on(Player::seeked(emitter, micros(position_ms))),
     }
 }
@@ -156,6 +164,9 @@ impl MediaControlsSync for MediaControlsHandle {
         }
         if changes.shuffle {
             self.emit(Emit::Shuffle);
+        }
+        if changes.rate {
+            self.emit(Emit::Rate);
         }
     }
 

@@ -3,14 +3,11 @@
 use std::rc::Rc;
 use std::time::Duration;
 
+use crate::ui::settings::settings_page::{self, SettingsTab};
 use melodia_app::library;
 use melodia_app::state::AppState;
-use melodia_ui::{AppWindow, Nav, Onboarding, Settings, SettingsPage, Theme};
+use melodia_ui::{AppWindow, Onboarding, Settings, Theme};
 use slint::ComponentHandle;
-
-/// Settings' own nav index. Spelled here rather than reached for: `ui::my_library` owns the only
-/// other one, and neither is the other's to publish.
-const NAV_SETTINGS: i32 = 9;
 
 pub(super) fn wire(ui: &AppWindow, state: &AppState, deferred: Rc<super::DeferredOnce>) {
     wire_dismiss(ui, state, deferred);
@@ -30,25 +27,11 @@ fn wire_run_again(ui: &AppWindow) {
 }
 
 /// Land on Settings ▸ Services and close the card.
-///
-/// Tab first, then nav, so the page mounts on the body it is meant to show — `my_library::go_to_tab`
-/// for the same reason. Both writes go through the callbacks that already own an `IndexPersist`;
-/// calling the disk setters directly would be a seventh writer, which
-/// `crates/melodia/tests/index_persist.rs` pins against.
 fn wire_open_services(ui: &AppWindow) {
     let weak = ui.as_weak();
     ui.global::<Onboarding>().on_open_services(move || {
         let Some(ui) = weak.upgrade() else { return };
-
-        let page = ui.global::<SettingsPage>();
-        let services = page.get_tab_services();
-        page.set_tab_idx(services);
-        page.invoke_tab_changed(services);
-
-        let nav = ui.global::<Nav>();
-        nav.set_selected_index(NAV_SETTINGS);
-        nav.invoke_persist_selected_index(NAV_SETTINGS);
-
+        settings_page::open_on(&ui, SettingsTab::Services);
         ui.global::<Onboarding>().invoke_dismiss();
     });
 }

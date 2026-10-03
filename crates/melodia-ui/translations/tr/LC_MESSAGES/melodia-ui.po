@@ -2298,3 +2298,249 @@ msgstr "MusicBrainz Kayıt Kimliği"
 
 msgid "{} can't be saved to {} files"
 msgstr "{} {} dosyalarına kaydedilemiyor"
+
+msgid "Output"
+msgstr "Çıkış"
+
+msgid "Match the File's Sample Rate"
+msgstr "Dosyanın Örnekleme Hızına Uy"
+
+msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate"
+msgstr "Ses aygıtını her parçanın kendi hızında yeniden açar, böylece sistem yeniden örneklemez. Sistemin bu hıza izin vermesi gerekir"
+
+msgid "Overlap the end of one track with the start of the next, unless the device has to change format between them"
+msgstr "Bir parçanın sonunu sonraki parçanın başıyla üst üste bindir, aygıtın aralarında biçim değiştirmesi gerekmedikçe"
+
+msgid "Signal Path"
+msgstr "Sinyal Yolu"
+
+msgid "What reaches the audio device, and what changes it on the way. Bit-perfect means nothing does"
+msgstr "Ses aygıtına ne ulaştığı ve yolda onu neyin değiştirdiği. Bit-perfect, hiçbir şeyin değiştirmediği anlamına gelir"
+
+msgid "Nothing is playing"
+msgstr "Hiçbir şey çalmıyor"
+
+msgid "Bit-perfect: the device receives the decoder's samples untouched"
+msgstr "Bit-perfect: aygıt, kod çözücünün örneklerini hiç değişmeden alır"
+
+msgid "Enhanced: only effects you chose change the sound"
+msgstr "İşlenmiş: sesi yalnızca seçtiğiniz efektler değiştirir"
+
+msgid "Converted: the sound is changed on its way to the device"
+msgstr "Dönüştürülmüş: ses aygıta giderken değişir"
+
+msgid "Bit-perfect"
+msgstr "Bit-perfect"
+
+msgid "Enhanced"
+msgstr "İşlenmiş"
+
+msgid "Fallback"
+msgstr "Yedek"
+
+msgid "Converted"
+msgstr "Dönüştürülmüş"
+
+msgid "Lossy: the file is compressed, so the device gets the decoder's reconstruction of the recording"
+msgstr "Kayıplı: dosya sıkıştırılmış, bu yüzden aygıt kaydın kod çözücü tarafından yeniden oluşturulmuş hâlini alır"
+
+msgid "Lossy"
+msgstr "Kayıplı"
+
+msgid "Make Bit-Perfect"
+msgstr "Bit-Perfect Yap"
+
+msgid "Switch to Exclusive Output?"
+msgstr "Özel çıkışa geçilsin mi?"
+
+msgid "Bit-perfect playback needs exclusive output. Other apps can't play through the device while Melodia does, and the system volume stops applying: Melodia's own volume goes to full unless Hardware Volume is on."
+msgstr "Bit-perfect çalma özel çıkış gerektirir. Melodia çalarken diğer uygulamalar bu aygıttan ses çalamaz ve sistem ses düzeyi artık uygulanmaz: Donanım Ses Düzeyi açık değilse Melodia'nın kendi ses düzeyi en yükseğe çıkar."
+
+msgid "Switch"
+msgstr "Geç"
+
+msgid "Source"
+msgstr "Kaynak"
+
+msgid "{}, rounded to fit 32-bit float"
+msgstr "{}, 32 bit kayan noktaya yuvarlanır"
+
+msgid "{}, decoded from a lossy codec"
+msgstr "{}, kayıplı bir kodekten çözülür"
+
+msgid "Effects"
+msgstr "Efektler"
+
+msgid "No effects"
+msgstr "Efekt yok"
+
+msgid "Equalizer and ReplayGain"
+msgstr "Ekolayzer ve ReplayGain"
+
+msgid "Normal"
+msgstr "Normal"
+
+msgid "Volume"
+msgstr "Ses Düzeyi"
+
+msgid "Muted"
+msgstr "Sessiz"
+
+msgid "Not fading"
+msgstr "Geçiş yok"
+
+msgid "Fading between tracks"
+msgstr "Parçalar arasında geçiş yapılıyor"
+
+msgid "{} resampled to {}"
+msgstr "{}, {} hızına yeniden örneklenir"
+
+msgid "Unchanged"
+msgstr "Değişmedi"
+
+msgid "Mixed down for the device"
+msgstr "Aygıt için daha az kanala indirildi"
+
+msgid "Device"
+msgstr "Aygıt"
+
+msgid "{}, shared: the system mixer may still convert it"
+msgstr "{}, paylaşımlı: sistem mikseri yine de dönüştürebilir"
+
+msgid "Output Mode"
+msgstr "Çıkış Modu"
+
+msgid "Exclusive gives Melodia the audio device alone: other apps can't play through it while Melodia plays, and the system mixer can't change the sound"
+msgstr "Özel, ses aygıtını yalnızca Melodia'ya verir: Melodia çalarken diğer uygulamalar bu aygıttan ses çalamaz ve sistem mikseri sesi değiştiremez"
+
+msgid "Shared"
+msgstr "Paylaşımlı"
+
+msgid "Exclusive"
+msgstr "Özel"
+
+msgid "Exclusive Device"
+msgstr "Özel Aygıt"
+
+msgid "The sound card exclusive output takes"
+msgstr "Özel çıkışın kullandığı ses kartı"
+
+msgid "Output Device"
+msgstr "Çıkış Aygıtı"
+
+msgid "The sound card Melodia plays through"
+msgstr "Melodia'nın çaldığı ses kartı"
+
+msgid "System Default"
+msgstr "Sistem Varsayılanı"
+
+msgid "Fallback: exclusive output was refused, so the system mixer is in the way"
+msgstr "Yedek: özel çıkış reddedildi, bu yüzden sistem mikseri araya giriyor"
+
+msgid "the device is in use by another app"
+msgstr "aygıt başka bir uygulama tarafından kullanılıyor"
+
+msgid "{} holds the device"
+msgstr "aygıtı {} tutuyor"
+
+msgid "another app holds the device"
+msgstr "aygıtı başka bir uygulama tutuyor"
+
+msgid "the device can't run at this sample rate"
+msgstr "aygıt bu örnekleme hızında çalışamıyor"
+
+msgid "the device can't play this many channels"
+msgstr "aygıt bu kadar çok kanalı çalamıyor"
+
+msgid "the device takes no sample format that holds this track"
+msgstr "aygıt bu parçayı tam taşıyan hiçbir örnek biçimini kabul etmiyor"
+
+msgid "the chosen device isn't connected"
+msgstr "seçilen aygıt bağlı değil"
+
+msgid "exclusive output isn't available on this system"
+msgstr "özel çıkış bu sistemde kullanılamıyor"
+
+msgid "the device doesn't allow exclusive control, which its Advanced properties in the Sound control panel can turn on"
+msgstr "aygıt özel denetime izin vermiyor; bu, Ses denetim masasında aygıtın özelliklerindeki Gelişmiş sekmesinden açılabilir"
+
+msgid "the device couldn't be opened"
+msgstr "aygıt açılamadı"
+
+msgid "{}, shared: exclusive output was refused because {}"
+msgstr "{}, paylaşımlı: özel çıkış reddedildi ({})"
+
+msgid "{}, exclusive"
+msgstr "{}, özel"
+
+msgid "{}, exclusive, in a format that can't hold the source exactly"
+msgstr "{}, özel, kaynağı tam olarak taşıyamayan bir biçimde"
+
+msgid "Buffer Period"
+msgstr "Arabellek Periyodu"
+
+msgid "How much audio the device is handed at a time. Longer periods ride out a busy system; shorter ones react sooner"
+msgstr "Aygıta tek seferde ne kadar ses verildiği. Uzun periyotlar yoğun bir sistemi kaldırır, kısa olanlar daha çabuk tepki verir"
+
+msgid "Polling Mode"
+msgstr "Yoklama Modu"
+
+msgid "Top the device up on a timer instead of waiting for it to ask. Try it if a USB device stutters or crackles in exclusive mode"
+msgstr "Aygıtın istemesini beklemek yerine onu bir zamanlayıcıyla doldur. Bir USB aygıtı özel modda takılıyor veya cızırdıyorsa deneyin"
+
+msgid "{} ms"
+msgstr "{} ms"
+
+msgid "The device is running at {}"
+msgstr "Aygıt {} ile çalışıyor"
+
+msgid "{} refused exclusive output because {}. Playing shared on {}"
+msgstr "{} özel çıkışı reddetti ({}). {} üzerinde paylaşımlı çalınıyor"
+
+msgid "Silence After a Rate Change"
+msgstr "Hız Değişiminden Sonra Sessizlik"
+
+msgid "Exclusive output unavailable"
+msgstr "Özel çıkış kullanılamıyor"
+
+msgid "Exclusive output was refused, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "Özel çıkış reddedildi, bu yüzden Melodia şimdilik paylaşımlı çalıyor. Nedeni Ayarlar'daki Çıkış bölümünde yazıyor."
+
+msgid "{} refused exclusive output, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "{} özel çıkışı reddetti, bu yüzden Melodia şimdilik paylaşımlı çalıyor. Nedeni Ayarlar'daki Çıkış bölümünde yazıyor."
+
+msgid "Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off"
+msgstr "Bazı DAC'ler örnekleme hızını değiştirirken bir an susar. Her değişimde kısa bir sessizlik, parçanın başının kesilmesini önler"
+
+msgid "Hardware Volume"
+msgstr "Donanım Ses Düzeyi"
+
+msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
+msgstr "Örnekleri ölçeklemek yerine aygıtın kendi ses düzeyi denetimini çevir, böylece ses kaydırıcısı sesi bit-perfect tutar. Bu denetim aygıtın sistem ses düzeyidir ve Melodia aygıtı bıraktığında eski hâline döner. Kendi denetimi olmayan aygıtlar Melodia'nın ses düzeyini kullanmaya devam eder"
+
+msgid "Give the Device Back When Paused"
+msgstr "Duraklatınca Aygıtı Bırak"
+
+msgid "After five minutes paused, hand the device back so other apps can play through it. Pressing play takes it again"
+msgstr "Beş dakika duraklatıldıktan sonra aygıtı bırak, böylece diğer uygulamalar bu aygıttan ses çalabilir. Oynat'a basınca Melodia onu yeniden alır"
+
+msgid "Unsupported Sample Rates"
+msgstr "Desteklenmeyen Örnekleme Hızları"
+
+msgid "What exclusive output does when the device can't run a track's sample rate: hand the device back and play that track through the system mixer, or keep the device and convert the track to a rate it can run"
+msgstr "Aygıt bir parçanın örnekleme hızında çalışamadığında özel çıkışın ne yapacağı: aygıtı bırakıp o parçayı sistem mikseri üzerinden çalmak ya da aygıtı tutup parçayı aygıtın çalışabildiği bir hıza dönüştürmek"
+
+msgid "Play Through the System Mixer"
+msgstr "Sistem Mikseri Üzerinden Çal"
+
+msgid "Resample and Keep Exclusive"
+msgstr "Yeniden Örnekle ve Özel Kal"
+
+msgid "{}% on the device"
+msgstr "aygıtta %{}"
+
+msgid "{}% (the device muted)"
+msgstr "%{} (aygıt sessizde)"
+
+msgid "{}% (the device at {}%)"
+msgstr "%{} (aygıt %{} düzeyinde)"

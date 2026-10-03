@@ -11,8 +11,9 @@
 //! stops being reachable that way stops being testable without a sound card.
 
 use std::sync::Arc;
+use std::time::Duration;
 
-use melodia_audio::player::source::audio::{Sample, Shape};
+use melodia_audio::player::source::audio::{Sample, SampleRate, Shape, frames_in};
 
 use super::voice::{Voice, VoicePull};
 
@@ -24,7 +25,9 @@ use super::voice::{Voice, VoicePull};
 /// outgoing track stays at full gain for that whole period while the incoming one ramps up, and the
 /// sum — which nothing clamps, deliberately — goes past unity by the period over the fade length.
 /// Stepping every voice through the block together bounds that to this many frames instead, which
-/// against the shortest crossfade the settings allow is a fraction of a percent. rodio's mixer
+/// against the shortest crossfade the settings allow is a fraction of a percent. An outgoing voice
+/// whose converter interpolates adds its lookahead to that: those frames were pulled before the
+/// arm, so they play out at full gain. rodio's mixer
 /// pulled one sample from every voice in turn, so this is the same property at a coarser grain,
 /// chosen so the loop costs a few dozen iterations per callback rather than a few thousand.
 pub const LOCKSTEP_FRAMES: usize = 64;
@@ -54,6 +57,21 @@ pub struct MixerPull {
     /// One voice's contribution before it is summed. Sized for a single [`LOCKSTEP_FRAMES`] step,
     /// which is the longest slice a voice is ever handed, so the audio thread never grows it.
     scratch: Vec<Sample>,
+    /// Device frames still to be written as silence before any voice plays. See [`Self::hold`].
+    held: usize,
+    /// The silence a reopen owes a rate change, while it is trying streams. See
+    /// [`Self::arm_resync`].
+    resync: Option<Resync>,
+}
+
+/// A reopen's rate-change silence, decided at each stream's reshape.
+#[derive(Clone, Copy)]
+struct Resync {
+    /// The rate the device ran at before the reopen, or `None` where no stream was open.
+    from: Option<SampleRate>,
+    hold: Duration,
+    /// What was still held when the reopen began, which a stream at the same rate carries on.
+    held: usize,
 }
 
 impl MixerPull {
@@ -77,6 +95,15 @@ impl MixerPull {
         let out = &mut out[..whole];
 
         for step in out.chunks_mut(LOCKSTEP_FRAMES * width) {
+            if self.held > 0 {
+                // Serviced but not rendered: a clear issued behind a reopen still has to land, and
+                // no source may advance through audio nobody hears.
+                for voice in &mut self.voices {
+                    voice.service();
+                }
+                self.held = self.held.saturating_sub(step.len() / width);
+                continue;
+            }
             let mut written = false;
             for voice in &mut self.voices {
                 if written {
@@ -92,6 +119,48 @@ impl MixerPull {
             }
         }
     }
+
+    /// Bring every voice to `device` for the next stream, leaving what they hold where it is.
+    ///
+    /// Nothing loaded depends on the device, so a source part way through carries on from the
+    /// same frame; only the output width and the step change. Only while no stream is pulling.
+    pub fn reshape(&mut self, device: Shape) {
+        self.device = device;
+        for voice in &mut self.voices {
+            voice.reshape(device);
+        }
+        self.scratch.resize(LOCKSTEP_FRAMES * usize::from(device.channels.get()), 0.0);
+        if let Some(Resync { from, hold, held }) = self.resync {
+            let frames = if from == Some(device.rate) {
+                held
+            } else {
+                usize::try_from(frames_in(hold, device.rate)).unwrap_or(usize::MAX)
+            };
+            self.hold(frames);
+        }
+    }
+
+    /// Write `frames` of silence before any voice plays again.
+    ///
+    /// A DAC mutes while its clock relocks to a new rate, so whatever plays first after a rate
+    /// change is lost; held back, it is the silence that gets lost instead. Rounded up to whole
+    /// [`LOCKSTEP_FRAMES`] steps.
+    fn hold(&mut self, frames: usize) {
+        self.held = frames;
+    }
+
+    /// Have every [`Self::reshape`] until [`Self::disarm_resync`] hold `hold` of silence where the
+    /// new rate differs from `from`, the one the device ran at before.
+    ///
+    /// Settled at the reshape because that is the last step before a stream starts pulling, and
+    /// per reshape because a reopen can try several rates before one opens.
+    pub fn arm_resync(&mut self, from: Option<SampleRate>, hold: Duration) {
+        self.resync = Some(Resync { from, hold, held: self.held });
+    }
+
+    pub fn disarm_resync(&mut self) {
+        self.resync = None;
+    }
 }
 
 /// Build a mixer and its puller, with `voices` many brought to `device`.
@@ -106,6 +175,8 @@ pub fn pair(voices: usize, device: Shape) -> (Mixer, MixerPull) {
             voices: pulls.into_boxed_slice(),
             device,
             scratch: vec![0.0; LOCKSTEP_FRAMES * width],
+            held: 0,
+            resync: None,
         },
     )
 }

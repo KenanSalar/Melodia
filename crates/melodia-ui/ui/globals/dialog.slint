@@ -5,6 +5,7 @@ import { LibrarySettings } from "library-settings.slint";
 import { Playlists, PlaylistDetail } from "playlists.slint";
 import { Queue } from "queue.slint";
 import { WindowChrome } from "shell.slint";
+import { Settings } from "../settings.slint";
 
 // One root-level overlay serving both info ("OK"-only) and confirmation modals. A caller sets the
 // chrome plus a routing payload — `kind` and `target-id` — and flips `open`; the default `accepted`
@@ -110,6 +111,11 @@ export global Dialog {
             WindowChrome.restart-backdrop();
         } else if (root.kind == "clear-queue") {
             Queue.clear-queue();
+        } else if (root.kind == "bit-perfect-exclusive") {
+            // One Rust handler, which moves the chip too, rather than the chip's pick beside the
+            // button's: the reset reads off the claim whether the device carries the volume, and
+            // run first it would raise the device.
+            Settings.output-switch-to-bit-perfect();
         } else if (root.kind == "create-playlist") {
             // Name, optional description, and the ids to auto-add once it exists.
             Playlists.create-playlist(

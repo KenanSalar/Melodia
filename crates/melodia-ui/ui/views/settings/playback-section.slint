@@ -1,15 +1,14 @@
 import { Settings } from "../../settings.slint";
 import { SettingsPage } from "../../globals/settings-page.slint";
 import { Visualizer } from "../../globals/audio.slint";
-import { Theme } from "../../theme.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
 import { SectionDivider } from "../../components/settings/section-divider.slint";
 import { SettingRow } from "../../components/settings/setting-row.slint";
 import { SettingRowStacked } from "../../components/settings/setting-row-stacked.slint";
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 import { ChipGroup } from "../../components/settings/chip-group.slint";
+import { SettingSlider } from "../../components/settings/setting-slider.slint";
 import { VizStylePresets } from "../../components/now-playing/flyout-presets.slint";
-import { SliderTrack } from "../../components/slider-track.slint";
 
 // Three plain rows, plus two clusters whose sub-rows mount only while their
 // toggle is on: crossfade (duration slider + three sub-toggles) and the
@@ -51,6 +50,7 @@ export component PlaybackSection inherits Rectangle {
     property <string> resume-desc: @tr("Automatically resume the last track from where you left off when the app starts");
     property <string> crossfade-label: @tr("Crossfade");
     property <string> crossfade-desc: @tr("Overlap the end of one track with the start of the next");
+    property <string> crossfade-format-desc: @tr("Overlap the end of one track with the start of the next, unless the device has to change format between them");
     property <string> xf-duration-label: @tr("Crossfade duration");
     property <string> xf-duration-desc: @tr("How long the two tracks overlap");
     property <string> xf-album-label: @tr("Except on the same album");
@@ -113,7 +113,7 @@ export component PlaybackSection inherits Rectangle {
         if root.show-crossfade: SettingRow {
             icon: "swap_horiz";
             label: root.crossfade-label;
-            description: root.crossfade-desc;
+            description: Settings.rate-follows ? root.crossfade-format-desc : root.crossfade-desc;
             ToggleSwitch {
                 checked <=> Settings.crossfade-enabled;
                 toggled(v) => { Settings.crossfade-enabled-changed(v); }
@@ -124,30 +124,13 @@ export component PlaybackSection inherits Rectangle {
             icon: "history";
             label: root.xf-duration-label;
             description: root.xf-duration-desc;
-            HorizontalLayout {
-                spacing: Theme.pad-md;
-                alignment: stretch;
-                VerticalLayout {
-                    alignment: center;
-                    horizontal-stretch: 1;
-                    SliderTrack {
-                        value: root.secs-to-frac(Settings.crossfade-duration-secs);
-                        seam-mask-color: SettingsPage.card-fill;
-                        // Live during the drag, persist on release.
-                        changed(v) => { Settings.crossfade-duration-changed(root.frac-to-secs(v)); }
-                        committed(v) => { Settings.crossfade-duration-committed(root.frac-to-secs(v)); }
-                    }
-                }
-                VerticalLayout {
-                    alignment: center;
-                    Text {
-                        text: @tr("{} s", round(Settings.crossfade-duration-secs * 10) / 10);
-                        color: Theme.subtext0;
-                        font-size: Theme.font-size-sm;
-                        min-width: 48px;
-                        horizontal-alignment: right;
-                    }
-                }
+            SettingSlider {
+                value: root.secs-to-frac(Settings.crossfade-duration-secs);
+                readout: @tr("{} s", round(Settings.crossfade-duration-secs * 10) / 10);
+                readout-width: 48px;
+                // Live during the drag, persist on release.
+                changed(v) => { Settings.crossfade-duration-changed(root.frac-to-secs(v)); }
+                committed(v) => { Settings.crossfade-duration-committed(root.frac-to-secs(v)); }
             }
         }
 

@@ -124,8 +124,8 @@ coverage on this path.
   `windows-2025-vs2026`, which is **not** the durable one — GitHub shipped it to test the Visual
   Studio 2026 migration and folded it onto `windows-2025` when that finished, so all three spell
   one image today and only `windows-2025` is documented to keep doing so. No system deps and so no
-  `linux-system-deps` twin: cpal reaches WASAPI through `windows-sys` and Slint needs no package,
-  which makes the shape `fmt`'s rather than `test`'s.
+  `linux-system-deps` twin: cpal and `wasapi` reach WASAPI through `windows` and Slint needs no
+  package, which makes the shape `fmt`'s rather than `test`'s.
 
 - **`CARGO_BUILD_JOBS: 4` on `test` and `test-windows` is a memory cap, not a CPU match — don't
   raise it to `.cargo/config.toml`'s dev-machine jobs=8.** The peak is a single `rustc` on

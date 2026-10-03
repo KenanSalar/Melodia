@@ -1,12 +1,17 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::state::PlaybackContext;
 use melodia_audio::player::source::stream_source;
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
 use melodia_core::error::describe;
-use melodia_engine::player::engine::state::{lock_state, play_track_inner, with_state_emit};
+use melodia_engine::player::engine::backend::{OutputChoice, PlaybackEngine};
+use melodia_engine::player::engine::state::{
+    MAX_VOLUME, PlayerAction, PlayerState, lock_state, play_track_inner, with_state_emit,
+};
 use melodia_engine::player::engine::types::{PlaybackSource, PlaybackStatus, RadioNowPlaying};
+use melodia_playback::player::playback::output::{self, OutputDevice};
 use melodia_store::database::queries;
 
 /// Which slot of `summaries` playback should start on.
@@ -91,8 +96,20 @@ pub fn player_play(ctx: &PlaybackContext) -> Result<(), AppError> {
     if resume_station(ctx) {
         return Ok(());
     }
-    ctx.emit_and_execute(melodia_engine::player::engine::state::PlayerState::build_play_actions);
+    ctx.emit_and_execute(|s| play_actions(s, &ctx.engine));
     Ok(())
+}
+
+/// Resume the paused track, or start it again where its deck no longer holds it, which is what a
+/// pause long enough to give an exclusive device back leaves.
+///
+/// The deck is asked with the state lock held, the lock order's own direction, so the answer and
+/// the actions it picks can't be split by anything that goes through the emit.
+fn play_actions(s: &mut PlayerState, engine: &PlaybackEngine) -> Vec<PlayerAction> {
+    if s.status == PlaybackStatus::Paused && !engine.holds_source() {
+        return s.build_replay_actions();
+    }
+    s.build_play_actions()
 }
 
 /// Whether a play command has to re-open a station instead of resuming the deck.
@@ -236,9 +253,10 @@ pub fn player_toggle_play_pause(ctx: &PlaybackContext) -> Result<(), AppError> {
         return Ok(());
     }
     let fade_ms = transport_fade_ms(ctx);
+    let engine = &ctx.engine;
     ctx.emit_and_execute(move |s| match s.status {
         PlaybackStatus::Playing | PlaybackStatus::Loading => s.build_pause_actions(fade_ms),
-        PlaybackStatus::Paused | PlaybackStatus::Stopped => s.build_play_actions(),
+        PlaybackStatus::Paused | PlaybackStatus::Stopped => play_actions(s, engine),
     });
     Ok(())
 }
@@ -300,6 +318,16 @@ pub fn player_set_volume(ctx: &PlaybackContext, level: u32) -> Result<(), AppErr
     Ok(())
 }
 
+/// [`player_set_volume`] and its commit at once, for a move that arrives whole rather than as a
+/// drag: the OS media panel's, or the device's own control's.
+pub async fn player_set_volume_committed(
+    ctx: &PlaybackContext,
+    level: u32,
+) -> Result<(), AppError> {
+    player_set_volume(ctx, level)?;
+    commit_player_settings(ctx).await
+}
+
 pub async fn player_toggle_mute(ctx: &PlaybackContext) -> Result<(), AppError> {
     ctx.emit_and_execute(
         melodia_engine::player::engine::state::PlayerState::build_toggle_mute_actions,
@@ -309,12 +337,12 @@ pub async fn player_toggle_mute(ctx: &PlaybackContext) -> Result<(), AppError> {
 
 /// Persist the current `PlayerState`'s volume + `is_muted` into settings.json.
 /// Called once from the volume slider's `pointer-event Up` (after a drag or
-/// click), and inline from the mute mutators / the OS media controls'
-/// `SetVolume`.
+/// click), and inline from the mute mutators and [`player_set_volume_committed`].
 ///
-/// Reads-then-writes settings.json on a `spawn_blocking` thread so the
-/// async runtime worker isn't blocked. Short-circuits when settings already
-/// match (common — e.g. a click that didn't change the value).
+/// Writes on a `spawn_blocking` thread so the async runtime worker isn't
+/// blocked, under the settings lock so a concurrent `mutate_settings` isn't
+/// overwritten. Skips the write when settings already match (common — e.g. a
+/// click that didn't change the value).
 pub async fn commit_player_settings(ctx: &PlaybackContext) -> Result<(), AppError> {
     let (volume, is_muted) = {
         let s = lock_state(&ctx.player_state);
@@ -322,13 +350,12 @@ pub async fn commit_player_settings(ctx: &PlaybackContext) -> Result<(), AppErro
     };
     let paths = ctx.paths.clone();
     tokio::task::spawn_blocking(move || -> Result<(), AppError> {
-        let mut s = crate::services::settings::read_settings(&paths)?;
-        if s.volume == volume && s.playback.is_muted == is_muted {
-            return Ok(());
-        }
-        s.volume = volume;
-        s.playback.is_muted = is_muted;
-        crate::services::settings::write_settings(&paths, &s)
+        crate::services::settings::mutate_settings_if(&paths, |s| {
+            let changed = s.volume != volume || s.playback.is_muted != is_muted;
+            s.volume = volume;
+            s.playback.is_muted = is_muted;
+            changed
+        })
     })
     .await
     .map_err(|e| AppError::Settings(format!("commit_player_settings join: {e}")))?
@@ -337,6 +364,19 @@ pub async fn commit_player_settings(ctx: &PlaybackContext) -> Result<(), AppErro
 pub fn player_set_playback_speed(ctx: &PlaybackContext, speed: f64) -> Result<(), AppError> {
     ctx.emit_and_execute(|s| s.build_set_speed_actions(speed));
     Ok(())
+}
+
+/// [`player_set_playback_speed`] and the write that has it survive a restart, as
+/// [`player_set_volume_committed`] is for the volume.
+pub async fn player_set_playback_speed_committed(
+    ctx: &PlaybackContext,
+    speed: f64,
+) -> Result<(), AppError> {
+    player_set_playback_speed(ctx, speed)?;
+    let paths = Arc::clone(&ctx.paths);
+    tokio::task::spawn_blocking(move || crate::library::settings::set_playback_speed(&paths, speed))
+        .await
+        .map_err(AppError::io_source)?
 }
 
 pub fn player_set_gapless(ctx: &PlaybackContext, enabled: bool) -> Result<(), AppError> {
@@ -454,6 +494,80 @@ pub fn player_set_crossfade_skip_same_album(ctx: &PlaybackContext, on: bool) {
 /// Fade out on pause / user stop, and fade back in on resume.
 pub fn player_set_crossfade_fade_on_pause(ctx: &PlaybackContext, on: bool) {
     ctx.engine.set_crossfade_fade_on_pause(on);
+}
+
+/// Whether following the file's rate can change anything here, so the toggle is offered at all.
+pub const FOLLOW_RATE_SUPPORTED: bool = output::FOLLOW_RATE_SUPPORTED;
+
+/// Open the output at each track's own sample rate, from the next track on.
+pub fn player_set_follow_rate(ctx: &PlaybackContext, on: bool) {
+    ctx.engine.set_follow_rate(on);
+}
+
+/// Give an exclusive device back once a pause has held it long enough, from the next pause on.
+pub fn player_set_release_when_paused(ctx: &PlaybackContext, on: bool) {
+    ctx.engine.set_release_when_paused(on);
+}
+
+/// Write `hold` of silence after each reopen onto a new rate, from the next one on. Blocking: it
+/// waits out any reopen in flight, so it belongs on the blocking pool.
+pub fn player_set_resync_hold(ctx: &PlaybackContext, hold: Duration) {
+    ctx.engine.set_resync_hold(hold);
+}
+
+/// Whether this platform has an exclusive backend. Where it doesn't, an exclusive choice falls
+/// back to shared on every open, so the picker isn't offered at all.
+pub const EXCLUSIVE_SUPPORTED: bool = output::EXCLUSIVE_SUPPORTED;
+
+/// Whether an exclusive claim can be polled instead of event-driven here, which only matters to
+/// the drivers that stutter under events.
+pub const POLLING_SUPPORTED: bool = output::POLLING_SUPPORTED;
+
+/// Whether an exclusive claim can carry the volume on the device's own control here.
+pub const HARDWARE_VOLUME_SUPPORTED: bool = output::HARDWARE_VOLUME_SUPPORTED;
+
+/// Whether an exclusive claim can keep a device lacking the file's rate by converting to one it
+/// has, here.
+pub const RATE_FALLBACK_SUPPORTED: bool = output::RATE_FALLBACK_SUPPORTED;
+
+/// Whether the device picker chooses where shared output plays too, rather than exclusive alone.
+pub const SHARED_DEVICE_SUPPORTED: bool = output::SHARED_DEVICE_SUPPORTED;
+
+/// The devices an exclusive claim can be aimed at, and where [`SHARED_DEVICE_SUPPORTED`] a shared
+/// stream too. Blocking: it asks every device.
+pub fn output_devices() -> Vec<OutputDevice> {
+    output::devices()
+}
+
+/// Take the card for ourselves or give it back, now. Blocking: it opens a device, so it belongs
+/// on the blocking pool rather than the UI thread.
+pub fn player_set_output_choice(ctx: &PlaybackContext, choice: OutputChoice) {
+    ctx.engine.set_output_choice(choice);
+}
+
+/// Turn off everything the user chose that changes the samples on their way to the device, and
+/// follow the file's rate where that does anything, returning the volume it left. The live half
+/// only; `library::settings::reset_for_bit_perfect` persists the same set.
+///
+/// **A volume on the device's own control is left where it is**, only unmuted: it changes no
+/// sample, and raising it would be raising the user's speakers. Blocking: it reads the output,
+/// which a reopen holds for as long as a device takes to open.
+pub fn player_make_bit_perfect(ctx: &PlaybackContext) -> u32 {
+    player_set_eq_enabled(ctx, false);
+    player_set_replaygain_enabled(ctx, false);
+    let volume_on_device =
+        ctx.engine.negotiated().is_some_and(|negotiated| negotiated.hardware_volume);
+    let mut volume = MAX_VOLUME;
+    ctx.emit_and_execute(|s| {
+        if volume_on_device {
+            volume = s.volume;
+        }
+        let mut actions = s.build_set_speed_actions(1.0);
+        actions.extend(s.build_set_volume_actions(volume));
+        actions
+    });
+    player_set_follow_rate(ctx, true);
+    volume
 }
 
 // The visualizer has no setter here on purpose: its tap is armed by the

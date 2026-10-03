@@ -54,6 +54,22 @@ impl From<&SourceSummary<'_>> for PublishedMetadata {
     }
 }
 
+/// The playback rate the panel was told, and whether the source lets it move.
+///
+/// One value because MPRIS says both through the rate and its bounds, which a station pins to one:
+/// a change to either is announced together.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) struct PublishedRate {
+    pub(super) rate: f64,
+    pub(super) variable: bool,
+}
+
+impl PublishedRate {
+    fn of(vm: &PlayerViewModelLight) -> Self {
+        Self { rate: vm.playback_speed, variable: vm.radio.is_none() }
+    }
+}
+
 /// Which parts of the panel a view model moves.
 #[expect(
     clippy::struct_excessive_bools,
@@ -67,6 +83,7 @@ pub(super) struct Changes {
     pub(super) volume: bool,
     pub(super) shuffle: bool,
     pub(super) repeat: bool,
+    pub(super) rate: bool,
 }
 
 /// The panel as last published.
@@ -79,9 +96,17 @@ pub(super) struct Published {
     pub(super) is_muted: bool,
     pub(super) shuffle_enabled: bool,
     pub(super) repeat_mode: Option<RepeatMode>,
+    pub(super) rate: Option<PublishedRate>,
 }
 
 impl Published {
+    /// Whether a client may move the rate. Nothing published yet is nothing playing, which the
+    /// player lets it do.
+    #[cfg(target_os = "linux")]
+    pub(super) fn rate_varies(&self) -> bool {
+        self.rate.is_none_or(|rate| rate.variable)
+    }
+
     pub(super) fn changes(&self, vm: &PlayerViewModelLight, status: PlaybackStatus) -> Changes {
         Changes {
             metadata: !PublishedMetadata::still_current(
@@ -93,6 +118,7 @@ impl Published {
             volume: self.volume != vm.volume || self.is_muted != vm.is_muted,
             shuffle: self.shuffle_enabled != vm.shuffle_enabled,
             repeat: self.repeat_mode != Some(vm.repeat_mode),
+            rate: self.rate != Some(PublishedRate::of(vm)),
         }
     }
 
@@ -113,6 +139,7 @@ impl Published {
         self.is_muted = vm.is_muted;
         self.shuffle_enabled = vm.shuffle_enabled;
         self.repeat_mode = Some(vm.repeat_mode);
+        self.rate = Some(PublishedRate::of(vm));
     }
 }
 

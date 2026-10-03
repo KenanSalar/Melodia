@@ -10,11 +10,13 @@ use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{ObjectPath, Value};
 
 use melodia_engine::player::engine::event_sink::PlayerEvent;
-use melodia_engine::player::engine::state::volume_to_amplitude;
+use melodia_engine::player::engine::state::{
+    MAX_SPEED, MIN_SPEED, amplitude_to_volume, volume_to_amplitude,
+};
 use melodia_engine::player::engine::types::{PlaybackStatus, RepeatMode};
 
-use crate::services::integrations::media_controls::published::Published;
-use crate::services::integrations::media_controls::{cover_url, forward, volume_percent};
+use crate::services::integrations::media_controls::published::{Published, PublishedRate};
+use crate::services::integrations::media_controls::{cover_url, forward};
 
 /// One id for every source, so `SetPosition`'s stale-id check only turns away an id this player
 /// never published.
@@ -169,7 +171,7 @@ impl Player {
     /// player unmutes on any set, so this is the state its own sync will find.
     #[zbus(property)]
     fn set_volume(&self, volume: f64) {
-        let percent = volume_percent(volume);
+        let percent = amplitude_to_volume(volume);
         {
             let mut published = self.published.lock();
             published.volume = percent;
@@ -220,17 +222,42 @@ impl Player {
 
     #[zbus(property)]
     fn rate(&self) -> f64 {
-        1.0
+        self.published.lock().rate.map_or(1.0, |published| published.rate)
     }
 
+    /// Recorded before the player applies it, for `set_volume`'s reason. A rate of zero is a
+    /// pause, as the spec asks of a client that sends one.
+    #[zbus(property)]
+    fn set_rate(&self, rate: f64) -> zbus::fdo::Result<()> {
+        if rate == 0.0 {
+            forward(&self.events, PlayerEvent::Pause);
+            return Ok(());
+        }
+        if !rate.is_finite() || rate < 0.0 {
+            return Err(zbus::fdo::Error::InvalidArgs(format!("unplayable Rate {rate}")));
+        }
+        let mut published = self.published.lock();
+        if !published.rate_varies() {
+            return Err(zbus::fdo::Error::NotSupported(
+                "a station plays at its own rate".to_owned(),
+            ));
+        }
+        let rate = rate.clamp(MIN_SPEED, MAX_SPEED);
+        published.rate = Some(PublishedRate { rate, variable: true });
+        forward(&self.events, PlayerEvent::SetSpeed(rate));
+        Ok(())
+    }
+
+    /// Both bounds close on 1.0 while a station plays, which is how the spec says the rate can't
+    /// be changed.
     #[zbus(property)]
     fn minimum_rate(&self) -> f64 {
-        1.0
+        if self.published.lock().rate_varies() { MIN_SPEED } else { 1.0 }
     }
 
     #[zbus(property)]
     fn maximum_rate(&self) -> f64 {
-        1.0
+        if self.published.lock().rate_varies() { MAX_SPEED } else { 1.0 }
     }
 
     #[zbus(property)]

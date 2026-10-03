@@ -2294,3 +2294,249 @@ msgstr "Αναγνωριστικό ηχογράφησης MusicBrainz"
 
 msgid "{} can't be saved to {} files"
 msgstr "Το {} δεν μπορεί να αποθηκευτεί σε αρχεία {}"
+
+msgid "Output"
+msgstr "Έξοδος"
+
+msgid "Match the File's Sample Rate"
+msgstr "Αντιστοίχιση ρυθμού δειγματοληψίας αρχείου"
+
+msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate"
+msgstr "Ανοίγει ξανά τη συσκευή ήχου στον ρυθμό κάθε κομματιού, ώστε το σύστημα να μην τον μετατρέπει. Το σύστημα πρέπει να επιτρέπει αυτόν τον ρυθμό"
+
+msgid "Overlap the end of one track with the start of the next, unless the device has to change format between them"
+msgstr "Επικάλυψε το τέλος ενός κομματιού με την αρχή του επόμενου, εκτός αν η συσκευή πρέπει να αλλάξει μορφή ανάμεσά τους"
+
+msgid "Signal Path"
+msgstr "Διαδρομή σήματος"
+
+msgid "What reaches the audio device, and what changes it on the way. Bit-perfect means nothing does"
+msgstr "Τι φτάνει στη συσκευή ήχου και τι το αλλάζει στη διαδρομή. Bit-perfect σημαίνει ότι τίποτα δεν το αλλάζει"
+
+msgid "Nothing is playing"
+msgstr "Δεν αναπαράγεται τίποτα"
+
+msgid "Bit-perfect: the device receives the decoder's samples untouched"
+msgstr "Bit-perfect: η συσκευή λαμβάνει τα δείγματα του αποκωδικοποιητή αναλλοίωτα"
+
+msgid "Enhanced: only effects you chose change the sound"
+msgstr "Επεξεργασμένο: μόνο εφέ που επιλέξατε αλλάζουν τον ήχο"
+
+msgid "Converted: the sound is changed on its way to the device"
+msgstr "Μετατρεπόμενο: ο ήχος αλλάζει στη διαδρομή προς τη συσκευή"
+
+msgid "Bit-perfect"
+msgstr "Bit-perfect"
+
+msgid "Enhanced"
+msgstr "Επεξεργασμένο"
+
+msgid "Fallback"
+msgstr "Εναλλακτική"
+
+msgid "Converted"
+msgstr "Μετατρεπόμενο"
+
+msgid "Lossy: the file is compressed, so the device gets the decoder's reconstruction of the recording"
+msgstr "Απωλεστικό: το αρχείο είναι συμπιεσμένο, οπότε η συσκευή λαμβάνει την ανακατασκευή της ηχογράφησης από τον αποκωδικοποιητή"
+
+msgid "Lossy"
+msgstr "Απωλεστικό"
+
+msgid "Make Bit-Perfect"
+msgstr "Κάνε το bit-perfect"
+
+msgid "Switch to Exclusive Output?"
+msgstr "Μετάβαση σε αποκλειστική έξοδο;"
+
+msgid "Bit-perfect playback needs exclusive output. Other apps can't play through the device while Melodia does, and the system volume stops applying: Melodia's own volume goes to full unless Hardware Volume is on."
+msgstr "Η αναπαραγωγή bit-perfect χρειάζεται αποκλειστική έξοδο. Άλλες εφαρμογές δεν μπορούν να παίξουν μέσω της συσκευής όσο παίζει το Melodia, και η ένταση συστήματος παύει να ισχύει: η ένταση του ίδιου του Melodia πηγαίνει στο μέγιστο, εκτός αν είναι ενεργή η Ένταση υλικού."
+
+msgid "Switch"
+msgstr "Μετάβαση"
+
+msgid "Source"
+msgstr "Πηγή"
+
+msgid "{}, rounded to fit 32-bit float"
+msgstr "{}, στρογγυλεμένο σε float 32 bit"
+
+msgid "{}, decoded from a lossy codec"
+msgstr "{}, αποκωδικοποιημένο από απωλεστικό codec"
+
+msgid "Effects"
+msgstr "Εφέ"
+
+msgid "No effects"
+msgstr "Χωρίς εφέ"
+
+msgid "Equalizer and ReplayGain"
+msgstr "Ισοσταθμιστής και ReplayGain"
+
+msgid "Normal"
+msgstr "Κανονική"
+
+msgid "Volume"
+msgstr "Ένταση"
+
+msgid "Muted"
+msgstr "Σε σίγαση"
+
+msgid "Not fading"
+msgstr "Χωρίς μετάβαση"
+
+msgid "Fading between tracks"
+msgstr "Σταδιακή μετάβαση μεταξύ κομματιών"
+
+msgid "{} resampled to {}"
+msgstr "{} με μετατροπή σε {}"
+
+msgid "Unchanged"
+msgstr "Αμετάβλητα"
+
+msgid "Mixed down for the device"
+msgstr "Υπομίξη για τη συσκευή"
+
+msgid "Device"
+msgstr "Συσκευή"
+
+msgid "{}, shared: the system mixer may still convert it"
+msgstr "{}, κοινόχρηστη: ο μίκτης του συστήματος μπορεί ακόμη να το μετατρέψει"
+
+msgid "Output Mode"
+msgstr "Λειτουργία εξόδου"
+
+msgid "Exclusive gives Melodia the audio device alone: other apps can't play through it while Melodia plays, and the system mixer can't change the sound"
+msgstr "Η αποκλειστική δίνει τη συσκευή ήχου μόνο στο Melodia: άλλες εφαρμογές δεν μπορούν να παίξουν μέσω αυτής όσο παίζει το Melodia, και ο μίκτης του συστήματος δεν μπορεί να αλλάξει τον ήχο"
+
+msgid "Shared"
+msgstr "Κοινόχρηστη"
+
+msgid "Exclusive"
+msgstr "Αποκλειστική"
+
+msgid "Exclusive Device"
+msgstr "Αποκλειστική συσκευή"
+
+msgid "The sound card exclusive output takes"
+msgstr "Η κάρτα ήχου που καταλαμβάνει η αποκλειστική έξοδος"
+
+msgid "Output Device"
+msgstr "Συσκευή εξόδου"
+
+msgid "The sound card Melodia plays through"
+msgstr "Η κάρτα ήχου από την οποία παίζει το Melodia"
+
+msgid "System Default"
+msgstr "Προεπιλογή συστήματος"
+
+msgid "Fallback: exclusive output was refused, so the system mixer is in the way"
+msgstr "Εναλλακτική: η αποκλειστική έξοδος απορρίφθηκε, οπότε ο μίκτης του συστήματος παρεμβάλλεται"
+
+msgid "the device is in use by another app"
+msgstr "η συσκευή χρησιμοποιείται από άλλη εφαρμογή"
+
+msgid "{} holds the device"
+msgstr "η συσκευή είναι δεσμευμένη από {}"
+
+msgid "another app holds the device"
+msgstr "άλλη εφαρμογή έχει δεσμεύσει τη συσκευή"
+
+msgid "the device can't run at this sample rate"
+msgstr "η συσκευή δεν υποστηρίζει αυτόν τον ρυθμό δειγματοληψίας"
+
+msgid "the device can't play this many channels"
+msgstr "η συσκευή δεν μπορεί να αναπαράγει τόσα κανάλια"
+
+msgid "the device takes no sample format that holds this track"
+msgstr "η συσκευή δεν δέχεται καμία μορφή δειγμάτων που να χωρά αυτό το κομμάτι"
+
+msgid "the chosen device isn't connected"
+msgstr "η επιλεγμένη συσκευή δεν είναι συνδεδεμένη"
+
+msgid "exclusive output isn't available on this system"
+msgstr "η αποκλειστική έξοδος δεν είναι διαθέσιμη σε αυτό το σύστημα"
+
+msgid "the device doesn't allow exclusive control, which its Advanced properties in the Sound control panel can turn on"
+msgstr "η συσκευή δεν επιτρέπει αποκλειστικό έλεγχο, που ενεργοποιείται στις ιδιότητές της, στην καρτέλα Για προχωρημένους του πίνακα ελέγχου Ήχου"
+
+msgid "the device couldn't be opened"
+msgstr "δεν ήταν δυνατό να ανοίξει η συσκευή"
+
+msgid "{}, shared: exclusive output was refused because {}"
+msgstr "{}, κοινόχρηστη: η αποκλειστική έξοδος απορρίφθηκε ({})"
+
+msgid "{}, exclusive"
+msgstr "{}, αποκλειστική"
+
+msgid "{}, exclusive, in a format that can't hold the source exactly"
+msgstr "{}, αποκλειστική, σε μορφή που δεν χωρά την πηγή ακριβώς"
+
+msgid "Buffer Period"
+msgstr "Περίοδος προσωρινής μνήμης"
+
+msgid "How much audio the device is handed at a time. Longer periods ride out a busy system; shorter ones react sooner"
+msgstr "Πόσος ήχος δίνεται στη συσκευή κάθε φορά. Οι μεγαλύτερες περίοδοι αντέχουν ένα φορτωμένο σύστημα, οι μικρότερες αντιδρούν γρηγορότερα"
+
+msgid "Polling Mode"
+msgstr "Λειτουργία περιοδικού ελέγχου"
+
+msgid "Top the device up on a timer instead of waiting for it to ask. Try it if a USB device stutters or crackles in exclusive mode"
+msgstr "Τροφοδοσία της συσκευής με χρονόμετρο αντί να περιμένει να το ζητήσει. Δοκιμάστε το αν μια συσκευή USB κολλάει ή τρίζει σε αποκλειστική λειτουργία"
+
+msgid "{} ms"
+msgstr "{} ms"
+
+msgid "The device is running at {}"
+msgstr "Η συσκευή λειτουργεί στα {}"
+
+msgid "{} refused exclusive output because {}. Playing shared on {}"
+msgstr "{}: η αποκλειστική έξοδος απορρίφθηκε ({}). Κοινόχρηστη αναπαραγωγή μέσω {}"
+
+msgid "Silence After a Rate Change"
+msgstr "Σιωπή μετά από αλλαγή ρυθμού"
+
+msgid "Exclusive output unavailable"
+msgstr "Η αποκλειστική έξοδος δεν είναι διαθέσιμη"
+
+msgid "Exclusive output was refused, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "Η αποκλειστική έξοδος απορρίφθηκε, οπότε το Melodia παίζει προς το παρόν σε κοινόχρηστη λειτουργία. Η ενότητα «Έξοδος» στις Ρυθμίσεις εξηγεί τον λόγο."
+
+msgid "{} refused exclusive output, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "{}: η αποκλειστική έξοδος απορρίφθηκε, οπότε το Melodia παίζει προς το παρόν σε κοινόχρηστη λειτουργία. Η ενότητα «Έξοδος» στις Ρυθμίσεις εξηγεί τον λόγο."
+
+msgid "Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off"
+msgstr "Ορισμένοι DAC σιγούν για λίγο όταν αλλάζουν ρυθμό δειγματοληψίας. Μια σύντομη σιωπή σε κάθε αλλαγή κρατά την αρχή του κομματιού ανέπαφη"
+
+msgid "Hardware Volume"
+msgstr "Ένταση υλικού"
+
+msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
+msgstr "Ρύθμιση του ελέγχου έντασης της ίδιας της συσκευής αντί για κλιμάκωση των δειγμάτων, ώστε το ρυθμιστικό έντασης να κρατά τον ήχο bit-perfect. Αυτός ο έλεγχος είναι η ένταση συστήματος της συσκευής και επανέρχεται όταν το Melodia αφήσει τη συσκευή. Οι συσκευές χωρίς δικό τους έλεγχο κρατούν την ένταση του Melodia"
+
+msgid "Give the Device Back When Paused"
+msgstr "Επιστροφή της συσκευής σε παύση"
+
+msgid "After five minutes paused, hand the device back so other apps can play through it. Pressing play takes it again"
+msgstr "Μετά από πέντε λεπτά σε παύση, η συσκευή επιστρέφεται ώστε άλλες εφαρμογές να μπορούν να παίξουν μέσω αυτής. Με την αναπαραγωγή το Melodia την ξαναπαίρνει"
+
+msgid "Unsupported Sample Rates"
+msgstr "Μη υποστηριζόμενοι ρυθμοί δειγματοληψίας"
+
+msgid "What exclusive output does when the device can't run a track's sample rate: hand the device back and play that track through the system mixer, or keep the device and convert the track to a rate it can run"
+msgstr "Τι κάνει η αποκλειστική έξοδος όταν η συσκευή δεν υποστηρίζει τον ρυθμό δειγματοληψίας ενός κομματιού: επιστρέφει τη συσκευή και παίζει αυτό το κομμάτι μέσω του μίκτη του συστήματος ή κρατά τη συσκευή και μετατρέπει το κομμάτι σε έναν ρυθμό που υποστηρίζει"
+
+msgid "Play Through the System Mixer"
+msgstr "Αναπαραγωγή μέσω του μίκτη του συστήματος"
+
+msgid "Resample and Keep Exclusive"
+msgstr "Μετατροπή και διατήρηση αποκλειστικότητας"
+
+msgid "{}% on the device"
+msgstr "{}% στη συσκευή"
+
+msgid "{}% (the device muted)"
+msgstr "{}% (η συσκευή σε σίγαση)"
+
+msgid "{}% (the device at {}%)"
+msgstr "{}% (η συσκευή στο {}%)"

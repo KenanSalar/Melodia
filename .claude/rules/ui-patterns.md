@@ -149,6 +149,14 @@ silently miss the other.
   *interactive* pill is `chip-group.slint`'s `Chip`. Deliberately not one component: one states a
   fact, the other configures something.
 
+- **`QualityChip` is the third, and neither of those**: it states the signal path's verdict and
+  opens the Output card, in the player bar only. It is outlined on the bar's ground so its dot is
+  the only colour it carries; an accent fill reads as a toggle left on beside repeat and shuffle.
+  With one mount it reads `SignalPathUi` and `Theme` directly, where a second mount on another
+  ground would take its brushes as inputs, `MetaChip`'s idiom. **The dot is `GradeDot`**
+  (`components/grade-dot.slint`), the one grade-to-colour mapping, shared with the Output card's
+  stage rows; a verdict's Fallback falls into the red arm with a conversion.
+
 - **`PopupSurface`** — every `PopupWindow` body wraps it. `pill: true` for vertical-pill.
 
 - **A surface that floats over the app edges with `Theme.surface2`, never `Theme.border`.** All
@@ -1277,7 +1285,7 @@ edit would otherwise reverse.
 
 ## The Settings page
 
-- **The page is tabbed** — 5 tabs over the same 15 section cards. `settings-view.slint` is page
+- **The page is tabbed** — 5 tabs over the same 18 section cards. `settings-view.slint` is page
   chrome only, `settings-tabs.slint` the router, `views/settings/pages/*.slint` the five pages,
   each owning its section list *and* an aggregate `has-matches`. **Search escapes the tabs**: a
   non-empty query mounts all five pages at once, which is how the cross-tab flat list comes back
@@ -1355,3 +1363,7 @@ edit would otherwise reverse.
   that is what keeps a resize cheap. Every width change re-runs the strip's binding through
   `SettingsPage.page-w`, and a repeater handed a model it can't match by pointer rebuilds every chip
   and swatch under it, tooltips included; see the repeater entry in `slint-pitfalls.md`.
+
+- **A slider on a card is `components/settings/setting-slider.slint`'s `SettingSlider`**, never a
+  `SliderTrack` and a `Text` laid out by hand. The crossfade duration and the resync hold are its
+  two mounts, and the component's header says what stays the host's.

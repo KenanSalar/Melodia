@@ -105,6 +105,81 @@ export global Settings {
     in-out property <bool> crossfade-fade-on-pause: false;
     callback crossfade-fade-on-pause-changed(bool);
 
+    // Applied to the engine synchronously, acted on at the next track. A rate change then plays
+    // without a crossfade, since a fade can't cross the reopen it needs. The row is hidden where
+    // following the rate changes nothing, which Rust decides per platform.
+    in-out property <bool> output-follow-rate: false;
+    callback output-follow-rate-changed(bool);
+    in property <bool> follow-rate-supported;
+
+    // Shared (0) or exclusive (1), and which card an exclusive claim takes, and shared output too
+    // where `shared-device-supported`. Rust lists the cards, whose names are data, and applies a
+    // pick off the UI thread, since claiming a card blocks. The rows are hidden where the platform
+    // has no exclusive backend.
+    in property <bool> exclusive-supported;
+    in property <bool> shared-device-supported;
+    // The picker's first row where it chooses for shared output too, standing for no saved card.
+    // Translated here because the rest of the list is Rust's.
+    pure callback output-device-system-default() -> string;
+    output-device-system-default => {
+        return @tr("System Default");
+    }
+    in-out property <int> output-mode-idx: 0;
+    out property <bool> exclusive-chosen: root.exclusive-supported && root.output-mode-idx == 1;
+    // The engine's own answer: exclusive output always follows the file's rate, and the toggle
+    // counts only where it can do anything.
+    out property <bool> rate-follows: root.exclusive-chosen
+        || (root.follow-rate-supported && root.output-follow-rate);
+    callback output-mode-changed(int);
+    // The confirmed Make Bit-Perfect from shared output: a pick of exclusive and the reset, in that
+    // order in one task, since the reset keeps the volume only where the claim carries it.
+    callback output-switch-to-bit-perfect();
+    in property <[string]> output-device-names;
+    in-out property <int> output-device-idx: -1;
+    callback output-device-changed(int);
+    // Asked as the picker mounts, as it opens and while it is on screen: a card plugged in or
+    // pulled announces nothing, so a list taken earlier can be missing it. Returns the
+    // `output-devices-revision` the answer will be published under, which the picker's popup
+    // waits for.
+    callback list-output-devices() -> int;
+    in property <int> output-devices-revision;
+    // What a claim does where the card lacks the file's rate: play shared (0), or resample to one
+    // of the card's rates and keep it (1). Applied like the pickers above, since a change reopens
+    // the claim, and hidden where the backend can't ask a card which other rates it runs.
+    in property <bool> rate-fallback-supported;
+    in-out property <int> output-rate-fallback-idx: 0;
+    callback output-rate-fallback-changed(int);
+    // The saved card is not among those listed.
+    in property <bool> output-device-missing;
+    // How an exclusive writer paces the card: a period chip, -1 where the saved period matches
+    // none of them, and polling in place of the card's events where the platform tells the two
+    // apart. Applied like the pickers above, since either reopens the card.
+    in-out property <int> output-period-idx: 2;
+    callback output-period-changed(int);
+    in property <bool> polling-supported;
+    in-out property <bool> output-polling: false;
+    callback output-polling-changed(bool);
+    // The card's own control carrying the volume, so the samples reach it untouched. Applied like
+    // the pickers above: a change reopens the claim, since moving the gain between the samples and
+    // the card mid-stream could play a period at the wrong level.
+    in property <bool> hardware-volume-supported;
+    in-out property <bool> output-hardware-volume: false;
+    callback output-hardware-volume-changed(bool);
+    // Give the card back once a pause has held it long enough. Not one of the pickers: it changes
+    // nothing about the claim, so a toggle applies at once and reopens nothing.
+    in-out property <bool> output-release-paused: false;
+    callback output-release-paused-changed(bool);
+    // Lands on the Playback tab, where the signal path reads in full: the quality chip's click and
+    // the refused claim's toast action. Here rather than on `SignalPathUi` because the toast's
+    // dispatcher already reaches this global and no sibling.
+    callback open-signal-path();
+    // The silence a reopen onto a new rate writes first, for the DACs that mute while they relock.
+    // The drag only moves the readout: nothing hears the value until the next rate change, so it
+    // goes to the engine and to disk together on release.
+    in-out property <float> output-resync-ms: 200;
+    in property <float> output-resync-max-ms: 1000;
+    callback output-resync-committed(int /* milliseconds */);
+
     // Rust owns every property here — the `ScrobbleService` status-watch subscriber is the single
     // writer — and the toggles route their events back to persist and refresh the shadow. Connect
     // is opened inline from the section markup rather than through a callback, dodging Slint's
@@ -245,6 +320,7 @@ export global Settings {
     in-out property <bool> overflow-shuffle;
     in-out property <bool> overflow-pin;
     in-out property <bool> overflow-queue;
+    in-out property <bool> overflow-quality;
     callback overflow-buttons-changed(string /*id*/, bool /*overflow-on*/);
 
     // `language-names` carries native-name labels, always in the language's own script and never
@@ -520,6 +596,22 @@ export global Settings {
     pure callback toast-radio-vote-title() -> string;
     toast-radio-vote-title => {
         return @tr("Vote not counted");
+    }
+    // The body is translated as well: the detail is only the refusing device's name, empty where
+    // it couldn't be found. The reason is left to the Output settings, where it reads in full.
+    pure callback toast-exclusive-refused-title() -> string;
+    toast-exclusive-refused-title => {
+        return @tr("Exclusive output unavailable");
+    }
+    pure callback toast-exclusive-refused-message(string /* device */) -> string;
+    toast-exclusive-refused-message(device) => {
+        return device == ""
+            ? @tr("Exclusive output was refused, so Melodia is playing shared for now. The Output section of Settings says why.")
+            : @tr("{} refused exclusive output, so Melodia is playing shared for now. The Output section of Settings says why.", device);
+    }
+    pure callback toast-exclusive-refused-action-label() -> string;
+    toast-exclusive-refused-action-label => {
+        return @tr("Details");
     }
     // The one toast kind whose body is localized too — a restart that couldn't
     // relaunch carries no path or error worth showing, only an instruction.

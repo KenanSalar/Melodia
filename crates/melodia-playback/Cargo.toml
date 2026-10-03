@@ -23,9 +23,40 @@ realfft.workspace = true
 tokio.workspace = true
 parking_lot.workspace = true
 log.workspace = true
+thiserror.workspace = true
+
+# The exclusive backend. `alsa` stays on the version cpal already resolves, since a newer one
+# is a second copy of it and of `alsa-sys`. `zbus` carries the card reservation and the
+# real-time request, on its blocking API only (see the root manifest). `rustix` supplies the
+# thread id and the RT-time limit rtkit asks for, and keeps `libc` out of this crate.
+[target.'cfg(target_os = "linux")'.dependencies]
+alsa = "0.11.0"
+zbus.workspace = true
+rustix = { version = "1.1.5", features = ["process", "thread"] }
+
+# The exclusive backend on Windows. `wasapi` wraps COM over the same `windows` release cpal
+# resolves, so it adds no second copy of it. `windows-sys` supplies the WASAPI error codes and
+# the MMCSS registration the writer thread asks for. `windows` itself is named for the one COM
+# interface `wasapi` doesn't wrap, the endpoint volume, and is held to that same release; every
+# feature it asks for is already on through the two above it.
+[target.'cfg(target_os = "windows")'.dependencies]
+wasapi = "0.24.0"
+windows-sys.workspace = true
+windows = { version = "0.62.2", features = [
+    "Win32_Media_Audio",
+    "Win32_Media_Audio_Endpoints",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
+] }
 
 [dev-dependencies]
 melodia-testkit = { path = "../melodia-testkit" }
+
+# Builds the `WasapiError` a refused claim arrives as. Held to the release `wasapi` resolves,
+# since the error it wraps is that release's type and any other is a second copy.
+[target.'cfg(target_os = "windows")'.dev-dependencies]
+windows-core = "0.62.2"
 
 [lints]
 workspace = true

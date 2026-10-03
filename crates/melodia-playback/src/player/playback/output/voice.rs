@@ -15,7 +15,9 @@
 
 use std::collections::VecDeque;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{
+    AtomicBool, AtomicU8, AtomicU16, AtomicU32, AtomicU64, AtomicUsize, Ordering,
+};
 use std::sync::mpsc::{Receiver, SyncSender, TryRecvError, sync_channel};
 use std::time::{Duration, Instant};
 
@@ -24,8 +26,18 @@ use parking_lot::Mutex;
 use super::super::dsp::AtomicF64;
 use super::convert::{Converter, Filled};
 use melodia_audio::player::source::audio::{
-    AudioSource, Sample, SampleRate, Shape, frames_in, frames_to_duration,
+    AudioSource, ChannelCount, Sample, SampleRate, Shape, SourceFormat, frames_in,
+    frames_to_duration,
 };
+
+/// What a voice is playing, as the signal path reads it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PlayingSource {
+    pub shape: Shape,
+    pub format: SourceFormat,
+    /// Whether anything between the decoder and the deck changed the samples.
+    pub dsp_engaged: bool,
+}
 
 /// How long a control op waits for the callback before giving up.
 ///
@@ -124,6 +136,21 @@ struct VoiceShared {
     /// behind it; the reverse pairing only ever mis-scales a count near zero.
     frames: AtomicU64,
     rate: AtomicU32,
+    /// Where the clock last started counting from: a mount, a seek, or a resume. Nothing before it
+    /// can still be in the device, so [`Voice::heard`] never reads earlier. Written with `frames`,
+    /// ahead of `rate`.
+    anchor: AtomicU64,
+    /// Frames the playing source's converter has pulled past the one it is writing, which the ear
+    /// trails the clock by as well as the device's lead. Written once per render.
+    converter_ahead: AtomicU64,
+    /// The rest of what [`Voice::playing`] reports. The source's own four are written with the
+    /// clock at takeover, ahead of `rate`; `dsp_engaged` once per render. A read that straddles a
+    /// handover can pair two tracks' answers, which the next read puts right.
+    source_channels: AtomicU16,
+    source_bits: AtomicU8,
+    source_float: AtomicBool,
+    source_lossy: AtomicBool,
+    dsp_engaged: AtomicBool,
     /// Commands sent, and commands the callback has drained. A control op that must land before it
     /// returns waits for the second to reach the first.
     issued: AtomicU64,
@@ -145,7 +172,6 @@ pub struct Voice {
     /// Behind a lock because a `Receiver` is not `Sync` and this side is shared; nothing contends
     /// it, the collector being one task.
     spent: Mutex<Receiver<Loaded>>,
-    device: Shape,
 }
 
 impl Voice {
@@ -168,7 +194,7 @@ impl Voice {
     /// ordering between them.
     pub fn append_at<S: AudioSource + 'static>(&self, source: S, position: Duration) {
         let frames = frames_in(position, source.sample_rate());
-        let loaded = self.load(source);
+        let loaded = Self::load(source);
         self.send_counted(Command::Append { loaded, frames });
     }
 
@@ -181,7 +207,7 @@ impl Voice {
     /// dry, takes no source from this.
     pub fn replace<S: AudioSource + 'static>(&self, source: S, position: Duration, mounted: u64) {
         let frames = frames_in(position, source.sample_rate());
-        let loaded = self.load(source);
+        let loaded = Self::load(source);
         self.send_counted(Command::Replace { loaded, frames, mounted });
     }
 
@@ -191,9 +217,9 @@ impl Voice {
         self.shared.mounted.load(Ordering::Acquire)
     }
 
-    /// Pair `source` with the converter that brings it to this device.
-    fn load<S: AudioSource + 'static>(&self, source: S) -> Loaded {
-        Loaded { converter: Converter::new(source.shape(), self.device), source: Box::new(source) }
+    /// Pair `source` with the converter that brings it to whatever device is open when it plays.
+    fn load<S: AudioSource + 'static>(source: S) -> Loaded {
+        Loaded { converter: Converter::new(source.shape()), source: Box::new(source) }
     }
 
     /// Send a command carrying a source, counting it before the callback can see it.
@@ -224,6 +250,7 @@ impl Voice {
             self.await_service();
         }
         self.shared.frames.store(0, Ordering::Relaxed);
+        self.shared.anchor.store(0, Ordering::Relaxed);
     }
 
     /// Free whatever the callback has finished with, here rather than there.
@@ -236,7 +263,16 @@ impl Voice {
         while spent.try_recv().is_ok() {}
     }
 
+    /// Start pulling again, from where the clock stopped.
+    ///
+    /// A resume re-anchors there first: through the pause the device played out everything the
+    /// voice had handed it, so the ear caught up with the clock and the lead starts over from
+    /// nothing. A voice already playing keeps its anchor, the ear still being a lead behind.
     pub fn play(&self) {
+        if self.is_paused() {
+            let paused_at = self.shared.frames.load(Ordering::Relaxed);
+            self.shared.anchor.store(paused_at, Ordering::Relaxed);
+        }
         self.shared.paused.store(false, Ordering::SeqCst);
     }
 
@@ -277,6 +313,53 @@ impl Voice {
             return Duration::ZERO;
         };
         frames_to_duration(self.shared.frames.load(Ordering::Relaxed), rate)
+    }
+
+    /// Whether the callback has drained every command sent so far. Until it has, the clock can
+    /// still read where the voice was: a seek's swap re-anchors it only once serviced.
+    pub fn is_settled(&self) -> bool {
+        let issued = self.shared.issued.load(Ordering::Acquire);
+        self.shared.serviced.load(Ordering::Acquire) >= issued
+    }
+
+    /// Where the ear is in the playing source: [`Self::position`] less the `lead` the device still
+    /// holds and the frames the converter pulled ahead of the one it is writing, never earlier
+    /// than the clock's anchor.
+    ///
+    /// The lead is device time, and at a speed other than one the device plays media faster or
+    /// slower than that, so it is scaled into the source's time first. The anchor is what keeps a
+    /// fresh start, a seek or a resume from reading before the point it began at while the device
+    /// is still playing out what came before it.
+    pub fn heard(&self, lead: Duration) -> Duration {
+        let Some(rate) = SampleRate::new(self.shared.rate.load(Ordering::Acquire)) else {
+            return Duration::ZERO;
+        };
+        let pulled = self.shared.frames.load(Ordering::Relaxed);
+        let anchor = self.shared.anchor.load(Ordering::Relaxed).min(pulled);
+        let media_lead = lead.as_secs_f64() * self.shared.speed.load();
+        let behind = frames_in(Duration::try_from_secs_f64(media_lead).unwrap_or_default(), rate)
+            .saturating_add(self.shared.converter_ahead.load(Ordering::Relaxed));
+        frames_to_duration(pulled.saturating_sub(behind).max(anchor), rate)
+    }
+
+    /// What the playing source is and whether anything above the deck altered its samples, or
+    /// `None` while nothing has mounted.
+    pub fn playing(&self) -> Option<PlayingSource> {
+        if self.is_empty() {
+            return None;
+        }
+        let rate = SampleRate::new(self.shared.rate.load(Ordering::Acquire))?;
+        let channels = ChannelCount::new(self.shared.source_channels.load(Ordering::Relaxed))?;
+        let format = SourceFormat {
+            bits: self.shared.source_bits.load(Ordering::Relaxed),
+            float: self.shared.source_float.load(Ordering::Relaxed),
+            lossy: self.shared.source_lossy.load(Ordering::Relaxed),
+        };
+        Some(PlayingSource {
+            shape: Shape { channels, rate },
+            format,
+            dsp_engaged: self.shared.dsp_engaged.load(Ordering::Relaxed),
+        })
     }
 
     /// Whether the callback will see `command`.
@@ -366,12 +449,18 @@ impl VoicePull {
             let Some(loaded) = self.current.as_mut() else {
                 break;
             };
-            let Filled { samples, source_frames } =
-                loaded.converter.fill(&mut block[written..], &mut *loaded.source, speed);
+            let Filled { samples, source_frames } = loaded.converter.fill(
+                &mut block[written..],
+                &mut *loaded.source,
+                self.device,
+                speed,
+            );
             written += samples;
             self.shared.frames.fetch_add(source_frames, Ordering::Relaxed);
             if loaded.converter.is_done() {
                 self.finish_current();
+            } else if loaded.converter.is_starved() {
+                self.hand_over_or_drain();
             }
         }
 
@@ -381,7 +470,19 @@ impl VoicePull {
                 *slot *= volume;
             }
         }
+        if let Some(loaded) = &self.current {
+            self.shared.dsp_engaged.store(loaded.source.dsp_engaged(), Ordering::Relaxed);
+            self.shared.converter_ahead.store(loaded.converter.frames_ahead(), Ordering::Relaxed);
+        }
         written
+    }
+
+    /// Render at `device` from here on, mid-source included.
+    ///
+    /// Only while no stream is pulling, which is what `output::AudioOutput::reopen` guarantees by
+    /// dropping the old stream first.
+    pub fn reshape(&mut self, device: Shape) {
+        self.device = device;
     }
 
     /// Drain the control side's commands.
@@ -390,7 +491,7 @@ impl VoicePull {
     /// per callback — so an op lands at the head of the next *step*, part way through a block. That
     /// is the cheap direction: a waiting control thread is released a step early instead of a block
     /// late, and one step of skew between the voices is what `LOCKSTEP_FRAMES` already bounds.
-    fn service(&mut self) {
+    pub(super) fn service(&mut self) {
         let seen = self.shared.issued.load(Ordering::Acquire);
         // Nothing issued since the last drain, which is every step of every block but the ones
         // carrying a transport op. Answering that from the counter keeps the channel, and the
@@ -427,8 +528,15 @@ impl VoicePull {
     /// Count first, rate last — the pair's ordering is argued on [`VoiceShared::frames`]. The
     /// ticket is its own `Release`, the control side comparing it and nothing else.
     fn start_at(&mut self, loaded: Loaded, frames: u64) {
+        let source = &loaded.source;
+        let format = source.format();
+        self.shared.source_channels.store(source.channels().get(), Ordering::Relaxed);
+        self.shared.source_bits.store(format.bits, Ordering::Relaxed);
+        self.shared.source_float.store(format.float, Ordering::Relaxed);
+        self.shared.source_lossy.store(format.lossy, Ordering::Relaxed);
         self.shared.frames.store(frames, Ordering::Relaxed);
-        self.shared.rate.store(loaded.source.sample_rate().get(), Ordering::Release);
+        self.shared.anchor.store(frames, Ordering::Relaxed);
+        self.shared.rate.store(source.sample_rate().get(), Ordering::Release);
         self.shared.mounted.fetch_add(1, Ordering::Release);
         self.current = Some(loaded);
     }
@@ -462,6 +570,27 @@ impl VoicePull {
         self.shared.sources.fetch_sub(1, Ordering::SeqCst);
     }
 
+    /// The playing source ran dry with its converter still owed frames.
+    ///
+    /// A staged successor of the same shape takes that converter over, so the frames the window
+    /// still holds play out against the successor's first ones and the seam is converted as one
+    /// stream. Anything else lets the window drain, and the successor starts on its own.
+    fn hand_over_or_drain(&mut self) {
+        let Some(current) = self.current.as_mut() else {
+            return;
+        };
+        let shape = current.source.shape();
+        if let Some(next) = self.staged.front_mut().filter(|next| next.source.shape() == shape) {
+            std::mem::swap(&mut current.converter, &mut next.converter);
+        } else {
+            current.converter.drain();
+            if !current.converter.is_done() {
+                return;
+            }
+        }
+        self.finish_current();
+    }
+
     /// The playing source ran out: retire it and take the staged one, if any.
     ///
     /// Retiring rather than dropping is what keeps the free off this thread while the visualizer's
@@ -486,6 +615,7 @@ impl VoicePull {
         }
         self.shared.sources.fetch_sub(dropped, Ordering::SeqCst);
         self.shared.frames.store(0, Ordering::Relaxed);
+        self.shared.anchor.store(0, Ordering::Relaxed);
     }
 
     /// Give up `spent`'s claims here and hand the rest back to be freed elsewhere.
@@ -510,13 +640,19 @@ pub fn pair(device: Shape) -> (Voice, VoicePull) {
         sources: AtomicUsize::new(0),
         frames: AtomicU64::new(0),
         rate: AtomicU32::new(0),
+        anchor: AtomicU64::new(0),
+        converter_ahead: AtomicU64::new(0),
+        source_channels: AtomicU16::new(0),
+        source_bits: AtomicU8::new(0),
+        source_float: AtomicBool::new(false),
+        source_lossy: AtomicBool::new(false),
+        dsp_engaged: AtomicBool::new(false),
         issued: AtomicU64::new(0),
         serviced: AtomicU64::new(0),
         mounted: AtomicU64::new(0),
     });
 
-    let voice =
-        Voice { shared: shared.clone(), commands: command_tx, spent: Mutex::new(spent_rx), device };
+    let voice = Voice { shared: shared.clone(), commands: command_tx, spent: Mutex::new(spent_rx) };
     let pull = VoicePull {
         shared,
         commands: command_rx,

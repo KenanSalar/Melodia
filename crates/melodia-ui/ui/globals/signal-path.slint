@@ -1,0 +1,76 @@
+import { Settings } from "../settings.slint";
+
+// What the playing track goes through on its way to the device, owned by
+// `crates/melodia-views/src/ui/settings/signal_path.rs` and graded in Rust by
+// `signal_path::evaluate`. Nothing here decides a grade. The verdict's words live here rather than
+// in the Output card, so the card and the quality chip can't say two different things.
+//
+// A grade is 0 clean, 1 enhanced (something the user chose), 2 converted. The verdict takes the
+// same three values, 0 reading as Bit-perfect, plus 3 for an exclusive claim that fell back to
+// shared and 4 for a lossy source. The `in` strings are data: rates, formats and the device's own
+// name, none of which translate.
+//
+// `fallback-reason` indexes the inline reason list in `output-section.slint`, in the order of
+// `ui::settings::signal_path::fallback_index`, and is -1 when nothing fell back.
+export global SignalPathUi {
+    in property <bool> playing;
+    in property <int> verdict;
+    in property <bool> exclusive;
+    in property <int> fallback-reason: -1;
+    // Who holds the card, where the reason is a reservation and the holder named itself.
+    in property <string> fallback-by;
+    // The device that refused, which is not `device-name`: that is where the audio went instead.
+    // Empty where the refusing device couldn't be found, as a disconnected one can't.
+    in property <string> refused-by;
+
+    in property <int> source-grade;
+    in property <int> dsp-grade;
+    in property <int> speed-grade;
+    in property <int> volume-grade;
+    in property <int> crossfade-grade;
+    in property <int> rate-grade;
+    in property <int> channels-grade;
+    in property <int> output-grade;
+
+    in property <string> source-format;
+    // Decoded from a lossy codec. Its own property, since a fallback outranks the verdict that
+    // would otherwise say so.
+    in property <bool> source-lossy;
+    in property <string> source-rate;
+    in property <string> device-rate;
+    in property <string> device-format;
+    in property <string> device-name;
+    // What the device takes per period, empty where the host wouldn't say.
+    in property <string> device-period;
+    in property <bool> eq-on;
+    in property <bool> rg-on;
+    // The device's own control carries the volume, which then changes no sample.
+    in property <bool> volume-on-device;
+    // That control as the claim read it, as the percentage its own slider shows, or -1 where
+    // nothing was read. It changes no sample either, so it grades nothing and only explains a
+    // quiet or silent device. With the volume on the device the level is Melodia's own, and only
+    // the switch says anything.
+    in property <int> device-level: -1;
+    in property <bool> device-muted;
+    in property <bool> muted;
+    in property <int> volume;
+    in property <string> speed;
+
+    out property <string> verdict-text: !root.playing ? @tr("Nothing is playing")
+        : root.verdict == 0 ? @tr("Bit-perfect: the device receives the decoder's samples untouched")
+        : root.verdict == 1 ? @tr("Enhanced: only effects you chose change the sound")
+        : root.verdict == 3 ? @tr("Fallback: exclusive output was refused, so the system mixer is in the way")
+        : root.verdict == 4 ? @tr("Lossy: the file is compressed, so the device gets the decoder's reconstruction of the recording")
+        : @tr("Converted: the sound is changed on its way to the device");
+    out property <string> verdict-label: root.verdict == 0 ? @tr("Bit-perfect")
+        : root.verdict == 1 ? @tr("Enhanced")
+        : root.verdict == 3 ? @tr("Fallback")
+        : root.verdict == 4 ? @tr("Lossy")
+        : @tr("Converted");
+
+    // Whether the quality chip has anything to say. Only under exclusive output: shared output
+    // always grades Converted, and a red chip on every default install would read as a fault.
+    out property <bool> chip-shown: root.playing && Settings.exclusive-chosen;
+
+    callback make-bit-perfect();
+}

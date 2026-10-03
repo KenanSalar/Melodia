@@ -14,7 +14,9 @@ pub fn read_settings(paths: &Paths) -> AppResult<SettingsData> {
     Ok(settings)
 }
 
-pub fn write_settings(paths: &Paths, settings: &SettingsData) -> AppResult<()> {
+/// The whole file, unlocked. Crate-private: every writer goes through the `mutate_settings`
+/// family, and only a test fixture seeding a fresh root may write a file wholesale.
+pub(crate) fn write_settings(paths: &Paths, settings: &SettingsData) -> AppResult<()> {
     melodia_core::utils::atomic_file::write_json_sync(&paths.settings_path, settings)
         .map_err(|e| AppError::Settings(format!("Failed to write settings: {e}")))
 }
@@ -22,9 +24,8 @@ pub fn write_settings(paths: &Paths, settings: &SettingsData) -> AppResult<()> {
 /// Process-wide lock around `settings.json` mutation. Held by `mutate_settings`
 /// for the entire read→mutate→write window so a burst of UI events (e.g. a
 /// rapid theme + variant + accent click sequence) can't interleave their read
-/// snapshots and lose updates. Plain `read_settings` and `write_settings` stay
-/// lock-free — single-shot reads and full-replacement writes are inherently
-/// race-free against each other.
+/// snapshots and lose updates. A plain `read_settings` stays lock-free; writing
+/// back what one returned is exactly the lost update this lock exists to stop.
 static MUTATE_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
 
 /// Atomically read → mutate → write `settings.json`. Serializes against every
@@ -56,4 +57,18 @@ where
     let out = mutate(&mut settings);
     write_settings(paths, &settings)?;
     Ok(out)
+}
+
+/// [`mutate_settings`] for a caller that often changes nothing: the file is written only when the
+/// closure returns `true`, still under `MUTATE_LOCK`.
+pub fn mutate_settings_if<F>(paths: &Paths, mutate: F) -> AppResult<()>
+where
+    F: FnOnce(&mut SettingsData) -> bool,
+{
+    let _guard = MUTATE_LOCK.lock();
+    let mut settings = read_settings(paths)?;
+    if mutate(&mut settings) {
+        write_settings(paths, &settings)?;
+    }
+    Ok(())
 }

@@ -1,10 +1,8 @@
 //! Tests for the counters the audio device's error callback writes into.
 
-use std::sync::Arc;
-
 use cpal::{Error, ErrorKind};
 
-use super::{AudioStreamHealth, error_callback};
+use super::AudioStreamHealth;
 
 fn backend(description: &str) -> Error {
     Error::with_message(ErrorKind::BackendError, description.to_owned())
@@ -117,16 +115,29 @@ fn a_window_with_no_unclassified_error_carries_no_description() {
     assert!(report.first_other_error.is_none());
 }
 
-/// `output::device::open` clones the callback once per configuration its ladder
-/// retries, so every clone has to reach the same counters.
+/// The reopen path takes the loss on its own, and whichever of it and the drain swaps first owns
+/// the event: the other must not see the same loss and reopen a second time.
 #[test]
-fn a_cloned_callback_writes_to_the_same_counters() {
-    let health = Arc::new(AudioStreamHealth::default());
-    let mut callback = error_callback(Arc::clone(&health));
-    let mut retry = callback.clone();
+fn taking_a_lost_device_takes_it_from_the_drain() {
+    let health = AudioStreamHealth::default();
+    health.record(&ErrorKind::DeviceNotAvailable.into());
+    health.record(&ErrorKind::Xrun.into());
 
-    callback(ErrorKind::Xrun.into());
-    retry(ErrorKind::Xrun.into());
+    assert!(health.take_device_lost());
+    assert!(!health.take_device_lost(), "a loss is taken once");
+    let report = health.drain();
+    assert!(!report.device_lost, "the drain saw a loss already taken");
+    assert_eq!(report.underruns, 1, "taking the loss must leave the counters to the drain");
+}
 
-    assert_eq!(health.drain().underruns, 2);
+/// The stall watch compares two reads, so the count is never reset by a drain: resetting it would
+/// read as a callback that stopped.
+#[test]
+fn the_heartbeat_counts_blocks_and_survives_a_drain() {
+    let health = AudioStreamHealth::default();
+    health.beat();
+    health.beat();
+    let _ = health.drain();
+
+    assert_eq!(health.blocks(), 2);
 }

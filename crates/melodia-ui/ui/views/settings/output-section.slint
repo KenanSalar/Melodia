@@ -1,0 +1,413 @@
+import { Theme } from "../../theme.slint";
+import { Settings } from "../../settings.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
+import { SignalPathUi } from "../../globals/signal-path.slint";
+import { Dialog } from "../../globals/dialog.slint";
+import { SectionCard } from "../../components/settings/section-card.slint";
+import { SectionButton } from "../../components/settings/section-button.slint";
+import { SectionDivider } from "../../components/settings/section-divider.slint";
+import { SettingRow } from "../../components/settings/setting-row.slint";
+import { SettingRowStacked } from "../../components/settings/setting-row-stacked.slint";
+import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
+import { ChipGroup } from "../../components/settings/chip-group.slint";
+import { Dropdown } from "../../components/settings/dropdown.slint";
+import { SettingSlider } from "../../components/settings/setting-slider.slint";
+import { GradeDot } from "../../components/grade-dot.slint";
+
+// One step of the signal path: a dot in its grade's colour, what the step is, and what it did.
+// Denser than a `SettingRow` because eight of them sit under one heading; the dot takes the icon
+// column so the labels line up with the rows above.
+component StageRow inherits HorizontalLayout {
+    in property <int> grade;
+    in property <string> label;
+    in property <string> value;
+
+    padding-left: Theme.pad-lg;
+    padding-right: Theme.pad-lg;
+    padding-top: Theme.pad-xs;
+    padding-bottom: Theme.pad-xs;
+    spacing: Theme.pad-lg;
+
+    Rectangle {
+        width: SettingsPage.row-icon-w;
+        GradeDot { grade: root.grade; }
+    }
+    Text {
+        text: root.label;
+        color: Theme.text;
+        font-size: Theme.font-size-sm;
+        vertical-alignment: center;
+    }
+    Text {
+        text: root.value;
+        color: Theme.text-muted;
+        font-size: Theme.font-size-sm;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+        horizontal-stretch: 1;
+        wrap: word-wrap;
+    }
+}
+
+// How the audio device is opened, and what the playing track goes through to reach it. Search
+// visibility follows `playback-section.slint`.
+export component OutputSection inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    in property <string> tab-name;
+
+    property <string> card-title: @tr("Output");
+
+    pure function row-visible(label: string, desc: string) -> bool {
+        return SettingsPage.row-visible(root.tab-name, root.card-title,
+                                        label + " " + desc,
+                                        SettingsPage.search-query);
+    }
+
+    // A slider fraction as the whole ten milliseconds the readout shows.
+    pure function resync-step(fraction: float) -> float {
+        return round(fraction * Settings.output-resync-max-ms / 10) * 10;
+    }
+
+    property <string> mode-label: @tr("Output Mode");
+    property <string> mode-desc: @tr("Exclusive gives Melodia the audio device alone: other apps can't play through it while Melodia plays, and the system mixer can't change the sound");
+
+    property <string> device-label: Settings.shared-device-supported ? @tr("Output Device")
+        : @tr("Exclusive Device");
+    property <string> device-desc: Settings.shared-device-supported
+        ? @tr("The sound card Melodia plays through")
+        : @tr("The sound card exclusive output takes");
+
+    property <string> rate-fallback-label: @tr("Unsupported Sample Rates");
+    property <string> rate-fallback-desc: @tr("What exclusive output does when the device can't run a track's sample rate: hand the device back and play that track through the system mixer, or keep the device and convert the track to a rate it can run");
+
+    property <string> period-label: @tr("Buffer Period");
+    property <string> period-desc: @tr("How much audio the device is handed at a time. Longer periods ride out a busy system; shorter ones react sooner");
+
+    property <string> polling-label: @tr("Polling Mode");
+    property <string> polling-desc: @tr("Top the device up on a timer instead of waiting for it to ask. Try it if a USB device stutters or crackles in exclusive mode");
+
+    property <string> hardware-volume-label: @tr("Hardware Volume");
+    property <string> hardware-volume-desc: @tr("Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume");
+
+    property <string> release-label: @tr("Give the Device Back When Paused");
+    property <string> release-desc: @tr("After five minutes paused, hand the device back so other apps can play through it. Pressing play takes it again");
+
+    property <string> resync-label: @tr("Silence After a Rate Change");
+    property <string> resync-desc: @tr("Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off");
+
+    property <string> follow-rate-label: @tr("Match the File's Sample Rate");
+    property <string> follow-rate-desc: @tr("Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate");
+
+    property <string> signal-label: @tr("Signal Path");
+    property <string> signal-desc: @tr("What reaches the audio device, and what changes it on the way. Bit-perfect means nothing does");
+
+    property <bool> show-mode: Settings.exclusive-supported && row-visible(mode-label, mode-desc);
+    property <bool> show-device: (Settings.exclusive-chosen || Settings.shared-device-supported)
+        && row-visible(device-label, device-desc);
+    property <bool> show-rate-fallback: Settings.exclusive-chosen && Settings.rate-fallback-supported
+        && row-visible(rate-fallback-label, rate-fallback-desc);
+    property <bool> show-period: Settings.exclusive-chosen && row-visible(period-label, period-desc);
+    property <bool> show-polling: Settings.exclusive-chosen && Settings.polling-supported
+        && row-visible(polling-label, polling-desc);
+    property <bool> show-hardware-volume: Settings.exclusive-chosen && Settings.hardware-volume-supported
+        && row-visible(hardware-volume-label, hardware-volume-desc);
+    property <bool> show-release: Settings.exclusive-chosen && row-visible(release-label, release-desc);
+    // Exclusive output always follows the file's rate, so the toggle has nothing to add there.
+    property <bool> show-follow-rate: Settings.follow-rate-supported && !Settings.exclusive-chosen
+        && row-visible(follow-rate-label, follow-rate-desc);
+    // The hold falls only where the output changes rate.
+    property <bool> show-resync: Settings.rate-follows && row-visible(resync-label, resync-desc);
+    property <bool> show-signal-path: row-visible(signal-label, signal-desc);
+
+    // Whether any row above each exclusive row is shown, for the divider over it.
+    property <bool> any-above-rate-fallback: root.show-mode || root.show-device;
+    property <bool> any-above-period: root.any-above-rate-fallback || root.show-rate-fallback;
+    property <bool> any-above-polling: root.any-above-period || root.show-period;
+    property <bool> any-above-hardware-volume: root.any-above-polling || root.show-polling;
+    property <bool> any-above-release: root.any-above-hardware-volume || root.show-hardware-volume;
+
+    // What the rows above the signal path hand the divider under them.
+    property <bool> shows-exclusive-rows: root.any-above-release || root.show-release;
+    property <bool> shows-rate-rows: root.show-follow-rate || root.show-resync;
+
+    out property <bool> has-matches: shows-exclusive-rows || shows-rate-rows || show-signal-path;
+
+    // The stages a click can put right. A resample counts only where following the file's rate is
+    // the setting that would stop it, a volume on the device's own control only while muted (the
+    // reset never raises the device, only unmutes it), and shared output only where exclusive is
+    // there to switch to.
+    property <bool> can-reset: SignalPathUi.playing && (SignalPathUi.dsp-grade > 0
+        || SignalPathUi.speed-grade > 0
+        || (SignalPathUi.volume-grade > 0
+            && (SignalPathUi.muted || !SignalPathUi.volume-on-device))
+        || (SignalPathUi.rate-grade > 0 && Settings.follow-rate-supported
+            && !Settings.rate-follows)
+        || (SignalPathUi.output-grade > 0 && root.switches-to-exclusive));
+
+    // The reset leaves shared output by taking the device, which also takes the system volume out
+    // of the path, so the switch is asked for rather than made.
+    property <bool> switches-to-exclusive: Settings.exclusive-supported && !Settings.exclusive-chosen;
+
+    // Indexed by `SignalPathUi.fallback-reason`; the order is Rust's, see that property.
+    property <string> fallback-text: SignalPathUi.fallback-reason == 0 ? @tr("the device is in use by another app")
+        : SignalPathUi.fallback-reason == 1 && SignalPathUi.fallback-by != "" ? @tr("{} holds the device", SignalPathUi.fallback-by)
+        : SignalPathUi.fallback-reason == 1 ? @tr("another app holds the device")
+        : SignalPathUi.fallback-reason == 2 ? @tr("the device can't run at this sample rate")
+        : SignalPathUi.fallback-reason == 3 ? @tr("the device can't play this many channels")
+        : SignalPathUi.fallback-reason == 4 ? @tr("the device takes no sample format that holds this track")
+        : SignalPathUi.fallback-reason == 5 ? @tr("the chosen device isn't connected")
+        : SignalPathUi.fallback-reason == 6 ? @tr("exclusive output isn't available on this system")
+        : SignalPathUi.fallback-reason == 8 ? @tr("the device doesn't allow exclusive control, which its Advanced properties in the Sound control panel can turn on")
+        : @tr("the device couldn't be opened");
+
+    property <string> effects-text: SignalPathUi.dsp-grade == 0 ? @tr("No effects")
+        : SignalPathUi.eq-on && SignalPathUi.rg-on ? @tr("Equalizer and ReplayGain")
+        : SignalPathUi.rg-on ? @tr("ReplayGain")
+        : @tr("Equalizer");
+
+    property <string> device-text: SignalPathUi.device-name == "" ? SignalPathUi.device-format
+        : SignalPathUi.device-name + " · " + SignalPathUi.device-format;
+
+    // Wrapper so the root's preferred-height tracks the card's natural height. See
+    // `language-section.slint`.
+    VerticalLayout {
+    if has-matches: SectionCard {
+        title: root.card-title;
+
+        if root.show-mode: SettingRowStacked {
+            icon: "volume_up";
+            label: root.mode-label;
+            description: root.mode-desc;
+            ChipGroup {
+                options: [
+                    @tr("Shared"),
+                    @tr("Exclusive"),
+                ];
+                selected-index <=> Settings.output-mode-idx;
+                selected(i) => { Settings.output-mode-changed(i); }
+            }
+        }
+
+        if root.show-mode && root.show-device: SectionDivider {}
+
+        if root.show-device: SettingRow {
+            icon: "tune";
+            label: root.device-label;
+            description: root.device-desc;
+            Dropdown {
+                options: Settings.output-device-names;
+                options-revision: Settings.output-devices-revision;
+                selected-index <=> Settings.output-device-idx;
+                placeholder: Settings.output-device-missing ? @tr("Not connected") : "";
+                trigger-width: 200px;
+                popup-align-end: true;
+                // The row mounts on arriving at the page, and on choosing exclusive output where it
+                // picks for exclusive alone.
+                init => { Settings.list-output-devices(); }
+                about-to-open => { Settings.list-output-devices() }
+                selected(idx) => { Settings.output-device-changed(idx); }
+            }
+            // Keeps the label true across a replug with the row on screen. Rust rewrites the
+            // options only when the cards changed, so an open popup is left alone otherwise.
+            Timer {
+                interval: 2s;
+                running: true;
+                triggered => { Settings.list-output-devices(); }
+            }
+        }
+
+        if root.any-above-rate-fallback && root.show-rate-fallback: SectionDivider {}
+
+        if root.show-rate-fallback: SettingRowStacked {
+            icon: "swap_horiz";
+            label: root.rate-fallback-label;
+            description: root.rate-fallback-desc;
+            ChipGroup {
+                // The order is `ui::settings::output_settings::rate_fallback_index`'.
+                options: [
+                    @tr("Play Through the System Mixer"),
+                    @tr("Resample and Keep Exclusive"),
+                ];
+                selected-index <=> Settings.output-rate-fallback-idx;
+                selected(i) => { Settings.output-rate-fallback-changed(i); }
+            }
+        }
+
+        if root.any-above-period && root.show-period: SectionDivider {}
+
+        if root.show-period: SettingRowStacked {
+            icon: "history";
+            label: root.period-label;
+            description: root.period-desc;
+            ChipGroup {
+                // The order is `ui::settings::output_settings::PERIOD_PRESETS`'.
+                options: [
+                    @tr("{} ms", 5),
+                    @tr("{} ms", 10),
+                    @tr("{} ms", 20),
+                    @tr("{} ms", 50),
+                    @tr("{} ms", 100),
+                ];
+                selected-index <=> Settings.output-period-idx;
+                selected(i) => { Settings.output-period-changed(i); }
+            }
+            // What the device took, which a driver rounds to its own step.
+            if SignalPathUi.playing && SignalPathUi.exclusive && SignalPathUi.device-period != "": Text {
+                text: @tr("The device is running at {}", SignalPathUi.device-period);
+                color: Theme.text-muted;
+                font-size: Theme.font-size-sm;
+                wrap: word-wrap;
+            }
+        }
+
+        if root.any-above-polling && root.show-polling: SectionDivider {}
+
+        if root.show-polling: SettingRow {
+            icon: "refresh";
+            label: root.polling-label;
+            description: root.polling-desc;
+            ToggleSwitch {
+                checked <=> Settings.output-polling;
+                toggled(v) => { Settings.output-polling-changed(v); }
+            }
+        }
+
+        if root.any-above-hardware-volume && root.show-hardware-volume: SectionDivider {}
+
+        if root.show-hardware-volume: SettingRow {
+            icon: "volume_down";
+            label: root.hardware-volume-label;
+            description: root.hardware-volume-desc;
+            ToggleSwitch {
+                checked <=> Settings.output-hardware-volume;
+                toggled(v) => { Settings.output-hardware-volume-changed(v); }
+            }
+        }
+
+        if root.any-above-release && root.show-release: SectionDivider {}
+
+        if root.show-release: SettingRow {
+            icon: "pause";
+            label: root.release-label;
+            description: root.release-desc;
+            ToggleSwitch {
+                checked <=> Settings.output-release-paused;
+                toggled(v) => { Settings.output-release-paused-changed(v); }
+            }
+        }
+
+        if root.shows-exclusive-rows && root.show-follow-rate: SectionDivider {}
+
+        if root.show-follow-rate: SettingRow {
+            icon: "speed";
+            label: root.follow-rate-label;
+            description: root.follow-rate-desc;
+            ToggleSwitch {
+                checked <=> Settings.output-follow-rate;
+                toggled(v) => { Settings.output-follow-rate-changed(v); }
+            }
+        }
+
+        if (root.shows-exclusive-rows || root.show-follow-rate) && root.show-resync: SectionDivider {}
+
+        if root.show-resync: SettingRowStacked {
+            icon: "volume_off";
+            label: root.resync-label;
+            description: root.resync-desc;
+            SettingSlider {
+                value: Settings.output-resync-ms / Settings.output-resync-max-ms;
+                readout: @tr("{} ms", Settings.output-resync-ms);
+                readout-width: 56px;
+                changed(v) => { Settings.output-resync-ms = root.resync-step(v); }
+                committed(v) => { Settings.output-resync-committed(root.resync-step(v)); }
+            }
+        }
+
+        if (root.shows-exclusive-rows || root.shows-rate-rows) && root.show-signal-path: SectionDivider {}
+
+        if root.show-signal-path: SettingRow {
+            icon: "graphic_eq";
+            label: root.signal-label;
+            description: SignalPathUi.verdict-text;
+            if root.can-reset: SectionButton {
+                label: @tr("Make Bit-Perfect");
+                icon: "";
+                primary: false;
+                clicked => {
+                    if !root.switches-to-exclusive {
+                        SignalPathUi.make-bit-perfect();
+                        return;
+                    }
+                    Dialog.kind = "bit-perfect-exclusive";
+                    Dialog.title = @tr("Switch to Exclusive Output?");
+                    Dialog.message = @tr("Bit-perfect playback needs exclusive output. Other apps can't play through the device while Melodia does, and the system volume stops applying: Melodia's own volume goes to full unless Hardware Volume is on.");
+                    Dialog.confirm-label = @tr("Switch");
+                    Dialog.cancel-label = @tr("Cancel");
+                    Dialog.destructive = false;
+                    Dialog.open = true;
+                }
+            }
+        }
+
+        if root.show-signal-path && SignalPathUi.playing: VerticalLayout {
+            padding-bottom: Theme.pad-md;
+
+            StageRow {
+                grade: SignalPathUi.source-grade;
+                label: @tr("Source");
+                value: SignalPathUi.source-grade == 0 ? SignalPathUi.source-format
+                    : SignalPathUi.source-lossy ? @tr("{}, decoded from a lossy codec", SignalPathUi.source-format)
+                    : @tr("{}, rounded to fit 32-bit float", SignalPathUi.source-format);
+            }
+            StageRow {
+                grade: SignalPathUi.dsp-grade;
+                label: @tr("Effects");
+                value: root.effects-text;
+            }
+            StageRow {
+                grade: SignalPathUi.speed-grade;
+                label: @tr("Speed");
+                value: SignalPathUi.speed-grade == 0 ? @tr("Normal") : SignalPathUi.speed;
+            }
+            StageRow {
+                grade: SignalPathUi.volume-grade;
+                label: @tr("Volume");
+                value: SignalPathUi.muted ? @tr("Muted")
+                    : SignalPathUi.device-muted ? @tr("{}% (the device muted)", SignalPathUi.volume)
+                    : SignalPathUi.volume-on-device ? @tr("{}% on the device", SignalPathUi.volume)
+                    : SignalPathUi.device-level >= 0 && SignalPathUi.device-level < 100
+                        ? @tr("{}% (the device at {}%)", SignalPathUi.volume, SignalPathUi.device-level)
+                    : SignalPathUi.volume + "%";
+            }
+            StageRow {
+                grade: SignalPathUi.crossfade-grade;
+                label: @tr("Crossfade");
+                value: SignalPathUi.crossfade-grade == 0 ? @tr("Not fading") : @tr("Fading between tracks");
+            }
+            StageRow {
+                grade: SignalPathUi.rate-grade;
+                label: @tr("Sample Rate");
+                value: SignalPathUi.rate-grade == 0 ? SignalPathUi.source-rate
+                    : @tr("{} resampled to {}", SignalPathUi.source-rate, SignalPathUi.device-rate);
+            }
+            StageRow {
+                grade: SignalPathUi.channels-grade;
+                label: @tr("Channels");
+                value: SignalPathUi.channels-grade == 0 ? @tr("Unchanged") : @tr("Mixed down for the device");
+            }
+            StageRow {
+                grade: SignalPathUi.output-grade;
+                label: @tr("Device");
+                value: SignalPathUi.fallback-reason >= 0 && SignalPathUi.refused-by != "" ? @tr("{} refused exclusive output because {}. Playing shared on {}", SignalPathUi.refused-by, root.fallback-text, root.device-text)
+                    : SignalPathUi.fallback-reason >= 0 ? @tr("{}, shared: exclusive output was refused because {}", root.device-text, root.fallback-text)
+                    : !SignalPathUi.exclusive ? @tr("{}, shared: the system mixer may still convert it", root.device-text)
+                    : SignalPathUi.output-grade == 0 ? @tr("{}, exclusive", root.device-text)
+                    : @tr("{}, exclusive, in a format that can't hold the source exactly", root.device-text);
+            }
+        }
+    }
+    }
+}
