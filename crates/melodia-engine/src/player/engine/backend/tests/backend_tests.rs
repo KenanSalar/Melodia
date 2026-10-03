@@ -174,3 +174,51 @@ async fn a_next_track_that_wont_open_is_never_faded_into() -> Result<(), AppErro
     assert!(reopens);
     Ok(())
 }
+
+/// A next track the output plays as it is comes back opened, ready to stage behind this one.
+#[tokio::test]
+async fn a_next_track_that_plays_as_it_is_is_handed_back_to_stage() -> Result<(), AppError> {
+    let engine = engine_without_a_card()?;
+    let next = Path::new(ASSETS_DIR).join("silence.wav");
+
+    let staged = engine.open_for_gapless(&next.to_string_lossy());
+
+    assert!(matches!(staged, Ok(Some(_))));
+    Ok(())
+}
+
+/// The preload asks on every tick until the track ends, so a file that wouldn't open is refused on
+/// what the first ask found. Mending it in between shows it: a second open would now succeed.
+#[tokio::test]
+async fn a_next_track_that_wont_open_is_opened_once_for_every_gapless_ask() -> Result<(), AppError>
+{
+    let engine = engine_without_a_card()?;
+    let dir = tempfile::tempdir()?;
+    let next = dir.path().join("next.wav");
+    std::fs::write(&next, b"not audio")?;
+    let first = engine.open_for_gapless(&next.to_string_lossy());
+    std::fs::copy(Path::new(ASSETS_DIR).join("silence.wav"), &next)?;
+
+    let second = engine.open_for_gapless(&next.to_string_lossy());
+
+    let asks = (first.is_err(), second.map(|decoded| decoded.is_some()).ok());
+    assert_eq!(asks, (true, Some(false)), "(the first refused, the second staged)");
+    Ok(())
+}
+
+/// The crossfade's ask and the preload's read one record of the next track, so the file is opened
+/// once between them rather than once by each.
+#[tokio::test]
+async fn the_crossfade_and_the_preload_share_one_open_of_the_next_track() -> Result<(), AppError> {
+    let engine = engine_without_a_card()?;
+    let dir = tempfile::tempdir()?;
+    let next = dir.path().join("next.wav");
+    std::fs::write(&next, b"not audio")?;
+    let _reopens = engine.reopens_for(&next.to_string_lossy());
+    std::fs::copy(Path::new(ASSETS_DIR).join("silence.wav"), &next)?;
+
+    let staged = engine.open_for_gapless(&next.to_string_lossy());
+
+    assert!(matches!(staged, Ok(None)), "the preload opened the file again");
+    Ok(())
+}

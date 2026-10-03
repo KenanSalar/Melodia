@@ -928,6 +928,26 @@ fn the_rate_fallback_is_written_and_read_by_its_token() -> Result<(), AppError> 
     Ok(())
 }
 
+/// The mode's token, held for the same reason as the rate fallback's: an exclusive install that
+/// read back as shared would quietly stop claiming its device.
+#[test]
+fn the_output_mode_is_written_and_read_by_its_token() -> Result<(), AppError> {
+    let rows = [(OutputMode::Shared, "shared"), (OutputMode::Exclusive, "exclusive")];
+    for (mode, token) in rows {
+        let flags = OutputFlags { output_mode: mode, ..OutputFlags::default() };
+        let written = serde_json::to_value(&flags).map_err(|e| json_err(&e))?;
+        let read: OutputFlags = serde_json::from_value(serde_json::json!({ "output_mode": token }))
+            .map_err(|e| json_err(&e))?;
+
+        assert_eq!(
+            (written["output_mode"].clone(), read.output_mode),
+            (serde_json::json!(token), mode),
+            "{token}"
+        );
+    }
+    Ok(())
+}
+
 /// The long pause's token, held for the same reason as the rate fallback's.
 #[test]
 fn the_paused_device_is_written_and_read_by_its_token() -> Result<(), AppError> {

@@ -397,6 +397,20 @@ fn a_replace_lands_while_a_successor_is_only_staged() {
     assert_eq!(voice.len(), 2, "the staged successor should still be waiting behind the seek");
 }
 
+/// A seek's swap re-anchors the clock only once the callback takes it, so until then the voice
+/// reads where it was. A voice nothing was sent to has nothing outstanding.
+#[test]
+fn a_voice_is_unsettled_from_a_send_until_the_callback_takes_it() {
+    let (voice, mut pull) = pair(mono(RATE));
+    let fresh = voice.is_settled();
+    voice.append(seconds_of(1, RATE));
+    let sent = voice.is_settled();
+
+    pump(&mut pull, 64);
+
+    assert_eq!((fresh, sent, voice.is_settled()), (true, false, true), "(fresh, sent, taken)");
+}
+
 /// The converter is built against the source's own shape, so a second source at a different rate
 /// gets its own rather than inheriting whatever the first one negotiated. This is the fault
 /// `crates/melodia/tests/stream_rate.rs` covers end to end, asked at the level it now lives at.
@@ -415,24 +429,27 @@ fn a_second_source_is_converted_from_its_own_rate() {
 }
 
 /// A gapless seam at another rate is converted as one stream: the successor takes the converter
-/// over, window and fraction both. Restarting the kernel at the seam would leave half its width of
-/// silence either side, a tick on every continuous album the device can't play at its own rate.
+/// over, window, fraction and weights. Restarting the kernel at the seam would leave half its width
+/// of silence either side, a tick on every continuous album the device can't play at its own rate.
+/// A whole-number step is a row of its own, being the one that keeps its weights frame to frame.
 #[test]
 fn a_gapless_seam_at_another_rate_renders_exactly_like_the_unsplit_source() {
     const SEAM: usize = 1_001;
     let device = mono(48_000);
-    let mut tone = vec![0.0; 4_410];
-    fill_sine(&mut tone, 1_000.0, 44_100.0, 0.5);
-    let (unsplit, mut unsplit_pull) = pair(device);
-    unsplit.append(TestSource::new(tone.clone(), 1, RATE));
-    let (split, mut split_pull) = pair(device);
-    split.append(TestSource::new(tone[..SEAM].to_vec(), 1, RATE));
-    split.append(TestSource::new(tone[SEAM..].to_vec(), 1, RATE));
+    for (rate, rate_hz) in [(RATE, 44_100.0), (96_000, 96_000.0)] {
+        let mut tone = vec![0.0; 4_410];
+        fill_sine(&mut tone, 1_000.0, rate_hz, 0.5);
+        let (unsplit, mut unsplit_pull) = pair(device);
+        unsplit.append(TestSource::new(tone.clone(), 1, rate));
+        let (split, mut split_pull) = pair(device);
+        split.append(TestSource::new(tone[..SEAM].to_vec(), 1, rate));
+        split.append(TestSource::new(tone[SEAM..].to_vec(), 1, rate));
 
-    let whole = pump(&mut unsplit_pull, 8_192);
-    let seamed = pump(&mut split_pull, 8_192);
+        let whole = pump(&mut unsplit_pull, 8_192);
+        let seamed = pump(&mut split_pull, 8_192);
 
-    assert_eq!(bits(&seamed), bits(&whole));
+        assert_eq!(bits(&seamed), bits(&whole), "{rate} Hz");
+    }
 }
 
 /// A source's own `sample_rate` is what the clock divides by, so it has to follow the source rather

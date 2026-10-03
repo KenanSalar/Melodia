@@ -202,8 +202,31 @@ fn a_narrower_device_wider_than_mono_still_carries_the_channels_it_can() {
 /// source's own sample, with no pan-law trim between the decoder and the card.
 #[test]
 fn mono_reaches_a_stereo_device_at_unity_on_both_channels() {
-    let (out, _) = remap(vec![0.5, -0.25], 1, 2);
-    assert_eq!(bits(&out), bits(&[0.5, 0.5, -0.25, -0.25]));
+    let (out, _) = remap(vec![0.5, -0.25, -0.0], 1, 2);
+    assert_eq!(bits(&out), bits(&[0.5, 0.5, -0.25, -0.25, -0.0, -0.0]));
+}
+
+/// Resampled, a mono source is interpolated once for both channels, so each has to carry exactly
+/// what a mono device would have been handed.
+#[test]
+fn a_resampled_mono_source_hands_both_stereo_channels_what_a_mono_device_gets() {
+    let (mono, _) = convert_all(ramp(1_000), 1, 44_100, 48_000, 1.0);
+    let mut src = TestSource::new(ramp(1_000), 1, 44_100);
+    let mut converter = Converter::new(shape(1, 44_100));
+
+    let (stereo, _) = run_out(&mut converter, &mut src, shape(2, 48_000), 1.0, 4096);
+
+    let left: Vec<f32> = stereo.iter().step_by(2).copied().collect();
+    let right: Vec<f32> = stereo.iter().skip(1).step_by(2).copied().collect();
+    assert_eq!((bits(&left), bits(&right)), (bits(&mono), bits(&mono)), "(left, right)");
+}
+
+/// Only the front pair carries a mono source. Past it a wider device gets silence, as it does for
+/// any channel the source has no answer for.
+#[test]
+fn a_mono_source_fills_only_the_front_pair_of_a_wider_device() {
+    let (out, _) = remap(vec![0.5, -0.25], 1, 4);
+    assert_eq!(bits(&out), bits(&[0.5, 0.5, 0.0, 0.0, -0.25, -0.25, 0.0, 0.0]));
 }
 
 #[test]
@@ -296,6 +319,38 @@ fn a_tone_inside_the_band_keeps_its_level() {
 
         assert!(level.abs() < PASSBAND_TOLERANCE_DB, "{what} came through at {level:.4} dB");
     }
+}
+
+/// Twice a 96 kHz device's rate and four times a 48 kHz one's.
+const HI_RES_RATE: u32 = 192_000;
+
+/// Output frames converted at a whole-number step before the reopen.
+const FRAMES_BEFORE_THE_REOPEN: usize = 256;
+
+/// A block of [`HI_RES_RATE`] audio on a 48 kHz device, after `before_frames` of it on `before`.
+/// The tone is past the new device's Nyquist and inside a 96 kHz one's, so the two steps' filters
+/// disagree about every sample of it.
+fn after_a_reopen_from(before: Shape, before_frames: usize) -> Vec<f32> {
+    let mut src = TestSource::new(clean_tone(30_000, HI_RES_RATE), 1, HI_RES_RATE);
+    let mut converter = Converter::new(shape(1, HI_RES_RATE));
+    converter.fill(&mut vec![0.0; before_frames], &mut src, before, 1.0);
+
+    let mut after = vec![0.0; 512];
+    converter.fill(&mut after, &mut src, shape(1, 48_000), 1.0);
+    after
+}
+
+/// Both of a reopen's whole-number steps bring the position back to where it was, so the weights
+/// laid before it are keyed to where the frame after it sits. Kept, a 192 kHz file moved from a
+/// 96 kHz device to a 48 kHz one would filter at the old cutoff. The reference comes to the same
+/// frame copying the source, which lays no weights to keep.
+#[test]
+fn a_reopen_onto_another_whole_step_filters_at_the_new_one() {
+    let resampled_before = after_a_reopen_from(shape(1, 96_000), FRAMES_BEFORE_THE_REOPEN);
+    // At a step of one, twice the frames to reach the same one.
+    let copied_before = after_a_reopen_from(shape(1, HI_RES_RATE), 2 * FRAMES_BEFORE_THE_REOPEN);
+
+    assert_eq!(bits(&resampled_before), bits(&copied_before));
 }
 
 /// How far a step between two interpolated frames may stray from the speed that took it. The

@@ -1,17 +1,20 @@
 //! Tests for the signal path's words, whose order Rust and the Output card each spell.
 
+use melodia_engine::player::engine::signal_path::Verdict;
 use melodia_playback::player::playback::output::claim::FallbackReason;
 use melodia_testkit::{binding_value, strip_line_comments};
 
-use super::fallback_index;
+use super::{fallback_index, verdict_index};
 
 const OUTPUT_SECTION: &str =
     include_str!("../../../../../melodia-ui/ui/views/settings/output-section.slint");
 
-/// The words `chain` lands on for `index`, as Slint evaluates it: the first arm testing that
-/// index, or the closing default where none does.
-fn words_for(chain: &str, index: i32) -> &str {
-    let arm = format!("fallback-reason == {index} ");
+const SIGNAL_PATH: &str = include_str!("../../../../../melodia-ui/ui/globals/signal-path.slint");
+
+/// The words `chain` lands on for `property` at `index`, as Slint evaluates it: the first arm
+/// testing that index, or the closing default where none does.
+fn words_for<'a>(chain: &'a str, property: &str, index: i32) -> &'a str {
+    let arm = format!("{property} == {index} ");
     chain.lines().find(|line| line.contains(&arm)).or_else(|| chain.lines().last()).unwrap_or("")
 }
 
@@ -35,8 +38,35 @@ fn every_fallback_reason_lands_on_its_own_words_in_the_output_card() {
         (FallbackReason::NotAllowed, "doesn't allow exclusive control"),
     ];
     for (reason, words) in rows {
-        let landed = words_for(chain, fallback_index(&reason));
+        let landed = words_for(chain, "fallback-reason", fallback_index(&reason));
 
         assert!(landed.contains(words), "{reason:?} landed on {landed:?}");
+    }
+}
+
+/// `verdict_index` and the global's two verdict chains are one order spelled three times. Drifted,
+/// the panel and the quality chip call a fallback lossy or a converted path bit-perfect. Converted
+/// is the closing default in both, so it is the one a missing arm lands on silently.
+#[test]
+fn every_verdict_lands_on_its_own_words_in_the_panel_and_the_chip() {
+    let src = strip_line_comments(SIGNAL_PATH);
+    let text = binding_value(&src, "out property <string> verdict-text:");
+    let label = binding_value(&src, "out property <string> verdict-label:");
+    let rows = [
+        (Verdict::BitPerfect, "Bit-perfect"),
+        (Verdict::Enhanced, "Enhanced"),
+        (Verdict::Converted, "Converted"),
+        (Verdict::Fallback, "Fallback"),
+        (Verdict::Lossy, "Lossy"),
+    ];
+    for (verdict, words) in rows {
+        let index = verdict_index(verdict);
+
+        let landed = (words_for(text, "verdict", index), words_for(label, "verdict", index));
+
+        assert!(
+            landed.0.contains(words) && landed.1.contains(words),
+            "{verdict:?} landed on {landed:?}"
+        );
     }
 }

@@ -47,3 +47,7 @@ impl PlaybackEngine {
 fn millis(position: Duration) -> u64 {
     u64::try_from(position.as_millis()).unwrap_or(u64::MAX)
 }
+
+#[cfg(test)]
+#[path = "tests/reads_tests.rs"]
+mod tests;

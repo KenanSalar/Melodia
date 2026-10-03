@@ -4,7 +4,7 @@
 //! them the way the decoder does, and expect the encoder to hand the same integer back. That
 //! inverse is the whole of the bit-perfect claim below the mixer.
 
-use super::{DeviceFormat, encode};
+use super::{BlockEncoder, DeviceFormat, encode};
 use melodia_audio::player::source::audio::SourceFormat;
 
 /// `value` as the decoder would hand it over from a `bits`-wide integer sample.
@@ -36,6 +36,40 @@ fn every_integer_layout_hands_the_decoded_value_back() {
 
         assert_eq!(encoded(&samples, format), expected, "{format}");
     }
+}
+
+/// What both exclusive writers send: a block already on the grid passes the dither untouched, so a
+/// claim's bytes are the plain encoding of the decoder's own samples.
+#[test]
+fn the_block_encoder_hands_a_block_on_the_grid_over_as_its_own_integers() {
+    let cases: [(DeviceFormat, u8, &[i32]); 4] = [
+        (DeviceFormat::S16, 16, &[i32::from(i16::MIN), -1, 0, 1, i32::from(i16::MAX)]),
+        (DeviceFormat::S24Packed, 24, &[-8_388_608, -1, 0, 1, 8_388_607]),
+        (DeviceFormat::S24Low, 24, &[-8_388_608, -1, 0, 1, 8_388_607]),
+        (DeviceFormat::S24High, 24, &[-8_388_608, -1, 0, 1, 8_388_607]),
+    ];
+    for (format, bits, values) in cases {
+        let mut block: Vec<f32> = values.iter().map(|&v| decoded(v, bits)).collect();
+        let plain = encoded(&block, format);
+        let mut encoder = BlockEncoder::new(format, block.len());
+
+        let sent = encoder.encode(&mut block).to_vec();
+
+        assert_eq!(sent, plain, "{format}");
+    }
+}
+
+/// Both writers narrow through the encoder alone, so the dither has to be in it. A third of a step
+/// above zero rounds to zero everywhere; dithered, some of it lands a step up.
+#[test]
+fn the_block_encoder_dithers_a_block_the_chain_moved_off_the_grid() {
+    let mut block = vec![decoded(1, 16) / 3.0; 64];
+    let rounded = encoded(&block, DeviceFormat::S16);
+    let mut encoder = BlockEncoder::new(DeviceFormat::S16, block.len());
+
+    let sent = encoder.encode(&mut block).to_vec();
+
+    assert_ne!(sent, rounded, "the block was rounded without its dither");
 }
 
 /// `S24_LE` is 24 bits in the low end of a 32-bit word, sign-extended; the 48 dB-too-quiet bug is

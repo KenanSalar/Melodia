@@ -3,17 +3,27 @@
 //! The first two guard the same thing from opposite directions: a value the UI should never send,
 //! landing in `settings.json` where the next launch has to make sense of it. The bit-perfect reset
 //! decides by platform what it may turn on, and has to turn stages off without forgetting how
-//! they were set. The rest of the module is a field assignment whose round trip
-//! `services/tests/settings_tests.rs` already covers.
+//! they were set, and the switch to exclusive output has to land with it in one write. The rest
+//! of the module is a field assignment whose round trip `services/tests/settings_tests.rs` already
+//! covers.
+
+use std::time::Duration;
 
 use crate::services;
 use crate::services::settings::SettingsData;
 use crate::state::fixtures::{seeded_root, seeded_root_with};
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
+use melodia_engine::player::engine::backend::OutputChoice;
 use melodia_engine::player::engine::state::{MAX_SPEED, MAX_VOLUME, MIN_SPEED};
+use melodia_playback::player::playback::output::{
+    Drive, ExclusiveTuning, OutputMode, RateFallback,
+};
 
-use super::{set_playback_speed, write_bit_perfect_reset, write_play_button_animation};
+use super::{
+    set_playback_speed, write_bit_perfect_reset, write_bit_perfect_switch,
+    write_play_button_animation,
+};
 
 fn stored_token(paths: &Paths) -> Result<String, AppError> {
     Ok(services::settings::read_settings(paths)?.play_button_animation)
@@ -176,5 +186,29 @@ fn the_bit_perfect_reset_keeps_how_each_stage_it_cleared_was_set() -> Result<(),
 
     let after = tuning(&services::settings::read_settings(&paths)?);
     assert_eq!(after, before, "(curve, preamp bits, preset, ReplayGain preamp bits, mode)");
+    Ok(())
+}
+
+/// Make Bit-Perfect from shared output once took two writes, so a refused second one left
+/// exclusive output on disk with EQ and `ReplayGain` still on.
+#[test]
+fn the_switch_to_bit_perfect_writes_the_claim_and_the_reset_together() -> Result<(), AppError> {
+    let (_tmp, paths) = seeded_root_with(|settings| {
+        settings.equalizer.eq_enabled = true;
+        settings.replaygain.rg_enabled = true;
+    })?;
+    let choice = OutputChoice {
+        mode: OutputMode::Exclusive,
+        device: Some("hw:CARD=DAC,DEV=0".to_owned()),
+        tuning: ExclusiveTuning::new(Duration::from_millis(40), Drive::Polling),
+        hardware_volume: true,
+        rate_fallback: RateFallback::Resample,
+    };
+
+    write_bit_perfect_switch(&paths, &choice, MAX_VOLUME)?;
+
+    let s = services::settings::read_settings(&paths)?;
+    let written = (s.output.output_choice(), s.equalizer.eq_enabled, s.replaygain.rg_enabled);
+    assert_eq!(written, (choice, false, false), "(choice, equalizer, ReplayGain)");
     Ok(())
 }

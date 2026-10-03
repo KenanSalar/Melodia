@@ -70,7 +70,16 @@ pub fn switch_to_bit_perfect(
     choice: &OutputChoice,
     volume: u32,
 ) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, |settings| {
+    write_bit_perfect_switch(&state.paths, choice, volume)
+}
+
+/// [`switch_to_bit_perfect`]'s body, narrowed as [`write_bit_perfect_reset`] is.
+fn write_bit_perfect_switch(
+    paths: &Paths,
+    choice: &OutputChoice,
+    volume: u32,
+) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, |settings| {
         settings.output.set_output_choice(choice);
         apply_bit_perfect_reset(settings, volume);
     })

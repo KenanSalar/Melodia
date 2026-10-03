@@ -6,12 +6,19 @@
 //! runs the next track on the *other* deck, while a gapless source would sit on
 //! this one, behind the outgoing track, and inherit its fade cell.
 
+use std::num::NonZero;
+use std::path::Path;
 use std::sync::Arc;
 
 use super::*;
 use crate::player::engine::state::PlayerViewModelLight;
+use melodia_audio::player::source::audio::{Sample, Shape};
 use melodia_core::entities::track::TrackSummary;
+use melodia_core::error::AppError;
 use melodia_playback::player::playback::crossfade::CrossfadeSettings;
+use melodia_playback::player::playback::decks::DECK_COUNT;
+use melodia_playback::player::playback::output::mixer;
+use melodia_testkit::ASSETS_DIR;
 
 fn track(id: i64, album: Option<&str>) -> Arc<TrackSummary> {
     Arc::new(TrackSummary {
@@ -376,6 +383,33 @@ fn a_poll_that_is_not_holding_starts_the_count_over() {
     let due_after = polls_until_due(&mut watch);
 
     assert_eq!(due_after, Some(RELEASE_AFTER_N_TICKS));
+}
+
+/// A seek while paused moves the state at once and sends the deck its swap without waiting for it
+/// to land. A release in that gap must not take the deck's old reading for where to resume.
+#[tokio::test]
+async fn a_release_never_writes_back_the_position_a_seek_moved_off() -> Result<(), AppError> {
+    const SEEK_MS: u64 = 700;
+    let fixture = Path::new(ASSETS_DIR).join("silence.wav").to_string_lossy().into_owned();
+    let device = Shape {
+        channels: NonZero::new(2).unwrap_or(NonZero::<u16>::MIN),
+        rate: NonZero::new(44_100).unwrap_or(NonZero::<u32>::MIN),
+    };
+    let (mixer, mut pull) = mixer::pair(DECK_COUNT, device);
+    let engine = PlaybackEngine::new(&mixer, tokio::runtime::Handle::current())?;
+    engine.play_media(&fixture, 1.0, 1.0, None, TrackReplayGain::default())?;
+    let mut block: Vec<Sample> = vec![0.0; 4_096];
+    pull.fill(&mut block);
+    engine.pause();
+    engine.seek(&fixture, SEEK_MS, TrackReplayGain::default());
+    let paused =
+        PlayerState { status: PlaybackStatus::Paused, position_ms: SEEK_MS, ..playing_state() };
+    let (handle, sinks, _published) = seated(paused);
+
+    release_paused_track(&engine, &handle, &sinks);
+
+    assert_eq!(lock_state(&handle).position_ms, SEEK_MS);
+    Ok(())
 }
 
 // --- Live sources ----------------------------------------------------------

@@ -68,3 +68,33 @@ fn a_shared_stream_on_linux_never_names_the_exclusive_card() {
         assert_eq!(request, wanted, "{chosen:?} chosen");
     }
 }
+
+/// The sound server runs the card at whatever rate a stream opens at, so on Linux following the
+/// file's rate asks for it, and not following leaves the device's own config.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn a_shared_stream_on_linux_asks_for_the_files_rate_only_while_following_it()
+-> Result<(), melodia_core::error::AppError> {
+    use std::num::NonZero;
+
+    use melodia_audio::player::source::audio::{Shape, SourceFormat};
+    use melodia_playback::player::playback::decks::DECK_COUNT;
+    use melodia_playback::player::playback::output::mixer;
+
+    use super::PlaybackEngine;
+
+    let hi_res = Shape {
+        channels: NonZero::new(2).unwrap_or(NonZero::<u16>::MIN),
+        rate: NonZero::new(96_000).unwrap_or(NonZero::<u32>::MIN),
+    };
+    let (mixer, _pull) = mixer::pair(DECK_COUNT, hi_res);
+    let engine = PlaybackEngine::new(&mixer, tokio::runtime::Handle::current())?;
+    for (following, rate) in [(true, SampleRate::new(96_000)), (false, None)] {
+        engine.set_follow_rate(following);
+
+        let request = engine.wanted_request(hi_res, SourceFormat::F32);
+
+        assert_eq!(request, OutputRequest::Shared { rate, device: None }, "following: {following}");
+    }
+    Ok(())
+}
