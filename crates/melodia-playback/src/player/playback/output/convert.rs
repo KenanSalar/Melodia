@@ -58,6 +58,16 @@ pub struct Converter {
     state: State,
     incoming: Box<[Sample]>,
     weights: Box<[f32]>,
+    /// What `weights` hold. An integer step brings the position back to where it was, so there
+    /// every output frame would weigh exactly what the one before did.
+    laid: Option<Laid>,
+}
+
+/// The position and step `weights` were laid out for, as bits, and what laying them out found.
+struct Laid {
+    position: u64,
+    step: u64,
+    weighed: Weighed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -84,6 +94,7 @@ impl Converter {
             state: State::Pulling,
             incoming: vec![0.0; width].into_boxed_slice(),
             weights: vec![0.0; SPAN].into_boxed_slice(),
+            laid: None,
         }
     }
 
@@ -116,8 +127,7 @@ impl Converter {
             return filled;
         }
         for frame in out.chunks_exact_mut(width) {
-            let weighed =
-                (!passthrough).then(|| self.kernel.weigh(self.position, step, &mut self.weights));
+            let weighed = (!passthrough).then(|| self.weigh(step));
             self.write_frame(frame, weighed.as_ref());
             filled.samples += width;
 
@@ -168,6 +178,21 @@ impl Converter {
     /// Source frames taken in past the one being written, which the ear is behind the clock by.
     pub fn frames_ahead(&self) -> u64 {
         self.ahead.saturating_sub(self.pads) as u64
+    }
+
+    /// Lay the kernel's weights out for an output frame at the current position, unless they are
+    /// already laid out for this position and step.
+    fn weigh(&mut self, step: f64) -> Weighed {
+        let (position, step_bits) = (self.position.to_bits(), step.to_bits());
+        if let Some(laid) = &self.laid
+            && laid.position == position
+            && laid.step == step_bits
+        {
+            return laid.weighed.clone();
+        }
+        let weighed = self.kernel.weigh(self.position, step, &mut self.weights);
+        self.laid = Some(Laid { position, step: step_bits, weighed: weighed.clone() });
+        weighed
     }
 
     /// Move the centre on a frame, into the lookahead where there is some.

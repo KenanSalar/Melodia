@@ -82,6 +82,7 @@ fn count(n: usize) -> f64 {
 
 /// What [`Kernel::weigh`] wrote: the frames the weights cover, and the gain that brings their sum
 /// to one.
+#[derive(Clone)]
 pub struct Weighed {
     pub taps: Range<usize>,
     pub gain: f32,
