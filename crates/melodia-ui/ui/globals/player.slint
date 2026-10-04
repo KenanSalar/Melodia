@@ -83,6 +83,8 @@ export global Player {
     // Timer ticks left before the run ends, reset by every step. Non-zero is also what runs the
     // timer, so clearing it is how an absolute seek drops the trailing edge.
     in-out property <int> seek-run-ticks: 0;
+    // The timer's period, held here so a window can be counted in its ticks.
+    out property <duration> seek-run-tick: 100ms;
     property <int> seek-run-window-ticks: 3;
 
     // The press-and-hold half of the transport, read by both the bar and the miniplayer so the two
@@ -90,9 +92,11 @@ export global Player {
     property <bool> can-scan: root.vm.has_track && root.duration-ms > 0;
     // Longer than a slow click, so an ordinary one never turns into a scan.
     out property <duration> scan-hold: root.can-scan ? 500ms : 0ms;
-    // Long enough to hear each burst, short enough to read as one sweep. Kept inside the run
-    // window, so each step walks from the last target.
+    // Long enough to hear each burst, short enough to read as one sweep.
     out property <duration> scan-interval: 250ms;
+    // A refill keeps the timer's phase, so a window of n ticks can lapse n - 1 ticks after the step
+    // that set it. One tick past what the interval spans keeps each step inside the last one's run.
+    property <int> scan-window-ticks: floor(root.scan-interval / root.seek-run-tick) + 2;
     // A nudge first, growing per step up to a share of the track, so an hour-long recording crosses
     // about as fast as a song.
     property <int> scan-first-jump-ms: 3000;
@@ -272,7 +276,7 @@ export global Player {
                 direction * root.scan-jump(step),
                 max(root.scan-end-ms, root.seek-run-base()));
             root.flush-seek();
-            root.seek-run-ticks = root.seek-run-window-ticks;
+            root.seek-run-ticks = root.scan-window-ticks;
         }
     }
 
