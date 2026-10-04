@@ -37,7 +37,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
         if active {
             enter(&ui, &s, &ru);
         } else {
-            // The kept tabs' card set goes back with the page, though the rows it picked from
+            // The station card set goes back with the page, though the rows it picked from
             // stay; `card-selection.slint` argues why it cannot outlive the leave.
             ui.global::<CardSelection>().invoke_clear();
             leave(&ui, &s, &ru);

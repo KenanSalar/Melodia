@@ -14,8 +14,8 @@ use melodia_testkit::{
 /// The seven section leaves that hand the shared card selection back. **An equality, not a
 /// floor**: one slice quietly dropping its `clear()` is the regression, and a floor cannot see it.
 /// Browse and Tracks are deliberately absent, each keeping its row model across the leave and
-/// clearing its own `selected-ids` instead. Radio keeps its rows too, but its kept tabs' cards
-/// pick in `CardSelection`, so its leave owes the clear.
+/// clearing its own `selected-ids` instead. Radio keeps its rows too, but its station cards pick
+/// in `CardSelection`, so its leave owes the clear.
 const CARD_SELECTION_LEAVES: [&str; 7] = [
     "albums/callbacks/lifecycle.rs",
     "artists/callbacks/lifecycle.rs",

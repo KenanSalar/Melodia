@@ -1,9 +1,10 @@
 //! The text a Copy entry puts on the clipboard, for every surface that offers one.
 //!
 //! A menu holds ids rather than text, so the text is resolved here: one line per item, in the order
-//! the ids were handed over, which is the display order every selection keeps. An item without the
-//! field asked for contributes no line rather than an empty one, so a pasted list never carries
-//! blanks the user has to clean out.
+//! the ids were handed over. On a list or grid that is the selection's own order, a range in
+//! display order and a ctrl-click appended, so a copy lists a set the way Play queues it; the queue
+//! sheet hands over queue order. An item without the field asked for contributes no line rather
+//! than an empty one, so a pasted list never carries blanks the user has to clean out.
 //!
 //! **Line breaks between items, never a space.** A title or a station name holds spaces of its
 //! own, so a space-joined list cannot say where one item ends, and a path can hold commas. Pasted
@@ -49,7 +50,7 @@ impl TrackField {
     }
 }
 
-/// What an entity card's Copy entry offers. Every kind has a name; only an album credits an
+/// What an entity card's Copy entry offers. Every kind has a name; an album and a track credit an
 /// artist, and the other kinds answer the two artist fields with nothing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EntityField {

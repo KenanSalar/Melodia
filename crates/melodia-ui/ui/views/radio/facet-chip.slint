@@ -171,8 +171,6 @@ export component FacetChip inherits Rectangle {
         // The rows need their own handlers to run before it closes, so they close it themselves.
         close-policy: close-on-click-outside;
 
-        // Live only while this is the open picker: five chips are mounted whenever Browse is up,
-        // and an ungated watcher is five of them against one popup.
         if root.popup-open: FocusLossWatcher {
             close => { popup.close(); PopupHighlight.id = ""; }
         }

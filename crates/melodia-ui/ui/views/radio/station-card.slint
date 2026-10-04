@@ -36,9 +36,7 @@ export component StationCard inherits Rectangle {
     // Recently Played only, where it is what tells a station listened to daily from one played
     // once by accident. `0` everywhere else draws nothing.
     in property <int> play-count: 0;
-    // `EntityCard`'s selection, passed through. Only the kept tabs turn it on, Browse's stations
-    // having no row id to select by.
-    in property <bool> selectable;
+    // `EntityCard`'s selection, passed through.
     in property <bool> selected;
     in property <bool> selection-live;
 
@@ -102,7 +100,7 @@ export component StationCard inherits Rectangle {
         // The body opens the station's page; the play button over the tile is what tunes in.
         clicked => { root.clicked(); }
 
-        selectable: root.selectable;
+        selectable: true;
         selected: root.selected;
         selection-live: root.selection-live;
         select-clicked(shift, ctrl) => { root.select-clicked(shift, ctrl); }
@@ -138,7 +136,7 @@ export component StationCard inherits Rectangle {
             clicked => { root.play-clicked(); }
         }
 
-        // Under the selection box's corner, which is empty on Browse, whose cards draw no box.
+        // Under the selection box's corner.
         home_btn := IconButton {
             visible: root.homepage-known;
             x: Theme.pad-sm;

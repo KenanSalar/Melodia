@@ -600,11 +600,13 @@ three components that answer it, and each argues its geometry at its own file.
     declared on the popup since only it can read its descendants. Labels elide past the ceiling. A
     fixed width is what clipped a long Remove label; the chevron sits in a fixed box, its glyph
     being picked by a side the width decides.
-  - **Copy acts on the effective set, one line per item, in the order handed over**, which is
-    display order on every selection, an item without the field adding no line; why line breaks and
-    never a space is `library::clipboard`'s. Menus pass ids to `CopyActions` and Rust resolves the
-    text there; stations copy through `Radio.copy-stations` by `select_key`, resolving against the
-    slice's own caches.
+  - **Copy acts on the effective set, one line per item, in the order handed over**, never
+    re-sorted: on a list or grid that is the selection's pick order (a range in display order, a
+    ctrl-click appended), so it matches what Play queues, and on the queue sheet it is queue order,
+    the set being read back off its rows. An item without the field adds no line. Why line breaks
+    and never a space is `library::clipboard`'s. Menus pass ids to `CopyActions` and Rust resolves
+    the text there; stations copy through `Radio.copy-stations` by `select_key`, resolving against
+    the slice's own caches.
   - **There is one clipboard**: `AppWindow.copy-to-clipboard`, a hidden `TextInput` reaching the
     platform clipboard Slint's backend owns, which on Wayland is the app's own display connection
     where a clipboard crate would land on XWayland. `ui::clipboard::write` is its one Rust caller,

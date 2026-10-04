@@ -135,7 +135,6 @@ export component StationGrid inherits Rectangle {
                         edit-clicked => { root.edit-clicked(station); }
                         remove-clicked => { root.remove-clicked(station); }
 
-                        selectable: true;
                         selected: cell.selected;
                         selection-live: cell.selection-live;
                         select-clicked(shift, ctrl) => { cell.pick(shift, ctrl); }

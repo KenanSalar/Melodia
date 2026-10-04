@@ -14,6 +14,7 @@ use melodia_app::library::clipboard::{EntityField, TrackField, entity_lines, tra
 use melodia_app::library::entity_tracks::EntityKind;
 use melodia_app::state::AppState;
 use melodia_core::error::{AppError, describe};
+use melodia_core::utils::toast::{self, ToastKind};
 use melodia_ui::{AppWindow, CopyActions};
 
 /// Wire every `CopyActions` callback.
@@ -78,7 +79,11 @@ fn spawn_copy<Fut>(
             Ok(text) => {
                 let _ = weak.upgrade_in_event_loop(move |ui| clipboard::write(&ui, &text));
             }
-            Err(e) => log::warn!("{label}: {}", describe(&e)),
+            Err(e) => {
+                log::warn!("{label}: {}", describe(&e));
+                // The menu closed on the click, so a failure owes a sign as much as a copy does.
+                toast::notify(ToastKind::OperationFailed, e.to_string());
+            }
         }
     });
 }

@@ -24,8 +24,10 @@ use super::stream_source::ABANDON_POLL;
 /// How long a connection may deliver nothing before it is treated as lost.
 ///
 /// Long enough to ride out a drop TCP survives, short enough that the reconnect starts while the
-/// buffers still hold audio. Delivery also stops when the reader stops draining a full buffer,
-/// which is a connection worth renewing too: what it holds is that far behind live.
+/// decoded ring still holds audio. The cancel fails the reader before it serves what is already
+/// buffered, so compressed audio it had not reached is dropped: the price of a clean restart over
+/// a spliced one. Delivery also stops when the reader stops draining a full buffer, which is a
+/// connection worth renewing too: what it holds is that far behind live.
 const STALL_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Watches one connection's delivery and ends it once it stalls or its source is dropped.

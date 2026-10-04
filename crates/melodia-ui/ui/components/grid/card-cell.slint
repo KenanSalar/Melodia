@@ -28,7 +28,6 @@ export component CardCell inherits Rectangle {
     in property <length> card-height;
     // The `CardSelection` scope this grid owns. No default: an empty one answers `false` to
     // everything and picks nothing, which reads as a dead grid rather than as a missing property.
-    // Radio's Browse passes it empty on purpose, its stations having no id to select by.
     in property <string> scope;
     // Travels to Rust as the token `EntityKind::from_token` parses; `CardContextMenu` also picks
     // its per-kind entries off it. "station" raises the station menu instead.
