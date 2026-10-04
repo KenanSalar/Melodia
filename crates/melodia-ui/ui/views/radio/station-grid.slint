@@ -40,8 +40,8 @@ export component StationGrid inherits Rectangle {
     // that isn't ranked by it says nothing. Recently Played is the one tab that turns it on.
     in property <bool> show-play-count: false;
 
-    // The `CardSelection` scope the kept tabs pick in. Empty on Browse, whose stations have no
-    // row id, so its cards draw no box and the menu offers no selection group.
+    // The `CardSelection` scope this tab picks in, one per tab so no tab reads another's set. The
+    // cards pick by `select_key`, which is what lets Browse's id-less stations take part.
     in property <string> selection-scope;
     // `Radio.tab-*`, the list these cards are on, which the menu reads for what removal means.
     in property <int> list;
@@ -89,7 +89,7 @@ export component StationGrid inherits Rectangle {
                     card-height: root.card-height;
                     scope: root.selection-scope;
                     card-kind: "station";
-                    card-id: station.id;
+                    card-id: station.select_key;
                     station: station;
                     station-list: root.list;
 
@@ -135,12 +135,11 @@ export component StationGrid inherits Rectangle {
                         edit-clicked => { root.edit-clicked(station); }
                         remove-clicked => { root.remove-clicked(station); }
 
-                        selectable: root.selection-scope != "";
+                        selectable: true;
                         selected: cell.selected;
                         selection-live: cell.selection-live;
                         select-clicked(shift, ctrl) => { cell.pick(shift, ctrl); }
                         context-requested(x, y) => { cell.open-menu(x, y); }
-                        context-released => { cell.reclaim(); }
                     }
                 }
             }

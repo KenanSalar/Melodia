@@ -355,16 +355,12 @@ export struct BrowseFolderRow {
 }
 
 // One card in Browse's card view — folders first, then files in display order. Deliberately
-// *not* `EntityStripRow`: a browse card carries three fields no entity card has, and widening
-// that struct would tax the four grids sharing it. `row_index` indexes `Browse.rows`, so a
+// *not* `EntityStripRow`: a browse card carries fields no entity card has, and widening that
+// struct would tax the four grids sharing it. `row_index` indexes `Browse.rows`, so a
 // card activation reaches `play-row` with exactly the index the `TrackList` would have passed.
 export struct BrowseCardRow {
     id: int,             // track id; 0 for a folder and for a disk-only file
     row_index: int,      // index into `Browse.rows`; -1 for a folder
-    // The card's own slot in the flat list, and the only field here unique to a card: `id` is 0
-    // for every folder and every disk-only file, so keying the open context menu on it would arm
-    // each of their watchers on one popup. Nothing else reads it.
-    card_index: int,
     path: string,        // folder path; "" for a track card
     title: string,
     subtitle: string,
@@ -434,6 +430,10 @@ export struct NotificationRow {
 // `hls` bool beside it, and nothing draws a badge off one, because those stations play.
 export struct RadioStationRow {
     id: int,
+    // What the card selects and copies by: the row id on the kept tabs, and on Browse, whose rows
+    // all hold id 0, the station's 1-based place in the answer, which holds until a fresh search
+    // replaces it. 0 where nothing does, a station page's row.
+    select_key: int,
     uuid: string,
     name: string,
     // Whoever supplied it — the user's own answer wins over the directory's. `RadioStation::website`

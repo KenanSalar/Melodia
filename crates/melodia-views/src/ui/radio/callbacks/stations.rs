@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model};
 
-use crate::ui::radio::{RadioUi, browse, kept, tab_from_index};
+use crate::ui::radio::{RadioTab, RadioUi, browse, kept, tab_from_index};
 use crate::ui::{clipboard, launcher};
 use melodia_app::library;
 use melodia_app::library::clipboard::{StationField, StationText, station_lines};
@@ -60,20 +60,28 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
         let s = state.clone();
         let ru = radio_ui.clone();
         let weak = weak.clone();
-        g.on_set_favorites(move |tab, ids, favorite| {
+        g.on_set_favorites(move |tab, keys, favorite| {
             let Some(ui) = weak.upgrade() else { return };
-            let tab = tab_from_index(&ui.global::<Radio>(), tab);
-            // A hand-typed station's card has no star, so the set's star skips it too: un-starring
-            // one drops it from the only list that shows it.
-            let ids: Vec<i64> = ids
-                .iter()
-                .map(i64::from)
-                .filter(|&id| {
-                    kept::resolve(&ru, tab, id)
-                        .is_some_and(|station| station.station_uuid.is_some())
-                })
-                .collect();
-            set_kept_favorites(&s, &ru, &weak, ids, favorite);
+            match tab_from_index(&ui.global::<Radio>(), tab) {
+                RadioTab::Browse => {
+                    let stations =
+                        keys.iter().filter_map(|key| browse::resolve_key(&ru, key)).collect();
+                    set_browsed_favorites(&s, &ru, &weak, stations, favorite);
+                }
+                tab => {
+                    // A hand-typed station's card has no star, so the set's star skips it too:
+                    // un-starring one drops it from the only list that shows it.
+                    let ids: Vec<i64> = keys
+                        .iter()
+                        .map(i64::from)
+                        .filter(|&id| {
+                            kept::resolve(&ru, tab, id)
+                                .is_some_and(|station| station.station_uuid.is_some())
+                        })
+                        .collect();
+                    set_kept_favorites(&s, &ru, &weak, ids, favorite);
+                }
+            }
         });
     }
 
@@ -90,31 +98,28 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     {
         let ru = radio_ui.clone();
         let weak = weak.clone();
-        g.on_copy_kept_stations(move |tab, field, ids| {
+        g.on_copy_stations(move |tab, field, keys| {
             let Some(ui) = weak.upgrade() else { return };
             let Some(field) = StationField::from_token(&field) else {
                 log::warn!("radio copy: unknown field {field}");
                 return;
             };
-            let tab = tab_from_index(&ui.global::<Radio>(), tab);
-            let stations: Vec<RadioStation> =
-                ids.iter().filter_map(|id| kept::resolve(&ru, tab, i64::from(id))).collect();
-            let text = station_lines(stations.iter().map(kept_text), field);
-            clipboard::write(&ui, &text);
-        });
-    }
-
-    {
-        let ru = radio_ui.clone();
-        let weak = weak.clone();
-        g.on_copy_browse_station(move |field, uuid| {
-            let Some(ui) = weak.upgrade() else { return };
-            let Some(field) = StationField::from_token(&field) else {
-                log::warn!("radio copy: unknown field {field}");
-                return;
+            let text = match tab_from_index(&ui.global::<Radio>(), tab) {
+                RadioTab::Browse => {
+                    let stations: Vec<DirectoryStation> = keys
+                        .iter()
+                        .filter_map(|key| browse::resolve_key(&ru, key).map(|(station, _)| station))
+                        .collect();
+                    station_lines(stations.iter().map(browsed_text), field)
+                }
+                tab => {
+                    let stations: Vec<RadioStation> = keys
+                        .iter()
+                        .filter_map(|id| kept::resolve(&ru, tab, i64::from(id)))
+                        .collect();
+                    station_lines(stations.iter().map(kept_text), field)
+                }
             };
-            let Some((station, _logo)) = browse::resolve(&ru, &uuid) else { return };
-            let text = station_lines([browsed_text(&station)], field);
             clipboard::write(&ui, &text);
         });
     }
@@ -223,48 +228,77 @@ async fn set_kept_favorite(state: &AppState, id: i64, favorite: bool) -> Result<
 }
 
 /// Keep or release a station that only exists in the directory answer on screen.
-///
-/// Optimistic, like every other row flag in the tree: a star is not list membership on Browse, so
-/// nothing has to be re-fetched for it to be right, and the star has to answer on the click's own
-/// frame.
 fn toggle_browsed(
     state: &AppState,
     radio_ui: &Arc<RadioUi>,
     weak: &slint::Weak<AppWindow>,
     row: &RadioStationRow,
 ) {
-    let Some(ui) = weak.upgrade() else { return };
-    let Some((station, logo)) = browse::resolve(radio_ui, &row.uuid) else {
+    let Some(station) = browse::resolve(radio_ui, &row.uuid) else {
         return;
     };
-    let uuid = row.uuid.to_string();
-    let wanted = !row.is_favorite;
+    set_browsed_favorites(state, radio_ui, weak, vec![station], !row.is_favorite);
+}
 
-    radio_ui.set_local_favorite(&uuid, wanted);
+/// The star over directory stations, each with whatever logo this session found for it.
+///
+/// Optimistic, like every other row flag in the tree: a star is not list membership on Browse, so
+/// nothing has to be re-fetched for it to be right, and the star has to answer on the click's own
+/// frame. A station already where `wanted` puts it is left alone, so a failed write puts back
+/// exactly what was there.
+fn set_browsed_favorites(
+    state: &AppState,
+    radio_ui: &Arc<RadioUi>,
+    weak: &slint::Weak<AppWindow>,
+    stations: Vec<(DirectoryStation, Option<String>)>,
+    wanted: bool,
+) {
+    let Some(ui) = weak.upgrade() else { return };
+    let moving: Vec<(DirectoryStation, Option<String>)> = {
+        let starred = radio_ui.starred.lock();
+        stations
+            .into_iter()
+            .filter(|(station, _)| starred.contains(&station.station_uuid) != wanted)
+            .collect()
+    };
+    if moving.is_empty() {
+        return;
+    }
+    for (station, _) in &moving {
+        radio_ui.set_local_favorite(&station.station_uuid, wanted);
+    }
     browse::apply(&ui, radio_ui);
 
     let (s, ru, weak) = (state.clone(), radio_ui.clone(), weak.clone());
     state.runtime.spawn(async move {
-        // The write is unconditional so the facade has a row to resolve, and un-starring then
-        // takes the cleanup the trash takes: a station released here without a play behind it is
-        // listed by neither tab, and leaving it costs a row per browse-and-unstar forever.
-        let flipped =
-            match library::radio::set_directory_favorite(&s, &station, wanted, logo.as_deref())
-                .await
-            {
-                Ok(id) if !wanted => library::radio::delete_if_unlisted(&s, id).await,
-                Ok(_) => Ok(()),
-                Err(e) => Err(e),
-            };
-        if let Err(e) = flipped {
-            log::warn!("radio: favorite toggle failed: {}", melodia_core::error::describe(&e));
-            // Put the star back rather than leaving it claiming a row that was never written. A
-            // routine failure, so it is a log line and not a toast.
-            ru.set_local_favorite(&uuid, !wanted);
-            let _ = weak.upgrade_in_event_loop(move |ui| browse::apply(&ui, &ru));
-            return;
+        let mut reverted = false;
+        for (station, logo) in moving {
+            if let Err(e) = set_browsed_favorite(&s, &station, logo.as_deref(), wanted).await {
+                log::warn!("radio: favorite toggle failed: {}", melodia_core::error::describe(&e));
+                // Put the star back rather than leaving it claiming a row that was never written.
+                // A routine failure, so it is a log line and not a toast.
+                ru.set_local_favorite(&station.station_uuid, !wanted);
+                reverted = true;
+            }
         }
-        // The kept list gained or lost a station, and Browse's own stars come off the same fetch.
+        if reverted {
+            let ru = ru.clone();
+            let _ = weak.upgrade_in_event_loop(move |ui| browse::apply(&ui, &ru));
+        }
+        // The kept list gained or lost stations, and Browse's own stars come off the same fetch.
         refresh_lists(&s, &ru, &weak);
     });
+}
+
+/// The write is unconditional so the facade has a row to resolve, and un-starring then takes the
+/// cleanup the trash takes: a station released here without a play behind it is listed by neither
+/// tab, and leaving it costs a row per browse-and-unstar forever.
+async fn set_browsed_favorite(
+    state: &AppState,
+    station: &DirectoryStation,
+    logo: Option<&str>,
+    wanted: bool,
+) -> Result<(), AppError> {
+    let id = library::radio::set_directory_favorite(state, station, wanted, logo).await?;
+    if wanted { Ok(()) } else { library::radio::delete_if_unlisted(state, id).await }
 }

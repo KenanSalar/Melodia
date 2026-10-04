@@ -11,9 +11,8 @@ import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 
 // The right-click menu every track row raises, and the only place its entries are spelled.
 //
-// **The host keeps the pointer and the highlight; this keeps the menu.** A row writes its own
-// discriminator wherever it tracks one, hands the press position over as `at-x`/`at-y`, and calls
-// `show()`. Two hosts today — `TrackListRowItem` and the queue sheet's `QueueRowItem` — and the
+// **The host keeps the pointer; this keeps the menu.** A row hands the press position over as
+// `at-x`/`at-y` and calls `show()`. Two hosts today — `TrackListRowItem` and the queue sheet's `QueueRowItem` — and the
 // second is the reason the entries live here rather than inline in the first.
 //
 // **The root is zero-size on purpose.** It mounts as a free sibling of the row's TouchArea, so the
@@ -46,11 +45,6 @@ export component TrackContextMenu inherits Rectangle {
     in property <int> selection-count;
     in property <length> at-x;
     in property <length> at-y;
-    // The watcher gate. `ctx-key` is the host's right-click snapshot, `live-ctx-key` whatever the
-    // shell currently says owns an open menu — a track id for one host, a play-order index for
-    // the other, and this component never learns which.
-    in property <int> ctx-key: -1;
-    in property <int> live-ctx-key: -1;
 
     // Read by the host to route a batch action, so it sits on the root rather than in the popup.
     // Multi mode needs this row selected *and* more than one selected — right-clicking an
@@ -110,12 +104,6 @@ export component TrackContextMenu inherits Rectangle {
     callback go-to-album(int /*album_id*/);
     callback go-to-artist(int /*artist_id*/);
     callback go-to-genre(int /*genre_id*/);
-    // Focus loss closed the popup. The host hands back its own snapshot and highlight key, which
-    // are the two things this component deliberately doesn't own.
-    callback released();
-    // The host writes its highlight key back. The winit layer clears it on every release, so a
-    // click that leaves the menu open would otherwise disarm the focus-loss watcher.
-    callback reclaim();
 
     // **Pinned at the origin, and the zero size is why.** An element with no `x`/`y` in a
     // non-layout parent is *centred* — Slint generates `(parent.width - self.width) / 2` — so at
@@ -163,14 +151,10 @@ export component TrackContextMenu inherits Rectangle {
                 ? max(0, Playlists.rows.length - 1)
                 : Playlists.rows.length;
 
-        // Live only on the row whose menu is open. The gate keys off the right-click *snapshot*
-        // rather than the live row data, so a row recycle behind an open popup can't unmount the
-        // watcher mid-popup — one watcher per focus-loss event, however many rows.
-        if root.ctx-key != -1 && root.ctx-key == root.live-ctx-key: FocusLossWatcher {
-            close => {
-                pop.close();
-                root.released();
-            }
+        // Ungated: `show()` builds the popup's body and `close()` drops it, so only the open menu
+        // watches, however many rows mount one.
+        FocusLossWatcher {
+            close => { root.dismiss(); }
         }
 
         // First, so every row drawn over it wins its own click and a click on the empty reserve
@@ -303,10 +287,7 @@ export component TrackContextMenu inherits Rectangle {
                     submenu: true;
                     submenu-open: root.copy-open;
                     submenu-left: pop.flyout-left;
-                    clicked => {
-                        root.copy-open = !root.copy-open;
-                        root.reclaim();
-                    }
+                    clicked => { root.copy-open = !root.copy-open; }
                 }
                 // Single-target by nature, so hidden over a selection like the cross-tab entries
                 // below. Straight to `Nav`.

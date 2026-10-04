@@ -1,13 +1,12 @@
 import { RadioStationRow } from "../../models.slint";
 import { CardSelection } from "../../globals/card-selection.slint";
-import { PopupHighlight } from "../../globals/shell.slint";
 import { CardContextMenu } from "card-context-menu.slint";
 import { StationContextMenu } from "station-context-menu.slint";
 
 // **A wrapper per card, sized to it, and the one home for what a card owes its selection.** The
 // menu has to be the card's *sibling* in the card's own coordinate frame, which is what
 // `context-requested` reports in, and the delegate needs somewhere to hold the right-click
-// snapshot — neither can be declared on the `EntityCard` mount itself.
+// position — neither can be declared on the `EntityCard` mount itself.
 //
 // The card goes in through `@children` because the entity it draws is the one thing the grids
 // don't share: Slint has no generics and each takes its own row struct, so `for x in grid-row.xs:`
@@ -22,9 +21,8 @@ import { StationContextMenu } from "station-context-menu.slint";
 // mounted, which costs nothing until one opens: a `PopupWindow`'s body is built by its `show()`.
 //
 // **`BrowseCardGrid` deliberately does not mount this.** Its cards *are* its list rows, so it
-// reads `Browse.selected-ids` rather than `CardSelection`, and it keys its snapshot on
-// `card_index` because every folder and disk-only file holds `id == 0`. Covering it would mean a
-// second mode on four properties plus a parameterised snapshot key, for one call site.
+// reads `Browse.selected-ids` rather than `CardSelection`. Covering it would mean a second mode on
+// four properties, for one call site.
 export component CardCell inherits Rectangle {
     in property <length> card-width;
     in property <length> card-height;
@@ -67,40 +65,22 @@ export component CardCell inherits Rectangle {
     callback delete-cards([int] /*card_ids*/);
     callback play-single();
 
-    // The right-click snapshot, gating this cell's `FocusLossWatcher` against whatever the shell
-    // says owns the open menu.
+    // Where the right-click landed, in the card's frame.
     private property <length> ctx-x;
     private property <length> ctx-y;
-    private property <int> ctx-card-id: -1;
 
     public function pick(shift: bool, ctrl: bool) {
         CardSelection.pick(root.scope, root.card-id, shift, ctrl);
     }
 
-    // **Every write precedes `show()`**, or the popup body's `if` gate is still false when the
-    // watcher would mount — the row menu's rule.
     public function open-menu(x: length, y: length) {
         root.ctx-x = x;
         root.ctx-y = y;
-        root.ctx-card-id = root.card-id;
-        PopupHighlight.card-ctx-id = root.card-id;
         if (root.card-kind == "station") {
             station-menu.show();
         } else {
             ctx-menu.show();
         }
-    }
-
-    // Focus loss closed a menu, and this hands back the snapshot and the key it was armed by.
-    function hand-back() {
-        PopupHighlight.card-ctx-id = -1;
-        root.ctx-card-id = -1;
-    }
-
-    // The key again, after a release the winit layer cleared it on: the right-click's own, which
-    // the card reports as `context-released`, or a click that left the menu open.
-    public function reclaim() {
-        PopupHighlight.card-ctx-id = root.ctx-card-id;
     }
 
     width: root.card-width;
@@ -123,8 +103,6 @@ export component CardCell inherits Rectangle {
         selection-count: root.scope-count;
         at-x: root.ctx-x;
         at-y: root.ctx-y;
-        ctx-key: root.ctx-card-id;
-        live-ctx-key: PopupHighlight.card-ctx-id;
 
         go-to-artist(id) => { root.go-to-artist(id); }
         rename => { root.rename(); }
@@ -132,8 +110,6 @@ export component CardCell inherits Rectangle {
         edit-rules => { root.edit-rules(); }
         delete-cards(ids) => { root.delete-cards(ids); }
         play-single => { root.play-single(); }
-        released => { root.hand-back(); }
-        reclaim => { root.reclaim(); }
     }
 
     station-menu := StationContextMenu {
@@ -146,9 +122,5 @@ export component CardCell inherits Rectangle {
         selection-count: root.scope-count;
         at-x: root.ctx-x;
         at-y: root.ctx-y;
-        ctx-key: root.ctx-card-id;
-        live-ctx-key: PopupHighlight.card-ctx-id;
-        released => { root.hand-back(); }
-        reclaim => { root.reclaim(); }
     }
 }

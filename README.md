@@ -120,7 +120,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Your own stream URLs, checked at the dialog rather than at the first click; `.pls`, `.m3u`, and `.asx` resolve to the audio behind them
 - Live titles reach the player bar, Now Playing, your desktop's media controls, and Discord, with buffering and reconnection handled underneath
 - Favorites, Recently Played, station pages, cached logos, and playlist-file import and export
-- Station cards select like any other card on Favorites and Recently Played, with a right-click menu to play, star, edit, copy or remove one or many
+- Station cards select like any other card on all three tabs, with a right-click menu to play, star or copy one or many, and to edit or remove the stations you keep
 - The titles a station has announced this session, listed under it and copyable from a right-click, artist and title apart where the line splits
 - Segmented (HLS) stations play like any other
 

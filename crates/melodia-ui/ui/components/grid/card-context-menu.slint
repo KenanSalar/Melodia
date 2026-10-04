@@ -10,8 +10,8 @@ import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 
 // The right-click menu every entity card raises, and the only place its entries are spelled.
 //
-// `TrackContextMenu`'s contract, one layer over: **the host keeps the pointer position, the
-// right-click snapshot and the highlight key; this keeps the menu.** What differs is that a card
+// `TrackContextMenu`'s contract, one layer over: **the host keeps the pointer position; this keeps
+// the menu.** What differs is that a card
 // is a *set* of tracks, so the actions go through `CardActions` with a kind and an id list and
 // Rust resolves the set once, rather than each entry naming a track callback.
 //
@@ -43,10 +43,6 @@ export component CardContextMenu inherits Rectangle {
     in property <int> selection-count;
     in property <length> at-x;
     in property <length> at-y;
-    // The watcher gate, as on the row menu: the host's right-click snapshot against whatever the
-    // shell currently says owns an open menu.
-    in property <int> ctx-key: -1;
-    in property <int> live-ctx-key: -1;
 
     // Read by the host to route a batch action. Multi mode needs this card selected *and* more
     // than one selected — a right-click on an unselected card falls back to that card alone and
@@ -101,11 +97,6 @@ export component CardContextMenu inherits Rectangle {
     // The album card's one cross-tab entry, routed by the grid to `Albums.go-to-artist` — this
     // file imports no view global, as the row menu's "Go to …" set doesn't either.
     callback go-to-artist(int /*artist_id*/);
-    // Focus loss closed the popup; the host hands back its own snapshot and highlight key.
-    callback released();
-    // `TrackContextMenu.reclaim`: the host writes its key back after a click that keeps the menu
-    // open.
-    callback reclaim();
 
     // **Pinned at the origin, and the zero size is why** — the `TrackContextMenu` argument
     // verbatim: a child with no `x`/`y` in a non-layout parent is *centred*, so at zero width the
@@ -142,11 +133,9 @@ export component CardContextMenu inherits Rectangle {
         property <[int]> effective-ids:
             root.multi-active ? root.effective-selection : [root.card-id];
 
-        if root.ctx-key != -1 && root.ctx-key == root.live-ctx-key: FocusLossWatcher {
-            close => {
-                pop.close();
-                root.released();
-            }
+        // Ungated, as on the row menu: the popup's body exists only while it is shown.
+        FocusLossWatcher {
+            close => { root.dismiss(); }
         }
 
         // First, so every row drawn over it wins its own click and a click on the empty reserve
@@ -323,7 +312,6 @@ export component CardContextMenu inherits Rectangle {
                     clicked => {
                         if (root.has-flyout) {
                             root.copy-open = !root.copy-open;
-                            root.reclaim();
                         } else {
                             if (root.is-folder) {
                                 CopyActions.copy-text(root.card-path);

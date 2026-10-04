@@ -1,6 +1,5 @@
 import { Theme } from "../theme.slint";
 import { Queue } from "../globals/queue.slint";
-import { PopupHighlight } from "../globals/shell.slint";
 import { QueueRow } from "../models.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
 import { ArtworkImage } from "../components/artwork-image.slint";
@@ -50,11 +49,6 @@ export component QueueRowItem inherits Rectangle {
     function pick(ctrl: bool, shift: bool) {
         Queue.toggle-select(root.row-index, ctrl || !shift, shift);
     }
-
-    // The play-order index snapshotted at right-click, gating this row's `FocusLossWatcher`. An
-    // **index**, not `row-data.id`, because a queue may hold one track twice: keyed by id, both
-    // rows would mount a watcher for the one open popup.
-    property <int> right-click-row-index: -1;
 
     private property <length> press-abs-y;
     private property <bool> drag-started: false;
@@ -199,18 +193,10 @@ export component QueueRowItem inherits Rectangle {
                     Queue.drop-slot = -1;
                     root.drag-started = false;
                 }
+                // Nothing here touches the drag state: its arm is left-only, so a right-click
+                // can't ghost the row.
                 if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
-                    // **Both writes must precede `show()`**, or the menu's watcher gate is still
-                    // false when the watcher would mount. Nothing here touches the drag state:
-                    // its arm is left-only, so a right-click can't ghost the row.
-                    root.right-click-row-index = root.row-index;
-                    PopupHighlight.queue-ctx-index = root.row-index;
                     ctx-menu.show();
-                }
-                // The winit layer clears the key on this click's own release; the press's grab
-                // brings that release back here to write it again.
-                if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.right) {
-                    ctx-menu.reclaim();
                 }
             }
             moved => {
@@ -413,8 +399,6 @@ export component QueueRowItem inherits Rectangle {
             selection-count: Queue.selected-count;
             at-x: touch.mouse-x;
             at-y: touch.mouse-y;
-            ctx-key: root.right-click-row-index;
-            live-ctx-key: PopupHighlight.queue-ctx-index;
 
             play-single => { Queue.skip-to(root.row-index); }
             toggle-favorite(ids, on) => { Queue.toggle-row-favorite(ids, on); }
@@ -435,11 +419,6 @@ export component QueueRowItem inherits Rectangle {
             go-to-album(aid) => { Queue.dismiss(); Queue.go-to-album(aid); }
             go-to-artist(aid) => { Queue.dismiss(); Queue.go-to-artist(aid); }
             go-to-genre(gid) => { Queue.dismiss(); Queue.go-to-genre(gid); }
-            released => {
-                PopupHighlight.queue-ctx-index = -1;
-                root.right-click-row-index = -1;
-            }
-            reclaim => { PopupHighlight.queue-ctx-index = root.right-click-row-index; }
         }
     }
 }

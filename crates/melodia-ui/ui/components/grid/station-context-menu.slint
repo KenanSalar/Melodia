@@ -8,14 +8,14 @@ import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 
 // The right-click menu a station card raises, on all three Radio tabs.
 //
-// `CardContextMenu`'s contract over a station: the host keeps the pointer, the right-click snapshot
-// and the highlight key, this keeps the menu. **Its own component rather than a kind inside that
+// `CardContextMenu`'s contract over a station: the host keeps the pointer, this keeps the menu.
+// **Its own component rather than a kind inside that
 // one**, because nothing here resolves to tracks: a station is played, starred, edited and removed
 // through `Radio`, and none of `CardActions` applies to it.
 //
 // **Every entry is gated on what its operation needs, never on the tab for its own sake.** Play,
-// the website and Edit are single-target; the star needs a uuid to star against; the selection
-// group and removal need a kept list, Browse's stations having no row to select or remove.
+// the website and Edit are single-target; the star needs a uuid to star against; removal needs a
+// kept list, Browse's stations having no row to remove.
 export component StationContextMenu inherits Rectangle {
     in property <RadioStationRow> station;
     // `Radio.tab-*`: the list the card is on, which decides what removal means there.
@@ -26,9 +26,6 @@ export component StationContextMenu inherits Rectangle {
     in property <int> selection-count;
     in property <length> at-x;
     in property <length> at-y;
-    // The watcher gate, the other card menus'.
-    in property <int> ctx-key: -1;
-    in property <int> live-ctx-key: -1;
 
     // Multi mode needs this card selected *and* more than one selected, so a right-click on an
     // unselected card acts on that card alone.
@@ -53,11 +50,6 @@ export component StationContextMenu inherits Rectangle {
 
     callback select-all();
     callback clear-selection();
-    // Focus loss closed the popup; the host hands back its own snapshot and highlight key.
-    callback released();
-    // `TrackContextMenu.reclaim`: the host writes its key back after a click that keeps the menu
-    // open.
-    callback reclaim();
 
     public function show() {
         root.copy-open = false;
@@ -70,14 +62,9 @@ export component StationContextMenu inherits Rectangle {
         pop.close();
     }
 
-    // A kept station resolves by id against its own list; a browsed one by its uuid, being all
-    // `0` by id. Takes the ids, the root being unable to read the popup's own.
-    function copy(field: string, ids: [int]) {
-        if (root.kept) {
-            Radio.copy-kept-stations(root.list, field, ids);
-        } else {
-            Radio.copy-browse-station(field, root.station.uuid);
-        }
+    // Takes the keys, the root being unable to read the popup's own.
+    function copy(field: string, keys: [int]) {
+        Radio.copy-stations(root.list, field, keys);
         root.dismiss();
     }
 
@@ -104,13 +91,11 @@ export component StationContextMenu inherits Rectangle {
         close-policy: close-on-click-outside;
 
         property <[int]> effective-ids:
-            root.multi-active ? root.effective-selection : [root.station.id];
+            root.multi-active ? root.effective-selection : [root.station.select_key];
 
-        if root.ctx-key != -1 && root.ctx-key == root.live-ctx-key: FocusLossWatcher {
-            close => {
-                pop.close();
-                root.released();
-            }
+        // Ungated, as on the row menu: the popup's body exists only while it is shown.
+        FocusLossWatcher {
+            close => { root.dismiss(); }
         }
 
         // First, so every row drawn over it wins its own click and a click on the empty reserve
@@ -189,16 +174,13 @@ export component StationContextMenu inherits Rectangle {
                     submenu: true;
                     submenu-open: root.copy-open;
                     submenu-left: pop.flyout-left;
-                    clicked => {
-                        root.copy-open = !root.copy-open;
-                        root.reclaim();
-                    }
+                    clicked => { root.copy-open = !root.copy-open; }
                 }
 
                 // The selection group, the card menu's: Clear is gated on the scope holding a set,
                 // a card having no second activation to reach one it can no longer see.
-                if root.kept: MenuSeparator {}
-                if root.kept: MenuItem {
+                MenuSeparator {}
+                MenuItem {
                     label: @tr("Select all");
                     icon: "select_all";
                     clicked => {
@@ -206,7 +188,7 @@ export component StationContextMenu inherits Rectangle {
                         root.dismiss();
                     }
                 }
-                if root.kept && root.selection-count > 0: MenuItem {
+                if root.selection-count > 0: MenuItem {
                     label: @tr("Clear selection");
                     icon: "close";
                     clicked => {

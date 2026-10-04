@@ -103,7 +103,6 @@ export component PlaylistGrid inherits Rectangle {
                         // `crates/melodia/tests/entity_card_overlay.rs` bans the word here
                         // outright rather than trying to tell a position from a write.
                         context-requested(x, y) => { cell.open-menu(x, y); }
-                        context-released => { cell.reclaim(); }
 
                         // The hover-revealed CRUD trio. **The card's slot rather than the card
                         // itself**: it lived in `EntityCard` once, where every other host raising

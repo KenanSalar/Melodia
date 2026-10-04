@@ -80,12 +80,9 @@ export component EntityCard inherits Rectangle {
     // The box or the body was clicked; the host applies the modifiers against its own selection
     // scope.
     callback select-clicked(bool /*shift*/, bool /*ctrl*/);
-    // A right-click, in this card's own coordinate frame. The host keeps the snapshot, the
-    // highlight key and the menu, as `TrackListRowItem` does for a row.
+    // A right-click, in this card's own coordinate frame. The host keeps the position and the
+    // menu, as `TrackListRowItem` does for a row.
     callback context-requested(length /*x*/, length /*y*/);
-    // The release of that right-click. The winit layer clears the host's highlight key on it, so
-    // the host writes the key again here.
-    callback context-released();
 
     // **Every hover-driven binding on this card reads this, not `touch.has-hover`.** A
     // higher-z TouchArea captures the pointer, so hovering any nested button flips that
@@ -244,9 +241,6 @@ export component EntityCard inherits Rectangle {
             if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
                 root.context-requested(touch.mouse-x, touch.mouse-y);
             }
-            if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.right) {
-                root.context-released();
-            }
         }
     }
 
@@ -387,9 +381,6 @@ export component EntityCard inherits Rectangle {
                 if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
                     root.context-requested(
                         box.x + box-touch.mouse-x, box.y + box-touch.mouse-y);
-                }
-                if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.right) {
-                    root.context-released();
                 }
             }
         }

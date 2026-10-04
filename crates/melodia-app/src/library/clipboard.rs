@@ -5,6 +5,11 @@
 //! field asked for contributes no line rather than an empty one, so a pasted list never carries
 //! blanks the user has to clean out.
 //!
+//! **Line breaks between items, never a space.** A title or a station name holds spaces of its
+//! own, so a space-joined list cannot say where one item ends, and a path can hold commas. Pasted
+//! into a single-line field, the breaks become whatever that field makes of them: Melodia's own
+//! search box turns them into spaces, plenty of others drop them.
+//!
 //! **Nothing here logs what it resolves.** A copied line is the user's, a stream URL can carry a
 //! session token, and the rolling log ships inside bug reports.
 

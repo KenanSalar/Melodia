@@ -114,14 +114,13 @@ export global Radio {
     callback remove-from-favorites([int] /*ids*/);
     callback remove-from-recent([int] /*ids*/);
     // The card menu's star over a selection, in the direction away from the station it was raised
-    // on. Kept stations only, resolved against `tab`'s list; a hand-typed one is skipped, its card
-    // offering no star at all.
-    callback set-favorites(int /*tab*/, [int] /*ids*/, bool /*favorite*/);
-    // A station card's Copy flyout. `field` is "name" | "stream-url" | "website". Kept stations
-    // resolve by id against `tab`'s list; a browsed one has no row and answers to its uuid. Here
-    // rather than on `CopyActions` because the caches they resolve from are this slice's.
-    callback copy-kept-stations(int /*tab*/, string /*field*/, [int] /*ids*/);
-    callback copy-browse-station(string /*field*/, string /*uuid*/);
+    // on. `keys` are `RadioStationRow.select_key`s, resolved against `tab`'s list; a hand-typed
+    // station is skipped, its card offering no star at all.
+    callback set-favorites(int /*tab*/, [int] /*keys*/, bool /*favorite*/);
+    // A station card's Copy flyout, over one card or a selection. `field` is "name" |
+    // "stream-url" | "website", and `keys` resolve against `tab`'s list as above. Here rather than
+    // on `CopyActions` because the caches they resolve from are this slice's.
+    callback copy-stations(int /*tab*/, string /*field*/, [int] /*keys*/);
     callback import-stations();
     callback export-stations();
 

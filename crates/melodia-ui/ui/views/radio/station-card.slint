@@ -67,7 +67,6 @@ export component StationCard inherits Rectangle {
     callback remove-clicked();
     callback select-clicked(bool /*shift*/, bool /*ctrl*/);
     callback context-requested(length /*x*/, length /*y*/);
-    callback context-released();
 
     width: card-width;
     height: card-height;
@@ -108,7 +107,6 @@ export component StationCard inherits Rectangle {
         selection-live: root.selection-live;
         select-clicked(shift, ctrl) => { root.select-clicked(shift, ctrl); }
         context-requested(x, y) => { root.context-requested(x, y); }
-        context-released => { root.context-released(); }
 
         // The four below are hover affordances and ride the card's own single overlay fade; the
         // star is not one of them and sits outside, below.

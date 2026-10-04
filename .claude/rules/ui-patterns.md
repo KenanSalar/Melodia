@@ -122,9 +122,9 @@ silently miss the other.
   otherwise walking a model held precisely because it survives. **`CardSelection` goes back on the
   same leaves**, its scope guard answering a different question: that guard stops one grid reading
   another's set, and says nothing about a set no grid is showing. One `clear()` in each of the seven
-  `on_section_active_changed` bodies covers all nine scopes, since the state is one global keyed
+  `on_section_active_changed` bodies covers all ten scopes, since the state is one global keyed
   by one scope string. **Radio is the seventh, and the one that clears without dropping its rows**:
-  its leave keeps every list, but its kept tabs' station cards pick in `CardSelection`. A card grid
+  its leave keeps every list, but its station cards pick in `CardSelection`. A card grid
   is the surface that needs it most, having no pill and no second activation: a set left live
   turns every click into a pick. Held by `crates/melodia/tests/card_selection.rs`'s
   `every_section_leave_hands_its_card_selection_back`, an **equality** over the seven because a
@@ -229,7 +229,7 @@ three components that answer it, and each argues its geometry at its own file.
 
 - **`EntityCard` goes inside `grid/card-cell.slint`'s `CardCell`, which owns everything a card owes
   its selection.** The menu has to be the card's *sibling* in the card's own coordinate frame and
-  the delegate needs somewhere to hold the right-click snapshot, so neither can live on the
+  the delegate needs somewhere to hold the right-click position, so neither can live on the
   `EntityCard` mount; the card itself arrives through `@children` because Slint has no generics and
   each grid iterates its own row struct. **A mount states its scope and nothing else** — `selected`,
   `selection-live`, the menu's `effective-selection` and its count are all derived there once, and a
@@ -239,11 +239,10 @@ three components that answer it, and each argues its geometry at its own file.
   **It mounts two menus and opens one by kind**: `card-kind: "station"` raises
   `StationContextMenu`, whose actions are `Radio`'s and resolve to no tracks, and every other kind
   raises `CardContextMenu`. The second mount is free until it opens, a `PopupWindow`'s body being
-  built inside its `show()` (verified in the generated tree). Radio's Browse passes an empty
-  `scope`, its stations all holding `id == 0`, which `pick` refuses: menu, no box.
+  built inside its `show()` (verified in the generated tree). A station's `card-id` is its
+  `select_key`, Browse's stations all holding `id == 0` (`radio.md`).
   **`BrowseCardGrid` is the one exemption**: its
-  cards are its list rows, so it reads `Browse.selected-ids` and keys its snapshot on `card_index`,
-  every folder and disk-only file holding `id == 0`. `card_selection.rs`'s
+  cards are its list rows, so it reads `Browse.selected-ids`. `card_selection.rs`'s
   `a_card_grid_mount_states_its_scope_and_nothing_else` walks the `.slint` tree for the four files
   that may name `CardSelection` at all, so the exemption has to stay one.
 
@@ -574,11 +573,10 @@ three components that answer it, and each argues its geometry at its own file.
   place its entries are spelled.** Two hosts, `TrackListRowItem` and the queue sheet's
   `QueueRowItem`. It owns the entries, the `multi-active` gate (this row selected *and* more than
   one selected, so a right-click on an unselected row falls back to that row alone) and the
-  `effective-ids` every handler reads; the host keeps the pointer position, the right-click
-  snapshot and the highlight key, which is what lets the two key their watchers off different id
-  spaces. **`view-context` is most of what a host configures** — it suppresses the entry naming
-  the surface you are already on and picks the remove arm, and `"queue"` drops Play Next and Add
-  to Queue outright, the queue being what they name. A remove label handed over by the host would
+  `effective-ids` every handler reads; the host keeps the pointer position. **`view-context` is
+  most of what a host configures** — it suppresses the entry naming the surface you are already
+  on and picks the remove arm, and `"queue"` drops Play Next and Add to Queue outright, the queue
+  being what they name. A remove label handed over by the host would
   ship untranslated, `@tr` resolving literals at codegen, so a third list's arm is one more `if`
   here rather than a property.
 
@@ -594,20 +592,19 @@ three components that answer it, and each argues its geometry at its own file.
     `dismiss()` after acting.** `close-on-click` closes on any release inside the popup, the click
     that opens the flyout included. After, because `pop.effective-ids` goes with the popup. The
     history list's menu is flat and keeps `close-on-click`.
-  - **The host writes its highlight key back after every release that leaves the menu open.**
-    The focus-loss watcher is gated on that key and the winit Release arm clears it on every
-    release, the one ending the opening right-click included. So each host reclaims it on that
-    right release (a card reports it as `EntityCard.context-released`), and the Copy row asks for
-    it again through the menu's `reclaim()`. The history list does the same with
-    `PopupHighlight.id`.
+  - **Each mounts its `FocusLossWatcher` ungated, inside its own popup.** The popup's body exists
+    only while it is shown, so that is already one live watcher. A highlight key gating it is
+    gone by the end of the click that opened the menu, the winit Release arm clearing every key on
+    every release.
   - **The width follows the rows**, `ContextMenuMetrics.menu-w` over the rows' `preferred-width`,
     declared on the popup since only it can read its descendants. Labels elide past the ceiling. A
     fixed width is what clipped a long Remove label; the chevron sits in a fixed box, its glyph
     being picked by a side the width decides.
   - **Copy acts on the effective set, one line per item, in the order handed over**, which is
-    display order on every selection, an item without the field adding no line. Menus pass ids to
-    `CopyActions` and Rust resolves the text (`library::clipboard`); stations copy through `Radio`,
-    whose caches they resolve from.
+    display order on every selection, an item without the field adding no line; why line breaks and
+    never a space is `library::clipboard`'s. Menus pass ids to `CopyActions` and Rust resolves the
+    text there; stations copy through `Radio.copy-stations` by `select_key`, resolving against the
+    slice's own caches.
   - **There is one clipboard**: `AppWindow.copy-to-clipboard`, a hidden `TextInput` reaching the
     platform clipboard Slint's backend owns, which on Wayland is the app's own display connection
     where a clipboard crate would land on XWayland. `ui::clipboard::write` is its one Rust caller,
@@ -968,13 +965,11 @@ three components that answer it, and each argues its geometry at its own file.
 
 ## Popups, native dialogs, input
 
-- **PopupWindow auto-dismiss on OS focus loss** — `FocusLossWatcher`, mounted inside
-  `if popup-is-open` so only the open popup has a live watcher. Singletons gate on
-  `PopupHighlight.id`; the row context menu gates on the `ctx-key == live-ctx-key` pair its host
-  hands it, **over two key spaces that may not be merged** — a track id for a track list, a
-  play-order index for the queue sheet, since a queue may hold one track twice where a list
-  cannot and an id there would arm two rows' watchers on the one open popup. Slint 1.16 has no
-  `closed` callback, but `pop.close()` is a safe no-op when hidden.
+- **PopupWindow auto-dismiss on OS focus loss** is `FocusLossWatcher`, mounted inside the
+  popup's own `PopupWindow`, whose body Slint builds in `show()` and drops in `close()`, so only
+  the open popup has a live watcher. Singletons also gate it on `PopupHighlight.id`, the key that
+  lights their trigger; the four right-click menus mount it ungated. Slint 1.16 has no `closed`
+  callback, but `pop.close()` is a safe no-op when hidden.
 
 - **Native dialogs (rfd) — always through `ui::file_dialog::parented(&weak, title)`.** The helper
   owns the `weak.upgrade()` + `.set_parent(…)` half; the caller chains its own

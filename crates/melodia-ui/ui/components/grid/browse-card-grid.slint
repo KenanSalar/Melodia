@@ -1,6 +1,5 @@
 import { ListView } from "std-widgets.slint";
 import { BrowseCardGridRow, TrackListRow } from "../../models.slint";
-import { PopupHighlight } from "../../globals/shell.slint";
 import { EntityCard } from "entity-card.slint";
 import { CardContextMenu } from "card-context-menu.slint";
 import { CardFavoriteButton } from "card-favorite-button.slint";
@@ -98,7 +97,6 @@ export component BrowseCardGrid inherits Rectangle {
 
                     property <length> ctx-x;
                     property <length> ctx-y;
-                    property <int> ctx-card-id: -1;
                     // A library track, the one card with a favorite to draw or toggle.
                     property <bool> favorable: card.enabled && !card.is_folder;
                     property <bool> is-favorite:
@@ -137,18 +135,11 @@ export component BrowseCardGrid inherits Rectangle {
                         select-clicked(shift, ctrl) => {
                             root.select-card(card.row_index, card.id, shift, ctrl);
                         }
-                        // **Keyed on `card_index`, not on `id`** — every folder and every
-                        // disk-only file holds id 0, so an id here would arm all of their
-                        // watchers on the one open popup. The entity grids have no such
-                        // collision and key on their own ids.
                         context-requested(x, y) => {
                             cell.ctx-x = x;
                             cell.ctx-y = y;
-                            cell.ctx-card-id = card.card_index;
-                            PopupHighlight.card-ctx-id = card.card_index;
                             ctx-menu.show();
                         }
-                        context-released => { ctx-menu.reclaim(); }
                         overlay-hovered: fav.has-hover;
                     }
 
@@ -173,8 +164,6 @@ export component BrowseCardGrid inherits Rectangle {
                         selection-count: root.selected-ids.length;
                         at-x: cell.ctx-x;
                         at-y: cell.ctx-y;
-                        ctx-key: cell.ctx-card-id;
-                        live-ctx-key: PopupHighlight.card-ctx-id;
 
                         // The card's own activation: the folder from this track, as a click gives.
                         play-single => { root.track-clicked(card.id, card.row_index); }
@@ -183,11 +172,6 @@ export component BrowseCardGrid inherits Rectangle {
                         play-folder-next(path) => { root.play-folder-next(path); }
                         queue-folder(path) => { root.queue-folder(path); }
                         reveal-folder(path) => { root.reveal-folder(path); }
-                        released => {
-                            PopupHighlight.card-ctx-id = -1;
-                            cell.ctx-card-id = -1;
-                        }
-                        reclaim => { PopupHighlight.card-ctx-id = cell.ctx-card-id; }
                     }
                 }
             }

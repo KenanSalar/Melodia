@@ -1,7 +1,6 @@
 import { Theme } from "../theme.slint";
 import { StationHistoryRow } from "../models.slint";
 import { CopyActions } from "../globals/copy-actions.slint";
-import { PopupHighlight } from "../globals/shell.slint";
 import { ContextMenuMetrics, MenuItem } from "./context-menu.slint";
 import { FocusLossWatcher } from "./focus-loss-watcher.slint";
 import { IconButton } from "./icon-button.slint";
@@ -220,22 +219,12 @@ export component StationHistory inherits Rectangle {
             }
 
             touch := TouchArea {
-                // **The key is written on the press and again on its release**: the winit layer
-                // clears it on every release, the one that ends this right-click included, and the
-                // press's grab is what brings that release back here.
                 pointer-event(ev) => {
-                    if (ev.button != PointerEventButton.right) {
-                        return;
-                    }
-                    if (ev.kind == PointerEventKind.down) {
+                    if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
                         root.menu-row = entry;
                         root.menu-x = touch.absolute-position.x + touch.mouse-x - root.absolute-position.x;
                         root.menu-y = touch.absolute-position.y + touch.mouse-y - root.absolute-position.y;
-                        PopupHighlight.id = "station-history";
                         menu.show();
-                    }
-                    if (ev.kind == PointerEventKind.up) {
-                        PopupHighlight.id = "station-history";
                     }
                 }
             }
@@ -247,11 +236,8 @@ export component StationHistory inherits Rectangle {
         y: root.menu-y;
         width: ContextMenuMetrics.menu-w(menu-vl.preferred-width);
 
-        if PopupHighlight.id == "station-history": FocusLossWatcher {
-            close => {
-                menu.close();
-                PopupHighlight.id = "";
-            }
+        FocusLossWatcher {
+            close => { menu.close(); }
         }
 
         PopupSurface {
