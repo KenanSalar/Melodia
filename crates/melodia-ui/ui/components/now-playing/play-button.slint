@@ -1,9 +1,10 @@
 import { Theme } from "../../theme.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { Tooltip } from "../tooltip.slint";
+import { HoldTouchArea } from "../hold-touch-area.slint";
 
 // The now-playing bar's play / pause button: its hover-scale disc, glyph, hit
-// area and tooltip, plus the optional Equalizer overlay.
+// area and tooltip, the ring a hold fills, plus the optional Equalizer overlay.
 //
 // That overlay drives all four bars off one shared phase counter rather than an
 // `animate height` each. Slint re-evaluates every active `animate` per vsync
@@ -13,6 +14,9 @@ import { Tooltip } from "../tooltip.slint";
 // place, and a pause falls back to the glyph.
 export component PlayButton inherits Rectangle {
     in property <bool>   is-playing;
+    // The one glyph that shows a state rather than the click's action: a stop drawn as a play
+    // arrow reads as a pause.
+    in property <bool>   is-stopped;
     in property <int>    animation-mode;        // 0 None | 1 Equalizer
     in property <length> wrapper-d: 38px;
     in property <length> icon-size: wrapper-d * 0.5;
@@ -25,16 +29,31 @@ export component PlayButton inherits Rectangle {
     // accent is solved against what the cover measured, and the theme's would be the one
     // colour on that surface the record had no say in.
     in property <brush>  disc-color: Theme.accent;
+    // Off at zero; see `HoldTouchArea`.
+    in property <duration> hold-delay: 0ms;
     callback clicked();
+    callback held();
 
     width: wrapper-d;
     height: wrapper-d;
     background: transparent;
 
+    // A hold that fires lets go of the press shrink there and then, so the stop shows while the
+    // pointer is still down rather than on the release.
+    property <bool> held-down: pp-touch.pressed && !pp-touch.hold-fired;
+
+    // The ring holds off until a press has outlasted a click, so a pause never flashes it, then
+    // fills over what is left of the hold and lands as the stop fires.
+    property <duration> ring-delay: 250ms;
+    property <float> ring-progress: root.hold-delay > root.ring-delay
+        ? clamp((pp-touch.hold-progress * root.hold-delay - root.ring-delay)
+            / (root.hold-delay - root.ring-delay), 0, 1)
+        : 0;
+
     // A press clamps to 100 ms; anything else runs the expressive overshoot at
     // the standard medium duration.
     property <length> disc-d: root.wrapper-d *
-        (pp-touch.pressed ? 0.9 : (pp-touch.has-hover ? 1.05 : 1.0));
+        (root.held-down ? 0.9 : (pp-touch.has-hover ? 1.05 : 1.0));
 
     property <bool> equalizer-active: root.is-playing && root.animation-mode == 1;
 
@@ -74,7 +93,7 @@ export component PlayButton inherits Rectangle {
         border-radius: self.width / 2;
         background: root.disc-color;
         animate width, height {
-            duration: pp-touch.pressed ? 100ms : Theme.dur-med;
+            duration: root.held-down ? 100ms : Theme.dur-med;
             easing: cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
@@ -86,7 +105,7 @@ export component PlayButton inherits Rectangle {
             VerticalLayout {
                 alignment: center;
                 MaterialIcon {
-                    name: root.is-playing ? "pause" : "play_arrow";
+                    name: root.is-playing ? "pause" : (root.is-stopped ? "stop" : "play_arrow");
                     filled: true;
                     icon-size: root.icon-size;
                     icon-color: root.icon-color;
@@ -148,17 +167,46 @@ export component PlayButton inherits Rectangle {
                 border-radius: 1px;
             }
         }
+
+        // The hold filling up, clockwise from twelve o'clock in the glyph's ink, between the glyph
+        // and the disc's edge. Short of a full turn, where an arc's two ends meet and it draws
+        // nothing; the hold fires there anyway.
+        if root.ring-progress > 0: Path {
+            property <float> radius: 38;
+            property <angle> sweep: min(root.ring-progress, 0.999) * 360deg;
+
+            x: 0;
+            y: 0;
+            width: 100%;
+            height: 100%;
+            viewbox-width: 100;
+            viewbox-height: 100;
+            fit: fill;
+            stroke: root.icon-color;
+            stroke-width: 2px;
+            commands: "M 50 " + (50 - self.radius)
+                + " A " + self.radius + " " + self.radius + " 0 "
+                + (self.sweep > 180deg ? "1" : "0") + " 1 "
+                + (50 + self.radius * sin(self.sweep)) + " "
+                + (50 - self.radius * cos(self.sweep));
+        }
     }
 
     Tooltip {
-        text: root.is-playing ? @tr("Pause") : @tr("Play");
+        text: root.hold-delay > 0ms
+            ? (root.is-playing ? @tr("Pause (hold to stop)") : @tr("Play (hold to stop)"))
+            : (root.is-playing ? @tr("Pause") : @tr("Play"));
         hovered: pp-touch.has-hover;
         host-width: parent.width;
         host-height: parent.height;
     }
 
-    pp-touch := TouchArea {
+    pp-touch := HoldTouchArea {
+        width: 100%;
+        height: 100%;
         mouse-cursor: pointer;
+        hold-delay: root.hold-delay;
         clicked => { root.clicked(); }
+        held => { root.held(); }
     }
 }

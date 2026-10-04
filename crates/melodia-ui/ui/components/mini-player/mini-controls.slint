@@ -25,8 +25,11 @@ export component MiniTransport inherits HorizontalLayout {
             diameter: MiniSizes.button-d;
             icon-size: MiniSizes.button-icon;
             button-enabled: Player.vm.has_previous;
-            tooltip-text: @tr("Previous");
+            hold-delay: Player.scan-hold;
+            repeat-interval: Player.scan-interval;
+            tooltip-text: Player.previous-tooltip;
             clicked => { Player.previous(); }
+            held(step) => { Player.scan-step(-1, step); }
         }
     }
     VerticalLayout {
@@ -35,10 +38,13 @@ export component MiniTransport inherits HorizontalLayout {
             wrapper-d: MiniSizes.play-d;
             icon-size: MiniSizes.play-icon;
             is-playing: Player.vm.is_playing;
+            is-stopped: Player.stopped-at-top;
             animation-mode: 0;
             disc-color: root.disc-color;
             icon-color: root.disc-ink;
+            hold-delay: Player.stop-hold;
             clicked => { Player.play-pause(); }
+            held => { Player.stop(); }
         }
     }
     VerticalLayout {
@@ -48,8 +54,11 @@ export component MiniTransport inherits HorizontalLayout {
             diameter: MiniSizes.button-d;
             icon-size: MiniSizes.button-icon;
             button-enabled: Player.vm.has_next;
-            tooltip-text: @tr("Next");
+            hold-delay: Player.scan-hold;
+            repeat-interval: Player.scan-interval;
+            tooltip-text: Player.next-tooltip;
             clicked => { Player.next(); }
+            held(step) => { Player.scan-step(1, step); }
         }
     }
 }

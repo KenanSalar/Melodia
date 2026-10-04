@@ -1,0 +1,63 @@
+// A click target that can also be held, shared so the line between a click and a hold is drawn in
+// one place. A press held past `hold-delay` fires `held(0)`, then `held(n)` every `repeat-interval`
+// for as long as it lasts, and its release makes no click. Size it at the mount: a component root
+// takes no size off its parent.
+export component HoldTouchArea {
+    // Zero is a plain click target.
+    in property <duration> hold-delay: 0ms;
+    // Zero fires the hold once.
+    in property <duration> repeat-interval: 0ms;
+    in property <MouseCursor> mouse-cursor: default;
+
+    out property <bool> pressed: touch.pressed;
+    out property <bool> has-hover: touch.has-hover;
+    out property <bool> hold-fired: false;
+    // How far a building hold has got, 0 to 1, for a host that draws it. `animation-tick()` sits
+    // inside the live arm only, so nothing redraws per frame while no hold is building.
+    out property <float> hold-progress: root.building
+        ? clamp((animation-tick() - root.pressed-at) / root.hold-delay, 0, 1)
+        : 0;
+
+    callback clicked();
+    callback held(int /*step*/);
+
+    private property <bool> building: root.hold-delay > 0ms && touch.pressed && !root.hold-fired;
+    private property <duration> pressed-at;
+    private property <int> repeats;
+
+    hold-timer := Timer {
+        interval: root.hold-delay;
+        running: root.building;
+        triggered => {
+            root.hold-fired = true;
+            root.held(0);
+        }
+    }
+
+    repeat-timer := Timer {
+        interval: root.repeat-interval;
+        running: root.repeat-interval > 0ms && touch.pressed && root.hold-fired;
+        triggered => {
+            root.repeats += 1;
+            root.held(root.repeats);
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: root.mouse-cursor;
+        pointer-event(ev) => {
+            if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
+                root.hold-fired = false;
+                root.repeats = 0;
+                root.pressed-at = animation-tick();
+            }
+        }
+        // `clicked` rather than Up: it runs first, so it still reads this press's flag, and only
+        // for an area that took the press (`slint-pitfalls.md`).
+        clicked => {
+            if (!root.hold-fired) {
+                root.clicked();
+            }
+        }
+    }
+}

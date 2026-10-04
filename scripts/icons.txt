@@ -87,6 +87,7 @@ sort
 speed
 star
 star_border
+stop
 swap_horiz
 system_update
 theater_comedy

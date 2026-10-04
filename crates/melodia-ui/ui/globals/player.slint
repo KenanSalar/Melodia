@@ -1,4 +1,5 @@
 import { PlayerVm, QueueVm, TrackMetaRow } from "../models.slint";
+import { Settings } from "../settings.slint";
 
 // Bound to the backend through watch channels (push) and `library::*` (pull); cross-cutting
 // callbacks are wired in `crates/melodia-views/src/ui/callbacks/`, each view slice owning its own under `<view>/`.
@@ -70,17 +71,54 @@ export global Player {
     // ≥ 0 the slider prefers it over `position-ms`, so the thumb doesn't snap back for a frame.
     in-out property <int> seek_pending_ms: -1;
 
-    // Where a run of *relative* seek keystrokes is walking to, or -1 between runs; `ShortcutScope`
-    // owns the timer that lands it, a global holding no elements. The state lives here rather than
-    // beside that timer so `seek-to` can cancel a run, which is the only way an absolute seek is
-    // safe from a trailing edge landing back on the target it just abandoned.
+    // Where a run of *relative* seeks is walking to, or -1 between runs. The seek keys and a held
+    // Previous or Next both walk it; `ShortcutScope` owns the timer that lands it, a global holding
+    // no elements. The state lives here rather than beside that timer so `seek-to` can cancel a run,
+    // which is the only way an absolute seek is safe from a trailing edge landing back on the target
+    // it just abandoned.
     in-out property <int> seek-run-target-ms: -1;
     // Whether the target has moved since the last one was sent, so the trailing edge stays quiet
     // when the leading one already covered the whole run.
     in-out property <bool> seek-run-unsent: false;
-    // Timer ticks left before the run ends, reset by every keystroke. Non-zero is also what runs
-    // the timer, so clearing it is how an absolute seek drops the trailing edge.
+    // Timer ticks left before the run ends, reset by every step. Non-zero is also what runs the
+    // timer, so clearing it is how an absolute seek drops the trailing edge.
     in-out property <int> seek-run-ticks: 0;
+    property <int> seek-run-window-ticks: 3;
+
+    // The press-and-hold half of the transport, read by both the bar and the miniplayer so the two
+    // can't come to behave differently. A zero hold leaves a plain button.
+    property <bool> can-scan: root.vm.has_track && root.duration-ms > 0;
+    // Longer than a slow click, so an ordinary one never turns into a scan.
+    out property <duration> scan-hold: root.can-scan ? 500ms : 0ms;
+    // Long enough to hear each burst, short enough to read as one sweep. Kept inside the run
+    // window, so each step walks from the last target.
+    out property <duration> scan-interval: 250ms;
+    // A nudge first, growing per step up to a share of the track, so an hour-long recording crosses
+    // about as fast as a song.
+    property <int> scan-first-jump-ms: 3000;
+    property <float> scan-jump-growth: 1.2;
+    property <int> scan-jump-cap-floor-ms: 15000;
+    property <int> scan-crossing-steps: 12;
+    // Where a fast-forward parks: short of the crossfade window, where the monitor would start the
+    // next track, by a margin one scan interval plus the device's lead can't use up.
+    property <int> scan-end-margin-ms: 2000;
+    property <int> scan-end-ms: max(0, root.duration-ms - root.scan-end-margin-ms
+        - (Settings.crossfade-enabled ? round(Settings.crossfade-duration-secs * 1000) : 0));
+    // Clearly longer than any click on the most-pressed button, and than the scan's hold.
+    out property <duration> stop-hold: root.vm.has_track || root.vm.has_station ? 900ms : 0ms;
+    // A stop, as against a pause: play starts the track over. Launch restores its track stopped
+    // where the last session left it, and that one resumes like a pause, hence the position.
+    out property <bool> stopped-at-top: root.vm.has_track && root.vm.status == "stopped"
+        && root.position-ms == 0;
+
+    // The tooltip is the only thing on screen naming the hold, and on a dimmed button the only
+    // sign it does anything.
+    out property <string> previous-tooltip: root.can-scan
+        ? @tr("Previous (hold to rewind)")
+        : @tr("Previous");
+    out property <string> next-tooltip: root.can-scan
+        ? @tr("Next (hold to fast-forward)")
+        : @tr("Next");
 
     // The dual-slot cross-fade: Rust writes the fresh blur into the *inactive* slot then flips
     // `blur-use-a`. **Neither slot is ever cleared** — the outgoing layer stays painted for the
@@ -184,6 +222,7 @@ export global Player {
     callback play-pause();
     callback next();
     callback previous();
+    callback stop();
     callback seek(int);          // position in ms
 
     // Drop the relative-seek run, so the next press reads a fresh position.
@@ -198,6 +237,65 @@ export global Player {
     public function seek-to(ms: int) {
         root.end-seek-run();
         root.seek(ms);
+    }
+
+    // Walk the run's target rather than re-reading the position per press, for two reasons that
+    // happen to share a fix. A seek round-trips through the backend asynchronously and does not
+    // land inside a key repeat, so every repeat would aim at the same sample and the run would
+    // travel one step; and a seek is far from free down there, where the track is reopened and
+    // the demuxer walked to the target, so issuing one per repeat is the expensive way to go
+    // nowhere.
+    //
+    // Guarded on a real duration, so a press with no track loaded is a no-op rather than a seek
+    // against an unloaded backend.
+    public function bump-seek(delta-ms: int) {
+        if (root.duration-ms > 0) {
+            root.walk-seek-run(delta-ms, root.duration-ms);
+            // Leading edge, so a single tap still seeks on the keystroke; a repeat inside
+            // the window only moves the target and the trailing edge sends where it ended.
+            if (root.seek-run-ticks == 0) {
+                root.flush-seek();
+            }
+            root.seek-run-ticks = root.seek-run-window-ticks;
+        }
+    }
+
+    // One jump of a held Previous or Next. Unlike a key repeat every step is sent, the scan's
+    // interval being the rate limit, and each keeps the run open so the next walks from this
+    // target. At either end a step lands on the end again, so the position holds there rather than
+    // playing on into the start of the track or the next one.
+    public function scan-step(direction: int, step: int) {
+        if (root.can-scan) {
+            // Never below the run's own base, so a fast-forward started past the parking point
+            // holds its place instead of jumping back to it.
+            root.walk-seek-run(
+                direction * root.scan-jump(step),
+                max(root.scan-end-ms, root.seek-run-base()));
+            root.flush-seek();
+            root.seek-run-ticks = root.seek-run-window-ticks;
+        }
+    }
+
+    public function flush-seek() {
+        if (root.seek-run-unsent && root.seek-run-target-ms >= 0) {
+            root.seek(root.seek-run-target-ms);
+            root.seek-run-unsent = false;
+        }
+    }
+
+    pure function seek-run-base() -> int {
+        return root.seek-run-target-ms >= 0 ? root.seek-run-target-ms : root.position-ms;
+    }
+
+    function walk-seek-run(delta-ms: int, ceiling-ms: int) {
+        root.seek-run-target-ms = clamp(root.seek-run-base() + delta-ms, 0, ceiling-ms);
+        root.seek-run-unsent = true;
+    }
+
+    pure function scan-jump(step: int) -> int {
+        return round(min(
+            max(root.scan-jump-cap-floor-ms, root.duration-ms / root.scan-crossing-steps),
+            root.scan-first-jump-ms * pow(root.scan-jump-growth, step)));
     }
 
     callback set-volume(int);    // 0..100, fires continuously during drag

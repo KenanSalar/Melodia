@@ -211,14 +211,17 @@ export component NowPlayingBar inherits Rectangle {
                         diameter: root.btn-d;
                         icon-size: root.btn-icon-d;
                         button-enabled: Player.vm.has_previous;
-                        tooltip-text: @tr("Previous");
+                        hold-delay: Player.scan-hold;
+                        repeat-interval: Player.scan-interval;
+                        tooltip-text: Player.previous-tooltip;
                         clicked => { Player.previous(); }
+                        held(step) => { Player.scan-step(-1, step); }
                     }
                 }
 
-                // Disc geometry, hover and press scale, tooltip and the optional
-                // Equalizer overlay all live inside `PlayButton`. The bar feeds it the
-                // playing state, the animation mode, a diameter clamped to the bar
+                // Disc geometry, hover and press scale, tooltip, the hold ring and the
+                // optional Equalizer overlay all live inside `PlayButton`. The bar feeds it
+                // the playing state, the animation mode, a diameter clamped to the bar
                 // width, and its own fill for the glyph to be punched out in.
                 VerticalLayout {
                     alignment: center;
@@ -227,8 +230,11 @@ export component NowPlayingBar inherits Rectangle {
                         icon-size: clamp(root.bar-w * 0.025, 14px, 20px);
                         icon-color: WindowChrome.mantle;
                         is-playing: Player.vm.is_playing;
+                        is-stopped: Player.stopped-at-top;
                         animation-mode: Settings.play-button-animation-idx;
+                        hold-delay: Player.stop-hold;
                         clicked => { Player.play-pause(); }
+                        held => { Player.stop(); }
                     }
                 }
 
@@ -240,8 +246,11 @@ export component NowPlayingBar inherits Rectangle {
                         diameter: root.btn-d;
                         icon-size: root.btn-icon-d;
                         button-enabled: Player.vm.has_next;
-                        tooltip-text: @tr("Next");
+                        hold-delay: Player.scan-hold;
+                        repeat-interval: Player.scan-interval;
+                        tooltip-text: Player.next-tooltip;
                         clicked => { Player.next(); }
+                        held(step) => { Player.scan-step(1, step); }
                     }
                 }
             }

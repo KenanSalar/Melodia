@@ -228,6 +228,7 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
     );
     wire_sync_pb!(player, on_next, state, "next", library::playback::player_next);
     wire_sync_pb!(player, on_previous, state, "previous", library::playback::player_previous);
+    wire_sync_pb!(player, on_stop, state, "stop", library::playback::player_stop);
     wire_pb!(
         player,
         on_commit_volume,
