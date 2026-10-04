@@ -1,6 +1,7 @@
 import { Theme } from "../theme.slint";
 import { MaterialIcon } from "material-icon.slint";
 import { Tooltip, TooltipSide } from "tooltip.slint";
+import { HoldTouchArea } from "hold-touch-area.slint";
 
 // Generic icon-only button with hover/pressed/active visual states.
 export component IconButton inherits Rectangle {
@@ -60,8 +61,13 @@ export component IconButton inherits Rectangle {
     // binding restarts on dependency dirtiness, so a per-frame fade would stall both crossfades.
     // Argued in `slint-pitfalls.md`'s `opacity` entry.
     in property <float> fade: 1.0;
+    // Off at zero; see `HoldTouchArea`. Deliberately not gated on `button-enabled`: a button with
+    // nothing to click through to can still have something to hold for, and keeps its dimmed look.
+    in property <duration> hold-delay: 0ms;
+    in property <duration> repeat-interval: 0ms;
 
     callback clicked();
+    callback held(int /*step*/);
 
     width: diameter;
     height: diameter;
@@ -146,10 +152,15 @@ export component IconButton inherits Rectangle {
         force-shown: root.force-tooltip;
     }
 
-    touch := TouchArea {
+    touch := HoldTouchArea {
+        width: 100%;
+        height: 100%;
         mouse-cursor: root.button-enabled ? pointer : default;
+        hold-delay: root.hold-delay;
+        repeat-interval: root.repeat-interval;
         clicked => {
             if (root.button-enabled) { root.clicked(); }
         }
+        held(step) => { root.held(step); }
     }
 }

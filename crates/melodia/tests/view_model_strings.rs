@@ -32,8 +32,8 @@ const FALLBACK_VARIANT: &str = "info";
 
 /// Vacuity floors, one per walk. Each is under what the tree holds today and none is an
 /// inventory: what they guard is a walk that stopped matching, which every assertion below
-/// would otherwise pass. Deliberately loose, `status` most of all — its two comparisons are the
-/// two halves of one ternary, so anything but 1 is a floor that fails on an ordinary edit.
+/// would otherwise pass. Deliberately loose, `status` most of all — its comparisons sit in two
+/// bindings an ordinary edit could drop either of, so anything but 1 is a floor that fails on one.
 const MIN_REPEAT_SITES: usize = 6;
 const MIN_STATUS_SITES: usize = 1;
 const MIN_VARIANT_PRODUCERS: usize = 10;

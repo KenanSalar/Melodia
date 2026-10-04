@@ -100,6 +100,18 @@ msgstr "Précédent"
 msgid "Next"
 msgstr "Suivant"
 
+msgid "Previous (hold to rewind)"
+msgstr "Précédent (maintenir pour le retour rapide)"
+
+msgid "Next (hold to fast-forward)"
+msgstr "Suivant (maintenir pour l'avance rapide)"
+
+msgid "Play (hold to stop)"
+msgstr "Lecture (maintenir pour arrêter)"
+
+msgid "Pause (hold to stop)"
+msgstr "Pause (maintenir pour arrêter)"
+
 msgid "Repeat"
 msgstr "Répéter"
 

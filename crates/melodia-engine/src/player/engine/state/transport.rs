@@ -88,13 +88,15 @@ impl PlayerState {
         vec![PlayerAction::Stop { fade_ms: 0 }]
     }
 
-    /// Build actions for user-initiated stop (preserves position for resume).
-    /// `fade_ms` is the pause-fade length when that setting is on, else `0`.
+    /// Build actions for a stop: back to the top of a track that stays seated, so play starts it
+    /// over. A pause is what keeps the position. `fade_ms` is the pause-fade length when that
+    /// setting is on, else `0`.
     ///
     /// A station is forgotten outright rather than paused, so the transport falls back to the
     /// queue that was left untouched underneath it (D9).
     pub fn build_stop_actions(&mut self, fade_ms: u64) -> Vec<PlayerAction> {
         self.status = PlaybackStatus::Stopped;
+        self.position_ms = 0;
         if self.is_radio() {
             self.end_stream_session();
             self.source = None;
@@ -417,14 +419,10 @@ pub fn play_track_inner(
     }]
 }
 
-/// Stop at end of queue — preserves `current_track` but resets position to 0 for replay-from-start.
-/// Contrast with `player_stop` command which preserves position for resume-from-where-stopped.
+/// Stop at the end of the queue. Never faded: the track has already run out of audio, so there is
+/// nothing left to fade, and a deferred clear would only delay the silence.
 pub fn stop_end_of_queue(state: &mut PlayerState) -> Vec<PlayerAction> {
-    state.status = PlaybackStatus::Stopped;
-    state.position_ms = 0;
-    // Never faded: the track has already run out of audio, so there is nothing
-    // left to fade — and a deferred clear would only delay the silence.
-    vec![PlayerAction::Stop { fade_ms: 0 }]
+    state.build_stop_actions(0)
 }
 
 /// Resume playback from a Stopped state. Replays the current track from the saved position.

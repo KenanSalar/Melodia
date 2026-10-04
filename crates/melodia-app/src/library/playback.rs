@@ -261,8 +261,8 @@ pub fn player_toggle_play_pause(ctx: &PlaybackContext) -> Result<(), AppError> {
     Ok(())
 }
 
-/// User-initiated stop — preserves `current_track` and `position_ms` so `player_play` can resume
-/// from where the user stopped. Contrast with `stop_end_of_queue` which resets position to 0.
+/// User-initiated stop, from the play button's hold and the OS media controls alike: back to the
+/// top with the track still seated, so `player_play` starts it over, as MPRIS specifies.
 pub fn player_stop(ctx: &PlaybackContext) -> Result<(), AppError> {
     let fade_ms = transport_fade_ms(ctx);
     ctx.emit_and_execute(move |s| s.build_stop_actions(fade_ms));

@@ -100,6 +100,18 @@ msgstr "Önceki"
 msgid "Next"
 msgstr "Sonraki"
 
+msgid "Previous (hold to rewind)"
+msgstr "Önceki (geri sarmak için basılı tut)"
+
+msgid "Next (hold to fast-forward)"
+msgstr "Sonraki (ileri sarmak için basılı tut)"
+
+msgid "Play (hold to stop)"
+msgstr "Çal (durdurmak için basılı tut)"
+
+msgid "Pause (hold to stop)"
+msgstr "Duraklat (durdurmak için basılı tut)"
+
 msgid "Repeat"
 msgstr "Tekrarla"
 

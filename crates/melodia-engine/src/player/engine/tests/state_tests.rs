@@ -61,7 +61,7 @@ fn test_play_track_inner_with_resume_position() -> Result<(), AppError> {
     let mut state = PlayerState::default();
     let track = make_summary(1, "Song", 180_000);
 
-    // Play a track, then stop (preserving current_track)
+    // Stopped part-way through, as a launch restores the last session's track
     play_track_inner(&mut state, track, None);
     state.position_ms = 60_000;
     state.status = PlaybackStatus::Stopped;
@@ -235,7 +235,7 @@ fn test_resume_from_stopped_not_stopped() {
 }
 
 #[test]
-fn test_stop_preserves_track_for_resume() {
+fn test_stop_preserves_track() {
     let mut state = PlayerState {
         status: PlaybackStatus::Playing,
         source: Some(PlaybackSource::Track(make_summary(1, "Song", 100_000))),
@@ -1124,6 +1124,42 @@ fn stop_forwards_the_pause_fade_length() {
 
     state.status = PlaybackStatus::Playing;
     assert_eq!(state.build_stop_actions(250), vec![PlayerAction::Stop { fade_ms: 250 }]);
+}
+
+/// The stopped row is a launch, which restores the last session's track stopped part-way through
+/// and still offers the hold.
+#[test]
+fn a_stop_takes_the_track_back_to_the_top_from_any_status() {
+    for status in [PlaybackStatus::Playing, PlaybackStatus::Paused, PlaybackStatus::Stopped] {
+        let mut state = PlayerState {
+            status,
+            source: Some(PlaybackSource::Track(make_summary(1, "Song", 180_000))),
+            duration_ms: 180_000,
+            position_ms: 60_000,
+            ..Default::default()
+        };
+
+        state.build_stop_actions(0);
+
+        assert_eq!((state.status, state.position_ms), (PlaybackStatus::Stopped, 0), "{status:?}");
+    }
+}
+
+/// What a stop is for, as MPRIS specifies it. Taken from a pause, the one status that keeps a
+/// position on purpose, so a stop that left it in place would show here as a resume.
+#[test]
+fn play_after_a_stop_starts_the_track_over() {
+    let mut state = queued(1);
+    play_track_inner(&mut state, make_summary(1, "Track 1", 180_000), Some(60_000));
+    state.build_pause_actions(0);
+    state.build_stop_actions(0);
+
+    let actions = state.build_play_actions();
+
+    assert!(
+        matches!(actions.as_slice(), [PlayerAction::PlayMedia { start_position_ms: None, .. }]),
+        "play after a stop must start from the top, not where the pause held it: {actions:?}"
+    );
 }
 
 #[test]
