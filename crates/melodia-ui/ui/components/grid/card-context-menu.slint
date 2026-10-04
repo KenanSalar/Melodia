@@ -103,6 +103,9 @@ export component CardContextMenu inherits Rectangle {
     callback go-to-artist(int /*artist_id*/);
     // Focus loss closed the popup; the host hands back its own snapshot and highlight key.
     callback released();
+    // `TrackContextMenu.reclaim`: the host writes its key back after a click that keeps the menu
+    // open.
+    callback reclaim();
 
     // **Pinned at the origin, and the zero size is why** — the `TrackContextMenu` argument
     // verbatim: a child with no `x`/`y` in a non-layout parent is *centred*, so at zero width the
@@ -320,6 +323,7 @@ export component CardContextMenu inherits Rectangle {
                     clicked => {
                         if (root.has-flyout) {
                             root.copy-open = !root.copy-open;
+                            root.reclaim();
                         } else {
                             if (root.is-folder) {
                                 CopyActions.copy-text(root.card-path);

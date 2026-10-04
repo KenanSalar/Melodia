@@ -113,6 +113,9 @@ export component TrackContextMenu inherits Rectangle {
     // Focus loss closed the popup. The host hands back its own snapshot and highlight key, which
     // are the two things this component deliberately doesn't own.
     callback released();
+    // The host writes its highlight key back. The winit layer clears it on every release, so a
+    // click that leaves the menu open would otherwise disarm the focus-loss watcher.
+    callback reclaim();
 
     // **Pinned at the origin, and the zero size is why.** An element with no `x`/`y` in a
     // non-layout parent is *centred* — Slint generates `(parent.width - self.width) / 2` — so at
@@ -300,7 +303,10 @@ export component TrackContextMenu inherits Rectangle {
                     submenu: true;
                     submenu-open: root.copy-open;
                     submenu-left: pop.flyout-left;
-                    clicked => { root.copy-open = !root.copy-open; }
+                    clicked => {
+                        root.copy-open = !root.copy-open;
+                        root.reclaim();
+                    }
                 }
                 // Single-target by nature, so hidden over a selection like the cross-tab entries
                 // below. Straight to `Nav`.

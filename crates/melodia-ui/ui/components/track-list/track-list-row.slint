@@ -250,6 +250,11 @@ export component TrackListRowItem inherits Rectangle {
                     ctx-menu.show();
                     root.request-blur-search();
                 }
+                // The winit layer clears the key on this click's own release; the press's grab
+                // brings that release back here to write it again.
+                if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.right && root.enabled) {
+                    ctx-menu.reclaim();
+                }
                 // Drag-reorder tracking — opt-in via `enable-drag`.
                 if (root.enable-drag) {
                     if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
@@ -563,6 +568,7 @@ export component TrackListRowItem inherits Rectangle {
                 PopupHighlight.row-ctx-id = -1;
                 root.right-click-row-id = -1;
             }
+            reclaim => { PopupHighlight.row-ctx-id = root.right-click-row-id; }
         }
     }
     }

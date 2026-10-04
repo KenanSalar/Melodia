@@ -590,9 +590,16 @@ three components that answer it, and each argues its geometry at its own file.
     the popup being sized once as it opens: wide enough for the flyout whether or not it opens, the
     reserve on whichever side `ContextMenuMetrics.opens-left` finds room, so the column stays under
     the pointer. A second `PopupWindow` is not an option (`slint-pitfalls.md`).
-  - **`close-on-click-outside`, and every entry calls the menu's `dismiss()` after acting.**
-    `close-on-click` closes on any release inside the popup, the click that opens the flyout
-    included. After, because `pop.effective-ids` goes with the popup.
+  - **The three with a flyout take `close-on-click-outside`, and every entry calls the menu's
+    `dismiss()` after acting.** `close-on-click` closes on any release inside the popup, the click
+    that opens the flyout included. After, because `pop.effective-ids` goes with the popup. The
+    history list's menu is flat and keeps `close-on-click`.
+  - **The host writes its highlight key back after every release that leaves the menu open.**
+    The focus-loss watcher is gated on that key and the winit Release arm clears it on every
+    release, the one ending the opening right-click included. So each host reclaims it on that
+    right release (a card reports it as `EntityCard.context-released`), and the Copy row asks for
+    it again through the menu's `reclaim()`. The history list does the same with
+    `PopupHighlight.id`.
   - **The width follows the rows**, `ContextMenuMetrics.menu-w` over the rows' `preferred-width`,
     declared on the popup since only it can read its descendants. Labels elide past the ceiling. A
     fixed width is what clipped a long Remove label; the chevron sits in a fixed box, its glyph

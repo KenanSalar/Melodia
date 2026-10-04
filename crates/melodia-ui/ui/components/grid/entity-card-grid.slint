@@ -114,6 +114,7 @@ export component EntityCardGrid inherits Rectangle {
                         selection-live: cell.selection-live;
                         select-clicked(shift, ctrl) => { cell.pick(shift, ctrl); }
                         context-requested(x, y) => { cell.open-menu(x, y); }
+                        context-released => { cell.reclaim(); }
                         overlay-hovered: fav.has-hover;
                     }
 

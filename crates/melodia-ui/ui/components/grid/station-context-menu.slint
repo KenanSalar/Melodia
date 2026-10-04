@@ -55,6 +55,9 @@ export component StationContextMenu inherits Rectangle {
     callback clear-selection();
     // Focus loss closed the popup; the host hands back its own snapshot and highlight key.
     callback released();
+    // `TrackContextMenu.reclaim`: the host writes its key back after a click that keeps the menu
+    // open.
+    callback reclaim();
 
     public function show() {
         root.copy-open = false;
@@ -186,7 +189,10 @@ export component StationContextMenu inherits Rectangle {
                     submenu: true;
                     submenu-open: root.copy-open;
                     submenu-left: pop.flyout-left;
-                    clicked => { root.copy-open = !root.copy-open; }
+                    clicked => {
+                        root.copy-open = !root.copy-open;
+                        root.reclaim();
+                    }
                 }
 
                 // The selection group, the card menu's: Clear is gated on the scope holding a set,

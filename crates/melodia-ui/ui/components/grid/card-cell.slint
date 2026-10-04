@@ -97,6 +97,12 @@ export component CardCell inherits Rectangle {
         root.ctx-card-id = -1;
     }
 
+    // The key again, after a release the winit layer cleared it on: the right-click's own, which
+    // the card reports as `context-released`, or a click that left the menu open.
+    public function reclaim() {
+        PopupHighlight.card-ctx-id = root.ctx-card-id;
+    }
+
     width: root.card-width;
     height: root.card-height;
 
@@ -127,6 +133,7 @@ export component CardCell inherits Rectangle {
         delete-cards(ids) => { root.delete-cards(ids); }
         play-single => { root.play-single(); }
         released => { root.hand-back(); }
+        reclaim => { root.reclaim(); }
     }
 
     station-menu := StationContextMenu {
@@ -142,5 +149,6 @@ export component CardCell inherits Rectangle {
         ctx-key: root.ctx-card-id;
         live-ctx-key: PopupHighlight.card-ctx-id;
         released => { root.hand-back(); }
+        reclaim => { root.reclaim(); }
     }
 }

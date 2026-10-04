@@ -207,6 +207,11 @@ export component QueueRowItem inherits Rectangle {
                     PopupHighlight.queue-ctx-index = root.row-index;
                     ctx-menu.show();
                 }
+                // The winit layer clears the key on this click's own release; the press's grab
+                // brings that release back here to write it again.
+                if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.right) {
+                    ctx-menu.reclaim();
+                }
             }
             moved => {
                 if (self.pressed) {
@@ -434,6 +439,7 @@ export component QueueRowItem inherits Rectangle {
                 PopupHighlight.queue-ctx-index = -1;
                 root.right-click-row-index = -1;
             }
+            reclaim => { PopupHighlight.queue-ctx-index = root.right-click-row-index; }
         }
     }
 }

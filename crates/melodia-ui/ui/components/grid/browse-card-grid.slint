@@ -148,6 +148,7 @@ export component BrowseCardGrid inherits Rectangle {
                             PopupHighlight.card-ctx-id = card.card_index;
                             ctx-menu.show();
                         }
+                        context-released => { ctx-menu.reclaim(); }
                         overlay-hovered: fav.has-hover;
                     }
 
@@ -186,6 +187,7 @@ export component BrowseCardGrid inherits Rectangle {
                             PopupHighlight.card-ctx-id = -1;
                             cell.ctx-card-id = -1;
                         }
+                        reclaim => { PopupHighlight.card-ctx-id = cell.ctx-card-id; }
                     }
                 }
             }
