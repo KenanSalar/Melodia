@@ -154,6 +154,19 @@ pub fn resolve(radio_ui: &RadioUi, tab: RadioTab, id: i64) -> Option<RadioStatio
     cache(radio_ui, tab).lock().stations.iter().find(|station| station.id == id).cloned()
 }
 
+/// The stations a set of cards' ids name, in the order given, skipping an id that names none:
+/// [`resolve`] over a selection under one lock, as [`super::browse::resolve_keys`] is for Browse.
+pub fn resolve_keys(
+    radio_ui: &RadioUi,
+    tab: RadioTab,
+    ids: impl IntoIterator<Item = i64>,
+) -> Vec<RadioStation> {
+    let state = cache(radio_ui, tab).lock();
+    ids.into_iter()
+        .filter_map(|id| state.stations.iter().find(|station| station.id == id).cloned())
+        .collect()
+}
+
 /// Rebuild one tab's grid from its cache.
 ///
 /// **The one write path**, as `browse::apply` is for the directory: a landed fetch, a keystroke, a

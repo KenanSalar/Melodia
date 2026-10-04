@@ -71,13 +71,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
                 tab => {
                     // A hand-typed station's card has no star, so the set's star skips it too:
                     // un-starring one drops it from the only list that shows it.
-                    let ids: Vec<i64> = keys
-                        .iter()
-                        .map(i64::from)
-                        .filter(|&id| {
-                            kept::resolve(&ru, tab, id)
-                                .is_some_and(|station| station.station_uuid.is_some())
-                        })
+                    let ids: Vec<i64> = kept::resolve_keys(&ru, tab, keys.iter().map(i64::from))
+                        .into_iter()
+                        .filter(|station| station.station_uuid.is_some())
+                        .map(|station| station.id)
                         .collect();
                     set_kept_favorites(&s, &ru, &weak, ids, favorite);
                 }
@@ -110,10 +107,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
                     station_lines(stations.iter().map(|(station, _)| browsed_text(station)), field)
                 }
                 tab => {
-                    let stations: Vec<RadioStation> = keys
-                        .iter()
-                        .filter_map(|id| kept::resolve(&ru, tab, i64::from(id)))
-                        .collect();
+                    let stations = kept::resolve_keys(&ru, tab, keys.iter().map(i64::from));
                     station_lines(stations.iter().map(kept_text), field)
                 }
             };
