@@ -31,6 +31,11 @@ export global ContextMenuMetrics {
         return rows * root.item-h + 2 * root.inset;
     }
 
+    // A left flyout takes the reserve the popup was shifted by, so it starts at the popup's edge.
+    pure public function flyout-x(left: bool, menu-w: length) -> length {
+        return left ? 0px : menu-w + root.gap;
+    }
+
     // Level with the row that opens it, and lifted where that row sits too low for the whole
     // column to fit in the popup.
     pure public function flyout-y(row-y: length, popup-h: length, flyout-h: length) -> length {

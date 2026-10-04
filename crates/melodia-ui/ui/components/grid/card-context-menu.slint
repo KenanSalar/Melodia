@@ -8,7 +8,7 @@ import { PopupSurface } from "../popup-surface.slint";
 import { PopupDismissCatcher } from "../popup-dismiss-catcher.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 
-// The right-click menu every entity card raises, and the only place its entries are spelled.
+// The right-click menu every entity card raises, and the only place its entries are mounted.
 //
 // `TrackContextMenu`'s contract, one layer over: **the host keeps the pointer position; this keeps
 // the menu.** What differs is that a card is a *set* of tracks, so the actions go through
@@ -416,7 +416,7 @@ export component CardContextMenu inherits Rectangle {
 
         // A track card offers what a track row does; an album its own name and credit.
         if root.copy-open: MenuFlyout {
-            x: pop.flyout-left ? 0px : pop.menu-w + ContextMenuMetrics.gap;
+            x: ContextMenuMetrics.flyout-x(pop.flyout-left, pop.menu-w);
             y: ContextMenuMetrics.flyout-y(copy-row.y, pop.height, pop.flyout-h);
             height: pop.flyout-h;
 

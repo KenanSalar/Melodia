@@ -8,7 +8,7 @@ import { PopupSurface } from "../popup-surface.slint";
 import { PopupDismissCatcher } from "../popup-dismiss-catcher.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 
-// The right-click menu every track row raises, and the only place its entries are spelled.
+// The right-click menu every track row raises, and the only place its entries are mounted.
 //
 // **The host keeps the pointer; this keeps the menu.** A row hands the press position over as
 // `at-x`/`at-y` and calls `show()`. Two hosts today — `TrackListRowItem` and the queue sheet's
@@ -379,7 +379,7 @@ export component TrackContextMenu inherits Rectangle {
 
         // Mounted only while open, so its rows aren't built for every menu.
         if root.copy-open: MenuFlyout {
-            x: pop.flyout-left ? 0px : pop.menu-w + ContextMenuMetrics.gap;
+            x: ContextMenuMetrics.flyout-x(pop.flyout-left, pop.menu-w);
             y: ContextMenuMetrics.flyout-y(copy-row.y, pop.height, pop.flyout-h);
             height: pop.flyout-h;
 

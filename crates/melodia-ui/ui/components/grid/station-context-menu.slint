@@ -215,7 +215,7 @@ export component StationContextMenu inherits Rectangle {
         }
 
         if root.copy-open: MenuFlyout {
-            x: pop.flyout-left ? 0px : pop.menu-w + ContextMenuMetrics.gap;
+            x: ContextMenuMetrics.flyout-x(pop.flyout-left, pop.menu-w);
             y: ContextMenuMetrics.flyout-y(copy-row.y, pop.height, pop.flyout-h);
             height: pop.flyout-h;
 

@@ -570,7 +570,7 @@ three components that answer it, and each argues its geometry at its own file.
 ### Lists and playback
 
 - **The row right-click menu is `components/track-list/track-context-menu.slint`, and the only
-  place its entries are spelled.** Two hosts, `TrackListRowItem` and the queue sheet's
+  place its entries are mounted.** Two hosts, `TrackListRowItem` and the queue sheet's
   `QueueRowItem`. It owns the entries, the `multi-active` gate (this row selected *and* more than
   one selected, so a right-click on an unselected row falls back to that row alone) and the
   `effective-ids` every handler reads; the host keeps the pointer position. **`view-context` is
@@ -582,7 +582,9 @@ three components that answer it, and each argues its geometry at its own file.
 
 - **The four right-click menus share one shape**: the row menu, `CardContextMenu`,
   `StationContextMenu` and the radio history list's. `components/context-menu.slint` holds the
-  parts (`MenuItem`, `MenuFlyout`, `ContextMenuMetrics`); each menu argues its own entries.
+  parts (`MenuItem`, `FavoriteMenuItem`, `MenuFlyout`, `ContextMenuMetrics`), and
+  `components/track-copy-items.slint` the track Copy rows the row and card menus share; each menu
+  argues its own entries.
   - **Copy opens a flyout inside the menu's own popup** where the surface has more than one field
     to offer, and is a flat entry where it has one. The geometry is `OverflowMenu`'s fixed reserve,
     the popup being sized once as it opens: wide enough for the flyout whether or not it opens, the

@@ -101,7 +101,7 @@ pub fn install_toast_bridge(
                 ToastKind::PlaybackFailed | ToastKind::OperationFailed => {
                     // Only the title is ours to re-render; the detail is a Rust error
                     // string that was never translated in the first place.
-                    notifications.show_localized(&ui, "error", "error", move |ui| {
+                    notifications.show_failure(&ui, move |ui| {
                         let g = ui.global::<Settings>();
                         RowText::plain(
                             match kind {
@@ -128,7 +128,7 @@ pub fn install_toast_bridge(
                 // detail, and it sticks because it asks the user to do
                 // something rather than reporting what happened.
                 ToastKind::RestartRequired => {
-                    notifications.show_localized(&ui, "warning", "warning", |ui| {
+                    notifications.show_localized(&ui, "warning", "", |ui| {
                         let g = ui.global::<Settings>();
                         RowText::plain(
                             g.invoke_toast_restart_required_title(),

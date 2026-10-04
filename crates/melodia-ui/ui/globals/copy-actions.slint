@@ -5,9 +5,8 @@
 // to `AppWindow.copy-to-clipboard`, the one clipboard there is. `field` is a token Rust parses once
 // at the boundary; an unknown one copies nothing.
 export global CopyActions {
-    // "title" | "artist" | "album" | "artist-title" | "path", over track ids. One line per track,
-    // in the order handed over: a list's selection in the order Play would queue it, the queue's
-    // in queue order.
+    // A `TrackCopyFields` token, over track ids. One line per track, in the order handed over: a
+    // list's selection in the order Play would queue it, the queue's in queue order.
     callback copy-tracks(string /*field*/, [int] /*track_ids*/);
     // `kind` is an `EntityKind` token. "name" for every kind, plus "artist" and "artist-name" for
     // an album.
