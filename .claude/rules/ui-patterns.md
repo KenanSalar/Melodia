@@ -121,19 +121,26 @@ silently miss the other.
   the rows in their teardown; each of those two is guarded on there being a selection, the unstamp
   otherwise walking a model held precisely because it survives. **`CardSelection` goes back on the
   same leaves**, its scope guard answering a different question: that guard stops one grid reading
-  another's set, and says nothing about a set no grid is showing. One `clear()` in each of the six
-  `on_section_active_changed` bodies covers all seven scopes, since the state is one global keyed
-  by one scope string. A card grid is the surface that needs it most, having no pill and no second
-  activation: a set left live turns every click into a pick. Held by
-  `crates/melodia/tests/card_selection.rs`'s `every_section_leave_hands_its_card_selection_back`,
-  an **equality** over the six because a floor cannot see one slice stop clearing; the same file
-  holds the dispatcher's ten surfaces and the Escape arm's place at the bottom of the chain.
+  another's set, and says nothing about a set no grid is showing. One `clear()` in each of the seven
+  `on_section_active_changed` bodies covers all nine scopes, since the state is one global keyed
+  by one scope string. **Radio is the seventh, and the one that clears without dropping its rows**:
+  its leave keeps every list, but its kept tabs' station cards pick in `CardSelection`. A card grid
+  is the surface that needs it most, having no pill and no second activation: a set left live
+  turns every click into a pick. Held by `crates/melodia/tests/card_selection.rs`'s
+  `every_section_leave_hands_its_card_selection_back`, an **equality** over the seven because a
+  floor cannot see one slice stop clearing; the walk reads the `on_section_active_changed` block
+  itself, so the clear goes in that closure and not in a `leave()` it calls. The same file holds
+  the dispatcher's ten surfaces and the Escape arm's place at the bottom of the chain.
 
-- **A card menu offers both directions rather than reading a state it hasn't got.** A card is a
-  set, so the `row-is-favorite` a row menu toggles on has no honest answer over one half
-  favourited, and resolving the truth costs a query per menu open per card. Add and Remove sit
-  beside each other instead, both well defined whatever the mixture. Reach for this wherever an
-  entry acts on a set: hiding or dimming needs the same state, and leaves no way to undo.
+- **A card menu offers both directions only where it hasn't got the state.** An album, artist,
+  genre or playlist card is a set of tracks, so the `row-is-favorite` a row menu toggles on has no
+  honest answer over one half favourited, and resolving the truth costs a query per menu open per
+  card. Add and Remove sit beside each other there, both well defined whatever the mixture.
+  **A card that carries its own state takes the row menu's toggle instead**: one entry naming the
+  direction away from the clicked card and applied to the whole set, so a selection of favorites
+  is only ever offered their removal. That is a track card on a grid drawing its heart
+  (`favorite-known`, which the grid ties to the same flag as the heart) and every station card.
+  Showing Add over a set already favourited is the bug the split retired.
 
 - **A menu entry is gated on what the operation needs, never on the card's kind.** The menu is the
   right-click path to what the card's hover buttons already do, so an entry it hides while the
@@ -228,7 +235,13 @@ three components that answer it, and each argues its geometry at its own file.
   `selection-live`, the menu's `effective-selection` and its count are all derived there once, and a
   mount reaching past them for a `CardSelection` call is re-spelling what the cell already answers.
   Per-kind menu arms (`go-to-artist`, the playlist four, `play-single`) are callbacks the grid
-  forwards, inert on a kind that never raises them. **`BrowseCardGrid` is the one exemption**: its
+  forwards, inert on a kind that never raises them.
+  **It mounts two menus and opens one by kind**: `card-kind: "station"` raises
+  `StationContextMenu`, whose actions are `Radio`'s and resolve to no tracks, and every other kind
+  raises `CardContextMenu`. The second mount is free until it opens, a `PopupWindow`'s body being
+  built inside its `show()` (verified in the generated tree). Radio's Browse passes an empty
+  `scope`, its stations all holding `id == 0`, which `pick` refuses: menu, no box.
+  **`BrowseCardGrid` is the one exemption**: its
   cards are its list rows, so it reads `Browse.selected-ids` and keys its snapshot on `card_index`,
   every folder and disk-only file holding `id == 0`. `card_selection.rs`'s
   `a_card_grid_mount_states_its_scope_and_nothing_else` walks the `.slint` tree for the four files
@@ -287,9 +300,19 @@ three components that answer it, and each argues its geometry at its own file.
   `overlay-hovered` back for every control it owns, the star outside the slot included (the card's
   `touch` goes false under any higher-z button), and must frame its
   controls off the published `tile-size` rather than `parent`, which in that slot is not what it
-  reads as — `slint-pitfalls.md` argues why. A control that stays up while the card is idle is not
-  a hover affordance: it goes *beside* the card on `IconButton.fade`, as the station star does,
-  since the slot carries one fade for everything in it.
+  reads as — `slint-pitfalls.md` argues why. A control stacked under the selection box frames off
+  `select-box-bottom`, published beside it for the same reason (the station card's website link).
+  A control that stays up while the card is idle is not a hover affordance: it goes *beside* the
+  card on `IconButton.fade`, since the slot carries one fade for everything in it.
+
+- **A card's heart is `grid/card-favorite-button.slint`'s `CardFavoriteButton`**, one spelling
+  for the station cards, both Most Played grids and Browse's file cards. Top right, beside the
+  card rather than in its slot, and up while idle wherever being a favorite says something;
+  `marks-kept: false` makes it a hover control where every card is one (Favorites' Most Played,
+  Radio's Favorites). The host owes `overlay-hovered: <heart>.has-hover`. **Its state comes from
+  where the card's row already keeps it**: `EntityStripRow.is_favorite` on the Most Played grids,
+  and on Browse the list row the card *is*, read through `row_index`, so the list's own toggle
+  patches both presentations at once.
 
 - **`MosaicHeroTile`** is the 140 px artwork square both curated heroes draw, and it draws **one
   composed collage, never a live `CoverMosaic`** — `media::image::artwork`'s `COMPOSITE_LAYOUTS` owns the
@@ -558,6 +581,30 @@ three components that answer it, and each argues its geometry at its own file.
   to Queue outright, the queue being what they name. A remove label handed over by the host would
   ship untranslated, `@tr` resolving literals at codegen, so a third list's arm is one more `if`
   here rather than a property.
+
+- **The four right-click menus share one shape**: the row menu, `CardContextMenu`,
+  `StationContextMenu` and the radio history list's. `components/context-menu.slint` holds the
+  parts (`MenuItem`, `MenuFlyout`, `ContextMenuMetrics`); each menu argues its own entries.
+  - **Copy opens a flyout inside the menu's own popup** where the surface has more than one field
+    to offer, and is a flat entry where it has one. The geometry is `OverflowMenu`'s fixed reserve,
+    the popup being sized once as it opens: wide enough for the flyout whether or not it opens, the
+    reserve on whichever side `ContextMenuMetrics.opens-left` finds room, so the column stays under
+    the pointer. A second `PopupWindow` is not an option (`slint-pitfalls.md`).
+  - **`close-on-click-outside`, and every entry calls the menu's `dismiss()` after acting.**
+    `close-on-click` closes on any release inside the popup, the click that opens the flyout
+    included. After, because `pop.effective-ids` goes with the popup.
+  - **The width follows the rows**, `ContextMenuMetrics.menu-w` over the rows' `preferred-width`,
+    declared on the popup since only it can read its descendants. Labels elide past the ceiling. A
+    fixed width is what clipped a long Remove label; the chevron sits in a fixed box, its glyph
+    being picked by a side the width decides.
+  - **Copy acts on the effective set, one line per item, in the order handed over**, which is
+    display order on every selection, an item without the field adding no line. Menus pass ids to
+    `CopyActions` and Rust resolves the text (`library::clipboard`); stations copy through `Radio`,
+    whose caches they resolve from.
+  - **There is one clipboard**: `AppWindow.copy-to-clipboard`, a hidden `TextInput` reaching the
+    platform clipboard Slint's backend owns, which on Wayland is the app's own display connection
+    where a clipboard crate would land on XWayland. `ui::clipboard::write` is its one Rust caller,
+    raises the confirmation, and never logs the text, a stream URL being able to carry a token.
 
 - **`play-row` replaces the queue with the view; there is no single-track play path, and no
   Play-All pill.** Every row activation resolves the view's *displayed* ids and hands them to

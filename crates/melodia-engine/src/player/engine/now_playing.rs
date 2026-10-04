@@ -93,8 +93,8 @@ pub struct Announcement<'a> {
     pub title: &'a str,
 }
 
-impl RadioNowPlaying {
-    /// What the stream announced, as artist and title, or `None` where it named no artist.
+impl<'a> Announcement<'a> {
+    /// Reads one announced line as artist and title, or `None` where it names no artist.
     ///
     /// **Split on the first `" - "`**, because `Artist - Title` is the convention stations follow
     /// and a title carries a second dash far more often than an artist does (`Song - Remastered`).
@@ -104,11 +104,19 @@ impl RadioNowPlaying {
     /// **Two halves with no letter between them are not a song.** Some stations briefly announce
     /// their automation's catalogue ids (`403761 - 287105`) before the real line. One numeric half
     /// is kept, since band names and titles like `311` or `1979` exist.
-    pub fn announcement(&self) -> Option<Announcement<'_>> {
-        let (artist, title) = self.live_title.as_deref()?.split_once(" - ")?;
-        let song = Announcement { artist: non_empty(artist)?, title: non_empty(title)? };
+    pub fn parse(line: &'a str) -> Option<Self> {
+        let (artist, title) = line.split_once(" - ")?;
+        let song = Self { artist: non_empty(artist)?, title: non_empty(title)? };
         let has_letter = |text: &str| text.chars().any(char::is_alphabetic);
         (has_letter(song.artist) || has_letter(song.title)).then_some(song)
+    }
+}
+
+impl RadioNowPlaying {
+    /// What the stream announced, as artist and title, read by [`Announcement::parse`]: the
+    /// station's history splits its past lines through the same call.
+    pub fn announcement(&self) -> Option<Announcement<'_>> {
+        Announcement::parse(self.live_title.as_deref()?)
     }
 }
 

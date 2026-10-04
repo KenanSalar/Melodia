@@ -254,6 +254,7 @@ fn mk_most_played(title: &str, artist: Option<&str>) -> MostPlayedFavorite {
         artwork_path: None,
         play_count: 0,
         duration_ms: 0,
+        is_favorite: false,
     }
 }
 

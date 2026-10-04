@@ -23,7 +23,7 @@ use crate::ui::callbacks::macros::{release_hero_slots, release_shared_hero};
 use crate::ui::radio::{RadioUi, browse, covers, detail, facets, kept};
 use melodia_app::state::AppState;
 use melodia_app::tasks::TaskSpawner;
-use melodia_ui::{AppWindow, Radio};
+use melodia_ui::{AppWindow, CardSelection, Radio};
 
 pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     let g = ui.global::<Radio>();
@@ -37,6 +37,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
         if active {
             enter(&ui, &s, &ru);
         } else {
+            // The kept tabs' card set goes back with the page, though the rows it picked from
+            // stay; `card-selection.slint` argues why it cannot outlive the leave.
+            ui.global::<CardSelection>().invoke_clear();
             leave(&ui, &s, &ru);
         }
     });

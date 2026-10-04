@@ -75,6 +75,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Browse by folder, as a detailed list or a grid of cards
 - Star ratings, play and skip counts, natural sort, resizable and toggleable columns
 - Multi-selection on every library list and card grid: tick one to start, then a click anywhere on a row or card adds the next and shift-click takes a range. Right-click acts on the whole set, from queueing it to editing its tags; `Esc` clears it
+- Copy from any right-click menu: a song's title, artist, album, "Artist - Title" or file path, an album's name and artist, or a station's name, stream URL or website. A selection copies one line per item, in the order on screen
 - Tag editing for one track or many at once, cover art included, written straight back to the files. A track's artists, its genres and the ten studio credits (composer, lyricist, conductor, performer, producer and the rest) are each an editable list rather than one text box, beside the rest of what a file can carry: work and movement, key, mood, ISRC, and the release's own label, catalog number, barcode and medium
 - Manual and smart playlists, the latter rule-based and resolved live; `.m3u8` import and export, several at once as a single `.zip` that imports back without extracting, drag-and-drop import and reordering
 - A database backup before every schema migration, three kept
@@ -119,6 +120,8 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Your own stream URLs, checked at the dialog rather than at the first click; `.pls`, `.m3u`, and `.asx` resolve to the audio behind them
 - Live titles reach the player bar, Now Playing, your desktop's media controls, and Discord, with buffering and reconnection handled underneath
 - Favorites, Recently Played, station pages, cached logos, and playlist-file import and export
+- Station cards select like any other card on Favorites and Recently Played, with a right-click menu to play, star, edit, copy or remove one or many
+- The titles a station has announced this session, listed under it and copyable from a right-click, artist and title apart where the line splits
 - Segmented (HLS) stations play like any other
 
 ### Themes

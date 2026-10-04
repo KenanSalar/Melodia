@@ -1,4 +1,5 @@
 import { Theme } from "../../theme.slint";
+import { CardFavoriteButton } from "../../components/grid/card-favorite-button.slint";
 import { EntityCard } from "../../components/grid/entity-card.slint";
 import { IconButton } from "../../components/icon-button.slint";
 
@@ -35,6 +36,11 @@ export component StationCard inherits Rectangle {
     // Recently Played only, where it is what tells a station listened to daily from one played
     // once by accident. `0` everywhere else draws nothing.
     in property <int> play-count: 0;
+    // `EntityCard`'s selection, passed through. Only the kept tabs turn it on, Browse's stations
+    // having no row id to select by.
+    in property <bool> selectable;
+    in property <bool> selected;
+    in property <bool> selection-live;
 
     in property <length> card-width: 180px;
     // The square tile plus three text lines, where an entity card of the same width carries two.
@@ -59,6 +65,8 @@ export component StationCard inherits Rectangle {
     callback homepage-clicked();
     callback edit-clicked();
     callback remove-clicked();
+    callback select-clicked(bool /*shift*/, bool /*ctrl*/);
+    callback context-requested(length /*x*/, length /*y*/);
 
     width: card-width;
     height: card-height;
@@ -91,8 +99,14 @@ export component StationCard inherits Rectangle {
         // Still the last resort, for a name with no letters to take initials from.
         fallback-icon: "radio";
 
-        // The body opens the station's page; the play button in the corner is what tunes in.
+        // The body opens the station's page; the play button over the tile is what tunes in.
         clicked => { root.clicked(); }
+
+        selectable: root.selectable;
+        selected: root.selected;
+        selection-live: root.selection-live;
+        select-clicked(shift, ctrl) => { root.select-clicked(shift, ctrl); }
+        context-requested(x, y) => { root.context-requested(x, y); }
 
         // The four below are hover affordances and ride the card's own single overlay fade; the
         // star is not one of them and sits outside, below.
@@ -103,22 +117,19 @@ export component StationCard inherits Rectangle {
             || edit_btn.has-hover
             || remove_btn.has-hover;
 
-        // **The centre stays clear.** A body click lands there, so a play control in the middle
-        // of the tile plays for anyone who aimed at the artwork. A corner control, as every other
-        // card in the tree draws one, leaves both actions reachable.
+        // **In the middle of the tile, the top left being the selection box's** as on every
+        // selectable card, and the bottom right the play count's. A body click aimed at the
+        // artwork still opens the page anywhere but on the button itself.
         //
-        // **Top-left, and the bottom right is the play count's on every card in the tree.** Play
-        // leads the column and the link follows, so a station with no site leaves nothing under
-        // play rather than a hole above it.
-        //
-        // **The four below frame the tile off `card-body.tile-size`, never off `parent`.** These
-        // are laid out inside the card's overlay slot, but a `@children` element resolves names
-        // where it is *written*, so `parent` here is the `EntityCard` — its full height, not the
-        // square. The source reads correctly either way and only the generated tree tells them
-        // apart, which is what `crates/melodia/tests/entity_card_overlay.rs` walks for.
+        // **The four below frame the tile off `card-body`'s published metrics, never off
+        // `parent`.** These are laid out inside the card's overlay slot, but a `@children` element
+        // resolves names where it is *written*, so `parent` here is the `EntityCard` — its full
+        // height, not the square. The source reads correctly either way and only the generated
+        // tree tells them apart, which is what `crates/melodia/tests/entity_card_overlay.rs` walks
+        // for.
         play_btn := IconButton {
-            x: Theme.pad-sm;
-            y: Theme.pad-sm;
+            x: (card-body.tile-size - self.width) / 2;
+            y: (card-body.tile-size - self.height) / 2;
             icon: "play_arrow";
             icon-size: 18px;
             diameter: 30px;
@@ -127,10 +138,11 @@ export component StationCard inherits Rectangle {
             clicked => { root.play-clicked(); }
         }
 
+        // Under the selection box's corner, which is empty on Browse, whose cards draw no box.
         home_btn := IconButton {
             visible: root.homepage-known;
             x: Theme.pad-sm;
-            y: Theme.pad-sm + play_btn.height + Theme.pad-xs;
+            y: card-body.select-box-bottom + Theme.pad-xs;
             icon: "link";
             icon-size: 18px;
             diameter: 30px;
@@ -164,32 +176,14 @@ export component StationCard inherits Rectangle {
         }
     }
 
-    // **Stays up when the station is starred**, unlike the rest of the overlay: the star is a fact
-    // about the row and not an affordance, so a grid of results has to show which of them are
-    // already kept without being hovered one at a time. That is Browse, and it is Recently Played
-    // too — a station played out of Browse is kept without being starred, so the two are mixed
-    // there as well. On Favorites every row is starred, where the same mark says nothing and reads
-    // as chrome on every card.
-    //
-    // Which is why it sits beside the card rather than in its overlay slot: that slot carries one
-    // fade for the whole hover set, and this one has its own rule. `fade` over `opacity` for the
-    // reason the slot's own comment gives. Positioned against the root, landing on the same tile
-    // corner the slot's own top-right does.
-    fav_btn := IconButton {
+    // Browse and Recently Played both mix kept and unkept stations, a station played out of
+    // Browse being kept without a star, so the mark says something on both.
+    fav_btn := CardFavoriteButton {
         visible: root.starrable;
-        x: root.card-width - self.width - 2 * Theme.pad-sm;
-        y: 2 * Theme.pad-sm;
-        icon: root.is-favorite ? "favorite" : "favorite_border";
-        icon-size: 18px;
-        diameter: 30px;
-        filled: root.is-favorite;
-        idle-bg: Theme.floating-chrome-bg;
-        idle-fg: root.is-favorite ? Theme.red : Theme.text;
-        hover-fg: Theme.red;
-        fade: fav_btn.has-hover
-            || card-body.card-hovered
-            || (root.is-favorite && root.star-marks-kept) ? 1.0 : 0.0;
-        animate fade { duration: Theme.dur-fast; easing: ease-in-out; }
+        card-width: root.card-width;
+        is-favorite: root.is-favorite;
+        marks-kept: root.star-marks-kept;
+        card-hovered: card-body.card-hovered;
         clicked => { root.favorite-clicked(); }
     }
 }

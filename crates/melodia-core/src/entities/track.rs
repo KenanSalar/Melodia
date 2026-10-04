@@ -686,6 +686,9 @@ pub struct MostPlayedFavorite {
     pub artwork_path: Option<String>,
     pub play_count: i32,
     pub duration_ms: i64,
+    /// What the card's heart draws. Always set on Favorites' ranking, which is filtered on it;
+    /// Recently Played's spans the whole library.
+    pub is_favorite: bool,
 }
 
 /// Explicit SELECT columns for `MostPlayedFavorite` queries, in field order for
@@ -701,6 +704,7 @@ pub const MOST_PLAYED_COLUMNS: &[&str] = &[
     "artwork_path",
     "play_count",
     "duration_ms",
+    "is_favorite",
 ];
 
 /// Comma-separated form of `MOST_PLAYED_COLUMNS` for direct `SELECT` usage,

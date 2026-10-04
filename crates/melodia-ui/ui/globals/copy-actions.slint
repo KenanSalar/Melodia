@@ -1,0 +1,16 @@
+// What every Copy entry in the tree does, one call per copy.
+//
+// **Stateless, `CardActions`' shape.** A menu holds ids rather than text, a selection's rows being
+// mostly unmounted, so each call names what to copy and Rust resolves the text before handing it
+// to `AppWindow.copy-to-clipboard`, the one clipboard there is. `field` is a token Rust parses once
+// at the boundary; an unknown one copies nothing.
+export global CopyActions {
+    // "title" | "artist" | "album" | "artist-title" | "path", over track ids. One line per track,
+    // in the order handed over, which is the display order every selection keeps.
+    callback copy-tracks(string /*field*/, [int] /*track_ids*/);
+    // `kind` is an `EntityKind` token. "name" for every kind, plus "artist" and "artist-name" for
+    // an album.
+    callback copy-entities(string /*kind*/, string /*field*/, [int] /*entity_ids*/);
+    // Text Slint already holds: a history line, a stream URL, a folder's path.
+    callback copy-text(string);
+}

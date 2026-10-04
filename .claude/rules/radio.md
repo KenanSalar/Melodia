@@ -21,6 +21,7 @@ paths:
   - crates/melodia-ui/ui/views/radio/station-detail.slint
   - crates/melodia-ui/ui/views/radio/station-card.slint
   - crates/melodia-ui/ui/views/radio/station-grid.slint
+  - crates/melodia-ui/ui/components/grid/station-context-menu.slint
   - crates/melodia-ui/ui/views/radio/facet-chip.slint
   - crates/melodia-ui/ui/views/radio/suggestion-pill.slint
   - crates/melodia-ui/ui/views/radio/tab-pills.slint
@@ -140,6 +141,21 @@ is the copy to delete.
   its generation rather than its URL and `player::stream_source` names the station in every message
   and the URL in none. `RadioStationRow` deliberately has no `stream_url` field at all; it crosses
   on `RadioVm` and `Radio.detail-stream-url`, the two places something actually needs it.
+
+## Cards and history
+
+- **A station card selects only on the two kept tabs**, in the scopes `radio-favorites` and
+  `radio-recent`, which `kept-stations-tab.slint` spells and `callbacks::card_selection` reads the
+  two lists back by. Browse passes no scope: its rows are all `id == 0` and `pick` refuses that.
+  The leave's clear sits in the `on_section_active_changed` closure, where
+  `card_selection.rs`' walk reads it, rather than in `leave()`.
+- **A batch star or remove loops the facade's per-id calls from the slice**, so every write still
+  goes through `library::radio` and the facade walks see nothing new. A removal clears the card
+  selection, the removed ids being otherwise still counted by the menu.
+- **A history row is split by the engine's `Announcement::parse`**, the call behind the player
+  bar, MPRIS, Discord and scrobbling, so the menu's Copy Title and Copy Artist name what the bar
+  showed while the line played. `ui::radio::history` splits on publish into `StationHistoryRow`;
+  the line itself is always offered whole, the split being a convention rather than a format.
 
 ## Numbers both trees spell
 

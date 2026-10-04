@@ -164,6 +164,23 @@ pub fn install_toast_bridge(
                         4000,
                     );
                 }
+                // A confirmation for something the user just did, so shorter than the
+                // reports above.
+                ToastKind::Copied | ToastKind::NothingToCopy => {
+                    notifications.show_auto_dismiss(
+                        NotificationParams {
+                            variant: "info".into(),
+                            title: match kind {
+                                ToastKind::Copied => g.invoke_toast_copied_title(),
+                                _ => g.invoke_toast_nothing_to_copy_title(),
+                            },
+                            message: slint::SharedString::default(),
+                            action_label: slint::SharedString::default(),
+                            action_kind: "info".into(),
+                        },
+                        2500,
+                    );
+                }
                 // Auto-dismissing: the music carries on through the shared output, and the
                 // Output settings keep saying why for as long as it stays that way.
                 ToastKind::ExclusiveRefused => {

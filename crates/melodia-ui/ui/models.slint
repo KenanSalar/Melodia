@@ -387,6 +387,8 @@ export struct EntityStripRow {
     subtitle: string,
     artwork_path: string,
     play_count: int,
+    // A track card's heart. Unread on every other kind, whose grids mount no heart.
+    is_favorite: bool,
 }
 
 export struct EntityGridRow {
@@ -462,6 +464,14 @@ export struct RadioStationRow {
 
 export struct RadioStationGridRow {
     stations: [RadioStationRow],
+}
+
+// One title a station announced. `artist` and `title` are the line split the way the player bar
+// splits it, and both empty where it doesn't split: a jingle, an ad, a show name.
+export struct StationHistoryRow {
+    line: string,
+    artist: string,
+    title: string,
 }
 
 // One entry of a directory facet list behind a filter chip. `code` is only ever sent for

@@ -2540,3 +2540,69 @@ msgstr "{}% (η συσκευή σε σίγαση)"
 
 msgid "{}% (the device at {}%)"
 msgstr "{}% (η συσκευή στο {}%)"
+
+# ---- Copy, and the station card menu ----------------------------------------
+
+msgid "Copy"
+msgstr "Αντιγραφή"
+
+msgid "Copy Name"
+msgstr "Αντιγραφή ονόματος"
+
+msgid "Copy Path"
+msgstr "Αντιγραφή διαδρομής"
+
+msgid "Copy Title"
+msgstr "Αντιγραφή τίτλου"
+
+msgid "Copy Artist"
+msgstr "Αντιγραφή καλλιτέχνη"
+
+msgid "Artist - Title"
+msgstr "Καλλιτέχνης - Τίτλος"
+
+msgid "Artist - Album"
+msgstr "Καλλιτέχνης - Άλμπουμ"
+
+msgid "File Path"
+msgstr "Διαδρομή αρχείου"
+
+msgid "Copied to clipboard"
+msgstr "Αντιγράφηκε στο πρόχειρο"
+
+msgid "Nothing to copy"
+msgstr "Τίποτα για αντιγραφή"
+
+msgid "Open Website"
+msgstr "Άνοιγμα ιστότοπου"
+
+msgid "Edit…"
+msgstr "Επεξεργασία…"
+
+msgid "Remove from Favorites…"
+msgstr "Κατάργηση από τα αγαπημένα…"
+
+msgid "Remove from Recently Played…"
+msgstr "Αφαίρεση από τα πρόσφατα αναπαραγόμενα…"
+
+msgid "Remove {} from Favorites…"
+msgstr "Αφαίρεση {} από τα αγαπημένα…"
+
+msgid "Remove {} from Recently Played…"
+msgstr "Αφαίρεση {} από τα πρόσφατα αναπαραγόμενα…"
+
+msgid "Remove {n} station from Recently Played?"
+msgid_plural "Remove {n} stations from Recently Played?"
+msgstr[0] "Αφαίρεση {n} σταθμού από τα πρόσφατα αναπαραγόμενα;"
+msgstr[1] "Αφαίρεση {n} σταθμών από τα πρόσφατα αναπαραγόμενα;"
+
+msgid "Remove {n} station from favorites?"
+msgid_plural "Remove {n} stations from favorites?"
+msgstr[0] "Αφαίρεση {n} σταθμού από τα αγαπημένα;"
+msgstr[1] "Αφαίρεση {n} σταθμών από τα αγαπημένα;"
+
+msgid "The stations will be removed from Recently Played."
+msgstr "Οι σταθμοί θα αφαιρεθούν από τα πρόσφατα αναπαραγόμενα."
+
+msgid "The stations will be removed from your favorites. Any you added by hand are removed from your stations, along with their play history."
+msgstr "Οι σταθμοί θα αφαιρεθούν από τα αγαπημένα σας. Όσοι προστέθηκαν χειροκίνητα θα αφαιρεθούν από τους σταθμούς σας, μαζί με το ιστορικό αναπαραγωγής τους."

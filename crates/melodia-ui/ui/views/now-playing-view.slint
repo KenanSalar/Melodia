@@ -444,9 +444,6 @@ export component NowPlayingView inherits Rectangle {
                                 action-idle-fg: Player.np-accent-dim;
                                 action-hover-fg: Player.np-accent-bright;
                                 action-hover-bg: Player.np-accent-pill;
-                                stream-url-copied => {
-                                    Radio.copy-stream-url(Player.vm.radio.station_id);
-                                }
                                 open-homepage(url) => { Radio.open-homepage(url); }
                             }
 

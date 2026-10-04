@@ -7,13 +7,15 @@
 
 use std::sync::Arc;
 
-use slint::ComponentHandle;
+use slint::{ComponentHandle, Model};
 
-use crate::ui::launcher;
-use crate::ui::radio::{RadioUi, browse, kept};
+use crate::ui::radio::{RadioUi, browse, kept, tab_from_index};
+use crate::ui::{clipboard, launcher};
 use melodia_app::library;
+use melodia_app::library::clipboard::{StationField, StationText, station_lines};
 use melodia_app::state::AppState;
-use melodia_core::entities::radio::DirectoryStation;
+use melodia_core::entities::radio::{DirectoryStation, RadioStation};
+use melodia_core::error::AppError;
 use melodia_ui::{AppWindow, Radio, RadioStationRow};
 
 /// Whether a row names a station that already has a database row.
@@ -56,12 +58,78 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
 
     {
         let s = state.clone();
+        let ru = radio_ui.clone();
+        let weak = weak.clone();
+        g.on_set_favorites(move |tab, ids, favorite| {
+            let Some(ui) = weak.upgrade() else { return };
+            let tab = tab_from_index(&ui.global::<Radio>(), tab);
+            // A hand-typed station's card has no star, so the set's star skips it too: un-starring
+            // one drops it from the only list that shows it.
+            let ids: Vec<i64> = ids
+                .iter()
+                .map(i64::from)
+                .filter(|&id| {
+                    kept::resolve(&ru, tab, id)
+                        .is_some_and(|station| station.station_uuid.is_some())
+                })
+                .collect();
+            set_kept_favorites(&s, &ru, &weak, ids, favorite);
+        });
+    }
+
+    {
+        let s = state.clone();
         g.on_open_homepage(move |url| {
             if url.is_empty() {
                 return;
             }
             s.runtime.spawn(launcher::open_target(url.to_string(), "radio::open_homepage"));
         });
+    }
+
+    {
+        let ru = radio_ui.clone();
+        let weak = weak.clone();
+        g.on_copy_kept_stations(move |tab, field, ids| {
+            let Some(ui) = weak.upgrade() else { return };
+            let Some(field) = StationField::from_token(&field) else {
+                log::warn!("radio copy: unknown field {field}");
+                return;
+            };
+            let tab = tab_from_index(&ui.global::<Radio>(), tab);
+            let stations: Vec<RadioStation> =
+                ids.iter().filter_map(|id| kept::resolve(&ru, tab, i64::from(id))).collect();
+            let text = station_lines(stations.iter().map(kept_text), field);
+            clipboard::write(&ui, &text);
+        });
+    }
+
+    {
+        let ru = radio_ui.clone();
+        let weak = weak.clone();
+        g.on_copy_browse_station(move |field, uuid| {
+            let Some(ui) = weak.upgrade() else { return };
+            let Some(field) = StationField::from_token(&field) else {
+                log::warn!("radio copy: unknown field {field}");
+                return;
+            };
+            let Some((station, _logo)) = browse::resolve(&ru, &uuid) else { return };
+            let text = station_lines([browsed_text(&station)], field);
+            clipboard::write(&ui, &text);
+        });
+    }
+}
+
+/// What a kept station offers a Copy entry, its website read through the user's own first.
+fn kept_text(station: &RadioStation) -> StationText<'_> {
+    StationText { name: &station.name, stream_url: &station.stream_url, website: station.website() }
+}
+
+fn browsed_text(station: &DirectoryStation) -> StationText<'_> {
+    StationText {
+        name: &station.name,
+        stream_url: &station.stream_url,
+        website: station.homepage.as_deref(),
     }
 }
 
@@ -113,10 +181,6 @@ fn refresh_lists(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &slint::Weak<A
 /// Not optimistic, unlike the browsed toggle below: un-starring drops the row out of the Favorites
 /// list entirely, so there is nothing on screen for an optimistic flip to be right about — the
 /// refetch *is* the update.
-///
-/// **Un-starring goes through the removal door, not the flag.** The star and the trash leave a
-/// station in the same place, so they owe the same cleanup: a row neither tab would list is one
-/// nothing can reach, and `set_favorite` alone leaves it there for good.
 fn toggle_kept(
     state: &AppState,
     radio_ui: &Arc<RadioUi>,
@@ -124,19 +188,38 @@ fn toggle_kept(
     id: i64,
     favorite: bool,
 ) {
+    set_kept_favorites(state, radio_ui, weak, vec![id], favorite);
+}
+
+/// The star over every kept station in `ids`, then one re-read of both lists. A station that fails
+/// leaves the rest to go, each being its own row.
+fn set_kept_favorites(
+    state: &AppState,
+    radio_ui: &Arc<RadioUi>,
+    weak: &slint::Weak<AppWindow>,
+    ids: Vec<i64>,
+    favorite: bool,
+) {
     let (s, ru, weak) = (state.clone(), radio_ui.clone(), weak.clone());
     state.runtime.spawn(async move {
-        let flipped = if favorite {
-            library::radio::set_favorite(&s, id, true).await
-        } else {
-            library::radio::remove_from_favorites(&s, id).await
-        };
-        if let Err(e) = flipped {
-            log::warn!("radio: favorite toggle failed: {}", melodia_core::error::describe(&e));
-            return;
+        for id in ids {
+            if let Err(e) = set_kept_favorite(&s, id, favorite).await {
+                log::warn!("radio: favorite toggle failed: {}", melodia_core::error::describe(&e));
+            }
         }
         refresh_lists(&s, &ru, &weak);
     });
+}
+
+/// **Un-starring goes through the removal door, not the flag.** The star and the trash leave a
+/// station in the same place, so they owe the same cleanup: a row neither tab would list is one
+/// nothing can reach, and `set_favorite` alone leaves it there for good.
+async fn set_kept_favorite(state: &AppState, id: i64, favorite: bool) -> Result<(), AppError> {
+    if favorite {
+        library::radio::set_favorite(state, id, true).await
+    } else {
+        library::radio::remove_from_favorites(state, id).await
+    }
 }
 
 /// Keep or release a station that only exists in the directory answer on screen.

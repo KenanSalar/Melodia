@@ -223,6 +223,7 @@ pub fn to_slint_album_strip_row(a: &AlbumStats) -> UiEntityStripRow {
         subtitle: SharedString::from(a.artist_name.as_str()),
         artwork_path: SharedString::from(a.artwork_path.as_deref().unwrap_or("")),
         play_count: 0,
+        is_favorite: false,
     }
 }
 
@@ -236,6 +237,7 @@ pub fn to_slint_artist_strip_row(a: &ArtistStats, subtitle: &str) -> UiEntityStr
         subtitle: SharedString::from(subtitle),
         artwork_path: SharedString::from(a.image_path.as_deref().unwrap_or("")),
         play_count: 0,
+        is_favorite: false,
     }
 }
 

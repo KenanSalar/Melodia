@@ -46,6 +46,7 @@ fn played(duration_ms: i64, play_count: i32) -> MostPlayedFavorite {
         artwork_path: None,
         play_count,
         duration_ms,
+        is_favorite: false,
     }
 }
 

@@ -29,6 +29,10 @@ export component FavoritesMostPlayedTab inherits Rectangle {
         // These cards are tracks, so the menu's entity arm resolves each id to itself.
         card-kind: "track";
         selection-scope: "fav-most-played";
+        // Every card here is a favorite, so the heart is a hover control and its click takes
+        // the card off the page.
+        show-favorite: true;
+        favorite-marks-kept: false;
         covers-generation: Favorites.covers-generation;
         request-cover(p, gen) => { Favorites.request-most-played-cover(p, gen) }
         row-clicked(id) => { Favorites.play-track(id); }

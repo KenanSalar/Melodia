@@ -1,9 +1,11 @@
 import { Theme } from "../../theme.slint";
 import { CardActions } from "../../globals/card-actions.slint";
+import { CopyActions } from "../../globals/copy-actions.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { Nav } from "../../globals/nav.slint";
-import { MenuItem, MenuSeparator } from "../context-menu.slint";
+import { ContextMenuMetrics, MenuFlyout, MenuItem, MenuSeparator } from "../context-menu.slint";
 import { PopupSurface } from "../popup-surface.slint";
+import { PopupDismissCatcher } from "../popup-dismiss-catcher.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 
 // The right-click menu every entity card raises, and the only place its entries are spelled.
@@ -29,6 +31,11 @@ export component CardContextMenu inherits Rectangle {
     in property <bool> card-is-smart: false;
     // Album cards only. 0 means no linkage and hides the entry.
     in property <int> card-artist-id: 0;
+    // Whether this card's own favorite state is known, and what it is. A track card carries one,
+    // on the grids that draw its heart; an album, artist, genre or playlist is a set of tracks and
+    // has no single answer.
+    in property <bool> favorite-known: false;
+    in property <bool> card-is-favorite: false;
 
     in property <bool> card-selected;
     // The batch payload in multi mode, the host's own scope's selection.
@@ -55,8 +62,21 @@ export component CardContextMenu inherits Rectangle {
     // Rename and Edit Artwork: single-target, and a playlist's whatever its kind.
     property <bool> playlist-edits: root.is-playlist && !root.multi-active;
 
+    // **Only the kinds with more than one field to copy open a flyout.** The rest copy their one
+    // field from the row itself, and their menu reserves no room for a column it never opens.
+    property <bool> has-flyout: root.is-track || root.card-kind == "album";
+    property <bool> copy-open;
+
     public function show() {
+        root.copy-open = false;
         pop.show();
+    }
+
+    // `TrackContextMenu.dismiss`: every entry closes the menu after acting, the popup's own policy
+    // being unable to spare the click that opens the flyout.
+    function dismiss() {
+        root.copy-open = false;
+        pop.close();
     }
 
     // Per-kind entries the host owns, because the grid already has these wired for its hover
@@ -94,12 +114,25 @@ export component CardContextMenu inherits Rectangle {
     height: 0px;
 
     // One PopupWindow per mounted card. The grids virtualize by row, so this stays a screenful of
-    // popups whatever the library size.
+    // popups whatever the library size. Opened wide enough for its Copy flyout where it has one,
+    // on whichever side has room, `TrackContextMenu`'s reserve.
     pop := PopupWindow {
-        x: root.at-x;
+        // On the popup, so it can read its own descendant's layout.
+        property <length> menu-w: ContextMenuMetrics.menu-w(menu-vl.preferred-width);
+        property <length> menu-h: menu-vl.preferred-height;
+        property <length> flyout-h: ContextMenuMetrics.flyout-h(root.is-track ? 5 : 3);
+        property <length> reserve: root.has-flyout
+            ? ContextMenuMetrics.gap + ContextMenuMetrics.flyout-w
+            : 0px;
+        // Off the root's position, which sits outside the popup and so still means the window.
+        property <bool> flyout-left: root.has-flyout
+            && ContextMenuMetrics.opens-left(root.absolute-position.x + root.at-x, self.menu-w);
+
+        x: root.at-x - (self.flyout-left ? self.reserve : 0px);
         y: root.at-y;
-        width: 230px;
-        close-policy: close-on-click;
+        width: self.menu-w + self.reserve;
+        height: root.has-flyout ? max(self.menu-h, self.flyout-h) : self.menu-h;
+        close-policy: close-on-click-outside;
 
         // This card alone in single mode, the whole selection in multi. Computed once so every
         // handler reads the same list.
@@ -113,9 +146,22 @@ export component CardContextMenu inherits Rectangle {
             }
         }
 
+        // First, so every row drawn over it wins its own click and a click on the empty reserve
+        // still closes the menu.
+        PopupDismissCatcher {
+            width: parent.width;
+            height: parent.height;
+            clicked => { root.dismiss(); }
+        }
+
         PopupSurface {
-            VerticalLayout {
-                padding: Theme.pad-xs;
+            x: pop.flyout-left ? pop.reserve : 0px;
+            y: 0px;
+            width: pop.menu-w;
+            height: pop.menu-h;
+
+            menu-vl := VerticalLayout {
+                padding: ContextMenuMetrics.inset;
                 spacing: 0;
 
                 // **Play stays in multi mode here, unlike the row menu.** There it is dropped
@@ -136,12 +182,16 @@ export component CardContextMenu inherits Rectangle {
                         } else {
                             CardActions.play(root.card-kind, pop.effective-ids);
                         }
+                        root.dismiss();
                     }
                 }
                 if !root.is-folder: MenuItem {
                     label: @tr("Shuffle");
                     icon: "shuffle";
-                    clicked => { CardActions.shuffle(root.card-kind, pop.effective-ids); }
+                    clicked => {
+                        CardActions.shuffle(root.card-kind, pop.effective-ids);
+                        root.dismiss();
+                    }
                 }
                 MenuItem {
                     label: root.multi-active
@@ -154,6 +204,7 @@ export component CardContextMenu inherits Rectangle {
                         } else {
                             CardActions.play-next(root.card-kind, pop.effective-ids);
                         }
+                        root.dismiss();
                     }
                 }
                 MenuItem {
@@ -167,6 +218,7 @@ export component CardContextMenu inherits Rectangle {
                         } else {
                             CardActions.add-to-queue(root.card-kind, pop.effective-ids);
                         }
+                        root.dismiss();
                     }
                 }
 
@@ -181,6 +233,7 @@ export component CardContextMenu inherits Rectangle {
                         // the *track* ids, which only Rust knows. It sets its own `@tr` chrome and
                         // raises the card once they land.
                         CardActions.create-playlist-from(root.card-kind, pop.effective-ids);
+                        root.dismiss();
                     }
                 }
                 if !root.is-folder: MenuItem {
@@ -191,28 +244,49 @@ export component CardContextMenu inherits Rectangle {
                         // the track total only exists once Rust has resolved them.
                         Dialog.prepare-add-to-playlist(@tr("Add to Playlist"));
                         CardActions.add-to-playlist(root.card-kind, pop.effective-ids);
+                        root.dismiss();
                     }
                 }
 
                 if !root.is-folder: MenuSeparator {}
-                // **Two entries, where the row menu toggles one.** A card is a set, so the state
-                // the row menu reads off `row-is-favorite` has no honest answer here: a playlist
-                // half favourited would make either label a lie, and resolving the truth means a
-                // query per menu open, per card. Both operations are well defined over a set
-                // whatever its mixture, so offering them retires the question rather than
-                // answering it — and leaves the undo the one-way entry never had.
-                if !root.is-folder: MenuItem {
+                // **One entry where the card's state is known, the row menu's toggle**: it names
+                // the direction away from the clicked card and applies it to the whole set, so a
+                // selection of favorites is only ever offered their removal.
+                if root.favorite-known: MenuItem {
+                    label: root.multi-active
+                        ? (root.card-is-favorite
+                            ? @tr("Remove {} from Favorites", root.multi-count)
+                            : @tr("Add {} to Favorites", root.multi-count))
+                        : (root.card-is-favorite
+                            ? @tr("Remove from Favorites")
+                            : @tr("Add to Favorites"));
+                    icon: root.card-is-favorite ? "heart_minus" : "favorite";
+                    clicked => {
+                        CardActions.set-favorites(
+                            root.card-kind, pop.effective-ids, !root.card-is-favorite);
+                        root.dismiss();
+                    }
+                }
+                // **Two entries where it isn't.** An album, artist, genre or playlist is a set of
+                // tracks, so the state the row menu reads off `row-is-favorite` has no honest
+                // answer here: half a playlist favourited would make either label a lie, and
+                // resolving the truth means a query per menu open, per card. Both operations are
+                // well defined over a set whatever its mixture, so offering them retires the
+                // question rather than answering it.
+                if !root.is-folder && !root.favorite-known: MenuItem {
                     label: @tr("Add to Favorites");
                     icon: "favorite";
                     clicked => {
                         CardActions.set-favorites(root.card-kind, pop.effective-ids, true);
+                        root.dismiss();
                     }
                 }
-                if !root.is-folder: MenuItem {
+                if !root.is-folder && !root.favorite-known: MenuItem {
                     label: @tr("Remove from Favorites");
                     icon: "heart_minus";
                     clicked => {
                         CardActions.set-favorites(root.card-kind, pop.effective-ids, false);
+                        root.dismiss();
                     }
                 }
                 if !root.is-folder: MenuItem {
@@ -227,34 +301,66 @@ export component CardContextMenu inherits Rectangle {
                             root.multi-active
                                 ? @tr("Edit {} Tracks", root.multi-count)
                                 : @tr("Edit Track Information"));
+                        root.dismiss();
                     }
                 }
 
-                // Single-target by nature, so hidden over a selection. The third disjunct is the
-                // album arm: `card-artist-id` is an album card's alone, and left out of the gate
-                // it put Go to Artist straight under Edit Tags with no rule between.
-                if root.folder-single
-                    || (root.is-track && !root.multi-active)
-                    || (!root.multi-active && root.card-artist-id != 0): MenuSeparator {}
+                // Copy heads the group of entries that read the card rather than act on its
+                // tracks, the single-target ones below it. Every kind has it, so the separator
+                // above needs no gate. Not behind an `if`, the flyout lining up against its `y`.
+                MenuSeparator {}
+                copy-row := MenuItem {
+                    label: root.has-flyout
+                        ? @tr("Copy")
+                        : (root.is-folder ? @tr("Copy Path") : @tr("Copy Name"));
+                    icon: "content_copy";
+                    submenu: root.has-flyout;
+                    submenu-open: root.copy-open;
+                    submenu-left: pop.flyout-left;
+                    clicked => {
+                        if (root.has-flyout) {
+                            root.copy-open = !root.copy-open;
+                        } else {
+                            if (root.is-folder) {
+                                CopyActions.copy-text(root.card-path);
+                            } else {
+                                CopyActions.copy-entities(root.card-kind, "name", pop.effective-ids);
+                            }
+                            root.dismiss();
+                        }
+                    }
+                }
                 if root.folder-single: MenuItem {
                     label: @tr("Open Folder");
                     icon: "folder_open";
-                    clicked => { root.open-folder(root.card-path); }
+                    clicked => {
+                        root.open-folder(root.card-path);
+                        root.dismiss();
+                    }
                 }
                 if root.folder-single: MenuItem {
                     label: @tr("Show in File Manager");
                     icon: "drive_file_move";
-                    clicked => { root.reveal-folder(root.card-path); }
+                    clicked => {
+                        root.reveal-folder(root.card-path);
+                        root.dismiss();
+                    }
                 }
                 if root.is-track && !root.multi-active: MenuItem {
                     label: @tr("Open Containing Folder");
                     icon: "folder_open";
-                    clicked => { Nav.reveal-in-folder(root.card-id); }
+                    clicked => {
+                        Nav.reveal-in-folder(root.card-id);
+                        root.dismiss();
+                    }
                 }
                 if !root.multi-active && root.card-artist-id != 0: MenuItem {
                     label: @tr("Go to Artist");
                     icon: "person";
-                    clicked => { root.go-to-artist(root.card-artist-id); }
+                    clicked => {
+                        root.go-to-artist(root.card-artist-id);
+                        root.dismiss();
+                    }
                 }
 
                 // The selection group. **Clear is gated on the scope holding a set rather than on
@@ -268,12 +374,18 @@ export component CardContextMenu inherits Rectangle {
                 MenuItem {
                     label: @tr("Select all");
                     icon: "select_all";
-                    clicked => { root.select-all(); }
+                    clicked => {
+                        root.select-all();
+                        root.dismiss();
+                    }
                 }
                 if root.selection-count > 0: MenuItem {
                     label: @tr("Clear selection");
                     icon: "close";
-                    clicked => { root.clear-selection(); }
+                    clicked => {
+                        root.clear-selection();
+                        root.dismiss();
+                    }
                 }
 
                 // The playlist block mirrors the card's own hover trio, which stays: the buttons
@@ -283,17 +395,26 @@ export component CardContextMenu inherits Rectangle {
                 if root.playlist-edits: MenuItem {
                     label: @tr("Rename…");
                     icon: "edit";
-                    clicked => { root.rename(); }
+                    clicked => {
+                        root.rename();
+                        root.dismiss();
+                    }
                 }
                 if root.playlist-edits: MenuItem {
                     label: @tr("Edit Artwork…");
                     icon: "image";
-                    clicked => { root.edit-artwork(); }
+                    clicked => {
+                        root.edit-artwork();
+                        root.dismiss();
+                    }
                 }
                 if root.is-playlist && !root.multi-active && root.card-is-smart: MenuItem {
                     label: @tr("Edit Rules…");
                     icon: "auto_awesome";
-                    clicked => { root.edit-rules(); }
+                    clicked => {
+                        root.edit-rules();
+                        root.dismiss();
+                    }
                 }
                 if root.is-playlist: MenuItem {
                     label: root.multi-active
@@ -301,7 +422,84 @@ export component CardContextMenu inherits Rectangle {
                         : @tr("Delete Playlist");
                     icon: "delete";
                     destructive: true;
-                    clicked => { root.delete-cards(pop.effective-ids); }
+                    clicked => {
+                        root.delete-cards(pop.effective-ids);
+                        root.dismiss();
+                    }
+                }
+            }
+        }
+
+        // Level with the Copy row, and lifted where that row sits too low for the whole column to
+        // fit. A track card offers what a track row does; an album its own name and credit.
+        if root.copy-open: MenuFlyout {
+            x: pop.flyout-left ? 0px : pop.menu-w + ContextMenuMetrics.gap;
+            y: max(0px, min(copy-row.y - ContextMenuMetrics.inset, pop.height - pop.flyout-h));
+            width: ContextMenuMetrics.flyout-w;
+            height: pop.flyout-h;
+
+            if root.is-track: MenuItem {
+                label: @tr("Title");
+                icon: "title";
+                clicked => {
+                    CopyActions.copy-tracks("title", pop.effective-ids);
+                    root.dismiss();
+                }
+            }
+            if root.is-track: MenuItem {
+                label: @tr("Artist");
+                icon: "person";
+                clicked => {
+                    CopyActions.copy-tracks("artist", pop.effective-ids);
+                    root.dismiss();
+                }
+            }
+            if root.is-track: MenuItem {
+                label: @tr("Album");
+                icon: "album";
+                clicked => {
+                    CopyActions.copy-tracks("album", pop.effective-ids);
+                    root.dismiss();
+                }
+            }
+            if root.is-track: MenuItem {
+                label: @tr("Artist - Title");
+                icon: "music_note";
+                clicked => {
+                    CopyActions.copy-tracks("artist-title", pop.effective-ids);
+                    root.dismiss();
+                }
+            }
+            if root.is-track: MenuItem {
+                label: @tr("File Path");
+                icon: "folder_open";
+                clicked => {
+                    CopyActions.copy-tracks("path", pop.effective-ids);
+                    root.dismiss();
+                }
+            }
+            if !root.is-track: MenuItem {
+                label: @tr("Album");
+                icon: "album";
+                clicked => {
+                    CopyActions.copy-entities("album", "name", pop.effective-ids);
+                    root.dismiss();
+                }
+            }
+            if !root.is-track: MenuItem {
+                label: @tr("Artist");
+                icon: "person";
+                clicked => {
+                    CopyActions.copy-entities("album", "artist", pop.effective-ids);
+                    root.dismiss();
+                }
+            }
+            if !root.is-track: MenuItem {
+                label: @tr("Artist - Album");
+                icon: "music_note";
+                clicked => {
+                    CopyActions.copy-entities("album", "artist-name", pop.effective-ids);
+                    root.dismiss();
                 }
             }
         }

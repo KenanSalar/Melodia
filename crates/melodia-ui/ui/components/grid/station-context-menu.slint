@@ -1,0 +1,262 @@
+import { RadioStationRow } from "../../models.slint";
+import { Dialog } from "../../globals/dialog.slint";
+import { Radio } from "../../globals/radio.slint";
+import { ContextMenuMetrics, MenuFlyout, MenuItem, MenuSeparator } from "../context-menu.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { PopupDismissCatcher } from "../popup-dismiss-catcher.slint";
+import { FocusLossWatcher } from "../focus-loss-watcher.slint";
+
+// The right-click menu a station card raises, on all three Radio tabs.
+//
+// `CardContextMenu`'s contract over a station: the host keeps the pointer, the right-click snapshot
+// and the highlight key, this keeps the menu. **Its own component rather than a kind inside that
+// one**, because nothing here resolves to tracks: a station is played, starred, edited and removed
+// through `Radio`, and none of `CardActions` applies to it.
+//
+// **Every entry is gated on what its operation needs, never on the tab for its own sake.** Play,
+// the website and Edit are single-target; the star needs a uuid to star against; the selection
+// group and removal need a kept list, Browse's stations having no row to select or remove.
+export component StationContextMenu inherits Rectangle {
+    in property <RadioStationRow> station;
+    // `Radio.tab-*`: the list the card is on, which decides what removal means there.
+    in property <int> list;
+    in property <bool> card-selected;
+    // The batch payload in multi mode, the host's own scope's selection.
+    in property <[int]> effective-selection;
+    in property <int> selection-count;
+    in property <length> at-x;
+    in property <length> at-y;
+    // The watcher gate, the other card menus'.
+    in property <int> ctx-key: -1;
+    in property <int> live-ctx-key: -1;
+
+    // Multi mode needs this card selected *and* more than one selected, so a right-click on an
+    // unselected card acts on that card alone.
+    out property <bool> multi-active: root.card-selected && root.selection-count > 1;
+
+    property <int> multi-count: root.selection-count;
+    property <bool> kept: root.list != Radio.tab-browse;
+    property <bool> on-favorites: root.list == Radio.tab-favorites;
+    property <bool> on-recent: root.list == Radio.tab-recent;
+    // A hand-typed station has nothing in the directory to star against, so its card has no star.
+    property <bool> starrable: root.station.uuid != "";
+    // **No star entry on Favorites**: there the star and the trash leave the card in the same
+    // place, and the trash's confirm is the one that says what a hand-typed station loses.
+    property <bool> has-star: root.starrable && !root.on-favorites;
+    property <bool> can-edit: !root.multi-active && root.kept && root.station.editable;
+    property <bool> has-play-group: !root.multi-active;
+    property <bool> has-keep-group: root.has-star || root.can-edit;
+    // A selection may mix stations with and without a site, so it is offered whatever this one has.
+    property <bool> copy-website: root.multi-active || root.station.homepage != "";
+
+    property <bool> copy-open;
+
+    callback select-all();
+    callback clear-selection();
+    // Focus loss closed the popup; the host hands back its own snapshot and highlight key.
+    callback released();
+
+    public function show() {
+        root.copy-open = false;
+        pop.show();
+    }
+
+    // `TrackContextMenu.dismiss`: every entry closes the menu after acting.
+    function dismiss() {
+        root.copy-open = false;
+        pop.close();
+    }
+
+    // A kept station resolves by id against its own list; a browsed one by its uuid, being all
+    // `0` by id. Takes the ids, the root being unable to read the popup's own.
+    function copy(field: string, ids: [int]) {
+        if (root.kept) {
+            Radio.copy-kept-stations(root.list, field, ids);
+        } else {
+            Radio.copy-browse-station(field, root.station.uuid);
+        }
+        root.dismiss();
+    }
+
+    // `CardContextMenu`'s reason for the pinned, zero-size root.
+    x: 0px;
+    y: 0px;
+    width: 0px;
+    height: 0px;
+
+    pop := PopupWindow {
+        // On the popup, so it can read its own descendant's layout.
+        property <length> menu-w: ContextMenuMetrics.menu-w(menu-vl.preferred-width);
+        property <length> menu-h: menu-vl.preferred-height;
+        property <length> flyout-h: ContextMenuMetrics.flyout-h(root.copy-website ? 3 : 2);
+        property <length> reserve: ContextMenuMetrics.gap + ContextMenuMetrics.flyout-w;
+        // Off the root's position, which sits outside the popup and so still means the window.
+        property <bool> flyout-left:
+            ContextMenuMetrics.opens-left(root.absolute-position.x + root.at-x, self.menu-w);
+
+        x: root.at-x - (self.flyout-left ? self.reserve : 0px);
+        y: root.at-y;
+        width: self.menu-w + self.reserve;
+        height: max(self.menu-h, self.flyout-h);
+        close-policy: close-on-click-outside;
+
+        property <[int]> effective-ids:
+            root.multi-active ? root.effective-selection : [root.station.id];
+
+        if root.ctx-key != -1 && root.ctx-key == root.live-ctx-key: FocusLossWatcher {
+            close => {
+                pop.close();
+                root.released();
+            }
+        }
+
+        // First, so every row drawn over it wins its own click and a click on the empty reserve
+        // still closes the menu.
+        PopupDismissCatcher {
+            width: parent.width;
+            height: parent.height;
+            clicked => { root.dismiss(); }
+        }
+
+        PopupSurface {
+            x: pop.flyout-left ? pop.reserve : 0px;
+            y: 0px;
+            width: pop.menu-w;
+            height: pop.menu-h;
+
+            menu-vl := VerticalLayout {
+                padding: ContextMenuMetrics.inset;
+                spacing: 0;
+
+                // What the card's own hover controls do, single-target as they are.
+                if root.has-play-group: MenuItem {
+                    label: @tr("Play");
+                    icon: "play_arrow";
+                    clicked => {
+                        Radio.play-station(root.station);
+                        root.dismiss();
+                    }
+                }
+                if root.has-play-group && root.station.homepage != "": MenuItem {
+                    label: @tr("Open Website");
+                    icon: "link";
+                    clicked => {
+                        Radio.open-homepage(root.station.homepage);
+                        root.dismiss();
+                    }
+                }
+
+                if root.has-play-group && root.has-keep-group: MenuSeparator {}
+                // The row menu's toggle: the direction away from the clicked station, over that
+                // card or the whole selection, so a selection of favorites is only ever offered
+                // their removal.
+                if root.has-star: MenuItem {
+                    label: root.multi-active
+                        ? (root.station.is_favorite
+                            ? @tr("Remove {} from Favorites", root.multi-count)
+                            : @tr("Add {} to Favorites", root.multi-count))
+                        : (root.station.is_favorite
+                            ? @tr("Remove from Favorites")
+                            : @tr("Add to Favorites"));
+                    icon: root.station.is_favorite ? "heart_minus" : "favorite";
+                    clicked => {
+                        if (root.multi-active) {
+                            Radio.set-favorites(
+                                root.list, pop.effective-ids, !root.station.is_favorite);
+                        } else {
+                            Radio.toggle-favorite(root.station);
+                        }
+                        root.dismiss();
+                    }
+                }
+                if root.can-edit: MenuItem {
+                    label: @tr("Edit…");
+                    icon: "edit";
+                    clicked => {
+                        Radio.edit-station(root.station);
+                        root.dismiss();
+                    }
+                }
+
+                // Not behind an `if`, the flyout lining up against its `y`.
+                if root.has-play-group || root.has-keep-group: MenuSeparator {}
+                copy-row := MenuItem {
+                    label: @tr("Copy");
+                    icon: "content_copy";
+                    submenu: true;
+                    submenu-open: root.copy-open;
+                    submenu-left: pop.flyout-left;
+                    clicked => { root.copy-open = !root.copy-open; }
+                }
+
+                // The selection group, the card menu's: Clear is gated on the scope holding a set,
+                // a card having no second activation to reach one it can no longer see.
+                if root.kept: MenuSeparator {}
+                if root.kept: MenuItem {
+                    label: @tr("Select all");
+                    icon: "select_all";
+                    clicked => {
+                        root.select-all();
+                        root.dismiss();
+                    }
+                }
+                if root.kept && root.selection-count > 0: MenuItem {
+                    label: @tr("Clear selection");
+                    icon: "close";
+                    clicked => {
+                        root.clear-selection();
+                        root.dismiss();
+                    }
+                }
+
+                // The trash button's confirm, over one card or the whole selection. Two labels
+                // rather than one taking the tab's name, `@tr` resolving literals at codegen.
+                if root.kept: MenuSeparator {}
+                if root.kept: MenuItem {
+                    label: root.on-recent
+                        ? (root.multi-active
+                            ? @tr("Remove {} from Recently Played…", root.multi-count)
+                            : @tr("Remove from Recently Played…"))
+                        : (root.multi-active
+                            ? @tr("Remove {} from Favorites…", root.multi-count)
+                            : @tr("Remove from Favorites…"));
+                    icon: "delete";
+                    destructive: true;
+                    clicked => {
+                        if (root.multi-active) {
+                            Dialog.open-remove-stations(pop.effective-ids, root.on-recent);
+                        } else {
+                            Dialog.open-remove-station(root.station, root.on-recent);
+                        }
+                        root.dismiss();
+                    }
+                }
+            }
+        }
+
+        // Level with the Copy row, and lifted where that row sits too low for the whole column to
+        // fit.
+        if root.copy-open: MenuFlyout {
+            x: pop.flyout-left ? 0px : pop.menu-w + ContextMenuMetrics.gap;
+            y: max(0px, min(copy-row.y - ContextMenuMetrics.inset, pop.height - pop.flyout-h));
+            width: ContextMenuMetrics.flyout-w;
+            height: pop.flyout-h;
+
+            MenuItem {
+                label: @tr("Name");
+                icon: "title";
+                clicked => { root.copy("name", pop.effective-ids); }
+            }
+            MenuItem {
+                label: @tr("Stream URL");
+                icon: "radio";
+                clicked => { root.copy("stream-url", pop.effective-ids); }
+            }
+            if root.copy-website: MenuItem {
+                label: @tr("Website");
+                icon: "link";
+                clicked => { root.copy("website", pop.effective-ids); }
+            }
+        }
+    }
+}

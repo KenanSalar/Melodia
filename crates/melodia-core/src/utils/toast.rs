@@ -39,6 +39,14 @@ pub enum ToastKind {
     /// auto-dismissing, and surfaced rather than logged for the reason the radio vote is: it
     /// happens only when somebody presses a control that says so, and this one rewrites a file.
     LyricsSaved,
+    /// A Copy entry put its text on the clipboard. The copy itself is invisible, so this is the
+    /// only sign it landed; auto-dismissing, and carrying no detail so the copied text is never
+    /// shown or kept anywhere else.
+    Copied,
+    /// A Copy entry found the field empty on every item it was handed: a track with no album, an
+    /// album with no artist. Said rather than skipped, the menu having closed on a click that
+    /// otherwise did nothing visible.
+    NothingToCopy,
     /// The retroactive loved-tracks backfill queued existing favorites after a love
     /// toggle or a connect. Informational, auto-dismissing.
     LoveSync,
