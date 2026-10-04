@@ -430,9 +430,9 @@ export struct NotificationRow {
 // `hls` bool beside it, and nothing draws a badge off one, because those stations play.
 export struct RadioStationRow {
     id: int,
-    // What the card selects and copies by: the row id on the kept tabs, and on Browse, whose rows
-    // all hold id 0, the station's 1-based place in the answer, which holds until a fresh search
-    // replaces it. 0 where nothing does, a station page's row.
+    // What the card selects and copies by: the row id on a kept row, and on Browse, whose rows all
+    // hold id 0, the station's 1-based place in the answer, which holds until a fresh search
+    // replaces it. A browsed row built anywhere else, a station page's, holds 0.
     select_key: int,
     uuid: string,
     name: string,

@@ -149,18 +149,26 @@ pub fn resolve(radio_ui: &RadioUi, uuid: &str) -> Option<(DirectoryStation, Opti
     Some((station, logo))
 }
 
-/// The cached station a card's `select_key` names, and its logo, `resolve`'s answer by place.
+/// The cached stations a set of cards' `select_key`s name, each with its logo: `resolve`'s answer
+/// by place, skipping a key that names none.
 ///
 /// A place rather than a uuid because the selection is ids, and a browsed row has no id. It holds
 /// for as long as the answer does: a page appended keeps every earlier place, and a fresh search,
 /// which renumbers them, drops a Browse selection as it lands ([`paint`]).
-pub fn resolve_key(radio_ui: &RadioUi, key: i32) -> Option<(DirectoryStation, Option<String>)> {
-    let place = usize::try_from(key).ok()?.checked_sub(1)?;
+pub fn resolve_keys(
+    radio_ui: &RadioUi,
+    keys: impl IntoIterator<Item = i32>,
+) -> Vec<(DirectoryStation, Option<String>)> {
     let browse = radio_ui.browse.lock();
-    let station = browse.stations.get(place)?.clone();
     let kept = radio_ui.kept_answers.lock();
-    let logo = logo_for(radio_ui, kept.get(&station.station_uuid), &station);
-    Some((station, logo))
+    keys.into_iter()
+        .filter_map(|key| {
+            let place = usize::try_from(key).ok()?.checked_sub(1)?;
+            let station = browse.stations.get(place)?;
+            let logo = logo_for(radio_ui, kept.get(&station.station_uuid), station);
+            Some((station.clone(), logo))
+        })
+        .collect()
 }
 
 /// 1-based, so no place lands on the `0` a selection refuses.
@@ -177,8 +185,8 @@ fn select_key_at(place: usize) -> i32 {
 /// entry of `None`. Either way the two local tabs paint it and Browse was painting a monogram.
 /// Last is what a narrow search discovered on the site of a station that has no row yet.
 ///
-/// `kept` is that row's answers, looked up by the caller: three of the four sites walk a whole
-/// page, and reaching for the lock in here would take it once per station rather than once per
+/// `kept` is that row's answers, looked up by the caller: every site but `resolve` walks a set of
+/// stations, and reaching for the lock in here would take it once per station rather than once per
 /// pass.
 fn logo_for(
     radio_ui: &RadioUi,

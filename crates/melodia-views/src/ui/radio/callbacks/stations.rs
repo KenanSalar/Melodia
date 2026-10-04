@@ -1,8 +1,9 @@
 //! The row actions all three tabs share.
 //!
-//! **One door per action, taking the whole row rather than an id**, because the two kinds of
-//! station identify themselves differently: a browsed one has no database row and answers to its
-//! uuid, a kept one has an id and no place in the browse cache. `id == 0` is the split, and it is
+//! **One door per action**, because the two kinds of station identify themselves differently: a
+//! browsed one has no database row and answers to its uuid or its place in the answer, a kept one
+//! has an id and no place in the browse cache. A door over one card takes the whole row and splits
+//! on `id == 0`; a door over a selection takes `select_key`s and splits on the tab. Either split is
 //! spelled once here rather than at every mount.
 
 use std::sync::Arc;
@@ -64,8 +65,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
             let Some(ui) = weak.upgrade() else { return };
             match tab_from_index(&ui.global::<Radio>(), tab) {
                 RadioTab::Browse => {
-                    let stations =
-                        keys.iter().filter_map(|key| browse::resolve_key(&ru, key)).collect();
+                    let stations = browse::resolve_keys(&ru, keys.iter());
                     set_browsed_favorites(&s, &ru, &weak, stations, favorite);
                 }
                 tab => {
@@ -106,11 +106,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
             };
             let text = match tab_from_index(&ui.global::<Radio>(), tab) {
                 RadioTab::Browse => {
-                    let stations: Vec<DirectoryStation> = keys
-                        .iter()
-                        .filter_map(|key| browse::resolve_key(&ru, key).map(|(station, _)| station))
-                        .collect();
-                    station_lines(stations.iter().map(browsed_text), field)
+                    let stations = browse::resolve_keys(&ru, keys.iter());
+                    station_lines(stations.iter().map(|(station, _)| browsed_text(station)), field)
                 }
                 tab => {
                     let stations: Vec<RadioStation> = keys

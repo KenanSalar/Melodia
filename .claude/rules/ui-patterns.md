@@ -124,9 +124,9 @@ silently miss the other.
   another's set, and says nothing about a set no grid is showing. One `clear()` in each of the seven
   `on_section_active_changed` bodies covers all ten scopes, since the state is one global keyed
   by one scope string. **Radio is the seventh, and the one that clears without dropping its rows**:
-  its leave keeps every list, but its station cards pick in `CardSelection`. A card grid
-  is the surface that needs it most, having no pill and no second activation: a set left live
-  turns every click into a pick. Held by `crates/melodia/tests/card_selection.rs`'s
+  its leave keeps every list, but its station cards pick in `CardSelection`. A card grid is the
+  surface that needs it most, having no pill and no second activation: a set left live turns every
+  click into a pick. Held by `crates/melodia/tests/card_selection.rs`'s
   `every_section_leave_hands_its_card_selection_back`, an **equality** over the seven because a
   floor cannot see one slice stop clearing; the walk reads the `on_section_active_changed` block
   itself, so the clear goes in that closure and not in a `leave()` it calls. The same file holds
@@ -576,9 +576,9 @@ three components that answer it, and each argues its geometry at its own file.
   `effective-ids` every handler reads; the host keeps the pointer position. **`view-context` is
   most of what a host configures** — it suppresses the entry naming the surface you are already
   on and picks the remove arm, and `"queue"` drops Play Next and Add to Queue outright, the queue
-  being what they name. A remove label handed over by the host would
-  ship untranslated, `@tr` resolving literals at codegen, so a third list's arm is one more `if`
-  here rather than a property.
+  being what they name. A remove label handed over by the host would ship untranslated, `@tr`
+  resolving literals at codegen, so a third list's arm is one more `if` here rather than a
+  property.
 
 - **The four right-click menus share one shape**: the row menu, `CardContextMenu`,
   `StationContextMenu` and the radio history list's. `components/context-menu.slint` holds the

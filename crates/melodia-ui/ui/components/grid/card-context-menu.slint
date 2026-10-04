@@ -11,9 +11,9 @@ import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 // The right-click menu every entity card raises, and the only place its entries are spelled.
 //
 // `TrackContextMenu`'s contract, one layer over: **the host keeps the pointer position; this keeps
-// the menu.** What differs is that a card
-// is a *set* of tracks, so the actions go through `CardActions` with a kind and an id list and
-// Rust resolves the set once, rather than each entry naming a track callback.
+// the menu.** What differs is that a card is a *set* of tracks, so the actions go through
+// `CardActions` with a kind and an id list and Rust resolves the set once, rather than each entry
+// naming a track callback.
 //
 // `card-kind` is what a host configures, and it both picks the per-kind entries and travels to
 // Rust as the token `EntityKind::from_token` parses.

@@ -12,8 +12,9 @@ import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 // The right-click menu every track row raises, and the only place its entries are spelled.
 //
 // **The host keeps the pointer; this keeps the menu.** A row hands the press position over as
-// `at-x`/`at-y` and calls `show()`. Two hosts today — `TrackListRowItem` and the queue sheet's `QueueRowItem` — and the
-// second is the reason the entries live here rather than inline in the first.
+// `at-x`/`at-y` and calls `show()`. Two hosts today — `TrackListRowItem` and the queue sheet's
+// `QueueRowItem` — and the second is the reason the entries live here rather than inline in the
+// first.
 //
 // **The root is zero-size on purpose.** It mounts as a free sibling of the row's TouchArea, so the
 // popup's coordinate frame is the row chrome's, which is the frame `touch.mouse-x` already reports

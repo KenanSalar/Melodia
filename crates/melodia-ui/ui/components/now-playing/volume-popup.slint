@@ -86,9 +86,6 @@ export component VolumePopup inherits Rectangle {
         height: 180px;
         close-policy: close-on-click-outside;
 
-        // Live only while this popup is the open one — the trigger sets the discriminator
-        // before `show()` and the close paths clear it — so focus loss reaches one
-        // watcher rather than one per popup host.
         if PopupHighlight.id == "volume": FocusLossWatcher {
             close => { pop.close(); PopupHighlight.id = ""; }
         }

@@ -15,8 +15,8 @@ import { SelectionPill } from "selection-pill.slint";
 // `Theme.track-row-pitch`.** The inner `chrome` Rectangle is the visible pill and owns the
 // TouchArea, cell layout and context popup.
 //
-// Column widths, visibility and the playing track id arrive as `in` properties; the globals the
-// menu reads went with it into `TrackContextMenu`.
+// Column widths, visibility and the playing track id arrive as `in` properties; the menu's
+// globals are `TrackContextMenu`'s.
 export component TrackListRowItem inherits Rectangle {
     in property <TrackListRow> row-data;
     in property <int> row-index;

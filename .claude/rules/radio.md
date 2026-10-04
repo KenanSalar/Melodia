@@ -148,8 +148,8 @@ is the copy to delete.
   (`radio-browse`, `radio-favorites`, `radio-recent`). On the kept tabs the key is the row id; on
   Browse, whose rows all hold `id == 0`, it is the station's 1-based place in the answer, which a
   page appended keeps and a fresh search renumbers. So `browse::paint` drops a `radio-browse` set
-  as a fresh answer lands, and `browse::resolve_key` is how every batch action and copy finds a
-  browsed station. The leave's clear sits in the `on_section_active_changed` closure, where
+  as a fresh answer lands, and `browse::resolve_keys` is how every batch action and copy finds the
+  browsed stations. The leave's clear sits in the `on_section_active_changed` closure, where
   `card_selection.rs`' walk reads it, rather than in `leave()`.
 - **A batch star or remove loops the facade's per-id calls from the slice**, so every write still
   goes through `library::radio` and the facade walks see nothing new. A removal clears the card
