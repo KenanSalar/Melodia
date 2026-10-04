@@ -1,4 +1,4 @@
-import { PlaylistPickRow, PlaylistExportPickRow } from "../models.slint";
+import { PlaylistPickRow, PlaylistExportPickRow, RadioStationRow } from "../models.slint";
 import { SmartEditor, TagEditor, ScrobbleUi, RadioForm } from "dialog-forms.slint";
 import { Radio } from "radio.slint";
 import { LibrarySettings } from "library-settings.slint";
@@ -158,9 +158,9 @@ export global Dialog {
             // Stays open across the probe, like the two logins below; Rust closes it on success.
             RadioForm.submit();
         } else if (root.kind == "remove-from-favorites") {
-            Radio.remove-from-favorites(root.target-id);
+            Radio.remove-from-favorites(root.pending-card-ids);
         } else if (root.kind == "remove-from-recent") {
-            Radio.remove-from-recent(root.target-id);
+            Radio.remove-from-recent(root.pending-card-ids);
         } else if (root.kind == "scrobble-listenbrainz-login") {
             // The dialog stays open — `dialog.slint` suppresses auto-close for this kind — until
             // Rust closes it on a valid token.
@@ -314,6 +314,52 @@ export global Dialog {
         root.cancel-label = @tr("Cancel");
         root.destructive = true;
         root.kind = "delete-playlists";
+        root.pending-card-ids = ids;
+        root.open = true;
+    }
+
+    // A kept station's trash button and its card menu's single-target remove. The kind is what
+    // carries the tab to the dispatcher, so removal means the list the card was on rather than
+    // whichever is mounted when the confirm lands.
+    //
+    // **The copy names the list, except where the list is the whole of what the row is.** A
+    // hand-typed station has no uuid, so no page can name it and the card offers it no star;
+    // leaving Favorites is leaving everything, history included, and `is_listed` deletes it. That
+    // is the one deletion the card can see the condition for, and understating it is a destructive
+    // action with no undo.
+    public function open-remove-station(station: RadioStationRow, from-recent: bool) {
+        root.claim-request();
+        root.title = from-recent
+            ? @tr("Remove from Recently Played?")
+            : @tr("Remove from favorites?");
+        root.message = from-recent
+            ? @tr("\"{}\" will be removed from Recently Played.", station.name)
+            : station.uuid == ""
+                ? @tr("\"{}\" will be removed from your stations, along with its play history.", station.name)
+                : @tr("\"{}\" will be removed from your favorites.", station.name);
+        root.confirm-label = @tr("Remove");
+        root.cancel-label = @tr("Cancel");
+        root.destructive = true;
+        root.kind = from-recent ? "remove-from-recent" : "remove-from-favorites";
+        root.pending-card-ids = [station.id];
+        root.open = true;
+    }
+
+    // The card menu's multi arm, `open-delete-playlists`' reason for being its own: the singular
+    // copy names one station. A selection may hold hand-typed stations the menu can't see, so the
+    // Favorites copy always says what removing one of those costs.
+    public function open-remove-stations(ids: [int], from-recent: bool) {
+        root.claim-request();
+        root.title = from-recent
+            ? @tr("Remove {n} station from Recently Played?" | "Remove {n} stations from Recently Played?" % ids.length)
+            : @tr("Remove {n} station from favorites?" | "Remove {n} stations from favorites?" % ids.length);
+        root.message = from-recent
+            ? @tr("The stations will be removed from Recently Played.")
+            : @tr("The stations will be removed from your favorites. Any you added by hand are removed from your stations, along with their play history.");
+        root.confirm-label = @tr("Remove");
+        root.cancel-label = @tr("Cancel");
+        root.destructive = true;
+        root.kind = from-recent ? "remove-from-recent" : "remove-from-favorites";
         root.pending-card-ids = ids;
         root.open = true;
     }

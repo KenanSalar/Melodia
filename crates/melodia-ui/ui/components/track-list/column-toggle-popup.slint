@@ -110,9 +110,6 @@ export component ColumnTogglePopup inherits Rectangle {
         y: root.height + Theme.popup-gap;
         close-policy: close-on-click-outside;
 
-        // Live only while this is the open popup — the trigger claims
-        // `PopupHighlight.id` before `show()`, so focus loss costs one watcher
-        // rather than one per popup host in the tree.
         if PopupHighlight.id == "columns": FocusLossWatcher {
             close => { pop.close(); PopupHighlight.id = ""; }
         }

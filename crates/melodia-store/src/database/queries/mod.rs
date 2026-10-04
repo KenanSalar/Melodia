@@ -1,6 +1,7 @@
 pub mod album;
 pub mod artist;
 pub mod artwork;
+pub mod entity_labels;
 #[doc(hidden)]
 pub mod fixtures;
 pub mod folder;

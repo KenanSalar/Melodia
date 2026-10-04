@@ -1,6 +1,5 @@
 import { Theme } from "../../theme.slint";
 import { TrackListRow, TrackColumns, TrackColumnLayout } from "../../models.slint";
-import { PopupHighlight } from "../../globals/shell.slint";
 import { RowCovers } from "../../globals/tracks.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { StarRating } from "../star-rating.slint";
@@ -16,17 +15,11 @@ import { SelectionPill } from "selection-pill.slint";
 // `Theme.track-row-pitch`.** The inner `chrome` Rectangle is the visible pill and owns the
 // TouchArea, cell layout and context popup.
 //
-// Column widths, visibility and the playing track id arrive as `in` properties; the one global
-// left is `PopupHighlight`, which the right-click arm writes. The menu's own four went with it
-// into `TrackContextMenu`.
+// Column widths, visibility and the playing track id arrive as `in` properties; the menu's
+// globals are `TrackContextMenu`'s.
 export component TrackListRowItem inherits Rectangle {
     in property <TrackListRow> row-data;
     in property <int> row-index;
-
-    // `row-data.id` snapshotted at right-click, so a ListView row recycle — a data swap behind the
-    // same instance during a scroll — can't unmount the FocusLossWatcher mid-popup. Reset by the
-    // same close path that clears `PopupHighlight.row-ctx-id`, else the gate stays true.
-    property <int> right-click-row-id: -1;
 
     // The list's visibility flags and the `layout` it resolved from them, the one the header places
     // its cells by.
@@ -241,12 +234,6 @@ export component TrackListRowItem inherits Rectangle {
                     root.request-blur-search();
                 }
                 if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right && root.enabled) {
-                    // Records which row owns the open menu, so the popup's `FocusLossWatcher`
-                    // mounts on this row alone and focus-loss dispatch stays O(1). **Both writes
-                    // must precede `show()`**, or the popup body's `if` gate is still false when
-                    // the watcher would mount.
-                    root.right-click-row-id = root.row-data.id;
-                    PopupHighlight.row-ctx-id = root.row-data.id;
                     ctx-menu.show();
                     root.request-blur-search();
                 }
@@ -531,8 +518,7 @@ export component TrackListRowItem inherits Rectangle {
         }
 
         // The menu itself is `TrackContextMenu`, shared with the queue sheet's row. What stays
-        // here is what the menu deliberately doesn't own: the pointer position, the right-click
-        // snapshot and the highlight key it gates on.
+        // here is the pointer position, the one thing it deliberately doesn't own.
         ctx-menu := TrackContextMenu {
             row-id: root.row-data.id;
             row-is-favorite: root.row-data.is_favorite;
@@ -546,8 +532,6 @@ export component TrackListRowItem inherits Rectangle {
             selection-count: root.view-selected-ids.length;
             at-x: touch.mouse-x;
             at-y: touch.mouse-y;
-            ctx-key: root.right-click-row-id;
-            live-ctx-key: PopupHighlight.row-ctx-id;
 
             play-single => { root.play-row(root.row-data.id, root.row-index); }
             play-next(ids) => { root.play-next(ids); }
@@ -559,10 +543,6 @@ export component TrackListRowItem inherits Rectangle {
             go-to-album(aid) => { root.go-to-album(aid); }
             go-to-artist(aid) => { root.go-to-artist(aid); }
             go-to-genre(gid) => { root.go-to-genre(gid); }
-            released => {
-                PopupHighlight.row-ctx-id = -1;
-                root.right-click-row-id = -1;
-            }
         }
     }
     }

@@ -355,3 +355,45 @@ fn the_needle_ignores_case_and_accents() {
         "an empty needle matches everything, which is what lets the walk run unconditionally"
     );
 }
+
+/// A kept station answering to `id`, named so a failure says which station resolved.
+fn numbered(id: i64, name: &str) -> RadioStation {
+    let mut kept = station(name, "2026-01-01T00:00:00.000+00:00", 0, None);
+    kept.id = id;
+    kept
+}
+
+/// The names `resolve_keys` hands back, in the order it hands them.
+fn resolved(radio_ui: &RadioUi, tab: RadioTab, ids: &[i64]) -> Vec<String> {
+    resolve_keys(radio_ui, tab, ids.iter().copied()).into_iter().map(|kept| kept.name).collect()
+}
+
+/// A Copy lists a selection in the order it was picked, so the cache's own order must not leak
+/// through.
+#[test]
+fn a_selection_resolves_in_the_order_it_was_picked() {
+    let radio_ui = RadioUi::new(false, None);
+    radio_ui.kept.lock().stations =
+        vec![numbered(1, "Alpha"), numbered(2, "Beta"), numbered(3, "Gamma")];
+
+    assert_eq!(resolved(&radio_ui, RadioTab::Favorites, &[3, 1]), ["Gamma", "Alpha"]);
+}
+
+/// A refresh can drop a station between the menu opening and the click, and the rest of the set
+/// still acts.
+#[test]
+fn an_id_the_tab_no_longer_lists_resolves_to_nothing() {
+    let radio_ui = RadioUi::new(false, None);
+    radio_ui.kept.lock().stations = vec![numbered(2, "Beta")];
+
+    assert_eq!(resolved(&radio_ui, RadioTab::Favorites, &[99, 2]), ["Beta"]);
+}
+
+#[test]
+fn each_kept_tab_resolves_against_its_own_list() {
+    let radio_ui = RadioUi::new(false, None);
+    radio_ui.kept.lock().stations = vec![numbered(1, "Starred")];
+    radio_ui.recent.lock().stations = vec![numbered(2, "Played")];
+
+    assert_eq!(resolved(&radio_ui, RadioTab::Recent, &[1, 2]), ["Played"]);
+}

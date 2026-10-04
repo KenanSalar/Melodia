@@ -101,7 +101,7 @@ pub fn install_toast_bridge(
                 ToastKind::PlaybackFailed | ToastKind::OperationFailed => {
                     // Only the title is ours to re-render; the detail is a Rust error
                     // string that was never translated in the first place.
-                    notifications.show_localized(&ui, "error", "error", move |ui| {
+                    notifications.show_failure(&ui, move |ui| {
                         let g = ui.global::<Settings>();
                         RowText::plain(
                             match kind {
@@ -116,13 +116,11 @@ pub fn install_toast_bridge(
                 // rather than sticking like a failure.
                 ToastKind::MbidTagging => {
                     notifications.show_auto_dismiss(
-                        NotificationParams {
-                            variant: "info".into(),
-                            title: g.invoke_toast_mbid_title(),
-                            message: detail.into(),
-                            action_label: slint::SharedString::default(),
-                            action_kind: "info".into(),
-                        },
+                        NotificationParams::plain(
+                            "info",
+                            g.invoke_toast_mbid_title(),
+                            detail.into(),
+                        ),
                         6000,
                     );
                 }
@@ -130,7 +128,7 @@ pub fn install_toast_bridge(
                 // detail, and it sticks because it asks the user to do
                 // something rather than reporting what happened.
                 ToastKind::RestartRequired => {
-                    notifications.show_localized(&ui, "warning", "warning", |ui| {
+                    notifications.show_localized(&ui, "warning", "", |ui| {
                         let g = ui.global::<Settings>();
                         RowText::plain(
                             g.invoke_toast_restart_required_title(),
@@ -140,13 +138,11 @@ pub fn install_toast_bridge(
                 }
                 ToastKind::LoveSync => {
                     notifications.show_auto_dismiss(
-                        NotificationParams {
-                            variant: "info".into(),
-                            title: g.invoke_toast_love_sync_title(),
-                            message: detail.into(),
-                            action_label: slint::SharedString::default(),
-                            action_kind: "info".into(),
-                        },
+                        NotificationParams::plain(
+                            "info",
+                            g.invoke_toast_love_sync_title(),
+                            detail.into(),
+                        ),
                         6000,
                     );
                 }
@@ -154,14 +150,24 @@ pub fn install_toast_bridge(
                 // they were already looking at, so the toast confirms rather than reports.
                 ToastKind::LyricsSaved => {
                     notifications.show_auto_dismiss(
-                        NotificationParams {
-                            variant: "info".into(),
-                            title: g.invoke_toast_lyrics_saved_title(),
-                            message: detail.into(),
-                            action_label: slint::SharedString::default(),
-                            action_kind: "info".into(),
-                        },
+                        NotificationParams::plain(
+                            "info",
+                            g.invoke_toast_lyrics_saved_title(),
+                            detail.into(),
+                        ),
                         4000,
+                    );
+                }
+                // A confirmation for something the user just did, so shorter than the
+                // reports above.
+                ToastKind::Copied | ToastKind::NothingToCopy => {
+                    let title = match kind {
+                        ToastKind::Copied => g.invoke_toast_copied_title(),
+                        _ => g.invoke_toast_nothing_to_copy_title(),
+                    };
+                    notifications.show_auto_dismiss(
+                        NotificationParams::plain("info", title, slint::SharedString::default()),
+                        2500,
                     );
                 }
                 // Auto-dismissing: the music carries on through the shared output, and the
@@ -182,13 +188,11 @@ pub fn install_toast_bridge(
                 // and there is nothing for the user to do about it.
                 ToastKind::RadioVote => {
                     notifications.show_auto_dismiss(
-                        NotificationParams {
-                            variant: "warning".into(),
-                            title: g.invoke_toast_radio_vote_title(),
-                            message: detail.into(),
-                            action_label: slint::SharedString::default(),
-                            action_kind: "warning".into(),
-                        },
+                        NotificationParams::plain(
+                            "warning",
+                            g.invoke_toast_radio_vote_title(),
+                            detail.into(),
+                        ),
                         6000,
                     );
                 }

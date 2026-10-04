@@ -1,24 +1,78 @@
 import { Theme } from "../theme.slint";
+import { WindowChrome } from "../globals/shell.slint";
 import { MaterialIcon } from "material-icon.slint";
+import { PopupSurface } from "popup-surface.slint";
 
-// One row inside a context menu; the host popup's own close policy dismisses it.
+// What every right-click menu with a flyout shares, so the reserve and the edge test are stated
+// once rather than per menu. The reserve is `OverflowMenu`'s: a `PopupWindow` is sized as it
+// opens and never again, so a menu that can grow a flyout is opened wide enough for it.
+export global ContextMenuMetrics {
+    out property <length> item-h: 32px;
+    out property <length> flyout-w: 200px;
+    out property <length> gap: Theme.pad-xs;
+    // The padding a menu column puts round its rows.
+    out property <length> inset: Theme.pad-xs;
+    // A menu column is as wide as its widest row, between these: the floor keeps a short menu
+    // reading as one, the ceiling keeps a long translation from crossing the window, and a row
+    // past it elides rather than running off the surface.
+    out property <length> menu-min-w: 220px;
+    out property <length> menu-max-w: 400px;
+    // How much wider than its column a menu with a flyout opens, on whichever side has room.
+    out property <length> reserve: root.gap + root.flyout-w;
+
+    // Off the rows' `preferred-width`, which only the popup holding them can read.
+    pure public function menu-w(rows-w: length) -> length {
+        return clamp(rows-w, root.menu-min-w, root.menu-max-w);
+    }
+
+    // Exactly the rows and their padding: any more and the column's layout spreads the surplus
+    // between rows that cannot grow.
+    pure public function flyout-h(rows: int) -> length {
+        return rows * root.item-h + 2 * root.inset;
+    }
+
+    // A left flyout takes the reserve the popup was shifted by, so it starts at the popup's edge.
+    pure public function flyout-x(left: bool, menu-w: length) -> length {
+        return left ? 0px : menu-w + root.gap;
+    }
+
+    // Level with the row that opens it, and lifted where that row sits too low for the whole
+    // column to fit in the popup.
+    pure public function flyout-y(row-y: length, popup-h: length, flyout-h: length) -> length {
+        return max(0px, min(row-y - root.inset, popup-h - flyout-h));
+    }
+
+    // Whether a flyout beside a menu opened at `anchor-x` would run past the shell's right edge.
+    // In window coordinates, so a host passes its menu root's `absolute-position`: the root sits
+    // outside the popup, where the position still means the window.
+    pure public function opens-left(anchor-x: length, menu-w: length) -> bool {
+        return anchor-x + menu-w + root.reserve > WindowChrome.shell-x + WindowChrome.shell-width;
+    }
+}
+
+// One row inside a context menu. The host closes the menu from its handler, where the menu has a
+// flyout to keep open; a menu without one leaves it to its popup's close policy.
 export component MenuItem inherits Rectangle {
     in property <string> label;
     in property <string> icon;
     in property <bool> destructive;
+    // Opens a flyout rather than acting: a chevron pointing the way it opens, and the hover fill
+    // held for as long as it is open, so the row it belongs to stays marked.
+    in property <bool> submenu;
+    in property <bool> submenu-open;
+    in property <bool> submenu-left;
 
     callback clicked();
 
-    height: 32px;
+    height: ContextMenuMetrics.item-h;
     border-radius: Theme.radius-sm;
-    background: touch.has-hover ? Theme.surface2 : transparent;
+    background: touch.has-hover || root.submenu-open ? Theme.surface2 : transparent;
     animate background { duration: 100ms; easing: ease-in-out; }
 
     HorizontalLayout {
         padding-left: Theme.pad-sm;
         padding-right: Theme.pad-sm;
         spacing: Theme.pad-sm;
-        alignment: start;
 
         VerticalLayout {
             alignment: center;
@@ -31,10 +85,31 @@ export component MenuItem inherits Rectangle {
 
         VerticalLayout {
             alignment: center;
+            horizontal-stretch: 1;
+            // Elided, so a row past the menu's ceiling shortens inside it. Its preferred width
+            // stays the whole label, which is what the menu sizes itself off.
             Text {
                 text: root.label;
                 color: root.destructive ? Theme.red : Theme.text;
                 font-size: Theme.font-size-md;
+                overflow: elide;
+            }
+        }
+
+        // **A fixed box round the chevron**: the side it points to is decided off the menu's
+        // width, so the width may not read back the glyph that side picks.
+        if root.submenu: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 16px;
+                height: 16px;
+                MaterialIcon {
+                    x: 0px;
+                    y: 0px;
+                    name: root.submenu-left ? "chevron_left" : "chevron_right";
+                    icon-size: 16px;
+                    icon-color: Theme.subtext1;
+                }
             }
         }
     }
@@ -42,6 +117,33 @@ export component MenuItem inherits Rectangle {
     touch := TouchArea {
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
+    }
+}
+
+// The favorite entry wherever the clicked item's own state is known. It names the direction away
+// from that item and the host applies it to the whole set, so a selection of favorites is only
+// ever offered their removal.
+export component FavoriteMenuItem inherits MenuItem {
+    in property <bool> is-favorite;
+    in property <bool> multi-active;
+    in property <int> multi-count;
+
+    label: root.multi-active
+        ? (root.is-favorite
+            ? @tr("Remove {} from Favorites", root.multi-count)
+            : @tr("Add {} to Favorites", root.multi-count))
+        : (root.is-favorite ? @tr("Remove from Favorites") : @tr("Add to Favorites"));
+    icon: root.is-favorite ? "heart_minus" : "favorite";
+}
+
+// The column a submenu row opens: the menu's own chrome round the rows the host passes in.
+export component MenuFlyout inherits PopupSurface {
+    width: ContextMenuMetrics.flyout-w;
+
+    VerticalLayout {
+        padding: ContextMenuMetrics.inset;
+        spacing: 0;
+        @children
     }
 }
 

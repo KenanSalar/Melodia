@@ -593,6 +593,14 @@ export global Settings {
     toast-lyrics-saved-title => {
         return @tr("Lyrics saved");
     }
+    pure callback toast-copied-title() -> string;
+    toast-copied-title => {
+        return @tr("Copied to clipboard");
+    }
+    pure callback toast-nothing-to-copy-title() -> string;
+    toast-nothing-to-copy-title => {
+        return @tr("Nothing to copy");
+    }
     pure callback toast-radio-vote-title() -> string;
     toast-radio-vote-title => {
         return @tr("Vote not counted");

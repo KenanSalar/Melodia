@@ -2535,3 +2535,69 @@ msgstr "{}% (il dispositivo silenziato)"
 
 msgid "{}% (the device at {}%)"
 msgstr "{}% (il dispositivo al {}%)"
+
+# ---- Copy, and the station card menu ----------------------------------------
+
+msgid "Copy"
+msgstr "Copia"
+
+msgid "Copy Name"
+msgstr "Copia nome"
+
+msgid "Copy Path"
+msgstr "Copia percorso"
+
+msgid "Copy Title"
+msgstr "Copia titolo"
+
+msgid "Copy Artist"
+msgstr "Copia artista"
+
+msgid "Artist - Title"
+msgstr "Artista - Titolo"
+
+msgid "Artist - Album"
+msgstr "Artista - Album"
+
+msgid "File Path"
+msgstr "Percorso del file"
+
+msgid "Copied to clipboard"
+msgstr "Copiato negli appunti"
+
+msgid "Nothing to copy"
+msgstr "Niente da copiare"
+
+msgid "Open Website"
+msgstr "Apri sito web"
+
+msgid "Edit…"
+msgstr "Modifica…"
+
+msgid "Remove from Favorites…"
+msgstr "Rimuovi dai preferiti…"
+
+msgid "Remove from Recently Played…"
+msgstr "Rimuovi da Riprodotti di recente…"
+
+msgid "Remove {} from Favorites…"
+msgstr "Rimuovi {} dai preferiti…"
+
+msgid "Remove {} from Recently Played…"
+msgstr "Rimuovi {} da Riprodotti di recente…"
+
+msgid "Remove {n} station from Recently Played?"
+msgid_plural "Remove {n} stations from Recently Played?"
+msgstr[0] "Rimuovere {n} stazione da Riprodotti di recente?"
+msgstr[1] "Rimuovere {n} stazioni da Riprodotti di recente?"
+
+msgid "Remove {n} station from favorites?"
+msgid_plural "Remove {n} stations from favorites?"
+msgstr[0] "Rimuovere {n} stazione dai preferiti?"
+msgstr[1] "Rimuovere {n} stazioni dai preferiti?"
+
+msgid "The stations will be removed from Recently Played."
+msgstr "Le stazioni verranno rimosse da Riprodotti di recente."
+
+msgid "The stations will be removed from your favorites. Any you added by hand are removed from your stations, along with their play history."
+msgstr "Le stazioni verranno rimosse dai tuoi preferiti. Quelle aggiunte a mano verranno rimosse dalle tue stazioni, insieme alla cronologia di ascolto."

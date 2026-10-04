@@ -1,4 +1,4 @@
-// Multi-selection for every entity-card grid, shared rather than copied per view.
+// Multi-selection for every card grid, shared rather than copied per view.
 //
 // **Every call carries the asking grid's scope, and that argument is the guard.** Rust holds one
 // `(scope, set)` pair, so a grid asking about a scope that is not the current one is answered
@@ -9,7 +9,7 @@
 // the user can no longer see still answers `Selection.any-live()`, so it swallows the Escape meant
 // for the page they moved to, and it comes back live on re-entry, where a card has no second
 // activation and every click picks instead of opening. One `clear()` in each page's leave answers
-// for all seven scopes, so no mount has to know.
+// for every scope on it, so no mount has to know.
 //
 // **Browse is deliberately not here.** Its cards *are* its list rows, sharing `row_index` and
 // `Browse.selected-ids`, so card mode reads the selection list mode already owns and toggling the

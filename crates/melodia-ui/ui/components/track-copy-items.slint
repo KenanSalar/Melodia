@@ -1,0 +1,41 @@
+import { CopyActions } from "../globals/copy-actions.slint";
+import { MenuItem } from "context-menu.slint";
+
+// What a track's Copy flyout offers, on its row's menu and on its card's. A host reserves its
+// flyout's height off this list's length before the flyout mounts, so a field added here can't
+// clip the popup.
+
+// `token` travels to Rust as the field `TrackField::from_token` parses.
+export struct CopyField {
+    token: string,
+    label: string,
+    icon: string,
+}
+
+export global TrackCopyFields {
+    out property <[CopyField]> list: [
+        { token: "title", label: @tr("Title"), icon: "title" },
+        { token: "artist", label: @tr("Artist"), icon: "person" },
+        { token: "album", label: @tr("Album"), icon: "album" },
+        { token: "artist-title", label: @tr("Artist - Title"), icon: "music_note" },
+        { token: "path", label: @tr("File Path"), icon: "folder_open" },
+    ];
+}
+
+// The rows themselves, mounted inside the host's `MenuFlyout`.
+export component TrackCopyItems inherits VerticalLayout {
+    in property <[int]> track-ids;
+    // After the copy, so the host can close a menu whose ids go with it.
+    callback copied();
+
+    spacing: 0;
+
+    for entry in TrackCopyFields.list: MenuItem {
+        label: entry.label;
+        icon: entry.icon;
+        clicked => {
+            CopyActions.copy-tracks(entry.token, root.track-ids);
+            root.copied();
+        }
+    }
+}

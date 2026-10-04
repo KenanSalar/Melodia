@@ -121,7 +121,8 @@ pub struct LocalAnswers {
 /// One browsed station, with those answers folded in.
 ///
 /// `id` stays `0`: a directory station has no row until the user keeps or plays it, and that zero
-/// is what every call site taking a whole row branches on.
+/// is what every call site taking a whole row branches on. So does `select_key`, which only the
+/// Browse grid can give it, knowing the station's place in the answer.
 pub fn to_slint_radio_station_row(
     station: &DirectoryStation,
     local: &LocalAnswers,
@@ -130,6 +131,7 @@ pub fn to_slint_radio_station_row(
     let tile = identity::station_tile(&station.name);
     RadioStationRow {
         id: 0,
+        select_key: 0,
         uuid: SharedString::from(&station.station_uuid),
         name: SharedString::from(&station.name),
         homepage: station.homepage.as_deref().map(SharedString::from).unwrap_or_default(),
@@ -158,8 +160,10 @@ pub fn to_slint_radio_station_row(
 pub fn to_slint_kept_station_row(station: &RadioStation) -> RadioStationRow {
     let tile = identity::station_tile(&station.name);
     let format = station.format();
+    let id = crate::ui::util::clamp_i64_to_i32(station.id);
     RadioStationRow {
-        id: crate::ui::util::clamp_i64_to_i32(station.id),
+        id,
+        select_key: id,
         uuid: station.station_uuid.as_deref().map(SharedString::from).unwrap_or_default(),
         name: SharedString::from(&station.name),
         homepage: station.website().map(SharedString::from).unwrap_or_default(),

@@ -41,6 +41,7 @@ pub fn to_slint_most_played_row(t: &MostPlayedFavorite) -> UiEntityStripRow {
         subtitle: SharedString::from(t.artist.as_deref().unwrap_or("")),
         artwork_path: SharedString::from(t.artwork_path.as_deref().unwrap_or("")),
         play_count: t.play_count,
+        is_favorite: t.is_favorite,
     }
 }
 
@@ -56,5 +57,6 @@ pub fn to_slint_fav_artist_row(a: &FavoriteArtist, subtitle: SharedString) -> Ui
         subtitle,
         artwork_path: SharedString::from(a.image_path.as_deref().unwrap_or("")),
         play_count: 0,
+        is_favorite: false,
     }
 }

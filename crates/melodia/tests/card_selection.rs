@@ -11,16 +11,18 @@ use melodia_testkit::{
     globals_declaring, stripped_sources,
 };
 
-/// The six section leaves that hand the shared card selection back. **An equality, not a floor**:
-/// one slice quietly dropping its `clear()` is the regression, and a floor cannot see it. Browse
-/// and Tracks are deliberately absent, each keeping its row model across the leave and clearing
-/// its own `selected-ids` instead.
-const CARD_SELECTION_LEAVES: [&str; 6] = [
+/// The seven section leaves that hand the shared card selection back. **An equality, not a
+/// floor**: one slice quietly dropping its `clear()` is the regression, and a floor cannot see it.
+/// Browse and Tracks are deliberately absent, each keeping its row model across the leave and
+/// clearing its own `selected-ids` instead. Radio keeps its rows too, but its station cards pick
+/// in `CardSelection`, so its leave owes the clear.
+const CARD_SELECTION_LEAVES: [&str; 7] = [
     "albums/callbacks/lifecycle.rs",
     "artists/callbacks/lifecycle.rs",
     "favorites/callbacks/lifecycle.rs",
     "genres/callbacks/lifecycle.rs",
     "playlists/callbacks/lifecycle.rs",
+    "radio/callbacks/lifecycle.rs",
     "recently_played/callbacks/lifecycle.rs",
 ];
 
@@ -69,6 +71,31 @@ fn inside_block_after(src: &str, opener: &str, needle: &str) -> bool {
         .any(|(found, _)| depth_between(src, open, found).is_some_and(|depth| depth >= 1))
 }
 
+/// The string literals in `text`, in order.
+fn literals(text: &str) -> impl Iterator<Item = &str> {
+    text.split('"').skip(1).step_by(2)
+}
+
+/// Every scope a `.slint` mount hands a card grid, off its `scope:` and `selection-scope:`
+/// bindings. A binding forwarding a property holds no literal and contributes nothing.
+fn mounted_scopes(sources: &[(String, String)]) -> BTreeSet<&str> {
+    sources
+        .iter()
+        .flat_map(|(_, src)| src.split("scope:").skip(1))
+        .filter_map(|binding| binding.split_once(';').map(|(value, _)| value))
+        .flat_map(literals)
+        .collect()
+}
+
+/// The scopes `card_selection::scope` declares, which are the ones `visible_ids` has an arm for.
+fn rust_scopes(sources: &[(String, String)]) -> BTreeSet<&str> {
+    sources
+        .iter()
+        .filter(|(path, _)| path == "callbacks/card_selection.rs")
+        .flat_map(|(_, src)| literals(block_after(src, "pub mod scope")))
+        .collect()
+}
+
 /// What a global declares to be one of the surfaces the Escape arm has to know about.
 const SELECTION_MODEL: &str = "property <[int]> selected-ids";
 
@@ -109,6 +136,24 @@ fn every_section_leave_hands_its_card_selection_back() {
         "the shared card selection is one global keyed by one scope string, so a leave that stops \
          clearing it leaves a set no grid is showing: on re-entry every click picks instead of \
          opening, and there is no pill and no second activation to undo it with"
+    );
+}
+
+/// The scope is a literal spelled once per tree, and a mount spelling one Rust has no arm for
+/// still picks a card per click: what it loses is every shift-range and Select All on that grid,
+/// `visible_ids` answering nothing for it. An equality, a Rust arm no mount reaches being the
+/// other half of the same drift.
+#[test]
+fn every_scope_a_grid_is_mounted_under_is_one_rust_can_list_the_cards_of() {
+    let wiring = wiring_sources();
+    let slint = slint_sources();
+    let rust = rust_scopes(&wiring);
+    assert!(!rust.is_empty(), "`card_selection::scope` moved, so this walk reads nothing");
+
+    assert_eq!(
+        mounted_scopes(&slint),
+        rust,
+        "a card grid's mount and `card_selection::scope` disagree about which scopes exist"
     );
 }
 

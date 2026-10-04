@@ -12,6 +12,7 @@ pub(in crate::ui) mod macros;
 
 pub(in crate::ui) mod card_actions;
 pub(in crate::ui) mod card_selection;
+mod clipboard;
 pub(in crate::ui) mod cross_tab_nav;
 pub(in crate::ui) mod index_persist;
 mod library_settings;
@@ -212,9 +213,11 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
     let ui_weak = ui.as_weak();
 
     // The two card-grid globals: selection state shared across every grid, and the actions its
-    // right-click menu fires. Here rather than in a view slice because seven grids answer to them.
+    // right-click menu fires. Here rather than in a view slice because no one grid owns them.
     card_selection::wire(ui);
     card_actions::wire(ui, state);
+    // Every row and card menu's Copy entries, answering to no single view for the same reason.
+    clipboard::wire(ui, state);
 
     wire_sync_pb!(
         player,

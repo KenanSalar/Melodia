@@ -80,8 +80,8 @@ export component EntityCard inherits Rectangle {
     // The box or the body was clicked; the host applies the modifiers against its own selection
     // scope.
     callback select-clicked(bool /*shift*/, bool /*ctrl*/);
-    // A right-click, in this card's own coordinate frame. The host keeps the snapshot, the
-    // highlight key and the menu, as `TrackListRowItem` does for a row.
+    // A right-click, in this card's own coordinate frame. The host keeps the position and the
+    // menu, as `TrackListRowItem` does for a row.
     callback context-requested(length /*x*/, length /*y*/);
 
     // **Every hover-driven binding on this card reads this, not `touch.has-hover`.** A
@@ -124,6 +124,10 @@ export component EntityCard inherits Rectangle {
     // formula: a station card sizes its favicon's 1:1 estimate off this, and a padding change here
     // would otherwise skew that silently.
     out property <length> tile-size: root.card-width - 2 * Theme.pad-sm;
+    // Where the selection box ends, in the overlay slot's frame, for a host stacking a control
+    // under the corner it takes. Published for `tile-size`'s reason: the box's size is this
+    // card's to change.
+    out property <length> select-box-bottom: box.y + box.height - overlay.y;
 
     // The dimming, through the tile and the text rather than `opacity`, which would render every
     // dimmed card into a texture of its own for as long as it stays dimmed. The badges need none:

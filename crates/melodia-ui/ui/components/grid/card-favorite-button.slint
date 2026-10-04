@@ -1,0 +1,35 @@
+import { Theme } from "../../theme.slint";
+import { IconButton } from "../icon-button.slint";
+
+// A card's heart, at the top right of its tile, and the one spelling of it: station cards and the
+// track cards of the Most Played grids and Browse all mount this.
+//
+// **It stays up while the card is a favorite, wherever that says something**: a grid has to show
+// which cards are already kept without being hovered one at a time. Where every card is a favorite
+// the mark says nothing and reads as chrome on every card, so `marks-kept` turns it into a hover
+// control like the rest.
+//
+// **Beside the card rather than in its overlay slot**, the slot carrying one fade for its whole
+// hover set where this has a rule of its own; `fade` over `opacity` for the slot's own reason. It
+// is placed in the card's frame, so a host mounts it as the card's sibling and owes the card
+// `overlay-hovered: <this>.has-hover`, a higher button taking the card's own hover away.
+export component CardFavoriteButton inherits IconButton {
+    in property <length> card-width;
+    in property <bool> is-favorite;
+    in property <bool> marks-kept: true;
+    // The card's `card-hovered`, so the heart arrives with the rest of the hover set.
+    in property <bool> card-hovered;
+
+    // The tile's top right, the corner the selection box leaves free.
+    x: root.card-width - self.width - 2 * Theme.pad-sm;
+    y: 2 * Theme.pad-sm;
+    icon: root.is-favorite ? "favorite" : "favorite_border";
+    icon-size: 18px;
+    diameter: 30px;
+    filled: root.is-favorite;
+    idle-bg: Theme.floating-chrome-bg;
+    idle-fg: root.is-favorite ? Theme.red : Theme.text;
+    hover-fg: Theme.red;
+    fade: root.has-hover || root.card-hovered || (root.is-favorite && root.marks-kept) ? 1.0 : 0.0;
+    animate fade { duration: Theme.dur-fast; easing: ease-in-out; }
+}

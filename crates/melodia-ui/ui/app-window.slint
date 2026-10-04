@@ -28,6 +28,7 @@ import { Playlists, PlaylistDetail } from "globals/playlists.slint";
 import { CardSelection } from "globals/card-selection.slint";
 import { Selection } from "globals/selection.slint";
 import { CardActions } from "globals/card-actions.slint";
+import { CopyActions } from "globals/copy-actions.slint";
 import { Queue, NowPlaying } from "globals/queue.slint";
 import { Radio } from "globals/radio.slint";
 import { Search } from "globals/search.slint";
@@ -72,7 +73,7 @@ import { ViewTransition } from "components/view-transition.slint";
 
 // Re-export so Rust can mention these from `slint::include_modules!`.
 export {
-    Theme, Settings, SettingsPage, Player, HeroBackdrop, HeroChips, Equalizer, ReplayGain, Visualizer, SignalPathUi, ScrobbleUi, SmartEditor, TagEditor, Nav, CompositeScroll, MiniPlayer, MyLibrary, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers, Radio, RadioForm, Onboarding, Lyrics, Wrap, TrackColumnSizing, CardSelection, CardActions, Selection,
+    Theme, Settings, SettingsPage, Player, HeroBackdrop, HeroChips, Equalizer, ReplayGain, Visualizer, SignalPathUi, ScrobbleUi, SmartEditor, TagEditor, Nav, CompositeScroll, MiniPlayer, MyLibrary, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers, Radio, RadioForm, Onboarding, Lyrics, Wrap, TrackColumnSizing, CardSelection, CardActions, CopyActions, Selection,
     TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow, LyricRow,
     TrackColumns, TrackColumnLayout, TrackColumn,
     BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
@@ -317,6 +318,28 @@ export component AppWindow inherits Window {
     }
     public function resize-released() {
         mini-switch.resize-released();
+    }
+
+    // **The clipboard, and the whole of it.** Slint's `TextInput` reaches the platform clipboard
+    // the windowing backend owns, which on Wayland speaks over the app's own display connection; a
+    // clipboard crate of our own would land on XWayland there. Disabled so a Tab walk can't put
+    // focus on it, which neither `select-all` nor `copy` asks about. Pinned at the origin, a child
+    // with no `x`/`y` here being centred.
+    clipboard-sink := TextInput {
+        x: 0px;
+        y: 0px;
+        width: 0px;
+        height: 0px;
+        enabled: false;
+    }
+
+    // `ui::clipboard::write` is the one caller. The text is dropped again once copied, so a stream
+    // URL, which can carry a session token, doesn't sit in the tree afterwards.
+    public function copy-to-clipboard(text: string) {
+        clipboard-sink.text = text;
+        clipboard-sink.select-all();
+        clipboard-sink.copy();
+        clipboard-sink.text = "";
     }
 
     // One gate per section in nav-index order, plus one per tab for a section built out of tabs.

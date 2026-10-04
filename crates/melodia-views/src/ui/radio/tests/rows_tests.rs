@@ -117,6 +117,12 @@ fn a_browsed_station_reports_no_plays_of_its_own() {
     assert_eq!(row.play_count, 0);
 }
 
+/// The kept tabs resolve a selection by row id, so a kept card's key has to be that id.
+#[test]
+fn a_kept_card_selects_by_its_row_id() {
+    assert_eq!(kept_row(31, Some("uuid-31")).select_key, 31);
+}
+
 /// Every shape a segmented station arrives in with nothing to call its format, and the two it does
 /// not. A blank codec is the fragmented-MP4 case: there is no elementary stream this end can name,
 /// so the card would otherwise draw an empty slot where the chip beside it reads `HLS`.

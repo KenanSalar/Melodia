@@ -96,7 +96,6 @@ export component RadioStationDetail inherits Rectangle {
                         // one that can state a vote count.
                         votes: Radio.detail-votes;
                         play-count: Radio.detail-station.play_count;
-                        stream-url-copied => { Radio.copy-stream-url(Radio.detail-station.id); }
                         open-homepage(url) => { Radio.open-homepage(url); }
                     }
 

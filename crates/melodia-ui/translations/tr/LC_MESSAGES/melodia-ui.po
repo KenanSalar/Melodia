@@ -2544,3 +2544,69 @@ msgstr "%{} (aygıt sessizde)"
 
 msgid "{}% (the device at {}%)"
 msgstr "%{} (aygıt %{} düzeyinde)"
+
+# ---- Copy, and the station card menu ----------------------------------------
+
+msgid "Copy"
+msgstr "Kopyala"
+
+msgid "Copy Name"
+msgstr "Adı Kopyala"
+
+msgid "Copy Path"
+msgstr "Yolu Kopyala"
+
+msgid "Copy Title"
+msgstr "Başlığı Kopyala"
+
+msgid "Copy Artist"
+msgstr "Sanatçıyı Kopyala"
+
+msgid "Artist - Title"
+msgstr "Sanatçı - Başlık"
+
+msgid "Artist - Album"
+msgstr "Sanatçı - Albüm"
+
+msgid "File Path"
+msgstr "Dosya Yolu"
+
+msgid "Copied to clipboard"
+msgstr "Panoya kopyalandı"
+
+msgid "Nothing to copy"
+msgstr "Kopyalanacak bir şey yok"
+
+msgid "Open Website"
+msgstr "Web Sitesini Aç"
+
+msgid "Edit…"
+msgstr "Düzenle…"
+
+msgid "Remove from Favorites…"
+msgstr "Favorilerden Kaldır…"
+
+msgid "Remove from Recently Played…"
+msgstr "Son Çalınanlardan Kaldır…"
+
+msgid "Remove {} from Favorites…"
+msgstr "{} Favorilerden Çıkar…"
+
+msgid "Remove {} from Recently Played…"
+msgstr "{} Son Çalınanlardan Çıkar…"
+
+msgid "Remove {n} station from Recently Played?"
+msgid_plural "Remove {n} stations from Recently Played?"
+msgstr[0] "{n} istasyon Son Çalınanlardan kaldırılsın mı?"
+msgstr[1] "{n} istasyon Son Çalınanlardan kaldırılsın mı?"
+
+msgid "Remove {n} station from favorites?"
+msgid_plural "Remove {n} stations from favorites?"
+msgstr[0] "{n} istasyon favorilerden kaldırılsın mı?"
+msgstr[1] "{n} istasyon favorilerden kaldırılsın mı?"
+
+msgid "The stations will be removed from Recently Played."
+msgstr "İstasyonlar Son Çalınanlar listesinden kaldırılacak."
+
+msgid "The stations will be removed from your favorites. Any you added by hand are removed from your stations, along with their play history."
+msgstr "İstasyonlar favorilerinden kaldırılacak. Elle eklediklerin, dinlenme geçmişleriyle birlikte istasyonlarından kaldırılacak."

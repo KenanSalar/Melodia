@@ -1,9 +1,8 @@
 import { Theme } from "../../theme.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
-// The play count, as every Most Played surface marks a card with it. Its own leaf rather than markup
-// on a card, because `StationCard` is not an `EntityCard` and a second host is exactly what turns a
-// shared element into a copy.
+// The play count, as every Most Played surface marks a card with it. Mounted once, by `EntityCard`,
+// so a host owes the count and never the markup: a station card passes one like any other.
 //
 // Sized to its own content. Reading the row's `preferred-width` is a derivation, not a cycle: a
 // layout reports its children's intrinsic widths and never reads back the width it is handed.

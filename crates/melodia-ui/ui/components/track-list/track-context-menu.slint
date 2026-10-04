@@ -1,18 +1,19 @@
-import { Theme } from "../../theme.slint";
 import { TagEditor } from "../../globals/dialog-forms.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { Nav } from "../../globals/nav.slint";
 import { Playlists } from "../../globals/playlists.slint";
-import { MenuItem, MenuSeparator } from "../context-menu.slint";
+import { ContextMenuMetrics, FavoriteMenuItem, MenuFlyout, MenuItem, MenuSeparator } from "../context-menu.slint";
+import { TrackCopyFields, TrackCopyItems } from "../track-copy-items.slint";
 import { PopupSurface } from "../popup-surface.slint";
+import { PopupDismissCatcher } from "../popup-dismiss-catcher.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 
-// The right-click menu every track row raises, and the only place its entries are spelled.
+// The right-click menu every track row raises, and the only place its entries are mounted.
 //
-// **The host keeps the pointer and the highlight; this keeps the menu.** A row writes its own
-// discriminator wherever it tracks one, hands the press position over as `at-x`/`at-y`, and calls
-// `show()`. Two hosts today — `TrackListRowItem` and the queue sheet's `QueueRowItem` — and the
-// second is the reason the entries live here rather than inline in the first.
+// **The host keeps the pointer; this keeps the menu.** A row hands the press position over as
+// `at-x`/`at-y` and calls `show()`. Two hosts today — `TrackListRowItem` and the queue sheet's
+// `QueueRowItem` — and the second is the reason the entries live here rather than inline in the
+// first.
 //
 // **The root is zero-size on purpose.** It mounts as a free sibling of the row's TouchArea, so the
 // popup's coordinate frame is the row chrome's, which is the frame `touch.mouse-x` already reports
@@ -30,7 +31,7 @@ export component TrackContextMenu inherits Rectangle {
     in property <int> genre-id;
     // Suppresses the entry naming the surface you are already looking at, and picks the remove
     // arm. One of "tracks", "album-detail", "artist-detail", "genre-detail", "playlist-detail",
-    // "browse", "favorites", "search", "queue"; empty means no suppression.
+    // "browse", "favorites", "recently_played", "search", "queue"; empty means no suppression.
     in property <string> view-context;
     // Set only under `view-context == "playlist-detail"`; the Add-to-Playlist sub-list filters it
     // out so "add to the playlist you're looking at" never appears. 0 = none.
@@ -44,11 +45,6 @@ export component TrackContextMenu inherits Rectangle {
     in property <int> selection-count;
     in property <length> at-x;
     in property <length> at-y;
-    // The watcher gate. `ctx-key` is the host's right-click snapshot, `live-ctx-key` whatever the
-    // shell currently says owns an open menu — a track id for one host, a play-order index for
-    // the other, and this component never learns which.
-    in property <int> ctx-key: -1;
-    in property <int> live-ctx-key: -1;
 
     // Read by the host to route a batch action, so it sits on the root rather than in the popup.
     // Multi mode needs this row selected *and* more than one selected — right-clicking an
@@ -75,8 +71,20 @@ export component TrackContextMenu inherits Rectangle {
     property <bool> show-remove:
         root.view-context == "playlist-detail" || root.view-context == "queue";
 
+    // The Copy flyout. Collapsed by every `show()`, so the menu always opens on its own column.
+    property <bool> copy-open;
+
     public function show() {
+        root.copy-open = false;
         pop.show();
+    }
+
+    // **Every entry closes the menu itself, after it has acted.** The popup's own policy can't:
+    // closing on any click inside would take the click that opens the Copy flyout with it. After,
+    // because `pop.effective-ids` goes with the popup.
+    function dismiss() {
+        root.copy-open = false;
+        pop.close();
     }
 
     // Single-target by nature: a track list plays the row against its own view, the queue skips to
@@ -96,9 +104,6 @@ export component TrackContextMenu inherits Rectangle {
     callback go-to-album(int /*album_id*/);
     callback go-to-artist(int /*artist_id*/);
     callback go-to-genre(int /*genre_id*/);
-    // Focus loss closed the popup. The host hands back its own snapshot and highlight key, which
-    // are the two things this component deliberately doesn't own.
-    callback released();
 
     // **Pinned at the origin, and the zero size is why.** An element with no `x`/`y` in a
     // non-layout parent is *centred* — Slint generates `(parent.width - self.width) / 2` — so at
@@ -112,13 +117,27 @@ export component TrackContextMenu inherits Rectangle {
     height: 0px;
 
     // One PopupWindow per row instance — the ListView only instantiates visible rows, so this
-    // stays a screenful of popups whatever the library size. Height is content-driven;
-    // Add-to-Playlist hands off to a picker dialog rather than scrolling inline.
+    // stays a screenful of popups whatever the library size. Add-to-Playlist hands off to a picker
+    // dialog rather than scrolling inline.
+    //
+    // **Opened wide enough for the Copy flyout whether or not it opens**, `OverflowMenu`'s
+    // reserve, and the reserve goes on whichever side has room. The menu column stays under the
+    // pointer either way: on the left side the popup opens that much further left.
     pop := PopupWindow {
-        x: root.at-x;
+        // On the popup, so it can read its own descendant's layout.
+        property <length> menu-w: ContextMenuMetrics.menu-w(menu-vl.preferred-width);
+        property <length> menu-h: menu-vl.preferred-height;
+        property <length> flyout-h: ContextMenuMetrics.flyout-h(TrackCopyFields.list.length);
+        property <length> reserve: ContextMenuMetrics.reserve;
+        // Off the root's position, which sits outside the popup and so still means the window.
+        property <bool> flyout-left:
+            ContextMenuMetrics.opens-left(root.absolute-position.x + root.at-x, self.menu-w);
+
+        x: root.at-x - (self.flyout-left ? self.reserve : 0px);
         y: root.at-y;
-        width: 220px;
-        close-policy: close-on-click;
+        width: self.menu-w + self.reserve;
+        height: max(self.menu-h, self.flyout-h);
+        close-policy: close-on-click-outside;
 
         // This row alone in single mode, the whole selection in multi. Computed once so every
         // `clicked` handler reads the same list.
@@ -132,19 +151,28 @@ export component TrackContextMenu inherits Rectangle {
                 ? max(0, Playlists.rows.length - 1)
                 : Playlists.rows.length;
 
-        // Live only on the row whose menu is open. The gate keys off the right-click *snapshot*
-        // rather than the live row data, so a row recycle behind an open popup can't unmount the
-        // watcher mid-popup — one watcher per focus-loss event, however many rows.
-        if root.ctx-key != -1 && root.ctx-key == root.live-ctx-key: FocusLossWatcher {
-            close => {
-                pop.close();
-                root.released();
-            }
+        // Ungated: `show()` builds the popup's body and `close()` drops it, so only the open menu
+        // watches, however many rows mount one.
+        FocusLossWatcher {
+            close => { root.dismiss(); }
+        }
+
+        // First, so every row drawn over it wins its own click and a click on the empty reserve
+        // still closes the menu.
+        PopupDismissCatcher {
+            width: parent.width;
+            height: parent.height;
+            clicked => { root.dismiss(); }
         }
 
         PopupSurface {
-            VerticalLayout {
-                padding: Theme.pad-xs;
+            x: pop.flyout-left ? pop.reserve : 0px;
+            y: 0px;
+            width: pop.menu-w;
+            height: pop.menu-h;
+
+            menu-vl := VerticalLayout {
+                padding: ContextMenuMetrics.inset;
                 spacing: 0;
 
                 // Single-row mode keeps "Play", matching double-click. Over a selection the verb
@@ -153,21 +181,30 @@ export component TrackContextMenu inherits Rectangle {
                 if !root.multi-active: MenuItem {
                     label: @tr("Play");
                     icon: "play_arrow";
-                    clicked => { root.play-single(); }
+                    clicked => {
+                        root.play-single();
+                        root.dismiss();
+                    }
                 }
                 if root.show-queue-actions: MenuItem {
                     label: root.multi-active
                         ? @tr("Play {} Next", root.multi-count)
                         : @tr("Play Next");
                     icon: "queue_play_next";
-                    clicked => { root.play-next(pop.effective-ids); }
+                    clicked => {
+                        root.play-next(pop.effective-ids);
+                        root.dismiss();
+                    }
                 }
                 if root.show-queue-actions: MenuItem {
                     label: root.multi-active
                         ? @tr("Add {} to Queue", root.multi-count)
                         : @tr("Add to Queue");
                     icon: "queue_music";
-                    clicked => { root.add-to-queue(pop.effective-ids); }
+                    clicked => {
+                        root.add-to-queue(pop.effective-ids);
+                        root.dismiss();
+                    }
                 }
                 if root.show-queue-actions || !root.multi-active: MenuSeparator {}
 
@@ -180,6 +217,7 @@ export component TrackContextMenu inherits Rectangle {
                         // dispatcher's create-playlist branch reads `pending-track-ids` once the
                         // row exists and adds the tracks in the same call.
                         Dialog.open-create-playlist(pop.effective-ids);
+                        root.dismiss();
                     }
                 }
                 // Hidden when there is nothing to add to. Only the heading is ours — the same
@@ -200,21 +238,18 @@ export component TrackContextMenu inherits Rectangle {
                             pop.effective-ids,
                             root.current-playlist-id,
                         );
+                        root.dismiss();
                     }
                 }
 
                 MenuSeparator {}
-                MenuItem {
-                    label: root.multi-active
-                        ? (root.row-is-favorite
-                            ? @tr("Remove {} from Favorites", root.multi-count)
-                            : @tr("Add {} to Favorites", root.multi-count))
-                        : (root.row-is-favorite
-                            ? @tr("Remove from Favorites")
-                            : @tr("Add to Favorites"));
-                    icon: root.row-is-favorite ? "heart_minus" : "favorite";
+                FavoriteMenuItem {
+                    is-favorite: root.row-is-favorite;
+                    multi-active: root.multi-active;
+                    multi-count: root.multi-count;
                     clicked => {
                         root.toggle-favorite(pop.effective-ids, !root.row-is-favorite);
+                        root.dismiss();
                     }
                 }
 
@@ -234,16 +269,30 @@ export component TrackContextMenu inherits Rectangle {
                                 : @tr("Edit Track Information"),
                             pop.effective-ids,
                             TagEditor.tab-tags);
+                        root.dismiss();
                     }
                 }
 
+                // Opens the flyout and closes nothing. Not behind an `if`, the flyout lining up
+                // against its `y`.
+                MenuSeparator {}
+                copy-row := MenuItem {
+                    label: @tr("Copy");
+                    icon: "content_copy";
+                    submenu: true;
+                    submenu-open: root.copy-open;
+                    submenu-left: pop.flyout-left;
+                    clicked => { root.copy-open = !root.copy-open; }
+                }
                 // Single-target by nature, so hidden over a selection like the cross-tab entries
-                // below. Straight to `Nav`, with the separator on the same gate.
-                if !root.multi-active: MenuSeparator {}
+                // below. Straight to `Nav`.
                 if !root.multi-active: MenuItem {
                     label: @tr("Open Containing Folder");
                     icon: "folder_open";
-                    clicked => { Nav.reveal-in-folder(root.row-id); }
+                    clicked => {
+                        Nav.reveal-in-folder(root.row-id);
+                        root.dismiss();
+                    }
                 }
 
                 // Hidden over a selection, which may span several albums, and on the detail view
@@ -254,17 +303,26 @@ export component TrackContextMenu inherits Rectangle {
                 if root.show-go-to-album: MenuItem {
                     label: @tr("Go to Album");
                     icon: "album";
-                    clicked => { root.go-to-album(root.album-id); }
+                    clicked => {
+                        root.go-to-album(root.album-id);
+                        root.dismiss();
+                    }
                 }
                 if root.show-go-to-artist: MenuItem {
                     label: @tr("Go to Artist");
                     icon: "person";
-                    clicked => { root.go-to-artist(root.artist-id); }
+                    clicked => {
+                        root.go-to-artist(root.artist-id);
+                        root.dismiss();
+                    }
                 }
                 if root.show-go-to-genre: MenuItem {
                     label: @tr("Go to Genre");
                     icon: "music_note";
-                    clicked => { root.go-to-genre(root.genre-id); }
+                    clicked => {
+                        root.go-to-genre(root.genre-id);
+                        root.dismiss();
+                    }
                 }
 
                 // The selection group. With no clear button on any list, Clear is the only way
@@ -278,12 +336,18 @@ export component TrackContextMenu inherits Rectangle {
                 MenuItem {
                     label: @tr("Select all");
                     icon: "select_all";
-                    clicked => { root.select-all(); }
+                    clicked => {
+                        root.select-all();
+                        root.dismiss();
+                    }
                 }
                 if root.row-selected: MenuItem {
                     label: @tr("Clear selection");
                     icon: "close";
-                    clicked => { root.clear-selection(); }
+                    clicked => {
+                        root.clear-selection();
+                        root.dismiss();
+                    }
                 }
 
                 // Removes the row, or the whole selection, from whichever list the host is. Two
@@ -295,15 +359,33 @@ export component TrackContextMenu inherits Rectangle {
                         ? @tr("Remove {} from Playlist", root.multi-count)
                         : @tr("Remove from Playlist");
                     icon: "playlist_remove";
-                    clicked => { root.request-remove(pop.effective-ids); }
+                    clicked => {
+                        root.request-remove(pop.effective-ids);
+                        root.dismiss();
+                    }
                 }
                 if root.view-context == "queue": MenuItem {
                     label: root.multi-active
                         ? @tr("Remove {} from Queue", root.multi-count)
                         : @tr("Remove from Queue");
                     icon: "playlist_remove";
-                    clicked => { root.request-remove(pop.effective-ids); }
+                    clicked => {
+                        root.request-remove(pop.effective-ids);
+                        root.dismiss();
+                    }
                 }
+            }
+        }
+
+        // Mounted only while open, so its rows aren't built for every menu.
+        if root.copy-open: MenuFlyout {
+            x: ContextMenuMetrics.flyout-x(pop.flyout-left, pop.menu-w);
+            y: ContextMenuMetrics.flyout-y(copy-row.y, pop.height, pop.flyout-h);
+            height: pop.flyout-h;
+
+            TrackCopyItems {
+                track-ids: pop.effective-ids;
+                copied => { root.dismiss(); }
             }
         }
     }

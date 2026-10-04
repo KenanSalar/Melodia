@@ -120,12 +120,4 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
             });
         });
     }
-
-    // Slint's `TextInput` owns the clipboard write; `StationFacts` mounts a zero-sized one over
-    // the URL it draws and calls `select-all()` / `copy()`. Nothing is owed here but the log line
-    // that says a station's URL was taken — and not the URL itself, which a station can carry a
-    // session token in.
-    g.on_copy_stream_url(|station_id| {
-        log::debug!("radio: stream URL copied for station {station_id}");
-    });
 }

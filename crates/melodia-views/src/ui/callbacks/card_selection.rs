@@ -1,4 +1,4 @@
-//! Multi-selection for the entity card grids, shared by all seven of them.
+//! Multi-selection for the card grids, shared by all ten of them.
 //!
 //! One `(scope, set)` pair rather than a copy of the state per view. Every callback carries the
 //! asking grid's scope, so a grid that is not the one holding the set reads back an empty
@@ -18,7 +18,7 @@ use std::rc::Rc;
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use melodia_ui::{
-    Albums, AppWindow, Artists, CardSelection, Favorites, Genres, Playlists, RecentlyPlayed,
+    Albums, AppWindow, Artists, CardSelection, Favorites, Genres, Playlists, Radio, RecentlyPlayed,
 };
 
 /// The scope token each grid passes. The `.slint` mounts spell the same literals; a mount that
@@ -38,6 +38,9 @@ pub mod scope {
     pub const FAVORITE_MOST_PLAYED: &str = "fav-most-played";
     pub const FAVORITE_ARTISTS: &str = "fav-artists";
     pub const RECENT_MOST_PLAYED: &str = "rp-most-played";
+    pub const RADIO_BROWSE: &str = "radio-browse";
+    pub const RADIO_FAVORITES: &str = "radio-favorites";
+    pub const RADIO_RECENT: &str = "radio-recent";
 }
 
 /// Whether the asking grid named no scope at all, which no selection may be seated under.
@@ -241,6 +244,15 @@ fn visible_ids(ui: &AppWindow, asking_scope: &str) -> Vec<i32> {
         }
         scope::RECENT_MOST_PLAYED => {
             flatten(&ui.global::<RecentlyPlayed>().get_most_played_rows(), |r| r.entities, |c| c.id)
+        }
+        scope::RADIO_BROWSE => {
+            flatten(&ui.global::<Radio>().get_browse_rows(), |r| r.stations, |c| c.select_key)
+        }
+        scope::RADIO_FAVORITES => {
+            flatten(&ui.global::<Radio>().get_favorites_rows(), |r| r.stations, |c| c.select_key)
+        }
+        scope::RADIO_RECENT => {
+            flatten(&ui.global::<Radio>().get_recent_rows(), |r| r.stations, |c| c.select_key)
         }
         _ => Vec::new(),
     }

@@ -19,6 +19,7 @@ fn most_played(play_count: i32) -> MostPlayedFavorite {
         artwork_path: Some("/covers/track.jpg".to_owned()),
         play_count,
         duration_ms: 210_000,
+        is_favorite: false,
     }
 }
 

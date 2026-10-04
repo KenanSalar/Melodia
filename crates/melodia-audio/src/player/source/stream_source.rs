@@ -8,9 +8,10 @@
 //! **Reconnect lives here rather than in the playback monitor.** The feed thread already holds the
 //! URL, the client and the ring, so when its decoder ends it re-opens and keeps filling the *same*
 //! ring: the source never ends, the deck never blinks, and the state machine needs no
-//! reconnect path at all. Only once the attempt budget is spent, or a server comes back with a
-//! format the already-appended source cannot carry, does the thread give up and let the deck
-//! drain — which the monitor reads as the end of the station.
+//! reconnect path at all. A connection that goes quiet ends its decoder the same way, through
+//! `stall_watch`, rather than being re-requested underneath it. Only once the attempt budget is
+//! spent, or a server comes back with a format the already-appended source cannot carry, does the
+//! thread give up and let the deck drain — which the monitor reads as the end of the station.
 //!
 //! Nothing here logs a stream URL. They routinely carry a session token in the query string, and
 //! `services::diagnostics` puts the log tail in front of a public GitHub issue.
@@ -22,10 +23,10 @@ use std::time::Duration;
 use icy_metadata::error::MetadataParseError;
 use icy_metadata::{IcyHeaders, IcyMetadata, IcyMetadataReader, RequestIcyMetadata};
 use reqwest::Url;
+use stream_download::StreamDownload;
 use stream_download::http::{Client as StreamClient, HttpStream, format_range_header_bytes};
 use stream_download::storage::bounded::BoundedStorageProvider;
 use stream_download::storage::memory::MemoryStorageProvider;
-use stream_download::{Settings, StreamDownload};
 use symphonia::core::codecs::audio::AudioCodecId;
 use symphonia::core::codecs::audio::well_known::{
     CODEC_ID_AAC, CODEC_ID_ALAC, CODEC_ID_FLAC, CODEC_ID_MP1, CODEC_ID_MP2, CODEC_ID_MP3,
@@ -38,6 +39,7 @@ use melodia_core::error::describe;
 use super::audio::{Shape, SourceFormat};
 use super::hls;
 use super::prebuffer::{PrebufferSource, RingWriter, StreamShared};
+use super::stall_watch::StallWatch;
 use super::stream_decode::{LiveSource, StreamDecoder};
 
 /// The circular buffer between the socket and the decoder, in compressed bytes.
@@ -71,8 +73,8 @@ const RECONNECT_ATTEMPTS: u32 = 5;
 /// The first backoff step; each attempt doubles it up to [`RECONNECT_MAX_DELAY`].
 const RECONNECT_BASE_SECS: u64 = 1;
 const RECONNECT_MAX_DELAY: Duration = Duration::from_secs(16);
-/// Granularity at which a blocking wait notices the source was dropped. Shared with
-/// [`super::hls`], whose reader parks on the same question from the same thread.
+/// Granularity at which a wait notices the source was dropped. Shared with [`super::hls`]'s
+/// reader and with `stall_watch`, which ask the same question.
 pub(super) const ABANDON_POLL: Duration = Duration::from_millis(100);
 
 /// Whole-request ceiling for fetching a playlist file, which is a small text document nobody
@@ -128,9 +130,9 @@ impl StreamClient for IcyClient {
         self.0.get(url.clone()).request_icy_metadata().send().await
     }
 
-    /// The reconnect path. It carries the header for the same reason [`Self::get`] does: without
-    /// it a station keeps playing after a mid-stream reconnect but stops naming its tracks, which
-    /// is the kind of fault nobody traces back to a missing header.
+    /// Only stream-download's own reconnect and a seek ask for a range, and a live mount gets
+    /// neither: `stall_watch` keeps the first off and the source is unseekable. The header stays
+    /// so turning that reconnect back on can't quietly cost a station its track names.
     async fn get_range(
         &self,
         url: &Self::Url,
@@ -418,11 +420,13 @@ async fn connect(
     };
 
     let storage = BoundedStorageProvider::new(MemoryStorageProvider, DOWNLOAD_BUFFER_BYTES);
-    let settings = Settings::default().prefetch_bytes(prefetch_bytes(icy.bitrate()));
+    let watch = StallWatch::new();
+    let settings = watch.settings(prefetch_bytes(icy.bitrate()));
 
     let reader = StreamDownload::from_stream(stream, storage, settings)
         .await
         .map_err(|e| AppError::network("Could not buffer the station's stream", e))?;
+    watch.spawn(reader.cancellation_token(), Arc::clone(shared));
 
     let titles = shared.clone();
     let reader: StreamReader =
@@ -722,8 +726,18 @@ fn feed_loop(mut ctx: FeedContext) {
             return;
         }
 
-        match ctx.runtime.block_on(reopen(&ctx.client, &ctx.url, &ctx.shared, ctx.reopen)) {
+        let reopened = ctx.runtime.block_on(async {
+            tokio::select! {
+                opened = reopen(&ctx.client, &ctx.url, &ctx.shared, ctx.reopen) => Some(opened),
+                () = abandoned(&ctx.shared) => None,
+            }
+        });
+        // Stopped mid-request, which a dead network can hold open for a long time. Dropping the
+        // request closes its socket.
+        let Some(reopened) = reopened else { return };
+        match reopened {
             Ok(opened) if opened.shape == ctx.shape => {
+                log::info!("Radio stream re-established");
                 ctx.decoder = opened.decoder;
             }
             Ok(_) => {
@@ -751,6 +765,13 @@ fn sleep_unless_abandoned(shared: &StreamShared, delay: Duration) -> bool {
         left -= slice;
     }
     !shared.is_abandoned()
+}
+
+/// Resolves once the source is dropped.
+async fn abandoned(shared: &StreamShared) {
+    while !shared.is_abandoned() {
+        tokio::time::sleep(ABANDON_POLL).await;
+    }
 }
 
 #[cfg(test)]

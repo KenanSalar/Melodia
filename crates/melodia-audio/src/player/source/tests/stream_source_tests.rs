@@ -6,8 +6,8 @@ use crate::player::source::audio::SourceFormat;
 use crate::player::source::prebuffer::{PrebufferSource, StreamShared};
 use crate::player::source::stream_source::{
     ABANDON_POLL, PREFETCH_FALLBACK_BYTES, PREFETCH_MAX_BYTES, PREFETCH_MIN_BYTES,
-    PREFETCH_SECONDS, RECONNECT_ATTEMPTS, RECONNECT_MAX_DELAY, codec_token, first_stream_url,
-    is_playlist_content_type, is_playlist_url, prefetch_bytes, reconnect_delay,
+    PREFETCH_SECONDS, RECONNECT_ATTEMPTS, RECONNECT_MAX_DELAY, abandoned, codec_token,
+    first_stream_url, is_playlist_content_type, is_playlist_url, prefetch_bytes, reconnect_delay,
     sleep_unless_abandoned,
 };
 use crate::player::source::tests::helpers::shape;
@@ -182,11 +182,39 @@ fn a_wait_with_nothing_left_to_serve_still_reports_the_source() {
     let live = StreamShared::new();
     assert!(sleep_unless_abandoned(&live, Duration::ZERO));
 
-    let abandoned = StreamShared::new();
+    let dropped = StreamShared::new();
     let (source, _writer) =
-        PrebufferSource::new(abandoned.clone(), shape(2, 48_000), SourceFormat::F32);
+        PrebufferSource::new(dropped.clone(), shape(2, 48_000), SourceFormat::F32);
     drop(source);
-    assert!(!sleep_unless_abandoned(&abandoned, Duration::ZERO));
+    assert!(!sleep_unless_abandoned(&dropped, Duration::ZERO));
+}
+
+/// A reopen against a dead network can hold its request open far longer than any backoff step, so
+/// the feed loop races it against this and a station stopped mid-outage closes the socket now.
+/// Dropped after the wait began, so a check made once up front can't pass for the poll.
+#[tokio::test(start_paused = true)]
+async fn a_source_dropped_while_a_reopen_is_in_flight_is_noticed_within_a_poll() {
+    let shared = StreamShared::new();
+    let (source, _writer) =
+        PrebufferSource::new(shared.clone(), shape(2, 48_000), SourceFormat::F32);
+    let reopen = tokio::spawn(async move { abandoned(&shared).await });
+    tokio::time::sleep(RECONNECT_MAX_DELAY).await;
+
+    drop(source);
+    let noticed = tokio::time::timeout(ABANDON_POLL * 2, reopen).await;
+
+    assert!(matches!(noticed, Ok(Ok(()))), "the reopen outlived the station it was for");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_live_source_never_abandons_its_reopen() {
+    let shared = StreamShared::new();
+    let (_source, _writer) =
+        PrebufferSource::new(shared.clone(), shape(2, 48_000), SourceFormat::F32);
+
+    let noticed = tokio::time::timeout(RECONNECT_MAX_DELAY, abandoned(&shared)).await;
+
+    assert!(noticed.is_err(), "a reopen for a station still playing was given up");
 }
 
 /// Building the decoder probes the container by *reading*, and `StreamDownload`'s reader parks the

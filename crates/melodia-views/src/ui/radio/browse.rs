@@ -16,6 +16,7 @@ use std::time::{Duration, Instant};
 use parking_lot::Mutex;
 use slint::{ComponentHandle, Weak};
 
+use crate::ui::callbacks::card_selection;
 use crate::ui::grid_rows::{chunk_built_rows, write_grid};
 use crate::ui::util::len_as_i32;
 use melodia_app::library;
@@ -23,7 +24,7 @@ use melodia_app::state::AppState;
 use melodia_core::entities::radio::{
     DEFAULT_PAGE_LIMIT, DirectoryStation, StationPage, StationSearch,
 };
-use melodia_ui::{AppWindow, Radio, RadioStationGridRow};
+use melodia_ui::{AppWindow, CardSelection, Radio, RadioStationGridRow, RadioStationRow};
 
 use super::state::KeptAnswers;
 use super::{RadioUi, covers, logos, rows};
@@ -148,6 +149,33 @@ pub fn resolve(radio_ui: &RadioUi, uuid: &str) -> Option<(DirectoryStation, Opti
     Some((station, logo))
 }
 
+/// The cached stations a set of cards' `select_key`s name, each with its logo: `resolve`'s answer
+/// by place, skipping a key that names none.
+///
+/// A place rather than a uuid because the selection is ids, and a browsed row has no id. It holds
+/// for as long as the answer does: a page appended keeps every earlier place, and a fresh search,
+/// which renumbers them, drops a Browse selection as it lands ([`paint`]).
+pub fn resolve_keys(
+    radio_ui: &RadioUi,
+    keys: impl IntoIterator<Item = i32>,
+) -> Vec<(DirectoryStation, Option<String>)> {
+    let browse = radio_ui.browse.lock();
+    let kept = radio_ui.kept_answers.lock();
+    keys.into_iter()
+        .filter_map(|key| {
+            let place = usize::try_from(key).ok()?.checked_sub(1)?;
+            let station = browse.stations.get(place)?;
+            let logo = logo_for(radio_ui, kept.get(&station.station_uuid), station);
+            Some((station.clone(), logo))
+        })
+        .collect()
+}
+
+/// 1-based, so no place lands on the `0` a selection refuses.
+fn select_key_at(place: usize) -> i32 {
+    len_as_i32(place.saturating_add(1))
+}
+
 /// The logo a browsed station draws, from the three places this install can know one.
 ///
 /// The `favicon_url` answer comes first because a *moved* logo is exactly what the URL-keyed memo
@@ -157,8 +185,8 @@ pub fn resolve(radio_ui: &RadioUi, uuid: &str) -> Option<(DirectoryStation, Opti
 /// entry of `None`. Either way the two local tabs paint it and Browse was painting a monogram.
 /// Last is what a narrow search discovered on the site of a station that has no row yet.
 ///
-/// `kept` is that row's answers, looked up by the caller: three of the four sites walk a whole
-/// page, and reaching for the lock in here would take it once per station rather than once per
+/// `kept` is that row's answers, looked up by the caller: every site but `resolve` walks a set of
+/// stations, and reaching for the lock in here would take it once per station rather than once per
 /// pass.
 fn logo_for(
     radio_ui: &RadioUi,
@@ -209,14 +237,18 @@ pub fn apply(ui: &AppWindow, radio_ui: &RadioUi) {
         let station_rows: Vec<_> = browse
             .stations
             .iter()
-            .map(|station| {
+            .enumerate()
+            .map(|(place, station)| {
                 let answers = kept.get(&station.station_uuid);
                 let local = rows::LocalAnswers {
                     is_favorite: starred.contains(&station.station_uuid),
                     logo: logo_for(radio_ui, answers, station),
                     format: format_for(answers),
                 };
-                rows::to_slint_radio_station_row(station, &local)
+                RadioStationRow {
+                    select_key: select_key_at(place),
+                    ..rows::to_slint_radio_station_row(station, &local)
+                }
             })
             .collect();
         (station_rows, browse.has_more)
@@ -361,6 +393,12 @@ fn paint(state: &AppState, weak: &Weak<AppWindow>, radio_ui: &Arc<RadioUi>, fres
         ui.global::<Radio>().set_browse_loading(false);
         apply(&ui, &ru);
         if fresh {
+            // A fresh answer renumbers every place, so a set picked against the last one would
+            // name other stations now. Only Browse's own set: the kept tabs select by row id.
+            let selection = ui.global::<CardSelection>();
+            if selection.get_scope() == card_selection::scope::RADIO_BROWSE {
+                selection.invoke_clear();
+            }
             super::suggest::adopt_only_scope(&ui, &s, &ru);
         }
     });
@@ -510,3 +548,7 @@ async fn warm_page(
     })
     .await;
 }
+
+#[cfg(test)]
+#[path = "tests/browse_tests.rs"]
+mod tests;

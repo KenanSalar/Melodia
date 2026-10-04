@@ -8,8 +8,7 @@ import { StationGrid } from "station-grid.slint";
 
 // Both local tabs: the stations the user kept, and the ones they played. One component for the
 // same reason `ui::radio::kept` is one module — they are one list at two filters, and what differs
-// is the model, the count and the copy on the empty state. The remove dialog in particular is what
-// a second file loses: eight lines of `Dialog` fields nothing would report having drifted.
+// is the model, the count and the copy on the empty state.
 //
 // **The scroller is here, not on the page**, as on Browse and for the same reason.
 export component KeptStationsTab inherits Rectangle {
@@ -53,6 +52,9 @@ export component KeptStationsTab inherits Rectangle {
                 row-height: root.row-h;
                 gap: root.gap;
                 manageable: true;
+                // A scope per tab, so a set picked on one is never read by the other's cards.
+                selection-scope: root.is-recent ? "radio-recent" : "radio-favorites";
+                list: root.is-recent ? Radio.tab-recent : Radio.tab-favorites;
                 // Recently Played mixes starred and unstarred stations, so the mark still says
                 // something there; on Favorites it would be on every card.
                 star-marks-kept: root.is-recent;
@@ -67,31 +69,8 @@ export component KeptStationsTab inherits Rectangle {
                 favorite-clicked(s) => { Radio.toggle-favorite(s); }
                 homepage-clicked(s) => { Radio.open-homepage(s.homepage); }
                 edit-clicked(s) => { Radio.edit-station(s); }
-                // Chrome inline so `@tr` applies and so the message can name the station. The
-                // kind is what carries the tab to the dispatcher, so removal means the list the
-                // card was actually on rather than whichever is mounted when the confirm lands.
-                //
-                // **The copy names the list, except where the list is the whole of what the row
-                // is.** A hand-typed station has no uuid, so no page can name it and the card
-                // offers it no star; leaving Favorites is leaving everything, history included,
-                // and `is_listed` deletes it. That is the one deletion the card can see the
-                // condition for, and understating it is a destructive action with no undo.
-                remove-clicked(s) => {
-                    Dialog.title = root.is-recent
-                        ? @tr("Remove from Recently Played?")
-                        : @tr("Remove from favorites?");
-                    Dialog.message = root.is-recent
-                        ? @tr("\"{}\" will be removed from Recently Played.", s.name)
-                        : s.uuid == ""
-                            ? @tr("\"{}\" will be removed from your stations, along with its play history.", s.name)
-                            : @tr("\"{}\" will be removed from your favorites.", s.name);
-                    Dialog.confirm-label = @tr("Remove");
-                    Dialog.cancel-label = @tr("Cancel");
-                    Dialog.destructive = true;
-                    Dialog.kind = root.is-recent ? "remove-from-recent" : "remove-from-favorites";
-                    Dialog.target-id = s.id;
-                    Dialog.open = true;
-                }
+                // The card menu raises the same confirm, so its copy is the opener's.
+                remove-clicked(s) => { Dialog.open-remove-station(s, root.is-recent); }
             }
 
             if root.is-empty: GridEmptyState {

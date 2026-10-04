@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 
-use super::{SourceId, SourceSummary};
+use super::{Announcement, SourceId, SourceSummary};
 use crate::player::engine::fixtures::{test_station, test_track, test_view_model as deck};
 use crate::player::engine::types::RadioNowPlaying;
 
@@ -116,6 +116,43 @@ fn a_whitespace_announcement_leaves_the_station_lending_its_name() {
     let vm = deck(None, Some(tuned_to("Night Radio", Some("   "))), 0);
 
     assert_eq!(lines(vm.source()), Some(("Night Radio", None)));
+}
+
+/// The station history splits its past lines through the same call the bar does, so a split rule
+/// that moves here moves what both surfaces name.
+#[test]
+fn an_announced_line_splits_on_its_first_spaced_dash() {
+    let cases = [
+        ("Field - Nocturne", ("Field", "Nocturne")),
+        // A title carries a second dash far more often than an artist does.
+        ("Field - Nocturne - Remastered", ("Field", "Nocturne - Remastered")),
+        ("  Field  -  Nocturne  ", ("Field", "Nocturne")),
+    ];
+    for (line, (artist, title)) in cases {
+        assert_eq!(Announcement::parse(line), Some(Announcement { artist, title }), "{line:?}");
+    }
+}
+
+#[test]
+fn a_line_without_both_halves_names_no_song() {
+    for line in ["Station ident", "Field-Nocturne", " - Nocturne", "Field - ", "   -   ", ""] {
+        assert_eq!(Announcement::parse(line), None, "{line:?}");
+    }
+}
+
+/// Some stations announce their automation's catalogue ids before the real line, and a band or a
+/// title can still be a number on its own.
+#[test]
+fn two_numeric_halves_are_not_a_song_but_one_is() {
+    assert_eq!(Announcement::parse("403761 - 287105"), None);
+    assert_eq!(
+        Announcement::parse("311 - Amber"),
+        Some(Announcement { artist: "311", title: "Amber" })
+    );
+    assert_eq!(
+        Announcement::parse("Field - 1979"),
+        Some(Announcement { artist: "Field", title: "1979" })
+    );
 }
 
 #[test]

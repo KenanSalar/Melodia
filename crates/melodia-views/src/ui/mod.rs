@@ -7,6 +7,7 @@ pub mod backdrop;
 pub mod browse;
 pub mod callbacks;
 pub mod chips;
+pub mod clipboard;
 pub mod cover_generation;
 pub mod detail_artwork;
 pub mod detail_filter;

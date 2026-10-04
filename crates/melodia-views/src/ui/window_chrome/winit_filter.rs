@@ -216,8 +216,8 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
             // dismissing click. Release works because the press has already fired Slint's
             // `close-on-click-outside`; popup-internal areas that should *keep* the
             // highlight re-set `PopupHighlight.id` from their own `pointer-event(up)`,
-            // which runs after this filter. Both writes are sentinel-gated so a random
-            // click doesn't churn the property.
+            // which runs after this filter. The write is sentinel-gated so a random click
+            // doesn't churn the property.
             WindowEvent::MouseInput { state: ElementState::Released, .. } => {
                 // Synchronous rather than `upgrade_in_event_loop`: a deferred clear lands
                 // after those `pointer-event(up)` handlers and wipes the re-set.
@@ -225,15 +225,6 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                     let ph = ui.global::<PopupHighlight>();
                     if !ph.get_id().is_empty() {
                         ph.set_id("".into());
-                    }
-                    if ph.get_row_ctx_id() != -1 {
-                        ph.set_row_ctx_id(-1);
-                    }
-                    if ph.get_queue_ctx_index() != -1 {
-                        ph.set_queue_ctx_index(-1);
-                    }
-                    if ph.get_card_ctx_id() != -1 {
-                        ph.set_card_ctx_id(-1);
                     }
                 }
                 EventResult::Propagate

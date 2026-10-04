@@ -1,4 +1,4 @@
-import { RadioFacetRow, RadioStationGridRow, RadioStationRow, RadioSuggestionRow } from "../models.slint";
+import { RadioFacetRow, RadioStationGridRow, RadioStationRow, RadioSuggestionRow, StationHistoryRow } from "../models.slint";
 
 // The Radio page at nav index 10: three tabs over the radio-browser.info directory, the stations
 // the user kept and the ones they played. **One `SectionActiveGate`, not one per tab** — the three
@@ -109,10 +109,18 @@ export global Radio {
     // One per tab, because removal means something different on each: the star goes here, the play
     // history there, and the row itself only when neither tab would list it any more. Which one
     // fires is the dialog *kind* rather than the live `tab-idx`, so the answer is the one captured
-    // at the click. By id, the confirm carrying `target-id` and the row being long gone by the
-    // time it is accepted.
-    callback remove-from-favorites(int /*id*/);
-    callback remove-from-recent(int /*id*/);
+    // at the click. By id, the confirm carrying the ids and the rows being long gone by the time
+    // it is accepted; one id for the trash button, the whole selection for the card menu's.
+    callback remove-from-favorites([int] /*ids*/);
+    callback remove-from-recent([int] /*ids*/);
+    // The card menu's star over a selection, in the direction away from the station it was raised
+    // on. `keys` are `RadioStationRow.select_key`s, resolved against `tab`'s list; a hand-typed
+    // station is skipped, its card offering no star at all.
+    callback set-favorites(int /*tab*/, [int] /*keys*/, bool /*favorite*/);
+    // A station card's Copy flyout, over one card or a selection. `field` is "name" |
+    // "stream-url" | "website", and `keys` resolve against `tab`'s list as above. Here rather than
+    // on `CopyActions` because the caches they resolve from are this slice's.
+    callback copy-stations(int /*tab*/, string /*field*/, [int] /*keys*/);
     callback import-stations();
     callback export-stations();
 
@@ -175,7 +183,7 @@ export global Radio {
     // the open page's. One ring, one model, two readers: the Now Playing view draws it whole,
     // and the station page gates it on the flag below. Written only when the ring moves, so a
     // tab hand-off costs nothing.
-    in-out property <[string]> history-rows;
+    in-out property <[StationHistoryRow]> history-rows;
     // Whether the station page on screen is the one those titles belong to. The page has no
     // history of its own to fall back on, so this is what keeps it from listing another
     // station's songs under this one's name.
@@ -196,11 +204,6 @@ export global Radio {
     // the directory records against; the id is only there so the vote count can be repainted on a
     // page holding the same station, and a station seated under a different id simply skips that.
     callback vote(string /*station_uuid*/, int /*station_id*/);
-    // The clipboard write is the caller's — Slint's `TextInput` owns it. What this reports is
-    // *which* station's URL was taken, and it takes the id because two surfaces copy: this page,
-    // and the Now Playing panel for whatever is on the deck. `0` for a browsed station with no
-    // row, matching `RadioStationRow.id`.
-    callback copy-stream-url(int /*station_id*/);
 
     // --- Filter chips -------------------------------------------------------------------------
     //

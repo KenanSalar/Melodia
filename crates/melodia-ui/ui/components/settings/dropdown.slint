@@ -179,9 +179,8 @@ export component Dropdown inherits Rectangle {
         // See above — the rows need their handlers to run before it closes.
         close-policy: close-on-click-outside;
 
-        // Ungated, unlike the other popups: Settings hosts a handful of these,
-        // and a `PopupHighlight` discriminator per instance would buy nothing
-        // at that scale.
+        // Ungated: a popup's body exists only while it is shown, so however
+        // many of these Settings mounts, only the open one watches.
         FocusLossWatcher {
             close => { popup.close(); }
         }

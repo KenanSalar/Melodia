@@ -1,5 +1,6 @@
 import { ListView } from "std-widgets.slint";
 import { RadioStationGridRow, RadioStationRow } from "../../models.slint";
+import { CardCell } from "../../components/grid/card-cell.slint";
 import { StationCard } from "station-card.slint";
 
 // Virtualized station grid, `EntityCardGrid`'s contract over `RadioStationGridRow`: Rust chunks the
@@ -39,6 +40,12 @@ export component StationGrid inherits Rectangle {
     // that isn't ranked by it says nothing. Recently Played is the one tab that turns it on.
     in property <bool> show-play-count: false;
 
+    // The `CardSelection` scope this tab picks in, one per tab so no tab reads another's set. The
+    // cards pick by `select_key`, which is what lets Browse's id-less stations take part.
+    in property <string> selection-scope;
+    // `Radio.tab-*`, the list these cards are on, which the menu reads for what removal means.
+    in property <int> list;
+
     callback station-clicked(RadioStationRow);
     callback play-clicked(RadioStationRow);
     callback favorite-clicked(RadioStationRow);
@@ -77,46 +84,62 @@ export component StationGrid inherits Rectangle {
                 spacing: root.gap;
                 alignment: start;
 
-                for station in grid-row.stations: StationCard {
+                for station in grid-row.stations: cell := CardCell {
                     card-width: root.card-width;
                     card-height: root.card-height;
-                    artwork-path: station.artwork_path;
-                    cover: root.request-logo(station.artwork_path, root.covers-generation);
-                    name: station.name;
-                    // Each separator hangs off what precedes it, so a station missing any of the
-                    // three does not lead with a middot. The directory is missing one often:
-                    // `bitrate` is `0` on a large share of live stations, the most-clicked in the
-                    // world included.
-                    meta: station.country
-                        + (station.country != "" && station.codec != "" ? " · " : "")
-                        + station.codec
-                        + ((station.country != "" || station.codec != "") && station.bitrate > 0
-                            ? " · " : "")
-                        + (station.bitrate > 0 ? @tr("{} kbps", station.bitrate) : "");
-                    tags: station.tags;
-                    logo-decode-size: root.logo-decode-size;
-                    tile-color-1: station.tile_color_1;
-                    tile-color-2: station.tile_color_2;
-                    monogram: station.monogram;
-                    is-favorite: station.is_favorite;
-                    // An empty uuid is a station the user typed in: there is nothing in the
-                    // directory to star it against, and Remove is what it has instead.
-                    starrable: station.uuid != "";
-                    star-marks-kept: root.star-marks-kept;
-                    // Both kinds, and the dialog decides what that means: a hand-typed station
-                    // gets its whole form, a directory one gets the website field alone. Gated on
-                    // the row rather than on the uuid, because a directory entry that already
-                    // names a site has nothing here for the user to set and everything to lose.
-                    editable: root.manageable && station.editable;
-                    removable: root.manageable;
-                    homepage-known: station.homepage != "";
-                    play-count: root.show-play-count ? station.play_count : 0;
-                    clicked => { root.station-clicked(station); }
-                    play-clicked => { root.play-clicked(station); }
-                    favorite-clicked => { root.favorite-clicked(station); }
-                    homepage-clicked => { root.homepage-clicked(station); }
-                    edit-clicked => { root.edit-clicked(station); }
-                    remove-clicked => { root.remove-clicked(station); }
+                    scope: root.selection-scope;
+                    card-kind: "station";
+                    card-id: station.select_key;
+                    station: station;
+                    station-list: root.list;
+
+                    StationCard {
+                        card-width: root.card-width;
+                        card-height: root.card-height;
+                        artwork-path: station.artwork_path;
+                        cover: root.request-logo(station.artwork_path, root.covers-generation);
+                        name: station.name;
+                        // Each separator hangs off what precedes it, so a station missing any of
+                        // the three does not lead with a middot. The directory is missing one
+                        // often: `bitrate` is `0` on a large share of live stations, the
+                        // most-clicked in the world included.
+                        meta: station.country
+                            + (station.country != "" && station.codec != "" ? " · " : "")
+                            + station.codec
+                            + ((station.country != "" || station.codec != "") && station.bitrate > 0
+                                ? " · " : "")
+                            + (station.bitrate > 0 ? @tr("{} kbps", station.bitrate) : "");
+                        tags: station.tags;
+                        logo-decode-size: root.logo-decode-size;
+                        tile-color-1: station.tile_color_1;
+                        tile-color-2: station.tile_color_2;
+                        monogram: station.monogram;
+                        is-favorite: station.is_favorite;
+                        // An empty uuid is a station the user typed in: there is nothing in the
+                        // directory to star it against, and Remove is what it has instead.
+                        starrable: station.uuid != "";
+                        star-marks-kept: root.star-marks-kept;
+                        // Both kinds, and the dialog decides what that means: a hand-typed station
+                        // gets its whole form, a directory one gets the website field alone. Gated
+                        // on the row rather than on the uuid, because a directory entry that
+                        // already names a site has nothing here for the user to set and everything
+                        // to lose.
+                        editable: root.manageable && station.editable;
+                        removable: root.manageable;
+                        homepage-known: station.homepage != "";
+                        play-count: root.show-play-count ? station.play_count : 0;
+                        clicked => { root.station-clicked(station); }
+                        play-clicked => { root.play-clicked(station); }
+                        favorite-clicked => { root.favorite-clicked(station); }
+                        homepage-clicked => { root.homepage-clicked(station); }
+                        edit-clicked => { root.edit-clicked(station); }
+                        remove-clicked => { root.remove-clicked(station); }
+
+                        selected: cell.selected;
+                        selection-live: cell.selection-live;
+                        select-clicked(shift, ctrl) => { cell.pick(shift, ctrl); }
+                        context-requested(x, y) => { cell.open-menu(x, y); }
+                    }
                 }
             }
         }

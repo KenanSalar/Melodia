@@ -20,7 +20,8 @@ use async_compat::Compat;
 use slint::ComponentHandle;
 
 use melodia_engine::player::engine::event_sink::PlayerSinks;
-use melodia_ui::AppWindow;
+use melodia_engine::player::engine::now_playing::Announcement;
+use melodia_ui::{AppWindow, StationHistoryRow};
 
 use super::{RadioUi, detail};
 
@@ -116,13 +117,24 @@ pub fn install(
 /// The borrow is scoped so the flag's own read of the ring is a second acquisition rather than a
 /// re-entrant one — `parking_lot::Mutex` would deadlock on the latter.
 pub fn apply(ui: &AppWindow, radio_ui: &RadioUi) {
-    let titles: Vec<slint::SharedString> = {
+    let rows: Vec<StationHistoryRow> = {
         let history = radio_ui.history.lock();
-        history.titles().iter().map(|title| slint::SharedString::from(title.as_str())).collect()
+        history.titles().iter().map(|title| history_row(title)).collect()
     };
     ui.global::<melodia_ui::Radio>()
-        .set_history_rows(slint::ModelRc::new(slint::VecModel::from(titles)));
+        .set_history_rows(slint::ModelRc::new(slint::VecModel::from(rows)));
     detail::sync_history_seat(ui, radio_ui);
+}
+
+/// One title, split here rather than in Slint so a row's Copy Title and Copy Artist name what the
+/// player bar showed while it played.
+fn history_row(title: &str) -> StationHistoryRow {
+    let song = Announcement::parse(title);
+    StationHistoryRow {
+        line: title.into(),
+        artist: song.map_or_else(Default::default, |song| song.artist.into()),
+        title: song.map_or_else(Default::default, |song| song.title.into()),
+    }
 }
 
 #[cfg(test)]
