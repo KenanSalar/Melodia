@@ -548,3 +548,7 @@ async fn warm_page(
     })
     .await;
 }
+
+#[cfg(test)]
+#[path = "tests/browse_tests.rs"]
+mod tests;

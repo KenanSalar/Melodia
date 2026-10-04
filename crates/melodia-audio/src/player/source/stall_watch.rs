@@ -83,3 +83,7 @@ impl StallWatch {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/stall_watch_tests.rs"]
+mod tests;

@@ -4,7 +4,7 @@
 //! keep the list a list of songs rather than of metadata blocks — and each is invisible from the
 //! surfaces that draw it, both of which simply paint whatever the ring holds.
 
-use super::{HISTORY_CAP, StationHistory};
+use super::{HISTORY_CAP, StationHistory, history_row};
 
 const A: &str = "https://stream.example/a";
 const B: &str = "https://stream.example/b";
@@ -87,4 +87,28 @@ fn the_ring_holds_its_cap_and_drops_the_oldest() {
     assert_eq!(held.len(), HISTORY_CAP);
     assert_eq!(held.first().copied(), Some(format!("Song {}", HISTORY_CAP + 9)).as_deref());
     assert_eq!(held.last().copied(), Some("Song 10"), "the oldest ten fell off the end");
+}
+
+/// The halves are what the row menu's Copy Title and Copy Artist hand over, so they have to be the
+/// ones the player bar drew while the line played.
+#[test]
+fn a_history_row_splits_its_line_the_way_the_bar_did() {
+    let row = history_row("Field - Nocturne");
+
+    assert_eq!(
+        (row.line.as_str(), row.artist.as_str(), row.title.as_str()),
+        ("Field - Nocturne", "Field", "Nocturne")
+    );
+}
+
+/// The split is a convention rather than a format, so a line that doesn't follow it is still
+/// offered whole and the two halves say nothing rather than guess.
+#[test]
+fn a_line_naming_no_artist_keeps_the_line_and_leaves_both_halves_empty() {
+    let row = history_row("Station ident");
+
+    assert_eq!(
+        (row.line.as_str(), row.artist.as_str(), row.title.as_str()),
+        ("Station ident", "", "")
+    );
 }

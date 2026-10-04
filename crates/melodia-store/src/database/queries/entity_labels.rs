@@ -39,3 +39,7 @@ pub async fn playlist_names(db: &DbPool, ids: &[i64]) -> Result<Vec<(i64, String
     })
     .await
 }
+
+#[cfg(test)]
+#[path = "tests/entity_labels_tests.rs"]
+mod tests;

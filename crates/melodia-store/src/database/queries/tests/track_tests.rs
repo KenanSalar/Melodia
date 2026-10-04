@@ -811,6 +811,26 @@ async fn both_most_played_queries_project_what_the_filter_searches() -> Result<(
     Ok(())
 }
 
+/// Recently Played's ranking spans the whole library, so its cards' hearts are only right if each
+/// row carries its own track's flag rather than the one the Favorites ranking is filtered on.
+#[tokio::test]
+async fn the_whole_library_ranking_reports_each_tracks_own_heart() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    sqlx::query("UPDATE tracks SET play_count = 2, is_favorite = TRUE WHERE title = 'Alpha'")
+        .execute(db.write())
+        .await?;
+    sqlx::query("UPDATE tracks SET play_count = 1 WHERE title = 'Beta'")
+        .execute(db.write())
+        .await?;
+
+    let rows = queries::track::get_most_played(&db).await?;
+
+    let hearts: Vec<(&str, bool)> =
+        rows.iter().map(|r| (r.title.as_str(), r.is_favorite)).collect();
+    assert_eq!(hearts, [("Alpha", true), ("Beta", false)]);
+    Ok(())
+}
+
 // --- Tag-edit query tests ---
 
 #[tokio::test]

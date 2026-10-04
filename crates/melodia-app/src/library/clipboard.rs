@@ -126,12 +126,8 @@ pub async fn entity_lines(
     ids: &[i64],
     field: EntityField,
 ) -> Result<String, AppError> {
-    let mut labels = entity_labels(state, kind, ids).await?;
-    Ok(join_lines(
-        ids.iter()
-            .filter_map(|id| labels.remove(id))
-            .filter_map(|label| entity_line(&label, field)),
-    ))
+    let labels = entity_labels(state, kind, ids).await?;
+    Ok(lines_in_order(ids, labels, field))
 }
 
 /// One line per station, in the order handed over.
@@ -174,6 +170,19 @@ async fn entity_labels(
 
 fn named(rows: Vec<(i64, String)>) -> HashMap<i64, EntityLabel> {
     rows.into_iter().map(|(id, name)| (id, EntityLabel { name, artist: None })).collect()
+}
+
+/// The labels come back in whatever order the database picked, so `ids` puts it back.
+fn lines_in_order(
+    ids: &[i64],
+    mut labels: HashMap<i64, EntityLabel>,
+    field: EntityField,
+) -> String {
+    join_lines(
+        ids.iter()
+            .filter_map(|id| labels.remove(id))
+            .filter_map(|label| entity_line(&label, field)),
+    )
 }
 
 fn track_line(track: &TrackSummary, field: TrackField) -> Option<String> {
@@ -222,3 +231,7 @@ fn present(text: &str) -> Option<&str> {
 fn join_lines(lines: impl Iterator<Item = String>) -> String {
     lines.collect::<Vec<_>>().join("\n")
 }
+
+#[cfg(test)]
+#[path = "tests/clipboard_tests.rs"]
+mod tests;
