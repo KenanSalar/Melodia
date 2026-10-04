@@ -661,10 +661,12 @@ three components that answer it, and each argues its geometry at its own file.
   is one to redefine at a call site. One `TouchArea` covers that sheet, so there is no per-row
   `has-hover` to reach for.
 
-- **A button that can also be held goes through `components/hold-touch-area.slint`'s
-  `HoldTouchArea`**, never a press-armed `Timer` of its own: that one place decides when a press
-  stops being a click. `IconButton` and `PlayButton` both sit on it, off at a zero `hold-delay`,
-  so every other mount stays a plain button.
+- **A button whose hold does something other than its click goes through
+  `components/hold-touch-area.slint`'s `HoldTouchArea`**, never a press-armed `Timer` of its own:
+  that one place decides when a press stops being a click. `IconButton` and `PlayButton` both sit
+  on it, off at a zero `hold-delay`, so every other mount stays a plain button. The sleep timer's
+  `StepperButton` is the other shape and keeps its own timer: it acts on the press and a hold only
+  repeats it, so there is no click for a hold to replace.
   **The transport's hold half is read off `Player`, never spelled at a mount.** The bar and the
   miniplayer take the hold times, the scan interval, both tooltips, `scan-step`, `stop` and the
   stopped glyph's predicate from it, so a third transport mounts the same reads and none can come

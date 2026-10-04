@@ -235,7 +235,7 @@ fn test_resume_from_stopped_not_stopped() {
 }
 
 #[test]
-fn test_stop_preserves_track_for_resume() {
+fn test_stop_preserves_track() {
     let mut state = PlayerState {
         status: PlaybackStatus::Playing,
         source: Some(PlaybackSource::Track(make_summary(1, "Song", 100_000))),

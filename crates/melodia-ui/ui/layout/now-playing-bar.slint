@@ -220,9 +220,8 @@ export component NowPlayingBar inherits Rectangle {
                 }
 
                 // Disc geometry, hover and press scale, tooltip, the hold ring and the
-                // optional Equalizer overlay all live inside `PlayButton`. The bar feeds it
-                // the playing state, the animation mode, a diameter clamped to the bar
-                // width, and its own fill for the glyph to be punched out in.
+                // optional Equalizer overlay all live inside `PlayButton`. The glyph is
+                // punched out in the bar's own fill.
                 VerticalLayout {
                     alignment: center;
                     PlayButton {

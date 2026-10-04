@@ -223,7 +223,10 @@ async fn each_transport_door_reaches_the_builder_it_names() -> Result<(), AppErr
     player_stop(&fx.ctx)?;
     let state = lock_state(&fx.ctx.player_state);
     assert_eq!(state.status, PlaybackStatus::Stopped);
-    assert!(state.current_track().is_some(), "a user stop keeps the track so play can resume it");
+    assert!(
+        state.current_track().is_some(),
+        "a user stop keeps the track so play can start it over"
+    );
     Ok(())
 }
 

@@ -108,12 +108,14 @@ export global Player {
     property <int> scan-end-margin-ms: 2000;
     property <int> scan-end-ms: max(0, root.duration-ms - root.scan-end-margin-ms
         - (Settings.crossfade-enabled ? round(Settings.crossfade-duration-secs * 1000) : 0));
-    // Clearly longer than any click on the most-pressed button, and than the scan's hold.
-    out property <duration> stop-hold: root.vm.has_track || root.vm.has_station ? 900ms : 0ms;
     // A stop, as against a pause: play starts the track over. Launch restores its track stopped
     // where the last session left it, and that one resumes like a pause, hence the position.
     out property <bool> stopped-at-top: root.vm.has_track && root.vm.status == "stopped"
         && root.position-ms == 0;
+    // Clearly longer than any click on the most-pressed button, and than the scan's hold. Off where
+    // a stop would change nothing, so a slow press there still plays.
+    out property <duration> stop-hold:
+        (root.vm.has_track && !root.stopped-at-top) || root.vm.has_station ? 900ms : 0ms;
 
     // The tooltip is the only thing on screen naming the hold, and on a dimmed button the only
     // sign it does anything.
