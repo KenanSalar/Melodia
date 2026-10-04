@@ -118,6 +118,20 @@ fn a_tick_off_playing_is_void() {
     assert!(evaluate_playing_tick(&mut state, backend(1_000, crossfade_off())).is_none());
 }
 
+/// The backend is read before the state lock, so a stop can land between that read and this.
+/// The position it read must not go back over the stop's zero, or play would carry on from it
+/// rather than start the track over.
+#[test]
+fn a_tick_read_before_a_stop_leaves_the_track_at_the_top() {
+    let mut state = playing_state();
+    state.position_ms = 30_000;
+    state.build_stop_actions(0);
+
+    evaluate_playing_tick(&mut state, backend(30_500, crossfade_off()));
+
+    assert_eq!(state.position_ms, 0);
+}
+
 #[test]
 fn a_normal_tick_publishes_the_position_and_does_nothing_else() {
     let mut state = playing_state();
