@@ -155,6 +155,12 @@ pub fn spawn_position_subscriber(
             let Some(ui) = ui.upgrade() else { break };
             if let Some(tick) = snapshot {
                 let player = ui.global::<Player>();
+                // The monitor reads a tick under the state lock and sends it after, so one read
+                // just before a stop can land after the stop's own publish and put the old
+                // position back, with nothing ticking again to correct it.
+                if !player.get_vm_is_playing() {
+                    continue;
+                }
                 let new_position_ms = clamp_to_i32(tick.position_ms);
                 player.set_position_ms(new_position_ms);
                 if tick.duration_ms > 0 {
