@@ -1,7 +1,7 @@
 import { RadioStationRow } from "../../models.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { Radio } from "../../globals/radio.slint";
-import { ContextMenuMetrics, MenuFlyout, MenuItem, MenuSeparator } from "../context-menu.slint";
+import { ContextMenuMetrics, FavoriteMenuItem, MenuFlyout, MenuItem, MenuSeparator } from "../context-menu.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { PopupDismissCatcher } from "../popup-dismiss-catcher.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
@@ -79,7 +79,7 @@ export component StationContextMenu inherits Rectangle {
         property <length> menu-w: ContextMenuMetrics.menu-w(menu-vl.preferred-width);
         property <length> menu-h: menu-vl.preferred-height;
         property <length> flyout-h: ContextMenuMetrics.flyout-h(root.copy-website ? 3 : 2);
-        property <length> reserve: ContextMenuMetrics.gap + ContextMenuMetrics.flyout-w;
+        property <length> reserve: ContextMenuMetrics.reserve;
         // Off the root's position, which sits outside the popup and so still means the window.
         property <bool> flyout-left:
             ContextMenuMetrics.opens-left(root.absolute-position.x + root.at-x, self.menu-w);
@@ -135,18 +135,10 @@ export component StationContextMenu inherits Rectangle {
                 }
 
                 if root.has-play-group && root.has-keep-group: MenuSeparator {}
-                // The row menu's toggle: the direction away from the clicked station, over that
-                // card or the whole selection, so a selection of favorites is only ever offered
-                // their removal.
-                if root.has-star: MenuItem {
-                    label: root.multi-active
-                        ? (root.station.is_favorite
-                            ? @tr("Remove {} from Favorites", root.multi-count)
-                            : @tr("Add {} to Favorites", root.multi-count))
-                        : (root.station.is_favorite
-                            ? @tr("Remove from Favorites")
-                            : @tr("Add to Favorites"));
-                    icon: root.station.is_favorite ? "heart_minus" : "favorite";
+                if root.has-star: FavoriteMenuItem {
+                    is-favorite: root.station.is_favorite;
+                    multi-active: root.multi-active;
+                    multi-count: root.multi-count;
                     clicked => {
                         if (root.multi-active) {
                             Radio.set-favorites(
@@ -222,12 +214,9 @@ export component StationContextMenu inherits Rectangle {
             }
         }
 
-        // Level with the Copy row, and lifted where that row sits too low for the whole column to
-        // fit.
         if root.copy-open: MenuFlyout {
             x: pop.flyout-left ? 0px : pop.menu-w + ContextMenuMetrics.gap;
-            y: max(0px, min(copy-row.y - ContextMenuMetrics.inset, pop.height - pop.flyout-h));
-            width: ContextMenuMetrics.flyout-w;
+            y: ContextMenuMetrics.flyout-y(copy-row.y, pop.height, pop.flyout-h);
             height: pop.flyout-h;
 
             MenuItem {

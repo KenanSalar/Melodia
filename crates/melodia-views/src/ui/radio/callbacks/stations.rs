@@ -50,10 +50,13 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
         let weak = weak.clone();
         g.on_toggle_favorite(move |row| {
             if is_kept(&row) {
-                toggle_kept(&s, &ru, &weak, i64::from(row.id), !row.is_favorite);
+                set_kept_favorites(&s, &ru, &weak, vec![i64::from(row.id)], !row.is_favorite);
                 return;
             }
-            toggle_browsed(&s, &ru, &weak, &row);
+            let Some(station) = browse::resolve(&ru, &row.uuid) else {
+                return;
+            };
+            set_browsed_favorites(&s, &ru, &weak, vec![station], !row.is_favorite);
         });
     }
 
@@ -172,23 +175,12 @@ fn refresh_lists(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &slint::Weak<A
     let _ = weak.upgrade_in_event_loop(move |ui| kept::refresh(&ui, &s, &ru));
 }
 
-/// Star or un-star a station that already has a row.
-///
-/// Not optimistic, unlike the browsed toggle below: un-starring drops the row out of the Favorites
-/// list entirely, so there is nothing on screen for an optimistic flip to be right about — the
-/// refetch *is* the update.
-fn toggle_kept(
-    state: &AppState,
-    radio_ui: &Arc<RadioUi>,
-    weak: &slint::Weak<AppWindow>,
-    id: i64,
-    favorite: bool,
-) {
-    set_kept_favorites(state, radio_ui, weak, vec![id], favorite);
-}
-
 /// The star over every kept station in `ids`, then one re-read of both lists. A station that fails
 /// leaves the rest to go, each being its own row.
+///
+/// Not optimistic, unlike the browsed star below: un-starring drops the row out of the Favorites
+/// list entirely, so there is nothing on screen for an optimistic flip to be right about — the
+/// refetch *is* the update.
 fn set_kept_favorites(
     state: &AppState,
     radio_ui: &Arc<RadioUi>,
@@ -218,20 +210,7 @@ async fn set_kept_favorite(state: &AppState, id: i64, favorite: bool) -> Result<
     }
 }
 
-/// Keep or release a station that only exists in the directory answer on screen.
-fn toggle_browsed(
-    state: &AppState,
-    radio_ui: &Arc<RadioUi>,
-    weak: &slint::Weak<AppWindow>,
-    row: &RadioStationRow,
-) {
-    let Some(station) = browse::resolve(radio_ui, &row.uuid) else {
-        return;
-    };
-    set_browsed_favorites(state, radio_ui, weak, vec![station], !row.is_favorite);
-}
-
-/// The star over directory stations, each with whatever logo this session found for it.
+/// Keep or release directory stations, each with whatever logo this session found for it.
 ///
 /// Optimistic, like every other row flag in the tree: a star is not list membership on Browse, so
 /// nothing has to be re-fetched for it to be right, and the star has to answer on the click's own

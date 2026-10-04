@@ -17,6 +17,8 @@ export global ContextMenuMetrics {
     // past it elides rather than running off the surface.
     out property <length> menu-min-w: 220px;
     out property <length> menu-max-w: 400px;
+    // How much wider than its column a menu with a flyout opens, on whichever side has room.
+    out property <length> reserve: root.gap + root.flyout-w;
 
     // Off the rows' `preferred-width`, which only the popup holding them can read.
     pure public function menu-w(rows-w: length) -> length {
@@ -29,12 +31,17 @@ export global ContextMenuMetrics {
         return rows * root.item-h + 2 * root.inset;
     }
 
+    // Level with the row that opens it, and lifted where that row sits too low for the whole
+    // column to fit in the popup.
+    pure public function flyout-y(row-y: length, popup-h: length, flyout-h: length) -> length {
+        return max(0px, min(row-y - root.inset, popup-h - flyout-h));
+    }
+
     // Whether a flyout beside a menu opened at `anchor-x` would run past the shell's right edge.
     // In window coordinates, so a host passes its menu root's `absolute-position`: the root sits
     // outside the popup, where the position still means the window.
     pure public function opens-left(anchor-x: length, menu-w: length) -> bool {
-        return anchor-x + menu-w + root.gap + root.flyout-w
-            > WindowChrome.shell-x + WindowChrome.shell-width;
+        return anchor-x + menu-w + root.reserve > WindowChrome.shell-x + WindowChrome.shell-width;
     }
 }
 
@@ -108,8 +115,26 @@ export component MenuItem inherits Rectangle {
     }
 }
 
+// The favorite entry wherever the clicked item's own state is known. It names the direction away
+// from that item and the host applies it to the whole set, so a selection of favorites is only
+// ever offered their removal.
+export component FavoriteMenuItem inherits MenuItem {
+    in property <bool> is-favorite;
+    in property <bool> multi-active;
+    in property <int> multi-count;
+
+    label: root.multi-active
+        ? (root.is-favorite
+            ? @tr("Remove {} from Favorites", root.multi-count)
+            : @tr("Add {} to Favorites", root.multi-count))
+        : (root.is-favorite ? @tr("Remove from Favorites") : @tr("Add to Favorites"));
+    icon: root.is-favorite ? "heart_minus" : "favorite";
+}
+
 // The column a submenu row opens: the menu's own chrome round the rows the host passes in.
 export component MenuFlyout inherits PopupSurface {
+    width: ContextMenuMetrics.flyout-w;
+
     VerticalLayout {
         padding: ContextMenuMetrics.inset;
         spacing: 0;

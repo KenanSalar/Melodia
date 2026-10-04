@@ -1,10 +1,9 @@
-import { Theme } from "../../theme.slint";
 import { TagEditor } from "../../globals/dialog-forms.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { Nav } from "../../globals/nav.slint";
 import { Playlists } from "../../globals/playlists.slint";
-import { CopyActions } from "../../globals/copy-actions.slint";
-import { ContextMenuMetrics, MenuFlyout, MenuItem, MenuSeparator } from "../context-menu.slint";
+import { ContextMenuMetrics, FavoriteMenuItem, MenuFlyout, MenuItem, MenuSeparator } from "../context-menu.slint";
+import { TrackCopyFields, TrackCopyItems } from "../track-copy-items.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { PopupDismissCatcher } from "../popup-dismiss-catcher.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
@@ -128,8 +127,8 @@ export component TrackContextMenu inherits Rectangle {
         // On the popup, so it can read its own descendant's layout.
         property <length> menu-w: ContextMenuMetrics.menu-w(menu-vl.preferred-width);
         property <length> menu-h: menu-vl.preferred-height;
-        property <length> flyout-h: ContextMenuMetrics.flyout-h(5);
-        property <length> reserve: ContextMenuMetrics.gap + ContextMenuMetrics.flyout-w;
+        property <length> flyout-h: ContextMenuMetrics.flyout-h(TrackCopyFields.list.length);
+        property <length> reserve: ContextMenuMetrics.reserve;
         // Off the root's position, which sits outside the popup and so still means the window.
         property <bool> flyout-left:
             ContextMenuMetrics.opens-left(root.absolute-position.x + root.at-x, self.menu-w);
@@ -244,15 +243,10 @@ export component TrackContextMenu inherits Rectangle {
                 }
 
                 MenuSeparator {}
-                MenuItem {
-                    label: root.multi-active
-                        ? (root.row-is-favorite
-                            ? @tr("Remove {} from Favorites", root.multi-count)
-                            : @tr("Add {} to Favorites", root.multi-count))
-                        : (root.row-is-favorite
-                            ? @tr("Remove from Favorites")
-                            : @tr("Add to Favorites"));
-                    icon: root.row-is-favorite ? "heart_minus" : "favorite";
+                FavoriteMenuItem {
+                    is-favorite: root.row-is-favorite;
+                    multi-active: root.multi-active;
+                    multi-count: root.multi-count;
                     clicked => {
                         root.toggle-favorite(pop.effective-ids, !root.row-is-favorite);
                         root.dismiss();
@@ -383,53 +377,15 @@ export component TrackContextMenu inherits Rectangle {
             }
         }
 
-        // Level with the Copy row, and lifted where that row sits too low for the whole column to
-        // fit. Mounted only while open, so its rows aren't built for every menu.
+        // Mounted only while open, so its rows aren't built for every menu.
         if root.copy-open: MenuFlyout {
             x: pop.flyout-left ? 0px : pop.menu-w + ContextMenuMetrics.gap;
-            y: max(0px, min(copy-row.y - ContextMenuMetrics.inset, pop.height - pop.flyout-h));
-            width: ContextMenuMetrics.flyout-w;
+            y: ContextMenuMetrics.flyout-y(copy-row.y, pop.height, pop.flyout-h);
             height: pop.flyout-h;
 
-            MenuItem {
-                label: @tr("Title");
-                icon: "title";
-                clicked => {
-                    CopyActions.copy-tracks("title", pop.effective-ids);
-                    root.dismiss();
-                }
-            }
-            MenuItem {
-                label: @tr("Artist");
-                icon: "person";
-                clicked => {
-                    CopyActions.copy-tracks("artist", pop.effective-ids);
-                    root.dismiss();
-                }
-            }
-            MenuItem {
-                label: @tr("Album");
-                icon: "album";
-                clicked => {
-                    CopyActions.copy-tracks("album", pop.effective-ids);
-                    root.dismiss();
-                }
-            }
-            MenuItem {
-                label: @tr("Artist - Title");
-                icon: "music_note";
-                clicked => {
-                    CopyActions.copy-tracks("artist-title", pop.effective-ids);
-                    root.dismiss();
-                }
-            }
-            MenuItem {
-                label: @tr("File Path");
-                icon: "folder_open";
-                clicked => {
-                    CopyActions.copy-tracks("path", pop.effective-ids);
-                    root.dismiss();
-                }
+            TrackCopyItems {
+                track-ids: pop.effective-ids;
+                copied => { root.dismiss(); }
             }
         }
     }

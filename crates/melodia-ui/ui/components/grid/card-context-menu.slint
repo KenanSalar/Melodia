@@ -1,9 +1,9 @@
-import { Theme } from "../../theme.slint";
 import { CardActions } from "../../globals/card-actions.slint";
 import { CopyActions } from "../../globals/copy-actions.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { Nav } from "../../globals/nav.slint";
-import { ContextMenuMetrics, MenuFlyout, MenuItem, MenuSeparator } from "../context-menu.slint";
+import { ContextMenuMetrics, FavoriteMenuItem, MenuFlyout, MenuItem, MenuSeparator } from "../context-menu.slint";
+import { TrackCopyFields, TrackCopyItems } from "../track-copy-items.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { PopupDismissCatcher } from "../popup-dismiss-catcher.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
@@ -114,10 +114,9 @@ export component CardContextMenu inherits Rectangle {
         // On the popup, so it can read its own descendant's layout.
         property <length> menu-w: ContextMenuMetrics.menu-w(menu-vl.preferred-width);
         property <length> menu-h: menu-vl.preferred-height;
-        property <length> flyout-h: ContextMenuMetrics.flyout-h(root.is-track ? 5 : 3);
-        property <length> reserve: root.has-flyout
-            ? ContextMenuMetrics.gap + ContextMenuMetrics.flyout-w
-            : 0px;
+        property <length> flyout-h:
+            ContextMenuMetrics.flyout-h(root.is-track ? TrackCopyFields.list.length : 3);
+        property <length> reserve: root.has-flyout ? ContextMenuMetrics.reserve : 0px;
         // Off the root's position, which sits outside the popup and so still means the window.
         property <bool> flyout-left: root.has-flyout
             && ContextMenuMetrics.opens-left(root.absolute-position.x + root.at-x, self.menu-w);
@@ -241,18 +240,11 @@ export component CardContextMenu inherits Rectangle {
                 }
 
                 if !root.is-folder: MenuSeparator {}
-                // **One entry where the card's state is known, the row menu's toggle**: it names
-                // the direction away from the clicked card and applies it to the whole set, so a
-                // selection of favorites is only ever offered their removal.
-                if root.favorite-known: MenuItem {
-                    label: root.multi-active
-                        ? (root.card-is-favorite
-                            ? @tr("Remove {} from Favorites", root.multi-count)
-                            : @tr("Add {} to Favorites", root.multi-count))
-                        : (root.card-is-favorite
-                            ? @tr("Remove from Favorites")
-                            : @tr("Add to Favorites"));
-                    icon: root.card-is-favorite ? "heart_minus" : "favorite";
+                // **One entry where the card's state is known**, the row menu's toggle.
+                if root.favorite-known: FavoriteMenuItem {
+                    is-favorite: root.card-is-favorite;
+                    multi-active: root.multi-active;
+                    multi-count: root.multi-count;
                     clicked => {
                         CardActions.set-favorites(
                             root.card-kind, pop.effective-ids, !root.card-is-favorite);
@@ -422,53 +414,15 @@ export component CardContextMenu inherits Rectangle {
             }
         }
 
-        // Level with the Copy row, and lifted where that row sits too low for the whole column to
-        // fit. A track card offers what a track row does; an album its own name and credit.
+        // A track card offers what a track row does; an album its own name and credit.
         if root.copy-open: MenuFlyout {
             x: pop.flyout-left ? 0px : pop.menu-w + ContextMenuMetrics.gap;
-            y: max(0px, min(copy-row.y - ContextMenuMetrics.inset, pop.height - pop.flyout-h));
-            width: ContextMenuMetrics.flyout-w;
+            y: ContextMenuMetrics.flyout-y(copy-row.y, pop.height, pop.flyout-h);
             height: pop.flyout-h;
 
-            if root.is-track: MenuItem {
-                label: @tr("Title");
-                icon: "title";
-                clicked => {
-                    CopyActions.copy-tracks("title", pop.effective-ids);
-                    root.dismiss();
-                }
-            }
-            if root.is-track: MenuItem {
-                label: @tr("Artist");
-                icon: "person";
-                clicked => {
-                    CopyActions.copy-tracks("artist", pop.effective-ids);
-                    root.dismiss();
-                }
-            }
-            if root.is-track: MenuItem {
-                label: @tr("Album");
-                icon: "album";
-                clicked => {
-                    CopyActions.copy-tracks("album", pop.effective-ids);
-                    root.dismiss();
-                }
-            }
-            if root.is-track: MenuItem {
-                label: @tr("Artist - Title");
-                icon: "music_note";
-                clicked => {
-                    CopyActions.copy-tracks("artist-title", pop.effective-ids);
-                    root.dismiss();
-                }
-            }
-            if root.is-track: MenuItem {
-                label: @tr("File Path");
-                icon: "folder_open";
-                clicked => {
-                    CopyActions.copy-tracks("path", pop.effective-ids);
-                    root.dismiss();
-                }
+            if root.is-track: TrackCopyItems {
+                track-ids: pop.effective-ids;
+                copied => { root.dismiss(); }
             }
             if !root.is-track: MenuItem {
                 label: @tr("Album");
