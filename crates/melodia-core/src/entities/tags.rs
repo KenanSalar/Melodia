@@ -125,9 +125,6 @@ pub struct TagEdit {
     pub release_type: FieldEdit<String>,
     pub release_country: FieldEdit<String>,
     pub compilation: FieldEdit<bool>,
-    /// Written by the auto-tag backfill so `ListenBrainz` loves — which key on it — work. Not
-    /// surfaced in the Edit-Tags dialog.
-    pub musicbrainz_track_id: FieldEdit<String>,
     pub lyrics: FieldEdit<String>,
     /// Written by the rating write-back, not the Edit-Tags dialog. Stars, 0–5; `Clear` and
     /// `Set(0)` mean the same thing and both remove the tag.
@@ -277,7 +274,6 @@ pub enum TagField {
     Compilation,
     Lyrics,
     Rating,
-    MusicBrainzRecordingId,
     Credit(CreditRole),
 }
 
@@ -285,7 +281,7 @@ pub enum TagField {
 ///
 /// The order is the whole contract: [`TagField::label_index`] is a position in it, so a label list
 /// that drifts names the wrong field and nothing else notices. `tags_tests` pins both halves.
-pub const PLAIN_TAG_FIELDS: [TagField; 35] = [
+pub const PLAIN_TAG_FIELDS: [TagField; 34] = [
     TagField::Title,
     TagField::Artist,
     TagField::Album,
@@ -320,7 +316,6 @@ pub const PLAIN_TAG_FIELDS: [TagField; 35] = [
     TagField::Compilation,
     TagField::Lyrics,
     TagField::Rating,
-    TagField::MusicBrainzRecordingId,
 ];
 
 impl TagField {
@@ -362,7 +357,6 @@ impl TagField {
             Self::Compilation => "compilation",
             Self::Lyrics => "lyrics",
             Self::Rating => "rating",
-            Self::MusicBrainzRecordingId => "musicbrainz_recording_id",
             Self::Credit(role) => role.as_db_str(),
         }
     }

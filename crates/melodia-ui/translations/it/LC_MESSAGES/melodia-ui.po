@@ -2278,9 +2278,6 @@ msgstr "Numero movimento"
 msgid "Movement Total"
 msgstr "Totale movimenti"
 
-msgid "MusicBrainz Recording ID"
-msgstr "ID registrazione MusicBrainz"
-
 msgid "{} can't be saved to {} files"
 msgstr "{} non può essere salvato nei file {}"
 

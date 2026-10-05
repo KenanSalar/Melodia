@@ -429,14 +429,6 @@ pub fn apply_edit(tag: &mut Tag, edit: &TagEdit, picture: Option<&Picture>) -> V
     write.string(&edit.media, ItemKey::OriginalMediaType, TagField::Media);
     write.string(&edit.release_type, ItemKey::MusicBrainzReleaseType, TagField::ReleaseType);
     write.string(&edit.release_country, ItemKey::ReleaseCountry, TagField::ReleaseCountry);
-    // Through the ordinary checked path like every other text field: `ID3v2` stores this in a
-    // binary `UFID` frame, which `Tag::insert_text` refused until lofty 0.25 taught its support
-    // check about the mapping the conversion already had.
-    write.string(
-        &edit.musicbrainz_track_id,
-        ItemKey::MusicBrainzRecordingId,
-        TagField::MusicBrainzRecordingId,
-    );
 
     write.number(&edit.track_number, ItemKey::TrackNumber, TagField::TrackNumber);
     write.number(&edit.track_total, ItemKey::TrackTotal, TagField::TrackTotal);

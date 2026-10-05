@@ -2283,9 +2283,6 @@ msgstr "Αριθμός μέρους"
 msgid "Movement Total"
 msgstr "Σύνολο μερών"
 
-msgid "MusicBrainz Recording ID"
-msgstr "Αναγνωριστικό ηχογράφησης MusicBrainz"
-
 msgid "{} can't be saved to {} files"
 msgstr "Το {} δεν μπορεί να αποθηκευτεί σε αρχεία {}"
 

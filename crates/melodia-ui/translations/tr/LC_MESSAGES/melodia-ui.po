@@ -2287,9 +2287,6 @@ msgstr "Bölüm numarası"
 msgid "Movement Total"
 msgstr "Toplam bölüm"
 
-msgid "MusicBrainz Recording ID"
-msgstr "MusicBrainz Kayıt Kimliği"
-
 msgid "{} can't be saved to {} files"
 msgstr "{} {} dosyalarına kaydedilemiyor"
 

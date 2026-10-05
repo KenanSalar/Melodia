@@ -127,8 +127,7 @@ fn build_edit(
         compilation: diff_flag(form.compilation, orig.compilation),
         lyrics: diff_str(&cur.lyrics, &was.lyrics),
         artwork,
-        // The Edit-Tags dialog doesn't surface MusicBrainz ids; leaving them
-        // `Keep` preserves whatever the file (or the auto-tag backfill) wrote.
+        // The rating has a write-back of its own, so this dialog leaves it `Keep`.
         ..Default::default()
     }
 }

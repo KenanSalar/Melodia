@@ -110,8 +110,8 @@ and `tasks/rss_sampler.rs` calls `slint::spawn_local`.
 ## Phase 4: SQL lives in `melodia-store`
 
 Today app runs 3 raw SQL strings (`tasks/tag_backfill.rs`, `tasks/queue_prune.rs`,
-`file_event_processor/reconcile.rs`) and opens about 7 transactions (`mbid.rs`, `tags.rs`,
-`import.rs`, two in `settings/folders.rs`, `reconcile.rs`, `radio_files.rs`). About 6 of its
+`file_event_processor/reconcile.rs`) and opens about 6 transactions (`tags.rs`, `import.rs`,
+two in `settings/folders.rs`, `reconcile.rs`, `radio_files.rs`). About 6 of its
 functions take a `&mut Transaction`, and one type derives `FromRow` (`queue_prune.rs`).
 
 - [ ] The three queries move into `queries::*` as named functions.

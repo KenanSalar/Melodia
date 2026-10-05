@@ -2285,9 +2285,6 @@ msgstr "Satznummer"
 msgid "Movement Total"
 msgstr "Sätze gesamt"
 
-msgid "MusicBrainz Recording ID"
-msgstr "MusicBrainz-Aufnahme-ID"
-
 msgid "{} can't be saved to {} files"
 msgstr "{} kann nicht in {}-Dateien gespeichert werden"
 

@@ -104,6 +104,13 @@ the repo for these runs: the library generator, a first-scan and forced-rescan t
 the dev root before every run, so a session starts with `dev_idle.sh snapshot` and ends with
 `dev_idle.sh restore`), and the cover-decode timer (`decode-check/`).
 
+`scan_rounds.sh` there drives a scan spot check, phase 5's being the first: it warms the page cache,
+sets one file an hour older, runs the first scans with the launch order rotated each round,
+restamps every file to one time and runs the rescans. The older file is what lets a rescan be
+timed at all: `measure_scan.py` ends a rescan once every row carries the newest `date_modified`,
+which is stored to the second, so a library already restamped to one time passes that check at
+launch. Edit its builds, rotation and output names before a run.
+
 | Run | First scan of the large library | Peak RssAnon | Wall time | Threads after |
 |---|---|---|---|---|
 | Baseline, phase 0 | 50,400 tracks, 0.18.0, three runs | 189–197 MiB | 2.97 s cold, 2.56–2.58 s | 45–46 |
@@ -111,11 +118,11 @@ the dev root before every run, so a session starts with `dev_idle.sh snapshot` a
 
 Production files the phases touch, in lines (`wc -l`): `cover_thumbs.rs` 622, `folders.rs` 494,
 `now_playing/mod.rs` 472, `visualizer.rs` 441, `track_list_cache.rs` 389, `grid_prewarm.rs` 358,
-`mbid_backfill.rs` 358, `ui/visualizer/mod.rs` 337, `queries/track/lookup.rs` 254, `tracks/mod.rs`
-168, `queue_sheet/mod.rs` 167, `scanner.rs` 118, `callbacks/tags/artwork.rs` 98, `ui/util.rs` 78,
-`main.rs` 569, `playlists/callbacks/dialog.rs` 544, `queries/ingest.rs` 484, `shell/bridge.rs` 392,
-`database/mod.rs` 341, `boot/ui_setup/views.rs` 268, `engine/backend/mod.rs` 782,
-`queue_sheet/callbacks.rs` 461, `now_playing/up_next.rs` 291, `shell/mini_player.rs` 159.
+`ui/visualizer/mod.rs` 337, `tracks/mod.rs` 168, `queue_sheet/mod.rs` 167, `scanner.rs` 118,
+`callbacks/tags/artwork.rs` 98, `ui/util.rs` 78, `main.rs` 569, `playlists/callbacks/dialog.rs` 544,
+`queries/ingest.rs` 484, `shell/bridge.rs` 392, `database/mod.rs` 341,
+`boot/ui_setup/views.rs` 268, `engine/backend/mod.rs` 782, `queue_sheet/callbacks.rs` 461,
+`now_playing/up_next.rs` 291, `shell/mini_player.rs` 159.
 
 ## Every phase
 
@@ -358,8 +365,7 @@ the wait as well.
       queues the UI thread's inline decodes behind a grid prewarm.
 - [x] `ScanPool` (`melodia-store`'s `media/ingest/scan_pool.rs`) owns the scoped pool: one thread
       per file up to one per core, named `scan-{i}`, ended by the last clone's drop. A pass over no
-      files, and a failed build, run on the global pool. `library/mbid.rs` folded in through
-      `for_files_capped`, keeping its `MBID_WRITE_THREADS` cap and losing its hand-rolled fallback.
+      files, and a failed build, run on the global pool.
 - [x] A scan's three stages are separate `spawn_blocking` closures with `.await`s between them
       (`folders.rs:271`, `:329`, then `ingest.rs:333` per chunk), so no single `install` covers
       them. The walk closure builds the pool once it knows the file count and hands it out; the
@@ -456,6 +462,28 @@ library holds an estimated 75 to 100 MB of parsed tags at its peak.
       - **Watcher:** every 0.18.0 and phase 4 rescan overflowed the kernel's inotify queue and
         asked for a full rescan, which the running reconcile absorbed. No phase 5 rescan did,
         serial or overlapped: the scan's own file reads now arrive a chunk at a time.
+
+Per run, rounds 1 / 2 / 3, the launch order rotating by one build each round. "Settled" is RssAnon
+10 s after the scan ended. Raw output is `phase5-results.jsonl` (pass 1) and
+`phase5b-results.jsonl` (pass 2) in `~/Development/melodia-measure`, with the four binaries in its
+`bin/`.
+
+| Pass | Scan | Build | Peak RssAnon, MiB | Wall, s | Settled, MiB | Threads after |
+|---|---|---|---|---|---|---|
+| 1 | First | 0.18.0 | 189.1 / 191.7 / 184.0 | 2.68 / 2.58 / 2.59 | 121.9 / 131.6 / 134.3 | 44 / 43 / 45 |
+| 1 | First | phase 4 | 237.6 / 195.7 / 186.8 | 2.57 / 2.59 / 2.59 | 166.2 / 131.1 / 123.8 | 31 / 31 / 32 |
+| 1 | First | phase 5 | 117.5 / 68.6 / 69.1 | 2.58 / 2.49 / 2.49 | 165.3 / 117.2 / 118.6 | 32 / 32 / 32 |
+| 1 | Rescan | 0.18.0 | 243.8 / 242.8 / 249.8 | 4.24 / 4.10 / 3.99 | 148.6 / 153.1 / 152.8 | 46 / 47 / 47 |
+| 1 | Rescan | phase 4 | 240.1 / 251.1 / 246.0 | 4.11 / 4.19 / 3.86 | 136.5 / 153.6 / 151.7 | 32 / 32 / 32 |
+| 1 | Rescan | phase 5 | 142.5 / 142.3 / 142.8 | 4.23 / 4.33 / 4.22 | 142.8 / 137.2 / 140.4 | 33 / 33 / 32 |
+| 2 | First | 0.18.0 | 192.3 / 187.4 / 190.6 | 2.49 / 2.39 / 2.49 | 118.8 / 117.5 / 132.3 | 44 / 46 / 45 |
+| 2 | First | phase 4 | 191.2 / 193.2 / 191.1 | 2.39 / 2.39 / 2.39 | 117.2 / 122.6 / 114.9 | 33 / 31 / 30 |
+| 2 | First | phase 5 | 117.9 / 68.6 / 68.4 | 2.39 / 2.39 / 2.39 | 164.5 / 122.7 / 114.3 | 30 / 31 / 32 |
+| 2 | First | phase 5, overlapped | 73.6 / 73.6 / 73.7 | 2.38 / 2.39 / 2.39 | 116.4 / 114.0 / 115.8 | 33 / 32 / 32 |
+| 2 | Rescan | 0.18.0 | 247.5 / 242.3 / 242.5 | 4.00 / 3.88 / 4.00 | 153.4 / 152.4 / 142.4 | 44 / 44 / 47 |
+| 2 | Rescan | phase 4 | 243.2 / 245.9 / 252.9 | 3.97 / 3.85 / 3.87 | 148.7 / 142.7 / 159.7 | 32 / 31 / 32 |
+| 2 | Rescan | phase 5 | 148.5 / 146.2 / 144.0 | 3.88 / 4.00 / 3.98 | 137.7 / 139.5 / 140.6 | 33 / 33 / 33 |
+| 2 | Rescan | phase 5, overlapped | 149.4 / 150.4 / 149.6 | 4.00 / 3.99 / 3.97 | 146.5 / 147.8 / 147.2 | 33 / 33 / 33 |
 
 Memory: the first-scan peak goes from following the library to following one 2,000-file chunk,
 measured above at about 120 MiB less on a first scan of 50,400 files and about 100 MiB less on a
