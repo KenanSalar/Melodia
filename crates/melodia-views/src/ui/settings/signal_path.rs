@@ -93,7 +93,7 @@ fn paint(ui: &AppWindow, path: Option<&SignalPath>) {
         Some(FallbackReason::Reserved { by }) => by.into(),
         _ => SharedString::new(),
     });
-    g.set_refused_by(fallback.and_then(|fallback| fallback.device.as_deref()).unwrap_or("").into());
+    g.set_refused_by(util::opt_shared(fallback.and_then(|fallback| fallback.device.as_deref())));
     let source_rate = rate_text(source.rate.get());
     let device_rate = rate_text(device.shape.rate.get());
     g.set_source_format(

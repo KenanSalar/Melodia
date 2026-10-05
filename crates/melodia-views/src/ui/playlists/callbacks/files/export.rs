@@ -13,7 +13,7 @@ use super::{refresh_export_selection_meta, set_all_picks, toggle_pick};
 use crate::ui::callbacks::DialogClaim;
 use crate::ui::file_dialog;
 use crate::ui::shell::notifications::{Completion, NotificationsUi, RowText};
-use crate::ui::util::count_as_i32;
+use crate::ui::util::{count_as_i32, opt_shared};
 use melodia_app::library;
 use melodia_app::library::playlist_files::{self, ExportOutcome, ExportPlaylistsResult};
 use melodia_app::state::AppState;
@@ -65,9 +65,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, notifications: &Rc<Notifica
                             Some(UiPlaylistExportPickRow {
                                 id,
                                 name: SharedString::from(p.name.as_str()),
-                                artwork_path: SharedString::from(
-                                    p.thumbnail_path.as_deref().unwrap_or(""),
-                                ),
+                                artwork_path: opt_shared(p.thumbnail_path.as_deref()),
                                 track_count: p.track_count,
                                 // Start with nothing selected — the user opts in
                                 // per playlist (or via "Select all").

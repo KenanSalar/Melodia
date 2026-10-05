@@ -27,7 +27,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::ui::section_state::{SectionState, impl_section_state_helpers};
 use crate::ui::track_list_cache::TrackListCache;
-use crate::ui::util::clamp_i64_to_i32;
+use crate::ui::util::{StringPool, clamp_i64_to_i32};
 use crate::ui::view_ctx::ViewCtx;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
@@ -64,11 +64,9 @@ pub struct TracksUi {
     /// Canonical row set plus its filter keys, sort keys and display-order
     /// permutation. A header-click sort recomputes only the permutation.
     pub(super) cache: TrackListCache,
-    /// Path-keyed thumbnail cache. Many tracks share an album cover, so
-    /// hitting this from `to_slint_track_list_row` avoids re-decoding the
-    /// same file per track. Shared with the now-playing-bar bridge so
-    /// the bar's artwork tile reuses cached thumbnails warmed by the
-    /// Tracks view.
+    /// The shared row tier, which a fetch prewarms in display order. The
+    /// now-playing bar reads the same tier, so its tile reuses what the
+    /// Tracks view warmed.
     pub(super) cover_thumbs: Arc<CoverThumbs>,
     /// Visibility and staleness bookkeeping (`section-active-changed`
     /// shadow plus dirty flag). Unlike the entity-grid views, Tracks
@@ -125,26 +123,26 @@ fn install_selection_model(ui: &AppWindow) {
     ui.global::<Tracks>().set_selected_ids(ModelRc::from(model));
 }
 
-/// Build a track-list row for the Slint model.
+/// Build a track-list row for the Slint model, every field but the title drawn from `pool`.
 ///
 /// Every field is `Send`, covers included — a row carries only its artwork *path* and
 /// `RowCovers.request` resolves the thumbnail per instantiated row on the Slint side — so this
 /// runs wherever the rows are, worker or event loop. It replaced a `prepare`/`finish` pair that
 /// split it across a thread hop the finished row makes just as well.
-pub fn to_slint_track_list_row(r: &RsTrackListRow) -> UiTrackListRow {
+pub fn to_slint_track_list_row(r: &RsTrackListRow, pool: &mut StringPool) -> UiTrackListRow {
     UiTrackListRow {
         id: clamp_i64_to_i32(r.id),
         title: SharedString::from(r.title.as_str()),
-        artist: SharedString::from(r.artist.as_deref().unwrap_or("")),
-        album: SharedString::from(r.album.as_deref().unwrap_or("")),
-        genre: SharedString::from(r.genre.as_deref().unwrap_or("")),
+        artist: pool.intern(r.artist.as_deref().unwrap_or_default()),
+        album: pool.intern(r.album.as_deref().unwrap_or_default()),
+        genre: pool.intern(r.genre.as_deref().unwrap_or_default()),
         year: r.year.unwrap_or(0),
         track_number: r.track_number.unwrap_or(0),
         duration_ms: i32::try_from(r.duration_ms.clamp(0, i64::from(i32::MAX))).unwrap_or(i32::MAX),
         is_favorite: r.is_favorite,
         rating: r.rating,
-        artwork_path: SharedString::from(r.artwork_path.as_deref().unwrap_or("")),
-        display_duration: SharedString::from(format_duration_ms(r.duration_ms.max(0))),
+        artwork_path: pool.intern(r.artwork_path.as_deref().unwrap_or_default()),
+        display_duration: pool.intern(&format_duration_ms(r.duration_ms.max(0))),
         selected: false,
         // Always interactive for real DB-backed rows. Only the Browse view
         // overrides this `false` — for disk-only files not yet in the library.
@@ -153,6 +151,14 @@ pub fn to_slint_track_list_row(r: &RsTrackListRow) -> UiTrackListRow {
         artist_id: r.artist_id.map_or(0, clamp_i64_to_i32),
         genre_id: r.genre_id.map_or(0, clamp_i64_to_i32),
     }
+}
+
+/// [`to_slint_track_list_row`] over a whole list, sharing one pool across it.
+pub fn to_slint_track_list_rows<'a>(
+    rows: impl IntoIterator<Item = &'a RsTrackListRow>,
+) -> Vec<UiTrackListRow> {
+    let mut pool = StringPool::default();
+    rows.into_iter().map(|r| to_slint_track_list_row(r, &mut pool)).collect()
 }
 
 /// `mm:ss` for tracks under one hour, `h:mm:ss` otherwise. Matches the Slint

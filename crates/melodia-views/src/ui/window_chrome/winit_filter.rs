@@ -34,13 +34,13 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use slint::ComponentHandle;
 use slint::winit_030::winit::error::ExternalError;
 use slint::winit_030::winit::event::{
     ElementState, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent,
 };
 use slint::winit_030::winit::window::{ResizeDirection, Window as WinitWindow};
 use slint::winit_030::{EventResult, WinitWindowAccessor};
+use slint::{ComponentHandle, SharedString};
 
 use melodia_app::state::AppState;
 use melodia_ui::{
@@ -224,7 +224,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                 if let Some(ui) = weak.upgrade() {
                     let ph = ui.global::<PopupHighlight>();
                     if !ph.get_id().is_empty() {
-                        ph.set_id("".into());
+                        ph.set_id(SharedString::default());
                     }
                 }
                 EventResult::Propagate

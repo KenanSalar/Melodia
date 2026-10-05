@@ -129,8 +129,7 @@ where
     )
     .await;
 
-    let ui_tracks: Vec<UiTrackListRow> =
-        tracks.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
+    let ui_tracks: Vec<UiTrackListRow> = crate::ui::tracks::to_slint_track_list_rows(&tracks);
 
     // Seed both caches before the UI hop so resort / drag-reorder / play-row callbacks firing on
     // the next tick already see consistent state.
@@ -158,7 +157,7 @@ where
         reset_detail_selection(&g, &playlists_ui);
         // Fresh open clears the filter so the user lands on the full track set, not a stale needle
         // from the previous detail.
-        g.set_filter(SharedString::from(""));
+        g.set_filter(SharedString::default());
         playlists_ui.detail.filter.lock().clear();
         g.set_sort_field(SharedString::from(sort_field.as_str()));
         g.set_sort_dir(SharedString::from(sort_dir.as_str()));

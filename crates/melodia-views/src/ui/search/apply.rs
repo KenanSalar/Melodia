@@ -15,7 +15,7 @@ use super::{SearchUi, restamp_rows, to_slint_album_strip_row, to_slint_artist_st
 use crate::ui::genres::genre_accent;
 use crate::ui::model_patch;
 use crate::ui::track_sort::sort_track_rows_by;
-use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
+use crate::ui::util::{clamp_i64_to_i32, len_as_i32, opt_shared};
 use melodia_app::services::settings::SortDir;
 use melodia_core::entities::artist::ArtistStats;
 use melodia_core::entities::search::SearchResults;
@@ -88,8 +88,7 @@ fn sort_track_rows(
     }
 
     let total = len_as_i32(sorted.len());
-    let rows = sorted.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
-    (rows, total)
+    (crate::ui::tracks::to_slint_track_list_rows(&sorted), total)
 }
 
 /// Truncate the Songs rows against the live `show-all-tracks` flag and write
@@ -132,7 +131,7 @@ fn write_top_result(g: &Search, top: Option<TopResult>) {
         TopSubtitle::AlbumCount(n) => g.invoke_album_count_label(*n),
         TopSubtitle::TrackCount(n) => g.invoke_track_count_label(*n),
     });
-    g.set_top_artwork_path(SharedString::from(t.artwork_path.as_deref().unwrap_or("")));
+    g.set_top_artwork_path(opt_shared(t.artwork_path.as_deref()));
     // Derived from the title rather than carried on `TopResult`:
     // `genre_accent` is a pure function of the name, so deriving here is what
     // guarantees this card and the genre's grid card tint identically. The
@@ -149,11 +148,11 @@ fn write_top_result(g: &Search, top: Option<TopResult>) {
 /// `Image` slot the card holds through its cover callback — the binding won't
 /// be re-evaluated for an empty path, so no explicit image write is owed.
 fn clear_top_result(g: &Search) {
-    g.set_top_kind(SharedString::from(""));
+    g.set_top_kind(SharedString::default());
     g.set_top_id(-1);
-    g.set_top_title(SharedString::from(""));
-    g.set_top_subtitle(SharedString::from(""));
-    g.set_top_artwork_path(SharedString::from(""));
+    g.set_top_title(SharedString::default());
+    g.set_top_subtitle(SharedString::default());
+    g.set_top_artwork_path(SharedString::default());
 }
 
 /// Empty every results surface: the Songs model, both strips, the total, the

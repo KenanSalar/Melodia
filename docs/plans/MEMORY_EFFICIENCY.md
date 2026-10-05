@@ -492,6 +492,8 @@ Risk: low to medium, on throughput. Measured above: no change past the script's 
 
 ## Phase 6: share repeated strings in the Songs list
 
+Status: implemented and spot-checked 2026-10-05; its rows wait for the checkpoint after 1–7.
+
 Where: `crates/melodia-views/src/ui/track_list_cache.rs` (`convert`),
 `crates/melodia-views/src/ui/tracks/mod.rs` (`to_slint_track_list_row`), and the other
 `unwrap_or("")` row conversions: `shell/bridge.rs`, `queue_sheet/rows.rs`, `albums/mod.rs`,
@@ -502,20 +504,78 @@ Each row allocates its own artist, album, genre, artwork path and duration strin
 `SharedString::from("")` allocates where `SharedString::default()` does not (i-slint-core 1.16.1,
 `string.rs`): a 25 B request for the header and the NUL, a 48 B glibc chunk.
 
-- [ ] Intern within one conversion pass: a local map from text to `SharedString` for the fields an
+- [x] Intern within one conversion pass: a local map from text to `SharedString` for the fields an
       album's tracks share, so they hold one string each. The Songs pass runs on a runtime worker,
       so the UI thread pays nothing there. Favorites' refresh on `library_changed` and
       `stats_changed` converts on the UI thread (`spawn_local`, `favorites/callbacks/lifecycle.rs`),
       as do the detail filters, so time the map there or keep it to the Songs pass.
-- [ ] One helper in `ui/util.rs`, beside the other row conversions, turns an optional field into a
+      Built as `ui::util::StringPool`, a `HashSet<SharedString>` looked up by `&str`, and handed to
+      `to_slint_track_list_row` for artist, album, genre, artwork path and duration. The timing
+      (below) put a pooled pass under an allocating one, so it runs on every pass, the UI-thread
+      ones included. `to_slint_track_list_rows` owns the pool for a whole list, and Browse has the
+      same pair.
+- [x] One helper in `ui/util.rs`, beside the other row conversions, turns an optional field into a
       `SharedString` and answers `default()` when it is empty. Every `unwrap_or("")` site goes
       through it. It replaces `bridge.rs`'s private `opt_shared`, which allocates on `None`;
       `radio/rows.rs` already spells the allocation-free form inline.
-- [ ] The detail conversions take the same interner unless phase A below lands first.
+      `opt_shared` takes `Option<impl AsRef<str>>`, so the Now Playing chips' formatted values
+      and `radio/rows.rs`'s inline form go through it too. Every `SharedString::from("")` and
+      `"".into()` became `SharedString::default()`, `updater_daily.rs` in `melodia-app` included,
+      and Browse's disk-only row fills from `TrackListRow::default()`.
+- [x] The detail conversions take the same interner unless phase A below lands first.
+- Not interned: the queue sheet. `queue_sheet/rows.rs` rebuilds every row on the UI thread on
+  each queue mutation, every frame of a drag included, and the sheet holds its rows only while
+  open. It takes `opt_shared` only.
+- [x] Spot check, in the app, 2026-10-05: Idle on My Library ▸ Songs with the phase 0 library,
+  the release build of `c18ae28` against this phase's, three rounds each with the order
+  alternating (B A, A B, B A). `tools/songs_idle.sh` copies the scanned root `p5b-serial-1` over
+  a working root before every run, switches the three online services off, and drives the
+  footprint script under the baseline protocol on the 144 Hz screen. Raw output is
+  `songs-idle-{before,before-2,before-3,after-1,after-2,after-3}`.
+  - **Anonymous:** median 118.5 → 104.8 MiB (−13.7), close to the 12.7 MiB the tool measured
+    for the Songs pass. Each round's pair moved the same way: −19.1, −21.6 and −10.8 MiB.
+  - **USS:** median 165.8 → 152.0 MiB. RSS moved both ways (449, 394, 440 against 481, 373,
+    429 MiB), being mostly file-backed.
+  - **CPU, threads:** 0.13–0.15% against 0.12–0.15% of one core; 30–33 threads against 29–31.
+  - **Watch at the checkpoint:** the first round read about 50 MiB higher than the other two on
+    both builds (168.5 and 149.4 MiB). The before/after gap held through it, and no cause was
+    found.
+  - **The dev library** (`dev_idle.sh`, Idle on My Library ▸ Songs, one run each): 32.5 → 32.3 MiB
+    Anonymous, USS 77.2 and 77.4 MiB, 31 threads on both. At 512 tracks the saving is about
+    0.13 MB, under what a median sample resolves.
 
-Memory: an estimated 0.3 KB per track, about 15 MB at 50k, plus 48 B for each empty field on each
-row. Trivial at 512 tracks; measure on the phase 0 library. The cache holds every row and the Slint
-model holds clones sharing the same buffers, so the saving is counted once.
+| Round | Build | Anonymous | USS | RSS | Peak RSS | Threads |
+|---|---|---|---|---|---|---|
+| 1 | `c18ae28` | 168.5 MiB | 216.3 MiB | 449.2 MiB | 484.1 MiB | 33 |
+| 1 | phase 6 | 149.4 MiB | 197.5 MiB | 481.1 MiB | 511.5 MiB | 31 |
+| 2 | phase 6 | 96.9 MiB | 144.1 MiB | 372.7 MiB | 405.3 MiB | 29 |
+| 2 | `c18ae28` | 118.5 MiB | 165.8 MiB | 394.4 MiB | 421.8 MiB | 31 |
+| 3 | `c18ae28` | 115.6 MiB | 163.1 MiB | 440.3 MiB | 467.2 MiB | 30 |
+| 3 | phase 6 | 104.8 MiB | 152.0 MiB | 429.1 MiB | 456.6 MiB | 30 |
+
+- [x] Spot check, outside the app, 2026-10-05: `tools/intern-check` in
+  `~/Development/melodia-measure` runs today's conversion of the six text fields against the
+  pooled one over the phase 0 library's 50,400 rows, exported in `sort_key` order, 20 rounds
+  each with the order alternating. A counting allocator reports what a pass leaves held, in
+  glibc chunks. The "with covers" rows give each album a store-shaped artwork path and spread
+  the durations over 2 to 8 minutes, since the phase 0 library has no covers and one duration.
+  Raw output is `phase6-intern-check-1.txt`.
+
+| Rows | Held, today | Held, pooled | Saved per row | Pass and drop, today | Pass and drop, pooled |
+|---|---|---|---|---|---|
+| Songs, 50,400 | 18.11 MiB | 5.38 MiB | 265 B | 16.5 ms | 10.5 ms |
+| One genre, 3,360 | 1.21 MiB | 0.37 MiB | 261 B | 0.96 ms | 0.68 ms |
+| One album, 12 | 73 allocations | 18 allocations | 249 B | 3 µs | 2 µs |
+| Songs with covers, 50,400 | 20.41 MiB | 5.77 MiB | 305 B | 17.4 ms | 11.5 ms |
+| One genre with covers, 3,360 | 1.36 MiB | 0.40 MiB | 299 B | 1.01 ms | 0.76 ms |
+
+Times are medians; each p99 sat within 0.7 ms of its median.
+
+Memory: measured above at 265 B per track on the phase 0 library and 305 B once albums carry
+covers, the empty fields included; 13.7 MiB of Anonymous at idle on its 50,400 tracks. The cache
+holds every row and the Slint model holds clones sharing the same buffers, so the saving is
+counted once. Each pass is also about a third faster, the pool's lookup costing less than the
+allocation it replaces.
 Risk: low. The strings are never mutated, and `SharedString` compares by content.
 
 ## Phase 7: page the ListenBrainz backfill

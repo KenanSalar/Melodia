@@ -112,14 +112,14 @@ fn setting_the_path_directly_leaves_the_stack_alone() {
 
 // --- the row a disk-only file becomes ------------------------------------
 
-/// The shared `TrackList` draws a row it can be interacted with only when `enabled`, and the
-/// Tracks converter this branch delegates to does not set it. Left at its default, every row on
-/// the Browse page is dimmed and swallows every click, which is the page not working at all.
+/// The shared `TrackList` draws a row it can be interacted with only when `enabled`. Left at its
+/// default, every row on the Browse page is dimmed and swallows every click, which is the page not
+/// working at all.
 #[test]
 fn a_file_the_library_knows_is_interactive_and_keeps_its_id() {
     let file = BrowseFile { row: library_row(42), in_library: true };
 
-    let row = to_slint_browse_track_row(&file);
+    let row = to_slint_browse_track_row(&file, &mut StringPool::default());
 
     assert!(row.enabled, "an in-library row the list will not let you click is a dead page");
     assert_eq!(row.id, 42);
@@ -135,7 +135,7 @@ fn a_file_the_library_knows_is_interactive_and_keeps_its_id() {
 fn a_file_the_library_does_not_know_is_sparse_and_inert() {
     let file = BrowseFile { row: library_row(42), in_library: false };
 
-    let row = to_slint_browse_track_row(&file);
+    let row = to_slint_browse_track_row(&file, &mut StringPool::default());
 
     assert!(!row.enabled, "a row with no track behind it must not accept interaction");
     assert_eq!(row.id, 0, "an id from the disk-only branch would address someone else's track");
@@ -149,7 +149,7 @@ fn a_file_the_library_does_not_know_is_sparse_and_inert() {
 fn a_sparse_row_states_nothing_it_cannot_know() {
     let file = BrowseFile { row: library_row(42), in_library: false };
 
-    let row = to_slint_browse_track_row(&file);
+    let row = to_slint_browse_track_row(&file, &mut StringPool::default());
 
     assert_eq!(row.artist, "");
     assert_eq!(row.album, "");

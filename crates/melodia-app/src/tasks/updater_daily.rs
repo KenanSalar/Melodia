@@ -40,7 +40,7 @@
 use std::time::Duration;
 
 use chrono::Utc;
-use slint::{ComponentHandle, Weak};
+use slint::{ComponentHandle, SharedString, Weak};
 use tokio::sync::watch;
 
 use crate::library;
@@ -346,7 +346,7 @@ fn set_up_to_date(weak: &Weak<AppWindow>) {
         let g = ui.global::<MelodiaUpdater>();
         g.set_up_to_date(true);
         g.set_update_available(false);
-        g.set_error_message("".into());
+        g.set_error_message(SharedString::default());
     });
 }
 
@@ -363,7 +363,7 @@ fn set_update_available(
         g.set_available_version(version.into());
         g.set_notes_short(notes_short.into());
         g.set_is_critical(critical);
-        g.set_error_message("".into());
+        g.set_error_message(SharedString::default());
     });
 }
 

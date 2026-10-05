@@ -26,7 +26,7 @@ pub(super) fn paint_up_to_date(weak: &Weak<AppWindow>) {
         let g = ui.global::<MelodiaUpdater>();
         g.set_up_to_date(true);
         g.set_update_available(false);
-        g.set_error_message("".into());
+        g.set_error_message(SharedString::default());
     });
 }
 
@@ -43,7 +43,7 @@ pub(super) fn paint_available(
         g.set_available_version(SharedString::from(version));
         g.set_notes_short(SharedString::from(notes_short));
         g.set_is_critical(critical);
-        g.set_error_message("".into());
+        g.set_error_message(SharedString::default());
     });
 }
 

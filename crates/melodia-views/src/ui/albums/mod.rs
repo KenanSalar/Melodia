@@ -28,7 +28,7 @@ use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork::{self, DetailArtwork};
 use crate::ui::row_match::Needle;
 use crate::ui::section_state::{SectionState, impl_detail_row_cache, impl_section_state_helpers};
-use crate::ui::util::clamp_i64_to_i32;
+use crate::ui::util::{clamp_i64_to_i32, opt_shared};
 use crate::ui::view_ctx::ViewCtx;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::album::AlbumStats;
@@ -204,7 +204,7 @@ pub fn to_slint_album_row(a: &AlbumStats) -> UiAlbumRow {
         track_count: a.track_count,
         total_duration_ms: i32::try_from(a.total_duration_ms.clamp(0, i64::from(i32::MAX)))
             .unwrap_or(i32::MAX),
-        artwork_path: SharedString::from(a.artwork_path.as_deref().unwrap_or("")),
+        artwork_path: opt_shared(a.artwork_path.as_deref()),
     }
 }
 

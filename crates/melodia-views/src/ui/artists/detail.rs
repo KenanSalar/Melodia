@@ -115,8 +115,7 @@ where
         decode_detail_pair(state, artists_ui.detail_artwork.clone(), detail.image_path.clone())
             .await;
 
-    let ui_tracks: Vec<UiTrackListRow> =
-        tracks.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
+    let ui_tracks: Vec<UiTrackListRow> = crate::ui::tracks::to_slint_track_list_rows(&tracks);
 
     // The album list is the artist's own discography, so its year span is what
     // "active 1957–1963" means here; folded on the worker that fetched it.
@@ -140,7 +139,7 @@ where
         reset_detail_selection(&g, &artists_ui);
         // Fresh open clears the filter so the user lands on the full tracks + albums set, not a
         // stale needle from the previous detail. Slint property and Rust cache cleared together.
-        g.set_filter(SharedString::from(""));
+        g.set_filter(SharedString::default());
         artists_ui.detail.filter.lock().clear();
         g.set_sort_field(SharedString::from(sort_field.as_str()));
         g.set_sort_dir(SharedString::from(sort_dir.as_str()));

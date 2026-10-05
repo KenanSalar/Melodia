@@ -7,7 +7,8 @@
 //! refcounted, so handing a cached row to the model is a pointer copy and a few atomic
 //! increments where `SharedString::from(&str)` allocates — the display text exists once,
 //! a filter keystroke allocates nothing per visible row, and the single-row patches can't
-//! deep-clone a library's worth of `String`s.
+//! deep-clone a library's worth of `String`s. Once is also across rows: the conversion
+//! interns, so an album's tracks hold one artist, album, genre and cover path between them.
 //!
 //! What a DB row still answers and a converted one cannot is the sort: `disc_number` never
 //! reaches the UI and `sort_key` is not a displayed column. Those two plus the untruncated
@@ -28,7 +29,7 @@ use parking_lot::Mutex;
 use crate::ui::row_match::{self, Needle};
 use crate::ui::track_sort::{self, TrackSortFields};
 use crate::ui::tracks::to_slint_track_list_row;
-use crate::ui::util::len_as_i32;
+use crate::ui::util::{StringPool, len_as_i32};
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 use melodia_ui::TrackListRow as UiTrackListRow;
 
@@ -358,6 +359,7 @@ fn convert(
     let mut display = Vec::with_capacity(n);
     let mut search = Vec::with_capacity(n);
     let mut sort = Vec::with_capacity(n);
+    let mut pool = StringPool::default();
 
     for row in rows {
         search.push(RowSearchKey::from_row(&row));
@@ -366,7 +368,7 @@ fn convert(
             disc: row.disc(),
             sort_key: row.sort_key.as_deref().unwrap_or("").into(),
         });
-        display.push(to_slint_track_list_row(&row));
+        display.push(to_slint_track_list_row(&row, &mut pool));
     }
     (display, search, sort)
 }

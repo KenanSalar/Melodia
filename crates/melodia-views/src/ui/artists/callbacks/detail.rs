@@ -62,7 +62,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>
             // Clear the SearchBar so the next open lands on the full
             // tracks + albums set, not a stale needle from the last
             // detail. `clear_detail` drops the Rust-side mirror too.
-            g.set_filter(SharedString::from(""));
+            g.set_filter(SharedString::default());
             artists_ui_mod::clear_detail(&au);
 
             let au_swap = au.clone();

@@ -39,7 +39,7 @@ use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork::{self, DetailArtwork};
 use crate::ui::row_match::Needle;
 use crate::ui::section_state::{SectionState, impl_detail_row_cache, impl_section_state_helpers};
-use crate::ui::util::clamp_i64_to_i32;
+use crate::ui::util::{clamp_i64_to_i32, opt_shared};
 use crate::ui::view_ctx::ViewCtx;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::playlist::PlaylistStats;
@@ -242,8 +242,8 @@ pub fn to_slint_playlist_row(p: &PlaylistStats) -> UiPlaylistRow {
     UiPlaylistRow {
         id: clamp_i64_to_i32(p.id),
         name: SharedString::from(p.name.as_str()),
-        description: SharedString::from(p.description.as_deref().unwrap_or("")),
-        artwork_path: SharedString::from(p.thumbnail_path.as_deref().unwrap_or("")),
+        description: opt_shared(p.description.as_deref()),
+        artwork_path: opt_shared(p.thumbnail_path.as_deref()),
         track_count: p.track_count,
         total_duration_ms: i32::try_from(p.total_duration_ms.clamp(0, i64::from(i32::MAX)))
             .unwrap_or(i32::MAX),
