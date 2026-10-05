@@ -61,7 +61,10 @@ FADE_OUT_SECONDS = 1.2
 
 # MAX_PATH counts the terminating NUL.
 WINDOWS_MAX_PATH = 260
+# Piped output gets a line every this many tracks instead of the bar.
 PROGRESS_EVERY = 500
+BAR_MIN_WIDTH = 10
+BAR_MAX_WIDTH = 40
 
 EARLIEST_YEAR = 1965
 LATEST_DEBUT = 2018
@@ -1085,33 +1088,93 @@ def check_windows_path_lengths(jobs: list[TrackJob]) -> None:
 
 
 def generate(jobs: list[TrackJob], workers: int) -> None:
-    started = time.monotonic()
     sizes: Counter[str] = Counter()
     counts: Counter[str] = Counter()
     skipped = 0
     failures: list[str] = []
+    progress = Progress(len(jobs))
+    progress.show()
     with Pool(workers) as pool:
-        for done, outcome in enumerate(pool.imap_unordered(render_track, jobs, chunksize=8), 1):
+        for outcome in pool.imap_unordered(render_track, jobs, chunksize=8):
             if outcome.error:
                 failures.append(outcome.error)
-                print(f"FAILED {outcome.error}", flush=True)
+                progress.note(f"FAILED {outcome.error}")
             else:
                 sizes[outcome.label] += outcome.size
                 counts[outcome.label] += 1
                 skipped += outcome.skipped
-            if done % PROGRESS_EVERY == 0 or done == len(jobs):
-                elapsed = time.monotonic() - started
-                eta = elapsed / done * (len(jobs) - done)
-                print(f"{done}/{len(jobs)}  {done / elapsed:.1f}/s  elapsed {format_duration(elapsed)}"
-                      f"  eta {format_duration(eta)}", flush=True)
+            progress.advance(outcome)
+    progress.finish()
 
-    print(f"\ndone in {format_duration(time.monotonic() - started)}; "
+    print(f"\ndone in {format_duration(progress.elapsed())}; "
           f"{skipped} already existed, {len(failures)} failed")
     for label, count in counts.most_common():
         print(f"  {label:9} {count:6}  {sizes[label] / 2**30:6.2f} GiB  avg {sizes[label] / count / 2**10:7.0f} KiB")
     print(f"  {'total':9} {sum(counts.values()):6}  {sum(sizes.values()) / 2**30:6.2f} GiB")
     if failures:
         sys.exit(1)
+
+
+class Progress:
+    """How far a run has got: a bar redrawn in place on a terminal, a line now and then when piped."""
+
+    def __init__(self, total: int) -> None:
+        self._total = total
+        self._done = 0
+        self._rendered = 0
+        self._started = time.monotonic()
+        self._live = sys.stdout.isatty()
+
+    def elapsed(self) -> float:
+        return time.monotonic() - self._started
+
+    def advance(self, outcome: Outcome) -> None:
+        self._done += 1
+        self._rendered += not outcome.skipped
+        self.show()
+
+    def show(self) -> None:
+        if self._live:
+            self._draw()
+        elif self._done % PROGRESS_EVERY == 0 or self._done == self._total:
+            print(self._status(), flush=True)
+
+    def note(self, message: str) -> None:
+        """Prints a line above the bar; the next update draws the bar again under it."""
+        if self._live:
+            sys.stdout.write("\r" + " " * self._columns() + "\r")
+        print(message, flush=True)
+
+    def finish(self) -> None:
+        if self._live:
+            print(flush=True)
+
+    def _status(self) -> str:
+        elapsed = self.elapsed()
+        # A skipped track finishes instantly, so only rendered ones set the pace.
+        rate = self._rendered / elapsed if elapsed > 0 else 0.0
+        eta = format_duration((self._total - self._done) / rate) if rate else "--"
+        percent = 100 * self._done / self._total
+        return (f"{self._done}/{self._total}  {percent:5.1f}%  eta {eta}"
+                f"  {rate:.1f}/s  elapsed {format_duration(elapsed)}")
+
+    def _draw(self) -> None:
+        status = self._status()
+        columns = self._columns()
+        width = min(BAR_MAX_WIDTH, columns - len(status) - 3)
+        if width < BAR_MIN_WIDTH:
+            line = status
+        else:
+            filled = width * self._done // self._total
+            line = f"[{'#' * filled}{'.' * (width - filled)}] {status}"
+        sys.stdout.write("\r" + line[:columns].ljust(columns))
+        sys.stdout.flush()
+
+    @staticmethod
+    def _columns() -> int:
+        # A column short of the edge, where some consoles wrap; and the line is padded rather
+        # than erased, since a legacy Windows console prints an erase sequence literally.
+        return shutil.get_terminal_size().columns - 1
 
 
 def format_duration(seconds: float) -> str:
