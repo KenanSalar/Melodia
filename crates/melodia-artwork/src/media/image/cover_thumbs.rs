@@ -133,19 +133,23 @@ impl Pending {
     }
 }
 
+/// Where a tier's decode size comes from.
+enum TierSize {
+    /// Its own. Atomic because the tiers are held behind `Arc` and
+    /// [`CoverThumbs::set_thumb_size`] retunes them once the scale factor is known.
+    Own(AtomicU32),
+    /// The backing's, read live so its retunes carry over. A miss peeks the backing before
+    /// decoding, never promoting, so no borrower decides what the backing's surfaces keep.
+    Backed(Arc<CoverThumbs>),
+}
+
 pub struct CoverThumbs {
     cache: Mutex<LruCache<PathBuf, Cached>>,
-    /// Side length every cover in this cache is downscaled to, unless the tier is backed. Atomic
-    /// because the tiers are held behind `Arc` and [`Self::set_thumb_size`] retunes them once the
-    /// scale factor is known.
-    own_thumb_size: AtomicU32,
-    /// Where a miss looks before decoding. Only ever peeked, so a borrower's lookups never decide
-    /// what the backing's own surfaces keep.
-    backing: Option<Arc<CoverThumbs>>,
-    /// Bumped by [`Self::clear`]. A batch reads it before decoding and again before inserting, so
-    /// buffers whose tier was released mid-flight are dropped rather than landing in the memory a
-    /// section leave has already handed back. A retune is deliberately not one of these: it moves
-    /// what a lookup asks for, not whether there is still a tier to ask.
+    size: TierSize,
+    /// Bumped by [`Self::clear`]. A batch or a prewarm reads it before decoding and again before
+    /// inserting, so buffers whose tier was released mid-flight are dropped rather than landing in
+    /// the memory a section leave has already handed back. A retune is deliberately not one of
+    /// these: it moves what a lookup asks for, not whether there is still a tier to ask.
     epoch: AtomicU64,
     pending: Mutex<Pending>,
     /// Fired once per landed batch, for the UI to invalidate the bindings that missed. Set at
@@ -157,8 +161,7 @@ impl Default for CoverThumbs {
     fn default() -> Self {
         Self {
             cache: Mutex::new(LruCache::new(CACHE_CAP)),
-            own_thumb_size: AtomicU32::new(ROW_THUMB_SIZE),
-            backing: None,
+            size: TierSize::Own(AtomicU32::new(ROW_THUMB_SIZE)),
             epoch: AtomicU64::new(0),
             pending: Mutex::new(Pending::default()),
             on_decoded: OnceLock::new(),
@@ -178,7 +181,7 @@ impl CoverThumbs {
     pub fn with_config(thumb_size: u32, cache_cap: NonZeroUsize) -> Self {
         Self {
             cache: Mutex::new(LruCache::new(cache_cap)),
-            own_thumb_size: AtomicU32::new(thumb_size),
+            size: TierSize::Own(AtomicU32::new(thumb_size)),
             ..Self::default()
         }
     }
@@ -187,9 +190,9 @@ impl CoverThumbs {
     ///
     /// For a surface that must hand its covers back when it closes while drawing mostly what a
     /// shared tier already holds. It draws at the backing's size and follows the backing's
-    /// retunes, so [`Self::set_thumb_size`] on it changes nothing.
+    /// retunes, so [`Self::set_thumb_size`] on it does nothing.
     pub fn backed_by(backing: Arc<CoverThumbs>) -> Self {
-        Self { backing: Some(backing), ..Self::default() }
+        Self { size: TierSize::Backed(backing), ..Self::default() }
     }
 
     /// Drop every cached buffer, every queued miss and whatever is mid-decode, for a per-view tier
@@ -314,17 +317,18 @@ impl CoverThumbs {
     /// What does go is `settled`: it records which paths this burst has already handed to the
     /// pool, and at the new size every one of them is worth handing over again.
     pub fn set_thumb_size(&self, thumb_size: u32) {
-        if self.own_thumb_size.swap(thumb_size, Ordering::Relaxed) == thumb_size {
+        let TierSize::Own(size) = &self.size else { return };
+        if size.swap(thumb_size, Ordering::Relaxed) == thumb_size {
             return;
         }
         self.pending.lock().settled.clear();
     }
 
-    /// The size a lookup asks for, which on a backed tier is the backing's.
+    /// The size a lookup asks for.
     fn thumb_size(&self) -> u32 {
-        match &self.backing {
-            Some(backing) => backing.thumb_size(),
-            None => self.own_thumb_size.load(Ordering::Relaxed),
+        match &self.size {
+            TierSize::Own(size) => size.load(Ordering::Relaxed),
+            TierSize::Backed(backing) => backing.thumb_size(),
         }
     }
 
@@ -336,7 +340,7 @@ impl CoverThumbs {
     /// Only at the size being drawn: an entry a retune left stale is the backing's to replace,
     /// not ours to copy.
     fn borrow_from_backing(&self, path: &Path, thumb_size: u32) -> Option<Cached> {
-        let backing = self.backing.as_ref()?;
+        let TierSize::Backed(backing) = &self.size else { return None };
         let cache = backing.cache.lock();
         let held = cache.peek(path).filter(|held| held.size == thumb_size)?;
         Some(Cached { buf: held.buf.clone(), size: thumb_size })
@@ -580,16 +584,17 @@ impl CoverThumbs {
     pub fn prewarm(&self, paths: &[PathBuf]) {
         // Read once, so the filter and every decode in the batch agree on the size.
         let thumb_size = self.thumb_size();
-        let missing: Vec<PathBuf> = {
+        let (epoch, missing) = {
             let cache = self.cache.lock();
             let cap = cache.cap().get();
             let mut seen = HashSet::with_capacity(paths.len().min(cap));
-            paths
+            let missing: Vec<PathBuf> = paths
                 .iter()
                 .filter(|p| !holds(&cache, p.as_path(), thumb_size) && seen.insert(*p))
                 .take(cap)
                 .cloned()
-                .collect()
+                .collect();
+            (self.epoch.load(Ordering::Relaxed), missing)
         };
         if missing.is_empty() {
             return;
@@ -608,6 +613,10 @@ impl CoverThumbs {
             None => decode_all(),
         };
         let mut cache = self.cache.lock();
+        // The drain's epoch check, for its reason: a release since the filter took this memory back.
+        if self.epoch.load(Ordering::Relaxed) != epoch {
+            return;
+        }
         // Against the tier's live size for the reason the drain's insert gives: a retune landing
         // mid-decode makes this pass the staler of the two writers.
         let current = self.thumb_size();
