@@ -74,8 +74,8 @@ Each checkpoint is a full run of the baseline protocol, the phase 0 states inclu
 the table below beside the baseline. A phase's own re-measurement (Every phase) is a spot check of
 the state it targets, taken to catch a regression early; it does not replace a checkpoint.
 
-1. **After phases 1 to 7.** Once every phase in the main list is in. This is the number the plan is
-   judged on.
+1. **After phases 1 to 7.** Once every phase in the main list is in, phase 7 excepted, which was
+   dropped. This is the number the plan is judged on.
 2. **After the optional phases.** Each time one or more of phases A to D lands, a new block of rows
    named for exactly the phases it includes, for example *After 1–7 + B*.
 
@@ -409,6 +409,8 @@ import) each get a full-width pool where they used to share one.
 
 ## Phase 5: parse and ingest a scan in chunks
 
+Status: implemented and spot-checked 2026-10-05; its rows wait for the checkpoint after 1–7.
+
 Where: `crates/melodia-app/src/library/settings/folders.rs` (`scan_folder_internal`,
 `TX_CHUNK_FILES`), and the full re-read `tasks/tag_backfill.rs` triggers.
 
@@ -418,23 +420,47 @@ more in `SortTags` and `ReleaseTags`, and six variable-length lists of names and
 written to the store during the parse, so no picture bytes ride along. A first scan of a 50k
 library holds an estimated 75 to 100 MB of parsed tags at its peak.
 
-- [ ] Parse and ingest per 2,000-file chunk, so the peak follows the chunk rather than the library.
-      Overlap the next chunk's parse with the current chunk's write if the phase 0 timing shows a
-      dip.
-- [ ] Moved files keep their ratings and play counts. On the scan path that is
+- [x] Parse and ingest per 2,000-file chunk, so the peak follows the chunk rather than the library.
+      `scan_folder_internal` takes `TX_CHUNK_FILES` paths at a time off `to_scan`, parses them
+      (`parse_chunk`) and ingests them before taking the next. No overlap: it was built and
+      measured (below), and bought no time for about 5 MiB more.
+- [x] Moved files keep their ratings and play counts. On the scan path that is
       `ingest_scanned_files`, not the watcher's `process_batch`: it matches each chunk's hashes
       against the whole table, and the orphan purge runs once, after the last chunk. Chunking the
-      parse keeps that as long as the purge stays after every chunk.
-- [ ] Progress keeps its total, which is known before the parse, and orphan detection keeps its full
-      path list.
-- [ ] `folders.rs:402` copies every on-disk path into a `String` set (`to_string_lossy`) while
-      `files`, never read again, stays alive beside it. Move the buffers instead: about 6 MB
-      transient at 50k (estimate).
+      parse keeps that as long as the purge stays after every chunk. The ingest already committed
+      per 2,000 files, so its chunks see exactly what they saw before.
+- [x] Progress keeps its total, which is known before the parse, and orphan detection keeps its full
+      path list. `ScanProgressReporter` counts each chunk's ticks against the whole scan.
+- [x] `folders.rs:402` copies every on-disk path into a `String` set (`to_string_lossy`) while
+      `files`, never read again, stays alive beside it. The set now takes the buffers out of
+      `files` (`into_string_lossy`).
+- [x] Spot check, 2026-10-05, on the phase 0 library: two passes of `measure_scan.py`, each three
+      rotated rounds of a first scan into an empty root and a forced rescan (every file restamped
+      once), against the installed 0.18.0 and the phase 4 release build (the 12:38 binary behind
+      phase 4's figures). Pass 2 adds the overlapped variant as a fourth arm. The script polls for
+      the end every 0.1 s, so wall times are only comparable past that.
+      - **First scan:** peak RssAnon 68.4, 68.6 and 117.9 MiB against 187.4–192.3 on 0.18.0 and
+        191.1–193.2 on phase 4. Wall 2.39 s on every run, against 2.39–2.49 and 2.39. Pass 1:
+        68.6, 69.1 and 117.5 against 184.0–191.7 and 186.8–237.6. Each pass has one high
+        round-1 run, cause not found.
+      - **Forced rescan:** peak 144.0–148.5 MiB against 242.3–247.5 and 243.2–252.9. Wall
+        3.88–4.00 s against 3.88–4.00 and 3.85–3.97. Pass 1 read 142.3–142.8 MiB and 4.22–4.33 s
+        against 3.86–4.24 for the other two. Pass 2 was run to check that time gap, and it
+        didn't reproduce.
+      - **Settled 10 s after:** first scan 114.3–164.5 MiB against 114.9–132.3, rescan
+        137.7–140.6 against 142.4–159.7.
+      - **Overlap** (the next chunk parsing while this one is written): first scan 73.6–73.7 MiB,
+        rescan 149.4–150.4 MiB, wall 2.38–2.39 and 3.97–4.00 s. Not kept.
+      - **Threads:** as phase 4. `scan-*` peaks at 16, 30–33 threads after against 43–47 on
+        0.18.0.
+      - **Watcher:** every 0.18.0 and phase 4 rescan overflowed the kernel's inotify queue and
+        asked for a full rescan, which the running reconcile absorbed. No phase 5 rescan did,
+        serial or overlapped: the scan's own file reads now arrive a chunk at a time.
 
-Memory: the first-scan peak goes from following the library to following one 2,000-file chunk.
-Nothing changes at idle.
-Risk: low to medium, on throughput. Verify with `MELODIA_RSS_SAMPLE=1` on a first scan of the
-phase 0 library: peak `RssAnon` and wall time, before and after.
+Memory: the first-scan peak goes from following the library to following one 2,000-file chunk,
+measured above at about 120 MiB less on a first scan of 50,400 files and about 100 MiB less on a
+forced rescan. Nothing changes at idle.
+Risk: low to medium, on throughput. Measured above: no change past the script's resolution.
 
 ## Phase 6: share repeated strings in the Songs list
 
@@ -466,6 +492,17 @@ Risk: low. The strings are never mutated, and `SharedString` compares by content
 
 ## Phase 7: page the ListenBrainz backfill
 
+Status: dropped 2026-10-05. It was implemented and passed the gate, then reverted before any
+commit, because the feature it pages is being removed: the auto-tagging matches on tag text and
+writes what it guessed into the user's files, where Picard identifies a track by its audio. The
+removal takes the sweep, its query and the attempted set with it, so the memory this phase
+targeted goes away entirely.
+
+What was built, should the feature return: keyset pages of 2,000 with the cursor taken off the page
+as read (so a page of attempted rows doesn't end the walk), and the attempted set loaded on the
+first sweep that has a token, through the async `load_json_or_default`, with the kick still
+clearing it without a token.
+
 Where: `crates/melodia-store/src/database/queries/track/lookup.rs` (`get_tracks_missing_mbid`),
 `crates/melodia-app/src/tasks/mbid_backfill.rs`.
 
@@ -475,8 +512,8 @@ A library change here includes every favourite and rating toggle, not only scans
 also loaded at boot with the feature off, which costs something only once
 `scrobble_mbid_attempted.json` exists.
 
-- [ ] Page by id, as `get_unrated_track_paths_after` does for the rating import.
-- [ ] Load `attempted` only once a token exists.
+- [ ] Page by id, as `get_unrated_track_paths_after` does for the rating import. Dropped.
+- [ ] Load `attempted` only once a token exists. Dropped.
 
 Memory: an estimated 10 MB transient per library change at 50k, and only with the feature on. A row
 is about 350 to 400 B, so that figure assumes 25k to 35k tracks without an MBID.
@@ -602,6 +639,6 @@ Risk: medium, on move detection. Only with a test that moves a folder across the
 - **The allocator.** No allocator swap and no periodic trim; both were measured and rejected
   (`rust-performance.md`, `tasks/heap_trim.rs`).
 
-When phases 1 to 7 are in and checkpointed, and each optional phase is either in and checkpointed or
+When phases 1 to 6 are in and checkpointed, and each optional phase is either in and checkpointed or
 declined, this plan is deleted, and `~/Development/melodia-measure` and
 `~/Development/melodia-scale-library` go with it.

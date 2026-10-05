@@ -6,7 +6,9 @@
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 
 use rayon::prelude::*;
 
@@ -14,6 +16,7 @@ use crate::services;
 use crate::state::{AppState, ScanProgressTick};
 use crate::tasks::{self, TaskSpawner};
 use melodia_core::entities::folder;
+use melodia_core::entities::scan::ScannedFile;
 use melodia_core::error::AppError;
 use melodia_store::database::{DbPool, queries};
 use melodia_store::media::ingest::scan_pool::ScanPool;
@@ -229,11 +232,18 @@ pub async fn scan_folder(state: &AppState, folder_id: i64) -> Result<u32, AppErr
 /// (`tasks/file_event_processor/reconcile.rs`).
 const SCAN_BULK_THRESHOLD: usize = 20;
 
-/// Files per ingest write-transaction on the bulk scan path. Large enough
-/// that per-chunk overhead (begin/commit + the 6 trigger DDL statements)
-/// is noise, small enough that interactive writes waiting on the single
-/// writer connection get a slot every few seconds even on slow disks.
+/// Files a scan parses and then ingests in one write transaction. Large
+/// enough that per-chunk overhead (begin/commit + the 6 trigger DDL
+/// statements) is noise, small enough that interactive writes waiting on the
+/// single writer connection get a slot every few seconds even on slow disks.
+/// It is also the scan's memory peak: one chunk's parsed tags are resident at
+/// a time, however large the library.
 const TX_CHUNK_FILES: usize = 2_000;
+
+/// Floor between two progress ticks. A fast SSD scan reaches the scanner's
+/// every-10-files gate far faster than the UI can paint, and each tick
+/// allocates the file name it carries.
+const PROGRESS_INTERVAL: Duration = Duration::from_millis(50);
 
 /// Internal scan implementation. Reusable by `scan_folder` and the first-launch task.
 pub async fn scan_folder_internal(state: &AppState, folder_id: i64) -> Result<u32, AppError> {
@@ -304,88 +314,57 @@ pub async fn scan_folder_internal(state: &AppState, folder_id: i64) -> Result<u3
     }
     let total = u32::try_from(to_scan.len()).unwrap_or(u32::MAX);
 
-    // Decided before `to_scan` moves into the scan task. Edge: a tiny
+    // Decided before the chunk loop consumes `to_scan`. Edge: a tiny
     // `to_scan` combined with a huge orphan purge (folder emptied
     // externally) runs the delete trigger per orphaned row — rare, still
     // correct, and accepted over plumbing the orphan count (unknown until
     // inside the transaction) into this decision.
     let is_bulk = to_scan.len() > SCAN_BULK_THRESHOLD;
 
-    // Publish an initial 0-of-total tick so the UI shows the bar immediately.
-    let _ = state.scan_progress_tx.send(Some(ScanProgressTick {
-        folder_id: folder.id,
-        scanned: 0,
-        total,
-        current_file: String::new(),
-    }));
-
-    let scanned_files = if to_scan.is_empty() {
-        Vec::new()
-    } else {
-        let artwork_dir = state.paths.artwork_dir.clone();
-        let cover_cache_clone = state.cover_cache.clone();
-        let progress_tx = state.scan_progress_tx.clone();
-        let progress_folder_id = folder.id;
-        // Throttle progress publishes to ~20 Hz. The scanner already gates
-        // at every-10-files, but a fast SSD scan can fire those gates much
-        // faster than the UI can paint — and each tick allocates a String
-        // (filename) for the watch channel. Always publish the final tick
-        // (`scanned == total`) so the UI knows the scan finished.
-        let last_send = std::sync::Arc::new(parking_lot::Mutex::new(std::time::Instant::now()));
-        let parse_pool = pool.clone();
-        tokio::task::spawn_blocking(move || {
-            parse_pool.install(|| {
-                scan_files_parallel(
-                    &to_scan,
-                    &artwork_dir,
-                    &cover_cache_clone,
-                    &move |scanned, file_name| {
-                        let is_final = scanned == total;
-                        if !is_final {
-                            let mut last = last_send.lock();
-                            if last.elapsed() < std::time::Duration::from_millis(50) {
-                                return;
-                            }
-                            *last = std::time::Instant::now();
-                        }
-                        let _ = progress_tx.send(Some(ScanProgressTick {
-                            folder_id: progress_folder_id,
-                            scanned,
-                            total,
-                            current_file: file_name.to_owned(),
-                        }));
-                    },
-                )
-            })
-        })
-        .await
-        .map_err(|e| AppError::scanner("Scan task failed", e))?
-    };
+    let progress = Arc::new(ScanProgressReporter::new(state, folder.id, total));
+    // Unthrottled, so the UI shows the bar immediately.
+    progress.publish(0, "");
 
     let scan_timestamp = melodia_core::utils::now_rfc3339();
 
-    // --- Stage 1: ingest, chunked into separate write transactions on the
-    // bulk path. The single writer connection frees between chunks, so
-    // interactive writes (favorite toggles, play-count flushes, position
-    // saves) no longer queue behind a multi-minute first scan. Each chunk
-    // is self-consistent: stats triggers are dropped and recreated INSIDE
-    // its transaction, so a crash never leaves them missing — the stats
-    // merely lag until the final recalc below, which is invisible to the
-    // UI because `library_changed` is bumped only after the final
+    // --- Stage 1: parse and ingest a chunk at a time, each chunk in a write
+    // transaction of its own. The single writer connection frees between
+    // chunks, so interactive writes (favorite toggles, play-count flushes,
+    // position saves) don't queue behind a multi-minute first scan. Each
+    // chunk is self-consistent: stats triggers are dropped and recreated
+    // INSIDE its transaction, so a crash never leaves them missing — the
+    // stats merely lag until the final recalc below, which is invisible to
+    // the UI because `library_changed` is bumped only after the final
     // commit. A crash between chunks leaves committed tracks behind; the
     // next scan's size+mtime gate makes the re-run a cheap no-op over them.
     let mut inserted_count: u32 = 0;
     let mut moved_count: u32 = 0;
     let mut updated_count: u32 = 0;
-    let chunk_size = if is_bulk { TX_CHUNK_FILES } else { scanned_files.len().max(1) };
-    for chunk in scanned_files.chunks(chunk_size) {
+    let mut parsed: u32 = 0;
+    let mut remaining = to_scan.into_iter();
+    loop {
+        let chunk: Vec<PathBuf> = remaining.by_ref().take(TX_CHUNK_FILES).collect();
+        if chunk.is_empty() {
+            break;
+        }
+        let chunk_len = u32::try_from(chunk.len()).unwrap_or(u32::MAX);
+        let reporter = Arc::clone(&progress);
+        let scanned_files = parse_chunk(state, chunk, &pool, move |scanned, file_name| {
+            reporter.report(parsed + scanned, file_name);
+        })
+        .await?;
+        parsed += chunk_len;
+        if scanned_files.is_empty() {
+            continue;
+        }
+
         let mut tx = state.db.write().begin().await?;
         if is_bulk {
             queries::stats::disable_stats_triggers(&mut tx).await?;
         }
         let result = queries::ingest::ingest_scanned_files(
             &mut tx,
-            chunk,
+            &scanned_files,
             &queries::FolderResolution::Fixed(folder.id),
             &scan_timestamp,
             true,
@@ -407,11 +386,10 @@ pub async fn scan_folder_internal(state: &AppState, folder_id: i64) -> Result<u3
     let mut tx = state.db.write().begin().await?;
     let all_db_paths = queries::scan::get_all_track_paths_for_folder(&mut tx, folder.id).await?;
     // Orphans = DB rows whose file is no longer on disk. Compare against the
-    // full on-disk set (`files`), NOT `scanned_files`: with the incremental
-    // filter above, `scanned_files` omits unchanged files that are still
-    // present, and treating those as orphans would delete the whole library.
-    let on_disk_paths: HashSet<String> =
-        files.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+    // full on-disk set (`files`), NOT what was parsed: the incremental filter
+    // above leaves out unchanged files that are still present, and treating
+    // those as orphans would delete the whole library.
+    let on_disk_paths: HashSet<String> = files.into_iter().map(into_string_lossy).collect();
     let orphans: Vec<String> =
         all_db_paths.into_iter().filter(|p| !on_disk_paths.contains(p)).collect();
     // On the bulk path a full recalc follows anyway, so a large orphan
@@ -474,6 +452,69 @@ pub async fn scan_folder_internal(state: &AppState, folder_id: i64) -> Result<u3
     state.library_changed.bump();
 
     Ok(inserted_count)
+}
+
+/// Parses one chunk of a scan on its pool, handing `report` how far into the chunk it has got.
+async fn parse_chunk(
+    state: &AppState,
+    paths: Vec<PathBuf>,
+    pool: &ScanPool,
+    report: impl Fn(u32, &str) + Send + Sync + 'static,
+) -> Result<Vec<ScannedFile>, AppError> {
+    let artwork_dir = state.paths.artwork_dir.clone();
+    let cover_cache = state.cover_cache.clone();
+    let pool = pool.clone();
+    tokio::task::spawn_blocking(move || {
+        pool.install(|| scan_files_parallel(&paths, &artwork_dir, &cover_cache, &report))
+    })
+    .await
+    .map_err(|e| AppError::scanner("Scan task failed", e))
+}
+
+/// Takes the path's own buffer, copying only for the rare path that isn't valid UTF-8.
+fn into_string_lossy(path: PathBuf) -> String {
+    path.into_os_string().into_string().unwrap_or_else(|path| path.to_string_lossy().into_owned())
+}
+
+/// A scan's progress ticks, counted against the whole scan rather than the chunk being parsed.
+struct ScanProgressReporter {
+    tx: tokio::sync::watch::Sender<Option<ScanProgressTick>>,
+    folder_id: i64,
+    total: u32,
+    last_send: parking_lot::Mutex<Instant>,
+}
+
+impl ScanProgressReporter {
+    fn new(state: &AppState, folder_id: i64, total: u32) -> Self {
+        Self {
+            tx: state.scan_progress_tx.clone(),
+            folder_id,
+            total,
+            last_send: parking_lot::Mutex::new(Instant::now()),
+        }
+    }
+
+    /// Publishes at most once per [`PROGRESS_INTERVAL`], except the final tick, which always
+    /// lands so the UI knows the scan finished.
+    fn report(&self, scanned: u32, file_name: &str) {
+        if scanned != self.total {
+            let mut last = self.last_send.lock();
+            if last.elapsed() < PROGRESS_INTERVAL {
+                return;
+            }
+            *last = Instant::now();
+        }
+        self.publish(scanned, file_name);
+    }
+
+    fn publish(&self, scanned: u32, file_name: &str) {
+        let _ = self.tx.send(Some(ScanProgressTick {
+            folder_id: self.folder_id,
+            scanned,
+            total: self.total,
+            current_file: file_name.to_owned(),
+        }));
+    }
 }
 
 /// RAII helper: clears `scan_progress_tx` on drop so any early-return path

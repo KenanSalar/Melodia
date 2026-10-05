@@ -23,9 +23,11 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 
 ## Scan and change signalling
 
-- **Scan ingest is chunked + batched.** Bulk scans (`to_scan > SCAN_BULK_THRESHOLD`) ingest in
-  per-`TX_CHUNK_FILES` write transactions (the writer connection frees between chunks; the
-  per-chunk stats-trigger drop/create stays crash-safe) with multi-row `INSERT … RETURNING id,
+- **Scan ingest is chunked + batched.** A scan parses and ingests `TX_CHUNK_FILES` files at a
+  time, each chunk in its own write transaction, so a first scan holds one chunk's tags rather
+  than the library's. The writer connection frees between chunks, and a bulk scan's
+  (`to_scan > SCAN_BULK_THRESHOLD`) per-chunk stats-trigger drop/create stays crash-safe. The
+  orphan purge still runs once, after the last chunk. Inserts are multi-row `INSERT … RETURNING id,
   file_path` via `insert_tracks_batch` — ids mapped back **by path**, RETURNING order being
   unspecified while DnD import relies on input order. Small deltas keep the stats triggers enabled
   and skip `recalculate_all_stats` entirely. Orphans + artwork rollup + recalc land in one final
