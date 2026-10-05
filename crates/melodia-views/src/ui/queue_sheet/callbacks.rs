@@ -304,7 +304,8 @@ fn wire_open_close(
                 //    `covers-generation` is still 0 here, which is what
                 //    holds `Queue.request-cover` to a cache-only lookup, so
                 //    the rows the `ListView` instantiates on that first
-                //    frame can't drag a decode onto the UI thread.
+                //    frame can't drag a decode onto the UI thread. They
+                //    still paint every cover the row tier holds.
                 //
                 // 2. **Warm the first screenful (off-thread), then bump
                 //    `covers-generation`:** each row pulls its own cover
@@ -387,13 +388,13 @@ fn wire_open_close(
                             &queue.get_rows(),
                             "queue sheet teardown",
                         );
-                        // Drop the cache's buffer refs too — only with
-                        // both gone is the underlying memory actually
-                        // freed. Rewinding the generation alongside it is
-                        // what keeps 0 meaning "this tier is cold" rather
-                        // than "first open of the session": the next open
-                        // faces the same empty cache, so it owes the same
-                        // cache-only first frame.
+                        // Drop the cache's buffer refs too. A cover the
+                        // sheet decoded is freed once both are gone; one it
+                        // borrowed stays with the row tier. Rewinding the
+                        // generation alongside it is what keeps 0 meaning
+                        // "this tier is cold" rather than "first open of
+                        // the session": the next open faces the same empty
+                        // cache, so it owes the same cache-only first frame.
                         queue.set_covers_generation(0);
                         queue_covers.clear();
                         // The FK trio the row menu navigates by, on the same

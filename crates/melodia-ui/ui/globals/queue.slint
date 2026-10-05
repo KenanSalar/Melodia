@@ -38,7 +38,8 @@ export global Queue {
     // `is-drop-hovered && open`. Wayland needs the vendored winit patch.
     in property <bool> is-drop-hovered: false;
 
-    // Lazy row cover against the sheet's *own* tier, so closing releases every buffer.
+    // Lazy row cover against the sheet's *own* tier, so closing releases every buffer. That tier
+    // borrows what the row tier already holds, so a cover the track lists draw is one buffer.
     // **`generation` does two jobs**: reading it makes the binding depend on the counter, a `pure`
     // callback's result being cached until a dependency is dirtied; its *value* is whether the tier
     // is warm. The sheet can't prewarm-then-set, its rows having to land synchronously for the

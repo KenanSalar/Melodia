@@ -135,9 +135,13 @@ impl Pending {
 
 pub struct CoverThumbs {
     cache: Mutex<LruCache<PathBuf, Cached>>,
-    /// Side length every cover in this cache is downscaled to. Atomic because the tiers are held
-    /// behind `Arc` and [`Self::set_thumb_size`] retunes them once the scale factor is known.
-    thumb_size: AtomicU32,
+    /// Side length every cover in this cache is downscaled to, unless the tier is backed. Atomic
+    /// because the tiers are held behind `Arc` and [`Self::set_thumb_size`] retunes them once the
+    /// scale factor is known.
+    own_thumb_size: AtomicU32,
+    /// Where a miss looks before decoding. Only ever peeked, so a borrower's lookups never decide
+    /// what the backing's own surfaces keep.
+    backing: Option<Arc<CoverThumbs>>,
     /// Bumped by [`Self::clear`]. A batch reads it before decoding and again before inserting, so
     /// buffers whose tier was released mid-flight are dropped rather than landing in the memory a
     /// section leave has already handed back. A retune is deliberately not one of these: it moves
@@ -153,7 +157,8 @@ impl Default for CoverThumbs {
     fn default() -> Self {
         Self {
             cache: Mutex::new(LruCache::new(CACHE_CAP)),
-            thumb_size: AtomicU32::new(ROW_THUMB_SIZE),
+            own_thumb_size: AtomicU32::new(ROW_THUMB_SIZE),
+            backing: None,
             epoch: AtomicU64::new(0),
             pending: Mutex::new(Pending::default()),
             on_decoded: OnceLock::new(),
@@ -163,7 +168,7 @@ impl Default for CoverThumbs {
 
 impl CoverThumbs {
     /// The shared row tier, behind every track table and the now-playing bar. The queue sheet
-    /// keeps its own private instance, released on close.
+    /// keeps a [`Self::backed_by`] tier over it, released on close.
     pub fn new() -> Self {
         Self::default()
     }
@@ -173,9 +178,18 @@ impl CoverThumbs {
     pub fn with_config(thumb_size: u32, cache_cap: NonZeroUsize) -> Self {
         Self {
             cache: Mutex::new(LruCache::new(cache_cap)),
-            thumb_size: AtomicU32::new(thumb_size),
+            own_thumb_size: AtomicU32::new(thumb_size),
             ..Self::default()
         }
+    }
+
+    /// A tier that answers a miss with `backing`'s buffer, by reference, before decoding one.
+    ///
+    /// For a surface that must hand its covers back when it closes while drawing mostly what a
+    /// shared tier already holds. It draws at the backing's size and follows the backing's
+    /// retunes, so [`Self::set_thumb_size`] on it changes nothing.
+    pub fn backed_by(backing: Arc<CoverThumbs>) -> Self {
+        Self { backing: Some(backing), ..Self::default() }
     }
 
     /// Drop every cached buffer, every queued miss and whatever is mid-decode, for a per-view tier
@@ -300,10 +314,32 @@ impl CoverThumbs {
     /// What does go is `settled`: it records which paths this burst has already handed to the
     /// pool, and at the new size every one of them is worth handing over again.
     pub fn set_thumb_size(&self, thumb_size: u32) {
-        if self.thumb_size.swap(thumb_size, Ordering::Relaxed) == thumb_size {
+        if self.own_thumb_size.swap(thumb_size, Ordering::Relaxed) == thumb_size {
             return;
         }
         self.pending.lock().settled.clear();
+    }
+
+    /// The size a lookup asks for, which on a backed tier is the backing's.
+    fn thumb_size(&self) -> u32 {
+        match &self.backing {
+            Some(backing) => backing.thumb_size(),
+            None => self.own_thumb_size.load(Ordering::Relaxed),
+        }
+    }
+
+    /// A miss: the backing's buffer where it holds this cover at `thumb_size`, a decode otherwise.
+    fn load(&self, path: &Path, thumb_size: u32) -> Cached {
+        self.borrow_from_backing(path, thumb_size).unwrap_or_else(|| decode_thumb(path, thumb_size))
+    }
+
+    /// Only at the size being drawn: an entry a retune left stale is the backing's to replace,
+    /// not ours to copy.
+    fn borrow_from_backing(&self, path: &Path, thumb_size: u32) -> Option<Cached> {
+        let backing = self.backing.as_ref()?;
+        let cache = backing.cache.lock();
+        let held = cache.peek(path).filter(|held| held.size == thumb_size)?;
+        Some(Cached { buf: held.buf.clone(), size: thumb_size })
     }
 
     /// Whether the tier holds nothing. For the one caller that publishes its decode size beside
@@ -323,13 +359,13 @@ impl CoverThumbs {
     /// wrong size. A decode that fails is remembered, so a refilter doesn't retry it. Safe from
     /// any thread, but the returned `Image` is not `Send`.
     pub fn get_or_load(&self, path: &Path) -> Image {
-        let thumb_size = self.thumb_size.load(Ordering::Relaxed);
+        let thumb_size = self.thumb_size();
         // `LruCache::get` takes `&mut self` (a hit promotes), hence the mutex.
         if let Some(held) = self.cache.lock().get(path).filter(|held| held.size == thumb_size) {
             return buf_to_image(&held.buf);
         }
         // Decode off the lock so other threads can keep reading the cache.
-        let entry = decode_thumb(path, thumb_size);
+        let entry = self.load(path, thumb_size);
         let img = buf_to_image(&entry.buf);
         self.cache.lock().put(path.to_path_buf(), entry);
         img
@@ -346,7 +382,8 @@ impl CoverThumbs {
 
     /// Cache-only lookup — **never** decodes synchronously, serving the placeholder on a miss.
     /// The one lookup that takes whatever size the tier holds, having neither of the two ways to
-    /// improve on it: it may not decode and it may not schedule.
+    /// improve on it: it may not decode and it may not schedule. A backed tier still borrows on a
+    /// miss, which is neither.
     ///
     /// For a surface that mounts rows *before* its tier is warm, which here is the queue sheet
     /// alone: its rows must land in the model before `on_open_changed` returns so the slide-up has
@@ -357,10 +394,16 @@ impl CoverThumbs {
         let Some(p) = path.filter(|p| !p.is_empty()) else {
             return Image::default();
         };
-        self.cache
-            .lock()
-            .get(Path::new(p))
-            .map_or_else(Image::default, |held| buf_to_image(&held.buf))
+        let path = Path::new(p);
+        if let Some(held) = self.cache.lock().get(path) {
+            return buf_to_image(&held.buf);
+        }
+        let Some(borrowed) = self.borrow_from_backing(path, self.thumb_size()) else {
+            return Image::default();
+        };
+        let img = buf_to_image(&borrowed.buf);
+        self.cache.lock().put(path.to_path_buf(), borrowed);
+        img
     }
 
     /// Register what to call when a scheduled batch lands. First caller wins.
@@ -388,7 +431,7 @@ impl CoverThumbs {
             return Image::default();
         };
         let path = Path::new(path);
-        let thumb_size = self.thumb_size.load(Ordering::Relaxed);
+        let thumb_size = self.thumb_size();
         // Scoped so the lock is gone before `schedule`, which takes it again through `capacity`.
         let held = {
             let mut cache = self.cache.lock();
@@ -460,7 +503,7 @@ impl CoverThumbs {
                 (self.epoch.load(Ordering::Relaxed), batch)
             };
 
-            let thumb_size = self.thumb_size.load(Ordering::Relaxed);
+            let thumb_size = self.thumb_size();
             // Non-promoting, so this can't reorder a prefix `prewarm` warmed. A tab pick mounts
             // rows *before* its prewarm runs, so the two routinely ask for the same covers and
             // without this every one of them is decoded twice.
@@ -475,7 +518,7 @@ impl CoverThumbs {
             let decoded: Vec<(PathBuf, Cached)> = batch
                 .into_par_iter()
                 .map(|path| {
-                    let entry = decode_thumb(&path, thumb_size);
+                    let entry = self.load(&path, thumb_size);
                     (path, entry)
                 })
                 .collect();
@@ -491,7 +534,7 @@ impl CoverThumbs {
                     // batch was decoding. Measured against the tier's *live* size rather than the
                     // one this batch read: a retune since then makes what we carry the staler of
                     // the two, and an entry already at the size being drawn is not ours to replace.
-                    let current = self.thumb_size.load(Ordering::Relaxed);
+                    let current = self.thumb_size();
                     for (path, entry) in decoded {
                         if !holds(&cache, path.as_path(), current) {
                             cache.put(path, entry);
@@ -514,11 +557,11 @@ impl CoverThumbs {
     /// Material You seeds its palette from the already-decoded thumbnail this way, rather than
     /// decoding the full-resolution artwork a second time.
     pub fn get_or_load_rgb8(&self, path: &Path) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
-        let thumb_size = self.thumb_size.load(Ordering::Relaxed);
+        let thumb_size = self.thumb_size();
         if let Some(held) = self.cache.lock().get(path).filter(|held| held.size == thumb_size) {
             return held.buf.clone();
         }
-        let entry = decode_thumb(path, thumb_size);
+        let entry = self.load(path, thumb_size);
         let returned = entry.buf.clone();
         self.cache.lock().put(path.to_path_buf(), entry);
         returned
@@ -535,8 +578,8 @@ impl CoverThumbs {
     /// evicts the earliest with the latest. **Pass paths in display order** so the kept prefix is
     /// the visible one.
     pub fn prewarm(&self, paths: &[PathBuf]) {
-        // Hoisted so the Rayon closure captures a plain `u32` rather than `self`.
-        let thumb_size = self.thumb_size.load(Ordering::Relaxed);
+        // Read once, so the filter and every decode in the batch agree on the size.
+        let thumb_size = self.thumb_size();
         let missing: Vec<PathBuf> = {
             let cache = self.cache.lock();
             let cap = cache.cap().get();
@@ -555,7 +598,7 @@ impl CoverThumbs {
             missing
                 .into_par_iter()
                 .map(|p| {
-                    let entry = decode_thumb(&p, thumb_size);
+                    let entry = self.load(&p, thumb_size);
                     (p, entry)
                 })
                 .collect::<Vec<(PathBuf, Cached)>>()
@@ -567,7 +610,7 @@ impl CoverThumbs {
         let mut cache = self.cache.lock();
         // Against the tier's live size for the reason the drain's insert gives: a retune landing
         // mid-decode makes this pass the staler of the two writers.
-        let current = self.thumb_size.load(Ordering::Relaxed);
+        let current = self.thumb_size();
         for (p, entry) in decoded {
             // A `get_or_load` racing between the filter above and this reacquire could have
             // inserted the same key.

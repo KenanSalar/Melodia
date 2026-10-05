@@ -296,7 +296,7 @@ fn main() -> AppResult<()> {
     ui::radio::install_history(weak.clone(), &views.radio_ui, &state.sinks)
         .map_err(|e| AppError::Window(format!("station history subscriber: {e}")))?;
 
-    match ui::queue_sheet::install(&app, &state) {
+    match ui::queue_sheet::install(&app, &state, &views.cover_thumbs) {
         Ok(h) => ui::window_chrome::set_queue_sheet_open(h.is_open),
         Err(e) => log::warn!("queue_sheet::install: {e}"),
     }

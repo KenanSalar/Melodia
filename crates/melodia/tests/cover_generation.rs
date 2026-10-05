@@ -130,7 +130,7 @@ fn every_scheduling_tier_installs_a_notifier() {
 const TIER_HOMES: [(&str, &str); 5] = [
     ("boot/ui_setup/views.rs", "the row tier, at row-tile size"),
     ("ui/grid_prewarm.rs", "the one tier every card grid draws from"),
-    ("ui/queue_sheet/mod.rs", "the sheet's own, dropped on close rather than evicted"),
+    ("ui/queue_sheet/mod.rs", "the sheet's own, dropped on close, over the row tier's buffers"),
     ("ui/radio/covers.rs", "logos, whose card reads the decoded extent for its layout"),
     ("ui/search/mod.rs", "the two card strips, at strip sizes of their own"),
 ];
@@ -150,7 +150,10 @@ fn only_the_named_cover_tiers_are_built() {
         if path == "media/image/cover_thumbs.rs" {
             continue;
         }
-        if code.contains("CoverThumbs::with_config(") || code.contains("CoverThumbs::new()") {
+        if code.contains("CoverThumbs::with_config(")
+            || code.contains("CoverThumbs::new()")
+            || code.contains("CoverThumbs::backed_by(")
+        {
             found.insert(path);
         }
     }

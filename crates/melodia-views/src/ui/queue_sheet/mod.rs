@@ -17,7 +17,7 @@ use parking_lot::Mutex;
 use slint::{ComponentHandle, ModelRc, VecModel, Weak};
 
 use melodia_app::state::AppState;
-use melodia_artwork::media::image::cover_thumbs::{CoverThumbs, row_cover_size};
+use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::track::TrackSummary;
 use melodia_ui::{AppWindow, Queue, QueueRow};
 
@@ -59,6 +59,7 @@ pub struct QueueSheetHandles {
 pub fn install(
     ui: &AppWindow,
     state: &AppState,
+    row_covers: &Arc<CoverThumbs>,
 ) -> Result<QueueSheetHandles, slint::EventLoopError> {
     let queue_model: Rc<VecModel<QueueRow>> = Rc::new(VecModel::default());
     ui.global::<Queue>().set_rows(ModelRc::from(queue_model.clone()));
@@ -72,24 +73,9 @@ pub fn install(
     let link_cache: links::LinkCache = Arc::new(Mutex::new(std::collections::HashMap::new()));
     let anchor: Arc<Mutex<Option<usize>>> = Arc::new(Mutex::new(None));
     let is_open = Arc::new(AtomicBool::new(false));
-    // The queue sheet's *own* row-tier cover cache — deliberately NOT the
-    // shared `cover_thumbs`. Private so it can be dropped wholesale when
-    // the sheet closes (clearing the shared cache would yank covers the
-    // Tracks / Browse views and the now-playing bar still need).
-    let queue_covers = Arc::new(CoverThumbs::new());
-    // Deferred for the reason the grid tiers are: `install` runs long before
-    // `app.show()`, and `scale_factor` answers 1.0 until the window is on a
-    // monitor. The sheet can't be open yet, so the tier is empty either way.
-    let tune_covers = queue_covers.clone();
-    let tune_weak = ui.as_weak();
-    if let Err(e) = slint::invoke_from_event_loop(move || {
-        let Some(ui) = tune_weak.upgrade() else {
-            return;
-        };
-        tune_covers.set_thumb_size(row_cover_size(f64::from(ui.window().scale_factor())));
-    }) {
-        log::warn!("Failed to schedule queue-cover display tuning: {e}");
-    }
+    // Private so closing can drop it wholesale: clearing the row tier would yank covers the track
+    // lists and the now-playing bar still need. Backed by it, so a cover both draw is one buffer.
+    let queue_covers = Arc::new(CoverThumbs::backed_by(row_covers.clone()));
 
     // Lazy row covers, wired once — the `boot::ui_setup` `RowCovers` shape,
     // against this sheet's private tier.

@@ -770,8 +770,8 @@ three components that answer it, and each argues its geometry at its own file.
   bought nothing but a section leave releasing its own, which is what made every re-entry cold. A module singleton rather than a
   `ViewCtx` field, there being exactly one of it and no view owning it — the shape
   `ui::nav_history::nav()` takes. **The tiers that stay private are private on decode size**:
-  Search's two card strips, the queue sheet's, and the row tier. Radio's logo tier is the one
-  exception on other grounds, below.
+  Search's two card strips and the row tier. Two are private on other grounds: the queue sheet's,
+  on lifetime (the `QueueRow` entry below), and Radio's logo tier, below.
 
 - **A leave hands the pixels back and keeps the picture.** `grid_prewarm::hand_back_covers` shrinks
   every entry to `PROXY_COVER_DIM` square in place rather than calling `clear`, so a re-entry paints
@@ -845,8 +845,10 @@ three components that answer it, and each argues its geometry at its own file.
 
 - **`QueueRow` goes through two globals rather than `RowCovers`**, each wanting a different tier:
   the queue sheet's *private* `CoverThumbs` (so closing it drops every buffer without yanking
-  covers the track lists still need) and the shared row tier. That is what makes a queue the size
-  of the library affordable.
+  covers the track lists still need) and the shared row tier. **The private one is
+  `CoverThumbs::backed_by` the shared one**: a miss borrows the row tier's buffer before decoding,
+  and its size is the row tier's, retunes included, so a cover both draw is one allocation. That
+  is what makes a queue the size of the library affordable.
 
 - **`covers-generation` is the repaint token, and on a card grid that is all it is.** A `pure`
   callback's result is cached until a dependency is dirtied, so an `int` the binding also reads is
@@ -930,8 +932,9 @@ three components that answer it, and each argues its geometry at its own file.
   is **largest in a narrow panel**, where `max-card-w` is now what stops it, and lands near 190 px
   on a wide one. A tier spelling its own size is the thing to reach for this instead of. Needs no
   winit round trip, the scale factor being Slint's own, and shares the cap's zero-extent bail.
-  `cover_thumbs::row_cover_size` is the row tier's twin, wired at each of its two construction
-  sites rather than through a tune hook, neither having one.
+  `cover_thumbs::row_cover_size` is the row tier's twin, applied in the same `display-changed`
+  retune. The queue sheet's tier takes the row tier's size through its backing rather than being
+  wired a second time.
 
 - **Prewarm path dedup via `grid_prewarm::unique_artwork_paths(paths, cap)`**, first-seen-ordered
   and non-empty. **Every prewarm site goes through it**, the per-entity wrapper owning only the

@@ -95,7 +95,7 @@ the state it targets, taken to catch a regression early; it does not replace a c
 | Baseline, 2026-10-05 | Playing, list view | 35.5 MiB | 92.2 MiB | 87.2 MiB | 165.3 MiB | 178.5 MiB | 26.0 MiB | 0.65% | 0.00% | 41 |
 | Baseline, 2026-10-05 | Playing, visualizer live | 35.2 MiB | 91.4 MiB | 87.5 MiB | 162.5 MiB | 178.5 MiB | 30.0 MiB | 3.47% | 2.19% | 42 |
 | Baseline, phase 0 | Grid page (Albums) | | | | | | | | | |
-| Baseline, phase 0 | Queue sheet open | | | | | | | | | |
+| Baseline, phase 0 | Queue sheet open | 35.3 MiB | 89.0 MiB | 84.2 MiB | 158.4 MiB | 166.8 MiB | 28.0 MiB | 0.10% | 0.00% | 45 |
 | Baseline, phase 0 | Now Playing opened, then closed | | | | | | | | | |
 | Baseline, phase 0 | Minute after a full rescan | | | | | | | | | |
 | After 1–7 | Idle | | | | | | | | | |
@@ -112,7 +112,10 @@ database. `~/Development/melodia-measure/tools` holds what took the phase 4 read
 the repo for these runs: the library generator, a first-scan and forced-rescan timer
 (`measure_scan.py`), the dev-root Idle runner (`dev_idle.sh`, which restores its snapshot over
 the dev root before every run, so a session starts with `dev_idle.sh snapshot` and ends with
-`dev_idle.sh restore`), and the cover-decode timer (`decode-check/`).
+`dev_idle.sh restore`), and the cover-decode timer (`decode-check/`). `queue_open.sh` drives the
+queue-sheet state over that same snapshot: it queues the whole library and opens the sheet by
+activating the window through a KWin script and injecting `q` through ydotool, so nothing may be
+typed while it runs. It refuses to inject unless KWin reports Melodia active.
 
 `scan_rounds.sh` there drives a scan spot check, phase 5's being the first: it warms the page cache,
 sets one file an hour older, runs the first scans with the launch order rotated each round,
@@ -154,6 +157,10 @@ Production files the phases touch, in lines (`wc -l`): `cover_thumbs.rs` 622, `f
       (Albums) scrolled once, the queue sheet open on a long queue, Now Playing opened and closed,
       and the minute after a forced full rescan. Fill the *Baseline, phase 0* rows, and keep a
       heaptrack profile of each beside them.
+      Queue sheet open: filled 2026-10-05 from the installed 0.18.0 RPM by `queue_open.sh`, with
+      the queue holding the whole dev library (551 tracks) rather than the Synthwave playlist.
+      Its heaptrack profile is of `1284fb8` rather than 0.18.0 (`queue-open-p2-before-ht`, phase
+      2's before). The other three states are still open.
 - [x] Build a large library outside the repo for phases 4 to 6: ffmpeg-generated short files with
       tags spread over a few thousand albums, 50k tracks or more. Built 2026-10-05 at
       `~/Development/melodia-scale-library`, deliberately not under `~/Music`, which a first launch
@@ -238,6 +245,10 @@ Sizing pass, 2026-10-05:
 
 ## Phase 2: let the queue sheet share the row tier's buffers
 
+Status: done 2026-10-05: implemented, spot-checked, and checked by hand on a queue holding the whole
+library, which behaves as before. Its rows wait for the checkpoint after 1–7, and the tests listed
+at the end of this section come later.
+
 Where: `crates/melodia-views/src/ui/queue_sheet/mod.rs` (the private `CoverThumbs` and its
 `request-cover` handler), `crates/melodia-artwork/src/media/image/cover_thumbs.rs`.
 
@@ -246,41 +257,67 @@ lists still need. It decodes at the same `row_cover_size` as the shared row tier
 two have in common is held twice while the sheet is open. Cached buffers are refcounted
 `SharedPixelBuffer`s.
 
-- [ ] Give `CoverThumbs` a lookup that returns a cached buffer without promoting it in the LRU, and
-      only when it was decoded at the asked size.
-- [ ] On a private miss the sheet takes the shared tier's buffer by reference and caches that,
+- [x] Give `CoverThumbs` a lookup that returns a cached buffer without promoting it in the LRU, and
+      only when it was decoded at the asked size. Built as a kind of tier rather than a public
+      lookup: `CoverThumbs::backed_by(row tier)` peeks its backing on every miss (`get_or_load`,
+      `get_or_load_rgb8`, `prewarm`, the scheduled drain) before decoding, so `CoverThumbs` still
+      exposes no peek or insert. `get_cached_opt` borrows too, so the slide-up's first frame
+      paints every cover the row tier holds, where it used to paint placeholders.
+- [x] On a private miss the sheet takes the shared tier's buffer by reference and caches that,
       decoding only what the shared tier lacks. Closing still clears the private tier, which now
       drops references rather than pixels where the two overlapped. The reason the tier is private
-      holds unchanged.
-- [ ] `queue_sheet::install(ui, state)` has no handle on the shared tier, which is
-      `ViewCtx.cover_thumbs`, built in `boot/ui_setup/views.rs`. It takes one.
-- [ ] Update the comment at `queue_sheet/mod.rs:74` and `ui-patterns.md`'s `QueueRow` entry.
+      holds unchanged. That covers the open-time prewarm (up to 24 covers), where most of the
+      double decodes were, and the misses after it.
+- [x] `queue_sheet::install` takes the row tier, passed from `main.rs` as `now_playing::install`
+      gets it beside it. `wire_callbacks` is unchanged: the sharing lives in the tier, not in a
+      ninth parameter.
+- [x] The size: a backed tier has none of its own and draws at its backing's, retunes included.
+      That retired the sheet's one-shot tuning at install, which kept it decoding at the launch
+      scale after a move across the 1.25× boundary, soft on a HiDPI screen.
+- [x] Docs: the tier comment in `queue_sheet/mod.rs`, the `request-cover` note in
+      `globals/queue.slint`, and in `ui-patterns.md` the `QueueRow` entry, the "private on decode
+      size" list (which named the sheet's, private on lifetime) and the `row_cover_size` line.
+      `crates/melodia/tests/cover_generation.rs`'s tier walk counts `CoverThumbs::backed_by(` as a
+      constructor.
+- Not in this phase: past its warm-up the sheet still decodes a miss the row tier doesn't hold on
+  the UI thread (`get_or_load_opt`), as before.
+- [x] Spot check, in the app, 2026-10-05: `tools/queue_open.sh` (under Checkpoints) on the dev
+  root, the queue rewritten to the whole library (551 tracks, 189 distinct covers) on My Library ▸
+  Songs, whose prewarm puts every cover in the row tier. The release build of `1284fb8` against
+  this phase's, three rounds with the order alternating (B A, A B, B A), each binary launched once
+  unmeasured first. Raw output is `queue-open-p2-{before,after}-{1,2,3}`.
+  - **Footprint:** no difference past what a median sample resolves. Anonymous 35.0, 34.7 and
+    34.6 MiB against 35.0, 34.5 and 34.5; CPU 0.07–0.08% of one core on both; 31 threads on both.
+    That is what the constants predict: an open holds its 24 prewarmed covers plus the visible
+    rows, about 162 KiB at 6,912 B per 48 px cover.
+  - **heaptrack**, one run each over the same flow (`queue-open-p2-{before,after}-ht`): cover
+    buffers built 235 → 212 (`buffer_from_rgb` in the collapsed stacks, 233 → 210 through
+    `prewarm`), allocation calls 1,003,270 → 948,464, peak heap 23.59 → 23.65 MiB. The 23 fewer
+    are the open's prewarm, borrowed instead of decoded.
+  - Not exercised: scrolling the sheet. The bound on this library, 189 × 6,912 B or about
+    1.25 MiB, needs the whole queue scrolled through.
+
+| Round | Build | Anonymous | USS | RSS | Peak RSS | CPU, one core | Threads | Memory maps |
+|---|---|---|---|---|---|---|---|---|
+| 1 | `1284fb8` | 35.0 MiB | 83.7 MiB | 158.8 MiB | 167.1 MiB | 0.07% | 31 | 538 |
+| 1 | phase 2 | 35.0 MiB | 83.5 MiB | 157.6 MiB | 165.9 MiB | 0.08% | 31 | 541 |
+| 2 | phase 2 | 34.5 MiB | 83.3 MiB | 158.6 MiB | 166.9 MiB | 0.08% | 31 | 541 |
+| 2 | `1284fb8` | 34.7 MiB | 83.5 MiB | 157.8 MiB | 166.1 MiB | 0.07% | 31 | 539 |
+| 3 | `1284fb8` | 34.6 MiB | 83.2 MiB | 156.9 MiB | 165.2 MiB | 0.08% | 31 | 538 |
+| 3 | phase 2 | 34.5 MiB | 83.6 MiB | 157.9 MiB | 166.3 MiB | 0.08% | 31 | 539 |
 
 Memory: up to 512 × 48² × 3 = 3,538,944 B at 1× and 512 × 72² × 3 = 7,962,624 B on HiDPI while the
-sheet is open, plus the decode work for every overlapping cover. Nothing changes while it is closed.
-The bound needs 512 distinct covers in both tiers at once; a queue drawn from a few albums shares
-far fewer. Past its warm-up the sheet decodes a miss on the UI thread (`get_or_load_opt`), so every
-cover it finds in the shared tier is also a decode taken off the event loop.
+sheet is open, bounded by the distinct covers in both tiers at once: 189 on the dev library, about
+1.25 MiB, reached only by scrolling the whole queue. An open costs its 24-cover prewarm, about
+162 KiB, which the footprint script can't resolve and heaptrack shows gone. Nothing changes while
+the sheet is closed. Every cover it finds in the row tier past its warm-up is also a decode taken
+off the event loop.
 Risk: low. A shared buffer the shared tier later evicts stays alive through the sheet's reference
 until the sheet closes, which is what the sheet holds today anyway.
-
-Sizing pass, 2026-10-05:
-
-- `queue_sheet::install` is called from `crates/melodia/src/main.rs:285`, not from
-  `boot/ui_setup/views.rs`. Pass `views.cover_thumbs` there, as `now_playing::install` does beside
-  it; `views.rs` doesn't change.
-- Most of the double decodes on open come from the open-time prewarm in
-  `queue_sheet/callbacks.rs:328-346` (up to 24 covers), not from the misses after it. The phase
-  covers both.
-- `wire_callbacks` already takes 8 parameters, clippy's threshold, so the shared tier rides in a
-  bundle rather than as a ninth.
-- `CoverThumbs` has no public non-promoting lookup and no public insert. `holds()` is private, and
-  neither tier exposes its size.
-- The sheet's tier is tuned once at install, while the shared row tier retunes on every display
-  change. After a move across the 1.25× boundary the two sizes differ and an "only at the asked
-  size" lookup refuses every match. Fix the retune here or accept the misses.
-- Also stale: `ui-patterns.md:772-773` (calls the sheet's tier private on decode size, which it
-  isn't) and `globals/queue.slint:41`.
+Tests, when asked: a backed tier serves the backing's own allocation without decoding; borrowing
+leaves the backing's LRU order alone; after the backing retunes, a backed tier decodes at the new
+size rather than borrowing the stale entry; `get_cached_opt` on a backed tier serves the backing's
+entry; `clear` on a backed tier leaves the backing's entry.
 
 ## Phase 3: small holders that outlive their use
 
