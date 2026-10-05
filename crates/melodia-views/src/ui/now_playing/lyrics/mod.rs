@@ -191,7 +191,7 @@ pub(crate) struct LyricsUi {
     holding: RefCell<Option<String>>,
     /// Filled after [`install`] returns, because looking a sheet up needs the `NowPlayingState`
     /// this is a field of. `NowPlayingState`'s own two seeders, one layer down.
-    reseed: RefCell<Option<super::Seeder>>,
+    reseed: RefCell<Option<super::Hook>>,
     model: Rc<VecModel<LyricRow>>,
 }
 

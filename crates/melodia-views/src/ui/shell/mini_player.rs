@@ -16,12 +16,10 @@
 //! concern, and mixing the two axes makes neither greppable.
 
 use std::rc::Rc;
-use std::sync::Arc;
 
 use slint::ComponentHandle;
 
-use crate::ui::now_playing::{NowPlayingState, release_artwork_off_thread, release_lyrics};
-use crate::ui::now_playing_artwork::NowPlayingArtwork;
+use crate::ui::now_playing::{NowPlayingState, release_lyrics};
 use melodia_app::state::AppState;
 use melodia_core::error::AppError;
 use melodia_ui::{AppWindow, MiniPlayer};
@@ -35,15 +33,11 @@ fn sync_mini_layout(weak: &slint::Weak<AppWindow>, np_state: &NowPlayingState) {
 }
 
 /// Seeds the large artwork if anything on screen still draws from it, and hands it back otherwise.
-fn follow_artwork(
-    state: &AppState,
-    np_artwork: &Arc<NowPlayingArtwork>,
-    np_state: &NowPlayingState,
-) {
+fn follow_artwork(np_state: &NowPlayingState) {
     if np_state.renders_artwork() {
         np_state.kick_artwork();
     } else {
-        release_artwork_off_thread(state, np_artwork);
+        np_state.release_artwork();
     }
 }
 
@@ -53,19 +47,17 @@ fn follow_artwork(
 pub fn install(
     app: &AppWindow,
     state: &AppState,
-    np_artwork: &Arc<NowPlayingArtwork>,
     np_state: &Rc<NowPlayingState>,
 ) -> Result<(), AppError> {
     let mini = app.global::<MiniPlayer>();
 
     // active-changed: on enter, flip the gates, re-seed Up Next so the column doesn't render an
-    // empty list, and seed the high-res cover if anything on screen draws from it. On exit, release
-    // the artwork LRU and the lyrics sheet unless Now Playing is open to draw them: with the view
+    // empty list, and seed the high-res cover if anything on screen draws from it. On exit, hand
+    // back the artwork and the lyrics sheet unless Now Playing is open to draw them: with the view
     // closed nothing needs either, and no track change comes back to hand the sheet over.
     {
         let np_state = np_state.clone();
         let state = state.clone();
-        let np_artwork = np_artwork.clone();
         let weak = app.as_weak();
         mini.on_active_changed(move |is_active| {
             let was_visible = np_state.mini_visible.replace(is_active);
@@ -90,7 +82,7 @@ pub fn install(
                     return;
                 }
                 if !np_state.renders_artwork() {
-                    release_artwork_off_thread(&state, &np_artwork);
+                    np_state.release_artwork();
                 }
                 if !np_state.renders_panel()
                     && let Some(ui) = weak.upgrade()
@@ -108,14 +100,12 @@ pub fn install(
     // the next track, and one out of it hands the sheet back.
     {
         let np_state = np_state.clone();
-        let state = state.clone();
-        let np_artwork = np_artwork.clone();
         mini.on_layout_changed(move |layout| {
             np_state.mini_layout.set(layout);
             if !np_state.mini_visible.get() {
                 return;
             }
-            follow_artwork(&state, &np_artwork, &np_state);
+            follow_artwork(&np_state);
             np_state.kick_lyrics();
         });
     }
@@ -127,11 +117,10 @@ pub fn install(
     {
         let np_state = np_state.clone();
         let state = state.clone();
-        let np_artwork = np_artwork.clone();
         mini.on_set_backdrop_shown(move |on| {
             np_state.mini_backdrop.set(on);
             if np_state.mini_visible.get() {
-                follow_artwork(&state, &np_artwork, &np_state);
+                follow_artwork(&np_state);
             }
             state.persist_blocking("mini backdrop", move |s| {
                 melodia_app::library::window::set_mini_backdrop(s, on)

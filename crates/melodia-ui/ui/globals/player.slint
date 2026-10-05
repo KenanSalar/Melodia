@@ -127,8 +127,10 @@ export global Player {
         : @tr("Next");
 
     // The dual-slot cross-fade: Rust writes the fresh blur into the *inactive* slot then flips
-    // `blur-use-a`. **Neither slot is ever cleared** — the outgoing layer stays painted for the
-    // whole fade. Written only on track change, so these don't re-invalidate per tick.
+    // `blur-use-a`. **Nothing clears a slot a fade may still read**: the outgoing layer stays
+    // painted for the whole fade, and `ui::now_playing` empties the unshown one only after it, once
+    // no surface draws the pair. Written only on track change, so these don't re-invalidate per
+    // tick.
     in-out property <image> blur-img-a;
     in-out property <image> blur-img-b;
     in-out property <bool> blur-use-a: true;

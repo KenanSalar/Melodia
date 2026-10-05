@@ -316,7 +316,7 @@ fn main() -> AppResult<()> {
     // Needs `np_state` for the up-next subscriber gate; without it the gate
     // would flip nothing visible.
     if let Some(ref np_state) = np_state
-        && let Err(e) = ui::shell::mini_player::install(&app, &state, &np_artwork, np_state)
+        && let Err(e) = ui::shell::mini_player::install(&app, &state, np_state)
     {
         log::warn!("mini_player::install: {e}");
     }

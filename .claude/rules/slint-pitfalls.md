@@ -462,11 +462,13 @@ this file is what builds, looks right, and is wrong.
   End-of-track, the last arming `PlayerState::pause_after_current_track` (monitor half in
   `.claude/rules/audio-stack.md`).
 
-- **Flash-free image cross-fade = two slots, never cleared.** Two stacked `Image`s + `use-a` bool;
-  Rust writes the new image into the *inactive* slot then flips the bool so both `opacity`
-  animate. Slot `source` is never reset — the outgoing layer stays painted for the fade. Clearing
-  a pair is only ever right where nothing fades *into* the new source and no mounted element reads
-  it; `ui::now_playing::source_change` is the one such site, and argues it there.
+- **Flash-free image cross-fade = two slots, never cleared under a fade.** Two stacked `Image`s +
+  `use-a` bool; Rust writes the new image into the *inactive* slot then flips the bool so both
+  `opacity` animate. A write never resets the outgoing slot, which stays painted for the fade. A
+  slot is cleared only where no fade can still be reading it: a station, which nothing fades
+  *into* (`ui::now_playing::source_change`), a hero handed back with its page
+  (`release_hero_slots!`), and Now Playing once no surface draws it, emptying only the slots not
+  on show and only after `dur-med` (`NowPlayingState::release_artwork`). Each argues itself there.
 
 - **A rounded `clip: true` renders everything under it into a texture, and a clip on a rounded
   element is always a rounded one.** `passes/clip.rs` copies the element's radius onto the `Clip`

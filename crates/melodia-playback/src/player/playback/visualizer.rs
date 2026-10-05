@@ -15,8 +15,8 @@
 //!
 //! [`EqSource`]: super::equalizer::EqSource
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use super::decks::DECK_COUNT;
@@ -29,8 +29,8 @@ use melodia_audio::player::source::audio::{
 ///
 /// Sized for the *widest* window any style asks for, at the highest rate a music file plausibly
 /// carries — the waveform's span plus its trigger slack is a fixed number of **milliseconds**, so
-/// it outgrows [`FFT_SIZE`](super::spectrum::FFT_SIZE) well before the rate ceiling. Resident for
-/// the life of the player and never reallocated.
+/// it outgrows [`FFT_SIZE`](super::spectrum::FFT_SIZE) well before the rate ceiling. Allocated by
+/// the first arm and kept from then on, never reallocated.
 pub const RING_CAP: usize = 16_384;
 
 /// One deck's ring, plus the bookkeeping that says whether anything is filling it and how far back
@@ -45,8 +45,9 @@ struct DeckRing {
     /// Total samples ever pushed, monotonic — a `usize` takes millions of years to wrap, so the
     /// modulo below is the only wrapping.
     write_cursor: AtomicUsize,
-    /// `RING_CAP` `f32` bit patterns.
-    ring: Box<[AtomicU32]>,
+    /// `RING_CAP` `f32` bit patterns, built by [`Self::arm`] on the UI thread. The audio thread
+    /// only ever `get`s, a single acquire load, so it never waits on the allocation.
+    ring: OnceLock<Box<[AtomicU32]>>,
 }
 
 impl DeckRing {
@@ -55,16 +56,23 @@ impl DeckRing {
             sources: AtomicUsize::new(0),
             valid_from: AtomicUsize::new(0),
             write_cursor: AtomicUsize::new(0),
-            // `AtomicU32` isn't `Clone`, so this can't be `vec![…; N]`; collecting also keeps the
-            // buffer off the stack on its way out.
-            ring: (0..RING_CAP).map(|_| AtomicU32::new(0)).collect(),
+            ring: OnceLock::new(),
         }
+    }
+
+    fn arm(&self) {
+        // `AtomicU32` isn't `Clone`, so this can't be `vec![…; N]`; collecting also keeps the
+        // buffer off the stack on its way out.
+        self.ring.get_or_init(|| (0..RING_CAP).map(|_| AtomicU32::new(0)).collect());
     }
 
     #[inline]
     fn push(&self, sample: f32) {
+        let Some(ring) = self.ring.get() else {
+            return;
+        };
         let idx = self.write_cursor.fetch_add(1, Ordering::Relaxed);
-        self.ring[idx % RING_CAP].store(sample.to_bits(), Ordering::Relaxed);
+        ring[idx % RING_CAP].store(sample.to_bits(), Ordering::Relaxed);
     }
 
     /// Forget everything written so far, so the next window starts from silence.
@@ -97,14 +105,20 @@ impl DeckRing {
     }
 
     #[inline]
-    fn sample_at(&self, cursor: usize) -> f32 {
-        f32::from_bits(self.ring[cursor % RING_CAP].load(Ordering::Relaxed))
+    fn sample_at(ring: &[AtomicU32], cursor: usize) -> f32 {
+        f32::from_bits(ring[cursor % RING_CAP].load(Ordering::Relaxed))
     }
 
     /// Write (or add) the most recent `out.len()` samples of this run into `out`, oldest first.
     /// Short history pads at the **front**, so the newest sample is always last and a deck that
     /// just started contributes its handful over silence — exactly what it gave the mixer.
     fn read_into(&self, out: &mut [f32], add: bool) {
+        let Some(ring) = self.ring.get() else {
+            if !add {
+                out.fill(0.0);
+            }
+            return;
+        };
         let end = self.write_cursor.load(Ordering::Relaxed);
         let run = end.saturating_sub(self.valid_from.load(Ordering::Relaxed));
         let avail = out.len().min(RING_CAP).min(run);
@@ -112,12 +126,12 @@ impl DeckRing {
         let start = end - avail;
         if add {
             for (i, slot) in tail.iter_mut().enumerate() {
-                *slot += self.sample_at(start + i);
+                *slot += Self::sample_at(ring, start + i);
             }
         } else {
             head.fill(0.0);
             for (i, slot) in tail.iter_mut().enumerate() {
-                *slot = self.sample_at(start + i);
+                *slot = Self::sample_at(ring, start + i);
             }
         }
     }
@@ -152,12 +166,18 @@ pub struct VisualizerShared {
 impl VisualizerShared {
     #[must_use]
     pub fn new(enabled: bool) -> Arc<Self> {
-        Arc::new(Self {
+        let shared = Self {
             enabled: AtomicBool::new(enabled),
             sample_rate: AtomicU32::new(0),
             speed: AtomicU32::new(1.0_f32.to_bits()),
             decks: std::array::from_fn(|_| DeckRing::new()),
-        })
+        };
+        if enabled {
+            for deck in &shared.decks {
+                deck.arm();
+            }
+        }
+        Arc::new(shared)
     }
 
     // --- producer side (audio thread) --------------------------------------
@@ -200,12 +220,14 @@ impl VisualizerShared {
 
     // --- both sides ---------------------------------------------------------
 
-    /// Arm or disarm the tap. Arming drops whatever history the rings hold — it runs when the
-    /// Now-Playing view comes back on screen, and the newest samples down there may predate its
-    /// closing. The stamps land *before* the flag, so no armed sample is thrown away.
+    /// Arm or disarm the tap. Arming builds the rings the first time and drops whatever history
+    /// they hold: it runs when the Now-Playing view comes back on screen, and the newest samples
+    /// down there may predate its closing. The stamps land *before* the flag, so no armed sample is
+    /// thrown away.
     pub fn set_enabled(&self, on: bool) {
         if on && !self.is_enabled() {
             for deck in &self.decks {
+                deck.arm();
                 deck.drop_history();
             }
         }

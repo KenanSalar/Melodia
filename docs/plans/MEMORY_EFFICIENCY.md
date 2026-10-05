@@ -321,34 +321,110 @@ entry; `clear` on a backed tier leaves the backing's entry.
 
 ## Phase 3: small holders that outlive their use
 
-- [ ] **Visualizer rings** (`crates/melodia-playback/src/player/playback/visualizer.rs`, built at
+Status: done 2026-10-05: implemented, through the gate and spot-checked. Its rows wait for the
+checkpoint after 1–7, the check by hand is Kenan's, and the tests listed at the end of this section
+come later. Phase 0's "Now Playing opened, then closed" row was not taken with it and stays open.
+
+- [x] **Visualizer rings** (`crates/melodia-playback/src/player/playback/visualizer.rs`, built at
       `engine/backend/mod.rs:142`): two decks × 16,384 × 4 B = 131,072 B, written in full when the
       engine is constructed, whether or not the visualizer is ever shown. Allocate them on the first
       enable, on the UI thread and never on the audio callback, keeping `valid_from` and `DeckRun`
       as they behave today. The audio thread then needs a lock-free view of a ring that may not
       exist yet (a `OnceLock` per deck), and `RING_CAP`'s doc, which says the rings are resident
       for the life of the player, is updated.
-- [ ] **Analyzers** (`crates/melodia-views/src/ui/visualizer/mod.rs:69`): the spectrum and the
+      Built as `DeckRing::arm`, the cell's only initializer, called by `set_enabled(true)` and by
+      `new(true)`. `push` returns before advancing the cursor while no ring exists, and `read_into`
+      reads an unbuilt ring as silence. `engine/backend/mod.rs` is untouched.
+      `visualizer.md`'s re-arm bullet says the first arm allocates.
+- [x] **Analyzers** (`crates/melodia-views/src/ui/visualizer/mod.rs:69`): the spectrum and the
       waveform analyzer are both built whichever style is shown. They already exist only while the
       strip is mounted, so what this saves is the unshown one's share. Build the shown one, and the
       other on a style switch. The audit put the two at roughly 110 to 170 KiB while the strip is
       up; measure before and after. The waveform window is sized to `RING_CAP` and the comment at
       `:73` argues it, so leave it unless the measurement says otherwise.
-- [ ] **Now Playing's crossfade pair** (`Player.np-cover-a/b`, `blur-img-a/b`): once no surface
+      Built as `Session { figure, frames }`, where `Figure` is the shown kind's analyzer and its own
+      path string. A pick between the bars and the trace replaces the figure rather than keeping
+      both, and Bars↔Mirrored keeps it. The trace's path keeps its capacity for the widest trace;
+      the bars' path starts empty. The spectrum analyzer is boxed, since clippy's
+      `large_enum_variant` put the bars variant at 344 B against the trace's 120 B.
+- [x] **Now Playing's crossfade pair** (`Player.np-cover-a/b`, `blur-img-a/b`): once no surface
       renders the artwork, the slot not shown still holds a 384 px cover and its blur, about
       0.5 MiB. Clear that slot then, never mid-fade. The miniplayer's card and column read the same
       pair, which `Surfaces::renders_artwork` already answers for. The two-slot rule in
       `slint-pitfalls.md` names `ui::now_playing::source_change` as the one site allowed to clear a
       pair; a second site argues itself the same way, and the rule entry is updated to say so.
-- [ ] **Tag editor preview** (`crates/melodia-views/src/ui/callbacks/tags/artwork.rs:91`):
+      Built as `NowPlayingState::release_artwork`, the twin of `kick_artwork`, which the three
+      release sites call in place of `release_artwork_off_thread`. It waits `Theme.dur-med` on one
+      restartable `slint::Timer` and gives up if a surface draws again in the meantime. Otherwise
+      it empties the slots not on show (both when the pair has no image) and then clears the LRU,
+      so the trim sees both. `mini_player::install` no longer takes `np_artwork`. The rule entry
+      names the three sites without counting them, and the "never cleared" comments in
+      `globals/player.slint` and `components/now-playing/now-playing-cover.slint` went with it.
+- [x] **Tag editor preview** (`crates/melodia-views/src/ui/callbacks/tags/artwork.rs:91`):
       `decode_cover_preview` decodes the picked file whole through `decode_capped` and then resizes.
       Decode through `decode_capped_to` against `COVER_SIZE`, under `large_decode_guard`. Peak only:
       a 3000 × 3000 JPEG no longer passes through a full-size buffer. The scaled path is chosen by
       the file's extension, so a PNG or WebP pick still decodes whole.
       `crates/melodia/tests/bounded_decode.rs` walks for `capped_limits(` and `ImageReader::new(`
       only, so it stays green.
+      Built as described, with the guard held through the resize. `decode_jpeg_scaled`'s doc now
+      covers a picked file's extension.
+- [x] Spot check, in the app, 2026-10-05: the release build of `0b13161` against this phase's, each
+  launched once unmeasured first, on the dev root with the queue rewritten to the 402 tracks that
+  have artwork. `tools/np_flow.sh` drives each scenario with keys injected through ydotool after a
+  KWin activation (space and `f` for the visualizer; `f`, `n`, `f` for Now Playing opened, skipped
+  and closed) and keeps a screenshot as proof. `tools/p3_leaks.sh` reads what each heaptrack
+  profile still held at quit. Raw output is `np-flow-p3-*` and `p3-*-ht.*`.
+  - **heaptrack**, one run per scenario and build. Fat LTO inlines the holders, so the rings are
+    found by their 64 KiB blocks, the visualizer session by its module's frames, and Now Playing's
+    covers as what `pair_from_image` held beyond the Idle run's 751,152 B of detail-hero covers.
+    The dev root runs the aurora backdrop, so Now Playing builds no blur; under the blur backdrop
+    the unshown slot also holds its blur.
+  - **Footprint**, 16 of the 18 runs planned (the third Now Playing round was stopped): no
+    regression. CPU with the visualizer live 3.73–4.08% of one core against 3.93–4.12%, Anonymous
+    within 0.3 MiB either way in every scenario, 31 threads on both. One before run of the
+    visualizer scenario never started playing (0.05% CPU) and is left out.
+  - Not exercised: a visualizer opened in a session that then never leaves it, and the miniplayer's
+    exit and layout paths, which call the same `release_artwork`.
 
+| Scenario | Holder | `0b13161` | Phase 3 |
+|---|---|---|---|
+| Idle | Visualizer rings | 131,072 B | 0 B |
+| Playing, visualizer live (Mirrored) | Visualizer session, rings excluded | 920,264 B | 794,632 B |
+| Playing, visualizer live (Mirrored) | Visualizer rings | 131,072 B | 131,072 B |
+| Now Playing opened, skipped, closed | Now Playing covers | 368,880 B | 120,024 B |
+| Idle | Held at quit, all | 7.16 MiB | 7.05 MiB |
+| Playing, visualizer live (Mirrored) | Held at quit, all | 8.37 MiB | 8.23 MiB |
+| Now Playing opened, skipped, closed | Held at quit, all | 8.28 MiB | 8.04 MiB |
+
+- [x] Spot check, outside the app, 2026-10-05: `tools/preview-check` in
+  `~/Development/melodia-measure` runs `decode_cover_preview`'s before and after as copies of the
+  `image_decode` functions (`melodia-artwork` pulls in Slint), on Melodia's pinned `image`,
+  `jpeg-decoder`, `fast_image_resize` and `rayon`, with a two-thread global pool and a counting
+  allocator. 20 rounds per file after a warm-up, over ffmpeg-made sources in `preview-images/`: a
+  real cover upscaled to 3000 and 1500 px, a 3000 px test pattern, and a 3000 px PNG. Raw output is
+  `preview-check-p3.txt`.
+  - **The peak falls by up to 23.6 MiB, and the decode costs more on two of the three JPEGs.** The
+    scaled path runs `jpeg-decoder`, where the whole decode ran `image`'s zune decoder. A 1500 px
+    pick reduces only by half, so the slower decoder isn't offset by the reduced transform. Kept: it
+    is one decode on the blocking pool before a dialog preview, never on a frame path.
+
+| Source | Peak heap, before | Peak heap, after | Time p50, before | Time p50, after |
+|---|---|---|---|---|
+| Cover, 3000 px JPEG | 26.83 MiB | 3.25 MiB | 13.94 ms | 14.54 ms |
+| Test pattern, 3000 px JPEG | 26.66 MiB | 2.45 MiB | 8.94 ms | 8.22 ms |
+| Cover, 1500 px JPEG | 6.93 MiB | 3.25 MiB | 4.24 ms | 6.82 ms |
+| Cover, 3000 px PNG | 26.25 MiB | 26.25 MiB | 54.09 ms | 54.17 ms |
+
+Memory: 131,072 B for every session that never opens the visualizer; 125,632 B while the strip is
+up on Bars or Mirrored, the trace's analyzer and path; one 384 px cover, and its blur under the blur
+backdrop, after Now Playing closes on a track it crossfaded into (248,856 B for the 384×216 cover
+measured); and up to 23.6 MiB of transient peak per cover picked in the tag editor.
 Risk: low for each. None changes what is drawn or heard.
+Tests, when asked: the rings stay unbuilt until `set_enabled(true)`, and `push` before then moves no
+cursor; a style crossing between the bars and the trace replaces the figure, and Bars↔Mirrored keeps
+it; `clear_unshown_slots` clears the slot `use_a` doesn't name and both without an image, and the
+release hands nothing back once a surface renders the artwork again.
 
 Sizing pass, 2026-10-05:
 

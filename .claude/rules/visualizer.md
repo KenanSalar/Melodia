@@ -37,15 +37,17 @@ counter, both worth reading before changing a gate.
 
 - **Re-arming drops the rings' history** — the newest samples down there may predate the close —
   and `snapshot` front-pads with silence, so the first frame back reads a touch low rather than
-  stale.
+  stale. **The first arm is also what allocates them**, which is why every `set_enabled(true)`
+  stays on the UI thread: the audio callback only ever reads the cell.
 
-- **`set-active(false)` also drops the session's buffers.** The two FFT plans with their windows,
-  spectra and scratch, plus the trace's window, x-coordinate table and path string, live in an
-  `Rc<RefCell<Option<Analyzers>>>` the tick builds on its first frame (`get_or_insert_with`, the
-  one construction site, so no mount ordering can leave the tick without them) and that callback
-  clears — a user who never opens Now Playing never pays for the plans. The tick's one shadow, the
-  `FrameWatch`, lives in that struct rather than beside it, so dropping it starts the next session
-  counting from a clean slate instead of from whatever the last one stalled at.
+- **`set-active(false)` also drops the session's buffers.** The shown style's analyzer and its
+  path string live in an `Rc<RefCell<Option<Session>>>` the tick builds on its first frame
+  (`get_or_insert_with`, the one construction site, so no mount ordering can leave the tick without
+  them) and that callback clears — a user who never opens Now Playing never pays for the FFT plans.
+  Only the shown kind is held: a pick crossing between the bars and the trace rebuilds the
+  `Figure`, and Bars↔Mirrored keeps it. The tick's one shadow, the `FrameWatch`, lives in that
+  struct rather than beside it, so dropping it starts the next session counting from a clean slate
+  instead of from whatever the last one stalled at.
 
 ## The tick's gates
 

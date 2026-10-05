@@ -11,7 +11,8 @@ use crate::ui::file_dialog;
 use crate::ui::util::{COVER_SIZE, buffer_from_rgb};
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::image_decode::{
-    FilterType, MAX_SOURCE_DIM, decode_capped, fit_within, resize_rgb8,
+    FilterType, MAX_SOURCE_DIM, decode_capped_to, fit_within, large_decode_guard, resize_rgb8,
+    source_pixels,
 };
 use melodia_core::entities::tags::ArtworkEdit;
 use melodia_ui::{AppWindow, TagEditor};
@@ -89,9 +90,13 @@ pub(super) fn wire_remove_artwork(
 /// Blocking (image decode) — call under `spawn_blocking`. `None` on any decode
 /// error: the preview is best-effort, and the write path re-validates the pick.
 pub(super) fn decode_cover_preview(path: &Path) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
+    // A picked file has no size bound, unlike a store path. Held through the resize, which still
+    // has the decoded source alive.
+    let _oversized = source_pixels(path).and_then(large_decode_guard);
+
     // The dialog tile renders at 160 px, so the shared 384 px cover tier keeps
     // it crisp on HiDPI while staying a small bounded buffer.
-    let decoded = decode_capped(path, MAX_SOURCE_DIM).ok()?;
+    let decoded = decode_capped_to(path, MAX_SOURCE_DIM, COVER_SIZE).ok()?;
     let (width, height) = fit_within(decoded.width(), decoded.height(), COVER_SIZE, COVER_SIZE);
     let rgb = resize_rgb8(&decoded, width, height, FilterType::Box)?;
     Some(buffer_from_rgb(&rgb))
