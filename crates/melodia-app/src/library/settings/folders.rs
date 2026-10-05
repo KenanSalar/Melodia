@@ -16,6 +16,7 @@ use crate::tasks::{self, TaskSpawner};
 use melodia_core::entities::folder;
 use melodia_core::error::AppError;
 use melodia_store::database::{DbPool, queries};
+use melodia_store::media::ingest::scan_pool::ScanPool;
 use melodia_store::media::ingest::scanner::{
     collect_media_files, scan_files_parallel, track_is_current,
 };
@@ -267,15 +268,20 @@ pub async fn scan_folder_internal(state: &AppState, folder_id: i64) -> Result<u3
     // — actually spends its time on, and a serial syscall loop is the worst shape
     // for it on a cold cache or a network mount. Rayon's `collect` preserves the
     // sequential order, so `to_scan` stays byte-for-byte what it was before.
+    //
+    // One pool serves the filter, the parse and the ingest's stat, and ends with this scan.
     let folder_path_owned = folder_path.to_path_buf();
-    let (files, to_scan) = tokio::task::spawn_blocking(move || {
+    let (files, to_scan, pool) = tokio::task::spawn_blocking(move || {
         let files = collect_media_files(&folder_path_owned);
-        let to_scan: Vec<PathBuf> = files
-            .par_iter()
-            .filter(|path| !track_is_current(path, &existing_summaries))
-            .cloned()
-            .collect();
-        (files, to_scan)
+        let pool = ScanPool::for_files(files.len());
+        let to_scan: Vec<PathBuf> = pool.install(|| {
+            files
+                .par_iter()
+                .filter(|path| !track_is_current(path, &existing_summaries))
+                .cloned()
+                .collect()
+        });
+        (files, to_scan, pool)
     })
     .await
     .map_err(|e| AppError::scanner("Scan walk task failed", e))?;
@@ -326,28 +332,31 @@ pub async fn scan_folder_internal(state: &AppState, folder_id: i64) -> Result<u3
         // (filename) for the watch channel. Always publish the final tick
         // (`scanned == total`) so the UI knows the scan finished.
         let last_send = std::sync::Arc::new(parking_lot::Mutex::new(std::time::Instant::now()));
+        let parse_pool = pool.clone();
         tokio::task::spawn_blocking(move || {
-            scan_files_parallel(
-                &to_scan,
-                &artwork_dir,
-                &cover_cache_clone,
-                &move |scanned, file_name| {
-                    let is_final = scanned == total;
-                    if !is_final {
-                        let mut last = last_send.lock();
-                        if last.elapsed() < std::time::Duration::from_millis(50) {
-                            return;
+            parse_pool.install(|| {
+                scan_files_parallel(
+                    &to_scan,
+                    &artwork_dir,
+                    &cover_cache_clone,
+                    &move |scanned, file_name| {
+                        let is_final = scanned == total;
+                        if !is_final {
+                            let mut last = last_send.lock();
+                            if last.elapsed() < std::time::Duration::from_millis(50) {
+                                return;
+                            }
+                            *last = std::time::Instant::now();
                         }
-                        *last = std::time::Instant::now();
-                    }
-                    let _ = progress_tx.send(Some(ScanProgressTick {
-                        folder_id: progress_folder_id,
-                        scanned,
-                        total,
-                        current_file: file_name.to_owned(),
-                    }));
-                },
-            )
+                        let _ = progress_tx.send(Some(ScanProgressTick {
+                            folder_id: progress_folder_id,
+                            scanned,
+                            total,
+                            current_file: file_name.to_owned(),
+                        }));
+                    },
+                )
+            })
         })
         .await
         .map_err(|e| AppError::scanner("Scan task failed", e))?
@@ -380,6 +389,7 @@ pub async fn scan_folder_internal(state: &AppState, folder_id: i64) -> Result<u3
             &queries::FolderResolution::Fixed(folder.id),
             &scan_timestamp,
             true,
+            &pool,
         )
         .await?;
         if is_bulk {

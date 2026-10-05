@@ -21,6 +21,11 @@ use melodia_views::ui;
 use slint::ComponentHandle;
 use tokio::sync::watch;
 
+/// Rayon's global pool, which jpeg-decoder runs every colour JPEG's passes on. Two keeps a cover
+/// decode parallel without a worker per core idling from the first decode to quit; a pass over
+/// library files brings a `ScanPool` of its own rather than landing here.
+const GLOBAL_RAYON_THREADS: usize = 2;
+
 fn main() -> AppResult<()> {
     // The updater's post-swap smoke test spawns the freshly renamed binary with
     // this and asserts exit 0 plus a `Melodia ` prefix carrying the expected
@@ -139,6 +144,15 @@ fn main() -> AppResult<()> {
         .thread_name("melodia-bg")
         .build()
         .map_err(|e| AppError::Settings(format!("tokio runtime: {e}")))?;
+
+    // Ahead of the first decode: rayon fixes the global pool's shape at first use.
+    if let Err(e) = rayon::ThreadPoolBuilder::new()
+        .num_threads(GLOBAL_RAYON_THREADS)
+        .thread_name(|i| format!("rayon-{i}"))
+        .build_global()
+    {
+        log::warn!("rayon global pool: {e}; rayon will size its own");
+    }
 
     // Slint's a11y/D-Bus thread looks up a tokio reactor from UI-thread tasks,
     // so the guard has to stay alive for the entire `app.run()` window.

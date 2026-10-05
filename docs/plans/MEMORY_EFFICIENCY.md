@@ -98,19 +98,24 @@ the state it targets, taken to catch a regression early; it does not replace a c
 
 The scan phases are judged on the large library instead, where the footprint script's windows do
 not reach. Peak `RssAnon` comes from `MELODIA_RSS_SAMPLE=1` during a first scan into an empty
-database.
+database. `~/Development/melodia-measure/tools` holds what took the phase 4 readings, kept outside
+the repo for these runs: the library generator, a first-scan and forced-rescan timer
+(`measure_scan.py`), the dev-root Idle runner (`dev_idle.sh`, which restores its snapshot over
+the dev root before every run, so a session starts with `dev_idle.sh snapshot` and ends with
+`dev_idle.sh restore`), and the cover-decode timer (`decode-check/`).
 
 | Run | First scan of the large library | Peak RssAnon | Wall time | Threads after |
 |---|---|---|---|---|
-| Baseline, phase 0 | | | | |
+| Baseline, phase 0 | 50,400 tracks, 0.18.0, three runs | 189–197 MiB | 2.97 s cold, 2.56–2.58 s | 45–46 |
 | After 1–7 | | | | |
 
-Production files the phases touch, in lines (`wc -l`): `cover_thumbs.rs` 622, `folders.rs` 484,
+Production files the phases touch, in lines (`wc -l`): `cover_thumbs.rs` 622, `folders.rs` 494,
 `now_playing/mod.rs` 472, `visualizer.rs` 441, `track_list_cache.rs` 389, `grid_prewarm.rs` 358,
 `mbid_backfill.rs` 358, `ui/visualizer/mod.rs` 337, `queries/track/lookup.rs` 254, `tracks/mod.rs`
 168, `queue_sheet/mod.rs` 167, `scanner.rs` 118, `callbacks/tags/artwork.rs` 98, `ui/util.rs` 78,
-`main.rs` 555, `playlists/callbacks/dialog.rs` 544, `queries/ingest.rs` 478, `shell/bridge.rs` 392,
-`database/mod.rs` 341, `boot/ui_setup/views.rs` 268.
+`main.rs` 569, `playlists/callbacks/dialog.rs` 544, `queries/ingest.rs` 484, `shell/bridge.rs` 392,
+`database/mod.rs` 341, `boot/ui_setup/views.rs` 268, `engine/backend/mod.rs` 782,
+`queue_sheet/callbacks.rs` 461, `now_playing/up_next.rs` 291, `shell/mini_player.rs` 159.
 
 ## Every phase
 
@@ -132,11 +137,17 @@ Production files the phases touch, in lines (`wc -l`): `cover_thumbs.rs` 622, `f
       (Albums) scrolled once, the queue sheet open on a long queue, Now Playing opened and closed,
       and the minute after a forced full rescan. Fill the *Baseline, phase 0* rows, and keep a
       heaptrack profile of each beside them.
-- [ ] Build a large library outside the repo for phases 4 to 6: ffmpeg-generated short files with
-      tags spread over a few thousand albums, 50k tracks or more. Fill the baseline row of the scan
-      table from a first scan into an empty database.
-- [ ] `playlists/callbacks/dialog.rs:68` quotes "~603 KiB" for the cover buffer, a figure left from
-      the old 448 px tier. Drop the number and keep what the comment argues.
+- [x] Build a large library outside the repo for phases 4 to 6: ffmpeg-generated short files with
+      tags spread over a few thousand albums, 50k tracks or more. Built 2026-10-05 at
+      `~/Development/melodia-scale-library`, deliberately not under `~/Music`, which a first launch
+      adds: 50,400 one-second MP3s, 840 artists × 5 albums × 12 tracks, each copied from one
+      ffmpeg-rendered file and given distinct ID3v2.4 tags (title, artist, album artist, album,
+      track, genre, year). No embedded covers.
+- [x] Fill the baseline row of the scan table from a first scan of that library into an empty
+      database: the installed 0.18.0 RPM, `MELODIA_RSS_SAMPLE=1` sampling every 500 ms.
+- [x] `playlists/callbacks/dialog.rs:68` quotes "~603 KiB" for the cover buffer, a figure left from
+      the old 448 px tier. Drop the number and keep what the comment argues. Its twin in
+      `playlist-mosaic-picker.slint` ("the grid tier (448 px)") went with it.
 
 ## Phase 1: decode grid covers at the size the tile draws
 
@@ -177,11 +188,36 @@ the card's `pad-sm` inset and grows by the hover zoom at most. On a 2560×1440 w
 Memory: 150,528 B to 110,592 B per cover at 1× (−26.5%), up to −3.5 MiB of heap at the 91-cover cap
 that window gets, and the same cut in each mounted card's texture. 519,168 B to 442,368 B per cover
 at 2× (−14.8%). The 64 px proxies a section leave keeps are unchanged.
-Risk: none on the cards while the size stays at or above what is drawn, FemtoVG minifying without
-mipmaps. The two surfaces above draw the buffer at something other than the card's tile, which is
-where this phase is visible.
+Risk: the cards on single-row grids. `GridGeometry`'s `lone-row-cards` draws a grid that fits on
+one row at `MAX_CARD_W`, a 208 px tile and 216.3 px hovered, while the tier is sized off the widest
+card the column band draws. At 1× that puts the new tier under the drawn tile for logical widths
+2452 to 3651, the baseline machine included, where today only 3652 to 3840 fall short. A filtered
+grid, a handful of playlists and Favorites ▸ Artists all draw one row, and FemtoVG upscales
+bilinearly, so every window where this phase saves memory is one where those grids soften. The
+tier is shared, so sizing it for a lone row gives the saving back wherever one draws. Decide which
+before starting. The two surfaces above draw the buffer at something other than the card's tile
+too.
 Tests, when asked: sweep `grid_prewarm_tests` over widths and scales, asserting the decode never
 falls under the drawn tile.
+
+Sizing pass, 2026-10-05:
+
+- The tier moves only on these logical widths: 1× 2452–3651 (224 → 192), 1.25× 1652–2051
+  (288 → 256), 1.5× 1452–1651 (352 → 320) and 2452–3651 (320 → 288), 2× 1652–1851 (448 → 416) and
+  2452–3651 (416 → 384). 1920×1080 at 1× and 4K at 2× don't change.
+- `cover_size`'s `as u32` truncates. At 1.25× for logical 1652–1851 the new formula lands 0.1 px
+  under the drawn tile, so round up before the cast.
+- `grid_prewarm_tests`' `the_tier_covers_the_card_at_every_sidebar_width` asserts the tier covers
+  the whole card and breaks; it becomes tier ≥ (card − 2 × inset) × zoom × scale.
+  `assert_eq!(cover_size(500, 1.0), MAX_CARD_W)` passes only through the step's rounding.
+- A seventh zoom spelling: `genre-grid.slint:68` sets `1.15` with no condition. Search's strips and
+  Radio's station card take the default. Slint can't override one arm of a ternary, so "one
+  spelling" needs a card property: an opt-in the hosts set, or the card deriving 1.15 from an
+  empty `artwork-path`, which also changes Search and Radio.
+- The mosaic picker's preview cells read the grid tier too (`CoverMosaic` →
+  `Playlists.request-cover` → `grid_cover`): one pick fills 220 px, two about 214 px each. The
+  Edit Artwork decision covers them as well. Decoding the dialog's own cover takes `dialog.rs` out
+  of `cover_generation.rs`'s `BLOCKING_LOOKUP_SITES`, an exact list.
 
 ## Phase 2: let the queue sheet share the row tier's buffers
 
@@ -210,6 +246,24 @@ far fewer. Past its warm-up the sheet decodes a miss on the UI thread (`get_or_l
 cover it finds in the shared tier is also a decode taken off the event loop.
 Risk: low. A shared buffer the shared tier later evicts stays alive through the sheet's reference
 until the sheet closes, which is what the sheet holds today anyway.
+
+Sizing pass, 2026-10-05:
+
+- `queue_sheet::install` is called from `crates/melodia/src/main.rs:285`, not from
+  `boot/ui_setup/views.rs`. Pass `views.cover_thumbs` there, as `now_playing::install` does beside
+  it; `views.rs` doesn't change.
+- Most of the double decodes on open come from the open-time prewarm in
+  `queue_sheet/callbacks.rs:328-346` (up to 24 covers), not from the misses after it. The phase
+  covers both.
+- `wire_callbacks` already takes 8 parameters, clippy's threshold, so the shared tier rides in a
+  bundle rather than as a ninth.
+- `CoverThumbs` has no public non-promoting lookup and no public insert. `holds()` is private, and
+  neither tier exposes its size.
+- The sheet's tier is tuned once at install, while the shared row tier retunes on every display
+  change. After a move across the 1.25× boundary the two sizes differ and an "only at the asked
+  size" lookup refuses every match. Fix the retune here or accept the misses.
+- Also stale: `ui-patterns.md:772-773` (calls the sheet's tier private on decode size, which it
+  isn't) and `globals/queue.slint:41`.
 
 ## Phase 3: small holders that outlive their use
 
@@ -242,12 +296,38 @@ until the sheet closes, which is what the sheet holds today anyway.
 
 Risk: low for each. None changes what is drawn or heard.
 
+Sizing pass, 2026-10-05:
+
+- Rings: a `OnceLock` can't be cleared through `&self`, so once armed the rings stay for the
+  session; the saving is the sessions that never open the visualizer. `new(true)` stays eager,
+  about 20 tests in `playback/tests/visualizer_tests.rs` pushing straight into it.
+  `engine/backend/mod.rs` sits at 782 lines, so its edit stays a comment.
+- Analyzers: going by the buffers in `waveform.rs` and `spectrum.rs`, the waveform analyzer alone
+  looks near 87 KiB and the spectrum one at least 120 KiB, above the audit's 110 to 170 KiB for
+  both. The measurement decides.
+- Now Playing pair: three release sites, not one (`now_playing/up_next.rs:145`,
+  `shell/mini_player.rs:43-47` in `follow_artwork`, and `:92` on the miniplayer exit), and the
+  `follow_artwork` closures hold no `weak` today. `globals/player.slint:130` says "Neither slot is
+  ever cleared" and needs the same update as the rule. `release_hero_slots!`
+  (`callbacks/macros.rs:165-172`) already clears the detail globals' blur pairs, so the rule's
+  "one such site" is untrue today. The miniplayer drain keeps the stack mounted after
+  `set-shown(false)`, so clear only the inactive slot, or defer the clear by at least `dur-med`
+  and re-check `renders_artwork()`.
+- Tag preview: `decode_cover_preview` has a second caller, `tags/open.rs:114`, which decodes the
+  track's stored artwork as the dialog opens and gains the same. `decode_jpeg_scaled`'s doc
+  ("Every caller passes a store path") stops being true. `bounded_decode.rs` walks three spellings,
+  `ImageReader::open(` among them, and stays green. Only `cover_thumbs.rs:599` pairs
+  `large_decode_guard` with `decode_capped_to` today.
+
 ## Phase 4: run scan work on a pool that ends with the scan
+
+Status: implemented and spot-checked 2026-10-05; its rows wait for the checkpoint after 1–7.
 
 Where: the global-pool `par_iter`s at `library/settings/folders.rs:274`,
 `media/ingest/scanner.rs:53`, `database/queries/ingest.rs:335`,
 `tasks/file_event_processor/reconcile.rs:63`, `tasks/rating_import.rs:124` and
-`tasks/retroactive_hash.rs:41`.
+`tasks/retroactive_hash.rs:41`, plus `library/import.rs` (drag-and-drop, open-with and playlist
+import), which reaches `scanner.rs:53` and `ingest.rs:335` through the same two functions.
 
 They all run on rayon's global pool, which is built on first use with one thread per logical CPU
 and never exits: 16 threads here, alive from the boot reconcile to quit. The reconcile's
@@ -260,42 +340,71 @@ scratch in a thread-local (`image_decode.rs:258`).
 default `rayon` feature, and every colour JPEG it decodes runs its colour pass through
 `par_chunks_mut`, with a parallel component decode on top past 128 × 128. On a rayon worker that
 work stays on the worker's own pool; anywhere else it builds the global one: the bar's cover
-warm at boot (`shell/bridge.rs:98` → `warm_vm_cover`, on the blocking pool), Now Playing and the
-detail heroes (`artwork_cache.rs:113`), Material You, and the inline decodes the queue sheet and
+warm at boot (first through `boot/ui_setup/hydrate.rs:51` → `warm_vm_cover`, then
+`shell/bridge.rs:98`, both on the blocking pool), Now Playing and the detail heroes
+(`artwork_cache.rs:113`), Material You, and the inline decodes the queue sheet and
 `grid_cover_blocking` run on the UI thread. Any of those brings back all 16 threads.
 
-- [ ] Build rayon's global pool small and named at startup (`ThreadPoolBuilder::build_global`
-      right after the runtime, ahead of the first rayon use), so `jpeg-decoder` keeps a home that
-      costs two threads. The two alternatives each cost something this one doesn't. Turning off
-      `jpeg-decoder`'s default features spawns and joins OS threads per decode, the churn
-      `TAG_WRITE_POOL`'s doc argues against. Routing those decodes through `cover-decode` queues
-      the UI thread's inline decodes behind a grid prewarm. Time a Now Playing open before and
-      after.
-- [ ] One helper owns the scoped pool for the jobs: built at today's width, dropped at the end of
-      the job. It lives in `melodia-store`, the lowest crate among the six sites, which `melodia-app`
-      already names; nothing re-exports it. `library/mbid.rs:133` builds its own pool per call and
-      folds into the helper.
-- [ ] A scan's three stages are separate `spawn_blocking` closures with `.await`s between them
+Rayon serves injected work only after local and stolen work, so while a scan saturated the global
+pool every one of those UI-thread decodes waited for it to drain. Moving scans off that pool ends
+the wait as well.
+
+- [x] Build rayon's global pool small and named at startup: two threads (`rayon-{i}`,
+      `GLOBAL_RAYON_THREADS`), built in `main.rs` right after the runtime and ahead of
+      `AppState::init`, so `jpeg-decoder` keeps a home that costs two threads. The binary gained a
+      direct `rayon` dependency for it. The two alternatives each cost something this one doesn't.
+      Turning off `jpeg-decoder`'s default features spawns and joins OS threads per decode, the
+      churn `TAG_WRITE_POOL`'s doc argues against. Routing those decodes through `cover-decode`
+      queues the UI thread's inline decodes behind a grid prewarm.
+- [x] `ScanPool` (`melodia-store`'s `media/ingest/scan_pool.rs`) owns the scoped pool: one thread
+      per file up to one per core, named `scan-{i}`, ended by the last clone's drop. A pass over no
+      files, and a failed build, run on the global pool. `library/mbid.rs` folded in through
+      `for_files_capped`, keeping its `MBID_WRITE_THREADS` cap and losing its hand-rolled fallback.
+- [x] A scan's three stages are separate `spawn_blocking` closures with `.await`s between them
       (`folders.rs:271`, `:329`, then `ingest.rs:333` per chunk), so no single `install` covers
-      them. The job holds the pool in an `Arc` and hands it to each closure, which gives
-      `ingest_scanned_files` a parameter.
-- [ ] Name both pools' threads within 15 bytes (`scan-{i}` and one for the global pool), and add
-      each file that names through a closure to `RUNTIME_NAMED` in
-      `crates/melodia/tests/packaging.rs`, which holds that list to an exact count.
-- [ ] Small watcher batches stay sequential rather than paying for a pool; `reconcile.rs:63` runs
-      today on a batch of one file.
-- [ ] `TAG_WRITE_POOL` (`library/tags.rs:49`) keeps its four threads after the first tag write. Leave
-      it: building one per call is what its doc argues against.
-- [ ] `cover_thumbs.rs` falls back to the global pool in three places when its decode pool fails
-      to build (`shrink_to_proxy`, `schedule` at `:439`, `prewarm`). Leave them; after this phase
-      that pool is the small one.
-- [ ] Update the doc comments that say "Rayon worker" where the scratch cap is argued.
+      them. The walk closure builds the pool once it knows the file count and hands it out; the
+      parse closure takes a clone, and `ingest_scanned_files` takes `&ScanPool`. `import.rs` does
+      the same.
+- [x] `RUNTIME_NAMED` in `crates/melodia/tests/packaging.rs` holds three files now:
+      `cover_thumbs.rs`, `scan_pool.rs` and `main.rs`.
+- [x] Small watcher batches pay only for what they use: the pool is sized to the batch, so one file
+      costs one thread for its length. That replaced the threshold this item first asked for.
+- [x] `TAG_WRITE_POOL` (`library/tags.rs:49`) keeps its four threads after the first tag write, and
+      `cover_thumbs.rs`'s three global-pool fallbacks stay. Both untouched, their docs updated.
+- [x] Docs: `image_decode.rs`'s scratch-cap wording, `cover_thumbs.rs`'s and `tags.rs`'s
+      "`num_cpus`-wide global pool", `rating_import.rs`'s `PAGE_ROWS`, `CLAUDE.md`'s and
+      `melodia-artwork/Cargo.toml`'s "the one rayon pool that names its threads", and
+      `.claude/rules/rayon.md`'s Thread Pool section.
+- [x] Spot check, 2026-10-05, the installed 0.18.0 RPM against this branch's release build. The
+      512-track rescan was swapped for a forced rescan of the phase 0 library, since an unchanged
+      rescan finishes too fast to time.
+      - **Idle on the dev library** (footprint script, baseline protocol): threads 45 → 31,
+        `melodia-bg` 19 → 3 beside `rayon-0` and `rayon-1`, memory maps 574 → 540, Anonymous
+        34.3 → 33.9 MiB, USS 87.7 → 86.2 MiB, CPU 0.07% → 0.08%.
+      - **Now Playing opened** on the dev library: 47 threads against 31. Neither build's rayon
+        pool grew; 0.18.0's one extra was a tokio blocking thread (`melodia-bg` 20 → 21), which
+        tokio drops after 10 s idle. The open
+        itself wasn't timed in the app, which reports nothing for it; the decode it waits on, the
+        one part this phase touches, was timed outside the app over the 190 stored covers × 20
+        with a 2- and a 16-thread global pool: median 463–472 µs against 441–474 µs, p99
+        1.51–1.53 ms against 1.48–1.83 ms.
+      - **First scan of the phase 0 library** into an empty root, three alternating runs each,
+        from the "Auto-added" log line to "Watching folder": 2.97 (cold), 2.58, 2.56 s against
+        2.55, 2.48, 2.52 s. Peak RssAnon 189–197 against 191–195 MiB. `scan-*` peaked at 16
+        during the pass; threads after it 45–46 against 31–33.
+      - **Forced rescan** (every file restamped, re-parsed by the boot reconcile): 4.34, 4.30,
+        4.17 s against 4.23, 4.16, 4.03 s. Peak RssAnon 242–247 against 239–246 MiB.
+      - Not exercised: the resizer scratch a scan worker now hands back. The phase 0 library
+        carries no covers, so no scan resized one.
+      - Watch at the checkpoint: RssAnon settled after a first scan at 116–131 MiB on this branch
+        against 117–119 MiB on 0.18.0, and after a rescan at 134–150 against 145–155 MiB. Three
+        runs show no trend either way.
 
 Memory: 14 fewer idle threads on this machine (the global pool's 16 become two), their touched
 stacks, and up to 32 MiB of resizer scratch after a scan that stored oversized covers. All three
-baseline rows already carry the 16, so Idle should move. Measure the thread count after boot,
-after opening Now Playing and after a rescan.
-Cost: one pool build per scan. Time a forced full rescan on the phase 0 library before and after.
+baseline rows already carry the 16, so Idle should move.
+Cost: one pool build per pass. Two passes running at once (the boot reconcile beside the rating
+import) each get a full-width pool where they used to share one.
 
 ## Phase 5: parse and ingest a scan in chunks
 
@@ -371,6 +480,21 @@ also loaded at boot with the feature off, which costs something only once
 Memory: an estimated 10 MB transient per library change at 50k, and only with the feature on. A row
 is about 350 to 400 B, so that figure assumes 25k to 35k tracks without an MBID.
 Risk: low.
+
+Sizing pass, 2026-10-05:
+
+- Advance the cursor off the raw page's last id, not the filtered page's, or a page of rows already
+  attempted ends the walk. `rating_import_tests`' `a_page_holding_no_ratings_does_not_end_the_walk`
+  is the test to copy.
+- `Abandoned`, the 429 retry and shutdown have to break the outer page loop, and `looked_up`
+  accumulates across pages so `summarize` still works.
+- `mbid_backfill_tests` pins the literal `"async fn run_sweep"` and forbids `bump(` in the file.
+- The kick clears and persists `attempted` whether or not a token exists. Decide whether it still
+  does once loading waits for a token.
+- Paging bounds the peak, not the work: every library change still walks the eligible table, a page
+  at a time.
+- `load_attempted` reads through blocking `std::fs` on a runtime worker; `atomic_file.rs:36` has the
+  async twin.
 
 ## Optional, after discussing
 
@@ -478,4 +602,5 @@ Risk: medium, on move detection. Only with a test that moves a folder across the
   (`rust-performance.md`, `tasks/heap_trim.rs`).
 
 When phases 1 to 7 are in and checkpointed, and each optional phase is either in and checkpointed or
-declined, this plan is deleted.
+declined, this plan is deleted, and `~/Development/melodia-measure` and
+`~/Development/melodia-scale-library` go with it.

@@ -106,6 +106,8 @@ slint.workspace = true
 tokio.workspace = true
 async-compat.workspace = true
 log.workspace = true
+# Only to shape rayon's global pool before its first use, which nothing later can.
+rayon.workspace = true
 
 [target.'cfg(target_os = "windows")'.build-dependencies]
 winresource.workspace = true

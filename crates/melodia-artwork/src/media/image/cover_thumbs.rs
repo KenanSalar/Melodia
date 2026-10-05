@@ -77,10 +77,10 @@ struct Cached {
 }
 
 /// Bounded Rayon pool for everything this tier hands off — the prewarm, the scheduled drain and
-/// the proxy shrink. Each decode briefly holds a full-resolution `DynamicImage`, so fanning across
-/// the `num_cpus`-wide global pool would let that many coexist at the peak; a small dedicated one
-/// bounds that *and* isolates the burst from the library scanner. `None` if it fails to build, in
-/// which case every caller falls back to the global pool.
+/// the proxy shrink. Each decode briefly holds a full-resolution `DynamicImage`, so this pool's
+/// width is how many coexist at the peak. Its own pool also keeps a prewarm burst off the global
+/// one, which the UI thread's inline decodes wait on. `None` if it fails to build, in which case
+/// every caller falls back to the global pool.
 static DECODE_POOL: OnceLock<Option<rayon::ThreadPool>> = OnceLock::new();
 
 /// Sized to half the logical cores, clamped — the knob trading prewarm throughput against the

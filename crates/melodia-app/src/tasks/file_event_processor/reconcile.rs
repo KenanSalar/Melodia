@@ -12,6 +12,7 @@ use melodia_core::error::AppResult;
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
 use melodia_store::media::ingest::metadata::{extract_date_modified, extract_or_filename_row};
+use melodia_store::media::ingest::scan_pool::ScanPool;
 use melodia_store::media::ingest::watcher::FileEvent;
 
 /// Batch size threshold above which stats triggers are disabled for bulk processing.
@@ -59,24 +60,26 @@ async fn extract_metadata_batch(
     let cover_cache = cover_cache.clone();
     let extracted = tokio::task::spawn_blocking(move || {
         use rayon::prelude::*;
-        paths_to_extract
-            .into_par_iter()
-            .filter_map(|path| {
-                match extract_or_filename_row(&path, &artwork_dir, &cover_cache, false) {
-                    Ok(meta) => Some((path, meta)),
-                    // Only an unreadable file gets this far; unparseable tags come back
-                    // as a filename-derived row rather than a `None`.
-                    Err(e) => {
-                        log::warn!(
-                            "Skipping {}: {}",
-                            path.display(),
-                            melodia_core::error::describe(&e)
-                        );
-                        None
+        ScanPool::for_files(paths_to_extract.len()).install(|| {
+            paths_to_extract
+                .into_par_iter()
+                .filter_map(|path| {
+                    match extract_or_filename_row(&path, &artwork_dir, &cover_cache, false) {
+                        Ok(meta) => Some((path, meta)),
+                        // Only an unreadable file gets this far; unparseable tags come back
+                        // as a filename-derived row rather than a `None`.
+                        Err(e) => {
+                            log::warn!(
+                                "Skipping {}: {}",
+                                path.display(),
+                                melodia_core::error::describe(&e)
+                            );
+                            None
+                        }
                     }
-                }
-            })
-            .collect::<HashMap<_, _>>()
+                })
+                .collect::<HashMap<_, _>>()
+        })
     })
     .await;
 

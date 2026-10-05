@@ -251,7 +251,8 @@ pub fn encode_jpeg(source: RgbImage, quality: u8) -> image::ImageResult<Vec<u8>>
 ///
 /// The resizer holds one intermediate buffer sized by the *source* width against the target
 /// height and grows it without ever shrinking, so one outsized source would leave that thread
-/// holding it for the process lifetime — once per Rayon worker and once per blocking-pool thread.
+/// holding it for as long as it lives: until quit on the cover tiers' pools, the rest of the pass
+/// on a scan's.
 /// Clear of *twice* what a stored cover into the largest tile needs, because the buffer grows by
 /// `max(capacity * 2, required)`: gated on the request size instead, two ordinary tiers in the
 /// wrong order trip the reset that the steady state is the whole point of avoiding.

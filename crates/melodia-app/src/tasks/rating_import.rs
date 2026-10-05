@@ -24,14 +24,14 @@ use crate::tasks::{TaskSpawner, one_shot};
 use melodia_core::error::{AppError, AppResult};
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
+use melodia_store::media::ingest::scan_pool::ScanPool;
 use melodia_store::media::ingest::{metadata, rating_tags};
 
 /// Tracks whose paths are held in memory at once, and whose tags are parsed in one fan-out.
 ///
 /// The predicate selects the whole library on the run that matters, so the page size is what keeps
 /// this pass off the RSS budget. Wide enough that the per-page round trip is noise beside the tag
-/// parses it feeds, and narrow enough to hand the global Rayon pool back between pages: the boot
-/// this runs on is the one the first-launch reconcile scan wants that pool for too.
+/// parses it feeds.
 const PAGE_ROWS: i64 = 2_000;
 
 /// Run the import unless this install has already had one.
@@ -91,9 +91,11 @@ async fn import_into(db: &DbPool, page_rows: i64) -> AppResult<usize> {
         };
         after_id = last_id;
 
-        let found = tokio::task::spawn_blocking(move || read_each(&page))
-            .await
-            .map_err(|e| AppError::scanner("Rating import task panicked", e))?;
+        let found = tokio::task::spawn_blocking(move || {
+            ScanPool::for_files(page.len()).install(|| read_each(&page))
+        })
+        .await
+        .map_err(|e| AppError::scanner("Rating import task panicked", e))?;
         if found.is_empty() {
             continue;
         }

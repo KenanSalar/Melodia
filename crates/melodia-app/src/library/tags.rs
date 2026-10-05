@@ -440,10 +440,10 @@ fn run_write_pass(
         FileWrite { id: *id, path: path.clone(), outcome }
     };
 
-    // Sequentially, rather than on the global pool, where the build failed. That pool is
-    // `num_cpus` wide, which is the number `TAG_WRITE_THREADS` exists to hold down, and it panics
-    // on first use if it could not build either. Both matter for the same reason: thread
-    // starvation is the only realistic way to arrive here.
+    // Sequentially, rather than on the global pool, where the build failed. Thread starvation is
+    // the only realistic way to arrive here, and the global pool panics on first use if that kept
+    // it from building too. Where it did build, it is the pool the UI thread's inline decodes wait
+    // on.
     match TAG_WRITE_POOL.as_ref() {
         Some(pool) => pool.install(|| rows.par_iter().map(write_one).collect()),
         None => rows.iter().map(write_one).collect(),

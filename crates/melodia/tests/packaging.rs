@@ -27,13 +27,14 @@ const MIN_THREAD_NAMES: usize = 5;
 
 /// The files that compute a name rather than spelling one, where reading the literal measures
 /// nothing. Paths are relative to the crate root that holds them.
-///
-/// One entry rather than two: this pin used to name itself, having to spell the needle it greps
-/// for, and out here it is no longer in the corpus it walks.
-const RUNTIME_NAMED: [&str; 1] = [
+const RUNTIME_NAMED: [&str; 3] = [
     // `cover-decode-{i}`, whose budget is the prefix plus the widest index the decode pool's
     // clamp can reach; raising that clamp is a thread-name change.
     "media/image/cover_thumbs.rs",
+    // `scan-{i}`, sized to the core count, which leaves the index ten digits.
+    "media/ingest/scan_pool.rs",
+    // `rayon-{i}` over `GLOBAL_RAYON_THREADS`.
+    "melodia/main.rs",
 ];
 
 /// Linux keeps `TASK_COMM_LEN` bytes of a thread name and std truncates ahead of it rather than

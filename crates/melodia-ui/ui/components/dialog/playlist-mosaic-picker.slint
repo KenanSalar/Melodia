@@ -14,8 +14,8 @@ import { SectionButton } from "../settings/section-button.slint";
 //
 // The two cover tiers are picked by size. The 64 px candidate tiles take the
 // shared row tier (72 px, a near-exact fit), the ~110–220 px preview cells the
-// grid tier (448 px), whose downscale stays crisp where a 72 px source
-// pixelates badly.
+// grid tier, sized against the window's cards, which stays crisp where a 72 px
+// source pixelates badly.
 //
 // Rust owns selection (`Playlists.toggle-mosaic-candidate`) and caps it at 4 —
 // past that the toggle is a silent no-op.

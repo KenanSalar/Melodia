@@ -9,6 +9,7 @@ use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
 use melodia_core::utils::audio_ext::is_audio_extension;
 use melodia_store::database::{DbPool, queries};
+use melodia_store::media::ingest::scan_pool::ScanPool;
 use melodia_store::media::ingest::scanner::scan_files_parallel;
 
 /// Result of importing files into the library (shared by playlist and queue import).
@@ -77,8 +78,12 @@ async fn import_files(
         let artwork_dir = artwork_dir.to_path_buf();
         let new_paths_clone = new_paths.clone();
         let cover_cache_clone = cover_cache.clone();
-        let scanned_files = tokio::task::spawn_blocking(move || {
-            scan_files_parallel(&new_paths_clone, &artwork_dir, &cover_cache_clone, &|_, _| {})
+        let (scanned_files, pool) = tokio::task::spawn_blocking(move || {
+            let pool = ScanPool::for_files(new_paths_clone.len());
+            let scanned = pool.install(|| {
+                scan_files_parallel(&new_paths_clone, &artwork_dir, &cover_cache_clone, &|_, _| {})
+            });
+            (scanned, pool)
         })
         .await
         .map_err(|e| AppError::scanner("Scan task failed", e))?;
@@ -95,6 +100,7 @@ async fn import_files(
                 &queries::FolderResolution::FromParentDir,
                 &scan_timestamp,
                 false,
+                &pool,
             )
             .await?;
 

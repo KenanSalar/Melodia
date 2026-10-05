@@ -28,6 +28,7 @@ use melodia_core::error::describe;
 use melodia_core::utils::self_writes::SelfWrites;
 use melodia_store::database::{DbPool, queries};
 use melodia_store::media::ingest::metadata::extract_metadata;
+use melodia_store::media::ingest::scan_pool::ScanPool;
 use melodia_store::media::ingest::tag_writer;
 
 /// Same bound as the tag editor's fan-out ([`crate::library::tags`]): the write
@@ -130,13 +131,7 @@ fn run_write_pass(
             .collect::<Vec<FileWrite>>()
     };
 
-    match rayon::ThreadPoolBuilder::new().num_threads(MBID_WRITE_THREADS).build() {
-        Ok(pool) => pool.install(map_files),
-        Err(e) => {
-            log::warn!("mbid-write pool build failed ({e}); using the global pool");
-            map_files()
-        }
-    }
+    ScanPool::for_files_capped(resolved.len(), MBID_WRITE_THREADS).install(map_files)
 }
 
 /// FK-resolution memo key — identical to the tag editor's, so tracks sharing

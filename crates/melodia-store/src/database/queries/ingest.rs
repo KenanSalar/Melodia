@@ -7,6 +7,7 @@ use sqlx::AssertSqlSafe;
 use crate::database::MAX_BINDS_PER_STATEMENT;
 use crate::database::queries;
 use crate::database::queries::scan::NameCache;
+use crate::media::ingest::scan_pool::ScanPool;
 use melodia_core::entities::scan::ScannedFile;
 use melodia_core::error::AppError;
 
@@ -73,12 +74,14 @@ impl ResolveCaches {
 ///   the file is skipped entirely. If they have changed, metadata is re-extracted.
 /// - `update_artwork_on_existing`: when `true`, updates `artwork_path` on tracks that
 ///   already exist but have no artwork (used by library scan, not by file import).
+/// - `pool`: the pass's own, which the moved-file stat fans out on.
 pub async fn ingest_scanned_files(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     scanned_files: &[ScannedFile],
     folder_resolution: &FolderResolution,
     scan_timestamp: &str,
     update_artwork_on_existing: bool,
+    pool: &ScanPool,
 ) -> Result<IngestResult, AppError> {
     let estimated = scanned_files.len();
     let mut caches = ResolveCaches::with_capacity_for(estimated);
@@ -135,7 +138,7 @@ pub async fn ingest_scanned_files(
     // rest are treated as moves.
     let candidate_old_paths: Vec<String> =
         hash_to_existing.values().map(|(_, p)| p.clone()).collect();
-    let existing_old_paths_present = batch_stat_existence(candidate_old_paths).await;
+    let existing_old_paths_present = batch_stat_existence(candidate_old_paths, pool).await;
 
     // Collect (file_path, artwork_path) for unchanged-but-missing-artwork
     // tracks instead of issuing one UPDATE per row. Single batched UPDATE
@@ -314,28 +317,31 @@ async fn batch_lookup_by_hash(
     Ok(out)
 }
 
-/// Run `Path::exists()` over `paths` in parallel on a blocking thread pool,
-/// returning the subset that's actually present on disk. Lifts the syscall
-/// out of the writer transaction so the writer connection isn't held while
-/// the kernel walks inodes.
 /// Below this threshold the rayon thread-pool overhead dominates the
 /// savings — small move-detection batches (the common case during
 /// incremental rescans) walk sequentially. Per `.claude/rules/rayon.md`.
 const STAT_PAR_THRESHOLD: usize = 32;
 
-async fn batch_stat_existence(paths: Vec<String>) -> HashSet<String> {
+/// Run `Path::exists()` over `paths` in parallel on a blocking thread pool,
+/// returning the subset that's actually present on disk. Lifts the syscall
+/// out of the writer transaction so the writer connection isn't held while
+/// the kernel walks inodes.
+async fn batch_stat_existence(paths: Vec<String>, pool: &ScanPool) -> HashSet<String> {
     if paths.is_empty() {
         return HashSet::new();
     }
     if paths.len() < STAT_PAR_THRESHOLD {
         return paths.into_iter().filter(|p| std::path::Path::new(p).exists()).collect();
     }
+    let pool = pool.clone();
     tokio::task::spawn_blocking(move || {
-        paths
-            .par_iter()
-            .filter(|p| std::path::Path::new(p).exists())
-            .cloned()
-            .collect::<HashSet<String>>()
+        pool.install(|| {
+            paths
+                .par_iter()
+                .filter(|p| std::path::Path::new(p).exists())
+                .cloned()
+                .collect::<HashSet<String>>()
+        })
     })
     .await
     .unwrap_or_default()

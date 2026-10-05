@@ -65,9 +65,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     //      cannot be registered away the way a callback body can.
     //   2. `current-artwork` — the one `image`-typed property, which has
     //      no Slint default literal and so can only be reset from Rust.
-    //      This is the ~603 KiB `SharedPixelBuffer` Arc pulled from the
-    //      playlist grid-tier LRU at dialog-open; dropping it here releases
-    //      it on the same tick the body branch unmounts.
+    //      This is the `SharedPixelBuffer` Arc the dialog opened with, the
+    //      shared grid tier's or the detail hero's; dropping it here
+    //      releases it on the same tick the body branch unmounts.
     //
     // Pair the Arc drop with an off-thread `allocator::trim()` (parity with
     // `release_detail_artwork`) so glibc returns the freed pages instead of
