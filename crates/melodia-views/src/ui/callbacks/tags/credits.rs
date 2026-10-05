@@ -9,6 +9,7 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
+use crate::ui::util::opt_shared;
 use melodia_core::entities::artist::{ArtistCredit, CreditedArtist};
 use melodia_ui::{AppWindow, ArtistCreditRow, TagEditor};
 
@@ -125,7 +126,7 @@ fn patch_credit_row(
 /// written rather than having to picture the join phrases in place.
 fn refresh_preview(ui: &AppWindow, session: &Rc<RefCell<TagSession>>, field: usize) {
     let credit = credit_from_model(ui, field, &session.borrow().join_phrases);
-    let line = SharedString::from(credit.line().unwrap_or_default());
+    let line = opt_shared(credit.line());
     let te = ui.global::<TagEditor>();
     if field == CREDIT_ALBUM_ARTIST {
         te.set_album_artist_preview(line);

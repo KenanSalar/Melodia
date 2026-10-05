@@ -22,6 +22,7 @@ use async_compat::Compat;
 use slint::{ComponentHandle, SharedString};
 
 use crate::ui::launcher;
+use crate::ui::util::opt_shared;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::integrations::ScrobbleFlags;
@@ -39,12 +40,10 @@ use melodia_ui::{AppWindow, Dialog, ScrobbleUi, Settings};
 fn paint_status(ui: &AppWindow, status: &ScrobbleStatus) {
     let g = ui.global::<Settings>();
     g.set_scrobble_lastfm_connected(status.lastfm.connected);
-    g.set_scrobble_lastfm_username(status.lastfm.username.clone().unwrap_or_default().into());
+    g.set_scrobble_lastfm_username(opt_shared(status.lastfm.username.as_deref()));
     g.set_scrobble_lastfm_enabled(status.lastfm.enabled);
     g.set_scrobble_listenbrainz_connected(status.listenbrainz.connected);
-    g.set_scrobble_listenbrainz_username(
-        status.listenbrainz.username.clone().unwrap_or_default().into(),
-    );
+    g.set_scrobble_listenbrainz_username(opt_shared(status.listenbrainz.username.as_deref()));
     g.set_scrobble_listenbrainz_enabled(status.listenbrainz.enabled);
     g.set_scrobble_lastfm_love(status.lastfm.love_enabled);
     g.set_scrobble_listenbrainz_love(status.listenbrainz.love_enabled);

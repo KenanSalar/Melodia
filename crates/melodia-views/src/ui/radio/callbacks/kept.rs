@@ -11,6 +11,7 @@ use slint::{ComponentHandle, Model, SharedString, Weak};
 use crate::ui::callbacks::{next_sort, persist_view_sort, persisted_sort};
 use crate::ui::radio::{RadioTab, RadioUi, kept};
 use crate::ui::track_list_view::view_id;
+use crate::ui::util::opt_shared;
 use melodia_app::library;
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
@@ -156,10 +157,10 @@ fn open_editor(radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>, id: i64) {
         // The user's own answers, never the resolved ones: these fields are what they may change,
         // and seeding from `website()` or `genre()` would offer a directory value up for editing
         // by way of the save that follows.
-        form.set_website(SharedString::from(station.local_homepage.unwrap_or_default()));
-        form.set_logo_url(SharedString::from(station.local_favicon_url.unwrap_or_default()));
-        form.set_genre(SharedString::from(station.local_tags.unwrap_or_default()));
-        form.set_country(SharedString::from(station.local_country.unwrap_or_default()));
+        form.set_website(opt_shared(station.local_homepage));
+        form.set_logo_url(opt_shared(station.local_favicon_url));
+        form.set_genre(opt_shared(station.local_tags));
+        form.set_country(opt_shared(station.local_country));
         form.set_can_edit_website(can_website);
         form.set_can_edit_logo(can_logo);
         form.set_can_edit_genre(can_genre);

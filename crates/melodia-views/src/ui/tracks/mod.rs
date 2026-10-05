@@ -123,7 +123,8 @@ fn install_selection_model(ui: &AppWindow) {
     ui.global::<Tracks>().set_selected_ids(ModelRc::from(model));
 }
 
-/// Build a track-list row for the Slint model, every field but the title drawn from `pool`.
+/// Build a track-list row for the Slint model, every text field but the title, which rarely
+/// repeats, drawn from `pool`.
 ///
 /// Every field is `Send`, covers included — a row carries only its artwork *path* and
 /// `RowCovers.request` resolves the thumbnail per instantiated row on the Slint side — so this

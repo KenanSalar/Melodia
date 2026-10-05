@@ -521,7 +521,10 @@ Each row allocates its own artist, album, genre, artwork path and duration strin
       `opt_shared` takes `Option<impl AsRef<str>>`, so the Now Playing chips' formatted values
       and `radio/rows.rs`'s inline form go through it too. Every `SharedString::from("")` and
       `"".into()` became `SharedString::default()`, `updater_daily.rs` in `melodia-app` included,
-      and Browse's disk-only row fills from `TrackListRow::default()`.
+      and Browse's disk-only row fills from `TrackListRow::default()`. The one-off writes that
+      spelled the same thing as `unwrap_or_default()` take it as well: the Output card's device
+      name, the two scrobbling usernames, the radio form's four seeds and the tag editor's
+      credit previews and Summary strings.
 - [x] The detail conversions take the same interner unless phase A below lands first.
 - Not interned: the queue sheet. `queue_sheet/rows.rs` rebuilds every row on the UI thread on
   each queue mutation, every frame of a drag included, and the sheet holds its rows only while

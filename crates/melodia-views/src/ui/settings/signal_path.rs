@@ -105,7 +105,7 @@ fn paint(ui: &AppWindow, path: Option<&SignalPath>) {
     );
     g.set_source_rate(source_rate.into());
     g.set_device_rate(device_rate.into());
-    g.set_device_name(device.device_name.clone().unwrap_or_default().into());
+    g.set_device_name(util::opt_shared(device.device_name.as_deref()));
     g.set_device_period(
         device
             .period
