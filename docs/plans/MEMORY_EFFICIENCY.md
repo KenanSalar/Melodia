@@ -64,6 +64,16 @@ The setup a checkpoint reproduces, or names where it differs:
   scenarios.
 - **Launches:** Idle came from a first launch with a different song selected, the two playing
   windows from a second launch of the same build.
+- **Shader cache:** launch every new binary once, unmeasured, before its first measured run. The
+  NVIDIA driver keys its shader disk cache to the executable, so a binary's first launch compiles
+  FemtoVG's shaders in-process, and what the compile allocates stays live for the whole session.
+  On the phase 0 library on 2026-10-05 that was 101.5–104.0 MiB of Anonymous with the cache warm
+  against 140.2–146.7 MiB on a fresh copy of the binary or under `__GL_SHADER_DISK_CACHE=0`. It is
+  expected and not Melodia's to fix: glibc counts it as in use rather than held free,
+  `malloc_trim(0)` returned under 0.5 MiB of it, and `glReleaseShaderCompiler` with the context
+  current returned none. A user on that driver should meet it once per update, on the new binary's
+  first launch. `tools/trim_probe.sh` and `tools/compiler_release_probe.sh` in
+  `~/Development/melodia-measure` reproduce both halves.
 
 None of these scenarios has a grid page up, the queue sheet open or a scan running, which is where
 most of this plan acts. Phase 0 adds those states to the baseline.
@@ -448,7 +458,8 @@ library holds an estimated 75 to 100 MB of parsed tags at its peak.
       - **First scan:** peak RssAnon 68.4, 68.6 and 117.9 MiB against 187.4–192.3 on 0.18.0 and
         191.1–193.2 on phase 4. Wall 2.39 s on every run, against 2.39–2.49 and 2.39. Pass 1:
         68.6, 69.1 and 117.5 against 184.0–191.7 and 186.8–237.6. Each pass has one high
-        round-1 run, cause not found.
+        round-1 run, consistent with a binary's first launch compiling its shaders (Shader
+        cache, under the baseline's setup).
       - **Forced rescan:** peak 144.0–148.5 MiB against 242.3–247.5 and 243.2–252.9. Wall
         3.88–4.00 s against 3.88–4.00 and 3.85–3.97. Pass 1 read 142.3–142.8 MiB and 4.22–4.33 s
         against 3.86–4.24 for the other two. Pass 2 was run to check that time gap, and it
@@ -540,9 +551,9 @@ Each row allocates its own artist, album, genre, artwork path and duration strin
   - **USS:** median 165.8 → 152.0 MiB. RSS moved both ways (449, 394, 440 against 481, 373,
     429 MiB), being mostly file-backed.
   - **CPU, threads:** 0.13–0.15% against 0.12–0.15% of one core; 30–33 threads against 29–31.
-  - **Watch at the checkpoint:** the first round read about 50 MiB higher than the other two on
-    both builds (168.5 and 149.4 MiB). The before/after gap held through it, and no cause was
-    found.
+  - **Round 1** read about 50 MiB higher than the other two on both builds (168.5 and 149.4
+    MiB), each binary's first launch: consistent with the shader compile (Shader cache, under the
+    baseline's setup). The before/after gap held through it.
   - **The dev library** (`dev_idle.sh`, Idle on My Library ▸ Songs, one run each): 32.5 → 32.3 MiB
     Anonymous, USS 77.2 and 77.4 MiB, 31 threads on both. At 512 tracks the saving is about
     0.13 MB, under what a median sample resolves.
@@ -733,3 +744,10 @@ Risk: medium, on move detection. Only with a test that moves a folder across the
 When phases 1 to 6 are in and checkpointed, and each optional phase is either in and checkpointed or
 declined, this plan is deleted, and `~/Development/melodia-measure` and
 `~/Development/melodia-scale-library` go with it.
+
+The binaries in `melodia-measure/bin/` sit outside `target/`, so each launch counts as a tarball
+install and rewrites the per-user launcher, `~/.local/share/applications/com.github.kenansalar.melodia.desktop`,
+and its metainfo, `~/.local/share/metainfo/com.github.kenansalar.melodia.metainfo.xml`, to point at
+itself. Both shadow the RPM's own entries, so once `bin/` is gone the app-menu entry points at a
+missing binary. They are deleted with `melodia-measure`, and only after Kenan says yes: ask first,
+naming both paths, and never remove them as part of a cleanup step on your own.
