@@ -27,7 +27,9 @@ const MIN_THREAD_NAMES: usize = 5;
 
 /// The files that compute a name rather than spelling one, where reading the literal measures
 /// nothing. Paths are relative to the crate root that holds them.
-const RUNTIME_NAMED: [&str; 3] = [
+const RUNTIME_NAMED: [&str; 4] = [
+    // `tag-write-{i}` over `TAG_WRITE_THREADS`.
+    "library/tags.rs",
     // `cover-decode-{i}`, whose budget is the prefix plus the widest index the decode pool's
     // clamp can reach; raising that clamp is a thread-name change.
     "media/image/cover_thumbs.rs",

@@ -49,6 +49,7 @@ const TAG_WRITE_THREADS: usize = 4;
 static TAG_WRITE_POOL: LazyLock<Option<rayon::ThreadPool>> = LazyLock::new(|| {
     rayon::ThreadPoolBuilder::new()
         .num_threads(TAG_WRITE_THREADS)
+        .thread_name(|i| format!("tag-write-{i}"))
         .build()
         .inspect_err(|e| log::warn!("tag-write pool build failed ({e}); writing sequentially"))
         .ok()

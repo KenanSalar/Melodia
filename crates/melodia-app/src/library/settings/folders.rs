@@ -269,7 +269,7 @@ pub async fn scan_folder_internal(state: &AppState, folder_id: i64) -> Result<u3
     // for it on a cold cache or a network mount. Rayon's `collect` preserves the
     // sequential order, so `to_scan` stays byte-for-byte what it was before.
     //
-    // One pool serves the filter, the parse and the ingest's stat, and ends with this scan.
+    // One pool serves the filter, the parse and the ingest's stat, and ends with the ingest.
     let folder_path_owned = folder_path.to_path_buf();
     let (files, to_scan, pool) = tokio::task::spawn_blocking(move || {
         let files = collect_media_files(&folder_path_owned);
@@ -400,6 +400,7 @@ pub async fn scan_folder_internal(state: &AppState, folder_id: i64) -> Result<u3
         moved_count += result.moved_count;
         updated_count += result.updated_count;
     }
+    drop(pool);
 
     // --- Stage 2: orphan pruning + album-artwork roll-up + stats recalc
     // in one final transaction.

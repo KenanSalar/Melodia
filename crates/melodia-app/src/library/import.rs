@@ -103,6 +103,7 @@ async fn import_files(
                 &pool,
             )
             .await?;
+            drop(pool);
 
             imported_count = result.inserted_count;
 

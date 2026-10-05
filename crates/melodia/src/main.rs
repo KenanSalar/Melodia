@@ -21,9 +21,9 @@ use melodia_views::ui;
 use slint::ComponentHandle;
 use tokio::sync::watch;
 
-/// Rayon's global pool, which jpeg-decoder runs every colour JPEG's passes on. Two keeps a cover
-/// decode parallel without a worker per core idling from the first decode to quit; a pass over
-/// library files brings a `ScanPool` of its own rather than landing here.
+/// Rayon's global pool, where jpeg-decoder runs its passes for every JPEG decoded outside a pool.
+/// Two keeps a cover decode parallel without a worker per core idling from the first decode to
+/// quit; a pass over library files brings a `ScanPool` of its own rather than landing here.
 const GLOBAL_RAYON_THREADS: usize = 2;
 
 fn main() -> AppResult<()> {

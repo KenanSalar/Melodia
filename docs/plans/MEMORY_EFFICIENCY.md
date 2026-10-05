@@ -364,13 +364,14 @@ the wait as well.
       (`folders.rs:271`, `:329`, then `ingest.rs:333` per chunk), so no single `install` covers
       them. The walk closure builds the pool once it knows the file count and hands it out; the
       parse closure takes a clone, and `ingest_scanned_files` takes `&ScanPool`. `import.rs` does
-      the same.
-- [x] `RUNTIME_NAMED` in `crates/melodia/tests/packaging.rs` holds three files now:
-      `cover_thumbs.rs`, `scan_pool.rs` and `main.rs`.
+      the same. Both drop it after the ingest, ahead of the stats recalc.
+- [x] `RUNTIME_NAMED` in `crates/melodia/tests/packaging.rs` holds four files now:
+      `tags.rs`, `cover_thumbs.rs`, `scan_pool.rs` and `main.rs`.
 - [x] Small watcher batches pay only for what they use: the pool is sized to the batch, so one file
       costs one thread for its length. That replaced the threshold this item first asked for.
-- [x] `TAG_WRITE_POOL` (`library/tags.rs:49`) keeps its four threads after the first tag write, and
-      `cover_thumbs.rs`'s three global-pool fallbacks stay. Both untouched, their docs updated.
+- [x] `TAG_WRITE_POOL` (`library/tags.rs:49`) keeps its four threads after the first tag write, now
+      named `tag-write-{i}` rather than inheriting `melodia-bg` from the blocking thread that built
+      it, and `cover_thumbs.rs`'s three global-pool fallbacks stay. Docs updated for both.
 - [x] Docs: `image_decode.rs`'s scratch-cap wording, `cover_thumbs.rs`'s and `tags.rs`'s
       "`num_cpus`-wide global pool", `rating_import.rs`'s `PAGE_ROWS`, `CLAUDE.md`'s and
       `melodia-artwork/Cargo.toml`'s "the one rayon pool that names its threads", and

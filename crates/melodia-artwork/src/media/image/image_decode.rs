@@ -251,17 +251,16 @@ pub fn encode_jpeg(source: RgbImage, quality: u8) -> image::ImageResult<Vec<u8>>
 ///
 /// The resizer holds one intermediate buffer sized by the *source* width against the target
 /// height and grows it without ever shrinking, so one outsized source would leave that thread
-/// holding it for as long as it lives: until quit on the cover tiers' pools, the rest of the pass
-/// on a scan's.
+/// holding it for as long as the thread lives, which on the cover-decode and tag-write pools and
+/// the UI thread is until quit.
 /// Clear of *twice* what a stored cover into the largest tile needs, because the buffer grows by
 /// `max(capacity * 2, required)`: gated on the request size instead, two ordinary tiers in the
 /// wrong order trip the reset that the steady state is the whole point of avoiding.
 const RESIZER_SCRATCH_CAP: usize = 2 * 1024 * 1024;
 
 thread_local! {
-    /// One resizer per worker rather than one per cover: it owns the scratch buffers the
-    /// convolution runs in, capped by [`RESIZER_SCRATCH_CAP`]. Every caller is already on a Rayon
-    /// worker or a blocking task, so thread-local is the whole of the sharing needed.
+    /// One resizer per thread rather than one per cover: it owns the scratch buffers the
+    /// convolution runs in, capped by [`RESIZER_SCRATCH_CAP`].
     static RESIZER: RefCell<Resizer> = RefCell::new(Resizer::new());
 }
 
