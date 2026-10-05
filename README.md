@@ -134,8 +134,7 @@ MP3, FLAC, M4A/M4B (AAC and ALAC), raw AAC (`.aac`), Ogg Vorbis (`.ogg`, `.oga`)
 Seven locales (English, German, French, Spanish, Turkish, Greek, Italian), switchable at runtime with no restart.
 
 ### System integration
-- Scrobbling to **Last.fm** and **ListenBrainz**, each independently, with loved-track sync that catches your existing favorites up on connect, and a durable offline queue
-- Optional MusicBrainz auto-tagging, so loved tracks resolve even for a library with no MusicBrainz IDs
+- Scrobbling to **Last.fm** and **ListenBrainz**, each independently, with loved-track sync that catches your existing favorites up on connect, and a durable offline queue. A ListenBrainz love needs the track's MusicBrainz recording ID in its tags
 - **Discord Rich Presence** (off by default): title, artist, album, and optionally a cover looked up on Deezer, sent to your running Discord client. Nothing leaves the machine while it is off
 - OS media controls (MPRIS2 on Linux, SMTC on Windows) and media keys
 - A system-tray icon with playback controls, on by default, and an optional close-to-tray; both under Settings ▸ Interface

@@ -1667,32 +1667,14 @@ msgstr "Sincronizza i brani preferiti con ListenBrainz"
 msgid "Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)"
 msgstr "Segna come preferiti su ListenBrainz i brani che ami — attivandolo si sincronizzano i preferiti esistenti (richiede ID MusicBrainz)"
 
+msgid "MusicBrainz Picard adds these IDs to your files, identifying each track by its audio."
+msgstr "MusicBrainz Picard aggiunge questi ID ai tuoi file, identificando ogni brano dal suo audio."
+
 msgid "Loved tracks"
 msgstr "Brani preferiti"
 
 msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
 msgstr "Melodia non è riuscita a riavviarsi. Chiudi e riapri l'app per applicare la modifica."
-
-msgid "Add MusicBrainz IDs to your music"
-msgstr "Aggiungi gli ID MusicBrainz alla tua musica"
-
-msgid "Look up and tag files so loves work on ListenBrainz"
-msgstr "Cerca ed etichetta i file così i preferiti funzionano su ListenBrainz"
-
-msgid "Look up missing IDs"
-msgstr "Cerca gli ID mancanti"
-
-msgid "Re-scan tracks that still have no MusicBrainz ID"
-msgstr "Rianalizza i brani che non hanno ancora un ID MusicBrainz"
-
-msgid "Look up"
-msgstr "Cerca"
-
-msgid "MusicBrainz IDs"
-msgstr "ID MusicBrainz"
-
-msgid "Best for files that already have correct artist and title tags. For loosely-tagged music (e.g. songs downloaded from YouTube), use MusicBrainz Picard instead — it identifies tracks by their audio, not their tags."
-msgstr "Ideale per i file che hanno già tag di artista e titolo corretti. Per musica con tag approssimativi (ad es. brani scaricati da YouTube), usa invece MusicBrainz Picard — identifica i brani dal loro audio, non dai tag."
 
 msgid "Connected as {}"
 msgstr "Connesso come {}"

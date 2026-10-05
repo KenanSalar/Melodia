@@ -41,31 +41,26 @@ export component ScrobblingSection inherits Rectangle {
     property <string> lb-scrobble-desc: @tr("Report each play to your ListenBrainz account");
     property <string> lb-loves-label: @tr("Sync loved tracks to ListenBrainz");
     property <string> lb-loves-desc: @tr("Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)");
-    property <string> mbid-label: @tr("Add MusicBrainz IDs to your music");
-    property <string> mbid-desc: @tr("Look up and tag files so loves work on ListenBrainz");
+    property <string> lb-picard-note: @tr("MusicBrainz Picard adds these IDs to your files, identifying each track by its audio.");
 
     // A cluster searches as one unit: the toggles' labels fold into the status
     // row's text, so matching any of them reveals the whole thing.
     property <bool> show-lastfm: row-visible(
         lastfm-label + " " + lastfm-scrobble-label + " " + lastfm-loves-label,
-        lastfm-scrobble-desc);
+        lastfm-scrobble-desc + " " + lastfm-loves-desc);
     property <bool> show-listenbrainz: row-visible(
         lb-label + " " + lb-scrobble-label + " " + lb-loves-label,
-        lb-scrobble-desc);
-    // MusicBrainz auto-tagging rides on the ListenBrainz token.
-    property <bool> show-mbid: Settings.scrobble-listenbrainz-connected
-        && row-visible(mbid-label, mbid-desc);
+        lb-scrobble-desc + " " + lb-loves-desc + " " + lb-picard-note);
 
     property <string> radio-label: @tr("Scrobble radio songs");
     property <string> radio-desc: @tr("Songs heard in full on a station go to your connected scrobbling services");
     // Here rather than on the Radio card, since this is where a reader looks for what gets
-    // scrobbled; it exists only while radio does, as the MusicBrainz rows exist only with
-    // ListenBrainz.
+    // scrobbled; it exists only while radio does.
     property <bool> show-radio: Settings.radio-enabled && row-visible(radio-label, radio-desc);
     property <bool> any-service-on: (Settings.scrobble-lastfm-connected && Settings.scrobble-lastfm-enabled)
         || (Settings.scrobble-listenbrainz-connected && Settings.scrobble-listenbrainz-enabled);
 
-    out property <bool> has-matches: show-lastfm || show-listenbrainz || show-mbid || show-radio;
+    out property <bool> has-matches: show-lastfm || show-listenbrainz || show-radio;
 
     VerticalLayout {
     if has-matches: SectionCard {
@@ -181,47 +176,23 @@ export component ScrobblingSection inherits Rectangle {
                 toggled(v) => { Settings.scrobble-listenbrainz-love-changed(v); }
             }
         }
-
-        // MusicBrainz auto-tagging — part of the ListenBrainz cluster, since its
-        // token is what resolves the ids.
-        if root.show-mbid: SettingRow {
-            icon: "auto_awesome";
-            label: root.mbid-label;
-            description: root.mbid-desc;
-            ToggleSwitch {
-                checked <=> Settings.scrobble-mbid-auto-tag;
-                toggled(v) => { Settings.scrobble-mbid-auto-tag-changed(v); }
-            }
-        }
-        // Worth stating because it decides whether the feature helps at all: the
-        // lookup is text-only, so it tidies an already-tidy library and Picard's
-        // fingerprinting is for a messy one. The `max-width` caps the copy into
-        // a reading column so it can't inflate the card.
-        if root.show-mbid: HorizontalLayout {
+        // Melodia doesn't look these IDs up, so the loves above reach only as far as the tags
+        // already do; this says where the rest come from. The `max-width` keeps the copy to a
+        // reading column so it can't inflate the card.
+        if root.show-listenbrainz && Settings.scrobble-listenbrainz-connected: HorizontalLayout {
             padding-left: Theme.pad-lg;
             padding-right: Theme.pad-lg;
             padding-bottom: Theme.pad-sm;
             Text {
-                text: @tr("Best for files that already have correct artist and title tags. For loosely-tagged music (e.g. songs downloaded from YouTube), use MusicBrainz Picard instead — it identifies tracks by their audio, not their tags.");
+                text: root.lb-picard-note;
                 color: Theme.text-muted;
                 font-size: Theme.font-size-sm;
                 wrap: word-wrap;
                 max-width: 480px;
             }
         }
-        if root.show-mbid && Settings.scrobble-mbid-auto-tag: SettingRow {
-            icon: "search";
-            label: @tr("Look up missing IDs");
-            description: @tr("Re-scan tracks that still have no MusicBrainz ID");
-            SectionButton {
-                label: @tr("Look up");
-                icon: "";
-                primary: false;
-                clicked => { Settings.scrobble-lookup-missing-mbids(); }
-            }
-        }
 
-        if root.show-radio && (root.show-lastfm || root.show-listenbrainz || root.show-mbid): SectionDivider {}
+        if root.show-radio && (root.show-lastfm || root.show-listenbrainz): SectionDivider {}
 
         // Greyed rather than hidden with no service on, so the switch is findable and says why
         // it can't be used yet.

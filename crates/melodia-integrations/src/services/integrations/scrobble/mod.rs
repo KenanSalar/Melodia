@@ -93,10 +93,6 @@ pub struct ScrobbleService {
     queue_path: PathBuf,
     /// Wakes the submitter task when a scrobble is enqueued.
     notify: Notify,
-    /// Wakes the MBID backfill task — on enabling auto-tagging or the manual
-    /// "look up missing ids" button. Separate from `notify` so a scrobble
-    /// enqueue doesn't spin the backfill and vice versa.
-    mbid_kick: Notify,
     /// The same lazy `OnceLock` as `AppState`'s client, so the
     /// whole app shares one connection pool built on first request.
     http: Arc<OnceLock<Client>>,
@@ -125,7 +121,6 @@ impl ScrobbleService {
             creds_path: paths.scrobble_credentials_path.clone(),
             queue_path: paths.scrobble_queue_path.clone(),
             notify: Notify::new(),
-            mbid_kick: Notify::new(),
             http,
             listenbrainz_base: listenbrainz::LB_API_BASE.to_owned(),
             status_tx,
@@ -202,29 +197,6 @@ impl ScrobbleService {
         credentials: Option<ListenBrainzCredentials>,
     ) -> AppResult<()> {
         self.persist_credentials_change(move |creds| creds.listenbrainz = credentials).await
-    }
-
-    /// The `ListenBrainz` token to use for MBID lookups — `Some` only when
-    /// auto-tagging is enabled **and** `ListenBrainz` is connected (the lookup
-    /// endpoint requires the user's token). Read synchronously from the shadow.
-    pub fn mbid_lookup_token(&self) -> Option<String> {
-        let runtime = self.runtime.read();
-        if runtime.flags.mbid_auto_tag {
-            runtime.credentials.listenbrainz.as_ref().map(|c| c.token.clone())
-        } else {
-            None
-        }
-    }
-
-    /// Wake the MBID backfill task to (re-)sweep the library — used by the
-    /// enable toggle and the manual "look up missing ids" button.
-    pub fn kick_mbid_backfill(&self) {
-        self.mbid_kick.notify_one();
-    }
-
-    /// Await the next MBID backfill kick.
-    pub async fn mbid_kicked(&self) {
-        self.mbid_kick.notified().await;
     }
 
     /// Number of listens + loves still queued for submission. The submitter loop

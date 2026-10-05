@@ -38,10 +38,3 @@ pub fn set_scrobble_listenbrainz_love_enabled(
         settings.scrobble.listenbrainz_love_enabled = enabled;
     })
 }
-
-/// Persist the `MusicBrainz` auto-tag toggle. Defaults to `false` on first launch.
-pub fn set_scrobble_mbid_auto_tag(state: &AppState, enabled: bool) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |settings| {
-        settings.scrobble.mbid_auto_tag = enabled;
-    })
-}

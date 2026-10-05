@@ -72,8 +72,8 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   `metadata::extract_or_filename_row` keeps a filename-derived row for a file whose tags won't
   parse, which is the only way Matroska and CAF reach the library at all; both scan sites use it
   (`scanner::scan_files_parallel`, `file_event_processor::reconcile`), so an `Err` there now means
-  a file that can't be *read*. `extract_metadata` stays strict, and the tag-write and MBID
-  re-reads depend on that: a row built from a parse that didn't happen would blank the track
+  a file that can't be *read*. `extract_metadata` stays strict, and the tag-write re-read
+  depends on that: a row built from a parse that didn't happen would blank the track
   instead of reporting the failure. Duration on a fallback row comes from
   `player::file_decode::probe_duration`, the one edge `media/` has into `player/`. Each half is
   argued at its own definition, including why identification is `FileType::from_buffer` and never

@@ -78,7 +78,6 @@ pub use replaygain::{
 pub use scrobble::{
     set_scrobble_lastfm_enabled, set_scrobble_lastfm_love_enabled,
     set_scrobble_listenbrainz_enabled, set_scrobble_listenbrainz_love_enabled,
-    set_scrobble_mbid_auto_tag,
 };
 pub use support::{mark_support_prompt_seen, record_launch};
 pub use updates::{

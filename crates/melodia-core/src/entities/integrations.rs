@@ -23,9 +23,6 @@ pub struct ScrobbleFlags {
     pub lastfm_love_enabled: bool,
     /// Mirror favorites to `ListenBrainz` recording feedback.
     pub listenbrainz_love_enabled: bool,
-    /// Auto-tag scanned tracks with their `MusicBrainz` Recording ID, into both
-    /// the DB and the file, so loves work on untagged libraries.
-    pub mbid_auto_tag: bool,
 }
 
 /// Discord Rich Presence toggles. Nothing lives outside `settings.json` here —

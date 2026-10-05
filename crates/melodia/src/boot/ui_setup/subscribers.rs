@@ -112,18 +112,6 @@ pub fn install_toast_bridge(
                         )
                     });
                 }
-                // The result of a user-triggered sweep, so it auto-dismisses
-                // rather than sticking like a failure.
-                ToastKind::MbidTagging => {
-                    notifications.show_auto_dismiss(
-                        NotificationParams::plain(
-                            "info",
-                            g.invoke_toast_mbid_title(),
-                            detail.into(),
-                        ),
-                        6000,
-                    );
-                }
                 // A restart that had nowhere to relaunch from: no dynamic
                 // detail, and it sticks because it asks the user to do
                 // something rather than reporting what happened.

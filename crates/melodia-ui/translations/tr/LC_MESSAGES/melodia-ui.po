@@ -1672,32 +1672,14 @@ msgstr "Beğenilen parçaları ListenBrainz ile eşitle"
 msgid "Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)"
 msgstr "Beğendiğin parçaları ListenBrainz'de beğenilmiş olarak işaretle — açtığında mevcut favorilerin eşitlenir (MusicBrainz kimlikleri gerekir)"
 
+msgid "MusicBrainz Picard adds these IDs to your files, identifying each track by its audio."
+msgstr "MusicBrainz Picard bu kimlikleri dosyalarına ekler ve her parçayı sesinden tanır."
+
 msgid "Loved tracks"
 msgstr "Beğenilen parçalar"
 
 msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
 msgstr "Melodia kendini yeniden başlatamadı. Değişikliği uygulamak için uygulamayı kapatıp yeniden açın."
-
-msgid "Add MusicBrainz IDs to your music"
-msgstr "Müziğine MusicBrainz kimliklerini ekle"
-
-msgid "Look up and tag files so loves work on ListenBrainz"
-msgstr "Beğeniler ListenBrainz'de çalışsın diye dosyaları arayıp etiketle"
-
-msgid "Look up missing IDs"
-msgstr "Eksik kimlikleri ara"
-
-msgid "Re-scan tracks that still have no MusicBrainz ID"
-msgstr "Hâlâ MusicBrainz kimliği olmayan parçaları yeniden tara"
-
-msgid "Look up"
-msgstr "Ara"
-
-msgid "MusicBrainz IDs"
-msgstr "MusicBrainz kimlikleri"
-
-msgid "Best for files that already have correct artist and title tags. For loosely-tagged music (e.g. songs downloaded from YouTube), use MusicBrainz Picard instead — it identifies tracks by their audio, not their tags."
-msgstr "Zaten doğru sanatçı ve başlık etiketlerine sahip dosyalar için idealdir. Gevşek etiketlenmiş müzik için (ör. YouTube'dan indirilen parçalar) bunun yerine MusicBrainz Picard kullanın — parçaları etiketlerinden değil, sesinden tanır."
 
 msgid "Connected as {}"
 msgstr "{} olarak bağlanıldı"

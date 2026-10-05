@@ -23,13 +23,7 @@ impl ScanPool {
     #[must_use]
     pub fn for_files(files: usize) -> Self {
         let cores = std::thread::available_parallelism().map_or(1, NonZero::get);
-        Self::for_files_capped(files, cores)
-    }
-
-    /// Returns a pool of one thread per file, up to `max_threads`.
-    #[must_use]
-    pub fn for_files_capped(files: usize, max_threads: usize) -> Self {
-        let threads = files.min(max_threads);
+        let threads = files.min(cores);
         if threads == 0 {
             return Self::default();
         }

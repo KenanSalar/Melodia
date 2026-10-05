@@ -48,9 +48,6 @@ pub fn spawn_background_tasks(
     // Watches the view-model/position seam, enqueues qualifying plays and
     // drains the durable queue. Inert until a provider is connected.
     tasks::scrobble::spawn(spawner, state);
-    // Auto-tags Recording IDs so loves work on an untagged library. Inert until
-    // enabled and ListenBrainz is connected.
-    tasks::mbid_backfill::spawn(spawner, state);
     // Projects the view-model into a Discord activity card. Inert until enabled;
     // started here when it already is, so the card connects while idle rather
     // than on the first track.

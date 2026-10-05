@@ -102,8 +102,7 @@ impl TagEditReport {
     ///
     /// Per file would be the obvious shape and is the wrong one here: a batch is however many
     /// tracks the user selected, the log rotates at a size, and nobody reads five thousand lines
-    /// saying the same thing. `mbid_backfill` logs per file because its set is structurally almost
-    /// always empty — every primary tag type maps the recording id — so it cannot flood.
+    /// saying the same thing.
     ///
     /// One path still survives per group, because a count alone cannot be chased: it names a file
     /// to open and the rest are the same edit against the same container.

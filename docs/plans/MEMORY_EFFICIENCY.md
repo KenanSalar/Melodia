@@ -494,7 +494,7 @@ Risk: low. The strings are never mutated, and `SharedString` compares by content
 
 Status: dropped 2026-10-05. It was implemented and passed the gate, then reverted before any
 commit, because the feature it pages is being removed: the auto-tagging matches on tag text and
-writes what it guessed into the user's files, where Picard identifies a track by its audio. The
+writes what it guessed into the user's files, and only a track's audio identifies it reliably. The
 removal takes the sweep, its query and the attempted set with it, so the memory this phase
 targeted goes away entirely.
 

@@ -1672,32 +1672,14 @@ msgstr "Συγχρονισμός αγαπημένων κομματιών με τ
 msgid "Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)"
 msgstr "Σημειώστε ως αγαπημένα στο ListenBrainz τα κομμάτια που αγαπάτε — η ενεργοποίηση συγχρονίζει τα υπάρχοντα αγαπημένα σας (απαιτεί αναγνωριστικά MusicBrainz)"
 
+msgid "MusicBrainz Picard adds these IDs to your files, identifying each track by its audio."
+msgstr "Το MusicBrainz Picard προσθέτει αυτά τα αναγνωριστικά στα αρχεία σας, αναγνωρίζοντας κάθε κομμάτι από τον ήχο του."
+
 msgid "Loved tracks"
 msgstr "Αγαπημένα κομμάτια"
 
 msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
 msgstr "Το Melodia δεν μπόρεσε να επανεκκινήσει. Κλείστε και ανοίξτε ξανά την εφαρμογή για να εφαρμοστεί η αλλαγή."
-
-msgid "Add MusicBrainz IDs to your music"
-msgstr "Προσθήκη αναγνωριστικών MusicBrainz στη μουσική σας"
-
-msgid "Look up and tag files so loves work on ListenBrainz"
-msgstr "Αναζήτηση και προσθήκη ετικετών ώστε τα αγαπημένα να λειτουργούν στο ListenBrainz"
-
-msgid "Look up missing IDs"
-msgstr "Αναζήτηση αναγνωριστικών που λείπουν"
-
-msgid "Re-scan tracks that still have no MusicBrainz ID"
-msgstr "Εκ νέου σάρωση κομματιών που δεν έχουν ακόμη αναγνωριστικό MusicBrainz"
-
-msgid "Look up"
-msgstr "Αναζήτηση"
-
-msgid "MusicBrainz IDs"
-msgstr "Αναγνωριστικά MusicBrainz"
-
-msgid "Best for files that already have correct artist and title tags. For loosely-tagged music (e.g. songs downloaded from YouTube), use MusicBrainz Picard instead — it identifies tracks by their audio, not their tags."
-msgstr "Ιδανικό για αρχεία που έχουν ήδη σωστές ετικέτες καλλιτέχνη και τίτλου. Για μουσική με ελλιπείς ετικέτες (π.χ. κομμάτια που κατεβάσατε από το YouTube), χρησιμοποιήστε το MusicBrainz Picard — αναγνωρίζει τα κομμάτια από τον ήχο τους, όχι τις ετικέτες τους."
 
 msgid "Connected as {}"
 msgstr "Συνδεδεμένος ως {}"
