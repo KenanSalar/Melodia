@@ -257,9 +257,21 @@ class TrackJob:
     cover: Cover
 
 
+# How hard LAME and the native AAC encoder search for a bit allocation. With the bitrate
+# set, a faster search changes how closely an encode tracks its source and little else;
+# 7 is LAME's own -f.
+LAME_FAST_SEARCH = ("-compression_level", "7")
+AAC_FAST_SEARCH = ("-aac_coder", "fast")
+
+
 def _mp3(rng: random.Random) -> Encoding:
     rate = rng.choice(("128k", "192k", "256k", "320k", "V0", "V2"))
-    quality = ("-q:a", rate[1]) if rate.startswith("V") else ("-b:a", rate)
+    if rate.startswith("V"):
+        # VBR spends whatever the search settles on, so a faster one would shrink V0 and V2
+        # below the bitrates real files carry.
+        quality = ("-q:a", rate[1])
+    else:
+        quality = ("-b:a", rate, *LAME_FAST_SEARCH)
     args = ("-c:a", "libmp3lame", *quality, "-id3v2_version", "0")
     return Encoding("mp3", "id3", "mp3", 44100, args, "mp3", rng.choice((3, 4)))
 
@@ -272,7 +284,7 @@ def _flac(rng: random.Random) -> Encoding:
 
 def _aac(rng: random.Random) -> Encoding:
     if rng.random() < 0.6:
-        codec = ("-c:a", "aac", "-b:a", rng.choice(("128k", "192k", "256k")))
+        codec = ("-c:a", "aac", "-b:a", rng.choice(("128k", "192k", "256k")), *AAC_FAST_SEARCH)
     else:
         codec = ("-c:a", "libfdk_aac", "-vbr", rng.choice(("3", "4", "5")))
     rate = rng.choice((44100, 48000))
