@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
 import functools
 import io
 import itertools
@@ -31,6 +32,7 @@ import random
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from collections import Counter
 from collections.abc import Iterator
@@ -573,6 +575,14 @@ VOICES = {
 }
 
 
+class Sound(NamedTuple):
+    """A voice holding one pitch for `hold` seconds."""
+
+    voice: Voice
+    pitch: float
+    hold: float
+
+
 @dataclass(frozen=True)
 class Part:
     """An instrument's level and place in the stereo field, from -1 (left) to 1 (right)."""
@@ -743,12 +753,20 @@ class Melodist:
 class Mixer:
     """A stereo buffer every part is summed into."""
 
-    def __init__(self, seconds: float, sample_rate: int) -> None:
-        self.sample_rate = sample_rate
-        self._buffer = np.zeros((int(seconds * sample_rate), 2), dtype=np.float32)
+    def __init__(self, frames: int, sample_rate: int) -> None:
+        self._sample_rate = sample_rate
+        self._buffer = np.zeros((frames, 2), dtype=np.float32)
+        self._sounds: dict[Sound, np.ndarray] = {}
+
+    def play(self, start: float, sound: Sound, part: Part) -> None:
+        """Adds `sound` at `start`, rendering it once: pads, bass lines and repeated phrases
+        replay the same sounds."""
+        if sound not in self._sounds:
+            self._sounds[sound] = sound.voice.render(sound.pitch, sound.hold, self._sample_rate)
+        self.add(start, self._sounds[sound], part)
 
     def add(self, start: float, wave: np.ndarray, part: Part) -> None:
-        first = int(start * self.sample_rate)
+        first = int(start * self._sample_rate)
         count = min(len(wave), len(self._buffer) - first)
         if count <= 0:
             return
@@ -759,14 +777,14 @@ class Mixer:
     def master(self, echo_delay: float, peak: float) -> np.ndarray:
         """Adds a ping-pong echo, scales the mix to `peak` and fades both ends."""
         buffer = self._buffer
-        delay = int(echo_delay * self.sample_rate)
+        delay = int(echo_delay * self._sample_rate)
         dry = buffer.copy()
         buffer[delay:, 0] += ECHO_GAIN * dry[:-delay, 1]
         buffer[delay:, 1] += ECHO_GAIN * dry[:-delay, 0]
         buffer *= peak / float(np.max(np.abs(buffer)))
-        fade_in = int(FADE_IN_SECONDS * self.sample_rate)
+        fade_in = int(FADE_IN_SECONDS * self._sample_rate)
         buffer[:fade_in] *= np.linspace(0, 1, fade_in, dtype=np.float32)[:, None]
-        fade_out = int(FADE_OUT_SECONDS * self.sample_rate)
+        fade_out = int(FADE_OUT_SECONDS * self._sample_rate)
         buffer[-fade_out:] *= np.linspace(1, 0, fade_out, dtype=np.float32)[:, None]
         return buffer
 
@@ -805,18 +823,22 @@ class Song:
         self._beat = 60 / self._rng.uniform(*self._style.bpm)
         self._bar = BEATS_PER_BAR * self._beat
         self._bar_count = fit_bars(job.target_seconds, self._bar)
-        self._mixer = Mixer(self._bar_count * self._bar + TAIL_SECONDS, job.encoding.sample_rate)
+        self._sample_rate = job.encoding.sample_rate
+        self.frames = int((self._bar_count * self._bar + TAIL_SECONDS) * self._sample_rate)
         self._key = Key(self._rng.randint(*TONIC_RANGE), self._rng.choice(SCALES))
         self._progression = self._rng.choice(PROGRESSIONS)
 
     def render(self) -> np.ndarray:
-        self._play_lead()
-        self._play_pad()
-        self._play_bass()
+        # Mixed here rather than built with the song, so a song holds no audio while the
+        # rest of its album renders.
+        mixer = Mixer(self.frames, self._sample_rate)
+        self._play_lead(mixer)
+        self._play_pad(mixer)
+        self._play_bass(mixer)
         if self._style.drums:
-            self._play_drums()
+            self._play_drums(mixer)
         peak = 10 ** (self._rng.uniform(*PEAK_DBFS) / 20)
-        return self._mixer.master(ECHO_BEATS * self._beat, peak)
+        return mixer.master(ECHO_BEATS * self._beat, peak)
 
     def _at(self, bar: int, beat: float) -> float:
         return bar * self._bar + beat * self._beat
@@ -841,7 +863,7 @@ class Song:
         bars[-1] = melodist.home(bars[-1][-1])
         return bars
 
-    def _play_lead(self) -> None:
+    def _play_lead(self, mixer: Mixer) -> None:
         melodist = Melodist(self._rng, self._key.notes(MELODY_SPAN))
         voice = VOICES[self._rng.choice(self._style.leads)]
         pan = self._rng.uniform(*LEAD_PAN)
@@ -850,32 +872,32 @@ class Song:
                 start = self._at(bar, event.beat)
                 if self._style.swing and event.beat % 1 == 0.5:
                     start += SWING_DELAY_BEATS * self._beat
-                wave = voice.render(melodist.pitch(event), event.length * self._beat * LEGATO, self._mixer.sample_rate)
-                self._mixer.add(start, wave, Part(LEAD_GAIN * self._rng.uniform(*LEAD_VELOCITY), pan))
+                sound = Sound(voice, melodist.pitch(event), event.length * self._beat * LEGATO)
+                mixer.play(start, sound, Part(LEAD_GAIN * self._rng.uniform(*LEAD_VELOCITY), pan))
 
-    def _play_pad(self) -> None:
+    def _play_pad(self, mixer: Mixer) -> None:
         for bar in range(self._bar_count):
             chord = self._key.chord(self._degree(bar), self._style.chord_size, octave=-1)
             for pitch, pan in zip(chord, PAD_PANS):
-                wave = VOICES["pad"].render(pitch, self._bar * PAD_HOLD, self._mixer.sample_rate)
-                self._mixer.add(self._at(bar, 0), wave, Part(self._style.pad_gain, pan))
+                sound = Sound(VOICES["pad"], pitch, self._bar * PAD_HOLD)
+                mixer.play(self._at(bar, 0), sound, Part(self._style.pad_gain, pan))
 
-    def _play_bass(self) -> None:
+    def _play_bass(self, mixer: Mixer) -> None:
         for bar in range(self._bar_count):
             root, third, fifth = self._key.chord(self._degree(bar), 3, octave=-2)
             tones = (root, third, fifth, root + 12)
             pattern = BASS_PATTERNS["held" if self._is_last(bar) else self._style.bass]
             for beat, length, tone in pattern:
-                wave = VOICES["bass"].render(tones[tone], length * self._beat * BASS_HOLD, self._mixer.sample_rate)
-                self._mixer.add(self._at(bar, beat), wave, BASS_PART)
+                sound = Sound(VOICES["bass"], tones[tone], length * self._beat * BASS_HOLD)
+                mixer.play(self._at(bar, beat), sound, BASS_PART)
 
-    def _play_drums(self) -> None:
-        kit = drum_kit(self._mixer.sample_rate)
+    def _play_drums(self, mixer: Mixer) -> None:
+        kit = drum_kit(self._sample_rate)
         for bar in range(self._bar_count):
             hits = CLOSING_HITS if self._is_last(bar) else DRUM_PATTERNS[self._style.drums]
             for drum, beats in hits.items():
                 for beat in beats:
-                    self._mixer.add(self._at(bar, beat), kit[drum], DRUM_PARTS[drum])
+                    mixer.add(self._at(bar, beat), kit[drum], DRUM_PARTS[drum])
 
 
 def cover_bytes(cover: Cover) -> bytes:
@@ -888,14 +910,49 @@ def cover_bytes(cover: Cover) -> bytes:
     return buffer.getvalue()
 
 
-def encode(pcm: np.ndarray, encoding: Encoding, destination: Path) -> None:
+def encode_album(songs: list[Song], encoding: Encoding, destinations: list[Path]) -> None:
+    """Streams an album's songs into one ffmpeg as they render, which writes each to its file.
+
+    Starting ffmpeg is a large share of a short track's encode, so an album pays for it once.
+    """
+    graph, outputs = split_graph([song.frames for song in songs])
     command = [
         "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
         "-f", "f32le", "-ar", str(encoding.sample_rate), "-ch_layout", "stereo", "-i", "pipe:0",
-        "-map_metadata", "-1", "-fflags", "+bitexact", "-flags:a", "+bitexact", "-threads", "1",
-        *encoding.codec_args, "-f", encoding.muxer, str(destination),
+        "-filter_complex", graph,
     ]
-    subprocess.run(command, input=pcm.astype("<f4").tobytes(), check=True, capture_output=True)
+    for output, destination in zip(outputs, destinations):
+        command += [
+            "-map", output, "-map_metadata", "-1", "-fflags", "+bitexact", "-flags:a", "+bitexact",
+            "-threads", "1", *encoding.codec_args, "-f", encoding.muxer, str(destination),
+        ]
+    # A file rather than a pipe, which ffmpeg could fill while this side is blocked writing.
+    with tempfile.TemporaryFile() as log:
+        ffmpeg = subprocess.Popen(command, stdin=subprocess.PIPE, stderr=log)
+        try:
+            for song in songs:
+                ffmpeg.stdin.write(song.render().astype("<f4").tobytes())
+        except BrokenPipeError:
+            pass  # ffmpeg quit early; its exit status and log say why
+        finally:
+            with contextlib.suppress(BrokenPipeError):
+                ffmpeg.stdin.close()
+            ffmpeg.wait()
+        if ffmpeg.returncode:
+            log.seek(0)
+            raise subprocess.CalledProcessError(ffmpeg.returncode, command, stderr=log.read())
+
+
+def split_graph(frame_counts: list[int]) -> tuple[str, list[str]]:
+    """A filter graph cutting one stream at the track boundaries, and its outputs in track order."""
+    outputs = [f"[t{index}]" for index in range(len(frame_counts))]
+    if len(frame_counts) == 1:
+        return f"[0:a]anull{outputs[0]}", outputs  # asegment refuses an empty list of cuts
+    cuts = "|".join(str(frame) for frame in itertools.accumulate(frame_counts[:-1]))
+    segments = [f"[s{index}]" for index in range(len(frame_counts))]
+    # A segment keeps its time in the album's stream; each file has to start from zero.
+    rezeroed = ";".join(f"{segment}asetpts=PTS-STARTPTS{output}" for segment, output in zip(segments, outputs))
+    return f"[0:a]asegment=samples={cuts}{''.join(segments)};{rezeroed}", outputs
 
 
 def id3_frames(job: TrackJob, art: bytes) -> list:
@@ -1027,24 +1084,50 @@ def partial_path(final: Path) -> Path:
     return final.with_name(f".{final.name}.part")
 
 
-def render_track(job: TrackJob) -> Outcome:
-    final = Path(job.path)
-    label = job.encoding.label
-    if final.exists():
-        return Outcome(label, final.stat().st_size, skipped=True)
-    partial = partial_path(final)
+def render_album(tracks: list[TrackJob]) -> list[Outcome]:
+    """Renders an album's missing tracks, keeping the ones a previous run finished."""
+    outcomes: list[Outcome] = []
+    missing: list[TrackJob] = []
+    for job in tracks:
+        final = Path(job.path)
+        if final.exists():
+            outcomes.append(Outcome(job.encoding.label, final.stat().st_size, skipped=True))
+        else:
+            missing.append(job)
+    if missing:
+        outcomes += render_tracks(missing)
+    return outcomes
+
+
+def render_tracks(jobs: list[TrackJob]) -> list[Outcome]:
+    """Encodes tracks sharing an album's encoding and cover together, then tags each one."""
+    partials = [partial_path(Path(job.path)) for job in jobs]
     try:
-        final.parent.mkdir(parents=True, exist_ok=True)
-        encode(Song(job).render(), job.encoding, partial)
-        TAG_WRITERS[job.encoding.tag_family](partial, job, cover_bytes(job.cover))
+        partials[0].parent.mkdir(parents=True, exist_ok=True)
+        encode_album([Song(job) for job in jobs], jobs[0].encoding, partials)
+        art = cover_bytes(jobs[0].cover)
+    except Exception as error:  # one bad album is reported, not allowed to end the run
+        for partial in partials:
+            partial.unlink(missing_ok=True)
+        return [Outcome(job.encoding.label, 0, error=f"{job.path}: {failure_reason(error)}") for job in jobs]
+    return [finish_track(job, partial, art) for job, partial in zip(jobs, partials)]
+
+
+def finish_track(job: TrackJob, partial: Path, art: bytes) -> Outcome:
+    final = Path(job.path)
+    try:
+        TAG_WRITERS[job.encoding.tag_family](partial, job, art)
         os.replace(partial, final)
-    except subprocess.CalledProcessError as error:
-        partial.unlink(missing_ok=True)
-        return Outcome(label, 0, error=f"{final}: ffmpeg: {error.stderr.decode(errors='replace').strip()}")
     except Exception as error:  # one bad track is reported, not allowed to end the run
         partial.unlink(missing_ok=True)
-        return Outcome(label, 0, error=f"{final}: {error!r}")
-    return Outcome(label, final.stat().st_size)
+        return Outcome(job.encoding.label, 0, error=f"{final}: {error!r}")
+    return Outcome(job.encoding.label, final.stat().st_size)
+
+
+def failure_reason(error: Exception) -> str:
+    if isinstance(error, subprocess.CalledProcessError):
+        return f"ffmpeg: {error.stderr.decode(errors='replace').strip()}"
+    return repr(error)
 
 
 def to_folder(raw: str) -> Path:
@@ -1095,15 +1178,15 @@ def check_windows_path_lengths(jobs: list[TrackJob]) -> None:
         )
 
 
-def generate(jobs: list[TrackJob], workers: int) -> None:
+def generate(albums: list[list[TrackJob]], workers: int) -> None:
     sizes: Counter[str] = Counter()
     counts: Counter[str] = Counter()
     skipped = 0
     failures: list[str] = []
-    progress = Progress(len(jobs))
+    progress = Progress(sum(len(album) for album in albums))
     progress.show()
     with Pool(workers) as pool:
-        for outcome in pool.imap_unordered(render_track, jobs, chunksize=8):
+        for outcome in itertools.chain.from_iterable(pool.imap_unordered(render_album, albums)):
             if outcome.error:
                 failures.append(outcome.error)
                 progress.note(f"FAILED {outcome.error}")
@@ -1219,9 +1302,10 @@ def main() -> None:
     check_windows_path_lengths(jobs)
     root.mkdir(parents=True, exist_ok=True)
 
-    album_count = len({Path(job.path).parent for job in jobs})
-    print(f"{len(jobs)} tracks in {album_count} albums -> {root}", flush=True)
-    generate(jobs, args.workers)
+    # The catalogue lists an album's tracks together, which is all groupby needs.
+    albums = [list(tracks) for _, tracks in itertools.groupby(jobs, key=lambda job: Path(job.path).parent)]
+    print(f"{len(jobs)} tracks in {len(albums)} albums -> {root}", flush=True)
+    generate(albums, args.workers)
 
 
 if __name__ == "__main__":
