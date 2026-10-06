@@ -2059,7 +2059,7 @@ msgstr "Omitir"
 msgid "Pick how Melodia looks. Every change applies as you make it."
 msgstr "Elige el aspecto de Melodia. Cada cambio se aplica al instante."
 
-# Heading of the welcome card's second panel, about the user's library folders.
+# Heading of the welcome card's first panel, about the user's library folders.
 msgid "Your music"
 msgstr "Tu música"
 

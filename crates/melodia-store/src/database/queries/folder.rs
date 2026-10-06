@@ -37,19 +37,30 @@ pub async fn get_folder_by_id(db: &DbPool, id: i64) -> Result<folder::Folder, Ap
         .ok_or_else(|| AppError::not_found("Folder", id))
 }
 
-/// Deletes the folders, their tracks by cascade, and whatever those tracks leave behind.
+/// Deletes the folder, its tracks by cascade, and whatever those tracks leave behind.
 ///
 /// The prune shares the delete's transaction because nothing else would run it: only a scan that
 /// changed something prunes, and an album left without tracks keeps its cover referenced, so the
-/// artwork sweep never retires it. Chunks at [`MAX_BINDS_PER_STATEMENT`] so a long id list stays
-/// inside one statement's budget.
+/// artwork sweep never retires it.
+pub async fn delete_folder(db: &DbPool, id: i64) -> Result<(), AppError> {
+    let mut tx = db.write().begin().await?;
+    sqlx::query("DELETE FROM folders WHERE id = ?").bind(id).execute(&mut *tx).await?;
+    crate::database::queries::scan::prune_orphans(&mut tx).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Deletes the folders a new parent supersedes, their tracks by cascade.
+///
+/// No prune, unlike [`delete_folder`]: the parent's scan follows and prunes after it re-ingests, so
+/// the artists those tracks shared keep their rows and the images fetched for them. Chunks at
+/// [`MAX_BINDS_PER_STATEMENT`] so a long id list stays inside one statement's budget.
 ///
 /// [`MAX_BINDS_PER_STATEMENT`]: crate::database::MAX_BINDS_PER_STATEMENT
 pub async fn delete_folders(db: &DbPool, ids: &[i64]) -> Result<(), AppError> {
     if ids.is_empty() {
         return Ok(());
     }
-    let mut tx = db.write().begin().await?;
     for chunk in ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT) {
         let placeholders = crate::database::placeholders(chunk.len());
         let sql = format!("DELETE FROM folders WHERE id IN ({placeholders})");
@@ -57,10 +68,8 @@ pub async fn delete_folders(db: &DbPool, ids: &[i64]) -> Result<(), AppError> {
         for id in chunk {
             q = q.bind(id);
         }
-        q.persistent(false).execute(&mut *tx).await?;
+        q.persistent(false).execute(db.write()).await?;
     }
-    crate::database::queries::scan::prune_orphans(&mut tx).await?;
-    tx.commit().await?;
     Ok(())
 }
 

@@ -101,7 +101,7 @@ async fn insert_replacing_children(db: &DbPool, path: &str) -> Result<folder::Fo
 pub async fn remove_folder(state: &AppState, id: i64) -> Result<(), AppError> {
     // Read ahead of the delete: the covers it releases are the ones named here and not after it.
     let referenced_before = queries::artwork::referenced_filenames(&state.db).await?;
-    queries::folder::delete_folders(&state.db, &[id]).await?;
+    queries::folder::delete_folder(&state.db, id).await?;
     // Cascade-delete removes every track in this folder; subscribers (Tracks
     // view + folder list) need to re-fetch or the UI keeps the stale rows.
     state.library_changed.bump();

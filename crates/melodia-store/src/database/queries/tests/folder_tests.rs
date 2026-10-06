@@ -53,7 +53,7 @@ async fn get_folder_by_id_not_found() -> Result<(), AppError> {
 async fn delete_folder_removes_it() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let f = queries::folder::insert_folder(&db, "/music", true).await?;
-    queries::folder::delete_folders(&db, &[f.id]).await?;
+    queries::folder::delete_folder(&db, f.id).await?;
     let folders = queries::folder::get_all_folders(&db).await?;
     assert!(folders.is_empty());
     Ok(())
@@ -71,7 +71,7 @@ async fn delete_folder_cascades_tracks() -> Result<(), AppError> {
         .execute(db.write())
         .await?;
 
-    queries::folder::delete_folders(&db, &[f.id]).await?;
+    queries::folder::delete_folder(&db, f.id).await?;
 
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?;
     assert_eq!(count, 0);

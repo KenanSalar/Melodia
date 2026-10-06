@@ -2063,7 +2063,7 @@ msgstr "Παράλειψη"
 msgid "Pick how Melodia looks. Every change applies as you make it."
 msgstr "Επιλέξτε την εμφάνιση του Melodia. Κάθε αλλαγή εφαρμόζεται αμέσως."
 
-# Heading of the welcome card's second panel, about the user's library folders.
+# Heading of the welcome card's first panel, about the user's library folders.
 msgid "Your music"
 msgstr "Η μουσική σας"
 

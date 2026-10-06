@@ -48,6 +48,9 @@ pub enum ScanOutcome {
 }
 
 /// Scans one folder, stopping when [`cancel`] or shutdown asks.
+///
+/// Repairs first, and when the repair cleared covers it hands the rest of the library to a
+/// reconcile, since this scan only re-reads its own folder.
 pub async fn scan_folder(state: &AppState, folder_id: i64) -> Result<ScanOutcome, AppError> {
     let cancel = state.scan.token();
     let restoring = forget_missing_artwork(state).await;
@@ -108,8 +111,10 @@ impl Drop for ReconcileGuard {
 /// the watcher itself only reports live events, so a restart or a
 /// toggle-off interval leaves DB and disk out of sync until the next
 /// manual Rescan. Triggered after the watcher transitions off → on
-/// (`resume_watching::run`, `toggle_folder_watching(true)`) and on
-/// watcher-overflow `RescanNeeded` from `file_event_processor`.
+/// (`resume_watching::run`, `toggle_folder_watching(true)`), on
+/// watcher-overflow `RescanNeeded` from `file_event_processor`, by
+/// `tag_backfill`, by `artwork_restore`, and by a completed
+/// [`scan_folder`] whose repair cleared any covers.
 ///
 /// Sequential per folder: `SQLite` has a single writer, and the scan
 /// progress is one `watch` slot that parallel scans would clobber. Each
@@ -120,9 +125,10 @@ impl Drop for ReconcileGuard {
 /// come as well as the one being scanned. Tracked on `TaskSpawner` so
 /// shutdown waits for the in-flight folder's last write.
 ///
-/// Coalesces concurrent triggers via [`RECONCILE_IN_FLIGHT`] — a second
-/// call while a reconcile is mid-flight is a no-op (the in-flight pass
-/// will pick up the latest disk state anyway).
+/// Coalesces concurrent triggers via [`RECONCILE_IN_FLIGHT`]: a second
+/// call while a reconcile is mid-flight is a no-op. The in-flight pass
+/// still reads the latest audio files, but its artwork repair ran at its
+/// start, so a cover gone since waits for the next scan entry.
 pub fn reconcile_watched_folders(state: &AppState) {
     reconcile(state, None);
 }

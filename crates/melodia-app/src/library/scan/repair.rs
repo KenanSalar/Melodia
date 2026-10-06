@@ -69,11 +69,17 @@ pub async fn restore_missing_artwork(state: &AppState) -> Result<(), AppError> {
 }
 
 /// The library's artwork references whose file is not on disk, one `stat` per distinct path.
+///
+/// Only a definite not-found counts: a `stat` failing for any other reason is no proof the file is
+/// gone, and clearing a reference costs a re-parse, or a custom playlist image outright.
 async fn missing_references(state: &AppState) -> Result<Vec<String>, AppError> {
     let referenced = queries::artwork::referenced_library_paths(&state.db).await?;
     tokio::task::spawn_blocking(move || {
         ScanPool::for_files(referenced.len()).install(|| {
-            referenced.into_par_iter().filter(|path| !Path::new(path).exists()).collect()
+            referenced
+                .into_par_iter()
+                .filter(|path| matches!(Path::new(path).try_exists(), Ok(false)))
+                .collect()
         })
     })
     .await

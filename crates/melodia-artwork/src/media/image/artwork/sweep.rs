@@ -133,6 +133,8 @@ pub fn retire<S: std::hash::BuildHasher>(
                 report.deleted += 1;
                 report.bytes += candidate.bytes;
             }
+            // A sweep running beside this one got there first.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => {
                 report.failed += 1;
                 log::warn!("Could not retire {}: {e}", candidate.path.display());
