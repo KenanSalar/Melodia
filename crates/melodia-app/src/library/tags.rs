@@ -589,16 +589,15 @@ async fn run_commit(
     // After every `upsert_album` above, which is what it exists to undo.
     queries::album::clear_release_tags(&mut tx, &cleared_album_ids, cleared_release).await?;
 
-    // Both passes answer to a track that changed parents, and both are whole-table:
-    // the rollup is a window CTE over every row in `tracks`, the sweep three
-    // correlated deletes plus a rewrite of every `artists` row, all of it inside
-    // this transaction on a single-writer pool. A rating write reaches here on one
-    // click and can move nothing, so gating them is most of what that click costs.
+    // Both passes answer to a track that changed parents, and the sweep is whole-table:
+    // three correlated deletes inside this transaction on a single-writer pool. A
+    // rating write reaches here on one click and can move nothing, so gating them is
+    // most of what that click costs.
     //
     // The residue is that a file whose tags had already drifted from the database
     // can be re-homed by the re-extract above: its old parent is left stranded, and
-    // the album row it lands in instead gets no cover. The next scan runs both
-    // passes and repairs both, on the pass it always did.
+    // the album row it lands in instead gets no cover. The next scan or watcher batch
+    // that writes a row runs both passes and repairs both.
     if edit.moves_between_parents() {
         // Backfill album covers from their tracks (null-only, never an overwrite),
         // so retagging a track into a different album lets that album inherit the
