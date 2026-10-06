@@ -29,12 +29,14 @@ pub enum FileEvent {
 
 pub struct FolderWatcher {
     debouncer: Option<Debouncer<notify::RecommendedWatcher, RecommendedCache>>,
+    /// Roots the running debouncer holds a recursive watch on.
+    roots: Vec<PathBuf>,
     tx: mpsc::Sender<FileEvent>,
 }
 
 impl FolderWatcher {
     pub fn new(tx: mpsc::Sender<FileEvent>) -> Self {
-        Self { debouncer: None, tx }
+        Self { debouncer: None, roots: Vec::new(), tx }
     }
 
     pub fn start(&mut self, paths: &[PathBuf]) -> Result<(), AppError> {
@@ -42,7 +44,7 @@ impl FolderWatcher {
 
         let tx = self.tx.clone();
 
-        let mut debouncer =
+        let debouncer =
             new_debouncer(Duration::from_secs(2), None, move |result: DebounceEventResult| {
                 match result {
                     Ok(events) => {
@@ -79,30 +81,48 @@ impl FolderWatcher {
             })
             .map_err(|e| AppError::watcher("Failed to create watcher", e))?;
 
-        for path in paths {
-            if path.exists() {
-                if let Err(e) = debouncer.watch(path, RecursiveMode::Recursive) {
-                    log::warn!("Failed to watch {}: {}", path.display(), e);
-                } else {
-                    log::info!("Watching folder: {}", path.display());
-                }
-            }
-        }
-
         self.debouncer = Some(debouncer);
+        self.retarget(paths);
         Ok(())
     }
 
-    /// Restarts a running watcher over `paths`, for a folder list that changed under it. A
-    /// stopped one stays stopped, watching being switched off.
-    pub fn retarget(&mut self, paths: &[PathBuf]) -> Result<(), AppError> {
-        if self.debouncer.is_none() {
-            return Ok(());
+    /// Moves a running watcher onto `paths` by the difference, so a root both lists share stays
+    /// watched throughout. A stopped watcher stays stopped.
+    pub fn retarget(&mut self, paths: &[PathBuf]) {
+        let Some(debouncer) = self.debouncer.as_mut() else {
+            return;
+        };
+
+        // Dropped roots go first: a parent replacing its children registers their directories
+        // again, and unwatching a child after that would take those watches with it.
+        self.roots.retain(|root| {
+            if paths.contains(root) {
+                return true;
+            }
+            // A root whose directory vanished has already lost its watch.
+            match debouncer.unwatch(root) {
+                Ok(()) => log::info!("Stopped watching folder: {}", root.display()),
+                Err(e) => log::debug!("Failed to unwatch {}: {}", root.display(), e),
+            }
+            false
+        });
+
+        for path in paths {
+            if self.roots.contains(path) || !path.exists() {
+                continue;
+            }
+            match debouncer.watch(path, RecursiveMode::Recursive) {
+                Ok(()) => {
+                    log::info!("Watching folder: {}", path.display());
+                    self.roots.push(path.clone());
+                }
+                Err(e) => log::warn!("Failed to watch {}: {}", path.display(), e),
+            }
         }
-        self.start(paths)
     }
 
     pub fn stop(&mut self) {
+        self.roots.clear();
         if self.debouncer.take().is_some() {
             log::info!("Folder watcher stopped");
         }

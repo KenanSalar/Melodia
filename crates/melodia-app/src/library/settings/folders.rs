@@ -117,8 +117,7 @@ pub async fn toggle_folder_watching(state: &AppState, enabled: bool) -> Result<(
         // watcher itself only reports live events.
         scan::reconcile_watched_folders(state);
     } else {
-        let mut watcher = state.watcher.lock();
-        watcher.stop();
+        with_watcher(state, FolderWatcher::stop).await?;
     }
     Ok(())
 }
@@ -126,7 +125,7 @@ pub async fn toggle_folder_watching(state: &AppState, enabled: bool) -> Result<(
 /// Starts the watcher over every enabled folder, replacing whatever it watched before.
 pub(crate) async fn start_watcher(state: &AppState) -> Result<(), AppError> {
     let paths = enabled_folder_paths(state).await?;
-    with_watcher(state, move |watcher| watcher.start(&paths)).await
+    with_watcher(state, move |watcher| watcher.start(&paths)).await?
 }
 
 /// Points a running watcher at the folder list as it now stands, so a folder added in Settings
@@ -148,15 +147,15 @@ async fn enabled_folder_paths(state: &AppState) -> Result<Vec<PathBuf>, AppError
 }
 
 /// Runs `op` against the watcher on the blocking pool: registering a recursive watch walks the
-/// whole tree, and Add Folder's flow runs on the UI thread.
-async fn with_watcher(
+/// whole tree under the lock, and Add Folder's flow runs on the UI thread.
+async fn with_watcher<R: Send + 'static>(
     state: &AppState,
-    op: impl FnOnce(&mut FolderWatcher) -> Result<(), AppError> + Send + 'static,
-) -> Result<(), AppError> {
+    op: impl FnOnce(&mut FolderWatcher) -> R + Send + 'static,
+) -> Result<R, AppError> {
     let watcher = Arc::clone(&state.watcher);
     tokio::task::spawn_blocking(move || op(&mut watcher.lock()))
         .await
-        .map_err(|e| AppError::watcher("Folder watcher task failed", e))?
+        .map_err(|e| AppError::watcher("Folder watcher task failed", e))
 }
 
 /// Persist the `folder_watching_enabled` flag *first*, then flip the watcher.
