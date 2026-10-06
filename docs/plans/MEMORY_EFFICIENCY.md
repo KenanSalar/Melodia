@@ -8,11 +8,16 @@ the distinct data does. This plan holds the changes that save memory without a v
 latency regression, one phase per change.
 
 **Order:** phase 0 goes first, since the states most phases act on were not in the 2026-10-05
-measurement. Phases 1 to 7 are independent of each other. The optional phases come last and start
-only after a discussion: each one reverses a documented choice or carries a real behaviour risk.
+measurement. Phases 2 to 6 are independent of each other; phases 1 and 7 were dropped. The optional
+phases come last and start only after a discussion: each one reverses a documented choice or
+carries a real behaviour risk.
 
-**Measurement:** the 2026-10-05 run below is the baseline. It is measured again once phases 1 to 7
-are all in, and again each time one or more of the optional phases lands (see Checkpoints).
+**Measurement:** the 2026-10-05 run below is the baseline. It is measured again once phases 2 to 6
+are all in, and again each time one or more of the optional phases lands (see Checkpoints). From
+2026-10-06, a before and an after are release builds of the commits either side of the change, and
+a 0.18.0 reading is a release build of the `v0.18.0` tag, never the installed RPM. Each binary sits
+at `~/Development/melodia-measure/target/<label>/Melodia`, where it counts as a development build
+and so never rewrites the app-menu launcher.
 
 **Figures:** anything not marked *measured* is an upper bound computed from the constants named
 beside it, or an estimate from field types. Phase 0 and each phase's own re-measurement replace
@@ -20,8 +25,6 @@ them.
 
 ## What we see
 
-- **A grid page holds its covers larger than it draws them.** On a 2560×1440 window at 1× a card's
-  artwork is drawn at 184 px, 191.4 px with the hover zoom, and decoded at 224 px.
 - **Opening the queue sheet decodes every visible cover a second time**, at the same size the track
   lists already hold it.
 - **16 worker threads stay alive from launch to quit.** The boot reconcile builds rayon's global
@@ -75,8 +78,8 @@ The setup a checkpoint reproduces, or names where it differs:
   first launch. `tools/trim_probe.sh` and `tools/compiler_release_probe.sh` in
   `~/Development/melodia-measure` reproduce both halves.
 
-None of these scenarios has a grid page up, the queue sheet open or a scan running, which is where
-most of this plan acts. Phase 0 adds those states to the baseline.
+None of these scenarios has the queue sheet open, Now Playing just closed or a scan running, which
+is where most of this plan acts. Phase 0 adds those states to the baseline.
 
 ## Checkpoints
 
@@ -84,27 +87,25 @@ Each checkpoint is a full run of the baseline protocol, the phase 0 states inclu
 the table below beside the baseline. A phase's own re-measurement (Every phase) is a spot check of
 the state it targets, taken to catch a regression early; it does not replace a checkpoint.
 
-1. **After phases 1 to 7.** Once every phase in the main list is in, phase 7 excepted, which was
+1. **After phases 2 to 6.** Once every phase in the main list is in, phases 1 and 7 excepted, both
    dropped. This is the number the plan is judged on.
 2. **After the optional phases.** Each time one or more of phases A to D lands, a new block of rows
-   named for exactly the phases it includes, for example *After 1–7 + B*.
+   named for exactly the phases it includes, for example *After 2–6 + B*.
 
 | Run | Scenario | Anonymous | PSS | USS | RSS | Peak RSS | GPU memory | CPU, one core | GPU | Threads |
 |---|---|---|---|---|---|---|---|---|---|---|
 | Baseline, 2026-10-05 | Idle | 34.3 MiB | 89.8 MiB | 85.0 MiB | 162.0 MiB | 176.2 MiB | 26.0 MiB | 0.15% | 0.00% | 41 |
 | Baseline, 2026-10-05 | Playing, list view | 35.5 MiB | 92.2 MiB | 87.2 MiB | 165.3 MiB | 178.5 MiB | 26.0 MiB | 0.65% | 0.00% | 41 |
 | Baseline, 2026-10-05 | Playing, visualizer live | 35.2 MiB | 91.4 MiB | 87.5 MiB | 162.5 MiB | 178.5 MiB | 30.0 MiB | 3.47% | 2.19% | 42 |
-| Baseline, phase 0 | Grid page (Albums) | | | | | | | | | |
 | Baseline, phase 0 | Queue sheet open | 35.3 MiB | 89.0 MiB | 84.2 MiB | 158.4 MiB | 166.8 MiB | 28.0 MiB | 0.10% | 0.00% | 45 |
 | Baseline, phase 0 | Now Playing opened, then closed | | | | | | | | | |
 | Baseline, phase 0 | Minute after a full rescan | | | | | | | | | |
-| After 1–7 | Idle | | | | | | | | | |
-| After 1–7 | Playing, list view | | | | | | | | | |
-| After 1–7 | Playing, visualizer live | | | | | | | | | |
-| After 1–7 | Grid page (Albums) | | | | | | | | | |
-| After 1–7 | Queue sheet open | | | | | | | | | |
-| After 1–7 | Now Playing opened, then closed | | | | | | | | | |
-| After 1–7 | Minute after a full rescan | | | | | | | | | |
+| After 2–6 | Idle | | | | | | | | | |
+| After 2–6 | Playing, list view | | | | | | | | | |
+| After 2–6 | Playing, visualizer live | | | | | | | | | |
+| After 2–6 | Queue sheet open | | | | | | | | | |
+| After 2–6 | Now Playing opened, then closed | | | | | | | | | |
+| After 2–6 | Minute after a full rescan | | | | | | | | | |
 
 The scan phases are judged on the large library instead, where the footprint script's windows do
 not reach. Peak `RssAnon` comes from `MELODIA_RSS_SAMPLE=1` during a first scan into an empty
@@ -127,11 +128,10 @@ launch. Edit its builds, rotation and output names before a run.
 | Run | First scan of the large library | Peak RssAnon | Wall time | Threads after |
 |---|---|---|---|---|
 | Baseline, phase 0 | 50,400 tracks, 0.18.0, three runs | 189–197 MiB | 2.97 s cold, 2.56–2.58 s | 45–46 |
-| After 1–7 | | | | |
+| After 2–6 | | | | |
 
 Production files the phases touch, in lines (`wc -l`): `cover_thumbs.rs` 622, `folders.rs` 494,
-`now_playing/mod.rs` 472, `visualizer.rs` 441, `track_list_cache.rs` 389, `grid_prewarm.rs` 358,
-`ui/visualizer/mod.rs` 337, `tracks/mod.rs` 168, `queue_sheet/mod.rs` 167, `scanner.rs` 118,
+`now_playing/mod.rs` 472, `visualizer.rs` 441, `track_list_cache.rs` 389, `ui/visualizer/mod.rs` 337, `tracks/mod.rs` 168, `queue_sheet/mod.rs` 167, `scanner.rs` 118,
 `callbacks/tags/artwork.rs` 98, `ui/util.rs` 78, `main.rs` 569, `playlists/callbacks/dialog.rs` 544,
 `queries/ingest.rs` 484, `shell/bridge.rs` 392, `database/mod.rs` 341,
 `boot/ui_setup/views.rs` 268, `engine/backend/mod.rs` 782, `queue_sheet/callbacks.rs` 461,
@@ -153,14 +153,13 @@ Production files the phases touch, in lines (`wc -l`): `cover_thumbs.rs` 622, `f
 
 ## Phase 0: baseline and one correction
 
-- [ ] Measure the states this plan acts on, on the same build and setup as the baseline: a grid page
-      (Albums) scrolled once, the queue sheet open on a long queue, Now Playing opened and closed,
-      and the minute after a forced full rescan. Fill the *Baseline, phase 0* rows, and keep a
-      heaptrack profile of each beside them.
+- [ ] Measure the states this plan acts on, on the same build and setup as the baseline: the queue
+      sheet open on a long queue, Now Playing opened and closed, and the minute after a forced full
+      rescan. Fill the *Baseline, phase 0* rows, and keep a heaptrack profile of each beside them.
       Queue sheet open: filled 2026-10-05 from the installed 0.18.0 RPM by `queue_open.sh`, with
       the queue holding the whole dev library (551 tracks) rather than the Synthwave playlist.
       Its heaptrack profile is of `1284fb8` rather than 0.18.0 (`queue-open-p2-before-ht`, phase
-      2's before). The other three states are still open.
+      2's before). The other two states are still open. The grid page left the list with phase 1.
 - [x] Build a large library outside the repo for phases 4 to 6: ffmpeg-generated short files with
       tags spread over a few thousand albums, 50k tracks or more. Built 2026-10-05 at
       `~/Development/melodia-scale-library`, deliberately not under `~/Music`, which a first launch
@@ -174,6 +173,22 @@ Production files the phases touch, in lines (`wc -l`): `cover_thumbs.rs` 622, `f
       `playlist-mosaic-picker.slint` ("the grid tier (448 px)") went with it.
 
 ## Phase 1: decode grid covers at the size the tile draws
+
+Status: dropped 2026-10-06. It was implemented, passed the gate and was measured, then reverted
+before any commit: in the app, the artwork didn't look as good as before. The saving doesn't pay
+for that. The tier was already bounded by the window (91 covers at most on a maximized 2560×1440
+one), so this was a quarter off a fixed amount rather than a cure for growth.
+
+What was built, should it return: the hover zoom in one place (`EntityCard.pronounced-glyph-zoom`,
+an opt-in the seven grid hosts set, the card owning 1.04 and 1.15), `CARD_INSET` and `COVER_ZOOM`
+pinned against the `.slint` beside `MIN_CARD_W`, and `cover_size` sizing
+`(widest_card − 2 × CARD_INSET) × COVER_ZOOM × scale`, rounded up before the cast. With the
+round-up, 1.25× moves on 1852–2051 only, not on 1652–2051.
+
+Measured 2026-10-06 on My Library ▸ Albums, maximized on DP-6, three rounds alternating the builds
+(`tools/grid_open.sh`, raw output `grid-open-p1-*` and `p1-*.log` in `~/Development/melodia-measure`):
+Anonymous 46.8 → 45.1–45.3 MiB on the quiet runs, GPU memory 84.0 → 82.0 MiB, and 42 covers held at
+150,528 B against 45 at 110,592 B on the first screenful. CPU and decode time didn't move.
 
 Where: `crates/melodia-views/src/ui/grid_prewarm.rs` (`widest_card`, `cover_size`),
 `crates/melodia-ui/ui/components/grid/entity-card.slint` (`tile-size`, `cover-scale-hover`), the
@@ -246,7 +261,7 @@ Sizing pass, 2026-10-05:
 ## Phase 2: let the queue sheet share the row tier's buffers
 
 Status: done 2026-10-05: implemented, spot-checked, and checked by hand on a queue holding the whole
-library, which behaves as before. Its rows wait for the checkpoint after 1–7, and the tests listed
+library, which behaves as before. Its rows wait for the checkpoint after 2–6, and the tests listed
 at the end of this section come later.
 
 Where: `crates/melodia-views/src/ui/queue_sheet/mod.rs` (the private `CoverThumbs` and its
@@ -322,7 +337,7 @@ entry; `clear` on a backed tier leaves the backing's entry.
 ## Phase 3: small holders that outlive their use
 
 Status: done 2026-10-05: implemented, through the gate and spot-checked. Its rows wait for the
-checkpoint after 1–7, the check by hand is Kenan's, and the tests listed at the end of this section
+checkpoint after 2–6, the check by hand is Kenan's, and the tests listed at the end of this section
 come later. Phase 0's "Now Playing opened, then closed" row was not taken with it and stays open.
 
 - [x] **Visualizer rings** (`crates/melodia-playback/src/player/playback/visualizer.rs`, built at
@@ -451,7 +466,7 @@ Sizing pass, 2026-10-05:
 
 ## Phase 4: run scan work on a pool that ends with the scan
 
-Status: implemented and spot-checked 2026-10-05; its rows wait for the checkpoint after 1–7.
+Status: implemented and spot-checked 2026-10-05; its rows wait for the checkpoint after 2–6.
 
 Where: the global-pool `par_iter`s at `library/settings/folders.rs:274`,
 `media/ingest/scanner.rs:53`, `database/queries/ingest.rs:335`,
@@ -538,7 +553,7 @@ import) each get a full-width pool where they used to share one.
 
 ## Phase 5: parse and ingest a scan in chunks
 
-Status: implemented and spot-checked 2026-10-05; its rows wait for the checkpoint after 1–7.
+Status: implemented and spot-checked 2026-10-05; its rows wait for the checkpoint after 2–6.
 
 Where: `crates/melodia-app/src/library/settings/folders.rs` (`scan_folder_internal`,
 `TX_CHUNK_FILES`), and the full re-read `tasks/tag_backfill.rs` triggers.
@@ -616,7 +631,7 @@ Risk: low to medium, on throughput. Measured above: no change past the script's 
 
 ## Phase 6: share repeated strings in the Songs list
 
-Status: implemented and spot-checked 2026-10-05; its rows wait for the checkpoint after 1–7.
+Status: implemented and spot-checked 2026-10-05; its rows wait for the checkpoint after 2–6.
 
 Where: `crates/melodia-views/src/ui/track_list_cache.rs` (`convert`),
 `crates/melodia-views/src/ui/tracks/mod.rs` (`to_slint_track_list_row`), and the other
@@ -815,7 +830,9 @@ image", and a 12-entry LRU per detail type is not one.
 Memory: 442,368 B to 76,800 B per hero at 1× (160 px), up to about 4.2 MiB per detail type at the
 LRU cap.
 Risk: reverses a documented decision, and the dialog above is the surface that decision protects
-today. The call is whether one size across the app still earns its buffers.
+today. The call is whether one size across the app still earns its buffers. Phase 1 made the same
+kind of cut on the grid, decoding closer to the drawn size, and was dropped because the artwork
+looked worse in the app.
 
 ### Phase D: cap folder-watch batches
 
@@ -854,13 +871,14 @@ Risk: medium, on move detection. Only with a test that moves a folder across the
 - **The allocator.** No allocator swap and no periodic trim; both were measured and rejected
   (`rust-performance.md`, `tasks/heap_trim.rs`).
 
-When phases 1 to 6 are in and checkpointed, and each optional phase is either in and checkpointed or
+When phases 2 to 6 are in and checkpointed, and each optional phase is either in and checkpointed or
 declined, this plan is deleted, and `~/Development/melodia-measure` and
 `~/Development/melodia-scale-library` go with it.
 
-The binaries in `melodia-measure/bin/` sit outside `target/`, so each launch counts as a tarball
-install and rewrites the per-user launcher, `~/.local/share/applications/com.github.kenansalar.melodia.desktop`,
-and its metainfo, `~/.local/share/metainfo/com.github.kenansalar.melodia.metainfo.xml`, to point at
-itself. Both shadow the RPM's own entries, so once `bin/` is gone the app-menu entry points at a
-missing binary. They are deleted with `melodia-measure`, and only after Kenan says yes: ask first,
-naming both paths, and never remove them as part of a cleanup step on your own.
+The binaries in `melodia-measure/bin/` sit outside `target/`, so each launch counted as a tarball
+install and rewrote the per-user launcher, its icon and its metainfo to point at itself, shadowing
+the RPM's own. On 2026-10-06, at Kenan's request, those three files were deleted
+(`~/.local/share/applications/com.github.kenansalar.melodia.desktop`,
+`~/.local/share/icons/hicolor/scalable/apps/melodia.svg`,
+`~/.local/share/metainfo/com.github.kenansalar.melodia.metainfo.xml`) and the menu went back to the
+RPM's entry. Nothing in `bin/` is launched again; new builds go under `melodia-measure/target/`.

@@ -117,6 +117,16 @@ counter, both worth reading before changing a gate.
   second, and there is no per-style rate to retune. **Both styles' geometry crosses as an SVG
   `commands` string with a fixed viewbox**, neither as a model — `slint-pitfalls.md`'s `Path` entry.
 
+- **The trace is pushed and the bars are asked for.** The bars snap every edge to the window's
+  device pixels for one strip geometry, so a figure pushed for one width lands its edges between
+  pixels under another and, with anti-aliasing off, the bars and gaps come out uneven. A resize, a
+  sidebar animation or a scroll moves the strip with no tick coming while it rests. So
+  `spectrum-bars.slint` binds `commands` to the `bars-figure` pure callback over its own live
+  position and size, and the tick only bumps `bars-generation` when the bands move: the
+  `covers-generation` idiom. A strip-local `changed width` or a Timer reading the width is no
+  substitute: both are `ChangeTracker`s inside an `if` (`slint-pitfalls.md`). The trace is
+  anti-aliased and snaps nothing, so a stretch only scales it.
+
 - **The trace is the visualizer's most expensive frame, and the `x` half of it is cached.**
   Rebuilding the path string outweighs a whole spectrum frame, two FFTs included, and it is the
   number *formatting* that costs, not the arithmetic. `player/playback/waveform.rs` holds the whole

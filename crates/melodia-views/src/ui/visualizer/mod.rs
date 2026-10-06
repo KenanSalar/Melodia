@@ -10,8 +10,9 @@
 //! What the mount tree *can't* gate is the producer, so this module is the sole writer of the
 //! tap's arm state, from three places on the UI thread: `set-active` (the mount boundary), `tick`
 //! (the steady state) and `window-hidden` (the one case the tick can't cover, the same signal
-//! stopping the Timer it runs off). One benign gap: a pause landing on an already-settled drawing
-//! stops the Timer the way a hide does and nothing disarms the tap, which costs nothing.
+//! stopping the Timer it runs off). Two benign gaps, both leaving the tap armed with no audio to
+//! feed it, which costs nothing: a pause landing on an already-settled drawing stops the Timer the
+//! way a hide does, and a strip mounting over a stopped player has no tick to refine the arm.
 //!
 //! Nor can it gate a window still *open* but not being shown, Slint `Timer`s firing off an event
 //! loop that survives a close-to-tray hide. The two signals stay apart because they carry
@@ -31,7 +32,7 @@ use crate::ui::shell::tray_bridge;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_playback::player::playback::spectrum::{
-    BarAnchor, FFT_SIZE, NUM_BANDS, SpectrumAnalyzer, StripGeometry,
+    self, BarAnchor, FFT_SIZE, NUM_BANDS, SpectrumAnalyzer, StripGeometry,
 };
 use melodia_playback::player::playback::visualizer::RING_CAP;
 use melodia_playback::player::playback::waveform::{self, MAX_COLUMNS, WaveformAnalyzer};
@@ -53,6 +54,9 @@ const FRAME_STALL_TICKS: u32 = 60;
 const RESTING_IDLE: bool = true;
 const RESTING_DORMANT: bool = false;
 
+/// The bands a strip with no analysis behind it draws: every one on its floor.
+const RESTING_LEVELS: [f32; NUM_BANDS] = [0.0; NUM_BANDS];
+
 /// One drawing session: the figure the shown style draws, plus the shadow tracking what the window
 /// last painted. Built on the first tick after the strip mounts and dropped when it leaves, so a
 /// user who never opens Now Playing never pays for the FFT plans.
@@ -70,8 +74,16 @@ impl Session {
 /// The analyzer one style draws with and the path string it writes into. Only the shown kind is
 /// held, so a pick crossing between the bars and the trace rebuilds it from silence, as an arm does.
 enum Figure {
-    Bars { analyzer: Box<SpectrumAnalyzer>, path: String },
-    Trace { analyzer: WaveformAnalyzer, path: String },
+    Bars {
+        analyzer: Box<SpectrumAnalyzer>,
+        path: String,
+        /// Whether the last tick's bands had settled.
+        settled: bool,
+    },
+    Trace {
+        analyzer: WaveformAnalyzer,
+        path: String,
+    },
 }
 
 impl Figure {
@@ -85,10 +97,11 @@ impl Figure {
                 path: String::with_capacity(MAX_COLUMNS * 2 * 20),
             }
         } else {
-            // A fraction of the trace's size, grown to fit by the first frame and kept there.
+            // A fraction of the trace's size, grown to fit by the first figure and kept there.
             Self::Bars {
                 analyzer: Box::new(SpectrumAnalyzer::new(FFT_SIZE, NUM_BANDS)),
                 path: String::new(),
+                settled: false,
             }
         }
     }
@@ -176,9 +189,8 @@ fn publish_style(global: &Visualizer, index: usize) {
 /// with the two flags that say so — built by the code the live path uses, so it can't drift from
 /// what a decay lands on.
 ///
-/// **Only the trace, because only the trace can be drawn without a size.** The bars figure floors
-/// each band against the strip's own width, so rest for the bars is whatever the strip's seed tick
-/// writes once it has a layout to measure (`visualizer-strip.slint`).
+/// **Only the trace.** The bars are asked for with the strip's geometry, and with no session
+/// behind them the answer is already their rest.
 ///
 /// The session-end call is the load-bearing one: the strip's Timer runs on
 /// `(playing && window-shown) || !idle`, so a strip remounting over a *paused* player never ticks
@@ -217,11 +229,10 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
     viz_global.set_band_count(i32::try_from(NUM_BANDS).unwrap_or_default());
 
     // Neither figure's Timer runs until something plays, so a view opened on a fresh app would
-    // show an empty strip. The trace can be seeded from here; the bars wait for the strip's seed
-    // tick, having no size to floor themselves against yet.
+    // show an empty trace. The bars need no seed, asking for their figure as they mount.
     publish_resting(&viz_global);
 
-    // tick — one frame. Nothing here allocates except the one `SharedString` the figure has to be
+    // tick — one frame. Nothing here allocates except the one `SharedString` the trace has to be
     // handed to Slint as.
     {
         let viz = state.engine.visualizer();
@@ -229,7 +240,7 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
         let session = session.clone();
         let weak = ui.as_weak();
 
-        viz_global.on_tick(move |playing, strip_x, strip_y, strip_width, strip_height| {
+        viz_global.on_tick(move |playing, strip_width| {
             let style = style.get();
             let mut slot = session.borrow_mut();
             // The one construction site, so no mount ordering can leave the tick without buffers
@@ -253,45 +264,67 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
             // is applied. Zero is the "draw nothing new" signal both styles decay on.
             let rate = if analyzing { viz.analysis_rate() } else { 0 };
 
-            // The scale factor is read here rather than passed in: `.slint` has no way to spell it,
-            // and the bars need it to find the window's device pixels under the strip. A window
-            // that has gone can't be drawn into anyway, so the fallback never reaches a frame.
-            let scale = weak.upgrade().map_or(1.0, |ui| ui.window().scale_factor());
-            let strip = StripGeometry {
-                x: strip_x,
-                y: strip_y,
-                width: strip_width,
-                height: strip_height,
-                scale,
-            };
-            let idle = match &mut session.figure {
+            let (idle, wave_path, bars_moved) = match &mut session.figure {
                 Figure::Trace { analyzer, path } => {
-                    frame::waveform(&viz, analyzer, path, rate, strip)
+                    let idle = frame::waveform(&viz, analyzer, path, rate, strip_width);
+                    (idle, Some(SharedString::from(path.as_str())), false)
                 }
-                Figure::Bars { analyzer, path } => {
-                    frame::bars(&viz, analyzer, path, rate, bar_anchor(style), strip)
+                Figure::Bars { analyzer, settled, .. } => {
+                    let idle = frame::bars(&viz, analyzer, rate);
+                    // Settled bands draw every bar on its floor, the same figure frame after frame,
+                    // so a run of them redraws once. A redraw every tick is a repaint `pulse`
+                    // would count, and a strip playing silence would never go dormant.
+                    let moved = !(idle && *settled);
+                    *settled = idle;
+                    (idle, None, moved)
                 }
             };
             // Settled with nothing arriving to unsettle it: the tick is only still here to watch
             // for frames, which it can do far more slowly.
             let dormant = idle && !painting;
+            // `bars-figure` borrows the same cell whenever Slint asks for the bars.
+            drop(slot);
 
             if let Some(ui) = weak.upgrade() {
                 let global = ui.global::<Visualizer>();
-                // Only the mounted style's property — the other one's consumer isn't in the tree
-                // to read it. The two flags are value-compared by `Property::set`, so writing them
+                // Only the mounted style's half — the other one's consumer isn't in the tree to
+                // read it. The two flags are value-compared by `Property::set`, so writing them
                 // every tick costs a comparison rather than a repaint.
-                match &session.figure {
-                    Figure::Trace { path, .. } => {
-                        global.set_wave_path(SharedString::from(path.as_str()));
-                    }
-                    Figure::Bars { path, .. } => {
-                        global.set_bars_path(SharedString::from(path.as_str()));
-                    }
+                if let Some(path) = wave_path {
+                    global.set_wave_path(path);
+                }
+                if bars_moved {
+                    global.set_bars_generation(global.get_bars_generation().wrapping_add(1));
                 }
                 global.set_idle(idle);
                 global.set_dormant(dormant);
             }
+        });
+    }
+
+    // bars-figure — the bars for the levels the last tick left, laid out on the strip as Slint has
+    // it now, so a relayout at rest re-snaps them with no tick to ask. The generation is only the
+    // token that re-runs the binding.
+    {
+        let session = session.clone();
+        let weak = ui.as_weak();
+        viz_global.on_bars_figure(move |_generation, style_idx, x, y, width, height| {
+            // `.slint` has no way to spell the scale factor, and the bars need it to find the
+            // window's device pixels under the strip.
+            let scale = weak.upgrade().map_or(1.0, |ui| ui.window().scale_factor());
+            let strip = StripGeometry { x, y, width, height, scale };
+            let anchor = bar_anchor(style_index_from_i32(style_idx));
+            let mut slot = session.borrow_mut();
+            if let Some(Session { figure: Figure::Bars { analyzer, path, .. }, .. }) = slot.as_mut()
+            {
+                spectrum::write_bar_path(analyzer.levels(), strip, anchor, path);
+                return SharedString::from(path.as_str());
+            }
+            // No session before the first tick, and a trace one until a tick replaces it: the bars
+            // at rest either way.
+            let mut path = String::new();
+            spectrum::write_bar_path(&RESTING_LEVELS, strip, anchor, &mut path);
+            SharedString::from(path.as_str())
         });
     }
 
