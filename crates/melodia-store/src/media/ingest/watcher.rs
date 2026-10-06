@@ -93,6 +93,15 @@ impl FolderWatcher {
         Ok(())
     }
 
+    /// Restarts a running watcher over `paths`, for a folder list that changed under it. A
+    /// stopped one stays stopped, watching being switched off.
+    pub fn retarget(&mut self, paths: &[PathBuf]) -> Result<(), AppError> {
+        if self.debouncer.is_none() {
+            return Ok(());
+        }
+        self.start(paths)
+    }
+
     pub fn stop(&mut self) {
         if self.debouncer.take().is_some() {
             log::info!("Folder watcher stopped");

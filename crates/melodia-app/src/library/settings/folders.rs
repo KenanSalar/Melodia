@@ -5,13 +5,15 @@
 //! validation-then-persist cadence. Scanning one is `library::scan`'s.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use crate::library::scan;
 use crate::services;
 use crate::state::AppState;
 use melodia_core::entities::folder;
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 use melodia_store::database::{DbPool, queries};
+use melodia_store::media::ingest::watcher::FolderWatcher;
 
 /// Validates a new folder path against existing folders.
 /// Returns IDs of existing child folders that should be removed (covered by the new parent).
@@ -71,6 +73,7 @@ pub async fn add_folder(state: &AppState, path: String) -> Result<folder::Folder
     // away cascade-deleted their tracks. The subsequent scan will fire its
     // own bump on completion.
     state.library_changed.bump();
+    retarget_watcher(state).await;
 
     Ok(folder)
 }
@@ -99,6 +102,7 @@ pub async fn remove_folder(state: &AppState, id: i64) -> Result<(), AppError> {
     // Cascade-delete removes every track in this folder; subscribers (Tracks
     // view + folder list) need to re-fetch or the UI keeps the stale rows.
     state.library_changed.bump();
+    retarget_watcher(state).await;
     Ok(())
 }
 
@@ -108,15 +112,7 @@ pub async fn get_folders(state: &AppState) -> Result<Vec<folder::Folder>, AppErr
 
 pub async fn toggle_folder_watching(state: &AppState, enabled: bool) -> Result<(), AppError> {
     if enabled {
-        // Resolve folder paths via the async DB query *before* taking the
-        // (sync) parking_lot lock — the guard must not span an await point.
-        let folders = queries::folder::get_all_folders(&state.db).await?;
-        let paths: Vec<PathBuf> =
-            folders.iter().filter(|f| f.is_enabled).map(|f| PathBuf::from(&f.path)).collect();
-        {
-            let mut watcher = state.watcher.lock();
-            watcher.start(&paths)?;
-        }
+        start_watcher(state).await?;
         // Catch files added / removed while the watcher was off — the
         // watcher itself only reports live events.
         scan::reconcile_watched_folders(state);
@@ -125,6 +121,42 @@ pub async fn toggle_folder_watching(state: &AppState, enabled: bool) -> Result<(
         watcher.stop();
     }
     Ok(())
+}
+
+/// Starts the watcher over every enabled folder, replacing whatever it watched before.
+pub(crate) async fn start_watcher(state: &AppState) -> Result<(), AppError> {
+    let paths = enabled_folder_paths(state).await?;
+    with_watcher(state, move |watcher| watcher.start(&paths)).await
+}
+
+/// Points a running watcher at the folder list as it now stands, so a folder added in Settings
+/// is watched from now rather than from the next launch. A failure costs only that, so it is
+/// logged rather than failing the add or remove it follows.
+async fn retarget_watcher(state: &AppState) {
+    let retarget = async {
+        let paths = enabled_folder_paths(state).await?;
+        with_watcher(state, move |watcher| watcher.retarget(&paths)).await
+    };
+    if let Err(e) = retarget.await {
+        log::warn!("Folder watcher didn't follow the folder list: {}", describe(&e));
+    }
+}
+
+async fn enabled_folder_paths(state: &AppState) -> Result<Vec<PathBuf>, AppError> {
+    let folders = queries::folder::get_all_folders(&state.db).await?;
+    Ok(folders.iter().filter(|f| f.is_enabled).map(|f| PathBuf::from(&f.path)).collect())
+}
+
+/// Runs `op` against the watcher on the blocking pool: registering a recursive watch walks the
+/// whole tree, and Add Folder's flow runs on the UI thread.
+async fn with_watcher(
+    state: &AppState,
+    op: impl FnOnce(&mut FolderWatcher) -> Result<(), AppError> + Send + 'static,
+) -> Result<(), AppError> {
+    let watcher = Arc::clone(&state.watcher);
+    tokio::task::spawn_blocking(move || op(&mut watcher.lock()))
+        .await
+        .map_err(|e| AppError::watcher("Folder watcher task failed", e))?
 }
 
 /// Persist the `folder_watching_enabled` flag *first*, then flip the watcher.

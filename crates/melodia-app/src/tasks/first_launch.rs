@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::library;
 use crate::library::scan::ScanOutcome;
@@ -65,26 +65,13 @@ pub async fn run(state: &AppState) -> AppResult<()> {
     }
 
     if settings.library.folder_watching_enabled {
-        match queries::folder::get_all_folders(&state.db).await {
-            Ok(folders) => {
-                let paths: Vec<PathBuf> = folders
-                    .iter()
-                    .filter(|f| f.is_enabled)
-                    .map(|f| PathBuf::from(&f.path))
-                    .collect();
-                {
-                    let mut watcher = state.watcher.lock();
-                    if let Err(e) = watcher.start(&paths) {
-                        log::warn!("Failed to start folder watcher: {}", describe(&e));
-                    }
-                }
-                // Catch files added / removed since the previous session —
-                // the watcher only reports live events from now on.
-                if !auto_scan_stopped {
-                    library::scan::reconcile_watched_folders(state);
-                }
-            }
-            Err(e) => log::warn!("Failed to load folders for watcher: {}", describe(&e)),
+        if let Err(e) = library::settings::folders::start_watcher(state).await {
+            log::warn!("Failed to start folder watcher: {}", describe(&e));
+        }
+        // Catch files added / removed since the previous session —
+        // the watcher only reports live events from now on.
+        if !auto_scan_stopped {
+            library::scan::reconcile_watched_folders(state);
         }
     }
 
