@@ -7,8 +7,8 @@ export component FolderRow inherits Rectangle {
     in property <string> path;
     // Pre-formatted by Rust; empty means never scanned, and hides the line.
     in property <string> last-scanned;
-    // Held false mid-scan, so two rescans can't fight over the shared
-    // `scan_progress_tx`.
+    // Held false mid-scan, so two rescans can't fight over the one
+    // progress slot `ScanControl` holds.
     in property <bool> actions-enabled: true;
 
     callback rescan-clicked();

@@ -56,7 +56,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   scans, watcher, imports, favorite toggles — stays on `library_changed`.
 
 - **First launch** auto-adds `dirs::audio_dir()` and scans. The same `first_launch::run` then
-  starts the watcher and calls `reconcile_watched_folders`, which re-runs `scan_folder_internal`
+  starts the watcher and calls `reconcile_watched_folders`, which re-runs `library::scan`'s folder scan
   over every enabled folder — so a normal boot scans each folder once more to catch changes made
   while closed. That reconcile is the scan path's *common* case (almost nothing to re-parse), which
   is why its incremental filter is the part worth keeping fast.

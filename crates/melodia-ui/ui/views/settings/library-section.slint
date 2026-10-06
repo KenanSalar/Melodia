@@ -92,9 +92,9 @@ export component LibrarySection inherits Rectangle {
             FolderRow {
                 path: row.path;
                 last-scanned: row.last-scanned;
-                // Blocked mid-scan so two rescans can't race on the shared
-                // `scan_progress_tx`: the first's drop-guard would clear the
-                // bar out from under the second.
+                // Blocked mid-scan so two rescans can't race on `ScanControl`'s
+                // one progress slot: the first `ScanRun` to drop would clear
+                // the bar out from under the second.
                 actions-enabled: !LibrarySettings.scanning;
                 rescan-clicked => {
                     LibrarySettings.rescan-folder(row.id);

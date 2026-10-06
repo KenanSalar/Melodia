@@ -555,8 +555,7 @@ import) each get a full-width pool where they used to share one.
 
 Status: implemented and spot-checked 2026-10-05; its rows wait for the checkpoint after 2–6.
 
-Where: `crates/melodia-app/src/library/settings/folders.rs` (`scan_folder_internal`,
-`TX_CHUNK_FILES`), and the full re-read `tasks/tag_backfill.rs` triggers.
+Where: `crates/melodia-app/src/library/scan/mod.rs` (`scan_one`, `TX_CHUNK_FILES`), and the full re-read `tasks/tag_backfill.rs` triggers.
 
 The scan parses the whole folder into one `Vec<ScannedFile>` and only then writes it in
 `TX_CHUNK_FILES` (2,000) transactions. An `ExtractedMetadata` carries 22 text fields of its own, 11
@@ -565,7 +564,7 @@ written to the store during the parse, so no picture bytes ride along. A first s
 library holds an estimated 75 to 100 MB of parsed tags at its peak.
 
 - [x] Parse and ingest per 2,000-file chunk, so the peak follows the chunk rather than the library.
-      `scan_folder_internal` takes `TX_CHUNK_FILES` paths at a time off `to_scan`, parses them
+      `scan_one` takes `TX_CHUNK_FILES` paths at a time off `to_scan`, parses them
       (`parse_chunk`) and ingests them before taking the next. No overlap: it was built and
       measured (below), and bought no time for about 5 MiB more.
 - [x] Moved files keep their ratings and play counts. On the scan path that is
@@ -574,7 +573,7 @@ library holds an estimated 75 to 100 MB of parsed tags at its peak.
       parse keeps that as long as the purge stays after every chunk. The ingest already committed
       per 2,000 files, so its chunks see exactly what they saw before.
 - [x] Progress keeps its total, which is known before the parse, and orphan detection keeps its full
-      path list. `ScanProgressReporter` counts each chunk's ticks against the whole scan.
+      path list. `ScanRun` counts each chunk's ticks against the whole scan.
 - [x] `folders.rs:402` copies every on-disk path into a `String` set (`to_string_lossy`) while
       `files`, never read again, stays alive beside it. The set now takes the buffers out of
       `files` (`into_string_lossy`).

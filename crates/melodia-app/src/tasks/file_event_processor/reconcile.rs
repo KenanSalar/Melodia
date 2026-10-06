@@ -175,7 +175,7 @@ pub(super) async fn process_batch(
     // Gates the post-loop sweeps: a no-op batch (events for untracked
     // files, paths outside library folders) must not pay the full-table
     // album-artwork window-function pass or a stats recalc — mirrors the
-    // `any_changes` gate on the scan path (`library/settings/folders.rs`).
+    // `any_changes` gate on the scan path (`library/scan/finish.rs`).
     let mut changes: usize = 0;
     // One per batch, not one per event: a folder drop lands a release at a time, so every file in
     // it names the same artist and genre.

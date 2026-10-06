@@ -18,7 +18,7 @@ use melodia_store::database::queries;
 ///      flowing into the `file_event_processor`.
 pub async fn run(state: &AppState) -> AppResult<()> {
     let settings = services::settings::read_settings(&state.paths).unwrap_or_else(|e| {
-        log::warn!("Failed to read settings during first-launch init: {e}");
+        log::warn!("Failed to read settings during first-launch init: {}", describe(&e));
         services::settings::SettingsData::default()
     });
 
@@ -49,7 +49,7 @@ pub async fn run(state: &AppState) -> AppResult<()> {
                             }
                         }
                     }
-                    Err(e) => log::warn!("Failed to auto-add Music folder: {e}"),
+                    Err(e) => log::warn!("Failed to auto-add Music folder: {}", describe(&e)),
                 }
             }
         }
@@ -60,7 +60,7 @@ pub async fn run(state: &AppState) -> AppResult<()> {
             settings.library.music_folder_auto_added = true;
         });
         if let Err(e) = marked {
-            log::warn!("Failed to save music_folder_auto_added flag: {e}");
+            log::warn!("Failed to save music_folder_auto_added flag: {}", describe(&e));
         }
     }
 
@@ -75,7 +75,7 @@ pub async fn run(state: &AppState) -> AppResult<()> {
                 {
                     let mut watcher = state.watcher.lock();
                     if let Err(e) = watcher.start(&paths) {
-                        log::warn!("Failed to start folder watcher: {e}");
+                        log::warn!("Failed to start folder watcher: {}", describe(&e));
                     }
                 }
                 // Catch files added / removed since the previous session —
@@ -84,7 +84,7 @@ pub async fn run(state: &AppState) -> AppResult<()> {
                     library::scan::reconcile_watched_folders(state);
                 }
             }
-            Err(e) => log::warn!("Failed to load folders for watcher: {e}"),
+            Err(e) => log::warn!("Failed to load folders for watcher: {}", describe(&e)),
         }
     }
 

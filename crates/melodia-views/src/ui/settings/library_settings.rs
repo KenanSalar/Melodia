@@ -14,7 +14,8 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 
 use crate::ui::util::{clamp_i64_to_i32, count_as_i32};
 use melodia_app::library;
-use melodia_app::state::AppState;
+use melodia_app::state::{AppState, ScanProgressTick};
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Dialog, FolderListRow, LibrarySettings, ScanPhase};
 
 /// Wire up the `LibrarySettings` global: initial folder fetch +
@@ -43,25 +44,18 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<(), slint::EventLoopE
         let mut rx = state.scan.subscribe();
         let weak = weak.clone();
         slint::spawn_local(Compat::new(async move {
+            // Painted before the first wait: the first-launch scan can be publishing before
+            // this subscribes, and `subscribe` marks that value seen.
             loop {
+                let snapshot = rx.borrow_and_update().clone();
+                match weak.upgrade() {
+                    Some(ui) => {
+                        paint_scan_progress(&ui.global::<LibrarySettings>(), snapshot.as_ref());
+                    }
+                    None => break,
+                }
                 if rx.changed().await.is_err() {
                     break;
-                }
-                let snapshot = rx.borrow_and_update().clone();
-                let Some(ui) = weak.upgrade() else { break };
-                let g = ui.global::<LibrarySettings>();
-                if let Some(tick) = snapshot {
-                    g.set_scan_phase(ui_phase(tick.phase));
-                    g.set_found_count(count_as_i32(tick.found));
-                    g.set_scanned_count(count_as_i32(tick.done));
-                    g.set_total_count(count_as_i32(tick.total));
-                    g.set_scanning_file(SharedString::from(tick.current_file.as_str()));
-                } else {
-                    g.set_scan_phase(ScanPhase::Idle);
-                    g.set_found_count(0);
-                    g.set_scanned_count(0);
-                    g.set_total_count(0);
-                    g.set_scanning_file(SharedString::default());
                 }
             }
             log::debug!("ui::settings::library_settings scan-progress subscriber stopped");
@@ -95,7 +89,7 @@ pub async fn refresh_folders(ui: Weak<AppWindow>, state: AppState) {
     let folders = match library::settings::get_folders(&state).await {
         Ok(f) => f,
         Err(e) => {
-            log::warn!("library_settings::refresh_folders: {e}");
+            log::warn!("library_settings::refresh_folders: {}", describe(&e));
             return;
         }
     };
@@ -159,6 +153,23 @@ pub fn format_last_scanned(stamp: Option<&str>) -> String {
 
 fn plural(n: i64) -> &'static str {
     if n == 1 { "" } else { "s" }
+}
+
+/// Shows `tick` on the scan bar, or puts the bar away when no scan is running.
+fn paint_scan_progress(g: &LibrarySettings<'_>, tick: Option<&ScanProgressTick>) {
+    let Some(tick) = tick else {
+        g.set_scan_phase(ScanPhase::Idle);
+        g.set_found_count(0);
+        g.set_scanned_count(0);
+        g.set_total_count(0);
+        g.set_scanning_file(SharedString::default());
+        return;
+    };
+    g.set_scan_phase(ui_phase(tick.phase));
+    g.set_found_count(count_as_i32(tick.found));
+    g.set_scanned_count(count_as_i32(tick.done));
+    g.set_total_count(count_as_i32(tick.total));
+    g.set_scanning_file(SharedString::from(tick.current_file.as_str()));
 }
 
 /// The global's spelling of a backend phase; its extra `Idle` is the empty channel.
