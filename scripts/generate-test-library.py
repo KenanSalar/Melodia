@@ -2,18 +2,20 @@
 r"""Builds a synthetic music library for Melodia's scan and footprint tests.
 
 Every track is a short tune composed from its own seed, tagged with colour and material
-names and a real genre, and carries a flat cover in a colour no other track uses. The
-catalogue derives from one seed, so a rerun rebuilds the same library and skips the
-files that already exist.
+names and a real genre. An album's tracks share one flat cover, in a colour no other
+album uses. The catalogue derives from one seed, so a rerun rebuilds the same library
+and skips the files that already exist.
 
 Needs ffmpeg on PATH and three Python packages:
 
     pip install numpy Pillow mutagen
 
-It asks which folder to write into; --out answers that up front:
+It asks for a folder and builds the library in a folder of its own inside it, named after
+the catalogue: melodia-test-library-50500 by default. --out answers that up front, and
+pointing it at the library's own folder resumes a run there:
 
     python3 scripts/generate-test-library.py
-    py scripts\generate-test-library.py --out D:\melodia-test-songs
+    py scripts\generate-test-library.py --out D:\test-data
 """
 
 from __future__ import annotations
@@ -308,10 +310,11 @@ ENCODER_WEIGHTS = (38, 16, 13, 5, 11, 10, 4, 3)
 def build_catalogue(total: int, seed: int, root: Path) -> list[TrackJob]:
     rng = random.Random(seed)
     titles = iter(unique_titles(rng, total))
-    colors = iter(unique_colors(rng, total))
+    albums = plan_albums(rng, total)
     jobs: list[TrackJob] = []
-    for album in plan_albums(rng, total):
+    for album, color in zip(albums, unique_colors(rng, len(albums))):
         encoding = rng.choices(ENCODERS, weights=ENCODER_WEIGHTS)[0](rng)
+        cover = pick_cover(rng, color)
         folder = root / safe_component(album.album_artist) / safe_component(f"{album.year} - {album.title}")
         discs = disc_layout(rng, len(album.credits))
         credits = iter(album.credits)
@@ -336,7 +339,7 @@ def build_catalogue(total: int, seed: int, root: Path) -> list[TrackJob]:
                     style=GENRE_STYLES[album.genres[0]],
                     seed=rng.getrandbits(32),
                     target_seconds=rng.uniform(MIN_SECONDS, MAX_SECONDS),
-                    cover=pick_cover(rng, next(colors)),
+                    cover=cover,
                 ))
     return jobs
 
@@ -1052,17 +1055,22 @@ def to_folder(raw: str) -> Path:
     return Path(os.path.expandvars(os.path.expanduser(cleaned))).resolve()
 
 
-def ask_for_folder() -> Path:
+def ask_for_folder(library_name: str) -> Path:
     try:
-        folder = to_folder(input("Folder to generate the library in: "))
-        if folder.is_dir() and any(folder.iterdir()):
-            answer = input(f"{folder} already has files in it. Tracks already there are kept "
-                           "and the rest are added. Continue? [y/N] ")
-            if answer.strip().lower() not in ("y", "yes"):
-                sys.exit("Cancelled.")
+        return to_folder(input(f"Folder to create {library_name} in: "))
     except EOFError:
         sys.exit("No folder given; pass --out when running without a terminal.")
-    return folder
+
+
+def library_folder_name(total: int, seed: int) -> str:
+    """Names the folder after what builds the catalogue, so two catalogues never share one."""
+    name = f"melodia-test-library-{total}"
+    return name if seed == DEFAULT_SEED else f"{name}-seed-{seed}"
+
+
+def library_root(folder: Path, library_name: str) -> Path:
+    """The library's own folder inside `folder`, unless `folder` already is it."""
+    return folder if folder.name == library_name else folder / library_name
 
 
 def windows_long_paths_enabled() -> bool:
@@ -1185,7 +1193,7 @@ def format_duration(seconds: float) -> str:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--out", help="folder to write the library into; asked for when left out")
+    parser.add_argument("--out", help="folder to create the library's folder in; asked for when left out")
     parser.add_argument("--total", type=int, default=DEFAULT_TOTAL, help="tracks to generate (default %(default)s)")
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED,
                         help="catalogue seed; the same seed rebuilds the same library (default %(default)s)")
@@ -1199,9 +1207,11 @@ def main() -> None:
     args = parse_args()
     if shutil.which("ffmpeg") is None:
         sys.exit("ffmpeg isn't on PATH; install it and run this again.")
-    root = to_folder(args.out) if args.out is not None else ask_for_folder()
-    if root.exists() and not root.is_dir():
-        sys.exit(f"{root} is a file, not a folder.")
+    library_name = library_folder_name(args.total, args.seed)
+    folder = to_folder(args.out) if args.out is not None else ask_for_folder(library_name)
+    if folder.exists() and not folder.is_dir():
+        sys.exit(f"{folder} is a file, not a folder.")
+    root = library_root(folder, library_name)
 
     jobs = build_catalogue(args.total, args.seed, root)
     if args.sample:
