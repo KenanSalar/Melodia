@@ -1,10 +1,11 @@
 use std::path::{Path, PathBuf};
 
 use crate::library;
+use crate::library::scan::ScanOutcome;
 use crate::services;
 use crate::state::AppState;
 use melodia_core::entities::folder::Folder;
-use melodia_core::error::AppResult;
+use melodia_core::error::{AppResult, describe};
 use melodia_store::database::queries;
 
 /// Translate of `startup::run_async_init` from the Tauri version.
@@ -21,6 +22,8 @@ pub async fn run(state: &AppState) -> AppResult<()> {
         services::settings::SettingsData::default()
     });
 
+    // Set when the user cancels the auto-scan, so the reconcile below doesn't start it over.
+    let mut auto_scan_stopped = false;
     if !settings.library.music_folder_auto_added {
         if let Some(music_dir) = dirs::audio_dir()
             && music_dir.exists()
@@ -39,10 +42,11 @@ pub async fn run(state: &AppState) -> AppResult<()> {
                         // connection. `run()` is itself a tracked task in
                         // `main.rs`, so the outer task_tracker is what
                         // covers shutdown.
-                        if let Err(e) =
-                            library::settings::scan_folder_internal(state, folder.id).await
-                        {
-                            log::warn!("Auto-scan of Music folder failed: {e}");
+                        match library::scan::scan_folder(state, folder.id).await {
+                            Ok(outcome) => auto_scan_stopped = outcome == ScanOutcome::Stopped,
+                            Err(e) => {
+                                log::warn!("Auto-scan of Music folder failed: {}", describe(&e));
+                            }
                         }
                     }
                     Err(e) => log::warn!("Failed to auto-add Music folder: {e}"),
@@ -76,7 +80,9 @@ pub async fn run(state: &AppState) -> AppResult<()> {
                 }
                 // Catch files added / removed since the previous session —
                 // the watcher only reports live events from now on.
-                library::settings::reconcile_watched_folders(state);
+                if !auto_scan_stopped {
+                    library::scan::reconcile_watched_folders(state);
+                }
             }
             Err(e) => log::warn!("Failed to load folders for watcher: {e}"),
         }

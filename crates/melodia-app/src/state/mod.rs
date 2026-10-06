@@ -8,8 +8,10 @@ use tokio_util::task::TaskTracker;
 pub mod contexts;
 #[cfg(test)]
 pub(crate) mod fixtures;
+pub mod scan;
 pub mod signal;
 pub use contexts::PlaybackContext;
+pub use scan::{ScanControl, ScanPhase, ScanProgressTick};
 pub use signal::{SharedFlag, Signal};
 
 use crate::services::search_history::SearchHistoryState;
@@ -34,17 +36,6 @@ use melodia_playback::player::playback::output::{AudioOutput, OutputMode};
 use melodia_playback::player::playback::stream_health::AudioStreamHealth;
 use melodia_store::database::{self, DbPool};
 use melodia_store::media::ingest::watcher::{FileEvent, FolderWatcher};
-
-/// One scan-progress sample published while a folder scan is running. `None`
-/// on the channel means "no scan in progress" — the UI uses that to clear the
-/// progress bar.
-#[derive(Debug, Clone)]
-pub struct ScanProgressTick {
-    pub folder_id: i64,
-    pub scanned: u32,
-    pub total: u32,
-    pub current_file: String,
-}
 
 #[derive(Clone)]
 pub struct AppState {
@@ -100,9 +91,8 @@ pub struct AppState {
     /// notices, so playback runs on with the position ticking and no sound.
     /// Coalesces like `rescan_notice`: a burst paints one toast.
     pub audio_device_lost: Signal,
-    /// Live progress for the folder scan in flight. `None` means idle; the UI
-    /// uses that to hide the progress bar in the Library settings section.
-    pub scan_progress_tx: watch::Sender<Option<ScanProgressTick>>,
+    /// The folder scan in flight: its progress for the Library settings bar, and its cancel.
+    pub scan: Arc<ScanControl>,
     pub watcher: Arc<parking_lot::Mutex<FolderWatcher>>,
     /// Files this process wrote itself (tag edits), so the watcher can drop the
     /// `Modified` events its own writes generate instead of paying for a full
@@ -228,7 +218,8 @@ impl AppState {
         let (q_tx, _) = watch::channel::<Option<QueueViewModel>>(None);
         let (position_tx, _) = watch::channel::<Option<PositionTick>>(None);
         let (signal_path_tx, _) = watch::channel::<Option<SignalPath>>(None);
-        let (scan_progress_tx, _) = watch::channel::<Option<ScanProgressTick>>(None);
+        let shutdown_token = CancellationToken::new();
+        let scan = Arc::new(ScanControl::new(&shutdown_token));
 
         let (mc_handle, mc_rx) = media_controls::init_media_controls();
         let mc_handle = Arc::new(mc_handle);
@@ -281,7 +272,7 @@ impl AppState {
             rescan_notice: Signal::new(),
             auto_check_changed: Signal::new(),
             audio_device_lost: Signal::new(),
-            scan_progress_tx,
+            scan,
             watcher,
             self_writes: Arc::new(SelfWrites::default()),
             always_on_top: always_on_top_capability,
@@ -300,7 +291,7 @@ impl AppState {
             media_controls: Some(mc_handle),
             http_client,
             task_tracker: TaskTracker::new(),
-            shutdown_token: CancellationToken::new(),
+            shutdown_token,
         };
 
         let channels = StartupChannels { media_control_rx: Some(mc_rx), file_event_rx: file_rx };

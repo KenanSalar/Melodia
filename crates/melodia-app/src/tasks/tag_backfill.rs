@@ -57,7 +57,7 @@ async fn backfill(state: &AppState) -> AppResult<()> {
     // Whichever reconcile gets there first does the work. This one is a no-op when the boot scan
     // is already in flight — the marks are durable, so that pass or the next launch's picks them
     // up, and the marker records the half that must not be lost.
-    library::settings::reconcile_watched_folders(state);
+    library::scan::reconcile_watched_folders(state);
     Ok(())
 }
 

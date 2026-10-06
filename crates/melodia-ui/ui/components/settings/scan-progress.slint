@@ -1,0 +1,55 @@
+import { Theme } from "../../theme.slint";
+import { LibrarySettings, ScanPhase } from "../../globals/library-settings.slint";
+import { ProgressBar } from "progress-bar.slint";
+import { SectionButton } from "section-button.slint";
+
+// The scan in flight: its bar, where it has got to, and Cancel. Mounted by the Library Folders
+// card and the onboarding music step, the second inside a branch dropped on close, so nothing
+// here may carry a `changed` handler.
+//
+// Cancel stays mounted, disabled, once there is nothing left to stop, so the bar doesn't widen
+// under the pointer the moment it is pressed.
+export component ScanProgress inherits HorizontalLayout {
+    spacing: Theme.pad-md;
+
+    VerticalLayout {
+        horizontal-stretch: 1;
+        alignment: center;
+        spacing: Theme.pad-sm;
+
+        ProgressBar {
+            value: LibrarySettings.scan-progress;
+        }
+        Text {
+            text: LibrarySettings.scan-phase == ScanPhase.discovering
+                ? @tr("Looking for music… {n} file found" | "Looking for music… {n} files found"
+                      % LibrarySettings.found-count)
+                : LibrarySettings.scan-phase == ScanPhase.finishing ? @tr("Finishing up…")
+                : LibrarySettings.scan-phase == ScanPhase.stopping ? @tr("Stopping…")
+                : LibrarySettings.scanning-file != ""
+                    ? @tr("{} / {} files · {}",
+                          LibrarySettings.scanned-count,
+                          LibrarySettings.total-count,
+                          LibrarySettings.scanning-file)
+                    : @tr("{} / {} files",
+                          LibrarySettings.scanned-count,
+                          LibrarySettings.total-count);
+            color: Theme.subtext0;
+            font-size: Theme.font-size-sm;
+            overflow: elide;
+        }
+    }
+
+    VerticalLayout {
+        alignment: center;
+        SectionButton {
+            label: @tr("Cancel");
+            icon: "close";
+            primary: false;
+            button-enabled: LibrarySettings.scan-cancellable;
+            clicked => {
+                LibrarySettings.cancel-scan();
+            }
+        }
+    }
+}

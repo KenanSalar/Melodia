@@ -373,6 +373,20 @@ msgstr "{} / {} file"
 msgid "{} / {} files · {}"
 msgstr "{} / {} file · {}"
 
+# The scan's other phases: the walk, before anything is known about what needs
+# reading; the last write once everything is read; a cancelled scan writing what
+# it had read.
+msgid "Looking for music… {n} file found"
+msgid_plural "Looking for music… {n} files found"
+msgstr[0] "Ricerca di musica… {n} file trovato"
+msgstr[1] "Ricerca di musica… {n} file trovati"
+
+msgid "Finishing up…"
+msgstr "Completamento…"
+
+msgid "Stopping…"
+msgstr "Interruzione…"
+
 msgid "Remove Folder?"
 msgstr "Rimuovere la cartella?"
 

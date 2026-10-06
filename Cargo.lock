@@ -3918,7 +3918,6 @@ dependencies = [
  "notify",
  "notify-debouncer-full",
  "rayon",
- "serde",
  "sqlx",
  "tempfile",
  "tokio",

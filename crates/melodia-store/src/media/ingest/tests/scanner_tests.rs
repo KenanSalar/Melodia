@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
-use std::sync::Arc;
-use std::sync::atomic::AtomicU32;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use tempfile::TempDir;
 
@@ -23,6 +22,13 @@ fn create_test_files(dir: &Path, names: &[&str]) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Walks `dir` with nothing able to stop it, so a `None` is a defect rather than a cancel.
+fn walk(dir: &Path) -> Result<Vec<PathBuf>, AppError> {
+    collect_media_files(dir, &Unobserved)
+        .map(|walk| walk.files)
+        .ok_or_else(|| AppError::Validation("a walk nothing cancelled came back stopped".into()))
+}
+
 #[test]
 fn collects_audio_files() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
@@ -30,7 +36,7 @@ fn collects_audio_files() -> Result<(), AppError> {
         tmp.path(),
         &["song.mp3", "track.flac", "audio.m4a", "clip.aac", "voice.ogg", "pcm.wav"],
     )?;
-    let files = collect_media_files(tmp.path());
+    let files = walk(tmp.path())?;
     assert_eq!(files.len(), 6);
     Ok(())
 }
@@ -39,7 +45,7 @@ fn collects_audio_files() -> Result<(), AppError> {
 fn ignores_non_audio_files() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     create_test_files(tmp.path(), &["song.mp3", "readme.txt", "cover.jpg", "doc.pdf"])?;
-    let files = collect_media_files(tmp.path());
+    let files = walk(tmp.path())?;
     assert_eq!(files.len(), 1);
     assert!(files[0].to_string_lossy().ends_with("song.mp3"));
     Ok(())
@@ -48,7 +54,7 @@ fn ignores_non_audio_files() -> Result<(), AppError> {
 #[test]
 fn handles_empty_directory() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
-    let files = collect_media_files(tmp.path());
+    let files = walk(tmp.path())?;
     assert!(files.is_empty());
     Ok(())
 }
@@ -57,7 +63,7 @@ fn handles_empty_directory() -> Result<(), AppError> {
 fn follows_nested_directories() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     create_test_files(tmp.path(), &["a/b/deep.flac", "top.mp3", "sub/track.ogg"])?;
-    let files = collect_media_files(tmp.path());
+    let files = walk(tmp.path())?;
     assert_eq!(files.len(), 3);
     Ok(())
 }
@@ -69,7 +75,7 @@ fn collects_all_supported_extensions() -> Result<(), AppError> {
         AUDIO_EXTENSIONS.iter().map(|ext| format!("file.{ext}")).collect();
     let names: Vec<&str> = audio_files.iter().map(std::string::String::as_str).collect();
     create_test_files(tmp.path(), &names)?;
-    let files = collect_media_files(tmp.path());
+    let files = walk(tmp.path())?;
     assert_eq!(files.len(), AUDIO_EXTENSIONS.len());
     Ok(())
 }
@@ -83,7 +89,7 @@ fn extension_match_is_case_insensitive() -> Result<(), AppError> {
         tmp.path(),
         &["Track.FLAC", "Song.Mp3", "clip.AAC", "cover.JPG", "notes.TXT"],
     )?;
-    let mut names: Vec<String> = collect_media_files(tmp.path())
+    let mut names: Vec<String> = walk(tmp.path())?
         .iter()
         .filter_map(|p| p.file_name()?.to_str().map(str::to_owned))
         .collect();
@@ -131,7 +137,7 @@ fn scan_files_parallel_empty_returns_empty() -> Result<(), AppError> {
     let artwork_dir = tmp.path().join("artwork");
     fs::create_dir(&artwork_dir)?;
 
-    let result = scan_files_parallel(&[], &artwork_dir, &test_cover_cache(), &|_, _| {});
+    let result = scan_files_parallel(&[], &artwork_dir, &test_cover_cache(), &Unobserved);
     assert!(result.is_empty());
     Ok(())
 }
@@ -150,7 +156,7 @@ fn scan_files_parallel_keeps_a_filename_row_for_unparseable_tags() -> Result<(),
     fs::write(&bad_file, b"not valid audio")?;
 
     let files = vec![bad_file];
-    let result = scan_files_parallel(&files, &artwork_dir, &test_cover_cache(), &|_, _| {});
+    let result = scan_files_parallel(&files, &artwork_dir, &test_cover_cache(), &Unobserved);
 
     let [scanned] = result.as_slice() else {
         return Err(AppError::Validation("the unparseable file produced no row".into()));
@@ -171,18 +177,31 @@ fn scan_files_parallel_drops_files_it_cannot_read() -> Result<(), AppError> {
     fs::create_dir(&artwork_dir)?;
 
     let files = vec![tmp.path().join("gone.mp3")];
-    let result = scan_files_parallel(&files, &artwork_dir, &test_cover_cache(), &|_, _| {});
+    let result = scan_files_parallel(&files, &artwork_dir, &test_cover_cache(), &Unobserved);
     assert!(result.is_empty());
     Ok(())
 }
 
+/// Counts the parse's progress reports.
+struct ReadCounter(AtomicU32);
+
+impl ScanObserver for ReadCounter {
+    fn is_cancelled(&self) -> bool {
+        false
+    }
+
+    fn read(&self, _done: u32, _file_name: &str) {
+        self.0.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
 #[test]
-fn scan_files_parallel_calls_progress_callback() -> Result<(), AppError> {
+fn scan_files_parallel_reports_progress_to_its_observer() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let artwork_dir = tmp.path().join("artwork");
     fs::create_dir(&artwork_dir)?;
 
-    // Create 10 valid WAV files to trigger the progress callback (fires every 10)
+    // Create 10 valid WAV files to trigger a progress report (fires every 10)
     let mut files = Vec::new();
     for i in 0..10 {
         let path = tmp.path().join(format!("track_{i}.wav"));
@@ -190,15 +209,11 @@ fn scan_files_parallel_calls_progress_callback() -> Result<(), AppError> {
         files.push(path);
     }
 
-    let callback_count = Arc::new(AtomicU32::new(0));
-    let counter = callback_count.clone();
+    let counter = ReadCounter(AtomicU32::new(0));
+    scan_files_parallel(&files, &artwork_dir, &test_cover_cache(), &counter);
 
-    scan_files_parallel(&files, &artwork_dir, &test_cover_cache(), &move |_, _| {
-        counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    });
-
-    // With 10 files, callback fires at file 10 (every 10 files)
-    assert!(callback_count.load(std::sync::atomic::Ordering::Relaxed) >= 1);
+    // With 10 files, a report fires at file 10 (every 10 files)
+    assert!(counter.0.load(Ordering::Relaxed) >= 1);
     Ok(())
 }
 

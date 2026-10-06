@@ -15,7 +15,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 use crate::ui::util::{clamp_i64_to_i32, count_as_i32};
 use melodia_app::library;
 use melodia_app::state::AppState;
-use melodia_ui::{AppWindow, Dialog, FolderListRow, LibrarySettings};
+use melodia_ui::{AppWindow, Dialog, FolderListRow, LibrarySettings, ScanPhase};
 
 /// Wire up the `LibrarySettings` global: initial folder fetch +
 /// scan-progress subscriber + library-changed re-fetch subscriber. Call once
@@ -40,7 +40,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<(), slint::EventLoopE
 
     // 2. Scan-progress subscriber: live progress bar updates on the UI.
     {
-        let mut rx = state.scan_progress_tx.subscribe();
+        let mut rx = state.scan.subscribe();
         let weak = weak.clone();
         slint::spawn_local(Compat::new(async move {
             loop {
@@ -51,16 +51,16 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<(), slint::EventLoopE
                 let Some(ui) = weak.upgrade() else { break };
                 let g = ui.global::<LibrarySettings>();
                 if let Some(tick) = snapshot {
-                    g.set_scanning(true);
-                    g.set_scanned_count(count_as_i32(tick.scanned));
+                    g.set_scan_phase(ui_phase(tick.phase));
+                    g.set_found_count(count_as_i32(tick.found));
+                    g.set_scanned_count(count_as_i32(tick.done));
                     g.set_total_count(count_as_i32(tick.total));
-                    g.set_scan_progress(progress_fraction(tick.scanned, tick.total));
                     g.set_scanning_file(SharedString::from(tick.current_file.as_str()));
                 } else {
-                    g.set_scanning(false);
+                    g.set_scan_phase(ScanPhase::Idle);
+                    g.set_found_count(0);
                     g.set_scanned_count(0);
                     g.set_total_count(0);
-                    g.set_scan_progress(0.0);
                     g.set_scanning_file(SharedString::default());
                 }
             }
@@ -161,15 +161,15 @@ fn plural(n: i64) -> &'static str {
     if n == 1 { "" } else { "s" }
 }
 
-#[allow(
-    clippy::cast_precision_loss,
-    reason = "u32 file counts stay below f32 mantissa range; progress is for UI only"
-)]
-fn progress_fraction(scanned: u32, total: u32) -> f32 {
-    if total == 0 {
-        return 0.0;
+/// The global's spelling of a backend phase; its extra `Idle` is the empty channel.
+fn ui_phase(phase: melodia_app::state::ScanPhase) -> ScanPhase {
+    use melodia_app::state::ScanPhase as Backend;
+    match phase {
+        Backend::Discovering => ScanPhase::Discovering,
+        Backend::Reading => ScanPhase::Reading,
+        Backend::Finishing => ScanPhase::Finishing,
+        Backend::Stopping => ScanPhase::Stopping,
     }
-    (scanned as f32) / (total as f32)
 }
 
 #[cfg(test)]

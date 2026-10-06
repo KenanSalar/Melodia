@@ -113,7 +113,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState, mut rx: mpsc::Receiver<Fil
                 BatchPlan::Nothing => {}
                 BatchPlan::Rescan => {
                     log::warn!("Rescan requested via watcher overflow flag");
-                    crate::library::settings::reconcile_watched_folders(&state);
+                    crate::library::scan::reconcile_watched_folders(&state);
                     state.rescan_notice.bump();
                 }
                 BatchPlan::Process(batch) => {

@@ -6,7 +6,7 @@ import { SectionCard } from "../../components/settings/section-card.slint";
 import { SectionDivider } from "../../components/settings/section-divider.slint";
 import { SectionButton } from "../../components/settings/section-button.slint";
 import { FolderRow } from "../../components/settings/folder-row.slint";
-import { ProgressBar } from "../../components/settings/progress-bar.slint";
+import { ScanProgress } from "../../components/settings/scan-progress.slint";
 
 // Folder management: a header sub-row and Add button, optional scan progress,
 // then the folder rows or an empty state. Everything comes off
@@ -80,29 +80,8 @@ export component LibrarySection inherits Rectangle {
 
         SectionDivider {}
 
-        // One column for the bar, the file label and the counter.
-        if LibrarySettings.scanning: Rectangle {
-            background: transparent;
-            VerticalLayout {
-                padding: Theme.pad-lg;
-                spacing: Theme.pad-sm;
-                ProgressBar {
-                    value: LibrarySettings.scan-progress;
-                }
-                Text {
-                    text: LibrarySettings.scanning-file != ""
-                        ? @tr("{} / {} files · {}",
-                              LibrarySettings.scanned-count,
-                              LibrarySettings.total-count,
-                              LibrarySettings.scanning-file)
-                        : @tr("{} / {} files",
-                              LibrarySettings.scanned-count,
-                              LibrarySettings.total-count);
-                    color: Theme.subtext0;
-                    font-size: Theme.font-size-sm;
-                    overflow: elide;
-                }
-            }
+        if LibrarySettings.scanning: ScanProgress {
+            padding: Theme.pad-lg;
         }
         if LibrarySettings.scanning: SectionDivider {}
 

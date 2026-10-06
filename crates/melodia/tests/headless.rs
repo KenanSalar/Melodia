@@ -17,6 +17,7 @@
 use std::path::PathBuf;
 
 use melodia_app::library;
+use melodia_app::library::scan::ScanOutcome;
 use melodia_app::state::AppState;
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
@@ -38,8 +39,12 @@ async fn headless_scan_persists_track() -> Result<(), AppError> {
     let folder =
         library::settings::add_folder(&state, fixtures.to_string_lossy().into_owned()).await?;
 
-    let scanned = library::settings::scan_folder(&state, folder.id).await?;
-    assert_eq!(scanned, 1, "expected exactly the silence fixture to ingest");
+    let outcome = library::scan::scan_folder(&state, folder.id).await?;
+    assert_eq!(
+        outcome,
+        ScanOutcome::Completed { inserted: 1 },
+        "expected exactly the silence fixture to ingest"
+    );
 
     let tracks = library::tracks::get_tracks(&state).await?;
     assert_eq!(tracks.len(), 1, "exactly one track should be in DB");

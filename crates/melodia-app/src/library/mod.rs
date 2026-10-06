@@ -31,6 +31,7 @@ pub mod radio;
 pub mod radio_files;
 pub mod ratings;
 pub mod recently_played;
+pub mod scan;
 pub mod search;
 pub mod settings;
 pub mod smart_playlists;

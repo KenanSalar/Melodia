@@ -1,7 +1,7 @@
 import { Theme } from "../../theme.slint";
 import { OnboardingPanelHeader } from "onboarding-panel-header.slint";
 import { LibrarySettings } from "../../globals/library-settings.slint";
-import { ProgressBar } from "../settings/progress-bar.slint";
+import { ScanProgress } from "../settings/scan-progress.slint";
 import { SectionButton } from "../settings/section-button.slint";
 
 // Step 2, and not a question: `tasks::first_launch` adds the Music folder and starts a scan on its
@@ -17,25 +17,8 @@ export component OnboardingMusicPanel inherits VerticalLayout {
     }
 
     // Three states, and the scan wins: it is the only one that is still moving.
-    if LibrarySettings.scanning: VerticalLayout {
-        spacing: Theme.pad-sm;
+    if LibrarySettings.scanning: ScanProgress {
         padding-top: Theme.pad-sm;
-        ProgressBar {
-            value: LibrarySettings.scan-progress;
-        }
-        Text {
-            text: LibrarySettings.scanning-file != ""
-                ? @tr("{} / {} files · {}",
-                      LibrarySettings.scanned-count,
-                      LibrarySettings.total-count,
-                      LibrarySettings.scanning-file)
-                : @tr("{} / {} files",
-                      LibrarySettings.scanned-count,
-                      LibrarySettings.total-count);
-            color: Theme.subtext0;
-            font-size: Theme.font-size-sm;
-            overflow: elide;
-        }
     }
     if !LibrarySettings.scanning && LibrarySettings.folders.length > 0: Text {
         text: @tr("{n} folder in your library" | "{n} folders in your library"
