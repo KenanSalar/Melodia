@@ -91,6 +91,10 @@ pub struct AppState {
     /// notices, so playback runs on with the position ticking and no sound.
     /// Coalesces like `rescan_notice`: a burst paints one toast.
     pub audio_device_lost: Signal,
+    /// How many scans are restoring cover art whose stored file went missing, for the notice
+    /// that says so. A count rather than a [`Signal`] because the boot scan can start restoring
+    /// before the notice's subscriber exists, and a payload is still there when it attaches.
+    pub artwork_restoring: watch::Sender<u32>,
     /// The folder scan in flight: its progress for the Library settings bar, and its cancel.
     pub scan: Arc<ScanControl>,
     pub watcher: Arc<parking_lot::Mutex<FolderWatcher>>,
@@ -272,6 +276,7 @@ impl AppState {
             rescan_notice: Signal::new(),
             auto_check_changed: Signal::new(),
             audio_device_lost: Signal::new(),
+            artwork_restoring: watch::Sender::new(0),
             scan,
             watcher,
             self_writes: Arc::new(SelfWrites::default()),

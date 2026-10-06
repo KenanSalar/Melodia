@@ -1,9 +1,10 @@
 //! A process-wide one-way channel whose sender producers reach without carrying a handle.
 //!
-//! Two of these exist and they had a copy each of the same three pieces: a `OnceLock` sender, a
-//! send that no-ops when nothing installed one, and an install that hands the receiver back. What
-//! differs between them is only the consumer — the play-count flusher spawns its own, the toast
-//! bridge hands its receiver to a UI-thread task — so that half stays at each site.
+//! Each bridge used to carry its own copy of the same three pieces: a `OnceLock` sender, a send
+//! that no-ops when nothing installed one, and an install that hands the receiver back. What
+//! differs between them is only the consumer, so that half stays at each site: the play-count
+//! flusher and the artwork restore spawn their own, and the toast bridge hands its receiver to a
+//! UI-thread task.
 //!
 //! Producers are dependency-free by construction: the event type is theirs and nothing here
 //! reaches the consumer's world. That is what lets `tasks/` and `player/` raise a toast without

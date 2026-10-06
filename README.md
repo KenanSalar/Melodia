@@ -66,7 +66,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 ## Features
 
 ### Library
-- A first-run card that sets language, theme and accent, reports the scan already running over your Music folder, and names every feature that reaches the network so you can switch it on or leave it off. Three panels, closeable in a click, and reachable again from Settings ▸ About
+- A first-run card that opens on your library, adding your Music folder in one click or any other folder you pick, then sets language, theme and accent, and names every feature that reaches the network so you can switch it on or leave it off. Three panels, closeable in a click, and reachable again from Settings ▸ About
 - Parallel folder scanning, live folder watching, and incremental re-scans
 - Content hashing (BLAKE3), so a moved or renamed file keeps its play counts, favorites, and place in the queue
 - Full-text search (SQLite FTS5) over tracks, albums, artists, and genres, and over the people credited on a track, so a composer or a producer reaches their work: accent-insensitive, relevance-ranked, with a top-result card and recent history. The filter box on every list searches the same fields
@@ -309,7 +309,7 @@ Everything lives under the OS application-data directory, `~/.local/share/Melodi
 | `melodia.db` | The music library (SQLite, WAL + FTS5) |
 | `settings.json`, `views.json`, `queue.json` | Preferences, per-view UI state, and the queue with the station tuned over it |
 | `scrobble_*.json` | Last.fm session key and ListenBrainz token (`0600` on Unix), plus the offline queue |
-| `artwork/`, `artists/`, `radio-logos/` | Cached album, artist, and station images |
+| `artwork/`, `artists/`, `radio-logos/` | Cached album, artist, and station images. A deleted cover is put back from your music files on the next scan |
 | `lyrics/` | Sheets the online lookup found, and a marker for the tracks it found none for |
 | `backups/` | Database copies taken before each schema migration |
 | `logs/` | Rolling logs and crash reports |

@@ -56,7 +56,8 @@ pub use discord::{
 };
 pub use equalizer::{set_eq_band_gains_and_preset, set_eq_enabled, set_eq_preamp};
 pub use folders::{
-    add_folder, get_folders, remove_folder, set_folder_watching_enabled, toggle_folder_watching,
+    add_folder, get_folders, remove_folder, set_folder_watching_enabled, suggested_music_folder,
+    toggle_folder_watching,
 };
 pub use lyrics::{set_lyrics_enabled, set_lyrics_online_enabled, set_lyrics_romanization_shown};
 pub use motion::set_skip_startup_animation;

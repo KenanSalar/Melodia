@@ -8,7 +8,6 @@ use crate::ui::file_dialog;
 use crate::ui::settings::library_settings as lib_settings_ui;
 use melodia_app::library;
 use melodia_app::state::AppState;
-use melodia_core::error::AppError;
 use melodia_ui::{AppWindow, LibrarySettings};
 
 /// Wire the `LibrarySettings.*` callbacks. Pairs with
@@ -41,18 +40,7 @@ pub fn wire_library_settings(ui: &AppWindow, state: &AppState) {
                     return;
                 };
                 let path_str = handle.path().to_string_lossy().into_owned();
-
-                match library::settings::add_folder(&s, path_str).await {
-                    // The bump inside `add_folder` already drove the folder-list
-                    // subscriber, so the new row is on screen by the time the scan starts.
-                    Ok(folder) => library::scan::start(&s, folder.id),
-                    Err(AppError::Validation(msg)) => {
-                        lib_settings_ui::show_error(&weak, "Cannot add folder", msg);
-                    }
-                    Err(e) => {
-                        lib_settings_ui::show_error(&weak, "Cannot add folder", e.to_string());
-                    }
-                }
+                lib_settings_ui::add_folder_and_scan(&s, &weak, path_str).await;
             }));
         });
     }

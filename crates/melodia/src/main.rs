@@ -183,7 +183,7 @@ fn main() -> AppResult<()> {
         boot::tasks::open_startup_files(&runtime, &state, &startup_files);
     }
 
-    boot::tasks::spawn_first_launch(&spawner, &state);
+    boot::tasks::spawn_resume_watching(&spawner, &state);
 
     // Maximized rides the winit `WindowAttributes` hook — Slint exposes no API
     // for it, and the hook creates the window already-maximized with no flash.
@@ -341,6 +341,11 @@ fn main() -> AppResult<()> {
         weak.clone(),
         notifications.clone(),
     )?;
+    boot::ui_setup::install_artwork_restore_subscriber(
+        &state,
+        weak.clone(),
+        notifications.clone(),
+    )?;
 
     // The Ko-fi link, plus the one-time support toast a few minutes into
     // whichever early launch is the fifth. Counts this launch either way.
@@ -413,7 +418,7 @@ fn main() -> AppResult<()> {
     // Independent of the daily check: the in-attempt prune only fires on the
     // next install click, so a cancelled install leaves a verified package in
     // the staging dir forever for a user who never clicks again. The grace
-    // matches `updater_daily::STARTUP_DELAY`, giving the first-launch scan and
+    // matches `updater_daily::STARTUP_DELAY`, giving the launch scan and
     // DB pre-fetch first claim on the disk.
     runtime.spawn(async {
         tokio::time::sleep(std::time::Duration::from_secs(30)).await;

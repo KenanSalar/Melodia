@@ -735,6 +735,12 @@ msgstr "Kitaplık yeniden eşitleniyor"
 msgid "Filesystem event burst — rescanning your folders."
 msgstr "Dosya sistemi olay yoğunluğu — klasörlerin yeniden taranıyor."
 
+msgid "Restoring cover art"
+msgstr "Kapaklar geri yükleniyor"
+
+msgid "Some cover art was missing. Melodia is restoring it from your music files."
+msgstr "Bazı kapak görselleri eksikti. Melodia bunları müzik dosyalarından geri yüklüyor."
+
 # ---- Albums view ------------------------------------------------------------
 
 msgid "Name"
@@ -2066,9 +2072,18 @@ msgstr "Melodia'nın görünümünü seçin. Her değişiklik anında uygulanır
 msgid "Your music"
 msgstr "Müzikleriniz"
 
-# Body line under "Your music": states what the first-launch scan already did.
-msgid "Melodia watches your Music folder and picks up changes on its own."
-msgstr "Melodia, Müzik klasörünüzü izler ve değişiklikleri kendisi algılar."
+# Body line under "Your music": the first panel asks for the library's folders.
+msgid "Add the folders your music lives in. Melodia picks up changes to them on its own."
+msgstr "Müziğinizin bulunduğu klasörleri ekleyin. Melodia bunlardaki değişiklikleri kendisi algılar."
+
+msgid "Your Music folder: {}"
+msgstr "Müzik klasörünüz: {}"
+
+msgid "Add Music Folder"
+msgstr "Müzik Klasörünü Ekle"
+
+msgid "Choose Another Folder"
+msgstr "Başka Klasör Seç"
 
 # Heading of the welcome card's third panel, listing the features that use the network.
 msgid "What Melodia can reach"

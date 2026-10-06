@@ -111,10 +111,11 @@ export component OnboardingOverlay inherits Rectangle {
                 }
             }
 
-            // Only step 1 takes the width: its strips wrap against it, where the other two lay
-            // themselves out from the layout alone.
-            if Onboarding.step == 0: OnboardingAppearancePanel { content-w: card.content-w; }
-            if Onboarding.step == 1: OnboardingMusicPanel { }
+            // The library first, nothing else filling it. Only the appearance panel takes the
+            // width: its strips wrap against it, where the other two lay themselves out from the
+            // layout alone.
+            if Onboarding.step == 0: OnboardingMusicPanel { }
+            if Onboarding.step == 1: OnboardingAppearancePanel { content-w: card.content-w; }
             if Onboarding.step == 2: OnboardingFeaturesPanel { }
 
             HorizontalLayout {

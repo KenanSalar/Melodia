@@ -50,9 +50,13 @@ async fn get_artist_by_id_not_found() -> Result<(), AppError> {
 async fn get_artists_without_images() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let artists = queries::artist::get_artists_without_images(&db).await?;
-    // The seed's two, plus the schema's Unknown Artist sentinel, which has no image either and
-    // is exactly the row a floor here would let the query start or stop returning unnoticed.
-    assert_eq!(artists.len(), 3);
+    // The seed's two, and not the schema's Unknown Artist sentinel, which has no image either:
+    // a directory search for its name answers with a stranger's photo.
+    assert_eq!(artists.len(), 2);
+    assert!(
+        artists.iter().all(|artist| artist.id != queries::artist::UNKNOWN_ARTIST_ID),
+        "the placeholder must never be looked up"
+    );
     Ok(())
 }
 

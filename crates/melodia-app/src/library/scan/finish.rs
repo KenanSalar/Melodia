@@ -77,12 +77,13 @@ pub(super) async fn commit_final(
     }
 
     // No-op rescans (every file unchanged, no orphans, no inserts) skip the
-    // album-artwork propagation and the full stats recalc — both are O(rows)
-    // sweeps that produce identical values when nothing changed.
+    // artwork roll-ups and the full stats recalc, O(rows) sweeps that produce
+    // identical values when nothing changed.
     let any_changes = ingested.any() || !orphans.is_empty();
 
     if any_changes {
         queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
+        queries::playlist::fill_missing_thumbnails(&mut tx).await?;
         // Purged orphan tracks can leave their album/artist/genre empty; sweep those.
         queries::scan::prune_orphans(&mut tx).await?;
     }

@@ -118,8 +118,8 @@ pub fn new_cover_cache() -> CoverCache {
 /// the same key duplicate the work once rather than queueing behind each other's I/O.
 ///
 /// **A hit naming a file that is gone counts as a miss.** The sweep can retire a stored cover
-/// between the memo landing and a later track reaching it, and a row written from a stale hit does
-/// not heal: `track_is_current` reads the track as current, so nothing re-extracts. One `stat`
+/// between the memo landing and a later track reaching it, and a row written from a stale hit
+/// names a file that isn't there, a placeholder until the next scan's repair clears it. One `stat`
 /// against a decode plus a re-encode. A memoized `None` stays a hit — a directory with no cover and
 /// a source that would not store are both settled answers, not worth re-asking per track.
 fn memoized_path<K, P>(
@@ -173,9 +173,23 @@ fn persist_unless_exists(tmp: tempfile::NamedTempFile, file_path: &Path) -> io::
     tmp.persist(file_path).map(drop).map_err(|e| e.error)
 }
 
+/// A staging file in `dir`, recreating `dir` if it has gone.
+///
+/// Boot creates every store directory, so only a folder deleted while the app runs reaches the
+/// retry, and without it every write would fail until a restart, the restore included.
+fn stage_in(dir: &Path) -> io::Result<tempfile::NamedTempFile> {
+    match tempfile::NamedTempFile::new_in(dir) {
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            std::fs::create_dir_all(dir)?;
+            tempfile::NamedTempFile::new_in(dir)
+        }
+        staged => staged,
+    }
+}
+
 /// Stages `bytes` beside their destination and renames into place.
 fn write_atomic(dir: &Path, file_path: &Path, bytes: &[u8]) -> io::Result<()> {
-    let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
+    let mut tmp = stage_in(dir)?;
     tmp.write_all(bytes)?;
     persist_unless_exists(tmp, file_path)
 }

@@ -15,7 +15,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 use crate::ui::util::{clamp_i64_to_i32, count_as_i32};
 use melodia_app::library;
 use melodia_app::state::{AppState, ScanProgressTick};
-use melodia_core::error::describe;
+use melodia_core::error::{AppError, describe};
 use melodia_ui::{AppWindow, Dialog, FolderListRow, LibrarySettings, ScanPhase};
 
 /// Wire up the `LibrarySettings` global: initial folder fetch +
@@ -107,6 +107,18 @@ pub async fn refresh_folders(ui: Weak<AppWindow>, state: AppState) {
         let model: Rc<VecModel<FolderListRow>> = Rc::new(VecModel::from(rows));
         ui.global::<LibrarySettings>().set_folders(ModelRc::from(model));
     });
+}
+
+/// Add `path` to the library and scan it, raising the Dialog with the reason a folder was
+/// refused. The Library tab's picker and the welcome card's Music folder offer both land here.
+pub async fn add_folder_and_scan(state: &AppState, ui: &Weak<AppWindow>, path: String) {
+    match library::settings::add_folder(state, path).await {
+        // The bump inside `add_folder` already drove the folder-list subscriber, so the new row
+        // is on screen by the time the scan starts.
+        Ok(folder) => library::scan::start(state, folder.id),
+        Err(AppError::Validation(msg)) => show_error(ui, "Cannot add folder", msg),
+        Err(e) => show_error(ui, "Cannot add folder", e.to_string()),
+    }
 }
 
 /// Pop the modal Dialog overlay with the given title + message. Safe to call

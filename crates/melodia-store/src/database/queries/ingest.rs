@@ -6,14 +6,11 @@ use sqlx::AssertSqlSafe;
 
 use crate::database::MAX_BINDS_PER_STATEMENT;
 use crate::database::queries;
+use crate::database::queries::artist::UNKNOWN_ARTIST_ID;
 use crate::database::queries::scan::NameCache;
 use crate::media::ingest::scan_pool::ScanPool;
 use melodia_core::entities::scan::ScannedFile;
 use melodia_core::error::AppError;
-
-/// Sentinel artist ID for tracks/albums with no known artist.
-/// Matches the row inserted in schema.sql.
-const UNKNOWN_ARTIST_ID: i64 = 1;
 
 /// How to resolve the `folder_id` for each track during ingest.
 pub enum FolderResolution {

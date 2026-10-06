@@ -3,7 +3,7 @@
 //! Cadence:
 //!
 //! - **30 s after launch**: one-shot first check (gives the runtime time
-//!   to settle and avoids racing the first-launch folder scan for
+//!   to settle and avoids racing the launch folder scan for
 //!   network I/O).
 //! - **Then every 6 h**: re-arm via `tokio::time::sleep`. Not
 //!   `tokio::time::interval` — `interval` fires every tick instantly
@@ -88,7 +88,7 @@ pub fn spawn(
     let mut auto_check = state.auto_check_changed.subscribe();
 
     spawner.spawn_cancellable(move |shutdown| async move {
-        // Startup grace period — gives the first-launch scan + DB
+        // Startup grace period — gives the launch scan + DB
         // pre-fetch room to settle before we add network I/O.
         tokio::select! {
             biased;

@@ -84,7 +84,7 @@ fn a_referenced_file_survives_and_an_orphan_does_not() -> Result<(), AppError> {
     assert!(dir.join("33fb807d1f1b7cbb.jpg").exists(), "a referenced composite must survive");
     assert!(!dir.join("4cccaf4d4b4cea11.jpg").exists(), "an unreferenced file must go");
     assert!(dir.join("notes.txt").exists(), "a name we never wrote is not ours to delete");
-    assert_eq!(report, SweepReport { deleted: 1, bytes: 9, kept: 1, failed: 0 });
+    assert_eq!(report, SweepReport { deleted: 1, bytes: 9, kept: 1, deferred: 0, failed: 0 });
     Ok(())
 }
 
@@ -125,7 +125,7 @@ fn the_grace_window_keeps_a_just_written_file() -> Result<(), AppError> {
 
     assert!(dir.join("abcdef0123456789.png").exists(), "inside the window, nothing goes");
     assert_eq!(report.deleted, 0);
-    assert_eq!(report.kept, 1);
+    assert_eq!(report.deferred, 1, "an orphan the window spared is owed a later sweep");
     Ok(())
 }
 

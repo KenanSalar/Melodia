@@ -33,7 +33,8 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   `library_changed` bumps once after it.
 
 - **The artwork sweep runs *after* that tx commits, never inside it** (`tasks::artwork_sweep`,
-  spawned beside `retroactive_hash`). It deletes by reference rather than by refcount, argued in
+  spawned beside `retroactive_hash`, and once per launch, since a launch with no library scans
+  nothing). It deletes by reference rather than by refcount, argued in
   `docs/adr/`. Two gates, both required: the name has to parse back into the scheme
   `media::image::artwork` writes, and nothing in the reference set may name it. **That set is six
   columns** — `tracks.artwork_path`, `albums.artwork_path`, `artists.image_path`,
@@ -46,20 +47,42 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   file the sweep just deleted. That also fixes an order: `tasks::radio_logo_cache` drops expired
   rows *before* the sweep runs, or every one of them still counts as referenced and the store
   never shrinks. A one-hour grace window covers the file a tag edit or scan worker has
-  written but not yet committed a row for. `queries::artwork` owns both the read side and the
-  `UPDATE`s the renormalize pass re-points with, pinned against one column ledger — a missing
-  column is silent one way and destructive the other.
+  written but not yet committed a row for, and **an orphan it spares brings the sweep back once
+  the hour is up**, a library with nothing left to scan running no other. **A folder removal
+  skips the window** (`artwork_sweep::retire_released`): it reads the reference set ahead of the
+  delete and retires what that named and the set after it doesn't, every such file having been
+  named by a committed row, so a library removed seconds after its scan takes its covers with it.
+  `queries::artwork` owns the read
+  side, the `UPDATE`s the renormalize pass re-points with and the ones the repair below clears
+  with, pinned against one column ledger — a missing column is silent one way and destructive the
+  other.
+
+- **Every scan entry repairs before it walks, and the repair is the sweep's inverse**
+  (`library::scan::repair`): references to a stored file that is gone are cleared. Every refill
+  fills an empty column and leaves a set one alone, and the size-and-mtime gate never re-reads an
+  unchanged track, so a path to a deleted cover used to survive any number of rescans. A cleared
+  track also loses its `date_modified`, `tasks::tag_backfill`'s lever, so the scan behind it
+  re-extracts the cover. Library columns only: radio's two heal through `library::radio`.
+  **Mid-session the trigger is a cover cache**, in either of two crates that may not name the
+  library: a decode that finds the file missing reports over `utils::missing_artwork`, and
+  `tasks::artwork_restore` starts the same reconcile. `media::image::decoded` is what lets the
+  restored cover paint without a restart, a cached *missing* answer lapsing once the file is back
+  where a *broken* one stays settled.
 
 - **`stats_changed` vs `library_changed`.** Play-count flushes bump the stats channel only;
   its two subscribers are Favorites (hero mosaic + Most Played rank by `play_count`) and
   Recently-Played (ordered by `last_played`, written on the same flush). Everything structural —
   scans, watcher, imports, favorite toggles — stays on `library_changed`.
 
-- **First launch** auto-adds `dirs::audio_dir()` and scans. The same `first_launch::run` then
-  starts the watcher and calls `reconcile_watched_folders`, which re-runs `library::scan`'s folder scan
-  over every enabled folder — so a normal boot scans each folder once more to catch changes made
-  while closed. That reconcile is the scan path's *common* case (almost nothing to re-parse), which
-  is why its incremental filter is the part worth keeping fast.
+- **No folder is added on its own.** A fresh install starts empty, and the welcome card's first
+  panel offers the platform's Music folder beside the picker. It is offered only where adding it
+  would neither be refused nor supersede a folder already there (`suggested_music_folder` argues
+  why).
+  Every launch, `tasks::resume_watching::run` starts the watcher and calls
+  `reconcile_watched_folders`, which re-runs `library::scan`'s folder scan over every enabled folder
+  — so a normal boot scans each folder once more to catch changes made while closed. That reconcile
+  is the scan path's *common* case (almost nothing to re-parse), which is why its incremental
+  filter is the part worth keeping fast.
 
 - **One audio-extension predicate: `utils::audio_ext::is_audio_extension(ext)`.** Case-folded
   (`eq_ignore_ascii_case` against ASCII `AUDIO_EXTENSIONS`), allocating nothing — the library walk

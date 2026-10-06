@@ -29,4 +29,11 @@ export global Onboarding {
     // Close onto Settings ▸ Services. Both scrobbling services need a login, which has no business
     // inside a welcome card.
     callback open-services();
+
+    // The platform's Music folder as the first panel names it, or empty where there is nothing to
+    // offer: no such folder, or one the library already covers. Rust keeps it current while the
+    // card is up.
+    in property <string> suggested-folder;
+    // Add that folder and scan it: the Library tab's add, minus the picker.
+    callback add-suggested-folder();
 }

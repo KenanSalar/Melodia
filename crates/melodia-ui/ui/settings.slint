@@ -368,6 +368,14 @@ export global Settings {
     library-resyncing-message => {
         return @tr("Filesystem event burst — rescanning your folders.");
     }
+    pure callback artwork-restoring-title() -> string;
+    artwork-restoring-title => {
+        return @tr("Restoring cover art");
+    }
+    pure callback artwork-restoring-message() -> string;
+    artwork-restoring-message => {
+        return @tr("Some cover art was missing. Melodia is restoring it from your music files.");
+    }
 
     // The updater's three toasts. "Available" carries the `install-update` action kind
     // and dispatches `Updater.install()`; "installed" carries `update-restart` and

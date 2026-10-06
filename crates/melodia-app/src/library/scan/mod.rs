@@ -10,7 +10,10 @@
 //! skipping everything already stored.
 
 mod finish;
+mod repair;
 mod run;
+
+pub use repair::restore_missing_artwork;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -31,6 +34,7 @@ use melodia_store::media::ingest::scan_pool::ScanPool;
 use melodia_store::media::ingest::scanner::{
     MediaWalk, ScanObserver, collect_media_files, scan_files_parallel, track_is_current,
 };
+use repair::RestoreNotice;
 use run::ScanRun;
 
 /// How a scan ended, when it didn't fail.
@@ -46,7 +50,25 @@ pub enum ScanOutcome {
 /// Scans one folder, stopping when [`cancel`] or shutdown asks.
 pub async fn scan_folder(state: &AppState, folder_id: i64) -> Result<ScanOutcome, AppError> {
     let cancel = state.scan.token();
-    scan_one(state, folder_id, &cancel).await
+    let restoring = forget_missing_artwork(state).await;
+    let outcome = scan_one(state, folder_id, &cancel).await?;
+    // The repair cleared missing covers across the whole library and this folder has re-read
+    // only its own share, so the rest follow under the same notice.
+    if let Some(notice) = restoring
+        && matches!(outcome, ScanOutcome::Completed { .. })
+    {
+        reconcile(state, Some(notice));
+    }
+    Ok(outcome)
+}
+
+/// The repair every scan entry runs before reading anything. A failure is logged rather than
+/// returned: a scan that couldn't check the artwork store is still worth running.
+async fn forget_missing_artwork(state: &AppState) -> Option<RestoreNotice> {
+    repair::forget_missing(state).await.unwrap_or_else(|e| {
+        log::warn!("Artwork check before the scan failed: {}", describe(&e));
+        None
+    })
 }
 
 /// Scans one folder in the background, tracked so shutdown waits for its last write. A failure
@@ -86,7 +108,7 @@ impl Drop for ReconcileGuard {
 /// the watcher itself only reports live events, so a restart or a
 /// toggle-off interval leaves DB and disk out of sync until the next
 /// manual Rescan. Triggered after the watcher transitions off → on
-/// (`first_launch::run`, `toggle_folder_watching(true)`) and on
+/// (`resume_watching::run`, `toggle_folder_watching(true)`) and on
 /// watcher-overflow `RescanNeeded` from `file_event_processor`.
 ///
 /// Sequential per folder: `SQLite` has a single writer, and the scan
@@ -102,6 +124,11 @@ impl Drop for ReconcileGuard {
 /// call while a reconcile is mid-flight is a no-op (the in-flight pass
 /// will pick up the latest disk state anyway).
 pub fn reconcile_watched_folders(state: &AppState) {
+    reconcile(state, None);
+}
+
+/// [`reconcile_watched_folders`], holding up a restore notice a scan has already raised.
+fn reconcile(state: &AppState, restoring: Option<RestoreNotice>) {
     if RECONCILE_IN_FLIGHT
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         .is_err()
@@ -114,6 +141,8 @@ pub fn reconcile_watched_folders(state: &AppState) {
     let cancel = state.scan.token();
     spawner.spawn(async move {
         let _guard = ReconcileGuard;
+        let _handed_over = restoring;
+        let _restoring = forget_missing_artwork(&state).await;
         let folders = match queries::folder::get_all_folders(&state.db).await {
             Ok(f) => f,
             Err(e) => {

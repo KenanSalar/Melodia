@@ -18,7 +18,7 @@ use crate::media::image::image_decode::{FilterType, MAX_SOURCE_DIM, decode_cappe
 
 use super::{
     HASH_HEX_LEN, HashingWriter, STORE_JPEG_QUALITY, STORE_MAX_DIM, persist_unless_exists,
-    resize_to_cover, stored_name,
+    resize_to_cover, stage_in, stored_name,
 };
 
 /// Side of the collage [`compose_artwork`] persists.
@@ -137,7 +137,7 @@ pub fn compose_artwork(source_paths: &[PathBuf], artwork_dir: &Path) -> Option<S
     // writer feeds every byte to a BLAKE3 hasher. This avoids holding the
     // entire encoded JPEG in RAM (composite mosaics are typically ~50 KB but
     // the scanner can issue several in parallel during a large library scan).
-    let tmp = match tempfile::NamedTempFile::new_in(artwork_dir) {
+    let tmp = match stage_in(artwork_dir) {
         Ok(t) => t,
         Err(e) => {
             log::warn!("Failed to create composite tempfile: {e}");

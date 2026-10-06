@@ -20,7 +20,8 @@ use super::is_stored_name;
 ///
 /// A tag edit or a scan worker can have written a cover whose row hasn't committed yet, which
 /// would otherwise read as an orphan and leave the committing transaction pointing at nothing. An
-/// hour is far past any write window and costs at most one extra scan before a real orphan goes.
+/// hour is far past any write window, and what it spares is counted as [`SweepReport::deferred`]
+/// so the caller can come back for it.
 pub const GRACE: Duration = Duration::from_hours(1);
 
 /// What one sweep did, for the caller's log line.
@@ -30,8 +31,11 @@ pub struct SweepReport {
     pub deleted: u32,
     /// Bytes those files occupied.
     pub bytes: u64,
-    /// Stored files left in place — still referenced, or still inside [`GRACE`].
+    /// Stored files still referenced, and so left in place.
     pub kept: u32,
+    /// Unreferenced files spared only for being inside the grace window. Orphans once it passes,
+    /// unless a row commits for them first.
+    pub deferred: u32,
     /// Stored files that could not be read or unlinked; left alone, retried next sweep.
     pub failed: u32,
 }
@@ -41,10 +45,12 @@ pub struct Candidate {
     path: PathBuf,
     name: String,
     bytes: u64,
+    /// Inside the grace window: spared even unreferenced, but still checked, so the caller learns
+    /// whether a later sweep is owed.
+    young: bool,
 }
 
-/// Every stored file in `dir` the two clock-and-name gates left standing, plus what they already
-/// decided.
+/// Every stored file in `dir` the name gate left standing, plus what it already decided.
 ///
 /// **Call this before reading the reference set, never after.** A scan writes to both under it,
 /// and only this order fails safe: a row committed between the two is visible to the query, where
@@ -79,17 +85,23 @@ pub fn collect_candidates(
             report.failed += 1;
             continue;
         };
-        if within_grace(&metadata, grace, now) {
-            report.kept += 1;
-            continue;
-        }
         candidates.push(Candidate {
             path: entry.path(),
             name: name.to_owned(),
             bytes: metadata.len(),
+            young: within_grace(&metadata, grace, now),
         });
     }
     (candidates, report)
+}
+
+/// Narrows `candidates` to the files `names` lists, for a caller that knows which files it
+/// released and owes the rest no decision.
+pub fn named_in<S: std::hash::BuildHasher>(
+    candidates: Vec<Candidate>,
+    names: &HashSet<String, S>,
+) -> Vec<Candidate> {
+    candidates.into_iter().filter(|candidate| names.contains(&candidate.name)).collect()
 }
 
 /// Deletes every candidate `referenced` does not name, folding into the report
@@ -110,6 +122,10 @@ pub fn retire<S: std::hash::BuildHasher>(
     for candidate in candidates {
         if referenced.contains(&candidate.name) {
             report.kept += 1;
+            continue;
+        }
+        if candidate.young {
+            report.deferred += 1;
             continue;
         }
         match std::fs::remove_file(&candidate.path) {

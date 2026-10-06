@@ -33,6 +33,7 @@ use parking_lot::Mutex;
 use rayon::prelude::*;
 use slint::{Image, Rgb8Pixel, SharedPixelBuffer};
 
+use super::decoded::Decoded;
 use super::image_decode::{
     FilterType, MAX_SOURCE_DIM, decode_capped_to, large_decode_guard, resize_rgb8,
     resize_rgb8_image, source_pixels,
@@ -60,9 +61,7 @@ const CACHE_CAP: NonZeroUsize = match NonZeroUsize::new(512) {
     None => panic!("CACHE_CAP > 0"),
 };
 
-/// `None` is a decode that failed — cached too, so refilters don't keep re-hitting the same broken
-/// file.
-type CachedBuf = Option<SharedPixelBuffer<Rgb8Pixel>>;
+type CachedBuf = Decoded<SharedPixelBuffer<Rgb8Pixel>>;
 
 /// A cached thumbnail and the tier size it was decoded for.
 ///
@@ -74,6 +73,13 @@ struct Cached {
     /// The size asked for at the decode, not the buffer's own extent. The tier is downscale-only,
     /// so a cover smaller than it keeps its own size and the two differ routinely.
     size: u32,
+}
+
+impl Cached {
+    /// Whether this entry answers a lookup of `path` at `thumb_size` without a decode.
+    fn serves(&self, path: &Path, thumb_size: u32) -> bool {
+        self.size == thumb_size && self.buf.is_current(path)
+    }
 }
 
 /// Bounded Rayon pool for everything this tier hands off — the prewarm, the scheduled drain and
@@ -247,7 +253,7 @@ impl CoverThumbs {
             cache
                 .iter()
                 .filter_map(|(path, held)| {
-                    let buf = held.buf.as_ref()?;
+                    let buf = held.buf.ready()?;
                     (buf.width().max(buf.height()) > proxy_dim).then(|| (path.clone(), buf.clone()))
                 })
                 .collect()
@@ -280,7 +286,7 @@ impl CoverThumbs {
                 // iteration order and hand the next eviction the wrong answer about what was
                 // seen last.
                 if let Some(held) = cache.peek_mut(&path) {
-                    held.buf = Some(buf);
+                    held.buf = Decoded::Ready(buf);
                     held.size = proxy_dim;
                 }
             }
@@ -342,7 +348,7 @@ impl CoverThumbs {
     fn borrow_from_backing(&self, path: &Path, thumb_size: u32) -> Option<Cached> {
         let TierSize::Backed(backing) = &self.size else { return None };
         let cache = backing.cache.lock();
-        let held = cache.peek(path).filter(|held| held.size == thumb_size)?;
+        let held = cache.peek(path).filter(|held| held.serves(path, thumb_size))?;
         Some(Cached { buf: held.buf.clone(), size: thumb_size })
     }
 
@@ -365,7 +371,8 @@ impl CoverThumbs {
     pub fn get_or_load(&self, path: &Path) -> Image {
         let thumb_size = self.thumb_size();
         // `LruCache::get` takes `&mut self` (a hit promotes), hence the mutex.
-        if let Some(held) = self.cache.lock().get(path).filter(|held| held.size == thumb_size) {
+        if let Some(held) = self.cache.lock().get(path).filter(|held| held.serves(path, thumb_size))
+        {
             return buf_to_image(&held.buf);
         }
         // Decode off the lock so other threads can keep reading the cache.
@@ -439,11 +446,18 @@ impl CoverThumbs {
         // Scoped so the lock is gone before `schedule`, which takes it again through `capacity`.
         let held = {
             let mut cache = self.cache.lock();
-            cache.get(path).map(|held| (buf_to_image(&held.buf), held.size))
+            cache
+                .get(path)
+                .map(|held| (buf_to_image(&held.buf), held.size, held.buf.is_current(path)))
         };
         match held {
-            Some((img, size)) if size == thumb_size => img,
-            Some((img, _)) => {
+            Some((img, size, true)) if size == thumb_size => img,
+            Some((img, _, current)) => {
+                // A missing cover that is back may already be among the paths this burst
+                // settled, and `schedule` would refuse it.
+                if !current {
+                    self.pending.lock().settled.remove(path);
+                }
                 self.schedule(path.to_path_buf());
                 img
             }
@@ -562,11 +576,12 @@ impl CoverThumbs {
     /// decoding the full-resolution artwork a second time.
     pub fn get_or_load_rgb8(&self, path: &Path) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
         let thumb_size = self.thumb_size();
-        if let Some(held) = self.cache.lock().get(path).filter(|held| held.size == thumb_size) {
-            return held.buf.clone();
+        if let Some(held) = self.cache.lock().get(path).filter(|held| held.serves(path, thumb_size))
+        {
+            return held.buf.ready().cloned();
         }
         let entry = self.load(path, thumb_size);
-        let returned = entry.buf.clone();
+        let returned = entry.buf.ready().cloned();
         self.cache.lock().put(path.to_path_buf(), entry);
         returned
     }
@@ -634,18 +649,20 @@ impl CoverThumbs {
 ///
 /// **Non-promoting**, so asking cannot reorder the prefix a `prewarm` warmed in display order.
 fn holds(cache: &LruCache<PathBuf, Cached>, path: &Path, thumb_size: u32) -> bool {
-    cache.peek(path).is_some_and(|held| held.size == thumb_size)
+    cache.peek(path).is_some_and(|held| held.serves(path, thumb_size))
 }
 
 fn buf_to_image(buf: &CachedBuf) -> Image {
-    buf.as_ref().map(|b| Image::from_rgb8(b.clone())).unwrap_or_default()
+    buf.ready().map(|b| Image::from_rgb8(b.clone())).unwrap_or_default()
 }
 
 fn decode_thumb(path: &Path, thumb_size: u32) -> Cached {
-    Cached { buf: decode_thumb_buffer(path, thumb_size), size: thumb_size }
+    let buf =
+        decode_thumb_buffer(path, thumb_size).map_or_else(|| Decoded::failed(path), Decoded::Ready);
+    Cached { buf, size: thumb_size }
 }
 
-fn decode_thumb_buffer(path: &Path, thumb_size: u32) -> CachedBuf {
+fn decode_thumb_buffer(path: &Path, thumb_size: u32) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
     // Held for the decode only. A header the probe can't read leaves the decode ungated, which is
     // no worse than having no gate.
     let _oversized = source_pixels(path).and_then(large_decode_guard);

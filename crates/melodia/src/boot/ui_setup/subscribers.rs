@@ -1,7 +1,8 @@
-//! Backend-to-UI bridges: the three `Signal` subscribers and the process-wide toast channel.
+//! Backend-to-UI bridges: the three `Signal` subscribers, the artwork restore's count and the
+//! process-wide toast channel.
 //!
-//! Each is a closure over `ui::signal::on_signal`, which owns the subscribe-and-spawn loop; what
-//! is left here is what each one does with the tick.
+//! Each `Signal` one is a closure over `ui::signal::on_signal`, which owns the subscribe-and-spawn
+//! loop; what is left here is what each one does with the tick.
 
 use std::sync::Arc;
 
@@ -73,6 +74,49 @@ pub fn install_audio_device_lost_subscriber(
             RowText::plain(g.invoke_audio_device_lost_title(), g.invoke_audio_device_lost_message())
         });
     })
+}
+
+/// Holds an info toast up while a scan restores cover art whose stored file went missing.
+///
+/// A payload loop rather than [`ui::signal::on_signal`]: the boot scan can raise the count before
+/// this attaches, and a tick sent then is never seen where the count is still there to read. Acts
+/// only on the edges, so a second restore joining the first stacks no second card.
+pub fn install_artwork_restore_subscriber(
+    state: &AppState,
+    weak: slint::Weak<AppWindow>,
+    notifications: std::rc::Rc<ui::shell::notifications::NotificationsUi>,
+) -> Result<(), melodia_core::error::AppError> {
+    use melodia_ui::Settings;
+    use ui::shell::notifications::RowText;
+
+    const KIND: &str = "artwork-restoring";
+    let mut restoring = state.artwork_restoring.subscribe();
+    slint::spawn_local(async_compat::Compat::new(async move {
+        let mut shown = false;
+        loop {
+            let active = *restoring.borrow_and_update() > 0;
+            if active != shown {
+                let Some(ui) = weak.upgrade() else { break };
+                if active {
+                    notifications.show_localized(&ui, "info", KIND, |ui| {
+                        let g = ui.global::<Settings>();
+                        RowText::plain(
+                            g.invoke_artwork_restoring_title(),
+                            g.invoke_artwork_restoring_message(),
+                        )
+                    });
+                } else {
+                    notifications.dismiss_by_kind(KIND);
+                }
+                shown = active;
+            }
+            if restoring.changed().await.is_err() {
+                break;
+            }
+        }
+    }))
+    .map(|_| ())
+    .map_err(|e| melodia_core::error::AppError::Window(format!("artwork restore subscriber: {e}")))
 }
 
 /// Drain the process-wide `utils::toast` channel on the UI thread.

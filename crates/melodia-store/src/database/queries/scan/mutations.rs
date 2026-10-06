@@ -451,13 +451,14 @@ pub async fn prune_orphans(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Resu
 
     sqlx::query(
         "DELETE FROM artists \
-         WHERE id <> 1 \
+         WHERE id <> ? \
            AND NOT EXISTS (SELECT 1 FROM tracks WHERE tracks.artist_id = artists.id) \
            AND NOT EXISTS (SELECT 1 FROM albums WHERE albums.artist_id = artists.id) \
            AND NOT EXISTS (SELECT 1 FROM track_artists WHERE track_artists.artist_id = artists.id) \
            AND NOT EXISTS (SELECT 1 FROM album_artists WHERE album_artists.artist_id = artists.id) \
            AND NOT EXISTS (SELECT 1 FROM track_credits WHERE track_credits.artist_id = artists.id)",
     )
+    .bind(crate::database::queries::artist::UNKNOWN_ARTIST_ID)
     .execute(&mut **tx)
     .await?;
 

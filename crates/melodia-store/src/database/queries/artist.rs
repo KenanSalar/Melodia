@@ -18,10 +18,19 @@ pub async fn get_artist_by_id(db: &DbPool, id: i64) -> Result<artist::ArtistStat
         .ok_or_else(|| AppError::not_found("Artist", id))
 }
 
+/// The artist a track or album with no artist tag is filed under, inserted at a fixed id by the
+/// initial schema.
+///
+/// Never pruned, and never given an image: it names no one, so a directory search for its name
+/// answers with a stranger's photo, drawn under every untagged track.
+pub const UNKNOWN_ARTIST_ID: i64 = 1;
+
+/// The artists an image fetch should look up, the [`UNKNOWN_ARTIST_ID`] placeholder excluded.
 pub async fn get_artists_without_images(db: &DbPool) -> Result<Vec<artist::Artist>, AppError> {
     let artists = sqlx::query_as::<_, artist::Artist>(
-        "SELECT * FROM artists WHERE image_path IS NULL OR image_path = ''",
+        "SELECT * FROM artists WHERE (image_path IS NULL OR image_path = '') AND id <> ?",
     )
+    .bind(UNKNOWN_ARTIST_ID)
     .fetch_all(db.read())
     .await?;
     Ok(artists)

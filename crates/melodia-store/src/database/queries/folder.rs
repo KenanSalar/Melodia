@@ -37,21 +37,19 @@ pub async fn get_folder_by_id(db: &DbPool, id: i64) -> Result<folder::Folder, Ap
         .ok_or_else(|| AppError::not_found("Folder", id))
 }
 
-pub async fn delete_folder(db: &DbPool, id: i64) -> Result<(), AppError> {
-    // ON DELETE CASCADE on tracks.folder_id handles child deletion
-    sqlx::query("DELETE FROM folders WHERE id = ?").bind(id).execute(db.write()).await?;
-    Ok(())
-}
-
-/// Batch delete by id list. Used by `add_folder` to remove subfolders covered
-/// by a newly-added parent — one round-trip instead of one per child.
-/// Chunks at [`MAX_BINDS_PER_STATEMENT`] so a long id list stays inside one statement's budget.
+/// Deletes the folders, their tracks by cascade, and whatever those tracks leave behind.
+///
+/// The prune shares the delete's transaction because nothing else would run it: only a scan that
+/// changed something prunes, and an album left without tracks keeps its cover referenced, so the
+/// artwork sweep never retires it. Chunks at [`MAX_BINDS_PER_STATEMENT`] so a long id list stays
+/// inside one statement's budget.
 ///
 /// [`MAX_BINDS_PER_STATEMENT`]: crate::database::MAX_BINDS_PER_STATEMENT
-pub async fn delete_folders_by_ids(db: &DbPool, ids: &[i64]) -> Result<(), AppError> {
+pub async fn delete_folders(db: &DbPool, ids: &[i64]) -> Result<(), AppError> {
     if ids.is_empty() {
         return Ok(());
     }
+    let mut tx = db.write().begin().await?;
     for chunk in ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT) {
         let placeholders = crate::database::placeholders(chunk.len());
         let sql = format!("DELETE FROM folders WHERE id IN ({placeholders})");
@@ -59,8 +57,10 @@ pub async fn delete_folders_by_ids(db: &DbPool, ids: &[i64]) -> Result<(), AppEr
         for id in chunk {
             q = q.bind(id);
         }
-        q.persistent(false).execute(db.write()).await?;
+        q.persistent(false).execute(&mut *tx).await?;
     }
+    crate::database::queries::scan::prune_orphans(&mut tx).await?;
+    tx.commit().await?;
     Ok(())
 }
 

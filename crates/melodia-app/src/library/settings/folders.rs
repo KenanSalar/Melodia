@@ -10,6 +10,7 @@ use std::sync::Arc;
 use crate::library::scan;
 use crate::services;
 use crate::state::AppState;
+use crate::tasks::{self, TaskSpawner};
 use melodia_core::entities::folder;
 use melodia_core::error::{AppError, describe};
 use melodia_store::database::{DbPool, queries};
@@ -88,7 +89,7 @@ async fn insert_replacing_children(db: &DbPool, path: &str) -> Result<folder::Fo
     let existing_folders = queries::folder::get_all_folders(db).await?;
     let children_to_remove = validate_folder_path(new_path, &existing_folders)?;
 
-    queries::folder::delete_folders_by_ids(db, &children_to_remove).await?;
+    queries::folder::delete_folders(db, &children_to_remove).await?;
 
     let canonical = melodia_core::utils::canonicalize_path(new_path)
         .map_err(|e| AppError::Validation(format!("Cannot resolve path: {e}")))?;
@@ -98,16 +99,38 @@ async fn insert_replacing_children(db: &DbPool, path: &str) -> Result<folder::Fo
 }
 
 pub async fn remove_folder(state: &AppState, id: i64) -> Result<(), AppError> {
-    queries::folder::delete_folder(&state.db, id).await?;
+    // Read ahead of the delete: the covers it releases are the ones named here and not after it.
+    let referenced_before = queries::artwork::referenced_filenames(&state.db).await?;
+    queries::folder::delete_folders(&state.db, &[id]).await?;
     // Cascade-delete removes every track in this folder; subscribers (Tracks
     // view + folder list) need to re-fetch or the UI keeps the stale rows.
     state.library_changed.bump();
+    tasks::artwork_sweep::retire_released(
+        &TaskSpawner::from_state(state),
+        state,
+        referenced_before,
+    );
     retarget_watcher(state).await;
     Ok(())
 }
 
 pub async fn get_folders(state: &AppState) -> Result<Vec<folder::Folder>, AppError> {
     queries::folder::get_all_folders(&state.db).await
+}
+
+/// The platform's own Music folder, when adding it would neither be refused nor replace a folder
+/// already in the library, for the welcome card to offer in one click.
+///
+/// Replacing is ruled out as well as refusing: a parent supersedes its children by deleting their
+/// tracks, and a click on an offer is no place to spend a library's play counts and favourites.
+pub async fn suggested_music_folder(state: &AppState) -> Result<Option<PathBuf>, AppError> {
+    let Some(music_dir) = dirs::audio_dir() else {
+        return Ok(None);
+    };
+    let existing = queries::folder::get_all_folders(&state.db).await?;
+    let addable =
+        validate_folder_path(&music_dir, &existing).is_ok_and(|children| children.is_empty());
+    Ok(addable.then_some(music_dir))
 }
 
 pub async fn toggle_folder_watching(state: &AppState, enabled: bool) -> Result<(), AppError> {
@@ -160,7 +183,7 @@ async fn with_watcher<R: Send + 'static>(
 
 /// Persist the `folder_watching_enabled` flag *first*, then flip the watcher.
 /// Persist-first means a `start()` failure leaves disk consistent with the
-/// user's intent — `tasks::first_launch::run` will retry on next launch
+/// user's intent — `tasks::resume_watching::run` will retry on next launch
 /// from the persisted flag. The reverse order would leave a running watcher
 /// that doesn't restart next session if `mutate_settings` failed.
 pub async fn set_folder_watching_enabled(state: &AppState, enabled: bool) -> Result<(), AppError> {

@@ -731,6 +731,12 @@ msgstr "Επανασυγχρονισμός βιβλιοθήκης"
 msgid "Filesystem event burst — rescanning your folders."
 msgstr "Έξαρση συμβάντων συστήματος αρχείων — επανεξετάζονται οι φάκελοί σας."
 
+msgid "Restoring cover art"
+msgstr "Επαναφορά εξωφύλλων"
+
+msgid "Some cover art was missing. Melodia is restoring it from your music files."
+msgstr "Κάποια εξώφυλλα έλειπαν. Το Melodia τα επαναφέρει από τα αρχεία μουσικής σας."
+
 # ---- Albums view ------------------------------------------------------------
 
 msgid "Name"
@@ -2061,9 +2067,18 @@ msgstr "Επιλέξτε την εμφάνιση του Melodia. Κάθε αλλ
 msgid "Your music"
 msgstr "Η μουσική σας"
 
-# Body line under "Your music": states what the first-launch scan already did.
-msgid "Melodia watches your Music folder and picks up changes on its own."
-msgstr "Το Melodia παρακολουθεί τον φάκελο μουσικής σας και εντοπίζει μόνο του τις αλλαγές."
+# Body line under "Your music": the first panel asks for the library's folders.
+msgid "Add the folders your music lives in. Melodia picks up changes to them on its own."
+msgstr "Προσθέστε τους φακέλους όπου βρίσκεται η μουσική σας. Το Melodia εντοπίζει μόνο του τις αλλαγές τους."
+
+msgid "Your Music folder: {}"
+msgstr "Ο φάκελος μουσικής σας: {}"
+
+msgid "Add Music Folder"
+msgstr "Προσθήκη φακέλου μουσικής"
+
+msgid "Choose Another Folder"
+msgstr "Επιλογή άλλου φακέλου"
 
 # Heading of the welcome card's third panel, listing the features that use the network.
 msgid "What Melodia can reach"

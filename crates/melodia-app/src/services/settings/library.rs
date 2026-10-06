@@ -14,11 +14,10 @@ use serde::{Deserialize, Serialize};
 #[serde(default)]
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "six independent settings.json keys, four of them one-shot markers; any grouping would be a container invented for the lint rather than one describing something"
+    reason = "five independent settings.json keys, three of them one-shot markers; any grouping would be a container invented for the lint rather than one describing something"
 )]
 pub struct LibraryFlags {
     pub folder_watching_enabled: bool,
-    pub music_folder_auto_added: bool,
     /// Whether the artwork store has been brought inside its size bounds once.
     ///
     /// Normalization happens at the writer, so it only ever reaches newly-scanned files —
@@ -55,7 +54,6 @@ impl Default for LibraryFlags {
     fn default() -> Self {
         Self {
             folder_watching_enabled: true,
-            music_folder_auto_added: false,
             artwork_store_normalized: false,
             write_ratings_to_tags: true,
             ratings_imported_from_tags: false,

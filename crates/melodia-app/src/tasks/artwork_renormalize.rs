@@ -99,7 +99,7 @@ async fn renormalize(db: &DbPool, paths: &Paths) -> AppResult<()> {
     // Awaited here rather than left to the next scan: every original this pass replaced is an
     // orphan *created by the re-points above*, so a sweep ordered before them cannot see one —
     // which is exactly what left them on disk for a whole extra launch.
-    super::artwork_sweep::run(db, paths).await
+    super::artwork_sweep::run(db, paths).await.map(drop)
 }
 
 /// One file's verdict.
