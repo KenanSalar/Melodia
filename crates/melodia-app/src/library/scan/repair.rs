@@ -5,9 +5,14 @@
 //! stopped all of them, and the scan's size and mtime gate never re-reads an unchanged track to
 //! notice. Clearing the reference hands each column back to its own refill, the track's being the
 //! scan that follows.
+//!
+//! A row naming a data root that has since moved is re-pointed rather than cleared: its file is in
+//! the current store under the same content-addressed name, and clearing it would cost a re-parse,
+//! an artist-image refetch and a custom playlist mosaic outright.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
+use rayon::iter::Either;
 use rayon::prelude::*;
 use tokio::sync::watch;
 
@@ -33,32 +38,37 @@ impl Drop for RestoreNotice {
     }
 }
 
-/// Clears every library reference to a file that is gone, answering with the notice to hold
-/// while the scan puts the covers back, or `None` when nothing was missing.
+/// Re-points every library reference the current store still holds and clears the rest,
+/// answering with the notice to hold while the scan puts the cleared covers back, or `None` when
+/// nothing was cleared.
 ///
-/// The album and playlist roll-ups run in the same transaction, so a cover that still exists on
+/// The album and playlist roll-ups run in the clearing transaction, so a cover that still exists on
 /// another of an album's tracks is back before the scan starts rather than after it.
 pub(super) async fn forget_missing(state: &AppState) -> Result<Option<RestoreNotice>, AppError> {
-    let missing = missing_references(state).await?;
-    if missing.is_empty() {
+    let MissingReferences { relocated, gone } = missing_references(state).await?;
+    if !relocated.is_empty() {
+        let repointed = queries::artwork::repoint_all(&state.db, &relocated).await?;
+        log::info!("Re-pointed {repointed} artwork reference(s) at the current data directory");
+    }
+    if gone.is_empty() {
         return Ok(None);
     }
 
     let mut tx = state.db.write().begin().await?;
-    let cleared = queries::artwork::forget_paths(&mut tx, &missing).await?;
+    let cleared = queries::artwork::forget_paths(&mut tx, &gone).await?;
     queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
     queries::playlist::fill_missing_thumbnails(&mut tx).await?;
     tx.commit().await?;
 
     log::info!(
         "Artwork store is missing {} file(s); cleared {cleared} reference(s) to restore",
-        missing.len()
+        gone.len()
     );
     Ok(Some(RestoreNotice::raise(&state.artwork_restoring)))
 }
 
 /// Starts a library reconcile when a stored cover the library names is gone, for a cache that
-/// found one missing while the app runs. The reconcile's own repair does the clearing; this only
+/// found one missing while the app runs. The reconcile's own repair does the work; this only
 /// keeps a report about a file outside the library's columns, a station logo, from starting a
 /// walk that would find nothing to do.
 pub async fn restore_missing_artwork(state: &AppState) -> Result<(), AppError> {
@@ -68,20 +78,49 @@ pub async fn restore_missing_artwork(state: &AppState) -> Result<(), AppError> {
     Ok(())
 }
 
-/// The library's artwork references whose file is not on disk, one `stat` per distinct path.
+/// The library's artwork references whose file is not where the row says.
+struct MissingReferences {
+    /// `(stored, current)` for a file the current store holds under the same name.
+    relocated: Vec<(String, String)>,
+    /// Gone from every store, so only a scan can put them back.
+    gone: Vec<String>,
+}
+
+impl MissingReferences {
+    fn is_empty(&self) -> bool {
+        self.relocated.is_empty() && self.gone.is_empty()
+    }
+}
+
+/// One `stat` per distinct path, and one per store for each that fails it.
 ///
 /// Only a definite not-found counts: a `stat` failing for any other reason is no proof the file is
 /// gone, and clearing a reference costs a re-parse, or a custom playlist image outright.
-async fn missing_references(state: &AppState) -> Result<Vec<String>, AppError> {
+async fn missing_references(state: &AppState) -> Result<MissingReferences, AppError> {
     let referenced = queries::artwork::referenced_library_paths(&state.db).await?;
-    tokio::task::spawn_blocking(move || {
+    let stores = [state.paths.artwork_dir.clone(), state.paths.artists_dir.clone()];
+    let (relocated, gone) = tokio::task::spawn_blocking(move || {
         ScanPool::for_files(referenced.len()).install(|| {
             referenced
                 .into_par_iter()
                 .filter(|path| matches!(Path::new(path).try_exists(), Ok(false)))
-                .collect()
+                .partition_map(|path| match current_copy(&path, &stores) {
+                    Some(current) => Either::Left((path, current)),
+                    None => Either::Right(path),
+                })
         })
     })
     .await
-    .map_err(|e| AppError::scanner("Artwork check task failed", e))
+    .map_err(|e| AppError::scanner("Artwork check task failed", e))?;
+    Ok(MissingReferences { relocated, gone })
+}
+
+/// Where the current store holds the file `path` names, the name alone identifying it.
+fn current_copy(path: &str, stores: &[PathBuf]) -> Option<String> {
+    let name = Path::new(path).file_name()?;
+    stores
+        .iter()
+        .map(|dir| dir.join(name))
+        .find(|candidate| matches!(candidate.try_exists(), Ok(true)))
+        .map(|candidate| candidate.to_string_lossy().into_owned())
 }

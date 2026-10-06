@@ -78,11 +78,12 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   panel offers the platform's Music folder beside the picker. It is offered only where adding it
   would neither be refused nor supersede a folder already there (`suggested_music_folder` argues
   why).
-  Every launch, `tasks::resume_watching::run` starts the watcher and calls
+  Every launch with watching on, `tasks::resume_watching::run` starts the watcher and calls
   `reconcile_watched_folders`, which re-runs `library::scan`'s folder scan over every enabled folder
   — so a normal boot scans each folder once more to catch changes made while closed. That reconcile
   is the scan path's *common* case (almost nothing to re-parse), which is why its incremental
-  filter is the part worth keeping fast.
+  filter is the part worth keeping fast. With watching off there is no launch scan, so a cover gone
+  while the app was closed waits for a cache to report it, which starts the same reconcile.
 
 - **One audio-extension predicate: `utils::audio_ext::is_audio_extension(ext)`.** Case-folded
   (`eq_ignore_ascii_case` against ASCII `AUDIO_EXTENSIONS`), allocating nothing — the library walk

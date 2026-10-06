@@ -44,7 +44,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<(), slint::EventLoopE
         let mut rx = state.scan.subscribe();
         let weak = weak.clone();
         slint::spawn_local(Compat::new(async move {
-            // Painted before the first wait: the first-launch scan can be publishing before
+            // Painted before the first wait: the launch scan can be publishing before
             // this subscribes, and `subscribe` marks that value seen.
             loop {
                 let snapshot = rx.borrow_and_update().clone();

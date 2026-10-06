@@ -57,7 +57,7 @@ pub async fn delete_folder(db: &DbPool, id: i64) -> Result<(), AppError> {
 /// [`MAX_BINDS_PER_STATEMENT`] so a long id list stays inside one statement's budget.
 ///
 /// [`MAX_BINDS_PER_STATEMENT`]: crate::database::MAX_BINDS_PER_STATEMENT
-pub async fn delete_folders(db: &DbPool, ids: &[i64]) -> Result<(), AppError> {
+pub async fn delete_superseded_folders(db: &DbPool, ids: &[i64]) -> Result<(), AppError> {
     if ids.is_empty() {
         return Ok(());
     }

@@ -89,7 +89,7 @@ async fn insert_replacing_children(db: &DbPool, path: &str) -> Result<folder::Fo
     let existing_folders = queries::folder::get_all_folders(db).await?;
     let children_to_remove = validate_folder_path(new_path, &existing_folders)?;
 
-    queries::folder::delete_folders(db, &children_to_remove).await?;
+    queries::folder::delete_superseded_folders(db, &children_to_remove).await?;
 
     let canonical = melodia_core::utils::canonicalize_path(new_path)
         .map_err(|e| AppError::Validation(format!("Cannot resolve path: {e}")))?;
