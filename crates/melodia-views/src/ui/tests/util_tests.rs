@@ -63,3 +63,24 @@ fn buffer_from_rgb_round_trips_dimensions_and_bytes() {
     assert_eq!(buf.height(), 2);
     assert_eq!(buf.as_bytes(), img.as_raw().as_slice());
 }
+
+/// An album's tracks repeat its artist, album, genre and cover on every row, and one buffer per
+/// text is the saving the pool is for.
+#[test]
+fn a_text_interned_twice_shares_one_buffer() {
+    let mut pool = StringPool::default();
+
+    let first = pool.intern("Miles Davis");
+    let again = pool.intern("Miles Davis");
+
+    assert!(std::ptr::eq(first.as_str().as_ptr(), again.as_str().as_ptr()));
+}
+
+#[test]
+fn interning_hands_back_the_text_it_was_given() {
+    let mut pool = StringPool::default();
+
+    let interned = [pool.intern("A"), pool.intern("B"), pool.intern("A")];
+
+    assert_eq!(interned, ["A", "B", "A"]);
+}

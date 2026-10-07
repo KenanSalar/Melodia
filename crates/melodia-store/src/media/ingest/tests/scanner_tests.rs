@@ -217,6 +217,72 @@ fn scan_files_parallel_reports_progress_to_its_observer() -> Result<(), AppError
     Ok(())
 }
 
+/// Stopped before it starts.
+struct Cancelled;
+
+impl ScanObserver for Cancelled {
+    fn is_cancelled(&self) -> bool {
+        true
+    }
+}
+
+/// A partial list read as the whole tree would purge every row the walk hadn't reached.
+#[test]
+fn a_cancelled_walk_answers_none_rather_than_a_partial_list() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    create_test_files(tmp.path(), &["a.mp3", "b.flac"])?;
+
+    assert!(collect_media_files(tmp.path(), &Cancelled).is_none());
+    Ok(())
+}
+
+/// The running counts the walk reports, in order.
+#[derive(Default)]
+struct FoundLog(std::sync::Mutex<Vec<u32>>);
+
+impl ScanObserver for FoundLog {
+    fn is_cancelled(&self) -> bool {
+        false
+    }
+
+    fn found(&self, count: u32) {
+        // Poisoned only by a panic that has already failed the test.
+        if let Ok(mut counts) = self.0.lock() {
+            counts.push(count);
+        }
+    }
+}
+
+#[test]
+fn the_walk_counts_the_audio_files_it_finds_and_nothing_else() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    create_test_files(tmp.path(), &["a.mp3", "cover.jpg", "b.flac", "notes.txt", "c.ogg"])?;
+    let log = FoundLog::default();
+
+    collect_media_files(tmp.path(), &log);
+
+    let counts = log.0.into_inner().map_err(|_| AppError::Validation("log poisoned".into()))?;
+    assert_eq!(counts, [1, 2, 3]);
+    Ok(())
+}
+
+/// A file a cancelled parse still read would be written by the chunk the cancel cut short, so
+/// stopping costs more than the one transaction it promises.
+#[test]
+fn a_cancelled_parse_reads_nothing() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let artwork_dir = tmp.path().join("artwork");
+    fs::create_dir(&artwork_dir)?;
+    // Unparseable, so each would otherwise come back as a filename row.
+    let file = tmp.path().join("unread.mp3");
+    fs::write(&file, b"not valid audio")?;
+
+    let result = scan_files_parallel(&[file], &artwork_dir, &test_cover_cache(), &Cancelled);
+
+    assert!(result.is_empty());
+    Ok(())
+}
+
 // ── track_is_current (incremental-scan filter) ──
 
 /// Build an `ExistingTrackSummary` map with one entry whose size + mtime

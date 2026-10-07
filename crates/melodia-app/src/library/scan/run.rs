@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use parking_lot::Mutex;
 use tokio_util::sync::CancellationToken;
 
-use crate::state::{AppState, ScanControl, ScanPhase, ScanProgressTick};
+use crate::state::{ScanControl, ScanPhase, ScanProgressTick};
 use melodia_store::media::ingest::scanner::ScanObserver;
 
 /// Floor between two progress ticks. A fast SSD scan reaches the scanner's every-10-files gate
@@ -29,9 +29,9 @@ pub(super) struct ScanRun {
 
 impl ScanRun {
     /// Starts a run and puts the bar up at once, ahead of the walk.
-    pub(super) fn start(state: &AppState, cancel: CancellationToken) -> Arc<Self> {
+    pub(super) fn start(control: &Arc<ScanControl>, cancel: CancellationToken) -> Arc<Self> {
         let run = Arc::new(Self {
-            control: Arc::clone(&state.scan),
+            control: Arc::clone(control),
             cancel,
             found_count: AtomicU32::new(0),
             total: AtomicU32::new(0),
@@ -109,3 +109,7 @@ impl Drop for ScanRun {
         self.control.clear();
     }
 }
+
+#[cfg(test)]
+#[path = "tests/run_tests.rs"]
+mod tests;

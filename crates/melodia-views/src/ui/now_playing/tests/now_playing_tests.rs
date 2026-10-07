@@ -1,6 +1,7 @@
+use std::cell::Cell;
 use std::sync::Arc;
 
-use super::{NowPlayingSource, SourceKey, Surfaces};
+use super::{NowPlayingSource, SourceKey, Surfaces, clear_unshown_slot};
 use melodia_engine::player::engine::fixtures::{test_station, test_track, test_view_model};
 use melodia_engine::player::engine::now_playing::SourceId;
 use melodia_ui::MiniLayout;
@@ -102,5 +103,25 @@ fn only_a_surface_drawing_the_artwork_asks_for_its_decode() {
 fn only_now_playing_and_the_column_mount_a_panel() {
     for (surfaces, _, panel) in RENDERED {
         assert_eq!(surfaces.renders_panel(), panel, "{surfaces:?}");
+    }
+}
+
+/// The slot on show stays, so reopening on the same source paints without a decode, and the hidden
+/// one is the memory handed back. Cleared the other way round, the reopen opens on an empty tile.
+#[test]
+fn a_release_empties_only_the_cross_fade_slot_not_on_show() {
+    let cases = [
+        // (has image, showing a), then (a emptied, b emptied)
+        ((true, true), (false, true)),
+        ((true, false), (true, false)),
+        ((false, true), (true, true)),
+        ((false, false), (true, true)),
+    ];
+
+    for ((has_image, use_a), expected) in cases {
+        let (a_emptied, b_emptied) = (Cell::new(false), Cell::new(false));
+        clear_unshown_slot(has_image, use_a, |_| a_emptied.set(true), |_| b_emptied.set(true));
+        let emptied = (a_emptied.get(), b_emptied.get());
+        assert_eq!(emptied, expected, "has image {has_image}, showing a {use_a}");
     }
 }

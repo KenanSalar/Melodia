@@ -53,3 +53,7 @@ fn is_gone(path: &Path) -> bool {
 fn is_back(path: &Path) -> bool {
     matches!(path.try_exists(), Ok(true))
 }
+
+#[cfg(test)]
+#[path = "tests/decoded_tests.rs"]
+mod tests;

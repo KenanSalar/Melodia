@@ -494,6 +494,86 @@ async fn removing_a_cover_falls_back_to_the_one_beside_the_file() -> Result<(), 
     Ok(())
 }
 
+async fn set_artwork(db: &DbPool, id: i64, path: &str) -> Result<(), AppError> {
+    sqlx::query("UPDATE tracks SET artwork_path = ? WHERE id = ?")
+        .bind(path)
+        .bind(id)
+        .execute(db.write())
+        .await?;
+    Ok(())
+}
+
+async fn playlist_thumbnail(db: &DbPool, playlist: i64) -> Result<Option<String>, AppError> {
+    Ok(queries::playlist::get_playlist_by_id(db, playlist).await?.thumbnail_path)
+}
+
+/// A playlist's automatic thumbnail is its first track's cover, and a cover edit reaches the
+/// playlist without an edit to it. Left alone, the playlist keeps showing the removed cover, and
+/// keeps its file out of the sweep's reach.
+#[tokio::test]
+async fn removing_a_playlists_first_cover_moves_its_thumbnail_to_the_next() -> Result<(), AppError>
+{
+    let db = DbPool::test_pool().await?;
+    let tmp = TempDir::new()?;
+    queries::folder::insert_folder(&db, &tmp.path().to_string_lossy(), true).await?;
+    let first = seed_track(&db, &stage(&tmp, "silence-cover.flac")?.to_string_lossy()).await?;
+    let second = seed_track(&db, &tmp.path().join("second.flac").to_string_lossy()).await?;
+    set_artwork(&db, first, "/cached/first.jpg").await?;
+    set_artwork(&db, second, "/cached/second.jpg").await?;
+    let playlist = queries::playlist::create_playlist(&db, "Mix", None).await?;
+    queries::playlist::add_tracks_to_playlist(&db, playlist.id, &[first, second]).await?;
+    let artwork_dir = tmp.path().join("artwork");
+    std::fs::create_dir(&artwork_dir)?;
+    let edit = TagEdit { artwork: ArtworkEdit::Remove, ..TagEdit::default() };
+
+    write_tag_edit(
+        &db,
+        &artwork_dir,
+        &artwork::new_cover_cache(),
+        &Arc::new(SelfWrites::default()),
+        &[first],
+        &edit,
+        None,
+    )
+    .await?;
+
+    assert_eq!(playlist_thumbnail(&db, playlist.id).await?.as_deref(), Some("/cached/second.jpg"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn replacing_a_playlists_first_cover_carries_its_thumbnail_along() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let tmp = TempDir::new()?;
+    queries::folder::insert_folder(&db, &tmp.path().to_string_lossy(), true).await?;
+    let first = seed_track(&db, &stage(&tmp, "silence.flac")?.to_string_lossy()).await?;
+    set_artwork(&db, first, "/cached/old.jpg").await?;
+    let playlist = queries::playlist::create_playlist(&db, "Mix", None).await?;
+    queries::playlist::add_tracks_to_playlist(&db, playlist.id, &[first]).await?;
+    let artwork_dir = tmp.path().join("artwork");
+    std::fs::create_dir(&artwork_dir)?;
+    let edit = TagEdit { artwork: ArtworkEdit::Replace, ..TagEdit::default() };
+    let source = assets_dir().join("cover.jpg");
+
+    write_tag_edit(
+        &db,
+        &artwork_dir,
+        &artwork::new_cover_cache(),
+        &Arc::new(SelfWrites::default()),
+        &[first],
+        &edit,
+        Some(source.as_path()),
+    )
+    .await?;
+
+    let shown = playlist_thumbnail(&db, playlist.id).await?;
+    assert!(
+        shown.as_deref().is_some_and(|path| path.starts_with(&*artwork_dir.to_string_lossy())),
+        "the playlist still shows {shown:?} rather than the replaced cover"
+    );
+    Ok(())
+}
+
 /// A `Replace` whose picked image never arrived fails the whole edit, and it fails before the
 /// write pass rather than partway through it. Every file in the batch is still the one the user
 /// had.

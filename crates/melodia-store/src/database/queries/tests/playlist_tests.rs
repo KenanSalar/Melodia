@@ -708,3 +708,85 @@ async fn an_id_deleted_under_the_grid_is_simply_absent() -> Result<(), AppError>
     assert_eq!(verdicts, [(kept.id, false, None)]);
     Ok(())
 }
+
+// --- refresh_automatic_thumbnails ---
+
+/// A playlist over the seed's first two tracks, its thumbnail taken from the first one's cover.
+async fn covered_playlist(db: &crate::database::DbPool) -> Result<(i64, Vec<i64>), AppError> {
+    let ids = seeded_track_ids(db).await?;
+    set_artwork(db, ids[0], "/artwork/first.jpg").await?;
+    set_artwork(db, ids[1], "/artwork/second.jpg").await?;
+    let pl = queries::playlist::create_playlist(db, "Covered", None).await?;
+    queries::playlist::add_tracks_to_playlist(db, pl.id, &ids[..2]).await?;
+    Ok((pl.id, ids))
+}
+
+async fn refresh(db: &crate::database::DbPool) -> Result<(), AppError> {
+    let mut tx = db.write().begin().await?;
+    queries::playlist::refresh_automatic_thumbnails(&mut tx).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// A cover can change under a playlist without an edit to it: a tag edit on its first track, or a
+/// file the repair found missing. Left alone, the playlist keeps naming a cover none of its tracks
+/// hold, which also keeps the file out of the sweep's reach.
+#[tokio::test]
+async fn an_automatic_thumbnail_follows_its_first_tracks_current_cover() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    let (playlist, ids) = covered_playlist(&db).await?;
+    set_artwork(&db, ids[0], "/artwork/edited.jpg").await?;
+
+    refresh(&db).await?;
+
+    let shown = queries::playlist::get_playlist_by_id(&db, playlist).await?.thumbnail_path;
+    assert_eq!(shown.as_deref(), Some("/artwork/edited.jpg"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_playlist_whose_tracks_lost_every_cover_loses_its_thumbnail() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    let (playlist, _) = covered_playlist(&db).await?;
+    sqlx::query("UPDATE tracks SET artwork_path = NULL").execute(db.write()).await?;
+
+    refresh(&db).await?;
+
+    let shown = queries::playlist::get_playlist_by_id(&db, playlist).await?.thumbnail_path;
+    assert_eq!(shown, None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_custom_thumbnail_is_left_where_the_user_put_it() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    let (playlist, ids) = covered_playlist(&db).await?;
+    queries::playlist::set_playlist_custom_thumbnail(&db, playlist, "/artwork/custom.jpg").await?;
+    set_artwork(&db, ids[0], "/artwork/edited.jpg").await?;
+
+    refresh(&db).await?;
+
+    let shown = queries::playlist::get_playlist_by_id(&db, playlist).await?.thumbnail_path;
+    assert_eq!(shown.as_deref(), Some("/artwork/custom.jpg"));
+    Ok(())
+}
+
+/// The grid orders by `updated_at`, and a refresh is nothing the user did: stamping it would move
+/// every playlist a scan touched to the top.
+#[tokio::test]
+async fn a_refresh_leaves_the_playlists_updated_at_alone() -> Result<(), AppError> {
+    const EARLIER: &str = "2020-01-01T00:00:00.000+00:00";
+    let db = setup_seeded_db().await?;
+    let (playlist, ids) = covered_playlist(&db).await?;
+    sqlx::query("UPDATE playlists SET updated_at = ?").bind(EARLIER).execute(db.write()).await?;
+    set_artwork(&db, ids[0], "/artwork/edited.jpg").await?;
+
+    refresh(&db).await?;
+
+    let updated_at: String = sqlx::query_scalar("SELECT updated_at FROM playlists WHERE id = ?")
+        .bind(playlist)
+        .fetch_one(db.read())
+        .await?;
+    assert_eq!(updated_at, EARLIER);
+    Ok(())
+}

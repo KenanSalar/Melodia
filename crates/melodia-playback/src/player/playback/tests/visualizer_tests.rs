@@ -49,6 +49,24 @@ fn a_disabled_push_never_touches_the_ring() {
     assert_eq!(bits(&out), bits(&[0.0; 8]));
 }
 
+/// A ring per deck, sized for the widest window, stays resident from its first arm on, and most
+/// sessions never open Now Playing. Nothing outside the tap can see whether one was built.
+#[test]
+fn a_tap_never_armed_builds_no_ring() {
+    let viz = VisualizerShared::new(false);
+
+    assert!(viz.decks.iter().all(|deck| deck.ring.get().is_none()));
+}
+
+#[test]
+fn arming_builds_every_decks_ring() {
+    let viz = VisualizerShared::new(false);
+
+    viz.set_enabled(true);
+
+    assert!(viz.decks.iter().all(|deck| deck.ring.get().is_some()));
+}
+
 #[test]
 fn enabling_starts_the_ring_mid_stream() {
     let viz = VisualizerShared::new(false);

@@ -49,41 +49,42 @@ enum PassState {
     },
 }
 
-/// This task's hold on [`PASS`], let go on any way out, a panic included.
-struct PassClaim {
+/// This task's hold on a pass lock, let go on any way out, a panic included.
+struct PassClaim<'a> {
+    pass: &'a Mutex<PassState>,
     held: bool,
 }
 
-impl PassClaim {
-    /// Claims [`PASS`], or merges `reach` into the pass holding it.
-    fn take(reach: Reach) -> Option<Self> {
-        let mut pass = PASS.lock();
-        if let PassState::Running { library_owed } = &mut *pass {
+impl<'a> PassClaim<'a> {
+    /// Claims `pass`, or merges `reach` into the pass holding it.
+    fn take(pass: &'a Mutex<PassState>, reach: Reach) -> Option<Self> {
+        let mut state = pass.lock();
+        if let PassState::Running { library_owed } = &mut *state {
             *library_owed |= reach == Reach::Library;
             return None;
         }
-        *pass = PassState::Running { library_owed: false };
-        Some(Self { held: true })
+        *state = PassState::Running { library_owed: false };
+        Some(Self { pass, held: true })
     }
 
     /// The round owed after one over `finished`, letting go under the same lock when none is.
     fn next_round(&mut self, finished: Reach) -> Option<Reach> {
-        let mut pass = PASS.lock();
-        let owed = matches!(*pass, PassState::Running { library_owed: true });
+        let mut state = self.pass.lock();
+        let owed = matches!(*state, PassState::Running { library_owed: true });
         if owed && finished != Reach::Library {
-            *pass = PassState::Running { library_owed: false };
+            *state = PassState::Running { library_owed: false };
             return Some(Reach::Library);
         }
-        *pass = PassState::Idle;
+        *state = PassState::Idle;
         self.held = false;
         None
     }
 }
 
-impl Drop for PassClaim {
+impl Drop for PassClaim<'_> {
     fn drop(&mut self) {
         if self.held {
-            *PASS.lock() = PassState::Idle;
+            *self.pass.lock() = PassState::Idle;
         }
     }
 }
@@ -123,7 +124,7 @@ pub fn finish_interrupted_imports(state: &AppState) {
 /// Starts a pass over the folders `reach` covers, holding up a restore notice a scan has already
 /// raised until it ends.
 pub(super) fn start(state: &AppState, reach: Reach, restoring: Option<RestoreNotice>) {
-    let Some(mut claim) = PassClaim::take(reach) else {
+    let Some(mut claim) = PassClaim::take(&PASS, reach) else {
         log::debug!("reconcile_watched_folders: already in flight, merging into it");
         return;
     };
@@ -179,7 +180,7 @@ async fn scan_in_turn(state: &AppState, mut folders: Vec<Folder>, cancel: &Cance
             log::info!("reconcile_watched_folders: stopped, bailing between folders");
             return;
         }
-        let run = ScanRun::start(state, cancel.clone());
+        let run = ScanRun::start(&state.scan, cancel.clone());
         if let Err(e) = scan_one(state, folder.id, &run).await {
             log::warn!(
                 "reconcile_watched_folders: scan of {} failed: {}",
@@ -189,3 +190,7 @@ async fn scan_in_turn(state: &AppState, mut folders: Vec<Folder>, cancel: &Cance
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/reconcile_tests.rs"]
+mod tests;

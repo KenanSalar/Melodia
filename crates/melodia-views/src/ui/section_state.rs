@@ -175,3 +175,7 @@ macro_rules! impl_detail_row_cache {
 }
 
 pub(crate) use {impl_detail_row_cache, impl_section_state_helpers};
+
+#[cfg(test)]
+#[path = "tests/section_state_tests.rs"]
+mod tests;

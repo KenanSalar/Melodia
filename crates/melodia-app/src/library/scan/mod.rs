@@ -87,7 +87,7 @@ pub async fn scan_folder(
     let cancels_at_start = state.scan.user_cancels();
     let cancel = state.scan.token();
     let restoring = forget_missing_artwork(state).await;
-    let run = ScanRun::start(state, cancel);
+    let run = ScanRun::start(&state.scan, cancel);
     let outcome = scan_one(state, folder_id, &run).await?;
     let cancelled_import =
         on_stop == OnStop::Withdraw && state.scan.user_cancels() != cancels_at_start;
@@ -121,7 +121,8 @@ pub async fn scan_folder(
 /// The repair every scan entry runs before reading anything. A failure is logged rather than
 /// returned: a scan that couldn't check the artwork store is still worth running.
 async fn forget_missing_artwork(state: &AppState) -> Option<RestoreNotice> {
-    repair::forget_missing(state).await.unwrap_or_else(|e| {
+    let repaired = repair::forget_missing(&state.db, &state.paths, &state.artwork_restoring).await;
+    repaired.unwrap_or_else(|e| {
         log::warn!("Artwork check before the scan failed: {}", describe(&e));
         None
     })
@@ -369,3 +370,7 @@ async fn parse_chunk(
     .await
     .map_err(|e| AppError::scanner("Scan task failed", e))
 }
+
+#[cfg(test)]
+#[path = "tests/scan_tests.rs"]
+mod tests;

@@ -17,8 +17,9 @@ use rayon::prelude::*;
 use tokio::sync::watch;
 
 use crate::state::AppState;
+use melodia_core::config::Paths;
 use melodia_core::error::AppError;
-use melodia_store::database::queries;
+use melodia_store::database::{DbPool, queries};
 use melodia_store::media::ingest::scan_pool::ScanPool;
 
 /// Raises `AppState::artwork_restoring` for as long as it lives, so a scan that stops or fails
@@ -44,17 +45,21 @@ impl Drop for RestoreNotice {
 ///
 /// The album and playlist roll-ups run in the clearing transaction, so a cover that still exists on
 /// another of an album's tracks is back before the scan starts rather than after it.
-pub(super) async fn forget_missing(state: &AppState) -> Result<Option<RestoreNotice>, AppError> {
-    let MissingReferences { relocated, gone } = missing_references(state).await?;
+pub(super) async fn forget_missing(
+    db: &DbPool,
+    paths: &Paths,
+    restoring: &watch::Sender<u32>,
+) -> Result<Option<RestoreNotice>, AppError> {
+    let MissingReferences { relocated, gone } = missing_references(db, paths).await?;
     if !relocated.is_empty() {
-        let repointed = queries::artwork::repoint_all(&state.db, &relocated).await?;
+        let repointed = queries::artwork::repoint_all(db, &relocated).await?;
         log::info!("Re-pointed {repointed} artwork reference(s) at the current data directory");
     }
     if gone.is_empty() {
         return Ok(None);
     }
 
-    let mut tx = state.db.write().begin().await?;
+    let mut tx = db.write().begin().await?;
     let cleared = queries::artwork::forget_paths(&mut tx, &gone).await?;
     queries::scan::roll_up_covers(&mut tx).await?;
     tx.commit().await?;
@@ -63,7 +68,7 @@ pub(super) async fn forget_missing(state: &AppState) -> Result<Option<RestoreNot
         "Artwork store is missing {} file(s); cleared {cleared} reference(s) to restore",
         gone.len()
     );
-    Ok(Some(RestoreNotice::raise(&state.artwork_restoring)))
+    Ok(Some(RestoreNotice::raise(restoring)))
 }
 
 /// Starts a library reconcile when a stored cover the library names is gone, for a cache that
@@ -71,7 +76,7 @@ pub(super) async fn forget_missing(state: &AppState) -> Result<Option<RestoreNot
 /// keeps a report about a file outside the library's columns, a station logo, from starting a
 /// walk that would find nothing to do.
 pub async fn restore_missing_artwork(state: &AppState) -> Result<(), AppError> {
-    if !missing_references(state).await?.is_empty() {
+    if !missing_references(&state.db, &state.paths).await?.is_empty() {
         super::reconcile_watched_folders(state);
     }
     Ok(())
@@ -95,9 +100,9 @@ impl MissingReferences {
 ///
 /// Only a definite not-found counts: a `stat` failing for any other reason is no proof the file is
 /// gone, and clearing a reference costs a re-parse, or a custom playlist image outright.
-async fn missing_references(state: &AppState) -> Result<MissingReferences, AppError> {
-    let referenced = queries::artwork::referenced_library_paths(&state.db).await?;
-    let stores = [state.paths.artwork_dir.clone(), state.paths.artists_dir.clone()];
+async fn missing_references(db: &DbPool, paths: &Paths) -> Result<MissingReferences, AppError> {
+    let referenced = queries::artwork::referenced_library_paths(db).await?;
+    let stores = [paths.artwork_dir.clone(), paths.artists_dir.clone()];
     let (relocated, gone) = tokio::task::spawn_blocking(move || {
         ScanPool::for_files(referenced.len()).install(|| {
             referenced
@@ -123,3 +128,7 @@ fn current_copy(path: &str, stores: &[PathBuf]) -> Option<String> {
         .find(|candidate| matches!(candidate.try_exists(), Ok(true)))
         .map(|candidate| candidate.to_string_lossy().into_owned())
 }
+
+#[cfg(test)]
+#[path = "tests/repair_tests.rs"]
+mod tests;

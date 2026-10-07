@@ -187,3 +187,119 @@ async fn blank_and_missing_paths_contribute_nothing() -> Result<(), AppError> {
     assert!(queries::artwork::referenced_filenames(&db).await?.is_empty());
     Ok(())
 }
+
+// === What the scan's repair clears ===
+
+/// The four columns a library scan can fill again, the radio pair being `library::radio`'s.
+const LIBRARY_COLUMNS: [(&str, &str); 4] = [
+    ("tracks", "artwork_path"),
+    ("albums", "artwork_path"),
+    ("artists", "image_path"),
+    ("playlists", "thumbnail_path"),
+];
+
+const MISSING: &str = "/data/artwork/33fb807d1f1b7cbb.jpg";
+const PRESENT: &str = "/data/artwork/4cccaf4d4b4cea11.jpg";
+
+async fn forget(db: &DbPool, missing: &str) -> Result<(), AppError> {
+    let mut tx = db.write().begin().await?;
+    queries::artwork::forget_paths(&mut tx, &[missing.to_owned()]).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn set_track_artwork(db: &DbPool, path: &str, artwork: &str) -> Result<(), AppError> {
+    sqlx::query("UPDATE tracks SET artwork_path = ? WHERE file_path = ?")
+        .bind(artwork)
+        .bind(path)
+        .execute(db.write())
+        .await?;
+    Ok(())
+}
+
+/// Every refill fills an empty column and leaves a set one alone, so a column left naming the
+/// gone file is one no scan ever repairs.
+#[tokio::test]
+async fn forgetting_a_path_clears_every_library_column_naming_it() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    queries::playlist::create_playlist(&db, "Mosaic", None).await?;
+    let mut tx = db.write().begin().await?;
+    for (table, column) in LIBRARY_COLUMNS {
+        let sql = format!("UPDATE {table} SET {column} = ?");
+        sqlx::query(AssertSqlSafe(sql)).bind(MISSING).execute(&mut *tx).await?;
+    }
+    tx.commit().await?;
+
+    forget(&db, MISSING).await?;
+
+    for (table, column) in LIBRARY_COLUMNS {
+        let left: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
+            "SELECT COUNT(*) FROM {table} WHERE {column} = ?"
+        )))
+        .bind(MISSING)
+        .fetch_one(db.read())
+        .await?;
+        assert_eq!(left, 0, "{table}.{column} still names the gone file");
+    }
+    Ok(())
+}
+
+/// The size and mtime gate would otherwise read the track as current, and the scan behind the
+/// repair would never extract its cover again.
+#[tokio::test]
+async fn a_track_whose_cover_is_forgotten_loses_its_mtime_too() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    set_track_artwork(&db, "/music/track1.mp3", MISSING).await?;
+    set_track_artwork(&db, "/music/track2.mp3", PRESENT).await?;
+
+    forget(&db, MISSING).await?;
+
+    let stamps: Vec<Option<String>> = sqlx::query_scalar(
+        "SELECT date_modified FROM tracks WHERE file_path IN ('/music/track1.mp3', \
+         '/music/track2.mp3') ORDER BY file_path",
+    )
+    .fetch_all(db.read())
+    .await?;
+    assert_eq!(stamps, [None, Some("2024-01-01T00:00:00+00:00".to_owned())]);
+    Ok(())
+}
+
+/// A custom image has no source to come back from, so the playlist goes back to following its
+/// first track's cover rather than staying blank.
+#[tokio::test]
+async fn a_forgotten_custom_playlist_image_falls_back_to_the_automatic_one() -> Result<(), AppError>
+{
+    let db = setup_seeded_db().await?;
+    let playlist = queries::playlist::create_playlist(&db, "Mosaic", None).await?;
+    queries::playlist::set_playlist_custom_thumbnail(&db, playlist.id, MISSING).await?;
+
+    forget(&db, MISSING).await?;
+
+    let after = queries::playlist::get_playlist_by_id(&db, playlist.id).await?;
+    assert_eq!((after.thumbnail_path, after.custom_thumbnail), (None, false));
+    Ok(())
+}
+
+/// A station logo that went missing is fetched again by `library::radio`. Reported here, it would
+/// start a library walk with nothing to put back.
+#[tokio::test]
+async fn the_library_reference_set_leaves_the_radio_stores_out() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    let station_id = queries::radio::save_station(&db, &test_station()).await?;
+    queries::radio::set_artwork(&db, station_id, Some("/data/radio-logos/aaaaaaaaaaaaaaaa.png"))
+        .await?;
+    queries::radio::record_logo_hit(
+        &db,
+        "https://example.invalid/logo.png",
+        "/data/radio-logos/bbbbbbbbbbbbbbbb.png",
+        1_024,
+        "2026-08-24T00:00:00.000+00:00",
+    )
+    .await?;
+    sqlx::query("UPDATE tracks SET artwork_path = ?").bind(PRESENT).execute(db.write()).await?;
+
+    let library = queries::artwork::referenced_library_paths(&db).await?;
+
+    assert_eq!(library, [PRESENT]);
+    Ok(())
+}

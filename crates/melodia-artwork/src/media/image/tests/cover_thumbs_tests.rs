@@ -437,3 +437,116 @@ fn a_shrink_does_not_reorder_the_tier() -> TestResult {
     assert!(cache.peek(&newest).is_some(), "a shrink is not a use, so it moves nothing");
     Ok(())
 }
+
+// --- A tier backed by another ---
+
+/// The queue sheet draws mostly what the row tier already holds, so a copy of each buffer is the
+/// memory the backing exists to save.
+#[test]
+fn a_backed_tier_shares_the_backings_buffer() -> TestResult {
+    let backing = Arc::new(CoverThumbs::new());
+    let (_tmp, path) = write_test_png(600)?;
+    let held = backing.get_or_load_rgb8(&path).ok_or("the backing failed to decode")?;
+    let backed = CoverThumbs::backed_by(Arc::clone(&backing));
+
+    let borrowed = backed.get_or_load_rgb8(&path).ok_or("the backed tier came back empty")?;
+
+    assert!(std::ptr::eq(borrowed.as_slice().as_ptr(), held.as_slice().as_ptr()));
+    Ok(())
+}
+
+/// A stale entry is the backing's to replace on its own next lookup. Borrowed, the sheet would
+/// draw a cover at a size the window no longer asks for.
+#[test]
+fn a_backed_tier_decodes_rather_than_borrow_an_entry_at_a_stale_size() -> TestResult {
+    let cap = NonZeroUsize::new(8).ok_or("cap must be > 0")?;
+    let backing = Arc::new(CoverThumbs::with_config(64, cap));
+    let (_tmp, path) = write_test_png(600)?;
+    backing.get_or_load_rgb8(&path).ok_or("the backing failed to decode")?;
+    backing.set_thumb_size(32);
+    let backed = CoverThumbs::backed_by(Arc::clone(&backing));
+
+    let buf = backed.get_or_load_rgb8(&path).ok_or("the backed tier came back empty")?;
+
+    assert_eq!(buf.width(), 32);
+    Ok(())
+}
+
+/// Its buffers are the backing's, so a size of its own would be one no borrow could ever match.
+#[test]
+fn a_backed_tier_draws_at_the_backings_size_whatever_it_is_told() -> TestResult {
+    let cap = NonZeroUsize::new(8).ok_or("cap must be > 0")?;
+    // Neither the row tier's own sizes nor the one the backed tier is told, so a tier that drew at
+    // any of those can't pass.
+    let backing = Arc::new(CoverThumbs::with_config(80, cap));
+    let backed = CoverThumbs::backed_by(Arc::clone(&backing));
+    backed.set_thumb_size(96);
+    let (_tmp, path) = write_test_png(600)?;
+
+    let buf = backed.get_or_load_rgb8(&path).ok_or("the backed tier failed to decode")?;
+
+    assert_eq!(buf.width(), 80);
+    Ok(())
+}
+
+/// The queue sheet mounts its rows before its tier is warm and may not decode there, so a borrow
+/// is the only way those rows open on a cover rather than the placeholder.
+#[test]
+fn a_cache_only_lookup_on_a_backed_tier_borrows_on_a_miss() -> TestResult {
+    let backing = Arc::new(CoverThumbs::new());
+    let (_tmp, path) = write_test_png(600)?;
+    backing.get_or_load_rgb8(&path).ok_or("the backing failed to decode")?;
+    let backed = CoverThumbs::backed_by(Arc::clone(&backing));
+
+    let image = backed.get_cached_opt(path.to_str());
+
+    assert_eq!(image.size().width, ROW_THUMB_SIZE);
+    Ok(())
+}
+
+#[test]
+fn a_cache_only_lookup_on_a_backed_tier_still_never_decodes() -> TestResult {
+    let backed = CoverThumbs::backed_by(Arc::new(CoverThumbs::new()));
+    let (_tmp, path) = write_test_png(600)?;
+
+    let image = backed.get_cached_opt(path.to_str());
+
+    assert_eq!(image.size().width, 0, "a cover the backing lacks is a placeholder, not a decode");
+    Ok(())
+}
+
+// --- A cover that went missing and came back ---
+
+/// The restore puts a stored cover back under its old name, so a missing answer kept for good
+/// would paint the placeholder until a restart.
+#[test]
+fn a_cover_found_missing_is_decoded_once_it_is_back() -> TestResult {
+    let thumbs = CoverThumbs::new();
+    let (tmp, source) = write_test_png(600)?;
+    let path = tmp.path().join("restored.png");
+    assert!(thumbs.get_or_load_rgb8(&path).is_none(), "test setup: the cover starts out missing");
+    std::fs::copy(&source, &path)?;
+
+    let buf = thumbs.get_or_load_rgb8(&path).ok_or("the missing answer outlived the file")?;
+
+    assert_eq!(buf.width(), ROW_THUMB_SIZE);
+    Ok(())
+}
+
+/// The burst may already have decoded the cover while it was gone, and the brake on re-queueing
+/// a settled path would otherwise leave a scheduling surface on its placeholder.
+#[test]
+fn a_restored_cover_the_burst_already_settled_is_scheduled_again() -> TestResult {
+    let thumbs = Arc::new(CoverThumbs::new());
+    without_a_drain(&thumbs);
+    let (tmp, source) = write_test_png(120)?;
+    let path = tmp.path().join("restored.png");
+    let _ = thumbs.get_or_load_rgb8(&path);
+    thumbs.pending.lock().settled.insert(path.clone());
+    std::fs::copy(&source, &path)?;
+
+    thumbs.get_or_schedule_opt(path.to_str());
+
+    assert!(thumbs.pending.lock().queued.contains(&path));
+    Ok(())
+}

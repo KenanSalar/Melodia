@@ -48,3 +48,7 @@ impl ScanPool {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/scan_pool_tests.rs"]
+mod tests;

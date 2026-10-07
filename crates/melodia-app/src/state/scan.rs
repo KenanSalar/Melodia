@@ -114,3 +114,7 @@ impl ScanControl {
         self.progress.send_replace(None);
     }
 }
+
+#[cfg(test)]
+#[path = "tests/scan_tests.rs"]
+mod tests;

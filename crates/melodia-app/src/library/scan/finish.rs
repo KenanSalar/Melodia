@@ -164,3 +164,7 @@ pub(super) async fn after_completed(state: &AppState, folder_id: i64) -> Result<
     tasks::artwork_sweep::spawn(&spawner, state);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "tests/finish_tests.rs"]
+mod tests;

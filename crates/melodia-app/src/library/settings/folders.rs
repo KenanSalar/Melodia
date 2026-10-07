@@ -151,7 +151,7 @@ pub async fn toggle_folder_watching(state: &AppState, enabled: bool) -> Result<(
 
 /// Starts the watcher over every enabled folder, replacing whatever it watched before.
 pub(crate) async fn start_watcher(state: &AppState) -> Result<(), AppError> {
-    let paths = watch_roots(state).await?;
+    let paths = watch_roots(&state.db).await?;
     with_watcher(state, move |watcher| watcher.start(&paths)).await?
 }
 
@@ -160,7 +160,7 @@ pub(crate) async fn start_watcher(state: &AppState) -> Result<(), AppError> {
 /// logged rather than failing the add or remove it follows.
 async fn retarget_watcher(state: &AppState) {
     let retarget = async {
-        let paths = watch_roots(state).await?;
+        let paths = watch_roots(&state.db).await?;
         with_watcher(state, move |watcher| watcher.retarget(&paths)).await
     };
     if let Err(e) = retarget.await {
@@ -170,8 +170,8 @@ async fn retarget_watcher(state: &AppState) {
 
 /// The enabled folders, less any inside another. A folder awaiting absorption is already under its
 /// parent's recursive watch, and unwatching it later would take the parent's watches with it.
-async fn watch_roots(state: &AppState) -> Result<Vec<PathBuf>, AppError> {
-    let folders = queries::folder::get_all_folders(&state.db).await?;
+async fn watch_roots(db: &DbPool) -> Result<Vec<PathBuf>, AppError> {
+    let folders = queries::folder::get_all_folders(db).await?;
     let enabled: Vec<PathBuf> =
         folders.iter().filter(|f| f.is_enabled).map(|f| PathBuf::from(&f.path)).collect();
     let is_nested =
