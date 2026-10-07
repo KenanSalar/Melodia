@@ -40,7 +40,7 @@ rustix = { version = "1.1.5", features = ["process", "thread"] }
 # interface `wasapi` doesn't wrap, the endpoint volume, and is held to that same release; every
 # feature it asks for is already on through the two above it.
 [target.'cfg(target_os = "windows")'.dependencies]
-wasapi = "0.24.0"
+wasapi = "0.25.0"
 windows-sys.workspace = true
 windows = { version = "0.62.2", features = [
     "Win32_Media_Audio",
