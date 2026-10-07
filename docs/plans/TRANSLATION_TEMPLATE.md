@@ -134,7 +134,7 @@ installed. The Windows half waits for Phase 6.
 - `cargo install slint-tr-extractor --version 1.16.1 --locked`, the same version as the
   workspace's `slint`.
 - gettext: already on Fedora. Debian and Ubuntu need the `gettext` package, since `gettext-base`
-  has no `msgmerge`. On Windows, `winget install MicheleLocati.GettextIconv`.
+  has no `msgmerge`. On Windows, `winget install mlocati.GetText`.
 
 ### Phase 1: `scripts/update-translations.sh` ✅
 
@@ -243,10 +243,11 @@ three header fields from Phase 2 step 4 differ.
 
 Done 2026-10-07. Each check failed on its scratch mutation and only that check did. Where it
 left the plan: the parser keeps a `fuzzy` flag rather than every `#,` flag, fuzzy being the only
-one read; check 4 is an equality, so a note deleted from the source but left in the `.pot` fails
-too, and it keys notes as a set because msgcat folds an identical note repeated across files
-into one; the raw walk became `melodia_testkit::raw_sources`, which `stripped_sources` now wraps,
-retiring `slint_sources()`.
+one read; check 3 reads every plural form, since rspolib's `translated()` rejects a plural with
+any form empty and Slint then shows every form in English; check 4 is an equality, so a note
+deleted from the source but left in the `.pot` fails too, and it keys notes as a set because
+msgcat folds an identical note repeated across files into one; the raw walk became
+`melodia_testkit::raw_sources`, which `stripped_sources` now wraps, retiring `slint_sources()`.
 
 In `crates/melodia/tests/translations.rs`:
 
@@ -287,7 +288,7 @@ starts from the template with `msginit`, and the PR template's clippy and test l
     the note that it moves with `slint` and that the script names the exact version on a mismatch
   - gettext: `sudo dnf install gettext` on Fedora; `sudo apt install gettext` on Debian and
     Ubuntu, since the default `gettext-base` has no `msgmerge`; `brew install gettext` on macOS;
-    `winget install MicheleLocati.GettextIconv` on Windows
+    `winget install mlocati.GetText` on Windows
   - Windows runs the script from Git Bash, which comes with Git for Windows
 - `CLAUDE.md`: the melodia-ui module-map bullet (the catalogs and the generated `.pot`), the i18n
   "Bundled translations" bullet, and a rewrite of "A new string means the same `msgid` in every
@@ -301,7 +302,9 @@ starts from the template with `msginit`, and the PR template's clippy and test l
 Run the script from Git Bash after a pull. `git status` has to stay clean, which proves the output
 matches Linux byte for byte. Watch for CRLF from the Windows gettext build; if it shows up, the
 script normalizes line endings after each gettext call. Confirm that Git Bash picks up MSYS `find`
-and `sort`, and note how long the 251 extractor runs take.
+and `sort`, and note how long the 251 extractor runs take. winget's `mlocati.GetText` ships
+gettext 1.0 against Fedora's 0.26, as Homebrew does, so a clean `git status` also proves the
+two versions write the same bytes.
 
 ## Cross-cutting
 

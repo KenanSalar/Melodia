@@ -31,7 +31,7 @@ const MIN_MSGIDS: usize = 400;
 /// Floor under the plural pairs found in the tree, loose for [`MIN_MSGIDS`]' reason.
 const MIN_PLURALS: usize = 10;
 
-/// Floor under the translator notes found in the tree, loose for [`MIN_MSGIDS`]' reason.
+/// Floor under the msgids a translator note sits on in the tree, loose for [`MIN_MSGIDS`]' reason.
 const MIN_NOTES: usize = 20;
 
 const RUN_THE_SCRIPT: &str = "run scripts/update-translations.sh";
@@ -56,9 +56,10 @@ struct Entry {
 }
 
 impl Entry {
-    /// Whether Slint passes over this entry for its msgid: it loads only what rspolib's
-    /// `translated()` accepts.
-    fn shows_in_english(&self) -> bool {
+    /// Whether a translator still owes this entry a string. Slint loads only what rspolib's
+    /// `translated()` accepts, which rejects a plural with any form empty, so a half-done plural
+    /// shows in English in every form.
+    fn is_unfinished(&self) -> bool {
         self.fuzzy || self.msgstrs.is_empty() || self.msgstrs.iter().any(String::is_empty)
     }
 }
@@ -306,16 +307,16 @@ fn every_catalogue_holds_exactly_the_templates_strings() {
 }
 
 #[test]
-fn no_catalogue_ships_a_string_in_english() {
-    let mut in_english = Vec::new();
+fn no_catalogue_ships_a_fuzzy_or_empty_entry() {
+    let mut unfinished = Vec::new();
     for (code, entries) in catalogues() {
-        let skipped = entries.iter().filter(|entry| entry.shows_in_english());
-        in_english.extend(skipped.map(|entry| format!("{code}: \"{}\"", entry.msgid)));
+        let owed = entries.iter().filter(|entry| entry.is_unfinished());
+        unfinished.extend(owed.map(|entry| format!("{code}: \"{}\"", entry.msgid)));
     }
     assert!(
-        in_english.is_empty(),
-        "these are fuzzy or untranslated, so Slint shows them in English. Translate each and \
-         drop any `#, fuzzy` line: {in_english:?}"
+        unfinished.is_empty(),
+        "these are fuzzy or untranslated, so Slint shows them in English, a plural with any form \
+         left empty included. Translate each and drop any `#, fuzzy` line: {unfinished:?}"
     );
 }
 

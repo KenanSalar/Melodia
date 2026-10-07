@@ -32,7 +32,7 @@ for tool in msgcat msgmerge msgattrib msgfmt; do
         "  Fedora: sudo dnf install gettext" \
         "  Debian/Ubuntu: sudo apt install gettext (gettext-base has no msgmerge)" \
         "  macOS: brew install gettext" \
-        "  Windows: winget install MicheleLocati.GettextIconv"
+        "  Windows: winget install mlocati.GetText"
 done
 
 # The extractor parses with the Slint compiler, so it moves with `slint`.
