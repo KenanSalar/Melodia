@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **proposed** · Created: 2026-10-07 · Branch: `refactor/translation-catalog-template`
+Status: **in progress**, Phases 0 to 3 done · Created: 2026-10-07 · Branch: `refactor/translation-catalog-template`
 
 > **Checked 2026-10-07** against `360dda24`. Read: the `slint-tr-extractor` 1.16.1 and `rspolib`
 > 0.1.2 sources (rspolib is the extractor's PO writer, and 0.1.2 is still its latest release), and
@@ -10,6 +10,9 @@ Status: **proposed** · Created: 2026-10-07 · Branch: `refactor/translation-cat
 > `msgmerge`, `msgcat` and `msgattrib` against scratch copies of all six catalogs. The extractor
 > isn't installed, so extraction was **simulated** in Python; findings 3 and 4 are confirmed
 > against the real binary in Phase 1 before anything touches the catalogs.
+>
+> **Phase 1 confirmed findings 3 to 5** against `slint-tr-extractor 1.16.1` on 2026-10-07, and
+> turned up finding 12.
 
 ## What we see
 
@@ -43,10 +46,10 @@ notes starting with `Translators:`.
 ## Findings
 
 1. **The merge loses nothing.** Against the simulated template, every catalog keeps 777 translated
-   entries, with 0 fuzzy and 0 obsolete. Each grows from about 2,630 lines to about 3,520 (+34%),
-   from the `#:` lines and from unwrapping. Four to six `msgstr`s per catalog are wrapped today, so
-   the test's "every entry in these catalogues is on one line today" is already false; `--no-wrap`
-   makes it true again.
+   entries, with 0 fuzzy and 0 obsolete. Each grows from about 2,630 lines to about 3,370 (+28%,
+   measured on the first run), from the `#:` lines and from unwrapping. Four to six `msgstr`s per
+   catalog are wrapped today, so the test's "every entry in these catalogues is on one line today"
+   is already false; `--no-wrap` makes it true again.
 2. **The timestamp churns every file.** The extractor stamps `POT-Creation-Date` from the clock on
    every run, and `msgmerge` copies that field into every catalog's header. Unless the script drops
    it, each run rewrites seven files even when no string moved.
@@ -54,10 +57,11 @@ notes starting with `Translators:`.
    comes out as bare wrapped text with no `#.` in front, so the raw extractor output is not valid
    PO. 6 of the 32 code comments sitting directly above an `@tr` line are that wide today. Two
    consequences: the filter has to run on the raw text before any gettext tool reads it, and a
-   `Translators:` note has to fit in 76 columns, counting from `Translators:`.
+   `Translators:` note has to fit in 76 columns, counting from `Translators:`. The real binary
+   keeps the prefix at 76 columns and drops it at 77.
 4. **rspolib drops locations.** When a `#:` line overflows 78 columns, the writer skips the
    occurrence that didn't fit and repeats the earlier ones on the next line. In one run over every
-   file, about 120 of the 777 entries would lose a whole file from their `#:` line (simulated).
+   file, 121 of the 777 entries lose a whole file from their `#:` line (real binary).
    That undercuts the reason for deleting the notes that say where a string lives. Extracting **one
    file at a time** fixes it: the first occurrence in a file always survives, and `msgcat` takes
    the union across files.
@@ -86,6 +90,11 @@ notes starting with `Translators:`.
     all carry them through (tested).
 11. **`msgattrib --no-wrap --no-obsolete`** round-trips a merged catalog byte-identical and drops
     `#~` blocks, so a string deleted from the source leaves nothing behind in six files.
+12. **A note reaches every `@tr` on the line below it.** The extractor walks back from the string
+    across every token on its line, so `[@tr("A"), @tr("B")]` or a ternary's two arms on one line
+    share whatever comment sits above. A note needs a line where its `@tr` stands alone: `Key` is
+    noted in the tag editor rather than in `settings.slint`'s five-per-line list, and `LIVE` was
+    split off `Buffering…` in `player.slint`.
 
 ## Structure
 
@@ -109,9 +118,9 @@ test's line scanner becomes one entry parser.
 Each phase starts only when it is asked for.
 
 - [x] Phase 0: tools ✅
-- [ ] Phase 1: the script
-- [ ] Phase 2: one-off catalog cleanup
-- [ ] Phase 3: first run
+- [x] Phase 1: the script ✅
+- [x] Phase 2: one-off catalog cleanup ✅
+- [x] Phase 3: first run ✅
 - [ ] Phase 4: stricter test
 - [ ] Phase 5: docs
 - [ ] Phase 6: Windows run
@@ -126,7 +135,10 @@ installed. The Windows half waits for Phase 6.
 - gettext: already on Fedora. Debian and Ubuntu need the `gettext` package, since `gettext-base`
   has no `msgmerge`. On Windows, `winget install MicheleLocati.GettextIconv`.
 
-### Phase 1: `scripts/update-translations.sh`
+### Phase 1: `scripts/update-translations.sh` ✅
+
+Done 2026-10-07. The two guards (a note past 76 columns, two notes on one msgid) were each made to
+fire on a scratch copy and exit before writing anything. shellcheck is clean.
 
 1. If `slint-tr-extractor`, `msgcat`, `msgmerge`, `msgattrib` or `msgfmt` is missing, fail and
    print the install line.
@@ -157,7 +169,14 @@ installed. The Windows half waits for Phase 6.
 confirm findings 3 to 5 with the real binary. Check each entry's `#:` files against a per-file grep
 for `@tr(`, and compare one run over every file with the per-file output.
 
-### Phase 2: one-off catalog cleanup
+### Phase 2: one-off catalog cleanup ✅
+
+Done 2026-10-07: 29 notes in 13 files, and 15 per-language notes. Where it left the candidate list:
+the lyrics note was stale (it named the Settings tab) and now sits on the two `… the Lyrics menu`
+hints it is about; `Support me on Ko-fi` and `{} / {} files · {}` got notes of their own beside
+their siblings; the multi-select note covers ten msgids, the two station ones saying "stations".
+The ten Turkish plural notes now share one wording. The normalized comparison differed only by
+the three header fields step 4 adds.
 
 This is content only, done in the current layout, so its diff reads as deletions rather than as a
 reshuffle.
@@ -205,7 +224,10 @@ drop the `#` lines, and the two outputs are byte-identical, so no msgid or msgst
 `msgfmt -c --statistics` reports 777 translated messages and no warnings.
 `cargo test --locked --workspace` stays green.
 
-### Phase 3: first run
+### Phase 3: first run ✅
+
+Done 2026-10-07, landing in one commit with Phases 1 and 2. Every check below held; the second
+run was compared against a copy of the first rather than against `git status`.
 
 Run the script and check in `melodia-ui.pot`. The catalogs gain their `#:` lines and the
 `#. Translators:` notes, re-sort by file and unwrap.
@@ -229,10 +251,10 @@ In `crates/melodia/tests/translations.rs`:
   2. Each catalog's entries **equal** the template's. This replaces today's superset check.
   3. No catalog entry is fuzzy, and none has an empty `msgstr` or `msgstr[n]`. The failure lists
      each one and says it shows in English.
-  4. Every `// Translators:` line in the tree sits directly above a line holding `@tr(`, and its
-     text is that msgid's `#.` note in the template. This catches a note split over two lines (the
-     extractor keeps only the last), a note hidden by an earlier comment in the same file, and a
-     template that wasn't regenerated.
+  4. Every `// Translators:` line in the tree sits directly above a line holding exactly one
+     `@tr(` (finding 12), and its text is that msgid's `#.` note in the template. This catches a
+     note split over two lines (the extractor keeps only the last), a note hidden by an earlier
+     comment in the same file, and a template that wasn't regenerated.
 - The notes walk gets a vacuity floor, and unreadable paths are collected rather than skipped, as
   the other corpus walks do.
 - Fix the stale prose in the same pass: the one-line claim in `read_po_value`'s doc, and the

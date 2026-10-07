@@ -339,7 +339,9 @@ export component LyricsPanel inherits Rectangle {
             : Lyrics.state == LyricsState.off ? @tr("Lyrics lookup is off")
             : @tr("Play something to see its lyrics");
         hint: root.compact ? ""
+            // Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
             : Lyrics.state == LyricsState.off ? @tr("Turn it on in the Lyrics menu")
+            // Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
             : Lyrics.state == LyricsState.unavailable ? @tr("Try again from the Lyrics menu")
             : "";
         compact: root.compact;

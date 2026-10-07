@@ -259,6 +259,7 @@ export component TagEditorBody inherits HorizontalLayout {
                         text <=> TagEditor.movement;
                     }
                     LabeledInput {
+                        // Translators: the movement's number, as in movement 2 of 4
                         label: @tr("Number");
                         placeholder: TagEditor.movement-number-placeholder;
                         text <=> TagEditor.movement-number;
@@ -273,6 +274,7 @@ export component TagEditorBody inherits HorizontalLayout {
                 HorizontalLayout {
                     spacing: Theme.pad-sm;
                     LabeledInput {
+                        // Translators: a musical key, as in A minor
                         label: @tr("Key");
                         placeholder: TagEditor.initial-key-placeholder;
                         text <=> TagEditor.initial-key;
@@ -321,6 +323,7 @@ export component TagEditorBody inherits HorizontalLayout {
                         text <=> TagEditor.barcode;
                     }
                     LabeledInput {
+                        // Translators: the physical medium a release came out on: CD, vinyl
                         label: @tr("Media");
                         placeholder: TagEditor.media-placeholder;
                         text <=> TagEditor.media;

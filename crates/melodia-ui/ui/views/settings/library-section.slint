@@ -106,6 +106,7 @@ export component LibrarySection inherits Rectangle {
                     Dialog.kind = "remove-folder";
                     Dialog.target-id = row.id;
                     Dialog.title = @tr("Remove Folder?");
+                    // Translators: `{}` is the absolute path of the folder being removed
                     Dialog.message = @tr("Remove \"{}\" from your library? All tracks under this folder will be removed from the library and from your playlists.", row.path);
                     Dialog.confirm-label = @tr("Remove");
                     Dialog.cancel-label = @tr("Cancel");

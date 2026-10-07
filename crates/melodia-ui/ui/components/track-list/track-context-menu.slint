@@ -188,6 +188,7 @@ export component TrackContextMenu inherits Rectangle {
                 }
                 if root.show-queue-actions: MenuItem {
                     label: root.multi-active
+                        // Translators: `{}` is how many items are selected
                         ? @tr("Play {} Next", root.multi-count)
                         : @tr("Play Next");
                     icon: "queue_play_next";
@@ -198,6 +199,7 @@ export component TrackContextMenu inherits Rectangle {
                 }
                 if root.show-queue-actions: MenuItem {
                     label: root.multi-active
+                        // Translators: `{}` is how many items are selected
                         ? @tr("Add {} to Queue", root.multi-count)
                         : @tr("Add to Queue");
                     icon: "queue_music";
@@ -225,6 +227,7 @@ export component TrackContextMenu inherits Rectangle {
                 // belonging to the opener, which the card menu shares.
                 if pop.visible-playlist-count > 0: MenuItem {
                     label: root.multi-active
+                        // Translators: `{}` is how many items are selected
                         ? @tr("Add {} to Playlist", root.multi-count)
                         : @tr("Add to Playlist");
                     icon: "playlist_add";
@@ -259,6 +262,7 @@ export component TrackContextMenu inherits Rectangle {
                 // hop `SmartEditor.request-edit` also takes.
                 MenuItem {
                     label: root.multi-active
+                        // Translators: `{}` is how many items are selected
                         ? @tr("Edit Tags for {}", root.multi-count)
                         : @tr("Edit Tags…");
                     icon: "edit";
@@ -356,6 +360,7 @@ export component TrackContextMenu inherits Rectangle {
                 if root.show-remove: MenuSeparator {}
                 if root.view-context == "playlist-detail": MenuItem {
                     label: root.multi-active
+                        // Translators: `{}` is how many items are selected
                         ? @tr("Remove {} from Playlist", root.multi-count)
                         : @tr("Remove from Playlist");
                     icon: "playlist_remove";
@@ -366,6 +371,7 @@ export component TrackContextMenu inherits Rectangle {
                 }
                 if root.view-context == "queue": MenuItem {
                     label: root.multi-active
+                        // Translators: `{}` is how many items are selected
                         ? @tr("Remove {} from Queue", root.multi-count)
                         : @tr("Remove from Queue");
                     icon: "playlist_remove";

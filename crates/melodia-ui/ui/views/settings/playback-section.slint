@@ -126,6 +126,7 @@ export component PlaybackSection inherits Rectangle {
             description: root.xf-duration-desc;
             SettingSlider {
                 value: root.secs-to-frac(Settings.crossfade-duration-secs);
+                // Translators: `{}` is a duration in seconds, such as 2.5
                 readout: @tr("{} s", round(Settings.crossfade-duration-secs * 10) / 10);
                 readout-width: 48px;
                 // Live during the drag, persist on release.

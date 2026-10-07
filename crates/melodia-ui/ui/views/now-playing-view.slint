@@ -377,6 +377,7 @@ export component NowPlayingView inherits Rectangle {
                     // so this column states what the station *is* instead. Lyrics take the same
                     // slot on a track, the column being one column with three arms rather than a
                     // place two things share.
+                    // Translators: a heading in place of "Up Next", so keep it as short
                     text: Player.vm.has_station ? @tr("Station")
                         : Lyrics.enabled ? @tr("Lyrics")
                         : @tr("Up Next");

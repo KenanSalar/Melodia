@@ -195,9 +195,11 @@ export component StationContextMenu inherits Rectangle {
                 if root.kept: MenuItem {
                     label: root.on-recent
                         ? (root.multi-active
+                            // Translators: `{}` is how many stations are selected
                             ? @tr("Remove {} from Recently Played…", root.multi-count)
                             : @tr("Remove from Recently Played…"))
                         : (root.multi-active
+                            // Translators: `{}` is how many stations are selected
                             ? @tr("Remove {} from Favorites…", root.multi-count)
                             : @tr("Remove from Favorites…"));
                     icon: "delete";

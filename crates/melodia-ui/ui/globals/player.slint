@@ -51,8 +51,12 @@ export global Player {
     out property <string> live-label: root.vm.status == "loading"
         ? @tr("Connecting…")
         : (root.vm.status == "paused"
+            // Translators: a state on the station pill, not the Pause button's verb
             ? @tr("Paused")
-            : (root.vm.radio.buffering ? @tr("Buffering…") : @tr("LIVE")));
+            : (root.vm.radio.buffering
+                ? @tr("Buffering…")
+                // Translators: a short pill in place of a track's seek bar
+                : @tr("LIVE")));
 
     // Projected out of `vm` for a *Rust* reader, which is the half a binding cannot help with:
     // reading a struct property from Rust clones the whole of it, and the lyrics panel's follow

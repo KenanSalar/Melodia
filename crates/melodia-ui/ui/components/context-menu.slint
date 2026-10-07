@@ -130,7 +130,9 @@ export component FavoriteMenuItem inherits MenuItem {
 
     label: root.multi-active
         ? (root.is-favorite
+            // Translators: `{}` is how many items are selected
             ? @tr("Remove {} from Favorites", root.multi-count)
+            // Translators: `{}` is how many items are selected
             : @tr("Add {} to Favorites", root.multi-count))
         : (root.is-favorite ? @tr("Remove from Favorites") : @tr("Add to Favorites"));
     icon: root.is-favorite ? "heart_minus" : "favorite";

@@ -27,10 +27,12 @@ export component ScanProgress inherits HorizontalLayout {
                 : LibrarySettings.scan-phase == ScanPhase.finishing ? @tr("Finishing up…")
                 : LibrarySettings.scan-phase == ScanPhase.stopping ? @tr("Stopping…")
                 : LibrarySettings.scanning-file != ""
+                    // Translators: files read so far, the total, then the file being read
                     ? @tr("{} / {} files · {}",
                           LibrarySettings.scanned-count,
                           LibrarySettings.total-count,
                           LibrarySettings.scanning-file)
+                    // Translators: files read so far, then the total
                     : @tr("{} / {} files",
                           LibrarySettings.scanned-count,
                           LibrarySettings.total-count);
