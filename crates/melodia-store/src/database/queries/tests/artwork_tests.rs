@@ -8,7 +8,7 @@ use sqlx::AssertSqlSafe;
 
 use crate::database::DbPool;
 use crate::database::queries;
-use crate::database::queries::fixtures::{insert_test_track, setup_seeded_db};
+use crate::database::queries::fixtures::{insert_test_track, set_test_artwork, setup_seeded_db};
 use melodia_core::entities::radio;
 use melodia_core::error::AppError;
 
@@ -208,15 +208,6 @@ async fn forget(db: &DbPool, missing: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-async fn set_track_artwork(db: &DbPool, path: &str, artwork: &str) -> Result<(), AppError> {
-    sqlx::query("UPDATE tracks SET artwork_path = ? WHERE file_path = ?")
-        .bind(artwork)
-        .bind(path)
-        .execute(db.write())
-        .await?;
-    Ok(())
-}
-
 /// Every refill fills an empty column and leaves a set one alone, so a column left naming the
 /// gone file is one no scan ever repairs.
 #[tokio::test]
@@ -248,18 +239,19 @@ async fn forgetting_a_path_clears_every_library_column_naming_it() -> Result<(),
 /// repair would never extract its cover again.
 #[tokio::test]
 async fn a_track_whose_cover_is_forgotten_loses_its_mtime_too() -> Result<(), AppError> {
-    let db = setup_seeded_db().await?;
-    set_track_artwork(&db, "/music/track1.mp3", MISSING).await?;
-    set_track_artwork(&db, "/music/track2.mp3", PRESENT).await?;
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    let gone = insert_test_track(&db, "/music/1.mp3", "One", "Artist", "Album", "Rock").await?;
+    let kept = insert_test_track(&db, "/music/2.mp3", "Two", "Artist", "Album", "Rock").await?;
+    set_test_artwork(&db, gone, MISSING).await?;
+    set_test_artwork(&db, kept, PRESENT).await?;
 
     forget(&db, MISSING).await?;
 
-    let stamps: Vec<Option<String>> = sqlx::query_scalar(
-        "SELECT date_modified FROM tracks WHERE file_path IN ('/music/track1.mp3', \
-         '/music/track2.mp3') ORDER BY file_path",
-    )
-    .fetch_all(db.read())
-    .await?;
+    let stamps: Vec<Option<String>> =
+        sqlx::query_scalar("SELECT date_modified FROM tracks ORDER BY id")
+            .fetch_all(db.read())
+            .await?;
     assert_eq!(stamps, [None, Some("2024-01-01T00:00:00+00:00".to_owned())]);
     Ok(())
 }

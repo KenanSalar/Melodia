@@ -141,6 +141,14 @@ pub async fn insert_tagged_track(
     Ok(id)
 }
 
+/// Points a track's cover at `path`, which the seeding helpers leave null.
+pub async fn set_test_artwork(db: &DbPool, track_id: i64, path: &str) -> Result<(), AppError> {
+    let mut tx = db.write().begin().await?;
+    queries::track::set_track_artwork(&mut tx, &[track_id], Some(path)).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
 /// A pool holding `count` tracks, in insert order, for the suites that need more rows than one
 /// statement's bind budget covers. Each is titled by its index, so no two share a hash.
 #[cfg(test)]

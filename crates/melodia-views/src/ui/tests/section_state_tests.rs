@@ -1,6 +1,4 @@
-//! When a section's card grid is what the window draws, which is what a cover prewarm asks: the
-//! tier keeps what it decodes until a card draws it again, and a grid under a detail draws
-//! nothing.
+//! When a section's card grid is what the window draws.
 
 use super::SectionState;
 

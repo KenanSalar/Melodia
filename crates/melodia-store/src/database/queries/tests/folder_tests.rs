@@ -125,15 +125,6 @@ async fn file_under(db: &DbPool, track_id: i64, folder_id: i64) -> Result<(), Ap
     Ok(())
 }
 
-async fn set_artwork(db: &DbPool, track_id: i64, path: &str) -> Result<(), AppError> {
-    sqlx::query("UPDATE tracks SET artwork_path = ? WHERE id = ?")
-        .bind(path)
-        .bind(track_id)
-        .execute(db.write())
-        .await?;
-    Ok(())
-}
-
 /// A parent taking over the folders inside it must not re-import their tracks: the cascade on
 /// `tracks.folder_id` would take the rows, and with them what no rescan brings back.
 #[tokio::test]
@@ -201,8 +192,8 @@ async fn deleting_a_folder_moves_a_playlist_cover_off_the_tracks_it_took() -> Re
     let gone = insert_test_track(&db, "/other/a.mp3", "A", "Artist", "Album", "Rock").await?;
     let stays = insert_test_track(&db, "/music/b.mp3", "B", "Artist", "Album", "Rock").await?;
     file_under(&db, gone, removed.id).await?;
-    set_artwork(&db, gone, "/art/gone.jpg").await?;
-    set_artwork(&db, stays, "/art/stays.jpg").await?;
+    set_test_artwork(&db, gone, "/art/gone.jpg").await?;
+    set_test_artwork(&db, stays, "/art/stays.jpg").await?;
     let playlist = queries::playlist::create_playlist(&db, "Mixed", None).await?;
     queries::playlist::add_tracks_to_playlist(&db, playlist.id, &[gone, stays]).await?;
 

@@ -18,7 +18,7 @@ use melodia_core::error::AppError;
 use melodia_core::utils::self_writes::SelfWrites;
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
-use melodia_store::database::queries::fixtures::insert_test_track;
+use melodia_store::database::queries::fixtures::{insert_test_track, set_test_artwork};
 use melodia_store::media::ingest::metadata::{compute_file_hash, date_modified_from_metadata};
 use melodia_store::media::ingest::scanner::track_is_current;
 use melodia_testkit::ASSETS_DIR;
@@ -226,11 +226,7 @@ async fn a_rating_only_edit_sweeps_nothing_and_keeps_its_cover() -> Result<(), A
         set_genre(&db, &artwork_dir, &cover_cache, &self_writes, id, "Kept Genre").await?;
 
     // A cover on the row and an orphan beside it: the two things the gated passes would reach.
-    sqlx::query("UPDATE tracks SET artwork_path = ? WHERE id = ?")
-        .bind("/covers/kept.jpg")
-        .bind(id)
-        .execute(db.write())
-        .await?;
+    set_test_artwork(&db, id, "/covers/kept.jpg").await?;
     sqlx::query("INSERT INTO genres (name) VALUES ('Stray Genre')").execute(db.write()).await?;
 
     let edit = TagEdit { rating: FieldEdit::Set(4), ..TagEdit::default() };
@@ -428,10 +424,7 @@ async fn removing_a_cover_with_no_fallback_nulls_the_row() -> Result<(), AppErro
 
     let path = stage(&tmp, "silence-cover.flac")?;
     let id = seed_track(&db, &path.to_string_lossy()).await?;
-    sqlx::query("UPDATE tracks SET artwork_path = '/cached/old.jpg' WHERE id = ?")
-        .bind(id)
-        .execute(db.write())
-        .await?;
+    set_test_artwork(&db, id, "/cached/old.jpg").await?;
 
     let artwork_dir = tmp.path().join("artwork");
     std::fs::create_dir(&artwork_dir)?;
@@ -494,15 +487,6 @@ async fn removing_a_cover_falls_back_to_the_one_beside_the_file() -> Result<(), 
     Ok(())
 }
 
-async fn set_artwork(db: &DbPool, id: i64, path: &str) -> Result<(), AppError> {
-    sqlx::query("UPDATE tracks SET artwork_path = ? WHERE id = ?")
-        .bind(path)
-        .bind(id)
-        .execute(db.write())
-        .await?;
-    Ok(())
-}
-
 async fn playlist_thumbnail(db: &DbPool, playlist: i64) -> Result<Option<String>, AppError> {
     Ok(queries::playlist::get_playlist_by_id(db, playlist).await?.thumbnail_path)
 }
@@ -518,8 +502,8 @@ async fn removing_a_playlists_first_cover_moves_its_thumbnail_to_the_next() -> R
     queries::folder::insert_folder(&db, &tmp.path().to_string_lossy(), true).await?;
     let first = seed_track(&db, &stage(&tmp, "silence-cover.flac")?.to_string_lossy()).await?;
     let second = seed_track(&db, &tmp.path().join("second.flac").to_string_lossy()).await?;
-    set_artwork(&db, first, "/cached/first.jpg").await?;
-    set_artwork(&db, second, "/cached/second.jpg").await?;
+    set_test_artwork(&db, first, "/cached/first.jpg").await?;
+    set_test_artwork(&db, second, "/cached/second.jpg").await?;
     let playlist = queries::playlist::create_playlist(&db, "Mix", None).await?;
     queries::playlist::add_tracks_to_playlist(&db, playlist.id, &[first, second]).await?;
     let artwork_dir = tmp.path().join("artwork");
@@ -547,7 +531,7 @@ async fn replacing_a_playlists_first_cover_carries_its_thumbnail_along() -> Resu
     let tmp = TempDir::new()?;
     queries::folder::insert_folder(&db, &tmp.path().to_string_lossy(), true).await?;
     let first = seed_track(&db, &stage(&tmp, "silence.flac")?.to_string_lossy()).await?;
-    set_artwork(&db, first, "/cached/old.jpg").await?;
+    set_test_artwork(&db, first, "/cached/old.jpg").await?;
     let playlist = queries::playlist::create_playlist(&db, "Mix", None).await?;
     queries::playlist::add_tracks_to_playlist(&db, playlist.id, &[first]).await?;
     let artwork_dir = tmp.path().join("artwork");

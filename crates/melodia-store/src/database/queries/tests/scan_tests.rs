@@ -306,14 +306,8 @@ async fn update_track_artwork_if_missing_sets_when_null() -> Result<(), AppError
 async fn update_track_artwork_if_missing_preserves_existing() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
-    insert_test_track(&db, "/music/song.mp3", "Song", "Artist", "Album", "Rock").await?;
-
-    // Set artwork first
-    sqlx::query(
-        "UPDATE tracks SET artwork_path = '/art/original.jpg' WHERE file_path = '/music/song.mp3'",
-    )
-    .execute(db.write())
-    .await?;
+    let id = insert_test_track(&db, "/music/song.mp3", "Song", "Artist", "Album", "Rock").await?;
+    set_test_artwork(&db, id, "/art/original.jpg").await?;
 
     // Try to overwrite — should not change
     let mut tx = db.write().begin().await?;
@@ -333,14 +327,8 @@ async fn update_track_artwork_if_missing_preserves_existing() -> Result<(), AppE
 async fn update_album_artwork_from_tracks_fills_missing() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
-    insert_test_track(&db, "/music/song.mp3", "Song", "Artist", "Album", "Rock").await?;
-
-    // Set artwork on track
-    sqlx::query(
-        "UPDATE tracks SET artwork_path = '/art/cover.jpg' WHERE file_path = '/music/song.mp3'",
-    )
-    .execute(db.write())
-    .await?;
+    let id = insert_test_track(&db, "/music/song.mp3", "Song", "Artist", "Album", "Rock").await?;
+    set_test_artwork(&db, id, "/art/cover.jpg").await?;
 
     let mut tx = db.write().begin().await?;
     queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
@@ -351,15 +339,6 @@ async fn update_album_artwork_from_tracks_fills_missing() -> Result<(), AppError
             .fetch_one(db.read())
             .await?;
     assert_eq!(artwork.as_deref(), Some("/art/cover.jpg"));
-    Ok(())
-}
-
-async fn set_track_artwork(db: &DbPool, path: &str, artwork: &str) -> Result<(), AppError> {
-    sqlx::query("UPDATE tracks SET artwork_path = ? WHERE file_path = ?")
-        .bind(artwork)
-        .bind(path)
-        .execute(db.write())
-        .await?;
     Ok(())
 }
 
@@ -383,10 +362,10 @@ async fn an_album_takes_the_cover_of_its_lowest_id_track_that_has_one() -> Resul
     let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     insert_test_track(&db, "/music/1.mp3", "One", "Artist", "Album", "Rock").await?;
-    insert_test_track(&db, "/music/2.mp3", "Two", "Artist", "Album", "Rock").await?;
-    insert_test_track(&db, "/music/3.mp3", "Three", "Artist", "Album", "Rock").await?;
-    set_track_artwork(&db, "/music/3.mp3", "/art/three.jpg").await?;
-    set_track_artwork(&db, "/music/2.mp3", "/art/two.jpg").await?;
+    let two = insert_test_track(&db, "/music/2.mp3", "Two", "Artist", "Album", "Rock").await?;
+    let three = insert_test_track(&db, "/music/3.mp3", "Three", "Artist", "Album", "Rock").await?;
+    set_test_artwork(&db, three, "/art/three.jpg").await?;
+    set_test_artwork(&db, two, "/art/two.jpg").await?;
 
     roll_up_album_covers(&db).await?;
 
@@ -399,8 +378,8 @@ async fn an_album_takes_the_cover_of_its_lowest_id_track_that_has_one() -> Resul
 async fn an_album_cover_already_set_is_never_overwritten() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
-    insert_test_track(&db, "/music/1.mp3", "One", "Artist", "Album", "Rock").await?;
-    set_track_artwork(&db, "/music/1.mp3", "/art/track.jpg").await?;
+    let id = insert_test_track(&db, "/music/1.mp3", "One", "Artist", "Album", "Rock").await?;
+    set_test_artwork(&db, id, "/art/track.jpg").await?;
     sqlx::query("UPDATE albums SET artwork_path = '/art/chosen.jpg' WHERE name = 'Album'")
         .execute(db.write())
         .await?;
@@ -419,10 +398,10 @@ async fn rolling_up_covers_moves_an_automatic_playlist_onto_its_first_tracks_cov
     let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     let id = insert_test_track(&db, "/music/1.mp3", "One", "Artist", "Album", "Rock").await?;
-    set_track_artwork(&db, "/music/1.mp3", "/art/old.jpg").await?;
+    set_test_artwork(&db, id, "/art/old.jpg").await?;
     let playlist = queries::playlist::create_playlist(&db, "Mix", None).await?;
     queries::playlist::add_tracks_to_playlist(&db, playlist.id, &[id]).await?;
-    set_track_artwork(&db, "/music/1.mp3", "/art/rescanned.jpg").await?;
+    set_test_artwork(&db, id, "/art/rescanned.jpg").await?;
 
     let mut tx = db.write().begin().await?;
     queries::scan::roll_up_covers(&mut tx).await?;

@@ -8,7 +8,7 @@ use tokio::sync::watch;
 use super::forget_missing;
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
-use melodia_store::database::queries::fixtures::insert_test_track;
+use melodia_store::database::queries::fixtures::{insert_test_track, set_test_artwork};
 use melodia_store::database::{DbPool, queries};
 
 const STORED_NAME: &str = "33fb807d1f1b7cbb.jpg";
@@ -42,12 +42,7 @@ impl Library {
     }
 
     async fn set_cover(&self, track: i64, path: &Path) -> Result<(), AppError> {
-        sqlx::query("UPDATE tracks SET artwork_path = ? WHERE id = ?")
-            .bind(as_str(path))
-            .bind(track)
-            .execute(self.db.write())
-            .await?;
-        Ok(())
+        set_test_artwork(&self.db, track, &as_str(path)).await
     }
 
     async fn cover(&self) -> Result<Option<String>, AppError> {
