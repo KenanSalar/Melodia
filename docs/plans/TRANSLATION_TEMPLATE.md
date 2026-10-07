@@ -2,7 +2,8 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **in progress**, Phases 0 to 3 done · Created: 2026-10-07 · Branch: `refactor/translation-catalog-template`
+Status: **in progress**, Phases 0 to 3 done · Created: 2026-10-07 ·
+Branch: `refactor/translation-catalog-template`
 
 > **Checked 2026-10-07** against `360dda24`. Read: the `slint-tr-extractor` 1.16.1 and `rspolib`
 > 0.1.2 sources (rspolib is the extractor's PO writer, and 0.1.2 is still its latest release), and
@@ -47,9 +48,9 @@ notes starting with `Translators:`.
 
 1. **The merge loses nothing.** Against the simulated template, every catalog keeps 777 translated
    entries, with 0 fuzzy and 0 obsolete. Each grows from about 2,630 lines to about 3,370 (+28%,
-   measured on the first run), from the `#:` lines and from unwrapping. Four to six `msgstr`s per
-   catalog are wrapped today, so the test's "every entry in these catalogues is on one line today"
-   is already false; `--no-wrap` makes it true again.
+   measured on the first run), from the `#:` lines and from unwrapping. Three to five `msgstr`s per
+   catalog were wrapped before it, which made the test's "every entry in these catalogues is on
+   one line today" false; `--no-wrap` made it true again.
 2. **The timestamp churns every file.** The extractor stamps `POT-Creation-Date` from the clock on
    every run, and `msgmerge` copies that field into every catalog's header. Unless the script drops
    it, each run rewrites seven files even when no string moved.
@@ -162,8 +163,8 @@ fire on a scratch copy and exit before writing anything. shellcheck is clean.
 7. For each `translations/*/LC_MESSAGES/melodia-ui.po`, run `msgmerge -q -U --no-wrap
    --add-location=file --sort-by-file --backup=none` against the **line-numbered** template, then
    `msgattrib --no-wrap --no-obsolete` in place.
-8. End with `msgfmt --statistics` for each catalog, so a run finishes by listing what still needs
-   translating.
+8. End with `msgfmt -c --statistics` for each catalog, so a run finishes by listing what still
+   needs translating, and fails on a catalog whose header can't carry its plurals.
 
 **Before Phase 3 touches the real catalogs**, run the extraction half into a scratch directory and
 confirm findings 3 to 5 with the real binary. Check each entry's `#:` files against a per-file grep
@@ -178,8 +179,8 @@ their siblings; the multi-select note covers ten msgids, the two station ones sa
 The ten Turkish plural notes now share one wording. The normalized comparison differed only by
 the three header fields step 4 adds.
 
-This is content only, done in the current layout, so its diff reads as deletions rather than as a
-reshuffle.
+This is content only, done in the current layout. It was meant to land on its own as a diff of
+deletions, but Phase 3 ran before a commit, so the two land together.
 
 1. **Write the surviving notes into the source first**, one Edit each: a single
    `// Translators:` line of at most 76 columns, directly above the line holding the `@tr`. A note
@@ -234,8 +235,9 @@ Run the script and check in `melodia-ui.pot`. The catalogs gain their `#:` lines
 
 **Verify.** The same msgcat comparison against the Phase 2 state shows no change.
 `msgfmt --statistics` reports 777 translated, 0 fuzzy and 0 untranslated in every catalog. **A
-second run leaves `git status` clean.** `cargo test` is green. This lands as its own commit: a large
-diff that the comparison proves is mechanical.
+second run leaves `git status` clean.** `cargo test` is green. The same comparison against
+`5bafa5ea`, the commit before the change, is what proves the combined diff mechanical: only the
+three header fields from Phase 2 step 4 differ.
 
 ### Phase 4: stricter test
 

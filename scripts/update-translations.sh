@@ -111,5 +111,6 @@ done
 
 for catalog in translations/*/LC_MESSAGES/melodia-ui.po; do
     language=${catalog#translations/}
-    echo "${language%%/*}: $(msgfmt --statistics -o "$work/stats.mo" "$catalog" 2>&1)"
+    stats=$(msgfmt -c --statistics -o "$work/stats.mo" "$catalog" 2>&1) || fail "$stats"
+    echo "${language%%/*}: $stats"
 done
