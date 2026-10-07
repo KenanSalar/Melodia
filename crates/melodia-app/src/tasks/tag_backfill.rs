@@ -54,9 +54,10 @@ async fn backfill(state: &AppState) -> AppResult<()> {
 
     log::info!("Tag backfill: {marked} track(s) queued for a re-read of their tags");
 
-    // Whichever reconcile gets there first does the work. This one is a no-op when the boot scan
-    // is already in flight — the marks are durable, so that pass or the next launch's picks them
-    // up, and the marker records the half that must not be lost.
+    // Whichever reconcile gets there first does the work, a pass already in flight taking this
+    // request rather than starting a second. The marks are durable, so a folder that pass has
+    // already read picks them up at its next scan, and the marker records the half that must not
+    // be lost.
     library::scan::reconcile_watched_folders(state);
     Ok(())
 }

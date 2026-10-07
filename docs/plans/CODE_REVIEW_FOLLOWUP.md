@@ -177,8 +177,8 @@ three detail `wire`s (150 to 190, phase 6), `callbacks/tags/open.rs::populate` (
 - [ ] `main()` splits into named boot steps, kept in order. `crates/melodia/src/tests/main_order_tests.rs`
       pins that order by reading `main.rs` as text, so its pins move with the code in the same
       step.
-- [ ] The rest (`scan_one`, `reconcile`, `ingest_scanned_files`,
-      `spawn_playback_monitor`, `populate`) split by stage.
+- [ ] The rest (`scan_one`, `ingest_scanned_files`, `spawn_playback_monitor`, `populate`) split
+      by stage.
 - [ ] Turn on `cognitive_complexity` in `[workspace.lints.clippy]`. Its threshold of 30 is already
       set in `clippy.toml`, where it does nothing until the lint is on.
 - [ ] Remove `too_many_lines = "allow"` from `Cargo.toml` once the count is down. If the leftovers

@@ -25,7 +25,8 @@ pub fn spawn_background_tasks(
     tasks::file_event_processor::spawn(spawner, state, channels.file_event_rx);
     tasks::queue_prune::spawn(spawner, state);
     tasks::retroactive_hash::spawn(spawner, state);
-    // Puts back a stored cover a cache finds missing mid-session; the boot scan covers the rest.
+    // Puts back a stored cover a cache finds missing: mid-session, and with watching off, where no
+    // boot scan reconciles the library, one gone while the app was closed too.
     tasks::artwork_restore::spawn(spawner, state);
     // Every other sweep follows a scan, and a launch with no library folders runs none, so the
     // covers of a library removed last session would otherwise stay on disk.

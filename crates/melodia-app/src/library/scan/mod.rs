@@ -1,5 +1,5 @@
-//! The library scan: one folder's walk, read and write, and the reconcile that runs it over every
-//! enabled folder.
+//! The library scan: one folder's walk, read and write, and the reconcile that runs it over several
+//! in turn.
 //!
 //! Every scan stops on a token from [`ScanControl`](crate::state::ScanControl), so [`cancel`]
 //! stops any of them, and quitting stops them at the same checkpoints: the walk, the incremental
@@ -14,16 +14,16 @@
 //! folder's until a completed scan absorbs it.
 
 mod finish;
+mod reconcile;
 mod repair;
 mod run;
 
+pub use reconcile::{finish_interrupted_imports, reconcile_watched_folders};
 pub use repair::restore_missing_artwork;
 
-use std::cmp::Reverse;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use rayon::prelude::*;
 
@@ -40,6 +40,7 @@ use melodia_store::media::ingest::scan_pool::ScanPool;
 use melodia_store::media::ingest::scanner::{
     MediaWalk, ScanObserver, collect_media_files, scan_files_parallel, track_is_current,
 };
+use reconcile::Reach;
 use repair::RestoreNotice;
 use run::ScanRun;
 
@@ -59,7 +60,8 @@ pub enum ScanOutcome {
     Withdrawn,
 }
 
-/// What a scan the user cancels leaves behind. Quitting always keeps.
+/// What a scan the user cancels leaves behind. Quitting always keeps, and an import it cuts short
+/// is finished at the next launch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OnStop {
     /// What was read stays: the folder was in the library before this scan, so a cancel only stops
@@ -111,7 +113,7 @@ pub async fn scan_folder(
     if let Some(notice) = restoring
         && matches!(outcome, ScanOutcome::Completed { .. })
     {
-        reconcile(state, Some(notice));
+        reconcile::start(state, Reach::Library, Some(notice));
     }
     Ok(outcome)
 }
@@ -142,90 +144,6 @@ pub fn start(state: &AppState, folder_id: i64, on_stop: OnStop) {
 /// [`OnStop`] withdraws the folder.
 pub fn cancel(state: &AppState) {
     state.scan.cancel();
-}
-
-/// Coalesces concurrent `reconcile_watched_folders` triggers. A
-/// rapid-fire kernel-overflow burst during `rsync` could otherwise spawn
-/// three full library sweeps back-to-back; each one is idempotent but
-/// would still re-hash every file. The flag is RAII-cleared by
-/// [`ReconcileGuard`] so a panic or early-return path can't strand it.
-static RECONCILE_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
-
-struct ReconcileGuard;
-impl Drop for ReconcileGuard {
-    fn drop(&mut self) {
-        RECONCILE_IN_FLIGHT.store(false, Ordering::Release);
-    }
-}
-
-/// Fire-and-forget background reconcile of every enabled library folder.
-/// Catches files that landed (or vanished) while the watcher was off —
-/// the watcher itself only reports live events, so a restart or a
-/// toggle-off interval leaves DB and disk out of sync until the next
-/// manual Rescan. Triggered after the watcher transitions off → on
-/// (`resume_watching::run`, `toggle_folder_watching(true)`), on
-/// watcher-overflow `RescanNeeded` from `file_event_processor`, by
-/// `tag_backfill`, by `artwork_restore`, and by a completed
-/// [`scan_folder`] whose repair cleared any covers.
-///
-/// Sequential per folder: `SQLite` has a single writer, and the scan
-/// progress is one `watch` slot that parallel scans would clobber. Each
-/// folder's scan already bumps `library_changed`, so Browse/Tracks views
-/// auto-refresh per folder as scans complete.
-///
-/// One token for the whole pass, so a cancel stops the folders still to
-/// come as well as the one being scanned. Tracked on `TaskSpawner` so
-/// shutdown waits for the in-flight folder's last write.
-///
-/// Coalesces concurrent triggers via [`RECONCILE_IN_FLIGHT`]: a second
-/// call while a reconcile is mid-flight is a no-op. The in-flight pass
-/// still reads the latest audio files, but its artwork repair ran at its
-/// start, so a cover gone since waits for the next scan entry.
-pub fn reconcile_watched_folders(state: &AppState) {
-    reconcile(state, None);
-}
-
-/// [`reconcile_watched_folders`], holding up a restore notice a scan has already raised.
-fn reconcile(state: &AppState, restoring: Option<RestoreNotice>) {
-    if RECONCILE_IN_FLIGHT
-        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-        .is_err()
-    {
-        log::debug!("reconcile_watched_folders: already in flight, skipping");
-        return;
-    }
-    let spawner = TaskSpawner::from_state(state);
-    let state = state.clone();
-    let cancel = state.scan.token();
-    spawner.spawn(async move {
-        let _guard = ReconcileGuard;
-        let _handed_over = restoring;
-        let _restoring = forget_missing_artwork(&state).await;
-        let mut folders = match queries::folder::get_all_folders(&state.db).await {
-            Ok(f) => f,
-            Err(e) => {
-                log::warn!("reconcile_watched_folders: load folders failed: {}", describe(&e));
-                return;
-            }
-        };
-        // Deepest first: a folder absorbs the ones nested in it when its scan completes, so
-        // theirs has to run before it or not at all.
-        folders.sort_by_key(|f| Reverse(Path::new(&f.path).components().count()));
-        for folder in folders.iter().filter(|f| f.is_enabled) {
-            if cancel.is_cancelled() {
-                log::info!("reconcile_watched_folders: stopped, bailing between folders");
-                return;
-            }
-            let run = ScanRun::start(&state, cancel.clone());
-            if let Err(e) = scan_one(&state, folder.id, &run).await {
-                log::warn!(
-                    "reconcile_watched_folders: scan of {} failed: {}",
-                    folder.path,
-                    describe(&e)
-                );
-            }
-        }
-    });
 }
 
 /// Scan-delta size above which the denormalized-stats triggers are dropped

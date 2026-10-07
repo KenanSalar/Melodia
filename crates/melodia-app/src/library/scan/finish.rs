@@ -146,8 +146,9 @@ pub(super) async fn absorb_nested(
     Ok(())
 }
 
-/// Stamps the folder as scanned and starts the passes a completed scan feeds. A stopped scan
-/// owes neither: the folder isn't scanned, and the next scan of it runs them.
+/// Stamps the folder as scanned, which is also how a launch tells a finished import from one a quit
+/// cut short, and starts the passes a completed scan feeds. A stopped scan owes neither: the folder
+/// isn't scanned, and the next scan of it runs them.
 pub(super) async fn after_completed(state: &AppState, folder_id: i64) -> Result<(), AppError> {
     let now = melodia_core::utils::now_rfc3339();
     queries::folder::update_folder_last_scanned(&state.db, folder_id, &now).await?;
