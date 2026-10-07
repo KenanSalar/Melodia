@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **in progress**, Phases 0 to 5 done · Created: 2026-10-07 ·
+Status: **done**, Phases 0 to 6 done · Created: 2026-10-07 ·
 Branch: `refactor/translation-catalog-template`
 
 > **Checked 2026-10-07** against `360dda24`. Read: the `slint-tr-extractor` 1.16.1 and `rspolib`
@@ -124,12 +124,12 @@ Each phase starts only when it is asked for.
 - [x] Phase 3: first run ✅
 - [x] Phase 4: stricter test ✅
 - [x] Phase 5: docs ✅
-- [ ] Phase 6: Windows run
+- [x] Phase 6: Windows run ✅
 
 ### Phase 0: tools ✅
 
 Done on Kenan's Linux machine 2026-10-07: `slint-tr-extractor 1.16.1`, with gettext 0.26 already
-installed. The Windows half waits for Phase 6.
+installed. The Windows half went in at the start of Phase 6.
 
 - `cargo install slint-tr-extractor --version 1.16.1 --locked`, the same version as the
   workspace's `slint`.
@@ -297,7 +297,17 @@ starts from the template with `msginit`, and the PR template's clippy and test l
 - Root `Cargo.toml`: the comment beside `slint-build` says the script checks the extractor's
   version against this pin.
 
-### Phase 6: Windows run (Kenan's machine)
+### Phase 6: Windows run (Kenan's machine) ✅
+
+Done 2026-10-07 with winget's gettext 1.0 and the extractor at 1.16.1. All six catalogs came out
+byte-identical to the Linux run, so 1.0 and 0.26 write the same bytes. CRLF did show up, but only
+in the template and only through stdout: a Windows gettext writes stdout in text mode, while `-o`
+and `-U` write a file as it is. So rather than normalizing after each call, the template now goes
+through `msgcat -o` like every other write. The `msgfmt` report came out in German with a garbled
+`ü`, the Windows build printing in the console code page, so that call alone runs under
+`LC_ALL=C`; a whole run under it was byte-identical too, but keeping it off the merge tools keeps
+the Linux output out of question. Git Bash is MINGW64 with GNU `find` and `sort` ahead of
+Windows' own. The 251 extractor runs and the merge take about 10 s together.
 
 Run the script from Git Bash after a pull. `git status` has to stay clean, which proves the output
 matches Linux byte for byte. Watch for CRLF from the Windows gettext build; if it shows up, the
