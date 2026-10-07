@@ -785,9 +785,10 @@ three components that answer it, and each argues its geometry at its own file.
     off-screen section was answered by decoding and then releasing; against a tier nothing clears,
     that leaves a screenful resident for a page nobody opened. Browse is where it bit, being the
     only view whose boot seed fetches while the section is off screen, so a launch landing anywhere
-    else paid for a screenful it never drew. Every other prewarm site already gated its
-    fetch on `section_active()`. A leave landing *inside* a decode is no longer a reason to hand
-    anything back: those buffers are what the re-entry paints.
+    else paid for a screenful it never drew. Every other prewarm site gates its fetch on
+    `section_active()`, and the three grids a detail can cover (Albums, Artists, Playlists) on
+    `SectionState::grid_on_screen`, which argues why. A leave landing *inside* a decode is no
+    longer a reason to hand anything back: those buffers are what the re-entry paints.
   - **Radio's logo tier is not this tier, and the reason is its card rather than its decode.**
     `station-card.slint` derives `logo-native-size` from `cover.width / logo-decode-size`, so the
     decoded *extent* is load-bearing for that card's layout: a proxy makes every logo read as a tiny

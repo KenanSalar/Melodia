@@ -28,17 +28,12 @@ pub async fn fetch_grid(
     // See `ui::albums::grid::fetch_grid` for the gate rationale.
     {
         let _gate = artists_ui.section.gate();
-        *artists_ui.grid.data.lock() = data.clone();
+        *artists_ui.grid.data.lock() = data;
         *artists_ui.grid.index_cache.lock() = None;
     }
 
-    if artists_ui.section_active() {
-        let unique = first_screenful_paths(&data);
-        if !unique.is_empty() {
-            let _ = tokio::task::spawn_blocking(move || crate::ui::grid_prewarm::prewarm(&unique))
-                .await;
-        }
-    }
+    let warm = artists_ui.clone();
+    let _ = tokio::task::spawn_blocking(move || warm.prewarm_visible_covers()).await;
 
     let artists_ui = artists_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {

@@ -35,7 +35,7 @@ pub async fn fetch_grid(
     // only across the synchronous writes — never across an `.await`.
     {
         let _gate = albums_ui.section.gate();
-        *albums_ui.grid.data.lock() = data.clone();
+        *albums_ui.grid.data.lock() = data;
         // The album set changed — the memoized filter+sort indices are stale.
         *albums_ui.grid.index_cache.lock() = None;
     }
@@ -50,17 +50,8 @@ pub async fn fetch_grid(
     // — album-art decoding is CPU-bound; the bounded decode pool inside
     // `prewarm` parallelizes it while `spawn_blocking` keeps the runtime
     // responsive.
-    //
-    // Gated on the section being on screen: a background library-changed
-    // tick must not re-fill a cache the user isn't looking at — it was
-    // released on section exit and the re-enter handler re-warms it.
-    if albums_ui.section_active() {
-        let unique = first_screenful_paths(&data);
-        if !unique.is_empty() {
-            let _ = tokio::task::spawn_blocking(move || crate::ui::grid_prewarm::prewarm(&unique))
-                .await;
-        }
-    }
+    let warm = albums_ui.clone();
+    let _ = tokio::task::spawn_blocking(move || warm.prewarm_visible_covers()).await;
 
     let albums_ui = albums_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -178,8 +169,8 @@ fn sort_album_indices(indices: &mut [usize], data: &GridData, field: &str, dir: 
 }
 
 /// The first `GRID_PREWARM_AHEAD` distinct artwork paths in display
-/// (name-sorted) order — the covers first on screen. Shared by
-/// `fetch_grid` and `AlbumsUi::prewarm_visible_covers`. The cap counts
+/// (name-sorted) order — the covers first on screen, which
+/// `AlbumsUi::prewarm_visible_covers` warms. The cap counts
 /// kept *paths*, so a run of covertless albums is walked past rather than
 /// spending the budget on them.
 pub(super) fn first_screenful_paths(data: &GridData) -> Vec<PathBuf> {

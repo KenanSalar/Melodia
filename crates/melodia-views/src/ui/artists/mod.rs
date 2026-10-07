@@ -158,6 +158,9 @@ impl ArtistsUi {
 
     /// Re-decode the first screenful of grid covers into the grid-tier cache after a release.
     pub fn prewarm_visible_covers(&self) {
+        if !self.section.grid_on_screen(|| self.detail_artist_id() >= 0) {
+            return;
+        }
         let data = self.grid.data.lock().clone();
         let unique = grid::first_screenful_paths(&data);
         if !unique.is_empty() {

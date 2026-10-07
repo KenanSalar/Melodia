@@ -7,9 +7,9 @@ threads and buffers that outlive their job, and memory that grows with library s
 the distinct data does. This plan holds the changes that save memory without a visible, audible or
 latency regression, one phase per change.
 
-**Order:** phases 0 and 2 to 6 are done and checkpointed; phases 1 and 7 were dropped. The optional
-phases come last and start only after a discussion: each one reverses a documented choice or
-carries a real behaviour risk.
+**Order:** phases 0 and 2 to 6 are done and checkpointed; phase 8 is done and spot-checked, and
+waits for the next checkpoint; phases 1 and 7 were dropped. The optional phases come last and start
+only after a discussion: each one reverses a documented choice or carries a real behaviour risk.
 
 **Measurement:** the 2026-10-05 run below is what the audit was sized on. A checkpoint measures a
 release build of `main` beside one of this branch in the same session (see Checkpoints), once after
@@ -18,6 +18,13 @@ before and an after are release builds of the commits either side of the change,
 reading is a release build of the `v0.18.0` tag, never the installed RPM. Each binary sits at
 `~/Development/melodia-measure/target/<label>/Melodia`, where it counts as a development build and
 so never rewrites the app-menu launcher.
+
+**Builds compare on Anonymous.** PSS, USS and RSS also carry the executable's resident pages, and
+those follow how its page cache was filled rather than the code: measured 2026-10-07, one branch
+binary had 46.6 MiB of its code resident at idle with its cache as it was and 38.4 MiB after the
+cache was dropped before launch, PSS and USS moving about 7.5 MiB with it and Anonymous not at all.
+A `cp` on btrfs reflinks, so a freshly copied binary starts with nothing cached. Two binaries'
+PSS, USS and RSS compare only when both had their cache dropped the same way.
 
 **Figures:** anything not marked *measured* is an upper bound computed from the constants named
 beside it, or an estimate from field types. Phase 0 and each phase's own re-measurement replace
@@ -39,6 +46,9 @@ them.
 - **Small holders outlive their use.** The visualizer's rings exist from launch whether or not it is
   ever opened, both analyzers are built whichever style is shown, Now Playing keeps a cover pair
   after it closes, and the tag editor decodes a picked image whole for a 160 px preview.
+- **A launch that restores a detail decodes the grid behind it**, at the grid tier's 256 px
+  fallback, and keeps those covers for as long as the detail stays open. Found 2026-10-07, after
+  this list was drawn up; phase 8.
 
 ## Baseline (measured 2026-10-05)
 
@@ -143,7 +153,8 @@ The setup is the baseline's, with these differences:
   at idle, 30 s after launch (`ckpt-smaps-idle-{main,branch}.smaps.tsv`): `melodia.db` is 12 MiB
   more RSS with its PSS unchanged, the same file pages mapped more than once and RSS counting each
   mapping, and the binary's own pages are 1.3 MiB more PSS, which is code rather than an
-  allocation. Anonymous moved 0.1 MiB down in that capture.
+  allocation and also follows the binary's page cache (under Measurement). Anonymous moved 0.1 MiB
+  down in that capture.
 
 The scan phases are judged on the large library instead, where the footprint script's windows do
 not reach. Peak `RssAnon` comes from `MELODIA_RSS_SAMPLE=1` during a first scan into an empty
@@ -804,6 +815,132 @@ Sizing pass, 2026-10-05:
   at a time.
 - `load_attempted` reads through blocking `std::fs` on a runtime worker; `atomic_file.rs:36` has the
   async twin.
+
+## Phase 8: prewarm a grid only while it is drawn
+
+Status: done 2026-10-07: implemented, through the gate, spot-checked and measured with the
+footprint script, a re-run after a reboot pending. The check by hand is Kenan's, the tests listed
+at the end of this section come later, and the 2026-10-07 checkpoint predates it.
+
+Where: `crates/melodia-views/src/ui/section_state.rs` (`grid_on_screen`, `begin_restore`,
+`end_restore`), and in each of `albums`, `artists` and `playlists` under
+`crates/melodia-views/src/ui/`: `mod.rs` (`prewarm_visible_covers`), `grid.rs` (`fetch_grid`) and
+`detail.rs` (`seed_detail_from_settings`).
+
+How it was found: a native-titlebar run of the footprint script on the branch, 2026-10-07, read 1 to
+2 MiB more Anonymous than the README's table, which 0.14.0 measured on 2026-09-15. Release builds
+measured in one session on the README's setup (the dev root's own queue and view), each scenario
+from a fresh launch and each binary warmed once, put the growth before bit-perfect output (#117)
+and none of it in it, and a build of `v0.14.0` reproduced the README. One launch per cell,
+Anonymous in MiB:
+
+| Scenario | `v0.14.0` | before #117 (`46ad594`) | after #117 (`69f8467`) | branch (`616c35a`) |
+|---|---|---|---|---|
+| Idle | 32.9 | 34.5, 34.8, 34.8 | 34.2 | 33.9, 33.4, 34.2, 34.8 |
+| Playing, list view | 33.8 | 35.2, 34.6, 35.2 | 35.4 | 34.5, 35.4, 34.7 |
+| Playing, visualizer live | 34.6 | 35.0, 34.2 | 35.5 | 35.1, 34.4, 34.6 |
+
+heaptrack at idle, held at quit 60 s after launch (the middle of the footprint window), placed the
+difference in the grid cover tier. Every build held the same 194 covers, 187 of them 48 px row
+thumbnails, but from #107 on the playlist grid's covers stayed at 256 px. The dev root launches onto
+My Library ▸ Playlists with a playlist's detail open, so the grid's fetch prewarms its first
+screenful at `GRID_COVER_FALLBACK` before the window is measured. 0.14.0's retune emptied the tier
+and dropped them; since #107 a retune keeps every entry until its card draws again, which a grid
+under a detail never does. Two more ways in had the same result: a dirty section enter runs
+`fetch_grid` with the detail still open, and a clean one called `prewarm_visible_covers`
+regardless, both re-decoding at full size the grid a drill had handed back.
+
+- [x] `SectionState::grid_on_screen(detail_open)`: the section is active, no detail is open over the
+      grid, and no launch restore is reopening one. `begin_restore` and `end_restore` mirror the
+      detail's Slint `restoring`, which Rust could not read: a restore writes the detail id only
+      once its rows are in, two database round trips after the grid fetch has usually reached its
+      prewarm. The flag is read before the id, which a restore writes before lowering the flag.
+- [x] `prewarm_visible_covers` returns early unless the grid is on screen, and each `fetch_grid`
+      calls it rather than an inline copy of the same first-screenful prewarm.
+- [x] Each `seed_detail_from_settings` raises the flag beside `restoring` before its spawn, lowers
+      it once the open returns, then prewarms before the hop that lowers `restoring`: a detail gone
+      since the last session hands its grid back on covers, and a reopened one turns the prewarm
+      away.
+- [x] Closing a detail is unchanged: `clear_detail` writes `-1` before the close's prewarm runs.
+- [x] Docs: `section_state.rs`'s module and struct docs, `GRID_COVER_FALLBACK`'s (a cover decoded
+      at it is replaced when its card next draws, not at the retune), each
+      `first_screenful_paths`'s, and `ui-patterns.md`'s "The guard sits ahead of the decode".
+- [x] Gate. `detail_restore_tests::every_seed_lowers_the_flag_again_whatever_the_fetch_did` counts
+      `set_restoring(false)` per seed, which is why the Rust half is `begin_restore` and
+      `end_restore` rather than a second setter of that spelling.
+- [x] No file past 800 lines, in lines: `section_state.rs` 177, `grid_prewarm.rs` 358, `playlists`
+      `mod.rs` 268, `grid.rs` 231, `detail.rs` 462, `albums` 222, 181, 344, `artists` 219, 141, 352.
+- [x] Spot check, in the app, 2026-10-07: the release build of `616c35a` against this phase's
+      (`melodia-measure/target/{branch-616c35a,fix-gridgate}`), heaptrack at idle beside the three
+      profiles above, then one footprint round per scenario with the order rotating. Raw output is
+      `ckpt-htfix-idle-fix` and `ckpt-fx-{idle,list,viz}-{fix,branch}` in `melodia-measure`; the
+      investigation's runs are `ckpt-bp-*` (#117 either side), `ckpt-rc-*` (`v0.14.0`), `ckpt-exp-*`
+      (the page-cache runs under Measurement) and `ckpt-ht-idle-*`. `tools/compare_batch.sh`
+      drives a batch over `tools/checkpoint.sh`, which gained `CKPT_QUEUE=keep`, a `heaptrack` mode
+      and a per-path smaps table after every run.
+  - **heaptrack:** the cover tier's prewarmed buffers 3,319 → 1,422 KiB, everything held at quit
+    8,551 → 6,616 KiB, peak heap 23.18 → 21.20 M (heaptrack's units). The phase saves more than #107
+    added: a further 1,044 KiB, identical in all three earlier builds, was the hidden grid's larger
+    covers held through the resize path, and 108 KiB of it remains. The row thumbnails are back at
+    0.14.0's 1,312 KiB.
+  - **Footprint:** Anonymous 2.8, 2.1 and 1.2 MiB lower in single runs, where the branch alone read
+    33.4–34.8 MiB at idle across the day; `[heap]` plus `[anon]` 2.8, 2.1 and 1.1 MiB lower. CPU
+    within 0.12 points of one core, 31 threads on both. The visualizer's GPU figure (6.55% against
+    1.07%) is the driver's whole-percent sampling: the same branch binary read 1.50%, 1.60% and
+    3.59% in earlier runs that day.
+
+| heaptrack, idle, KiB held at quit | `v0.14.0` | before #117 | `616c35a` | phase 8 |
+|---|---|---|---|---|
+| Cover tier, through `prewarm` | 2,356 | 3,322 | 3,319 | 1,422 |
+| Detail artwork | 435 | 435 | 435 | 435 |
+| Everything held | 9,331 | 10,314 | 8,551 | 6,616 |
+| Peak heap (heaptrack's M) | 24.66 | 23.51 | 23.18 | 21.20 |
+
+| Scenario | Build | Anonymous | `[heap]` + `[anon]` | CPU, one core | Threads |
+|---|---|---|---|---|---|
+| Idle | `616c35a` | 34.8 MiB | 22.2 MiB | 0.05% | 31 |
+| Idle | phase 8 | 32.0 MiB | 19.4 MiB | 0.07% | 31 |
+| Playing, list view | `616c35a` | 34.7 MiB | 22.1 MiB | 0.50% | 31 |
+| Playing, list view | phase 8 | 32.6 MiB | 20.0 MiB | 0.53% | 31 |
+| Playing, visualizer live | `616c35a` | 34.6 MiB | 22.1 MiB | 3.58% | 31 |
+| Playing, visualizer live | phase 8 | 33.4 MiB | 21.0 MiB | 3.70% | 31 |
+
+Kenan's run of the footprint script after the phase, 2026-10-07 15:33
+(`target/linux-footprint/20261007-152655`), beside his run of `616c35a` that morning
+(`target/linux-footprint/20261007-121518`). Both are the script launching `target/release/Melodia`
+against the dev root, one launch each, Last.fm, ListenBrainz and Discord presence on. This one
+followed an afternoon of builds and launches, which leaves page-cache state behind but nothing in
+a new process's own memory; a re-run after a reboot is still to come.
+
+| Scenario | Build | Anonymous | PSS | USS | RSS | Peak RSS | GPU memory | CPU, one core | GPU | Threads | Memory maps |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Idle | `616c35a` | 34.3 MiB | 92.0 MiB | 85.1 MiB | 164.1 MiB | 178.4 MiB | 31.0 MiB | 0.05% | 0.00% | 32 | 546 |
+| Idle | phase 8 | 32.5 MiB | 93.3 MiB | 86.8 MiB | 168.8 MiB | 181.9 MiB | 28.0 MiB | 0.17% | 0.00% | 28 | 529 |
+| Playing, list view | `616c35a` | 35.0 MiB | 93.1 MiB | 87.8 MiB | 163.0 MiB | 179.8 MiB | 30.0 MiB | 0.45% | 0.00% | 28 | 535 |
+| Playing, list view | phase 8 | 32.6 MiB | 89.5 MiB | 84.9 MiB | 160.6 MiB | 181.9 MiB | 28.0 MiB | 0.55% | 0.00% | 30 | 533 |
+| Playing, visualizer live | `616c35a` | 34.2 MiB | 92.1 MiB | 87.1 MiB | 161.9 MiB | 179.8 MiB | 30.0 MiB | 3.38% | 3.59% | 29 | 536 |
+| Playing, visualizer live | phase 8 | 33.3 MiB | 90.6 MiB | 86.3 MiB | 161.6 MiB | 181.9 MiB | 28.0 MiB | 4.35% | 2.37% | 29 | 530 |
+
+- **Anonymous** 1.8, 2.4 and 0.9 MiB lower: back at the README's 32, 33 and 33 MiB (0.14.0) and
+  under the 0.18.0 baseline's 34.3, 35.5 and 35.2 MiB.
+- **PSS, USS and RSS** move both ways and do not compare across the two binaries (under
+  Measurement); the phase 8 binary was built at 15:00, the other at 10:59.
+- **CPU** read higher, 0.17% at idle and 4.35% with the visualizer against 0.05% and 3.38%, where
+  the same-session spot check had the two builds within 0.12 points of one core. The phase adds no
+  ongoing work, so the re-run after a reboot is what settles it.
+- **Threads, descriptors and memory maps** hold flat from one scenario to the next.
+
+Memory: 1.9 MiB of live heap at idle on the dev library, whenever a launch lands on a restored
+detail. The bound is the grid the launch lands on, `GRID_PREWARM_AHEAD` covers at the fallback size:
+24 × 256² × 3 = 4,718,592 B. A section entered with a detail open keeps the drill's 64 px proxies
+instead of decoding that screenful again.
+Risk: low. A detail restored at launch and then closed decodes its grid's covers on the close, as
+0.14.0 did, rather than finding them decoded at launch; the check by hand is that the close paints
+covers and not the placeholder glyph, for a restored album, artist and playlist.
+Tests, when asked: `grid_on_screen` is false while a restore runs, while a detail id is set and
+while the section is inactive, and true otherwise; `prewarm_visible_covers` decodes nothing into
+the tier while a detail is open; each of the three seeds calls `begin_restore` above its spawn and
+`end_restore` once, beside `detail_restore_tests`' pins.
 
 ## Optional, after discussing
 

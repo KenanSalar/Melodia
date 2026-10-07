@@ -162,6 +162,9 @@ impl AlbumsUi {
     /// thread. The post-wipe path goes through `fetch_grid`, which prewarms
     /// itself.
     pub fn prewarm_visible_covers(&self) {
+        if !self.section.grid_on_screen(|| self.detail_album_id() >= 0) {
+            return;
+        }
         let data = self.grid.data.lock().clone();
         let unique = grid::first_screenful_paths(&data);
         if !unique.is_empty() {

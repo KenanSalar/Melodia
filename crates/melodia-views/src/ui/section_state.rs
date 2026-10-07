@@ -1,8 +1,8 @@
 //! Shared section-visibility state for the sidebar sections that cache.
 //!
 //! Nine views track the same small state machine around "is this section on screen, and
-//! is its cached data stale?". [`SectionState`] bundles the three fields it needs, so
-//! each `*Ui` carries one cohesive unit rather than three loose ones.
+//! is its cached data stale?". [`SectionState`] bundles the fields it needs, so each `*Ui`
+//! carries one cohesive unit rather than loose ones.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -18,9 +18,13 @@ use parking_lot::{Mutex, MutexGuard};
 ///   what makes it race-correct against an in-flight `release_section_state` wipe.
 /// * [`gate`](Self::gate) — serializes that wipe against the fetch storing into the same
 ///   caches. Held only around the write or wipe, never across an `.await`.
+/// * [`grid_on_screen`](Self::grid_on_screen) narrows `active` to the section's card grid,
+///   which a detail can cover while the section stays up. `restoring` answers the window no
+///   detail id can: a launch reopening the last detail writes the id only once its rows are in.
 pub struct SectionState {
     active: AtomicBool,
     dirty: AtomicBool,
+    restoring: AtomicBool,
     gate: Mutex<()>,
 }
 
@@ -35,7 +39,12 @@ impl SectionState {
     /// section's own state but not the band. **Browse takes the same seed for the card
     /// view's cover tier**, which an off-screen prewarm releases rather than keeps.
     pub fn new() -> Self {
-        Self { active: AtomicBool::new(false), dirty: AtomicBool::new(false), gate: Mutex::new(()) }
+        Self {
+            active: AtomicBool::new(false),
+            dirty: AtomicBool::new(false),
+            restoring: AtomicBool::new(false),
+            gate: Mutex::new(()),
+        }
     }
 
     /// Mirror the section-visible flag (`section-active-changed`).
@@ -46,6 +55,28 @@ impl SectionState {
     /// Whether the section is currently on screen.
     pub fn active(&self) -> bool {
         self.active.load(Ordering::Relaxed)
+    }
+
+    /// Raised beside the detail's own `restoring`, before a launch spawns the reopen of this
+    /// section's last detail.
+    pub fn begin_restore(&self) {
+        self.restoring.store(true, Ordering::Release);
+    }
+
+    /// Lowered once that reopen returns, however it went.
+    pub fn end_restore(&self) {
+        self.restoring.store(false, Ordering::Release);
+    }
+
+    /// Whether the section's card grid is what is drawn: the section is on screen and no detail
+    /// is open over the grid or being reopened over it.
+    ///
+    /// What a cover prewarm asks rather than [`Self::active`], since the tier keeps what it
+    /// decodes until a card draws it again and a grid under a detail draws nothing.
+    /// `detail_open` is asked after the flag, which a reopen lowers only once its id is written,
+    /// so the two can't both read clear mid-restore.
+    pub fn grid_on_screen(&self, detail_open: impl FnOnce() -> bool) -> bool {
+        self.active() && !self.restoring.load(Ordering::Acquire) && !detail_open()
     }
 
     /// Mark the cached grid and detail data as needing a re-fetch on the next enter.

@@ -310,6 +310,7 @@ pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, artists_ui: &
     };
     // Synchronously, so it is up before `app.show()` — see `AlbumDetail.restoring`.
     ui.global::<ArtistDetail>().set_restoring(true);
+    artists_ui.section.begin_restore();
     let s = state.clone();
     let au = artists_ui.clone();
     let weak = ui.as_weak();
@@ -321,6 +322,10 @@ pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, artists_ui: &
         }
         // Lowered however it went, and behind `open_artist`'s own hop so the id is already in: an
         // artist gone since the last session owes the grid back rather than an empty body.
+        au.section.end_restore();
+        // A grid handed back is warmed before the hop below shows it; a reopen turns this away.
+        let warm = au.clone();
+        let _ = tokio::task::spawn_blocking(move || warm.prewarm_visible_covers()).await;
         let _ = weak.upgrade_in_event_loop(|ui| {
             ui.global::<ArtistDetail>().set_restoring(false);
         });

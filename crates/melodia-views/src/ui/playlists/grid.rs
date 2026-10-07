@@ -103,17 +103,12 @@ async fn fetch_grid_inner(
     let data = Arc::new(GridData::new(playlists));
     {
         let _gate = playlists_ui.section.gate();
-        *playlists_ui.grid.data.lock() = data.clone();
+        *playlists_ui.grid.data.lock() = data;
         *playlists_ui.grid.index_cache.lock() = None;
     }
 
-    if playlists_ui.section_active() {
-        let unique = first_screenful_paths(&data);
-        if !unique.is_empty() {
-            let _ = tokio::task::spawn_blocking(move || crate::ui::grid_prewarm::prewarm(&unique))
-                .await;
-        }
-    }
+    let warm = playlists_ui.clone();
+    let _ = tokio::task::spawn_blocking(move || warm.prewarm_visible_covers()).await;
 
     let playlists_ui = playlists_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -225,10 +220,9 @@ fn sort_playlist_indices(indices: &mut [usize], data: &GridData, field: &str, di
 }
 
 /// The first `GRID_PREWARM_AHEAD` distinct thumbnail paths in display order —
-/// the covers first on screen. Shared by `fetch_grid` and
-/// `PlaylistsUi::prewarm_visible_covers`. The cap counts kept *paths*, so a run
-/// of thumbnail-less playlists is walked past rather than spending the budget
-/// on them.
+/// the covers first on screen, which `PlaylistsUi::prewarm_visible_covers`
+/// warms. The cap counts kept *paths*, so a run of thumbnail-less playlists is
+/// walked past rather than spending the budget on them.
 pub(super) fn first_screenful_paths(data: &GridData) -> Vec<PathBuf> {
     crate::ui::grid_prewarm::unique_artwork_paths(
         data.playlists.iter().map(|p| p.thumbnail_path.as_deref()),
