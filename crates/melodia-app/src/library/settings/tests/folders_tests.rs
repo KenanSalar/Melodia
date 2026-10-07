@@ -7,7 +7,7 @@ use tempfile::TempDir;
 use melodia_core::entities::folder::Folder;
 use melodia_core::error::AppError;
 
-use super::validate_folder_path;
+use super::{folders_inside, validate_folder_path};
 
 fn make_folder(id: i64, path: &str) -> Folder {
     Folder {
@@ -82,7 +82,7 @@ fn validate_child_of_existing_returns_error() -> Result<(), AppError> {
 }
 
 #[test]
-fn validate_parent_of_existing_returns_children_to_remove() -> Result<(), AppError> {
+fn folders_inside_finds_every_folder_under_the_path() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let parent = tmp.path().join("music");
     let child1 = parent.join("rock");
@@ -97,15 +97,16 @@ fn validate_parent_of_existing_returns_children_to_remove() -> Result<(), AppErr
         make_folder(20, c2.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?),
     ];
 
-    let result = validate_folder_path(&parent, &existing)?;
-    assert_eq!(result.len(), 2);
-    assert!(result.contains(&10));
-    assert!(result.contains(&20));
+    let canonical_parent = melodia_core::utils::canonicalize_path(&parent)?;
+    let mut ids: Vec<i64> =
+        folders_inside(&canonical_parent, &existing).iter().map(|f| f.id).collect();
+    ids.sort_unstable();
+    assert_eq!(ids, [10, 20]);
     Ok(())
 }
 
 #[test]
-fn validate_unrelated_path_returns_empty() -> Result<(), AppError> {
+fn folders_inside_leaves_out_an_unrelated_folder() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let dir_a = tmp.path().join("music_a");
     let dir_b = tmp.path().join("music_b");
@@ -118,8 +119,8 @@ fn validate_unrelated_path_returns_empty() -> Result<(), AppError> {
         canonical_a.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?,
     );
 
-    let result = validate_folder_path(&dir_b, &[existing])?;
-    assert!(result.is_empty());
+    let canonical_b = melodia_core::utils::canonicalize_path(&dir_b)?;
+    assert!(folders_inside(&canonical_b, &[existing]).is_empty());
     Ok(())
 }
 
@@ -131,8 +132,7 @@ fn validate_deleted_existing_folder_skipped() -> Result<(), AppError> {
 
     let existing = make_folder(1, "/nonexistent/deleted/folder");
 
-    let result = validate_folder_path(&dir, &[existing])?;
-    assert!(result.is_empty());
+    assert!(validate_folder_path(&dir, &[existing]).is_ok());
     Ok(())
 }
 

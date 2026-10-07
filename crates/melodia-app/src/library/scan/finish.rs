@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use crate::library::settings::folders::NestedFolder;
 use crate::services;
 use crate::state::AppState;
 use crate::tasks::{self, TaskSpawner};
@@ -124,6 +125,24 @@ fn orphans_of(db_paths: Vec<String>, walk: MediaWalk) -> Vec<String> {
 /// Takes the path's own buffer, copying only for the rare path that isn't valid UTF-8.
 fn into_string_lossy(path: PathBuf) -> String {
     path.into_os_string().into_string().unwrap_or_else(|path| path.to_string_lossy().into_owned())
+}
+
+/// Hands `folder` the folders nested in it, tracks and all, now that a scan of it has completed.
+///
+/// Only once the purge has committed: the walk left their files out, so until then their tracks
+/// as `folder`'s own would have read as orphans.
+pub(super) async fn absorb_nested(
+    state: &AppState,
+    folder: &Folder,
+    nested: &[NestedFolder],
+) -> Result<(), AppError> {
+    if nested.is_empty() {
+        return Ok(());
+    }
+    let ids: Vec<i64> = nested.iter().map(|f| f.id).collect();
+    queries::folder::absorb_folders(&state.db, folder.id, &ids).await?;
+    log::info!("Folded {} nested folder(s) into {}", ids.len(), folder.path);
+    Ok(())
 }
 
 /// Stamps the folder as scanned and starts the passes a completed scan feeds. A stopped scan

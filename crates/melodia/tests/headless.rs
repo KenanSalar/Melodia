@@ -17,7 +17,7 @@
 use std::path::PathBuf;
 
 use melodia_app::library;
-use melodia_app::library::scan::ScanOutcome;
+use melodia_app::library::scan::{OnStop, ScanOutcome};
 use melodia_app::state::AppState;
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
@@ -39,7 +39,7 @@ async fn headless_scan_persists_track() -> Result<(), AppError> {
     let folder =
         library::settings::add_folder(&state, fixtures.to_string_lossy().into_owned()).await?;
 
-    let outcome = library::scan::scan_folder(&state, folder.id).await?;
+    let outcome = library::scan::scan_folder(&state, folder.id, OnStop::Keep).await?;
     assert_eq!(
         outcome,
         ScanOutcome::Completed { inserted: 1 },

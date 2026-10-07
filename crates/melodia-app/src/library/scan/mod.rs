@@ -4,10 +4,14 @@
 //! Every scan stops on a token from [`ScanControl`](crate::state::ScanControl), so [`cancel`]
 //! stops any of them, and quitting stops them at the same checkpoints: the walk, the incremental
 //! filter, each file of a read, and the head of every chunk. **A stopped scan keeps what it read
-//! and deletes nothing.** Committed chunks stay, and so does the part of the chunk read when the
-//! cancel landed. The orphan purge doesn't run, its walk being incomplete, and the folder isn't
-//! stamped as scanned. The next scan of the folder reads only the rest, the size and mtime gate
-//! skipping everything already stored.
+//! and deletes nothing**, the one exception being the import of a folder just added, which a
+//! cancel takes back out ([`OnStop::Withdraw`]). Otherwise committed chunks stay, and so does the
+//! part of the chunk read when the cancel landed. The orphan purge doesn't run, its walk being
+//! incomplete, and the folder isn't stamped as scanned. The next scan of the folder reads only the
+//! rest, the size and mtime gate skipping everything already stored.
+//!
+//! A scan leaves alone the files of a folder nested inside its own, which stay that folder's until
+//! a completed scan absorbs it.
 
 mod finish;
 mod repair;
@@ -15,17 +19,19 @@ mod run;
 
 pub use repair::restore_missing_artwork;
 
+use std::cmp::Reverse;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use rayon::prelude::*;
-use tokio_util::sync::CancellationToken;
 
+use crate::library::settings::folders::{NestedFolder, folders_inside};
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 use finish::Ingested;
+use melodia_core::entities::folder::Folder;
 use melodia_core::entities::scan::{ExistingTrackSummary, ScannedFile};
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::toast::{self, ToastKind};
@@ -45,16 +51,49 @@ pub enum ScanOutcome {
     },
     /// Cancelled, or interrupted by shutdown, after keeping whatever it had read.
     Stopped,
+    /// Cancelled under [`OnStop::Withdraw`], which took the folder back out of the library.
+    Withdrawn,
+}
+
+/// What a scan the user cancels leaves behind. Quitting always keeps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OnStop {
+    /// What was read stays: the folder was in the library before this scan, so a cancel only stops
+    /// the refresh.
+    Keep,
+    /// The folder goes, with everything the scan brought in. For the import of a folder just
+    /// added, where Cancel means not adding it, and keeping half of it would also leave the next
+    /// reconcile to finish what the user cancelled.
+    Withdraw,
 }
 
 /// Scans one folder, stopping when [`cancel`] or shutdown asks.
 ///
 /// Repairs first, and when the repair cleared covers it hands the rest of the library to a
 /// reconcile, since this scan only re-reads its own folder.
-pub async fn scan_folder(state: &AppState, folder_id: i64) -> Result<ScanOutcome, AppError> {
+pub async fn scan_folder(
+    state: &AppState,
+    folder_id: i64,
+    on_stop: OnStop,
+) -> Result<ScanOutcome, AppError> {
+    // Read ahead of the token, so a cancel landing between the two can't stop this scan unseen.
+    let cancels_at_start = state.scan.user_cancels();
     let cancel = state.scan.token();
     let restoring = forget_missing_artwork(state).await;
-    let outcome = scan_one(state, folder_id, &cancel).await?;
+    let run = ScanRun::start(state, cancel);
+    let outcome = match scan_one(state, folder_id, &run).await? {
+        ScanOutcome::Stopped
+            if on_stop == OnStop::Withdraw && state.scan.user_cancels() != cancels_at_start =>
+        {
+            // Under the run, so the bar stays on "Stopping" until the library is back as it was.
+            crate::library::settings::remove_folder(state, folder_id).await?;
+            log::info!("Withdrew folder {folder_id}, its import having been cancelled");
+            ScanOutcome::Withdrawn
+        }
+        outcome => outcome,
+    };
+    // Lets go of the bar before a reconcile puts up its own.
+    drop(run);
     // The repair cleared missing covers across the whole library and this folder has re-read
     // only its own share, so the rest follow under the same notice.
     if let Some(notice) = restoring
@@ -76,18 +115,19 @@ async fn forget_missing_artwork(state: &AppState) -> Option<RestoreNotice> {
 
 /// Scans one folder in the background, tracked so shutdown waits for its last write. A failure
 /// is logged and toasted, there being nobody left to hand it to.
-pub fn start(state: &AppState, folder_id: i64) {
+pub fn start(state: &AppState, folder_id: i64, on_stop: OnStop) {
     let spawner = TaskSpawner::from_state(state);
     let state = state.clone();
     spawner.spawn(async move {
-        if let Err(e) = scan_folder(&state, folder_id).await {
+        if let Err(e) = scan_folder(&state, folder_id, on_stop).await {
             log::warn!("Scan of folder {folder_id} failed: {}", describe(&e));
             toast::notify(ToastKind::OperationFailed, e.to_string());
         }
     });
 }
 
-/// Stops every scan running now. What each one has read stays in the library.
+/// Stops every scan running now. What each one has read stays in the library, unless its
+/// [`OnStop`] withdraws the folder.
 pub fn cancel(state: &AppState) {
     state.scan.cancel();
 }
@@ -149,19 +189,23 @@ fn reconcile(state: &AppState, restoring: Option<RestoreNotice>) {
         let _guard = ReconcileGuard;
         let _handed_over = restoring;
         let _restoring = forget_missing_artwork(&state).await;
-        let folders = match queries::folder::get_all_folders(&state.db).await {
+        let mut folders = match queries::folder::get_all_folders(&state.db).await {
             Ok(f) => f,
             Err(e) => {
                 log::warn!("reconcile_watched_folders: load folders failed: {}", describe(&e));
                 return;
             }
         };
+        // Deepest first: a folder absorbs the ones nested in it when its scan completes, so
+        // theirs has to run before it or not at all.
+        folders.sort_by_key(|f| Reverse(Path::new(&f.path).components().count()));
         for folder in folders.iter().filter(|f| f.is_enabled) {
             if cancel.is_cancelled() {
                 log::info!("reconcile_watched_folders: stopped, bailing between folders");
                 return;
             }
-            if let Err(e) = scan_one(&state, folder.id, &cancel).await {
+            let run = ScanRun::start(&state, cancel.clone());
+            if let Err(e) = scan_one(&state, folder.id, &run).await {
                 log::warn!(
                     "reconcile_watched_folders: scan of {} failed: {}",
                     folder.path,
@@ -192,16 +236,14 @@ const TX_CHUNK_FILES: usize = 2_000;
 async fn scan_one(
     state: &AppState,
     folder_id: i64,
-    cancel: &CancellationToken,
+    run: &Arc<ScanRun>,
 ) -> Result<ScanOutcome, AppError> {
     let folder = queries::folder::get_folder_by_id(&state.db, folder_id).await?;
 
-    let folder_path = PathBuf::from(&folder.path);
-    if !folder_path.exists() {
+    if !Path::new(&folder.path).exists() {
         return Err(AppError::scanner_msg(format!("Folder does not exist: {}", folder.path)));
     }
-
-    let run = ScanRun::start(state, cancel.clone());
+    let scope = Arc::new(ScanScope::of(state, &folder).await?);
 
     // Read-side pre-load through the read pool (before the writer tx opens):
     // size + mtime for every track already in this folder. Doesn't contend
@@ -210,11 +252,16 @@ async fn scan_one(
         queries::scan::get_existing_track_summaries_for_folder(&state.db, folder.id).await?;
 
     let Some(Discovery { walk, to_scan, pool }) =
-        discover(folder_path, existing_summaries, Arc::clone(&run)).await?
+        discover(Arc::clone(&scope), existing_summaries, Arc::clone(run)).await?
     else {
         return Ok(ScanOutcome::Stopped);
     };
     if walk.files.is_empty() {
+        // A folder whose only files sit in nested folders still takes them over.
+        if !scope.nested.is_empty() {
+            finish::absorb_nested(state, &folder, &scope.nested).await?;
+            state.library_changed.bump();
+        }
         return Ok(ScanOutcome::Completed { inserted: 0 });
     }
 
@@ -257,7 +304,7 @@ async fn scan_one(
             break;
         }
         let chunk_len = u32::try_from(chunk.len()).unwrap_or(u32::MAX);
-        let scanned_files = parse_chunk(state, chunk, &pool, Arc::clone(&run)).await?;
+        let scanned_files = parse_chunk(state, chunk, &pool, Arc::clone(run)).await?;
         run.chunk_read(chunk_len);
         if scanned_files.is_empty() {
             continue;
@@ -285,19 +332,43 @@ async fn scan_one(
     drop(pool);
 
     // --- Stage 2. `finish::commit_final` argues what a stopped scan still owes.
-    if run.is_cancelled() {
+    if !run.try_begin_finishing() {
         if ingested.any() {
             finish::commit_final(state, &folder, None, &ingested).await?;
             state.library_changed.bump();
         }
         return Ok(ScanOutcome::Stopped);
     }
-    run.begin_finishing();
     finish::commit_final(state, &folder, Some(walk), &ingested).await?;
+    finish::absorb_nested(state, &folder, &scope.nested).await?;
     finish::after_completed(state, folder.id).await?;
     state.library_changed.bump();
 
     Ok(ScanOutcome::Completed { inserted: ingested.inserted })
+}
+
+/// What a folder's scan reads: its directory, less the folders nested inside it.
+struct ScanScope {
+    root: PathBuf,
+    nested: Vec<NestedFolder>,
+}
+
+impl ScanScope {
+    /// On the blocking pool, since telling which folders are nested costs a stat apiece.
+    async fn of(state: &AppState, folder: &Folder) -> Result<Self, AppError> {
+        let folders = queries::folder::get_all_folders(&state.db).await?;
+        let root = PathBuf::from(&folder.path);
+        tokio::task::spawn_blocking(move || {
+            let nested = folders_inside(&root, &folders);
+            Self { root, nested }
+        })
+        .await
+        .map_err(|e| AppError::scanner("Scan scope task failed", e))
+    }
+
+    fn owns(&self, path: &Path) -> bool {
+        !self.nested.iter().any(|folder| path.starts_with(&folder.path))
+    }
 }
 
 /// What the walk found, and what the incremental filter left to read.
@@ -328,12 +399,13 @@ struct Discovery {
 /// for it on a cold cache or a network mount. Rayon's `collect` preserves the
 /// sequential order, so `to_scan` stays byte-for-byte what it was before.
 async fn discover(
-    folder_path: PathBuf,
+    scope: Arc<ScanScope>,
     existing: HashMap<String, ExistingTrackSummary>,
     run: Arc<ScanRun>,
 ) -> Result<Option<Discovery>, AppError> {
     tokio::task::spawn_blocking(move || {
-        let walk = collect_media_files(&folder_path, run.as_ref())?;
+        let mut walk = collect_media_files(&scope.root, run.as_ref())?;
+        walk.files.retain(|path| scope.owns(path));
         let pool = ScanPool::for_files(walk.files.len());
         let to_scan: Vec<PathBuf> = pool.install(|| {
             walk.files

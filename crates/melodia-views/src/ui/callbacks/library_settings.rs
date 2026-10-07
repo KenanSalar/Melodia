@@ -7,6 +7,7 @@ use super::macros::spawn_logged;
 use crate::ui::file_dialog;
 use crate::ui::settings::library_settings as lib_settings_ui;
 use melodia_app::library;
+use melodia_app::library::scan::OnStop;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, LibrarySettings};
 
@@ -64,7 +65,7 @@ pub fn wire_library_settings(ui: &AppWindow, state: &AppState) {
     // list so `last_scanned` updates.
     {
         let s = state.clone();
-        g.on_rescan_folder(move |id| library::scan::start(&s, i64::from(id)));
+        g.on_rescan_folder(move |id| library::scan::start(&s, i64::from(id), OnStop::Keep));
     }
 
     {

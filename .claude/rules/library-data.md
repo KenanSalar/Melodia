@@ -75,9 +75,9 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   scans, watcher, imports, favorite toggles — stays on `library_changed`.
 
 - **No folder is added on its own.** A fresh install starts empty, and the welcome card's first
-  panel offers the platform's Music folder beside the picker. It is offered only where adding it
-  would neither be refused nor supersede a folder already there (`suggested_music_folder` argues
-  why).
+  panel offers the platform's Music folder beside the picker, wherever adding it wouldn't be
+  refused. A folder around ones already in the library deletes none of them: its first completed
+  scan absorbs them, tracks and stats intact (`library::scan::finish::absorb_nested`).
   Every launch with watching on, `tasks::resume_watching::run` starts the watcher and calls
   `reconcile_watched_folders`, which re-runs `library::scan`'s folder scan over every enabled folder
   — so a normal boot scans each folder once more to catch changes made while closed. That reconcile

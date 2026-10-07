@@ -51,8 +51,11 @@ impl ScanRun {
         self.read_before.fetch_add(files, Ordering::Relaxed);
     }
 
-    pub(super) fn begin_finishing(&self) {
-        self.publish(ScanPhase::Finishing, self.total.load(Ordering::Relaxed), "");
+    /// Shows the last write as under way unless the scan was cancelled first, and answers whether
+    /// it did. Refusing under the channel's lock is what stops a cancel that lands after the chunk
+    /// loop's last check from being ignored.
+    pub(super) fn try_begin_finishing(&self) -> bool {
+        self.publish(ScanPhase::Finishing, self.total.load(Ordering::Relaxed), "")
     }
 
     /// Restarts [`PROGRESS_INTERVAL`] and answers `true` if it had run out, `false` if the tick
@@ -66,7 +69,7 @@ impl ScanRun {
         true
     }
 
-    fn publish(&self, phase: ScanPhase, done: u32, current_file: &str) {
+    fn publish(&self, phase: ScanPhase, done: u32, current_file: &str) -> bool {
         self.control.publish(
             &self.cancel,
             ScanProgressTick {
@@ -76,7 +79,7 @@ impl ScanRun {
                 total: self.total.load(Ordering::Relaxed),
                 current_file: current_file.to_owned(),
             },
-        );
+        )
     }
 }
 

@@ -1,6 +1,8 @@
 //! The library scan in flight, as everything outside it sees one: how far it has got, and the
 //! switch that stops it.
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use parking_lot::Mutex;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
@@ -46,12 +48,20 @@ pub struct ScanControl {
     progress: watch::Sender<Option<ScanProgressTick>>,
     epoch: Mutex<CancellationToken>,
     shutdown: CancellationToken,
+    /// Moved by [`cancel`](Self::cancel) alone, so a scan can tell the user stopping it from the
+    /// app closing, even once both have happened.
+    user_cancels: AtomicU64,
 }
 
 impl ScanControl {
     pub fn new(shutdown: &CancellationToken) -> Self {
         let (progress, _) = watch::channel(None);
-        Self { progress, epoch: Mutex::new(shutdown.child_token()), shutdown: shutdown.clone() }
+        Self {
+            progress,
+            epoch: Mutex::new(shutdown.child_token()),
+            shutdown: shutdown.clone(),
+            user_cancels: AtomicU64::new(0),
+        }
     }
 
     pub fn subscribe(&self) -> watch::Receiver<Option<ScanProgressTick>> {
@@ -63,8 +73,17 @@ impl ScanControl {
         self.epoch.lock().child_token()
     }
 
+    /// How many times the user has cancelled. A scan that reads it before taking its token and
+    /// again once stopped knows whether one of those cancels was what stopped it.
+    pub fn user_cancels(&self) -> u64 {
+        self.user_cancels.load(Ordering::Relaxed)
+    }
+
     /// Stops every scan running now, showing it as stopping until it lets go of the bar.
     pub fn cancel(&self) {
+        // Relaxed is enough: a scan reads the count only after seeing its token cancelled, and
+        // the cancel below orders that after this bump.
+        self.user_cancels.fetch_add(1, Ordering::Relaxed);
         let fresh = self.shutdown.child_token();
         std::mem::replace(&mut *self.epoch.lock(), fresh).cancel();
         self.progress.send_if_modified(|tick| match tick {
@@ -77,16 +96,17 @@ impl ScanControl {
     }
 
     /// Shows `tick` unless `token` was cancelled, so a worker's late report can't paint over the
-    /// "Stopping" a cancel put up. The check runs under the channel's lock, which `cancel` takes
-    /// only after cancelling, so the two can't interleave the other way round.
-    pub(crate) fn publish(&self, token: &CancellationToken, tick: ScanProgressTick) {
+    /// "Stopping" a cancel put up, and answers whether it did. The check runs under the channel's
+    /// lock, which `cancel` takes only after cancelling, so the two can't interleave the other way
+    /// round.
+    pub(crate) fn publish(&self, token: &CancellationToken, tick: ScanProgressTick) -> bool {
         self.progress.send_if_modified(|current| {
             if token.is_cancelled() {
                 return false;
             }
             *current = Some(tick);
             true
-        });
+        })
     }
 
     pub(crate) fn clear(&self) {

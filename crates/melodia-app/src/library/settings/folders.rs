@@ -16,12 +16,13 @@ use melodia_core::error::{AppError, describe};
 use melodia_store::database::{DbPool, queries};
 use melodia_store::media::ingest::watcher::FolderWatcher;
 
-/// Validates a new folder path against existing folders.
-/// Returns IDs of existing child folders that should be removed (covered by the new parent).
+/// Refuses a new folder path that isn't a directory, or is already in the library or inside a
+/// folder that is, and answers it canonicalized. A path *around* existing folders is accepted: the
+/// first scan of it that completes absorbs them.
 fn validate_folder_path(
     new_path: &Path,
     existing_folders: &[folder::Folder],
-) -> Result<Vec<i64>, AppError> {
+) -> Result<PathBuf, AppError> {
     if !new_path.exists() {
         return Err(AppError::Validation(format!("Path does not exist: {}", new_path.display())));
     }
@@ -35,8 +36,6 @@ fn validate_folder_path(
     let canonical_new = melodia_core::utils::canonicalize_path(new_path).map_err(|e| {
         AppError::Validation(format!("Cannot resolve path {}: {}", new_path.display(), e))
     })?;
-
-    let mut children_to_remove = Vec::new();
 
     for folder in existing_folders {
         let existing_path = Path::new(&folder.path);
@@ -57,45 +56,48 @@ fn validate_folder_path(
                 folder.path
             )));
         }
-
-        if canonical_existing.starts_with(&canonical_new) {
-            children_to_remove.push(folder.id);
-        }
     }
 
-    Ok(children_to_remove)
+    Ok(canonical_new)
+}
+
+/// A folder inside another, which the outer one takes over once a scan of it completes.
+pub(crate) struct NestedFolder {
+    pub id: i64,
+    pub path: PathBuf,
+}
+
+/// The folders whose directory sits inside `outer`, compared canonically as validation compares,
+/// so a row spelled through a symlink still counts and one whose directory has gone never does.
+/// `outer` is canonical, as an added folder's row is stored.
+pub(crate) fn folders_inside(outer: &Path, folders: &[folder::Folder]) -> Vec<NestedFolder> {
+    folders
+        .iter()
+        .filter_map(|folder| {
+            let path = melodia_core::utils::canonicalize_path(&folder.path).ok()?;
+            (path != outer && path.starts_with(outer))
+                .then_some(NestedFolder { id: folder.id, path })
+        })
+        .collect()
 }
 
 pub async fn add_folder(state: &AppState, path: String) -> Result<folder::Folder, AppError> {
-    let folder = insert_replacing_children(&state.db, &path).await?;
-
-    // Notify subscribers (Tracks view, folder list) — the new folder row is
-    // visible immediately, and any child folders that were auto-aggregated
-    // away cascade-deleted their tracks. The subsequent scan will fire its
-    // own bump on completion.
+    let folder = insert_validated(&state.db, &path).await?;
+    // Puts the row on screen before its scan starts.
     state.library_changed.bump();
     retarget_watcher(state).await;
-
     Ok(folder)
 }
 
 /// [`add_folder`]'s body, narrowed to the pool it reaches.
 ///
-/// The delete is the half worth driving: a folder superseded by a new parent takes its tracks with
-/// it, and a rescan brings the files back with none of the ratings, play counts or favourites that
-/// were on them.
-async fn insert_replacing_children(db: &DbPool, path: &str) -> Result<folder::Folder, AppError> {
-    let new_path = Path::new(path);
+/// Deletes nothing, even where the new folder is around folders already in the library: they keep
+/// their tracks until its first completed scan absorbs them, so cancelling that scan leaves them as
+/// they were.
+async fn insert_validated(db: &DbPool, path: &str) -> Result<folder::Folder, AppError> {
     let existing_folders = queries::folder::get_all_folders(db).await?;
-    let children_to_remove = validate_folder_path(new_path, &existing_folders)?;
-
-    queries::folder::delete_superseded_folders(db, &children_to_remove).await?;
-
-    let canonical = melodia_core::utils::canonicalize_path(new_path)
-        .map_err(|e| AppError::Validation(format!("Cannot resolve path: {e}")))?;
-    let canonical_str = canonical.to_string_lossy().into_owned();
-
-    queries::folder::insert_folder(db, &canonical_str, true).await
+    let canonical = validate_folder_path(Path::new(path), &existing_folders)?;
+    queries::folder::insert_folder(db, &canonical.to_string_lossy(), true).await
 }
 
 pub async fn remove_folder(state: &AppState, id: i64) -> Result<(), AppError> {
@@ -118,18 +120,14 @@ pub async fn get_folders(state: &AppState) -> Result<Vec<folder::Folder>, AppErr
     queries::folder::get_all_folders(&state.db).await
 }
 
-/// The platform's own Music folder, when adding it would neither be refused nor replace a folder
-/// already in the library, for the welcome card to offer in one click.
-///
-/// Replacing is ruled out as well as refusing: a parent supersedes its children by deleting their
-/// tracks, and a click on an offer is no place to spend a library's play counts and favourites.
+/// The platform's own Music folder, when adding it wouldn't be refused, for the welcome card to
+/// offer in one click.
 pub async fn suggested_music_folder(state: &AppState) -> Result<Option<PathBuf>, AppError> {
     let Some(music_dir) = dirs::audio_dir() else {
         return Ok(None);
     };
     let existing = queries::folder::get_all_folders(&state.db).await?;
-    let addable =
-        validate_folder_path(&music_dir, &existing).is_ok_and(|children| children.is_empty());
+    let addable = validate_folder_path(&music_dir, &existing).is_ok();
     Ok(addable.then_some(music_dir))
 }
 
@@ -147,7 +145,7 @@ pub async fn toggle_folder_watching(state: &AppState, enabled: bool) -> Result<(
 
 /// Starts the watcher over every enabled folder, replacing whatever it watched before.
 pub(crate) async fn start_watcher(state: &AppState) -> Result<(), AppError> {
-    let paths = enabled_folder_paths(state).await?;
+    let paths = watch_roots(state).await?;
     with_watcher(state, move |watcher| watcher.start(&paths)).await?
 }
 
@@ -156,7 +154,7 @@ pub(crate) async fn start_watcher(state: &AppState) -> Result<(), AppError> {
 /// logged rather than failing the add or remove it follows.
 async fn retarget_watcher(state: &AppState) {
     let retarget = async {
-        let paths = enabled_folder_paths(state).await?;
+        let paths = watch_roots(state).await?;
         with_watcher(state, move |watcher| watcher.retarget(&paths)).await
     };
     if let Err(e) = retarget.await {
@@ -164,9 +162,15 @@ async fn retarget_watcher(state: &AppState) {
     }
 }
 
-async fn enabled_folder_paths(state: &AppState) -> Result<Vec<PathBuf>, AppError> {
+/// The enabled folders, less any inside another. A folder awaiting absorption is already under its
+/// parent's recursive watch, and unwatching it later would take the parent's watches with it.
+async fn watch_roots(state: &AppState) -> Result<Vec<PathBuf>, AppError> {
     let folders = queries::folder::get_all_folders(&state.db).await?;
-    Ok(folders.iter().filter(|f| f.is_enabled).map(|f| PathBuf::from(&f.path)).collect())
+    let enabled: Vec<PathBuf> =
+        folders.iter().filter(|f| f.is_enabled).map(|f| PathBuf::from(&f.path)).collect();
+    let is_nested =
+        |path: &PathBuf| enabled.iter().any(|other| other != path && path.starts_with(other));
+    Ok(enabled.iter().filter(|path| !is_nested(path)).cloned().collect())
 }
 
 /// Runs `op` against the watcher on the blocking pool: registering a recursive watch walks the
