@@ -39,8 +39,8 @@ const RUN_THE_SCRIPT: &str = "run scripts/update-translations.sh";
 /// msgid → `msgid_plural`, the plural being there for the `@tr("one" | "many" % n)` form.
 type Msgids = BTreeMap<String, Option<String>>;
 
-/// msgid → its translator notes. A set because msgcat folds an identical note repeated across
-/// files into one.
+/// msgid → its translator notes. A set because the same note can sit above a msgid in more than
+/// one file, and the template carries it once.
 type Notes = BTreeMap<String, BTreeSet<String>>;
 
 /// One entry of the template or a catalogue, its strings still escaped as the file spells them.

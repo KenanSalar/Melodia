@@ -80,13 +80,18 @@ while IFS= read -r source; do
     keep_translator_notes "$source" < "$work/raw.po" > "$(printf '%s/part-%04d.po' "$work" "$part")"
 done < "$work/sources"
 
-# msgcat brackets each note with a `#-#-#-#-#  part-NNNN.po  #-#-#-#-#` line
-# when a msgid comes from more than one file.
+# msgcat folds a note into one line only when every file using the msgid
+# carries it, and otherwise repeats it per file under a `#-#-#-#-#` marker. A
+# repeat is still one note, so only a second, different one fails.
 (cd "$work" && msgcat --no-wrap --sort-by-file -o merged.pot part-*.po)
 awk '
     /^#\. #-#-#-#-#/ { next }
-    /^$/ { notes = 0 }
-    /^#\. Translators:/ { notes++ }
+    /^$/ { notes = 0; split("", seen) }
+    /^#\. Translators:/ {
+        if ($0 in seen) next
+        seen[$0] = 1
+        notes++
+    }
     /^msgid / && notes > 1 {
         printf "error: %s has %d translator notes, and a msgid gets one\n", $0, notes > "/dev/stderr"
         failed = 1
