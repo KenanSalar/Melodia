@@ -3,8 +3,8 @@
 
 use std::cmp::Reverse;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 
+use parking_lot::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use super::repair::RestoreNotice;
@@ -26,26 +26,65 @@ pub(super) enum Reach {
 
 impl Reach {
     fn covers(self, folder: &Folder) -> bool {
-        folder.is_enabled && (self == Self::Library || folder.last_scanned.is_none())
+        let in_reach = match self {
+            Self::Library => true,
+            Self::UnfinishedImports => folder.last_scanned.is_none(),
+        };
+        folder.is_enabled && in_reach
     }
 }
 
-/// Coalesces concurrent reconcile triggers. A rapid-fire kernel-overflow
-/// burst during `rsync` could otherwise spawn three full library sweeps
-/// back-to-back; each one is idempotent but would still walk and stat every
-/// file. The flag is RAII-cleared by [`ReconcileGuard`] so a panic or
-/// early-return path can't strand it.
-static RECONCILE_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
+/// Coalesces concurrent reconcile triggers. A rapid-fire kernel-overflow burst during `rsync`
+/// could otherwise spawn three full library sweeps back to back; each one is idempotent but would
+/// still walk and stat every file. One lock, so a request can't land between a pass deciding it is
+/// done and letting go, which is where a deferred one would be lost.
+static PASS: Mutex<PassState> = Mutex::new(PassState::Idle);
 
-/// A library-wide pass asked for while a narrower one ran, which doesn't read the folders that
-/// request is for, so it is deferred rather than dropped. Cleared by whoever claims
-/// [`RECONCILE_IN_FLIGHT`], so a debt a full pass has already paid isn't paid twice.
-static LIBRARY_PASS_OWED: AtomicBool = AtomicBool::new(false);
+enum PassState {
+    Idle,
+    Running {
+        /// A library-wide pass asked for while this one ran. A narrower round doesn't read the
+        /// folders that request is for, so it runs one next rather than dropping it.
+        library_owed: bool,
+    },
+}
 
-struct ReconcileGuard;
-impl Drop for ReconcileGuard {
+/// This task's hold on [`PASS`], let go on any way out, a panic included.
+struct PassClaim {
+    held: bool,
+}
+
+impl PassClaim {
+    /// Claims [`PASS`], or merges `reach` into the pass holding it.
+    fn take(reach: Reach) -> Option<Self> {
+        let mut pass = PASS.lock();
+        if let PassState::Running { library_owed } = &mut *pass {
+            *library_owed |= reach == Reach::Library;
+            return None;
+        }
+        *pass = PassState::Running { library_owed: false };
+        Some(Self { held: true })
+    }
+
+    /// The round owed after one over `finished`, letting go under the same lock when none is.
+    fn next_round(&mut self, finished: Reach) -> Option<Reach> {
+        let mut pass = PASS.lock();
+        let owed = matches!(*pass, PassState::Running { library_owed: true });
+        if owed && finished != Reach::Library {
+            *pass = PassState::Running { library_owed: false };
+            return Some(Reach::Library);
+        }
+        *pass = PassState::Idle;
+        self.held = false;
+        None
+    }
+}
+
+impl Drop for PassClaim {
     fn drop(&mut self) {
-        RECONCILE_IN_FLIGHT.store(false, Ordering::Release);
+        if self.held {
+            *PASS.lock() = PassState::Idle;
+        }
     }
 }
 
@@ -71,7 +110,7 @@ impl Drop for ReconcileGuard {
 /// A call while a pass is in flight merges into it. A full pass still reads
 /// the latest audio files, but its artwork repair ran at its start, so a
 /// cover gone since waits for the next scan entry. A narrower pass runs
-/// again over the whole library once it ends ([`LIBRARY_PASS_OWED`]).
+/// again over the whole library once it ends.
 pub fn reconcile_watched_folders(state: &AppState) {
     start(state, Reach::Library, None);
 }
@@ -84,53 +123,54 @@ pub fn finish_interrupted_imports(state: &AppState) {
 /// Starts a pass over the folders `reach` covers, holding up a restore notice a scan has already
 /// raised until it ends.
 pub(super) fn start(state: &AppState, reach: Reach, restoring: Option<RestoreNotice>) {
-    if RECONCILE_IN_FLIGHT
-        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-        .is_err()
-    {
-        if reach == Reach::Library {
-            LIBRARY_PASS_OWED.store(true, Ordering::Release);
-        }
+    let Some(mut claim) = PassClaim::take(reach) else {
         log::debug!("reconcile_watched_folders: already in flight, merging into it");
         return;
-    }
-    LIBRARY_PASS_OWED.store(false, Ordering::Release);
+    };
     let spawner = TaskSpawner::from_state(state);
     let state = state.clone();
     let cancel = state.scan.token();
     spawner.spawn(async move {
-        let _guard = ReconcileGuard;
         let _handed_over = restoring;
         let mut reach = reach;
         loop {
-            let restoring = forget_missing_artwork(&state).await;
-            if restoring.is_some() {
-                // The repair cleared covers across the library, and a cleared one is never
-                // reported missing again, so only a full round brings them back.
-                reach = Reach::Library;
-            }
-            scan_in_turn(&state, reach, &cancel).await;
-            if cancel.is_cancelled()
-                || reach == Reach::Library
-                || !LIBRARY_PASS_OWED.swap(false, Ordering::AcqRel)
-            {
+            reach = round(&state, reach, &cancel).await;
+            if cancel.is_cancelled() {
                 return;
             }
-            reach = Reach::Library;
+            let Some(next) = claim.next_round(reach) else {
+                return;
+            };
+            reach = next;
         }
     });
 }
 
-/// Scans the folders `reach` covers one after another, until `cancel` stops the pass.
-async fn scan_in_turn(state: &AppState, reach: Reach, cancel: &CancellationToken) {
+/// One round over the folders `reach` covers, answering the reach it ended up reading: the repair
+/// widens it to the library when it clears covers.
+async fn round(state: &AppState, reach: Reach, cancel: &CancellationToken) -> Reach {
     let mut folders = match queries::folder::get_all_folders(&state.db).await {
         Ok(f) => f,
         Err(e) => {
             log::warn!("reconcile_watched_folders: load folders failed: {}", describe(&e));
-            return;
+            return reach;
         }
     };
+    if reach == Reach::UnfinishedImports && !folders.iter().any(|f| reach.covers(f)) {
+        // The repair runs ahead of a scan, and with watching off there is none to run ahead of.
+        return reach;
+    }
+    let restoring = forget_missing_artwork(state).await;
+    // The repair cleared covers across the library, and a cleared one is never reported missing
+    // again, so only a full round brings them back.
+    let reach = if restoring.is_some() { Reach::Library } else { reach };
     folders.retain(|f| reach.covers(f));
+    scan_in_turn(state, folders, cancel).await;
+    reach
+}
+
+/// Scans `folders` one after another, until `cancel` stops the pass.
+async fn scan_in_turn(state: &AppState, mut folders: Vec<Folder>, cancel: &CancellationToken) {
     // Deepest first: a folder absorbs the ones nested in it when its scan completes, so
     // theirs has to run before it or not at all.
     folders.sort_by_key(|f| Reverse(Path::new(&f.path).components().count()));

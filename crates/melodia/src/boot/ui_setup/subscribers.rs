@@ -37,7 +37,7 @@ pub fn install_library_changed_refresher(
 /// Toast on every kernel-overflow rescan. On the UI thread so it can hold the
 /// non-`Send` `Rc<NotificationsUi>` and resolve its strings at push time, in
 /// whichever locale was active when the rescan fired. Coalesced upstream by the
-/// `watch` slot and by `RECONCILE_IN_FLIGHT`, so a burst of overflows still
+/// `watch` slot and by the reconcile's own coalescing, so a burst of overflows still
 /// paints at most one toast per reconcile cycle.
 pub fn install_rescan_notice_subscriber(
     state: &AppState,

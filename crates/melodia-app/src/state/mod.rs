@@ -77,8 +77,7 @@ pub struct AppState {
     /// user knows why Tracks/Browse paused refreshing while the
     /// reconcile runs. Coalescing semantics: a burst of overflows that
     /// land in the same `watch` slot only paints one toast — which is
-    /// also what `RECONCILE_IN_FLIGHT` does to the reconcile spawn
-    /// itself.
+    /// also what the reconcile's own coalescing does to its spawn.
     pub rescan_notice: Signal,
     /// Bumped after the auto-update switch reaches disk. `tasks::updater_daily` sleeps for hours
     /// at a stretch and up to a week under the failure backoff, so without this the switch is a

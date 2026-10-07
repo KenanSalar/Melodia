@@ -187,6 +187,7 @@ async fn scan_one(
         return Ok(ScanOutcome::Stopped { rewrote_existing: false });
     };
     if walk.files.is_empty() {
+        finish::after_completed(state, folder.id).await?;
         return Ok(ScanOutcome::Completed { inserted: 0 });
     }
 
