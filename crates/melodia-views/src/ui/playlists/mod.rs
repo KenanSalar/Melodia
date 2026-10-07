@@ -163,6 +163,9 @@ impl PlaylistsUi {
         melodia_platform::services::platform::allocator::trim();
     }
 
+    /// Decodes the first screenful of grid covers into the grid tier, so the grid's first frame
+    /// paints covers rather than placeholders. Every prewarm of this grid comes through here, and
+    /// does nothing unless the grid is what is drawn ([`SectionState::grid_on_screen`]).
     pub fn prewarm_visible_covers(&self) {
         if !self.section.grid_on_screen(|| self.detail_playlist_id() >= 0) {
             return;

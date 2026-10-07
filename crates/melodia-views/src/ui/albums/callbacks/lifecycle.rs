@@ -135,6 +135,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
                             // stranding them on an empty detail page they
                             // can only escape via the back button.
                             albums_ui_mod::clear_detail(&au);
+                            // Handed back warm, as a failed restore's grid is.
+                            let warm = au.clone();
+                            let _ =
+                                tokio::task::spawn_blocking(move || warm.prewarm_visible_covers())
+                                    .await;
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 let g = ui.global::<AlbumDetail>();
                                 g.set_album_id(-1);

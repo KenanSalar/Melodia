@@ -157,10 +157,10 @@ impl AlbumsUi {
         melodia_platform::services::platform::allocator::trim();
     }
 
-    /// Re-decode the first screenful of grid covers, so a section enter over
-    /// still-warm data paints cache hits rather than decoding inline on the UI
-    /// thread. The post-wipe path goes through `fetch_grid`, which prewarms
-    /// itself.
+    /// Decodes the first screenful of grid covers into the grid tier, so the
+    /// grid's first frame paints covers rather than placeholders. Every prewarm
+    /// of this grid comes through here, and does nothing unless the grid is what
+    /// is drawn ([`SectionState::grid_on_screen`]).
     pub fn prewarm_visible_covers(&self) {
         if !self.section.grid_on_screen(|| self.detail_album_id() >= 0) {
             return;

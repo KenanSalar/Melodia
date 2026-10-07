@@ -18,9 +18,8 @@ use melodia_ui::{AlbumGridRow as UiAlbumGridRow, Albums, AppWindow};
 /// Fetch the album list from the DB into `albums_ui.grid.data`, prewarm
 /// cover thumbnails, then rebuild the grid model on the UI thread. Async —
 /// runs on the tokio runtime; the UI write hops back via
-/// `upgrade_in_event_loop`. Called once at startup and from the
-/// library-changed subscriber. The pre-lowercased sort keys are built here
-/// (on the worker), not per sort click on the UI thread.
+/// `upgrade_in_event_loop`. The pre-lowercased sort keys are built here (on
+/// the worker), not per sort click on the UI thread.
 pub async fn fetch_grid(
     state: &AppState,
     albums_ui: &Arc<AlbumsUi>,
@@ -40,16 +39,9 @@ pub async fn fetch_grid(
         *albums_ui.grid.index_cache.lock() = None;
     }
 
-    // Prewarm the first few screenfuls of grid-tier covers so the initial
-    // grid paint is a cache hit. The rest decode lazily on scroll-in via
-    // `request-cover` — covers are virtualized now, so prewarming the
-    // whole catalogue would just thrash the grid-tier LRU on large
-    // libraries (and waste CPU decoding covers the user never scrolls to).
-    // `album_stats` is name-sorted, so the first `GRID_PREWARM_AHEAD`
-    // albums are the ones first on screen. Runs on the runtime worker pool
-    // — album-art decoding is CPU-bound; the bounded decode pool inside
-    // `prewarm` parallelizes it while `spawn_blocking` keeps the runtime
-    // responsive.
+    // Ahead of the rebuild hop, so a drawn grid's first paint is cache hits.
+    // Only the first screenful: the rest decode as cards scroll in, and
+    // warming the catalogue would thrash the tier on a large library.
     let warm = albums_ui.clone();
     let _ = tokio::task::spawn_blocking(move || warm.prewarm_visible_covers()).await;
 

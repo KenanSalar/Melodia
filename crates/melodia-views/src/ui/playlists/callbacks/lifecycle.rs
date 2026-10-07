@@ -90,6 +90,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                                 describe(&e)
                             );
                             playlists_ui_mod::clear_detail(&pu);
+                            // Handed back warm, as a failed restore's grid is.
+                            let warm = pu.clone();
+                            let _ =
+                                tokio::task::spawn_blocking(move || warm.prewarm_visible_covers())
+                                    .await;
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 let g = ui.global::<PlaylistDetail>();
                                 g.set_playlist_id(-1);

@@ -862,6 +862,9 @@ regardless, both re-decoding at full size the grid a drill had handed back.
       since the last session hands its grid back on covers, and a reopened one turns the prewarm
       away.
 - [x] Closing a detail is unchanged: `clear_detail` writes `-1` before the close's prewarm runs.
+- [x] A section enter whose reopen fails, the entity having gone while the section was hidden,
+      prewarms after `clear_detail` and before the hop that shows the grid, as a failed restore
+      does: its `fetch_grid` ran with the old id still set and turned the prewarm away.
 - [x] Docs: `section_state.rs`'s module and struct docs, `GRID_COVER_FALLBACK`'s (a cover decoded
       at it is replaced when its card next draws, not at the retune), each
       `first_screenful_paths`'s, and `ui-patterns.md`'s "The guard sits ahead of the decode".
@@ -869,7 +872,8 @@ regardless, both re-decoding at full size the grid a drill had handed back.
       `set_restoring(false)` per seed, which is why the Rust half is `begin_restore` and
       `end_restore` rather than a second setter of that spelling.
 - [x] No file past 800 lines, in lines: `section_state.rs` 177, `grid_prewarm.rs` 358, `playlists`
-      `mod.rs` 268, `grid.rs` 231, `detail.rs` 462, `albums` 222, 181, 344, `artists` 219, 141, 352.
+      `mod.rs` 271, `grid.rs` 231, `detail.rs` 462, `callbacks/lifecycle.rs` 213, `albums` 222, 173,
+      344, 214, `artists` 221, 141, 352, 174.
 - [x] Spot check, in the app, 2026-10-07: the release build of `616c35a` against this phase's
       (`melodia-measure/target/{branch-616c35a,fix-gridgate}`), heaptrack at idle beside the three
       profiles above, then one footprint round per scenario with the order rotating. Raw output is
@@ -905,29 +909,35 @@ regardless, both re-decoding at full size the grid a drill had handed back.
 | Playing, visualizer live | `616c35a` | 34.6 MiB | 22.1 MiB | 3.58% | 31 |
 | Playing, visualizer live | phase 8 | 33.4 MiB | 21.0 MiB | 3.70% | 31 |
 
-Kenan's run of the footprint script after the phase, 2026-10-07 15:33
-(`target/linux-footprint/20261007-152655`), beside his run of `616c35a` that morning
-(`target/linux-footprint/20261007-121518`). Both are the script launching `target/release/Melodia`
-against the dev root, one launch each, Last.fm, ListenBrainz and Discord presence on. This one
-followed an afternoon of builds and launches, which leaves page-cache state behind but nothing in
-a new process's own memory; a re-run after a reboot is still to come.
+Kenan's runs of the footprint script after the phase, beside his run of `616c35a` that morning
+(`target/linux-footprint/20261007-121518`): 15:33 on the phase as committed (`…-152655`), and 15:58
+with the failure-arm prewarm on top (`…-155412`, built 15:50). That one adds a prewarm only on a
+path these scenarios never take, so the two read as two samples of one steady state. All three are
+the script launching `target/release/Melodia` against the dev root, one launch each, Last.fm,
+ListenBrainz and Discord presence on. The machine had been up since 08:07, so both afternoon runs
+followed hours of builds and launches, which leaves page-cache state behind but nothing in a new
+process's own memory; a re-run after a reboot is still to come.
 
 | Scenario | Build | Anonymous | PSS | USS | RSS | Peak RSS | GPU memory | CPU, one core | GPU | Threads | Memory maps |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | Idle | `616c35a` | 34.3 MiB | 92.0 MiB | 85.1 MiB | 164.1 MiB | 178.4 MiB | 31.0 MiB | 0.05% | 0.00% | 32 | 546 |
-| Idle | phase 8 | 32.5 MiB | 93.3 MiB | 86.8 MiB | 168.8 MiB | 181.9 MiB | 28.0 MiB | 0.17% | 0.00% | 28 | 529 |
+| Idle | phase 8, 15:33 | 32.5 MiB | 93.3 MiB | 86.8 MiB | 168.8 MiB | 181.9 MiB | 28.0 MiB | 0.17% | 0.00% | 28 | 529 |
+| Idle | phase 8, 15:58 | 31.9 MiB | 90.6 MiB | 84.3 MiB | 164.3 MiB | 178.6 MiB | 31.0 MiB | 0.08% | 0.00% | 32 | 538 |
 | Playing, list view | `616c35a` | 35.0 MiB | 93.1 MiB | 87.8 MiB | 163.0 MiB | 179.8 MiB | 30.0 MiB | 0.45% | 0.00% | 28 | 535 |
-| Playing, list view | phase 8 | 32.6 MiB | 89.5 MiB | 84.9 MiB | 160.6 MiB | 181.9 MiB | 28.0 MiB | 0.55% | 0.00% | 30 | 533 |
+| Playing, list view | phase 8, 15:33 | 32.6 MiB | 89.5 MiB | 84.9 MiB | 160.6 MiB | 181.9 MiB | 28.0 MiB | 0.55% | 0.00% | 30 | 533 |
+| Playing, list view | phase 8, 15:58 | 32.6 MiB | 90.8 MiB | 86.3 MiB | 159.9 MiB | 178.5 MiB | 30.0 MiB | 0.58% | 0.00% | 30 | 533 |
 | Playing, visualizer live | `616c35a` | 34.2 MiB | 92.1 MiB | 87.1 MiB | 161.9 MiB | 179.8 MiB | 30.0 MiB | 3.38% | 3.59% | 29 | 536 |
-| Playing, visualizer live | phase 8 | 33.3 MiB | 90.6 MiB | 86.3 MiB | 161.6 MiB | 181.9 MiB | 28.0 MiB | 4.35% | 2.37% | 29 | 530 |
+| Playing, visualizer live | phase 8, 15:33 | 33.3 MiB | 90.6 MiB | 86.3 MiB | 161.6 MiB | 181.9 MiB | 28.0 MiB | 4.35% | 2.37% | 29 | 530 |
+| Playing, visualizer live | phase 8, 15:58 | 33.2 MiB | 91.9 MiB | 87.7 MiB | 160.9 MiB | 178.5 MiB | 30.0 MiB | 3.70% | 2.33% | 29 | 531 |
 
-- **Anonymous** 1.8, 2.4 and 0.9 MiB lower: back at the README's 32, 33 and 33 MiB (0.14.0) and
-  under the 0.18.0 baseline's 34.3, 35.5 and 35.2 MiB.
-- **PSS, USS and RSS** move both ways and do not compare across the two binaries (under
-  Measurement); the phase 8 binary was built at 15:00, the other at 10:59.
-- **CPU** read higher, 0.17% at idle and 4.35% with the visualizer against 0.05% and 3.38%, where
-  the same-session spot check had the two builds within 0.12 points of one core. The phase adds no
-  ongoing work, so the re-run after a reboot is what settles it.
+- **Anonymous** 1.8 to 2.4 MiB lower at idle, 2.4 in list view and about 1 MiB with the visualizer,
+  the two phase 8 runs within 0.6 MiB of each other: back at the README's 32, 33 and 33 MiB (0.14.0)
+  and under the 0.18.0 baseline's 34.3, 35.5 and 35.2 MiB.
+- **PSS, USS and RSS** move both ways and do not compare across the three binaries (under
+  Measurement), built at 10:59, 15:00 and 15:50.
+- **CPU** read higher at 15:33, 0.17% at idle and 4.35% with the visualizer, and was back at 0.08%
+  and 3.70% at 15:58, beside the README's 0.08% and 3.92% and the 3.58–3.70% of the same-session
+  spot check. Noise, then, and not a reboot's doing: both runs came on the same uptime.
 - **Threads, descriptors and memory maps** hold flat from one scenario to the next.
 
 Memory: 1.9 MiB of live heap at idle on the dev library, whenever a launch lands on a restored
@@ -940,7 +950,8 @@ covers and not the placeholder glyph, for a restored album, artist and playlist.
 Tests, when asked: `grid_on_screen` is false while a restore runs, while a detail id is set and
 while the section is inactive, and true otherwise; `prewarm_visible_covers` decodes nothing into
 the tier while a detail is open; each of the three seeds calls `begin_restore` above its spawn and
-`end_restore` once, beside `detail_restore_tests`' pins.
+`end_restore` once, beside `detail_restore_tests`' pins; each section enter's failure arm
+prewarms before its hop.
 
 ## Optional, after discussing
 

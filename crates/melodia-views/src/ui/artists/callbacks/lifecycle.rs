@@ -100,6 +100,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>
                             // stranding the user on an empty detail page.
                             // Mirrors the Albums slice's own lifecycle wiring.
                             artists_ui_mod::clear_detail(&au);
+                            // Handed back warm, as a failed restore's grid is.
+                            let warm = au.clone();
+                            let _ =
+                                tokio::task::spawn_blocking(move || warm.prewarm_visible_covers())
+                                    .await;
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 let g = ui.global::<ArtistDetail>();
                                 g.set_artist_id(-1);
