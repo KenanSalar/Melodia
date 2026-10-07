@@ -53,6 +53,8 @@ slint = { version = "1.16.1", default-features = false, features = [
     "renderer-femtovg",
 ] }
 # Must match the `slint` version above; the pair is declared adjacently for that.
+# So must `slint-tr-extractor`: `scripts/update-translations.sh` reads the version off the
+# `slint = { version = … }` line and refuses an extractor that doesn't match it.
 slint-build = "1.16.1"
 
 # Async runtime / synchronisation

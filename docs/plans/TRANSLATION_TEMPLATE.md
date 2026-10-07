@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **in progress**, Phases 0 to 3 done · Created: 2026-10-07 ·
+Status: **in progress**, Phases 0 to 5 done · Created: 2026-10-07 ·
 Branch: `refactor/translation-catalog-template`
 
 > **Checked 2026-10-07** against `360dda24`. Read: the `slint-tr-extractor` 1.16.1 and `rspolib`
@@ -122,8 +122,8 @@ Each phase starts only when it is asked for.
 - [x] Phase 1: the script ✅
 - [x] Phase 2: one-off catalog cleanup ✅
 - [x] Phase 3: first run ✅
-- [ ] Phase 4: stricter test
-- [ ] Phase 5: docs
+- [x] Phase 4: stricter test ✅
+- [x] Phase 5: docs ✅
 - [ ] Phase 6: Windows run
 
 ### Phase 0: tools ✅
@@ -239,7 +239,14 @@ second run leaves `git status` clean.** `cargo test` is green. The same comparis
 `5bafa5ea`, the commit before the change, is what proves the combined diff mechanical: only the
 three header fields from Phase 2 step 4 differ.
 
-### Phase 4: stricter test
+### Phase 4: stricter test ✅
+
+Done 2026-10-07. Each check failed on its scratch mutation and only that check did. Where it
+left the plan: the parser keeps a `fuzzy` flag rather than every `#,` flag, fuzzy being the only
+one read; check 4 is an equality, so a note deleted from the source but left in the `.pot` fails
+too, and it keys notes as a set because msgcat folds an identical note repeated across files
+into one; the raw walk became `melodia_testkit::raw_sources`, which `stripped_sources` now wraps,
+retiring `slint_sources()`.
 
 In `crates/melodia/tests/translations.rs`:
 
@@ -265,7 +272,11 @@ In `crates/melodia/tests/translations.rs`:
 - Show each new check failing on a scratch mutation: an entry marked fuzzy, an emptied msgstr, a
   note split over two lines, a hand-edited `.pot`.
 
-### Phase 5: docs
+### Phase 5: docs ✅
+
+Done 2026-10-07. Beyond the list: CLAUDE.md's "Runtime switch" bullet says a new locale's `.po`
+starts from the template with `msginit`, and the PR template's clippy and test lines gained
+`--workspace`. CONTRIBUTING names no extractor version, the script printing the exact one.
 
 - `CONTRIBUTING.md`: the string paragraph under "Pull requests" covers the workflow (write the
   `@tr`, run the script, fill in six msgstrs) and the note rule. A short block under "Getting set

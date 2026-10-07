@@ -19,11 +19,11 @@ Part of #
 
 ## Checklist
 
-- [ ] `cargo clippy --all-targets --locked -- -D warnings` passes
-- [ ] `cargo test --locked` passes
+- [ ] `cargo clippy --all-targets --locked --workspace -- -D warnings` passes
+- [ ] `cargo test --locked --workspace` passes
 - [ ] Docs updated where behaviour or conventions changed (`CLAUDE.md`, the relevant `.claude/rules/*.md`, `README.md`)
 - [ ] A change that moves an architectural seam names the ADR it follows, or adds one under `docs/adr/`
-- [ ] New user-facing strings are wrapped in `@tr(...)` and added to every `crates/melodia-ui/translations/*/LC_MESSAGES/melodia-ui.po`
+- [ ] New or changed user-facing strings are wrapped in `@tr(...)`, `scripts/update-translations.sh` was run, and every catalogue's new `msgstr`s are filled in
 
 ## Notes for review
 

@@ -19,6 +19,24 @@ Run this once per clone, so the tree-wide formatting commits stay out of `git bl
 git config blame.ignoreRevsFile .git-blame-ignore-revs
 ```
 
+Adding, changing or removing an `@tr(...)` string means regenerating the translation
+catalogues, which needs two tools that building, testing and translating don't. The first
+is the string extractor, at the `slint` version in the root `Cargo.toml`:
+
+```bash
+cargo install slint-tr-extractor --version <slint version> --locked
+```
+
+It moves with `slint`, and `scripts/update-translations.sh` prints the exact line to run
+when it is missing or out of step. The second is GNU gettext:
+
+- Fedora: `sudo dnf install gettext`
+- Debian and Ubuntu: `sudo apt install gettext`, since the default `gettext-base` has no
+  `msgmerge`
+- macOS: `brew install gettext`
+- Windows: `winget install MicheleLocati.GettextIconv`, then run the script from Git Bash,
+  which comes with Git for Windows
+
 ## Reporting a bug
 
 Open an issue with the bug report template. `Melodia --logs` prints the log directory
@@ -61,9 +79,14 @@ The lint configuration is strict on purpose, and `unwrap()` is denied everywhere
 tests included. Reach for `?`, for `expect()` with the invariant in the message, or
 for `let ... else`.
 
-If you add a user-facing string, wrap it in `@tr(...)` and add the same msgid to all
-catalogues under `crates/melodia-ui/translations/`. A catalogue that is missing one falls
-back to English silently.
+If you add, change or remove a user-facing string, wrap it in `@tr(...)` and run
+`scripts/update-translations.sh`. It rebuilds the template,
+`crates/melodia-ui/translations/melodia-ui.pot`, which nobody edits by hand, and leaves each
+new string as an empty `msgstr` in every catalogue beside it for you to fill in. A note for
+translators goes in the `.slint` file as one `// Translators: …` line directly above the line
+holding the `@tr`, with no second `@tr` on that line and at most 76 columns from
+`Translators:` on. `cargo test` fails on a catalogue that is out of step with the source or
+still has a fuzzy or empty entry, since Slint shows either in English without a word.
 
 ## What CI runs
 
