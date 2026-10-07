@@ -7,17 +7,17 @@ threads and buffers that outlive their job, and memory that grows with library s
 the distinct data does. This plan holds the changes that save memory without a visible, audible or
 latency regression, one phase per change.
 
-**Order:** phase 0 goes first, since the states most phases act on were not in the 2026-10-05
-measurement. Phases 2 to 6 are independent of each other; phases 1 and 7 were dropped. The optional
+**Order:** phases 0 and 2 to 6 are done and checkpointed; phases 1 and 7 were dropped. The optional
 phases come last and start only after a discussion: each one reverses a documented choice or
 carries a real behaviour risk.
 
-**Measurement:** the 2026-10-05 run below is the baseline. It is measured again once phases 2 to 6
-are all in, and again each time one or more of the optional phases lands (see Checkpoints). From
-2026-10-06, a before and an after are release builds of the commits either side of the change, and
-a 0.18.0 reading is a release build of the `v0.18.0` tag, never the installed RPM. Each binary sits
-at `~/Development/melodia-measure/target/<label>/Melodia`, where it counts as a development build
-and so never rewrites the app-menu launcher.
+**Measurement:** the 2026-10-05 run below is what the audit was sized on. A checkpoint measures a
+release build of `main` beside one of this branch in the same session (see Checkpoints), once after
+phases 2 to 6 and again each time one or more of the optional phases lands. From 2026-10-06, a
+before and an after are release builds of the commits either side of the change, and a 0.18.0
+reading is a release build of the `v0.18.0` tag, never the installed RPM. Each binary sits at
+`~/Development/melodia-measure/target/<label>/Melodia`, where it counts as a development build and
+so never rewrites the app-menu launcher.
 
 **Figures:** anything not marked *measured* is an upper bound computed from the constants named
 beside it, or an estimate from field types. Phase 0 and each phase's own re-measurement replace
@@ -79,33 +79,71 @@ The setup a checkpoint reproduces, or names where it differs:
   `~/Development/melodia-measure` reproduce both halves.
 
 None of these scenarios has the queue sheet open, Now Playing just closed or a scan running, which
-is where most of this plan acts. Phase 0 adds those states to the baseline.
+is where most of this plan acts. The checkpoint after phases 2 to 6 measures the first two beside
+0.18.0.
 
 ## Checkpoints
 
-Each checkpoint is a full run of the baseline protocol, the phase 0 states included, written into
-the table below beside the baseline. A phase's own re-measurement (Every phase) is a spot check of
-the state it targets, taken to catch a regression early; it does not replace a checkpoint.
+Each checkpoint measures a release build of `main` and one of this branch in the same session, every
+scenario from a fresh launch. A phase's own re-measurement (Every phase) is a spot check of the
+state it targets, taken to catch a regression early; it does not replace a checkpoint.
 
-1. **After phases 2 to 6.** Once every phase in the main list is in, phases 1 and 7 excepted, both
-   dropped. This is the number the plan is judged on.
-2. **After the optional phases.** Each time one or more of phases A to D lands, a new block of rows
-   named for exactly the phases it includes, for example *After 2–6 + B*.
+1. **After phases 2 to 6.** Done 2026-10-07, below. This is the number the plan is judged on.
+2. **After the optional phases.** Each time one or more of phases A to D lands, a new table named
+   for exactly the phases it includes, for example *After 2–6 + B*.
 
-| Run | Scenario | Anonymous | PSS | USS | RSS | Peak RSS | GPU memory | CPU, one core | GPU | Threads |
-|---|---|---|---|---|---|---|---|---|---|---|
-| Baseline, 2026-10-05 | Idle | 34.3 MiB | 89.8 MiB | 85.0 MiB | 162.0 MiB | 176.2 MiB | 26.0 MiB | 0.15% | 0.00% | 41 |
-| Baseline, 2026-10-05 | Playing, list view | 35.5 MiB | 92.2 MiB | 87.2 MiB | 165.3 MiB | 178.5 MiB | 26.0 MiB | 0.65% | 0.00% | 41 |
-| Baseline, 2026-10-05 | Playing, visualizer live | 35.2 MiB | 91.4 MiB | 87.5 MiB | 162.5 MiB | 178.5 MiB | 30.0 MiB | 3.47% | 2.19% | 42 |
-| Baseline, phase 0 | Queue sheet open | 35.3 MiB | 89.0 MiB | 84.2 MiB | 158.4 MiB | 166.8 MiB | 28.0 MiB | 0.10% | 0.00% | 45 |
-| Baseline, phase 0 | Now Playing opened, then closed | | | | | | | | | |
-| Baseline, phase 0 | Minute after a full rescan | | | | | | | | | |
-| After 2–6 | Idle | | | | | | | | | |
-| After 2–6 | Playing, list view | | | | | | | | | |
-| After 2–6 | Playing, visualizer live | | | | | | | | | |
-| After 2–6 | Queue sheet open | | | | | | | | | |
-| After 2–6 | Now Playing opened, then closed | | | | | | | | | |
-| After 2–6 | Minute after a full rescan | | | | | | | | | |
+### After phases 2 to 6, measured 2026-10-07
+
+The two builds, both release builds made that morning:
+
+- **0.18.0**: `main` at `c592b8c`, which is the `v0.18.0` tag (`melodia-measure/target/main-c592b8c`).
+- **Branch**: `perf/memory-efficiency` at `616c35a` (`melodia-measure/target/branch-616c35a`). It
+  carries more than phases 2 to 6 (the library fixes, scan cancel, the watcher moving by
+  difference, missing-cover restore), so the table is what the release ships, and a single phase's
+  share is read from its own spot check.
+
+The setup is the baseline's, with these differences:
+
+- **Data:** each build ran on its own copy of the dev root, identical but for sqlx's row for
+  `20261006000000`, without which 0.18.0 refuses the database. That migration only clears the
+  Unknown Artist's image. The 50k root was copied the same way, the branch's copy migrated by hand
+  so the branch ran no migration or backup inside its window.
+- **Queue:** the 402 tracks with artwork; the whole library (542 tracks) for the queue sheet; the
+  50k root's own queue for the Songs view.
+- **Runs:** one round per build, each binary launched once unmeasured first (Shader cache, under the
+  baseline's setup). `tools/checkpoint.sh` drives a scenario and `tools/checkpoint_table.py`
+  collects the summaries. Raw output is `ckpt-<scenario>-<build>-1/` in `melodia-measure`.
+- **Left out:** Playing, list view, which no phase targets, and the minute after a full rescan. The
+  scan phases are judged on their spot checks.
+
+| Scenario | Build | Anonymous | PSS | USS | RSS | Peak RSS | GPU memory | CPU, one core | GPU | Threads | Memory maps |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Idle | 0.18.0 | 37.8 MiB | 103.6 MiB | 93.2 MiB | 180.4 MiB | 197.5 MiB | 27.0 MiB | 0.05% | 0.00% | 45 | 586 |
+| Idle | Branch | 38.2 MiB | 105.7 MiB | 95.2 MiB | 188.2 MiB | 203.6 MiB | 27.0 MiB | 0.03% | 0.00% | 31 | 559 |
+| Playing, visualizer live | 0.18.0 | 36.3 MiB | 105.4 MiB | 100.2 MiB | 176.3 MiB | 201.6 MiB | 29.0 MiB | 3.75% | 2.83% | 45 | 578 |
+| Playing, visualizer live | Branch | 37.1 MiB | 107.0 MiB | 96.5 MiB | 189.5 MiB | 204.0 MiB | 29.0 MiB | 4.02% | 3.78% | 31 | 548 |
+| Now Playing opened, skipped, closed | 0.18.0 | 41.2 MiB | 106.0 MiB | 100.7 MiB | 177.2 MiB | 202.2 MiB | 29.0 MiB | 0.73% | 0.67% | 45 | 587 |
+| Now Playing opened, skipped, closed | Branch | 38.3 MiB | 108.5 MiB | 98.0 MiB | 191.0 MiB | 208.2 MiB | 29.0 MiB | 0.75% | 0.00% | 31 | 554 |
+| Queue sheet open | 0.18.0 | 40.2 MiB | 106.6 MiB | 96.6 MiB | 182.8 MiB | 197.4 MiB | 33.0 MiB | 0.05% | 0.00% | 45 | 582 |
+| Queue sheet open | Branch | 39.8 MiB | 105.5 MiB | 96.9 MiB | 184.1 MiB | 197.5 MiB | 33.0 MiB | 0.03% | 0.00% | 31 | 552 |
+| Songs view idle, 50k tracks | 0.18.0 | 113.9 MiB | 221.4 MiB | 166.1 MiB | 394.6 MiB | 426.7 MiB | 28.0 MiB | 0.10% | 0.00% | 44 | 578 |
+| Songs view idle, 50k tracks | Branch | 99.7 MiB | 208.0 MiB | 153.0 MiB | 379.1 MiB | 430.3 MiB | 28.0 MiB | 0.10% | 0.00% | 32 | 548 |
+
+- **Phase 4:** 14 fewer threads in every dev-root scenario and 12 on the 50k root, and 27 to 33
+  fewer memory maps.
+- **Phase 6:** on the 50k Songs view, Anonymous 14.2 MiB lower, USS 13.1 MiB and PSS 13.4 MiB. The
+  phase's spot check measured 13.7 MiB.
+- **Phases 2 and 3** save 0.1 to 0.3 MiB in the app (their heaptrack figures, under each phase),
+  under what one footprint run resolves; these rows show neither costs anything. The Now Playing
+  row's 2.9 MiB less Anonymous is one run and over ten times what phase 3 accounts for, where its
+  spot check had the builds within 0.3 MiB, so it is not counted.
+- **CPU** with the visualizer live: 3.75% against 4.02% of one core, inside the 3.73–4.12% that
+  phase 3's spot check saw across both its builds.
+- **RSS** reads 8 to 14 MiB higher on the branch on the dev root, and PSS about 2 MiB. Per mapping
+  at idle, 30 s after launch (`ckpt-smaps-idle-{main,branch}.smaps.tsv`): `melodia.db` is 12 MiB
+  more RSS with its PSS unchanged, the same file pages mapped more than once and RSS counting each
+  mapping, and the binary's own pages are 1.3 MiB more PSS, which is code rather than an
+  allocation. Anonymous moved 0.1 MiB down in that capture.
 
 The scan phases are judged on the large library instead, where the footprint script's windows do
 not reach. Peak `RssAnon` comes from `MELODIA_RSS_SAMPLE=1` during a first scan into an empty
@@ -128,7 +166,9 @@ launch. Edit its builds, rotation and output names before a run.
 | Run | First scan of the large library | Peak RssAnon | Wall time | Threads after |
 |---|---|---|---|---|
 | Baseline, phase 0 | 50,400 tracks, 0.18.0, three runs | 189–197 MiB | 2.97 s cold, 2.56–2.58 s | 45–46 |
-| After 2–6 | | | | |
+
+The checkpoint after phases 2 to 6 left scans out; phase 4's and phase 5's spot checks hold the
+scan comparison, and scan speed is checked by hand.
 
 Production files the phases touch, in lines (`wc -l`): `cover_thumbs.rs` 622, `folders.rs` 494,
 `now_playing/mod.rs` 472, `visualizer.rs` 441, `track_list_cache.rs` 389, `ui/visualizer/mod.rs` 337, `tracks/mod.rs` 168, `queue_sheet/mod.rs` 167, `scanner.rs` 118,
@@ -153,13 +193,15 @@ Production files the phases touch, in lines (`wc -l`): `cover_thumbs.rs` 622, `f
 
 ## Phase 0: baseline and one correction
 
-- [ ] Measure the states this plan acts on, on the same build and setup as the baseline: the queue
+Status: done 2026-10-07.
+
+- [x] Measure the states this plan acts on, on the same build and setup as the baseline: the queue
       sheet open on a long queue, Now Playing opened and closed, and the minute after a forced full
-      rescan. Fill the *Baseline, phase 0* rows, and keep a heaptrack profile of each beside them.
-      Queue sheet open: filled 2026-10-05 from the installed 0.18.0 RPM by `queue_open.sh`, with
-      the queue holding the whole dev library (551 tracks) rather than the Synthwave playlist.
-      Its heaptrack profile is of `1284fb8` rather than 0.18.0 (`queue-open-p2-before-ht`, phase
-      2's before). The other two states are still open. The grid page left the list with phase 1.
+      rescan. Measured in the checkpoint after phases 2 to 6 instead, a release build of 0.18.0
+      beside the branch in one session, rather than 0.18.0 first and the branch later. The queue
+      sheet and Now Playing are in that table. The rescan was left out, the scan phases being
+      judged on their spot checks, and no heaptrack profiles were kept beside it: each phase's
+      spot check holds its own. The grid page left the list with phase 1.
 - [x] Build a large library outside the repo for phases 4 to 6: ffmpeg-generated short files with
       tags spread over a few thousand albums, 50k tracks or more. Built 2026-10-05 at
       `~/Development/melodia-scale-library`, deliberately not under `~/Music`, which a first launch
@@ -261,8 +303,8 @@ Sizing pass, 2026-10-05:
 ## Phase 2: let the queue sheet share the row tier's buffers
 
 Status: done 2026-10-05: implemented, spot-checked, and checked by hand on a queue holding the whole
-library, which behaves as before. Its rows wait for the checkpoint after 2–6, and the tests listed
-at the end of this section come later.
+library, which behaves as before. Checkpointed 2026-10-07; the tests listed at the end of this
+section come later.
 
 Where: `crates/melodia-views/src/ui/queue_sheet/mod.rs` (the private `CoverThumbs` and its
 `request-cover` handler), `crates/melodia-artwork/src/media/image/cover_thumbs.rs`.
@@ -336,9 +378,8 @@ entry; `clear` on a backed tier leaves the backing's entry.
 
 ## Phase 3: small holders that outlive their use
 
-Status: done 2026-10-05: implemented, through the gate and spot-checked. Its rows wait for the
-checkpoint after 2–6, the check by hand is Kenan's, and the tests listed at the end of this section
-come later. Phase 0's "Now Playing opened, then closed" row was not taken with it and stays open.
+Status: done 2026-10-05: implemented, through the gate and spot-checked. Checkpointed 2026-10-07;
+the check by hand is Kenan's, and the tests listed at the end of this section come later.
 
 - [x] **Visualizer rings** (`crates/melodia-playback/src/player/playback/visualizer.rs`, built at
       `engine/backend/mod.rs:142`): two decks × 16,384 × 4 B = 131,072 B, written in full when the
@@ -466,7 +507,7 @@ Sizing pass, 2026-10-05:
 
 ## Phase 4: run scan work on a pool that ends with the scan
 
-Status: implemented and spot-checked 2026-10-05; its rows wait for the checkpoint after 2–6.
+Status: implemented and spot-checked 2026-10-05; checkpointed 2026-10-07.
 
 Where: the global-pool `par_iter`s at `library/settings/folders.rs:274`,
 `media/ingest/scanner.rs:53`, `database/queries/ingest.rs:335`,
@@ -541,9 +582,9 @@ the wait as well.
         4.17 s against 4.23, 4.16, 4.03 s. Peak RssAnon 242–247 against 239–246 MiB.
       - Not exercised: the resizer scratch a scan worker now hands back. The phase 0 library
         carries no covers, so no scan resized one.
-      - Watch at the checkpoint: RssAnon settled after a first scan at 116–131 MiB on this branch
-        against 117–119 MiB on 0.18.0, and after a rescan at 134–150 against 145–155 MiB. Three
-        runs show no trend either way.
+      - RssAnon settled after a first scan at 116–131 MiB on this branch against 117–119 MiB on
+        0.18.0, and after a rescan at 134–150 against 145–155 MiB. Three runs show no trend either
+        way, and the checkpoint left scans out.
 
 Memory: 14 fewer idle threads on this machine (the global pool's 16 become two), their touched
 stacks, and up to 32 MiB of resizer scratch after a scan that stored oversized covers. All three
@@ -553,7 +594,8 @@ import) each get a full-width pool where they used to share one.
 
 ## Phase 5: parse and ingest a scan in chunks
 
-Status: implemented and spot-checked 2026-10-05; its rows wait for the checkpoint after 2–6.
+Status: implemented and spot-checked 2026-10-05. The checkpoint left scans out, so the spot check
+below is this phase's measurement.
 
 Where: `crates/melodia-app/src/library/scan/mod.rs` (`scan_one`, `TX_CHUNK_FILES`), and the full re-read `tasks/tag_backfill.rs` triggers.
 
@@ -630,7 +672,7 @@ Risk: low to medium, on throughput. Measured above: no change past the script's 
 
 ## Phase 6: share repeated strings in the Songs list
 
-Status: implemented and spot-checked 2026-10-05; its rows wait for the checkpoint after 2–6.
+Status: implemented and spot-checked 2026-10-05; checkpointed 2026-10-07.
 
 Where: `crates/melodia-views/src/ui/track_list_cache.rs` (`convert`),
 `crates/melodia-views/src/ui/tracks/mod.rs` (`to_slint_track_list_row`), and the other
