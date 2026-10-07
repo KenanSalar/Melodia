@@ -40,6 +40,10 @@ impl Ingested {
     pub(super) fn any(&self) -> bool {
         self.inserted > 0 || self.updated > 0 || self.moved > 0
     }
+
+    pub(super) fn rewrote_existing(&self) -> bool {
+        self.moved > 0 || self.updated > 0
+    }
 }
 
 /// Orphan pruning, the album-artwork roll-up and the stats recalc, in one transaction.
@@ -128,9 +132,6 @@ fn into_string_lossy(path: PathBuf) -> String {
 }
 
 /// Hands `folder` the folders nested in it, tracks and all, now that a scan of it has completed.
-///
-/// Only once the purge has committed: the walk left their files out, so until then their tracks
-/// as `folder`'s own would have read as orphans.
 pub(super) async fn absorb_nested(
     state: &AppState,
     folder: &Folder,

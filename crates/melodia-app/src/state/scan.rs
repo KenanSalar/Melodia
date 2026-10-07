@@ -15,7 +15,8 @@ pub enum ScanPhase {
     Reading,
     /// The last write, which brings the library's counts in line and can't stop part way.
     Finishing,
-    /// Cancelled, and still writing what had been read when it was.
+    /// Cancelled, and still writing what had been read when it was, or taking a cancelled import
+    /// back out.
     Stopping,
 }
 

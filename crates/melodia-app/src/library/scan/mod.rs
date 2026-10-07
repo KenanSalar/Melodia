@@ -50,7 +50,11 @@ pub enum ScanOutcome {
         inserted: u32,
     },
     /// Cancelled, or interrupted by shutdown, after keeping whatever it had read.
-    Stopped,
+    Stopped {
+        /// Whether it rewrote tracks the library held before it started, which a withdraw would
+        /// delete along with the folder.
+        rewrote_existing: bool,
+    },
     /// Cancelled under [`OnStop::Withdraw`], which took the folder back out of the library.
     Withdrawn,
 }
@@ -63,7 +67,8 @@ pub enum OnStop {
     Keep,
     /// The folder goes, with everything the scan brought in. For the import of a folder just
     /// added, where Cancel means not adding it, and keeping half of it would also leave the next
-    /// reconcile to finish what the user cancelled.
+    /// reconcile to finish what the user cancelled. An import that has already taken over tracks
+    /// from elsewhere in the library stays, since removing it would delete them.
     Withdraw,
 }
 
@@ -81,14 +86,21 @@ pub async fn scan_folder(
     let cancel = state.scan.token();
     let restoring = forget_missing_artwork(state).await;
     let run = ScanRun::start(state, cancel);
-    let outcome = match scan_one(state, folder_id, &run).await? {
-        ScanOutcome::Stopped
-            if on_stop == OnStop::Withdraw && state.scan.user_cancels() != cancels_at_start =>
-        {
+    let outcome = scan_one(state, folder_id, &run).await?;
+    let cancelled_import =
+        on_stop == OnStop::Withdraw && state.scan.user_cancels() != cancels_at_start;
+    let outcome = match outcome {
+        ScanOutcome::Stopped { rewrote_existing: false } if cancelled_import => {
             // Under the run, so the bar stays on "Stopping" until the library is back as it was.
             crate::library::settings::remove_folder(state, folder_id).await?;
             log::info!("Withdrew folder {folder_id}, its import having been cancelled");
             ScanOutcome::Withdrawn
+        }
+        outcome @ ScanOutcome::Stopped { rewrote_existing: true } if cancelled_import => {
+            log::info!(
+                "Kept folder {folder_id}: its cancelled import had taken over existing tracks"
+            );
+            outcome
         }
         outcome => outcome,
     };
@@ -254,14 +266,9 @@ async fn scan_one(
     let Some(Discovery { walk, to_scan, pool }) =
         discover(Arc::clone(&scope), existing_summaries, Arc::clone(run)).await?
     else {
-        return Ok(ScanOutcome::Stopped);
+        return Ok(ScanOutcome::Stopped { rewrote_existing: false });
     };
     if walk.files.is_empty() {
-        // A folder whose only files sit in nested folders still takes them over.
-        if !scope.nested.is_empty() {
-            finish::absorb_nested(state, &folder, &scope.nested).await?;
-            state.library_changed.bump();
-        }
         return Ok(ScanOutcome::Completed { inserted: 0 });
     }
 
@@ -337,7 +344,7 @@ async fn scan_one(
             finish::commit_final(state, &folder, None, &ingested).await?;
             state.library_changed.bump();
         }
-        return Ok(ScanOutcome::Stopped);
+        return Ok(ScanOutcome::Stopped { rewrote_existing: ingested.rewrote_existing() });
     }
     finish::commit_final(state, &folder, Some(walk), &ingested).await?;
     finish::absorb_nested(state, &folder, &scope.nested).await?;
@@ -404,13 +411,16 @@ async fn discover(
     run: Arc<ScanRun>,
 ) -> Result<Option<Discovery>, AppError> {
     tokio::task::spawn_blocking(move || {
-        let mut walk = collect_media_files(&scope.root, run.as_ref())?;
-        walk.files.retain(|path| scope.owns(path));
+        let walk = collect_media_files(&scope.root, run.as_ref())?;
         let pool = ScanPool::for_files(walk.files.len());
         let to_scan: Vec<PathBuf> = pool.install(|| {
+            // Reads only what this folder owns, but the walk stays whole: the purge checks the
+            // folder's rows against it, and some can sit inside a nested folder's directory.
             walk.files
                 .par_iter()
-                .filter(|path| !run.is_cancelled() && !track_is_current(path, &existing))
+                .filter(|path| {
+                    !run.is_cancelled() && scope.owns(path) && !track_is_current(path, &existing)
+                })
                 .cloned()
                 .collect()
         });
