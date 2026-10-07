@@ -320,6 +320,79 @@ fn no_catalogue_ships_a_fuzzy_or_empty_entry() {
     );
 }
 
+/// The shipped catalogues hold no fuzzy or empty entry, so the check above passes the same
+/// whether the parser still spots one or not; only a hand-written catalogue can tell. A plural
+/// with one form left empty is the row easiest to miss, since Slint shows every form in English.
+#[test]
+fn an_entry_is_unfinished_exactly_when_slint_shows_it_in_english() {
+    const PO: &str = r#"msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "translated"
+msgstr "done"
+
+msgid "empty"
+msgstr ""
+
+#, fuzzy
+msgid "fuzzy"
+msgstr "done"
+
+#, c-format, fuzzy
+msgid "fuzzy behind another flag"
+msgstr "done"
+
+#, c-format
+msgid "a flag that isn't fuzzy"
+msgstr "done"
+
+msgid "wrapped"
+msgstr ""
+"done over "
+"two lines"
+
+msgid "{n} plural with every form"
+msgid_plural "{n} plurals with every form"
+msgstr[0] "one"
+msgstr[1] "many"
+
+msgid "{n} plural missing its second form"
+msgid_plural "{n} plurals missing their second form"
+msgstr[0] "one"
+msgstr[1] ""
+
+msgid "{n} plural missing its first form"
+msgid_plural "{n} plurals missing their first form"
+msgstr[0] ""
+msgstr[1] "many"
+
+msgid "no msgstr at all"
+"#;
+
+    let entries = parse_po(PO);
+
+    let verdicts: Vec<(&str, bool)> =
+        entries.iter().map(|entry| (entry.msgid.as_str(), entry.is_unfinished())).collect();
+    assert_eq!(
+        verdicts,
+        [
+            ("translated", false),
+            ("empty", true),
+            ("fuzzy", true),
+            ("fuzzy behind another flag", true),
+            ("a flag that isn't fuzzy", false),
+            ("wrapped", false),
+            ("{n} plural with every form", false),
+            ("{n} plural missing its second form", true),
+            ("{n} plural missing its first form", true),
+            ("no msgstr at all", true),
+        ],
+        "the parser disagrees with Slint about what ships in English, so the catalogue check \
+         would pass an entry users see untranslated or fail one they don't"
+    );
+}
+
 #[test]
 fn every_translator_note_reaches_the_template() {
     let (tree, misplaced) = slint_tree_notes();
@@ -339,6 +412,26 @@ fn every_translator_note_reaches_the_template() {
          ran, an earlier comment above the same string in that file took the note's place, \
          since the extractor keeps the first. Not in the template: {unshipped:?}. \
          Not in the tree: {stale:?}"
+    );
+}
+
+/// Every note in the tree sits above a line with one call, so the placement check above passes
+/// the same whether a shared line is still refused or not; only hand-written lines can tell.
+#[test]
+fn a_note_belongs_only_to_a_line_holding_exactly_one_tr_call() {
+    const LINES: [(&str, Option<&str>); 4] = [
+        (r#"text: @tr("Key");"#, Some("Key")),
+        (r#"model: [@tr("Key"), @tr("Mode")];"#, None),
+        ("text: root.key-label;", None),
+        (r#"text: @tr("Key"); // was @tr("Mode")"#, Some("Key")),
+    ];
+
+    let found = LINES.map(|(line, _)| (line, sole_tr_call(line, 0, line)));
+
+    assert_eq!(
+        found, LINES,
+        "the extractor hands a note to every `@tr(` on the line below it, so a shared line \
+         can't place one, and a call inside a comment isn't a call"
     );
 }
 

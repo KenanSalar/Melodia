@@ -35,7 +35,8 @@ when it is missing or out of step. The second is GNU gettext:
   `msgmerge`
 - macOS: `brew install gettext`
 - Windows: `winget install mlocati.GetText`, then run the script from Git Bash, which comes
-  with Git for Windows
+  with Git for Windows. Open a new terminal first, since one already running doesn't see
+  the PATH the installer sets
 
 ## Reporting a bug
 
