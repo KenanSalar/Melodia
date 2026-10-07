@@ -65,6 +65,9 @@ fn validate_folder_path(
 pub(crate) struct NestedFolder {
     pub id: i64,
     pub path: PathBuf,
+    /// A library folder, whose own scan reads its files. The folder an import filed loose tracks
+    /// under is scanned by nothing, so the one around it reads that directory itself.
+    pub is_enabled: bool,
 }
 
 /// The folders whose directory sits inside `outer`, compared canonically as validation compares,
@@ -75,8 +78,11 @@ pub(crate) fn folders_inside(outer: &Path, folders: &[folder::Folder]) -> Vec<Ne
         .iter()
         .filter_map(|folder| {
             let path = melodia_core::utils::canonicalize_path(&folder.path).ok()?;
-            (path != outer && path.starts_with(outer))
-                .then_some(NestedFolder { id: folder.id, path })
+            (path != outer && path.starts_with(outer)).then_some(NestedFolder {
+                id: folder.id,
+                path,
+                is_enabled: folder.is_enabled,
+            })
         })
         .collect()
 }

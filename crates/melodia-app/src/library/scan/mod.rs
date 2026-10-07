@@ -10,8 +10,8 @@
 //! incomplete, and the folder isn't stamped as scanned. The next scan of the folder reads only the
 //! rest, the size and mtime gate skipping everything already stored.
 //!
-//! A scan leaves alone the files of a folder nested inside its own, which stay that folder's until
-//! a completed scan absorbs it.
+//! A scan leaves alone the files of a library folder nested inside its own, which stay that
+//! folder's until a completed scan absorbs it.
 
 mod finish;
 mod repair;
@@ -275,7 +275,8 @@ async fn scan_one(
     let skipped = walk.files.len() - to_scan.len();
     if skipped > 0 {
         log::info!(
-            "Incremental scan of '{}': {skipped} unchanged file(s) skipped, {} to (re)parse",
+            "Incremental scan of '{}': {skipped} file(s) skipped as unchanged or a nested folder's, \
+             {} to (re)parse",
             folder.path,
             to_scan.len()
         );
@@ -354,7 +355,7 @@ async fn scan_one(
     Ok(ScanOutcome::Completed { inserted: ingested.inserted })
 }
 
-/// What a folder's scan reads: its directory, less the folders nested inside it.
+/// What a folder's scan reads: its directory, less the library folders nested inside it.
 struct ScanScope {
     root: PathBuf,
     nested: Vec<NestedFolder>,
@@ -374,7 +375,7 @@ impl ScanScope {
     }
 
     fn owns(&self, path: &Path) -> bool {
-        !self.nested.iter().any(|folder| path.starts_with(&folder.path))
+        !self.nested.iter().any(|folder| folder.is_enabled && path.starts_with(&folder.path))
     }
 }
 
