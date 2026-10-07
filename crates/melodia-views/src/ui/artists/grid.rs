@@ -8,6 +8,7 @@ use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 
 use super::state::{GRID_PREWARM_AHEAD, GridData, GridIndexCache};
 use super::{ArtistsUi, to_slint_artist_row};
+use crate::ui::grid_prewarm;
 use crate::ui::grid_rows::chunk_rows;
 use crate::ui::row_match;
 use crate::ui::util::len_as_i32;
@@ -32,8 +33,7 @@ pub async fn fetch_grid(
         *artists_ui.grid.index_cache.lock() = None;
     }
 
-    let warm = artists_ui.clone();
-    let _ = tokio::task::spawn_blocking(move || warm.prewarm_visible_covers()).await;
+    grid_prewarm::prewarm_off_thread(artists_ui, ArtistsUi::prewarm_visible_covers).await;
 
     let artists_ui = artists_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -134,7 +134,7 @@ fn sort_artist_indices(indices: &mut [usize], data: &GridData, field: &str, dir:
 /// well past the first screenful to find that many rather than prewarming
 /// the two or three the opening rows happen to carry.
 pub(super) fn first_screenful_paths(data: &GridData) -> Vec<PathBuf> {
-    crate::ui::grid_prewarm::unique_artwork_paths(
+    grid_prewarm::unique_artwork_paths(
         data.artists.iter().map(|a| a.image_path.as_deref()),
         GRID_PREWARM_AHEAD,
     )

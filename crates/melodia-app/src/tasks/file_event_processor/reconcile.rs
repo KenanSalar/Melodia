@@ -173,9 +173,9 @@ pub(super) async fn process_batch(
 
     // Rows actually inserted / re-pointed / updated / deleted this batch.
     // Gates the post-loop sweeps: a no-op batch (events for untracked
-    // files, paths outside library folders) must not pay the full-table
-    // album-artwork window-function pass or a stats recalc — mirrors the
-    // `any_changes` gate on the scan path (`library/scan/finish.rs`).
+    // files, paths outside library folders) must not pay the cover roll-ups
+    // or a stats recalc, which mirrors the `any_changes` gate on the scan
+    // path (`library/scan/finish.rs`).
     let mut changes: usize = 0;
     // One per batch, not one per event: a folder drop lands a release at a time, so every file in
     // it names the same artist and genre.
@@ -248,8 +248,7 @@ pub(super) async fn process_batch(
     }
 
     if changes > 0 {
-        queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
-        queries::playlist::refresh_automatic_thumbnails(&mut tx).await?;
+        queries::scan::roll_up_covers(&mut tx).await?;
         // A deleted file can empty its album/artist/genre; prune the stranded rows.
         queries::scan::prune_orphans(&mut tx).await?;
     }

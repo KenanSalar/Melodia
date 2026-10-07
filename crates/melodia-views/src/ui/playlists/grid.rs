@@ -8,6 +8,7 @@ use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 
 use super::state::{GRID_PREWARM_AHEAD, GridData, GridIndexCache};
 use super::{PlaylistsUi, to_slint_playlist_row};
+use crate::ui::grid_prewarm;
 use crate::ui::grid_rows::chunk_rows;
 use crate::ui::row_match;
 use crate::ui::util::len_as_i32;
@@ -107,8 +108,7 @@ async fn fetch_grid_inner(
         *playlists_ui.grid.index_cache.lock() = None;
     }
 
-    let warm = playlists_ui.clone();
-    let _ = tokio::task::spawn_blocking(move || warm.prewarm_visible_covers()).await;
+    grid_prewarm::prewarm_off_thread(playlists_ui, PlaylistsUi::prewarm_visible_covers).await;
 
     let playlists_ui = playlists_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -224,7 +224,7 @@ fn sort_playlist_indices(indices: &mut [usize], data: &GridData, field: &str, di
 /// warms. The cap counts kept *paths*, so a run of thumbnail-less playlists is
 /// walked past rather than spending the budget on them.
 pub(super) fn first_screenful_paths(data: &GridData) -> Vec<PathBuf> {
-    crate::ui::grid_prewarm::unique_artwork_paths(
+    grid_prewarm::unique_artwork_paths(
         data.playlists.iter().map(|p| p.thumbnail_path.as_deref()),
         GRID_PREWARM_AHEAD,
     )

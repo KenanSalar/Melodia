@@ -1,6 +1,6 @@
 //! Track-row write side: insert (single + multi-row), metadata refresh,
 //! location-only update (for moved/renamed files), bulk delete, and the
-//! album-artwork roll-up that runs at the tail of every scan batch.
+//! cover roll-ups that run at the tail of every scan batch.
 
 use std::collections::HashMap;
 
@@ -419,6 +419,17 @@ pub async fn update_album_artwork_from_tracks(
     .execute(&mut **tx)
     .await?;
     Ok(())
+}
+
+/// Fills each album missing a cover from its tracks, then re-points each automatic playlist at
+/// its first track's cover.
+///
+/// One call for a pass that can change which cover a playlisted track holds: refreshing only the
+/// albums leaves a playlist naming a cover none of its tracks hold, which keeps the file
+/// referenced and out of the artwork sweep's reach.
+pub async fn roll_up_covers(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Result<(), AppError> {
+    update_album_artwork_from_tracks(tx).await?;
+    crate::database::queries::playlist::refresh_automatic_thumbnails(tx).await
 }
 
 /// Delete album, artist, and genre rows left with no tracks — orphans stranded

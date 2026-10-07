@@ -542,7 +542,7 @@ async fn a_copy_beside_a_file_that_still_exists_is_a_duplicate() -> Result<(), A
     Ok(())
 }
 
-/// `prune_orphans` and the album-artwork rollup are gated on the batch having written
+/// `prune_orphans` and the cover roll-ups are gated on the batch having written
 /// something, so a batch of events for files nobody tracks pays for neither. Both sides of that
 /// gate, since a floor on one of them would pass whichever way the gate was wired.
 #[tokio::test]

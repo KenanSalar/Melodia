@@ -9,6 +9,7 @@ use slint::ComponentHandle;
 
 use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
 use crate::ui::callbacks::macros::{release_detail_hero_images, spawn_logged};
+use crate::ui::grid_prewarm;
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::tab_bar::UNFETCHED_COUNT;
@@ -101,10 +102,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>
                             // Mirrors the Albums slice's own lifecycle wiring.
                             artists_ui_mod::clear_detail(&au);
                             // Handed back warm, as a failed restore's grid is.
-                            let warm = au.clone();
-                            let _ =
-                                tokio::task::spawn_blocking(move || warm.prewarm_visible_covers())
-                                    .await;
+                            grid_prewarm::prewarm_off_thread(
+                                &au,
+                                ArtistsUi::prewarm_visible_covers,
+                            )
+                            .await;
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 let g = ui.global::<ArtistDetail>();
                                 g.set_artist_id(-1);
@@ -112,11 +114,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>
                             });
                         }
                     } else {
-                        let au = au.clone();
-                        let _ = tokio::task::spawn_blocking(move || {
-                            au.prewarm_visible_covers();
-                        })
-                        .await;
+                        grid_prewarm::prewarm_off_thread(&au, ArtistsUi::prewarm_visible_covers)
+                            .await;
                     }
                 });
             } else {

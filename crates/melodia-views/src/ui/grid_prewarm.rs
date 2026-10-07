@@ -106,6 +106,16 @@ pub fn prewarm(paths: &[PathBuf]) {
     tier().prewarm(paths);
 }
 
+/// Runs `warm` against `grid` on the blocking pool and waits for it, so the hop that follows
+/// paints cache hits.
+pub async fn prewarm_off_thread<G>(grid: &Arc<G>, warm: impl FnOnce(&G) + Send + 'static)
+where
+    G: Send + Sync + 'static,
+{
+    let grid = Arc::clone(grid);
+    let _ = tokio::task::spawn_blocking(move || warm(&grid)).await;
+}
+
 /// Deduplicated, non-empty artwork paths from an iterator of optional path strings,
 /// first-seen order preserved, stopping at `cap`.
 ///

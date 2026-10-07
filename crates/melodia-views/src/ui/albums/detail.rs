@@ -326,8 +326,7 @@ pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, albums_ui: &A
         // album gone since the last session owes the grid back rather than an empty body.
         au.section.end_restore();
         // A grid handed back is warmed before the hop below shows it; a reopen turns this away.
-        let warm = au.clone();
-        let _ = tokio::task::spawn_blocking(move || warm.prewarm_visible_covers()).await;
+        crate::ui::grid_prewarm::prewarm_off_thread(&au, AlbumsUi::prewarm_visible_covers).await;
         let _ = weak.upgrade_in_event_loop(|ui| {
             ui.global::<AlbumDetail>().set_restoring(false);
         });

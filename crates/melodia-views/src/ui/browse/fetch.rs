@@ -146,8 +146,10 @@ pub async fn fetch_and_apply(
             // the first screenful of cards is a cache hit.
             if browse_ui.view_mode() == BrowseViewMode::Card {
                 let unique = cards::first_screenful_paths(&files);
-                let bu = browse_ui.clone();
-                let _ = tokio::task::spawn_blocking(move || bu.warm_card_tier(&unique)).await;
+                crate::ui::grid_prewarm::prewarm_off_thread(browse_ui, move |bu| {
+                    bu.warm_card_tier(&unique);
+                })
+                .await;
             }
 
             let token = browse_ui.fetch_token.load(Ordering::Relaxed);

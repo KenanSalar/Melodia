@@ -56,8 +56,7 @@ pub(super) async fn forget_missing(state: &AppState) -> Result<Option<RestoreNot
 
     let mut tx = state.db.write().begin().await?;
     let cleared = queries::artwork::forget_paths(&mut tx, &gone).await?;
-    queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
-    queries::playlist::refresh_automatic_thumbnails(&mut tx).await?;
+    queries::scan::roll_up_covers(&mut tx).await?;
     tx.commit().await?;
 
     log::info!(

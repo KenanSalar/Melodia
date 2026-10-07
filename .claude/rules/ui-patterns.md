@@ -1310,7 +1310,7 @@ block first; each page's section below is deltas only.** The nav-index map is in
 
 - Shared helpers: `ui::tab_bar::{clamp_tab, grid_signature, UNFETCHED_COUNT}`,
   `ui::grid_rows::{chunk_entity_rows, write_grid}`, `ui::track_list_cache`,
-  `ui::grid_prewarm::{tier, grid_cover, prewarm, hand_back_covers}`,
+  `ui::grid_prewarm::{tier, grid_cover, prewarm, prewarm_off_thread, hand_back_covers}`,
   `ui::mosaic_hero::{compose_off_thread, MosaicGuard}`.
 
 ### Per-page deltas

@@ -46,7 +46,7 @@ impl Ingested {
     }
 }
 
-/// Orphan pruning, the album-artwork roll-up and the stats recalc, in one transaction.
+/// Orphan pruning, the cover roll-ups and the stats recalc, in one transaction.
 ///
 /// `walk` is the folder's complete walk, the set its rows are checked against for files that
 /// vanished. A stopped scan has none to hand over and purges nothing: every row its walk didn't
@@ -87,8 +87,7 @@ pub(super) async fn commit_final(
     let any_changes = ingested.any() || !orphans.is_empty();
 
     if any_changes {
-        queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
-        queries::playlist::refresh_automatic_thumbnails(&mut tx).await?;
+        queries::scan::roll_up_covers(&mut tx).await?;
         // Purged orphan tracks can leave their album/artist/genre empty; sweep those.
         queries::scan::prune_orphans(&mut tx).await?;
     }
