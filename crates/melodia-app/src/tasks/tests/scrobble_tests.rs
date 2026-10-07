@@ -1,11 +1,13 @@
-//! The two loops either side of the queue: the submitter's retry ladder and its flush, and the
-//! row enrichment the detector's effects are carried out through.
+//! The two loops either side of the queue: the submitter's retry ladder, its last round and the
+//! grace a quit gives a round, and the row enrichment the detector's effects are carried out
+//! through.
 //!
 //! The drain itself is `melodia-integrations`' to test and is covered there, against a local
-//! server its own crate can point it at. So are the detector's *decisions*, which are the pure
-//! `DetectorState`'s. What is left for here is what neither of those covers: the ladder wrapped
-//! around the drain, and `fetch_row`'s single-slot cache, whose key is the only thing standing
-//! between a session's second scrobble and its first track's name.
+//! server its own crate can point it at, including what a stopped round writes back. So are the
+//! detector's *decisions*, which are the pure `DetectorState`'s. What is left for here is what
+//! neither of those covers: the ladder and the grace wrapped around the drain, the second driven
+//! with a stand-in round on a paused clock, and `fetch_row`'s single-slot cache, whose key is the
+//! only thing standing between a session's second scrobble and its first track's name.
 //!
 //! `run_detector` itself stays undriven, and the reason is an observation rather than a seam.
 //! Its priming and its shutdown arm are real decisions, but the only way to see either from
@@ -24,10 +26,12 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use tempfile::TempDir;
+use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
 use super::{
-    BASE_BACKOFF, MAX_BACKOFF, defer, fetch_row, process_effects, run_submitter, wait_for,
+    BASE_BACKOFF, MAX_BACKOFF, SHUTDOWN_GRACE, defer, fetch_row, process_effects, run_submitter,
+    run_with_grace, wait_for,
 };
 use melodia_core::config::Paths;
 use melodia_core::entities::integrations::ScrobbleFlags;
@@ -171,8 +175,8 @@ async fn an_unset_wait_parks_where_a_set_one_elapses() {
 }
 
 /// A listen queued while the submitter is parked must not sit there until the next launch. The
-/// shutdown arm is `biased` first precisely so the flush runs before the loop notices anything
-/// else, and it is the only thing standing between a quit and a queue nobody drains.
+/// shutdown arm is `biased` first precisely so the last round runs before the loop notices
+/// anything else.
 #[tokio::test]
 async fn a_shutdown_flushes_what_is_still_queued() -> TestResult {
     let dir = tempfile::tempdir()?;
@@ -182,7 +186,7 @@ async fn a_shutdown_flushes_what_is_still_queued() -> TestResult {
     let submitter = tokio::spawn(run_submitter(shutdown.clone(), Arc::clone(&service)));
 
     // Let the loop take its entry drain on the empty queue and park, so what follows is the
-    // flush rather than that first pass finding the item.
+    // last round rather than that first pass finding the item.
     tokio::task::yield_now().await;
     service.push_scrobble(queued_listen()).await?;
     assert_eq!(service.queued_len(), 1, "test setup: parked with work waiting");
@@ -190,8 +194,67 @@ async fn a_shutdown_flushes_what_is_still_queued() -> TestResult {
     shutdown.cancel();
     submitter.await?;
 
-    assert_eq!(service.queued_len(), 0, "the flush drained the queue on the way out");
+    assert_eq!(service.queued_len(), 0, "the last round drained the queue on the way out");
     Ok(())
+}
+
+/// How far into a round the quit lands, in the cases that have one.
+const QUIT_AT: Duration = Duration::from_secs(1);
+
+/// tokio's timer resolution, so the nearest a deadline can sit to another without sharing it.
+const TIMER_STEP: Duration = Duration::from_millis(1);
+
+/// A stand-in for a drain round: it ends after `length` unless `stop` fires first, and says how
+/// far in that came. `Some` coming back at all means the round was awaited past its stop rather
+/// than dropped, which is what lets the real one write back.
+async fn round_lasting(length: Duration, stop: &CancellationToken) -> Option<Duration> {
+    let started = Instant::now();
+    tokio::select! {
+        () = stop.cancelled() => Some(started.elapsed()),
+        () = tokio::time::sleep(length) => None,
+    }
+}
+
+/// A round of `length` under a quit landing [`QUIT_AT`] into it.
+async fn round_quit_at(length: Duration) -> Option<Duration> {
+    let stop = CancellationToken::new();
+    let shutdown = CancellationToken::new();
+    let quitting = shutdown.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(QUIT_AT).await;
+        quitting.cancel();
+    });
+    run_with_grace(round_lasting(length, &stop), &stop, &shutdown).await
+}
+
+/// The grace is a bound on a quit, not on a round. Counting it without the quit would cut every
+/// long love backfill into grace-sized pieces mid-session.
+#[tokio::test(start_paused = true)]
+async fn a_round_with_no_quit_is_never_stopped() {
+    let stop = CancellationToken::new();
+    let shutdown = CancellationToken::new();
+
+    let stopped_at =
+        run_with_grace(round_lasting(SHUTDOWN_GRACE * 100, &stop), &stop, &shutdown).await;
+
+    assert_eq!(stopped_at, None);
+}
+
+/// One step inside the grace: a request that answers before the grace is spent still counts.
+#[tokio::test(start_paused = true)]
+async fn a_round_ending_inside_the_grace_is_left_to_finish() {
+    let stopped_at = round_quit_at((QUIT_AT + SHUTDOWN_GRACE).saturating_sub(TIMER_STEP)).await;
+
+    assert_eq!(stopped_at, None);
+}
+
+/// The quit that motivated the grace: a request that never answers once held the app open past
+/// its shutdown budget. Stopped a grace after the quit, not a grace after the round began.
+#[tokio::test(start_paused = true)]
+async fn a_round_still_running_a_grace_after_the_quit_is_stopped() {
+    let stopped_at = round_quit_at(SHUTDOWN_GRACE * 100).await;
+
+    assert_eq!(stopped_at, Some(QUIT_AT + SHUTDOWN_GRACE));
 }
 
 /// The cache exists so a play's now-playing read is reused at its scrobble, so its whole value is
