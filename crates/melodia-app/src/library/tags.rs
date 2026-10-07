@@ -577,11 +577,13 @@ async fn run_commit(
     match edit.artwork {
         ArtworkEdit::Replace => {
             apply_replace_artwork(&mut tx, &updated_ids, &mut album_ids, cached_artwork).await?;
+            queries::playlist::refresh_automatic_thumbnails(&mut tx).await?;
         }
         ArtworkEdit::Remove => {
             if !remove_null_ids.is_empty() {
                 queries::track::set_track_artwork(&mut tx, &remove_null_ids, None).await?;
             }
+            queries::playlist::refresh_automatic_thumbnails(&mut tx).await?;
         }
         ArtworkEdit::Keep => {}
     }

@@ -91,12 +91,12 @@ pub async fn referenced_library_paths(db: &DbPool) -> Result<Vec<String>, AppErr
 
 /// Clears every library reference to `missing`, returning rows touched.
 ///
-/// A cleared reference is one the existing refills already answer: the album roll-up, the
-/// artist-image fetch and the playlist thumbnail all fill an empty column and leave a set one
-/// alone, which is why a path to a deleted file stopped them. A track also loses its
-/// `date_modified`, the lever `tasks::tag_backfill` pulls, so the next scan reads it as changed
-/// and extracts its cover again. A custom playlist image has no source to come back from, so the
-/// playlist falls back to its automatic thumbnail.
+/// A cleared reference is one the existing refills already answer: the album roll-up and the
+/// artist-image fetch fill an empty column and leave a set one alone, which is why a path to a
+/// deleted file stopped them; a playlist's automatic thumbnail follows its first track's cover.
+/// A track also loses its `date_modified`, the lever `tasks::tag_backfill` pulls, so the
+/// next scan reads it as changed and extracts its cover again. A custom playlist image has no
+/// source to come back from, so the playlist falls back to its automatic thumbnail.
 pub async fn forget_paths(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     missing: &[String],

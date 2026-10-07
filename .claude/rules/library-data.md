@@ -58,11 +58,12 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   other.
 
 - **Every scan entry repairs before it walks, and the repair is the sweep's inverse**
-  (`library::scan::repair`): references to a stored file that is gone are cleared. Every refill
-  fills an empty column and leaves a set one alone, and the size-and-mtime gate never re-reads an
-  unchanged track, so a path to a deleted cover used to survive any number of rescans. A cleared
-  track also loses its `date_modified`, `tasks::tag_backfill`'s lever, so the scan behind it
-  re-extracts the cover. Library columns only: radio's two heal through `library::radio`.
+  (`library::scan::repair`): references to a stored file that is gone are cleared. The album and
+  artist refills fill an empty column and leave a set one alone, and the size-and-mtime gate never
+  re-reads an unchanged track, so a path to a deleted cover used to survive any number of rescans.
+  A cleared track also loses its `date_modified`, `tasks::tag_backfill`'s lever, so the scan
+  behind it re-extracts the cover. Library columns only: radio's two heal through
+  `library::radio`.
   **Mid-session the trigger is a cover cache**, in either of two crates that may not name the
   library: a decode that finds the file missing reports over `utils::missing_artwork`, and
   `tasks::artwork_restore` starts the same reconcile. `media::image::decoded` is what lets the

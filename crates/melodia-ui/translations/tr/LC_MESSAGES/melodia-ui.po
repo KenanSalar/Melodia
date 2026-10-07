@@ -398,7 +398,7 @@ msgstr "Klasör Kaldırılsın mı?"
 
 # Translators: `{}` is the absolute filesystem path of the folder being removed.
 msgid "Remove \"{}\" from your library? All tracks under this folder will be removed from the library and from your playlists."
-msgstr "\"{}\" kitaplığından kaldırılsın mı? Bu klasördeki tüm parçalar kitaplıktan ve çalma listelerinizden kaldırılacak."
+msgstr "\"{}\" kitaplığınızdan kaldırılsın mı? Bu klasördeki tüm parçalar kitaplıktan ve çalma listelerinizden kaldırılacak."
 
 # ---- Appearance section -----------------------------------------------------
 
