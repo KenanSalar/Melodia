@@ -391,8 +391,8 @@ msgid "Remove Folder?"
 msgstr "Rimuovere la cartella?"
 
 # Translators: `{}` is the absolute filesystem path of the folder being removed.
-msgid "Remove \"{}\" from your library? All tracks under this folder will be removed."
-msgstr "Rimuovere «{}» dalla tua libreria? Tutti i brani in questa cartella verranno rimossi."
+msgid "Remove \"{}\" from your library? All tracks under this folder will be removed from the library and from your playlists."
+msgstr "Rimuovere «{}» dalla tua libreria? Tutti i brani in questa cartella verranno rimossi dalla libreria e dalle tue playlist."
 
 # ---- Appearance section -----------------------------------------------------
 

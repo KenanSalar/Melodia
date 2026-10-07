@@ -565,18 +565,18 @@ async fn update_playlist_thumbnail_and_timestamp_tx(
     Ok(())
 }
 
-/// Gives every automatic playlist left without a thumbnail its first track's cover.
+/// Points every automatic playlist's thumbnail back at its first track's cover.
 ///
-/// Membership changes are what normally refresh one, so a thumbnail cleared because its file went
-/// missing would otherwise wait for the next edit to that playlist. `updated_at` stays put: the
-/// user changed nothing.
-pub async fn fill_missing_thumbnails(
+/// For what reaches a playlist without an edit to it: a track deleted out from under it, or a
+/// cover cleared because its file went missing. `updated_at` stays put: the user changed nothing.
+pub async fn refresh_automatic_thumbnails(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), AppError> {
     sqlx::query(concat!(
         "UPDATE playlists SET thumbnail_path = ",
         first_track_cover!(),
-        " WHERE custom_thumbnail = FALSE AND (thumbnail_path IS NULL OR thumbnail_path = '')"
+        " WHERE custom_thumbnail = FALSE AND thumbnail_path IS NOT ",
+        first_track_cover!()
     ))
     .execute(&mut **tx)
     .await?;

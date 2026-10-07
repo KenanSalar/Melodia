@@ -39,13 +39,15 @@ pub async fn get_folder_by_id(db: &DbPool, id: i64) -> Result<folder::Folder, Ap
 
 /// Deletes the folder, its tracks by cascade, and whatever those tracks leave behind.
 ///
-/// The prune shares the delete's transaction because nothing else would run it: only a scan that
-/// changed something prunes, and an album left without tracks keeps its cover referenced, so the
-/// artwork sweep never retires it.
+/// The prune and the thumbnail refresh share the delete's transaction because nothing else would
+/// run them: only a scan that changed something does, and an album left without tracks or a
+/// playlist still showing one of their covers keeps that cover referenced, so the artwork sweep
+/// never retires it.
 pub async fn delete_folder(db: &DbPool, id: i64) -> Result<(), AppError> {
     let mut tx = db.write().begin().await?;
     sqlx::query("DELETE FROM folders WHERE id = ?").bind(id).execute(&mut *tx).await?;
     crate::database::queries::scan::prune_orphans(&mut tx).await?;
+    crate::database::queries::playlist::refresh_automatic_thumbnails(&mut tx).await?;
     tx.commit().await?;
     Ok(())
 }

@@ -88,7 +88,7 @@ pub(super) async fn commit_final(
 
     if any_changes {
         queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
-        queries::playlist::fill_missing_thumbnails(&mut tx).await?;
+        queries::playlist::refresh_automatic_thumbnails(&mut tx).await?;
         // Purged orphan tracks can leave their album/artist/genre empty; sweep those.
         queries::scan::prune_orphans(&mut tx).await?;
     }
