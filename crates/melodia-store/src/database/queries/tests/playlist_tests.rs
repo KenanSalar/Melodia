@@ -230,16 +230,6 @@ async fn clearing_thumbnail_persists_after_adding_tracks() -> Result<(), AppErro
     Ok(())
 }
 
-/// Stage artwork on one track, which the scan helper leaves null.
-async fn set_artwork(db: &crate::database::DbPool, id: i64, path: &str) -> Result<(), AppError> {
-    sqlx::query("UPDATE tracks SET artwork_path = ? WHERE id = ?")
-        .bind(path)
-        .bind(id)
-        .execute(db.write())
-        .await?;
-    Ok(())
-}
-
 /// The positions a playlist's rows actually hold, in position order.
 async fn positions(db: &crate::database::DbPool, playlist_id: i64) -> Result<Vec<i64>, AppError> {
     let rows: Vec<(i64,)> = sqlx::query_as(
@@ -280,9 +270,9 @@ async fn the_mosaic_candidates_are_distinct_and_in_playlist_order() -> Result<()
     let track_ids: Vec<i64> =
         queries::track::get_all_tracks(&db).await?.into_iter().map(|t| t.id).collect();
     // The first and last track share a cover; the middle one has its own.
-    set_artwork(&db, track_ids[0], "/artwork/shared.jpg").await?;
-    set_artwork(&db, track_ids[1], "/artwork/middle.jpg").await?;
-    set_artwork(&db, track_ids[2], "/artwork/shared.jpg").await?;
+    set_test_artwork(&db, track_ids[0], "/artwork/shared.jpg").await?;
+    set_test_artwork(&db, track_ids[1], "/artwork/middle.jpg").await?;
+    set_test_artwork(&db, track_ids[2], "/artwork/shared.jpg").await?;
     let pl = queries::playlist::create_playlist(&db, "Mosaic", None).await?;
     queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids).await?;
 
@@ -300,8 +290,8 @@ async fn a_track_with_no_cover_offers_no_mosaic_candidate() -> Result<(), AppErr
     let db = setup_seeded_db().await?;
     let track_ids: Vec<i64> =
         queries::track::get_all_tracks(&db).await?.into_iter().map(|t| t.id).collect();
-    set_artwork(&db, track_ids[0], "").await?;
-    set_artwork(&db, track_ids[1], "/artwork/real.jpg").await?;
+    set_test_artwork(&db, track_ids[0], "").await?;
+    set_test_artwork(&db, track_ids[1], "/artwork/real.jpg").await?;
     let pl = queries::playlist::create_playlist(&db, "Sparse", None).await?;
     queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids).await?;
 
@@ -319,7 +309,7 @@ async fn the_mosaic_candidate_list_stops_at_the_limit_it_was_given() -> Result<(
     let track_ids: Vec<i64> =
         queries::track::get_all_tracks(&db).await?.into_iter().map(|t| t.id).collect();
     for (index, id) in track_ids.iter().enumerate() {
-        set_artwork(&db, *id, &format!("/artwork/{index}.jpg")).await?;
+        set_test_artwork(&db, *id, &format!("/artwork/{index}.jpg")).await?;
     }
     let pl = queries::playlist::create_playlist(&db, "Capped", None).await?;
     queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids).await?;
@@ -706,5 +696,87 @@ async fn an_id_deleted_under_the_grid_is_simply_absent() -> Result<(), AppError>
         queries::playlist::smart_criteria_for_playlists(&db, &[kept.id, gone.id]).await?;
 
     assert_eq!(verdicts, [(kept.id, false, None)]);
+    Ok(())
+}
+
+// --- refresh_automatic_thumbnails ---
+
+/// A playlist over the seed's first two tracks, its thumbnail taken from the first one's cover.
+async fn covered_playlist(db: &crate::database::DbPool) -> Result<(i64, Vec<i64>), AppError> {
+    let ids = seeded_track_ids(db).await?;
+    set_test_artwork(db, ids[0], "/artwork/first.jpg").await?;
+    set_test_artwork(db, ids[1], "/artwork/second.jpg").await?;
+    let pl = queries::playlist::create_playlist(db, "Covered", None).await?;
+    queries::playlist::add_tracks_to_playlist(db, pl.id, &ids[..2]).await?;
+    Ok((pl.id, ids))
+}
+
+async fn refresh(db: &crate::database::DbPool) -> Result<(), AppError> {
+    let mut tx = db.write().begin().await?;
+    queries::playlist::refresh_automatic_thumbnails(&mut tx).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// A cover can change under a playlist without an edit to it: a tag edit on its first track, or a
+/// file the repair found missing. Left alone, the playlist keeps naming a cover none of its tracks
+/// hold, which also keeps the file out of the sweep's reach.
+#[tokio::test]
+async fn an_automatic_thumbnail_follows_its_first_tracks_current_cover() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    let (playlist, ids) = covered_playlist(&db).await?;
+    set_test_artwork(&db, ids[0], "/artwork/edited.jpg").await?;
+
+    refresh(&db).await?;
+
+    let shown = queries::playlist::get_playlist_by_id(&db, playlist).await?.thumbnail_path;
+    assert_eq!(shown.as_deref(), Some("/artwork/edited.jpg"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_playlist_whose_tracks_lost_every_cover_loses_its_thumbnail() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    let (playlist, _) = covered_playlist(&db).await?;
+    sqlx::query("UPDATE tracks SET artwork_path = NULL").execute(db.write()).await?;
+
+    refresh(&db).await?;
+
+    let shown = queries::playlist::get_playlist_by_id(&db, playlist).await?.thumbnail_path;
+    assert_eq!(shown, None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_custom_thumbnail_is_left_where_the_user_put_it() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    let (playlist, ids) = covered_playlist(&db).await?;
+    queries::playlist::set_playlist_custom_thumbnail(&db, playlist, "/artwork/custom.jpg").await?;
+    set_test_artwork(&db, ids[0], "/artwork/edited.jpg").await?;
+
+    refresh(&db).await?;
+
+    let shown = queries::playlist::get_playlist_by_id(&db, playlist).await?.thumbnail_path;
+    assert_eq!(shown.as_deref(), Some("/artwork/custom.jpg"));
+    Ok(())
+}
+
+/// The grid orders by `updated_at`, and a refresh is nothing the user did: stamping it would move
+/// every playlist a scan touched to the top.
+#[tokio::test]
+async fn a_refresh_leaves_the_playlists_updated_at_alone() -> Result<(), AppError> {
+    const EARLIER: &str = "2020-01-01T00:00:00.000+00:00";
+    let db = setup_seeded_db().await?;
+    let (playlist, ids) = covered_playlist(&db).await?;
+    sqlx::query("UPDATE playlists SET updated_at = ?").bind(EARLIER).execute(db.write()).await?;
+    set_test_artwork(&db, ids[0], "/artwork/edited.jpg").await?;
+
+    refresh(&db).await?;
+
+    let updated_at: String = sqlx::query_scalar("SELECT updated_at FROM playlists WHERE id = ?")
+        .bind(playlist)
+        .fetch_one(db.read())
+        .await?;
+    assert_eq!(updated_at, EARLIER);
     Ok(())
 }

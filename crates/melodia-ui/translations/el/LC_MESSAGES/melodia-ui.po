@@ -375,12 +375,26 @@ msgstr "{} / {} αρχεία"
 msgid "{} / {} files · {}"
 msgstr "{} / {} αρχεία · {}"
 
+# The scan's other phases: the walk, before anything is known about what needs
+# reading; the last write once everything is read; a cancelled scan writing what
+# it had read.
+msgid "Looking for music… {n} file found"
+msgid_plural "Looking for music… {n} files found"
+msgstr[0] "Αναζήτηση μουσικής… βρέθηκε {n} αρχείο"
+msgstr[1] "Αναζήτηση μουσικής… βρέθηκαν {n} αρχεία"
+
+msgid "Finishing up…"
+msgstr "Ολοκλήρωση…"
+
+msgid "Stopping…"
+msgstr "Διακοπή…"
+
 msgid "Remove Folder?"
 msgstr "Κατάργηση φακέλου;"
 
 # Translators: `{}` is the absolute filesystem path of the folder being removed.
-msgid "Remove \"{}\" from your library? All tracks under this folder will be removed."
-msgstr "Να καταργηθεί το \"{}\" από τη βιβλιοθήκη; Όλα τα κομμάτια σε αυτόν τον φάκελο θα καταργηθούν."
+msgid "Remove \"{}\" from your library? All tracks under this folder will be removed from the library and from your playlists."
+msgstr "Να καταργηθεί το \"{}\" από τη βιβλιοθήκη; Όλα τα κομμάτια σε αυτόν τον φάκελο θα καταργηθούν από τη βιβλιοθήκη και από τις λίστες αναπαραγωγής σας."
 
 # ---- Appearance section -----------------------------------------------------
 
@@ -716,6 +730,12 @@ msgstr "Επανασυγχρονισμός βιβλιοθήκης"
 
 msgid "Filesystem event burst — rescanning your folders."
 msgstr "Έξαρση συμβάντων συστήματος αρχείων — επανεξετάζονται οι φάκελοί σας."
+
+msgid "Restoring cover art"
+msgstr "Επαναφορά εξωφύλλων"
+
+msgid "Some cover art was missing. Melodia is restoring it from your music files."
+msgstr "Κάποια εξώφυλλα έλειπαν. Το Melodia τα επαναφέρει από τα αρχεία μουσικής σας."
 
 # ---- Albums view ------------------------------------------------------------
 
@@ -1672,32 +1692,14 @@ msgstr "Συγχρονισμός αγαπημένων κομματιών με τ
 msgid "Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)"
 msgstr "Σημειώστε ως αγαπημένα στο ListenBrainz τα κομμάτια που αγαπάτε — η ενεργοποίηση συγχρονίζει τα υπάρχοντα αγαπημένα σας (απαιτεί αναγνωριστικά MusicBrainz)"
 
+msgid "MusicBrainz Picard adds these IDs to your files, identifying each track by its audio."
+msgstr "Το MusicBrainz Picard προσθέτει αυτά τα αναγνωριστικά στα αρχεία σας, αναγνωρίζοντας κάθε κομμάτι από τον ήχο του."
+
 msgid "Loved tracks"
 msgstr "Αγαπημένα κομμάτια"
 
 msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
 msgstr "Το Melodia δεν μπόρεσε να επανεκκινήσει. Κλείστε και ανοίξτε ξανά την εφαρμογή για να εφαρμοστεί η αλλαγή."
-
-msgid "Add MusicBrainz IDs to your music"
-msgstr "Προσθήκη αναγνωριστικών MusicBrainz στη μουσική σας"
-
-msgid "Look up and tag files so loves work on ListenBrainz"
-msgstr "Αναζήτηση και προσθήκη ετικετών ώστε τα αγαπημένα να λειτουργούν στο ListenBrainz"
-
-msgid "Look up missing IDs"
-msgstr "Αναζήτηση αναγνωριστικών που λείπουν"
-
-msgid "Re-scan tracks that still have no MusicBrainz ID"
-msgstr "Εκ νέου σάρωση κομματιών που δεν έχουν ακόμη αναγνωριστικό MusicBrainz"
-
-msgid "Look up"
-msgstr "Αναζήτηση"
-
-msgid "MusicBrainz IDs"
-msgstr "Αναγνωριστικά MusicBrainz"
-
-msgid "Best for files that already have correct artist and title tags. For loosely-tagged music (e.g. songs downloaded from YouTube), use MusicBrainz Picard instead — it identifies tracks by their audio, not their tags."
-msgstr "Ιδανικό για αρχεία που έχουν ήδη σωστές ετικέτες καλλιτέχνη και τίτλου. Για μουσική με ελλιπείς ετικέτες (π.χ. κομμάτια που κατεβάσατε από το YouTube), χρησιμοποιήστε το MusicBrainz Picard — αναγνωρίζει τα κομμάτια από τον ήχο τους, όχι τις ετικέτες τους."
 
 msgid "Connected as {}"
 msgstr "Συνδεδεμένος ως {}"
@@ -2061,13 +2063,22 @@ msgstr "Παράλειψη"
 msgid "Pick how Melodia looks. Every change applies as you make it."
 msgstr "Επιλέξτε την εμφάνιση του Melodia. Κάθε αλλαγή εφαρμόζεται αμέσως."
 
-# Heading of the welcome card's second panel, about the user's library folders.
+# Heading of the welcome card's first panel, about the user's library folders.
 msgid "Your music"
 msgstr "Η μουσική σας"
 
-# Body line under "Your music": states what the first-launch scan already did.
-msgid "Melodia watches your Music folder and picks up changes on its own."
-msgstr "Το Melodia παρακολουθεί τον φάκελο μουσικής σας και εντοπίζει μόνο του τις αλλαγές."
+# Body line under "Your music": the first panel asks for the library's folders.
+msgid "Add the folders your music lives in. Melodia picks up changes to them on its own."
+msgstr "Προσθέστε τους φακέλους όπου βρίσκεται η μουσική σας. Το Melodia εντοπίζει μόνο του τις αλλαγές τους."
+
+msgid "Your Music folder: {}"
+msgstr "Ο φάκελος μουσικής σας: {}"
+
+msgid "Add Music Folder"
+msgstr "Προσθήκη φακέλου μουσικής"
+
+msgid "Choose Another Folder"
+msgstr "Επιλογή άλλου φακέλου"
 
 # Heading of the welcome card's third panel, listing the features that use the network.
 msgid "What Melodia can reach"
@@ -2300,9 +2311,6 @@ msgstr "Αριθμός μέρους"
 
 msgid "Movement Total"
 msgstr "Σύνολο μερών"
-
-msgid "MusicBrainz Recording ID"
-msgstr "Αναγνωριστικό ηχογράφησης MusicBrainz"
 
 msgid "{} can't be saved to {} files"
 msgstr "Το {} δεν μπορεί να αποθηκευτεί σε αρχεία {}"

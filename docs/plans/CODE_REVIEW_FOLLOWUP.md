@@ -110,8 +110,8 @@ and `tasks/rss_sampler.rs` calls `slint::spawn_local`.
 ## Phase 4: SQL lives in `melodia-store`
 
 Today app runs 3 raw SQL strings (`tasks/tag_backfill.rs`, `tasks/queue_prune.rs`,
-`file_event_processor/reconcile.rs`) and opens about 7 transactions (`mbid.rs`, `tags.rs`,
-`import.rs`, two in `settings/folders.rs`, `reconcile.rs`, `radio_files.rs`). About 6 of its
+`file_event_processor/reconcile.rs`) and opens about 6 transactions (`tags.rs`, `import.rs`,
+two in `library/scan/`, `reconcile.rs`, `radio_files.rs`). About 6 of its
 functions take a `&mut Transaction`, and one type derives `FromRow` (`queue_prune.rs`).
 
 - [ ] The three queries move into `queries::*` as named functions.
@@ -170,15 +170,15 @@ show that a trait over generated globals works, yet four comments say it can't.
 The largest today, roughly: playlists `callbacks/dialog.rs::wire` (390), `main` (305), playlists
 `callbacks/detail.rs::wire` (270, shrinking in phase 6), `winit_filter::install` (210), the other
 three detail `wire`s (150 to 190, phase 6), `callbacks/tags/open.rs::populate` (175),
-`search/callbacks/results.rs::wire` (165), `card_actions::wire` (160), `scan_folder_internal`
-(150), `ingest_scanned_files` (140) and `spawn_playback_monitor` (140).
+`search/callbacks/results.rs::wire` (165), `card_actions::wire` (160), `ingest_scanned_files`
+(140), `spawn_playback_monitor` (140) and `library::scan::scan_one` (110).
 
 - [ ] Wiring functions get one named function per callback, and `wire` becomes the list of calls.
 - [ ] `main()` splits into named boot steps, kept in order. `crates/melodia/src/tests/main_order_tests.rs`
       pins that order by reading `main.rs` as text, so its pins move with the code in the same
       step.
-- [ ] The rest (`scan_folder_internal`, `reconcile`, `ingest_scanned_files`,
-      `spawn_playback_monitor`, `populate`) split by stage.
+- [ ] The rest (`scan_one`, `ingest_scanned_files`, `spawn_playback_monitor`, `populate`) split
+      by stage.
 - [ ] Turn on `cognitive_complexity` in `[workspace.lints.clippy]`. Its threshold of 30 is already
       set in `clippy.toml`, where it does nothing until the lint is on.
 - [ ] Remove `too_many_lines = "allow"` from `Cargo.toml` once the count is down. If the leftovers

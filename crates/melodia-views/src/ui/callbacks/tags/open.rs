@@ -12,7 +12,7 @@ use slint::{
 };
 
 use crate::ui::callbacks::DialogClaim;
-use crate::ui::util::{format_channels, format_sample_rate, len_as_i32};
+use crate::ui::util::{format_channels, format_sample_rate, len_as_i32, opt_shared};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::album::ReleaseTagRow;
@@ -247,8 +247,8 @@ fn populate(ui: &AppWindow, session: &Rc<RefCell<TagSession>>, fetched: Fetched)
     write_credit_rows(&te, CREDIT_ALBUM_ARTIST, album_artist_rows);
     te.set_artist_placeholder(placeholder(artist_disagrees, &sentinel));
     te.set_album_artist_placeholder(placeholder(album_artist_disagrees, &sentinel));
-    te.set_artist_preview(SharedString::from(artist.line().unwrap_or_default()));
-    te.set_album_artist_preview(SharedString::from(album_artist.line().unwrap_or_default()));
+    te.set_artist_preview(opt_shared(artist.line()));
+    te.set_album_artist_preview(opt_shared(album_artist.line()));
     field!(album, shared!(album), set_album, set_album_placeholder);
     // The genre list, one row per name. The rows themselves are the baseline, so nothing is
     // recorded in `originals.text`.
@@ -454,7 +454,7 @@ fn finalize_populate(
 fn set_summary(te: &TagEditor, row: Option<&TagEditRow>) {
     // Each field is the row's value, or "" when `row` is None.
     fn s(row: Option<&TagEditRow>, get: impl Fn(&TagEditRow) -> String) -> SharedString {
-        SharedString::from(row.map(get).unwrap_or_default().as_str())
+        opt_shared(row.map(get))
     }
     te.set_summary_path(s(row, |r| r.file_path.clone()));
     te.set_summary_codec(s(row, |r| r.codec.as_deref().unwrap_or_default().to_uppercase()));

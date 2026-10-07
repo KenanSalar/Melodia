@@ -1,13 +1,15 @@
+use std::collections::HashSet;
 #[cfg(unix)]
 use std::os::unix::fs::symlink;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use tempfile::TempDir;
 
 use melodia_core::entities::folder::Folder;
 use melodia_core::error::AppError;
+use melodia_store::database::{DbPool, queries};
 
-use super::validate_folder_path;
+use super::{folders_inside, validate_folder_path, watch_roots};
 
 fn make_folder(id: i64, path: &str) -> Folder {
     Folder {
@@ -82,7 +84,7 @@ fn validate_child_of_existing_returns_error() -> Result<(), AppError> {
 }
 
 #[test]
-fn validate_parent_of_existing_returns_children_to_remove() -> Result<(), AppError> {
+fn folders_inside_finds_every_folder_under_the_path() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let parent = tmp.path().join("music");
     let child1 = parent.join("rock");
@@ -97,15 +99,16 @@ fn validate_parent_of_existing_returns_children_to_remove() -> Result<(), AppErr
         make_folder(20, c2.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?),
     ];
 
-    let result = validate_folder_path(&parent, &existing)?;
-    assert_eq!(result.len(), 2);
-    assert!(result.contains(&10));
-    assert!(result.contains(&20));
+    let canonical_parent = melodia_core::utils::canonicalize_path(&parent)?;
+    let mut ids: Vec<i64> =
+        folders_inside(&canonical_parent, &existing).iter().map(|f| f.id).collect();
+    ids.sort_unstable();
+    assert_eq!(ids, [10, 20]);
     Ok(())
 }
 
 #[test]
-fn validate_unrelated_path_returns_empty() -> Result<(), AppError> {
+fn folders_inside_leaves_out_an_unrelated_folder() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let dir_a = tmp.path().join("music_a");
     let dir_b = tmp.path().join("music_b");
@@ -118,8 +121,64 @@ fn validate_unrelated_path_returns_empty() -> Result<(), AppError> {
         canonical_a.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?,
     );
 
-    let result = validate_folder_path(&dir_b, &[existing])?;
-    assert!(result.is_empty());
+    let canonical_b = melodia_core::utils::canonicalize_path(&dir_b)?;
+    assert!(folders_inside(&canonical_b, &[existing]).is_empty());
+    Ok(())
+}
+
+/// A scan asks this of every folder, its own row among them. Counted as nested, it would read
+/// none of its own files and then absorb itself, the delete taking every track with it.
+#[test]
+fn folders_inside_leaves_out_the_folder_itself() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let music = tmp.path().join("music");
+    std::fs::create_dir(&music)?;
+    let canonical = melodia_core::utils::canonicalize_path(&music)?;
+    let own_row = make_folder(
+        1,
+        canonical.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?,
+    );
+
+    assert!(folders_inside(&canonical, &[own_row]).is_empty());
+    Ok(())
+}
+
+/// An unmounted drive, say. Absorbed, its tracks would belong to a folder whose next walk can't
+/// find them, and that walk's purge would delete them.
+#[test]
+fn folders_inside_leaves_out_a_folder_whose_directory_is_gone() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let music = tmp.path().join("music");
+    std::fs::create_dir(&music)?;
+    let canonical = melodia_core::utils::canonicalize_path(&music)?;
+    let unmounted = canonical.join("external");
+    let row = make_folder(
+        2,
+        unmounted.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?,
+    );
+
+    assert!(folders_inside(&canonical, &[row]).is_empty());
+    Ok(())
+}
+
+/// A recursive watch on a folder already covers the folders inside it, and unwatching one of
+/// those once it is absorbed would take the outer folder's watches with it.
+#[tokio::test]
+async fn the_watcher_follows_only_the_outermost_enabled_folders() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let tmp = TempDir::new()?;
+    let music = tmp.path().join("music");
+    let nested = music.join("rock");
+    let beside = tmp.path().join("podcasts");
+    let disabled = tmp.path().join("imported");
+    for (path, is_enabled) in [(&music, true), (&nested, true), (&beside, true), (&disabled, false)]
+    {
+        queries::folder::insert_folder(&db, &path.to_string_lossy(), is_enabled).await?;
+    }
+
+    let roots: HashSet<PathBuf> = watch_roots(&db).await?.into_iter().collect();
+
+    assert_eq!(roots, HashSet::from([music, beside]));
     Ok(())
 }
 
@@ -131,8 +190,7 @@ fn validate_deleted_existing_folder_skipped() -> Result<(), AppError> {
 
     let existing = make_folder(1, "/nonexistent/deleted/folder");
 
-    let result = validate_folder_path(&dir, &[existing])?;
-    assert!(result.is_empty());
+    assert!(validate_folder_path(&dir, &[existing]).is_ok());
     Ok(())
 }
 

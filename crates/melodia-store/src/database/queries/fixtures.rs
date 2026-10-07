@@ -100,17 +100,16 @@ pub async fn insert_tagged_track(
     file_path: &str,
     meta: &ExtractedMetadata,
 ) -> Result<i64, AppError> {
-    let unknown_artist_id = 1; // sentinel from schema.sql
     let mut tx = db.write().begin().await?;
     let mut names = queries::scan::NameCache::default();
 
     let artist_name = meta.artist.primary_name();
-    let artist_id = names.artist(&mut tx, artist_name, unknown_artist_id).await?;
+    let artist_id = names.artist(&mut tx, artist_name, queries::artist::UNKNOWN_ARTIST_ID).await?;
     let album_artist_name = queries::scan::album_artist_name_for(meta);
     let album_artist_id = if album_artist_name == artist_name {
         artist_id
     } else {
-        names.artist(&mut tx, album_artist_name, unknown_artist_id).await?
+        names.artist(&mut tx, album_artist_name, queries::artist::UNKNOWN_ARTIST_ID).await?
     };
     let album_credit = queries::scan::album_credit_for(meta);
     let album_id = queries::scan::upsert_album(
@@ -140,6 +139,14 @@ pub async fn insert_tagged_track(
             .await?;
     tx.commit().await?;
     Ok(id)
+}
+
+/// Points a track's cover at `path`, which the seeding helpers leave null.
+pub async fn set_test_artwork(db: &DbPool, track_id: i64, path: &str) -> Result<(), AppError> {
+    let mut tx = db.write().begin().await?;
+    queries::track::set_track_artwork(&mut tx, &[track_id], Some(path)).await?;
+    tx.commit().await?;
+    Ok(())
 }
 
 /// A pool holding `count` tracks, in insert order, for the suites that need more rows than one

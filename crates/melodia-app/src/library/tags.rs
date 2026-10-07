@@ -49,6 +49,7 @@ const TAG_WRITE_THREADS: usize = 4;
 static TAG_WRITE_POOL: LazyLock<Option<rayon::ThreadPool>> = LazyLock::new(|| {
     rayon::ThreadPoolBuilder::new()
         .num_threads(TAG_WRITE_THREADS)
+        .thread_name(|i| format!("tag-write-{i}"))
         .build()
         .inspect_err(|e| log::warn!("tag-write pool build failed ({e}); writing sequentially"))
         .ok()
@@ -101,8 +102,7 @@ impl TagEditReport {
     ///
     /// Per file would be the obvious shape and is the wrong one here: a batch is however many
     /// tracks the user selected, the log rotates at a size, and nobody reads five thousand lines
-    /// saying the same thing. `mbid_backfill` logs per file because its set is structurally almost
-    /// always empty — every primary tag type maps the recording id — so it cannot flood.
+    /// saying the same thing.
     ///
     /// One path still survives per group, because a count alone cannot be chased: it names a file
     /// to open and the rest are the same edit against the same container.
@@ -440,10 +440,10 @@ fn run_write_pass(
         FileWrite { id: *id, path: path.clone(), outcome }
     };
 
-    // Sequentially, rather than on the global pool, where the build failed. That pool is
-    // `num_cpus` wide, which is the number `TAG_WRITE_THREADS` exists to hold down, and it panics
-    // on first use if it could not build either. Both matter for the same reason: thread
-    // starvation is the only realistic way to arrive here.
+    // Sequentially, rather than on the global pool, where the build failed. Thread starvation is
+    // the only realistic way to arrive here, and the global pool panics on first use if that kept
+    // it from building too. Where it did build, it is the pool the UI thread's inline decodes wait
+    // on.
     match TAG_WRITE_POOL.as_ref() {
         Some(pool) => pool.install(|| rows.par_iter().map(write_one).collect()),
         None => rows.iter().map(write_one).collect(),
@@ -577,11 +577,13 @@ async fn run_commit(
     match edit.artwork {
         ArtworkEdit::Replace => {
             apply_replace_artwork(&mut tx, &updated_ids, &mut album_ids, cached_artwork).await?;
+            queries::playlist::refresh_automatic_thumbnails(&mut tx).await?;
         }
         ArtworkEdit::Remove => {
             if !remove_null_ids.is_empty() {
                 queries::track::set_track_artwork(&mut tx, &remove_null_ids, None).await?;
             }
+            queries::playlist::refresh_automatic_thumbnails(&mut tx).await?;
         }
         ArtworkEdit::Keep => {}
     }
@@ -589,16 +591,15 @@ async fn run_commit(
     // After every `upsert_album` above, which is what it exists to undo.
     queries::album::clear_release_tags(&mut tx, &cleared_album_ids, cleared_release).await?;
 
-    // Both passes answer to a track that changed parents, and both are whole-table:
-    // the rollup is a window CTE over every row in `tracks`, the sweep three
-    // correlated deletes plus a rewrite of every `artists` row, all of it inside
-    // this transaction on a single-writer pool. A rating write reaches here on one
-    // click and can move nothing, so gating them is most of what that click costs.
+    // Both passes answer to a track that changed parents, and the sweep is whole-table:
+    // three correlated deletes inside this transaction on a single-writer pool. A
+    // rating write reaches here on one click and can move nothing, so gating them is
+    // most of what that click costs.
     //
     // The residue is that a file whose tags had already drifted from the database
     // can be re-homed by the re-extract above: its old parent is left stranded, and
-    // the album row it lands in instead gets no cover. The next scan runs both
-    // passes and repairs both, on the pass it always did.
+    // the album row it lands in instead gets no cover. The next scan or watcher batch
+    // that writes a row runs both passes and repairs both.
     if edit.moves_between_parents() {
         // Backfill album covers from their tracks (null-only, never an overwrite),
         // so retagging a track into a different album lets that album inherit the

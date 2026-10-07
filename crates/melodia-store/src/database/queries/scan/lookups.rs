@@ -25,8 +25,8 @@ pub async fn track_exists_by_path(
 /// **The separator is bound, never spelled.** Paths are stored exactly as the OS handed
 /// them over, so a Windows library folder is `C:\Music` and its tracks `C:\Music\a.mp3` —
 /// against a hardcoded `'/'` that answers `None` for every file on the platform, and each
-/// caller reads that as "outside the library": tag writes and MBID backfill refuse the
-/// file, and the watcher drops a create, rename or modify on the floor. `/` stays in the
+/// caller reads that as "outside the library": a tag write refuses the file, and the
+/// watcher drops a create, rename or modify on the floor. `/` stays in the
 /// comparison unconditionally rather than being swapped out, Win32 accepting it as a
 /// separator too and a path that arrived through a playlist or a URI carrying it.
 ///

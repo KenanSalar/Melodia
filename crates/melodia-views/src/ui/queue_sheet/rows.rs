@@ -14,6 +14,7 @@ use super::ShadowEntry;
 use super::links::{self, LinkCache, RowLinks};
 use crate::ui::model_patch::patch_rows_where;
 use crate::ui::tracks::format_duration_ms;
+use crate::ui::util::opt_shared;
 use melodia_app::state::AppState;
 use melodia_core::entities::track::TrackSummary;
 use melodia_engine::player::engine::state::QueueViewModel;
@@ -205,8 +206,8 @@ pub(crate) fn to_slint_queue_row(t: &TrackSummary, selected: bool) -> QueueRow {
     QueueRow {
         id: i32::try_from(t.id).unwrap_or(i32::MAX),
         title: t.title.as_str().into(),
-        artist: t.artist.as_deref().unwrap_or("").into(),
-        artwork_path: t.artwork_path.as_deref().unwrap_or("").into(),
+        artist: opt_shared(t.artist.as_deref()),
+        artwork_path: opt_shared(t.artwork_path.as_deref()),
         display_duration: display_duration.into(),
         selected,
         is_favorite: t.is_favorite,

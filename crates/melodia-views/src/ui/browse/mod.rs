@@ -39,6 +39,7 @@ use parking_lot::Mutex;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::ui::section_state::{SectionState, impl_section_state_helpers};
+use crate::ui::util::StringPool;
 use crate::ui::view_ctx::ViewCtx;
 use melodia_app::services::view_state;
 use melodia_app::state::AppState;
@@ -304,32 +305,23 @@ use melodia_ui::BreadcrumbRow as UiBreadcrumbRow;
 /// A `BrowseFile` as the shared `TrackListRow`. An in-library file reuses the
 /// Tracks converter; a disk-only one becomes the sparse, dimmed,
 /// non-interactive row the module docs describe.
-pub fn to_slint_browse_track_row(f: &BrowseFile) -> UiTrackListRow {
+pub fn to_slint_browse_track_row(f: &BrowseFile, pool: &mut StringPool) -> UiTrackListRow {
     if f.in_library {
-        let mut row = crate::ui::tracks::to_slint_track_list_row(&f.row);
-        row.enabled = true;
-        row
+        crate::ui::tracks::to_slint_track_list_row(&f.row, pool)
     } else {
         UiTrackListRow {
             id: 0,
             title: SharedString::from(f.row.title.as_str()),
-            artist: SharedString::from(""),
-            album: SharedString::from(""),
-            genre: SharedString::from(""),
-            year: 0,
-            track_number: 0,
-            duration_ms: 0,
-            is_favorite: false,
-            rating: 0,
-            artwork_path: SharedString::from(""),
-            display_duration: SharedString::from(""),
-            selected: false,
             enabled: false,
-            album_id: 0,
-            artist_id: 0,
-            genre_id: 0,
+            ..UiTrackListRow::default()
         }
     }
+}
+
+/// [`to_slint_browse_track_row`] over a folder's files, sharing one pool across them.
+pub fn to_slint_browse_track_rows(files: &[BrowseFile]) -> Vec<UiTrackListRow> {
+    let mut pool = StringPool::default();
+    files.iter().map(|f| to_slint_browse_track_row(f, &mut pool)).collect()
 }
 
 impl_section_state_helpers!(BrowseUi);

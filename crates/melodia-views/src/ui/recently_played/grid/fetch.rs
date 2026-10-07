@@ -75,9 +75,9 @@ pub async fn refresh_grid(state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>, weak:
     // turned into a `mark_dirty` by the caller, so there is nothing on screen to
     // warm for; the tab warms in `tab-changed` instead.
     if rp_ui.section_active() {
-        let ru = rp_ui.clone();
         let tab = rp_ui.active_tab();
-        let _ = tokio::task::spawn_blocking(move || ru.prewarm_tab_covers(tab)).await;
+        crate::ui::grid_prewarm::prewarm_off_thread(rp_ui, move |ru| ru.prewarm_tab_covers(tab))
+            .await;
     }
 
     // Push the filtered model so the visible tab reflects fresh data AND the live

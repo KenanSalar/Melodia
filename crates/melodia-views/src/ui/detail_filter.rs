@@ -63,8 +63,7 @@ pub fn apply_filtered_detail<V: RowSelectionView>(view: &V, refs: &FilterRefs<'_
         let all = refs.all_tracks.lock();
         all.iter().filter(|r| track_matches(r, &needle)).cloned().collect()
     };
-    let mut rows: Vec<UiTrackListRow> =
-        displayed.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
+    let mut rows: Vec<UiTrackListRow> = crate::ui::tracks::to_slint_track_list_rows(&displayed);
     restamp_selection(view, &mut rows);
     *refs.tracks.lock() = displayed;
     // The anchor is a row index, so it only goes stale when positions moved — a refresh that

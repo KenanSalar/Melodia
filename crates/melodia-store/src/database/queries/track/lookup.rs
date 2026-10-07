@@ -233,22 +233,3 @@ pub async fn get_unrated_track_paths_after(
     .await?;
     Ok(rows)
 }
-
-/// Tracks with no `MusicBrainz` Recording ID that carry enough metadata to be
-/// looked up — the work-list for the auto-tag backfill. Rows without an artist
-/// or title can't be resolved, so they're excluded rather than attempted and
-/// skipped. Columns: `(id, file_path, artist, title, album)`.
-pub async fn get_tracks_missing_mbid(
-    db: &DbPool,
-) -> Result<Vec<(i64, String, String, String, Option<String>)>, AppError> {
-    let rows = sqlx::query_as(
-        "SELECT id, file_path, artist, title, album
-         FROM tracks
-         WHERE (musicbrainz_track_id IS NULL OR musicbrainz_track_id = '')
-           AND artist IS NOT NULL AND artist <> ''
-           AND title <> ''",
-    )
-    .fetch_all(db.read())
-    .await?;
-    Ok(rows)
-}

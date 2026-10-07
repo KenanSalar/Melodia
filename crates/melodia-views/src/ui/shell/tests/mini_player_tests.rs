@@ -18,7 +18,7 @@ fn an_exit_with_no_entry_before_it_releases_nothing() {
     let body = active_changed_body();
     let exit = block_after(&body, "} else");
     let guard_at = exit.find(GUARD);
-    let artwork_at = exit.find("release_artwork_off_thread(");
+    let artwork_at = exit.find("np_state.release_artwork()");
     let lyrics_at = exit.find("release_lyrics(");
 
     assert!(!exit.is_empty(), "no exit arm found: the walk is broken, not the code");

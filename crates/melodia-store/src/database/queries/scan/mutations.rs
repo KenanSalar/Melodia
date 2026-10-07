@@ -1,6 +1,6 @@
 //! Track-row write side: insert (single + multi-row), metadata refresh,
 //! location-only update (for moved/renamed files), bulk delete, and the
-//! album-artwork roll-up that runs at the tail of every scan batch.
+//! cover roll-ups that run at the tail of every scan batch.
 
 use std::collections::HashMap;
 
@@ -391,31 +391,45 @@ pub async fn update_track_metadata(
     Ok(())
 }
 
-/// Update albums that are missing artwork by pulling from their tracks.
-/// Uses a CTE to calculate first artwork per album in a single pass,
-/// avoiding a correlated subquery per album.
+/// Give each album missing a cover the artwork of its lowest-id track that has one.
+///
+/// Driven from the albums rather than from `tracks`, so the cost follows the albums still missing
+/// a cover, and each lookup is one `idx_tracks_album_id` seek already in `id` order. Don't fold it
+/// back into a window over `tracks`: `SQLite` answers a correlated read of a materialized CTE by
+/// scanning it once per album written, and a first scan writes nearly every album.
 pub async fn update_album_artwork_from_tracks(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), AppError> {
     sqlx::query(
         "WITH first_art AS (
-            SELECT album_id, artwork_path,
-                   ROW_NUMBER() OVER (PARTITION BY album_id ORDER BY id) AS rn
-            FROM tracks
-            WHERE album_id IS NOT NULL
-              AND artwork_path IS NOT NULL
-              AND artwork_path != ''
+            SELECT albums.id AS album_id,
+                   (SELECT tracks.artwork_path FROM tracks
+                    WHERE tracks.album_id = albums.id
+                      AND tracks.artwork_path IS NOT NULL
+                      AND tracks.artwork_path != ''
+                    ORDER BY tracks.id LIMIT 1) AS artwork_path
+            FROM albums
+            WHERE albums.artwork_path IS NULL OR albums.artwork_path = ''
         )
-        UPDATE albums SET artwork_path = (
-            SELECT artwork_path FROM first_art
-            WHERE first_art.album_id = albums.id AND rn = 1
-        )
-        WHERE (artwork_path IS NULL OR artwork_path = '')
-          AND id IN (SELECT album_id FROM first_art WHERE rn = 1)",
+        UPDATE albums SET artwork_path = first_art.artwork_path
+        FROM first_art
+        WHERE first_art.album_id = albums.id
+          AND first_art.artwork_path IS NOT NULL",
     )
     .execute(&mut **tx)
     .await?;
     Ok(())
+}
+
+/// Fills each album missing a cover from its tracks, then re-points each automatic playlist at
+/// its first track's cover.
+///
+/// One call for a pass that can change which cover a playlisted track holds: refreshing only the
+/// albums leaves a playlist naming a cover none of its tracks hold, which keeps the file
+/// referenced and out of the artwork sweep's reach.
+pub async fn roll_up_covers(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Result<(), AppError> {
+    update_album_artwork_from_tracks(tx).await?;
+    crate::database::queries::playlist::refresh_automatic_thumbnails(tx).await
 }
 
 /// Delete album, artist, and genre rows left with no tracks — orphans stranded
@@ -448,13 +462,14 @@ pub async fn prune_orphans(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Resu
 
     sqlx::query(
         "DELETE FROM artists \
-         WHERE id <> 1 \
+         WHERE id <> ? \
            AND NOT EXISTS (SELECT 1 FROM tracks WHERE tracks.artist_id = artists.id) \
            AND NOT EXISTS (SELECT 1 FROM albums WHERE albums.artist_id = artists.id) \
            AND NOT EXISTS (SELECT 1 FROM track_artists WHERE track_artists.artist_id = artists.id) \
            AND NOT EXISTS (SELECT 1 FROM album_artists WHERE album_artists.artist_id = artists.id) \
            AND NOT EXISTS (SELECT 1 FROM track_credits WHERE track_credits.artist_id = artists.id)",
     )
+    .bind(crate::database::queries::artist::UNKNOWN_ARTIST_ID)
     .execute(&mut **tx)
     .await?;
 

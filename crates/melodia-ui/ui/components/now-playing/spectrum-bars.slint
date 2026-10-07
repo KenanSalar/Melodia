@@ -11,14 +11,24 @@ import { Player } from "../../globals/player.slint";
 // tick. The geometry arrives as an SVG command string for the same reason the trace's does, Slint
 // rejecting `for`-generated path elements outright (slint-ui/slint#754).
 // `spectrum::write_bar_path` is the writer and owns the anchor too, so "Mirrored" needs nothing
-// here.
+// here past handing over the style index.
 //
 // Heights come straight off the analyzer, which Rust has already smoothed with a fast attack and a
 // slow decay, which is why there is deliberately **no** `animate`: animating an already-smoothed
 // value phase-lags. Pure render, the footprint and Timer belonging to `visualizer-strip.slint`.
 export component SpectrumBars inherits Rectangle {
     Path {
-        commands: Visualizer.bars-path;
+        // Asked for over the strip's live geometry rather than pushed by the tick: the figure is
+        // snapped to whole device pixels for one width, so any relayout has to redraw it, and a
+        // strip at rest has no tick coming to do that.
+        commands: Visualizer.bars-figure(
+            Visualizer.bars-generation,
+            Visualizer.style-idx,
+            root.absolute-position.x / 1px,
+            root.absolute-position.y / 1px,
+            root.width / 1px,
+            root.height / 1px
+        );
 
         // Rust normalizes into this box, so it's a constant and no band count crosses the
         // boundary. Not optional: without one, Slint fits the path's *own* bounding box to the

@@ -28,7 +28,7 @@ use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork::{self, DetailArtwork};
 use crate::ui::row_match::Needle;
 use crate::ui::section_state::{SectionState, impl_detail_row_cache, impl_section_state_helpers};
-use crate::ui::util::clamp_i64_to_i32;
+use crate::ui::util::{clamp_i64_to_i32, opt_shared};
 use crate::ui::view_ctx::ViewCtx;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::album::AlbumStats;
@@ -157,11 +157,14 @@ impl AlbumsUi {
         melodia_platform::services::platform::allocator::trim();
     }
 
-    /// Re-decode the first screenful of grid covers, so a section enter over
-    /// still-warm data paints cache hits rather than decoding inline on the UI
-    /// thread. The post-wipe path goes through `fetch_grid`, which prewarms
-    /// itself.
+    /// Decodes the first screenful of grid covers into the grid tier, so the
+    /// grid's first frame paints covers rather than placeholders. Every prewarm
+    /// of this grid comes through here, and does nothing unless the grid is what
+    /// is drawn ([`SectionState::grid_on_screen`]).
     pub fn prewarm_visible_covers(&self) {
+        if !self.section.grid_on_screen(|| self.detail_album_id() >= 0) {
+            return;
+        }
         let data = self.grid.data.lock().clone();
         let unique = grid::first_screenful_paths(&data);
         if !unique.is_empty() {
@@ -204,7 +207,7 @@ pub fn to_slint_album_row(a: &AlbumStats) -> UiAlbumRow {
         track_count: a.track_count,
         total_duration_ms: i32::try_from(a.total_duration_ms.clamp(0, i64::from(i32::MAX)))
             .unwrap_or(i32::MAX),
-        artwork_path: SharedString::from(a.artwork_path.as_deref().unwrap_or("")),
+        artwork_path: opt_shared(a.artwork_path.as_deref()),
     }
 }
 

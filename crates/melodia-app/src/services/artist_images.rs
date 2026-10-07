@@ -66,8 +66,8 @@ const BATCH_INTERVAL: Duration = Duration::from_millis(750);
 /// `reconcile_watched_folders` shape, one service over.
 static PASS_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 
-/// **Deferred, not dropped** — the half `reconcile_watched_folders` has no need of
-/// and this does.
+/// **Deferred, not dropped**, which `reconcile_watched_folders` needs only for a
+/// request wider than the pass in flight, and this needs for every one.
 ///
 /// A pass queries once, at the start, so the artists a *later* scan commits are
 /// not in its snapshot. Dropping the overlapping request would therefore lose them

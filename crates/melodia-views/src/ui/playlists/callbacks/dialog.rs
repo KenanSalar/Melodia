@@ -26,6 +26,7 @@ use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
 use crate::ui::callbacks::DialogClaim;
 use crate::ui::callbacks::macros::release_detail_hero_images;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
+use crate::ui::util::opt_shared;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
@@ -65,9 +66,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     //      cannot be registered away the way a callback body can.
     //   2. `current-artwork` — the one `image`-typed property, which has
     //      no Slint default literal and so can only be reset from Rust.
-    //      This is the ~603 KiB `SharedPixelBuffer` Arc pulled from the
-    //      playlist grid-tier LRU at dialog-open; dropping it here releases
-    //      it on the same tick the body branch unmounts.
+    //      This is the `SharedPixelBuffer` Arc the dialog opened with, the
+    //      shared grid tier's or the detail hero's; dropping it here
+    //      releases it on the same tick the body branch unmounts.
     //
     // Pair the Arc drop with an off-thread `allocator::trim()` (parity with
     // `release_detail_artwork`) so glibc returns the freed pages instead of
@@ -444,9 +445,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                             Some(UiPlaylistPickRow {
                                 id,
                                 name: SharedString::from(p.name.as_str()),
-                                artwork_path: SharedString::from(
-                                    p.thumbnail_path.as_deref().unwrap_or(""),
-                                ),
+                                artwork_path: opt_shared(p.thumbnail_path.as_deref()),
                                 contained_count: contained,
                                 // Multi-select: start with nothing ticked; the
                                 // user opts in per playlist (or via "Select all").

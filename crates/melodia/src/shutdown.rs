@@ -101,9 +101,10 @@ pub fn flush_tasks_and_db(runtime: &tokio::runtime::Runtime, state: AppState) ->
 
     // One budget over both operations. Most tasks honour `shutdown_token` and
     // exit within a `select!` tick, but `spawn_blocking` work can't be
-    // cancelled — `first_launch::run` may be deep in a scan, `material_you` in a
-    // quantize pass — and `db.close()` waits for every connection to come back
-    // to the pool, which a task holding one across an await pins indefinitely.
+    // cancelled from outside: a scan stops only at its own checkpoints and still
+    // owes its last write, and `material_you` finishes its quantize pass. And
+    // `db.close()` waits for every connection to come back to the pool, which a
+    // task holding one across an await pins indefinitely.
     // Past the budget we force-exit regardless of what tokio thinks is pending.
     runtime.block_on(async move {
         tokio::time::timeout(std::time::Duration::from_secs(3), async {

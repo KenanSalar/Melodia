@@ -129,8 +129,7 @@ where
     )
     .await;
 
-    let ui_tracks: Vec<UiTrackListRow> =
-        tracks.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
+    let ui_tracks: Vec<UiTrackListRow> = crate::ui::tracks::to_slint_track_list_rows(&tracks);
 
     // Seed both caches before the UI hop so resort / drag-reorder / play-row callbacks firing on
     // the next tick already see consistent state.
@@ -158,7 +157,7 @@ where
         reset_detail_selection(&g, &playlists_ui);
         // Fresh open clears the filter so the user lands on the full track set, not a stale needle
         // from the previous detail.
-        g.set_filter(SharedString::from(""));
+        g.set_filter(SharedString::default());
         playlists_ui.detail.filter.lock().clear();
         g.set_sort_field(SharedString::from(sort_field.as_str()));
         g.set_sort_dir(SharedString::from(sort_dir.as_str()));
@@ -410,6 +409,7 @@ pub fn seed_detail_from_settings(
     };
     // Synchronously, so it is up before `app.show()` — see `PlaylistDetail.restoring`.
     ui.global::<PlaylistDetail>().set_restoring(true);
+    playlists_ui.section.begin_restore();
     let s = state.clone();
     let pu = playlists_ui.clone();
     let weak = ui.as_weak();
@@ -424,6 +424,9 @@ pub fn seed_detail_from_settings(
         }
         // Lowered however it went, and behind `open_playlist`'s own hop so the id is already in:
         // a playlist deleted since the last session owes the grid back rather than an empty body.
+        pu.section.end_restore();
+        // A grid handed back is warmed before the hop below shows it; a reopen turns this away.
+        crate::ui::grid_prewarm::prewarm_off_thread(&pu, PlaylistsUi::prewarm_visible_covers).await;
         let _ = weak.upgrade_in_event_loop(|ui| {
             ui.global::<PlaylistDetail>().set_restoring(false);
         });

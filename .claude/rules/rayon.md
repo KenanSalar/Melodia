@@ -24,9 +24,8 @@ paths:
 
 ## Thread Pool
 
-- Default thread count = number of logical CPUs (usually optimal)
+- **This tree's global pool is two threads** (`main.rs`'s `GLOBAL_RAYON_THREADS`), shared with every JPEG decoded outside a pool, so a bare `par_iter` from a blocking task is neither wide nor alone there. Bulk work over library files runs under `melodia_store::media::ingest::scan_pool::ScanPool::install`, which argues why.
 - Custom pools via `ThreadPoolBuilder::new().num_threads(n).build()` — use `pool.install(|| ...)` to run work on it
-- A single global pool is usually sufficient — create custom pools only for isolation
 
 ## Performance Considerations
 

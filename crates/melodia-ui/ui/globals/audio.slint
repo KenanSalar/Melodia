@@ -49,11 +49,13 @@ export global ReplayGain {
 // `style-idx` are one choice in two shapes, the strip mounting on the **key** so reordering the
 // picker can't repoint an existing install, while the Settings chips need the index.
 //
-// `bars` is normalized 0..1 heights, low → high, **already smoothed in Rust** — so they must not be
-// `animate`d. `wave-path` is SVG commands for the trace, a string because Slint rejects
-// `for`-generated path elements (slint-ui/slint#754). `idle` reports the drawing has decayed to
-// rest, letting the Timer stop once a paused player settles — pausing halts the tap but leaves
-// stale samples in the ring, so re-analysing them would freeze the drawing mid-shape.
+// Both figures are SVG commands, strings because Slint rejects `for`-generated path elements
+// (slint-ui/slint#754). `wave-path` is pushed every tick. The bars are asked for through
+// `bars-figure`, because they snap to the window's pixel grid under the strip and a figure pushed
+// for one geometry rescales unevenly under another, which a resize or a sidebar animation hands
+// a strip at rest with no tick coming. `idle` reports the drawing has decayed to rest, letting the
+// Timer stop once a paused player settles — pausing halts the tap but leaves stale samples in the
+// ring, so re-analysing them would freeze the drawing mid-shape.
 //
 // **`window-shown` and `dormant` carry different certainty on purpose.** `window-shown` is the OS
 // saying the window is off screen and every such event has a matching one putting it back, so it is
@@ -62,7 +64,9 @@ export global Visualizer {
     in-out property <bool> enabled: true;
     in-out property <string> style: "bars";
     in-out property <int> style-idx;
-    in property <string> bars-path;
+    // Moved by the tick whenever the bands it analysed change what the bars draw: the token that
+    // re-runs `bars-figure`, the strip's geometry being the rest of what it reads.
+    in property <int> bars-generation;
     in property <string> wave-path;
     // Published from `spectrum::NUM_BANDS` rather than restated here. Only the strip's width
     // ceiling reads it: the figure itself carries its own band count in its geometry.
@@ -80,14 +84,16 @@ export global Visualizer {
     // state but can't be relied on here: `window-shown` also gates the strip's Timer, so a hide
     // landing on a settled drawing stops it in the same pass and no further tick arrives.
     callback window-hidden();
-    // Both sizes ride along: the trace's column count follows the strip's width, and the bars floor
-    // each band against its own column, which is a ratio of the two. The position does too, the
-    // bars putting their edges on the window's pixel grid rather than the strip's.
-    callback tick(
-        bool /*is-playing*/,
+    // The width rides along for the trace, whose column count follows it.
+    callback tick(bool /*is-playing*/, float /*strip width, logical px*/);
+    // The bars for the latest levels, laid out on the strip as it stands. The style rides along
+    // for its anchor, so a Bars↔Mirrored pick redraws a strip at rest.
+    pure callback bars-figure(
+        int /*generation*/,
+        int /*style-idx*/,
         float /*strip x, logical px from the window's left*/,
         float /*strip y, logical px from the window's top*/,
         float /*strip width, logical px*/,
         float /*strip height, logical px*/,
-    );
+    ) -> string;
 }

@@ -12,6 +12,7 @@ use melodia_core::error::AppResult;
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
 use melodia_store::media::ingest::metadata::{extract_date_modified, extract_or_filename_row};
+use melodia_store::media::ingest::scan_pool::ScanPool;
 use melodia_store::media::ingest::watcher::FileEvent;
 
 /// Batch size threshold above which stats triggers are disabled for bulk processing.
@@ -59,24 +60,26 @@ async fn extract_metadata_batch(
     let cover_cache = cover_cache.clone();
     let extracted = tokio::task::spawn_blocking(move || {
         use rayon::prelude::*;
-        paths_to_extract
-            .into_par_iter()
-            .filter_map(|path| {
-                match extract_or_filename_row(&path, &artwork_dir, &cover_cache, false) {
-                    Ok(meta) => Some((path, meta)),
-                    // Only an unreadable file gets this far; unparseable tags come back
-                    // as a filename-derived row rather than a `None`.
-                    Err(e) => {
-                        log::warn!(
-                            "Skipping {}: {}",
-                            path.display(),
-                            melodia_core::error::describe(&e)
-                        );
-                        None
+        ScanPool::for_files(paths_to_extract.len()).install(|| {
+            paths_to_extract
+                .into_par_iter()
+                .filter_map(|path| {
+                    match extract_or_filename_row(&path, &artwork_dir, &cover_cache, false) {
+                        Ok(meta) => Some((path, meta)),
+                        // Only an unreadable file gets this far; unparseable tags come back
+                        // as a filename-derived row rather than a `None`.
+                        Err(e) => {
+                            log::warn!(
+                                "Skipping {}: {}",
+                                path.display(),
+                                melodia_core::error::describe(&e)
+                            );
+                            None
+                        }
                     }
-                }
-            })
-            .collect::<HashMap<_, _>>()
+                })
+                .collect::<HashMap<_, _>>()
+        })
     })
     .await;
 
@@ -170,9 +173,9 @@ pub(super) async fn process_batch(
 
     // Rows actually inserted / re-pointed / updated / deleted this batch.
     // Gates the post-loop sweeps: a no-op batch (events for untracked
-    // files, paths outside library folders) must not pay the full-table
-    // album-artwork window-function pass or a stats recalc — mirrors the
-    // `any_changes` gate on the scan path (`library/settings/folders.rs`).
+    // files, paths outside library folders) must not pay the cover roll-ups
+    // or a stats recalc, which mirrors the `any_changes` gate on the scan
+    // path (`library/scan/finish.rs`).
     let mut changes: usize = 0;
     // One per batch, not one per event: a folder drop lands a release at a time, so every file in
     // it names the same artist and genre.
@@ -245,7 +248,7 @@ pub(super) async fn process_batch(
     }
 
     if changes > 0 {
-        queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
+        queries::scan::roll_up_covers(&mut tx).await?;
         // A deleted file can empty its album/artist/genre; prune the stranded rows.
         queries::scan::prune_orphans(&mut tx).await?;
     }

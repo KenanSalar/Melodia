@@ -306,14 +306,8 @@ async fn update_track_artwork_if_missing_sets_when_null() -> Result<(), AppError
 async fn update_track_artwork_if_missing_preserves_existing() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
-    insert_test_track(&db, "/music/song.mp3", "Song", "Artist", "Album", "Rock").await?;
-
-    // Set artwork first
-    sqlx::query(
-        "UPDATE tracks SET artwork_path = '/art/original.jpg' WHERE file_path = '/music/song.mp3'",
-    )
-    .execute(db.write())
-    .await?;
+    let id = insert_test_track(&db, "/music/song.mp3", "Song", "Artist", "Album", "Rock").await?;
+    set_test_artwork(&db, id, "/art/original.jpg").await?;
 
     // Try to overwrite — should not change
     let mut tx = db.write().begin().await?;
@@ -333,14 +327,8 @@ async fn update_track_artwork_if_missing_preserves_existing() -> Result<(), AppE
 async fn update_album_artwork_from_tracks_fills_missing() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
-    insert_test_track(&db, "/music/song.mp3", "Song", "Artist", "Album", "Rock").await?;
-
-    // Set artwork on track
-    sqlx::query(
-        "UPDATE tracks SET artwork_path = '/art/cover.jpg' WHERE file_path = '/music/song.mp3'",
-    )
-    .execute(db.write())
-    .await?;
+    let id = insert_test_track(&db, "/music/song.mp3", "Song", "Artist", "Album", "Rock").await?;
+    set_test_artwork(&db, id, "/art/cover.jpg").await?;
 
     let mut tx = db.write().begin().await?;
     queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
@@ -351,6 +339,76 @@ async fn update_album_artwork_from_tracks_fills_missing() -> Result<(), AppError
             .fetch_one(db.read())
             .await?;
     assert_eq!(artwork.as_deref(), Some("/art/cover.jpg"));
+    Ok(())
+}
+
+async fn album_artwork(db: &DbPool) -> Result<Option<String>, AppError> {
+    Ok(sqlx::query_scalar("SELECT artwork_path FROM albums WHERE name = 'Album'")
+        .fetch_one(db.read())
+        .await?)
+}
+
+async fn roll_up_album_covers(db: &DbPool) -> Result<(), AppError> {
+    let mut tx = db.write().begin().await?;
+    queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// A track with no cover sits ahead of the ones that have one, so a lookup that took the album's
+/// first track rather than its first covered one would leave the album blank.
+#[tokio::test]
+async fn an_album_takes_the_cover_of_its_lowest_id_track_that_has_one() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    insert_test_track(&db, "/music/1.mp3", "One", "Artist", "Album", "Rock").await?;
+    let two = insert_test_track(&db, "/music/2.mp3", "Two", "Artist", "Album", "Rock").await?;
+    let three = insert_test_track(&db, "/music/3.mp3", "Three", "Artist", "Album", "Rock").await?;
+    set_test_artwork(&db, three, "/art/three.jpg").await?;
+    set_test_artwork(&db, two, "/art/two.jpg").await?;
+
+    roll_up_album_covers(&db).await?;
+
+    assert_eq!(album_artwork(&db).await?.as_deref(), Some("/art/two.jpg"));
+    Ok(())
+}
+
+/// Null-only: a cover the user picked for the album outlives any scan.
+#[tokio::test]
+async fn an_album_cover_already_set_is_never_overwritten() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    let id = insert_test_track(&db, "/music/1.mp3", "One", "Artist", "Album", "Rock").await?;
+    set_test_artwork(&db, id, "/art/track.jpg").await?;
+    sqlx::query("UPDATE albums SET artwork_path = '/art/chosen.jpg' WHERE name = 'Album'")
+        .execute(db.write())
+        .await?;
+
+    roll_up_album_covers(&db).await?;
+
+    assert_eq!(album_artwork(&db).await?.as_deref(), Some("/art/chosen.jpg"));
+    Ok(())
+}
+
+/// The reason the two roll-ups are one call: a scan that changed the cover a playlisted track
+/// holds and refreshed only the albums would leave the playlist naming a cover nothing holds.
+#[tokio::test]
+async fn rolling_up_covers_moves_an_automatic_playlist_onto_its_first_tracks_cover()
+-> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    let id = insert_test_track(&db, "/music/1.mp3", "One", "Artist", "Album", "Rock").await?;
+    set_test_artwork(&db, id, "/art/old.jpg").await?;
+    let playlist = queries::playlist::create_playlist(&db, "Mix", None).await?;
+    queries::playlist::add_tracks_to_playlist(&db, playlist.id, &[id]).await?;
+    set_test_artwork(&db, id, "/art/rescanned.jpg").await?;
+
+    let mut tx = db.write().begin().await?;
+    queries::scan::roll_up_covers(&mut tx).await?;
+    tx.commit().await?;
+
+    let shown = queries::playlist::get_playlist_by_id(&db, playlist.id).await?.thumbnail_path;
+    assert_eq!(shown.as_deref(), Some("/art/rescanned.jpg"));
     Ok(())
 }
 

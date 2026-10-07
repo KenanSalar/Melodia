@@ -20,7 +20,7 @@ use slint::{ComponentHandle, SharedString};
 use super::BrowseUi;
 use crate::ui::grid_prewarm;
 use crate::ui::grid_rows::{chunk_built_rows, write_grid};
-use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
+use crate::ui::util::{clamp_i64_to_i32, len_as_i32, opt_shared};
 use melodia_core::entities::browse::{BrowseFile, BrowseFolder};
 use melodia_ui::{
     AppWindow, Browse, BrowseCardGridRow as UiBrowseCardGridRow, BrowseCardRow as UiBrowseCardRow,
@@ -85,18 +85,18 @@ pub fn to_browse_card_rows(folders: &[BrowseFolder], files: &[BrowseFile]) -> Ve
         row_index: -1,
         path: SharedString::from(f.path.as_str()),
         title: SharedString::from(f.name.as_str()),
-        subtitle: SharedString::from(""),
-        artwork_path: SharedString::from(""),
+        subtitle: SharedString::default(),
+        artwork_path: SharedString::default(),
         is_folder: true,
         enabled: true,
     }));
     cards.extend(files.iter().enumerate().map(|(idx, f)| UiBrowseCardRow {
         id: if f.in_library { clamp_i64_to_i32(f.row.id) } else { 0 },
         row_index: len_as_i32(idx),
-        path: SharedString::from(""),
+        path: SharedString::default(),
         title: SharedString::from(f.row.title.as_str()),
-        subtitle: SharedString::from(f.row.artist.as_deref().unwrap_or("")),
-        artwork_path: SharedString::from(f.row.artwork_path.as_deref().unwrap_or("")),
+        subtitle: opt_shared(f.row.artist.as_deref()),
+        artwork_path: opt_shared(f.row.artwork_path.as_deref()),
         is_folder: false,
         enabled: f.in_library,
     }));

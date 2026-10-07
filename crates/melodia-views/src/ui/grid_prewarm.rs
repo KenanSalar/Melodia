@@ -106,6 +106,16 @@ pub fn prewarm(paths: &[PathBuf]) {
     tier().prewarm(paths);
 }
 
+/// Runs `warm` against `grid` on the blocking pool and waits for it, so the hop that follows
+/// paints cache hits.
+pub async fn prewarm_off_thread<G>(grid: &Arc<G>, warm: impl FnOnce(&G) + Send + 'static)
+where
+    G: Send + Sync + 'static,
+{
+    let grid = Arc::clone(grid);
+    let _ = tokio::task::spawn_blocking(move || warm(&grid)).await;
+}
+
 /// Deduplicated, non-empty artwork paths from an iterator of optional path strings,
 /// first-seen order preserved, stopping at `cap`.
 ///
@@ -205,10 +215,10 @@ const BODY_CHROME_W: u32 = 400 + 2 * 16;
 
 /// The size a tier is built at, before any geometry is known.
 ///
-/// A **fallback, not a tier size**: everything decoded at it is re-decoded the moment
-/// [`cover_size_for_window`] retunes. Sized for the run where that never happens — the deferred
-/// retune in `boot::ui_setup` can fail to schedule — so it covers a wide panel's card rather than
-/// taking the cheap end.
+/// A **fallback, not a tier size**: a cover decoded at it is re-decoded at the size
+/// [`cover_size_for_window`] retunes to when its card next draws. Sized for the run where that
+/// retune never happens — the deferred retune in `boot::ui_setup` can fail to schedule — so it
+/// covers a wide panel's card rather than taking the cheap end.
 pub const GRID_COVER_FALLBACK: u32 = 256;
 
 /// Steps the derived size falls on. Quantized because a size that genuinely moves costs

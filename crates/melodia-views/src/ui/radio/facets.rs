@@ -15,7 +15,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use slint::ComponentHandle;
+use slint::{ComponentHandle, SharedString};
 
 use crate::ui::grid_rows::write_grid;
 use crate::ui::row_match;
@@ -195,7 +195,7 @@ pub fn request(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, idx: i
         return;
     };
     let narrowed = !g.get_facet_filter().is_empty();
-    g.set_facet_filter("".into());
+    g.set_facet_filter(SharedString::default());
 
     // Keyed on the list held, not on the rows drawn: a needle that matched nothing leaves an empty
     // model over a list already in hand, and asking again would clear the picker and flash a

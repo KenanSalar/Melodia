@@ -14,8 +14,10 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 
 use crate::ui::util::{clamp_i64_to_i32, count_as_i32};
 use melodia_app::library;
-use melodia_app::state::AppState;
-use melodia_ui::{AppWindow, Dialog, FolderListRow, LibrarySettings};
+use melodia_app::library::scan::OnStop;
+use melodia_app::state::{AppState, ScanProgressTick};
+use melodia_core::error::{AppError, describe};
+use melodia_ui::{AppWindow, Dialog, FolderListRow, LibrarySettings, ScanPhase};
 
 /// Wire up the `LibrarySettings` global: initial folder fetch +
 /// scan-progress subscriber + library-changed re-fetch subscriber. Call once
@@ -40,28 +42,21 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<(), slint::EventLoopE
 
     // 2. Scan-progress subscriber: live progress bar updates on the UI.
     {
-        let mut rx = state.scan_progress_tx.subscribe();
+        let mut rx = state.scan.subscribe();
         let weak = weak.clone();
         slint::spawn_local(Compat::new(async move {
+            // Painted before the first wait: the launch scan can be publishing before
+            // this subscribes, and `subscribe` marks that value seen.
             loop {
+                let snapshot = rx.borrow_and_update().clone();
+                match weak.upgrade() {
+                    Some(ui) => {
+                        paint_scan_progress(&ui.global::<LibrarySettings>(), snapshot.as_ref());
+                    }
+                    None => break,
+                }
                 if rx.changed().await.is_err() {
                     break;
-                }
-                let snapshot = rx.borrow_and_update().clone();
-                let Some(ui) = weak.upgrade() else { break };
-                let g = ui.global::<LibrarySettings>();
-                if let Some(tick) = snapshot {
-                    g.set_scanning(true);
-                    g.set_scanned_count(count_as_i32(tick.scanned));
-                    g.set_total_count(count_as_i32(tick.total));
-                    g.set_scan_progress(progress_fraction(tick.scanned, tick.total));
-                    g.set_scanning_file(SharedString::from(tick.current_file.as_str()));
-                } else {
-                    g.set_scanning(false);
-                    g.set_scanned_count(0);
-                    g.set_total_count(0);
-                    g.set_scan_progress(0.0);
-                    g.set_scanning_file(SharedString::default());
                 }
             }
             log::debug!("ui::settings::library_settings scan-progress subscriber stopped");
@@ -95,7 +90,7 @@ pub async fn refresh_folders(ui: Weak<AppWindow>, state: AppState) {
     let folders = match library::settings::get_folders(&state).await {
         Ok(f) => f,
         Err(e) => {
-            log::warn!("library_settings::refresh_folders: {e}");
+            log::warn!("library_settings::refresh_folders: {}", describe(&e));
             return;
         }
     };
@@ -113,6 +108,18 @@ pub async fn refresh_folders(ui: Weak<AppWindow>, state: AppState) {
         let model: Rc<VecModel<FolderListRow>> = Rc::new(VecModel::from(rows));
         ui.global::<LibrarySettings>().set_folders(ModelRc::from(model));
     });
+}
+
+/// Add `path` to the library and scan it, raising the Dialog with the reason a folder was
+/// refused. The Library tab's picker and the welcome card's Music folder offer both land here.
+pub async fn add_folder_and_scan(state: &AppState, ui: &Weak<AppWindow>, path: String) {
+    match library::settings::add_folder(state, path).await {
+        // The bump inside `add_folder` already drove the folder-list subscriber, so the new row
+        // is on screen by the time the scan starts.
+        Ok(folder) => library::scan::start(state, folder.id, OnStop::Withdraw),
+        Err(AppError::Validation(msg)) => show_error(ui, "Cannot add folder", msg),
+        Err(e) => show_error(ui, "Cannot add folder", e.to_string()),
+    }
 }
 
 /// Pop the modal Dialog overlay with the given title + message. Safe to call
@@ -161,15 +168,32 @@ fn plural(n: i64) -> &'static str {
     if n == 1 { "" } else { "s" }
 }
 
-#[allow(
-    clippy::cast_precision_loss,
-    reason = "u32 file counts stay below f32 mantissa range; progress is for UI only"
-)]
-fn progress_fraction(scanned: u32, total: u32) -> f32 {
-    if total == 0 {
-        return 0.0;
+/// Shows `tick` on the scan bar, or puts the bar away when no scan is running.
+fn paint_scan_progress(g: &LibrarySettings<'_>, tick: Option<&ScanProgressTick>) {
+    let Some(tick) = tick else {
+        g.set_scan_phase(ScanPhase::Idle);
+        g.set_found_count(0);
+        g.set_scanned_count(0);
+        g.set_total_count(0);
+        g.set_scanning_file(SharedString::default());
+        return;
+    };
+    g.set_scan_phase(ui_phase(tick.phase));
+    g.set_found_count(count_as_i32(tick.found));
+    g.set_scanned_count(count_as_i32(tick.done));
+    g.set_total_count(count_as_i32(tick.total));
+    g.set_scanning_file(SharedString::from(tick.current_file.as_str()));
+}
+
+/// The global's spelling of a backend phase; its extra `Idle` is the empty channel.
+fn ui_phase(phase: melodia_app::state::ScanPhase) -> ScanPhase {
+    use melodia_app::state::ScanPhase as Backend;
+    match phase {
+        Backend::Discovering => ScanPhase::Discovering,
+        Backend::Reading => ScanPhase::Reading,
+        Backend::Finishing => ScanPhase::Finishing,
+        Backend::Stopping => ScanPhase::Stopping,
     }
-    (scanned as f32) / (total as f32)
 }
 
 #[cfg(test)]

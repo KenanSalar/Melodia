@@ -7,6 +7,7 @@ use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 
 use super::state::{GRID_PREWARM_AHEAD, GridData, GridIndexCache};
 use super::{AlbumsUi, to_slint_album_row};
+use crate::ui::grid_prewarm;
 use crate::ui::grid_rows::chunk_rows;
 use crate::ui::row_match;
 use crate::ui::util::len_as_i32;
@@ -18,9 +19,8 @@ use melodia_ui::{AlbumGridRow as UiAlbumGridRow, Albums, AppWindow};
 /// Fetch the album list from the DB into `albums_ui.grid.data`, prewarm
 /// cover thumbnails, then rebuild the grid model on the UI thread. Async —
 /// runs on the tokio runtime; the UI write hops back via
-/// `upgrade_in_event_loop`. Called once at startup and from the
-/// library-changed subscriber. The pre-lowercased sort keys are built here
-/// (on the worker), not per sort click on the UI thread.
+/// `upgrade_in_event_loop`. The pre-lowercased sort keys are built here (on
+/// the worker), not per sort click on the UI thread.
 pub async fn fetch_grid(
     state: &AppState,
     albums_ui: &Arc<AlbumsUi>,
@@ -35,32 +35,15 @@ pub async fn fetch_grid(
     // only across the synchronous writes — never across an `.await`.
     {
         let _gate = albums_ui.section.gate();
-        *albums_ui.grid.data.lock() = data.clone();
+        *albums_ui.grid.data.lock() = data;
         // The album set changed — the memoized filter+sort indices are stale.
         *albums_ui.grid.index_cache.lock() = None;
     }
 
-    // Prewarm the first few screenfuls of grid-tier covers so the initial
-    // grid paint is a cache hit. The rest decode lazily on scroll-in via
-    // `request-cover` — covers are virtualized now, so prewarming the
-    // whole catalogue would just thrash the grid-tier LRU on large
-    // libraries (and waste CPU decoding covers the user never scrolls to).
-    // `album_stats` is name-sorted, so the first `GRID_PREWARM_AHEAD`
-    // albums are the ones first on screen. Runs on the runtime worker pool
-    // — album-art decoding is CPU-bound; the bounded decode pool inside
-    // `prewarm` parallelizes it while `spawn_blocking` keeps the runtime
-    // responsive.
-    //
-    // Gated on the section being on screen: a background library-changed
-    // tick must not re-fill a cache the user isn't looking at — it was
-    // released on section exit and the re-enter handler re-warms it.
-    if albums_ui.section_active() {
-        let unique = first_screenful_paths(&data);
-        if !unique.is_empty() {
-            let _ = tokio::task::spawn_blocking(move || crate::ui::grid_prewarm::prewarm(&unique))
-                .await;
-        }
-    }
+    // Ahead of the rebuild hop, so a drawn grid's first paint is cache hits.
+    // Only the first screenful: the rest decode as cards scroll in, and
+    // warming the catalogue would thrash the tier on a large library.
+    grid_prewarm::prewarm_off_thread(albums_ui, AlbumsUi::prewarm_visible_covers).await;
 
     let albums_ui = albums_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -178,12 +161,12 @@ fn sort_album_indices(indices: &mut [usize], data: &GridData, field: &str, dir: 
 }
 
 /// The first `GRID_PREWARM_AHEAD` distinct artwork paths in display
-/// (name-sorted) order — the covers first on screen. Shared by
-/// `fetch_grid` and `AlbumsUi::prewarm_visible_covers`. The cap counts
+/// (name-sorted) order — the covers first on screen, which
+/// `AlbumsUi::prewarm_visible_covers` warms. The cap counts
 /// kept *paths*, so a run of covertless albums is walked past rather than
 /// spending the budget on them.
 pub(super) fn first_screenful_paths(data: &GridData) -> Vec<PathBuf> {
-    crate::ui::grid_prewarm::unique_artwork_paths(
+    grid_prewarm::unique_artwork_paths(
         data.albums.iter().map(|a| a.artwork_path.as_deref()),
         GRID_PREWARM_AHEAD,
     )

@@ -3,8 +3,7 @@ use std::path::Path;
 
 use sqlx::AssertSqlSafe;
 
-use crate::database::DbPool;
-use crate::database::MAX_BINDS_PER_STATEMENT;
+use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, placeholders};
 use melodia_core::error::AppError;
 
 /// Every column that points into the artwork stores, as `(table, column)`.
@@ -31,25 +30,41 @@ pub(super) const ARTWORK_COLUMNS: [(&str, &str); 6] = [
     ("radio_logo_answers", "artwork_path"),
 ];
 
+/// The four arms of the reference set a library scan can re-derive, as one literal both unions
+/// below are built from. Radio's two stay out: `library::radio` drops a logo whose file is gone and
+/// fetches it again on its own.
+macro_rules! library_reference_arms {
+    () => {
+        "\
+        SELECT artwork_path FROM tracks WHERE artwork_path IS NOT NULL AND artwork_path <> '' \
+        UNION \
+        SELECT artwork_path FROM albums WHERE artwork_path IS NOT NULL AND artwork_path <> '' \
+        UNION \
+        SELECT image_path FROM artists WHERE image_path IS NOT NULL AND image_path <> '' \
+        UNION \
+        SELECT thumbnail_path FROM playlists \
+        WHERE thumbnail_path IS NOT NULL AND thumbnail_path <> ''"
+    };
+}
+
 /// The read half of [`ARTWORK_COLUMNS`].
 ///
 /// `UNION` rather than `UNION ALL`: the tracks arm is one row per track, and deduplicating in
 /// `SQLite` is cheaper than moving a large library's worth of repeated paths across the boundary.
 /// The empty-string arm is not redundant — the schema leaves all six nullable and the ingest
 /// paths write `''` as readily as `NULL`.
-const REFERENCED_PATHS: &str = "\
-    SELECT artwork_path FROM tracks WHERE artwork_path IS NOT NULL AND artwork_path <> '' \
-    UNION \
-    SELECT artwork_path FROM albums WHERE artwork_path IS NOT NULL AND artwork_path <> '' \
-    UNION \
-    SELECT image_path FROM artists WHERE image_path IS NOT NULL AND image_path <> '' \
-    UNION \
-    SELECT thumbnail_path FROM playlists WHERE thumbnail_path IS NOT NULL AND thumbnail_path <> '' \
-    UNION \
+const REFERENCED_PATHS: &str = concat!(
+    library_reference_arms!(),
+    " UNION \
     SELECT artwork_path FROM radio_stations WHERE artwork_path IS NOT NULL AND artwork_path <> '' \
     UNION \
     SELECT artwork_path FROM radio_logo_answers \
-    WHERE artwork_path IS NOT NULL AND artwork_path <> ''";
+    WHERE artwork_path IS NOT NULL AND artwork_path <> ''"
+);
+
+/// The library's share of [`REFERENCED_PATHS`], spelled through the same arms so a column added
+/// to it cannot be missed by the sweep.
+const LIBRARY_REFERENCED_PATHS: &str = library_reference_arms!();
 
 /// The bare filenames every artwork column still points at.
 ///
@@ -67,6 +82,45 @@ pub async fn referenced_filenames(db: &DbPool) -> Result<HashSet<String>, AppErr
 /// needs where the file is rather than only what it is called.
 pub async fn referenced_paths(db: &DbPool) -> Result<Vec<String>, AppError> {
     Ok(sqlx::query_scalar(REFERENCED_PATHS).fetch_all(db.read()).await?)
+}
+
+/// The paths a library scan can put back if their file goes missing.
+pub async fn referenced_library_paths(db: &DbPool) -> Result<Vec<String>, AppError> {
+    Ok(sqlx::query_scalar(LIBRARY_REFERENCED_PATHS).fetch_all(db.read()).await?)
+}
+
+/// Clears every library reference to `missing`, returning rows touched.
+///
+/// A cleared reference is one the existing refills already answer: the album roll-up and the
+/// artist-image fetch fill an empty column and leave a set one alone, which is why a path to a
+/// deleted file stopped them; a playlist's automatic thumbnail follows its first track's cover.
+/// A track also loses its `date_modified`, the lever `tasks::tag_backfill` pulls, so the
+/// next scan reads it as changed and extracts its cover again. A custom playlist image has no
+/// source to come back from, so the playlist falls back to its automatic thumbnail.
+pub async fn forget_paths(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    missing: &[String],
+) -> Result<u64, AppError> {
+    const FORGETS: [(&str, &str, &str); 4] = [
+        ("tracks", "artwork_path", "artwork_path = NULL, date_modified = NULL"),
+        ("albums", "artwork_path", "artwork_path = NULL"),
+        ("artists", "image_path", "image_path = NULL"),
+        ("playlists", "thumbnail_path", "thumbnail_path = NULL, custom_thumbnail = FALSE"),
+    ];
+
+    let mut touched = 0;
+    for chunk in missing.chunks(MAX_BINDS_PER_STATEMENT) {
+        let list = placeholders(chunk.len());
+        for (table, column, cleared) in FORGETS {
+            let sql = format!("UPDATE {table} SET {cleared} WHERE {column} IN ({list})");
+            let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false);
+            for path in chunk {
+                query = query.bind(path);
+            }
+            touched += query.execute(&mut **tx).await?.rows_affected();
+        }
+    }
+    Ok(touched)
 }
 
 /// Re-points every artwork column across `moves`, returning rows touched.

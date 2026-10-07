@@ -37,7 +37,7 @@ use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel};
 
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::ArtistsUi;
-use crate::ui::util::clamp_i64_to_i32;
+use crate::ui::util::{clamp_i64_to_i32, opt_shared};
 use crate::ui::view_ctx::ViewCtx;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::album::AlbumStats;
@@ -221,7 +221,7 @@ pub fn to_slint_album_strip_row(a: &AlbumStats) -> UiEntityStripRow {
         id: clamp_i64_to_i32(a.id),
         title: SharedString::from(a.name.as_str()),
         subtitle: SharedString::from(a.artist_name.as_str()),
-        artwork_path: SharedString::from(a.artwork_path.as_deref().unwrap_or("")),
+        artwork_path: opt_shared(a.artwork_path.as_deref()),
         play_count: 0,
         is_favorite: false,
     }
@@ -235,7 +235,7 @@ pub fn to_slint_artist_strip_row(a: &ArtistStats, subtitle: &str) -> UiEntityStr
         id: clamp_i64_to_i32(a.id),
         title: SharedString::from(a.name.as_str()),
         subtitle: SharedString::from(subtitle),
-        artwork_path: SharedString::from(a.image_path.as_deref().unwrap_or("")),
+        artwork_path: opt_shared(a.image_path.as_deref()),
         play_count: 0,
         is_favorite: false,
     }

@@ -148,3 +148,64 @@ async fn the_scan_pass_keeps_a_logo_the_logo_pass_would_have_retired() -> Result
     assert!(logo.exists(), "the scan pass spends {GRACE:?}, not {RADIO_GRACE:?}");
     Ok(())
 }
+
+/// What a scan pass spared for being young is what brings the sweep back an hour later, and a
+/// library with nothing left to scan runs no other.
+#[tokio::test]
+async fn a_pass_answers_how_many_orphans_the_window_spared() -> Result<(), AppError> {
+    let library = Library::new().await?;
+    aged(&library.paths.artwork_dir, "33fb807d1f1b7cbb.jpg", Duration::ZERO)?;
+    aged(&library.paths.artists_dir, "4cccaf4d4b4cea11.jpg", PAST_EVERY_WINDOW)?;
+
+    let deferred = run(&library.db, &library.paths).await?;
+
+    assert_eq!(deferred, 1);
+    Ok(())
+}
+
+/// The covers a folder removal released, named by the reference set read ahead of its delete.
+fn released(names: &[&str]) -> Reach {
+    Reach::Released(names.iter().map(|name| (*name).to_owned()).collect())
+}
+
+/// Every file this reaches was named by a committed row the delete removed, so the window could
+/// only hold it back: a library removed minutes after its scan kept its covers for the hour.
+#[tokio::test]
+async fn a_folder_removal_retires_what_it_released_whatever_its_age() -> Result<(), AppError> {
+    let library = Library::new().await?;
+    let cover = aged(&library.paths.artwork_dir, "33fb807d1f1b7cbb.jpg", Duration::ZERO)?;
+
+    sweep_stores(&library.db, all_stores(&library.paths), released(&["33fb807d1f1b7cbb.jpg"]))
+        .await?;
+
+    assert!(!cover.exists());
+    Ok(())
+}
+
+/// The store is shared, so a cover the removed folder's tracks held may still be another row's.
+#[tokio::test]
+async fn a_folder_removal_keeps_a_released_file_another_row_still_names() -> Result<(), AppError> {
+    let library = Library::new().await?;
+    let shared = aged(&library.paths.artwork_dir, "33fb807d1f1b7cbb.jpg", PAST_EVERY_WINDOW)?;
+    station_with_logo(&library.db, &shared).await?;
+
+    sweep_stores(&library.db, all_stores(&library.paths), released(&["33fb807d1f1b7cbb.jpg"]))
+        .await?;
+
+    assert!(shared.exists());
+    Ok(())
+}
+
+/// Skipping the window is safe only for what the delete released. A young orphan beside it may
+/// be a cover whose row hasn't committed yet.
+#[tokio::test]
+async fn a_folder_removal_leaves_an_orphan_it_did_not_release() -> Result<(), AppError> {
+    let library = Library::new().await?;
+    let unrelated = aged(&library.paths.artwork_dir, "4cccaf4d4b4cea11.jpg", Duration::ZERO)?;
+
+    sweep_stores(&library.db, all_stores(&library.paths), released(&["33fb807d1f1b7cbb.jpg"]))
+        .await?;
+
+    assert!(unrelated.exists());
+    Ok(())
+}

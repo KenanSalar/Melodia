@@ -2,7 +2,9 @@
 //! for the row conversions, the technical-metadata display strings and the cover-decode
 //! sizes, rather than a comment in each copy asserting they match.
 
-use slint::{Rgb8Pixel, SharedPixelBuffer};
+use std::collections::HashSet;
+
+use slint::{Rgb8Pixel, SharedPixelBuffer, SharedString};
 
 /// Side length (px) a sharp cover tile is downscaled to. Matches the 384 px maximum on-screen
 /// tile in Now Playing, the largest cover the app paints, so it neither upscales nor pays for a
@@ -32,6 +34,37 @@ pub fn buffer_from_rgb(img: &image::RgbImage) -> SharedPixelBuffer<Rgb8Pixel> {
     let mut buf = SharedPixelBuffer::<Rgb8Pixel>::new(w, h);
     buf.make_mut_bytes().copy_from_slice(img.as_raw());
     buf
+}
+
+/// An optional field as the empty string Slint gates on when it is absent. `default()` allocates
+/// nothing, where `SharedString::from("")` allocates for its terminator like any other text.
+pub fn opt_shared(text: Option<impl AsRef<str>>) -> SharedString {
+    match text {
+        Some(text) if !text.as_ref().is_empty() => SharedString::from(text.as_ref()),
+        _ => SharedString::default(),
+    }
+}
+
+/// One `SharedString` per distinct text over a conversion pass, so the artist, album, genre and
+/// cover path an album's tracks repeat are one buffer shared by every row. Drop it with the pass;
+/// the rows keep what they were handed.
+#[derive(Default)]
+pub struct StringPool {
+    seen: HashSet<SharedString>,
+}
+
+impl StringPool {
+    pub fn intern(&mut self, text: &str) -> SharedString {
+        if text.is_empty() {
+            return SharedString::default();
+        }
+        if let Some(shared) = self.seen.get(text) {
+            return shared.clone();
+        }
+        let shared = SharedString::from(text);
+        self.seen.insert(shared.clone());
+        shared
+    }
 }
 
 /// Saturating `i64 → i32`: Slint's generated models use `i32` ids, the DB `i64`.

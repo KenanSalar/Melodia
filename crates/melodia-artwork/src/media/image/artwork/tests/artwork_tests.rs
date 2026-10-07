@@ -90,6 +90,21 @@ fn a_source_inside_the_bounds_is_stored_byte_identical() -> Result<(), AppError>
     Ok(())
 }
 
+/// Boot creates the store, so this is a folder deleted while the app runs. Without the retry every
+/// write would fail until a restart, the restore of that same folder's covers included.
+#[test]
+fn a_store_deleted_while_running_is_made_again_by_the_next_write() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let source = solid_source(tmp.path(), "small.png", [10, 20, 30], 64, 64)?;
+    let bytes = std::fs::read(&source)?;
+    let store = tmp.path().join("artwork");
+
+    let stored = store_image(&bytes, "png", &store);
+
+    assert!(stored.is_some_and(|path| Path::new(&path).exists()));
+    Ok(())
+}
+
 /// Over the dimension bound the file is re-encoded, and **the name has to describe what landed**
 /// — hash the source instead and the `exists()` dedup guard starts answering about bytes nobody
 /// stored.

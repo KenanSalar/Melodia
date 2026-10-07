@@ -1,41 +1,24 @@
 import { Theme } from "../../theme.slint";
 import { OnboardingPanelHeader } from "onboarding-panel-header.slint";
+import { Onboarding } from "../../globals/onboarding.slint";
 import { LibrarySettings } from "../../globals/library-settings.slint";
-import { ProgressBar } from "../settings/progress-bar.slint";
+import { ScanProgress } from "../settings/scan-progress.slint";
 import { SectionButton } from "../settings/section-button.slint";
 
-// Step 2, and not a question: `tasks::first_launch` adds the Music folder and starts a scan on its
-// own, so the panel reports whichever of the three states it finds rather than asking. On the
-// install where the auto-add found nothing, this panel is the reason the card exists at all.
+// Step 1, and first because nothing else fills the library: no folder is added on its own, so an
+// install that skips this starts empty until one is picked on the Library tab.
 export component OnboardingMusicPanel inherits VerticalLayout {
     min-width: 0px;
     spacing: Theme.pad-sm;
 
     OnboardingPanelHeader {
         title: @tr("Your music");
-        summary: @tr("Melodia watches your Music folder and picks up changes on its own.");
+        summary: @tr("Add the folders your music lives in. Melodia picks up changes to them on its own.");
     }
 
     // Three states, and the scan wins: it is the only one that is still moving.
-    if LibrarySettings.scanning: VerticalLayout {
-        spacing: Theme.pad-sm;
+    if LibrarySettings.scanning: ScanProgress {
         padding-top: Theme.pad-sm;
-        ProgressBar {
-            value: LibrarySettings.scan-progress;
-        }
-        Text {
-            text: LibrarySettings.scanning-file != ""
-                ? @tr("{} / {} files · {}",
-                      LibrarySettings.scanned-count,
-                      LibrarySettings.total-count,
-                      LibrarySettings.scanning-file)
-                : @tr("{} / {} files",
-                      LibrarySettings.scanned-count,
-                      LibrarySettings.total-count);
-            color: Theme.subtext0;
-            font-size: Theme.font-size-sm;
-            overflow: elide;
-        }
     }
     if !LibrarySettings.scanning && LibrarySettings.folders.length > 0: Text {
         text: @tr("{n} folder in your library" | "{n} folders in your library"
@@ -44,7 +27,7 @@ export component OnboardingMusicPanel inherits VerticalLayout {
         font-size: Theme.font-size-sm;
         overflow: elide;
     }
-    // The silent-and-empty install. Same copy the Library Folders card shows for the same state.
+    // Same copy the Library Folders card shows for the same state.
     if !LibrarySettings.scanning && LibrarySettings.folders.length == 0: Text {
         text: @tr("Add a folder to scan for music files.");
         color: Theme.subtext0;
@@ -52,11 +35,28 @@ export component OnboardingMusicPanel inherits VerticalLayout {
         wrap: word-wrap;
     }
 
+    // Its own line rather than the button's label, which doesn't elide and would carry a long path
+    // past the card's edge.
+    if Onboarding.suggested-folder != "": Text {
+        text: @tr("Your Music folder: {}", Onboarding.suggested-folder);
+        color: Theme.subtext0;
+        font-size: Theme.font-size-sm;
+        overflow: elide;
+    }
+
     HorizontalLayout {
         alignment: start;
+        spacing: Theme.pad-sm;
         padding-top: Theme.pad-sm;
+
+        if Onboarding.suggested-folder != "": SectionButton {
+            label: @tr("Add Music Folder");
+            icon: "library_music";
+            button-enabled: !LibrarySettings.scanning;
+            clicked => { Onboarding.add-suggested-folder(); }
+        }
         SectionButton {
-            label: @tr("Add Folder");
+            label: Onboarding.suggested-folder != "" ? @tr("Choose Another Folder") : @tr("Add Folder");
             icon: "create_new_folder";
             // The Library tab's own callback, so the picker is parented and the scan is queued
             // exactly as it is there.

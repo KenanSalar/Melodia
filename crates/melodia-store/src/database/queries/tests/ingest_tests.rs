@@ -4,6 +4,7 @@ use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::fixtures::{insert_test_track, make_test_metadata};
 use crate::database::queries::ingest::{FolderResolution, ingest_scanned_files};
+use crate::media::ingest::scan_pool::ScanPool;
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::ScannedFile;
@@ -33,6 +34,7 @@ async fn ingest_empty_list_returns_zero() -> Result<(), AppError> {
         &FolderResolution::Fixed(1),
         "2024-01-01T00:00:00Z",
         false,
+        &ScanPool::default(),
     )
     .await?;
     assert_eq!(result.inserted_count, 0);
@@ -54,6 +56,7 @@ async fn ingest_single_file_fixed_folder() -> Result<(), AppError> {
         &FolderResolution::Fixed(1),
         "2024-01-01T00:00:00Z",
         false,
+        &ScanPool::default(),
     )
     .await?;
     tx.commit().await?;
@@ -90,6 +93,7 @@ async fn ingest_deduplicates_artists() -> Result<(), AppError> {
         &FolderResolution::Fixed(1),
         "2024-01-01T00:00:00Z",
         false,
+        &ScanPool::default(),
     )
     .await?;
     tx.commit().await?;
@@ -123,6 +127,7 @@ async fn ingest_deduplicates_albums() -> Result<(), AppError> {
         &FolderResolution::Fixed(1),
         "2024-01-01T00:00:00Z",
         false,
+        &ScanPool::default(),
     )
     .await?;
     tx.commit().await?;
@@ -151,6 +156,7 @@ async fn ingest_deduplicates_genres() -> Result<(), AppError> {
         &FolderResolution::Fixed(1),
         "2024-01-01T00:00:00Z",
         false,
+        &ScanPool::default(),
     )
     .await?;
     tx.commit().await?;
@@ -177,6 +183,7 @@ async fn ingest_skips_existing_track() -> Result<(), AppError> {
         &FolderResolution::Fixed(1),
         "2024-01-01T00:00:00Z",
         false,
+        &ScanPool::default(),
     )
     .await?;
     tx.commit().await?;
@@ -202,6 +209,7 @@ async fn ingest_updates_artwork_on_existing_when_flag_set() -> Result<(), AppErr
         &FolderResolution::Fixed(1),
         "2024-01-01T00:00:00Z",
         true, // update artwork on existing
+        &ScanPool::default(),
     )
     .await?;
     tx.commit().await?;
@@ -237,6 +245,7 @@ async fn ingest_does_not_update_artwork_when_flag_false() -> Result<(), AppError
         &FolderResolution::Fixed(1),
         "2024-01-01T00:00:00Z",
         false, // don't update artwork
+        &ScanPool::default(),
     )
     .await?;
     tx.commit().await?;
@@ -262,6 +271,7 @@ async fn ingest_from_parent_dir_creates_folder() -> Result<(), AppError> {
         &FolderResolution::FromParentDir,
         "2024-01-01T00:00:00Z",
         false,
+        &ScanPool::default(),
     )
     .await?;
     tx.commit().await?;
@@ -290,6 +300,7 @@ async fn ingest_from_parent_dir_caches_folder() -> Result<(), AppError> {
         &FolderResolution::FromParentDir,
         "2024-01-01T00:00:00Z",
         false,
+        &ScanPool::default(),
     )
     .await?;
     tx.commit().await?;
@@ -316,6 +327,7 @@ async fn ingest_empty_artist_gets_unknown_id() -> Result<(), AppError> {
         &FolderResolution::Fixed(1),
         "2024-01-01T00:00:00Z",
         false,
+        &ScanPool::default(),
     )
     .await?;
     tx.commit().await?;
@@ -344,6 +356,7 @@ async fn ingest_empty_album_gets_none() -> Result<(), AppError> {
         &FolderResolution::Fixed(1),
         "2024-01-01T00:00:00Z",
         false,
+        &ScanPool::default(),
     )
     .await?;
     tx.commit().await?;
@@ -375,6 +388,7 @@ async fn ingest_mixed_new_and_existing() -> Result<(), AppError> {
         &FolderResolution::Fixed(1),
         "2024-01-01T00:00:00Z",
         false,
+        &ScanPool::default(),
     )
     .await?;
     tx.commit().await?;
@@ -403,6 +417,7 @@ async fn ingest_same_album_different_artists() -> Result<(), AppError> {
         &FolderResolution::Fixed(1),
         "2024-01-01T00:00:00Z",
         false,
+        &ScanPool::default(),
     )
     .await?;
     tx.commit().await?;
@@ -442,6 +457,7 @@ async fn ingest_detects_moved_file() -> Result<(), AppError> {
         &FolderResolution::Fixed(1),
         "2024-01-01T00:00:00Z",
         false,
+        &ScanPool::default(),
     )
     .await?;
     tx.commit().await?;
@@ -492,6 +508,7 @@ async fn ingest_batched_inserts_preserve_input_order_across_chunks() -> Result<(
         &FolderResolution::Fixed(1),
         "2024-01-01T00:00:00Z",
         false,
+        &ScanPool::default(),
     )
     .await?;
     tx.commit().await?;
@@ -549,6 +566,7 @@ async fn ingest_duplicate_hash_repoints_once_inserts_second() -> Result<(), AppE
         &FolderResolution::Fixed(1),
         "2024-01-01T00:00:00Z",
         false,
+        &ScanPool::default(),
     )
     .await?;
     tx.commit().await?;
@@ -592,6 +610,7 @@ async fn ingest_does_not_move_when_hash_differs() -> Result<(), AppError> {
         &FolderResolution::Fixed(1),
         "2024-01-01T00:00:00Z",
         false,
+        &ScanPool::default(),
     )
     .await?;
     tx.commit().await?;
@@ -630,6 +649,7 @@ async fn ingest_moved_file_preserves_playback_state() -> Result<(), AppError> {
         &FolderResolution::Fixed(1),
         "2024-01-01T00:00:00Z",
         false,
+        &ScanPool::default(),
     )
     .await?;
     tx.commit().await?;
@@ -661,6 +681,7 @@ async fn ingest_skips_unchanged_file() -> Result<(), AppError> {
         &FolderResolution::Fixed(1),
         "2024-01-01T00:00:00Z",
         false,
+        &ScanPool::default(),
     )
     .await?;
     tx.commit().await?;
@@ -687,6 +708,7 @@ async fn ingest_updates_metadata_when_file_changed() -> Result<(), AppError> {
         &FolderResolution::Fixed(1),
         "2024-01-01T00:00:00Z",
         false,
+        &ScanPool::default(),
     )
     .await?;
     tx.commit().await?;
@@ -718,6 +740,7 @@ async fn ingest_stores_file_hash() -> Result<(), AppError> {
         &FolderResolution::Fixed(1),
         "2024-01-01T00:00:00Z",
         false,
+        &ScanPool::default(),
     )
     .await?;
     tx.commit().await?;

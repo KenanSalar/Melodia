@@ -37,15 +37,17 @@ counter, both worth reading before changing a gate.
 
 - **Re-arming drops the rings' history** — the newest samples down there may predate the close —
   and `snapshot` front-pads with silence, so the first frame back reads a touch low rather than
-  stale.
+  stale. **The first arm is also what allocates them**, which is why every `set_enabled(true)`
+  stays on the UI thread: the audio callback only ever reads the cell.
 
-- **`set-active(false)` also drops the session's buffers.** The two FFT plans with their windows,
-  spectra and scratch, plus the trace's window, x-coordinate table and path string, live in an
-  `Rc<RefCell<Option<Analyzers>>>` the tick builds on its first frame (`get_or_insert_with`, the
-  one construction site, so no mount ordering can leave the tick without them) and that callback
-  clears — a user who never opens Now Playing never pays for the plans. The tick's one shadow, the
-  `FrameWatch`, lives in that struct rather than beside it, so dropping it starts the next session
-  counting from a clean slate instead of from whatever the last one stalled at.
+- **`set-active(false)` also drops the session's buffers.** The shown style's analyzer and its
+  path string live in an `Rc<RefCell<Option<Session>>>` the tick builds on its first frame
+  (`get_or_insert_with`, the one construction site, so no mount ordering can leave the tick without
+  them) and that callback clears — a user who never opens Now Playing never pays for the FFT plans.
+  Only the shown kind is held: a pick crossing between the bars and the trace rebuilds the
+  `Figure`, and Bars↔Mirrored keeps it. The tick's one shadow, the `FrameWatch`, lives in that
+  struct rather than beside it, so dropping it starts the next session counting from a clean slate
+  instead of from whatever the last one stalled at.
 
 ## The tick's gates
 
@@ -114,6 +116,16 @@ counter, both worth reading before changing a gate.
   `VISUALIZER_DECAY` being per *frame*, one interval means all three settle in about the same
   second, and there is no per-style rate to retune. **Both styles' geometry crosses as an SVG
   `commands` string with a fixed viewbox**, neither as a model — `slint-pitfalls.md`'s `Path` entry.
+
+- **The trace is pushed and the bars are asked for.** The bars snap every edge to the window's
+  device pixels for one strip geometry, so a figure pushed for one width lands its edges between
+  pixels under another and, with anti-aliasing off, the bars and gaps come out uneven. A resize, a
+  sidebar animation or a scroll moves the strip with no tick coming while it rests. So
+  `spectrum-bars.slint` binds `commands` to the `bars-figure` pure callback over its own live
+  position and size, and the tick only bumps `bars-generation` when the bands move: the
+  `covers-generation` idiom. A strip-local `changed width` or a Timer reading the width is no
+  substitute: both are `ChangeTracker`s inside an `if` (`slint-pitfalls.md`). The trace is
+  anti-aliased and snaps nothing, so a stretch only scales it.
 
 - **The trace is the visualizer's most expensive frame, and the `x` half of it is cached.**
   Rebuilding the path string outweighs a whole spectrum frame, two FFTs included, and it is the

@@ -23,16 +23,18 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 
 ## Scan and change signalling
 
-- **Scan ingest is chunked + batched.** Bulk scans (`to_scan > SCAN_BULK_THRESHOLD`) ingest in
-  per-`TX_CHUNK_FILES` write transactions (the writer connection frees between chunks; the
-  per-chunk stats-trigger drop/create stays crash-safe) with multi-row `INSERT … RETURNING id,
-  file_path` via `insert_tracks_batch` — ids mapped back **by path**, RETURNING order being
-  unspecified while DnD import relies on input order. Small deltas keep the stats triggers enabled
-  and skip `recalculate_all_stats` entirely. Orphans + artwork rollup + recalc land in one final
-  tx; `library_changed` bumps once after it.
+- **Scan ingest is chunked + batched.** A scan parses and ingests `TX_CHUNK_FILES` files at a
+  time, each chunk in its own write transaction. The writer connection frees between chunks, and
+  a bulk scan's (`to_scan > SCAN_BULK_THRESHOLD`) per-chunk stats-trigger drop/create stays
+  crash-safe. Inserts are multi-row `INSERT … RETURNING id, file_path` via
+  `insert_tracks_batch` — ids mapped back **by path**, RETURNING order being unspecified while
+  DnD import relies on input order. Small deltas keep the stats triggers enabled and skip
+  `recalculate_all_stats` entirely. Orphans, the cover roll-ups (`queries::scan::roll_up_covers`)
+  and the recalc land in one final tx; `library_changed` bumps once after it.
 
 - **The artwork sweep runs *after* that tx commits, never inside it** (`tasks::artwork_sweep`,
-  spawned beside `retroactive_hash`). It deletes by reference rather than by refcount, argued in
+  spawned beside `retroactive_hash`, and once per launch, since a launch with no library scans
+  nothing). It deletes by reference rather than by refcount, argued in
   `docs/adr/`. Two gates, both required: the name has to parse back into the scheme
   `media::image::artwork` writes, and nothing in the reference set may name it. **That set is six
   columns** — `tracks.artwork_path`, `albums.artwork_path`, `artists.image_path`,
@@ -45,20 +47,46 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   file the sweep just deleted. That also fixes an order: `tasks::radio_logo_cache` drops expired
   rows *before* the sweep runs, or every one of them still counts as referenced and the store
   never shrinks. A one-hour grace window covers the file a tag edit or scan worker has
-  written but not yet committed a row for. `queries::artwork` owns both the read side and the
-  `UPDATE`s the renormalize pass re-points with, pinned against one column ledger — a missing
-  column is silent one way and destructive the other.
+  written but not yet committed a row for, and **an orphan it spares brings the sweep back once
+  the hour is up**, a library with nothing left to scan running no other. **A folder removal
+  skips the window** (`artwork_sweep::retire_released`): it reads the reference set ahead of the
+  delete and retires what that named and the set after it doesn't, every such file having been
+  named by a committed row, so a library removed seconds after its scan takes its covers with it.
+  `queries::artwork` owns the read
+  side, the `UPDATE`s the renormalize pass re-points with and the ones the repair below clears
+  with, pinned against one column ledger — a missing column is silent one way and destructive the
+  other.
+
+- **Every scan entry repairs before it walks, and the repair is the sweep's inverse**
+  (`library::scan::repair`): references to a stored file that is gone are cleared. The album and
+  artist refills fill an empty column and leave a set one alone, and the size-and-mtime gate never
+  re-reads an unchanged track, so a path to a deleted cover used to survive any number of rescans.
+  A cleared track also loses its `date_modified`, `tasks::tag_backfill`'s lever, so the scan
+  behind it re-extracts the cover. Library columns only: radio's two heal through
+  `library::radio`.
+  **Mid-session the trigger is a cover cache**, in either of two crates that may not name the
+  library: a decode that finds the file missing reports over `utils::missing_artwork`, and
+  `tasks::artwork_restore` starts the same reconcile. `media::image::decoded` is what lets the
+  restored cover paint without a restart, a cached *missing* answer lapsing once the file is back
+  where a *broken* one stays settled.
 
 - **`stats_changed` vs `library_changed`.** Play-count flushes bump the stats channel only;
   its two subscribers are Favorites (hero mosaic + Most Played rank by `play_count`) and
   Recently-Played (ordered by `last_played`, written on the same flush). Everything structural —
   scans, watcher, imports, favorite toggles — stays on `library_changed`.
 
-- **First launch** auto-adds `dirs::audio_dir()` and scans. The same `first_launch::run` then
-  starts the watcher and calls `reconcile_watched_folders`, which re-runs `scan_folder_internal`
-  over every enabled folder — so a normal boot scans each folder once more to catch changes made
-  while closed. That reconcile is the scan path's *common* case (almost nothing to re-parse), which
-  is why its incremental filter is the part worth keeping fast.
+- **No folder is added on its own.** A fresh install starts empty, and the welcome card's first
+  panel offers the platform's Music folder beside the picker, wherever adding it wouldn't be
+  refused. A folder around ones already in the library deletes none of them: its first completed
+  scan absorbs them, tracks and stats intact (`library::scan::finish::absorb_nested`).
+  Every launch with watching on, `tasks::resume_watching::run` starts the watcher and calls
+  `reconcile_watched_folders`, which re-runs `library::scan`'s folder scan over every enabled folder
+  — so a normal boot scans each folder once more to catch changes made while closed. That reconcile
+  is the scan path's *common* case (almost nothing to re-parse), which is why its incremental
+  filter is the part worth keeping fast. With watching off a launch scans only the imports a quit
+  cut short (`library::scan::finish_interrupted_imports`, the folders no scan has completed), so a
+  cover gone while the app was closed waits for a cache to report it, which starts the same
+  reconcile.
 
 - **One audio-extension predicate: `utils::audio_ext::is_audio_extension(ext)`.** Case-folded
   (`eq_ignore_ascii_case` against ASCII `AUDIO_EXTENSIONS`), allocating nothing — the library walk
@@ -70,8 +98,8 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   `metadata::extract_or_filename_row` keeps a filename-derived row for a file whose tags won't
   parse, which is the only way Matroska and CAF reach the library at all; both scan sites use it
   (`scanner::scan_files_parallel`, `file_event_processor::reconcile`), so an `Err` there now means
-  a file that can't be *read*. `extract_metadata` stays strict, and the tag-write and MBID
-  re-reads depend on that: a row built from a parse that didn't happen would blank the track
+  a file that can't be *read*. `extract_metadata` stays strict, and the tag-write re-read
+  depends on that: a row built from a parse that didn't happen would blank the track
   instead of reporting the failure. Duration on a fallback row comes from
   `player::file_decode::probe_duration`, the one edge `media/` has into `player/`. Each half is
   argued at its own definition, including why identification is `FileType::from_buffer` and never

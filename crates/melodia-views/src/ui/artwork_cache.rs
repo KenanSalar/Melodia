@@ -24,6 +24,7 @@ use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 use crate::ui::backdrop::BackdropSample;
 use crate::ui::util::{BLUR_TARGET, COVER_SIZE, buffer_from_rgb};
+use melodia_artwork::media::image::decoded::Decoded;
 use melodia_artwork::media::image::image_decode::{
     FilterType, MAX_SOURCE_DIM, decode_capped_to, fit_within, resize_rgb8,
 };
@@ -56,13 +57,12 @@ pub struct ArtworkPair {
     pub(crate) sample: BackdropSample,
 }
 
-/// `None` records a previously-attempted decode that failed — cached so a
-/// broken cover file isn't re-opened on every change.
+/// A lookup's answer, `None` for a cover that won't decode or isn't there.
 pub type CachedArtwork = Option<ArtworkPair>;
 
 /// A path-keyed LRU of `(cover, blur)` pairs at one blur shape.
 pub struct ArtworkCache {
-    cache: Mutex<LruCache<PathBuf, CachedArtwork>>,
+    cache: Mutex<LruCache<PathBuf, Decoded<ArtworkPair>>>,
     blur: Option<BlurSpec>,
 }
 
@@ -76,13 +76,14 @@ impl ArtworkCache {
     /// `spawn_blocking`; the caller wraps each in a `slint::Image` on the UI thread.
     pub fn get_or_decode(&self, path: &Path) -> CachedArtwork {
         // `LruCache::get` needs `&mut self`, hence the Mutex.
-        if let Some(cached) = self.cache.lock().get(path) {
-            return cached.clone();
+        if let Some(cached) = self.cache.lock().get(path).filter(|held| held.is_current(path)) {
+            return cached.ready().cloned();
         }
         // Decode and blur without holding the lock, so a concurrent lookup isn't parked
         // behind the CPU work.
-        let pair = decode_artwork(path, self.blur);
-        let returned = pair.clone();
+        let pair =
+            decode_artwork(path, self.blur).map_or_else(|| Decoded::failed(path), Decoded::Ready);
+        let returned = pair.ready().cloned();
         self.cache.lock().put(path.to_path_buf(), pair);
         returned
     }

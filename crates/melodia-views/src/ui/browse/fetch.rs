@@ -11,7 +11,7 @@ use super::breadcrumbs::{build_breadcrumbs, folder_basename, sort_browse_files};
 use super::cards::{self, BrowseViewMode};
 use super::models::{replace_breadcrumb_model, replace_folder_model, replace_rows_model};
 use super::selection::{apply_selection_to_rows, reset_selection};
-use super::{BrowseUi, to_slint_browse_track_row};
+use super::{BrowseUi, to_slint_browse_track_rows};
 use crate::ui::model_patch;
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -77,10 +77,10 @@ pub async fn fetch_and_apply(
             replace_rows_model(&g, Vec::new());
             replace_breadcrumb_model(&g, Vec::new());
             reset_selection(&g);
-            g.set_current_path(SharedString::from(""));
+            g.set_current_path(SharedString::default());
             g.set_has_library_folders(has_library_folders);
             g.set_can_go_back(false);
-            g.set_error_message(SharedString::from(""));
+            g.set_error_message(SharedString::default());
             g.set_loading(false);
             cards::rebuild_cards(&ui, &browse_ui);
         });
@@ -146,8 +146,10 @@ pub async fn fetch_and_apply(
             // the first screenful of cards is a cache hit.
             if browse_ui.view_mode() == BrowseViewMode::Card {
                 let unique = cards::first_screenful_paths(&files);
-                let bu = browse_ui.clone();
-                let _ = tokio::task::spawn_blocking(move || bu.warm_card_tier(&unique)).await;
+                crate::ui::grid_prewarm::prewarm_off_thread(browse_ui, move |bu| {
+                    bu.warm_card_tier(&unique);
+                })
+                .await;
             }
 
             let token = browse_ui.fetch_token.load(Ordering::Relaxed);
@@ -169,8 +171,7 @@ pub async fn fetch_and_apply(
                 // move, no clone (the old `clone_from` deep-cloned the
                 // whole `Vec<BrowseFile>` a second time). Covers resolve
                 // lazily per visible row via `RowCovers.request`.
-                let ui_rows: Vec<UiTrackListRow> =
-                    files.iter().map(to_slint_browse_track_row).collect();
+                let ui_rows: Vec<UiTrackListRow> = to_slint_browse_track_rows(&files);
                 replace_folder_model(&g, ui_folders);
                 replace_rows_model(&g, ui_rows);
                 replace_breadcrumb_model(&g, breadcrumbs);
@@ -178,7 +179,7 @@ pub async fn fetch_and_apply(
                 g.set_current_path(SharedString::from(current_path.as_str()));
                 g.set_has_library_folders(true);
                 g.set_can_go_back(can_go_back);
-                g.set_error_message(SharedString::from(""));
+                g.set_error_message(SharedString::default());
                 g.set_loading(false);
                 *browse_ui.last_files.lock() = files;
                 *browse_ui.last_folders.lock() = browse_folders;
@@ -246,7 +247,7 @@ pub fn resort_and_apply(ui: &AppWindow, browse_ui: &Arc<BrowseUi>) {
     let ui_rows: Vec<UiTrackListRow> = {
         let mut files = browse_ui.last_files.lock();
         sort_browse_files(&mut files, &sort_field, &sort_dir);
-        files.iter().map(to_slint_browse_track_row).collect()
+        to_slint_browse_track_rows(&files)
     };
     let g = ui.global::<Browse>();
     replace_rows_model(&g, ui_rows);

@@ -22,6 +22,7 @@ use melodia_ui::{AppWindow, Onboarding};
 use slint::ComponentHandle;
 
 mod callbacks;
+mod music_folder;
 
 /// Work `main` hands over to run once the card is gone, or immediately if it never opens.
 ///
@@ -78,16 +79,18 @@ pub fn install(
 ) {
     let deferred = DeferredOnce::new(deferred);
     callbacks::wire(ui, state, Rc::clone(&deferred));
+    music_folder::wire(ui, state);
 
     if card_is_owed(startup_settings) {
-        open(ui);
+        open(ui, state);
         return;
     }
     deferred.run();
 }
 
 /// Mount the card, then raise it a frame later.
-pub fn open(ui: &AppWindow) {
+pub fn open(ui: &AppWindow, state: &AppState) {
+    music_folder::refresh(ui, state);
     let onboarding = ui.global::<Onboarding>();
     onboarding.set_step(0);
     onboarding.set_mounted(true);

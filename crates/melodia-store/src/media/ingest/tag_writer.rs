@@ -74,20 +74,6 @@ pub fn describe_unsupported(format: Option<&str>, fields: &[TagField]) -> String
     format!("{} has no key for {}", format.unwrap_or("this container"), named.join(", "))
 }
 
-impl WriteOutcome {
-    /// Record what fell out, because nothing else keeps the file it fell out of.
-    ///
-    /// Per file, which only suits a caller whose set is structurally almost always empty — the
-    /// MBID backfill, every primary tag type mapping the recording id, and no UI of its own to
-    /// raise anything. A tag edit is a batch the user sized and folds its own report instead.
-    pub fn log_unsupported(&self, path: &str) {
-        if self.unsupported.is_empty() {
-            return;
-        }
-        log::warn!("{path}: {}", describe_unsupported(self.format, &self.unsupported));
-    }
-}
-
 /// What to call `file_type` when telling someone their file would not take a field.
 ///
 /// The extension rather than the specification: `Mpeg` and `Mp4` are what lofty calls the
@@ -443,14 +429,6 @@ pub fn apply_edit(tag: &mut Tag, edit: &TagEdit, picture: Option<&Picture>) -> V
     write.string(&edit.media, ItemKey::OriginalMediaType, TagField::Media);
     write.string(&edit.release_type, ItemKey::MusicBrainzReleaseType, TagField::ReleaseType);
     write.string(&edit.release_country, ItemKey::ReleaseCountry, TagField::ReleaseCountry);
-    // Through the ordinary checked path like every other text field: `ID3v2` stores this in a
-    // binary `UFID` frame, which `Tag::insert_text` refused until lofty 0.25 taught its support
-    // check about the mapping the conversion already had.
-    write.string(
-        &edit.musicbrainz_track_id,
-        ItemKey::MusicBrainzRecordingId,
-        TagField::MusicBrainzRecordingId,
-    );
 
     write.number(&edit.track_number, ItemKey::TrackNumber, TagField::TrackNumber);
     write.number(&edit.track_total, ItemKey::TrackTotal, TagField::TrackTotal);

@@ -158,12 +158,9 @@ fn build_filtered_tracks(rp_ui: &RecentlyPlayedUi) -> Option<Vec<UiTrackListRow>
     }
     let needle = current_filter(rp_ui);
     let all = rp_ui.state().tracks_all.lock();
-    Some(
-        all.iter()
-            .filter(|r| row_match::track_matches(r, &needle))
-            .map(crate::ui::tracks::to_slint_track_list_row)
-            .collect(),
-    )
+    Some(crate::ui::tracks::to_slint_track_list_rows(
+        all.iter().filter(|r| row_match::track_matches(r, &needle)),
+    ))
 }
 
 /// Push the rows into `RecentlyPlayed.tracks`. UI thread only.

@@ -1,31 +1,28 @@
-//! Folder-management API: add / remove / list / watch / scan the
-//! library's source directories. Lives alongside the settings setters
-//! because folders are settings-adjacent (the `Folder` table backs
+//! Folder-management API: add / remove / list / watch the library's
+//! source directories. Lives alongside the settings setters because
+//! folders are settings-adjacent (the `Folder` table backs
 //! `Settings → Library → Music Folders`) and shares the same
-//! validation-then-persist cadence.
+//! validation-then-persist cadence. Scanning one is `library::scan`'s.
 
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
-use rayon::prelude::*;
-
+use crate::library::scan;
 use crate::services;
-use crate::state::{AppState, ScanProgressTick};
+use crate::state::AppState;
 use crate::tasks::{self, TaskSpawner};
 use melodia_core::entities::folder;
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 use melodia_store::database::{DbPool, queries};
-use melodia_store::media::ingest::scanner::{
-    collect_media_files, scan_files_parallel, track_is_current,
-};
+use melodia_store::media::ingest::watcher::FolderWatcher;
 
-/// Validates a new folder path against existing folders.
-/// Returns IDs of existing child folders that should be removed (covered by the new parent).
+/// Refuses a new folder path that isn't a directory, or is already in the library or inside a
+/// folder that is, and answers it canonicalized. A path *around* existing folders is accepted: the
+/// first scan of it that completes absorbs them.
 fn validate_folder_path(
     new_path: &Path,
     existing_folders: &[folder::Folder],
-) -> Result<Vec<i64>, AppError> {
+) -> Result<PathBuf, AppError> {
     if !new_path.exists() {
         return Err(AppError::Validation(format!("Path does not exist: {}", new_path.display())));
     }
@@ -39,8 +36,6 @@ fn validate_folder_path(
     let canonical_new = melodia_core::utils::canonicalize_path(new_path).map_err(|e| {
         AppError::Validation(format!("Cannot resolve path {}: {}", new_path.display(), e))
     })?;
-
-    let mut children_to_remove = Vec::new();
 
     for folder in existing_folders {
         let existing_path = Path::new(&folder.path);
@@ -61,51 +56,69 @@ fn validate_folder_path(
                 folder.path
             )));
         }
-
-        if canonical_existing.starts_with(&canonical_new) {
-            children_to_remove.push(folder.id);
-        }
     }
 
-    Ok(children_to_remove)
+    Ok(canonical_new)
+}
+
+/// A folder inside another, which the outer one takes over once a scan of it completes.
+pub(crate) struct NestedFolder {
+    pub id: i64,
+    pub path: PathBuf,
+    /// A library folder, whose own scan reads its files. The folder an import filed loose tracks
+    /// under is scanned by nothing, so the one around it reads that directory itself.
+    pub is_enabled: bool,
+}
+
+/// The folders whose directory sits inside `outer`, compared canonically as validation compares,
+/// so a row spelled through a symlink still counts and one whose directory has gone never does.
+/// `outer` is canonical, as an added folder's row is stored.
+pub(crate) fn folders_inside(outer: &Path, folders: &[folder::Folder]) -> Vec<NestedFolder> {
+    folders
+        .iter()
+        .filter_map(|folder| {
+            let path = melodia_core::utils::canonicalize_path(&folder.path).ok()?;
+            (path != outer && path.starts_with(outer)).then_some(NestedFolder {
+                id: folder.id,
+                path,
+                is_enabled: folder.is_enabled,
+            })
+        })
+        .collect()
 }
 
 pub async fn add_folder(state: &AppState, path: String) -> Result<folder::Folder, AppError> {
-    let folder = insert_replacing_children(&state.db, &path).await?;
-
-    // Notify subscribers (Tracks view, folder list) — the new folder row is
-    // visible immediately, and any child folders that were auto-aggregated
-    // away cascade-deleted their tracks. The subsequent scan will fire its
-    // own bump on completion.
+    let folder = insert_validated(&state.db, &path).await?;
+    // Puts the row on screen before its scan starts.
     state.library_changed.bump();
-
+    retarget_watcher(state).await;
     Ok(folder)
 }
 
 /// [`add_folder`]'s body, narrowed to the pool it reaches.
 ///
-/// The delete is the half worth driving: a folder superseded by a new parent takes its tracks with
-/// it, and a rescan brings the files back with none of the ratings, play counts or favourites that
-/// were on them.
-async fn insert_replacing_children(db: &DbPool, path: &str) -> Result<folder::Folder, AppError> {
-    let new_path = Path::new(path);
+/// Deletes nothing, even where the new folder is around folders already in the library: they keep
+/// their tracks until its first completed scan absorbs them, so cancelling that scan leaves them as
+/// they were.
+async fn insert_validated(db: &DbPool, path: &str) -> Result<folder::Folder, AppError> {
     let existing_folders = queries::folder::get_all_folders(db).await?;
-    let children_to_remove = validate_folder_path(new_path, &existing_folders)?;
-
-    queries::folder::delete_folders_by_ids(db, &children_to_remove).await?;
-
-    let canonical = melodia_core::utils::canonicalize_path(new_path)
-        .map_err(|e| AppError::Validation(format!("Cannot resolve path: {e}")))?;
-    let canonical_str = canonical.to_string_lossy().into_owned();
-
-    queries::folder::insert_folder(db, &canonical_str, true).await
+    let canonical = validate_folder_path(Path::new(path), &existing_folders)?;
+    queries::folder::insert_folder(db, &canonical.to_string_lossy(), true).await
 }
 
 pub async fn remove_folder(state: &AppState, id: i64) -> Result<(), AppError> {
+    // Read ahead of the delete: the covers it releases are the ones named here and not after it.
+    let referenced_before = queries::artwork::referenced_filenames(&state.db).await?;
     queries::folder::delete_folder(&state.db, id).await?;
     // Cascade-delete removes every track in this folder; subscribers (Tracks
     // view + folder list) need to re-fetch or the UI keeps the stale rows.
     state.library_changed.bump();
+    tasks::artwork_sweep::retire_released(
+        &TaskSpawner::from_state(state),
+        state,
+        referenced_before,
+    );
+    retarget_watcher(state).await;
     Ok(())
 }
 
@@ -113,99 +126,74 @@ pub async fn get_folders(state: &AppState) -> Result<Vec<folder::Folder>, AppErr
     queries::folder::get_all_folders(&state.db).await
 }
 
+/// The platform's own Music folder, when adding it wouldn't be refused, for the welcome card to
+/// offer in one click.
+pub async fn suggested_music_folder(state: &AppState) -> Result<Option<PathBuf>, AppError> {
+    let Some(music_dir) = dirs::audio_dir() else {
+        return Ok(None);
+    };
+    let existing = queries::folder::get_all_folders(&state.db).await?;
+    let addable = validate_folder_path(&music_dir, &existing).is_ok();
+    Ok(addable.then_some(music_dir))
+}
+
 pub async fn toggle_folder_watching(state: &AppState, enabled: bool) -> Result<(), AppError> {
     if enabled {
-        // Resolve folder paths via the async DB query *before* taking the
-        // (sync) parking_lot lock — the guard must not span an await point.
-        let folders = queries::folder::get_all_folders(&state.db).await?;
-        let paths: Vec<PathBuf> =
-            folders.iter().filter(|f| f.is_enabled).map(|f| PathBuf::from(&f.path)).collect();
-        {
-            let mut watcher = state.watcher.lock();
-            watcher.start(&paths)?;
-        }
+        start_watcher(state).await?;
         // Catch files added / removed while the watcher was off — the
         // watcher itself only reports live events.
-        reconcile_watched_folders(state);
+        scan::reconcile_watched_folders(state);
     } else {
-        let mut watcher = state.watcher.lock();
-        watcher.stop();
+        with_watcher(state, FolderWatcher::stop).await?;
     }
     Ok(())
 }
 
-/// Coalesces concurrent `reconcile_watched_folders` triggers. A
-/// rapid-fire kernel-overflow burst during `rsync` could otherwise spawn
-/// three full library sweeps back-to-back; each one is idempotent but
-/// would still re-hash every file. The flag is RAII-cleared by
-/// [`ReconcileGuard`] so a panic or early-return path can't strand it.
-static RECONCILE_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
+/// Starts the watcher over every enabled folder, replacing whatever it watched before.
+pub(crate) async fn start_watcher(state: &AppState) -> Result<(), AppError> {
+    let paths = watch_roots(&state.db).await?;
+    with_watcher(state, move |watcher| watcher.start(&paths)).await?
+}
 
-struct ReconcileGuard;
-impl Drop for ReconcileGuard {
-    fn drop(&mut self) {
-        RECONCILE_IN_FLIGHT.store(false, Ordering::Release);
+/// Points a running watcher at the folder list as it now stands, so a folder added in Settings
+/// is watched from now rather than from the next launch. A failure costs only that, so it is
+/// logged rather than failing the add or remove it follows.
+async fn retarget_watcher(state: &AppState) {
+    let retarget = async {
+        let paths = watch_roots(&state.db).await?;
+        with_watcher(state, move |watcher| watcher.retarget(&paths)).await
+    };
+    if let Err(e) = retarget.await {
+        log::warn!("Folder watcher didn't follow the folder list: {}", describe(&e));
     }
 }
 
-/// Fire-and-forget background reconcile of every enabled library folder.
-/// Catches files that landed (or vanished) while the watcher was off —
-/// the watcher itself only reports live events, so a restart or a
-/// toggle-off interval leaves DB and disk out of sync until the next
-/// manual Rescan. Triggered after the watcher transitions off → on
-/// (`first_launch::run`, `toggle_folder_watching(true)`) and on
-/// watcher-overflow `RescanNeeded` from `file_event_processor`.
-///
-/// Sequential per folder: `SQLite` has a single writer, and
-/// `scan_progress_tx` is a `watch` channel that parallel scans would
-/// clobber. Each `scan_folder_internal` already bumps
-/// `library_changed`, so Browse/Tracks views auto-refresh per folder
-/// as scans complete.
-///
-/// Tracked on `TaskSpawner` so shutdown waits for the in-flight folder's
-/// transaction to commit rather than tearing the runtime out from under
-/// a partial scan; shutdown between folders bails early since each
-/// folder is atomic on its own.
-///
-/// Coalesces concurrent triggers via [`RECONCILE_IN_FLIGHT`] — a second
-/// call while a reconcile is mid-flight is a no-op (the in-flight pass
-/// will pick up the latest disk state anyway).
-pub fn reconcile_watched_folders(state: &AppState) {
-    if RECONCILE_IN_FLIGHT
-        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-        .is_err()
-    {
-        log::debug!("reconcile_watched_folders: already in flight, skipping");
-        return;
-    }
-    let spawner = TaskSpawner::from_state(state);
-    let state = state.clone();
-    spawner.spawn_cancellable(move |shutdown| async move {
-        let _guard = ReconcileGuard;
-        let folders = match queries::folder::get_all_folders(&state.db).await {
-            Ok(f) => f,
-            Err(e) => {
-                log::warn!("reconcile_watched_folders: load folders failed: {e}");
-                return;
-            }
-        };
-        for folder in folders.iter().filter(|f| f.is_enabled) {
-            if shutdown.is_cancelled() {
-                log::info!(
-                    "reconcile_watched_folders: shutdown requested, bailing between folders"
-                );
-                return;
-            }
-            if let Err(e) = scan_folder_internal(&state, folder.id).await {
-                log::warn!("reconcile_watched_folders: scan of {} failed: {}", folder.path, e);
-            }
-        }
-    });
+/// The enabled folders, less any inside another. A folder awaiting absorption is already under its
+/// parent's recursive watch, and unwatching it later would take the parent's watches with it.
+async fn watch_roots(db: &DbPool) -> Result<Vec<PathBuf>, AppError> {
+    let folders = queries::folder::get_all_folders(db).await?;
+    let enabled: Vec<PathBuf> =
+        folders.iter().filter(|f| f.is_enabled).map(|f| PathBuf::from(&f.path)).collect();
+    let is_nested =
+        |path: &PathBuf| enabled.iter().any(|other| other != path && path.starts_with(other));
+    Ok(enabled.iter().filter(|path| !is_nested(path)).cloned().collect())
+}
+
+/// Runs `op` against the watcher on the blocking pool: registering a recursive watch walks the
+/// whole tree under the lock, and Add Folder's flow runs on the UI thread.
+async fn with_watcher<R: Send + 'static>(
+    state: &AppState,
+    op: impl FnOnce(&mut FolderWatcher) -> R + Send + 'static,
+) -> Result<R, AppError> {
+    let watcher = Arc::clone(&state.watcher);
+    tokio::task::spawn_blocking(move || op(&mut watcher.lock()))
+        .await
+        .map_err(|e| AppError::watcher("Folder watcher task failed", e))
 }
 
 /// Persist the `folder_watching_enabled` flag *first*, then flip the watcher.
 /// Persist-first means a `start()` failure leaves disk consistent with the
-/// user's intent — `tasks::first_launch::run` will retry on next launch
+/// user's intent — `tasks::resume_watching::run` will retry on next launch
 /// from the persisted flag. The reverse order would leave a running watcher
 /// that doesn't restart next session if `mutate_settings` failed.
 pub async fn set_folder_watching_enabled(state: &AppState, enabled: bool) -> Result<(), AppError> {
@@ -213,266 +201,6 @@ pub async fn set_folder_watching_enabled(state: &AppState, enabled: bool) -> Res
         s.library.folder_watching_enabled = enabled;
     })?;
     toggle_folder_watching(state, enabled).await
-}
-
-pub async fn scan_folder(state: &AppState, folder_id: i64) -> Result<u32, AppError> {
-    scan_folder_internal(state, folder_id).await
-}
-
-/// Scan-delta size above which the denormalized-stats triggers are dropped
-/// for the ingest and rebuilt via one `recalculate_all_stats` sweep at the
-/// end. At or below it the triggers stay enabled: per-row maintenance on a
-/// handful of inserts/updates/deletes is far cheaper than the full 3-table
-/// correlated-subquery recalc the drop would force. Same value and
-/// rationale as the watcher reconcile path's `BULK_THRESHOLD`
-/// (`tasks/file_event_processor/reconcile.rs`).
-const SCAN_BULK_THRESHOLD: usize = 20;
-
-/// Files per ingest write-transaction on the bulk scan path. Large enough
-/// that per-chunk overhead (begin/commit + the 6 trigger DDL statements)
-/// is noise, small enough that interactive writes waiting on the single
-/// writer connection get a slot every few seconds even on slow disks.
-const TX_CHUNK_FILES: usize = 2_000;
-
-/// Internal scan implementation. Reusable by `scan_folder` and the first-launch task.
-pub async fn scan_folder_internal(state: &AppState, folder_id: i64) -> Result<u32, AppError> {
-    let folder = queries::folder::get_folder_by_id(&state.db, folder_id).await?;
-
-    let folder_path = Path::new(&folder.path);
-    if !folder_path.exists() {
-        return Err(AppError::scanner_msg(format!("Folder does not exist: {}", folder.path)));
-    }
-
-    // Read-side pre-load through the read pool (before the writer tx opens):
-    // size + mtime for every track already in this folder. Doesn't contend
-    // with the scan's writes.
-    let existing_summaries =
-        queries::scan::get_existing_track_summaries_for_folder(&state.db, folder.id).await?;
-
-    // Directory walk + incremental filter on the blocking pool. Both are
-    // synchronous syscall loops (WalkDir over the whole tree, then one
-    // `fs::metadata` per already-known file inside `track_is_current`) —
-    // running them inline in this async fn would pin one of the runtime's
-    // few workers for the duration on a cold-cache disk, stalling position
-    // ticks and watcher deliveries during boot reconciles.
-    //
-    // The incremental filter only (re)parses files that are new, or whose
-    // size or mtime no longer matches the stored row. Byte-unchanged files
-    // keep their existing DB metadata untouched — Lofty is skipped for
-    // them entirely, which is the bulk of a typical startup rescan.
-    //
-    // The filter runs on Rayon (like `scan_files_parallel` does downstream):
-    // *every* file in the library reaches it and almost none proceed past it, so
-    // its per-file `stat` is what a rescan-with-nothing-changed — the common case
-    // — actually spends its time on, and a serial syscall loop is the worst shape
-    // for it on a cold cache or a network mount. Rayon's `collect` preserves the
-    // sequential order, so `to_scan` stays byte-for-byte what it was before.
-    let folder_path_owned = folder_path.to_path_buf();
-    let (files, to_scan) = tokio::task::spawn_blocking(move || {
-        let files = collect_media_files(&folder_path_owned);
-        let to_scan: Vec<PathBuf> = files
-            .par_iter()
-            .filter(|path| !track_is_current(path, &existing_summaries))
-            .cloned()
-            .collect();
-        (files, to_scan)
-    })
-    .await
-    .map_err(|e| AppError::scanner("Scan walk task failed", e))?;
-
-    if files.is_empty() {
-        return Ok(0);
-    }
-
-    // Drop guard: any return path (including `?` early-exits below) clears
-    // the scan-progress channel so the UI doesn't keep a stale progress bar.
-    let _scan_guard = ScanProgressGuard(&state.scan_progress_tx);
-
-    let skipped = files.len() - to_scan.len();
-    if skipped > 0 {
-        log::info!(
-            "Incremental scan of '{}': {skipped} unchanged file(s) skipped, {} to (re)parse",
-            folder.path,
-            to_scan.len()
-        );
-    }
-    let total = u32::try_from(to_scan.len()).unwrap_or(u32::MAX);
-
-    // Decided before `to_scan` moves into the scan task. Edge: a tiny
-    // `to_scan` combined with a huge orphan purge (folder emptied
-    // externally) runs the delete trigger per orphaned row — rare, still
-    // correct, and accepted over plumbing the orphan count (unknown until
-    // inside the transaction) into this decision.
-    let is_bulk = to_scan.len() > SCAN_BULK_THRESHOLD;
-
-    // Publish an initial 0-of-total tick so the UI shows the bar immediately.
-    let _ = state.scan_progress_tx.send(Some(ScanProgressTick {
-        folder_id: folder.id,
-        scanned: 0,
-        total,
-        current_file: String::new(),
-    }));
-
-    let scanned_files = if to_scan.is_empty() {
-        Vec::new()
-    } else {
-        let artwork_dir = state.paths.artwork_dir.clone();
-        let cover_cache_clone = state.cover_cache.clone();
-        let progress_tx = state.scan_progress_tx.clone();
-        let progress_folder_id = folder.id;
-        // Throttle progress publishes to ~20 Hz. The scanner already gates
-        // at every-10-files, but a fast SSD scan can fire those gates much
-        // faster than the UI can paint — and each tick allocates a String
-        // (filename) for the watch channel. Always publish the final tick
-        // (`scanned == total`) so the UI knows the scan finished.
-        let last_send = std::sync::Arc::new(parking_lot::Mutex::new(std::time::Instant::now()));
-        tokio::task::spawn_blocking(move || {
-            scan_files_parallel(
-                &to_scan,
-                &artwork_dir,
-                &cover_cache_clone,
-                &move |scanned, file_name| {
-                    let is_final = scanned == total;
-                    if !is_final {
-                        let mut last = last_send.lock();
-                        if last.elapsed() < std::time::Duration::from_millis(50) {
-                            return;
-                        }
-                        *last = std::time::Instant::now();
-                    }
-                    let _ = progress_tx.send(Some(ScanProgressTick {
-                        folder_id: progress_folder_id,
-                        scanned,
-                        total,
-                        current_file: file_name.to_owned(),
-                    }));
-                },
-            )
-        })
-        .await
-        .map_err(|e| AppError::scanner("Scan task failed", e))?
-    };
-
-    let scan_timestamp = melodia_core::utils::now_rfc3339();
-
-    // --- Stage 1: ingest, chunked into separate write transactions on the
-    // bulk path. The single writer connection frees between chunks, so
-    // interactive writes (favorite toggles, play-count flushes, position
-    // saves) no longer queue behind a multi-minute first scan. Each chunk
-    // is self-consistent: stats triggers are dropped and recreated INSIDE
-    // its transaction, so a crash never leaves them missing — the stats
-    // merely lag until the final recalc below, which is invisible to the
-    // UI because `library_changed` is bumped only after the final
-    // commit. A crash between chunks leaves committed tracks behind; the
-    // next scan's size+mtime gate makes the re-run a cheap no-op over them.
-    let mut inserted_count: u32 = 0;
-    let mut moved_count: u32 = 0;
-    let mut updated_count: u32 = 0;
-    let chunk_size = if is_bulk { TX_CHUNK_FILES } else { scanned_files.len().max(1) };
-    for chunk in scanned_files.chunks(chunk_size) {
-        let mut tx = state.db.write().begin().await?;
-        if is_bulk {
-            queries::stats::disable_stats_triggers(&mut tx).await?;
-        }
-        let result = queries::ingest::ingest_scanned_files(
-            &mut tx,
-            chunk,
-            &queries::FolderResolution::Fixed(folder.id),
-            &scan_timestamp,
-            true,
-        )
-        .await?;
-        if is_bulk {
-            queries::stats::enable_stats_triggers(&mut tx).await?;
-        }
-        tx.commit().await?;
-        inserted_count += result.inserted_count;
-        moved_count += result.moved_count;
-        updated_count += result.updated_count;
-    }
-
-    // --- Stage 2: orphan pruning + album-artwork roll-up + stats recalc
-    // in one final transaction.
-    let mut tx = state.db.write().begin().await?;
-    let all_db_paths = queries::scan::get_all_track_paths_for_folder(&mut tx, folder.id).await?;
-    // Orphans = DB rows whose file is no longer on disk. Compare against the
-    // full on-disk set (`files`), NOT `scanned_files`: with the incremental
-    // filter above, `scanned_files` omits unchanged files that are still
-    // present, and treating those as orphans would delete the whole library.
-    let on_disk_paths: HashSet<String> =
-        files.iter().map(|p| p.to_string_lossy().into_owned()).collect();
-    let orphans: Vec<String> =
-        all_db_paths.into_iter().filter(|p| !on_disk_paths.contains(p)).collect();
-    // On the bulk path a full recalc follows anyway, so a large orphan
-    // purge shouldn't pay per-row delete triggers on top — drop them for
-    // the delete. Small deltas keep the triggers on (per-row maintenance
-    // is the whole point of the `!is_bulk` branch).
-    let bulk_orphan_purge = is_bulk && !orphans.is_empty();
-    if bulk_orphan_purge {
-        queries::stats::disable_stats_triggers(&mut tx).await?;
-    }
-    if !orphans.is_empty() {
-        log::info!("Removing {} orphaned tracks from folder {}", orphans.len(), folder.path);
-        queries::scan::delete_tracks_by_paths_batch(&mut tx, &orphans).await?;
-    }
-
-    // No-op rescans (every file unchanged, no orphans, no inserts) skip the
-    // album-artwork propagation and the full stats recalc — both are O(rows)
-    // sweeps that produce identical values when nothing changed.
-    let any_changes =
-        inserted_count > 0 || updated_count > 0 || moved_count > 0 || !orphans.is_empty();
-
-    if any_changes {
-        queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
-        // Purged orphan tracks can leave their album/artist/genre empty; sweep those.
-        queries::scan::prune_orphans(&mut tx).await?;
-    }
-    // Small deltas (`!is_bulk`) never dropped the triggers, so per-row
-    // maintenance already kept the stats correct — no recalc needed at all.
-    if is_bulk {
-        if any_changes {
-            queries::stats::recalculate_all_stats(&mut tx).await?;
-        }
-        if bulk_orphan_purge {
-            queries::stats::enable_stats_triggers(&mut tx).await?;
-        }
-    }
-    tx.commit().await?;
-
-    if moved_count > 0 {
-        log::info!("Detected {moved_count} moved/renamed files");
-    }
-    if updated_count > 0 {
-        log::info!("Updated metadata for {updated_count} changed files");
-    }
-
-    let now = melodia_core::utils::now_rfc3339();
-    queries::folder::update_folder_last_scanned(&state.db, folder_id, &now).await?;
-
-    services::artist_images::spawn_fetch(
-        state.paths.clone(),
-        state.db.clone(),
-        state.http_client().clone(),
-    );
-    let spawner = TaskSpawner::from_state(state);
-    tasks::retroactive_hash::spawn(&spawner, state);
-    // After the orphan pass above committed, so the rows it deleted are already gone from the
-    // reference set this reads.
-    tasks::artwork_sweep::spawn(&spawner, state);
-
-    state.library_changed.bump();
-
-    Ok(inserted_count)
-}
-
-/// RAII helper: clears `scan_progress_tx` on drop so any early-return path
-/// inside `scan_folder_internal` removes the UI's progress indicator.
-struct ScanProgressGuard<'a>(&'a tokio::sync::watch::Sender<Option<ScanProgressTick>>);
-
-impl Drop for ScanProgressGuard<'_> {
-    fn drop(&mut self) {
-        let _ = self.0.send(None);
-    }
 }
 
 #[cfg(test)]

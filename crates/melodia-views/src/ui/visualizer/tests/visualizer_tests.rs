@@ -17,7 +17,6 @@
 
 use super::*;
 use melodia_app::services::settings::{DEFAULT_VIZ_STYLE, VisualizerFlags};
-use melodia_playback::player::playback::visualizer::VisualizerShared;
 
 const PLAYBACK_SECTION: &str =
     include_str!("../../../../../melodia-ui/ui/views/settings/playback-section.slint");
@@ -192,35 +191,6 @@ fn every_index_but_mirrored_grows_its_bars_from_the_baseline() {
     for index in [style_index(STYLE_BARS), style_index(STYLE_WAVEFORM), STYLES.len(), usize::MAX] {
         assert_eq!(bar_anchor(index), BarAnchor::Baseline, "index {index}");
     }
-}
-
-#[test]
-fn the_trace_is_laid_out_against_the_strips_width_alone() {
-    // The frame takes the whole strip since the bars need all of it, and the trace's columns
-    // follow the width. Any other term leaking in would re-lay the trace on a move or a
-    // monitor change that left the width alone.
-    let viz = VisualizerShared::new(false);
-    let narrow = StripGeometry { x: 0.0, y: 0.0, width: 240.0, height: 56.0, scale: 1.0 };
-    let moved = StripGeometry { x: 31.5, y: 412.25, width: 240.0, height: 128.0, scale: 2.0 };
-
-    let mut at_origin = String::new();
-    frame::waveform(
-        &viz,
-        &mut WaveformAnalyzer::new(RING_CAP, MAX_COLUMNS),
-        &mut at_origin,
-        0,
-        narrow,
-    );
-    let mut elsewhere = String::new();
-    frame::waveform(
-        &viz,
-        &mut WaveformAnalyzer::new(RING_CAP, MAX_COLUMNS),
-        &mut elsewhere,
-        0,
-        moved,
-    );
-
-    assert_eq!(at_origin, elsewhere);
 }
 
 #[test]

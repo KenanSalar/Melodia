@@ -24,8 +24,9 @@ mod up_next;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::Duration;
 
-use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Image, ModelRc, SharedString, TimerMode, VecModel};
 
 use crate::ui::chips;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
@@ -34,7 +35,7 @@ use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::track::TrackSummary;
 use melodia_engine::player::engine::now_playing::SourceId;
 use melodia_engine::player::engine::state::{PlayerViewModelLight, QueueViewModel, lock_state};
-use melodia_ui::{AppWindow, MiniLayout, MiniPlayer, Nav, NowPlaying, Player, QueueRow};
+use melodia_ui::{AppWindow, MiniLayout, MiniPlayer, Nav, NowPlaying, Player, QueueRow, Theme};
 
 use async_compat::Compat;
 
@@ -42,15 +43,15 @@ pub(crate) use source_change::republish_for_palette;
 use source_change::{apply_source_change, spawn_source_change_subscriber};
 use up_next::{rebuild_up_next, spawn_up_next_subscriber, wire_now_playing_open};
 
-/// Re-fill a `NowPlayingState`-shadowed surface: the Up Next list, the high-res cover slot, or
-/// the lyrics panel's sheet.
+/// Re-fill a `NowPlayingState`-shadowed surface (the Up Next list, the high-res cover slot or the
+/// lyrics panel's sheet), or hand the cover back.
 ///
-/// Set once, after [`install`] has built the state each one reads. The first two are called by
-/// [`crate::ui::shell::mini_player::install`] when the miniplayer becomes visible — the
+/// Set once, after [`install`] has built the state each one reads. The Up Next and cover kicks are
+/// called by [`crate::ui::shell::mini_player::install`] when the miniplayer becomes visible — the
 /// subscribers stash while no surface renders the model, so without those kicks a never-opened
 /// session followed by a direct shrink-to-mini shows empty or stale content. The lyrics one is
 /// called from wherever a sheet could have gone stale, and dedupes on the one it holds.
-type Seeder = Box<dyn Fn()>;
+type Hook = Box<dyn Fn()>;
 
 /// The list scrolls, so this is a soft cap — large enough to feel complete, small enough
 /// that rebuilding it on every queue mutation stays cheap.
@@ -159,11 +160,16 @@ pub struct NowPlayingState {
     pub(super) chip_last_shape: RefCell<Vec<usize>>,
     /// `None` only between `Rc::new(…)` and [`install`]'s post-init writes. Captures a
     /// `Weak<NowPlayingState>` to avoid the `Rc → closure → Rc` cycle.
-    up_next_seeder: RefCell<Option<Seeder>>,
+    up_next_seeder: RefCell<Option<Hook>>,
     /// The high-res cover, accent and chips, invoked by [`Self::kick_artwork`] when a miniplayer
     /// layout drawing them becomes visible, so the sharp tile replaces the row-tier fallback
     /// without waiting for the next source change.
-    artwork_seeder: RefCell<Option<Seeder>>,
+    artwork_seeder: RefCell<Option<Hook>>,
+    /// [`Self::release_artwork`]'s half, the seeder's twin.
+    artwork_releaser: RefCell<Option<Hook>>,
+    /// Defers the release past the fades still reading the slots it clears. One timer rather than
+    /// one per release, so a later release restarts the wait instead of racing it.
+    slot_release: slint::Timer,
     /// The lyrics panel's rows, offset table and sung index. Lives here rather than beside the
     /// panel because the panel is `if`-mounted and this outlives it, and because the three edges
     /// that refill it are all out here.
@@ -186,6 +192,15 @@ impl NowPlayingState {
     pub(crate) fn kick_artwork(&self) {
         if let Some(seeder) = self.artwork_seeder.borrow().as_ref() {
             seeder();
+        }
+    }
+
+    /// Hand back the high-res cover and blur once no surface draws them: the cross-fade slots not
+    /// on show and the decode cache, after the fades still reading them are over. The shown slots
+    /// stay, so a same-source reopen needs no decode. A no-op before [`install`] returns.
+    pub(crate) fn release_artwork(&self) {
+        if let Some(releaser) = self.artwork_releaser.borrow().as_ref() {
+            releaser();
         }
     }
 
@@ -247,10 +262,9 @@ impl Surfaces {
 }
 
 /// Drops the [`NowPlayingArtwork`] LRU and `malloc_trim`s the pages back, off the UI thread:
-/// `clear()` drops buffers and `trim()` walks arenas. The heavy `(cover, blur)` buffers are pinned
-/// only while a surface renders them, and the displayed track's stay alive regardless, the `Player`
-/// global still referencing its `Image`s.
-pub(crate) fn release_artwork_off_thread(state: &AppState, np_artwork: &Arc<NowPlayingArtwork>) {
+/// `clear()` drops buffers and `trim()` walks arenas. Runs after [`clear_unshown_slots`], so the
+/// trim sees what both let go of; the displayed track's pair stays alive in the slot showing it.
+fn release_artwork_off_thread(state: &AppState, np_artwork: &Arc<NowPlayingArtwork>) {
     let np_artwork = Arc::clone(np_artwork);
     state.runtime.spawn_blocking(move || {
         np_artwork.clear();
@@ -328,6 +342,8 @@ pub fn install(
         chip_last_shape: RefCell::new(Vec::new()),
         up_next_seeder: RefCell::new(None),
         artwork_seeder: RefCell::new(None),
+        artwork_releaser: RefCell::new(None),
+        slot_release: slint::Timer::default(),
         lyrics: lyrics::install(ui, state),
     });
 
@@ -413,6 +429,40 @@ pub fn install(
         }));
     }
 
+    // The seeder's twin. Waits out `dur-med`, which the cover's fade, the blur stack's and the
+    // miniplayer backdrop's drain all run on, and hands nothing back if a surface draws again by
+    // then.
+    {
+        let weak_ui = ui.as_weak();
+        let state = state.clone();
+        let np_artwork = np_artwork.clone();
+        let weak_np = Rc::downgrade(&np_state);
+        *np_state.artwork_releaser.borrow_mut() = Some(Box::new(move || {
+            let (Some(ui), Some(np_state)) = (weak_ui.upgrade(), weak_np.upgrade()) else {
+                return;
+            };
+            let fade_ms = u64::try_from(ui.global::<Theme>().get_dur_med()).unwrap_or(0);
+            let weak_ui = weak_ui.clone();
+            let weak_np = weak_np.clone();
+            let state = state.clone();
+            let np_artwork = np_artwork.clone();
+            np_state.slot_release.start(
+                TimerMode::SingleShot,
+                Duration::from_millis(fade_ms),
+                move || {
+                    let (Some(ui), Some(np_state)) = (weak_ui.upgrade(), weak_np.upgrade()) else {
+                        return;
+                    };
+                    if np_state.renders_artwork() {
+                        return;
+                    }
+                    clear_unshown_slots(&ui.global::<Player>());
+                    release_artwork_off_thread(&state, &np_artwork);
+                },
+            );
+        }));
+    }
+
     // Same `Weak<NowPlayingState>` reason, one layer down: the lyrics panel's own state is a
     // field of the thing its reseed has to read.
     lyrics::wire_reseed(ui, state, &np_state);
@@ -458,6 +508,39 @@ pub(crate) fn write_crossfade_slot(
             set_has_image(true);
         }
         None => set_has_image(false),
+    }
+}
+
+/// Empty every cross-fade slot nothing draws, the other half of [`write_crossfade_slot`]: the slot
+/// `use_a` doesn't name, or both where there is no image. Only once no fade is reading them.
+fn clear_unshown_slots(player: &Player<'_>) {
+    clear_unshown_slot(
+        player.get_np_cover_has_image(),
+        player.get_np_cover_use_a(),
+        |img| player.set_np_cover_a(img),
+        |img| player.set_np_cover_b(img),
+    );
+    clear_unshown_slot(
+        player.get_blur_has_image(),
+        player.get_blur_use_a(),
+        |img| player.set_blur_img_a(img),
+        |img| player.set_blur_img_b(img),
+    );
+}
+
+fn clear_unshown_slot(
+    has_image: bool,
+    use_a: bool,
+    set_a: impl FnOnce(Image),
+    set_b: impl FnOnce(Image),
+) {
+    match (has_image, use_a) {
+        (true, true) => set_b(Image::default()),
+        (true, false) => set_a(Image::default()),
+        (false, _) => {
+            set_a(Image::default());
+            set_b(Image::default());
+        }
     }
 }
 

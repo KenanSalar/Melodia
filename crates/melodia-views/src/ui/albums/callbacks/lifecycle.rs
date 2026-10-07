@@ -9,6 +9,7 @@ use slint::ComponentHandle;
 
 use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
 use crate::ui::callbacks::macros::{release_detail_hero_images, spawn_logged};
+use crate::ui::grid_prewarm;
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::tab_bar::UNFETCHED_COUNT;
@@ -135,6 +136,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
                             // stranding them on an empty detail page they
                             // can only escape via the back button.
                             albums_ui_mod::clear_detail(&au);
+                            // Handed back warm, as a failed restore's grid is.
+                            grid_prewarm::prewarm_off_thread(&au, AlbumsUi::prewarm_visible_covers)
+                                .await;
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 let g = ui.global::<AlbumDetail>();
                                 g.set_album_id(-1);
@@ -142,11 +146,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
                             });
                         }
                     } else {
-                        let au = au.clone();
-                        let _ = tokio::task::spawn_blocking(move || {
-                            au.prewarm_visible_covers();
-                        })
-                        .await;
+                        grid_prewarm::prewarm_off_thread(&au, AlbumsUi::prewarm_visible_covers)
+                            .await;
                     }
                 });
             } else {

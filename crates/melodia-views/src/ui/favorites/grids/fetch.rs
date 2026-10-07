@@ -77,9 +77,9 @@ pub async fn refresh_grids(state: &AppState, fav_ui: &Arc<FavoritesUi>, weak: &W
     // cards' first binding evaluation is a cache hit rather than a placeholder plus a scheduled
     // decode. Only the mounted tab; the other warms in `tab-changed`.
     if fav_ui.section_active() {
-        let fu = fav_ui.clone();
         let tab = fav_ui.active_tab();
-        let _ = tokio::task::spawn_blocking(move || fu.prewarm_tab_covers(tab)).await;
+        crate::ui::grid_prewarm::prewarm_off_thread(fav_ui, move |fu| fu.prewarm_tab_covers(tab))
+            .await;
     }
 
     // Both fetches resolved or logged; push the filtered model so the visible tab reflects fresh

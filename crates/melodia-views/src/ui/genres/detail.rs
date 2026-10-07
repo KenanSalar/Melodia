@@ -117,8 +117,7 @@ where
 
     // Build the `Send` half of every row here on the worker — only the `!Send` cover decode is
     // left for the UI thread, so the click→detail transition doesn't hitch on a large genre.
-    let ui_tracks: Vec<UiTrackListRow> =
-        tracks.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
+    let ui_tracks: Vec<UiTrackListRow> = crate::ui::tracks::to_slint_track_list_rows(&tracks);
 
     // How far the genre spreads — folded on the worker that fetched the rows,
     // since a broad genre's track list is the longest in the app.
@@ -134,7 +133,7 @@ where
         reset_detail_selection(&g, &genres_ui);
         // Fresh open clears the filter so the user lands on the full
         // track set, not a stale needle from the previous detail.
-        g.set_filter(SharedString::from(""));
+        g.set_filter(SharedString::default());
         genres_ui.detail.filter.lock().clear();
         g.set_sort_field(SharedString::from(sort_field.as_str()));
         g.set_sort_dir(SharedString::from(sort_dir.as_str()));

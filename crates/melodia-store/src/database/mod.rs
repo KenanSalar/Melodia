@@ -304,8 +304,8 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
         .pragma("temp_store", "MEMORY")
         .pragma("mmap_size", "268435456");
 
-    // `idle_timeout` reaps the connections the boot prefetch burst opens; sqlx
-    // otherwise keeps them for the process lifetime. `min_connections` stays at
+    // `idle_timeout` reaps the connections the boot prefetch burst opens after a
+    // minute idle rather than sqlx's default ten. `min_connections` stays at
     // its default — a cold reopen costs nothing at this scale.
     let read_pool = SqlitePoolOptions::new()
         .max_connections(read_conns)

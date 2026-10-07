@@ -21,6 +21,11 @@ use melodia_views::ui;
 use slint::ComponentHandle;
 use tokio::sync::watch;
 
+/// Rayon's global pool, where jpeg-decoder runs its passes for every JPEG decoded outside a pool.
+/// Two keeps a cover decode parallel without a worker per core idling from the first decode to
+/// quit; a pass over library files brings a `ScanPool` of its own rather than landing here.
+const GLOBAL_RAYON_THREADS: usize = 2;
+
 fn main() -> AppResult<()> {
     // The updater's post-swap smoke test spawns the freshly renamed binary with
     // this and asserts exit 0 plus a `Melodia ` prefix carrying the expected
@@ -140,6 +145,15 @@ fn main() -> AppResult<()> {
         .build()
         .map_err(|e| AppError::Settings(format!("tokio runtime: {e}")))?;
 
+    // Ahead of the first decode: rayon fixes the global pool's shape at first use.
+    if let Err(e) = rayon::ThreadPoolBuilder::new()
+        .num_threads(GLOBAL_RAYON_THREADS)
+        .thread_name(|i| format!("rayon-{i}"))
+        .build_global()
+    {
+        log::warn!("rayon global pool: {e}; rayon will size its own");
+    }
+
     // Slint's a11y/D-Bus thread looks up a tokio reactor from UI-thread tasks,
     // so the guard has to stay alive for the entire `app.run()` window.
     let runtime_guard = runtime.enter();
@@ -169,7 +183,7 @@ fn main() -> AppResult<()> {
         boot::tasks::open_startup_files(&runtime, &state, &startup_files);
     }
 
-    boot::tasks::spawn_first_launch(&spawner, &state);
+    boot::tasks::spawn_resume_watching(&spawner, &state);
 
     // Maximized rides the winit `WindowAttributes` hook — Slint exposes no API
     // for it, and the hook creates the window already-maximized with no flash.
@@ -282,7 +296,7 @@ fn main() -> AppResult<()> {
     ui::radio::install_history(weak.clone(), &views.radio_ui, &state.sinks)
         .map_err(|e| AppError::Window(format!("station history subscriber: {e}")))?;
 
-    match ui::queue_sheet::install(&app, &state) {
+    match ui::queue_sheet::install(&app, &state, &views.cover_thumbs) {
         Ok(h) => ui::window_chrome::set_queue_sheet_open(h.is_open),
         Err(e) => log::warn!("queue_sheet::install: {e}"),
     }
@@ -302,7 +316,7 @@ fn main() -> AppResult<()> {
     // Needs `np_state` for the up-next subscriber gate; without it the gate
     // would flip nothing visible.
     if let Some(ref np_state) = np_state
-        && let Err(e) = ui::shell::mini_player::install(&app, &state, &np_artwork, np_state)
+        && let Err(e) = ui::shell::mini_player::install(&app, &state, np_state)
     {
         log::warn!("mini_player::install: {e}");
     }
@@ -323,6 +337,11 @@ fn main() -> AppResult<()> {
     boot::ui_setup::install_library_changed_refresher(&state, &views.tracks_ui, weak.clone())?;
     boot::ui_setup::install_rescan_notice_subscriber(&state, weak.clone(), notifications.clone())?;
     boot::ui_setup::install_audio_device_lost_subscriber(
+        &state,
+        weak.clone(),
+        notifications.clone(),
+    )?;
+    boot::ui_setup::install_artwork_restore_subscriber(
         &state,
         weak.clone(),
         notifications.clone(),
@@ -399,7 +418,7 @@ fn main() -> AppResult<()> {
     // Independent of the daily check: the in-attempt prune only fires on the
     // next install click, so a cancelled install leaves a verified package in
     // the staging dir forever for a user who never clicks again. The grace
-    // matches `updater_daily::STARTUP_DELAY`, giving the first-launch scan and
+    // matches `updater_daily::STARTUP_DELAY`, giving the launch scan and
     // DB pre-fetch first claim on the disk.
     runtime.spawn(async {
         tokio::time::sleep(std::time::Duration::from_secs(30)).await;

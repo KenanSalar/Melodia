@@ -1,19 +1,31 @@
 import { FolderListRow } from "../models.slint";
 
+// `state::ScanPhase` plus the idle state the Rust side spells as an empty channel.
+export enum ScanPhase { idle, discovering, reading, finishing, stopping }
+
 // LibrarySettings: drives the Library Folders section of Settings. The
 // `folders` model is owned by Rust (`Rc<VecModel<FolderListRow>>` rebuilt
 // on each refresh in `crates/melodia-views/src/ui/settings/library_settings.rs`) and pushed in via
 // `set_folders(ModelRc::from(...))`. Scan-progress fields are patched by a
-// `slint::spawn_local` subscriber on `state.scan_progress_tx`.
+// `slint::spawn_local` subscriber on `state.scan`.
 export global LibrarySettings {
     in-out property <[FolderListRow]> folders;
-    in-out property <bool> scanning;
-    in-out property <float> scan-progress;
+    in-out property <ScanPhase> scan-phase: ScanPhase.idle;
+    in-out property <int> found-count;
     in-out property <int> scanned-count;
     in-out property <int> total-count;
     in-out property <string> scanning-file;
 
+    out property <bool> scanning: root.scan-phase != ScanPhase.idle;
+    out property <bool> scan-cancellable: root.scan-phase == ScanPhase.discovering
+        || root.scan-phase == ScanPhase.reading;
+    out property <float> scan-progress: root.total-count > 0
+        ? root.scanned-count / root.total-count
+        : 0;
+
     callback add-folder();
     callback remove-folder(int /*id*/);
     callback rescan-folder(int /*id*/);
+    // Stops every scan running, each keeping what it has read.
+    callback cancel-scan();
 }

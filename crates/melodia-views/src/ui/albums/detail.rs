@@ -108,8 +108,7 @@ where
     // The `Send` half of every row, built on the worker so only the `!Send`
     // cover lookup is left for the UI thread — otherwise the click→detail
     // transition hitches on a long album.
-    let ui_tracks: Vec<UiTrackListRow> =
-        tracks.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
+    let ui_tracks: Vec<UiTrackListRow> = crate::ui::tracks::to_slint_track_list_rows(&tracks);
 
     // Folded here rather than in the closure below: this is the worker that
     // already holds the rows.
@@ -126,7 +125,7 @@ where
         reset_detail_selection(&g, &albums_ui);
         // A fresh open lands on the full track set, not the previous detail's
         // needle. Slint property and Rust cache cleared together.
-        g.set_filter(SharedString::from(""));
+        g.set_filter(SharedString::default());
         albums_ui.detail.filter.lock().clear();
         g.set_sort_field(SharedString::from(sort_field.as_str()));
         g.set_sort_dir(SharedString::from(sort_dir.as_str()));
@@ -313,6 +312,7 @@ pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, albums_ui: &A
     };
     // Synchronously, so it is up before `app.show()` — see `AlbumDetail.restoring`.
     ui.global::<AlbumDetail>().set_restoring(true);
+    albums_ui.section.begin_restore();
     let s = state.clone();
     let au = albums_ui.clone();
     let weak = ui.as_weak();
@@ -324,6 +324,9 @@ pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, albums_ui: &A
         }
         // Lowered however it went, and behind `open_album`'s own hop so the id is already in: an
         // album gone since the last session owes the grid back rather than an empty body.
+        au.section.end_restore();
+        // A grid handed back is warmed before the hop below shows it; a reopen turns this away.
+        crate::ui::grid_prewarm::prewarm_off_thread(&au, AlbumsUi::prewarm_visible_covers).await;
         let _ = weak.upgrade_in_event_loop(|ui| {
             ui.global::<AlbumDetail>().set_restoring(false);
         });

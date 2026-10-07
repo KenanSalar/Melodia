@@ -37,30 +37,49 @@ pub async fn get_folder_by_id(db: &DbPool, id: i64) -> Result<folder::Folder, Ap
         .ok_or_else(|| AppError::not_found("Folder", id))
 }
 
+/// Deletes the folder, its tracks by cascade, and whatever those tracks leave behind.
+///
+/// The prune and the thumbnail refresh share the delete's transaction because nothing else would
+/// run them: only a scan that changed something does, and an album left without tracks or a
+/// playlist still showing one of their covers keeps that cover referenced, so the artwork sweep
+/// never retires it.
 pub async fn delete_folder(db: &DbPool, id: i64) -> Result<(), AppError> {
-    // ON DELETE CASCADE on tracks.folder_id handles child deletion
-    sqlx::query("DELETE FROM folders WHERE id = ?").bind(id).execute(db.write()).await?;
+    let mut tx = db.write().begin().await?;
+    sqlx::query("DELETE FROM folders WHERE id = ?").bind(id).execute(&mut *tx).await?;
+    crate::database::queries::scan::prune_orphans(&mut tx).await?;
+    crate::database::queries::playlist::refresh_automatic_thumbnails(&mut tx).await?;
+    tx.commit().await?;
     Ok(())
 }
 
-/// Batch delete by id list. Used by `add_folder` to remove subfolders covered
-/// by a newly-added parent — one round-trip instead of one per child.
-/// Chunks at [`MAX_BINDS_PER_STATEMENT`] so a long id list stays inside one statement's budget.
+/// Hands the tracks of the folders in `ids` to `parent_id`, then deletes those folders.
 ///
-/// [`MAX_BINDS_PER_STATEMENT`]: crate::database::MAX_BINDS_PER_STATEMENT
-pub async fn delete_folders_by_ids(db: &DbPool, ids: &[i64]) -> Result<(), AppError> {
+/// The tracks move before the rows go, so the cascade has nothing left to take: what a parent
+/// supersedes keeps its ratings, play counts, favourites and playlist entries. Neither the search
+/// index nor the stats triggers watch `folder_id`, so the move rewrites nothing else.
+pub async fn absorb_folders(db: &DbPool, parent_id: i64, ids: &[i64]) -> Result<(), AppError> {
     if ids.is_empty() {
         return Ok(());
     }
-    for chunk in ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT) {
+    let mut tx = db.write().begin().await?;
+    // One bind of each budget goes to the parent's id.
+    for chunk in ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 1) {
         let placeholders = crate::database::placeholders(chunk.len());
-        let sql = format!("DELETE FROM folders WHERE id IN ({placeholders})");
-        let mut q = sqlx::query(AssertSqlSafe(sql));
+        let sql = format!("UPDATE tracks SET folder_id = ? WHERE folder_id IN ({placeholders})");
+        let mut repoint = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(parent_id);
         for id in chunk {
-            q = q.bind(id);
+            repoint = repoint.bind(id);
         }
-        q.persistent(false).execute(db.write()).await?;
+        repoint.execute(&mut *tx).await?;
+
+        let sql = format!("DELETE FROM folders WHERE id IN ({placeholders})");
+        let mut delete = sqlx::query(AssertSqlSafe(sql)).persistent(false);
+        for id in chunk {
+            delete = delete.bind(id);
+        }
+        delete.execute(&mut *tx).await?;
     }
+    tx.commit().await?;
     Ok(())
 }
 

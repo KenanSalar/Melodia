@@ -351,6 +351,35 @@ fn an_unreadable_container_is_never_guessed_from_its_payload() -> Result<(), App
     Ok(())
 }
 
+/// `ListenBrainz` loves key on the recording id, and the only ids Melodia has are the ones a
+/// tagger wrote. `ID3v2` keeps it in a binary `UFID` frame rather than a text one, the format
+/// where the reader's mapping could quietly miss it.
+#[test]
+fn a_musicbrainz_recording_id_is_read_back_on_every_primary_tag_type() -> Result<(), AppError> {
+    let recording = "189002e7-3285-4e2e-92a3-7f6c30d407a2";
+    for fixture in ["silence.mp3", "silence.flac", "silence.m4a"] {
+        let tmp = TempDir::new()?;
+        let audio = stage_as(&tmp, fixture, fixture)?;
+        let mut tagged = read_tags(&audio, TagScope::Full)?;
+        tagged.insert_tag(Tag::new(tagged.primary_tag_type()));
+        let tag = tagged
+            .primary_tag_mut()
+            .ok_or_else(|| AppError::Validation(format!("{fixture}: no primary tag")))?;
+        assert!(
+            tag.insert_text(ItemKey::MusicBrainzRecordingId, recording.to_owned()),
+            "{fixture}: the primary tag type has to take a recording id",
+        );
+        tagged
+            .save_to_path(&audio, lofty::config::WriteOptions::default())
+            .map_err(|e| AppError::metadata(format!("Failed to stage {fixture}"), e))?;
+
+        let meta = extract_metadata(&audio, tmp.path(), &test_cover_cache(), true)?;
+
+        assert_eq!(meta.musicbrainz_track_id.as_deref(), Some(recording), "{fixture}");
+    }
+    Ok(())
+}
+
 // === What a tag's multi-value fields read as ===
 
 use lofty::tag::{ItemValue, Tag, TagItem, TagType};

@@ -1,14 +1,14 @@
-//! `LibrarySettings.*` callbacks: native folder picker, remove, rescan.
+//! `LibrarySettings.*` callbacks: native folder picker, remove, rescan, cancel.
 
 use async_compat::Compat;
 use slint::ComponentHandle;
 
-use super::macros::{spawn_logged, spawn_logged_toast};
+use super::macros::spawn_logged;
 use crate::ui::file_dialog;
 use crate::ui::settings::library_settings as lib_settings_ui;
 use melodia_app::library;
+use melodia_app::library::scan::OnStop;
 use melodia_app::state::AppState;
-use melodia_core::error::AppError;
 use melodia_ui::{AppWindow, LibrarySettings};
 
 /// Wire the `LibrarySettings.*` callbacks. Pairs with
@@ -41,32 +41,12 @@ pub fn wire_library_settings(ui: &AppWindow, state: &AppState) {
                     return;
                 };
                 let path_str = handle.path().to_string_lossy().into_owned();
-
-                match library::settings::add_folder(&s, path_str).await {
-                    Ok(folder) => {
-                        // The bump inside `add_folder` already drove the
-                        // folder-list subscriber, so the new row is on
-                        // screen by the time the scan starts.
-                        if let Err(e) = library::settings::scan_folder(&s, folder.id).await {
-                            log::warn!("scan after add_folder: {e}");
-                            melodia_core::utils::toast::notify(
-                                melodia_core::utils::toast::ToastKind::OperationFailed,
-                                e.to_string(),
-                            );
-                        }
-                    }
-                    Err(AppError::Validation(msg)) => {
-                        lib_settings_ui::show_error(&weak, "Cannot add folder", msg);
-                    }
-                    Err(e) => {
-                        lib_settings_ui::show_error(&weak, "Cannot add folder", e.to_string());
-                    }
-                }
+                lib_settings_ui::add_folder_and_scan(&s, &weak, path_str).await;
             }));
         });
     }
 
-    // Remove folder: matches Tauri — immediate, no confirmation. The
+    // Remove folder: the row's confirm dialog routes the accept here. The
     // `library_changed` bump inside `remove_folder` drives both the
     // folder-list subscriber and the Tracks view's request_refresh, so
     // the row vanishes and the cascade-deleted tracks disappear without
@@ -80,15 +60,16 @@ pub fn wire_library_settings(ui: &AppWindow, state: &AppState) {
         });
     }
 
-    // Rescan: kick off a scan; the scan-progress channel drives the bar,
-    // and the `library_changed` bump at the end of `scan_folder_internal`
-    // triggers a refresh of the folder list so `last_scanned` updates.
+    // Rescan: the scan-progress channel drives the bar, and the
+    // `library_changed` bump at the end of the scan refreshes the folder
+    // list so `last_scanned` updates.
     {
         let s = state.clone();
-        g.on_rescan_folder(move |id| {
-            let s = s.clone();
-            let id = i64::from(id);
-            spawn_logged_toast!(s, "rescan_folder", library::settings::scan_folder(&s, id));
-        });
+        g.on_rescan_folder(move |id| library::scan::start(&s, i64::from(id), OnStop::Keep));
+    }
+
+    {
+        let s = state.clone();
+        g.on_cancel_scan(move || library::scan::cancel(&s));
     }
 }

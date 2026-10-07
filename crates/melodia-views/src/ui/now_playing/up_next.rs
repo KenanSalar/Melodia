@@ -143,7 +143,7 @@ pub(super) fn wire_now_playing_open(
             // A same-track reopen needs no decode, the displayed track's images outliving the
             // release.
             if !np_state.renders_artwork() {
-                super::release_artwork_off_thread(&state, &np_artwork);
+                np_state.release_artwork();
             }
             return;
         }

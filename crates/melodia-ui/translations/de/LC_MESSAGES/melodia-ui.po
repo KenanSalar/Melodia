@@ -373,12 +373,26 @@ msgstr "{} / {} Dateien"
 msgid "{} / {} files · {}"
 msgstr "{} / {} Dateien · {}"
 
+# The scan's other phases: the walk, before anything is known about what needs
+# reading; the last write once everything is read; a cancelled scan writing what
+# it had read.
+msgid "Looking for music… {n} file found"
+msgid_plural "Looking for music… {n} files found"
+msgstr[0] "Suche nach Musik… {n} Datei gefunden"
+msgstr[1] "Suche nach Musik… {n} Dateien gefunden"
+
+msgid "Finishing up…"
+msgstr "Wird abgeschlossen…"
+
+msgid "Stopping…"
+msgstr "Wird abgebrochen…"
+
 msgid "Remove Folder?"
 msgstr "Ordner entfernen?"
 
 # Translators: `{}` is the absolute filesystem path of the folder being removed.
-msgid "Remove \"{}\" from your library? All tracks under this folder will be removed."
-msgstr "„{}\" aus deiner Bibliothek entfernen? Alle Lieder unter diesem Ordner werden ebenfalls entfernt."
+msgid "Remove \"{}\" from your library? All tracks under this folder will be removed from the library and from your playlists."
+msgstr "„{}“ aus deiner Bibliothek entfernen? Alle Lieder unter diesem Ordner werden aus der Bibliothek und aus deinen Wiedergabelisten entfernt."
 
 # ---- Appearance section -----------------------------------------------------
 
@@ -714,6 +728,12 @@ msgstr "Bibliothek wird neu synchronisiert"
 
 msgid "Filesystem event burst — rescanning your folders."
 msgstr "Schub von Dateisystemereignissen — deine Ordner werden neu eingelesen."
+
+msgid "Restoring cover art"
+msgstr "Cover werden wiederhergestellt"
+
+msgid "Some cover art was missing. Melodia is restoring it from your music files."
+msgstr "Einige Cover fehlten. Melodia stellt sie aus deinen Musikdateien wieder her."
 
 # ---- Albums view ------------------------------------------------------------
 
@@ -1674,32 +1694,14 @@ msgstr "Lieblingstitel mit ListenBrainz synchronisieren"
 msgid "Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)"
 msgstr "Titel, die du magst, auf ListenBrainz als Loved markieren — beim Aktivieren werden deine vorhandenen Favoriten synchronisiert (benötigt MusicBrainz-IDs)"
 
+msgid "MusicBrainz Picard adds these IDs to your files, identifying each track by its audio."
+msgstr "MusicBrainz Picard fügt diese IDs deinen Dateien hinzu und erkennt dabei jeden Titel an seinem Klang."
+
 msgid "Loved tracks"
 msgstr "Lieblingstitel"
 
 msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
 msgstr "Melodia konnte sich nicht selbst neu starten. Schließen und öffnen Sie die App erneut, um die Änderung zu übernehmen."
-
-msgid "Add MusicBrainz IDs to your music"
-msgstr "MusicBrainz-IDs zu deiner Musik hinzufügen"
-
-msgid "Look up and tag files so loves work on ListenBrainz"
-msgstr "Dateien nachschlagen und taggen, damit Loved auf ListenBrainz funktioniert"
-
-msgid "Look up missing IDs"
-msgstr "Fehlende IDs nachschlagen"
-
-msgid "Re-scan tracks that still have no MusicBrainz ID"
-msgstr "Titel erneut einlesen, die noch keine MusicBrainz-ID haben"
-
-msgid "Look up"
-msgstr "Nachschlagen"
-
-msgid "MusicBrainz IDs"
-msgstr "MusicBrainz-IDs"
-
-msgid "Best for files that already have correct artist and title tags. For loosely-tagged music (e.g. songs downloaded from YouTube), use MusicBrainz Picard instead — it identifies tracks by their audio, not their tags."
-msgstr "Am besten für Dateien, die bereits korrekte Interpreten- und Titel-Tags haben. Für lose getaggte Musik (z. B. von YouTube heruntergeladene Titel) verwende stattdessen MusicBrainz Picard — es erkennt Titel anhand ihres Klangs, nicht ihrer Tags."
 
 msgid "Connected as {}"
 msgstr "Verbunden als {}"
@@ -2063,13 +2065,22 @@ msgstr "Überspringen"
 msgid "Pick how Melodia looks. Every change applies as you make it."
 msgstr "Wähle das Aussehen von Melodia. Jede Änderung wird sofort übernommen."
 
-# Heading of the welcome card's second panel, about the user's library folders.
+# Heading of the welcome card's first panel, about the user's library folders.
 msgid "Your music"
 msgstr "Deine Musik"
 
-# Body line under "Your music": states what the first-launch scan already did.
-msgid "Melodia watches your Music folder and picks up changes on its own."
-msgstr "Melodia überwacht deinen Musikordner und erkennt Änderungen von selbst."
+# Body line under "Your music": the first panel asks for the library's folders.
+msgid "Add the folders your music lives in. Melodia picks up changes to them on its own."
+msgstr "Füge die Ordner hinzu, in denen deine Musik liegt. Melodia erkennt Änderungen darin von selbst."
+
+msgid "Your Music folder: {}"
+msgstr "Dein Musikordner: {}"
+
+msgid "Add Music Folder"
+msgstr "Musikordner hinzufügen"
+
+msgid "Choose Another Folder"
+msgstr "Anderen Ordner wählen"
 
 # Heading of the welcome card's third panel, listing the features that use the network.
 msgid "What Melodia can reach"
@@ -2302,9 +2313,6 @@ msgstr "Satznummer"
 
 msgid "Movement Total"
 msgstr "Sätze gesamt"
-
-msgid "MusicBrainz Recording ID"
-msgstr "MusicBrainz-Aufnahme-ID"
 
 msgid "{} can't be saved to {} files"
 msgstr "{} kann nicht in {}-Dateien gespeichert werden"

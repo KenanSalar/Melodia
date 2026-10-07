@@ -201,11 +201,6 @@ export global Settings {
     // Mirror favorites to ListenBrainz recording feedback.
     in-out property <bool> scrobble-listenbrainz-love;
     callback scrobble-listenbrainz-love-changed(bool);
-    // Auto-tag scanned tracks with their MusicBrainz Recording ID so loves work on untagged
-    // libraries; the button forces a re-sweep of tracks still missing one.
-    in-out property <bool> scrobble-mbid-auto-tag;
-    callback scrobble-mbid-auto-tag-changed(bool);
-    callback scrobble-lookup-missing-mbids();
 
     // Same shape as scrobbling: the `DiscordPresenceService` status-watch subscriber is the single
     // writer, so a Discord restart flips the status row live, and the toggles persist and refresh
@@ -372,6 +367,14 @@ export global Settings {
     pure callback library-resyncing-message() -> string;
     library-resyncing-message => {
         return @tr("Filesystem event burst — rescanning your folders.");
+    }
+    pure callback artwork-restoring-title() -> string;
+    artwork-restoring-title => {
+        return @tr("Restoring cover art");
+    }
+    pure callback artwork-restoring-message() -> string;
+    artwork-restoring-message => {
+        return @tr("Some cover art was missing. Melodia is restoring it from your music files.");
     }
 
     // The updater's three toasts. "Available" carries the `install-update` action kind
@@ -581,10 +584,6 @@ export global Settings {
     toast-operation-failed-title => {
         return @tr("Something went wrong");
     }
-    pure callback toast-mbid-title() -> string;
-    toast-mbid-title => {
-        return @tr("MusicBrainz IDs");
-    }
     pure callback toast-love-sync-title() -> string;
     toast-love-sync-title => {
         return @tr("Loved tracks");
@@ -683,7 +682,7 @@ export global Settings {
         @tr("Movement Total"), @tr("Key"), @tr("Mood"), @tr("Language"), @tr("ISRC"),
         @tr("Copyright"), @tr("Record Label"), @tr("Catalog Number"), @tr("Barcode"),
         @tr("Media"), @tr("Release Type"), @tr("Release Country"), @tr("Compilation"),
-        @tr("Lyrics"), @tr("Rating"), @tr("MusicBrainz Recording ID"),
+        @tr("Lyrics"), @tr("Rating"),
         @tr("Composer"), @tr("Lyricist"), @tr("Arranger"), @tr("Conductor"), @tr("Performer"),
         @tr("Remixer"), @tr("Producer"), @tr("Engineer"), @tr("Mixer"), @tr("DJ Mixer"),
     ];

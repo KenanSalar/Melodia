@@ -93,7 +93,7 @@ fn paint(ui: &AppWindow, path: Option<&SignalPath>) {
         Some(FallbackReason::Reserved { by }) => by.into(),
         _ => SharedString::new(),
     });
-    g.set_refused_by(fallback.and_then(|fallback| fallback.device.as_deref()).unwrap_or("").into());
+    g.set_refused_by(util::opt_shared(fallback.and_then(|fallback| fallback.device.as_deref())));
     let source_rate = rate_text(source.rate.get());
     let device_rate = rate_text(device.shape.rate.get());
     g.set_source_format(
@@ -105,7 +105,7 @@ fn paint(ui: &AppWindow, path: Option<&SignalPath>) {
     );
     g.set_source_rate(source_rate.into());
     g.set_device_rate(device_rate.into());
-    g.set_device_name(device.device_name.clone().unwrap_or_default().into());
+    g.set_device_name(util::opt_shared(device.device_name.as_deref()));
     g.set_device_period(
         device
             .period

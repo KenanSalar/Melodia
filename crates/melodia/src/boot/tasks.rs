@@ -25,6 +25,12 @@ pub fn spawn_background_tasks(
     tasks::file_event_processor::spawn(spawner, state, channels.file_event_rx);
     tasks::queue_prune::spawn(spawner, state);
     tasks::retroactive_hash::spawn(spawner, state);
+    // Puts back a stored cover a cache finds missing: mid-session, and with watching off, where no
+    // boot scan reconciles the library, one gone while the app was closed too.
+    tasks::artwork_restore::spawn(spawner, state);
+    // Every other sweep follows a scan, and a launch with no library folders runs none, so the
+    // covers of a library removed last session would otherwise stay on disk.
+    tasks::artwork_sweep::spawn(spawner, state);
     // One-shot, and gated on its own settings marker rather than on anything here.
     tasks::artwork_renormalize::spawn(spawner, state);
     // The other one-shot: reads the ratings a library already carried in before the scan
@@ -48,9 +54,6 @@ pub fn spawn_background_tasks(
     // Watches the view-model/position seam, enqueues qualifying plays and
     // drains the durable queue. Inert until a provider is connected.
     tasks::scrobble::spawn(spawner, state);
-    // Auto-tags Recording IDs so loves work on an untagged library. Inert until
-    // enabled and ListenBrainz is connected.
-    tasks::mbid_backfill::spawn(spawner, state);
     // Projects the view-model into a Discord activity card. Inert until enabled;
     // started here when it already is, so the card connects while idle rather
     // than on the first track.
@@ -152,13 +155,13 @@ pub fn serve_file_opens(
     });
 }
 
-/// First-launch auto-add + folder-watcher restart (off-thread, tracked so
+/// Folder-watcher restart and the launch reconcile (off-thread, tracked so
 /// shutdown can await its DB writes before dropping the runtime).
-pub fn spawn_first_launch(spawner: &tasks::TaskSpawner, state: &AppState) {
+pub fn spawn_resume_watching(spawner: &tasks::TaskSpawner, state: &AppState) {
     let state_for_init = state.clone();
     spawner.spawn(async move {
-        if let Err(e) = tasks::first_launch::run(&state_for_init).await {
-            log::warn!("First-launch init failed: {e}");
+        if let Err(e) = tasks::resume_watching::run(&state_for_init).await {
+            log::warn!("Resuming folder watching failed: {e}");
         }
     });
 }

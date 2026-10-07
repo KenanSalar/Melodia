@@ -12,16 +12,17 @@ use slint::ComponentHandle;
 pub(super) fn wire(ui: &AppWindow, state: &AppState, deferred: Rc<super::DeferredOnce>) {
     wire_dismiss(ui, state, deferred);
     wire_open_services(ui);
-    wire_run_again(ui);
+    wire_run_again(ui, state);
 }
 
 /// The Settings ▸ About row, and the only way back to the card once it has been seen — which is
 /// what makes an early dismissal safe to treat as final.
-fn wire_run_again(ui: &AppWindow) {
+fn wire_run_again(ui: &AppWindow, state: &AppState) {
     let weak = ui.as_weak();
+    let state = state.clone();
     ui.global::<Settings>().on_run_onboarding(move || {
         if let Some(ui) = weak.upgrade() {
-            super::open(&ui);
+            super::open(&ui, &state);
         }
     });
 }

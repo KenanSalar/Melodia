@@ -770,8 +770,8 @@ three components that answer it, and each argues its geometry at its own file.
   bought nothing but a section leave releasing its own, which is what made every re-entry cold. A module singleton rather than a
   `ViewCtx` field, there being exactly one of it and no view owning it — the shape
   `ui::nav_history::nav()` takes. **The tiers that stay private are private on decode size**:
-  Search's two card strips, the queue sheet's, and the row tier. Radio's logo tier is the one
-  exception on other grounds, below.
+  Search's two card strips and the row tier. Two are private on other grounds: the queue sheet's,
+  on lifetime (the `QueueRow` entry below), and Radio's logo tier, below.
 
 - **A leave hands the pixels back and keeps the picture.** `grid_prewarm::hand_back_covers` shrinks
   every entry to `PROXY_COVER_DIM` square in place rather than calling `clear`, so a re-entry paints
@@ -785,9 +785,10 @@ three components that answer it, and each argues its geometry at its own file.
     off-screen section was answered by decoding and then releasing; against a tier nothing clears,
     that leaves a screenful resident for a page nobody opened. Browse is where it bit, being the
     only view whose boot seed fetches while the section is off screen, so a launch landing anywhere
-    else paid for a screenful it never drew. Every other prewarm site already gated its
-    fetch on `section_active()`. A leave landing *inside* a decode is no longer a reason to hand
-    anything back: those buffers are what the re-entry paints.
+    else paid for a screenful it never drew. Every other prewarm site gates its fetch on
+    `section_active()`, and the three grids a detail can cover (Albums, Artists, Playlists) on
+    `SectionState::grid_on_screen`, which argues why. A leave landing *inside* a decode is no
+    longer a reason to hand anything back: those buffers are what the re-entry paints.
   - **Radio's logo tier is not this tier, and the reason is its card rather than its decode.**
     `station-card.slint` derives `logo-native-size` from `cover.width / logo-decode-size`, so the
     decoded *extent* is load-bearing for that card's layout: a proxy makes every logo read as a tiny
@@ -845,8 +846,10 @@ three components that answer it, and each argues its geometry at its own file.
 
 - **`QueueRow` goes through two globals rather than `RowCovers`**, each wanting a different tier:
   the queue sheet's *private* `CoverThumbs` (so closing it drops every buffer without yanking
-  covers the track lists still need) and the shared row tier. That is what makes a queue the size
-  of the library affordable.
+  covers the track lists still need) and the shared row tier. **The private one is
+  `CoverThumbs::backed_by` the shared one**: a miss borrows the row tier's buffer before decoding,
+  and its size is the row tier's, retunes included, so a cover both draw is one allocation. That
+  is what makes a queue the size of the library affordable.
 
 - **`covers-generation` is the repaint token, and on a card grid that is all it is.** A `pure`
   callback's result is cached until a dependency is dirtied, so an `int` the binding also reads is
@@ -930,8 +933,9 @@ three components that answer it, and each argues its geometry at its own file.
   is **largest in a narrow panel**, where `max-card-w` is now what stops it, and lands near 190 px
   on a wide one. A tier spelling its own size is the thing to reach for this instead of. Needs no
   winit round trip, the scale factor being Slint's own, and shares the cap's zero-extent bail.
-  `cover_thumbs::row_cover_size` is the row tier's twin, wired at each of its two construction
-  sites rather than through a tune hook, neither having one.
+  `cover_thumbs::row_cover_size` is the row tier's twin, applied in the same `display-changed`
+  retune. The queue sheet's tier takes the row tier's size through its backing rather than being
+  wired a second time.
 
 - **Prewarm path dedup via `grid_prewarm::unique_artwork_paths(paths, cap)`**, first-seen-ordered
   and non-empty. **Every prewarm site goes through it**, the per-entity wrapper owning only the
@@ -1306,7 +1310,7 @@ block first; each page's section below is deltas only.** The nav-index map is in
 
 - Shared helpers: `ui::tab_bar::{clamp_tab, grid_signature, UNFETCHED_COUNT}`,
   `ui::grid_rows::{chunk_entity_rows, write_grid}`, `ui::track_list_cache`,
-  `ui::grid_prewarm::{tier, grid_cover, prewarm, hand_back_covers}`,
+  `ui::grid_prewarm::{tier, grid_cover, prewarm, prewarm_off_thread, hand_back_covers}`,
   `ui::mosaic_hero::{compose_off_thread, MosaicGuard}`.
 
 ### Per-page deltas

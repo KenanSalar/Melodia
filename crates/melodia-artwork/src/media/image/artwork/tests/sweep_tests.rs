@@ -7,7 +7,7 @@ use std::collections::HashSet;
 use std::time::{Duration, SystemTime};
 
 use super::super::is_stored_name;
-use super::super::sweep::{SweepReport, collect_candidates, retire};
+use super::super::sweep::{SweepReport, collect_candidates, named_in, retire};
 use melodia_core::error::AppError;
 
 /// Long enough that nothing a test writes is ever old enough to sweep on its own.
@@ -84,7 +84,7 @@ fn a_referenced_file_survives_and_an_orphan_does_not() -> Result<(), AppError> {
     assert!(dir.join("33fb807d1f1b7cbb.jpg").exists(), "a referenced composite must survive");
     assert!(!dir.join("4cccaf4d4b4cea11.jpg").exists(), "an unreferenced file must go");
     assert!(dir.join("notes.txt").exists(), "a name we never wrote is not ours to delete");
-    assert_eq!(report, SweepReport { deleted: 1, bytes: 9, kept: 1, failed: 0 });
+    assert_eq!(report, SweepReport { deleted: 1, bytes: 9, kept: 1, deferred: 0, failed: 0 });
     Ok(())
 }
 
@@ -125,7 +125,7 @@ fn the_grace_window_keeps_a_just_written_file() -> Result<(), AppError> {
 
     assert!(dir.join("abcdef0123456789.png").exists(), "inside the window, nothing goes");
     assert_eq!(report.deleted, 0);
-    assert_eq!(report.kept, 1);
+    assert_eq!(report.deferred, 1, "an orphan the window spared is owed a later sweep");
     Ok(())
 }
 
@@ -155,4 +155,68 @@ fn a_missing_directory_sweeps_nothing_and_does_not_panic() {
         SystemTime::now(),
     );
     assert_eq!(report, SweepReport::default());
+}
+
+/// Writes a stored file last modified `age` ago.
+fn aged(dir: &std::path::Path, name: &str, age: Duration) -> Result<(), AppError> {
+    let path = dir.join(name);
+    std::fs::write(&path, b"stored")?;
+    std::fs::File::options().write(true).open(&path)?.set_modified(SystemTime::now() - age)?;
+    Ok(())
+}
+
+/// `deferred` is what brings a sweep back once the window has passed, so a young file a row
+/// already names must count as kept: deferred, it would schedule a return with nothing to retire.
+#[test]
+fn a_referenced_file_is_kept_at_any_age_and_only_a_young_orphan_is_deferred() -> Result<(), AppError>
+{
+    let tmp = tempfile::tempdir()?;
+    let dir = tmp.path();
+    let old = Duration::from_hours(2);
+    aged(dir, "0000000000000001.jpg", Duration::ZERO)?; // referenced, young
+    aged(dir, "0000000000000002.jpg", old)?; // referenced, old
+    aged(dir, "0000000000000003.jpg", Duration::ZERO)?; // orphan, young
+    aged(dir, "0000000000000004.jpg", old)?; // orphan, old
+    let referenced: HashSet<String> =
+        ["0000000000000001.jpg".to_owned(), "0000000000000002.jpg".to_owned()].into();
+
+    let report = sweep(dir, &referenced, HOUR, SystemTime::now());
+
+    assert_eq!(report, SweepReport { deleted: 1, bytes: 6, kept: 2, deferred: 1, failed: 0 });
+    assert!(!dir.join("0000000000000004.jpg").exists(), "the old orphan is the one that goes");
+    Ok(())
+}
+
+/// A folder removal retires only what its delete released, so an orphan it didn't release keeps
+/// the grace window's protection.
+#[test]
+fn narrowing_to_named_files_leaves_every_other_orphan_standing() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let dir = tmp.path();
+    write(dir, "0000000000000001.jpg", b"released")?;
+    write(dir, "0000000000000002.jpg", b"someone else's")?;
+    let released: HashSet<String> = ["0000000000000001.jpg".to_owned()].into();
+
+    let (candidates, report) = collect_candidates(dir, HOUR, well_past_grace());
+    retire(named_in(candidates, &released), &HashSet::new(), report);
+
+    assert!(!dir.join("0000000000000001.jpg").exists());
+    assert!(dir.join("0000000000000002.jpg").exists());
+    Ok(())
+}
+
+/// The launch sweep and a folder removal's can list the same orphan, and the one that loses the
+/// race must not report a failure for a file that is gone as it should be.
+#[test]
+fn a_file_another_sweep_already_retired_is_not_a_failure() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let dir = tmp.path();
+    write(dir, "0000000000000001.jpg", b"an orphan")?;
+    let (candidates, report) = collect_candidates(dir, HOUR, well_past_grace());
+    std::fs::remove_file(dir.join("0000000000000001.jpg"))?;
+
+    let report = retire(candidates, &HashSet::new(), report);
+
+    assert_eq!(report, SweepReport::default());
+    Ok(())
 }

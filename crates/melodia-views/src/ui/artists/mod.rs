@@ -32,7 +32,7 @@ use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork::{self, DetailArtwork};
 use crate::ui::row_match::Needle;
 use crate::ui::section_state::{SectionState, impl_detail_row_cache, impl_section_state_helpers};
-use crate::ui::util::clamp_i64_to_i32;
+use crate::ui::util::{clamp_i64_to_i32, opt_shared};
 use crate::ui::view_ctx::ViewCtx;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::artist::ArtistStats;
@@ -156,8 +156,13 @@ impl ArtistsUi {
         melodia_platform::services::platform::allocator::trim();
     }
 
-    /// Re-decode the first screenful of grid covers into the grid-tier cache after a release.
+    /// Decodes the first screenful of grid covers into the grid tier, so the grid's first frame
+    /// paints covers rather than placeholders. Every prewarm of this grid comes through here, and
+    /// does nothing unless the grid is what is drawn ([`SectionState::grid_on_screen`]).
     pub fn prewarm_visible_covers(&self) {
+        if !self.section.grid_on_screen(|| self.detail_artist_id() >= 0) {
+            return;
+        }
         let data = self.grid.data.lock().clone();
         let unique = grid::first_screenful_paths(&data);
         if !unique.is_empty() {
@@ -194,7 +199,7 @@ pub fn to_slint_artist_row(a: &ArtistStats) -> UiArtistRow {
     UiArtistRow {
         id: clamp_i64_to_i32(a.id),
         name: SharedString::from(a.name.as_str()),
-        image_path: SharedString::from(a.image_path.as_deref().unwrap_or("")),
+        image_path: opt_shared(a.image_path.as_deref()),
         track_count: a.track_count,
         album_count: a.album_count,
         total_duration_ms: i32::try_from(a.total_duration_ms.clamp(0, i64::from(i32::MAX)))

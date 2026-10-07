@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
-use crate::ui::util::clamp_i64_to_i32;
+use crate::ui::util::{clamp_i64_to_i32, opt_shared};
 use melodia_core::entities::artist::FavoriteArtist;
 use melodia_core::entities::track::MostPlayedFavorite;
 use melodia_ui::{
@@ -38,8 +38,8 @@ pub fn to_slint_most_played_row(t: &MostPlayedFavorite) -> UiEntityStripRow {
     UiEntityStripRow {
         id: clamp_i64_to_i32(t.id),
         title: SharedString::from(t.title.as_str()),
-        subtitle: SharedString::from(t.artist.as_deref().unwrap_or("")),
-        artwork_path: SharedString::from(t.artwork_path.as_deref().unwrap_or("")),
+        subtitle: opt_shared(t.artist.as_deref()),
+        artwork_path: opt_shared(t.artwork_path.as_deref()),
         play_count: t.play_count,
         is_favorite: t.is_favorite,
     }
@@ -55,7 +55,7 @@ pub fn to_slint_fav_artist_row(a: &FavoriteArtist, subtitle: SharedString) -> Ui
         id: clamp_i64_to_i32(a.id),
         title: SharedString::from(a.name.as_str()),
         subtitle,
-        artwork_path: SharedString::from(a.image_path.as_deref().unwrap_or("")),
+        artwork_path: opt_shared(a.image_path.as_deref()),
         play_count: 0,
         is_favorite: false,
     }

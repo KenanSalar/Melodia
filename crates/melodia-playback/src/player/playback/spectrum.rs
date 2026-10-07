@@ -399,6 +399,12 @@ impl SpectrumAnalyzer {
         &self.levels
     }
 
+    /// The levels the last [`Self::analyze`] left, for drawing them again without advancing a
+    /// frame.
+    pub fn levels(&self) -> &[f32] {
+        &self.levels
+    }
+
     /// Rebuild the band edges, crossover and tilt gains for `sample_rate`. A no-op unless the
     /// rate changed, which is once per track at most.
     fn remap_for_rate(&mut self, sample_rate: u32) {
@@ -540,8 +546,8 @@ pub fn write_bar_path(levels: &[f32], strip: StripGeometry, anchor: BarAnchor, o
     }
     let count = index_to_f32(levels.len());
 
-    // The seed tick can land before the strip's first layout pass. With nothing to measure there
-    // is no figure to draw rather than a degenerate one, and the next tick has a size.
+    // A strip can ask before a layout pass has sized it. With nothing to measure there is no
+    // figure to draw rather than a degenerate one, and the pass that sizes it asks again.
     let horizontal = GridAxis::new(strip.x, strip.width, strip.scale);
     let vertical = GridAxis::new(strip.y, strip.height, strip.scale);
     if !horizontal.is_drawable() || !vertical.is_drawable() {

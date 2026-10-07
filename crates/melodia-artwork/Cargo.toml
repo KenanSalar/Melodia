@@ -29,7 +29,7 @@ lru.workspace = true
 material-colors.workspace = true
 color-thief.workspace = true
 parking_lot.workspace = true
-# The decode pool behind `cover_thumbs`, the one rayon pool in the tree that names its threads.
+# The decode pool behind `cover_thumbs`.
 rayon.workspace = true
 # The composite's staging file, written then renamed like everything else in the store.
 tempfile.workspace = true

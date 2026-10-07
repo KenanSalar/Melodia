@@ -266,49 +266,6 @@ async fn enqueue_loves_noop_when_love_sync_inactive() -> TestResult {
     Ok(())
 }
 
-/// The MBID lookup borrows the user's `ListenBrainz` token, so it needs both halves: the endpoint
-/// requires a token, and auto-tagging is the setting that says the user wants the writes. Reading
-/// either alone runs a sweep over a library whose owner turned it off, or against no credential.
-#[tokio::test]
-async fn the_mbid_lookup_token_needs_both_the_toggle_and_a_connection() -> TestResult {
-    let dir = tempfile::tempdir()?;
-    let paths = paths_in(dir.path());
-
-    let unconnected =
-        init_service(&paths, &ScrobbleFlags { mbid_auto_tag: true, ..Default::default() });
-    assert_eq!(unconnected.mbid_lookup_token(), None, "auto-tag on, nothing to authenticate with");
-
-    let untoggled = lb_love_service(&paths_in(dir.path()), false).await?;
-    assert_eq!(untoggled.mbid_lookup_token(), None, "connected, but auto-tagging is off");
-
-    untoggled.set_flags(ScrobbleFlags { mbid_auto_tag: true, ..Default::default() });
-    assert_eq!(untoggled.mbid_lookup_token().as_deref(), Some("tok"));
-    Ok(())
-}
-
-/// Two `Notify`s rather than one, so waking the submitter does not also wake the backfill into a
-/// full sweep of the library. Folding them is invisible until a heavy listener's machine starts
-/// looking up MBIDs on every track change.
-///
-/// Enqueued rather than pushed: a push wakes nothing, so it would hold whether the two channels
-/// were separate or the same object. Both waits are bounded so a fold fails rather than hangs; the
-/// clock is paused, so neither bound costs anything.
-#[tokio::test(start_paused = true)]
-async fn waking_the_submitter_does_not_wake_the_backfill() -> TestResult {
-    let bound = std::time::Duration::from_mins(1);
-    let dir = tempfile::tempdir()?;
-    let service = lb_love_service(&paths_in(dir.path()), true).await?;
-
-    service.enqueue_love(&scrobble_row(Some("mbid-1")), true).await?;
-    assert_eq!(service.queued_len(), 1, "test setup: the submitter has been woken");
-    let swept = tokio::time::timeout(bound, service.mbid_kicked()).await;
-    assert!(swept.is_err(), "a love queued for submission is not a reason to sweep");
-
-    service.kick_mbid_backfill();
-    tokio::time::timeout(bound, service.mbid_kicked()).await?;
-    Ok(())
-}
-
 /// Now-playing is the one path that reads the provider gate a second time, spelled inline rather
 /// than through `listenbrainz_scrobble_ready`. Drift between the two copies posts for a provider
 /// scrobbling refuses, or goes quiet for one it accepts, and neither shows up in the queue.

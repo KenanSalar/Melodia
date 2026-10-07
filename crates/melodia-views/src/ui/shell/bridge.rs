@@ -14,7 +14,7 @@ use slint::{ComponentHandle, SharedString, Weak};
 use tokio::runtime::Handle;
 use tokio::sync::watch;
 
-use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
+use crate::ui::util::{clamp_i64_to_i32, len_as_i32, opt_shared};
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::track::TrackSummary;
 use melodia_engine::player::engine::event_sink::PlayerSinks;
@@ -195,10 +195,10 @@ pub fn to_slint_track(t: &TrackSummary, cover_thumbs: &CoverThumbs) -> TrackSumm
         id: clamp_i64_to_i32(t.id),
         file_path: SharedString::from(t.file_path.as_str()),
         title: SharedString::from(t.title.as_str()),
-        artist: SharedString::from(t.artist.as_deref().unwrap_or("")),
-        album: SharedString::from(t.album.as_deref().unwrap_or("")),
+        artist: opt_shared(t.artist.as_deref()),
+        album: opt_shared(t.album.as_deref()),
         duration_ms: clamp_i64_to_i32(t.duration_ms.max(0)),
-        artwork_path: SharedString::from(t.artwork_path.as_deref().unwrap_or("")),
+        artwork_path: opt_shared(t.artwork_path.as_deref()),
         cover_img,
         is_favorite: t.is_favorite,
         rating: t.rating,
@@ -242,11 +242,11 @@ fn to_slint_radio_vm(station: &RadioNowPlaying, cover_thumbs: &CoverThumbs) -> R
         station_id: clamp_i64_to_i32(station.station_id),
         uuid: opt_shared(station.station_uuid.as_deref()),
         name: SharedString::from(station.name.as_str()),
-        live_title: SharedString::from(
-            announcement.map_or(station.live_title.as_deref().unwrap_or(""), |song| song.title),
+        live_title: opt_shared(
+            announcement.map(|song| song.title).or(station.live_title.as_deref()),
         ),
-        live_artist: SharedString::from(announcement.map_or("", |song| song.artist)),
-        artwork_path: SharedString::from(station.artwork_path.as_deref().unwrap_or("")),
+        live_artist: opt_shared(announcement.map(|song| song.artist)),
+        artwork_path: opt_shared(station.artwork_path.as_deref()),
         logo_img: cover_thumbs.get_cached_opt(station.artwork_path.as_deref()),
         monogram: tile.monogram,
         tile_color_1: tile.color_1,
@@ -264,12 +264,6 @@ fn to_slint_radio_vm(station: &RadioNowPlaying, cover_thumbs: &CoverThumbs) -> R
         bitrate: station.bitrate,
         play_count: station.play_count,
     }
-}
-
-/// Slint has no `Option<T>`, so an absent fact crosses as the empty string every consumer already
-/// gates on.
-fn opt_shared(value: Option<&str>) -> SharedString {
-    SharedString::from(value.unwrap_or(""))
 }
 
 /// Which half of `Player.vm` a warm is filling. The two paths differ only in the field they guard

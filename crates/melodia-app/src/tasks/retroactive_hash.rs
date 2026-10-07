@@ -10,6 +10,7 @@ use crate::tasks::TaskSpawner;
 use melodia_core::error::AppResult;
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
+use melodia_store::media::ingest::scan_pool::ScanPool;
 
 /// Spawn the retroactive-hash task on the shared task lifecycle so the
 /// main shutdown sequence waits for the pending batch update to commit
@@ -37,33 +38,36 @@ async fn hash_unhashed_tracks(db: &DbPool) -> AppResult<()> {
     let updates = tokio::task::spawn_blocking(move || {
         use rayon::prelude::*;
 
-        unhashed
-            .par_iter()
-            .filter_map(|(id, path_str)| {
-                let path = Path::new(path_str);
-                // One `stat` answers both "is it still there" and "when was it last
-                // written" — an absent file fails here exactly as the old
-                // `path.exists()` check did, and the mtime comes from the same
-                // instant as that existence proof.
-                let Ok(meta) = std::fs::metadata(path) else {
-                    log::debug!("Skipping missing file during retroactive hash: {path_str}");
-                    return None;
-                };
-
-                let hash = match melodia_store::media::ingest::metadata::compute_file_hash(path) {
-                    Ok(h) => h,
-                    Err(e) => {
-                        log::warn!("Failed to hash {path_str}: {e}");
+        ScanPool::for_files(unhashed.len()).install(|| {
+            unhashed
+                .par_iter()
+                .filter_map(|(id, path_str)| {
+                    let path = Path::new(path_str);
+                    // One `stat` answers both "is it still there" and "when was it last
+                    // written" — an absent file fails here exactly as the old
+                    // `path.exists()` check did, and the mtime comes from the same
+                    // instant as that existence proof.
+                    let Ok(meta) = std::fs::metadata(path) else {
+                        log::debug!("Skipping missing file during retroactive hash: {path_str}");
                         return None;
-                    }
-                };
+                    };
 
-                let mtime =
-                    melodia_store::media::ingest::metadata::date_modified_from_metadata(&meta);
+                    let hash = match melodia_store::media::ingest::metadata::compute_file_hash(path)
+                    {
+                        Ok(h) => h,
+                        Err(e) => {
+                            log::warn!("Failed to hash {path_str}: {e}");
+                            return None;
+                        }
+                    };
 
-                Some((*id, hash, mtime))
-            })
-            .collect::<Vec<_>>()
+                    let mtime =
+                        melodia_store::media::ingest::metadata::date_modified_from_metadata(&meta);
+
+                    Some((*id, hash, mtime))
+                })
+                .collect::<Vec<_>>()
+        })
     })
     .await
     .map_err(|e| melodia_core::error::AppError::scanner("Hashing task panicked", e))?;

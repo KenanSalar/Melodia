@@ -17,6 +17,7 @@ use melodia_core::entities::radio::{DirectoryStation, Facet, RadioStation, UNKNO
 use melodia_ui::{RadioFacetRow, RadioStationGridRow, RadioStationRow};
 
 use super::{facets, identity};
+use crate::ui::util::opt_shared;
 
 /// How many of a station's tags a card shows.
 ///
@@ -134,11 +135,11 @@ pub fn to_slint_radio_station_row(
         select_key: 0,
         uuid: SharedString::from(&station.station_uuid),
         name: SharedString::from(&station.name),
-        homepage: station.homepage.as_deref().map(SharedString::from).unwrap_or_default(),
+        homepage: opt_shared(station.homepage.as_deref()),
         // Browse mounts the grid with `manageable: false`, so no card here draws a pencil and the
         // question never arises; the kept tabs are where a station is edited.
         editable: false,
-        artwork_path: logo.map(SharedString::from).unwrap_or_default(),
+        artwork_path: opt_shared(logo),
         tags: SharedString::from(display_tags(&station.tags)),
         country: SharedString::from(&station.country),
         codec: SharedString::from(display_codec(format, &station.codec, station.hls)),
@@ -164,13 +165,13 @@ pub fn to_slint_kept_station_row(station: &RadioStation) -> RadioStationRow {
     RadioStationRow {
         id,
         select_key: id,
-        uuid: station.station_uuid.as_deref().map(SharedString::from).unwrap_or_default(),
+        uuid: opt_shared(station.station_uuid.as_deref()),
         name: SharedString::from(&station.name),
-        homepage: station.website().map(SharedString::from).unwrap_or_default(),
+        homepage: opt_shared(station.website()),
         editable: station.is_editable(),
-        artwork_path: station.artwork_path.as_deref().map(SharedString::from).unwrap_or_default(),
+        artwork_path: opt_shared(station.artwork_path.as_deref()),
         tags: SharedString::from(display_tags(station.genre().unwrap_or_default())),
-        country: station.country_name().map(SharedString::from).unwrap_or_default(),
+        country: opt_shared(station.country_name()),
         codec: SharedString::from(display_codec(format.as_deref(), &station.codec, station.hls)),
         bitrate: station.bitrate,
         is_favorite: station.is_favorite,

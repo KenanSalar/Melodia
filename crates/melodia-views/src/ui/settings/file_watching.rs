@@ -3,7 +3,7 @@
 //! Seeds `Settings.watch-for-file-changes` from `settings.json` and registers the change
 //! callback, which routes into `library::settings::set_folder_watching_enabled` — that one
 //! **persists first**, then flips the watcher's start/stop state, so a `start()` failure
-//! leaves disk consistent with the user's intent and `tasks::first_launch::run` retries
+//! leaves disk consistent with the user's intent and `tasks::resume_watching::run` retries
 //! from the persisted flag next launch.
 //!
 //! The default is ON, enforced by `LibraryFlags::default()`: every consumer player

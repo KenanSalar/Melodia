@@ -94,8 +94,9 @@ pub fn decode_capped_to(
 /// about cost rather than about content: sniffing means opening every cover to read two bytes
 /// most of them will decline on, where the extension is already in hand. Nothing rests on the
 /// answer — both arms end in a real decode against a guessed format, so a mislabelled file loses
-/// the fast path and stays correct. Every caller passes a store path, and `media::image::artwork` puts
-/// the format in the name.
+/// the fast path and stays correct. A store path carries the format in its name, where
+/// `media::image::artwork` put it, and a cover picked in the tag editor carries whatever extension
+/// its filesystem gave it.
 fn decode_jpeg_scaled(path: &Path, max_dim: u32, target: u32) -> Option<DynamicImage> {
     if !is_jpeg_name(path) {
         return None;
@@ -251,16 +252,16 @@ pub fn encode_jpeg(source: RgbImage, quality: u8) -> image::ImageResult<Vec<u8>>
 ///
 /// The resizer holds one intermediate buffer sized by the *source* width against the target
 /// height and grows it without ever shrinking, so one outsized source would leave that thread
-/// holding it for the process lifetime — once per Rayon worker and once per blocking-pool thread.
+/// holding it for as long as the thread lives, which on the cover-decode and tag-write pools and
+/// the UI thread is until quit.
 /// Clear of *twice* what a stored cover into the largest tile needs, because the buffer grows by
 /// `max(capacity * 2, required)`: gated on the request size instead, two ordinary tiers in the
 /// wrong order trip the reset that the steady state is the whole point of avoiding.
 const RESIZER_SCRATCH_CAP: usize = 2 * 1024 * 1024;
 
 thread_local! {
-    /// One resizer per worker rather than one per cover: it owns the scratch buffers the
-    /// convolution runs in, capped by [`RESIZER_SCRATCH_CAP`]. Every caller is already on a Rayon
-    /// worker or a blocking task, so thread-local is the whole of the sharing needed.
+    /// One resizer per thread rather than one per cover: it owns the scratch buffers the
+    /// convolution runs in, capped by [`RESIZER_SCRATCH_CAP`].
     static RESIZER: RefCell<Resizer> = RefCell::new(Resizer::new());
 }
 

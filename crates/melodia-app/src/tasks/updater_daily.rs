@@ -3,7 +3,7 @@
 //! Cadence:
 //!
 //! - **30 s after launch**: one-shot first check (gives the runtime time
-//!   to settle and avoids racing the first-launch folder scan for
+//!   to settle and avoids racing the launch folder scan for
 //!   network I/O).
 //! - **Then every 6 h**: re-arm via `tokio::time::sleep`. Not
 //!   `tokio::time::interval` — `interval` fires every tick instantly
@@ -40,7 +40,7 @@
 use std::time::Duration;
 
 use chrono::Utc;
-use slint::{ComponentHandle, Weak};
+use slint::{ComponentHandle, SharedString, Weak};
 use tokio::sync::watch;
 
 use crate::library;
@@ -88,7 +88,7 @@ pub fn spawn(
     let mut auto_check = state.auto_check_changed.subscribe();
 
     spawner.spawn_cancellable(move |shutdown| async move {
-        // Startup grace period — gives the first-launch scan + DB
+        // Startup grace period — gives the launch scan + DB
         // pre-fetch room to settle before we add network I/O.
         tokio::select! {
             biased;
@@ -346,7 +346,7 @@ fn set_up_to_date(weak: &Weak<AppWindow>) {
         let g = ui.global::<MelodiaUpdater>();
         g.set_up_to_date(true);
         g.set_update_available(false);
-        g.set_error_message("".into());
+        g.set_error_message(SharedString::default());
     });
 }
 
@@ -363,7 +363,7 @@ fn set_update_available(
         g.set_available_version(version.into());
         g.set_notes_short(notes_short.into());
         g.set_is_critical(critical);
-        g.set_error_message("".into());
+        g.set_error_message(SharedString::default());
     });
 }
 

@@ -535,6 +535,16 @@ pub async fn set_playlist_custom_thumbnail(
     .ok_or_else(|| AppError::not_found("Playlist", playlist_id))
 }
 
+/// An automatic playlist's thumbnail: the first track in it that has a cover.
+macro_rules! first_track_cover {
+    () => {
+        "(SELECT t.artwork_path FROM playlist_items pi
+          JOIN tracks t ON pi.track_id = t.id
+          WHERE pi.playlist_id = playlists.id AND t.artwork_path IS NOT NULL AND t.artwork_path != ''
+          ORDER BY pi.position ASC LIMIT 1)"
+    };
+}
+
 /// Updates thumbnail and timestamp within an existing transaction.
 async fn update_playlist_thumbnail_and_timestamp_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
@@ -542,22 +552,34 @@ async fn update_playlist_thumbnail_and_timestamp_tx(
 ) -> Result<(), AppError> {
     let now = melodia_core::utils::now_rfc3339();
 
-    sqlx::query(
-        "UPDATE playlists SET
-            thumbnail_path = (
-                SELECT t.artwork_path FROM playlist_items pi
-                JOIN tracks t ON pi.track_id = t.id
-                WHERE pi.playlist_id = playlists.id AND t.artwork_path IS NOT NULL AND t.artwork_path != ''
-                ORDER BY pi.position ASC LIMIT 1
-            ),
-            updated_at = ?
-        WHERE id = ? AND custom_thumbnail = FALSE"
-    )
+    sqlx::query(concat!(
+        "UPDATE playlists SET thumbnail_path = ",
+        first_track_cover!(),
+        ", updated_at = ? WHERE id = ? AND custom_thumbnail = FALSE"
+    ))
     .bind(&now)
     .bind(playlist_id)
     .execute(&mut **tx)
     .await?;
 
+    Ok(())
+}
+
+/// Points every automatic playlist's thumbnail back at its first track's cover.
+///
+/// For what reaches a playlist without an edit to it: a track deleted out from under it, or a
+/// cover cleared because its file went missing. `updated_at` stays put: the user changed nothing.
+pub async fn refresh_automatic_thumbnails(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+) -> Result<(), AppError> {
+    sqlx::query(concat!(
+        "UPDATE playlists SET thumbnail_path = ",
+        first_track_cover!(),
+        " WHERE custom_thumbnail = FALSE AND thumbnail_path IS NOT ",
+        first_track_cover!()
+    ))
+    .execute(&mut **tx)
+    .await?;
     Ok(())
 }
 

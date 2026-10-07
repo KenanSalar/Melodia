@@ -56,8 +56,8 @@ pub use discord::{
 };
 pub use equalizer::{set_eq_band_gains_and_preset, set_eq_enabled, set_eq_preamp};
 pub use folders::{
-    add_folder, get_folders, reconcile_watched_folders, remove_folder, scan_folder,
-    scan_folder_internal, set_folder_watching_enabled, toggle_folder_watching,
+    add_folder, get_folders, remove_folder, set_folder_watching_enabled, suggested_music_folder,
+    toggle_folder_watching,
 };
 pub use lyrics::{set_lyrics_enabled, set_lyrics_online_enabled, set_lyrics_romanization_shown};
 pub use motion::set_skip_startup_animation;
@@ -78,7 +78,6 @@ pub use replaygain::{
 pub use scrobble::{
     set_scrobble_lastfm_enabled, set_scrobble_lastfm_love_enabled,
     set_scrobble_listenbrainz_enabled, set_scrobble_listenbrainz_love_enabled,
-    set_scrobble_mbid_auto_tag,
 };
 pub use support::{mark_support_prompt_seen, record_launch};
 pub use updates::{

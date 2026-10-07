@@ -23,18 +23,10 @@ export component VisualizerStrip inherits Rectangle {
     if Visualizer.style == "waveform": WaveformTrace { }
     if Visualizer.style != "waveform": SpectrumBars { }
 
-    // Both sizes ride along, the trace's columns following the width and the bars flooring each
-    // band against its own column. So does the position: the bars snap to the window's pixel grid,
-    // and a centred column puts the strip wherever it lands. Read here, in a handler, so it binds
-    // nothing to layout.
+    // The width rides along for the trace's columns. Read here, in a handler, so it binds nothing
+    // to layout; the bars read their geometry where they draw (`spectrum-bars.slint`).
     function tick() {
-        Visualizer.tick(
-            Player.vm.is_playing,
-            root.absolute-position.x / 1px,
-            root.absolute-position.y / 1px,
-            root.width / 1px,
-            root.height / 1px
-        );
+        Visualizer.tick(Player.vm.is_playing, root.width / 1px);
     }
 
     // One shared Timer, running a full snapshot → analysis → property pass in Rust; the only thing
@@ -51,23 +43,6 @@ export component VisualizerStrip inherits Rectangle {
         interval: Visualizer.dormant ? 500ms : 33ms;
         running: (Player.vm.is_playing && Visualizer.window-shown) || !Visualizer.idle;
         triggered() => {
-            root.tick();
-        }
-    }
-
-    // The bars floor each band against its own column width, so their resting figure can't be
-    // written until something has measured the strip — and the Timer above only runs once
-    // something is playing, so a strip mounted over a stopped player would never hand Rust a size.
-    // One tick at mount seeds it. A `changed width` mirror would keep it exact across a resize at
-    // rest, and is deliberately not here: the tracker would outlive this branch and watch a layout
-    // property the surviving parent re-dirties (`slint-pitfalls.md`). The figure is normalized, so
-    // an un-ticked resize stretches it rather than breaking it, and the next played frame is exact.
-    property <bool> seed-pending: true;
-    Timer {
-        interval: 1ms;
-        running: root.seed-pending;
-        triggered() => {
-            root.seed-pending = false;
             root.tick();
         }
     }

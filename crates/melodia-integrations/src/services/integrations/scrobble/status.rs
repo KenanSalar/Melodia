@@ -20,7 +20,6 @@ pub struct ProviderStatus {
 pub struct ScrobbleStatus {
     pub lastfm: ProviderStatus,
     pub listenbrainz: ProviderStatus,
-    pub mbid_auto_tag: bool,
 }
 
 /// Which provider a retroactive love backfill targets. Provider-scoped so
@@ -51,6 +50,5 @@ pub(super) fn build_status(
             enabled: flags.listenbrainz_enabled,
             love_enabled: flags.listenbrainz_love_enabled,
         },
-        mbid_auto_tag: flags.mbid_auto_tag,
     }
 }

@@ -66,7 +66,8 @@ pub fn set_filter(fav_ui: &FavoritesUi, filter: &str) {
 }
 
 /// Fetch the full favourites list, cache it under the current sort's display order, then re-apply
-/// the filter. Runs on a tokio worker; the sort is resolved here rather than in SQL — see
+/// the filter. Runs on whichever thread awaits it: a tokio worker from the section enter, the UI
+/// thread from the live-refresh subscriber. The sort is resolved here rather than in SQL; see
 /// [`resort_and_apply`].
 pub async fn refresh_tracks(
     state: &AppState,

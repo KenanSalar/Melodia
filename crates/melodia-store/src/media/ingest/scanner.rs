@@ -2,27 +2,66 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
-use serde::Serialize;
 use walkdir::WalkDir;
 
 use crate::media::ingest::metadata::extract_or_filename_row;
 use melodia_core::entities::scan::{ExistingTrackSummary, ScannedFile};
 use melodia_core::utils::audio_ext::is_audio_extension;
 
-#[derive(Debug, Clone, Serialize)]
-pub struct ScanProgress {
-    pub folder_id: i64,
-    pub scanned: u32,
-    pub total: u32,
-    pub current_file: String,
+/// What a library walk and parse report while they run, and how they learn to stop.
+///
+/// Both run on blocking threads nothing outside can abort, so a scan stops only where it asks
+/// [`is_cancelled`](Self::is_cancelled).
+pub trait ScanObserver: Sync {
+    fn is_cancelled(&self) -> bool;
+
+    /// Receives the running count of audio files the walk has found, once per file.
+    fn found(&self, _count: u32) {}
+
+    /// Receives how many files the parse has read, every few files and on the last.
+    fn read(&self, _done: u32, _file_name: &str) {}
 }
 
-pub fn collect_media_files(dir: &Path) -> Vec<PathBuf> {
-    let mut files = Vec::with_capacity(256);
+/// The observer for a parse nobody watches or stops, such as a file-drop import.
+pub struct Unobserved;
 
-    for entry in
-        WalkDir::new(dir).follow_links(false).into_iter().filter_map(std::result::Result::ok)
-    {
+impl ScanObserver for Unobserved {
+    fn is_cancelled(&self) -> bool {
+        false
+    }
+}
+
+/// The audio files under one folder, and what the walk couldn't vouch for.
+pub struct MediaWalk {
+    pub files: Vec<PathBuf>,
+    /// Paths the walk failed to read, a directory or now and then a single entry. Nothing under
+    /// one is known to be gone, so a row there can't be taken for an orphan.
+    pub unreadable: Vec<PathBuf>,
+}
+
+/// Walks `dir` for audio files, or answers `None` once `observer` cancels: a partial list is
+/// one a caller could mistake for the whole tree.
+pub fn collect_media_files(dir: &Path, observer: &dyn ScanObserver) -> Option<MediaWalk> {
+    let mut files = Vec::with_capacity(256);
+    let mut unreadable = Vec::new();
+
+    for entry in WalkDir::new(dir).follow_links(false) {
+        if observer.is_cancelled() {
+            return None;
+        }
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(e) => {
+                log::warn!(
+                    "Skipping an unreadable path under {}: {}",
+                    dir.display(),
+                    melodia_core::error::describe(&e)
+                );
+                // An error naming no path vouches for nothing below the root.
+                unreadable.push(e.path().unwrap_or(dir).to_path_buf());
+                continue;
+            }
+        };
         if !entry.file_type().is_file() {
             continue;
         }
@@ -34,17 +73,20 @@ pub fn collect_media_files(dir: &Path) -> Vec<PathBuf> {
 
         if is_audio_extension(ext) {
             files.push(path.to_path_buf());
+            observer.found(u32::try_from(files.len()).unwrap_or(u32::MAX));
         }
     }
 
-    files
+    Some(MediaWalk { files, unreadable })
 }
 
+/// Parses `files` on the current rayon pool. Once `observer` cancels, the files not yet started
+/// are skipped, so what comes back is whatever had been read by then.
 pub fn scan_files_parallel(
     files: &[PathBuf],
     artwork_dir: &Path,
     cover_cache: &melodia_artwork::media::image::artwork::CoverCache,
-    progress_callback: &(dyn Fn(u32, &str) + Send + Sync),
+    observer: &dyn ScanObserver,
 ) -> Vec<ScannedFile> {
     let total = files.len();
     let scanned = std::sync::atomic::AtomicU32::new(0);
@@ -52,12 +94,15 @@ pub fn scan_files_parallel(
     files
         .par_iter()
         .filter_map(|path| {
+            if observer.is_cancelled() {
+                return None;
+            }
             let current = scanned.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
 
             // Report progress every 10 files
             if current.is_multiple_of(10) || current as usize == total {
                 let file_name = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
-                progress_callback(current, file_name);
+                observer.read(current, file_name);
             }
 
             // Every file reaching this point was selected by the caller's

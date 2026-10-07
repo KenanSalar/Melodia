@@ -1,7 +1,8 @@
-//! Backend-to-UI bridges: the three `Signal` subscribers and the process-wide toast channel.
+//! Backend-to-UI bridges: the three `Signal` subscribers, the artwork restore's count and the
+//! process-wide toast channel.
 //!
-//! Each is a closure over `ui::signal::on_signal`, which owns the subscribe-and-spawn loop; what
-//! is left here is what each one does with the tick.
+//! Each `Signal` one is a closure over `ui::signal::on_signal`, which owns the subscribe-and-spawn
+//! loop; what is left here is what each one does with the tick.
 
 use std::sync::Arc;
 
@@ -36,7 +37,7 @@ pub fn install_library_changed_refresher(
 /// Toast on every kernel-overflow rescan. On the UI thread so it can hold the
 /// non-`Send` `Rc<NotificationsUi>` and resolve its strings at push time, in
 /// whichever locale was active when the rescan fired. Coalesced upstream by the
-/// `watch` slot and by `RECONCILE_IN_FLIGHT`, so a burst of overflows still
+/// `watch` slot and by the reconcile's own coalescing, so a burst of overflows still
 /// paints at most one toast per reconcile cycle.
 pub fn install_rescan_notice_subscriber(
     state: &AppState,
@@ -75,6 +76,49 @@ pub fn install_audio_device_lost_subscriber(
     })
 }
 
+/// Holds an info toast up while a scan restores cover art whose stored file went missing.
+///
+/// A payload loop rather than [`ui::signal::on_signal`]: the boot scan can raise the count before
+/// this attaches, and a tick sent then is never seen where the count is still there to read. Acts
+/// only on the edges, so a second restore joining the first stacks no second card.
+pub fn install_artwork_restore_subscriber(
+    state: &AppState,
+    weak: slint::Weak<AppWindow>,
+    notifications: std::rc::Rc<ui::shell::notifications::NotificationsUi>,
+) -> Result<(), melodia_core::error::AppError> {
+    use melodia_ui::Settings;
+    use ui::shell::notifications::RowText;
+
+    const KIND: &str = "artwork-restoring";
+    let mut restoring = state.artwork_restoring.subscribe();
+    slint::spawn_local(async_compat::Compat::new(async move {
+        let mut shown = false;
+        loop {
+            let active = *restoring.borrow_and_update() > 0;
+            if active != shown {
+                let Some(ui) = weak.upgrade() else { break };
+                if active {
+                    notifications.show_localized(&ui, "info", KIND, |ui| {
+                        let g = ui.global::<Settings>();
+                        RowText::plain(
+                            g.invoke_artwork_restoring_title(),
+                            g.invoke_artwork_restoring_message(),
+                        )
+                    });
+                } else {
+                    notifications.dismiss_by_kind(KIND);
+                }
+                shown = active;
+            }
+            if restoring.changed().await.is_err() {
+                break;
+            }
+        }
+    }))
+    .map(|_| ())
+    .map_err(|e| melodia_core::error::AppError::Window(format!("artwork restore subscriber: {e}")))
+}
+
 /// Drain the process-wide `utils::toast` channel on the UI thread.
 ///
 /// [`install_rescan_notice_subscriber`]'s shape over an `mpsc` rather than a
@@ -111,18 +155,6 @@ pub fn install_toast_bridge(
                             detail.clone().into(),
                         )
                     });
-                }
-                // The result of a user-triggered sweep, so it auto-dismisses
-                // rather than sticking like a failure.
-                ToastKind::MbidTagging => {
-                    notifications.show_auto_dismiss(
-                        NotificationParams::plain(
-                            "info",
-                            g.invoke_toast_mbid_title(),
-                            detail.into(),
-                        ),
-                        6000,
-                    );
                 }
                 // A restart that had nowhere to relaunch from: no dynamic
                 // detail, and it sticks because it asks the user to do

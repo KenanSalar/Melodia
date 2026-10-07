@@ -378,12 +378,27 @@ msgstr "{} / {} dosya"
 msgid "{} / {} files · {}"
 msgstr "{} / {} dosya · {}"
 
+# The scan's other phases: the walk, before anything is known about what needs
+# reading; the last write once everything is read; a cancelled scan writing what
+# it had read. Turkish keeps both plural slots but does not pluralize after a
+# numeral.
+msgid "Looking for music… {n} file found"
+msgid_plural "Looking for music… {n} files found"
+msgstr[0] "Müzik aranıyor… {n} dosya bulundu"
+msgstr[1] "Müzik aranıyor… {n} dosya bulundu"
+
+msgid "Finishing up…"
+msgstr "Tamamlanıyor…"
+
+msgid "Stopping…"
+msgstr "Durduruluyor…"
+
 msgid "Remove Folder?"
 msgstr "Klasör Kaldırılsın mı?"
 
 # Translators: `{}` is the absolute filesystem path of the folder being removed.
-msgid "Remove \"{}\" from your library? All tracks under this folder will be removed."
-msgstr "\"{}\" kitaplığından kaldırılsın mı? Bu klasördeki tüm parçalar da kaldırılacak."
+msgid "Remove \"{}\" from your library? All tracks under this folder will be removed from the library and from your playlists."
+msgstr "\"{}\" kitaplığınızdan kaldırılsın mı? Bu klasördeki tüm parçalar kitaplıktan ve çalma listelerinizden kaldırılacak."
 
 # ---- Appearance section -----------------------------------------------------
 
@@ -719,6 +734,12 @@ msgstr "Kitaplık yeniden eşitleniyor"
 
 msgid "Filesystem event burst — rescanning your folders."
 msgstr "Dosya sistemi olay yoğunluğu — klasörlerin yeniden taranıyor."
+
+msgid "Restoring cover art"
+msgstr "Kapaklar geri yükleniyor"
+
+msgid "Some cover art was missing. Melodia is restoring it from your music files."
+msgstr "Bazı kapak görselleri eksikti. Melodia bunları müzik dosyalarından geri yüklüyor."
 
 # ---- Albums view ------------------------------------------------------------
 
@@ -1672,32 +1693,14 @@ msgstr "Beğenilen parçaları ListenBrainz ile eşitle"
 msgid "Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)"
 msgstr "Beğendiğin parçaları ListenBrainz'de beğenilmiş olarak işaretle — açtığında mevcut favorilerin eşitlenir (MusicBrainz kimlikleri gerekir)"
 
+msgid "MusicBrainz Picard adds these IDs to your files, identifying each track by its audio."
+msgstr "MusicBrainz Picard bu kimlikleri dosyalarına ekler ve her parçayı sesinden tanır."
+
 msgid "Loved tracks"
 msgstr "Beğenilen parçalar"
 
 msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
 msgstr "Melodia kendini yeniden başlatamadı. Değişikliği uygulamak için uygulamayı kapatıp yeniden açın."
-
-msgid "Add MusicBrainz IDs to your music"
-msgstr "Müziğine MusicBrainz kimliklerini ekle"
-
-msgid "Look up and tag files so loves work on ListenBrainz"
-msgstr "Beğeniler ListenBrainz'de çalışsın diye dosyaları arayıp etiketle"
-
-msgid "Look up missing IDs"
-msgstr "Eksik kimlikleri ara"
-
-msgid "Re-scan tracks that still have no MusicBrainz ID"
-msgstr "Hâlâ MusicBrainz kimliği olmayan parçaları yeniden tara"
-
-msgid "Look up"
-msgstr "Ara"
-
-msgid "MusicBrainz IDs"
-msgstr "MusicBrainz kimlikleri"
-
-msgid "Best for files that already have correct artist and title tags. For loosely-tagged music (e.g. songs downloaded from YouTube), use MusicBrainz Picard instead — it identifies tracks by their audio, not their tags."
-msgstr "Zaten doğru sanatçı ve başlık etiketlerine sahip dosyalar için idealdir. Gevşek etiketlenmiş müzik için (ör. YouTube'dan indirilen parçalar) bunun yerine MusicBrainz Picard kullanın — parçaları etiketlerinden değil, sesinden tanır."
 
 msgid "Connected as {}"
 msgstr "{} olarak bağlanıldı"
@@ -2065,13 +2068,22 @@ msgstr "Atla"
 msgid "Pick how Melodia looks. Every change applies as you make it."
 msgstr "Melodia'nın görünümünü seçin. Her değişiklik anında uygulanır."
 
-# Heading of the welcome card's second panel, about the user's library folders.
+# Heading of the welcome card's first panel, about the user's library folders.
 msgid "Your music"
 msgstr "Müzikleriniz"
 
-# Body line under "Your music": states what the first-launch scan already did.
-msgid "Melodia watches your Music folder and picks up changes on its own."
-msgstr "Melodia, Müzik klasörünüzü izler ve değişiklikleri kendisi algılar."
+# Body line under "Your music": the first panel asks for the library's folders.
+msgid "Add the folders your music lives in. Melodia picks up changes to them on its own."
+msgstr "Müziğinizin bulunduğu klasörleri ekleyin. Melodia bunlardaki değişiklikleri kendisi algılar."
+
+msgid "Your Music folder: {}"
+msgstr "Müzik klasörünüz: {}"
+
+msgid "Add Music Folder"
+msgstr "Müzik Klasörünü Ekle"
+
+msgid "Choose Another Folder"
+msgstr "Başka Klasör Seç"
 
 # Heading of the welcome card's third panel, listing the features that use the network.
 msgid "What Melodia can reach"
@@ -2304,9 +2316,6 @@ msgstr "Bölüm numarası"
 
 msgid "Movement Total"
 msgstr "Toplam bölüm"
-
-msgid "MusicBrainz Recording ID"
-msgstr "MusicBrainz Kayıt Kimliği"
 
 msgid "{} can't be saved to {} files"
 msgstr "{} {} dosyalarına kaydedilemiyor"

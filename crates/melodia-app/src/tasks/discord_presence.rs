@@ -5,7 +5,7 @@
 //! and imports no `ui::*`.
 //!
 //! Always spawned; inert while the feature is disabled (self-gates on
-//! `service.armed()`, like `mbid_backfill`). Self-throttled between writes (see
+//! `service.armed()`). Self-throttled between writes (see
 //! `MIN_UPDATE_INTERVAL`): an update landing inside the window is deferred to
 //! the window's end and re-read from the (latest-only) watch, so suppressed
 //! intermediates collapse into a single write on current truth — the progress

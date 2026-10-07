@@ -313,7 +313,7 @@ fn a_tab_pick_clears_the_filter_on_both_sides() {
          `on_persist_tab_idx` \
          — this pin bounds the handler between the two",
     );
-    for clear in ["g.set_filter(SharedString::from(\"\"))", "filter::clear_mounted(&ui)"] {
+    for clear in ["g.set_filter(SharedString::default())", "filter::clear_mounted(&ui)"] {
         assert!(
             handler.contains(clear),
             "`on_tab_changed` must spell `{clear}` — the band's box and the entering tab's \

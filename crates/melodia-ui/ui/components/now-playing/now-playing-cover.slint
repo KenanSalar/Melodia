@@ -6,12 +6,13 @@ import { MaterialIcon } from "../material-icon.slint";
 // `ArtworkImage` its frame never moves or resizes on a track change — only the
 // content cross-fades, on the dual-slot contract the blurred backdrop uses: Rust
 // writes into the inactive slot and flips the bool, and only `opacity` animates.
-// A slot's `source` is NEVER cleared, so the outgoing cover stays painted for
+// A write never clears the outgoing slot, so the outgoing cover stays painted for
 // the whole fade rather than blinking to an empty frame. With no artwork both
 // slots fade to 0 and the placeholder comes in.
 //
-// The one exception is a move to a station, which this component is not mounted for and has
-// nothing to cross-fade into; `ui::now_playing::source_change` argues it where it makes it.
+// Two sites clear one where no fade can be reading it: a move to a station, which this component
+// is not mounted for (`ui::now_playing::source_change`), and `NowPlayingState::release_artwork`,
+// which empties the unshown slot `dur-med` after the last surface stops drawing the pair.
 export component NowPlayingCover inherits Rectangle {
     in property <length> tile-size;
 
