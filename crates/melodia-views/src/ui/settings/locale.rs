@@ -35,6 +35,7 @@ const LOCALE_NATIVE_NAMES: &[&str] = &[
     "Ελληνικά",
     "Italiano",
     "Português (Brasil)",
+    "Português (Portugal)",
 ];
 
 /// Synchronous in-memory shadow of `settings.locale`, updated by the language-changed

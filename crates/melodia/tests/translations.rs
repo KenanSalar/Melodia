@@ -1,7 +1,7 @@
 //! Pins the translation catalogues to the Slint tree `scripts/update-translations.sh` generates
 //! them from.
 //!
-//! It walks the sources rather than pinning a list, so a seventh locale extends
+//! It walks the sources rather than pinning a list, so a new locale extends
 //! the check by appearing in [`SUPPORTED_LOCALES`] and dropping a `.po` beside
 //! its siblings — nothing here has to be edited for it.
 //!

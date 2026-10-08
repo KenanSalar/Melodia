@@ -558,6 +558,26 @@ fn test_parse_language_code_invalid() {
     assert_eq!(parse_language_code("123"), None);
 }
 
+#[test]
+fn test_parse_language_code_drops_a_modifier() {
+    assert_eq!(parse_language_code("de@euro"), Some("de".to_owned()));
+    assert_eq!(parse_language_code("ca_ES.UTF-8@valencia"), Some("ca".to_owned()));
+}
+
+#[test]
+fn test_parse_region_code_upper_cases_either_spelling() {
+    assert_eq!(parse_region_code("pt_BR.UTF-8"), Some("BR".to_owned()));
+    assert_eq!(parse_region_code("pt-br"), Some("BR".to_owned()));
+    assert_eq!(parse_region_code("pt_PT@euro"), Some("PT".to_owned()));
+}
+
+#[test]
+fn test_parse_region_code_absent() {
+    assert_eq!(parse_region_code("pt"), None);
+    assert_eq!(parse_region_code("pt.UTF-8"), None);
+    assert_eq!(parse_region_code("pt@euro"), None);
+}
+
 /// Runs `body` with only `set` present among the four variables
 /// `detect_os_locale` consults, listed here in the order it consults them.
 ///
@@ -580,6 +600,30 @@ fn test_detect_os_locale_unsupported_locale_returns_none() {
     with_locale_env(&[("LC_ALL", "ja_JP.UTF-8")], || {
         assert_eq!(detect_os_locale(), None);
     });
+}
+
+#[test]
+fn test_detect_os_locale_picks_the_brazilian_catalog_however_the_host_spells_it() {
+    for (var, raw) in [
+        ("LC_ALL", "pt_BR.UTF-8"),
+        ("LANG", "pt_br.utf8"),
+        // The BCP 47 form, which is what Windows hands back.
+        ("LC_MESSAGES", "pt-BR"),
+        ("LANGUAGE", "pt_BR:pt"),
+    ] {
+        with_locale_env(&[(var, raw)], || {
+            assert_eq!(detect_os_locale(), Some("pt_BR".to_owned()), "{var}={raw}");
+        });
+    }
+}
+
+#[test]
+fn test_detect_os_locale_sends_every_other_portuguese_region_to_pt() {
+    for raw in ["pt_PT.UTF-8", "pt_PT@euro", "pt-AO", "pt_MZ.UTF-8", "pt"] {
+        with_locale_env(&[("LC_ALL", raw)], || {
+            assert_eq!(detect_os_locale(), Some("pt".to_owned()), "LC_ALL={raw}");
+        });
+    }
 }
 
 #[test]

@@ -10,4 +10,4 @@
 /// Index 0 is the default and ships no catalogue — English is the msgid baseline, living in the
 /// `.slint` sources directly. A new locale is an entry here, a native name beside
 /// `ui::settings::locale`'s 1:1 list, and a `.po` beside its siblings.
-pub const SUPPORTED_LOCALES: &[&str] = &["en", "de", "fr", "es", "tr", "el", "it", "pt_BR"];
+pub const SUPPORTED_LOCALES: &[&str] = &["en", "de", "fr", "es", "tr", "el", "it", "pt_BR", "pt"];
