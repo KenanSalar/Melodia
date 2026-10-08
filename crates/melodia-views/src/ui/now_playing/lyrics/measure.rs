@@ -8,7 +8,7 @@
 /// Latin line is made of. See [`char_ems`] for what the four buckets are measured against.
 const NARROW_EMS: f32 = 0.32;
 
-/// `m w M W @ %`, the only characters Vazirmatn sets near an em.
+/// `m w M W @ %`, the only ASCII characters Vazirmatn sets near an em.
 const WIDE_EMS: f32 = 0.90;
 
 /// A capital, which runs a fifth wider than the lowercase it sits in.

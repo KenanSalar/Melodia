@@ -31,11 +31,13 @@ https://github.com/rastikerdar/vazirmatn
 Licensed under the SIL Open Font License, Version 1.1 -- full text in
 Vazirmatn-OFL-1.1.txt.
 
-MODIFIED. `scripts/patch_vazirmatn.py` rewrites the OS/2 typo and hhea
-ascent/descent values so glyph mass lands at the line-box centre under the
-FemtoVG renderer; upstream's metrics are sized to clear Arabic combining marks
-and push centred Latin text upward at the app's UI sizes. Glyph outlines,
-capHeight, x-height and the usWin* clip bounds are untouched.
+MODIFIED. `scripts/patch_vazirmatn.py` merges in the Greek, Russian, Ukrainian
+and Vietnamese letters it lacks from Roboto (see the Roboto entry below), then
+rewrites the OS/2 typo and hhea ascent/descent values so glyph mass lands at the
+line-box centre under the FemtoVG renderer; upstream's metrics are sized to
+clear Arabic combining marks and push centred Latin text upward at the app's UI
+sizes. Vazirmatn's own glyph outlines, capHeight, x-height and the usWin* clip
+bounds are untouched.
 
 Files:
   crates/melodia-ui/ui/assets/fonts/vazirmatn/Vazirmatn-Regular.ttf
@@ -50,6 +52,32 @@ copyright line has changed.
 Upstream notes that Vazirmatn's non-Arabic glyphs derive from Roboto under the
 Apache License 2.0; that combination is upstream's, and their OFL covers the
 result.
+
+
+Roboto
+------
+Version 3.004, by Google Inc.
+https://github.com/googlefonts/roboto-3-classic
+
+Licensed under the Apache License, Version 2.0 -- full text in Apache-2.0.txt.
+Upstream ships no NOTICE file, so section 4(d) carries nothing here.
+
+MODIFIED. `scripts/patch_vazirmatn.py` instances the variable font at the three
+weights the Vazirmatn faces above ship, subsets each instance to the Greek,
+Russian, Ukrainian and Vietnamese letters Vazirmatn lacks (CLDR's exemplar
+characters for each language) and the combining marks their decomposed
+spellings use, and merges those glyphs, with their kerning and mark
+positioning, into the Vazirmatn faces. No outline is altered. This is the
+release Vazirmatn's own Latin was imported from, so the added letters match it.
+
+Files:
+  crates/melodia-ui/ui/assets/fonts/vazirmatn/Vazirmatn-Regular.ttf
+  crates/melodia-ui/ui/assets/fonts/vazirmatn/Vazirmatn-Medium.ttf
+  crates/melodia-ui/ui/assets/fonts/vazirmatn/Vazirmatn-SemiBold.ttf
+
+Merged rather than shipped beside Vazirmatn, so the faces keep the Vazirmatn
+name and carry it under upstream's OFL, which is how upstream already ships its
+own Roboto-derived Latin.
 
 
 Material Symbols Rounded

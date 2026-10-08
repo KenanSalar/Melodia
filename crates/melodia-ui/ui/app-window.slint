@@ -1,8 +1,10 @@
-// Vazirmatn (OFL) — one family covering Latin and Arabic with consistent metrics, so mixed-script
-// rows don't drift vertically the way they do across a fallback. These TTFs are PATCHED:
-// `scripts/patch_vazirmatn.py` rewrites the OS/2 typo + hhea metrics to a Latin-typical line ratio,
-// upstream's ~1.56× (which fits Arabic combining marks) pushing every centred Latin text several px
-// up at our sizes. Pristine copies live in `assets/fonts/originals/` as the script's input.
+// Vazirmatn (OFL) is one family covering Latin, Arabic and the Greek, Russian, Ukrainian and
+// Vietnamese alphabets with consistent metrics, so mixed-script rows don't drift vertically the
+// way they do across a fallback. These TTFs are BUILT: `scripts/patch_vazirmatn.py` merges in
+// those four alphabets' letters from Roboto, then rewrites the OS/2 typo + hhea metrics to a
+// Latin-typical line ratio, upstream's ~1.56× (which fits Arabic combining marks) pushing every
+// centred Latin text several px up at our sizes. Pristine copies of both live in
+// `assets/fonts/originals/` as the script's input.
 import "assets/fonts/vazirmatn/Vazirmatn-Regular.ttf";
 import "assets/fonts/vazirmatn/Vazirmatn-Medium.ttf";
 import "assets/fonts/vazirmatn/Vazirmatn-SemiBold.ttf";

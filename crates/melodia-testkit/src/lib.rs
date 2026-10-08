@@ -180,7 +180,7 @@ const FONT_EXTENSIONS: [&str; 3] = ["ttc", "ttf", "otf"];
 ///
 /// `originals/` is held back, and it is the counterexample to the walk's own premise: Slint
 /// embeds a face because a `.slint` file `import`s it, not because it sits under this root,
-/// and that directory is gitignored scratch space for the pristine upstream Vazirmatn
+/// and that directory is gitignored scratch space for the pristine upstream faces
 /// `scripts/patch_vazirmatn.py` reads.
 pub fn font_sources() -> (Vec<PathBuf>, Vec<PathBuf>) {
     let (mut fonts, unreadable) = sources_under_any(FONTS_DIR, &FONT_EXTENSIONS);

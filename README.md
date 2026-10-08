@@ -365,8 +365,9 @@ Romanization is [uroman-rs](https://github.com/stellanomia/uroman-rs) for most s
 [kakasi](https://github.com/Theta-Dev/kakasi) for Japanese.
 
 Melodia's interface is set in [Vazirmatn](https://github.com/rastikerdar/vazirmatn) (SIL Open Font
-License 1.1) and draws its icons from
-[Material Symbols Rounded](https://github.com/google/material-design-icons) (Apache License 2.0).
-Both are modified, as is the vendored [winit](https://github.com/rust-windowing/winit) fork
+License 1.1), with its Greek, Russian, Ukrainian and Vietnamese letters taken from
+[Roboto](https://github.com/googlefonts/roboto-3-classic) (Apache License 2.0), and draws its icons
+from [Material Symbols Rounded](https://github.com/google/material-design-icons) (Apache License
+2.0). All three are modified, as is the vendored [winit](https://github.com/rust-windowing/winit) fork
 (Apache License 2.0) that gives Wayland its drag-and-drop events. What changed in each ships in
 [`licenses/`](licenses/).

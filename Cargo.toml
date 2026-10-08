@@ -258,6 +258,9 @@ tempfile = "3.27.0"
 zip = { version = "8.6.0", default-features = false, features = ["chrono", "deflate-flate2"] }
 # Test-only: the rules pin expands each `.claude/rules` `paths:` glob.
 glob = "0.3.4"
+# Test-only: the translations pin reads the bundled faces' character maps. Slint's compiler
+# already builds this release, and a character lookup needs none of its features.
+ttf-parser = { version = "0.25.1", default-features = false }
 
 # Platform-specific, each declared under a `[target.'cfg(…)']` table in the member that
 # takes it: a call site gated wider than its dependency fails to resolve on the platforms

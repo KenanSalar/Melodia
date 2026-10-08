@@ -1,5 +1,5 @@
 //! Pins the translation catalogues to the Slint tree `scripts/update-translations.sh` generates
-//! them from.
+//! them from, and to the bundled faces that draw them.
 //!
 //! It walks the sources rather than pinning a list, so a new locale extends
 //! the check by appearing in [`SUPPORTED_LOCALES`] and dropping a `.po` beside
@@ -18,8 +18,10 @@ use std::path::{Path, PathBuf};
 
 use melodia_core::entities::locale::SUPPORTED_LOCALES;
 use melodia_testkit::{
-    MIN_SLINT_SOURCES, UI_DIR, raw_sources, strip_line_comments, stripped_sources,
+    MIN_SLINT_SOURCES, REPO_ROOT, UI_DIR, font_sources, raw_sources, rel_path, strip_line_comments,
+    stripped_sources,
 };
+use ttf_parser::Face;
 
 const TRANSLATIONS_DIR: &str = concat!(env!("MELODIA_REPO_ROOT"), "crates/melodia-ui/translations");
 
@@ -33,6 +35,10 @@ const MIN_PLURALS: usize = 10;
 
 /// Floor under the msgids a translator note sits on in the tree, loose for [`MIN_MSGIDS`]' reason.
 const MIN_NOTES: usize = 20;
+
+/// The three weights `app-window.slint` imports. A floor so a weight added later is checked with
+/// no edit here, and tight so one dropping out of the walk is not missed.
+const MIN_TEXT_FACES: usize = 3;
 
 const RUN_THE_SCRIPT: &str = "run scripts/update-translations.sh";
 
@@ -243,6 +249,58 @@ fn catalogues() -> Vec<(&'static str, Vec<Entry>)> {
         .iter()
         .filter(|code| **code != "en")
         .map(|code| (*code, read_entries(&catalogue_path(code))))
+        .collect()
+}
+
+/// The faces UI text is set in: what the font build writes under `vazirmatn/`. The icon faces
+/// beside it draw ligatures, not the catalogues' text.
+fn text_faces() -> (Vec<PathBuf>, Vec<PathBuf>) {
+    let (fonts, unreadable) = font_sources();
+    let faces = fonts
+        .into_iter()
+        .filter(|path| path.parent().is_some_and(|dir| dir.ends_with("vazirmatn")))
+        .collect();
+    (faces, unreadable)
+}
+
+/// Every character a locale can set from a catalogue, English's from the template, each with the
+/// locales that set it.
+///
+/// Read still escaped, as every string here is: an escape is spelled in ASCII the faces carry, so
+/// the escaped text answers for the unescaped.
+fn shipped_characters() -> BTreeMap<char, BTreeSet<&'static str>> {
+    let english = template_entries()
+        .into_iter()
+        .flat_map(|entry| iter::once(entry.msgid).chain(entry.msgid_plural))
+        .map(|text| ("en", text));
+    let translated = catalogues().into_iter().flat_map(|(code, entries)| {
+        entries.into_iter().flat_map(|entry| entry.msgstrs).map(move |text| (code, text))
+    });
+
+    let mut characters: BTreeMap<char, BTreeSet<&'static str>> = BTreeMap::new();
+    for (code, text) in english.chain(translated) {
+        for character in text.chars() {
+            characters.entry(character).or_default().insert(code);
+        }
+    }
+    characters
+}
+
+/// One line per character in `characters` that `face` has no glyph for.
+fn missing_glyphs(
+    face: &Face<'_>,
+    characters: &BTreeMap<char, BTreeSet<&str>>,
+    face_name: &str,
+) -> Vec<String> {
+    characters
+        .iter()
+        .filter(|(character, _)| face.glyph_index(**character).is_none())
+        .map(|(character, codes)| {
+            format!(
+                "{face_name} lacks {character} (U+{:04X}), set by {codes:?}",
+                u32::from(*character)
+            )
+        })
         .collect()
 }
 
@@ -562,6 +620,51 @@ fn the_shipped_catalogues_are_exactly_the_supported_locales_but_english() {
     assert_eq!(
         shipped, supported,
         "a locale is its SUPPORTED_LOCALES entry and its catalogue together"
+    );
+}
+
+/// Every character a shipped locale sets, English included, has a glyph in each bundled text face.
+///
+/// One the faces lack is drawn from whatever face the OS falls back to, whose taller line box sets
+/// the label off-centre in every pill and row, and nothing is drawn at all where the OS has no such
+/// face. A Latin machine shows none of it, which is how the Greek catalogue shipped with nearly
+/// every string in a fallback face. A locale whose alphabet the faces lack fails here until it has
+/// a row in `scripts/patch_vazirmatn.py`'s `LANGUAGE_LETTERS` and the faces are rebuilt.
+#[test]
+fn every_character_a_locale_sets_is_in_the_bundled_faces() {
+    let characters = shipped_characters();
+    let (faces, unwalkable) = text_faces();
+    assert!(unwalkable.is_empty(), "unreadable font directories: {unwalkable:?}");
+    assert!(
+        faces.len() >= MIN_TEXT_FACES,
+        "only {} text faces found under vazirmatn/, so the check below covers fewer weights \
+         than the UI sets text in",
+        faces.len()
+    );
+
+    let mut unreadable = Vec::new();
+    let mut missing = Vec::new();
+    for path in &faces {
+        let face_name = rel_path(REPO_ROOT, path);
+        let data = match fs::read(path) {
+            Ok(data) => data,
+            Err(e) => {
+                unreadable.push(format!("{face_name}: {e}"));
+                continue;
+            }
+        };
+        match Face::parse(&data, 0) {
+            Ok(face) => missing.extend(missing_glyphs(&face, &characters, &face_name)),
+            Err(e) => unreadable.push(format!("{face_name}: {e}")),
+        }
+    }
+
+    assert!(unreadable.is_empty(), "text faces that won't read or parse: {unreadable:?}");
+    assert!(
+        missing.is_empty(),
+        "these characters fall back to an OS face, off-centre wherever there is one and missing \
+         where there isn't. Add the language's letters to `LANGUAGE_LETTERS` in \
+         scripts/patch_vazirmatn.py and re-run it: {missing:#?}"
     );
 }
 
