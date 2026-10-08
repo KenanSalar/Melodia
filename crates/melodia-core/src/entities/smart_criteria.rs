@@ -14,6 +14,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::error::describe;
+
 /// Schema version stamped into every serialized [`SmartCriteria`].
 pub const SMART_CRITERIA_VERSION: u32 = 1;
 
@@ -51,7 +53,7 @@ impl SmartCriteria {
         match serde_json::from_str::<Self>(raw) {
             Ok(criteria) => criteria,
             Err(e) => {
-                log::warn!("malformed smart_criteria, falling back to defaults: {e}");
+                log::warn!("malformed smart_criteria, falling back to defaults: {}", describe(&e));
                 Self::default()
             }
         }

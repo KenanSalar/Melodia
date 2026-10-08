@@ -32,6 +32,7 @@ use crate::ui::nav_transition;
 use crate::ui::track_list_view::view_id;
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{
     AlbumDetail, Albums, AppWindow, ArtistDetail, Browse, Favorites, GenreDetail, MyLibrary, Nav,
     NavEnterFrom, PlaylistDetail, Queue, RecentlyPlayed, Search, Tracks,
@@ -208,7 +209,7 @@ pub(in crate::ui) fn open_album_cross_tab(
         )
         .await
         {
-            log::warn!("{log_tag}({album_id}): {e}");
+            log::warn!("{log_tag}({album_id}): {}", describe(&e));
         }
     });
 
@@ -217,7 +218,7 @@ pub(in crate::ui) fn open_album_cross_tab(
         if let Err(e) =
             library::settings::set_last_detail_id(&s_disk, view_id::ALBUM_DETAIL, Some(album_id))
         {
-            log::warn!("{log_tag} persist: {e}");
+            log::warn!("{log_tag} persist: {}", describe(&e));
         }
     });
 }
@@ -253,7 +254,7 @@ pub(in crate::ui) fn open_artist_cross_tab(
         )
         .await
         {
-            log::warn!("{log_tag}({artist_id}): {e}");
+            log::warn!("{log_tag}({artist_id}): {}", describe(&e));
         }
     });
 
@@ -262,7 +263,7 @@ pub(in crate::ui) fn open_artist_cross_tab(
         if let Err(e) =
             library::settings::set_last_detail_id(&s_disk, view_id::ARTIST_DETAIL, Some(artist_id))
         {
-            log::warn!("{log_tag} persist: {e}");
+            log::warn!("{log_tag} persist: {}", describe(&e));
         }
     });
 }
@@ -304,7 +305,7 @@ fn make_go_to_genre(
             )
             .await
             {
-                log::warn!("cross_tab_nav::go_to_genre({id}): {e}");
+                log::warn!("cross_tab_nav::go_to_genre({id}): {}", describe(&e));
             }
         });
 
@@ -313,7 +314,7 @@ fn make_go_to_genre(
             if let Err(e) =
                 library::settings::set_last_detail_id(&s_disk, view_id::GENRE_DETAIL, Some(id))
             {
-                log::warn!("cross_tab_nav::go_to_genre persist: {e}");
+                log::warn!("cross_tab_nav::go_to_genre persist: {}", describe(&e));
             }
         });
     }

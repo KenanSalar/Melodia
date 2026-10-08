@@ -13,6 +13,7 @@ use crate::ui::track_list_view::view_id;
 use melodia_app::library;
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, GenreDetail, Genres};
 
 /// Wire the `Genres` grid callbacks. See [`super::wire`].
@@ -111,7 +112,7 @@ pub(super) fn wire(
                 if let Err(e) =
                     library::settings::set_last_detail_id(&s_disk, view_id::GENRE_DETAIL, Some(id))
                 {
-                    log::warn!("genres::open_genre persist: {e}");
+                    log::warn!("genres::open_genre persist: {}", describe(&e));
                 }
             });
         });

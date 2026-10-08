@@ -31,7 +31,7 @@ use tokio::sync::{Notify, watch};
 use melodia_core::config::Paths;
 use melodia_core::entities::integrations::ScrobbleFlags;
 use melodia_core::entities::track::ScrobbleRow;
-use melodia_core::error::{AppError, AppResult};
+use melodia_core::error::{AppError, AppResult, describe};
 use melodia_net::services::net::build_http_client;
 use providers::lastfm;
 use providers::listenbrainz;
@@ -386,7 +386,7 @@ impl ScrobbleService {
                     lastfm::update_now_playing(&client, api_key, secret, &creds.session_key, &track)
                         .await
                 {
-                    log::debug!("Last.fm now-playing failed: {e}");
+                    log::debug!("Last.fm now-playing failed: {}", describe(&e));
                 }
             });
         }
@@ -398,7 +398,7 @@ impl ScrobbleService {
                 if let Err(e) =
                     listenbrainz::submit_playing_now(&client, &base, &creds.token, &track).await
                 {
-                    log::debug!("ListenBrainz now-playing failed: {e}");
+                    log::debug!("ListenBrainz now-playing failed: {}", describe(&e));
                 }
             });
         }

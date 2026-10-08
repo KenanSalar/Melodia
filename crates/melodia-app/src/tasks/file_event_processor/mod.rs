@@ -19,6 +19,7 @@ use tokio::time::{Duration, Instant};
 
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
+use melodia_core::error::describe;
 use melodia_core::utils::self_writes::SelfWrites;
 use melodia_store::media::ingest::watcher::FileEvent;
 
@@ -123,7 +124,9 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState, mut rx: mpsc::Receiver<Fil
                     // commit so we don't leave orphan rows behind.
                     match process_batch(&state.db, &state.paths, &state.cover_cache, batch).await {
                         Ok(()) => state.library_changed.bump(),
-                        Err(e) => log::error!("File event batch processing failed: {e}"),
+                        Err(e) => {
+                            log::error!("File event batch processing failed: {}", describe(&e));
+                        }
                     }
                 }
             }

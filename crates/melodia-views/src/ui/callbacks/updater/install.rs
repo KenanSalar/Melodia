@@ -9,6 +9,7 @@ use melodia_app::services::updater::{
     self, CheckOutcome, FailureKind, UpdaterEvent, asset_cache, check_for_update,
 };
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_platform::services::platform::install_kind::install_target;
 use melodia_ui::{AppWindow, MelodiaUpdater};
 
@@ -143,7 +144,8 @@ pub(super) fn spawn_install(
                     set_is_installing(&weak, false);
                     log::warn!(
                         "updater: re-fetch before install failed ({kind:?}) and \
-                         no cached asset available: {e}"
+                         no cached asset available: {}",
+                        describe(&e)
                     );
                     paint_error(&weak, format!("re-fetch before install failed: {e}"));
                     let _ = event_tx.send(Some(UpdaterEvent::Failed { kind }));
@@ -151,7 +153,8 @@ pub(super) fn spawn_install(
                 };
                 log::warn!(
                     "updater: re-fetch before install failed ({kind:?}); \
-                     falling back to cached asset: {e}"
+                     falling back to cached asset: {}",
+                    describe(&e)
                 );
                 cached
             }
@@ -192,7 +195,8 @@ pub(super) fn spawn_install(
                     }
                     Err(e) => log::warn!(
                         "updater: install_target lookup failed; \
-                         restart may relaunch the wrong binary: {e}"
+                         restart may relaunch the wrong binary: {}",
+                        describe(&e)
                     ),
                 }
                 paint_restart_needed(&weak);
@@ -201,7 +205,7 @@ pub(super) fn spawn_install(
             Err(e) => {
                 set_is_installing(&weak, false);
                 let kind = FailureKind::classify(&e);
-                log::warn!("updater: install failed ({kind:?}): {e}");
+                log::warn!("updater: install failed ({kind:?}): {}", describe(&e));
                 paint_error(&weak, format!("{e}"));
                 let _ = event_tx.send(Some(UpdaterEvent::Failed { kind }));
             }

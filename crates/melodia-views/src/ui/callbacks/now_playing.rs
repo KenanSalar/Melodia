@@ -13,6 +13,7 @@ use crate::ui::search::{self as search_ui_mod, SearchUi};
 use crate::ui::tracks::{self as tracks_ui_mod, TracksUi};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Player};
 
 /// The six view-side surfaces holding a per-row `is_favorite` / `rating`,
@@ -106,7 +107,7 @@ pub fn wire_now_playing_favorite(ui: &AppWindow, state: &AppState, handles: RowF
             match library::favorites::toggle_current_favorite(&s).await {
                 Ok(Some((id, fav))) => m.mirror_favorite(id, fav),
                 Ok(None) => {}
-                Err(e) => log::warn!("toggle_favorite: {e}"),
+                Err(e) => log::warn!("toggle_favorite: {}", describe(&e)),
             }
         });
     });
@@ -128,7 +129,7 @@ pub fn wire_now_playing_rating(ui: &AppWindow, state: &AppState, handles: RowFla
             match library::ratings::set_current_rating(&s, rating).await {
                 Ok(Some((id, rating))) => m.mirror_rating(id, rating),
                 Ok(None) => {}
-                Err(e) => log::warn!("set_current_rating: {e}"),
+                Err(e) => log::warn!("set_current_rating: {}", describe(&e)),
             }
         });
     });

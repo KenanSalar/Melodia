@@ -290,7 +290,10 @@ fn take_station_tag(line: &str, pending: &mut Option<radio::NewRadioStation>) ->
     };
     match serde_json::from_str(rest.trim()) {
         Ok(station) => *pending = Some(station),
-        Err(e) => log::debug!("radio: import dropped an unreadable station tag: {e}"),
+        Err(e) => log::debug!(
+            "radio: import dropped an unreadable station tag: {}",
+            melodia_core::error::describe(&e)
+        ),
     }
     true
 }

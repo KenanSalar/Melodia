@@ -18,7 +18,7 @@ use super::apply::{apply_results_to_slint, clear_results_on_ui, set_loading_on_u
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::search::SearchResults;
-use melodia_core::error::AppResult;
+use melodia_core::error::{AppResult, describe};
 use melodia_ui::{AppWindow, Search};
 
 /// Bump the fetch token, run `search_all`, and (if the token is still
@@ -161,7 +161,7 @@ pub fn schedule_history_add(
                 (*su.state().recent.lock()).clone_from(&rows);
                 push_recent_rows_to_slint(&weak, rows);
             }
-            Err(e) => log::warn!("search::add_history: {e}"),
+            Err(e) => log::warn!("search::add_history: {}", describe(&e)),
         }
     });
 }

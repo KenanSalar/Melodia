@@ -30,6 +30,7 @@ use material_colors::score::Score;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 use crate::media::image::image_decode::decode_capped;
+use melodia_core::error::describe;
 use melodia_core::themes::{Palette, material3};
 
 /// The seven Material 3 scheme variants, plus a `None` that disables Material
@@ -113,7 +114,7 @@ pub fn extract_source_argb(artwork_path: &Path) -> Option<u32> {
     let decoded = match decode_capped(artwork_path, MATERIAL_YOU_MAX_SOURCE_DIM) {
         Ok(d) => d,
         Err(e) => {
-            log::warn!("material_you: decode {}: {e}", artwork_path.display());
+            log::warn!("material_you: decode {}: {}", artwork_path.display(), describe(&e));
             return None;
         }
     };

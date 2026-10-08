@@ -15,7 +15,7 @@ use slint::ComponentHandle;
 use crate::ui::launcher;
 use crate::ui::shell::notifications::{NotificationsUi, RowText};
 use melodia_app::state::AppState;
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 use melodia_ui::{AppWindow, Settings};
 
 /// A literal rather than a manifest field — Cargo has no `funding` key to read it out
@@ -79,11 +79,11 @@ fn schedule_prompt(
             Ok(Ok(true)) => {}
             Ok(Ok(false)) => return,
             Ok(Err(e)) => {
-                log::warn!("support prompt: counting this launch failed: {e}");
+                log::warn!("support prompt: counting this launch failed: {}", describe(&e));
                 return;
             }
             Err(e) => {
-                log::warn!("support prompt: launch-count task join failed: {e}");
+                log::warn!("support prompt: launch-count task join failed: {}", describe(&e));
                 return;
             }
         }

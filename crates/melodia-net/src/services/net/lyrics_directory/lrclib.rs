@@ -16,7 +16,7 @@ use serde::Deserialize;
 
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::lyrics::{LyricsAnswer, carries_gloss};
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 use melodia_core::utils::fold::fold;
 
 use super::LookupError;
@@ -186,7 +186,7 @@ pub(super) async fn fetch(
         // the failure costs its timings; with none, reporting a miss would have the caller record
         // "nobody has this" for a month on the strength of an outage.
         Err(e) if exact.is_some() => {
-            log::debug!("lyrics: index unreachable: {e}");
+            log::debug!("lyrics: index unreachable: {}", describe(&e));
             Ok(exact)
         }
         Err(e) => Err(e),

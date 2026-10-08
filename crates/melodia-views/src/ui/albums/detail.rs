@@ -21,7 +21,7 @@ use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::album::AlbumStats;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
-use melodia_core::error::AppResult;
+use melodia_core::error::{AppResult, describe};
 use melodia_ui::{AlbumDetail, AppWindow, NavEnterFrom, TrackListRow as UiTrackListRow};
 
 // `apply_detail_artwork` (cover + hero-blur write) and
@@ -320,7 +320,7 @@ pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, albums_ui: &A
         // `Above` is the first-launch fade-down rather than a drill-in slide —
         // nobody navigated, this is a restore.
         if let Err(e) = open_album(&s, &au, weak.clone(), id, NavEnterFrom::Above).await {
-            log::warn!("albums::seed_detail_from_settings open_album({id}): {e}");
+            log::warn!("albums::seed_detail_from_settings open_album({id}): {}", describe(&e));
         }
         // Lowered however it went, and behind `open_album`'s own hop so the id is already in: an
         // album gone since the last session owes the grid back rather than an empty body.

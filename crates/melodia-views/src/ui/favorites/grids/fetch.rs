@@ -10,6 +10,7 @@ use super::sort::sort_cached_artists;
 use crate::ui::favorites::FavoritesUi;
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::AppWindow;
 
 /// Fetch Most Played + Favorite Artists in parallel and apply each independently. Returns `()`
@@ -26,10 +27,10 @@ pub async fn refresh_grids(state: &AppState, fav_ui: &Arc<FavoritesUi>, weak: &W
     // Logged before the guard below, not at the store — a query that failed is worth a line
     // whether or not anyone is still looking at the view.
     let most_played = most_played_res
-        .inspect_err(|e| log::warn!("favorites::refresh_grids most_played: {e}"))
+        .inspect_err(|e| log::warn!("favorites::refresh_grids most_played: {}", describe(e)))
         .ok();
     let fav_artists = fav_artists_res
-        .inspect_err(|e| log::warn!("favorites::refresh_grids fav_artists: {e}"))
+        .inspect_err(|e| log::warn!("favorites::refresh_grids fav_artists: {}", describe(e)))
         .ok();
 
     // Either query failing is a way of storing nothing, and the tab pick *consumes* the flag

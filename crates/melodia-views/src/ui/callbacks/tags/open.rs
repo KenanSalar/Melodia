@@ -58,7 +58,7 @@ pub(super) fn wire_request_edit(
                 Ok(rows) if !rows.is_empty() => rows,
                 Ok(_) => return,
                 Err(e) => {
-                    log::warn!("tag edit fetch: {e}");
+                    log::warn!("tag edit fetch: {}", describe(&e));
                     return;
                 }
             };
@@ -79,7 +79,11 @@ pub(super) fn wire_request_edit(
                         (String::new(), vec![<(ArtistCredit, ArtistCredit)>::default()])
                     }
                     Err(e) => {
-                        log::warn!("tag edit: reading {} failed: {e}", rows[0].file_path);
+                        log::warn!(
+                            "tag edit: reading {} failed: {}",
+                            rows[0].file_path,
+                            describe(&e)
+                        );
                         (String::new(), vec![<(ArtistCredit, ArtistCredit)>::default()])
                     }
                 }

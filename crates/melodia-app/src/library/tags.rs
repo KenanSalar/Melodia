@@ -51,7 +51,9 @@ static TAG_WRITE_POOL: LazyLock<Option<rayon::ThreadPool>> = LazyLock::new(|| {
         .num_threads(TAG_WRITE_THREADS)
         .thread_name(|i| format!("tag-write-{i}"))
         .build()
-        .inspect_err(|e| log::warn!("tag-write pool build failed ({e}); writing sequentially"))
+        .inspect_err(|e| {
+            log::warn!("tag-write pool build failed ({}); writing sequentially", describe(e));
+        })
         .ok()
 });
 

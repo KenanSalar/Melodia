@@ -27,7 +27,7 @@
 
 use std::path::Path;
 
-use melodia_core::error::{AppError, AppResult};
+use melodia_core::error::{AppError, AppResult, describe};
 
 use super::install_kind::{install_target, linux_pkg};
 
@@ -104,7 +104,11 @@ pub fn refresh_user_install() -> AppResult<()> {
         if let Err(e) = std::fs::remove_file(&legacy_path)
             && e.kind() != std::io::ErrorKind::NotFound
         {
-            log::debug!("desktop_integration: legacy {} remove failed: {e}", legacy_path.display());
+            log::debug!(
+                "desktop_integration: legacy {} remove failed: {}",
+                legacy_path.display(),
+                describe(&e)
+            );
         }
     }
     let icon_path =
@@ -121,7 +125,11 @@ pub fn refresh_user_install() -> AppResult<()> {
         match write_if_changed(path, payload) {
             Ok(changed) => Some(changed),
             Err(e) => {
-                log::warn!("desktop_integration: write {} failed: {e}", path.display());
+                log::warn!(
+                    "desktop_integration: write {} failed: {}",
+                    path.display(),
+                    describe(&e)
+                );
                 None
             }
         }

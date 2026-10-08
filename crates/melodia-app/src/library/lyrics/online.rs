@@ -6,7 +6,7 @@ use crate::state::AppState;
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::lyrics::{LyricsOutcome, LyricsSource};
 use melodia_core::entities::track::TrackSummary;
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 use melodia_core::utils::text::filled;
 use melodia_net::services::net::lyrics_directory as directory;
 use melodia_store::database::queries;
@@ -42,7 +42,7 @@ pub(super) async fn look_up(
         // absence of an answer rather than one, so the store stays untouched and the panel is told
         // we could not ask, which is the only honest thing left to say.
         Err(e) => {
-            log::debug!("lyrics: {e}");
+            log::debug!("lyrics: {}", describe(&e));
             return Ok(LyricsOutcome::Unavailable);
         }
     };

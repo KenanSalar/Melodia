@@ -5,6 +5,7 @@ use std::sync::Arc;
 use melodia_app::services;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Nav};
 use melodia_views::ui;
 use slint::ComponentHandle;
@@ -209,7 +210,7 @@ pub fn install_views(
     // buffers in place, so the cards keep painting what they had until each replacement lands.
     app.global::<melodia_ui::WindowChrome>().on_display_changed(retune.clone());
     if let Err(e) = slint::invoke_from_event_loop(retune) {
-        log::warn!("Failed to schedule cover-cache display tuning: {e}");
+        log::warn!("Failed to schedule cover-cache display tuning: {}", describe(&e));
     }
 
     // The four handles not returned are deliberately dropped here — see
@@ -260,7 +261,7 @@ pub fn install_library_settings_and_friends(
         if let Err(e) = ui::locale_refresh::on_locale_changed(state, app.as_weak(), move |ui| {
             notifications.refresh_for_locale(ui);
         }) {
-            log::warn!("notifications locale refresher: {e}");
+            log::warn!("notifications locale refresher: {}", describe(&e));
         }
     }
     Ok(notifications)

@@ -22,6 +22,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::locale::{DEFAULT_LOCALE, SUPPORTED_LOCALES};
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Settings};
 
 /// Native-name labels for [`SUPPORTED_LOCALES`], index for index, in alphabetical order so a
@@ -64,7 +65,7 @@ type PersistedLocale = Arc<parking_lot::Mutex<String>>;
 pub fn install_locale(ui: &AppWindow, state: &AppState) {
     let persisted = library::settings::get_settings(state).map_or_else(
         |e| {
-            log::warn!("locale: read settings failed: {e}");
+            log::warn!("locale: read settings failed: {}", describe(&e));
             DEFAULT_LOCALE.to_owned()
         },
         |s| s.locale,
@@ -107,7 +108,7 @@ fn wire_language_changed(ui: &AppWindow, state: &AppState, shadow: PersistedLoca
         // paint. Idempotent and cheap; no need to short-circuit on equal
         // current value.
         if let Err(e) = slint::select_bundled_translation(code) {
-            log::warn!("select_bundled_translation({code}): {e:?}");
+            log::warn!("select_bundled_translation({code}): {}", describe(&e));
         }
 
         // The switch above reaches every live `@tr` binding and nothing Rust rendered

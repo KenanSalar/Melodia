@@ -9,6 +9,8 @@ use std::time::Duration;
 
 use tokio_util::sync::CancellationToken;
 
+use melodia_core::error::describe;
+
 use super::ScrobbleService;
 use super::model::ScrobbleTrack;
 use super::providers::lastfm::{self, LastfmError};
@@ -26,7 +28,7 @@ impl ScrobbleService {
     async fn disconnect_lastfm(&self) {
         log::warn!("Last.fm session invalid; disconnecting");
         if let Err(e) = self.set_lastfm_credentials(None).await {
-            log::warn!("Failed to persist Last.fm disconnect: {e}");
+            log::warn!("Failed to persist Last.fm disconnect: {}", describe(&e));
         }
     }
 
@@ -34,7 +36,7 @@ impl ScrobbleService {
     async fn disconnect_listenbrainz(&self) {
         log::warn!("ListenBrainz token invalid; disconnecting");
         if let Err(e) = self.set_listenbrainz_credentials(None).await {
-            log::warn!("Failed to persist ListenBrainz disconnect: {e}");
+            log::warn!("Failed to persist ListenBrainz disconnect: {}", describe(&e));
         }
     }
 
@@ -227,7 +229,7 @@ impl ScrobbleService {
     /// stays in the in-memory queue to be re-persisted on the next drain.
     async fn persist_queue(&self, snapshot: ScrobbleQueue) {
         if let Err(e) = self.save_queue(snapshot).await {
-            log::warn!("Failed to persist scrobble queue after submit: {e}");
+            log::warn!("Failed to persist scrobble queue after submit: {}", describe(&e));
         }
     }
 
@@ -415,11 +417,11 @@ fn listenbrainz_reaction(error: &ListenBrainzError) -> Reaction {
 }
 
 /// The one deferral line both drains log, carrying the wait only when the provider named one.
-fn log_deferral(what: &str, cause: &dyn std::fmt::Display, delay: Duration) {
+fn log_deferral(what: &str, cause: &dyn std::error::Error, delay: Duration) {
     if delay.is_zero() {
-        log::info!("{what} deferred: {cause}");
+        log::info!("{what} deferred: {}", describe(cause));
     } else {
-        log::info!("{what} deferred: {cause}; retrying in {}s", delay.as_secs());
+        log::info!("{what} deferred: {}; retrying in {}s", describe(cause), delay.as_secs());
     }
 }
 

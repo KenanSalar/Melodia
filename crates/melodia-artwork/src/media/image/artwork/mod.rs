@@ -36,6 +36,7 @@ use std::sync::Arc;
 use lofty::picture::MimeType;
 use lofty::tag::Tag;
 use lru::LruCache;
+use melodia_core::error::describe;
 use parking_lot::Mutex;
 
 use crate::media::image::image_decode::{self, FilterType, MAX_SOURCE_DIM, resize_rgb8};
@@ -312,7 +313,7 @@ pub fn store_image(bytes: &[u8], ext: &str, dir: &Path) -> Option<String> {
     if !file_path.exists()
         && let Err(e) = write_atomic(dir, &file_path, stored)
     {
-        log::warn!("Failed to write artwork cache {}: {}", file_path.display(), e);
+        log::warn!("Failed to write artwork cache {}: {}", file_path.display(), describe(&e));
         return None;
     }
     Some(file_path.to_string_lossy().into_owned())

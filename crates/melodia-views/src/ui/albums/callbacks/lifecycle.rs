@@ -14,6 +14,7 @@ use crate::ui::model_diff::clear_vec_model;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{
     AlbumDetail, AlbumGridRow as UiAlbumGridRow, Albums, AppWindow, CardSelection,
     TrackListRow as UiTrackListRow,
@@ -110,7 +111,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
                         // we can re-open it here.
                         let open_id = au.detail_album_id();
                         if let Err(e) = albums_ui_mod::fetch_grid(&s, &au, weak.clone()).await {
-                            log::warn!("albums::section_enter fetch_grid: {e}");
+                            log::warn!("albums::section_enter fetch_grid: {}", describe(&e));
                         }
                         // The preserved `AlbumDetail.album-id` points at a
                         // detail the wipe just emptied — re-run `open_album`
@@ -126,7 +127,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
                             )
                             .await
                         {
-                            log::warn!("albums::section_enter open_album({open_id}): {e}");
+                            log::warn!(
+                                "albums::section_enter open_album({open_id}): {}",
+                                describe(&e)
+                            );
                             // The detail re-fetch failed — most likely the
                             // album was deleted on disk while the section
                             // was hidden (the `library_changed` subscriber

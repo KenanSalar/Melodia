@@ -20,6 +20,7 @@ use slint::{ComponentHandle, Model, ModelRc, VecModel};
 use crate::ui::settings_bind::{read_or_default, toggle_binding};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_playback::player::playback::equalizer;
 use melodia_ui::{AppWindow, Equalizer};
 
@@ -146,10 +147,10 @@ pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
                     &flat,
                     equalizer::DEFAULT_PRESET.to_owned(),
                 ) {
-                    log::warn!("persist eq band gains + preset: {e}");
+                    log::warn!("persist eq band gains + preset: {}", describe(&e));
                 }
                 if let Err(e) = library::settings::set_eq_preamp(&s, 0.0) {
-                    log::warn!("persist eq_preamp: {e}");
+                    log::warn!("persist eq_preamp: {}", describe(&e));
                 }
             });
         });

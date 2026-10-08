@@ -31,6 +31,83 @@ fn a_cause_is_appended_once_and_never_repeated() {
 }
 
 #[test]
+fn an_error_with_no_cause_reads_as_its_own_display() {
+    let error = AppError::network_msg("Failed to reach the directory");
+
+    assert_eq!(describe(&error), "Network error: Failed to reach the directory");
+}
+
+/// Every log line in the tree hands its error here, and the chains it gets run deeper than one
+/// level: an integration's error wraps a D-Bus error that wraps an I/O one.
+#[test]
+fn every_level_of_a_cause_chain_is_appended_in_order() {
+    let error = layer(
+        "Failed to update the media controls",
+        Some(layer("D-Bus call failed", Some(layer("connection reset by peer", None)))),
+    );
+
+    assert_eq!(
+        describe(&error),
+        "Failed to update the media controls: D-Bus call failed: connection reset by peer"
+    );
+}
+
+/// sqlx's shape one level down: a cause whose `Display` already prints its own source. The skip
+/// compares against everything written so far, not against the level directly above.
+#[test]
+fn a_cause_printed_further_up_the_chain_is_not_repeated() {
+    let error = layer(
+        "Failed to save the playlist",
+        Some(layer(
+            "error returned from database: UNIQUE constraint failed",
+            Some(layer("UNIQUE constraint failed", None)),
+        )),
+    );
+
+    assert_eq!(
+        describe(&error),
+        "Failed to save the playlist: error returned from database: UNIQUE constraint failed"
+    );
+}
+
+/// The `Io` variant's shape over a cause with a reason of its own: the level the `Display`
+/// already printed is skipped, and the reason below it still has to arrive.
+#[test]
+fn a_level_skipped_as_already_printed_does_not_end_the_walk() {
+    let error = layer(
+        "IO error: disk full",
+        Some(layer("disk full", Some(layer("No space left on device (os error 28)", None)))),
+    );
+
+    assert_eq!(describe(&error), "IO error: disk full: No space left on device (os error 28)");
+}
+
+#[test]
+fn an_empty_cause_leaves_no_trailing_separator() {
+    let error = layer("Failed to spawn the worker", Some(layer("", None)));
+
+    assert_eq!(describe(&error), "Failed to spawn the worker");
+}
+
+/// The skip is for a cause the `Display` interpolated, not for one whose words happen to end the
+/// context sentence, which a bare suffix match dropped. Repeating a word is the cheap failure;
+/// losing the reason is the one this function exists to prevent.
+#[test]
+fn a_cause_that_only_ends_the_context_sentence_is_still_appended() {
+    let error = layer("Failed to read the tag", Some(layer("tag", None)));
+
+    assert_eq!(describe(&error), "Failed to read the tag: tag");
+}
+
+/// A wrapper that prints exactly its cause, as `#[error(transparent)]` over a source would.
+#[test]
+fn a_wrapper_that_prints_exactly_its_cause_is_not_repeated() {
+    let error = layer("permission denied", Some(layer("permission denied", None)));
+
+    assert_eq!(describe(&error), "permission denied");
+}
+
+#[test]
 fn display_io() {
     let err = AppError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, "gone"));
     assert_eq!(format!("{err}"), "IO error: gone");
@@ -156,4 +233,28 @@ fn every_io_boundary_variant_keeps_its_context_and_its_cause() {
             "a constructor that drops its source reports the operation and never the reason"
         );
     }
+}
+
+/// An error that prints exactly its message, so a chain can be built to any depth and in either
+/// `Display` shape without a third-party type deciding the text.
+#[derive(Debug)]
+struct Layer {
+    message: &'static str,
+    cause: Option<Box<Layer>>,
+}
+
+impl std::fmt::Display for Layer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.message)
+    }
+}
+
+impl std::error::Error for Layer {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.cause.as_deref().map(|cause| cause as &(dyn std::error::Error + 'static))
+    }
+}
+
+fn layer(message: &'static str, cause: Option<Layer>) -> Layer {
+    Layer { message, cause: cause.map(Box::new) }
 }

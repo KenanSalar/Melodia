@@ -25,6 +25,7 @@ use crate::ui::view_tag;
 use melodia_app::library;
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Radio};
 
 use super::{RadioTab, RadioUi, filter, tab_from_index};
@@ -44,7 +45,7 @@ fn persist_tab(state: &AppState, persist: &Arc<IndexPersist>, tab: i32) {
     state.runtime.spawn_blocking(move || {
         persist.write_if_current(tab, || {
             if let Err(e) = library::settings::set_radio_tab(&s, tab) {
-                log::warn!("radio::set_radio_tab: {e}");
+                log::warn!("radio::set_radio_tab: {}", describe(&e));
             }
         });
     });

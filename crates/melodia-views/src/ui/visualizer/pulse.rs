@@ -17,6 +17,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use slint::{ComponentHandle, RenderingState};
 
+use melodia_core::error::describe;
 use melodia_ui::AppWindow;
 
 /// Frames drawn since startup. Monotonic, and never read for its absolute value —
@@ -52,7 +53,10 @@ pub(super) fn install(ui: &AppWindow) {
     }) {
         Ok(()) => COUNTING.store(true, Ordering::Relaxed),
         // Only the software renderer refuses, and this build is FemtoVG-only.
-        Err(e) => log::warn!("visualizer: no frame notifier ({e}) — falling back to the shadow"),
+        Err(e) => log::warn!(
+            "visualizer: no frame notifier ({}) — falling back to the shadow",
+            describe(&e)
+        ),
     }
 }
 

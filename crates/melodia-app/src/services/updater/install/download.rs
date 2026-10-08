@@ -7,7 +7,7 @@ use std::path::Path;
 
 use futures_util::StreamExt;
 
-use melodia_core::error::{AppError, AppResult};
+use melodia_core::error::{AppError, AppResult, describe};
 
 use super::staging::{
     StagedMeta, discard_staging_if_sidecar_mismatches, sidecar_meta_path, write_staged_meta,
@@ -130,9 +130,10 @@ pub(super) async fn download_to_file(
         existing_etag.as_deref(),
     ) {
         log::warn!(
-            "updater: failed to write staging sidecar at {}: {e} (download continues; \
+            "updater: failed to write staging sidecar at {}: {} (download continues; \
              worst case a future retry restarts from zero)",
-            sidecar_meta_path(dest).display()
+            sidecar_meta_path(dest).display(),
+            describe(&e)
         );
     }
 

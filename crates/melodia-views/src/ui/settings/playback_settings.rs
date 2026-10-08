@@ -21,6 +21,7 @@ use crate::ui::settings_bind::toggle_binding;
 use melodia_app::library;
 use melodia_app::services::settings;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_playback::player::playback::crossfade;
 use melodia_ui::{AppWindow, Settings};
 
@@ -73,7 +74,7 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
         // `with_state_emit`, so the bar's flag and the monitor's gate both refresh
         // before this callback returns.
         if let Err(e) = library::playback::player_set_gapless(&state_clone.playback_ctx(), on) {
-            log::warn!("player_set_gapless runtime apply: {e}");
+            log::warn!("player_set_gapless runtime apply: {}", describe(&e));
         }
         state_clone.persist_blocking("persist gapless_playback", move |s| {
             library::settings::set_gapless_playback(s, on)

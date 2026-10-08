@@ -12,6 +12,7 @@ use crate::ui::track_list_view::view_id;
 use melodia_app::library;
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, ArtistDetail, Artists};
 
 /// Wire the `Artists` grid callbacks. See [`super::wire`].
@@ -109,7 +110,7 @@ pub(super) fn wire(
                     crate::ui::track_list_view::view_id::ARTIST_DETAIL,
                     Some(id),
                 ) {
-                    log::warn!("artists::open_artist persist: {e}");
+                    log::warn!("artists::open_artist persist: {}", describe(&e));
                 }
             });
         });

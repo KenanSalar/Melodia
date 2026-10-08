@@ -26,7 +26,7 @@ use crate::ui::util::opt_shared;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::integrations::ScrobbleFlags;
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 use melodia_core::utils::toast::{self, ToastKind};
 use melodia_integrations::services::integrations::scrobble::providers::{lastfm, listenbrainz};
 use melodia_integrations::services::integrations::scrobble::{
@@ -129,7 +129,7 @@ where
         let disconnect = disconnect.clone();
         rt.spawn(async move {
             if let Err(e) = disconnect(scrobble).await {
-                log::warn!("{provider} disconnect: {e}");
+                log::warn!("{provider} disconnect: {}", describe(&e));
                 toast::notify(ToastKind::OperationFailed, format!("{provider}: {e}"));
             }
         });
@@ -354,7 +354,7 @@ fn wire_login_flows(ui: &AppWindow, state: &AppState) {
                     // Usually "not approved yet" — surface inline, keep the
                     // dialog open so the user can approve and click Finish again.
                     Err(e) => {
-                        log::info!("Last.fm get_session failed: {e}");
+                        log::info!("Last.fm get_session failed: {}", describe(&e));
                         let _ = weak.upgrade_in_event_loop(|ui| {
                             let su = ui.global::<ScrobbleUi>();
                             su.set_error(su.invoke_err_not_authorized());
@@ -369,8 +369,8 @@ fn wire_login_flows(ui: &AppWindow, state: &AppState) {
 
 /// Report a transport-level connect failure: toast + inline "couldn't reach the
 /// service" line, clear busy, keep the dialog open.
-fn network_failed(weak: &slint::Weak<AppWindow>, provider: &str, error: &impl std::fmt::Display) {
-    log::info!("{provider} connect failed: {error}");
+fn network_failed(weak: &slint::Weak<AppWindow>, provider: &str, error: &impl std::error::Error) {
+    log::info!("{provider} connect failed: {}", describe(error));
     toast::notify(ToastKind::OperationFailed, format!("{provider}: {error}"));
     let _ = weak.upgrade_in_event_loop(|ui| {
         let su = ui.global::<ScrobbleUi>();
@@ -381,8 +381,8 @@ fn network_failed(weak: &slint::Weak<AppWindow>, provider: &str, error: &impl st
 
 /// Report a credential-persist failure after a successful auth: toast + inline
 /// "couldn't save" line, clear busy, keep the dialog open.
-fn save_failed(weak: &slint::Weak<AppWindow>, provider: &str, error: &impl std::fmt::Display) {
-    log::warn!("{provider} connect: save failed: {error}");
+fn save_failed(weak: &slint::Weak<AppWindow>, provider: &str, error: &impl std::error::Error) {
+    log::warn!("{provider} connect: save failed: {}", describe(error));
     toast::notify(ToastKind::OperationFailed, format!("{provider}: {error}"));
     let _ = weak.upgrade_in_event_loop(|ui| {
         let su = ui.global::<ScrobbleUi>();

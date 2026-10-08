@@ -14,6 +14,7 @@ use crate::ui::recently_played::{self as recently_played_ui_mod, RecentlyPlayedU
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, RecentlyPlayed, TrackListRow as UiTrackListRow};
 
 /// Wire the card-action and sub-view-routing callbacks.
@@ -148,7 +149,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 // hop, and the cover swap below is this task's regardless.
                 persist_disk.write_if_current(tab, || {
                     if let Err(e) = library::settings::set_recently_played_tab(&s_disk, tab) {
-                        log::warn!("recently_played::set_recently_played_tab: {e}");
+                        log::warn!("recently_played::set_recently_played_tab: {}", describe(&e));
                     }
                 });
                 // A pick can't await a prewarm the way a fetch does — `TabBar` writes

@@ -12,6 +12,7 @@ use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{
     AppWindow, CardSelection, EntityGridRow as UiEntityGridRow, Favorites, Nav,
     TrackListRow as UiTrackListRow,
@@ -176,7 +177,7 @@ async fn kick_full_refresh(
         fav_ui.mark_grids_dirty();
         let (h, t) = tokio::join!(hero, favorites_ui_mod::refresh_tracks(state, fav_ui, weak));
         if let Err(e) = h {
-            log::warn!("favorites::refresh_hero: {e}");
+            log::warn!("favorites::refresh_hero: {}", describe(&e));
         }
         t
     } else {
@@ -184,12 +185,12 @@ async fn kick_full_refresh(
         fav_ui.mark_songs_dirty();
         let (h, ()) = tokio::join!(hero, favorites_ui_mod::refresh_grids(state, fav_ui, weak));
         if let Err(e) = h {
-            log::warn!("favorites::refresh_hero: {e}");
+            log::warn!("favorites::refresh_hero: {}", describe(&e));
         }
         Ok(())
     };
 
     if let Err(e) = tracks {
-        log::warn!("favorites::refresh_tracks: {e}");
+        log::warn!("favorites::refresh_tracks: {}", describe(&e));
     }
 }

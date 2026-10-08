@@ -25,7 +25,7 @@ use melodia_app::state::AppState;
 use melodia_core::entities::album::AlbumStats;
 use melodia_core::entities::artist::ArtistStats;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
-use melodia_core::error::AppResult;
+use melodia_core::error::{AppResult, describe};
 use melodia_ui::{
     AlbumRow as UiAlbumRow, AppWindow, ArtistDetail, NavEnterFrom, TrackListRow as UiTrackListRow,
 };
@@ -318,7 +318,7 @@ pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, artists_ui: &
         // Above = first-launch fade-down, not a drill-in slide: the user didn't navigate, this is
         // restoring their last view.
         if let Err(e) = open_artist(&s, &au, weak.clone(), id, NavEnterFrom::Above).await {
-            log::warn!("artists::seed_detail_from_settings open_artist({id}): {e}");
+            log::warn!("artists::seed_detail_from_settings open_artist({id}): {}", describe(&e));
         }
         // Lowered however it went, and behind `open_artist`'s own hop so the id is already in: an
         // artist gone since the last session owes the grid back rather than an empty body.

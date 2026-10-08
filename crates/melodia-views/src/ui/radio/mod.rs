@@ -41,6 +41,7 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 
 use crate::ui::view_ctx::ViewCtx;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Nav, Radio, RadioFacetRow, RadioStationGridRow, RadioSuggestionRow};
 
 use tabs::section_is_up;
@@ -79,7 +80,7 @@ pub fn fold_disabled_nav_index(idx: i32, radio_enabled: bool) -> i32 {
 /// tooltip left naming a row that no longer exists.
 pub fn disable(ui: &AppWindow, state: &AppState) {
     if let Err(e) = melodia_app::library::playback::player_stop_station(&state.playback_ctx()) {
-        log::warn!("radio: stop station on disable: {e}");
+        log::warn!("radio: stop station on disable: {}", describe(&e));
     }
     crate::ui::nav_history::nav().history().forget_section(NAV_RADIO);
 

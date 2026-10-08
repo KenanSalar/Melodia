@@ -21,6 +21,7 @@ use crate::ui::callbacks::macros::release_hero_slots;
 use crate::ui::my_library as my_library_mod;
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AlbumDetail, AppWindow, ArtistDetail, MyLibrary, PlaylistDetail};
 
 /// Write the active tab to `views.json` on the blocking pool. The Slint property is
@@ -39,7 +40,7 @@ fn persist_tab(state: &AppState, persist: &Arc<IndexPersist>, tab: i32) {
     state.runtime.spawn_blocking(move || {
         persist.write_if_current(tab, || {
             if let Err(e) = library::settings::set_my_library_tab(&s, tab) {
-                log::warn!("my_library: set_my_library_tab({tab}): {e}");
+                log::warn!("my_library: set_my_library_tab({tab}): {}", describe(&e));
             }
         });
     });

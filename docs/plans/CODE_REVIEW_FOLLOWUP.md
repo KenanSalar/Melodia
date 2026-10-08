@@ -80,29 +80,32 @@ Where: every crate. The variants and constructors are `melodia-core`'s `error.rs
 
 Phase 1's reader side. A `Metadata`, `Network`, `Scanner` or `Watcher` error displays its
 operation and not its reason (ADR 37), so a log line that prints one with a bare `{e}` reports a
-full disk and a permissions failure in the same words. Those four are where text is lost today;
-for any other error a bare `{e}` drops only the chain below it.
+full disk and a permissions failure in the same words. For any other error a bare `{e}` drops
+only the chain below it.
 
-Today (2026-10-08) about 260 `log::` calls print an error without `describe`: 245 single-line
-`{e}`/`{err}`/`{error}` in 117 files, 6 multi-line, 8 passing it positionally and 3 as `{e:?}`.
-178 already go through it. By crate: views 126, app 36, the binary 28, platform 18, integrations
-15, store 8, artwork 5, engine 4, the rest 1 or 2 each.
-
-- [ ] Re-measure, and drop any hit whose `e` is not an error.
-- [ ] Start with the funnel: `AppState::persist_blocking` (`state/mod.rs`) logs `{label}: {e}` for
-      every `settings.json` write, about 40 callers. The views macros (`spawn_logged!`,
-      `spawn_logged_sync!`, `spawn_blocking_logged!`) already go through `describe`.
-- [ ] Every remaining site takes `{}` plus `describe(&e)`, with no exception for an error type
-      that happens to print its whole reason: one spelling means nobody has to know what `e` is
-      to review the line.
-- [ ] A `{e:?}` on an error moves too, unless its `Debug` shape is the point, said at the site.
-- [ ] Not in scope: user-facing text (`show_error`, a toast's detail) built from an error. What
+- [x] Re-measured on 2026-10-08 and moved: 268 sites in 122 files. 259 printed `{e}`/`{err}`/
+      `{error}` inline (12 multi-line, 3 as `{e:?}`), 8 positionally, plus `{persist_err}` and
+      `{restore_err}`. 443 calls now go through `describe`, up from 174, and none prints an error
+      bare.
+- [x] `AppState::persist_blocking` went first, covering its 41 `settings.json` callers.
+- [x] One spelling everywhere, `{}` plus `describe(&e)`. Where every site in a file is
+      platform-gated, the call spells the full path so the import isn't unused on the other
+      platform, and the `hydrate.rs` macro body does the same.
+- [x] `log_deferral` and the scrobble `network_failed`/`save_failed` took `Display` and take
+      `std::error::Error` now. The one non-error, `ratings.rs`'s `err`, was a string `describe`
+      had already built, and is named `reason`.
+- [x] All three `{e:?}` moved: Slint's translation error and notify's say in `Display` what
+      `Debug` did.
+- [x] Not in scope: user-facing text (`paint_error`, a toast's detail) built from an error. What
       the user reads there is a UI decision, not a logging one.
-- [ ] A corpus walk in `crates/melodia/tests/` holds it: no `log::` call formats `{e}`, `{err}` or
-      `{error}` bare, with the walk's usual comment stripping, unreadable-path check and vacuity
-      floor.
-- [ ] CLAUDE.md's "A `log::` call handed an I/O-boundary `AppError` goes through `error::describe`"
-      widens to any error and names the walk.
+- [x] `crates/melodia/tests/logged_errors.rs` holds it: no `log::` call prints `e`, `err`,
+      `error` or a `_err`/`_error` name bare, inline, positional or named. A call it cannot read
+      fails the walk, and a floor catches a reader that finds nothing. The reader's own cases are
+      table-driven beside it, and `describe` gained chain-depth cases in `error_tests.rs`.
+- [x] CLAUDE.md's bullet widened to any error, and names the walk.
+- Not compiled here: the Windows/macOS-only sites (`tray_icon_backend.rs`,
+  `souvlaki_backend.rs`, `parked_loop.rs`, `main.rs`'s Windows arms). Every error type there was
+  read to implement `std::error::Error`; `clippy-windows` or the Windows machine confirms it.
 
 ## Phase 2: take Slint out of the audio stack
 

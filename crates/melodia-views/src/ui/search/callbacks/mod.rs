@@ -33,6 +33,7 @@ use crate::ui::track_list_view::view_id;
 use melodia_app::library;
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Search};
 
 /// Nav-sidebar index of the Search tab. Used by the cross-tab
@@ -101,6 +102,6 @@ fn hydrate_recent_on_install(
             // that case cleanly.
             push_recent_rows_to_slint(weak, rows);
         }
-        Err(e) => log::warn!("search::hydrate_recent: {e}"),
+        Err(e) => log::warn!("search::hydrate_recent: {}", describe(&e)),
     }
 }

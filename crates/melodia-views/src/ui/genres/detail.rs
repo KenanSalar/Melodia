@@ -25,7 +25,7 @@ use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::genre::GenreStats;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
-use melodia_core::error::AppResult;
+use melodia_core::error::{AppResult, describe};
 use melodia_ui::{AppWindow, GenreDetail, NavEnterFrom, TrackListRow as UiTrackListRow};
 
 /// Publish the genre's hero band from both of its hash-derived pairs — [`genre_accent`] picks them
@@ -302,7 +302,7 @@ pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, genres_ui: &A
         // Above = first-launch fade-down, not a drill-in slide: the user didn't navigate, this is
         // restoring their last view.
         if let Err(e) = open_genre(&s, &gu, weak.clone(), id, NavEnterFrom::Above).await {
-            log::warn!("genres::seed_detail_from_settings open_genre({id}): {e}");
+            log::warn!("genres::seed_detail_from_settings open_genre({id}): {}", describe(&e));
         }
         // Lowered however it went, and behind `open_genre`'s own hop so the id is already in: a
         // genre gone since the last session owes the grid back rather than an empty body.

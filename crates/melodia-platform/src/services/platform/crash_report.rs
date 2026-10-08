@@ -27,6 +27,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use chrono::{DateTime, Local, NaiveDateTime};
 
+use melodia_core::error::describe;
 use melodia_core::utils::redact::redact_home;
 
 /// How many reports survive a [`prune`].
@@ -221,7 +222,7 @@ pub fn take_unseen(logs_dir: &Path) -> Option<PathBuf> {
         // Hand the report over anyway. The hook wrote into this same directory
         // moments before, so a failure here is close to impossible — and a
         // notice that repeats beats one that never arrives.
-        log::warn!("crash report marker: {e}");
+        log::warn!("crash report marker: {}", describe(&e));
     }
     Some(path)
 }

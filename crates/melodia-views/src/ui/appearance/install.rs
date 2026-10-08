@@ -18,7 +18,7 @@ use super::{
 use melodia_app::library;
 use melodia_app::services;
 use melodia_app::state::{AppState, Signal};
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 use melodia_platform::services::platform::desktop;
 use melodia_ui::{AppWindow, MiniPlayer, Settings, Theme};
 
@@ -54,7 +54,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
             }
         }));
         if let Err(e) = res {
-            log::warn!("material_you repaint subscriber: {e}");
+            log::warn!("material_you repaint subscriber: {}", describe(&e));
         }
     }
 
@@ -153,7 +153,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
     // The boot migration for a `settings.json` written before `theme_preferences`
     // existed.
     if let Err(e) = library::settings::seed_theme_preference(state) {
-        log::warn!("seed theme_preferences: {e}");
+        log::warn!("seed theme_preferences: {}", describe(&e));
     }
 
     theme_picker::wire_theme_changed(

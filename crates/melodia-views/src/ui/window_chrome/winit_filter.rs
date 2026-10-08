@@ -43,6 +43,7 @@ use slint::winit_030::{EventResult, WinitWindowAccessor};
 use slint::{ComponentHandle, SharedString};
 
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{
     AppWindow, CompositeScroll, DragRegion, PlaylistDetail, PopupHighlight, Queue, Theme,
     WindowChrome,
@@ -129,7 +130,7 @@ fn start_os_drag(
 ) {
     let _ = w.with_winit_window(|ww| {
         if let Err(e) = op(ww) {
-            log::debug!("{what} unsupported on this platform: {e}");
+            log::debug!("{what} unsupported on this platform: {}", describe(&e));
         }
     });
 }
@@ -360,10 +361,10 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                     if let Err(e) = weak.upgrade_in_event_loop(|ui| {
                         crate::ui::shell::tray_bridge::hide_window(&ui);
                     }) {
-                        log::warn!("close-to-tray: schedule hide: {e}");
+                        log::warn!("close-to-tray: schedule hide: {}", describe(&e));
                     }
                 } else if let Err(e) = slint::quit_event_loop() {
-                    log::warn!("close-window: quit_event_loop: {e}");
+                    log::warn!("close-window: quit_event_loop: {}", describe(&e));
                 }
                 EventResult::PreventDefault
             }
@@ -416,7 +417,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                             delta_y: dy,
                         };
                         if let Err(e) = ui.window().try_dispatch_event(scrolled) {
-                            log::warn!("touchpad scroll: dispatch: {e}");
+                            log::warn!("touchpad scroll: dispatch: {}", describe(&e));
                         }
                         EventResult::PreventDefault
                     }

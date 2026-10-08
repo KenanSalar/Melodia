@@ -17,6 +17,7 @@ use crate::ui::tab_bar::UNFETCHED_COUNT;
 use crate::ui::track_list_view::view_id;
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Favorites, TrackListRow as UiTrackListRow};
 
 /// Wire the card-action and sub-view-routing callbacks.
@@ -168,7 +169,7 @@ pub(super) fn wire(
                         if let Err(e) =
                             favorites_ui_mod::refresh_tracks(&s_fetch, &fu_fetch, &weak_fetch).await
                         {
-                            log::warn!("favorites::refresh_tracks: {e}");
+                            log::warn!("favorites::refresh_tracks: {}", describe(&e));
                         }
                     } else {
                         favorites_ui_mod::refresh_grids(&s_fetch, &fu_fetch, &weak_fetch).await;
@@ -184,7 +185,7 @@ pub(super) fn wire(
                 // hop, and the cover swap below is this task's regardless.
                 persist_disk.write_if_current(tab, || {
                     if let Err(e) = library::settings::set_favorites_tab(&s_disk, tab) {
-                        log::warn!("favorites::set_favorites_tab: {e}");
+                        log::warn!("favorites::set_favorites_tab: {}", describe(&e));
                     }
                 });
                 // A pick can't await a prewarm the way a fetch does — `TabBar` writes

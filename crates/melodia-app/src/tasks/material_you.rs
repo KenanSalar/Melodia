@@ -33,6 +33,7 @@ use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_artwork::media::image::material_you::{
     SchemeStyle, SeedCache, extract_source_argb_from_rgb8, generate_palette,
 };
+use melodia_core::error::describe;
 use melodia_core::themes::{Palette, SystemColorState};
 use melodia_engine::player::engine::state::PlayerViewModelLight;
 
@@ -93,11 +94,11 @@ async fn read_appearance(state: &AppState) -> Option<AppearanceSnapshot> {
             theme_variant: s.theme_variant,
         }),
         Ok(Err(e)) => {
-            log::warn!("material_you: read settings: {e}");
+            log::warn!("material_you: read settings: {}", describe(&e));
             None
         }
         Err(e) => {
-            log::warn!("material_you: settings read join: {e}");
+            log::warn!("material_you: settings read join: {}", describe(&e));
             None
         }
     }
@@ -264,7 +265,7 @@ async fn react(
     let (returned_cache, palette) = match blocking_result {
         Ok(v) => v,
         Err(e) => {
-            log::warn!("material_you: spawn_blocking join: {e}");
+            log::warn!("material_you: spawn_blocking join: {}", describe(&e));
             return;
         }
     };
@@ -306,7 +307,7 @@ fn publish_repaint(
         // Only fails when every receiver has dropped, i.e. the UI is
         // tearing down. Logged at debug because it's the normal
         // shutdown path.
-        log::debug!("material_you: repaint subscriber dropped: {e}");
+        log::debug!("material_you: repaint subscriber dropped: {}", describe(&e));
     }
 }
 

@@ -8,6 +8,8 @@
 use std::num::NonZero;
 use std::sync::Arc;
 
+use melodia_core::error::describe;
+
 /// A pass's pool. Clones share it, and the last one to drop ends its threads.
 ///
 /// The default holds no pool, so a parallel pass under [`ScanPool::install`] runs on the global
@@ -34,7 +36,7 @@ impl ScanPool {
         {
             Ok(pool) => Self(Some(Arc::new(pool))),
             Err(e) => {
-                log::warn!("scan pool build failed ({e}); using the global pool");
+                log::warn!("scan pool build failed ({}); using the global pool", describe(&e));
                 Self::default()
             }
         }

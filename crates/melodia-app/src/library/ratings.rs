@@ -109,8 +109,8 @@ pub(crate) async fn write_rating_to_files(
         super::tags::write_tag_edit(db, artwork_dir, cover_cache, self_writes, ids, &edit, None)
             .await?;
 
-    for (file, err) in &report.failures {
-        log::warn!("rating: {file} kept its row but not its tag: {err}");
+    for (file, reason) in &report.failures {
+        log::warn!("rating: {file} kept its row but not its tag: {reason}");
     }
     Ok(report.updated)
 }

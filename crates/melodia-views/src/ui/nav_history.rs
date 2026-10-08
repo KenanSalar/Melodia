@@ -30,6 +30,7 @@ use crate::ui::my_library::{
 use crate::ui::radio::NAV_RADIO;
 use crate::ui::view_tag;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Dialog, MyLibrary, Nav, NavEnterFrom, Queue, Radio};
 
 const HISTORY_CAP: usize = 24;
@@ -412,7 +413,7 @@ fn spawn_open_detail(
             if let Err(e) =
                 crate::ui::radio::open_station_with(&s, &ru, weak, station, direction, hook).await
             {
-                log::warn!("nav_history::replay open_station({id}): {e}");
+                log::warn!("nav_history::replay open_station({id}): {}", describe(&e));
                 land_pending(pending, &fallback);
             }
         });
@@ -433,7 +434,7 @@ fn spawn_open_detail(
                 if let Err(e) =
                     crate::ui::albums::open_album_with(&s, &au, weak, id, direction, hook).await
                 {
-                    log::warn!("nav_history::replay open_album({id}): {e}");
+                    log::warn!("nav_history::replay open_album({id}): {}", describe(&e));
                     land_pending(pending, &fallback);
                 }
             });
@@ -451,7 +452,7 @@ fn spawn_open_detail(
                 if let Err(e) =
                     crate::ui::artists::open_artist_with(&s, &au, weak, id, direction, hook).await
                 {
-                    log::warn!("nav_history::replay open_artist({id}): {e}");
+                    log::warn!("nav_history::replay open_artist({id}): {}", describe(&e));
                     land_pending(pending, &fallback);
                 }
             });
@@ -469,7 +470,7 @@ fn spawn_open_detail(
                 if let Err(e) =
                     crate::ui::genres::open_genre_with(&s, &gu, weak, id, direction, hook).await
                 {
-                    log::warn!("nav_history::replay open_genre({id}): {e}");
+                    log::warn!("nav_history::replay open_genre({id}): {}", describe(&e));
                     land_pending(pending, &fallback);
                 }
             });
@@ -488,7 +489,7 @@ fn spawn_open_detail(
                     crate::ui::playlists::open_playlist_with(&s, &pu, weak, id, direction, hook)
                         .await
                 {
-                    log::warn!("nav_history::replay open_playlist({id}): {e}");
+                    log::warn!("nav_history::replay open_playlist({id}): {}", describe(&e));
                     land_pending(pending, &fallback);
                 }
             });

@@ -50,6 +50,7 @@ use crate::services::updater::{
 };
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, MelodiaUpdater};
 
 const STARTUP_DELAY: Duration = Duration::from_secs(30);
@@ -126,7 +127,7 @@ async fn run_one_iteration(
     let snapshot = match settings::read_settings(&state.paths) {
         Ok(s) => s.updates,
         Err(e) => {
-            log::warn!("updater_daily: read_settings failed: {e}");
+            log::warn!("updater_daily: read_settings failed: {}", describe(&e));
             return;
         }
     };
@@ -172,9 +173,9 @@ async fn run_one_iteration(
             handle_outcome(state, weak, event_tx, &snapshot.skipped_release, outcome, now);
         }
         Err(e) => {
-            log::warn!("updater_daily: check failed: {e}");
+            log::warn!("updater_daily: check failed: {}", describe(&e));
             if let Err(persist_err) = library::settings::updates::record_check_failure(state, now) {
-                log::warn!("updater_daily: record_check_failure: {persist_err}");
+                log::warn!("updater_daily: record_check_failure: {}", describe(&persist_err));
             }
         }
     }
@@ -231,7 +232,7 @@ fn handle_outcome(
             if verdict.clear_skip
                 && let Err(e) = library::settings::updates::reset_skipped_release(state)
             {
-                log::warn!("updater_daily: reset_skipped_release: {e}");
+                log::warn!("updater_daily: reset_skipped_release: {}", describe(&e));
             }
 
             set_update_available(weak, version.clone(), notes_short.clone(), critical);
@@ -271,7 +272,8 @@ fn skip_verdict(skipped_release: &str, version: &str, critical: bool) -> SkipVer
         Err(e) => {
             log::warn!(
                 "updater_daily: stored skipped_release {skipped_release:?} not valid semver \
-                 ({e}); clearing rather than muting every future notification"
+                 ({}); clearing rather than muting every future notification",
+                describe(&e)
             );
             SkipVerdict { notify: true, clear_skip: true }
         }
@@ -287,7 +289,7 @@ fn persist_success(
     if let Err(e) =
         library::settings::updates::record_check_success(state, now, latest_version, etag)
     {
-        log::warn!("updater_daily: record_check_success: {e}");
+        log::warn!("updater_daily: record_check_success: {}", describe(&e));
     }
 }
 

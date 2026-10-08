@@ -9,7 +9,7 @@
 
 use melodia_app::services::settings::{self, SettingsData};
 use melodia_app::state::{AppState, PlaybackContext, SharedFlag};
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 
 /// Persisted settings for an installer to seed its global from, falling back to the inert
 /// defaults if the file is missing or unreadable. Deriving that fallback from
@@ -17,7 +17,7 @@ use melodia_core::error::AppError;
 /// which would otherwise be a second copy of the `Default` impl.
 pub fn read_or_default(state: &AppState, what: &str) -> SettingsData {
     settings::read_settings(&state.paths).unwrap_or_else(|e| {
-        log::warn!("read settings for {what}: {e}");
+        log::warn!("read settings for {what}: {}", describe(&e));
         SettingsData::default()
     })
 }

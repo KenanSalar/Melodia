@@ -19,6 +19,7 @@ use parking_lot::Mutex;
 
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 
 /// Atomic mirror of `Queue.open`, which the `DroppedFile` handler consults to decide
 /// whether the user is targeting the queue sheet. A `OnceLock` so the queue sheet can
@@ -114,7 +115,7 @@ pub(super) fn schedule_drop_flush(state: &AppState, path: PathBuf) {
                     state.library_changed.bump();
                 }
                 Err(e) => {
-                    log::warn!("queue_import_files (drop): {e}");
+                    log::warn!("queue_import_files (drop): {}", describe(&e));
                     melodia_core::utils::toast::notify(
                         melodia_core::utils::toast::ToastKind::OperationFailed,
                         e.to_string(),
@@ -133,7 +134,7 @@ pub(super) fn schedule_drop_flush(state: &AppState, path: PathBuf) {
                         // previously-empty playlist has a new count and thumbnail.
                         state.library_changed.bump();
                     }
-                    Err(e) => log::warn!("import_files_to_playlist (drop): {e}"),
+                    Err(e) => log::warn!("import_files_to_playlist (drop): {}", describe(&e)),
                 }
             }
         }

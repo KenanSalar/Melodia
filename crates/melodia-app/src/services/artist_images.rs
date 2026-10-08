@@ -217,7 +217,7 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
                     refused += 1;
                     refusal.get_or_insert(reason);
                 }
-                Err(e) => log::error!("Artist image fetch task failed: {e}"),
+                Err(e) => log::error!("Artist image fetch task failed: {}", describe(&e)),
             }
         }
 

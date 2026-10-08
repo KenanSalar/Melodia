@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use melodia_artwork::media::image::artwork::CoverCache;
 use melodia_core::config::Paths;
 use melodia_core::entities::scan::ExtractedMetadata;
-use melodia_core::error::AppResult;
+use melodia_core::error::{AppResult, describe};
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
 use melodia_store::media::ingest::metadata::{extract_date_modified, extract_or_filename_row};
@@ -86,7 +86,7 @@ async fn extract_metadata_batch(
     match extracted {
         Ok(results) => results,
         Err(e) => {
-            log::warn!("Metadata extraction task panicked: {e}");
+            log::warn!("Metadata extraction task panicked: {}", describe(&e));
             HashMap::new()
         }
     }
@@ -190,7 +190,11 @@ pub(super) async fn process_batch(
                     {
                         Ok(changed) => changes += usize::from(changed),
                         Err(e) => {
-                            log::warn!("Failed to process created file {}: {}", path.display(), e);
+                            log::warn!(
+                                "Failed to process created file {}: {}",
+                                path.display(),
+                                describe(&e)
+                            );
                         }
                     }
                 }
@@ -203,7 +207,9 @@ pub(super) async fn process_batch(
                         log::info!("Removed track: {}", path.display());
                     }
                     Ok(false) => log::debug!("Track not in DB, skip remove: {}", path.display()),
-                    Err(e) => log::warn!("Failed to remove track {}: {}", path.display(), e),
+                    Err(e) => {
+                        log::warn!("Failed to remove track {}: {}", path.display(), describe(&e));
+                    }
                 }
             }
             FileEvent::Renamed { from, to } => {
@@ -216,7 +222,7 @@ pub(super) async fn process_batch(
                         "Failed to process rename {} -> {}: {}",
                         from.display(),
                         to.display(),
-                        e
+                        describe(&e)
                     ),
                 }
             }
@@ -227,7 +233,11 @@ pub(super) async fn process_batch(
                     {
                         Ok(changed) => changes += usize::from(changed),
                         Err(e) => {
-                            log::warn!("Failed to process modified file {}: {}", path.display(), e);
+                            log::warn!(
+                                "Failed to process modified file {}: {}",
+                                path.display(),
+                                describe(&e)
+                            );
                         }
                     }
                 }

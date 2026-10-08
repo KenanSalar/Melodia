@@ -4,6 +4,7 @@
 use melodia_app::services;
 use melodia_app::state::AppState;
 use melodia_core::entities::locale::DEFAULT_LOCALE;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, HeroBackdrop, Player, Theme};
 use melodia_views::ui;
 use slint::ComponentHandle;
@@ -19,7 +20,7 @@ pub fn install_locale(
     let persisted_locale =
         startup_settings.map_or_else(|| DEFAULT_LOCALE.to_owned(), |s| s.locale.clone());
     if let Err(e) = slint::select_bundled_translation(&persisted_locale) {
-        log::warn!("select_bundled_translation({persisted_locale}): {e:?}");
+        log::warn!("select_bundled_translation({persisted_locale}): {}", describe(&e));
     }
     ui::settings::locale::install_locale(app, state);
 }
@@ -28,7 +29,7 @@ pub fn install_locale(
 /// Errors are logged and swallowed — chrome install is best-effort.
 pub fn install_app_chrome(app: &AppWindow, state: &AppState) {
     if let Err(e) = ui::window_chrome::install(app, state) {
-        log::warn!("window_chrome::install: {e}");
+        log::warn!("window_chrome::install: {}", describe(&e));
     }
 }
 

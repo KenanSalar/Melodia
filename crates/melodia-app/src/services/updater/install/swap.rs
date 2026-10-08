@@ -231,8 +231,10 @@ fn linux_swap(target: &Path, staged: &Path) -> AppResult<()> {
         if let Err(restore_err) = std::fs::rename(&old, target) {
             log::warn!(
                 "updater: linux swap rollback failed after staged→target rename failed: \
-                 {restore_err} (original error: {e}); user may need to manually rename \
+                 {} (original error: {}); user may need to manually rename \
                  {} → {}",
+                melodia_core::error::describe(&restore_err),
+                melodia_core::error::describe(&e),
                 old.display(),
                 target.display()
             );

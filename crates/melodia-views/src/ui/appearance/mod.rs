@@ -25,6 +25,7 @@ use tokio::sync::watch;
 
 use melodia_app::library;
 use melodia_app::state::{AppState, Signal};
+use melodia_core::error::describe;
 use melodia_core::themes::{self, SystemColorState, ThemeDef};
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 use melodia_platform::services::platform;
@@ -148,8 +149,9 @@ pub(super) fn persist_and_kick(
         match library::settings::set_appearance(&s, theme_id, variant_id, accent_id) {
             Ok(()) => kick.bump(),
             Err(e) => log::warn!(
-                "persist appearance: {e}; suppressing Material You kick (disk write failed, \
-                 coordinator would observe stale settings)"
+                "persist appearance: {}; suppressing Material You kick (disk write failed, \
+                 coordinator would observe stale settings)",
+                describe(&e)
             ),
         }
     });

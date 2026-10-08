@@ -20,6 +20,7 @@ use slint::ComponentHandle;
 use melodia_app::library;
 use melodia_app::services::settings;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 
 use crate::ui::shell::notifications::{NotificationsUi, RowText};
 use melodia_ui::{AppWindow, Settings};
@@ -40,7 +41,7 @@ pub fn install(ui: &AppWindow, state: &AppState, notifications: &Rc<Notification
         let s_for_task = state_clone.clone();
         state_clone.runtime.spawn(async move {
             if let Err(e) = library::settings::set_folder_watching_enabled(&s_for_task, on).await {
-                log::warn!("set_folder_watching_enabled: {e}");
+                log::warn!("set_folder_watching_enabled: {}", describe(&e));
             }
         });
 

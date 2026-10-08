@@ -23,7 +23,7 @@ use chrono::{DateTime, Local};
 use crate::services::settings::read_settings;
 use crate::state::AppState;
 use melodia_core::config::Paths;
-use melodia_core::error::{AppError, AppResult};
+use melodia_core::error::{AppError, AppResult, describe};
 use melodia_core::utils::redact::redact_home;
 use melodia_platform::services::platform::crash_report::FILE_TS_FORMAT;
 use melodia_platform::services::platform::{crash_report, logging};
@@ -83,11 +83,11 @@ async fn library_facts(state: &AppState) -> LibraryFacts {
     LibraryFacts {
         tracks: queries::track::count_tracks(&state.db)
             .await
-            .inspect_err(|e| log::warn!("diagnostics: track count unavailable: {e}"))
+            .inspect_err(|e| log::warn!("diagnostics: track count unavailable: {}", describe(e)))
             .ok(),
         folders: queries::folder::get_all_folders(&state.db)
             .await
-            .inspect_err(|e| log::warn!("diagnostics: folder list unavailable: {e}"))
+            .inspect_err(|e| log::warn!("diagnostics: folder list unavailable: {}", describe(e)))
             .ok()
             .map(|folders| FolderCounts {
                 total: folders.len(),

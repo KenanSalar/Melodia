@@ -15,7 +15,7 @@ pub mod pacer;
 pub mod radio_blocklist;
 pub mod radio_browser;
 
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 
 /// Build the process-wide shared `reqwest::Client`. Kept out of any constructor so the rustls
 /// stack and connection pool load only on the first real request; both `OnceLock` holders init
@@ -33,8 +33,9 @@ pub fn build_http_client() -> reqwest::Client {
         .build()
         .unwrap_or_else(|e| {
             log::warn!(
-                "reqwest::Client::builder().build() failed unexpectedly ({e}); falling back to \
-                 default client without timeouts — downloads may hang on a wedged socket"
+                "reqwest::Client::builder().build() failed unexpectedly ({}); falling back to \
+                 default client without timeouts — downloads may hang on a wedged socket",
+                describe(&e)
             );
             reqwest::Client::new()
         })

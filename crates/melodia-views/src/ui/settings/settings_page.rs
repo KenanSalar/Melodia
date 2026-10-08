@@ -13,6 +13,7 @@ use crate::ui::row_match::{self, Needle};
 use crate::ui::tab_bar::clamp_tab;
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Nav, NavEnterFrom, SettingsPage};
 
 /// This page's `Nav.selected-index`, spelled once in Rust. The map itself is `globals/nav.slint`'s.
@@ -136,7 +137,7 @@ pub fn install(ui: &AppWindow, state: &AppState) {
         s.runtime.spawn_blocking(move || {
             persist.write_if_current(tab, || {
                 if let Err(e) = library::settings::set_settings_tab(&s_disk, tab) {
-                    log::warn!("settings_page: set_settings_tab({tab}): {e}");
+                    log::warn!("settings_page: set_settings_tab({tab}): {}", describe(&e));
                 }
             });
         });

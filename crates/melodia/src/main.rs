@@ -13,7 +13,7 @@ use std::sync::Arc;
 use melodia_app::state::AppState;
 use melodia_app::{library, services, tasks};
 use melodia_core::config::Paths;
-use melodia_core::error::{AppError, AppResult};
+use melodia_core::error::{AppError, AppResult, describe};
 use melodia_core::utils;
 use melodia_platform::services::platform;
 use melodia_ui::AppWindow;
@@ -126,7 +126,8 @@ fn main() -> AppResult<()> {
     // The claim happened before there was anywhere to say this.
     if let Some(e) = unenforced_reason {
         log::warn!(
-            "single_instance: not enforced ({e}); a second launch will open a second window"
+            "single_instance: not enforced ({}); a second launch will open a second window",
+            describe(&e)
         );
     }
 
@@ -151,7 +152,7 @@ fn main() -> AppResult<()> {
         .thread_name(|i| format!("rayon-{i}"))
         .build_global()
     {
-        log::warn!("rayon global pool: {e}; rayon will size its own");
+        log::warn!("rayon global pool: {}; rayon will size its own", describe(&e));
     }
 
     // Slint's a11y/D-Bus thread looks up a tokio reactor from UI-thread tasks,
@@ -253,7 +254,7 @@ fn main() -> AppResult<()> {
     let appearance_handles = match ui::appearance::install(&app, &state) {
         Ok(h) => Some(h),
         Err(e) => {
-            log::warn!("appearance::install: {e}");
+            log::warn!("appearance::install: {}", describe(&e));
             None
         }
     };
@@ -298,7 +299,7 @@ fn main() -> AppResult<()> {
 
     match ui::queue_sheet::install(&app, &state, &views.cover_thumbs) {
         Ok(h) => ui::window_chrome::set_queue_sheet_open(h.is_open),
-        Err(e) => log::warn!("queue_sheet::install: {e}"),
+        Err(e) => log::warn!("queue_sheet::install: {}", describe(&e)),
     }
 
     // Now Playing owns its own small `(cover, blur)` tier, separate from
@@ -309,7 +310,7 @@ fn main() -> AppResult<()> {
     let np_state = match ui::now_playing::install(&app, &state, &views.cover_thumbs, &np_artwork) {
         Ok(s) => Some(s),
         Err(e) => {
-            log::warn!("now_playing::install: {e}");
+            log::warn!("now_playing::install: {}", describe(&e));
             None
         }
     };
@@ -318,7 +319,7 @@ fn main() -> AppResult<()> {
     if let Some(ref np_state) = np_state
         && let Err(e) = ui::shell::mini_player::install(&app, &state, np_state)
     {
-        log::warn!("mini_player::install: {e}");
+        log::warn!("mini_player::install: {}", describe(&e));
     }
 
     boot::ui_setup::seed_initial_view_model(&app, &state, &views.cover_thumbs);
@@ -431,7 +432,7 @@ fn main() -> AppResult<()> {
     #[cfg(target_os = "linux")]
     runtime.spawn_blocking(|| {
         if let Err(e) = platform::desktop_integration::refresh_user_install() {
-            log::warn!("desktop_integration: refresh failed: {e}");
+            log::warn!("desktop_integration: refresh failed: {}", describe(&e));
         }
     });
 
@@ -476,7 +477,7 @@ fn main() -> AppResult<()> {
                 }
             }
         }) {
-            log::warn!("Failed to schedule Windows SMTC attach: {e}");
+            log::warn!("Failed to schedule Windows SMTC attach: {}", describe(&e));
         }
     }
 
@@ -496,7 +497,7 @@ fn main() -> AppResult<()> {
             install_window_icon(&app);
             ui::appearance::theme_apply::reapply_from_theme(&app);
         }) {
-            log::warn!("Failed to schedule Windows titlebar polish: {e}");
+            log::warn!("Failed to schedule Windows titlebar polish: {}", describe(&e));
         }
     }
 
@@ -564,7 +565,10 @@ fn install_window_icon(app: &AppWindow) {
             });
         }
         Err(e) => {
-            log::warn!("Failed to load Melodia icon from EXE resource (ordinal 1): {e}");
+            log::warn!(
+                "Failed to load Melodia icon from EXE resource (ordinal 1): {}",
+                describe(&e)
+            );
         }
     }
 }

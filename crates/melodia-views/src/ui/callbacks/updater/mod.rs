@@ -44,6 +44,7 @@ use crate::ui::shell::notifications::NotificationsUi;
 use melodia_app::library;
 use melodia_app::services::updater::UpdaterEvent;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, MelodiaUpdater};
 
 use check::spawn_manual_check;
@@ -105,7 +106,7 @@ pub fn wire(
                 if let Err(e) =
                     library::settings::updates::set_skipped_release(&state_for_disk, version)
                 {
-                    log::warn!("updater: set_skipped_release: {e}");
+                    log::warn!("updater: set_skipped_release: {}", describe(&e));
                 }
             });
             // Repaint the Settings → Updates panel to the "up to
@@ -131,7 +132,7 @@ pub fn wire(
                 // waking, so a kick over a failed write would wake it onto the old answer.
                 match library::settings::updates::set_auto_check_enabled(&state_for_disk, on) {
                     Ok(()) => state_for_disk.auto_check_changed.bump(),
-                    Err(e) => log::warn!("updater: set_auto_check_enabled: {e}"),
+                    Err(e) => log::warn!("updater: set_auto_check_enabled: {}", describe(&e)),
                 }
             });
         });

@@ -16,7 +16,7 @@ use sqlx::FromRow;
 
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
-use melodia_core::error::AppResult;
+use melodia_core::error::{AppResult, describe};
 use melodia_engine::player::engine::actions::emit_and_execute;
 use melodia_engine::player::engine::backend::PlaybackEngine;
 use melodia_engine::player::engine::event_sink::PlayerSinks;
@@ -48,7 +48,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
                         break;
                     }
                     if let Err(e) = reconcile_once(&db, &player_state, &sinks, &engine).await {
-                        log::warn!("queue_prune reconcile failed: {e}");
+                        log::warn!("queue_prune reconcile failed: {}", describe(&e));
                     }
                 }
             }

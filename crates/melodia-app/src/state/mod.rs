@@ -18,7 +18,7 @@ use crate::services::search_history::SearchHistoryState;
 use crate::services::settings;
 use melodia_artwork::media::image::artwork::CoverCache;
 use melodia_core::config::Paths;
-use melodia_core::error::{AppError, AppResult};
+use melodia_core::error::{AppError, AppResult, describe};
 use melodia_core::utils::self_writes::SelfWrites;
 use melodia_engine::player::engine::backend::PlaybackEngine;
 use melodia_engine::player::engine::event_sink::{MediaControlsSync, PlayerEvent, PlayerSinks};
@@ -181,7 +181,7 @@ impl AppState {
     pub async fn init(paths: Paths, runtime: Handle) -> AppResult<(Self, StartupChannels)> {
         // Ahead of the output, which opens differently under exclusive output.
         let settings = settings::read_settings(&paths).unwrap_or_else(|e| {
-            log::warn!("Failed to read settings on startup: {e}; using defaults");
+            log::warn!("Failed to read settings on startup: {}; using defaults", describe(&e));
             settings::SettingsData::default()
         });
 
@@ -321,7 +321,7 @@ impl AppState {
         let s = self.clone();
         self.runtime.spawn_blocking(move || {
             if let Err(e) = f(&s) {
-                log::warn!("{label}: {e}");
+                log::warn!("{label}: {}", describe(&e));
             }
         });
     }

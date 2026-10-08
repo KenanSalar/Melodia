@@ -5,6 +5,7 @@ use std::sync::Arc;
 use melodia_app::services;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, ArtistDetail, MiniPlayer, Nav, Player};
 use melodia_views::ui;
 use slint::ComponentHandle;
@@ -81,7 +82,7 @@ pub fn hydrate_ui_from_settings(
     } else {
         owned_view_state =
             services::view_state::read_view_state(&state.paths).unwrap_or_else(|e| {
-                log::warn!("hydrate_ui_from_settings: read view state failed: {e}");
+                log::warn!("hydrate_ui_from_settings: read view state failed: {}", describe(&e));
                 services::view_state::ViewStateData::default()
             });
         &owned_view_state
@@ -99,7 +100,7 @@ pub fn hydrate_ui_from_settings(
                 &owned_settings
             }
             Err(e) => {
-                log::warn!("hydrate_ui_from_settings: read settings failed: {e}");
+                log::warn!("hydrate_ui_from_settings: read settings failed: {}", describe(&e));
                 return;
             }
         },
@@ -169,7 +170,7 @@ pub fn spawn_initial_tracks_fetch(
         if let Err(e) =
             ui::tracks::fetch_and_apply(&s, &tu, weak, sort_field, sort_dir, String::new()).await
         {
-            log::warn!("initial tracks fetch: {e}");
+            log::warn!("initial tracks fetch: {}", describe(&e));
         }
     });
 }
@@ -189,7 +190,11 @@ macro_rules! initial_grid_fetch {
             let h = handle.clone();
             state.runtime.spawn(async move {
                 if let Err(e) = ui::$module::fetch_grid(&s, &h, weak).await {
-                    log::warn!("initial {} fetch: {e}", $label);
+                    log::warn!(
+                        "initial {} fetch: {}",
+                        $label,
+                        melodia_core::error::describe(&e)
+                    );
                 }
             });
         }

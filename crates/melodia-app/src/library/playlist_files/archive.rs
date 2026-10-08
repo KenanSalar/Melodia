@@ -135,7 +135,7 @@ pub fn read<R: Read + Seek>(reader: R) -> Result<Contents, AppError> {
                 contents.entries.push(Entry { name, text });
             }
             Err(e) => {
-                log::warn!("playlist archive: {name} is not UTF-8: {e}");
+                log::warn!("playlist archive: {name} is not UTF-8: {}", describe(&e));
                 contents.unreadable = contents.unreadable.saturating_add(1);
             }
         }

@@ -10,6 +10,7 @@ use melodia_app::services::updater::{
     version::is_upgrade,
 };
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::AppWindow;
 
 use super::paint::{paint_available, paint_error, paint_up_to_date, set_is_checking};
@@ -107,7 +108,7 @@ pub(super) fn spawn_manual_check(
             }
             Err(e) => {
                 let kind = FailureKind::classify(&e);
-                log::warn!("updater: manual check failed ({kind:?}): {e}");
+                log::warn!("updater: manual check failed ({kind:?}): {}", describe(&e));
                 paint_error(&weak, format!("{e}"));
                 let _ = library::settings::updates::record_check_failure(&state, now);
                 let _ = event_tx.send(Some(UpdaterEvent::Failed { kind }));

@@ -14,6 +14,8 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
+use melodia_core::error::describe;
+
 use super::is_stored_name;
 
 /// How long a file is protected from the sweep purely for being new.
@@ -137,7 +139,7 @@ pub fn retire<S: std::hash::BuildHasher>(
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => {
                 report.failed += 1;
-                log::warn!("Could not retire {}: {e}", candidate.path.display());
+                log::warn!("Could not retire {}: {}", candidate.path.display(), describe(&e));
             }
         }
     }

@@ -16,6 +16,7 @@ use crate::ui::recently_played::{
 };
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{
     AppWindow, CardSelection, EntityGridRow as UiEntityGridRow, Nav, RecentlyPlayed,
     TrackListRow as UiTrackListRow,
@@ -194,6 +195,6 @@ async fn kick_full_refresh(
         recently_played_ui_mod::refresh_tracks(state, rp_ui, weak).await
     };
     if let Err(e) = t {
-        log::warn!("recently_played::refresh_tracks: {e}");
+        log::warn!("recently_played::refresh_tracks: {}", describe(&e));
     }
 }

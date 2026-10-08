@@ -12,6 +12,7 @@ use melodia_app::library;
 use melodia_app::services::settings::SettingsData;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::material_you::SchemeStyle;
+use melodia_core::error::describe;
 use melodia_core::themes::{self, SystemColorState};
 use melodia_ui::{AppWindow, Settings};
 
@@ -22,7 +23,7 @@ use melodia_ui::{AppWindow, Settings};
 pub fn repaint_from_settings(ui: &AppWindow, state: &AppState, system: &SystemColorState) {
     match library::settings::get_settings(state) {
         Ok(settings) => apply_settings(ui, &settings, system),
-        Err(e) => log::warn!("material_you repaint: read settings: {e}"),
+        Err(e) => log::warn!("material_you repaint: read settings: {}", describe(&e)),
     }
 }
 

@@ -85,7 +85,10 @@ fn reseed(weak: &Weak<AppWindow>, state: &AppState, np_state: &Rc<NowPlayingStat
         apply(&ui, &np_state.lyrics, &track.file_path, &outcome, state.lyrics_online_enabled.get());
     }));
     if let Err(e) = res {
-        log::warn!("ui::now_playing lyrics reseed task spawn_local: {e}");
+        log::warn!(
+            "ui::now_playing lyrics reseed task spawn_local: {}",
+            melodia_core::error::describe(&e)
+        );
     }
 }
 
@@ -123,7 +126,10 @@ pub(crate) fn wire_menu(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPlayi
                 }
             }));
             if let Err(e) = res {
-                log::warn!("ui::now_playing lyrics refresh spawn_local: {e}");
+                log::warn!(
+                    "ui::now_playing lyrics refresh spawn_local: {}",
+                    melodia_core::error::describe(&e)
+                );
             }
         });
     }
@@ -163,7 +169,10 @@ pub(crate) fn wire_menu(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPlayi
                 np_state.lyrics.kick();
             }));
             if let Err(e) = res {
-                log::warn!("ui::now_playing lyrics save spawn_local: {e}");
+                log::warn!(
+                    "ui::now_playing lyrics save spawn_local: {}",
+                    melodia_core::error::describe(&e)
+                );
             }
         });
     }

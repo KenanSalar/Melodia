@@ -29,6 +29,7 @@ use melodia_app::library;
 use melodia_app::services::settings::{SortDir, ViewSort};
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Dialog, Nav, Player};
 
 use index_persist::IndexPersist;
@@ -128,11 +129,11 @@ pub(super) fn spawn_play_then_shuffle(state: &AppState, tag: &'static str, ids: 
         if let Err(e) =
             library::playback::player_play_tracks(&state.playback_ctx(), ids, Some(start)).await
         {
-            log::warn!("{tag} play: {e}");
+            log::warn!("{tag} play: {}", describe(&e));
             return;
         }
         if let Err(e) = library::queue::queue_set_shuffle(&state, true) {
-            log::warn!("{tag} shuffle: {e}");
+            log::warn!("{tag} shuffle: {}", describe(&e));
         }
     });
 }
@@ -184,7 +185,7 @@ pub(super) fn persist_view_sort(
     let sort = ViewSort { field, dir };
     state.runtime.spawn_blocking(move || {
         if let Err(e) = library::settings::set_view_sort(&s, view_id.to_owned(), sort) {
-            log::warn!("{view_id}::set_view_sort: {e}");
+            log::warn!("{view_id}::set_view_sort: {}", describe(&e));
         }
     });
 }
@@ -323,7 +324,7 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
             s.runtime.spawn_blocking(move || {
                 persist.write_if_current(idx, || {
                     if let Err(e) = library::settings::set_last_nav_index(&s_disk, idx) {
-                        log::warn!("nav: set_last_nav_index({idx}): {e}");
+                        log::warn!("nav: set_last_nav_index({idx}): {}", describe(&e));
                     }
                 });
             });
@@ -338,7 +339,7 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
             let id = i64::from(track_id);
             s.runtime.clone().spawn(async move {
                 if let Err(e) = library::tracks::reveal_in_file_manager(&s, id).await {
-                    log::warn!("nav: reveal_in_folder({id}): {e}");
+                    log::warn!("nav: reveal_in_folder({id}): {}", describe(&e));
                 }
             });
         });

@@ -33,6 +33,7 @@ use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::track::TrackSummary;
+use melodia_core::error::describe;
 use melodia_engine::player::engine::now_playing::SourceId;
 use melodia_engine::player::engine::state::{PlayerViewModelLight, QueueViewModel, lock_state};
 use melodia_ui::{AppWindow, MiniLayout, MiniPlayer, Nav, NowPlaying, Player, QueueRow, Theme};
@@ -424,7 +425,7 @@ pub fn install(
                 .await;
             }));
             if let Err(e) = res {
-                log::warn!("ui::now_playing artwork seeder task spawn_local: {e}");
+                log::warn!("ui::now_playing artwork seeder task spawn_local: {}", describe(&e));
             }
         }));
     }

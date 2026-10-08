@@ -14,6 +14,7 @@ use crate::ui::model_diff::clear_vec_model;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{
     AlbumRow as UiAlbumRow, AppWindow, ArtistDetail, ArtistGridRow as UiArtistGridRow, Artists,
     CardSelection, TrackListRow as UiTrackListRow,
@@ -83,7 +84,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>
                     if au.take_dirty() {
                         let open_id = au.detail_artist_id();
                         if let Err(e) = artists_ui_mod::fetch_grid(&s, &au, weak.clone()).await {
-                            log::warn!("artists::section_enter fetch_grid: {e}");
+                            log::warn!("artists::section_enter fetch_grid: {}", describe(&e));
                         }
                         if open_id >= 0
                             && let Err(e) = artists_ui_mod::open_artist(
@@ -95,7 +96,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>
                             )
                             .await
                         {
-                            log::warn!("artists::section_enter open_artist({open_id}): {e}");
+                            log::warn!(
+                                "artists::section_enter open_artist({open_id}): {}",
+                                describe(&e)
+                            );
                             // Detail re-fetch failed (artist deleted while
                             // hidden); drop back to the grid rather than
                             // stranding the user on an empty detail page.

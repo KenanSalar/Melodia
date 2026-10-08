@@ -18,6 +18,7 @@ use crate::ui::model_diff::clear_vec_model;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{
     AppWindow, CardSelection, GenreDetail, GenreGridRow as UiGenreGridRow, Genres,
     TrackListRow as UiTrackListRow,
@@ -87,7 +88,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
                     if gu.take_dirty() {
                         let open_id = gu.detail_genre_id();
                         if let Err(e) = genres_ui_mod::fetch_grid(&s, &gu, weak.clone()).await {
-                            log::warn!("genres::section_enter fetch_grid: {e}");
+                            log::warn!("genres::section_enter fetch_grid: {}", describe(&e));
                         }
                         if open_id >= 0
                             && let Err(e) = genres_ui_mod::open_genre(
@@ -99,7 +100,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
                             )
                             .await
                         {
-                            log::warn!("genres::section_enter open_genre({open_id}): {e}");
+                            log::warn!(
+                                "genres::section_enter open_genre({open_id}): {}",
+                                describe(&e)
+                            );
                             // Detail re-fetch failed (genre removed while
                             // hidden); drop back to the grid. Mirrors the
                             // Albums / Artists slices. No Image

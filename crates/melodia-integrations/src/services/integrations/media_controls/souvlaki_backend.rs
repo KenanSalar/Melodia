@@ -7,6 +7,7 @@ use souvlaki::{
 };
 use tokio::sync::mpsc;
 
+use melodia_core::error::describe;
 use melodia_engine::player::engine::event_sink::{MediaControlsSync, PlayerEvent};
 use melodia_engine::player::engine::state::{PlayerViewModelLight, amplitude_to_volume};
 use melodia_engine::player::engine::types::PlaybackStatus;
@@ -80,10 +81,7 @@ fn try_create_controls(
     match create_controls(hwnd, tx) {
         Ok(controls) => Some(controls),
         Err(e) => {
-            log::warn!(
-                "Failed to initialize OS media controls: {}",
-                melodia_core::error::describe(&e)
-            );
+            log::warn!("Failed to initialize OS media controls: {}", describe(&e));
             None
         }
     }
@@ -198,10 +196,10 @@ impl MediaControlsSync for MediaControlsHandle {
                     duration: source.duration_ms.map(Duration::from_millis),
                     cover_url: artwork_url.as_deref(),
                 }) {
-                    log::debug!("Failed to set media metadata: {e}");
+                    log::debug!("Failed to set media metadata: {}", describe(&e));
                 }
             } else if let Err(e) = controls.set_metadata(MediaMetadata::default()) {
-                log::debug!("Failed to clear media metadata: {e}");
+                log::debug!("Failed to clear media metadata: {}", describe(&e));
             }
         }
 
@@ -213,7 +211,7 @@ impl MediaControlsSync for MediaControlsHandle {
                 PlaybackStatus::Stopped | PlaybackStatus::Loading => MediaPlayback::Stopped,
             };
             if let Err(e) = controls.set_playback(playback) {
-                log::debug!("Failed to set media playback status: {e}");
+                log::debug!("Failed to set media playback status: {}", describe(&e));
             }
             inner.last_timeline_push = Some(Instant::now());
         }
@@ -232,7 +230,7 @@ impl MediaControlsSync for MediaControlsHandle {
         }
         let progress = Some(MediaPosition(Duration::from_millis(position_ms)));
         if let Err(e) = controls.set_playback(MediaPlayback::Playing { progress }) {
-            log::debug!("Failed to update media position: {e}");
+            log::debug!("Failed to update media position: {}", describe(&e));
         }
         inner.last_timeline_push = Some(Instant::now());
     }

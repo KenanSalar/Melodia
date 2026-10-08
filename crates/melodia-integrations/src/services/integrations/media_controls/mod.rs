@@ -11,6 +11,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
+use melodia_core::error::describe;
 use melodia_engine::player::engine::event_sink::{EventSink, PlayerEvent};
 
 #[cfg(target_os = "linux")]
@@ -66,7 +67,7 @@ pub fn spawn_event_receiver(
 /// Hand a command to the player without blocking the OS thread it arrived on.
 fn forward(tx: &mpsc::Sender<PlayerEvent>, event: PlayerEvent) {
     if let Err(e) = tx.try_send(event) {
-        log::warn!("Dropped media control event due to full channel: {e}");
+        log::warn!("Dropped media control event due to full channel: {}", describe(&e));
     }
 }
 

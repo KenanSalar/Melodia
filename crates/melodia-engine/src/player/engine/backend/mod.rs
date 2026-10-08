@@ -280,7 +280,7 @@ impl PlaybackEngine {
         if !start.is_zero() {
             log::debug!("Resuming playback at {}ms", start.as_millis());
             if let Err(e) = decoded.try_seek(start) {
-                log::warn!("Seek failed: {e}");
+                log::warn!("Seek failed: {}", describe(&e));
                 // The anchor goes with it: the clock counts frames handed out, and a source the
                 // seek refused to move hands out its first one from wherever it still is.
                 start = Duration::ZERO;
@@ -660,7 +660,7 @@ impl PlaybackEngine {
             }
         };
         if let Err(e) = decoded.try_seek(position) {
-            log::warn!("Seek failed: {e}");
+            log::warn!("Seek failed: {}", describe(&e));
             return;
         }
 

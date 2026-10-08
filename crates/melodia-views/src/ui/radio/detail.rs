@@ -30,7 +30,7 @@ use crate::ui::util::clamp_i64_to_i32;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::radio::{DirectoryStation, RadioStation};
-use melodia_core::error::{AppError, AppResult};
+use melodia_core::error::{AppError, AppResult, describe};
 use melodia_ui::{AppWindow, NavEnterFrom, Radio, RadioStationRow};
 
 use super::tabs::{RadioTab, mounted_tab, section_is_up};
@@ -526,7 +526,7 @@ pub fn persist_seat(state: &AppState, ui: &AppWindow, radio_ui: &Arc<RadioUi>) {
         }
         if let Err(e) = library::settings::set_last_detail_id(&state, view_id::RADIO_DETAIL, named)
         {
-            log::warn!("radio: persist station detail: {e}");
+            log::warn!("radio: persist station detail: {}", describe(&e));
         }
     });
 }

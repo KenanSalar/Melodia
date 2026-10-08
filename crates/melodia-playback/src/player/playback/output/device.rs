@@ -31,7 +31,7 @@ use cpal::{FromSample, SizedSample};
 use parking_lot::Mutex;
 use tokio::sync::Notify;
 
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 
 use melodia_audio::player::source::audio::{ChannelCount, Sample, SampleRate, Shape};
 
@@ -284,7 +284,7 @@ pub fn open(
     // rodio reached first — it only lists inside the fallback its default attempt failed into. A
     // `?` here spends a listing failure on the whole open without trying that config once.
     let supported = supported_configs(device).unwrap_or_else(|e| {
-        log::warn!("Falling back to the default output config alone: {e}");
+        log::warn!("Falling back to the default output config alone: {}", describe(&e));
         Vec::new()
     });
     let Rungs { preferred, fallback } = ladder(supported, rate);
