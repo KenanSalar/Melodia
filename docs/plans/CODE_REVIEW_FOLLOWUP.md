@@ -103,9 +103,9 @@ only the chain below it.
       fails the walk, and a floor catches a reader that finds nothing. The reader's own cases are
       table-driven beside it, and `describe` gained chain-depth cases in `error_tests.rs`.
 - [x] CLAUDE.md's bullet widened to any error, and names the walk.
-- Not compiled here: the Windows/macOS-only sites (`tray_icon_backend.rs`,
-  `souvlaki_backend.rs`, `parked_loop.rs`, `main.rs`'s Windows arms). Every error type there was
-  read to implement `std::error::Error`; `clippy-windows` or the Windows machine confirms it.
+- [x] The Windows-only sites (`tray_icon_backend.rs`, `souvlaki_backend.rs`, `parked_loop.rs`,
+      `main.rs`'s Windows arms) pass fmt, clippy and the tests on Windows (2026-10-08). No
+      `describe` call sits behind a macOS-only gate.
 
 ## Phase 2: take Slint out of the audio stack
 
