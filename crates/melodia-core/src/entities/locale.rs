@@ -14,8 +14,10 @@ pub const DEFAULT_LOCALE: &str = "en";
 ///
 /// A new locale goes in at its name's place, here and in that list, plus a `.po` beside its
 /// siblings.
-pub const SUPPORTED_LOCALES: &[&str] =
-    &["id", "de", "en", "es", "fr", "it", "nl", "pl", "pt_BR", "pt", "tr", "el", "ru", "uk"];
+pub const SUPPORTED_LOCALES: &[&str] = &[
+    "id", "de", "en", "es", "fr", "it", "hu", "nl", "pl", "pt_BR", "pt", "vi", "tr", "el", "ru",
+    "uk",
+];
 
 #[cfg(test)]
 #[path = "tests/locale_tests.rs"]

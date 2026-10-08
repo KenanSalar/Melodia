@@ -1,0 +1,3346 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: melodia-ui\n"
+"Report-Msgid-Bugs-To: \n"
+"PO-Revision-Date: 2026-10-08 00:00+0000\n"
+"Last-Translator: Kenan Salar\n"
+"Language-Team: none\n"
+"Language: vi\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: ui/app-window.slint ui/layout/sidebar.slint
+msgid "Search"
+msgstr "Tìm kiếm"
+
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/radio-view.slint
+msgid "Browse"
+msgstr "Duyệt"
+
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/favorites-view.slint
+#: ui/views/radio-view.slint
+msgid "Favorites"
+msgstr "Yêu thích"
+
+#: ui/app-window.slint ui/layout/sidebar.slint
+msgid "My Library"
+msgstr "Thư viện của tôi"
+
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/radio-view.slint
+#: ui/views/recently-played-view.slint
+msgid "Recently Played"
+msgstr "Đã phát gần đây"
+
+#: ui/app-window.slint ui/layout/sidebar.slint
+msgid "Settings"
+msgstr "Cài đặt"
+
+#: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/views/settings/radio-section.slint
+msgid "Radio"
+msgstr "Radio"
+
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
+msgid "Minimize"
+msgstr "Thu nhỏ"
+
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
+msgid "Maximize"
+msgstr "Phóng to"
+
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
+msgid "Restore"
+msgstr "Khôi phục xuống"
+
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Close"
+msgstr "Đóng"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/context-menu.slint
+msgid "Remove {} from Favorites"
+msgstr "Xóa {} mục khỏi Yêu thích"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/context-menu.slint
+msgid "Add {} to Favorites"
+msgstr "Thêm {} mục vào Yêu thích"
+
+#: ui/components/context-menu.slint ui/components/grid/card-context-menu.slint
+msgid "Add to Favorites"
+msgstr "Thêm vào Yêu thích"
+
+#: ui/components/context-menu.slint ui/components/grid/card-context-menu.slint
+msgid "Remove from Favorites"
+msgstr "Xóa khỏi Yêu thích"
+
+#: ui/components/dialog/add-station-body.slint
+#: ui/components/grid/station-context-menu.slint
+msgid "Stream URL"
+msgstr "URL luồng phát"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Name (optional)"
+msgstr "Tên (không bắt buộc)"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Leave blank to use the station's own name"
+msgstr "Để trống để dùng tên riêng của đài"
+
+#: ui/components/dialog/add-station-body.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/station-facts.slint
+msgid "Website"
+msgstr "Trang web"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Logo URL"
+msgstr "URL logo"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Leave blank to look for a logo on the website above."
+msgstr "Để trống để tìm logo trên trang web ở trên."
+
+#: ui/components/dialog/add-station-body.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+#: ui/views/search/top-result-card.slint
+msgid "Genre"
+msgstr "Thể loại"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Jazz, Blues"
+msgstr "Jazz, Blues"
+
+#: ui/components/dialog/add-station-body.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+msgid "Country"
+msgstr "Quốc gia"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Tunisia"
+msgstr "Tunisia"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "The directory owns this station's name and stream. What it left blank is yours to fill in; leave a field empty to remove it again."
+msgstr "Danh bạ quản lý tên và luồng phát của đài này. Những gì danh bạ để trống là phần bạn có thể điền; để trống một trường để xóa lại thông tin đó."
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Checking the stream…"
+msgstr "Đang kiểm tra luồng phát…"
+
+#: ui/components/dialog/credit-editor.slint
+#: ui/components/dialog/name-list-editor.slint ui/globals/dialog.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Add"
+msgstr "Thêm"
+
+#: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/grid/station-context-menu.slint ui/views/favorites-view.slint
+#: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
+msgid "Name"
+msgstr "Tên"
+
+#: ui/components/dialog/dialog.slint
+msgid "Playlist name"
+msgstr "Tên danh sách phát"
+
+#: ui/components/dialog/dialog.slint
+msgid "Description (optional)"
+msgstr "Mô tả (không bắt buộc)"
+
+#: ui/components/dialog/dialog.slint
+msgid "Add a description…"
+msgstr "Thêm mô tả…"
+
+#: ui/components/dialog/dialog.slint
+msgid "Finish"
+msgstr "Hoàn tất"
+
+#: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
+msgid "Open Last.fm"
+msgstr "Mở Last.fm"
+
+#: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
+msgid "Connect"
+msgstr "Kết nối"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Classical"
+msgstr "Cổ điển"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Flat"
+msgstr "Phẳng"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Jazz"
+msgstr "Jazz"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Pop"
+msgstr "Pop"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Rock"
+msgstr "Rock"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Bass Boost"
+msgstr "Tăng âm trầm"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Electronic"
+msgstr "Điện tử"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Treble Boost"
+msgstr "Tăng âm cao"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Vocal"
+msgstr "Giọng hát"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Custom"
+msgstr "Tùy chỉnh"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Enable equalizer"
+msgstr "Bật bộ chỉnh âm"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Reset"
+msgstr "Đặt lại"
+
+#: ui/components/dialog/export-playlist-picker.slint
+msgid "No playlists to export"
+msgstr "Không có danh sách phát nào để xuất"
+
+#: ui/components/dialog/export-playlist-picker.slint
+#: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
+#: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
+#: ui/globals/search.slint ui/views/queue-sheet.slint
+msgid "{n} track"
+msgid_plural "{n} tracks"
+msgstr[0] "{n} bản nhạc"
+
+#: ui/components/dialog/export-playlist-picker.slint
+msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
+msgstr "Nhiều danh sách phát được lưu thành một tệp .zip, bạn có thể nhập trực tiếp mà không cần giải nén."
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "No artwork"
+msgstr "Không có ảnh bìa"
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "{} / 4 selected"
+msgstr "Đã chọn {} / 4"
+
+#: ui/components/dialog/playlist-mosaic-picker.slint ui/views/queue-sheet.slint
+msgid "Clear"
+msgstr "Xóa"
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "Add tracks to this playlist to pick artwork."
+msgstr "Thêm bản nhạc vào danh sách phát này để chọn ảnh bìa."
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "Select up to 4 tracks"
+msgstr "Chọn tối đa 4 bản nhạc"
+
+#: ui/components/dialog/playlist-picker.slint
+msgid "Already added"
+msgstr "Đã thêm"
+
+#: ui/components/dialog/playlist-picker.slint
+msgid "{} of {} already added"
+msgstr "{} / {} đã được thêm"
+
+#: ui/components/dialog/preamp-slider-row.slint
+msgid "Preamp"
+msgstr "Tiền khuếch đại"
+
+#: ui/components/dialog/replaygain-body.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/search/top-result-card.slint
+msgid "Album"
+msgstr "Album"
+
+#: ui/components/dialog/replaygain-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Track"
+msgstr "Bản nhạc"
+
+#: ui/components/dialog/replaygain-body.slint
+msgid "Enable ReplayGain"
+msgstr "Bật ReplayGain"
+
+#: ui/components/dialog/replaygain-body.slint
+msgid "Normalization mode"
+msgstr "Chế độ chuẩn hóa"
+
+#: ui/components/dialog/replaygain-body.slint
+msgid "Prevent clipping"
+msgstr "Ngăn méo tiếng"
+
+#: ui/components/dialog/replaygain-body.slint
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "ReplayGain chỉ áp dụng cho các bản nhạc đã có thẻ độ lớn âm thanh. Hãy quét thư viện bằng công cụ như rsgain hoặc loudgain để thêm các thẻ này."
+
+#: ui/components/dialog/scrobble-lastfm-body.slint
+msgid "Click Open Last.fm to approve Melodia in your browser."
+msgstr "Nhấn Mở Last.fm để cấp quyền cho Melodia trong trình duyệt."
+
+#: ui/components/dialog/scrobble-lastfm-body.slint
+msgid "After approving Melodia in your browser, click Finish."
+msgstr "Sau khi cấp quyền cho Melodia trong trình duyệt, hãy nhấn Hoàn tất."
+
+#: ui/components/dialog/scrobble-lastfm-body.slint
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+#: ui/globals/player.slint
+msgid "Connecting…"
+msgstr "Đang kết nối…"
+
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+msgid "User token"
+msgstr "Mã thông báo người dùng"
+
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+msgid "Paste your ListenBrainz user token"
+msgstr "Dán mã thông báo người dùng ListenBrainz của bạn"
+
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+msgid "Find your token on your ListenBrainz profile settings page."
+msgstr "Bạn có thể tìm mã thông báo trên trang cài đặt hồ sơ ListenBrainz."
+
+#: ui/components/dialog/selectable-picker.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Select all"
+msgstr "Chọn tất cả"
+
+#: ui/components/dialog/selectable-picker.slint
+msgid "{} selected"
+msgstr "Đã chọn {}"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "value"
+msgstr "giá trị"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "days"
+msgstr "ngày"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "number"
+msgstr "số"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Album Artist"
+msgstr "Nghệ sĩ album"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/my-library/tab-pills.slint ui/views/search/top-result-card.slint
+msgid "Artist"
+msgstr "Nghệ sĩ"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+msgid "Title"
+msgstr "Tiêu đề"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Credits"
+msgstr "Ghi công"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "ISRC"
+msgstr "ISRC"
+
+#. Translators: a musical key, as in A minor
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Key"
+msgstr "Giọng"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Mood"
+msgstr "Tâm trạng"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "BPM"
+msgstr "BPM"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Duration (sec)"
+msgstr "Thời lượng (giây)"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/station-facts.slint ui/views/radio/tab-pills.slint
+msgid "Plays"
+msgstr "Lượt phát"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/my-library/tab-pills.slint
+msgid "Year"
+msgstr "Năm"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Bitrate (kbps)"
+msgstr "Tốc độ bit (kbps)"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/now-playing/overflow-menu.slint ui/settings.slint
+msgid "Rating"
+msgstr "Đánh giá"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Sample rate (Hz)"
+msgstr "Tần số lấy mẫu (Hz)"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Skips"
+msgstr "Lượt bỏ qua"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Date added"
+msgstr "Ngày thêm"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Favorite"
+msgstr "Yêu thích"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "File size (bytes)"
+msgstr "Kích thước tệp (byte)"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Last played"
+msgstr "Phát lần cuối"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "contains"
+msgstr "chứa"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "does not contain"
+msgstr "không chứa"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is"
+msgstr "là"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is not"
+msgstr "không phải là"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "ends with"
+msgstr "kết thúc bằng"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is not set"
+msgstr "chưa đặt"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is set"
+msgstr "đã đặt"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "starts with"
+msgstr "bắt đầu bằng"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "at least"
+msgstr "ít nhất"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "greater than"
+msgstr "lớn hơn"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "at most"
+msgstr "nhiều nhất"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "less than"
+msgstr "nhỏ hơn"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is false"
+msgstr "là sai"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is true"
+msgstr "là đúng"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "in the last"
+msgstr "trong vòng"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "not in the last"
+msgstr "không trong vòng"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "all"
+msgstr "tất cả"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "any"
+msgstr "một trong"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "least recently added"
+msgstr "thêm vào cũ nhất"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "most recently added"
+msgstr "thêm vào mới nhất"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "least played"
+msgstr "phát ít nhất"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "most played"
+msgstr "phát nhiều nhất"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "least recently played"
+msgstr "lâu chưa phát nhất"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "most recently played"
+msgstr "phát gần đây nhất"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "highest rated"
+msgstr "đánh giá cao nhất"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "random"
+msgstr "ngẫu nhiên"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Smart playlist name"
+msgstr "Tên danh sách phát thông minh"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Match"
+msgstr "Thỏa mãn"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "of the following rules"
+msgstr "các quy tắc sau"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Add rule"
+msgstr "Thêm quy tắc"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Limit to"
+msgstr "Giới hạn"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "N"
+msgstr "N"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "tracks by"
+msgstr "bản nhạc, chọn theo"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Arranger"
+msgstr "Người phối khí"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Composer"
+msgstr "Nhà soạn nhạc"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Conductor"
+msgstr "Nhạc trưởng"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Lyricist"
+msgstr "Người viết lời"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Performer"
+msgstr "Người trình bày"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "DJ Mixer"
+msgstr "DJ hòa âm"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Engineer"
+msgstr "Kỹ sư âm thanh"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Mixer"
+msgstr "Kỹ sư hòa âm"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Producer"
+msgstr "Nhà sản xuất"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Remixer"
+msgstr "Người remix"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Replace…"
+msgstr "Thay thế…"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/folder-row.slint ui/globals/dialog.slint
+#: ui/views/settings/library-section.slint
+msgid "Remove"
+msgstr "Xóa"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Details"
+msgstr "Chi tiết"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/now-playing/lyrics-menu.slint ui/settings.slint
+#: ui/views/now-playing-view.slint ui/views/settings/lyrics-section.slint
+msgid "Lyrics"
+msgstr "Lời bài hát"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Summary"
+msgstr "Tóm tắt"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Tags"
+msgstr "Thẻ"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Total"
+msgstr "Tổng"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Disc"
+msgstr "Đĩa"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Original Year"
+msgstr "Năm gốc"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Comment"
+msgstr "Ghi chú"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Subtitle"
+msgstr "Tiêu đề phụ"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Disc Subtitle"
+msgstr "Tiêu đề phụ của đĩa"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Grouping"
+msgstr "Nhóm"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Work"
+msgstr "Tác phẩm"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Movement"
+msgstr "Chương"
+
+#. Translators: the movement's number, as in movement 2 of 4
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Number"
+msgstr "Số"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/onboarding/appearance-panel.slint ui/settings.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+#: ui/views/settings/language-section.slint
+msgid "Language"
+msgstr "Ngôn ngữ"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Copyright"
+msgstr "Bản quyền"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Record Label"
+msgstr "Hãng đĩa"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Catalog Number"
+msgstr "Số danh mục"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Barcode"
+msgstr "Mã vạch"
+
+#. Translators: the physical medium a release came out on: CD, vinyl
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Media"
+msgstr "Phương tiện"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Release Type"
+msgstr "Loại phát hành"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Release Country"
+msgstr "Quốc gia phát hành"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Part of a compilation"
+msgstr "Thuộc một tuyển tập"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Insert found lyrics"
+msgstr "Chèn lời đã tìm thấy"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Path"
+msgstr "Đường dẫn"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Codec"
+msgstr "Codec"
+
+#: ui/components/dialog/tag-editor-body.slint ui/components/station-facts.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+msgid "Bitrate"
+msgstr "Tốc độ bit"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/views/settings/output-section.slint
+msgid "Sample Rate"
+msgstr "Tần số lấy mẫu"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Bit Depth"
+msgstr "Độ sâu bit"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/views/settings/output-section.slint
+msgid "Channels"
+msgstr "Kênh"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Size"
+msgstr "Kích thước"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/views/my-library/tab-pills.slint
+msgid "Duration"
+msgstr "Thời lượng"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Modified"
+msgstr "Ngày sửa đổi"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "BLAKE3"
+msgstr "BLAKE3"
+
+#: ui/components/grid/album-grid.slint
+#: ui/components/track-list/track-list-row.slint ui/globals/player.slint
+msgid "Unknown artist"
+msgstr "Nghệ sĩ không xác định"
+
+#: ui/components/grid/artist-grid.slint ui/globals/hero-chips.slint
+#: ui/globals/search.slint ui/views/my-library-view.slint
+msgid "{n} album"
+msgid_plural "{n} albums"
+msgstr[0] "{n} album"
+
+#: ui/components/grid/browse-card-grid.slint
+msgid "Folder"
+msgstr "Thư mục"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/now-playing/play-button.slint
+#: ui/components/track-list/track-context-menu.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Play"
+msgstr "Phát"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/now-playing/overflow-menu.slint ui/views/favorites-view.slint
+#: ui/views/my-library/tab-pills.slint ui/views/recently-played-view.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Shuffle"
+msgstr "Trộn bài"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Play {} Next"
+msgstr "Phát {} mục tiếp theo"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Play Next"
+msgstr "Phát tiếp theo"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Add {} to Queue"
+msgstr "Thêm {} mục vào hàng đợi"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Add to Queue"
+msgstr "Thêm vào hàng đợi"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "New Playlist…"
+msgstr "Danh sách phát mới…"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Add to Playlist"
+msgstr "Thêm vào danh sách phát"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Edit Tags for {}"
+msgstr "Sửa thẻ cho {} mục"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Edit Tags…"
+msgstr "Sửa thẻ…"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Edit {} Tracks"
+msgstr "Sửa {} bản nhạc"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/now-playing/lyrics-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Edit Track Information"
+msgstr "Sửa thông tin bản nhạc"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/station-facts.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Copy"
+msgstr "Sao chép"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Copy Name"
+msgstr "Sao chép tên"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Copy Path"
+msgstr "Sao chép đường dẫn"
+
+#: ui/components/grid/card-context-menu.slint ui/settings.slint
+#: ui/views/settings/diagnostics-section.slint
+msgid "Open Folder"
+msgstr "Mở thư mục"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Show in File Manager"
+msgstr "Hiện trong trình quản lý tệp"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Open Containing Folder"
+msgstr "Mở thư mục chứa tệp"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Go to Artist"
+msgstr "Đi tới nghệ sĩ"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Clear selection"
+msgstr "Bỏ chọn"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Rename…"
+msgstr "Đổi tên…"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Edit Artwork…"
+msgstr "Sửa ảnh bìa…"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Edit Rules…"
+msgstr "Sửa quy tắc…"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Delete {} Playlists"
+msgstr "Xóa {} danh sách phát"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Delete Playlist"
+msgstr "Xóa danh sách phát"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Artist - Album"
+msgstr "Nghệ sĩ - Album"
+
+#: ui/components/grid/playlist-grid.slint
+msgid "0 tracks"
+msgstr "0 bản nhạc"
+
+#: ui/components/grid/station-context-menu.slint
+msgid "Open Website"
+msgstr "Mở trang web"
+
+#: ui/components/grid/station-context-menu.slint
+msgid "Edit…"
+msgstr "Sửa…"
+
+#. Translators: `{}` is how many stations are selected
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove {} from Recently Played…"
+msgstr "Xóa {} đài khỏi Đã phát gần đây…"
+
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove from Recently Played…"
+msgstr "Xóa khỏi Đã phát gần đây…"
+
+#. Translators: `{}` is how many stations are selected
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove {} from Favorites…"
+msgstr "Xóa {} đài khỏi Yêu thích…"
+
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove from Favorites…"
+msgstr "Xóa khỏi Yêu thích…"
+
+#: ui/components/mini-player/mini-captions.slint
+msgid "Full Player"
+msgstr "Trình phát đầy đủ"
+
+#: ui/components/mini-player/mini-captions.slint
+msgid "Show Up Next"
+msgstr "Hiện danh sách tiếp theo"
+
+#: ui/components/mini-player/mini-captions.slint
+#: ui/components/now-playing/lyrics-controls.slint
+#: ui/views/settings/lyrics-section.slint
+msgid "Show lyrics"
+msgstr "Hiện lời bài hát"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Pin on Top"
+msgstr "Ghim trên cùng"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Unpin from Top"
+msgstr "Bỏ ghim trên cùng"
+
+#: ui/components/mini-player/mini-controls.slint
+msgid "Album Backdrop: off"
+msgstr "Phông nền album: tắt"
+
+#: ui/components/mini-player/mini-controls.slint
+msgid "Album Backdrop: on"
+msgstr "Phông nền album: bật"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Unfavorite"
+msgstr "Bỏ yêu thích"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Shuffle: off"
+msgstr "Trộn bài: tắt"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Shuffle: on"
+msgstr "Trộn bài: bật"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Repeat: off"
+msgstr "Lặp lại: tắt"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Repeat: one"
+msgstr "Lặp lại: một bài"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Repeat: all"
+msgstr "Lặp lại: tất cả"
+
+#: ui/components/now-playing/flyout-presets.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/components/now-playing/visualizer-flyout.slint
+msgid "Off"
+msgstr "Tắt"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "15 min"
+msgstr "15 phút"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "30 min"
+msgstr "30 phút"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "45 min"
+msgstr "45 phút"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "60 min"
+msgstr "60 phút"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "90 min"
+msgstr "90 phút"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "End of track"
+msgstr "Hết bản nhạc"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "Bars"
+msgstr "Cột"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "Mirrored"
+msgstr "Đối xứng"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "Waveform"
+msgstr "Dạng sóng"
+
+#: ui/components/now-playing/lyrics-menu.slint
+#: ui/views/settings/lyrics-section.slint
+msgid "Show romanization"
+msgstr "Hiện phiên âm Latin"
+
+#: ui/components/now-playing/lyrics-menu.slint
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/lyrics-section.slint
+msgid "Look up lyrics online"
+msgstr "Tìm lời bài hát trực tuyến"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Look up again"
+msgstr "Tìm lại"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Save to file"
+msgstr "Lưu vào tệp"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Edit lyrics…"
+msgstr "Sửa lời bài hát…"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Looking for lyrics…"
+msgstr "Đang tìm lời bài hát…"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "This track has no words"
+msgstr "Bản nhạc này không có lời"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "No lyrics found"
+msgstr "Không tìm thấy lời bài hát"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Couldn't reach the lyrics service"
+msgstr "Không thể kết nối với dịch vụ lời bài hát"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Lyrics lookup is off"
+msgstr "Tính năng tìm lời bài hát đang tắt"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Play something to see its lyrics"
+msgstr "Hãy phát một bài để xem lời"
+
+#. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Turn it on in the Lyrics menu"
+msgstr "Bật tính năng này trong menu Lời bài hát"
+
+#. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Try again from the Lyrics menu"
+msgstr "Thử lại từ menu Lời bài hát"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "More"
+msgstr "Khác"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/output-section.slint
+msgid "Speed"
+msgstr "Tốc độ"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "Sleep timer"
+msgstr "Hẹn giờ tắt"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "Track end"
+msgstr "Cuối bản nhạc"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/playback-section.slint
+msgid "Equalizer"
+msgstr "Bộ chỉnh âm"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "On"
+msgstr "Bật"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Done"
+msgstr "Xong"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/output-section.slint
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Repeat"
+msgstr "Lặp lại"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint ui/views/queue-sheet.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Queue"
+msgstr "Hàng đợi"
+
+#: ui/components/now-playing/play-button.slint
+msgid "Pause (hold to stop)"
+msgstr "Tạm dừng (giữ để dừng hẳn)"
+
+#: ui/components/now-playing/play-button.slint
+msgid "Play (hold to stop)"
+msgstr "Phát (giữ để dừng hẳn)"
+
+#: ui/components/now-playing/play-button.slint
+msgid "Pause"
+msgstr "Tạm dừng"
+
+#: ui/components/now-playing/sleep-timer-flyout.slint
+msgid "Start"
+msgstr "Bắt đầu"
+
+#: ui/components/now-playing/up-next-list.slint
+msgid "No tracks up next"
+msgstr "Không có bản nhạc tiếp theo"
+
+#: ui/components/now-playing/visualizer-picker.slint
+#: ui/views/settings/playback-section.slint
+msgid "Visualizer"
+msgstr "Sóng nhạc"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Appearance"
+msgstr "Diện mạo"
+
+#: ui/components/onboarding/appearance-panel.slint
+msgid "Pick how Melodia looks. Every change applies as you make it."
+msgstr "Chọn diện mạo cho Melodia. Mọi thay đổi được áp dụng ngay khi bạn chọn."
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Theme"
+msgstr "Chủ đề"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Theme Variant"
+msgstr "Biến thể chủ đề"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "System"
+msgstr "Hệ thống"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Dark"
+msgstr "Tối"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Light"
+msgstr "Sáng"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Accent Color"
+msgstr "Màu nhấn"
+
+#: ui/components/onboarding/features-panel.slint
+msgid "What Melodia can reach"
+msgstr "Những gì Melodia có thể kết nối"
+
+#: ui/components/onboarding/features-panel.slint
+msgid "Melodia works offline. These are the parts that reach out."
+msgstr "Melodia hoạt động ngoại tuyến. Đây là những phần có kết nối ra bên ngoài."
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/radio-section.slint
+msgid "Internet radio"
+msgstr "Radio trực tuyến"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/radio-section.slint
+msgid "Browse and play live stations from radio-browser.info"
+msgstr "Duyệt và phát các đài trực tiếp từ radio-browser.info"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/discord-section.slint
+msgid "Show the track you're playing on your Discord profile"
+msgstr "Hiện bản nhạc bạn đang phát trên hồ sơ Discord"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/lyrics-section.slint
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Khi bản nhạc không kèm lời, hỏi lrclib.net"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobbling"
+msgstr "Scrobbling"
+
+#: ui/components/onboarding/features-panel.slint
+msgid "Send what you play to Last.fm or ListenBrainz"
+msgstr "Gửi những gì bạn nghe tới Last.fm hoặc ListenBrainz"
+
+#: ui/components/onboarding/features-panel.slint
+msgid "Set Up"
+msgstr "Thiết lập"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Check for updates automatically"
+msgstr "Tự động kiểm tra bản cập nhật"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Once a day, Melodia asks GitHub whether a newer version is out."
+msgstr "Mỗi ngày một lần, Melodia hỏi GitHub xem đã có phiên bản mới hơn chưa."
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Your music"
+msgstr "Nhạc của bạn"
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Add the folders your music lives in. Melodia picks up changes to them on its own."
+msgstr "Thêm các thư mục chứa nhạc của bạn. Melodia sẽ tự nhận biết các thay đổi trong đó."
+
+#: ui/components/onboarding/music-panel.slint
+msgid "{n} folder in your library"
+msgid_plural "{n} folders in your library"
+msgstr[0] "{n} thư mục trong thư viện của bạn"
+
+#: ui/components/onboarding/music-panel.slint
+#: ui/views/settings/library-section.slint
+msgid "Add a folder to scan for music files."
+msgstr "Thêm thư mục để quét tìm tệp nhạc."
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Your Music folder: {}"
+msgstr "Thư mục Nhạc của bạn: {}"
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Add Music Folder"
+msgstr "Thêm thư mục Nhạc"
+
+#: ui/components/onboarding/music-panel.slint
+#: ui/views/settings/library-section.slint
+msgid "Add Folder"
+msgstr "Thêm thư mục"
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Choose Another Folder"
+msgstr "Chọn thư mục khác"
+
+#. Translators: Melodia is the product name and stays as is
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Welcome to Melodia"
+msgstr "Chào mừng đến với Melodia"
+
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Skip"
+msgstr "Bỏ qua"
+
+#: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
+msgid "Back"
+msgstr "Quay lại"
+
+#: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
+msgid "Next"
+msgstr "Tiếp theo"
+
+#: ui/components/search-bar.slint
+msgid "Search…"
+msgstr "Tìm kiếm…"
+
+#: ui/components/settings/folder-row.slint
+msgid "Rescan"
+msgstr "Quét lại"
+
+#: ui/components/settings/scan-progress.slint
+msgid "Looking for music… {n} file found"
+msgid_plural "Looking for music… {n} files found"
+msgstr[0] "Đang tìm nhạc… đã tìm thấy {n} tệp"
+
+#: ui/components/settings/scan-progress.slint
+msgid "Finishing up…"
+msgstr "Đang hoàn tất…"
+
+#: ui/components/settings/scan-progress.slint
+msgid "Stopping…"
+msgstr "Đang dừng…"
+
+#. Translators: files read so far, the total, then the file being read
+#: ui/components/settings/scan-progress.slint
+msgid "{} / {} files · {}"
+msgstr "{} / {} tệp · {}"
+
+#. Translators: files read so far, then the total
+#: ui/components/settings/scan-progress.slint
+msgid "{} / {} files"
+msgstr "{} / {} tệp"
+
+#: ui/components/settings/scan-progress.slint ui/globals/dialog-forms.slint
+#: ui/globals/dialog.slint ui/views/queue-sheet.slint
+#: ui/views/radio/tab-pills.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/library-section.slint
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/scrobbling-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Cancel"
+msgstr "Hủy"
+
+#: ui/components/sort-menu-popup.slint
+msgid "Sort"
+msgstr "Sắp xếp"
+
+#: ui/components/station-facts.slint
+msgid "Stream"
+msgstr "Luồng phát"
+
+#: ui/components/station-facts.slint
+msgid "Copy stream URL"
+msgstr "Sao chép URL luồng phát"
+
+#: ui/components/station-facts.slint
+msgid "Open in your browser"
+msgstr "Mở trong trình duyệt"
+
+#: ui/components/station-facts.slint ui/views/radio/suggestion-pill.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Format"
+msgstr "Định dạng"
+
+#: ui/components/station-facts.slint ui/views/radio/station-grid.slint
+msgid "{} kbps"
+msgstr "{} kbps"
+
+#: ui/components/station-facts.slint
+msgid "Votes"
+msgstr "Lượt bình chọn"
+
+#: ui/components/station-facts.slint
+msgid "{n} vote"
+msgid_plural "{n} votes"
+msgstr[0] "{n} lượt bình chọn"
+
+#: ui/components/station-facts.slint ui/globals/hero-chips.slint
+msgid "{n} play"
+msgid_plural "{n} plays"
+msgstr[0] "{n} lượt phát"
+
+#: ui/components/station-facts.slint
+msgid "Recently played on this station"
+msgstr "Đã phát gần đây trên đài này"
+
+#: ui/components/station-facts.slint
+msgid "Copy Title"
+msgstr "Sao chép tiêu đề"
+
+#: ui/components/station-facts.slint
+msgid "Copy Artist"
+msgstr "Sao chép nghệ sĩ"
+
+#: ui/components/track-copy-items.slint
+msgid "Artist - Title"
+msgstr "Nghệ sĩ - Tiêu đề"
+
+#: ui/components/track-copy-items.slint
+msgid "File Path"
+msgstr "Đường dẫn tệp"
+
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Columns"
+msgstr "Cột"
+
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Artwork"
+msgstr "Ảnh bìa"
+
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint
+msgid "Length"
+msgstr "Độ dài"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/track-list/track-context-menu.slint
+msgid "Add {} to Playlist"
+msgstr "Thêm {} mục vào danh sách phát"
+
+#: ui/components/track-list/track-context-menu.slint
+msgid "Go to Album"
+msgstr "Đi tới album"
+
+#: ui/components/track-list/track-context-menu.slint
+msgid "Go to Genre"
+msgstr "Đi tới thể loại"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove {} from Playlist"
+msgstr "Xóa {} mục khỏi danh sách phát"
+
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove from Playlist"
+msgstr "Xóa khỏi danh sách phát"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove {} from Queue"
+msgstr "Xóa {} mục khỏi hàng đợi"
+
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove from Queue"
+msgstr "Xóa khỏi hàng đợi"
+
+#: ui/components/track-list/track-list-row.slint
+msgid "Unknown album"
+msgstr "Album không xác định"
+
+#: ui/globals/curated.slint ui/globals/hero-chips.slint
+msgid "{n} favorite"
+msgid_plural "{n} favorites"
+msgstr[0] "{n} mục yêu thích"
+
+#: ui/globals/dialog-forms.slint
+msgid "That token wasn't accepted. Check it and try again."
+msgstr "Mã thông báo không được chấp nhận. Hãy kiểm tra và thử lại."
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't reach the service. Check your connection and try again."
+msgstr "Không thể kết nối với dịch vụ. Hãy kiểm tra kết nối và thử lại."
+
+#: ui/globals/dialog-forms.slint
+msgid "Not approved yet. Approve Melodia in your browser, then click Finish."
+msgstr "Chưa được cấp quyền. Hãy cấp quyền cho Melodia trong trình duyệt rồi nhấn Hoàn tất."
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't save your credentials."
+msgstr "Không thể lưu thông tin đăng nhập."
+
+#: ui/globals/dialog-forms.slint
+msgid "Edit Station"
+msgstr "Sửa đài"
+
+#: ui/globals/dialog-forms.slint
+msgid "Station Details"
+msgstr "Chi tiết đài"
+
+#: ui/globals/dialog-forms.slint ui/globals/dialog.slint
+msgid "Save"
+msgstr "Lưu"
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't reach that address. Check the URL and your connection."
+msgstr "Không thể kết nối tới địa chỉ đó. Hãy kiểm tra URL và kết nối mạng."
+
+#: ui/globals/dialog-forms.slint
+msgid "That address doesn't play as audio Melodia can decode."
+msgstr "Địa chỉ đó không phát ra âm thanh mà Melodia có thể giải mã."
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't save the station."
+msgstr "Không thể lưu đài."
+
+#: ui/globals/dialog-forms.slint
+msgid "That doesn't look like a web address. It should start with https://"
+msgstr "Đó không giống một địa chỉ web. Địa chỉ phải bắt đầu bằng https://"
+
+#: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
+msgid "New Playlist"
+msgstr "Danh sách phát mới"
+
+#: ui/globals/dialog.slint
+msgid "Create"
+msgstr "Tạo"
+
+#: ui/globals/dialog.slint
+msgid "Rename Playlist"
+msgstr "Đổi tên danh sách phát"
+
+#: ui/globals/dialog.slint
+msgid "Delete playlist?"
+msgstr "Xóa danh sách phát?"
+
+#: ui/globals/dialog.slint
+msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
+msgstr "Danh sách phát và thứ tự bản nhạc của nó sẽ bị xóa. Bản thân các bản nhạc vẫn ở trong thư viện của bạn."
+
+#: ui/globals/dialog.slint
+msgid "Delete"
+msgstr "Xóa"
+
+#: ui/globals/dialog.slint
+msgid "Delete {} playlists?"
+msgstr "Xóa {} danh sách phát?"
+
+#: ui/globals/dialog.slint
+msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
+msgstr "Các danh sách phát và thứ tự bản nhạc của chúng sẽ bị xóa. Bản thân các bản nhạc vẫn ở trong thư viện của bạn."
+
+#: ui/globals/dialog.slint
+msgid "Remove from Recently Played?"
+msgstr "Xóa khỏi Đã phát gần đây?"
+
+#: ui/globals/dialog.slint
+msgid "Remove from favorites?"
+msgstr "Xóa khỏi mục yêu thích?"
+
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from Recently Played."
+msgstr "\"{}\" sẽ bị xóa khỏi Đã phát gần đây."
+
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from your stations, along with its play history."
+msgstr "\"{}\" sẽ bị xóa khỏi danh sách đài của bạn, cùng với lịch sử phát của đài."
+
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from your favorites."
+msgstr "\"{}\" sẽ bị xóa khỏi mục yêu thích của bạn."
+
+#: ui/globals/dialog.slint
+msgid "Remove {n} station from Recently Played?"
+msgid_plural "Remove {n} stations from Recently Played?"
+msgstr[0] "Xóa {n} đài khỏi Đã phát gần đây?"
+
+#: ui/globals/dialog.slint
+msgid "Remove {n} station from favorites?"
+msgid_plural "Remove {n} stations from favorites?"
+msgstr[0] "Xóa {n} đài khỏi mục yêu thích?"
+
+#: ui/globals/dialog.slint
+msgid "The stations will be removed from Recently Played."
+msgstr "Các đài sẽ bị xóa khỏi Đã phát gần đây."
+
+#: ui/globals/dialog.slint
+msgid "The stations will be removed from your favorites. Any you added by hand are removed from your stations, along with their play history."
+msgstr "Các đài sẽ bị xóa khỏi mục yêu thích của bạn. Những đài bạn tự thêm sẽ bị xóa khỏi danh sách đài, cùng với lịch sử phát của chúng."
+
+#: ui/globals/dialog.slint
+msgid "Edit Rules"
+msgstr "Sửa quy tắc"
+
+#: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
+msgid "New Smart Playlist"
+msgstr "Danh sách phát thông minh mới"
+
+#: ui/globals/dialog.slint
+msgid "Edit Artwork"
+msgstr "Sửa ảnh bìa"
+
+#: ui/globals/dialog.slint
+msgid "Apply"
+msgstr "Áp dụng"
+
+#: ui/globals/dialog.slint
+msgid "Export Playlists"
+msgstr "Xuất danh sách phát"
+
+#: ui/globals/dialog.slint
+msgid "Choose playlists to export."
+msgstr "Chọn danh sách phát để xuất."
+
+#: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Export"
+msgstr "Xuất"
+
+#: ui/globals/hero-chips.slint ui/views/my-library-view.slint
+msgid "{n} artist"
+msgid_plural "{n} artists"
+msgstr[0] "{n} nghệ sĩ"
+
+#: ui/globals/hero-chips.slint
+msgid "{n} disc"
+msgid_plural "{n} discs"
+msgstr[0] "{n} đĩa"
+
+#: ui/globals/hero-chips.slint ui/settings.slint
+msgid "Compilation"
+msgstr "Tuyển tập"
+
+#: ui/globals/player.slint
+msgid "No track playing"
+msgstr "Không có bản nhạc nào đang phát"
+
+#. Translators: a state on the station pill, not the Pause button's verb
+#: ui/globals/player.slint
+msgid "Paused"
+msgstr "Đang tạm dừng"
+
+#: ui/globals/player.slint
+msgid "Buffering…"
+msgstr "Đang tải bộ đệm…"
+
+#. Translators: a short pill in place of a track's seek bar
+#: ui/globals/player.slint
+msgid "LIVE"
+msgstr "TRỰC TIẾP"
+
+#: ui/globals/player.slint
+msgid "Previous (hold to rewind)"
+msgstr "Bài trước (giữ để tua lại)"
+
+#: ui/globals/player.slint
+msgid "Previous"
+msgstr "Bài trước"
+
+#: ui/globals/player.slint
+msgid "Next (hold to fast-forward)"
+msgstr "Bài tiếp theo (giữ để tua nhanh)"
+
+#: ui/globals/signal-path.slint
+msgid "Nothing is playing"
+msgstr "Không có gì đang phát"
+
+#: ui/globals/signal-path.slint
+msgid "Bit-perfect: the device receives the decoder's samples untouched"
+msgstr "Bit-perfect: thiết bị nhận nguyên vẹn các mẫu từ bộ giải mã"
+
+#: ui/globals/signal-path.slint
+msgid "Enhanced: only effects you chose change the sound"
+msgstr "Tăng cường: chỉ các hiệu ứng bạn chọn mới thay đổi âm thanh"
+
+#: ui/globals/signal-path.slint
+msgid "Fallback: exclusive output was refused, so the system mixer is in the way"
+msgstr "Dự phòng: đầu ra độc quyền bị từ chối, nên bộ trộn âm của hệ thống nằm trên đường tín hiệu"
+
+#: ui/globals/signal-path.slint
+msgid "Lossy: the file is compressed, so the device gets the decoder's reconstruction of the recording"
+msgstr "Nén mất dữ liệu: tệp đã bị nén, nên thiết bị nhận bản tái tạo bản thu âm từ bộ giải mã"
+
+#: ui/globals/signal-path.slint
+msgid "Converted: the sound is changed on its way to the device"
+msgstr "Đã chuyển đổi: âm thanh bị thay đổi trên đường tới thiết bị"
+
+#: ui/globals/signal-path.slint
+msgid "Bit-perfect"
+msgstr "Bit-perfect"
+
+#: ui/globals/signal-path.slint
+msgid "Enhanced"
+msgstr "Tăng cường"
+
+#: ui/globals/signal-path.slint
+msgid "Fallback"
+msgstr "Dự phòng"
+
+#: ui/globals/signal-path.slint
+msgid "Lossy"
+msgstr "Nén mất dữ liệu"
+
+#: ui/globals/signal-path.slint
+msgid "Converted"
+msgstr "Đã chuyển đổi"
+
+#. Translators: the action a click takes, expanding the sidebar
+#: ui/layout/sidebar.slint
+msgid "Expand"
+msgstr "Mở rộng"
+
+#: ui/layout/sidebar.slint
+msgid "Collapse"
+msgstr "Thu gọn"
+
+#: ui/settings.slint
+msgid "System Default"
+msgstr "Mặc định hệ thống"
+
+#: ui/settings.slint
+msgid "File watching disabled"
+msgstr "Đã tắt theo dõi tệp"
+
+#: ui/settings.slint
+msgid "Tracks won't reflect disk changes until you re-enable it."
+msgstr "Các bản nhạc sẽ không cập nhật theo thay đổi trên ổ đĩa cho đến khi bạn bật lại."
+
+#: ui/settings.slint
+msgid "Library re-syncing"
+msgstr "Đang đồng bộ lại thư viện"
+
+#: ui/settings.slint
+msgid "Filesystem event burst — rescanning your folders."
+msgstr "Có quá nhiều sự kiện hệ thống tệp, đang quét lại các thư mục của bạn."
+
+#: ui/settings.slint
+msgid "Restoring cover art"
+msgstr "Đang khôi phục ảnh bìa"
+
+#: ui/settings.slint
+msgid "Some cover art was missing. Melodia is restoring it from your music files."
+msgstr "Một số ảnh bìa bị thiếu. Melodia đang khôi phục chúng từ các tệp nhạc của bạn."
+
+#: ui/settings.slint
+msgid "Update available"
+msgstr "Có bản cập nhật"
+
+#: ui/settings.slint
+msgid "Melodia {} is ready to install."
+msgstr "Melodia {} đã sẵn sàng để cài đặt."
+
+#: ui/settings.slint
+msgid "Install"
+msgstr "Cài đặt"
+
+#: ui/settings.slint
+msgid "Update installed"
+msgstr "Đã cài đặt bản cập nhật"
+
+#: ui/settings.slint
+msgid "Restart Melodia to start using the new version."
+msgstr "Khởi động lại Melodia để bắt đầu dùng phiên bản mới."
+
+#: ui/settings.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Restart"
+msgstr "Khởi động lại"
+
+#: ui/settings.slint
+msgid "Update failed"
+msgstr "Cập nhật thất bại"
+
+#: ui/settings.slint
+msgid "Couldn't reach the update server. Check your internet connection."
+msgstr "Không thể kết nối với máy chủ cập nhật. Hãy kiểm tra kết nối internet."
+
+#: ui/settings.slint
+msgid "Signature check failed. The downloaded update may be corrupted; please try again."
+msgstr "Kiểm tra chữ ký thất bại. Bản cập nhật đã tải có thể bị hỏng; vui lòng thử lại."
+
+#: ui/settings.slint
+msgid "The update server returned an unexpected response."
+msgstr "Máy chủ cập nhật trả về phản hồi không mong đợi."
+
+#: ui/settings.slint
+msgid "Couldn't write the downloaded update to disk."
+msgstr "Không thể ghi bản cập nhật đã tải xuống ổ đĩa."
+
+#: ui/settings.slint
+msgid "Update failed. See logs for details."
+msgstr "Cập nhật thất bại. Xem nhật ký để biết chi tiết."
+
+#: ui/settings.slint
+msgid "Diagnostics report saved"
+msgstr "Đã lưu báo cáo chẩn đoán"
+
+#: ui/settings.slint
+msgid "Saved to {}"
+msgstr "Đã lưu vào {}"
+
+#: ui/settings.slint
+msgid "Couldn't save the diagnostics report"
+msgstr "Không thể lưu báo cáo chẩn đoán"
+
+#: ui/settings.slint
+msgid "See the log for details."
+msgstr "Xem nhật ký để biết chi tiết."
+
+#: ui/settings.slint
+msgid "Melodia crashed last time"
+msgstr "Melodia đã gặp sự cố ở lần chạy trước"
+
+#: ui/settings.slint
+msgid "A crash report was written. Open the log folder to find it."
+msgstr "Một báo cáo sự cố đã được ghi lại. Mở thư mục nhật ký để xem."
+
+#: ui/settings.slint
+msgid "Enjoying Melodia?"
+msgstr "Bạn thích Melodia chứ?"
+
+#: ui/settings.slint
+msgid "It's free and open source, built in my spare time. If it's useful to you, you can support me. You'll only see this once."
+msgstr "Melodia miễn phí và mã nguồn mở, được tôi xây dựng trong thời gian rảnh. Nếu thấy hữu ích, bạn có thể ủng hộ tôi. Thông báo này chỉ hiện một lần."
+
+#: ui/settings.slint
+msgid "Support"
+msgstr "Ủng hộ"
+
+#: ui/settings.slint
+msgid "Audio device disconnected"
+msgstr "Thiết bị âm thanh đã ngắt kết nối"
+
+#: ui/settings.slint
+msgid "Playback won't be audible until you reconnect it and restart Melodia."
+msgstr "Bạn sẽ không nghe thấy âm thanh cho đến khi kết nối lại thiết bị và khởi động lại Melodia."
+
+#: ui/settings.slint
+msgid "{n} playlist imported"
+msgid_plural "{n} playlists imported"
+msgstr[0] "Đã nhập {n} danh sách phát"
+
+#: ui/settings.slint
+msgid "{n} track added · {} missing"
+msgid_plural "{n} tracks added · {} missing"
+msgstr[0] "Đã thêm {n} bản nhạc · thiếu {}"
+
+#: ui/settings.slint
+msgid "{n} track added"
+msgid_plural "{n} tracks added"
+msgstr[0] "Đã thêm {n} bản nhạc"
+
+#: ui/settings.slint
+msgid "Import failed"
+msgstr "Nhập thất bại"
+
+#: ui/settings.slint
+msgid "Couldn't read the selected playlist file(s)."
+msgstr "Không thể đọc (các) tệp danh sách phát đã chọn."
+
+#: ui/settings.slint
+msgid "{n} playlist exported"
+msgid_plural "{n} playlists exported"
+msgstr[0] "Đã xuất {n} danh sách phát"
+
+#: ui/settings.slint
+msgid "Export failed"
+msgstr "Xuất thất bại"
+
+#: ui/settings.slint
+msgid "Couldn't write the playlist files."
+msgstr "Không thể ghi các tệp danh sách phát."
+
+#: ui/settings.slint
+msgid "These playlists are too large for one .zip file. Export fewer at a time."
+msgstr "Các danh sách phát này quá lớn để gói vào một tệp .zip. Hãy xuất ít danh sách hơn mỗi lần."
+
+#: ui/settings.slint
+msgid "{n} station added"
+msgid_plural "{n} stations added"
+msgstr[0] "Đã thêm {n} đài"
+
+#: ui/settings.slint
+msgid "{n} was already in your list."
+msgid_plural "{n} were already in your list."
+msgstr[0] "{n} đài đã có sẵn trong danh sách của bạn."
+
+#: ui/settings.slint
+msgid "Couldn't read any stations from the selected file(s)."
+msgstr "Không thể đọc đài nào từ (các) tệp đã chọn."
+
+#: ui/settings.slint
+msgid "{n} station exported"
+msgid_plural "{n} stations exported"
+msgstr[0] "Đã xuất {n} đài"
+
+#: ui/settings.slint
+msgid "Couldn't write the station list."
+msgstr "Không thể ghi danh sách đài."
+
+#: ui/settings.slint
+msgid "Playback error"
+msgstr "Lỗi phát nhạc"
+
+#: ui/settings.slint
+msgid "Something went wrong"
+msgstr "Đã xảy ra lỗi"
+
+#: ui/settings.slint
+msgid "Loved tracks"
+msgstr "Bản nhạc đã thích"
+
+#: ui/settings.slint
+msgid "Lyrics saved"
+msgstr "Đã lưu lời bài hát"
+
+#: ui/settings.slint
+msgid "Copied to clipboard"
+msgstr "Đã sao chép vào bộ nhớ tạm"
+
+#: ui/settings.slint
+msgid "Nothing to copy"
+msgstr "Không có gì để sao chép"
+
+#: ui/settings.slint
+msgid "Vote not counted"
+msgstr "Bình chọn không được tính"
+
+#: ui/settings.slint
+msgid "Exclusive output unavailable"
+msgstr "Không thể dùng đầu ra độc quyền"
+
+#: ui/settings.slint
+msgid "Exclusive output was refused, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "Đầu ra độc quyền bị từ chối, nên Melodia tạm thời phát ở chế độ dùng chung. Mục Đầu ra trong Cài đặt có giải thích lý do."
+
+#: ui/settings.slint
+msgid "{} refused exclusive output, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "{} đã từ chối đầu ra độc quyền, nên Melodia tạm thời phát ở chế độ dùng chung. Mục Đầu ra trong Cài đặt có giải thích lý do."
+
+#: ui/settings.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Restart Required"
+msgstr "Cần khởi động lại"
+
+#: ui/settings.slint
+msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
+msgstr "Melodia không thể tự khởi động lại. Hãy đóng và mở lại để áp dụng thay đổi."
+
+#: ui/settings.slint
+msgid "Added to {n} playlist"
+msgid_plural "Added to {n} playlists"
+msgstr[0] "Đã thêm vào {n} danh sách phát"
+
+#: ui/settings.slint
+msgid "‹multiple values›"
+msgstr "‹nhiều giá trị›"
+
+#: ui/settings.slint
+msgid "{n} track updated"
+msgid_plural "{n} tracks updated"
+msgstr[0] "Đã cập nhật {n} bản nhạc"
+
+#: ui/settings.slint
+msgid "{n} file failed"
+msgid_plural "{n} files failed"
+msgstr[0] "{n} tệp bị lỗi"
+
+#: ui/settings.slint
+msgid "{n} file has unsupported fields"
+msgid_plural "{n} files have unsupported fields"
+msgstr[0] "{n} tệp có trường không được hỗ trợ"
+
+#: ui/settings.slint
+msgid "{} can't be saved to {} files"
+msgstr "Không thể lưu {} vào tệp {}"
+
+#: ui/settings.slint
+msgid "Disc Total"
+msgstr "Tổng số đĩa"
+
+#: ui/settings.slint
+msgid "Track Total"
+msgstr "Tổng số bản nhạc"
+
+#: ui/settings.slint
+msgid "Movement Number"
+msgstr "Số chương"
+
+#: ui/settings.slint
+msgid "Movement Total"
+msgstr "Tổng số chương"
+
+#: ui/settings.slint
+msgid "Couldn't save tags"
+msgstr "Không thể lưu thẻ"
+
+#: ui/settings.slint
+msgid "No tracks were updated."
+msgstr "Không có bản nhạc nào được cập nhật."
+
+#: ui/views/browse-view.slint
+msgid "No library folders configured"
+msgstr "Chưa thiết lập thư mục thư viện nào"
+
+#: ui/views/browse-view.slint
+msgid "Open Settings to add a folder"
+msgstr "Mở Cài đặt để thêm thư mục"
+
+#: ui/views/browse-view.slint
+msgid "Open Settings"
+msgstr "Mở Cài đặt"
+
+#: ui/views/browse-view.slint
+msgid "Could not load folder"
+msgstr "Không thể tải thư mục"
+
+#: ui/views/browse-view.slint
+msgid "Empty folder"
+msgstr "Thư mục trống"
+
+#: ui/views/browse-view.slint
+msgid "Card view"
+msgstr "Dạng thẻ"
+
+#: ui/views/browse-view.slint
+msgid "List view"
+msgstr "Dạng danh sách"
+
+#: ui/views/favorites-view.slint ui/views/recently-played-view.slint
+msgid "Filter most played…"
+msgstr "Lọc mục phát nhiều nhất…"
+
+#: ui/views/favorites-view.slint ui/views/my-library-view.slint
+msgid "Filter artists…"
+msgstr "Lọc nghệ sĩ…"
+
+#: ui/views/favorites-view.slint
+msgid "Filter favorites…"
+msgstr "Lọc mục yêu thích…"
+
+#: ui/views/favorites-view.slint
+msgid "Favorite Artists"
+msgstr "Nghệ sĩ yêu thích"
+
+#: ui/views/favorites-view.slint ui/views/recently-played-view.slint
+msgid "Most Played"
+msgstr "Phát nhiều nhất"
+
+#: ui/views/favorites-view.slint ui/views/my-library-view.slint
+#: ui/views/recently-played-view.slint ui/views/search/songs-section.slint
+msgid "Songs"
+msgstr "Bài hát"
+
+#: ui/views/favorites-view.slint
+msgid "No favorites yet"
+msgstr "Chưa có mục yêu thích nào"
+
+#: ui/views/favorites/artists-tab.slint
+msgid "No favorite artists yet"
+msgstr "Chưa có nghệ sĩ yêu thích nào"
+
+#: ui/views/favorites/artists-tab.slint
+msgid "Favorite a song and its artist appears here."
+msgstr "Hãy yêu thích một bài hát và nghệ sĩ của bài đó sẽ hiện ở đây."
+
+#: ui/views/favorites/most-played-tab.slint ui/views/radio-view.slint
+#: ui/views/recently-played/most-played-tab.slint
+msgid "Nothing played yet"
+msgstr "Chưa phát gì"
+
+#: ui/views/favorites/most-played-tab.slint
+msgid "Play one of your favorites and it will show up here."
+msgstr "Hãy phát một mục yêu thích và nó sẽ hiện ở đây."
+
+#: ui/views/my-library-view.slint
+msgid "{n} song"
+msgid_plural "{n} songs"
+msgstr[0] "{n} bài hát"
+
+#: ui/views/my-library-view.slint
+msgid "{n} genre"
+msgid_plural "{n} genres"
+msgstr[0] "{n} thể loại"
+
+#: ui/views/my-library-view.slint
+msgid "{n} playlist"
+msgid_plural "{n} playlists"
+msgstr[0] "{n} danh sách phát"
+
+#: ui/views/my-library-view.slint ui/views/my-library/artist-detail.slint
+#: ui/views/my-library/tab-pills.slint ui/views/search-view.slint
+msgid "Albums"
+msgstr "Album"
+
+#: ui/views/my-library-view.slint ui/views/search-view.slint
+msgid "Artists"
+msgstr "Nghệ sĩ"
+
+#: ui/views/my-library-view.slint
+msgid "Genres"
+msgstr "Thể loại"
+
+#: ui/views/my-library-view.slint
+msgid "Playlists"
+msgstr "Danh sách phát"
+
+#: ui/views/my-library-view.slint
+msgid "Filter tracks & albums…"
+msgstr "Lọc bản nhạc và album…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter tracks…"
+msgstr "Lọc bản nhạc…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter albums…"
+msgstr "Lọc album…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter genres…"
+msgstr "Lọc thể loại…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter playlists…"
+msgstr "Lọc danh sách phát…"
+
+#: ui/views/my-library/albums-tab.slint
+msgid "No albums yet"
+msgstr "Chưa có album nào"
+
+#: ui/views/my-library/albums-tab.slint ui/views/my-library/artists-tab.slint
+#: ui/views/my-library/genres-tab.slint
+msgid "Add a music folder in Settings to start building your library."
+msgstr "Thêm thư mục nhạc trong Cài đặt để bắt đầu xây dựng thư viện."
+
+#: ui/views/my-library/artists-tab.slint
+msgid "No artists yet"
+msgstr "Chưa có nghệ sĩ nào"
+
+#: ui/views/my-library/genres-tab.slint
+msgid "No genres yet"
+msgstr "Chưa có thể loại nào"
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "No matching tracks"
+msgstr "Không có bản nhạc phù hợp"
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "No tracks yet"
+msgstr "Chưa có bản nhạc nào"
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "No tracks match these rules."
+msgstr "Không có bản nhạc nào khớp với các quy tắc này."
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "Drag music files here, or add tracks via any track's overflow menu."
+msgstr "Kéo tệp nhạc vào đây, hoặc thêm bản nhạc qua menu mở rộng của bất kỳ bản nhạc nào."
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "Drop files to add to this playlist"
+msgstr "Thả tệp để thêm vào danh sách phát này"
+
+#: ui/views/my-library/playlists-tab.slint
+msgid "No playlists yet"
+msgstr "Chưa có danh sách phát nào"
+
+#: ui/views/my-library/playlists-tab.slint
+msgid "Click \"+ New Playlist\" to create one."
+msgstr "Nhấn \"+ Danh sách phát mới\" để tạo."
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Tracks"
+msgstr "Bản nhạc"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Edit artwork"
+msgstr "Sửa ảnh bìa"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Rename"
+msgstr "Đổi tên"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Edit rules"
+msgstr "Sửa quy tắc"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Delete playlist"
+msgstr "Xóa danh sách phát"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Create an empty playlist"
+msgstr "Tạo danh sách phát trống"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Create a playlist from rules"
+msgstr "Tạo danh sách phát từ quy tắc"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "More playlist actions"
+msgstr "Thao tác khác với danh sách phát"
+
+#: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
+msgid "Import"
+msgstr "Nhập"
+
+#: ui/views/now-playing-view.slint ui/views/radio/tab-pills.slint
+msgid "Vote"
+msgstr "Bình chọn"
+
+#. Translators: a heading in place of "Up Next", so keep it as short
+#: ui/views/now-playing-view.slint
+msgid "Station"
+msgstr "Đài"
+
+#: ui/views/now-playing-view.slint
+msgid "Up Next"
+msgstr "Tiếp theo"
+
+#: ui/views/placeholder-view.slint
+msgid "Coming soon"
+msgstr "Sắp ra mắt"
+
+#: ui/views/queue-sheet.slint
+msgid "No tracks"
+msgstr "Không có bản nhạc"
+
+#: ui/views/queue-sheet.slint
+msgid "Clear queue"
+msgstr "Xóa hàng đợi"
+
+#: ui/views/queue-sheet.slint
+msgid "Clear queue?"
+msgstr "Xóa hàng đợi?"
+
+#: ui/views/queue-sheet.slint
+msgid "Remove all tracks from the queue? Playback will stop."
+msgstr "Xóa tất cả bản nhạc khỏi hàng đợi? Nhạc sẽ dừng phát."
+
+#: ui/views/queue-sheet.slint
+msgid "Queue is empty"
+msgstr "Hàng đợi trống"
+
+#: ui/views/queue-sheet.slint
+msgid "Drop to add to queue"
+msgstr "Thả để thêm vào hàng đợi"
+
+#: ui/views/radio-view.slint ui/views/radio/suggestion-pill.slint
+msgid "{n} station"
+msgid_plural "{n} stations"
+msgstr[0] "{n} đài"
+
+#: ui/views/radio-view.slint
+msgid "Search stations…"
+msgstr "Tìm đài…"
+
+#: ui/views/radio-view.slint
+msgid "Filter stations…"
+msgstr "Lọc đài…"
+
+#: ui/views/radio-view.slint
+msgid "No stations kept yet"
+msgstr "Chưa lưu đài nào"
+
+#: ui/views/radio-view.slint
+msgid "Star a station in Browse, or add one by URL."
+msgstr "Gắn sao cho một đài trong mục Duyệt, hoặc thêm đài bằng URL."
+
+#: ui/views/radio-view.slint
+msgid "Stations you listen to show up here."
+msgstr "Các đài bạn nghe sẽ hiện ở đây."
+
+#: ui/views/radio/browse-tab.slint
+msgid "Searching the directory…"
+msgstr "Đang tìm trong danh bạ…"
+
+#: ui/views/radio/browse-tab.slint
+msgid "Stations are coming from radio-browser.info."
+msgstr "Các đài được lấy từ radio-browser.info."
+
+#: ui/views/radio/browse-tab.slint
+msgid "The station directory is unreachable"
+msgstr "Không thể kết nối với danh bạ đài"
+
+#: ui/views/radio/browse-tab.slint
+msgid "Check your connection and try again."
+msgstr "Hãy kiểm tra kết nối và thử lại."
+
+#: ui/views/radio/browse-tab.slint
+msgid "Try again"
+msgstr "Thử lại"
+
+#: ui/views/radio/browse-tab.slint ui/views/radio/kept-stations-tab.slint
+msgid "No stations matched"
+msgstr "Không có đài nào phù hợp"
+
+#: ui/views/radio/browse-tab.slint ui/views/radio/kept-stations-tab.slint
+msgid "Try a different name, or clear a filter."
+msgstr "Hãy thử tên khác, hoặc bỏ một bộ lọc."
+
+#: ui/views/radio/browse-tab.slint
+msgid "Load more stations"
+msgstr "Tải thêm đài"
+
+#: ui/views/radio/browse-tab.slint ui/views/radio/facet-chip.slint
+msgid "Loading…"
+msgstr "Đang tải…"
+
+#: ui/views/radio/facet-chip.slint
+msgid "Filter…"
+msgstr "Lọc…"
+
+#: ui/views/radio/facet-chip.slint
+msgid "Nothing to pick from"
+msgstr "Không có gì để chọn"
+
+#: ui/views/radio/station-detail.slint
+msgid "The directory reached this station on its last check."
+msgstr "Danh bạ đã kết nối được với đài này ở lần kiểm tra gần nhất."
+
+#: ui/views/radio/station-detail.slint
+msgid "The directory could not reach this station on its last check."
+msgstr "Danh bạ không kết nối được với đài này ở lần kiểm tra gần nhất."
+
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+msgid "{} kbps and up"
+msgstr "Từ {} kbps trở lên"
+
+#: ui/views/radio/suggestion-pill.slint
+msgid "{}: {}"
+msgstr "{}: {}"
+
+#: ui/views/radio/tab-pills.slint
+msgid "Add Station"
+msgstr "Thêm đài"
+
+#: ui/views/radio/tab-pills.slint
+msgid "Added"
+msgstr "Đã thêm"
+
+#: ui/views/radio/tab-pills.slint
+msgid "More station actions"
+msgstr "Thao tác khác với đài"
+
+#: ui/views/radio/tab-pills.slint
+msgid "Edit"
+msgstr "Sửa"
+
+#: ui/views/recently-played-view.slint
+msgid "Filter recently played…"
+msgstr "Lọc mục đã phát gần đây…"
+
+#: ui/views/recently-played-view.slint
+msgid "No recently played tracks"
+msgstr "Chưa có bản nhạc nào phát gần đây"
+
+#: ui/views/recently-played/most-played-tab.slint
+msgid "Play something and it will show up here."
+msgstr "Hãy phát một bài và nó sẽ hiện ở đây."
+
+#: ui/views/search-view.slint
+msgid "Searching…"
+msgstr "Đang tìm kiếm…"
+
+#: ui/views/search-view.slint
+msgid "Search your library…"
+msgstr "Tìm trong thư viện…"
+
+#: ui/views/search/no-results.slint
+msgid "No results found"
+msgstr "Không tìm thấy kết quả"
+
+#: ui/views/search/no-results.slint
+msgid "Try a different search term"
+msgstr "Hãy thử từ khóa khác"
+
+#: ui/views/search/recent-searches.slint
+msgid "Recent"
+msgstr "Gần đây"
+
+#: ui/views/search/recent-searches.slint
+msgid "Clear all"
+msgstr "Xóa tất cả"
+
+#: ui/views/search/songs-section.slint
+msgid "Show less"
+msgstr "Thu gọn"
+
+#: ui/views/search/songs-section.slint
+msgid "Show all {} songs"
+msgstr "Hiện tất cả {} bài hát"
+
+#: ui/views/search/top-result-card.slint
+msgid "Top Result"
+msgstr "Kết quả hàng đầu"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/interface-page.slint
+msgid "Interface"
+msgstr "Giao diện"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/library-page.slint
+msgid "Library"
+msgstr "Thư viện"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/playback-page.slint
+#: ui/views/settings/playback-section.slint
+msgid "Playback"
+msgstr "Phát nhạc"
+
+#: ui/views/settings-view.slint ui/views/settings/about-section.slint
+#: ui/views/settings/pages/about-page.slint
+msgid "About"
+msgstr "Giới thiệu"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/services-page.slint
+msgid "Services"
+msgstr "Dịch vụ"
+
+#: ui/views/settings-view.slint
+msgid "Search settings…"
+msgstr "Tìm cài đặt…"
+
+#. Translators: `{}` is the version number, such as 0.9.2
+#: ui/views/settings/about-section.slint
+msgid "Version {}"
+msgstr "Phiên bản {}"
+
+#. Translators: `{}` is the author's name, a proper noun kept as is
+#: ui/views/settings/about-section.slint
+msgid "Made by {}"
+msgstr "Tạo bởi {}"
+
+#. Translators: support as in funding the project, not technical support
+#: ui/views/settings/about-section.slint
+msgid "Support Melodia"
+msgstr "Ủng hộ Melodia"
+
+#: ui/views/settings/about-section.slint
+msgid "Melodia is free and open source. Support helps keep it going."
+msgstr "Melodia miễn phí và mã nguồn mở. Sự ủng hộ của bạn giúp dự án tiếp tục phát triển."
+
+#: ui/views/settings/about-section.slint
+msgid "License"
+msgstr "Giấy phép"
+
+#. Translators: Ko-fi is a brand and stays as is; support means funding
+#: ui/views/settings/about-section.slint
+msgid "Support me on Ko-fi"
+msgstr "Ủng hộ tôi trên Ko-fi"
+
+#: ui/views/settings/about-section.slint
+msgid "Welcome Guide"
+msgstr "Hướng dẫn chào mừng"
+
+#: ui/views/settings/about-section.slint
+msgid "Run the first-run setup again."
+msgstr "Chạy lại phần thiết lập lần đầu."
+
+#. Translators: a button in a narrow slot, so keep it short
+#: ui/views/settings/about-section.slint
+msgid "Show"
+msgstr "Hiện"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Color Style"
+msgstr "Kiểu màu"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Active — palette derived from the current track's artwork."
+msgstr "Đang bật: bảng màu lấy từ ảnh bìa của bản nhạc hiện tại."
+
+#: ui/views/settings/appearance-section.slint
+msgid "Generate theme colors from album artwork."
+msgstr "Tạo màu chủ đề từ ảnh bìa album."
+
+#: ui/views/settings/appearance-section.slint
+msgid "Aurora Backdrop"
+msgstr "Phông nền cực quang"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."
+msgstr "Tô phần đầu trang album, danh sách phát và Đang phát bằng một lớp màu lấy từ chính album, thay vì bản sao làm mờ của ảnh bìa. Không cần làm mờ nên phần đầu trang hiện nhanh hơn và Melodia nhẹ hơn. Cần khởi động lại để áp dụng."
+
+#: ui/views/settings/appearance-section.slint
+#: ui/views/settings/playback-section.slint
+msgid "None"
+msgstr "Không có"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Tonal Spot"
+msgstr "Tonal Spot"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Content"
+msgstr "Nội dung"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Vibrant"
+msgstr "Rực rỡ"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Expressive"
+msgstr "Biểu cảm"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Fidelity"
+msgstr "Trung thực"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Neutral"
+msgstr "Trung tính"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Monochrome"
+msgstr "Đơn sắc"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Changing the backdrop style requires restarting Melodia. Restart now?"
+msgstr "Thay đổi kiểu phông nền cần khởi động lại Melodia. Khởi động lại ngay?"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Diagnostics"
+msgstr "Chẩn đoán"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Logs"
+msgstr "Nhật ký"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Where Melodia writes its log files and crash reports."
+msgstr "Nơi Melodia ghi tệp nhật ký và báo cáo sự cố."
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Diagnostics report"
+msgstr "Báo cáo chẩn đoán"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "One text file with your system details, settings and recent logs, for attaching to a bug report."
+msgstr "Một tệp văn bản chứa thông tin hệ thống, cài đặt và nhật ký gần đây, để đính kèm vào báo cáo lỗi."
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Verbose logging"
+msgstr "Ghi nhật ký chi tiết"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Record extra detail. Turn this on, reproduce the problem, then save a report."
+msgstr "Ghi thêm chi tiết. Bật tùy chọn này, tái hiện sự cố rồi lưu báo cáo."
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Save…"
+msgstr "Lưu…"
+
+#: ui/views/settings/discord-section.slint
+msgid "Show album artwork"
+msgstr "Hiện ảnh bìa album"
+
+#: ui/views/settings/discord-section.slint
+msgid "Look up cover art online (via Deezer or iTunes) to show on the card"
+msgstr "Tìm ảnh bìa trực tuyến (qua Deezer hoặc iTunes) để hiện trên thẻ"
+
+#: ui/views/settings/discord-section.slint
+msgid "Hide while paused"
+msgstr "Ẩn khi tạm dừng"
+
+#: ui/views/settings/discord-section.slint
+msgid "Remove the card when paused instead of showing a paused marker"
+msgstr "Gỡ thẻ khi tạm dừng thay vì hiện dấu tạm dừng"
+
+#: ui/views/settings/discord-section.slint
+msgid "Status"
+msgstr "Trạng thái"
+
+#: ui/views/settings/discord-section.slint
+msgid "Connected to Discord"
+msgstr "Đã kết nối với Discord"
+
+#: ui/views/settings/discord-section.slint
+msgid "Discord not running"
+msgstr "Discord chưa chạy"
+
+#: ui/views/settings/file-watching-section.slint
+msgid "File Watching"
+msgstr "Theo dõi tệp"
+
+#: ui/views/settings/file-watching-section.slint
+msgid "Watch for file changes"
+msgstr "Theo dõi thay đổi tệp"
+
+#: ui/views/settings/file-watching-section.slint
+msgid "Automatically detect when files are added, removed, or changed in your library folders."
+msgstr "Tự động phát hiện khi tệp được thêm, xóa hoặc thay đổi trong các thư mục thư viện."
+
+#: ui/views/settings/language-section.slint
+msgid "Choose your preferred language"
+msgstr "Chọn ngôn ngữ bạn muốn dùng"
+
+#: ui/views/settings/library-section.slint
+msgid "Manage Folders"
+msgstr "Quản lý thư mục"
+
+#: ui/views/settings/library-section.slint
+msgid "Library Folders"
+msgstr "Thư mục thư viện"
+
+#: ui/views/settings/library-section.slint
+msgid "Remove Folder?"
+msgstr "Xóa thư mục?"
+
+#. Translators: `{}` is the absolute path of the folder being removed
+#: ui/views/settings/library-section.slint
+msgid "Remove \"{}\" from your library? All tracks under this folder will be removed from the library and from your playlists."
+msgstr "Xóa \"{}\" khỏi thư viện? Tất cả bản nhạc trong thư mục này sẽ bị xóa khỏi thư viện và khỏi các danh sách phát của bạn."
+
+#: ui/views/settings/library-section.slint
+msgid "No folders added"
+msgstr "Chưa thêm thư mục nào"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Show the playing track's words in Now Playing instead of Up Next"
+msgstr "Hiện lời của bản nhạc đang phát trong Đang phát thay cho Tiếp theo"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
+msgstr "Hiện cách đọc của mỗi dòng bằng chữ Latin bên dưới lời, với những hệ chữ không dùng chữ Latin"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Miniplayer"
+msgstr "Trình phát mini"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Window Buttons"
+msgstr "Nút cửa sổ"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "The minimize, full player and close buttons in the miniplayer's corner."
+msgstr "Các nút thu nhỏ, trình phát đầy đủ và đóng ở góc trình phát mini."
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Album Backdrop"
+msgstr "Phông nền album"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
+msgstr "Tô trình phát mini bằng màu của album đang phát, giống như màn hình Đang phát."
+
+#: ui/views/settings/motion-section.slint
+msgid "Motion"
+msgstr "Chuyển động"
+
+#: ui/views/settings/motion-section.slint
+msgid "Skip Startup Animation"
+msgstr "Bỏ qua hiệu ứng khởi động"
+
+#: ui/views/settings/motion-section.slint
+msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
+msgstr "Mở với thư viện đã hiện sẵn trên màn hình, thay vì mờ dần và trượt vào vị trí. Trang chi tiết bạn để mở vẫn sẽ mở rộng ra khi tải xong."
+
+#: ui/views/settings/output-section.slint
+msgid "Output"
+msgstr "Đầu ra"
+
+#: ui/views/settings/output-section.slint
+msgid "Output Mode"
+msgstr "Chế độ đầu ra"
+
+#: ui/views/settings/output-section.slint
+msgid "Exclusive gives Melodia the audio device alone: other apps can't play through it while Melodia plays, and the system mixer can't change the sound"
+msgstr "Độc quyền cho Melodia dùng riêng thiết bị âm thanh: các ứng dụng khác không thể phát qua thiết bị khi Melodia đang phát, và bộ trộn âm của hệ thống không thể thay đổi âm thanh"
+
+#: ui/views/settings/output-section.slint
+msgid "Output Device"
+msgstr "Thiết bị đầu ra"
+
+#: ui/views/settings/output-section.slint
+msgid "Exclusive Device"
+msgstr "Thiết bị độc quyền"
+
+#: ui/views/settings/output-section.slint
+msgid "The sound card Melodia plays through"
+msgstr "Card âm thanh mà Melodia phát qua"
+
+#: ui/views/settings/output-section.slint
+msgid "The sound card exclusive output takes"
+msgstr "Card âm thanh mà đầu ra độc quyền sử dụng"
+
+#: ui/views/settings/output-section.slint
+msgid "Unsupported Sample Rates"
+msgstr "Tần số lấy mẫu không được hỗ trợ"
+
+#: ui/views/settings/output-section.slint
+msgid "What exclusive output does when the device can't run a track's sample rate: hand the device back and play that track through the system mixer, or keep the device and convert the track to a rate it can run"
+msgstr "Cách đầu ra độc quyền xử lý khi thiết bị không chạy được tần số lấy mẫu của bản nhạc: trả lại thiết bị và phát bản nhạc đó qua bộ trộn âm của hệ thống, hoặc giữ thiết bị và chuyển bản nhạc sang tần số mà thiết bị chạy được"
+
+#: ui/views/settings/output-section.slint
+msgid "Buffer Period"
+msgstr "Chu kỳ bộ đệm"
+
+#: ui/views/settings/output-section.slint
+msgid "How much audio the device is handed at a time. Longer periods ride out a busy system; shorter ones react sooner"
+msgstr "Lượng âm thanh được giao cho thiết bị mỗi lần. Chu kỳ dài hơn chịu được hệ thống bận; chu kỳ ngắn hơn phản hồi nhanh hơn"
+
+#: ui/views/settings/output-section.slint
+msgid "Polling Mode"
+msgstr "Chế độ thăm dò"
+
+#: ui/views/settings/output-section.slint
+msgid "Top the device up on a timer instead of waiting for it to ask. Try it if a USB device stutters or crackles in exclusive mode"
+msgstr "Nạp dữ liệu cho thiết bị theo bộ hẹn giờ thay vì chờ thiết bị yêu cầu. Hãy thử nếu thiết bị USB bị giật hoặc rè ở chế độ độc quyền"
+
+#: ui/views/settings/output-section.slint
+msgid "Hardware Volume"
+msgstr "Âm lượng phần cứng"
+
+#: ui/views/settings/output-section.slint
+msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
+msgstr "Điều chỉnh âm lượng của chính thiết bị thay vì thay đổi biên độ mẫu, để thanh âm lượng giữ âm thanh bit-perfect. Điều khiển đó là âm lượng hệ thống của thiết bị và sẽ được khôi phục khi Melodia trả lại thiết bị. Thiết bị không có điều khiển này sẽ dùng âm lượng riêng của Melodia"
+
+#: ui/views/settings/output-section.slint
+msgid "Give the Device Back When Paused"
+msgstr "Trả lại thiết bị khi tạm dừng"
+
+#: ui/views/settings/output-section.slint
+msgid "After five minutes paused, hand the device back so other apps can play through it. Pressing play takes it again"
+msgstr "Sau năm phút tạm dừng, trả lại thiết bị để các ứng dụng khác có thể phát qua. Nhấn phát sẽ chiếm lại thiết bị"
+
+#: ui/views/settings/output-section.slint
+msgid "Silence After a Rate Change"
+msgstr "Khoảng lặng sau khi đổi tần số"
+
+#: ui/views/settings/output-section.slint
+msgid "Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off"
+msgstr "Một số DAC tắt tiếng trong giây lát khi chuyển tần số lấy mẫu. Một khoảng lặng ngắn ở mỗi lần đổi giúp phần đầu bản nhạc không bị mất"
+
+#: ui/views/settings/output-section.slint
+msgid "Match the File's Sample Rate"
+msgstr "Khớp tần số lấy mẫu của tệp"
+
+#: ui/views/settings/output-section.slint
+msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate"
+msgstr "Mở lại thiết bị âm thanh theo tần số riêng của từng bản nhạc, để hệ thống không lấy mẫu lại. Hệ thống phải cho phép tần số đó"
+
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Signal Path"
+msgstr "Đường tín hiệu"
+
+#: ui/views/settings/output-section.slint
+msgid "What reaches the audio device, and what changes it on the way. Bit-perfect means nothing does"
+msgstr "Những gì tới được thiết bị âm thanh, và những gì thay đổi nó trên đường đi. Bit-perfect nghĩa là không có gì thay đổi"
+
+#: ui/views/settings/output-section.slint
+msgid "the device is in use by another app"
+msgstr "thiết bị đang được ứng dụng khác sử dụng"
+
+#: ui/views/settings/output-section.slint
+msgid "{} holds the device"
+msgstr "{} đang giữ thiết bị"
+
+#: ui/views/settings/output-section.slint
+msgid "another app holds the device"
+msgstr "một ứng dụng khác đang giữ thiết bị"
+
+#: ui/views/settings/output-section.slint
+msgid "the device can't run at this sample rate"
+msgstr "thiết bị không chạy được ở tần số lấy mẫu này"
+
+#: ui/views/settings/output-section.slint
+msgid "the device can't play this many channels"
+msgstr "thiết bị không phát được số kênh này"
+
+#: ui/views/settings/output-section.slint
+msgid "the device takes no sample format that holds this track"
+msgstr "thiết bị không nhận định dạng mẫu nào chứa được bản nhạc này"
+
+#: ui/views/settings/output-section.slint
+msgid "the chosen device isn't connected"
+msgstr "thiết bị đã chọn chưa được kết nối"
+
+#: ui/views/settings/output-section.slint
+msgid "exclusive output isn't available on this system"
+msgstr "đầu ra độc quyền không khả dụng trên hệ thống này"
+
+#: ui/views/settings/output-section.slint
+msgid "the device doesn't allow exclusive control, which its Advanced properties in the Sound control panel can turn on"
+msgstr "thiết bị không cho phép điều khiển độc quyền; bạn có thể bật tính năng này trong thuộc tính Nâng cao của thiết bị tại bảng điều khiển Âm thanh"
+
+#: ui/views/settings/output-section.slint
+msgid "the device couldn't be opened"
+msgstr "không thể mở thiết bị"
+
+#: ui/views/settings/output-section.slint
+msgid "No effects"
+msgstr "Không có hiệu ứng"
+
+#: ui/views/settings/output-section.slint
+msgid "Equalizer and ReplayGain"
+msgstr "Bộ chỉnh âm và ReplayGain"
+
+#: ui/views/settings/output-section.slint
+msgid "Shared"
+msgstr "Dùng chung"
+
+#: ui/views/settings/output-section.slint
+msgid "Exclusive"
+msgstr "Độc quyền"
+
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/scrobbling-section.slint
+msgid "Not connected"
+msgstr "Chưa kết nối"
+
+#: ui/views/settings/output-section.slint
+msgid "Play Through the System Mixer"
+msgstr "Phát qua bộ trộn âm của hệ thống"
+
+#: ui/views/settings/output-section.slint
+msgid "Resample and Keep Exclusive"
+msgstr "Lấy mẫu lại và giữ độc quyền"
+
+#: ui/views/settings/output-section.slint
+msgid "{} ms"
+msgstr "{} ms"
+
+#: ui/views/settings/output-section.slint
+msgid "The device is running at {}"
+msgstr "Thiết bị đang chạy ở {}"
+
+#: ui/views/settings/output-section.slint
+msgid "Make Bit-Perfect"
+msgstr "Chuyển sang Bit-perfect"
+
+#: ui/views/settings/output-section.slint
+msgid "Switch to Exclusive Output?"
+msgstr "Chuyển sang đầu ra độc quyền?"
+
+#: ui/views/settings/output-section.slint
+msgid "Bit-perfect playback needs exclusive output. Other apps can't play through the device while Melodia does, and the system volume stops applying: Melodia's own volume goes to full unless Hardware Volume is on."
+msgstr "Phát bit-perfect cần đầu ra độc quyền. Các ứng dụng khác không thể phát qua thiết bị khi Melodia đang phát, và âm lượng hệ thống không còn tác dụng: âm lượng riêng của Melodia sẽ lên mức tối đa trừ khi bật Âm lượng phần cứng."
+
+#: ui/views/settings/output-section.slint
+msgid "Switch"
+msgstr "Chuyển"
+
+#: ui/views/settings/output-section.slint
+msgid "Source"
+msgstr "Nguồn"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, decoded from a lossy codec"
+msgstr "{}, giải mã từ codec nén mất dữ liệu"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, rounded to fit 32-bit float"
+msgstr "{}, làm tròn cho vừa số thực 32-bit"
+
+#: ui/views/settings/output-section.slint
+msgid "Effects"
+msgstr "Hiệu ứng"
+
+#: ui/views/settings/output-section.slint
+msgid "Normal"
+msgstr "Bình thường"
+
+#: ui/views/settings/output-section.slint
+msgid "Volume"
+msgstr "Âm lượng"
+
+#: ui/views/settings/output-section.slint
+msgid "Muted"
+msgstr "Đã tắt tiếng"
+
+#: ui/views/settings/output-section.slint
+msgid "{}% (the device muted)"
+msgstr "{}% (thiết bị đã tắt tiếng)"
+
+#: ui/views/settings/output-section.slint
+msgid "{}% on the device"
+msgstr "{}% trên thiết bị"
+
+#: ui/views/settings/output-section.slint
+msgid "{}% (the device at {}%)"
+msgstr "{}% (thiết bị ở mức {}%)"
+
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/playback-section.slint
+msgid "Crossfade"
+msgstr "Chuyển tiếp mượt"
+
+#: ui/views/settings/output-section.slint
+msgid "Fading between tracks"
+msgstr "Đang chuyển tiếp mượt giữa các bản nhạc"
+
+#: ui/views/settings/output-section.slint
+msgid "Not fading"
+msgstr "Không chuyển tiếp mượt"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled to {}"
+msgstr "{} được lấy mẫu lại thành {}"
+
+#: ui/views/settings/output-section.slint
+msgid "Mixed down for the device"
+msgstr "Đã trộn giảm kênh cho thiết bị"
+
+#: ui/views/settings/output-section.slint
+msgid "Unchanged"
+msgstr "Không thay đổi"
+
+#: ui/views/settings/output-section.slint
+msgid "Device"
+msgstr "Thiết bị"
+
+#: ui/views/settings/output-section.slint
+msgid "{} refused exclusive output because {}. Playing shared on {}"
+msgstr "{} đã từ chối đầu ra độc quyền vì {}. Đang phát dùng chung trên {}"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, shared: exclusive output was refused because {}"
+msgstr "{}, dùng chung: đầu ra độc quyền bị từ chối vì {}"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, shared: the system mixer may still convert it"
+msgstr "{}, dùng chung: bộ trộn âm của hệ thống vẫn có thể chuyển đổi"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, exclusive"
+msgstr "{}, độc quyền"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, exclusive, in a format that can't hold the source exactly"
+msgstr "{}, độc quyền, ở định dạng không chứa được nguồn một cách chính xác"
+
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Player Bar"
+msgstr "Thanh trình phát"
+
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Overflow Menu Buttons"
+msgstr "Nút trong menu mở rộng"
+
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Move selected buttons into a compact overflow menu in the player bar"
+msgstr "Chuyển các nút đã chọn vào một menu mở rộng gọn trên thanh trình phát"
+
+#: ui/views/settings/playback-section.slint
+msgid "Gapless Playback"
+msgstr "Phát liền mạch"
+
+#: ui/views/settings/playback-section.slint
+msgid "Seamless transitions between tracks without silence gaps"
+msgstr "Chuyển tiếp giữa các bản nhạc không có khoảng lặng"
+
+#: ui/views/settings/playback-section.slint
+msgid "Play Button Animation"
+msgstr "Hiệu ứng nút phát"
+
+#: ui/views/settings/playback-section.slint
+msgid "Visual effect on the play button while music is playing"
+msgstr "Hiệu ứng hình ảnh trên nút phát khi đang phát nhạc"
+
+#: ui/views/settings/playback-section.slint
+msgid "Resume on Startup"
+msgstr "Tiếp tục phát khi khởi động"
+
+#: ui/views/settings/playback-section.slint
+msgid "Automatically resume the last track from where you left off when the app starts"
+msgstr "Tự động phát tiếp bản nhạc cuối cùng từ chỗ bạn dừng khi ứng dụng khởi động"
+
+#: ui/views/settings/playback-section.slint
+msgid "Overlap the end of one track with the start of the next"
+msgstr "Chồng phần cuối của bản nhạc này lên phần đầu của bản tiếp theo"
+
+#: ui/views/settings/playback-section.slint
+msgid "Overlap the end of one track with the start of the next, unless the device has to change format between them"
+msgstr "Chồng phần cuối của bản nhạc này lên phần đầu của bản tiếp theo, trừ khi thiết bị phải đổi định dạng giữa hai bản"
+
+#: ui/views/settings/playback-section.slint
+msgid "Crossfade duration"
+msgstr "Thời lượng chuyển tiếp mượt"
+
+#: ui/views/settings/playback-section.slint
+msgid "How long the two tracks overlap"
+msgstr "Thời gian hai bản nhạc chồng lên nhau"
+
+#: ui/views/settings/playback-section.slint
+msgid "Except on the same album"
+msgstr "Trừ khi cùng album"
+
+#: ui/views/settings/playback-section.slint
+msgid "Keep tracks from one album gapless, so continuous mixes stay seamless"
+msgstr "Giữ các bản nhạc trong cùng album liền mạch, để các bản mix liên tục không bị ngắt quãng"
+
+#: ui/views/settings/playback-section.slint
+msgid "Also on manual track change"
+msgstr "Cả khi chuyển bài thủ công"
+
+#: ui/views/settings/playback-section.slint
+msgid "Crossfade when you skip to the next or previous track, not only at the end of one"
+msgstr "Chuyển tiếp mượt cả khi bạn chuyển sang bản trước hoặc bản tiếp theo, không chỉ khi hết một bản"
+
+#: ui/views/settings/playback-section.slint
+msgid "Fade out on pause"
+msgstr "Giảm dần âm lượng khi tạm dừng"
+
+#: ui/views/settings/playback-section.slint
+msgid "Fade the music out when pausing or stopping, and back in when resuming"
+msgstr "Giảm dần âm lượng khi tạm dừng hoặc dừng, và tăng dần trở lại khi tiếp tục"
+
+#: ui/views/settings/playback-section.slint
+msgid "Show an audio visualizer on the Now Playing screen"
+msgstr "Hiện sóng nhạc trên màn hình Đang phát"
+
+#: ui/views/settings/playback-section.slint
+msgid "Visualizer Style"
+msgstr "Kiểu sóng nhạc"
+
+#: ui/views/settings/playback-section.slint
+msgid "Choose how the visualizer draws the audio"
+msgstr "Chọn cách hiển thị sóng nhạc"
+
+#. Translators: `{}` is a duration in seconds, such as 2.5
+#: ui/views/settings/playback-section.slint
+msgid "{} s"
+msgstr "{} giây"
+
+#: ui/views/settings/radio-section.slint
+msgid "Hide segmented stations"
+msgstr "Ẩn đài phát theo phân đoạn"
+
+#: ui/views/settings/radio-section.slint
+msgid "Segmented (HLS) streams play, but take longer to start"
+msgstr "Luồng phân đoạn (HLS) vẫn phát được, nhưng mất nhiều thời gian hơn để bắt đầu"
+
+#: ui/views/settings/radio-section.slint
+msgid "Report plays to the directory"
+msgstr "Báo lượt phát cho danh bạ"
+
+#: ui/views/settings/radio-section.slint
+msgid "An anonymous count is what orders stations by popularity"
+msgstr "Số lượt đếm ẩn danh này dùng để xếp hạng đài theo độ phổ biến"
+
+#: ui/views/settings/ratings-section.slint
+msgid "Ratings"
+msgstr "Đánh giá"
+
+#: ui/views/settings/ratings-section.slint
+msgid "Save ratings to files"
+msgstr "Lưu đánh giá vào tệp"
+
+#: ui/views/settings/ratings-section.slint
+msgid "Write star ratings into each file's tags, so they survive a rescan and other players can read them."
+msgstr "Ghi số sao đánh giá vào thẻ của từng tệp, để không bị mất khi quét lại và các trình phát khác cũng đọc được."
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Last.fm"
+msgstr "Last.fm"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobble to Last.fm"
+msgstr "Scrobble lên Last.fm"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Report each play to your Last.fm account"
+msgstr "Báo mỗi lượt phát cho tài khoản Last.fm của bạn"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Sync loved tracks to Last.fm"
+msgstr "Đồng bộ bản nhạc đã thích lên Last.fm"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Mark tracks you love as loved on Last.fm — turning this on syncs your existing favorites"
+msgstr "Đánh dấu bản nhạc bạn yêu thích là \"đã thích\" trên Last.fm; bật tùy chọn này sẽ đồng bộ các mục yêu thích hiện có"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "ListenBrainz"
+msgstr "ListenBrainz"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobble to ListenBrainz"
+msgstr "Scrobble lên ListenBrainz"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Report each play to your ListenBrainz account"
+msgstr "Báo mỗi lượt phát cho tài khoản ListenBrainz của bạn"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Sync loved tracks to ListenBrainz"
+msgstr "Đồng bộ bản nhạc đã thích lên ListenBrainz"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)"
+msgstr "Đánh dấu bản nhạc bạn yêu thích là \"đã thích\" trên ListenBrainz; bật tùy chọn này sẽ đồng bộ các mục yêu thích hiện có (cần ID MusicBrainz)"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "MusicBrainz Picard adds these IDs to your files, identifying each track by its audio."
+msgstr "MusicBrainz Picard thêm các ID này vào tệp của bạn, nhận diện từng bản nhạc qua âm thanh của nó."
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobble radio songs"
+msgstr "Scrobble bài hát từ radio"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Songs heard in full on a station go to your connected scrobbling services"
+msgstr "Bài hát được nghe trọn vẹn trên một đài sẽ được gửi tới các dịch vụ scrobble đã kết nối"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Connected as {}"
+msgstr "Đã kết nối với tên {}"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Not configured in this build"
+msgstr "Chưa được cấu hình trong bản dựng này"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Connect Last.fm"
+msgstr "Kết nối Last.fm"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Disconnect"
+msgstr "Ngắt kết nối"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Connect ListenBrainz"
+msgstr "Kết nối ListenBrainz"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Turn on Last.fm or ListenBrainz above first"
+msgstr "Hãy bật Last.fm hoặc ListenBrainz ở trên trước"
+
+#: ui/views/settings/settings-tabs.slint
+msgid "No matching settings"
+msgstr "Không có cài đặt phù hợp"
+
+#: ui/views/settings/update-section.slint
+msgid "Updates"
+msgstr "Cập nhật"
+
+#: ui/views/settings/update-section.slint
+msgid "Software Updates"
+msgstr "Cập nhật phần mềm"
+
+#: ui/views/settings/update-section.slint
+msgid "Current version: {}"
+msgstr "Phiên bản hiện tại: {}"
+
+#: ui/views/settings/update-section.slint
+msgid "You're up to date!"
+msgstr "Bạn đang dùng phiên bản mới nhất!"
+
+#: ui/views/settings/update-section.slint
+msgid "Melodia {} is the latest version."
+msgstr "Melodia {} là phiên bản mới nhất."
+
+#: ui/views/settings/update-section.slint
+msgid "Update Installed"
+msgstr "Đã cài đặt bản cập nhật"
+
+#: ui/views/settings/update-section.slint
+msgid "Restart Melodia to apply the update"
+msgstr "Khởi động lại Melodia để áp dụng bản cập nhật"
+
+#: ui/views/settings/update-section.slint
+msgid "Version {} Available"
+msgstr "Đã có phiên bản {}"
+
+#: ui/views/settings/update-section.slint
+msgid "Updates managed by your package manager"
+msgstr "Bản cập nhật do trình quản lý gói của bạn quản lý"
+
+#: ui/views/settings/update-section.slint
+msgid "Re-run the latest .msi installer from the Releases page."
+msgstr "Chạy lại trình cài đặt .msi mới nhất từ trang Releases."
+
+#: ui/views/settings/update-section.slint
+msgid "Use brew upgrade melodia."
+msgstr "Dùng lệnh brew upgrade melodia."
+
+#: ui/views/settings/update-section.slint
+msgid "Use sudo dnf update melodia (or your distro equivalent)."
+msgstr "Dùng lệnh sudo dnf update melodia (hoặc lệnh tương đương trên bản phân phối của bạn)."
+
+#: ui/views/settings/update-section.slint
+msgid "Check for Updates"
+msgstr "Kiểm tra cập nhật"
+
+#: ui/views/settings/update-section.slint
+msgid "Checking..."
+msgstr "Đang kiểm tra..."
+
+#: ui/views/settings/update-section.slint
+msgid "Restart Now"
+msgstr "Khởi động lại ngay"
+
+#: ui/views/settings/update-section.slint
+msgid "Download & Install"
+msgstr "Tải xuống và cài đặt"
+
+#: ui/views/settings/update-section.slint
+msgid "Installing..."
+msgstr "Đang cài đặt..."
+
+#: ui/views/settings/update-section.slint
+msgid "Skip this version"
+msgstr "Bỏ qua phiên bản này"
+
+#: ui/views/settings/update-section.slint
+msgid "Critical update"
+msgstr "Bản cập nhật quan trọng"
+
+#: ui/views/settings/update-section.slint
+msgid "This update fixes a critical issue and can't be skipped."
+msgstr "Bản cập nhật này sửa một lỗi nghiêm trọng và không thể bỏ qua."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window"
+msgstr "Cửa sổ"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Managed by the operating system"
+msgstr "Do hệ điều hành quản lý"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Native Title Bar"
+msgstr "Thanh tiêu đề gốc"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Use the operating system's native title bar instead of the custom one. Restart required to apply."
+msgstr "Dùng thanh tiêu đề gốc của hệ điều hành thay cho thanh tùy chỉnh. Cần khởi động lại để áp dụng."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Match Unfocused Window Background"
+msgstr "Khớp nền cửa sổ khi mất tiêu điểm"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Only available with the native title bar."
+msgstr "Chỉ khả dụng với thanh tiêu đề gốc."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Tint the sidebar and now-playing bar toward the content background when the window loses focus."
+msgstr "Phủ màu thanh bên và thanh đang phát theo nền nội dung khi cửa sổ mất tiêu điểm."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Corner Radius"
+msgstr "Bo góc cửa sổ"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border"
+msgstr "Viền cửa sổ"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Draw a thin outline around the miniplayer. The full window keeps the border of its system frame."
+msgstr "Vẽ một đường viền mảnh quanh trình phát mini. Cửa sổ đầy đủ giữ viền khung của hệ thống."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Draw a thin outline around the whole window, the miniplayer included."
+msgstr "Vẽ một đường viền mảnh quanh toàn bộ cửa sổ, kể cả trình phát mini."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border Color"
+msgstr "Màu viền cửa sổ"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System follows the color the operating system draws its own window borders in."
+msgstr "Hệ thống sẽ theo màu mà hệ điều hành dùng cho viền cửa sổ của chính nó."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Available only while the window border is shown."
+msgstr "Chỉ khả dụng khi viền cửa sổ đang hiện."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Decoration Button Style"
+msgstr "Kiểu nút điều khiển cửa sổ"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Decoration Button Side"
+msgstr "Vị trí nút điều khiển cửa sổ"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System Tray Icon"
+msgstr "Biểu tượng khay hệ thống"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Show a Melodia icon in the system tray with playback controls."
+msgstr "Hiện biểu tượng Melodia trong khay hệ thống kèm các nút điều khiển phát nhạc."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Close to Tray"
+msgstr "Đóng xuống khay"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Keep Melodia running in the system tray when you close the window, instead of quitting."
+msgstr "Giữ Melodia chạy trong khay hệ thống khi bạn đóng cửa sổ, thay vì thoát."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Available only while the system tray icon is active."
+msgstr "Chỉ khả dụng khi biểu tượng khay hệ thống đang bật."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Switching to the native title bar requires restarting Melodia. Restart now?"
+msgstr "Chuyển sang thanh tiêu đề gốc cần khởi động lại Melodia. Khởi động lại ngay?"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Switching to the custom title bar requires restarting Melodia. Restart now?"
+msgstr "Chuyển sang thanh tiêu đề tùy chỉnh cần khởi động lại Melodia. Khởi động lại ngay?"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Square"
+msgstr "Vuông"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Left"
+msgstr "Trái"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Right"
+msgstr "Phải"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Changing the system tray icon requires restarting Melodia. Restart now?"
+msgstr "Thay đổi biểu tượng khay hệ thống cần khởi động lại Melodia. Khởi động lại ngay?"

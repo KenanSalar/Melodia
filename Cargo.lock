@@ -3682,6 +3682,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "ttf-parser",
+ "unicode-normalization",
  "winresource",
 ]
 

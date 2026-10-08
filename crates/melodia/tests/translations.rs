@@ -22,8 +22,11 @@ use melodia_testkit::{
     stripped_sources,
 };
 use ttf_parser::Face;
+use unicode_normalization::UnicodeNormalization;
 
 const TRANSLATIONS_DIR: &str = concat!(env!("MELODIA_REPO_ROOT"), "crates/melodia-ui/translations");
+
+const FONT_BUILD: &str = concat!(env!("MELODIA_REPO_ROOT"), "scripts/patch_vazirmatn.py");
 
 /// Floor under every msgid count here, the tree's and each parsed file's, so a broken walk or
 /// parser can't pass vacuously. Loose on purpose; it only catches a traversal or a parse that
@@ -257,16 +260,16 @@ fn unmatched<V: PartialEq + Debug>(
         .collect()
 }
 
-fn read_po(path: &Path) -> String {
-    let po = fs::read_to_string(path);
-    assert!(po.is_ok(), "can't read {}: {po:?}", path.display());
-    po.unwrap_or_default()
+fn read_source(path: &Path) -> String {
+    let source = fs::read_to_string(path);
+    assert!(source.is_ok(), "can't read {}: {source:?}", path.display());
+    source.unwrap_or_default()
 }
 
 /// `path` parsed, asserting it read and held at least [`MIN_MSGIDS`] entries, so a parser that
 /// broke can't make every check over it pass on nothing.
 fn read_entries(path: &Path) -> Vec<Entry> {
-    let entries = parse_po(&read_po(path));
+    let entries = parse_po(&read_source(path));
     assert!(
         entries.len() >= MIN_MSGIDS,
         "only {} entries parsed from {}",
@@ -338,11 +341,98 @@ fn missing_glyphs(
         .filter(|(character, _)| face.glyph_index(**character).is_none())
         .map(|(character, codes)| {
             format!(
-                "{face_name} lacks {character} (U+{:04X}), set by {codes:?}",
+                "{face_name} lacks {character} (U+{:04X}), for {codes:?}",
                 u32::from(*character)
             )
         })
         .collect()
+}
+
+/// [`missing_glyphs`] over every bundled text face, asserting the walk found each weight the UI
+/// sets text in and that each one read and parsed.
+fn missing_from_text_faces(characters: &BTreeMap<char, BTreeSet<&str>>) -> Vec<String> {
+    let (faces, unwalkable) = text_faces();
+    assert!(unwalkable.is_empty(), "unreadable font directories: {unwalkable:?}");
+    assert!(
+        faces.len() >= MIN_TEXT_FACES,
+        "only {} text faces found under vazirmatn/, so the check covers fewer weights than the \
+         UI sets text in",
+        faces.len()
+    );
+
+    let mut unreadable = Vec::new();
+    let mut missing = Vec::new();
+    for path in &faces {
+        let face_name = rel_path(REPO_ROOT, path);
+        let data = match fs::read(path) {
+            Ok(data) => data,
+            Err(e) => {
+                unreadable.push(format!("{face_name}: {e}"));
+                continue;
+            }
+        };
+        match Face::parse(&data, 0) {
+            Ok(face) => missing.extend(missing_glyphs(&face, characters, &face_name)),
+            Err(e) => unreadable.push(format!("{face_name}: {e}")),
+        }
+    }
+    assert!(unreadable.is_empty(), "text faces that won't read or parse: {unreadable:?}");
+    missing
+}
+
+/// The font build's `LANGUAGE_LETTERS`, code → letters, and every line inside the table that
+/// isn't a `"code": "letters",` row. A row holding an escape counts as unparsed, since its letters
+/// would be checked as the escape's own ASCII, which every face carries.
+fn merged_alphabets(script: &str) -> (BTreeMap<&str, &str>, Vec<&str>) {
+    let mut alphabets = BTreeMap::new();
+    let mut unparsed = Vec::new();
+    let table = script
+        .lines()
+        .skip_while(|line| *line != "LANGUAGE_LETTERS = {")
+        .skip(1)
+        .take_while(|line| *line != "}");
+    for line in table {
+        let row = line.trim();
+        if row.is_empty() || row.starts_with('#') {
+            continue;
+        }
+        let parsed = row
+            .strip_prefix('"')
+            .and_then(|row| row.strip_suffix("\","))
+            .and_then(|row| row.split_once("\": \""))
+            .filter(|(_, letters)| !letters.contains('\\'));
+        match parsed {
+            Some((code, letters)) => {
+                alphabets.insert(code, letters);
+            }
+            None => unparsed.push(line),
+        }
+    }
+    (alphabets, unparsed)
+}
+
+/// What the font build merges for `letters`, derived as its `language_codepoints` does: each
+/// letter in both cases, and the codepoints each spelling decomposes to.
+fn alphabet_codepoints(letters: &str) -> BTreeSet<char> {
+    let mut codepoints = BTreeSet::new();
+    for letter in letters.chars() {
+        for spelling in [String::from(letter), letter.to_uppercase().collect()] {
+            codepoints.extend(spelling.chars());
+            codepoints.extend(spelling.nfd());
+        }
+    }
+    codepoints
+}
+
+/// Every codepoint the merged alphabets owe the faces, each with the languages owing it.
+fn owed_characters<'a>(alphabets: &BTreeMap<&'a str, &str>) -> BTreeMap<char, BTreeSet<&'a str>> {
+    let mut owed: BTreeMap<char, BTreeSet<&str>> = BTreeMap::new();
+    for (code, letters) in alphabets {
+        for codepoint in alphabet_codepoints(letters) {
+            owed.entry(codepoint).or_default().insert(*code);
+        }
+    }
+    owed
 }
 
 /// The msgids the Slint tree registers, by the same extraction Slint's codegen runs.
@@ -533,7 +623,7 @@ msgid "no msgstr at all"
 fn every_plural_carries_as_many_forms_as_its_catalogue_declares() {
     let mut mismatched = Vec::new();
     for (code, entries) in catalogues() {
-        let Some(declared) = declared_plural_forms(&read_po(&catalogue_path(code))) else {
+        let Some(declared) = declared_plural_forms(&read_source(&catalogue_path(code))) else {
             mismatched.push(format!("{code}: the header declares no nplurals"));
             continue;
         };
@@ -735,39 +825,58 @@ fn the_shipped_catalogues_are_exactly_the_supported_locales_but_english() {
 /// a row in `scripts/patch_vazirmatn.py`'s `LANGUAGE_LETTERS` and the faces are rebuilt.
 #[test]
 fn every_character_a_locale_sets_is_in_the_bundled_faces() {
-    let characters = shipped_characters();
-    let (faces, unwalkable) = text_faces();
-    assert!(unwalkable.is_empty(), "unreadable font directories: {unwalkable:?}");
-    assert!(
-        faces.len() >= MIN_TEXT_FACES,
-        "only {} text faces found under vazirmatn/, so the check below covers fewer weights \
-         than the UI sets text in",
-        faces.len()
-    );
+    let missing = missing_from_text_faces(&shipped_characters());
 
-    let mut unreadable = Vec::new();
-    let mut missing = Vec::new();
-    for path in &faces {
-        let face_name = rel_path(REPO_ROOT, path);
-        let data = match fs::read(path) {
-            Ok(data) => data,
-            Err(e) => {
-                unreadable.push(format!("{face_name}: {e}"));
-                continue;
-            }
-        };
-        match Face::parse(&data, 0) {
-            Ok(face) => missing.extend(missing_glyphs(&face, &characters, &face_name)),
-            Err(e) => unreadable.push(format!("{face_name}: {e}")),
-        }
-    }
-
-    assert!(unreadable.is_empty(), "text faces that won't read or parse: {unreadable:?}");
     assert!(
         missing.is_empty(),
         "these characters fall back to an OS face, off-centre wherever there is one and missing \
          where there isn't. Add the language's letters to `LANGUAGE_LETTERS` in \
          scripts/patch_vazirmatn.py and re-run it: {missing:#?}"
+    );
+}
+
+/// Every letter `LANGUAGE_LETTERS` merges into the bundled faces, in both cases and decomposed, is
+/// in each of them.
+///
+/// The check above reads what the catalogues set, which is only the part of an alphabet their
+/// strings happen to use. Titles, artist names and file names use the rest, and Vietnamese's
+/// catalogue sets few of its capitals.
+#[test]
+fn every_letter_a_merged_alphabet_owes_is_in_the_bundled_faces() {
+    let script = read_source(Path::new(FONT_BUILD));
+    let (alphabets, unparsed) = merged_alphabets(&script);
+    assert!(
+        unparsed.is_empty(),
+        "LANGUAGE_LETTERS lines that don't read as a `\"code\": \"letters\",` row, so their \
+         letters go unchecked: {unparsed:?}"
+    );
+    assert!(!alphabets.is_empty(), "no LANGUAGE_LETTERS rows found in {FONT_BUILD}");
+
+    let missing = missing_from_text_faces(&owed_characters(&alphabets));
+
+    assert!(
+        missing.is_empty(),
+        "the faces lack letters LANGUAGE_LETTERS merges, so they were built from another table \
+         or replaced by hand. Re-run scripts/patch_vazirmatn.py: {missing:#?}"
+    );
+}
+
+/// Every face carries what it owes, so the check above passes the same whether it derives the
+/// capitals and decomposed marks or reads only the letters the table spells; only hand-written
+/// letters can tell. ΐ is the edge the font build names too: it has no precomposed capital, so its
+/// capital is three codepoints.
+#[test]
+fn a_merged_letter_owes_both_its_cases_and_what_they_decompose_to() {
+    let owed = [("ặ", alphabet_codepoints("ặ")), ("ΐ", alphabet_codepoints("ΐ"))];
+
+    assert_eq!(
+        owed,
+        [
+            ("ặ", BTreeSet::from(['ặ', 'Ặ', 'a', 'A', '\u{323}', '\u{306}'])),
+            ("ΐ", BTreeSet::from(['ΐ', 'ι', 'Ι', '\u{308}', '\u{301}'])),
+        ],
+        "the font build merges each letter's capital and what both spellings decompose to, so a \
+         title in capitals or a decomposed file name still finds a merged glyph"
     );
 }
 
