@@ -165,6 +165,19 @@ fn parse_entry(block: &str) -> Option<Entry> {
     (!entry.msgid.is_empty()).then_some(entry)
 }
 
+/// The `nplurals` `po`'s header declares, which is how many forms each of its plurals owes.
+fn declared_plural_forms(po: &str) -> Option<usize> {
+    let header: Vec<&str> = po.split("\n\n").next()?.lines().collect();
+    let at = header.iter().position(|line| line.starts_with("msgstr "))?;
+    let fields = read_po_value(&header, at, "msgstr")?;
+    let plural_forms = fields.split("\\n").find_map(|field| field.strip_prefix("Plural-Forms:"))?;
+    plural_forms
+        .split(';')
+        .filter_map(|setting| setting.split_once('='))
+        .find(|(key, _)| key.trim() == "nplurals")
+        .and_then(|(_, count)| count.trim().parse().ok())
+}
+
 fn msgids(entries: &[Entry]) -> Msgids {
     entries.iter().map(|entry| (entry.msgid.clone(), entry.msgid_plural.clone())).collect()
 }
@@ -188,12 +201,16 @@ fn unmatched<V: PartialEq + Debug>(
         .collect()
 }
 
+fn read_po(path: &Path) -> String {
+    let po = fs::read_to_string(path);
+    assert!(po.is_ok(), "can't read {}: {po:?}", path.display());
+    po.unwrap_or_default()
+}
+
 /// `path` parsed, asserting it read and held at least [`MIN_MSGIDS`] entries, so a parser that
 /// broke can't make every check over it pass on nothing.
 fn read_entries(path: &Path) -> Vec<Entry> {
-    let po = fs::read_to_string(path);
-    assert!(po.is_ok(), "can't read {}: {po:?}", path.display());
-    let entries = parse_po(&po.unwrap_or_default());
+    let entries = parse_po(&read_po(path));
     assert!(
         entries.len() >= MIN_MSGIDS,
         "only {} entries parsed from {}",
@@ -367,6 +384,12 @@ msgid_plural "{n} plurals missing their first form"
 msgstr[0] ""
 msgstr[1] "many"
 
+msgid "{n} plural missing its third form"
+msgid_plural "{n} plurals missing their third form"
+msgstr[0] "one"
+msgstr[1] "few"
+msgstr[2] ""
+
 msgid "no msgstr at all"
 "#;
 
@@ -386,10 +409,35 @@ msgid "no msgstr at all"
             ("{n} plural with every form", false),
             ("{n} plural missing its second form", true),
             ("{n} plural missing its first form", true),
+            ("{n} plural missing its third form", true),
             ("no msgstr at all", true),
         ],
         "the parser disagrees with Slint about what ships in English, so the catalogue check \
          would pass an entry users see untranslated or fail one they don't"
+    );
+}
+
+/// Slint picks a plural's form by its catalogue's `Plural-Forms` rule and shows the first form
+/// where the entry has none at that index, so a Polish plural left at the template's two forms
+/// prints the singular after "5" and nothing marks it unfinished. The script's `msgfmt -c` says
+/// so, but only where the script runs.
+#[test]
+fn every_plural_carries_as_many_forms_as_its_catalogue_declares() {
+    let mut mismatched = Vec::new();
+    for (code, entries) in catalogues() {
+        let Some(declared) = declared_plural_forms(&read_po(&catalogue_path(code))) else {
+            mismatched.push(format!("{code}: the header declares no nplurals"));
+            continue;
+        };
+        let plurals = entries.iter().filter(|entry| entry.msgid_plural.is_some());
+        mismatched.extend(plurals.filter(|entry| entry.msgstrs.len() != declared).map(|entry| {
+            format!("{code}: \"{}\" has {} of {declared} forms", entry.msgid, entry.msgstrs.len())
+        }));
+    }
+    assert!(
+        mismatched.is_empty(),
+        "Slint shows the singular for a form a plural lacks, so each owes exactly the forms its \
+         catalogue's header declares: {mismatched:?}"
     );
 }
 
