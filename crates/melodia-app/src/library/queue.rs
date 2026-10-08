@@ -379,7 +379,7 @@ async fn plan_restore(
         })
     })
     .await
-    .map_err(|e| AppError::Settings(format!("restore_persisted_playback join: {e}")))??;
+    .map_err(|e| AppError::io("restore_persisted_playback join", e))??;
 
     Ok(RestorePlan { persisted, summaries, station, repeat_mode, shuffle_enabled })
 }

@@ -116,7 +116,7 @@ pub fn install_artwork_restore_subscriber(
         }
     }))
     .map(|_| ())
-    .map_err(|e| melodia_core::error::AppError::Window(format!("artwork restore subscriber: {e}")))
+    .map_err(|e| melodia_core::error::AppError::io("artwork restore subscriber", e))
 }
 
 /// Drain the process-wide `utils::toast` channel on the UI thread.
@@ -232,5 +232,5 @@ pub fn install_toast_bridge(
         }
     }))
     .map(|_| ())
-    .map_err(|e| melodia_core::error::AppError::Window(format!("toast bridge: {e}")))
+    .map_err(|e| melodia_core::error::AppError::io("toast bridge", e))
 }

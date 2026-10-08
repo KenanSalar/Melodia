@@ -12,6 +12,7 @@ use crate::ui::my_library::return_to_section;
 use crate::ui::track_list_view::{self, view_id};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AlbumDetail, AppWindow};
 
 /// Wire the `AlbumDetail` callbacks. See [`super::wire`].
@@ -83,7 +84,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
                     crate::ui::track_list_view::view_id::ALBUM_DETAIL,
                     None,
                 ) {
-                    log::warn!("albums::close_detail persist: {e}");
+                    log::warn!("albums::close_detail persist: {}", describe(&e));
                 }
             });
 

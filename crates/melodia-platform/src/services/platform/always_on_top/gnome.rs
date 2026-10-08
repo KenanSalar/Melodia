@@ -25,15 +25,13 @@ pub async fn set_always_on_top(pinned: bool) -> Result<(), AppError> {
 
         let reply = conn
             .call_method(Some(SHELL_SERVICE), WINDOWS_PATH, Some(WINDOWS_INTERFACE), "List", &())
-            .map_err(|e| AppError::Window(format!("Failed to list windows: {e}")))?;
+            .map_err(|e| AppError::io("Failed to list windows", e))?;
 
-        let windows_json: String = reply
-            .body()
-            .deserialize()
-            .map_err(|e| AppError::Window(format!("Invalid windows list: {e}")))?;
+        let windows_json: String =
+            reply.body().deserialize().map_err(|e| AppError::io("Invalid windows list", e))?;
 
         let windows: Vec<serde_json::Value> = serde_json::from_str(&windows_json)
-            .map_err(|e| AppError::Window(format!("Failed to parse windows JSON: {e}")))?;
+            .map_err(|e| AppError::io("Failed to parse windows JSON", e))?;
 
         let pid_matches: Vec<&serde_json::Value> = windows
             .iter()
@@ -68,10 +66,10 @@ pub async fn set_always_on_top(pinned: bool) -> Result<(), AppError> {
             method,
             &(window_id,),
         )
-        .map_err(|e| AppError::Window(format!("Failed to {method} window: {e}")))?;
+        .map_err(|e| AppError::io(format!("Failed to {method} window"), e))?;
 
         Ok(())
     })
     .await
-    .map_err(|e| AppError::Window(format!("GNOME pin task panicked: {e}")))?
+    .map_err(|e| AppError::io("GNOME pin task panicked", e))?
 }

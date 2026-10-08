@@ -73,7 +73,7 @@ pub async fn reveal_folder(folder: std::path::PathBuf) -> Result<(), AppError> {
         Ok(())
     })
     .await
-    .map_err(|e| AppError::io_other(format!("reveal task join failed: {e}")))??;
+    .map_err(|e| AppError::io("reveal task join failed", e))??;
 
     Ok(())
 }

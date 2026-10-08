@@ -101,19 +101,13 @@ pub(super) async fn create(
     // file for the same reason: the boot stops here, and a bare `io::Error` would leave `main`
     // reporting an errno with no path in it, on a desktop launch with no terminal to print to.
     std::fs::create_dir_all(backups_dir).map_err(|e| {
-        AppError::io_other(format!(
-            "Could not create the backup directory {}: {e}",
-            backups_dir.display()
-        ))
+        AppError::io(format!("Could not create the backup directory {}", backups_dir.display()), e)
     })?;
 
     let tmp_path = backups_dir.join(tmp_file_name(version));
     if tmp_path.exists() {
         std::fs::remove_file(&tmp_path).map_err(|e| {
-            AppError::io_other(format!(
-                "Could not clear the staged backup at {}: {e}",
-                tmp_path.display()
-            ))
+            AppError::io(format!("Could not clear the staged backup at {}", tmp_path.display()), e)
         })?;
     }
 
@@ -122,7 +116,7 @@ pub(super) async fn create(
     let escaped = tmp_path.display().to_string().replace('\'', "''");
     sqlx::raw_sql(AssertSqlSafe(format!("VACUUM INTO '{escaped}'"))).execute(pool).await?;
     std::fs::rename(&tmp_path, &final_path).map_err(|e| {
-        AppError::io_other(format!("Could not publish the backup as {}: {e}", final_path.display()))
+        AppError::io(format!("Could not publish the backup as {}", final_path.display()), e)
     })?;
 
     log::info!("Database backup created at {}", final_path.display());

@@ -39,5 +39,5 @@ where
         }
     }))
     .map(|_| ())
-    .map_err(|e| AppError::Window(format!("{label} subscriber: {e}")))
+    .map_err(|e| AppError::io(format!("{label} subscriber"), e))
 }

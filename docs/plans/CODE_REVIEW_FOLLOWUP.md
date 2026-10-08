@@ -5,8 +5,9 @@ facts held up, its weighting was off in places (it scored several ADR-backed tra
 defects), and it missed three layering problems. This plan holds what is worth doing about it, one
 phase per change.
 
-**Order:** phases 0 to 5 are independent of each other. Phase 6 goes before 7, because it shrinks
-four of the monolithic functions 7 would otherwise split by hand. Phase 9 goes last.
+**Order:** phases 0 to 5, 1.5 included, are independent of each other. Phase 6 goes before 7,
+because it shrinks four of the monolithic functions 7 would otherwise split by hand. Phase 9 goes
+last.
 
 ## What we see
 
@@ -21,6 +22,8 @@ four of the monolithic functions 7 would otherwise split by hand. Phase 9 goes l
 - **About 50 errors lose their cause on the way up.** A typed error gets formatted into a `String`
   variant, so `describe` has nothing to walk, and a bug report names the operation without the
   reason.
+- **About 260 log calls print an error without `describe`.** On the four struct variants that
+  drops the reason outright.
 - **Most library functions take the whole `AppState` and read one field of it**, so testing one
   means building all of it.
 - **Some wiring functions are monolithic.** The largest is about 390 lines of eleven closures, and
@@ -53,27 +56,53 @@ re-measures its own numbers first.
 
 ## Phase 0: small corrections
 
-- [ ] `README.md`'s build section (~line 243) says "macOS and Windows need nothing extra", while the
-      badge and the release matrix are Linux and Windows only. Drop macOS there or mark it
-      untested, and do the same to CLAUDE.md's Prerequisites line.
-- [ ] CLAUDE.md's "the 47 globals in 30 feature-scoped files" is stale (it was 48 in 31 at the
-      check). Recount.
-- [ ] The albums, artists and genres `close_detail` persist logs go through `error::describe`, as
-      playlists' does. Phase 6 folds them into one, but the log is wrong today.
+- [x] `README.md`'s build section and CLAUDE.md's Prerequisites line drop macOS.
+- [x] CLAUDE.md's globals count is 48 in 31.
+- [x] The albums, artists and genres `close_detail` persist logs go through `error::describe`, as
+      playlists' does. Phase 6 folds them into one.
 
 ## Phase 1: keep error causes typed
 
 Where: every crate. The variants and constructors are `melodia-core`'s `error.rs`.
 
-- [ ] Find the sites: a typed error turned into `AppError::{Settings,Window,Player,Queue,…}` through
-      `format!("…{e}")` or `e.to_string()`. There were about 50 at the check, including
-      `main.rs:141` and the `JoinError`s in `queue.rs`, `window.rs` and `playback.rs`.
-- [ ] Each one moves to a spelling that keeps the source: plain `?` where a `#[from]` exists (`Io`,
-      `Database`, `Migration`), the struct-variant constructors (`metadata`, `network`, `watcher`,
-      `scanner`), or `io_source(e)`. `main.rs:141` becomes a plain `?`, since `Builder::build()`
-      returns an `io::Error`. A `JoinError` goes through `io_source(e)`.
-- [ ] A message with no cause behind it stays a `String` variant. That is allowed, and it is not
-      what this phase is about.
+- [x] 49 sites moved. ADR 37 keeps `Settings`/`Window`/`Player` as `String` variants, so a cause
+      with no struct variant goes on `Io` through the new `AppError::io(msg, source)`, which keeps
+      the operation beside the typed cause and prints both. The two settings writers already held
+      an `AppError` and now return it unchanged; the tag write's join goes through `metadata`.
+- [x] 15 sites keep their text, because a caller dispatches on their variant:
+      `FailureKind::classify` (the updater's 12 in `version.rs`, `github.rs`, `install/`), the
+      radio form's `form_error` (`stream_decode.rs:90`, and `file_decode.rs:200` beside it, both
+      reading `OpenError` as a sentence tail), and the add-folder dialog (`folders.rs:37`).
+- Found on the way: none of the wrapped types hides its reason behind `.source()`, so these sites
+  lost little text. The bigger gap for a bug report is the reader side, which is Phase 1.5.
+
+## Phase 1.5: every logged error goes through `describe`
+
+Phase 1's reader side. A `Metadata`, `Network`, `Scanner` or `Watcher` error displays its
+operation and not its reason (ADR 37), so a log line that prints one with a bare `{e}` reports a
+full disk and a permissions failure in the same words. Those four are where text is lost today;
+for any other error a bare `{e}` drops only the chain below it.
+
+Today (2026-10-08) about 260 `log::` calls print an error without `describe`: 245 single-line
+`{e}`/`{err}`/`{error}` in 117 files, 6 multi-line, 8 passing it positionally and 3 as `{e:?}`.
+178 already go through it. By crate: views 126, app 36, the binary 28, platform 18, integrations
+15, store 8, artwork 5, engine 4, the rest 1 or 2 each.
+
+- [ ] Re-measure, and drop any hit whose `e` is not an error.
+- [ ] Start with the funnel: `AppState::persist_blocking` (`state/mod.rs`) logs `{label}: {e}` for
+      every `settings.json` write, about 40 callers. The views macros (`spawn_logged!`,
+      `spawn_logged_sync!`, `spawn_blocking_logged!`) already go through `describe`.
+- [ ] Every remaining site takes `{}` plus `describe(&e)`, with no exception for an error type
+      that happens to print its whole reason: one spelling means nobody has to know what `e` is
+      to review the line.
+- [ ] A `{e:?}` on an error moves too, unless its `Debug` shape is the point, said at the site.
+- [ ] Not in scope: user-facing text (`show_error`, a toast's detail) built from an error. What
+      the user reads there is a UI decision, not a logging one.
+- [ ] A corpus walk in `crates/melodia/tests/` holds it: no `log::` call formats `{e}`, `{err}` or
+      `{error}` bare, with the walk's usual comment stripping, unreadable-path check and vacuity
+      floor.
+- [ ] CLAUDE.md's "A `log::` call handed an I/O-boundary `AppError` goes through `error::describe`"
+      widens to any error and names the walk.
 
 ## Phase 2: take Slint out of the audio stack
 

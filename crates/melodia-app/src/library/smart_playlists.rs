@@ -51,10 +51,9 @@ pub async fn recount(state: &AppState, playlists: &mut [PlaylistStats], rows: &[
     }
 }
 
-/// Serialize a rule set to the JSON stored in `playlists.smart_criteria`,
-/// mapping a serializer failure to a validation error.
+/// Serialize a rule set to the JSON stored in `playlists.smart_criteria`.
 fn criteria_to_json(criteria: &SmartCriteria) -> Result<String, AppError> {
-    criteria.to_json().map_err(|e| AppError::Validation(format!("serialize smart_criteria: {e}")))
+    criteria.to_json().map_err(|e| AppError::io("serialize smart_criteria", e))
 }
 
 /// Persist a new smart playlist and bump `library_changed` so the grid

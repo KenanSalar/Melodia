@@ -345,7 +345,7 @@ pub(crate) async fn write_tag_edit(
             Ok::<_, AppError>((files, cached_artwork))
         })
         .await
-        .map_err(|e| AppError::metadata_msg(format!("tag write task panicked: {e}")))??
+        .map_err(|e| AppError::metadata("tag write task panicked", e))??
     };
 
     let updated_ids =

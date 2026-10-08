@@ -177,9 +177,7 @@ impl ScrobbleService {
         let path = self.creds_path.clone();
         match tokio::task::spawn_blocking(move || credentials::save(&path, &snapshot)).await {
             Ok(result) => result,
-            Err(e) => {
-                Err(AppError::io_other(format!("scrobble credential persist task panicked: {e}")))
-            }
+            Err(e) => Err(AppError::io("scrobble credential persist task panicked", e)),
         }
     }
 
@@ -226,7 +224,7 @@ impl ScrobbleService {
         let path = self.queue_path.clone();
         match tokio::task::spawn_blocking(move || snapshot.save(&path)).await {
             Ok(result) => result,
-            Err(e) => Err(AppError::io_other(format!("scrobble queue persist task panicked: {e}"))),
+            Err(e) => Err(AppError::io("scrobble queue persist task panicked", e)),
         }
     }
 

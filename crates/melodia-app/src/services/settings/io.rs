@@ -2,7 +2,7 @@
 //! functions read and write lives in the sibling [`super::data`] module.
 
 use melodia_core::config::Paths;
-use melodia_core::error::{AppError, AppResult};
+use melodia_core::error::AppResult;
 
 use super::{MAX_CORNER_RADIUS, SettingsData};
 
@@ -18,7 +18,6 @@ pub fn read_settings(paths: &Paths) -> AppResult<SettingsData> {
 /// family, and only a test fixture seeding a fresh root may write a file wholesale.
 pub(crate) fn write_settings(paths: &Paths, settings: &SettingsData) -> AppResult<()> {
     melodia_core::utils::atomic_file::write_json_sync(&paths.settings_path, settings)
-        .map_err(|e| AppError::Settings(format!("Failed to write settings: {e}")))
 }
 
 /// Process-wide lock around `settings.json` mutation. Held by `mutate_settings`

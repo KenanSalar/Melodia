@@ -63,6 +63,14 @@ pub enum AppError {
     Validation(String),
 }
 
+/// What [`AppError::io`] hands `io::Error`: the operation and the error that failed it.
+#[derive(Debug, thiserror::Error)]
+#[error("{msg}: {source}")]
+struct Context {
+    msg: String,
+    source: BoxedSource,
+}
+
 impl AppError {
     pub fn not_found(entity: &str, id: i64) -> Self {
         Self::NotFound(format!("{entity} not found: {id}"))
@@ -72,13 +80,19 @@ impl AppError {
         Self::Io(std::io::Error::other(msg.into()))
     }
 
-    /// Wrap an arbitrary error as `Io`, preserving it as the `io::Error`'s
-    /// source. Unlike [`io_other`](Self::io_other) (which takes a bare message
-    /// and drops the typed cause), this keeps the original error reachable via
-    /// `.source()` — use it for non-io failures (`JoinError`, `serde_json`) that
-    /// were previously flattened with `e.to_string()`.
+    /// Wrap an arbitrary error as `Io`, kept typed as the `io::Error`'s payload. Reach for
+    /// [`io`](Self::io) instead wherever there is an operation to name.
     pub fn io_source(source: impl Into<BoxedSource>) -> Self {
         Self::Io(std::io::Error::other(source))
+    }
+
+    /// `Io` naming the operation that failed beside its typed cause. The home for a cause whose
+    /// category has no struct variant to carry it: a D-Bus call, a task join, a device open.
+    ///
+    /// Both halves are printed, so a log line built from `{e}` still says why, and
+    /// [`describe`] skips the repeat on its way down the chain.
+    pub fn io(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
+        Self::Io(std::io::Error::other(Context { msg: msg.into(), source: source.into() }))
     }
 
     /// Metadata error wrapping an underlying cause (Lofty, hashing I/O, …).

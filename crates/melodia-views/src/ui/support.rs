@@ -108,7 +108,7 @@ fn schedule_prompt(
         });
     }))
     .map(|_| ())
-    .map_err(|e| AppError::Window(format!("support prompt: {e}")))
+    .map_err(|e| AppError::io("support prompt", e))
 }
 
 #[cfg(test)]

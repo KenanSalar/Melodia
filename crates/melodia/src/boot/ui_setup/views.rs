@@ -224,9 +224,8 @@ pub fn install_library_settings_and_friends(
     app: &AppWindow,
     state: &AppState,
 ) -> Result<std::rc::Rc<ui::shell::notifications::NotificationsUi>, melodia_core::error::AppError> {
-    ui::settings::library_settings::install(app, state).map_err(|e| {
-        melodia_core::error::AppError::Window(format!("library_settings install: {e}"))
-    })?;
+    ui::settings::library_settings::install(app, state)
+        .map_err(|e| melodia_core::error::AppError::io("library_settings install", e))?;
     ui::callbacks::wire_library_settings(app, state);
     ui::settings::playback_settings::install_playback_settings(app, state);
     ui::settings::signal_path::install(app, state);

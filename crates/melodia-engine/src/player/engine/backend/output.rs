@@ -120,7 +120,8 @@ impl PlaybackEngine {
     ///
     /// # Errors
     ///
-    /// [`AppError::Player`] when there is no output to reopen, or the device refuses to open.
+    /// [`AppError::Player`] when there is no output to reopen, and the device's own open failure
+    /// when it refuses.
     pub fn reopen_output(&self) -> Result<Option<Negotiated>, AppError> {
         let decks = self.lock_decks();
         let mut output = self.output.device.lock();

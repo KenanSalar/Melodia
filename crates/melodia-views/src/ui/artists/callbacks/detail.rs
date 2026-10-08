@@ -13,6 +13,7 @@ use crate::ui::my_library::return_to_section;
 use crate::ui::track_list_view::{self, view_id};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, ArtistDetail};
 
 /// Wire the `ArtistDetail` callbacks. See [`super::wire`].
@@ -88,7 +89,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>
                     crate::ui::track_list_view::view_id::ARTIST_DETAIL,
                     None,
                 ) {
-                    log::warn!("artists::close_detail persist: {e}");
+                    log::warn!("artists::close_detail persist: {}", describe(&e));
                 }
             });
 

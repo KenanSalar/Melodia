@@ -143,7 +143,7 @@ fn main() -> AppResult<()> {
         .enable_all()
         .thread_name("melodia-bg")
         .build()
-        .map_err(|e| AppError::Settings(format!("tokio runtime: {e}")))?;
+        .map_err(|e| AppError::io("tokio runtime", e))?;
 
     // Ahead of the first decode: rayon fixes the global pool's shape at first use.
     if let Err(e) = rayon::ThreadPoolBuilder::new()
@@ -221,9 +221,9 @@ fn main() -> AppResult<()> {
     #[cfg(target_os = "windows")]
     let backend =
         backend.with_winit_custom_application_handler(ui::window_chrome::parked_loop::LoopTicks);
-    backend.select().map_err(|e| AppError::Window(format!("backend selector: {e}")))?;
+    backend.select().map_err(|e| AppError::io("backend selector", e))?;
 
-    let app = AppWindow::new().map_err(|e| AppError::Window(e.to_string()))?;
+    let app = AppWindow::new().map_err(|e| AppError::io("main window", e))?;
 
     // After `AppWindow::new()` (the adapter must exist) and before `app.run()`
     // (the window must not be shown). `set_size` sets winit's
@@ -285,16 +285,16 @@ fn main() -> AppResult<()> {
         views.cover_thumbs.clone(),
         state.runtime.clone(),
     )
-    .map_err(|e| AppError::Window(format!("view-model subscriber: {e}")))?;
+    .map_err(|e| AppError::io("view-model subscriber", e))?;
     ui::shell::bridge::spawn_queue_subscriber(weak.clone(), &state.sinks)
-        .map_err(|e| AppError::Window(format!("queue subscriber: {e}")))?;
+        .map_err(|e| AppError::io("queue subscriber", e))?;
     ui::shell::bridge::spawn_position_subscriber(weak.clone(), &state.position_tx)
-        .map_err(|e| AppError::Window(format!("position subscriber: {e}")))?;
+        .map_err(|e| AppError::io("position subscriber", e))?;
     // Reads the same view model as the first of those, for the ICY titles a station announces.
     // Beside them rather than inside `radio::install`, so every subscription to a player channel
     // is spawned in one place.
     ui::radio::install_history(weak.clone(), &views.radio_ui, &state.sinks)
-        .map_err(|e| AppError::Window(format!("station history subscriber: {e}")))?;
+        .map_err(|e| AppError::io("station history subscriber", e))?;
 
     match ui::queue_sheet::install(&app, &state, &views.cover_thumbs) {
         Ok(h) => ui::window_chrome::set_queue_sheet_open(h.is_open),
@@ -503,8 +503,8 @@ fn main() -> AppResult<()> {
     // Not `app.run()`: its loop terminates as soon as the last window is
     // *hidden*, which close-to-tray does. This is Slint's documented tray
     // pattern, returning only on `quit_event_loop()`.
-    app.show().map_err(|e| AppError::Window(e.to_string()))?;
-    slint::run_event_loop_until_quit().map_err(|e| AppError::Window(e.to_string()))?;
+    app.show().map_err(|e| AppError::io("show window", e))?;
+    slint::run_event_loop_until_quit().map_err(|e| AppError::io("event loop", e))?;
 
     log::info!("Melodia shutting down — flushing player state");
     shutdown::save_state_on_exit(&app, &state, &runtime);

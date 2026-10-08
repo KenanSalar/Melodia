@@ -14,9 +14,8 @@ use melodia_platform::services::platform::desktop;
 /// into the `KWin` / GNOME D-Bus backends via
 /// `melodia_platform::services::platform::always_on_top::apply`; on macOS / Windows the UI callback
 /// already pushed `WindowLevel::AlwaysOnTop` to winit synchronously, so
-/// here we just persist. Returns `AppError::Window` when the desktop
-/// has no supported method — callers use that to revert the optimistic
-/// toggle they performed on the UI thread.
+/// here we just persist. A failure to apply persists nothing, and the
+/// caller reverts its optimistic toggle on any error, whatever the variant.
 pub async fn set_always_on_top(state: &AppState, pinned: bool) -> Result<(), AppError> {
     apply_then_persist(&state.paths, state.always_on_top.method, pinned).await
 }
@@ -48,7 +47,7 @@ async fn persist_always_on_top(paths: &Arc<Paths>, pinned: bool) -> Result<(), A
         })
     })
     .await
-    .map_err(|e| AppError::Settings(format!("persist always_on_top join: {e}")))?
+    .map_err(|e| AppError::io("persist always_on_top join", e))?
 }
 
 /// Persist the user's titlebar choice. This only commits the new value to disk; the

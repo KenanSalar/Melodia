@@ -175,7 +175,7 @@ impl FileDecoder {
     /// shape of what follows.
     pub fn open(path: &Path) -> Result<Self, AppError> {
         let mut file = File::open(path)
-            .map_err(|e| AppError::Player(format!("Cannot open {}: {e}", path.display())))?;
+            .map_err(|e| AppError::io(format!("Cannot open {}", path.display()), e))?;
 
         // Read while the handle is still ours: an MP4's edit list and a Matroska file's discard
         // padding are both halves of what a container states and the demuxer keeps to itself, and

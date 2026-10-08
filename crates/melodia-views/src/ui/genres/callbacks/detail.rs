@@ -15,6 +15,7 @@ use crate::ui::my_library::return_to_section;
 use crate::ui::track_list_view::{self, view_id};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, GenreDetail};
 
 /// Wire the `GenreDetail` callbacks. See [`super::wire`].
@@ -73,7 +74,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
                 if let Err(e) =
                     library::settings::set_last_detail_id(&s_disk, view_id::GENRE_DETAIL, None)
                 {
-                    log::warn!("genres::close_detail persist: {e}");
+                    log::warn!("genres::close_detail persist: {}", describe(&e));
                 }
             });
 

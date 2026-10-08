@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::services::settings::{ColumnWidths, ViewSort};
 use melodia_core::config::Paths;
-use melodia_core::error::{AppError, AppResult};
+use melodia_core::error::AppResult;
 
 /// Per-view UI state persisted between launches. Every field is
 /// `#[serde(default)]` through the struct attribute, so a missing key — or a
@@ -96,7 +96,6 @@ pub fn read_view_state(paths: &Paths) -> AppResult<ViewStateData> {
 
 pub fn write_view_state(paths: &Paths, view_state: &ViewStateData) -> AppResult<()> {
     melodia_core::utils::atomic_file::write_json_sync(&paths.view_state_path, view_state)
-        .map_err(|e| AppError::Settings(format!("Failed to write view state: {e}")))
 }
 
 /// Held across the whole read→mutate→write window, so a burst of UI events can't

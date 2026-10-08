@@ -7,7 +7,7 @@ use slint::{ComponentHandle, Model, SharedString};
 use crate::ui::shell::notifications::{Completion, NotificationsUi, RowText};
 use crate::ui::util::len_as_i32;
 use melodia_app::library::tags::TagEditReport;
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 use melodia_ui::{AppWindow, Settings};
 
 /// Show the Save completion toast from the report — a partial failure or an
@@ -21,7 +21,7 @@ pub(super) fn show_report_toast(
     let report = match result {
         Ok(report) => report,
         Err(e) => {
-            log::warn!("apply_tag_edit: {e}");
+            log::warn!("apply_tag_edit: {}", describe(&e));
             show_failure_toast(ui, notifications);
             return;
         }
