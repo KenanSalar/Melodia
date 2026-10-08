@@ -178,6 +178,15 @@ fn declared_plural_forms(po: &str) -> Option<usize> {
         .and_then(|(_, count)| count.trim().parse().ok())
 }
 
+/// Every plural in `entries` whose form count isn't `declared`, by msgid and the count it has.
+fn plurals_off_count(entries: &[Entry], declared: usize) -> Vec<(&str, usize)> {
+    entries
+        .iter()
+        .filter(|entry| entry.msgid_plural.is_some() && entry.msgstrs.len() != declared)
+        .map(|entry| (entry.msgid.as_str(), entry.msgstrs.len()))
+        .collect()
+}
+
 fn msgids(entries: &[Entry]) -> Msgids {
     entries.iter().map(|entry| (entry.msgid.clone(), entry.msgid_plural.clone())).collect()
 }
@@ -429,15 +438,51 @@ fn every_plural_carries_as_many_forms_as_its_catalogue_declares() {
             mismatched.push(format!("{code}: the header declares no nplurals"));
             continue;
         };
-        let plurals = entries.iter().filter(|entry| entry.msgid_plural.is_some());
-        mismatched.extend(plurals.filter(|entry| entry.msgstrs.len() != declared).map(|entry| {
-            format!("{code}: \"{}\" has {} of {declared} forms", entry.msgid, entry.msgstrs.len())
-        }));
+        for (msgid, forms) in plurals_off_count(&entries, declared) {
+            mismatched.push(format!("{code}: \"{msgid}\" has {forms} of {declared} forms"));
+        }
     }
     assert!(
         mismatched.is_empty(),
         "Slint shows the singular for a form a plural lacks, so each owes exactly the forms its \
          catalogue's header declares: {mismatched:?}"
+    );
+}
+
+/// Every shipped plural carries exactly its forms, so the check above passes the same whether it
+/// asks for equality or only for enough; only a hand-written catalogue can tell. Indonesian is
+/// where the two part: a plural copied from a two-form sibling keeps a second form its one-form
+/// header never reads, which `msgfmt -c` rejects and a floor would pass.
+#[test]
+fn a_plural_owes_exactly_the_forms_its_header_declares() {
+    const PO: &str = r#"msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "not a plural"
+msgstr "done"
+
+msgid "{n} plural with its one form"
+msgid_plural "{n} plurals with their one form"
+msgstr[0] "every"
+
+msgid "{n} plural copied from a two-form catalogue"
+msgid_plural "{n} plurals copied from a two-form catalogue"
+msgstr[0] "one"
+msgstr[1] "many"
+"#;
+
+    assert_eq!(
+        declared_plural_forms(PO),
+        Some(1),
+        "a one-form header read as anything else holds every plural to the wrong count"
+    );
+    assert_eq!(
+        plurals_off_count(&parse_po(PO), 1),
+        [("{n} plural copied from a two-form catalogue", 2)],
+        "the form check must refuse a surplus form as well as a missing one, and leave a \
+         singular entry alone"
     );
 }
 

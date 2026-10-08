@@ -1,0 +1,3346 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: melodia-ui\n"
+"Report-Msgid-Bugs-To: \n"
+"PO-Revision-Date: 2026-10-08 00:00+0000\n"
+"Last-Translator: Kenan Salar\n"
+"Language-Team: none\n"
+"Language: id\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: ui/app-window.slint ui/layout/sidebar.slint
+msgid "Search"
+msgstr "Cari"
+
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/radio-view.slint
+msgid "Browse"
+msgstr "Jelajahi"
+
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/favorites-view.slint
+#: ui/views/radio-view.slint
+msgid "Favorites"
+msgstr "Favorit"
+
+#: ui/app-window.slint ui/layout/sidebar.slint
+msgid "My Library"
+msgstr "Pustaka Saya"
+
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/radio-view.slint
+#: ui/views/recently-played-view.slint
+msgid "Recently Played"
+msgstr "Terakhir Diputar"
+
+#: ui/app-window.slint ui/layout/sidebar.slint
+msgid "Settings"
+msgstr "Pengaturan"
+
+#: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/views/settings/radio-section.slint
+msgid "Radio"
+msgstr "Radio"
+
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
+msgid "Minimize"
+msgstr "Perkecil"
+
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
+msgid "Maximize"
+msgstr "Perbesar"
+
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
+msgid "Restore"
+msgstr "Pulihkan"
+
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Close"
+msgstr "Tutup"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/context-menu.slint
+msgid "Remove {} from Favorites"
+msgstr "Hapus {} dari Favorit"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/context-menu.slint
+msgid "Add {} to Favorites"
+msgstr "Tambahkan {} ke Favorit"
+
+#: ui/components/context-menu.slint ui/components/grid/card-context-menu.slint
+msgid "Add to Favorites"
+msgstr "Tambahkan ke Favorit"
+
+#: ui/components/context-menu.slint ui/components/grid/card-context-menu.slint
+msgid "Remove from Favorites"
+msgstr "Hapus dari Favorit"
+
+#: ui/components/dialog/add-station-body.slint
+#: ui/components/grid/station-context-menu.slint
+msgid "Stream URL"
+msgstr "URL stream"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Name (optional)"
+msgstr "Nama (opsional)"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Leave blank to use the station's own name"
+msgstr "Biarkan kosong untuk memakai nama stasiun itu sendiri"
+
+#: ui/components/dialog/add-station-body.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/station-facts.slint
+msgid "Website"
+msgstr "Situs web"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Logo URL"
+msgstr "URL logo"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Leave blank to look for a logo on the website above."
+msgstr "Biarkan kosong untuk mencari logo di situs web di atas."
+
+#: ui/components/dialog/add-station-body.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+#: ui/views/search/top-result-card.slint
+msgid "Genre"
+msgstr "Genre"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Jazz, Blues"
+msgstr "Jazz, Blues"
+
+#: ui/components/dialog/add-station-body.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+msgid "Country"
+msgstr "Negara"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Tunisia"
+msgstr "Tunisia"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "The directory owns this station's name and stream. What it left blank is yours to fill in; leave a field empty to remove it again."
+msgstr "Nama dan stream stasiun ini dikelola oleh direktori. Kolom yang dibiarkannya kosong boleh Anda isi; kosongkan kolom untuk menghapusnya lagi."
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Checking the stream…"
+msgstr "Memeriksa stream…"
+
+#: ui/components/dialog/credit-editor.slint
+#: ui/components/dialog/name-list-editor.slint ui/globals/dialog.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Add"
+msgstr "Tambah"
+
+#: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/grid/station-context-menu.slint ui/views/favorites-view.slint
+#: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
+msgid "Name"
+msgstr "Nama"
+
+#: ui/components/dialog/dialog.slint
+msgid "Playlist name"
+msgstr "Nama playlist"
+
+#: ui/components/dialog/dialog.slint
+msgid "Description (optional)"
+msgstr "Deskripsi (opsional)"
+
+#: ui/components/dialog/dialog.slint
+msgid "Add a description…"
+msgstr "Tambahkan deskripsi…"
+
+#: ui/components/dialog/dialog.slint
+msgid "Finish"
+msgstr "Selesai"
+
+#: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
+msgid "Open Last.fm"
+msgstr "Buka Last.fm"
+
+#: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
+msgid "Connect"
+msgstr "Hubungkan"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Classical"
+msgstr "Klasik"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Flat"
+msgstr "Datar"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Jazz"
+msgstr "Jazz"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Pop"
+msgstr "Pop"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Rock"
+msgstr "Rock"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Bass Boost"
+msgstr "Penguat Bass"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Electronic"
+msgstr "Elektronik"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Treble Boost"
+msgstr "Penguat Treble"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Vocal"
+msgstr "Vokal"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Custom"
+msgstr "Kustom"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Enable equalizer"
+msgstr "Aktifkan equalizer"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Reset"
+msgstr "Atur ulang"
+
+#: ui/components/dialog/export-playlist-picker.slint
+msgid "No playlists to export"
+msgstr "Tidak ada playlist untuk diekspor"
+
+#: ui/components/dialog/export-playlist-picker.slint
+#: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
+#: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
+#: ui/globals/search.slint ui/views/queue-sheet.slint
+msgid "{n} track"
+msgid_plural "{n} tracks"
+msgstr[0] "{n} lagu"
+
+#: ui/components/dialog/export-playlist-picker.slint
+msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
+msgstr "Beberapa playlist disimpan sebagai satu berkas .zip yang dapat Anda impor langsung tanpa mengekstraknya."
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "No artwork"
+msgstr "Tanpa sampul"
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "{} / 4 selected"
+msgstr "{} / 4 dipilih"
+
+#: ui/components/dialog/playlist-mosaic-picker.slint ui/views/queue-sheet.slint
+msgid "Clear"
+msgstr "Bersihkan"
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "Add tracks to this playlist to pick artwork."
+msgstr "Tambahkan lagu ke playlist ini untuk memilih sampul."
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "Select up to 4 tracks"
+msgstr "Pilih hingga 4 lagu"
+
+#: ui/components/dialog/playlist-picker.slint
+msgid "Already added"
+msgstr "Sudah ditambahkan"
+
+#: ui/components/dialog/playlist-picker.slint
+msgid "{} of {} already added"
+msgstr "{} dari {} sudah ditambahkan"
+
+#: ui/components/dialog/preamp-slider-row.slint
+msgid "Preamp"
+msgstr "Preamp"
+
+#: ui/components/dialog/replaygain-body.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/search/top-result-card.slint
+msgid "Album"
+msgstr "Album"
+
+#: ui/components/dialog/replaygain-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Track"
+msgstr "Trek"
+
+#: ui/components/dialog/replaygain-body.slint
+msgid "Enable ReplayGain"
+msgstr "Aktifkan ReplayGain"
+
+#: ui/components/dialog/replaygain-body.slint
+msgid "Normalization mode"
+msgstr "Mode normalisasi"
+
+#: ui/components/dialog/replaygain-body.slint
+msgid "Prevent clipping"
+msgstr "Cegah clipping"
+
+#: ui/components/dialog/replaygain-body.slint
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "ReplayGain hanya berlaku untuk lagu yang sudah memiliki tag kenyaringan. Pindai pustaka Anda dengan alat seperti rsgain atau loudgain untuk menambahkannya."
+
+#: ui/components/dialog/scrobble-lastfm-body.slint
+msgid "Click Open Last.fm to approve Melodia in your browser."
+msgstr "Klik Buka Last.fm untuk menyetujui Melodia di peramban Anda."
+
+#: ui/components/dialog/scrobble-lastfm-body.slint
+msgid "After approving Melodia in your browser, click Finish."
+msgstr "Setelah menyetujui Melodia di peramban Anda, klik Selesai."
+
+#: ui/components/dialog/scrobble-lastfm-body.slint
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+#: ui/globals/player.slint
+msgid "Connecting…"
+msgstr "Menghubungkan…"
+
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+msgid "User token"
+msgstr "Token pengguna"
+
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+msgid "Paste your ListenBrainz user token"
+msgstr "Tempelkan token pengguna ListenBrainz Anda"
+
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+msgid "Find your token on your ListenBrainz profile settings page."
+msgstr "Token Anda ada di halaman pengaturan profil ListenBrainz."
+
+#: ui/components/dialog/selectable-picker.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Select all"
+msgstr "Pilih semua"
+
+#: ui/components/dialog/selectable-picker.slint
+msgid "{} selected"
+msgstr "{} dipilih"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "value"
+msgstr "nilai"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "days"
+msgstr "hari"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "number"
+msgstr "angka"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Album Artist"
+msgstr "Artis Album"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/my-library/tab-pills.slint ui/views/search/top-result-card.slint
+msgid "Artist"
+msgstr "Artis"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+msgid "Title"
+msgstr "Judul"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Credits"
+msgstr "Kredit"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "ISRC"
+msgstr "ISRC"
+
+#. Translators: a musical key, as in A minor
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Key"
+msgstr "Kunci nada"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Mood"
+msgstr "Suasana"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "BPM"
+msgstr "BPM"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Duration (sec)"
+msgstr "Durasi (detik)"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/station-facts.slint ui/views/radio/tab-pills.slint
+msgid "Plays"
+msgstr "Jumlah putar"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/my-library/tab-pills.slint
+msgid "Year"
+msgstr "Tahun"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Bitrate (kbps)"
+msgstr "Bitrate (kbps)"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/now-playing/overflow-menu.slint ui/settings.slint
+msgid "Rating"
+msgstr "Rating"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Sample rate (Hz)"
+msgstr "Laju sampel (Hz)"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Skips"
+msgstr "Jumlah dilewati"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Date added"
+msgstr "Tanggal ditambahkan"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Favorite"
+msgstr "Favorit"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "File size (bytes)"
+msgstr "Ukuran berkas (byte)"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Last played"
+msgstr "Terakhir diputar"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "contains"
+msgstr "mengandung"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "does not contain"
+msgstr "tidak mengandung"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is"
+msgstr "adalah"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is not"
+msgstr "bukan"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "ends with"
+msgstr "diakhiri dengan"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is not set"
+msgstr "tidak diisi"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is set"
+msgstr "diisi"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "starts with"
+msgstr "diawali dengan"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "at least"
+msgstr "minimal"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "greater than"
+msgstr "lebih dari"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "at most"
+msgstr "maksimal"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "less than"
+msgstr "kurang dari"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is false"
+msgstr "salah"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is true"
+msgstr "benar"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "in the last"
+msgstr "dalam"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "not in the last"
+msgstr "tidak dalam"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "all"
+msgstr "semua"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "any"
+msgstr "salah satu"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "least recently added"
+msgstr "paling lama ditambahkan"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "most recently added"
+msgstr "paling baru ditambahkan"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "least played"
+msgstr "paling jarang diputar"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "most played"
+msgstr "paling sering diputar"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "least recently played"
+msgstr "paling lama tidak diputar"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "most recently played"
+msgstr "paling baru diputar"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "highest rated"
+msgstr "rating tertinggi"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "random"
+msgstr "acak"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Smart playlist name"
+msgstr "Nama playlist pintar"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Match"
+msgstr "Penuhi"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "of the following rules"
+msgstr "aturan berikut"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Add rule"
+msgstr "Tambah aturan"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Limit to"
+msgstr "Batasi hingga"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "N"
+msgstr "N"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "tracks by"
+msgstr "lagu berdasarkan"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Arranger"
+msgstr "Penata musik"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Composer"
+msgstr "Komposer"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Conductor"
+msgstr "Konduktor"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Lyricist"
+msgstr "Penulis lirik"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Performer"
+msgstr "Penampil"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "DJ Mixer"
+msgstr "DJ Mixer"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Engineer"
+msgstr "Teknisi suara"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Mixer"
+msgstr "Mixer"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Producer"
+msgstr "Produser"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Remixer"
+msgstr "Remixer"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Replace…"
+msgstr "Ganti…"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/folder-row.slint ui/globals/dialog.slint
+#: ui/views/settings/library-section.slint
+msgid "Remove"
+msgstr "Hapus"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Details"
+msgstr "Detail"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/now-playing/lyrics-menu.slint ui/settings.slint
+#: ui/views/now-playing-view.slint ui/views/settings/lyrics-section.slint
+msgid "Lyrics"
+msgstr "Lirik"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Summary"
+msgstr "Ringkasan"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Tags"
+msgstr "Tag"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Total"
+msgstr "Total"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Disc"
+msgstr "Disk"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Original Year"
+msgstr "Tahun Asli"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Comment"
+msgstr "Komentar"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Subtitle"
+msgstr "Subjudul"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Disc Subtitle"
+msgstr "Subjudul Disk"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Grouping"
+msgstr "Pengelompokan"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Work"
+msgstr "Karya"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Movement"
+msgstr "Bagian"
+
+#. Translators: the movement's number, as in movement 2 of 4
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Number"
+msgstr "Nomor"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/onboarding/appearance-panel.slint ui/settings.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+#: ui/views/settings/language-section.slint
+msgid "Language"
+msgstr "Bahasa"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Copyright"
+msgstr "Hak cipta"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Record Label"
+msgstr "Label Rekaman"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Catalog Number"
+msgstr "Nomor Katalog"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Barcode"
+msgstr "Barcode"
+
+#. Translators: the physical medium a release came out on: CD, vinyl
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Media"
+msgstr "Media"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Release Type"
+msgstr "Jenis Rilis"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Release Country"
+msgstr "Negara Rilis"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Part of a compilation"
+msgstr "Bagian dari kompilasi"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Insert found lyrics"
+msgstr "Sisipkan lirik yang ditemukan"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Path"
+msgstr "Jalur"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Codec"
+msgstr "Codec"
+
+#: ui/components/dialog/tag-editor-body.slint ui/components/station-facts.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+msgid "Bitrate"
+msgstr "Bitrate"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/views/settings/output-section.slint
+msgid "Sample Rate"
+msgstr "Laju Sampel"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Bit Depth"
+msgstr "Kedalaman Bit"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/views/settings/output-section.slint
+msgid "Channels"
+msgstr "Kanal"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Size"
+msgstr "Ukuran"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/views/my-library/tab-pills.slint
+msgid "Duration"
+msgstr "Durasi"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Modified"
+msgstr "Diubah"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "BLAKE3"
+msgstr "BLAKE3"
+
+#: ui/components/grid/album-grid.slint
+#: ui/components/track-list/track-list-row.slint ui/globals/player.slint
+msgid "Unknown artist"
+msgstr "Artis tidak dikenal"
+
+#: ui/components/grid/artist-grid.slint ui/globals/hero-chips.slint
+#: ui/globals/search.slint ui/views/my-library-view.slint
+msgid "{n} album"
+msgid_plural "{n} albums"
+msgstr[0] "{n} album"
+
+#: ui/components/grid/browse-card-grid.slint
+msgid "Folder"
+msgstr "Folder"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/now-playing/play-button.slint
+#: ui/components/track-list/track-context-menu.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Play"
+msgstr "Putar"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/now-playing/overflow-menu.slint ui/views/favorites-view.slint
+#: ui/views/my-library/tab-pills.slint ui/views/recently-played-view.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Shuffle"
+msgstr "Acak"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Play {} Next"
+msgstr "Putar {} Berikutnya"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Play Next"
+msgstr "Putar Berikutnya"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Add {} to Queue"
+msgstr "Tambahkan {} ke Antrean"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Add to Queue"
+msgstr "Tambahkan ke Antrean"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "New Playlist…"
+msgstr "Playlist Baru…"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Add to Playlist"
+msgstr "Tambahkan ke Playlist"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Edit Tags for {}"
+msgstr "Edit Tag untuk {}"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Edit Tags…"
+msgstr "Edit Tag…"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Edit {} Tracks"
+msgstr "Edit {} Lagu"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/now-playing/lyrics-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Edit Track Information"
+msgstr "Edit Informasi Lagu"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/station-facts.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Copy"
+msgstr "Salin"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Copy Name"
+msgstr "Salin Nama"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Copy Path"
+msgstr "Salin Jalur"
+
+#: ui/components/grid/card-context-menu.slint ui/settings.slint
+#: ui/views/settings/diagnostics-section.slint
+msgid "Open Folder"
+msgstr "Buka Folder"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Show in File Manager"
+msgstr "Tampilkan di Pengelola Berkas"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Open Containing Folder"
+msgstr "Buka Folder Induk"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Go to Artist"
+msgstr "Buka Artis"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Clear selection"
+msgstr "Hapus pilihan"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Rename…"
+msgstr "Ganti Nama…"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Edit Artwork…"
+msgstr "Edit Sampul…"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Edit Rules…"
+msgstr "Edit Aturan…"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Delete {} Playlists"
+msgstr "Hapus {} Playlist"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Delete Playlist"
+msgstr "Hapus Playlist"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Artist - Album"
+msgstr "Artis - Album"
+
+#: ui/components/grid/playlist-grid.slint
+msgid "0 tracks"
+msgstr "0 lagu"
+
+#: ui/components/grid/station-context-menu.slint
+msgid "Open Website"
+msgstr "Buka Situs Web"
+
+#: ui/components/grid/station-context-menu.slint
+msgid "Edit…"
+msgstr "Edit…"
+
+#. Translators: `{}` is how many stations are selected
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove {} from Recently Played…"
+msgstr "Hapus {} dari Terakhir Diputar…"
+
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove from Recently Played…"
+msgstr "Hapus dari Terakhir Diputar…"
+
+#. Translators: `{}` is how many stations are selected
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove {} from Favorites…"
+msgstr "Hapus {} dari Favorit…"
+
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove from Favorites…"
+msgstr "Hapus dari Favorit…"
+
+#: ui/components/mini-player/mini-captions.slint
+msgid "Full Player"
+msgstr "Pemutar Penuh"
+
+#: ui/components/mini-player/mini-captions.slint
+msgid "Show Up Next"
+msgstr "Tampilkan Berikutnya"
+
+#: ui/components/mini-player/mini-captions.slint
+#: ui/components/now-playing/lyrics-controls.slint
+#: ui/views/settings/lyrics-section.slint
+msgid "Show lyrics"
+msgstr "Tampilkan lirik"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Pin on Top"
+msgstr "Sematkan di Atas"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Unpin from Top"
+msgstr "Lepas Sematan"
+
+#: ui/components/mini-player/mini-controls.slint
+msgid "Album Backdrop: off"
+msgstr "Latar Album: nonaktif"
+
+#: ui/components/mini-player/mini-controls.slint
+msgid "Album Backdrop: on"
+msgstr "Latar Album: aktif"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Unfavorite"
+msgstr "Hapus Favorit"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Shuffle: off"
+msgstr "Acak: nonaktif"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Shuffle: on"
+msgstr "Acak: aktif"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Repeat: off"
+msgstr "Ulangi: nonaktif"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Repeat: one"
+msgstr "Ulangi: satu"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Repeat: all"
+msgstr "Ulangi: semua"
+
+#: ui/components/now-playing/flyout-presets.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/components/now-playing/visualizer-flyout.slint
+msgid "Off"
+msgstr "Nonaktif"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "15 min"
+msgstr "15 mnt"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "30 min"
+msgstr "30 mnt"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "45 min"
+msgstr "45 mnt"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "60 min"
+msgstr "60 mnt"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "90 min"
+msgstr "90 mnt"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "End of track"
+msgstr "Akhir lagu"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "Bars"
+msgstr "Batang"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "Mirrored"
+msgstr "Cermin"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "Waveform"
+msgstr "Bentuk gelombang"
+
+#: ui/components/now-playing/lyrics-menu.slint
+#: ui/views/settings/lyrics-section.slint
+msgid "Show romanization"
+msgstr "Tampilkan romanisasi"
+
+#: ui/components/now-playing/lyrics-menu.slint
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/lyrics-section.slint
+msgid "Look up lyrics online"
+msgstr "Cari lirik secara online"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Look up again"
+msgstr "Cari lagi"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Save to file"
+msgstr "Simpan ke berkas"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Edit lyrics…"
+msgstr "Edit lirik…"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Looking for lyrics…"
+msgstr "Mencari lirik…"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "This track has no words"
+msgstr "Lagu ini tidak berlirik"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "No lyrics found"
+msgstr "Lirik tidak ditemukan"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Couldn't reach the lyrics service"
+msgstr "Tidak dapat menjangkau layanan lirik"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Lyrics lookup is off"
+msgstr "Pencarian lirik nonaktif"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Play something to see its lyrics"
+msgstr "Putar sesuatu untuk melihat liriknya"
+
+#. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Turn it on in the Lyrics menu"
+msgstr "Aktifkan di menu Lirik"
+
+#. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Try again from the Lyrics menu"
+msgstr "Coba lagi dari menu Lirik"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "More"
+msgstr "Lainnya"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/output-section.slint
+msgid "Speed"
+msgstr "Kecepatan"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "Sleep timer"
+msgstr "Timer tidur"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "Track end"
+msgstr "Akhir lagu"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/playback-section.slint
+msgid "Equalizer"
+msgstr "Equalizer"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "On"
+msgstr "Aktif"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Done"
+msgstr "Selesai"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/output-section.slint
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Repeat"
+msgstr "Ulangi"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint ui/views/queue-sheet.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Queue"
+msgstr "Antrean"
+
+#: ui/components/now-playing/play-button.slint
+msgid "Pause (hold to stop)"
+msgstr "Jeda (tahan untuk berhenti)"
+
+#: ui/components/now-playing/play-button.slint
+msgid "Play (hold to stop)"
+msgstr "Putar (tahan untuk berhenti)"
+
+#: ui/components/now-playing/play-button.slint
+msgid "Pause"
+msgstr "Jeda"
+
+#: ui/components/now-playing/sleep-timer-flyout.slint
+msgid "Start"
+msgstr "Mulai"
+
+#: ui/components/now-playing/up-next-list.slint
+msgid "No tracks up next"
+msgstr "Tidak ada lagu berikutnya"
+
+#: ui/components/now-playing/visualizer-picker.slint
+#: ui/views/settings/playback-section.slint
+msgid "Visualizer"
+msgstr "Visualizer"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Appearance"
+msgstr "Tampilan"
+
+#: ui/components/onboarding/appearance-panel.slint
+msgid "Pick how Melodia looks. Every change applies as you make it."
+msgstr "Pilih tampilan Melodia. Setiap perubahan langsung diterapkan."
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Theme"
+msgstr "Tema"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Theme Variant"
+msgstr "Varian Tema"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "System"
+msgstr "Sistem"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Dark"
+msgstr "Gelap"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Light"
+msgstr "Terang"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Accent Color"
+msgstr "Warna Aksen"
+
+#: ui/components/onboarding/features-panel.slint
+msgid "What Melodia can reach"
+msgstr "Yang dapat dijangkau Melodia"
+
+#: ui/components/onboarding/features-panel.slint
+msgid "Melodia works offline. These are the parts that reach out."
+msgstr "Melodia bekerja secara offline. Inilah bagian-bagian yang terhubung ke luar."
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/radio-section.slint
+msgid "Internet radio"
+msgstr "Radio internet"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/radio-section.slint
+msgid "Browse and play live stations from radio-browser.info"
+msgstr "Jelajahi dan putar stasiun siaran langsung dari radio-browser.info"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/discord-section.slint
+msgid "Show the track you're playing on your Discord profile"
+msgstr "Tampilkan lagu yang sedang Anda putar di profil Discord Anda"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/lyrics-section.slint
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Jika lagu tidak menyertakan liriknya sendiri, minta dari lrclib.net"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobbling"
+msgstr "Scrobbling"
+
+#: ui/components/onboarding/features-panel.slint
+msgid "Send what you play to Last.fm or ListenBrainz"
+msgstr "Kirim yang Anda putar ke Last.fm atau ListenBrainz"
+
+#: ui/components/onboarding/features-panel.slint
+msgid "Set Up"
+msgstr "Siapkan"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Check for updates automatically"
+msgstr "Periksa pembaruan secara otomatis"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Once a day, Melodia asks GitHub whether a newer version is out."
+msgstr "Sekali sehari, Melodia menanyakan ke GitHub apakah ada versi yang lebih baru."
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Your music"
+msgstr "Musik Anda"
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Add the folders your music lives in. Melodia picks up changes to them on its own."
+msgstr "Tambahkan folder tempat musik Anda disimpan. Melodia mendeteksi perubahan di dalamnya dengan sendirinya."
+
+#: ui/components/onboarding/music-panel.slint
+msgid "{n} folder in your library"
+msgid_plural "{n} folders in your library"
+msgstr[0] "{n} folder di pustaka Anda"
+
+#: ui/components/onboarding/music-panel.slint
+#: ui/views/settings/library-section.slint
+msgid "Add a folder to scan for music files."
+msgstr "Tambahkan folder untuk dipindai mencari berkas musik."
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Your Music folder: {}"
+msgstr "Folder Musik Anda: {}"
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Add Music Folder"
+msgstr "Tambahkan Folder Musik"
+
+#: ui/components/onboarding/music-panel.slint
+#: ui/views/settings/library-section.slint
+msgid "Add Folder"
+msgstr "Tambahkan Folder"
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Choose Another Folder"
+msgstr "Pilih Folder Lain"
+
+#. Translators: Melodia is the product name and stays as is
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Welcome to Melodia"
+msgstr "Selamat datang di Melodia"
+
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Skip"
+msgstr "Lewati"
+
+#: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
+msgid "Back"
+msgstr "Kembali"
+
+#: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
+msgid "Next"
+msgstr "Berikutnya"
+
+#: ui/components/search-bar.slint
+msgid "Search…"
+msgstr "Cari…"
+
+#: ui/components/settings/folder-row.slint
+msgid "Rescan"
+msgstr "Pindai ulang"
+
+#: ui/components/settings/scan-progress.slint
+msgid "Looking for music… {n} file found"
+msgid_plural "Looking for music… {n} files found"
+msgstr[0] "Mencari musik… {n} berkas ditemukan"
+
+#: ui/components/settings/scan-progress.slint
+msgid "Finishing up…"
+msgstr "Menyelesaikan…"
+
+#: ui/components/settings/scan-progress.slint
+msgid "Stopping…"
+msgstr "Menghentikan…"
+
+#. Translators: files read so far, the total, then the file being read
+#: ui/components/settings/scan-progress.slint
+msgid "{} / {} files · {}"
+msgstr "{} / {} berkas · {}"
+
+#. Translators: files read so far, then the total
+#: ui/components/settings/scan-progress.slint
+msgid "{} / {} files"
+msgstr "{} / {} berkas"
+
+#: ui/components/settings/scan-progress.slint ui/globals/dialog-forms.slint
+#: ui/globals/dialog.slint ui/views/queue-sheet.slint
+#: ui/views/radio/tab-pills.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/library-section.slint
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/scrobbling-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Cancel"
+msgstr "Batal"
+
+#: ui/components/sort-menu-popup.slint
+msgid "Sort"
+msgstr "Urutkan"
+
+#: ui/components/station-facts.slint
+msgid "Stream"
+msgstr "Stream"
+
+#: ui/components/station-facts.slint
+msgid "Copy stream URL"
+msgstr "Salin URL stream"
+
+#: ui/components/station-facts.slint
+msgid "Open in your browser"
+msgstr "Buka di peramban Anda"
+
+#: ui/components/station-facts.slint ui/views/radio/suggestion-pill.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Format"
+msgstr "Format"
+
+#: ui/components/station-facts.slint ui/views/radio/station-grid.slint
+msgid "{} kbps"
+msgstr "{} kbps"
+
+#: ui/components/station-facts.slint
+msgid "Votes"
+msgstr "Suara"
+
+#: ui/components/station-facts.slint
+msgid "{n} vote"
+msgid_plural "{n} votes"
+msgstr[0] "{n} suara"
+
+#: ui/components/station-facts.slint ui/globals/hero-chips.slint
+msgid "{n} play"
+msgid_plural "{n} plays"
+msgstr[0] "{n} kali diputar"
+
+#: ui/components/station-facts.slint
+msgid "Recently played on this station"
+msgstr "Baru diputar di stasiun ini"
+
+#: ui/components/station-facts.slint
+msgid "Copy Title"
+msgstr "Salin Judul"
+
+#: ui/components/station-facts.slint
+msgid "Copy Artist"
+msgstr "Salin Artis"
+
+#: ui/components/track-copy-items.slint
+msgid "Artist - Title"
+msgstr "Artis - Judul"
+
+#: ui/components/track-copy-items.slint
+msgid "File Path"
+msgstr "Jalur Berkas"
+
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Columns"
+msgstr "Kolom"
+
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Artwork"
+msgstr "Sampul"
+
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint
+msgid "Length"
+msgstr "Durasi"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/track-list/track-context-menu.slint
+msgid "Add {} to Playlist"
+msgstr "Tambahkan {} ke Playlist"
+
+#: ui/components/track-list/track-context-menu.slint
+msgid "Go to Album"
+msgstr "Buka Album"
+
+#: ui/components/track-list/track-context-menu.slint
+msgid "Go to Genre"
+msgstr "Buka Genre"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove {} from Playlist"
+msgstr "Hapus {} dari Playlist"
+
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove from Playlist"
+msgstr "Hapus dari Playlist"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove {} from Queue"
+msgstr "Hapus {} dari Antrean"
+
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove from Queue"
+msgstr "Hapus dari Antrean"
+
+#: ui/components/track-list/track-list-row.slint
+msgid "Unknown album"
+msgstr "Album tidak dikenal"
+
+#: ui/globals/curated.slint ui/globals/hero-chips.slint
+msgid "{n} favorite"
+msgid_plural "{n} favorites"
+msgstr[0] "{n} favorit"
+
+#: ui/globals/dialog-forms.slint
+msgid "That token wasn't accepted. Check it and try again."
+msgstr "Token itu tidak diterima. Periksa lalu coba lagi."
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't reach the service. Check your connection and try again."
+msgstr "Tidak dapat menjangkau layanan. Periksa koneksi Anda lalu coba lagi."
+
+#: ui/globals/dialog-forms.slint
+msgid "Not approved yet. Approve Melodia in your browser, then click Finish."
+msgstr "Belum disetujui. Setujui Melodia di peramban Anda, lalu klik Selesai."
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't save your credentials."
+msgstr "Tidak dapat menyimpan kredensial Anda."
+
+#: ui/globals/dialog-forms.slint
+msgid "Edit Station"
+msgstr "Edit Stasiun"
+
+#: ui/globals/dialog-forms.slint
+msgid "Station Details"
+msgstr "Detail Stasiun"
+
+#: ui/globals/dialog-forms.slint ui/globals/dialog.slint
+msgid "Save"
+msgstr "Simpan"
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't reach that address. Check the URL and your connection."
+msgstr "Tidak dapat menjangkau alamat itu. Periksa URL dan koneksi Anda."
+
+#: ui/globals/dialog-forms.slint
+msgid "That address doesn't play as audio Melodia can decode."
+msgstr "Alamat itu tidak memutar audio yang dapat didekode Melodia."
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't save the station."
+msgstr "Tidak dapat menyimpan stasiun."
+
+#: ui/globals/dialog-forms.slint
+msgid "That doesn't look like a web address. It should start with https://"
+msgstr "Itu tidak tampak seperti alamat web. Alamat harus diawali dengan https://"
+
+#: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
+msgid "New Playlist"
+msgstr "Playlist Baru"
+
+#: ui/globals/dialog.slint
+msgid "Create"
+msgstr "Buat"
+
+#: ui/globals/dialog.slint
+msgid "Rename Playlist"
+msgstr "Ganti Nama Playlist"
+
+#: ui/globals/dialog.slint
+msgid "Delete playlist?"
+msgstr "Hapus playlist?"
+
+#: ui/globals/dialog.slint
+msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
+msgstr "Playlist dan urutan lagunya akan dihapus. Lagu-lagunya tetap ada di pustaka Anda."
+
+#: ui/globals/dialog.slint
+msgid "Delete"
+msgstr "Hapus"
+
+#: ui/globals/dialog.slint
+msgid "Delete {} playlists?"
+msgstr "Hapus {} playlist?"
+
+#: ui/globals/dialog.slint
+msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
+msgstr "Playlist tersebut beserta urutan lagunya akan dihapus. Lagu-lagunya tetap ada di pustaka Anda."
+
+#: ui/globals/dialog.slint
+msgid "Remove from Recently Played?"
+msgstr "Hapus dari Terakhir Diputar?"
+
+#: ui/globals/dialog.slint
+msgid "Remove from favorites?"
+msgstr "Hapus dari favorit?"
+
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from Recently Played."
+msgstr "\"{}\" akan dihapus dari Terakhir Diputar."
+
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from your stations, along with its play history."
+msgstr "\"{}\" akan dihapus dari stasiun Anda, beserta riwayat putarnya."
+
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from your favorites."
+msgstr "\"{}\" akan dihapus dari favorit Anda."
+
+#: ui/globals/dialog.slint
+msgid "Remove {n} station from Recently Played?"
+msgid_plural "Remove {n} stations from Recently Played?"
+msgstr[0] "Hapus {n} stasiun dari Terakhir Diputar?"
+
+#: ui/globals/dialog.slint
+msgid "Remove {n} station from favorites?"
+msgid_plural "Remove {n} stations from favorites?"
+msgstr[0] "Hapus {n} stasiun dari favorit?"
+
+#: ui/globals/dialog.slint
+msgid "The stations will be removed from Recently Played."
+msgstr "Stasiun tersebut akan dihapus dari Terakhir Diputar."
+
+#: ui/globals/dialog.slint
+msgid "The stations will be removed from your favorites. Any you added by hand are removed from your stations, along with their play history."
+msgstr "Stasiun tersebut akan dihapus dari favorit Anda. Stasiun yang Anda tambahkan secara manual akan dihapus dari stasiun Anda, beserta riwayat putarnya."
+
+#: ui/globals/dialog.slint
+msgid "Edit Rules"
+msgstr "Edit Aturan"
+
+#: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
+msgid "New Smart Playlist"
+msgstr "Playlist Pintar Baru"
+
+#: ui/globals/dialog.slint
+msgid "Edit Artwork"
+msgstr "Edit Sampul"
+
+#: ui/globals/dialog.slint
+msgid "Apply"
+msgstr "Terapkan"
+
+#: ui/globals/dialog.slint
+msgid "Export Playlists"
+msgstr "Ekspor Playlist"
+
+#: ui/globals/dialog.slint
+msgid "Choose playlists to export."
+msgstr "Pilih playlist yang akan diekspor."
+
+#: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Export"
+msgstr "Ekspor"
+
+#: ui/globals/hero-chips.slint ui/views/my-library-view.slint
+msgid "{n} artist"
+msgid_plural "{n} artists"
+msgstr[0] "{n} artis"
+
+#: ui/globals/hero-chips.slint
+msgid "{n} disc"
+msgid_plural "{n} discs"
+msgstr[0] "{n} disk"
+
+#: ui/globals/hero-chips.slint ui/settings.slint
+msgid "Compilation"
+msgstr "Kompilasi"
+
+#: ui/globals/player.slint
+msgid "No track playing"
+msgstr "Tidak ada lagu yang diputar"
+
+#. Translators: a state on the station pill, not the Pause button's verb
+#: ui/globals/player.slint
+msgid "Paused"
+msgstr "Dijeda"
+
+#: ui/globals/player.slint
+msgid "Buffering…"
+msgstr "Memuat buffer…"
+
+#. Translators: a short pill in place of a track's seek bar
+#: ui/globals/player.slint
+msgid "LIVE"
+msgstr "LIVE"
+
+#: ui/globals/player.slint
+msgid "Previous (hold to rewind)"
+msgstr "Sebelumnya (tahan untuk mundur)"
+
+#: ui/globals/player.slint
+msgid "Previous"
+msgstr "Sebelumnya"
+
+#: ui/globals/player.slint
+msgid "Next (hold to fast-forward)"
+msgstr "Berikutnya (tahan untuk maju cepat)"
+
+#: ui/globals/signal-path.slint
+msgid "Nothing is playing"
+msgstr "Tidak ada yang diputar"
+
+#: ui/globals/signal-path.slint
+msgid "Bit-perfect: the device receives the decoder's samples untouched"
+msgstr "Bit-perfect: perangkat menerima sampel dari dekoder tanpa diubah"
+
+#: ui/globals/signal-path.slint
+msgid "Enhanced: only effects you chose change the sound"
+msgstr "Disempurnakan: hanya efek pilihan Anda yang mengubah suara"
+
+#: ui/globals/signal-path.slint
+msgid "Fallback: exclusive output was refused, so the system mixer is in the way"
+msgstr "Cadangan: output eksklusif ditolak, sehingga mixer sistem ikut campur"
+
+#: ui/globals/signal-path.slint
+msgid "Lossy: the file is compressed, so the device gets the decoder's reconstruction of the recording"
+msgstr "Lossy: berkas dikompresi, sehingga perangkat menerima rekonstruksi rekaman dari dekoder"
+
+#: ui/globals/signal-path.slint
+msgid "Converted: the sound is changed on its way to the device"
+msgstr "Dikonversi: suara diubah dalam perjalanan ke perangkat"
+
+#: ui/globals/signal-path.slint
+msgid "Bit-perfect"
+msgstr "Bit-perfect"
+
+#: ui/globals/signal-path.slint
+msgid "Enhanced"
+msgstr "Disempurnakan"
+
+#: ui/globals/signal-path.slint
+msgid "Fallback"
+msgstr "Cadangan"
+
+#: ui/globals/signal-path.slint
+msgid "Lossy"
+msgstr "Lossy"
+
+#: ui/globals/signal-path.slint
+msgid "Converted"
+msgstr "Dikonversi"
+
+#. Translators: the action a click takes, expanding the sidebar
+#: ui/layout/sidebar.slint
+msgid "Expand"
+msgstr "Perluas"
+
+#: ui/layout/sidebar.slint
+msgid "Collapse"
+msgstr "Ciutkan"
+
+#: ui/settings.slint
+msgid "System Default"
+msgstr "Bawaan Sistem"
+
+#: ui/settings.slint
+msgid "File watching disabled"
+msgstr "Pemantauan berkas dinonaktifkan"
+
+#: ui/settings.slint
+msgid "Tracks won't reflect disk changes until you re-enable it."
+msgstr "Lagu tidak akan mengikuti perubahan di disk sampai Anda mengaktifkannya kembali."
+
+#: ui/settings.slint
+msgid "Library re-syncing"
+msgstr "Menyinkronkan ulang pustaka"
+
+#: ui/settings.slint
+msgid "Filesystem event burst — rescanning your folders."
+msgstr "Lonjakan peristiwa sistem berkas — memindai ulang folder Anda."
+
+#: ui/settings.slint
+msgid "Restoring cover art"
+msgstr "Memulihkan sampul"
+
+#: ui/settings.slint
+msgid "Some cover art was missing. Melodia is restoring it from your music files."
+msgstr "Beberapa sampul hilang. Melodia sedang memulihkannya dari berkas musik Anda."
+
+#: ui/settings.slint
+msgid "Update available"
+msgstr "Pembaruan tersedia"
+
+#: ui/settings.slint
+msgid "Melodia {} is ready to install."
+msgstr "Melodia {} siap diinstal."
+
+#: ui/settings.slint
+msgid "Install"
+msgstr "Instal"
+
+#: ui/settings.slint
+msgid "Update installed"
+msgstr "Pembaruan terinstal"
+
+#: ui/settings.slint
+msgid "Restart Melodia to start using the new version."
+msgstr "Mulai ulang Melodia untuk mulai menggunakan versi baru."
+
+#: ui/settings.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Restart"
+msgstr "Mulai ulang"
+
+#: ui/settings.slint
+msgid "Update failed"
+msgstr "Pembaruan gagal"
+
+#: ui/settings.slint
+msgid "Couldn't reach the update server. Check your internet connection."
+msgstr "Tidak dapat menjangkau server pembaruan. Periksa koneksi internet Anda."
+
+#: ui/settings.slint
+msgid "Signature check failed. The downloaded update may be corrupted; please try again."
+msgstr "Pemeriksaan tanda tangan gagal. Pembaruan yang diunduh mungkin rusak; silakan coba lagi."
+
+#: ui/settings.slint
+msgid "The update server returned an unexpected response."
+msgstr "Server pembaruan memberikan respons yang tidak terduga."
+
+#: ui/settings.slint
+msgid "Couldn't write the downloaded update to disk."
+msgstr "Tidak dapat menulis pembaruan yang diunduh ke disk."
+
+#: ui/settings.slint
+msgid "Update failed. See logs for details."
+msgstr "Pembaruan gagal. Lihat log untuk detailnya."
+
+#: ui/settings.slint
+msgid "Diagnostics report saved"
+msgstr "Laporan diagnostik disimpan"
+
+#: ui/settings.slint
+msgid "Saved to {}"
+msgstr "Disimpan ke {}"
+
+#: ui/settings.slint
+msgid "Couldn't save the diagnostics report"
+msgstr "Tidak dapat menyimpan laporan diagnostik"
+
+#: ui/settings.slint
+msgid "See the log for details."
+msgstr "Lihat log untuk detailnya."
+
+#: ui/settings.slint
+msgid "Melodia crashed last time"
+msgstr "Melodia berhenti mendadak terakhir kali"
+
+#: ui/settings.slint
+msgid "A crash report was written. Open the log folder to find it."
+msgstr "Laporan crash telah ditulis. Buka folder log untuk menemukannya."
+
+#: ui/settings.slint
+msgid "Enjoying Melodia?"
+msgstr "Suka dengan Melodia?"
+
+#: ui/settings.slint
+msgid "It's free and open source, built in my spare time. If it's useful to you, you can support me. You'll only see this once."
+msgstr "Melodia gratis dan sumber terbuka, dibuat di waktu luang saya. Jika bermanfaat bagi Anda, Anda dapat mendukung saya. Pesan ini hanya muncul sekali."
+
+#: ui/settings.slint
+msgid "Support"
+msgstr "Dukung"
+
+#: ui/settings.slint
+msgid "Audio device disconnected"
+msgstr "Perangkat audio terputus"
+
+#: ui/settings.slint
+msgid "Playback won't be audible until you reconnect it and restart Melodia."
+msgstr "Pemutaran tidak akan terdengar sampai Anda menyambungkannya kembali dan memulai ulang Melodia."
+
+#: ui/settings.slint
+msgid "{n} playlist imported"
+msgid_plural "{n} playlists imported"
+msgstr[0] "{n} playlist diimpor"
+
+#: ui/settings.slint
+msgid "{n} track added · {} missing"
+msgid_plural "{n} tracks added · {} missing"
+msgstr[0] "{n} lagu ditambahkan · {} tidak ditemukan"
+
+#: ui/settings.slint
+msgid "{n} track added"
+msgid_plural "{n} tracks added"
+msgstr[0] "{n} lagu ditambahkan"
+
+#: ui/settings.slint
+msgid "Import failed"
+msgstr "Impor gagal"
+
+#: ui/settings.slint
+msgid "Couldn't read the selected playlist file(s)."
+msgstr "Tidak dapat membaca berkas playlist yang dipilih."
+
+#: ui/settings.slint
+msgid "{n} playlist exported"
+msgid_plural "{n} playlists exported"
+msgstr[0] "{n} playlist diekspor"
+
+#: ui/settings.slint
+msgid "Export failed"
+msgstr "Ekspor gagal"
+
+#: ui/settings.slint
+msgid "Couldn't write the playlist files."
+msgstr "Tidak dapat menulis berkas playlist."
+
+#: ui/settings.slint
+msgid "These playlists are too large for one .zip file. Export fewer at a time."
+msgstr "Playlist ini terlalu besar untuk satu berkas .zip. Ekspor lebih sedikit sekaligus."
+
+#: ui/settings.slint
+msgid "{n} station added"
+msgid_plural "{n} stations added"
+msgstr[0] "{n} stasiun ditambahkan"
+
+#: ui/settings.slint
+msgid "{n} was already in your list."
+msgid_plural "{n} were already in your list."
+msgstr[0] "{n} sudah ada di daftar Anda."
+
+#: ui/settings.slint
+msgid "Couldn't read any stations from the selected file(s)."
+msgstr "Tidak dapat membaca stasiun apa pun dari berkas yang dipilih."
+
+#: ui/settings.slint
+msgid "{n} station exported"
+msgid_plural "{n} stations exported"
+msgstr[0] "{n} stasiun diekspor"
+
+#: ui/settings.slint
+msgid "Couldn't write the station list."
+msgstr "Tidak dapat menulis daftar stasiun."
+
+#: ui/settings.slint
+msgid "Playback error"
+msgstr "Kesalahan pemutaran"
+
+#: ui/settings.slint
+msgid "Something went wrong"
+msgstr "Terjadi kesalahan"
+
+#: ui/settings.slint
+msgid "Loved tracks"
+msgstr "Lagu yang disukai"
+
+#: ui/settings.slint
+msgid "Lyrics saved"
+msgstr "Lirik disimpan"
+
+#: ui/settings.slint
+msgid "Copied to clipboard"
+msgstr "Disalin ke papan klip"
+
+#: ui/settings.slint
+msgid "Nothing to copy"
+msgstr "Tidak ada yang bisa disalin"
+
+#: ui/settings.slint
+msgid "Vote not counted"
+msgstr "Suara tidak dihitung"
+
+#: ui/settings.slint
+msgid "Exclusive output unavailable"
+msgstr "Output eksklusif tidak tersedia"
+
+#: ui/settings.slint
+msgid "Exclusive output was refused, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "Output eksklusif ditolak, jadi untuk sementara Melodia memutar dalam mode bersama. Bagian Output di Pengaturan menjelaskan alasannya."
+
+#: ui/settings.slint
+msgid "{} refused exclusive output, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "{} menolak output eksklusif, jadi untuk sementara Melodia memutar dalam mode bersama. Bagian Output di Pengaturan menjelaskan alasannya."
+
+#: ui/settings.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Restart Required"
+msgstr "Perlu Mulai Ulang"
+
+#: ui/settings.slint
+msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
+msgstr "Melodia tidak dapat memulai ulang dirinya sendiri. Tutup lalu buka kembali untuk menerapkan perubahan."
+
+#: ui/settings.slint
+msgid "Added to {n} playlist"
+msgid_plural "Added to {n} playlists"
+msgstr[0] "Ditambahkan ke {n} playlist"
+
+#: ui/settings.slint
+msgid "‹multiple values›"
+msgstr "‹beberapa nilai›"
+
+#: ui/settings.slint
+msgid "{n} track updated"
+msgid_plural "{n} tracks updated"
+msgstr[0] "{n} lagu diperbarui"
+
+#: ui/settings.slint
+msgid "{n} file failed"
+msgid_plural "{n} files failed"
+msgstr[0] "{n} berkas gagal"
+
+#: ui/settings.slint
+msgid "{n} file has unsupported fields"
+msgid_plural "{n} files have unsupported fields"
+msgstr[0] "{n} berkas memiliki kolom yang tidak didukung"
+
+#: ui/settings.slint
+msgid "{} can't be saved to {} files"
+msgstr "{} tidak dapat disimpan ke berkas {}"
+
+#: ui/settings.slint
+msgid "Disc Total"
+msgstr "Total Disk"
+
+#: ui/settings.slint
+msgid "Track Total"
+msgstr "Total Trek"
+
+#: ui/settings.slint
+msgid "Movement Number"
+msgstr "Nomor Bagian"
+
+#: ui/settings.slint
+msgid "Movement Total"
+msgstr "Total Bagian"
+
+#: ui/settings.slint
+msgid "Couldn't save tags"
+msgstr "Tidak dapat menyimpan tag"
+
+#: ui/settings.slint
+msgid "No tracks were updated."
+msgstr "Tidak ada lagu yang diperbarui."
+
+#: ui/views/browse-view.slint
+msgid "No library folders configured"
+msgstr "Belum ada folder pustaka yang diatur"
+
+#: ui/views/browse-view.slint
+msgid "Open Settings to add a folder"
+msgstr "Buka Pengaturan untuk menambahkan folder"
+
+#: ui/views/browse-view.slint
+msgid "Open Settings"
+msgstr "Buka Pengaturan"
+
+#: ui/views/browse-view.slint
+msgid "Could not load folder"
+msgstr "Tidak dapat memuat folder"
+
+#: ui/views/browse-view.slint
+msgid "Empty folder"
+msgstr "Folder kosong"
+
+#: ui/views/browse-view.slint
+msgid "Card view"
+msgstr "Tampilan kartu"
+
+#: ui/views/browse-view.slint
+msgid "List view"
+msgstr "Tampilan daftar"
+
+#: ui/views/favorites-view.slint ui/views/recently-played-view.slint
+msgid "Filter most played…"
+msgstr "Saring yang paling sering diputar…"
+
+#: ui/views/favorites-view.slint ui/views/my-library-view.slint
+msgid "Filter artists…"
+msgstr "Saring artis…"
+
+#: ui/views/favorites-view.slint
+msgid "Filter favorites…"
+msgstr "Saring favorit…"
+
+#: ui/views/favorites-view.slint
+msgid "Favorite Artists"
+msgstr "Artis Favorit"
+
+#: ui/views/favorites-view.slint ui/views/recently-played-view.slint
+msgid "Most Played"
+msgstr "Paling Sering Diputar"
+
+#: ui/views/favorites-view.slint ui/views/my-library-view.slint
+#: ui/views/recently-played-view.slint ui/views/search/songs-section.slint
+msgid "Songs"
+msgstr "Lagu"
+
+#: ui/views/favorites-view.slint
+msgid "No favorites yet"
+msgstr "Belum ada favorit"
+
+#: ui/views/favorites/artists-tab.slint
+msgid "No favorite artists yet"
+msgstr "Belum ada artis favorit"
+
+#: ui/views/favorites/artists-tab.slint
+msgid "Favorite a song and its artist appears here."
+msgstr "Jadikan lagu sebagai favorit, dan artisnya akan muncul di sini."
+
+#: ui/views/favorites/most-played-tab.slint ui/views/radio-view.slint
+#: ui/views/recently-played/most-played-tab.slint
+msgid "Nothing played yet"
+msgstr "Belum ada yang diputar"
+
+#: ui/views/favorites/most-played-tab.slint
+msgid "Play one of your favorites and it will show up here."
+msgstr "Putar salah satu favorit Anda dan lagu itu akan muncul di sini."
+
+#: ui/views/my-library-view.slint
+msgid "{n} song"
+msgid_plural "{n} songs"
+msgstr[0] "{n} lagu"
+
+#: ui/views/my-library-view.slint
+msgid "{n} genre"
+msgid_plural "{n} genres"
+msgstr[0] "{n} genre"
+
+#: ui/views/my-library-view.slint
+msgid "{n} playlist"
+msgid_plural "{n} playlists"
+msgstr[0] "{n} playlist"
+
+#: ui/views/my-library-view.slint ui/views/my-library/artist-detail.slint
+#: ui/views/my-library/tab-pills.slint ui/views/search-view.slint
+msgid "Albums"
+msgstr "Album"
+
+#: ui/views/my-library-view.slint ui/views/search-view.slint
+msgid "Artists"
+msgstr "Artis"
+
+#: ui/views/my-library-view.slint
+msgid "Genres"
+msgstr "Genre"
+
+#: ui/views/my-library-view.slint
+msgid "Playlists"
+msgstr "Playlist"
+
+#: ui/views/my-library-view.slint
+msgid "Filter tracks & albums…"
+msgstr "Saring lagu & album…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter tracks…"
+msgstr "Saring lagu…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter albums…"
+msgstr "Saring album…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter genres…"
+msgstr "Saring genre…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter playlists…"
+msgstr "Saring playlist…"
+
+#: ui/views/my-library/albums-tab.slint
+msgid "No albums yet"
+msgstr "Belum ada album"
+
+#: ui/views/my-library/albums-tab.slint ui/views/my-library/artists-tab.slint
+#: ui/views/my-library/genres-tab.slint
+msgid "Add a music folder in Settings to start building your library."
+msgstr "Tambahkan folder musik di Pengaturan untuk mulai membangun pustaka Anda."
+
+#: ui/views/my-library/artists-tab.slint
+msgid "No artists yet"
+msgstr "Belum ada artis"
+
+#: ui/views/my-library/genres-tab.slint
+msgid "No genres yet"
+msgstr "Belum ada genre"
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "No matching tracks"
+msgstr "Tidak ada lagu yang cocok"
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "No tracks yet"
+msgstr "Belum ada lagu"
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "No tracks match these rules."
+msgstr "Tidak ada lagu yang cocok dengan aturan ini."
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "Drag music files here, or add tracks via any track's overflow menu."
+msgstr "Seret berkas musik ke sini, atau tambahkan lagu melalui menu lainnya pada lagu mana pun."
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "Drop files to add to this playlist"
+msgstr "Lepaskan berkas untuk menambahkannya ke playlist ini"
+
+#: ui/views/my-library/playlists-tab.slint
+msgid "No playlists yet"
+msgstr "Belum ada playlist"
+
+#: ui/views/my-library/playlists-tab.slint
+msgid "Click \"+ New Playlist\" to create one."
+msgstr "Klik \"+ Playlist Baru\" untuk membuatnya."
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Tracks"
+msgstr "Lagu"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Edit artwork"
+msgstr "Edit sampul"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Rename"
+msgstr "Ganti nama"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Edit rules"
+msgstr "Edit aturan"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Delete playlist"
+msgstr "Hapus playlist"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Create an empty playlist"
+msgstr "Buat playlist kosong"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Create a playlist from rules"
+msgstr "Buat playlist dari aturan"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "More playlist actions"
+msgstr "Tindakan playlist lainnya"
+
+#: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
+msgid "Import"
+msgstr "Impor"
+
+#: ui/views/now-playing-view.slint ui/views/radio/tab-pills.slint
+msgid "Vote"
+msgstr "Beri suara"
+
+#. Translators: a heading in place of "Up Next", so keep it as short
+#: ui/views/now-playing-view.slint
+msgid "Station"
+msgstr "Stasiun"
+
+#: ui/views/now-playing-view.slint
+msgid "Up Next"
+msgstr "Berikutnya"
+
+#: ui/views/placeholder-view.slint
+msgid "Coming soon"
+msgstr "Segera hadir"
+
+#: ui/views/queue-sheet.slint
+msgid "No tracks"
+msgstr "Tidak ada lagu"
+
+#: ui/views/queue-sheet.slint
+msgid "Clear queue"
+msgstr "Kosongkan antrean"
+
+#: ui/views/queue-sheet.slint
+msgid "Clear queue?"
+msgstr "Kosongkan antrean?"
+
+#: ui/views/queue-sheet.slint
+msgid "Remove all tracks from the queue? Playback will stop."
+msgstr "Hapus semua lagu dari antrean? Pemutaran akan berhenti."
+
+#: ui/views/queue-sheet.slint
+msgid "Queue is empty"
+msgstr "Antrean kosong"
+
+#: ui/views/queue-sheet.slint
+msgid "Drop to add to queue"
+msgstr "Lepaskan untuk menambahkan ke antrean"
+
+#: ui/views/radio-view.slint ui/views/radio/suggestion-pill.slint
+msgid "{n} station"
+msgid_plural "{n} stations"
+msgstr[0] "{n} stasiun"
+
+#: ui/views/radio-view.slint
+msgid "Search stations…"
+msgstr "Cari stasiun…"
+
+#: ui/views/radio-view.slint
+msgid "Filter stations…"
+msgstr "Saring stasiun…"
+
+#: ui/views/radio-view.slint
+msgid "No stations kept yet"
+msgstr "Belum ada stasiun yang disimpan"
+
+#: ui/views/radio-view.slint
+msgid "Star a station in Browse, or add one by URL."
+msgstr "Beri bintang pada stasiun di Jelajahi, atau tambahkan lewat URL."
+
+#: ui/views/radio-view.slint
+msgid "Stations you listen to show up here."
+msgstr "Stasiun yang Anda dengarkan akan muncul di sini."
+
+#: ui/views/radio/browse-tab.slint
+msgid "Searching the directory…"
+msgstr "Mencari di direktori…"
+
+#: ui/views/radio/browse-tab.slint
+msgid "Stations are coming from radio-browser.info."
+msgstr "Stasiun berasal dari radio-browser.info."
+
+#: ui/views/radio/browse-tab.slint
+msgid "The station directory is unreachable"
+msgstr "Direktori stasiun tidak dapat dijangkau"
+
+#: ui/views/radio/browse-tab.slint
+msgid "Check your connection and try again."
+msgstr "Periksa koneksi Anda lalu coba lagi."
+
+#: ui/views/radio/browse-tab.slint
+msgid "Try again"
+msgstr "Coba lagi"
+
+#: ui/views/radio/browse-tab.slint ui/views/radio/kept-stations-tab.slint
+msgid "No stations matched"
+msgstr "Tidak ada stasiun yang cocok"
+
+#: ui/views/radio/browse-tab.slint ui/views/radio/kept-stations-tab.slint
+msgid "Try a different name, or clear a filter."
+msgstr "Coba nama lain, atau hapus filter."
+
+#: ui/views/radio/browse-tab.slint
+msgid "Load more stations"
+msgstr "Muat stasiun lainnya"
+
+#: ui/views/radio/browse-tab.slint ui/views/radio/facet-chip.slint
+msgid "Loading…"
+msgstr "Memuat…"
+
+#: ui/views/radio/facet-chip.slint
+msgid "Filter…"
+msgstr "Saring…"
+
+#: ui/views/radio/facet-chip.slint
+msgid "Nothing to pick from"
+msgstr "Tidak ada yang bisa dipilih"
+
+#: ui/views/radio/station-detail.slint
+msgid "The directory reached this station on its last check."
+msgstr "Direktori berhasil menjangkau stasiun ini pada pemeriksaan terakhir."
+
+#: ui/views/radio/station-detail.slint
+msgid "The directory could not reach this station on its last check."
+msgstr "Direktori tidak dapat menjangkau stasiun ini pada pemeriksaan terakhir."
+
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+msgid "{} kbps and up"
+msgstr "{} kbps ke atas"
+
+#: ui/views/radio/suggestion-pill.slint
+msgid "{}: {}"
+msgstr "{}: {}"
+
+#: ui/views/radio/tab-pills.slint
+msgid "Add Station"
+msgstr "Tambah Stasiun"
+
+#: ui/views/radio/tab-pills.slint
+msgid "Added"
+msgstr "Ditambahkan"
+
+#: ui/views/radio/tab-pills.slint
+msgid "More station actions"
+msgstr "Tindakan stasiun lainnya"
+
+#: ui/views/radio/tab-pills.slint
+msgid "Edit"
+msgstr "Edit"
+
+#: ui/views/recently-played-view.slint
+msgid "Filter recently played…"
+msgstr "Saring yang terakhir diputar…"
+
+#: ui/views/recently-played-view.slint
+msgid "No recently played tracks"
+msgstr "Belum ada lagu yang terakhir diputar"
+
+#: ui/views/recently-played/most-played-tab.slint
+msgid "Play something and it will show up here."
+msgstr "Putar sesuatu dan akan muncul di sini."
+
+#: ui/views/search-view.slint
+msgid "Searching…"
+msgstr "Mencari…"
+
+#: ui/views/search-view.slint
+msgid "Search your library…"
+msgstr "Cari di pustaka Anda…"
+
+#: ui/views/search/no-results.slint
+msgid "No results found"
+msgstr "Tidak ada hasil"
+
+#: ui/views/search/no-results.slint
+msgid "Try a different search term"
+msgstr "Coba kata kunci lain"
+
+#: ui/views/search/recent-searches.slint
+msgid "Recent"
+msgstr "Terbaru"
+
+#: ui/views/search/recent-searches.slint
+msgid "Clear all"
+msgstr "Hapus semua"
+
+#: ui/views/search/songs-section.slint
+msgid "Show less"
+msgstr "Tampilkan lebih sedikit"
+
+#: ui/views/search/songs-section.slint
+msgid "Show all {} songs"
+msgstr "Tampilkan semua {} lagu"
+
+#: ui/views/search/top-result-card.slint
+msgid "Top Result"
+msgstr "Hasil Teratas"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/interface-page.slint
+msgid "Interface"
+msgstr "Antarmuka"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/library-page.slint
+msgid "Library"
+msgstr "Pustaka"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/playback-page.slint
+#: ui/views/settings/playback-section.slint
+msgid "Playback"
+msgstr "Pemutaran"
+
+#: ui/views/settings-view.slint ui/views/settings/about-section.slint
+#: ui/views/settings/pages/about-page.slint
+msgid "About"
+msgstr "Tentang"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/services-page.slint
+msgid "Services"
+msgstr "Layanan"
+
+#: ui/views/settings-view.slint
+msgid "Search settings…"
+msgstr "Cari pengaturan…"
+
+#. Translators: `{}` is the version number, such as 0.9.2
+#: ui/views/settings/about-section.slint
+msgid "Version {}"
+msgstr "Versi {}"
+
+#. Translators: `{}` is the author's name, a proper noun kept as is
+#: ui/views/settings/about-section.slint
+msgid "Made by {}"
+msgstr "Dibuat oleh {}"
+
+#. Translators: support as in funding the project, not technical support
+#: ui/views/settings/about-section.slint
+msgid "Support Melodia"
+msgstr "Dukung Melodia"
+
+#: ui/views/settings/about-section.slint
+msgid "Melodia is free and open source. Support helps keep it going."
+msgstr "Melodia gratis dan sumber terbuka. Dukungan Anda membantunya terus berjalan."
+
+#: ui/views/settings/about-section.slint
+msgid "License"
+msgstr "Lisensi"
+
+#. Translators: Ko-fi is a brand and stays as is; support means funding
+#: ui/views/settings/about-section.slint
+msgid "Support me on Ko-fi"
+msgstr "Dukung saya di Ko-fi"
+
+#: ui/views/settings/about-section.slint
+msgid "Welcome Guide"
+msgstr "Panduan Selamat Datang"
+
+#: ui/views/settings/about-section.slint
+msgid "Run the first-run setup again."
+msgstr "Jalankan lagi penyiapan awal."
+
+#. Translators: a button in a narrow slot, so keep it short
+#: ui/views/settings/about-section.slint
+msgid "Show"
+msgstr "Tampilkan"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Color Style"
+msgstr "Gaya Warna"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Active — palette derived from the current track's artwork."
+msgstr "Aktif — palet diambil dari sampul lagu yang sedang diputar."
+
+#: ui/views/settings/appearance-section.slint
+msgid "Generate theme colors from album artwork."
+msgstr "Buat warna tema dari sampul album."
+
+#: ui/views/settings/appearance-section.slint
+msgid "Aurora Backdrop"
+msgstr "Latar Aurora"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."
+msgstr "Warnai header album, playlist, dan Sedang Diputar dengan sapuan warna album itu sendiri, alih-alih salinan sampulnya yang diburamkan. Tidak ada yang perlu diburamkan, jadi header muncul lebih cepat dan Melodia tetap ringan. Perlu mulai ulang untuk menerapkan."
+
+#: ui/views/settings/appearance-section.slint
+#: ui/views/settings/playback-section.slint
+msgid "None"
+msgstr "Tidak ada"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Tonal Spot"
+msgstr "Tonal Spot"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Content"
+msgstr "Konten"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Vibrant"
+msgstr "Semarak"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Expressive"
+msgstr "Ekspresif"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Fidelity"
+msgstr "Fidelitas"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Neutral"
+msgstr "Netral"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Monochrome"
+msgstr "Monokrom"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Changing the backdrop style requires restarting Melodia. Restart now?"
+msgstr "Mengubah gaya latar memerlukan mulai ulang Melodia. Mulai ulang sekarang?"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Diagnostics"
+msgstr "Diagnostik"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Logs"
+msgstr "Log"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Where Melodia writes its log files and crash reports."
+msgstr "Tempat Melodia menyimpan berkas log dan laporan crash."
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Diagnostics report"
+msgstr "Laporan diagnostik"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "One text file with your system details, settings and recent logs, for attaching to a bug report."
+msgstr "Satu berkas teks berisi detail sistem, pengaturan, dan log terbaru Anda, untuk dilampirkan ke laporan bug."
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Verbose logging"
+msgstr "Log terperinci"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Record extra detail. Turn this on, reproduce the problem, then save a report."
+msgstr "Catat detail tambahan. Aktifkan ini, ulangi masalahnya, lalu simpan laporan."
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Save…"
+msgstr "Simpan…"
+
+#: ui/views/settings/discord-section.slint
+msgid "Show album artwork"
+msgstr "Tampilkan sampul album"
+
+#: ui/views/settings/discord-section.slint
+msgid "Look up cover art online (via Deezer or iTunes) to show on the card"
+msgstr "Cari sampul secara online (melalui Deezer atau iTunes) untuk ditampilkan di kartu"
+
+#: ui/views/settings/discord-section.slint
+msgid "Hide while paused"
+msgstr "Sembunyikan saat dijeda"
+
+#: ui/views/settings/discord-section.slint
+msgid "Remove the card when paused instead of showing a paused marker"
+msgstr "Hapus kartu saat dijeda alih-alih menampilkan penanda jeda"
+
+#: ui/views/settings/discord-section.slint
+msgid "Status"
+msgstr "Status"
+
+#: ui/views/settings/discord-section.slint
+msgid "Connected to Discord"
+msgstr "Terhubung ke Discord"
+
+#: ui/views/settings/discord-section.slint
+msgid "Discord not running"
+msgstr "Discord tidak berjalan"
+
+#: ui/views/settings/file-watching-section.slint
+msgid "File Watching"
+msgstr "Pemantauan Berkas"
+
+#: ui/views/settings/file-watching-section.slint
+msgid "Watch for file changes"
+msgstr "Pantau perubahan berkas"
+
+#: ui/views/settings/file-watching-section.slint
+msgid "Automatically detect when files are added, removed, or changed in your library folders."
+msgstr "Deteksi otomatis saat berkas ditambahkan, dihapus, atau diubah di folder pustaka Anda."
+
+#: ui/views/settings/language-section.slint
+msgid "Choose your preferred language"
+msgstr "Pilih bahasa yang Anda inginkan"
+
+#: ui/views/settings/library-section.slint
+msgid "Manage Folders"
+msgstr "Kelola Folder"
+
+#: ui/views/settings/library-section.slint
+msgid "Library Folders"
+msgstr "Folder Pustaka"
+
+#: ui/views/settings/library-section.slint
+msgid "Remove Folder?"
+msgstr "Hapus Folder?"
+
+#. Translators: `{}` is the absolute path of the folder being removed
+#: ui/views/settings/library-section.slint
+msgid "Remove \"{}\" from your library? All tracks under this folder will be removed from the library and from your playlists."
+msgstr "Hapus \"{}\" dari pustaka Anda? Semua lagu di folder ini akan dihapus dari pustaka dan dari playlist Anda."
+
+#: ui/views/settings/library-section.slint
+msgid "No folders added"
+msgstr "Belum ada folder yang ditambahkan"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Show the playing track's words in Now Playing instead of Up Next"
+msgstr "Tampilkan lirik lagu yang sedang diputar di Sedang Diputar alih-alih Berikutnya"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
+msgstr "Tampilkan bunyi tiap baris dalam huruf Latin di bawah liriknya, untuk aksara yang tidak memakai huruf Latin"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Miniplayer"
+msgstr "Pemutar Mini"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Window Buttons"
+msgstr "Tombol Jendela"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "The minimize, full player and close buttons in the miniplayer's corner."
+msgstr "Tombol perkecil, pemutar penuh, dan tutup di sudut pemutar mini."
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Album Backdrop"
+msgstr "Latar Album"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
+msgstr "Warnai pemutar mini dengan warna album yang sedang diputar, seperti tampilan Sedang Diputar."
+
+#: ui/views/settings/motion-section.slint
+msgid "Motion"
+msgstr "Gerakan"
+
+#: ui/views/settings/motion-section.slint
+msgid "Skip Startup Animation"
+msgstr "Lewati Animasi Pembuka"
+
+#: ui/views/settings/motion-section.slint
+msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
+msgstr "Buka dengan pustaka langsung tampil di layar, alih-alih memudar dan bergeser ke tempatnya. Halaman detail yang Anda biarkan terbuka tetap membentang setelah dimuat."
+
+#: ui/views/settings/output-section.slint
+msgid "Output"
+msgstr "Output"
+
+#: ui/views/settings/output-section.slint
+msgid "Output Mode"
+msgstr "Mode Output"
+
+#: ui/views/settings/output-section.slint
+msgid "Exclusive gives Melodia the audio device alone: other apps can't play through it while Melodia plays, and the system mixer can't change the sound"
+msgstr "Eksklusif memberi Melodia perangkat audio sepenuhnya: aplikasi lain tidak dapat memutar melaluinya selama Melodia memutar, dan mixer sistem tidak dapat mengubah suaranya"
+
+#: ui/views/settings/output-section.slint
+msgid "Output Device"
+msgstr "Perangkat Output"
+
+#: ui/views/settings/output-section.slint
+msgid "Exclusive Device"
+msgstr "Perangkat Eksklusif"
+
+#: ui/views/settings/output-section.slint
+msgid "The sound card Melodia plays through"
+msgstr "Kartu suara yang dipakai Melodia untuk memutar"
+
+#: ui/views/settings/output-section.slint
+msgid "The sound card exclusive output takes"
+msgstr "Kartu suara yang diambil alih output eksklusif"
+
+#: ui/views/settings/output-section.slint
+msgid "Unsupported Sample Rates"
+msgstr "Laju Sampel yang Tidak Didukung"
+
+#: ui/views/settings/output-section.slint
+msgid "What exclusive output does when the device can't run a track's sample rate: hand the device back and play that track through the system mixer, or keep the device and convert the track to a rate it can run"
+msgstr "Yang dilakukan output eksklusif saat perangkat tidak mendukung laju sampel suatu lagu: melepaskan perangkat dan memutar lagu itu melalui mixer sistem, atau tetap memegang perangkat dan mengonversi lagu ke laju yang didukungnya"
+
+#: ui/views/settings/output-section.slint
+msgid "Buffer Period"
+msgstr "Periode Buffer"
+
+#: ui/views/settings/output-section.slint
+msgid "How much audio the device is handed at a time. Longer periods ride out a busy system; shorter ones react sooner"
+msgstr "Seberapa banyak audio yang diberikan ke perangkat dalam sekali kirim. Periode yang lebih panjang tahan terhadap sistem yang sibuk; yang lebih pendek bereaksi lebih cepat"
+
+#: ui/views/settings/output-section.slint
+msgid "Polling Mode"
+msgstr "Mode Polling"
+
+#: ui/views/settings/output-section.slint
+msgid "Top the device up on a timer instead of waiting for it to ask. Try it if a USB device stutters or crackles in exclusive mode"
+msgstr "Isi ulang perangkat berdasarkan timer alih-alih menunggu permintaannya. Coba ini jika perangkat USB tersendat atau berderak dalam mode eksklusif"
+
+#: ui/views/settings/output-section.slint
+msgid "Hardware Volume"
+msgstr "Volume Perangkat Keras"
+
+#: ui/views/settings/output-section.slint
+msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
+msgstr "Atur kontrol volume milik perangkat alih-alih menskalakan sampel, sehingga penggeser volume menjaga suara tetap bit-perfect. Kontrol itu adalah volume sistem perangkat, dan dikembalikan saat Melodia melepaskan perangkat. Perangkat tanpa kontrol tersebut tetap memakai volume Melodia sendiri"
+
+#: ui/views/settings/output-section.slint
+msgid "Give the Device Back When Paused"
+msgstr "Lepaskan Perangkat Saat Dijeda"
+
+#: ui/views/settings/output-section.slint
+msgid "After five minutes paused, hand the device back so other apps can play through it. Pressing play takes it again"
+msgstr "Setelah lima menit dijeda, lepaskan perangkat agar aplikasi lain dapat memutar melaluinya. Menekan putar akan mengambilnya kembali"
+
+#: ui/views/settings/output-section.slint
+msgid "Silence After a Rate Change"
+msgstr "Hening Setelah Perubahan Laju"
+
+#: ui/views/settings/output-section.slint
+msgid "Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off"
+msgstr "Beberapa DAC membisu sesaat ketika berganti laju sampel. Jeda hening singkat di setiap perubahan mencegah awal lagu terpotong"
+
+#: ui/views/settings/output-section.slint
+msgid "Match the File's Sample Rate"
+msgstr "Ikuti Laju Sampel Berkas"
+
+#: ui/views/settings/output-section.slint
+msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate"
+msgstr "Buka ulang perangkat audio pada laju masing-masing lagu, sehingga sistem tidak melakukan resampling. Sistem harus mengizinkan laju tersebut"
+
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Signal Path"
+msgstr "Jalur Sinyal"
+
+#: ui/views/settings/output-section.slint
+msgid "What reaches the audio device, and what changes it on the way. Bit-perfect means nothing does"
+msgstr "Apa yang sampai ke perangkat audio, dan apa yang mengubahnya di perjalanan. Bit-perfect berarti tidak ada yang mengubahnya"
+
+#: ui/views/settings/output-section.slint
+msgid "the device is in use by another app"
+msgstr "perangkat sedang digunakan aplikasi lain"
+
+#: ui/views/settings/output-section.slint
+msgid "{} holds the device"
+msgstr "{} sedang memakai perangkat"
+
+#: ui/views/settings/output-section.slint
+msgid "another app holds the device"
+msgstr "aplikasi lain sedang memakai perangkat"
+
+#: ui/views/settings/output-section.slint
+msgid "the device can't run at this sample rate"
+msgstr "perangkat tidak dapat berjalan pada laju sampel ini"
+
+#: ui/views/settings/output-section.slint
+msgid "the device can't play this many channels"
+msgstr "perangkat tidak dapat memutar kanal sebanyak ini"
+
+#: ui/views/settings/output-section.slint
+msgid "the device takes no sample format that holds this track"
+msgstr "perangkat tidak menerima format sampel yang dapat memuat lagu ini"
+
+#: ui/views/settings/output-section.slint
+msgid "the chosen device isn't connected"
+msgstr "perangkat yang dipilih tidak terhubung"
+
+#: ui/views/settings/output-section.slint
+msgid "exclusive output isn't available on this system"
+msgstr "output eksklusif tidak tersedia di sistem ini"
+
+#: ui/views/settings/output-section.slint
+msgid "the device doesn't allow exclusive control, which its Advanced properties in the Sound control panel can turn on"
+msgstr "perangkat tidak mengizinkan kontrol eksklusif, yang dapat diaktifkan di tab Tingkat Lanjut pada properti perangkat di panel kontrol Suara"
+
+#: ui/views/settings/output-section.slint
+msgid "the device couldn't be opened"
+msgstr "perangkat tidak dapat dibuka"
+
+#: ui/views/settings/output-section.slint
+msgid "No effects"
+msgstr "Tanpa efek"
+
+#: ui/views/settings/output-section.slint
+msgid "Equalizer and ReplayGain"
+msgstr "Equalizer dan ReplayGain"
+
+#: ui/views/settings/output-section.slint
+msgid "Shared"
+msgstr "Bersama"
+
+#: ui/views/settings/output-section.slint
+msgid "Exclusive"
+msgstr "Eksklusif"
+
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/scrobbling-section.slint
+msgid "Not connected"
+msgstr "Tidak terhubung"
+
+#: ui/views/settings/output-section.slint
+msgid "Play Through the System Mixer"
+msgstr "Putar Melalui Mixer Sistem"
+
+#: ui/views/settings/output-section.slint
+msgid "Resample and Keep Exclusive"
+msgstr "Resample dan Tetap Eksklusif"
+
+#: ui/views/settings/output-section.slint
+msgid "{} ms"
+msgstr "{} ms"
+
+#: ui/views/settings/output-section.slint
+msgid "The device is running at {}"
+msgstr "Perangkat berjalan pada {}"
+
+#: ui/views/settings/output-section.slint
+msgid "Make Bit-Perfect"
+msgstr "Jadikan Bit-Perfect"
+
+#: ui/views/settings/output-section.slint
+msgid "Switch to Exclusive Output?"
+msgstr "Beralih ke Output Eksklusif?"
+
+#: ui/views/settings/output-section.slint
+msgid "Bit-perfect playback needs exclusive output. Other apps can't play through the device while Melodia does, and the system volume stops applying: Melodia's own volume goes to full unless Hardware Volume is on."
+msgstr "Pemutaran bit-perfect memerlukan output eksklusif. Aplikasi lain tidak dapat memutar melalui perangkat selama Melodia memutar, dan volume sistem tidak lagi berlaku: volume Melodia sendiri menjadi penuh kecuali Volume Perangkat Keras aktif."
+
+#: ui/views/settings/output-section.slint
+msgid "Switch"
+msgstr "Beralih"
+
+#: ui/views/settings/output-section.slint
+msgid "Source"
+msgstr "Sumber"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, decoded from a lossy codec"
+msgstr "{}, didekode dari codec lossy"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, rounded to fit 32-bit float"
+msgstr "{}, dibulatkan agar muat dalam float 32-bit"
+
+#: ui/views/settings/output-section.slint
+msgid "Effects"
+msgstr "Efek"
+
+#: ui/views/settings/output-section.slint
+msgid "Normal"
+msgstr "Normal"
+
+#: ui/views/settings/output-section.slint
+msgid "Volume"
+msgstr "Volume"
+
+#: ui/views/settings/output-section.slint
+msgid "Muted"
+msgstr "Dibisukan"
+
+#: ui/views/settings/output-section.slint
+msgid "{}% (the device muted)"
+msgstr "{}% (perangkat dibisukan)"
+
+#: ui/views/settings/output-section.slint
+msgid "{}% on the device"
+msgstr "{}% di perangkat"
+
+#: ui/views/settings/output-section.slint
+msgid "{}% (the device at {}%)"
+msgstr "{}% (perangkat pada {}%)"
+
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/playback-section.slint
+msgid "Crossfade"
+msgstr "Crossfade"
+
+#: ui/views/settings/output-section.slint
+msgid "Fading between tracks"
+msgstr "Memudarkan antarlagu"
+
+#: ui/views/settings/output-section.slint
+msgid "Not fading"
+msgstr "Tidak memudarkan"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled to {}"
+msgstr "{} di-resample ke {}"
+
+#: ui/views/settings/output-section.slint
+msgid "Mixed down for the device"
+msgstr "Di-downmix untuk perangkat"
+
+#: ui/views/settings/output-section.slint
+msgid "Unchanged"
+msgstr "Tidak berubah"
+
+#: ui/views/settings/output-section.slint
+msgid "Device"
+msgstr "Perangkat"
+
+#: ui/views/settings/output-section.slint
+msgid "{} refused exclusive output because {}. Playing shared on {}"
+msgstr "{} menolak output eksklusif karena {}. Diputar dalam mode bersama di {}"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, shared: exclusive output was refused because {}"
+msgstr "{}, bersama: output eksklusif ditolak karena {}"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, shared: the system mixer may still convert it"
+msgstr "{}, bersama: mixer sistem mungkin masih mengonversinya"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, exclusive"
+msgstr "{}, eksklusif"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, exclusive, in a format that can't hold the source exactly"
+msgstr "{}, eksklusif, dalam format yang tidak dapat memuat sumber secara persis"
+
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Player Bar"
+msgstr "Bilah Pemutar"
+
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Overflow Menu Buttons"
+msgstr "Tombol Menu Lainnya"
+
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Move selected buttons into a compact overflow menu in the player bar"
+msgstr "Pindahkan tombol yang dipilih ke menu lainnya yang ringkas di bilah pemutar"
+
+#: ui/views/settings/playback-section.slint
+msgid "Gapless Playback"
+msgstr "Pemutaran Tanpa Jeda"
+
+#: ui/views/settings/playback-section.slint
+msgid "Seamless transitions between tracks without silence gaps"
+msgstr "Transisi mulus antarlagu tanpa jeda hening"
+
+#: ui/views/settings/playback-section.slint
+msgid "Play Button Animation"
+msgstr "Animasi Tombol Putar"
+
+#: ui/views/settings/playback-section.slint
+msgid "Visual effect on the play button while music is playing"
+msgstr "Efek visual pada tombol putar saat musik diputar"
+
+#: ui/views/settings/playback-section.slint
+msgid "Resume on Startup"
+msgstr "Lanjutkan Saat Mulai"
+
+#: ui/views/settings/playback-section.slint
+msgid "Automatically resume the last track from where you left off when the app starts"
+msgstr "Lanjutkan otomatis lagu terakhir dari posisi terakhir saat aplikasi dimulai"
+
+#: ui/views/settings/playback-section.slint
+msgid "Overlap the end of one track with the start of the next"
+msgstr "Tumpuk akhir satu lagu dengan awal lagu berikutnya"
+
+#: ui/views/settings/playback-section.slint
+msgid "Overlap the end of one track with the start of the next, unless the device has to change format between them"
+msgstr "Tumpuk akhir satu lagu dengan awal lagu berikutnya, kecuali perangkat harus berganti format di antaranya"
+
+#: ui/views/settings/playback-section.slint
+msgid "Crossfade duration"
+msgstr "Durasi crossfade"
+
+#: ui/views/settings/playback-section.slint
+msgid "How long the two tracks overlap"
+msgstr "Berapa lama kedua lagu saling bertumpuk"
+
+#: ui/views/settings/playback-section.slint
+msgid "Except on the same album"
+msgstr "Kecuali dalam album yang sama"
+
+#: ui/views/settings/playback-section.slint
+msgid "Keep tracks from one album gapless, so continuous mixes stay seamless"
+msgstr "Putar lagu dari satu album tanpa jeda, agar mix berkelanjutan tetap mulus"
+
+#: ui/views/settings/playback-section.slint
+msgid "Also on manual track change"
+msgstr "Juga saat ganti lagu manual"
+
+#: ui/views/settings/playback-section.slint
+msgid "Crossfade when you skip to the next or previous track, not only at the end of one"
+msgstr "Crossfade saat Anda melompat ke lagu berikutnya atau sebelumnya, tidak hanya di akhir lagu"
+
+#: ui/views/settings/playback-section.slint
+msgid "Fade out on pause"
+msgstr "Memudar saat dijeda"
+
+#: ui/views/settings/playback-section.slint
+msgid "Fade the music out when pausing or stopping, and back in when resuming"
+msgstr "Pudarkan musik saat menjeda atau menghentikan, dan munculkan kembali saat melanjutkan"
+
+#: ui/views/settings/playback-section.slint
+msgid "Show an audio visualizer on the Now Playing screen"
+msgstr "Tampilkan visualizer audio di layar Sedang Diputar"
+
+#: ui/views/settings/playback-section.slint
+msgid "Visualizer Style"
+msgstr "Gaya Visualizer"
+
+#: ui/views/settings/playback-section.slint
+msgid "Choose how the visualizer draws the audio"
+msgstr "Pilih cara visualizer menggambar audio"
+
+#. Translators: `{}` is a duration in seconds, such as 2.5
+#: ui/views/settings/playback-section.slint
+msgid "{} s"
+msgstr "{} dtk"
+
+#: ui/views/settings/radio-section.slint
+msgid "Hide segmented stations"
+msgstr "Sembunyikan stasiun tersegmentasi"
+
+#: ui/views/settings/radio-section.slint
+msgid "Segmented (HLS) streams play, but take longer to start"
+msgstr "Stream tersegmentasi (HLS) dapat diputar, tetapi lebih lama untuk mulai"
+
+#: ui/views/settings/radio-section.slint
+msgid "Report plays to the directory"
+msgstr "Laporkan pemutaran ke direktori"
+
+#: ui/views/settings/radio-section.slint
+msgid "An anonymous count is what orders stations by popularity"
+msgstr "Hitungan anonim inilah yang mengurutkan stasiun berdasarkan popularitas"
+
+#: ui/views/settings/ratings-section.slint
+msgid "Ratings"
+msgstr "Rating"
+
+#: ui/views/settings/ratings-section.slint
+msgid "Save ratings to files"
+msgstr "Simpan rating ke berkas"
+
+#: ui/views/settings/ratings-section.slint
+msgid "Write star ratings into each file's tags, so they survive a rescan and other players can read them."
+msgstr "Tulis rating bintang ke tag setiap berkas, agar tetap ada setelah pemindaian ulang dan dapat dibaca pemutar lain."
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Last.fm"
+msgstr "Last.fm"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobble to Last.fm"
+msgstr "Scrobble ke Last.fm"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Report each play to your Last.fm account"
+msgstr "Laporkan setiap pemutaran ke akun Last.fm Anda"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Sync loved tracks to Last.fm"
+msgstr "Sinkronkan lagu yang disukai ke Last.fm"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Mark tracks you love as loved on Last.fm — turning this on syncs your existing favorites"
+msgstr "Tandai lagu yang Anda sukai sebagai loved di Last.fm — mengaktifkan ini akan menyinkronkan favorit Anda yang sudah ada"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "ListenBrainz"
+msgstr "ListenBrainz"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobble to ListenBrainz"
+msgstr "Scrobble ke ListenBrainz"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Report each play to your ListenBrainz account"
+msgstr "Laporkan setiap pemutaran ke akun ListenBrainz Anda"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Sync loved tracks to ListenBrainz"
+msgstr "Sinkronkan lagu yang disukai ke ListenBrainz"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)"
+msgstr "Tandai lagu yang Anda sukai sebagai loved di ListenBrainz — mengaktifkan ini akan menyinkronkan favorit Anda yang sudah ada (memerlukan ID MusicBrainz)"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "MusicBrainz Picard adds these IDs to your files, identifying each track by its audio."
+msgstr "MusicBrainz Picard menambahkan ID ini ke berkas Anda, dengan mengenali setiap lagu dari audionya."
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobble radio songs"
+msgstr "Scrobble lagu radio"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Songs heard in full on a station go to your connected scrobbling services"
+msgstr "Lagu yang didengarkan sampai habis di sebuah stasiun dikirim ke layanan scrobbling yang terhubung"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Connected as {}"
+msgstr "Terhubung sebagai {}"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Not configured in this build"
+msgstr "Tidak dikonfigurasi dalam build ini"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Connect Last.fm"
+msgstr "Hubungkan Last.fm"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Disconnect"
+msgstr "Putuskan"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Connect ListenBrainz"
+msgstr "Hubungkan ListenBrainz"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Turn on Last.fm or ListenBrainz above first"
+msgstr "Aktifkan Last.fm atau ListenBrainz di atas terlebih dahulu"
+
+#: ui/views/settings/settings-tabs.slint
+msgid "No matching settings"
+msgstr "Tidak ada pengaturan yang cocok"
+
+#: ui/views/settings/update-section.slint
+msgid "Updates"
+msgstr "Pembaruan"
+
+#: ui/views/settings/update-section.slint
+msgid "Software Updates"
+msgstr "Pembaruan Perangkat Lunak"
+
+#: ui/views/settings/update-section.slint
+msgid "Current version: {}"
+msgstr "Versi saat ini: {}"
+
+#: ui/views/settings/update-section.slint
+msgid "You're up to date!"
+msgstr "Anda sudah menggunakan versi terbaru!"
+
+#: ui/views/settings/update-section.slint
+msgid "Melodia {} is the latest version."
+msgstr "Melodia {} adalah versi terbaru."
+
+#: ui/views/settings/update-section.slint
+msgid "Update Installed"
+msgstr "Pembaruan Terinstal"
+
+#: ui/views/settings/update-section.slint
+msgid "Restart Melodia to apply the update"
+msgstr "Mulai ulang Melodia untuk menerapkan pembaruan"
+
+#: ui/views/settings/update-section.slint
+msgid "Version {} Available"
+msgstr "Versi {} Tersedia"
+
+#: ui/views/settings/update-section.slint
+msgid "Updates managed by your package manager"
+msgstr "Pembaruan dikelola oleh manajer paket Anda"
+
+#: ui/views/settings/update-section.slint
+msgid "Re-run the latest .msi installer from the Releases page."
+msgstr "Jalankan ulang penginstal .msi terbaru dari halaman Releases."
+
+#: ui/views/settings/update-section.slint
+msgid "Use brew upgrade melodia."
+msgstr "Gunakan brew upgrade melodia."
+
+#: ui/views/settings/update-section.slint
+msgid "Use sudo dnf update melodia (or your distro equivalent)."
+msgstr "Gunakan sudo dnf update melodia (atau padanannya di distro Anda)."
+
+#: ui/views/settings/update-section.slint
+msgid "Check for Updates"
+msgstr "Periksa Pembaruan"
+
+#: ui/views/settings/update-section.slint
+msgid "Checking..."
+msgstr "Memeriksa..."
+
+#: ui/views/settings/update-section.slint
+msgid "Restart Now"
+msgstr "Mulai Ulang Sekarang"
+
+#: ui/views/settings/update-section.slint
+msgid "Download & Install"
+msgstr "Unduh & Instal"
+
+#: ui/views/settings/update-section.slint
+msgid "Installing..."
+msgstr "Menginstal..."
+
+#: ui/views/settings/update-section.slint
+msgid "Skip this version"
+msgstr "Lewati versi ini"
+
+#: ui/views/settings/update-section.slint
+msgid "Critical update"
+msgstr "Pembaruan penting"
+
+#: ui/views/settings/update-section.slint
+msgid "This update fixes a critical issue and can't be skipped."
+msgstr "Pembaruan ini memperbaiki masalah penting dan tidak dapat dilewati."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window"
+msgstr "Jendela"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Managed by the operating system"
+msgstr "Dikelola oleh sistem operasi"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Native Title Bar"
+msgstr "Bilah Judul Bawaan"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Use the operating system's native title bar instead of the custom one. Restart required to apply."
+msgstr "Gunakan bilah judul bawaan sistem operasi alih-alih bilah judul kustom. Perlu mulai ulang untuk menerapkan."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Match Unfocused Window Background"
+msgstr "Samakan Latar Jendela Saat Tidak Fokus"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Only available with the native title bar."
+msgstr "Hanya tersedia dengan bilah judul bawaan."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Tint the sidebar and now-playing bar toward the content background when the window loses focus."
+msgstr "Warnai bilah sisi dan bilah pemutar mendekati latar konten saat jendela kehilangan fokus."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Corner Radius"
+msgstr "Radius Sudut Jendela"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border"
+msgstr "Bingkai Jendela"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Draw a thin outline around the miniplayer. The full window keeps the border of its system frame."
+msgstr "Gambar garis tepi tipis di sekeliling pemutar mini. Jendela penuh tetap memakai bingkai dari sistem."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Draw a thin outline around the whole window, the miniplayer included."
+msgstr "Gambar garis tepi tipis di sekeliling seluruh jendela, termasuk pemutar mini."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border Color"
+msgstr "Warna Bingkai Jendela"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System follows the color the operating system draws its own window borders in."
+msgstr "Sistem mengikuti warna yang dipakai sistem operasi untuk bingkai jendelanya sendiri."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Available only while the window border is shown."
+msgstr "Hanya tersedia saat bingkai jendela ditampilkan."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Decoration Button Style"
+msgstr "Gaya Tombol Dekorasi"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Decoration Button Side"
+msgstr "Posisi Tombol Dekorasi"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System Tray Icon"
+msgstr "Ikon Baki Sistem"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Show a Melodia icon in the system tray with playback controls."
+msgstr "Tampilkan ikon Melodia di baki sistem dengan kontrol pemutaran."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Close to Tray"
+msgstr "Tutup ke Baki"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Keep Melodia running in the system tray when you close the window, instead of quitting."
+msgstr "Biarkan Melodia tetap berjalan di baki sistem saat Anda menutup jendela, alih-alih keluar."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Available only while the system tray icon is active."
+msgstr "Hanya tersedia saat ikon baki sistem aktif."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Switching to the native title bar requires restarting Melodia. Restart now?"
+msgstr "Beralih ke bilah judul bawaan memerlukan mulai ulang Melodia. Mulai ulang sekarang?"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Switching to the custom title bar requires restarting Melodia. Restart now?"
+msgstr "Beralih ke bilah judul kustom memerlukan mulai ulang Melodia. Mulai ulang sekarang?"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Square"
+msgstr "Persegi"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Left"
+msgstr "Kiri"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Right"
+msgstr "Kanan"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Changing the system tray icon requires restarting Melodia. Restart now?"
+msgstr "Mengubah ikon baki sistem memerlukan mulai ulang Melodia. Mulai ulang sekarang?"
