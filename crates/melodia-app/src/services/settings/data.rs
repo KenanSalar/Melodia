@@ -14,7 +14,7 @@ use super::playback::{
 };
 use super::services::{LyricsFlags, RadioFlags};
 use melodia_core::entities::integrations::{DiscordFlags, ScrobbleFlags};
-use melodia_core::entities::locale::SUPPORTED_LOCALES;
+use melodia_core::entities::locale::{DEFAULT_LOCALE, SUPPORTED_LOCALES};
 use melodia_core::themes::{self, SYSTEM_VARIANT_ID, ThemeDef};
 use melodia_platform::services::platform::desktop::{
     HostDesktop, get_os_corner_radius, host_desktop,
@@ -265,7 +265,7 @@ fn first_launch_theme(desktop: HostDesktop) -> (&'static ThemeDef, &'static str)
 }
 
 fn default_locale() -> String {
-    detect_os_locale().unwrap_or_else(|| "en".to_owned())
+    detect_os_locale().unwrap_or_else(|| DEFAULT_LOCALE.to_owned())
 }
 
 /// A regional catalogue (`pt_BR`) wins over the bare language, which still serves every other

@@ -21,25 +21,26 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use melodia_app::library;
 use melodia_app::state::AppState;
-use melodia_core::entities::locale::SUPPORTED_LOCALES;
+use melodia_core::entities::locale::{DEFAULT_LOCALE, SUPPORTED_LOCALES};
 use melodia_ui::{AppWindow, Settings};
 
-/// Native-name labels for [`SUPPORTED_LOCALES`]. Indices
-/// match 1:1 — adding a locale means appending to both arrays.
+/// Native-name labels for [`SUPPORTED_LOCALES`], index for index, in alphabetical order so a
+/// reader finds their own language by its name. A new locale goes in at that place in both.
 const LOCALE_NATIVE_NAMES: &[&str] = &[
-    "English",
+    "Bahasa Indonesia",
     "Deutsch",
-    "Français",
+    "English",
     "Español",
-    "Türkçe",
-    "Ελληνικά",
+    "Français",
     "Italiano",
-    "Português (Brasil)",
-    "Português (Portugal)",
     "Nederlands",
     "Polski",
-    "Bahasa Indonesia",
+    "Português (Brasil)",
+    "Português (Portugal)",
+    "Türkçe",
+    "Ελληνικά",
     "Русский",
+    "Українська",
 ];
 
 // A short list hides the last locale from the picker, and nothing at runtime says so.
@@ -62,7 +63,7 @@ pub fn install_locale(ui: &AppWindow, state: &AppState) {
     let persisted = library::settings::get_settings(state).map_or_else(
         |e| {
             log::warn!("locale: read settings failed: {e}");
-            "en".to_owned()
+            DEFAULT_LOCALE.to_owned()
         },
         |s| s.locale,
     );
@@ -72,7 +73,10 @@ pub fn install_locale(ui: &AppWindow, state: &AppState) {
     let codes: Vec<SharedString> =
         SUPPORTED_LOCALES.iter().map(|c| SharedString::from(*c)).collect();
 
-    let idx = SUPPORTED_LOCALES.iter().position(|c| *c == persisted).unwrap_or(0);
+    // A code this build doesn't ship (hand-edited, or left by a newer build) renders in the
+    // default language, so the picker says that.
+    let index_of = |code: &str| SUPPORTED_LOCALES.iter().position(|c| *c == code);
+    let idx = index_of(&persisted).or_else(|| index_of(DEFAULT_LOCALE)).unwrap_or(0);
 
     {
         let g = ui.global::<Settings>();
@@ -91,8 +95,8 @@ fn wire_language_changed(ui: &AppWindow, state: &AppState, shadow: PersistedLoca
     ui.global::<Settings>().on_language_changed(move |idx_i32| {
         let Some(ui) = weak.upgrade() else { return };
 
-        let idx = usize::try_from(idx_i32).unwrap_or(0);
-        let Some(&code) = SUPPORTED_LOCALES.get(idx) else {
+        let Some(&code) = usize::try_from(idx_i32).ok().and_then(|idx| SUPPORTED_LOCALES.get(idx))
+        else {
             log::warn!("language-changed: out-of-range idx {idx_i32}");
             return;
         };
@@ -116,7 +120,7 @@ fn wire_language_changed(ui: &AppWindow, state: &AppState, shadow: PersistedLoca
         // Keep `language-idx` in sync defensively — the dropdown's two-way
         // bind already writes it, but a future code path could call the
         // callback programmatically without touching the dropdown.
-        ui.global::<Settings>().set_language_idx(i32::try_from(idx).unwrap_or(0));
+        ui.global::<Settings>().set_language_idx(idx_i32);
 
         // Synchronous shadow update before the async write so any sibling
         // reader sees the new code before the disk catches up.
@@ -126,3 +130,7 @@ fn wire_language_changed(ui: &AppWindow, state: &AppState, shadow: PersistedLoca
         s.persist_blocking("persist locale", move |s| library::settings::set_locale(s, code_owned));
     });
 }
+
+#[cfg(test)]
+#[path = "tests/locale_tests.rs"]
+mod tests;

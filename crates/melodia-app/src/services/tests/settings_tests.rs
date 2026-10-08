@@ -626,6 +626,19 @@ fn test_detect_os_locale_sends_every_other_portuguese_region_to_pt() {
     }
 }
 
+/// Ukraine's country code is `UA` and its language `uk`, so a host there spells both, and only the
+/// language picks the catalogue: a Russian speaker in Ukraine keeps Russian.
+#[test]
+fn test_detect_os_locale_takes_the_language_and_not_the_country() {
+    for (raw, expected) in
+        [("uk_UA.UTF-8", "uk"), ("uk-UA", "uk"), ("uk", "uk"), ("ru_UA.UTF-8", "ru")]
+    {
+        with_locale_env(&[("LC_ALL", raw)], || {
+            assert_eq!(detect_os_locale(), Some(expected.to_owned()), "LC_ALL={raw}");
+        });
+    }
+}
+
 #[test]
 fn test_detect_system_locale_raw_language_var() {
     // GNU LANGUAGE takes precedence over LC_* vars

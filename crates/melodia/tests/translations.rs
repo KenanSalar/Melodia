@@ -16,7 +16,7 @@ use std::fs;
 use std::iter;
 use std::path::{Path, PathBuf};
 
-use melodia_core::entities::locale::SUPPORTED_LOCALES;
+use melodia_core::entities::locale::{DEFAULT_LOCALE, SUPPORTED_LOCALES};
 use melodia_testkit::{
     MIN_SLINT_SOURCES, REPO_ROOT, UI_DIR, font_sources, raw_sources, rel_path, strip_line_comments,
     stripped_sources,
@@ -288,7 +288,7 @@ fn template_entries() -> Vec<Entry> {
 fn catalogues() -> Vec<(&'static str, Vec<Entry>)> {
     SUPPORTED_LOCALES
         .iter()
-        .filter(|code| **code != "en")
+        .filter(|code| **code != DEFAULT_LOCALE)
         .map(|code| (*code, read_entries(&catalogue_path(code))))
         .collect()
 }
@@ -313,7 +313,7 @@ fn shipped_characters() -> BTreeMap<char, BTreeSet<&'static str>> {
     let english = template_entries()
         .into_iter()
         .flat_map(|entry| iter::once(entry.msgid).chain(entry.msgid_plural))
-        .map(|text| ("en", text));
+        .map(|text| (DEFAULT_LOCALE, text));
     let translated = catalogues().into_iter().flat_map(|(code, entries)| {
         entries.into_iter().flat_map(|entry| entry.msgstrs).map(move |text| (code, text))
     });
@@ -717,7 +717,7 @@ fn the_shipped_catalogues_are_exactly_the_supported_locales_but_english() {
 
     let supported: BTreeSet<String> = SUPPORTED_LOCALES
         .iter()
-        .filter(|code| **code != "en")
+        .filter(|code| **code != DEFAULT_LOCALE)
         .map(|code| (*code).to_owned())
         .collect();
     assert_eq!(
