@@ -626,6 +626,22 @@ fn test_detect_os_locale_sends_every_other_portuguese_region_to_pt() {
     }
 }
 
+/// The catalogue takes the bare code, so a Belgian host reaches it as a Dutch one does.
+#[test]
+fn test_detect_os_locale_sends_every_dutch_region_to_nl() {
+    for (var, raw) in [
+        ("LC_ALL", "nl_NL.UTF-8"),
+        ("LANG", "nl_BE@euro"),
+        ("LC_MESSAGES", "nl-BE"),
+        ("LANGUAGE", "nl_AW:nl"),
+        ("LC_ALL", "nl"),
+    ] {
+        with_locale_env(&[(var, raw)], || {
+            assert_eq!(detect_os_locale(), Some("nl".to_owned()), "{var}={raw}");
+        });
+    }
+}
+
 #[test]
 fn test_detect_system_locale_raw_language_var() {
     // GNU LANGUAGE takes precedence over LC_* vars

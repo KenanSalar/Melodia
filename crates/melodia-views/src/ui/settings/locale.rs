@@ -36,7 +36,15 @@ const LOCALE_NATIVE_NAMES: &[&str] = &[
     "Italiano",
     "Português (Brasil)",
     "Português (Portugal)",
+    "Nederlands",
 ];
+
+// A name left off the end would take the last locale out of the picker, and only a debug
+// launch would have said so.
+const _: () = assert!(
+    LOCALE_NATIVE_NAMES.len() == SUPPORTED_LOCALES.len(),
+    "LOCALE_NATIVE_NAMES must stay 1:1 with SUPPORTED_LOCALES"
+);
 
 /// Synchronous in-memory shadow of `settings.locale`, updated by the language-changed
 /// callback before it spawns the disk write —
@@ -49,12 +57,6 @@ type PersistedLocale = Arc<parking_lot::Mutex<String>>;
 /// the change callback. **After** `AppWindow::new()`, so the global is mounted, and
 /// **before** `app.run()`.
 pub fn install_locale(ui: &AppWindow, state: &AppState) {
-    debug_assert_eq!(
-        SUPPORTED_LOCALES.len(),
-        LOCALE_NATIVE_NAMES.len(),
-        "LOCALE_NATIVE_NAMES must stay 1:1 with SUPPORTED_LOCALES"
-    );
-
     let persisted = library::settings::get_settings(state).map_or_else(
         |e| {
             log::warn!("locale: read settings failed: {e}");

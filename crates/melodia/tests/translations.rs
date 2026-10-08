@@ -435,20 +435,39 @@ fn a_note_belongs_only_to_a_line_holding_exactly_one_tr_call() {
     );
 }
 
-/// English is the source baseline and ships no catalogue; every other supported
-/// code must have one, or `select_bundled_translation` silently leaves the UI in
-/// English for that pick.
+/// English is the source baseline and ships no catalogue; every other supported code needs one,
+/// or `select_bundled_translation` silently leaves the UI in English for that pick. An equality
+/// because [`catalogues`] reads the list: a catalogue dropped in without its entry is checked by
+/// nothing here and offered by no picker.
 #[test]
-fn every_supported_locale_but_english_ships_a_catalogue() {
-    for code in SUPPORTED_LOCALES {
-        let path = catalogue_path(code);
-        assert_eq!(
-            path.is_file(),
-            *code != "en",
-            "catalogue presence doesn't match the locale list for {code} ({})",
-            path.display()
-        );
+fn the_shipped_catalogues_are_exactly_the_supported_locales_but_english() {
+    let listing = fs::read_dir(TRANSLATIONS_DIR);
+    assert!(listing.is_ok(), "`{TRANSLATIONS_DIR}` would not list");
+
+    let mut shipped = BTreeSet::new();
+    let mut unreadable = Vec::new();
+    for entry in listing.into_iter().flatten() {
+        match entry {
+            Ok(entry) => {
+                let code = entry.file_name().to_string_lossy().into_owned();
+                if catalogue_path(&code).is_file() {
+                    shipped.insert(code);
+                }
+            }
+            Err(e) => unreadable.push(e.to_string()),
+        }
     }
+    assert!(unreadable.is_empty(), "unreadable entries under translations/: {unreadable:?}");
+
+    let supported: BTreeSet<String> = SUPPORTED_LOCALES
+        .iter()
+        .filter(|code| **code != "en")
+        .map(|code| (*code).to_owned())
+        .collect();
+    assert_eq!(
+        shipped, supported,
+        "a locale is its SUPPORTED_LOCALES entry and its catalogue together"
+    );
 }
 
 /// Every `"Unknown …"` field fallback goes through `@tr`.
