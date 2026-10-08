@@ -441,23 +441,25 @@ fn a_note_belongs_only_to_a_line_holding_exactly_one_tr_call() {
 /// nothing here and offered by no picker.
 #[test]
 fn the_shipped_catalogues_are_exactly_the_supported_locales_but_english() {
-    let listing = fs::read_dir(TRANSLATIONS_DIR);
-    assert!(listing.is_ok(), "`{TRANSLATIONS_DIR}` would not list");
-
     let mut shipped = BTreeSet::new();
     let mut unreadable = Vec::new();
-    for entry in listing.into_iter().flatten() {
-        match entry {
-            Ok(entry) => {
-                let code = entry.file_name().to_string_lossy().into_owned();
-                if catalogue_path(&code).is_file() {
-                    shipped.insert(code);
+    match fs::read_dir(TRANSLATIONS_DIR) {
+        Ok(entries) => {
+            for entry in entries {
+                match entry {
+                    Ok(entry) => {
+                        let code = entry.file_name().to_string_lossy().into_owned();
+                        if catalogue_path(&code).is_file() {
+                            shipped.insert(code);
+                        }
+                    }
+                    Err(e) => unreadable.push(e.to_string()),
                 }
             }
-            Err(e) => unreadable.push(e.to_string()),
         }
+        Err(e) => unreadable.push(e.to_string()),
     }
-    assert!(unreadable.is_empty(), "unreadable entries under translations/: {unreadable:?}");
+    assert!(unreadable.is_empty(), "unreadable under translations/: {unreadable:?}");
 
     let supported: BTreeSet<String> = SUPPORTED_LOCALES
         .iter()

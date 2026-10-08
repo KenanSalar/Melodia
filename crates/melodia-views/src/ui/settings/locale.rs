@@ -39,8 +39,7 @@ const LOCALE_NATIVE_NAMES: &[&str] = &[
     "Nederlands",
 ];
 
-// A name left off the end would take the last locale out of the picker, and only a debug
-// launch would have said so.
+// A short list hides the last locale from the picker, and nothing at runtime says so.
 const _: () = assert!(
     LOCALE_NATIVE_NAMES.len() == SUPPORTED_LOCALES.len(),
     "LOCALE_NATIVE_NAMES must stay 1:1 with SUPPORTED_LOCALES"
