@@ -1,5 +1,5 @@
-//! The submitter's drain: what it batches, what it defers, and what it does with a queue entry
-//! whose provider has just gone away.
+//! The submitter's drain: what it batches, what it defers, what it does with a queue entry whose
+//! provider has just gone away, and what a round stopped by a quit keeps.
 //!
 //! Split in two by what a case needs. The retry policy and the batch walk are pure and are
 //! driven directly; everything from the readiness gate down goes through `submit_pending`, the
@@ -16,6 +16,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use melodia_testkit::http::{TestResponse, TestServer};
+use tokio_util::sync::CancellationToken;
 
 use super::super::tests::helpers::{
     TestResult, init_service, lb_love_service, paths_in, sample_item,
@@ -48,6 +49,14 @@ fn love_flagged(mbid: Option<&str>, loved: bool) -> LoveItem {
         lastfm_remaining: false,
         listenbrainz_remaining: true,
     }
+}
+
+/// A pending `ListenBrainz` love on a track of its own, named by its MBID. The queue folds loves
+/// for one track into one, so a case needing several apart needs this rather than
+/// [`love_flagged`].
+fn love_for(mbid: &str) -> LoveItem {
+    let love = love_flagged(Some(mbid), true);
+    LoveItem { track: ScrobbleTrack { track: mbid.to_owned(), ..love.track }, ..love }
 }
 
 /// A service with `ListenBrainz` connected, its scrobble toggle on, and every call pointed at
@@ -227,7 +236,7 @@ async fn an_empty_queue_asks_for_no_retry() -> TestResult {
     let dir = tempfile::tempdir()?;
     let service = init_service(&paths_in(dir.path()), &ScrobbleFlags::default());
 
-    assert_eq!(service.submit_pending().await, None);
+    assert_eq!(service.submit_pending(&CancellationToken::new()).await, None);
     assert_eq!(service.queued_len(), 0);
     Ok(())
 }
@@ -242,7 +251,7 @@ async fn a_listen_for_a_disconnected_provider_leaves_the_queue() -> TestResult {
     let service = init_service(&paths, &ScrobbleFlags::default());
     service.push_scrobble(item_flagged(true, true)).await?;
 
-    assert_eq!(service.submit_pending().await, None);
+    assert_eq!(service.submit_pending(&CancellationToken::new()).await, None);
     assert_eq!(service.queued_len(), 0);
 
     // The drain persisted, so a restart does not resurrect it.
@@ -270,7 +279,7 @@ async fn a_connected_provider_with_its_toggle_off_is_never_posted_to() -> TestRe
         .await?;
     service.push_scrobble(item_flagged(false, true)).await?;
 
-    assert_eq!(service.submit_pending().await, None);
+    assert_eq!(service.submit_pending(&CancellationToken::new()).await, None);
     assert!(server.requests().is_empty(), "a disabled provider must not be reached");
     assert_eq!(service.queued_len(), 0, "and its flag is released rather than pinned");
     Ok(())
@@ -287,7 +296,7 @@ async fn an_accepted_listen_goes_out_once_and_leaves_the_queue() -> TestResult {
     let service = lb_scrobble_service(&paths_in(dir.path()), &server.base_url()).await?;
     service.push_scrobble(item_flagged(false, true)).await?;
 
-    assert_eq!(service.submit_pending().await, None);
+    assert_eq!(service.submit_pending(&CancellationToken::new()).await, None);
     assert_eq!(service.queued_len(), 0);
 
     let sent = server.requests();
@@ -311,7 +320,11 @@ async fn a_rejected_token_disconnects_and_releases_every_pending_flag() -> TestR
         service.push_scrobble(item_flagged(false, true)).await?;
     }
 
-    assert_eq!(service.submit_pending().await, None, "a dead token is not a wait to honor");
+    assert_eq!(
+        service.submit_pending(&CancellationToken::new()).await,
+        None,
+        "a dead token is not a wait to honor"
+    );
     assert!(!service.status().listenbrainz.connected);
     assert_eq!(service.queued_len(), 0, "three pending flags, one disconnect");
 
@@ -330,7 +343,10 @@ async fn a_rate_limited_listen_stays_queued_for_the_wait_it_was_given() -> TestR
     let service = lb_scrobble_service(&paths_in(dir.path()), &server.base_url()).await?;
     service.push_scrobble(item_flagged(false, true)).await?;
 
-    assert_eq!(service.submit_pending().await, Some(Duration::from_secs(90)));
+    assert_eq!(
+        service.submit_pending(&CancellationToken::new()).await,
+        Some(Duration::from_secs(90))
+    );
     assert_eq!(service.queued_len(), 1, "a deferred listen is not a dropped one");
     Ok(())
 }
@@ -346,7 +362,7 @@ async fn a_queue_past_the_cap_goes_out_one_batch_at_a_time() -> TestResult {
         service.push_scrobble(item_flagged(false, true)).await?;
     }
 
-    assert_eq!(service.submit_pending().await, None);
+    assert_eq!(service.submit_pending(&CancellationToken::new()).await, None);
     assert_eq!(service.queued_len(), 60 - SCROBBLE_BATCH_MAX);
 
     let sent = server.requests();
@@ -368,7 +384,7 @@ async fn a_love_with_no_recording_id_is_settled_without_a_request() -> TestResul
     let service = lb_scrobble_service(&paths_in(dir.path()), &server.base_url()).await?;
     service.queue.lock().push_love(love_flagged(None, true));
 
-    assert_eq!(service.submit_pending().await, None);
+    assert_eq!(service.submit_pending(&CancellationToken::new()).await, None);
     assert!(server.requests().is_empty(), "there is no id to key feedback on");
     assert_eq!(service.queued_len(), 0);
     Ok(())
@@ -384,7 +400,7 @@ async fn a_love_and_an_unlove_carry_the_score_the_toggle_asked_for() -> TestResu
         let service = lb_scrobble_service(&paths_in(dir.path()), &server.base_url()).await?;
         service.queue.lock().push_love(love_flagged(Some("mbid-1"), loved));
 
-        assert_eq!(service.submit_pending().await, None);
+        assert_eq!(service.submit_pending(&CancellationToken::new()).await, None);
 
         let sent = server.requests();
         assert_eq!(sent.len(), 1, "one love is one POST: {sent:?}");
@@ -431,7 +447,7 @@ async fn a_love_reversed_mid_request_stays_pending() -> TestResult {
     let seated = under_test.set(Arc::clone(&service));
     assert!(seated.is_ok(), "the cell is filled once, before the only drain");
 
-    assert_eq!(service.submit_pending().await, None);
+    assert_eq!(service.submit_pending(&CancellationToken::new()).await, None);
     assert_eq!(server.requests().len(), 1, "the love was submitted");
 
     let queue = service.queue.lock();
@@ -440,5 +456,88 @@ async fn a_love_reversed_mid_request_stays_pending() -> TestResult {
         matches!(love, Some(l) if !l.loved && l.listenbrainz_remaining),
         "the reversed love must still be pending: {love:?}"
     );
+    Ok(())
+}
+
+// ---- a round that is stopped ----
+
+/// How long a held request waits to be let go before it answers anyway, so a drain that ignores
+/// its stop fails the case rather than hanging it.
+const HOLD_LIMIT: Duration = Duration::from_secs(5);
+
+/// A service with one listen and one love waiting for `ListenBrainz`, so a round has both of its
+/// passes to make.
+async fn listen_and_love_queued(
+    paths: &Paths,
+    base: &str,
+) -> Result<ScrobbleService, Box<dyn std::error::Error>> {
+    let service = lb_scrobble_service(paths, base).await?;
+    service.push_scrobble(item_flagged(false, true)).await?;
+    service.queue.lock().push_love(love_for("mbid-1"));
+    Ok(service)
+}
+
+/// Regression: a quit mid-round threw the whole round away, so loves that had already gone out
+/// were sent again on every launch and a long queue never drained. The second of three is held
+/// until the round stops: the first landed and is off the queue on disk, the held one and the
+/// one never sent wait for the next launch.
+#[tokio::test]
+async fn a_round_stopped_mid_request_keeps_what_already_landed() -> TestResult {
+    let stop = CancellationToken::new();
+    let stopping = stop.clone();
+    let (release, held) = std::sync::mpsc::channel::<()>();
+    let server = TestServer::start(move |request| {
+        if request.body_text().contains("mbid-2") {
+            stopping.cancel();
+            let _ = held.recv_timeout(HOLD_LIMIT);
+        }
+        TestResponse::ok("{}")
+    })?;
+    let dir = tempfile::tempdir()?;
+    let paths = paths_in(dir.path());
+    let service = lb_scrobble_service(&paths, &server.base_url()).await?;
+    for mbid in ["mbid-1", "mbid-2", "mbid-3"] {
+        service.queue.lock().push_love(love_for(mbid));
+    }
+
+    service.submit_pending(&stop).await;
+    drop(release);
+
+    let reloaded = init_service(&paths, &ScrobbleFlags::default());
+    let pending: Vec<Option<String>> =
+        reloaded.queue.lock().loves.iter().map(|love| love.track.recording_mbid.clone()).collect();
+    assert_eq!(pending, [Some("mbid-2".to_owned()), Some("mbid-3".to_owned())]);
+    Ok(())
+}
+
+/// The stop is what bounds a quit, so once it has fired neither the listen pass nor the love
+/// pass may open another request.
+#[tokio::test]
+async fn no_request_starts_once_a_round_is_stopped() -> TestResult {
+    let server = TestServer::start(|_| TestResponse::ok("{}"))?;
+    let dir = tempfile::tempdir()?;
+    let service = listen_and_love_queued(&paths_in(dir.path()), &server.base_url()).await?;
+    let stop = CancellationToken::new();
+    stop.cancel();
+
+    service.submit_pending(&stop).await;
+
+    assert!(server.requests().is_empty(), "a stopped round reached a provider");
+    Ok(())
+}
+
+/// A stopped round only defers its work. Reading "not sent" as "settled" would lose every listen
+/// and love a quit happened to land on.
+#[tokio::test]
+async fn a_round_stopped_before_it_starts_drops_nothing() -> TestResult {
+    let server = TestServer::start(|_| TestResponse::ok("{}"))?;
+    let dir = tempfile::tempdir()?;
+    let service = listen_and_love_queued(&paths_in(dir.path()), &server.base_url()).await?;
+    let stop = CancellationToken::new();
+    stop.cancel();
+
+    service.submit_pending(&stop).await;
+
+    assert_eq!(service.queued_len(), 2, "the listen and the love both wait for the next round");
     Ok(())
 }

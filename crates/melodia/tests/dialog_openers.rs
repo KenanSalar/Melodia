@@ -22,7 +22,7 @@ use melodia_testkit::{MIN_SLINT_SOURCES, UI_DIR, stripped_sources};
 ///
 /// The bug that fold retired is exactly what this guards: Ctrl+N's copy had drifted to
 /// `@tr("Create Playlist")` under a comment claiming it matched the other two — one
-/// dialog, two headings, and two msgids translated separately in all six catalogues,
+/// dialog, two headings, and two msgids translated separately in every catalogue,
 /// with nothing failing.
 ///
 /// **Nor is a second caller the only trigger.** `delete-playlists` has one, the card menu's batch

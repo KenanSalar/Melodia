@@ -165,12 +165,6 @@ fn sources_under_any(root: &str, exts: &[&str]) -> (Vec<PathBuf>, Vec<PathBuf>) 
     (sources, unreadable)
 }
 
-/// Every `.slint` file under [`UI_DIR`], as paths. The raw form, for the one pin reporting on
-/// the walk itself; anything wanting the file *contents* wants [`stripped_sources`].
-pub fn slint_sources() -> (Vec<PathBuf>, Vec<PathBuf>) {
-    sources_under(UI_DIR, "slint")
-}
-
 /// What a `.slint` `import` embeds a face from, taken from the compiler's own check
 /// (`i-slint-compiler`'s `object_tree.rs`) rather than from what is committed today: the format
 /// nothing uses yet is the one that arrives unlicensed.
@@ -186,7 +180,7 @@ const FONT_EXTENSIONS: [&str; 3] = ["ttc", "ttf", "otf"];
 ///
 /// `originals/` is held back, and it is the counterexample to the walk's own premise: Slint
 /// embeds a face because a `.slint` file `import`s it, not because it sits under this root,
-/// and that directory is gitignored scratch space for the pristine upstream Vazirmatn
+/// and that directory is gitignored scratch space for the pristine upstream faces
 /// `scripts/patch_vazirmatn.py` reads.
 pub fn font_sources() -> (Vec<PathBuf>, Vec<PathBuf>) {
     let (mut fonts, unreadable) = sources_under_any(FONTS_DIR, &FONT_EXTENSIONS);
@@ -201,15 +195,18 @@ pub fn rel_path(root: &str, path: &Path) -> String {
     path.strip_prefix(root).unwrap_or(path).display().to_string().replace('\\', "/")
 }
 
-/// Every source under `root` with extension `ext`, comment-stripped and paired with its
-/// `root`-relative path, forward-slashed for comparison against a literal on either platform.
-/// Shared for the reason [`sources_under`] is: a copy per walking pin is a copy that can
-/// disagree about what "the sources" are.
+/// Every source under `root` with extension `ext`, paired with its `root`-relative path,
+/// forward-slashed for comparison against a literal on either platform. Shared for the reason
+/// [`sources_under`] is: a copy per walking pin is a copy that can disagree about what "the
+/// sources" are.
+///
+/// Comments included, for the pin that reads them. Anything grepping for a construct wants
+/// [`stripped_sources`].
 ///
 /// # Panics
 ///
 /// If fewer than `floor` files turn up, or any path won't read.
-pub fn stripped_sources(root: &str, ext: &str, floor: usize) -> Vec<(String, String)> {
+pub fn raw_sources(root: &str, ext: &str, floor: usize) -> Vec<(String, String)> {
     let (paths, mut unreadable) = sources_under(root, ext);
     assert!(paths.len() >= floor, "only {} .{ext} files found under {root}", paths.len());
 
@@ -217,12 +214,24 @@ pub fn stripped_sources(root: &str, ext: &str, floor: usize) -> Vec<(String, Str
     for path in &paths {
         let rel = rel_path(root, path);
         match fs::read_to_string(path) {
-            Ok(src) => out.push((rel, strip_line_comments(&src))),
+            Ok(src) => out.push((rel, src)),
             Err(_) => unreadable.push(path.clone()),
         }
     }
     assert!(unreadable.is_empty(), "unreadable paths under {root}: {unreadable:?}");
     out
+}
+
+/// [`raw_sources`] with every line comment dropped.
+///
+/// # Panics
+///
+/// As [`raw_sources`].
+pub fn stripped_sources(root: &str, ext: &str, floor: usize) -> Vec<(String, String)> {
+    raw_sources(root, ext, floor)
+        .into_iter()
+        .map(|(path, src)| (path, strip_line_comments(&src)))
+        .collect()
 }
 
 /// Every crate's source root, paired with the directory name that identifies it.

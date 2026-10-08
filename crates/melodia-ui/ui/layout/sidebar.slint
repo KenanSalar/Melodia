@@ -149,6 +149,7 @@ export component Sidebar inherits Rectangle {
             changed hover-mirror => {
                 if (self.hover-mirror) {
                     Nav.sidebar-tip-idx = Nav.sidebar-collapse-tip-idx;
+                    // Translators: the action a click takes, expanding the sidebar
                     Nav.sidebar-tip-label = @tr("Expand");
                     Nav.sidebar-tip-y = self.absolute-position.y;
                     Nav.sidebar-tip-h = self.height;

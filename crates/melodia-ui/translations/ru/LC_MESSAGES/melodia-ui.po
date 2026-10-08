@@ -1,0 +1,3398 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: melodia-ui\n"
+"Report-Msgid-Bugs-To: \n"
+"PO-Revision-Date: 2026-10-08 00:00+0000\n"
+"Last-Translator: Kenan Salar\n"
+"Language-Team: none\n"
+"Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+#: ui/app-window.slint ui/layout/sidebar.slint
+msgid "Search"
+msgstr "Поиск"
+
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/radio-view.slint
+msgid "Browse"
+msgstr "Обзор"
+
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/favorites-view.slint
+#: ui/views/radio-view.slint
+msgid "Favorites"
+msgstr "Избранное"
+
+#: ui/app-window.slint ui/layout/sidebar.slint
+msgid "My Library"
+msgstr "Моя медиатека"
+
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/radio-view.slint
+#: ui/views/recently-played-view.slint
+msgid "Recently Played"
+msgstr "Недавно прослушанное"
+
+#: ui/app-window.slint ui/layout/sidebar.slint
+msgid "Settings"
+msgstr "Настройки"
+
+#: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/views/settings/radio-section.slint
+msgid "Radio"
+msgstr "Радио"
+
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
+msgid "Minimize"
+msgstr "Свернуть"
+
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
+msgid "Maximize"
+msgstr "Развернуть"
+
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
+msgid "Restore"
+msgstr "Восстановить"
+
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Close"
+msgstr "Закрыть"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/context-menu.slint
+msgid "Remove {} from Favorites"
+msgstr "Удалить из избранного ({})"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/context-menu.slint
+msgid "Add {} to Favorites"
+msgstr "Добавить в избранное ({})"
+
+#: ui/components/context-menu.slint ui/components/grid/card-context-menu.slint
+msgid "Add to Favorites"
+msgstr "Добавить в избранное"
+
+#: ui/components/context-menu.slint ui/components/grid/card-context-menu.slint
+msgid "Remove from Favorites"
+msgstr "Удалить из избранного"
+
+#: ui/components/dialog/add-station-body.slint
+#: ui/components/grid/station-context-menu.slint
+msgid "Stream URL"
+msgstr "Адрес потока"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Name (optional)"
+msgstr "Название (необязательно)"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Leave blank to use the station's own name"
+msgstr "Оставьте пустым, чтобы использовать название станции"
+
+#: ui/components/dialog/add-station-body.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/station-facts.slint
+msgid "Website"
+msgstr "Сайт"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Logo URL"
+msgstr "Адрес логотипа"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Leave blank to look for a logo on the website above."
+msgstr "Оставьте пустым, чтобы искать логотип на указанном выше сайте."
+
+#: ui/components/dialog/add-station-body.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+#: ui/views/search/top-result-card.slint
+msgid "Genre"
+msgstr "Жанр"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Jazz, Blues"
+msgstr "Джаз, блюз"
+
+#: ui/components/dialog/add-station-body.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+msgid "Country"
+msgstr "Страна"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Tunisia"
+msgstr "Тунис"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "The directory owns this station's name and stream. What it left blank is yours to fill in; leave a field empty to remove it again."
+msgstr "Название и поток этой станции задаёт каталог. То, что он оставил пустым, можете заполнить вы; оставьте поле пустым, чтобы снова его убрать."
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Checking the stream…"
+msgstr "Проверка потока…"
+
+#: ui/components/dialog/credit-editor.slint
+#: ui/components/dialog/name-list-editor.slint ui/globals/dialog.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Add"
+msgstr "Добавить"
+
+#: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/grid/station-context-menu.slint ui/views/favorites-view.slint
+#: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
+msgid "Name"
+msgstr "Название"
+
+#: ui/components/dialog/dialog.slint
+msgid "Playlist name"
+msgstr "Название плейлиста"
+
+#: ui/components/dialog/dialog.slint
+msgid "Description (optional)"
+msgstr "Описание (необязательно)"
+
+#: ui/components/dialog/dialog.slint
+msgid "Add a description…"
+msgstr "Добавьте описание…"
+
+#: ui/components/dialog/dialog.slint
+msgid "Finish"
+msgstr "Готово"
+
+#: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
+msgid "Open Last.fm"
+msgstr "Открыть Last.fm"
+
+#: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
+msgid "Connect"
+msgstr "Подключить"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Classical"
+msgstr "Классика"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Flat"
+msgstr "Ровный"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Jazz"
+msgstr "Джаз"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Pop"
+msgstr "Поп"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Rock"
+msgstr "Рок"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Bass Boost"
+msgstr "Усиление басов"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Electronic"
+msgstr "Электроника"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Treble Boost"
+msgstr "Усиление высоких"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Vocal"
+msgstr "Вокал"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Custom"
+msgstr "Свой"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Enable equalizer"
+msgstr "Включить эквалайзер"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Reset"
+msgstr "Сбросить"
+
+#: ui/components/dialog/export-playlist-picker.slint
+msgid "No playlists to export"
+msgstr "Нет плейлистов для экспорта"
+
+#: ui/components/dialog/export-playlist-picker.slint
+#: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
+#: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
+#: ui/globals/search.slint ui/views/queue-sheet.slint
+msgid "{n} track"
+msgid_plural "{n} tracks"
+msgstr[0] "{n} трек"
+msgstr[1] "{n} трека"
+msgstr[2] "{n} треков"
+
+#: ui/components/dialog/export-playlist-picker.slint
+msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
+msgstr "Несколько плейлистов сохраняются в один файл .zip, который можно импортировать сразу, не распаковывая."
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "No artwork"
+msgstr "Нет обложки"
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "{} / 4 selected"
+msgstr "Выбрано: {} / 4"
+
+#: ui/components/dialog/playlist-mosaic-picker.slint ui/views/queue-sheet.slint
+msgid "Clear"
+msgstr "Очистить"
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "Add tracks to this playlist to pick artwork."
+msgstr "Добавьте треки в этот плейлист, чтобы выбрать обложку."
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "Select up to 4 tracks"
+msgstr "Выберите до 4 треков"
+
+#: ui/components/dialog/playlist-picker.slint
+msgid "Already added"
+msgstr "Уже добавлено"
+
+#: ui/components/dialog/playlist-picker.slint
+msgid "{} of {} already added"
+msgstr "{} из {} уже добавлено"
+
+#: ui/components/dialog/preamp-slider-row.slint
+msgid "Preamp"
+msgstr "Предусиление"
+
+#: ui/components/dialog/replaygain-body.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/search/top-result-card.slint
+msgid "Album"
+msgstr "Альбом"
+
+#: ui/components/dialog/replaygain-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Track"
+msgstr "Трек"
+
+#: ui/components/dialog/replaygain-body.slint
+msgid "Enable ReplayGain"
+msgstr "Включить ReplayGain"
+
+#: ui/components/dialog/replaygain-body.slint
+msgid "Normalization mode"
+msgstr "Режим нормализации"
+
+#: ui/components/dialog/replaygain-body.slint
+msgid "Prevent clipping"
+msgstr "Предотвращать клиппинг"
+
+#: ui/components/dialog/replaygain-body.slint
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "ReplayGain действует только на треки, в которых уже есть теги громкости. Чтобы добавить их, просканируйте медиатеку программой вроде rsgain или loudgain."
+
+#: ui/components/dialog/scrobble-lastfm-body.slint
+msgid "Click Open Last.fm to approve Melodia in your browser."
+msgstr "Нажмите «Открыть Last.fm», чтобы разрешить доступ Melodia в браузере."
+
+#: ui/components/dialog/scrobble-lastfm-body.slint
+msgid "After approving Melodia in your browser, click Finish."
+msgstr "Разрешив доступ Melodia в браузере, нажмите «Готово»."
+
+#: ui/components/dialog/scrobble-lastfm-body.slint
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+#: ui/globals/player.slint
+msgid "Connecting…"
+msgstr "Подключение…"
+
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+msgid "User token"
+msgstr "Токен пользователя"
+
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+msgid "Paste your ListenBrainz user token"
+msgstr "Вставьте свой токен пользователя ListenBrainz"
+
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+msgid "Find your token on your ListenBrainz profile settings page."
+msgstr "Токен можно найти на странице настроек профиля ListenBrainz."
+
+#: ui/components/dialog/selectable-picker.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Select all"
+msgstr "Выбрать все"
+
+#: ui/components/dialog/selectable-picker.slint
+msgid "{} selected"
+msgstr "Выбрано: {}"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "value"
+msgstr "значение"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "days"
+msgstr "дн."
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "number"
+msgstr "число"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Album Artist"
+msgstr "Исполнитель альбома"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/my-library/tab-pills.slint ui/views/search/top-result-card.slint
+msgid "Artist"
+msgstr "Исполнитель"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+msgid "Title"
+msgstr "Название"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Credits"
+msgstr "Участники"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "ISRC"
+msgstr "ISRC"
+
+#. Translators: a musical key, as in A minor
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Key"
+msgstr "Тональность"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Mood"
+msgstr "Настроение"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "BPM"
+msgstr "BPM"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Duration (sec)"
+msgstr "Длительность (с)"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/station-facts.slint ui/views/radio/tab-pills.slint
+msgid "Plays"
+msgstr "Прослушивания"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/my-library/tab-pills.slint
+msgid "Year"
+msgstr "Год"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Bitrate (kbps)"
+msgstr "Битрейт (кбит/с)"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/now-playing/overflow-menu.slint ui/settings.slint
+msgid "Rating"
+msgstr "Оценка"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Sample rate (Hz)"
+msgstr "Частота дискретизации (Гц)"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Skips"
+msgstr "Пропуски"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Date added"
+msgstr "Дата добавления"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Favorite"
+msgstr "Избранное"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "File size (bytes)"
+msgstr "Размер файла (байт)"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Last played"
+msgstr "Последнее прослушивание"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "contains"
+msgstr "содержит"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "does not contain"
+msgstr "не содержит"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is"
+msgstr "равно"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is not"
+msgstr "не равно"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "ends with"
+msgstr "заканчивается на"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is not set"
+msgstr "не задано"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is set"
+msgstr "задано"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "starts with"
+msgstr "начинается с"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "at least"
+msgstr "не меньше"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "greater than"
+msgstr "больше"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "at most"
+msgstr "не больше"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "less than"
+msgstr "меньше"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is false"
+msgstr "нет"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is true"
+msgstr "да"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "in the last"
+msgstr "за последние"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "not in the last"
+msgstr "не за последние"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "all"
+msgstr "всем"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "any"
+msgstr "любому"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "least recently added"
+msgstr "давно добавленные"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "most recently added"
+msgstr "недавно добавленные"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "least played"
+msgstr "редко прослушиваемые"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "most played"
+msgstr "часто прослушиваемые"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "least recently played"
+msgstr "давно прослушанные"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "most recently played"
+msgstr "недавно прослушанные"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "highest rated"
+msgstr "с высшей оценкой"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "random"
+msgstr "случайные"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Smart playlist name"
+msgstr "Название умного плейлиста"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Match"
+msgstr "Треки, отвечающие"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "of the following rules"
+msgstr "из следующих правил"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Add rule"
+msgstr "Добавить правило"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Limit to"
+msgstr "Не больше"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "N"
+msgstr "N"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "tracks by"
+msgstr "треков, выбирая"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Arranger"
+msgstr "Аранжировщик"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Composer"
+msgstr "Композитор"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Conductor"
+msgstr "Дирижёр"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Lyricist"
+msgstr "Автор текста"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Performer"
+msgstr "Исполнитель партии"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "DJ Mixer"
+msgstr "DJ-микс"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Engineer"
+msgstr "Звукоинженер"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Mixer"
+msgstr "Сведение"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Producer"
+msgstr "Продюсер"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Remixer"
+msgstr "Автор ремикса"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Replace…"
+msgstr "Заменить…"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/folder-row.slint ui/globals/dialog.slint
+#: ui/views/settings/library-section.slint
+msgid "Remove"
+msgstr "Удалить"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Details"
+msgstr "Подробности"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/now-playing/lyrics-menu.slint ui/settings.slint
+#: ui/views/now-playing-view.slint ui/views/settings/lyrics-section.slint
+msgid "Lyrics"
+msgstr "Текст песни"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Summary"
+msgstr "Сводка"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Tags"
+msgstr "Теги"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Total"
+msgstr "Всего"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Disc"
+msgstr "Диск"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Original Year"
+msgstr "Исходный год"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Comment"
+msgstr "Комментарий"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Subtitle"
+msgstr "Подзаголовок"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Disc Subtitle"
+msgstr "Подзаголовок диска"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Grouping"
+msgstr "Группа"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Work"
+msgstr "Произведение"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Movement"
+msgstr "Часть"
+
+#. Translators: the movement's number, as in movement 2 of 4
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Number"
+msgstr "Номер"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/onboarding/appearance-panel.slint ui/settings.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+#: ui/views/settings/language-section.slint
+msgid "Language"
+msgstr "Язык"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Copyright"
+msgstr "Авторские права"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Record Label"
+msgstr "Лейбл"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Catalog Number"
+msgstr "Каталожный номер"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Barcode"
+msgstr "Штрихкод"
+
+#. Translators: the physical medium a release came out on: CD, vinyl
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Media"
+msgstr "Носитель"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Release Type"
+msgstr "Тип релиза"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Release Country"
+msgstr "Страна релиза"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Part of a compilation"
+msgstr "Часть сборника"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Insert found lyrics"
+msgstr "Вставить найденный текст"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Path"
+msgstr "Путь"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Codec"
+msgstr "Кодек"
+
+#: ui/components/dialog/tag-editor-body.slint ui/components/station-facts.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+msgid "Bitrate"
+msgstr "Битрейт"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/views/settings/output-section.slint
+msgid "Sample Rate"
+msgstr "Частота дискретизации"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Bit Depth"
+msgstr "Разрядность"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/views/settings/output-section.slint
+msgid "Channels"
+msgstr "Каналы"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Size"
+msgstr "Размер"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/views/my-library/tab-pills.slint
+msgid "Duration"
+msgstr "Длительность"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Modified"
+msgstr "Изменён"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "BLAKE3"
+msgstr "BLAKE3"
+
+#: ui/components/grid/album-grid.slint
+#: ui/components/track-list/track-list-row.slint ui/globals/player.slint
+msgid "Unknown artist"
+msgstr "Неизвестный исполнитель"
+
+#: ui/components/grid/artist-grid.slint ui/globals/hero-chips.slint
+#: ui/globals/search.slint ui/views/my-library-view.slint
+msgid "{n} album"
+msgid_plural "{n} albums"
+msgstr[0] "{n} альбом"
+msgstr[1] "{n} альбома"
+msgstr[2] "{n} альбомов"
+
+#: ui/components/grid/browse-card-grid.slint
+msgid "Folder"
+msgstr "Папка"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/now-playing/play-button.slint
+#: ui/components/track-list/track-context-menu.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Play"
+msgstr "Воспроизвести"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/now-playing/overflow-menu.slint ui/views/favorites-view.slint
+#: ui/views/my-library/tab-pills.slint ui/views/recently-played-view.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Shuffle"
+msgstr "Перемешать"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Play {} Next"
+msgstr "Воспроизвести следующими ({})"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Play Next"
+msgstr "Воспроизвести следующим"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Add {} to Queue"
+msgstr "Добавить в очередь ({})"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Add to Queue"
+msgstr "Добавить в очередь"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "New Playlist…"
+msgstr "Новый плейлист…"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Add to Playlist"
+msgstr "Добавить в плейлист"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Edit Tags for {}"
+msgstr "Изменить теги ({})"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Edit Tags…"
+msgstr "Изменить теги…"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Edit {} Tracks"
+msgstr "Изменить треки ({})"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/now-playing/lyrics-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Edit Track Information"
+msgstr "Изменить сведения о треке"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/station-facts.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Copy"
+msgstr "Копировать"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Copy Name"
+msgstr "Копировать название"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Copy Path"
+msgstr "Копировать путь"
+
+#: ui/components/grid/card-context-menu.slint ui/settings.slint
+#: ui/views/settings/diagnostics-section.slint
+msgid "Open Folder"
+msgstr "Открыть папку"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Show in File Manager"
+msgstr "Показать в файловом менеджере"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Open Containing Folder"
+msgstr "Открыть папку с файлом"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Go to Artist"
+msgstr "Перейти к исполнителю"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Clear selection"
+msgstr "Снять выделение"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Rename…"
+msgstr "Переименовать…"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Edit Artwork…"
+msgstr "Изменить обложку…"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Edit Rules…"
+msgstr "Изменить правила…"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Delete {} Playlists"
+msgstr "Удалить плейлисты ({})"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Delete Playlist"
+msgstr "Удалить плейлист"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Artist - Album"
+msgstr "Исполнитель - Альбом"
+
+#: ui/components/grid/playlist-grid.slint
+msgid "0 tracks"
+msgstr "0 треков"
+
+#: ui/components/grid/station-context-menu.slint
+msgid "Open Website"
+msgstr "Открыть сайт"
+
+#: ui/components/grid/station-context-menu.slint
+msgid "Edit…"
+msgstr "Изменить…"
+
+#. Translators: `{}` is how many stations are selected
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove {} from Recently Played…"
+msgstr "Удалить из недавно прослушанного ({})…"
+
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove from Recently Played…"
+msgstr "Удалить из недавно прослушанного…"
+
+#. Translators: `{}` is how many stations are selected
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove {} from Favorites…"
+msgstr "Удалить из избранного ({})…"
+
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove from Favorites…"
+msgstr "Удалить из избранного…"
+
+#: ui/components/mini-player/mini-captions.slint
+msgid "Full Player"
+msgstr "Полный плеер"
+
+#: ui/components/mini-player/mini-captions.slint
+msgid "Show Up Next"
+msgstr "Показать «Далее»"
+
+#: ui/components/mini-player/mini-captions.slint
+#: ui/components/now-playing/lyrics-controls.slint
+#: ui/views/settings/lyrics-section.slint
+msgid "Show lyrics"
+msgstr "Показать текст"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Pin on Top"
+msgstr "Поверх всех окон"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Unpin from Top"
+msgstr "Не поверх всех окон"
+
+#: ui/components/mini-player/mini-controls.slint
+msgid "Album Backdrop: off"
+msgstr "Фон из обложки: выкл."
+
+#: ui/components/mini-player/mini-controls.slint
+msgid "Album Backdrop: on"
+msgstr "Фон из обложки: вкл."
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Unfavorite"
+msgstr "Убрать из избранного"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Shuffle: off"
+msgstr "Перемешивание: выкл."
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Shuffle: on"
+msgstr "Перемешивание: вкл."
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Repeat: off"
+msgstr "Повтор: выкл."
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Repeat: one"
+msgstr "Повтор: один трек"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Repeat: all"
+msgstr "Повтор: все"
+
+#: ui/components/now-playing/flyout-presets.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/components/now-playing/visualizer-flyout.slint
+msgid "Off"
+msgstr "Выкл."
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "15 min"
+msgstr "15 мин"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "30 min"
+msgstr "30 мин"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "45 min"
+msgstr "45 мин"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "60 min"
+msgstr "60 мин"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "90 min"
+msgstr "90 мин"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "End of track"
+msgstr "Конец трека"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "Bars"
+msgstr "Столбцы"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "Mirrored"
+msgstr "Зеркальный"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "Waveform"
+msgstr "Волна"
+
+#: ui/components/now-playing/lyrics-menu.slint
+#: ui/views/settings/lyrics-section.slint
+msgid "Show romanization"
+msgstr "Показать транслитерацию"
+
+#: ui/components/now-playing/lyrics-menu.slint
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/lyrics-section.slint
+msgid "Look up lyrics online"
+msgstr "Искать тексты в интернете"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Look up again"
+msgstr "Искать снова"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Save to file"
+msgstr "Сохранить в файл"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Edit lyrics…"
+msgstr "Изменить текст…"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Looking for lyrics…"
+msgstr "Поиск текста…"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "This track has no words"
+msgstr "В этом треке нет слов"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "No lyrics found"
+msgstr "Текст не найден"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Couldn't reach the lyrics service"
+msgstr "Не удалось связаться со службой текстов"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Lyrics lookup is off"
+msgstr "Поиск текстов выключен"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Play something to see its lyrics"
+msgstr "Включите что-нибудь, чтобы увидеть текст"
+
+#. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Turn it on in the Lyrics menu"
+msgstr "Включите его в меню «Текст песни»"
+
+#. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Try again from the Lyrics menu"
+msgstr "Повторите попытку из меню «Текст песни»"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "More"
+msgstr "Ещё"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/output-section.slint
+msgid "Speed"
+msgstr "Скорость"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "Sleep timer"
+msgstr "Таймер сна"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "Track end"
+msgstr "Конец трека"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/playback-section.slint
+msgid "Equalizer"
+msgstr "Эквалайзер"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "On"
+msgstr "Вкл."
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Done"
+msgstr "Готово"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/output-section.slint
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Repeat"
+msgstr "Повтор"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint ui/views/queue-sheet.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Queue"
+msgstr "Очередь"
+
+#: ui/components/now-playing/play-button.slint
+msgid "Pause (hold to stop)"
+msgstr "Пауза (удерживайте, чтобы остановить)"
+
+#: ui/components/now-playing/play-button.slint
+msgid "Play (hold to stop)"
+msgstr "Воспроизвести (удерживайте, чтобы остановить)"
+
+#: ui/components/now-playing/play-button.slint
+msgid "Pause"
+msgstr "Пауза"
+
+#: ui/components/now-playing/sleep-timer-flyout.slint
+msgid "Start"
+msgstr "Запустить"
+
+#: ui/components/now-playing/up-next-list.slint
+msgid "No tracks up next"
+msgstr "Дальше треков нет"
+
+#: ui/components/now-playing/visualizer-picker.slint
+#: ui/views/settings/playback-section.slint
+msgid "Visualizer"
+msgstr "Визуализатор"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Appearance"
+msgstr "Внешний вид"
+
+#: ui/components/onboarding/appearance-panel.slint
+msgid "Pick how Melodia looks. Every change applies as you make it."
+msgstr "Выберите, как будет выглядеть Melodia. Каждое изменение применяется сразу."
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Theme"
+msgstr "Тема"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Theme Variant"
+msgstr "Вариант темы"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "System"
+msgstr "Системный"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Dark"
+msgstr "Тёмный"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Light"
+msgstr "Светлый"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Accent Color"
+msgstr "Акцентный цвет"
+
+#: ui/components/onboarding/features-panel.slint
+msgid "What Melodia can reach"
+msgstr "Куда может обращаться Melodia"
+
+#: ui/components/onboarding/features-panel.slint
+msgid "Melodia works offline. These are the parts that reach out."
+msgstr "Melodia работает без интернета. Вот что обращается к сети."
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/radio-section.slint
+msgid "Internet radio"
+msgstr "Интернет-радио"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/radio-section.slint
+msgid "Browse and play live stations from radio-browser.info"
+msgstr "Просмотр и прослушивание станций с radio-browser.info"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/discord-section.slint
+msgid "Show the track you're playing on your Discord profile"
+msgstr "Показывать играющий трек в профиле Discord"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/lyrics-section.slint
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Если в треке нет своего текста, запрашивать его у lrclib.net"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobbling"
+msgstr "Скробблинг"
+
+#: ui/components/onboarding/features-panel.slint
+msgid "Send what you play to Last.fm or ListenBrainz"
+msgstr "Отправлять прослушанное в Last.fm или ListenBrainz"
+
+#: ui/components/onboarding/features-panel.slint
+msgid "Set Up"
+msgstr "Настроить"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Check for updates automatically"
+msgstr "Автоматически проверять обновления"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Once a day, Melodia asks GitHub whether a newer version is out."
+msgstr "Раз в день Melodia спрашивает у GitHub, не вышла ли новая версия."
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Your music"
+msgstr "Ваша музыка"
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Add the folders your music lives in. Melodia picks up changes to them on its own."
+msgstr "Добавьте папки, в которых хранится ваша музыка. Melodia сама отслеживает изменения в них."
+
+#: ui/components/onboarding/music-panel.slint
+msgid "{n} folder in your library"
+msgid_plural "{n} folders in your library"
+msgstr[0] "{n} папка в медиатеке"
+msgstr[1] "{n} папки в медиатеке"
+msgstr[2] "{n} папок в медиатеке"
+
+#: ui/components/onboarding/music-panel.slint
+#: ui/views/settings/library-section.slint
+msgid "Add a folder to scan for music files."
+msgstr "Добавьте папку для поиска музыкальных файлов."
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Your Music folder: {}"
+msgstr "Ваша папка «Музыка»: {}"
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Add Music Folder"
+msgstr "Добавить папку «Музыка»"
+
+#: ui/components/onboarding/music-panel.slint
+#: ui/views/settings/library-section.slint
+msgid "Add Folder"
+msgstr "Добавить папку"
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Choose Another Folder"
+msgstr "Выбрать другую папку"
+
+#. Translators: Melodia is the product name and stays as is
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Welcome to Melodia"
+msgstr "Добро пожаловать в Melodia"
+
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Skip"
+msgstr "Пропустить"
+
+#: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
+msgid "Back"
+msgstr "Назад"
+
+#: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
+msgid "Next"
+msgstr "Далее"
+
+#: ui/components/search-bar.slint
+msgid "Search…"
+msgstr "Поиск…"
+
+#: ui/components/settings/folder-row.slint
+msgid "Rescan"
+msgstr "Пересканировать"
+
+#: ui/components/settings/scan-progress.slint
+msgid "Looking for music… {n} file found"
+msgid_plural "Looking for music… {n} files found"
+msgstr[0] "Поиск музыки… найден {n} файл"
+msgstr[1] "Поиск музыки… найдено {n} файла"
+msgstr[2] "Поиск музыки… найдено {n} файлов"
+
+#: ui/components/settings/scan-progress.slint
+msgid "Finishing up…"
+msgstr "Завершение…"
+
+#: ui/components/settings/scan-progress.slint
+msgid "Stopping…"
+msgstr "Остановка…"
+
+#. Translators: files read so far, the total, then the file being read
+#: ui/components/settings/scan-progress.slint
+msgid "{} / {} files · {}"
+msgstr "Файлов: {} / {} · {}"
+
+#. Translators: files read so far, then the total
+#: ui/components/settings/scan-progress.slint
+msgid "{} / {} files"
+msgstr "Файлов: {} / {}"
+
+#: ui/components/settings/scan-progress.slint ui/globals/dialog-forms.slint
+#: ui/globals/dialog.slint ui/views/queue-sheet.slint
+#: ui/views/radio/tab-pills.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/library-section.slint
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/scrobbling-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Cancel"
+msgstr "Отмена"
+
+#: ui/components/sort-menu-popup.slint
+msgid "Sort"
+msgstr "Сортировка"
+
+#: ui/components/station-facts.slint
+msgid "Stream"
+msgstr "Поток"
+
+#: ui/components/station-facts.slint
+msgid "Copy stream URL"
+msgstr "Копировать адрес потока"
+
+#: ui/components/station-facts.slint
+msgid "Open in your browser"
+msgstr "Открыть в браузере"
+
+#: ui/components/station-facts.slint ui/views/radio/suggestion-pill.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Format"
+msgstr "Формат"
+
+#: ui/components/station-facts.slint ui/views/radio/station-grid.slint
+msgid "{} kbps"
+msgstr "{} кбит/с"
+
+#: ui/components/station-facts.slint
+msgid "Votes"
+msgstr "Голоса"
+
+#: ui/components/station-facts.slint
+msgid "{n} vote"
+msgid_plural "{n} votes"
+msgstr[0] "{n} голос"
+msgstr[1] "{n} голоса"
+msgstr[2] "{n} голосов"
+
+#: ui/components/station-facts.slint ui/globals/hero-chips.slint
+msgid "{n} play"
+msgid_plural "{n} plays"
+msgstr[0] "{n} прослушивание"
+msgstr[1] "{n} прослушивания"
+msgstr[2] "{n} прослушиваний"
+
+#: ui/components/station-facts.slint
+msgid "Recently played on this station"
+msgstr "Недавно звучало на этой станции"
+
+#: ui/components/station-facts.slint
+msgid "Copy Title"
+msgstr "Копировать название"
+
+#: ui/components/station-facts.slint
+msgid "Copy Artist"
+msgstr "Копировать исполнителя"
+
+#: ui/components/track-copy-items.slint
+msgid "Artist - Title"
+msgstr "Исполнитель - Название"
+
+#: ui/components/track-copy-items.slint
+msgid "File Path"
+msgstr "Путь к файлу"
+
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Columns"
+msgstr "Столбцы"
+
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Artwork"
+msgstr "Обложка"
+
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint
+msgid "Length"
+msgstr "Длина"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/track-list/track-context-menu.slint
+msgid "Add {} to Playlist"
+msgstr "Добавить в плейлист ({})"
+
+#: ui/components/track-list/track-context-menu.slint
+msgid "Go to Album"
+msgstr "Перейти к альбому"
+
+#: ui/components/track-list/track-context-menu.slint
+msgid "Go to Genre"
+msgstr "Перейти к жанру"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove {} from Playlist"
+msgstr "Удалить из плейлиста ({})"
+
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove from Playlist"
+msgstr "Удалить из плейлиста"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove {} from Queue"
+msgstr "Удалить из очереди ({})"
+
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove from Queue"
+msgstr "Удалить из очереди"
+
+#: ui/components/track-list/track-list-row.slint
+msgid "Unknown album"
+msgstr "Неизвестный альбом"
+
+#: ui/globals/curated.slint ui/globals/hero-chips.slint
+msgid "{n} favorite"
+msgid_plural "{n} favorites"
+msgstr[0] "{n} в избранном"
+msgstr[1] "{n} в избранном"
+msgstr[2] "{n} в избранном"
+
+#: ui/globals/dialog-forms.slint
+msgid "That token wasn't accepted. Check it and try again."
+msgstr "Этот токен не принят. Проверьте его и повторите попытку."
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't reach the service. Check your connection and try again."
+msgstr "Не удалось связаться со службой. Проверьте подключение и повторите попытку."
+
+#: ui/globals/dialog-forms.slint
+msgid "Not approved yet. Approve Melodia in your browser, then click Finish."
+msgstr "Доступ ещё не разрешён. Разрешите доступ Melodia в браузере, затем нажмите «Готово»."
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't save your credentials."
+msgstr "Не удалось сохранить учётные данные."
+
+#: ui/globals/dialog-forms.slint
+msgid "Edit Station"
+msgstr "Изменить станцию"
+
+#: ui/globals/dialog-forms.slint
+msgid "Station Details"
+msgstr "Сведения о станции"
+
+#: ui/globals/dialog-forms.slint ui/globals/dialog.slint
+msgid "Save"
+msgstr "Сохранить"
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't reach that address. Check the URL and your connection."
+msgstr "Не удалось открыть этот адрес. Проверьте URL и подключение."
+
+#: ui/globals/dialog-forms.slint
+msgid "That address doesn't play as audio Melodia can decode."
+msgstr "По этому адресу нет звука, который Melodia может декодировать."
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't save the station."
+msgstr "Не удалось сохранить станцию."
+
+#: ui/globals/dialog-forms.slint
+msgid "That doesn't look like a web address. It should start with https://"
+msgstr "Это не похоже на веб-адрес. Он должен начинаться с https://"
+
+#: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
+msgid "New Playlist"
+msgstr "Новый плейлист"
+
+#: ui/globals/dialog.slint
+msgid "Create"
+msgstr "Создать"
+
+#: ui/globals/dialog.slint
+msgid "Rename Playlist"
+msgstr "Переименовать плейлист"
+
+#: ui/globals/dialog.slint
+msgid "Delete playlist?"
+msgstr "Удалить плейлист?"
+
+#: ui/globals/dialog.slint
+msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
+msgstr "Плейлист и порядок треков в нём будут удалены. Сами треки останутся в медиатеке."
+
+#: ui/globals/dialog.slint
+msgid "Delete"
+msgstr "Удалить"
+
+#: ui/globals/dialog.slint
+msgid "Delete {} playlists?"
+msgstr "Удалить плейлисты ({})?"
+
+#: ui/globals/dialog.slint
+msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
+msgstr "Плейлисты и порядок треков в них будут удалены. Сами треки останутся в медиатеке."
+
+#: ui/globals/dialog.slint
+msgid "Remove from Recently Played?"
+msgstr "Удалить из недавно прослушанного?"
+
+#: ui/globals/dialog.slint
+msgid "Remove from favorites?"
+msgstr "Удалить из избранного?"
+
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from Recently Played."
+msgstr "Станция «{}» будет удалена из недавно прослушанного."
+
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from your stations, along with its play history."
+msgstr "Станция «{}» будет удалена из вашего списка вместе с историей прослушивания."
+
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from your favorites."
+msgstr "Станция «{}» будет удалена из избранного."
+
+#: ui/globals/dialog.slint
+msgid "Remove {n} station from Recently Played?"
+msgid_plural "Remove {n} stations from Recently Played?"
+msgstr[0] "Удалить {n} станцию из недавно прослушанного?"
+msgstr[1] "Удалить {n} станции из недавно прослушанного?"
+msgstr[2] "Удалить {n} станций из недавно прослушанного?"
+
+#: ui/globals/dialog.slint
+msgid "Remove {n} station from favorites?"
+msgid_plural "Remove {n} stations from favorites?"
+msgstr[0] "Удалить {n} станцию из избранного?"
+msgstr[1] "Удалить {n} станции из избранного?"
+msgstr[2] "Удалить {n} станций из избранного?"
+
+#: ui/globals/dialog.slint
+msgid "The stations will be removed from Recently Played."
+msgstr "Станции будут удалены из недавно прослушанного."
+
+#: ui/globals/dialog.slint
+msgid "The stations will be removed from your favorites. Any you added by hand are removed from your stations, along with their play history."
+msgstr "Станции будут удалены из избранного. Добавленные вручную будут удалены из ваших станций вместе с историей прослушивания."
+
+#: ui/globals/dialog.slint
+msgid "Edit Rules"
+msgstr "Изменить правила"
+
+#: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
+msgid "New Smart Playlist"
+msgstr "Новый умный плейлист"
+
+#: ui/globals/dialog.slint
+msgid "Edit Artwork"
+msgstr "Изменить обложку"
+
+#: ui/globals/dialog.slint
+msgid "Apply"
+msgstr "Применить"
+
+#: ui/globals/dialog.slint
+msgid "Export Playlists"
+msgstr "Экспорт плейлистов"
+
+#: ui/globals/dialog.slint
+msgid "Choose playlists to export."
+msgstr "Выберите плейлисты для экспорта."
+
+#: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Export"
+msgstr "Экспорт"
+
+#: ui/globals/hero-chips.slint ui/views/my-library-view.slint
+msgid "{n} artist"
+msgid_plural "{n} artists"
+msgstr[0] "{n} исполнитель"
+msgstr[1] "{n} исполнителя"
+msgstr[2] "{n} исполнителей"
+
+#: ui/globals/hero-chips.slint
+msgid "{n} disc"
+msgid_plural "{n} discs"
+msgstr[0] "{n} диск"
+msgstr[1] "{n} диска"
+msgstr[2] "{n} дисков"
+
+#: ui/globals/hero-chips.slint ui/settings.slint
+msgid "Compilation"
+msgstr "Сборник"
+
+#: ui/globals/player.slint
+msgid "No track playing"
+msgstr "Ничего не играет"
+
+#. Translators: a state on the station pill, not the Pause button's verb
+#: ui/globals/player.slint
+msgid "Paused"
+msgstr "На паузе"
+
+#: ui/globals/player.slint
+msgid "Buffering…"
+msgstr "Буферизация…"
+
+#. Translators: a short pill in place of a track's seek bar
+#: ui/globals/player.slint
+msgid "LIVE"
+msgstr "ЭФИР"
+
+#: ui/globals/player.slint
+msgid "Previous (hold to rewind)"
+msgstr "Предыдущий (удерживайте для перемотки назад)"
+
+#: ui/globals/player.slint
+msgid "Previous"
+msgstr "Предыдущий"
+
+#: ui/globals/player.slint
+msgid "Next (hold to fast-forward)"
+msgstr "Следующий (удерживайте для перемотки вперёд)"
+
+#: ui/globals/signal-path.slint
+msgid "Nothing is playing"
+msgstr "Ничего не играет"
+
+#: ui/globals/signal-path.slint
+msgid "Bit-perfect: the device receives the decoder's samples untouched"
+msgstr "Бит-в-бит: устройство получает сэмплы декодера без изменений"
+
+#: ui/globals/signal-path.slint
+msgid "Enhanced: only effects you chose change the sound"
+msgstr "Улучшено: звук меняют только выбранные вами эффекты"
+
+#: ui/globals/signal-path.slint
+msgid "Fallback: exclusive output was refused, so the system mixer is in the way"
+msgstr "Запасной режим: в монопольном выводе отказано, поэтому звук идёт через системный микшер"
+
+#: ui/globals/signal-path.slint
+msgid "Lossy: the file is compressed, so the device gets the decoder's reconstruction of the recording"
+msgstr "С потерями: файл сжат, поэтому устройство получает восстановленную декодером запись"
+
+#: ui/globals/signal-path.slint
+msgid "Converted: the sound is changed on its way to the device"
+msgstr "Преобразовано: звук изменяется на пути к устройству"
+
+#: ui/globals/signal-path.slint
+msgid "Bit-perfect"
+msgstr "Бит-в-бит"
+
+#: ui/globals/signal-path.slint
+msgid "Enhanced"
+msgstr "Улучшено"
+
+#: ui/globals/signal-path.slint
+msgid "Fallback"
+msgstr "Запасной режим"
+
+#: ui/globals/signal-path.slint
+msgid "Lossy"
+msgstr "С потерями"
+
+#: ui/globals/signal-path.slint
+msgid "Converted"
+msgstr "Преобразовано"
+
+#. Translators: the action a click takes, expanding the sidebar
+#: ui/layout/sidebar.slint
+msgid "Expand"
+msgstr "Развернуть"
+
+#: ui/layout/sidebar.slint
+msgid "Collapse"
+msgstr "Свернуть"
+
+#: ui/settings.slint
+msgid "System Default"
+msgstr "Системный по умолчанию"
+
+#: ui/settings.slint
+msgid "File watching disabled"
+msgstr "Отслеживание файлов выключено"
+
+#: ui/settings.slint
+msgid "Tracks won't reflect disk changes until you re-enable it."
+msgstr "Изменения на диске не попадут в треки, пока вы снова его не включите."
+
+#: ui/settings.slint
+msgid "Library re-syncing"
+msgstr "Повторная синхронизация медиатеки"
+
+#: ui/settings.slint
+msgid "Filesystem event burst — rescanning your folders."
+msgstr "Всплеск событий файловой системы — папки сканируются заново."
+
+#: ui/settings.slint
+msgid "Restoring cover art"
+msgstr "Восстановление обложек"
+
+#: ui/settings.slint
+msgid "Some cover art was missing. Melodia is restoring it from your music files."
+msgstr "Некоторые обложки пропали. Melodia восстанавливает их из ваших музыкальных файлов."
+
+#: ui/settings.slint
+msgid "Update available"
+msgstr "Доступно обновление"
+
+#: ui/settings.slint
+msgid "Melodia {} is ready to install."
+msgstr "Melodia {} готова к установке."
+
+#: ui/settings.slint
+msgid "Install"
+msgstr "Установить"
+
+#: ui/settings.slint
+msgid "Update installed"
+msgstr "Обновление установлено"
+
+#: ui/settings.slint
+msgid "Restart Melodia to start using the new version."
+msgstr "Перезапустите Melodia, чтобы начать пользоваться новой версией."
+
+#: ui/settings.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Restart"
+msgstr "Перезапустить"
+
+#: ui/settings.slint
+msgid "Update failed"
+msgstr "Не удалось обновить"
+
+#: ui/settings.slint
+msgid "Couldn't reach the update server. Check your internet connection."
+msgstr "Не удалось связаться с сервером обновлений. Проверьте подключение к интернету."
+
+#: ui/settings.slint
+msgid "Signature check failed. The downloaded update may be corrupted; please try again."
+msgstr "Проверка подписи не пройдена. Загруженное обновление может быть повреждено; повторите попытку."
+
+#: ui/settings.slint
+msgid "The update server returned an unexpected response."
+msgstr "Сервер обновлений вернул неожиданный ответ."
+
+#: ui/settings.slint
+msgid "Couldn't write the downloaded update to disk."
+msgstr "Не удалось записать загруженное обновление на диск."
+
+#: ui/settings.slint
+msgid "Update failed. See logs for details."
+msgstr "Не удалось обновить. Подробности в журнале."
+
+#: ui/settings.slint
+msgid "Diagnostics report saved"
+msgstr "Диагностический отчёт сохранён"
+
+#: ui/settings.slint
+msgid "Saved to {}"
+msgstr "Сохранено в {}"
+
+#: ui/settings.slint
+msgid "Couldn't save the diagnostics report"
+msgstr "Не удалось сохранить диагностический отчёт"
+
+#: ui/settings.slint
+msgid "See the log for details."
+msgstr "Подробности в журнале."
+
+#: ui/settings.slint
+msgid "Melodia crashed last time"
+msgstr "В прошлый раз Melodia аварийно завершилась"
+
+#: ui/settings.slint
+msgid "A crash report was written. Open the log folder to find it."
+msgstr "Отчёт о сбое записан. Он находится в папке журналов."
+
+#: ui/settings.slint
+msgid "Enjoying Melodia?"
+msgstr "Нравится Melodia?"
+
+#: ui/settings.slint
+msgid "It's free and open source, built in my spare time. If it's useful to you, you can support me. You'll only see this once."
+msgstr "Это бесплатная программа с открытым исходным кодом, которую я делаю в свободное время. Если она вам полезна, вы можете меня поддержать. Это сообщение появится только один раз."
+
+#: ui/settings.slint
+msgid "Support"
+msgstr "Поддержать"
+
+#: ui/settings.slint
+msgid "Audio device disconnected"
+msgstr "Аудиоустройство отключено"
+
+#: ui/settings.slint
+msgid "Playback won't be audible until you reconnect it and restart Melodia."
+msgstr "Звука не будет, пока вы не подключите его снова и не перезапустите Melodia."
+
+#: ui/settings.slint
+msgid "{n} playlist imported"
+msgid_plural "{n} playlists imported"
+msgstr[0] "Импортирован {n} плейлист"
+msgstr[1] "Импортировано {n} плейлиста"
+msgstr[2] "Импортировано {n} плейлистов"
+
+#: ui/settings.slint
+msgid "{n} track added · {} missing"
+msgid_plural "{n} tracks added · {} missing"
+msgstr[0] "Добавлен {n} трек · не найдено: {}"
+msgstr[1] "Добавлено {n} трека · не найдено: {}"
+msgstr[2] "Добавлено {n} треков · не найдено: {}"
+
+#: ui/settings.slint
+msgid "{n} track added"
+msgid_plural "{n} tracks added"
+msgstr[0] "Добавлен {n} трек"
+msgstr[1] "Добавлено {n} трека"
+msgstr[2] "Добавлено {n} треков"
+
+#: ui/settings.slint
+msgid "Import failed"
+msgstr "Не удалось импортировать"
+
+#: ui/settings.slint
+msgid "Couldn't read the selected playlist file(s)."
+msgstr "Не удалось прочитать выбранные файлы плейлистов."
+
+#: ui/settings.slint
+msgid "{n} playlist exported"
+msgid_plural "{n} playlists exported"
+msgstr[0] "Экспортирован {n} плейлист"
+msgstr[1] "Экспортировано {n} плейлиста"
+msgstr[2] "Экспортировано {n} плейлистов"
+
+#: ui/settings.slint
+msgid "Export failed"
+msgstr "Не удалось экспортировать"
+
+#: ui/settings.slint
+msgid "Couldn't write the playlist files."
+msgstr "Не удалось записать файлы плейлистов."
+
+#: ui/settings.slint
+msgid "These playlists are too large for one .zip file. Export fewer at a time."
+msgstr "Эти плейлисты слишком велики для одного файла .zip. Экспортируйте меньше за раз."
+
+#: ui/settings.slint
+msgid "{n} station added"
+msgid_plural "{n} stations added"
+msgstr[0] "Добавлена {n} станция"
+msgstr[1] "Добавлено {n} станции"
+msgstr[2] "Добавлено {n} станций"
+
+#: ui/settings.slint
+msgid "{n} was already in your list."
+msgid_plural "{n} were already in your list."
+msgstr[0] "{n} уже была в списке."
+msgstr[1] "{n} уже были в списке."
+msgstr[2] "{n} уже были в списке."
+
+#: ui/settings.slint
+msgid "Couldn't read any stations from the selected file(s)."
+msgstr "Не удалось прочитать ни одной станции из выбранных файлов."
+
+#: ui/settings.slint
+msgid "{n} station exported"
+msgid_plural "{n} stations exported"
+msgstr[0] "Экспортирована {n} станция"
+msgstr[1] "Экспортировано {n} станции"
+msgstr[2] "Экспортировано {n} станций"
+
+#: ui/settings.slint
+msgid "Couldn't write the station list."
+msgstr "Не удалось записать список станций."
+
+#: ui/settings.slint
+msgid "Playback error"
+msgstr "Ошибка воспроизведения"
+
+#: ui/settings.slint
+msgid "Something went wrong"
+msgstr "Что-то пошло не так"
+
+#: ui/settings.slint
+msgid "Loved tracks"
+msgstr "Любимые треки"
+
+#: ui/settings.slint
+msgid "Lyrics saved"
+msgstr "Текст сохранён"
+
+#: ui/settings.slint
+msgid "Copied to clipboard"
+msgstr "Скопировано в буфер обмена"
+
+#: ui/settings.slint
+msgid "Nothing to copy"
+msgstr "Нечего копировать"
+
+#: ui/settings.slint
+msgid "Vote not counted"
+msgstr "Голос не учтён"
+
+#: ui/settings.slint
+msgid "Exclusive output unavailable"
+msgstr "Монопольный вывод недоступен"
+
+#: ui/settings.slint
+msgid "Exclusive output was refused, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "В монопольном выводе отказано, поэтому Melodia пока играет в общем режиме. Причина указана в разделе «Вывод» настроек."
+
+#: ui/settings.slint
+msgid "{} refused exclusive output, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "Устройство {} отказало в монопольном выводе, поэтому Melodia пока играет в общем режиме. Причина указана в разделе «Вывод» настроек."
+
+#: ui/settings.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Restart Required"
+msgstr "Требуется перезапуск"
+
+#: ui/settings.slint
+msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
+msgstr "Melodia не удалось перезапуститься. Закройте и снова откройте её, чтобы применить изменение."
+
+#: ui/settings.slint
+msgid "Added to {n} playlist"
+msgid_plural "Added to {n} playlists"
+msgstr[0] "Добавлено в {n} плейлист"
+msgstr[1] "Добавлено в {n} плейлиста"
+msgstr[2] "Добавлено в {n} плейлистов"
+
+#: ui/settings.slint
+msgid "‹multiple values›"
+msgstr "‹несколько значений›"
+
+#: ui/settings.slint
+msgid "{n} track updated"
+msgid_plural "{n} tracks updated"
+msgstr[0] "Обновлён {n} трек"
+msgstr[1] "Обновлено {n} трека"
+msgstr[2] "Обновлено {n} треков"
+
+#: ui/settings.slint
+msgid "{n} file failed"
+msgid_plural "{n} files failed"
+msgstr[0] "Ошибка в {n} файле"
+msgstr[1] "Ошибка в {n} файлах"
+msgstr[2] "Ошибка в {n} файлах"
+
+#: ui/settings.slint
+msgid "{n} file has unsupported fields"
+msgid_plural "{n} files have unsupported fields"
+msgstr[0] "В {n} файле есть неподдерживаемые поля"
+msgstr[1] "В {n} файлах есть неподдерживаемые поля"
+msgstr[2] "В {n} файлах есть неподдерживаемые поля"
+
+#: ui/settings.slint
+msgid "{} can't be saved to {} files"
+msgstr "{}: нельзя сохранить в файлы {}"
+
+#: ui/settings.slint
+msgid "Disc Total"
+msgstr "Всего дисков"
+
+#: ui/settings.slint
+msgid "Track Total"
+msgstr "Всего треков"
+
+#: ui/settings.slint
+msgid "Movement Number"
+msgstr "Номер части"
+
+#: ui/settings.slint
+msgid "Movement Total"
+msgstr "Всего частей"
+
+#: ui/settings.slint
+msgid "Couldn't save tags"
+msgstr "Не удалось сохранить теги"
+
+#: ui/settings.slint
+msgid "No tracks were updated."
+msgstr "Ни один трек не обновлён."
+
+#: ui/views/browse-view.slint
+msgid "No library folders configured"
+msgstr "Папки медиатеки не заданы"
+
+#: ui/views/browse-view.slint
+msgid "Open Settings to add a folder"
+msgstr "Откройте настройки, чтобы добавить папку"
+
+#: ui/views/browse-view.slint
+msgid "Open Settings"
+msgstr "Открыть настройки"
+
+#: ui/views/browse-view.slint
+msgid "Could not load folder"
+msgstr "Не удалось загрузить папку"
+
+#: ui/views/browse-view.slint
+msgid "Empty folder"
+msgstr "Пустая папка"
+
+#: ui/views/browse-view.slint
+msgid "Card view"
+msgstr "Карточки"
+
+#: ui/views/browse-view.slint
+msgid "List view"
+msgstr "Список"
+
+#: ui/views/favorites-view.slint ui/views/recently-played-view.slint
+msgid "Filter most played…"
+msgstr "Фильтр часто прослушиваемого…"
+
+#: ui/views/favorites-view.slint ui/views/my-library-view.slint
+msgid "Filter artists…"
+msgstr "Фильтр исполнителей…"
+
+#: ui/views/favorites-view.slint
+msgid "Filter favorites…"
+msgstr "Фильтр избранного…"
+
+#: ui/views/favorites-view.slint
+msgid "Favorite Artists"
+msgstr "Избранные исполнители"
+
+#: ui/views/favorites-view.slint ui/views/recently-played-view.slint
+msgid "Most Played"
+msgstr "Часто прослушиваемое"
+
+#: ui/views/favorites-view.slint ui/views/my-library-view.slint
+#: ui/views/recently-played-view.slint ui/views/search/songs-section.slint
+msgid "Songs"
+msgstr "Песни"
+
+#: ui/views/favorites-view.slint
+msgid "No favorites yet"
+msgstr "В избранном пока ничего нет"
+
+#: ui/views/favorites/artists-tab.slint
+msgid "No favorite artists yet"
+msgstr "Избранных исполнителей пока нет"
+
+#: ui/views/favorites/artists-tab.slint
+msgid "Favorite a song and its artist appears here."
+msgstr "Добавьте песню в избранное, и её исполнитель появится здесь."
+
+#: ui/views/favorites/most-played-tab.slint ui/views/radio-view.slint
+#: ui/views/recently-played/most-played-tab.slint
+msgid "Nothing played yet"
+msgstr "Пока ничего не прослушано"
+
+#: ui/views/favorites/most-played-tab.slint
+msgid "Play one of your favorites and it will show up here."
+msgstr "Включите что-нибудь из избранного, и оно появится здесь."
+
+#: ui/views/my-library-view.slint
+msgid "{n} song"
+msgid_plural "{n} songs"
+msgstr[0] "{n} песня"
+msgstr[1] "{n} песни"
+msgstr[2] "{n} песен"
+
+#: ui/views/my-library-view.slint
+msgid "{n} genre"
+msgid_plural "{n} genres"
+msgstr[0] "{n} жанр"
+msgstr[1] "{n} жанра"
+msgstr[2] "{n} жанров"
+
+#: ui/views/my-library-view.slint
+msgid "{n} playlist"
+msgid_plural "{n} playlists"
+msgstr[0] "{n} плейлист"
+msgstr[1] "{n} плейлиста"
+msgstr[2] "{n} плейлистов"
+
+#: ui/views/my-library-view.slint ui/views/my-library/artist-detail.slint
+#: ui/views/my-library/tab-pills.slint ui/views/search-view.slint
+msgid "Albums"
+msgstr "Альбомы"
+
+#: ui/views/my-library-view.slint ui/views/search-view.slint
+msgid "Artists"
+msgstr "Исполнители"
+
+#: ui/views/my-library-view.slint
+msgid "Genres"
+msgstr "Жанры"
+
+#: ui/views/my-library-view.slint
+msgid "Playlists"
+msgstr "Плейлисты"
+
+#: ui/views/my-library-view.slint
+msgid "Filter tracks & albums…"
+msgstr "Фильтр треков и альбомов…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter tracks…"
+msgstr "Фильтр треков…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter albums…"
+msgstr "Фильтр альбомов…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter genres…"
+msgstr "Фильтр жанров…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter playlists…"
+msgstr "Фильтр плейлистов…"
+
+#: ui/views/my-library/albums-tab.slint
+msgid "No albums yet"
+msgstr "Альбомов пока нет"
+
+#: ui/views/my-library/albums-tab.slint ui/views/my-library/artists-tab.slint
+#: ui/views/my-library/genres-tab.slint
+msgid "Add a music folder in Settings to start building your library."
+msgstr "Добавьте папку с музыкой в настройках, чтобы начать собирать медиатеку."
+
+#: ui/views/my-library/artists-tab.slint
+msgid "No artists yet"
+msgstr "Исполнителей пока нет"
+
+#: ui/views/my-library/genres-tab.slint
+msgid "No genres yet"
+msgstr "Жанров пока нет"
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "No matching tracks"
+msgstr "Нет подходящих треков"
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "No tracks yet"
+msgstr "Треков пока нет"
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "No tracks match these rules."
+msgstr "Ни один трек не отвечает этим правилам."
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "Drag music files here, or add tracks via any track's overflow menu."
+msgstr "Перетащите сюда музыкальные файлы или добавляйте треки через меню любого трека."
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "Drop files to add to this playlist"
+msgstr "Отпустите файлы, чтобы добавить их в этот плейлист"
+
+#: ui/views/my-library/playlists-tab.slint
+msgid "No playlists yet"
+msgstr "Плейлистов пока нет"
+
+#: ui/views/my-library/playlists-tab.slint
+msgid "Click \"+ New Playlist\" to create one."
+msgstr "Нажмите «+ Новый плейлист», чтобы создать его."
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Tracks"
+msgstr "Треки"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Edit artwork"
+msgstr "Изменить обложку"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Rename"
+msgstr "Переименовать"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Edit rules"
+msgstr "Изменить правила"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Delete playlist"
+msgstr "Удалить плейлист"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Create an empty playlist"
+msgstr "Создать пустой плейлист"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Create a playlist from rules"
+msgstr "Создать плейлист по правилам"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "More playlist actions"
+msgstr "Другие действия с плейлистом"
+
+#: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
+msgid "Import"
+msgstr "Импорт"
+
+#: ui/views/now-playing-view.slint ui/views/radio/tab-pills.slint
+msgid "Vote"
+msgstr "Голосовать"
+
+#. Translators: a heading in place of "Up Next", so keep it as short
+#: ui/views/now-playing-view.slint
+msgid "Station"
+msgstr "Станция"
+
+#: ui/views/now-playing-view.slint
+msgid "Up Next"
+msgstr "Далее"
+
+#: ui/views/placeholder-view.slint
+msgid "Coming soon"
+msgstr "Скоро"
+
+#: ui/views/queue-sheet.slint
+msgid "No tracks"
+msgstr "Нет треков"
+
+#: ui/views/queue-sheet.slint
+msgid "Clear queue"
+msgstr "Очистить очередь"
+
+#: ui/views/queue-sheet.slint
+msgid "Clear queue?"
+msgstr "Очистить очередь?"
+
+#: ui/views/queue-sheet.slint
+msgid "Remove all tracks from the queue? Playback will stop."
+msgstr "Удалить все треки из очереди? Воспроизведение остановится."
+
+#: ui/views/queue-sheet.slint
+msgid "Queue is empty"
+msgstr "Очередь пуста"
+
+#: ui/views/queue-sheet.slint
+msgid "Drop to add to queue"
+msgstr "Отпустите, чтобы добавить в очередь"
+
+#: ui/views/radio-view.slint ui/views/radio/suggestion-pill.slint
+msgid "{n} station"
+msgid_plural "{n} stations"
+msgstr[0] "{n} станция"
+msgstr[1] "{n} станции"
+msgstr[2] "{n} станций"
+
+#: ui/views/radio-view.slint
+msgid "Search stations…"
+msgstr "Поиск станций…"
+
+#: ui/views/radio-view.slint
+msgid "Filter stations…"
+msgstr "Фильтр станций…"
+
+#: ui/views/radio-view.slint
+msgid "No stations kept yet"
+msgstr "Сохранённых станций пока нет"
+
+#: ui/views/radio-view.slint
+msgid "Star a station in Browse, or add one by URL."
+msgstr "Отметьте станцию звёздочкой в «Обзоре» или добавьте её по адресу."
+
+#: ui/views/radio-view.slint
+msgid "Stations you listen to show up here."
+msgstr "Здесь появятся станции, которые вы слушаете."
+
+#: ui/views/radio/browse-tab.slint
+msgid "Searching the directory…"
+msgstr "Поиск в каталоге…"
+
+#: ui/views/radio/browse-tab.slint
+msgid "Stations are coming from radio-browser.info."
+msgstr "Станции загружаются с radio-browser.info."
+
+#: ui/views/radio/browse-tab.slint
+msgid "The station directory is unreachable"
+msgstr "Каталог станций недоступен"
+
+#: ui/views/radio/browse-tab.slint
+msgid "Check your connection and try again."
+msgstr "Проверьте подключение и повторите попытку."
+
+#: ui/views/radio/browse-tab.slint
+msgid "Try again"
+msgstr "Повторить"
+
+#: ui/views/radio/browse-tab.slint ui/views/radio/kept-stations-tab.slint
+msgid "No stations matched"
+msgstr "Подходящих станций нет"
+
+#: ui/views/radio/browse-tab.slint ui/views/radio/kept-stations-tab.slint
+msgid "Try a different name, or clear a filter."
+msgstr "Попробуйте другое название или сбросьте фильтр."
+
+#: ui/views/radio/browse-tab.slint
+msgid "Load more stations"
+msgstr "Загрузить ещё станции"
+
+#: ui/views/radio/browse-tab.slint ui/views/radio/facet-chip.slint
+msgid "Loading…"
+msgstr "Загрузка…"
+
+#: ui/views/radio/facet-chip.slint
+msgid "Filter…"
+msgstr "Фильтр…"
+
+#: ui/views/radio/facet-chip.slint
+msgid "Nothing to pick from"
+msgstr "Выбирать не из чего"
+
+#: ui/views/radio/station-detail.slint
+msgid "The directory reached this station on its last check."
+msgstr "При последней проверке каталог смог связаться с этой станцией."
+
+#: ui/views/radio/station-detail.slint
+msgid "The directory could not reach this station on its last check."
+msgstr "При последней проверке каталог не смог связаться с этой станцией."
+
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+msgid "{} kbps and up"
+msgstr "От {} кбит/с"
+
+#: ui/views/radio/suggestion-pill.slint
+msgid "{}: {}"
+msgstr "{}: {}"
+
+#: ui/views/radio/tab-pills.slint
+msgid "Add Station"
+msgstr "Добавить станцию"
+
+#: ui/views/radio/tab-pills.slint
+msgid "Added"
+msgstr "Добавлено"
+
+#: ui/views/radio/tab-pills.slint
+msgid "More station actions"
+msgstr "Другие действия со станцией"
+
+#: ui/views/radio/tab-pills.slint
+msgid "Edit"
+msgstr "Изменить"
+
+#: ui/views/recently-played-view.slint
+msgid "Filter recently played…"
+msgstr "Фильтр недавно прослушанного…"
+
+#: ui/views/recently-played-view.slint
+msgid "No recently played tracks"
+msgstr "Недавно прослушанных треков нет"
+
+#: ui/views/recently-played/most-played-tab.slint
+msgid "Play something and it will show up here."
+msgstr "Включите что-нибудь, и оно появится здесь."
+
+#: ui/views/search-view.slint
+msgid "Searching…"
+msgstr "Поиск…"
+
+#: ui/views/search-view.slint
+msgid "Search your library…"
+msgstr "Поиск в медиатеке…"
+
+#: ui/views/search/no-results.slint
+msgid "No results found"
+msgstr "Ничего не найдено"
+
+#: ui/views/search/no-results.slint
+msgid "Try a different search term"
+msgstr "Попробуйте другой запрос"
+
+#: ui/views/search/recent-searches.slint
+msgid "Recent"
+msgstr "Недавние"
+
+#: ui/views/search/recent-searches.slint
+msgid "Clear all"
+msgstr "Очистить все"
+
+#: ui/views/search/songs-section.slint
+msgid "Show less"
+msgstr "Свернуть"
+
+#: ui/views/search/songs-section.slint
+msgid "Show all {} songs"
+msgstr "Показать все песни ({})"
+
+#: ui/views/search/top-result-card.slint
+msgid "Top Result"
+msgstr "Лучший результат"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/interface-page.slint
+msgid "Interface"
+msgstr "Интерфейс"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/library-page.slint
+msgid "Library"
+msgstr "Медиатека"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/playback-page.slint
+#: ui/views/settings/playback-section.slint
+msgid "Playback"
+msgstr "Воспроизведение"
+
+#: ui/views/settings-view.slint ui/views/settings/about-section.slint
+#: ui/views/settings/pages/about-page.slint
+msgid "About"
+msgstr "О программе"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/services-page.slint
+msgid "Services"
+msgstr "Сервисы"
+
+#: ui/views/settings-view.slint
+msgid "Search settings…"
+msgstr "Поиск настроек…"
+
+#. Translators: `{}` is the version number, such as 0.9.2
+#: ui/views/settings/about-section.slint
+msgid "Version {}"
+msgstr "Версия {}"
+
+#. Translators: `{}` is the author's name, a proper noun kept as is
+#: ui/views/settings/about-section.slint
+msgid "Made by {}"
+msgstr "Автор: {}"
+
+#. Translators: support as in funding the project, not technical support
+#: ui/views/settings/about-section.slint
+msgid "Support Melodia"
+msgstr "Поддержать Melodia"
+
+#: ui/views/settings/about-section.slint
+msgid "Melodia is free and open source. Support helps keep it going."
+msgstr "Melodia — бесплатная программа с открытым исходным кодом. Ваша поддержка помогает ей развиваться."
+
+#: ui/views/settings/about-section.slint
+msgid "License"
+msgstr "Лицензия"
+
+#. Translators: Ko-fi is a brand and stays as is; support means funding
+#: ui/views/settings/about-section.slint
+msgid "Support me on Ko-fi"
+msgstr "Поддержать меня на Ko-fi"
+
+#: ui/views/settings/about-section.slint
+msgid "Welcome Guide"
+msgstr "Приветственный гид"
+
+#: ui/views/settings/about-section.slint
+msgid "Run the first-run setup again."
+msgstr "Снова пройти первоначальную настройку."
+
+#. Translators: a button in a narrow slot, so keep it short
+#: ui/views/settings/about-section.slint
+msgid "Show"
+msgstr "Показать"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Color Style"
+msgstr "Цветовой стиль"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Active — palette derived from the current track's artwork."
+msgstr "Включено — палитра берётся из обложки текущего трека."
+
+#: ui/views/settings/appearance-section.slint
+msgid "Generate theme colors from album artwork."
+msgstr "Создавать цвета темы по обложке альбома."
+
+#: ui/views/settings/appearance-section.slint
+msgid "Aurora Backdrop"
+msgstr "Фон «Аврора»"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."
+msgstr "Заливать заголовки альбомов, плейлистов и экрана «Сейчас играет» собственными цветами альбома вместо размытой копии обложки. Размывать ничего не нужно, поэтому заголовки появляются быстрее, а Melodia расходует меньше ресурсов. Чтобы применить, нужен перезапуск."
+
+#: ui/views/settings/appearance-section.slint
+#: ui/views/settings/playback-section.slint
+msgid "None"
+msgstr "Нет"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Tonal Spot"
+msgstr "Тональный акцент"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Content"
+msgstr "Контент"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Vibrant"
+msgstr "Яркий"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Expressive"
+msgstr "Выразительный"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Fidelity"
+msgstr "Точный"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Neutral"
+msgstr "Нейтральный"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Monochrome"
+msgstr "Монохромный"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Changing the backdrop style requires restarting Melodia. Restart now?"
+msgstr "Чтобы сменить стиль фона, нужно перезапустить Melodia. Перезапустить сейчас?"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Diagnostics"
+msgstr "Диагностика"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Logs"
+msgstr "Журналы"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Where Melodia writes its log files and crash reports."
+msgstr "Куда Melodia записывает файлы журналов и отчёты о сбоях."
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Diagnostics report"
+msgstr "Диагностический отчёт"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "One text file with your system details, settings and recent logs, for attaching to a bug report."
+msgstr "Один текстовый файл со сведениями о системе, настройками и свежими журналами, чтобы приложить его к сообщению об ошибке."
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Verbose logging"
+msgstr "Подробное журналирование"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Record extra detail. Turn this on, reproduce the problem, then save a report."
+msgstr "Записывать больше подробностей. Включите, воспроизведите проблему, затем сохраните отчёт."
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Save…"
+msgstr "Сохранить…"
+
+#: ui/views/settings/discord-section.slint
+msgid "Show album artwork"
+msgstr "Показывать обложку альбома"
+
+#: ui/views/settings/discord-section.slint
+msgid "Look up cover art online (via Deezer or iTunes) to show on the card"
+msgstr "Искать обложку в интернете (через Deezer или iTunes), чтобы показать её на карточке"
+
+#: ui/views/settings/discord-section.slint
+msgid "Hide while paused"
+msgstr "Скрывать на паузе"
+
+#: ui/views/settings/discord-section.slint
+msgid "Remove the card when paused instead of showing a paused marker"
+msgstr "Убирать карточку на паузе, а не показывать значок паузы"
+
+#: ui/views/settings/discord-section.slint
+msgid "Status"
+msgstr "Состояние"
+
+#: ui/views/settings/discord-section.slint
+msgid "Connected to Discord"
+msgstr "Подключено к Discord"
+
+#: ui/views/settings/discord-section.slint
+msgid "Discord not running"
+msgstr "Discord не запущен"
+
+#: ui/views/settings/file-watching-section.slint
+msgid "File Watching"
+msgstr "Отслеживание файлов"
+
+#: ui/views/settings/file-watching-section.slint
+msgid "Watch for file changes"
+msgstr "Отслеживать изменения файлов"
+
+#: ui/views/settings/file-watching-section.slint
+msgid "Automatically detect when files are added, removed, or changed in your library folders."
+msgstr "Автоматически замечать, когда в папках медиатеки файлы добавляются, удаляются или изменяются."
+
+#: ui/views/settings/language-section.slint
+msgid "Choose your preferred language"
+msgstr "Выберите язык интерфейса"
+
+#: ui/views/settings/library-section.slint
+msgid "Manage Folders"
+msgstr "Управление папками"
+
+#: ui/views/settings/library-section.slint
+msgid "Library Folders"
+msgstr "Папки медиатеки"
+
+#: ui/views/settings/library-section.slint
+msgid "Remove Folder?"
+msgstr "Удалить папку?"
+
+#. Translators: `{}` is the absolute path of the folder being removed
+#: ui/views/settings/library-section.slint
+msgid "Remove \"{}\" from your library? All tracks under this folder will be removed from the library and from your playlists."
+msgstr "Удалить «{}» из медиатеки? Все треки из этой папки будут удалены из медиатеки и из ваших плейлистов."
+
+#: ui/views/settings/library-section.slint
+msgid "No folders added"
+msgstr "Папки не добавлены"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Show the playing track's words in Now Playing instead of Up Next"
+msgstr "Показывать текст играющего трека на экране «Сейчас играет» вместо списка «Далее»"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
+msgstr "Показывать под строкой её звучание латиницей, если текст написан другим письмом"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Miniplayer"
+msgstr "Мини-плеер"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Window Buttons"
+msgstr "Кнопки окна"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "The minimize, full player and close buttons in the miniplayer's corner."
+msgstr "Кнопки сворачивания, полного плеера и закрытия в углу мини-плеера."
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Album Backdrop"
+msgstr "Фон из обложки"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
+msgstr "Окрашивать мини-плеер в цвета играющего альбома, как это делает экран «Сейчас играет»."
+
+#: ui/views/settings/motion-section.slint
+msgid "Motion"
+msgstr "Анимация"
+
+#: ui/views/settings/motion-section.slint
+msgid "Skip Startup Animation"
+msgstr "Без анимации при запуске"
+
+#: ui/views/settings/motion-section.slint
+msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
+msgstr "Открываться сразу с медиатекой на экране, без плавного появления и сдвига на место. Оставленная открытой подробная страница всё равно развернётся, когда загрузится."
+
+#: ui/views/settings/output-section.slint
+msgid "Output"
+msgstr "Вывод"
+
+#: ui/views/settings/output-section.slint
+msgid "Output Mode"
+msgstr "Режим вывода"
+
+#: ui/views/settings/output-section.slint
+msgid "Exclusive gives Melodia the audio device alone: other apps can't play through it while Melodia plays, and the system mixer can't change the sound"
+msgstr "В монопольном режиме аудиоустройство принадлежит только Melodia: пока она играет, другие приложения не могут воспроизводить через него звук, а системный микшер не может его изменить"
+
+#: ui/views/settings/output-section.slint
+msgid "Output Device"
+msgstr "Устройство вывода"
+
+#: ui/views/settings/output-section.slint
+msgid "Exclusive Device"
+msgstr "Монопольное устройство"
+
+#: ui/views/settings/output-section.slint
+msgid "The sound card Melodia plays through"
+msgstr "Звуковая карта, через которую играет Melodia"
+
+#: ui/views/settings/output-section.slint
+msgid "The sound card exclusive output takes"
+msgstr "Звуковая карта, которую занимает монопольный вывод"
+
+#: ui/views/settings/output-section.slint
+msgid "Unsupported Sample Rates"
+msgstr "Неподдерживаемые частоты"
+
+#: ui/views/settings/output-section.slint
+msgid "What exclusive output does when the device can't run a track's sample rate: hand the device back and play that track through the system mixer, or keep the device and convert the track to a rate it can run"
+msgstr "Что делает монопольный вывод, если устройство не поддерживает частоту дискретизации трека: вернуть устройство и сыграть этот трек через системный микшер или удержать устройство и преобразовать трек в поддерживаемую частоту"
+
+#: ui/views/settings/output-section.slint
+msgid "Buffer Period"
+msgstr "Период буфера"
+
+#: ui/views/settings/output-section.slint
+msgid "How much audio the device is handed at a time. Longer periods ride out a busy system; shorter ones react sooner"
+msgstr "Сколько звука устройство получает за раз. Длинные периоды выдерживают нагрузку на систему, короткие быстрее реагируют"
+
+#: ui/views/settings/output-section.slint
+msgid "Polling Mode"
+msgstr "Режим опроса"
+
+#: ui/views/settings/output-section.slint
+msgid "Top the device up on a timer instead of waiting for it to ask. Try it if a USB device stutters or crackles in exclusive mode"
+msgstr "Подавать данные устройству по таймеру, не дожидаясь его запроса. Попробуйте, если USB-устройство заикается или трещит в монопольном режиме"
+
+#: ui/views/settings/output-section.slint
+msgid "Hardware Volume"
+msgstr "Аппаратная громкость"
+
+#: ui/views/settings/output-section.slint
+msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
+msgstr "Менять громкость регулятором самого устройства, а не масштабированием сэмплов, чтобы ползунок громкости сохранял звук бит-в-бит. Этот регулятор — системная громкость устройства, и она восстанавливается, когда Melodia освобождает устройство. Устройства без такого регулятора используют собственную громкость Melodia"
+
+#: ui/views/settings/output-section.slint
+msgid "Give the Device Back When Paused"
+msgstr "Освобождать устройство на паузе"
+
+#: ui/views/settings/output-section.slint
+msgid "After five minutes paused, hand the device back so other apps can play through it. Pressing play takes it again"
+msgstr "После пяти минут паузы возвращать устройство, чтобы через него могли играть другие приложения. Нажатие на воспроизведение снова его занимает"
+
+#: ui/views/settings/output-section.slint
+msgid "Silence After a Rate Change"
+msgstr "Тишина после смены частоты"
+
+#: ui/views/settings/output-section.slint
+msgid "Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off"
+msgstr "Некоторые ЦАП на мгновение глушат звук при смене частоты дискретизации. Короткая пауза при каждой смене не даёт обрезать начало трека"
+
+#: ui/views/settings/output-section.slint
+msgid "Match the File's Sample Rate"
+msgstr "Частота как у файла"
+
+#: ui/views/settings/output-section.slint
+msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate"
+msgstr "Заново открывать аудиоустройство с частотой каждого трека, чтобы система не передискретизировала его. Система должна разрешать эту частоту"
+
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Signal Path"
+msgstr "Тракт сигнала"
+
+#: ui/views/settings/output-section.slint
+msgid "What reaches the audio device, and what changes it on the way. Bit-perfect means nothing does"
+msgstr "Что доходит до аудиоустройства и что меняет звук по пути. Бит-в-бит означает, что ничего"
+
+#: ui/views/settings/output-section.slint
+msgid "the device is in use by another app"
+msgstr "устройство используется другим приложением"
+
+#: ui/views/settings/output-section.slint
+msgid "{} holds the device"
+msgstr "устройство занято приложением {}"
+
+#: ui/views/settings/output-section.slint
+msgid "another app holds the device"
+msgstr "устройство занято другим приложением"
+
+#: ui/views/settings/output-section.slint
+msgid "the device can't run at this sample rate"
+msgstr "устройство не работает с этой частотой дискретизации"
+
+#: ui/views/settings/output-section.slint
+msgid "the device can't play this many channels"
+msgstr "устройство не воспроизводит столько каналов"
+
+#: ui/views/settings/output-section.slint
+msgid "the device takes no sample format that holds this track"
+msgstr "устройство не принимает ни одного формата сэмплов, вмещающего этот трек"
+
+#: ui/views/settings/output-section.slint
+msgid "the chosen device isn't connected"
+msgstr "выбранное устройство не подключено"
+
+#: ui/views/settings/output-section.slint
+msgid "exclusive output isn't available on this system"
+msgstr "монопольный вывод недоступен в этой системе"
+
+#: ui/views/settings/output-section.slint
+msgid "the device doesn't allow exclusive control, which its Advanced properties in the Sound control panel can turn on"
+msgstr "устройство не разрешает монопольный доступ; его можно включить в дополнительных свойствах устройства на панели управления «Звук»"
+
+#: ui/views/settings/output-section.slint
+msgid "the device couldn't be opened"
+msgstr "не удалось открыть устройство"
+
+#: ui/views/settings/output-section.slint
+msgid "No effects"
+msgstr "Без эффектов"
+
+#: ui/views/settings/output-section.slint
+msgid "Equalizer and ReplayGain"
+msgstr "Эквалайзер и ReplayGain"
+
+#: ui/views/settings/output-section.slint
+msgid "Shared"
+msgstr "Общий"
+
+#: ui/views/settings/output-section.slint
+msgid "Exclusive"
+msgstr "Монопольный"
+
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/scrobbling-section.slint
+msgid "Not connected"
+msgstr "Не подключено"
+
+#: ui/views/settings/output-section.slint
+msgid "Play Through the System Mixer"
+msgstr "Играть через системный микшер"
+
+#: ui/views/settings/output-section.slint
+msgid "Resample and Keep Exclusive"
+msgstr "Передискретизировать и остаться в монопольном режиме"
+
+#: ui/views/settings/output-section.slint
+msgid "{} ms"
+msgstr "{} мс"
+
+#: ui/views/settings/output-section.slint
+msgid "The device is running at {}"
+msgstr "Устройство работает с периодом {}"
+
+#: ui/views/settings/output-section.slint
+msgid "Make Bit-Perfect"
+msgstr "Сделать бит-в-бит"
+
+#: ui/views/settings/output-section.slint
+msgid "Switch to Exclusive Output?"
+msgstr "Перейти на монопольный вывод?"
+
+#: ui/views/settings/output-section.slint
+msgid "Bit-perfect playback needs exclusive output. Other apps can't play through the device while Melodia does, and the system volume stops applying: Melodia's own volume goes to full unless Hardware Volume is on."
+msgstr "Для воспроизведения бит-в-бит нужен монопольный вывод. Пока играет Melodia, другие приложения не могут воспроизводить звук через устройство, а системная громкость перестаёт действовать: собственная громкость Melodia становится максимальной, если не включена аппаратная громкость."
+
+#: ui/views/settings/output-section.slint
+msgid "Switch"
+msgstr "Перейти"
+
+#: ui/views/settings/output-section.slint
+msgid "Source"
+msgstr "Источник"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, decoded from a lossy codec"
+msgstr "{}, декодировано из кодека с потерями"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, rounded to fit 32-bit float"
+msgstr "{}, округлено до 32-битного float"
+
+#: ui/views/settings/output-section.slint
+msgid "Effects"
+msgstr "Эффекты"
+
+#: ui/views/settings/output-section.slint
+msgid "Normal"
+msgstr "Обычная"
+
+#: ui/views/settings/output-section.slint
+msgid "Volume"
+msgstr "Громкость"
+
+#: ui/views/settings/output-section.slint
+msgid "Muted"
+msgstr "Без звука"
+
+#: ui/views/settings/output-section.slint
+msgid "{}% (the device muted)"
+msgstr "{}% (звук устройства выключен)"
+
+#: ui/views/settings/output-section.slint
+msgid "{}% on the device"
+msgstr "{}% на устройстве"
+
+#: ui/views/settings/output-section.slint
+msgid "{}% (the device at {}%)"
+msgstr "{}% (устройство на {}%)"
+
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/playback-section.slint
+msgid "Crossfade"
+msgstr "Плавный переход"
+
+#: ui/views/settings/output-section.slint
+msgid "Fading between tracks"
+msgstr "Плавный переход между треками"
+
+#: ui/views/settings/output-section.slint
+msgid "Not fading"
+msgstr "Без плавного перехода"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled to {}"
+msgstr "{} передискретизировано в {}"
+
+#: ui/views/settings/output-section.slint
+msgid "Mixed down for the device"
+msgstr "Сведено для устройства"
+
+#: ui/views/settings/output-section.slint
+msgid "Unchanged"
+msgstr "Без изменений"
+
+#: ui/views/settings/output-section.slint
+msgid "Device"
+msgstr "Устройство"
+
+#: ui/views/settings/output-section.slint
+msgid "{} refused exclusive output because {}. Playing shared on {}"
+msgstr "Устройство {} отказало в монопольном выводе, потому что {}. Общий режим: {}"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, shared: exclusive output was refused because {}"
+msgstr "{}, общий режим: в монопольном выводе отказано, потому что {}"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, shared: the system mixer may still convert it"
+msgstr "{}, общий режим: системный микшер всё ещё может преобразовывать звук"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, exclusive"
+msgstr "{}, монопольный режим"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, exclusive, in a format that can't hold the source exactly"
+msgstr "{}, монопольный режим, в формате, который не передаёт источник в точности"
+
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Player Bar"
+msgstr "Панель плеера"
+
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Overflow Menu Buttons"
+msgstr "Кнопки в меню «Ещё»"
+
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Move selected buttons into a compact overflow menu in the player bar"
+msgstr "Переносить выбранные кнопки в компактное меню «Ещё» на панели плеера"
+
+#: ui/views/settings/playback-section.slint
+msgid "Gapless Playback"
+msgstr "Воспроизведение без пауз"
+
+#: ui/views/settings/playback-section.slint
+msgid "Seamless transitions between tracks without silence gaps"
+msgstr "Бесшовные переходы между треками без пауз"
+
+#: ui/views/settings/playback-section.slint
+msgid "Play Button Animation"
+msgstr "Анимация кнопки воспроизведения"
+
+#: ui/views/settings/playback-section.slint
+msgid "Visual effect on the play button while music is playing"
+msgstr "Визуальный эффект на кнопке воспроизведения, пока играет музыка"
+
+#: ui/views/settings/playback-section.slint
+msgid "Resume on Startup"
+msgstr "Продолжать при запуске"
+
+#: ui/views/settings/playback-section.slint
+msgid "Automatically resume the last track from where you left off when the app starts"
+msgstr "При запуске автоматически продолжать последний трек с того места, где вы остановились"
+
+#: ui/views/settings/playback-section.slint
+msgid "Overlap the end of one track with the start of the next"
+msgstr "Накладывать конец одного трека на начало следующего"
+
+#: ui/views/settings/playback-section.slint
+msgid "Overlap the end of one track with the start of the next, unless the device has to change format between them"
+msgstr "Накладывать конец одного трека на начало следующего, если устройству не нужно менять формат между ними"
+
+#: ui/views/settings/playback-section.slint
+msgid "Crossfade duration"
+msgstr "Длительность перехода"
+
+#: ui/views/settings/playback-section.slint
+msgid "How long the two tracks overlap"
+msgstr "Как долго два трека накладываются друг на друга"
+
+#: ui/views/settings/playback-section.slint
+msgid "Except on the same album"
+msgstr "Кроме треков одного альбома"
+
+#: ui/views/settings/playback-section.slint
+msgid "Keep tracks from one album gapless, so continuous mixes stay seamless"
+msgstr "Играть треки одного альбома без пауз, чтобы непрерывные миксы оставались цельными"
+
+#: ui/views/settings/playback-section.slint
+msgid "Also on manual track change"
+msgstr "И при ручной смене трека"
+
+#: ui/views/settings/playback-section.slint
+msgid "Crossfade when you skip to the next or previous track, not only at the end of one"
+msgstr "Делать плавный переход при переключении на следующий или предыдущий трек, а не только в конце трека"
+
+#: ui/views/settings/playback-section.slint
+msgid "Fade out on pause"
+msgstr "Затухание при паузе"
+
+#: ui/views/settings/playback-section.slint
+msgid "Fade the music out when pausing or stopping, and back in when resuming"
+msgstr "Плавно приглушать музыку при паузе или остановке и плавно возвращать при продолжении"
+
+#: ui/views/settings/playback-section.slint
+msgid "Show an audio visualizer on the Now Playing screen"
+msgstr "Показывать визуализатор звука на экране «Сейчас играет»"
+
+#: ui/views/settings/playback-section.slint
+msgid "Visualizer Style"
+msgstr "Стиль визуализатора"
+
+#: ui/views/settings/playback-section.slint
+msgid "Choose how the visualizer draws the audio"
+msgstr "Выберите, как визуализатор рисует звук"
+
+#. Translators: `{}` is a duration in seconds, such as 2.5
+#: ui/views/settings/playback-section.slint
+msgid "{} s"
+msgstr "{} с"
+
+#: ui/views/settings/radio-section.slint
+msgid "Hide segmented stations"
+msgstr "Скрывать сегментированные станции"
+
+#: ui/views/settings/radio-section.slint
+msgid "Segmented (HLS) streams play, but take longer to start"
+msgstr "Сегментированные потоки (HLS) воспроизводятся, но дольше запускаются"
+
+#: ui/views/settings/radio-section.slint
+msgid "Report plays to the directory"
+msgstr "Сообщать каталогу о прослушиваниях"
+
+#: ui/views/settings/radio-section.slint
+msgid "An anonymous count is what orders stations by popularity"
+msgstr "По анонимному счётчику станции упорядочиваются по популярности"
+
+#: ui/views/settings/ratings-section.slint
+msgid "Ratings"
+msgstr "Оценки"
+
+#: ui/views/settings/ratings-section.slint
+msgid "Save ratings to files"
+msgstr "Сохранять оценки в файлы"
+
+#: ui/views/settings/ratings-section.slint
+msgid "Write star ratings into each file's tags, so they survive a rescan and other players can read them."
+msgstr "Записывать оценки в теги каждого файла, чтобы они сохранялись при повторном сканировании и их могли читать другие плееры."
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Last.fm"
+msgstr "Last.fm"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobble to Last.fm"
+msgstr "Скробблить в Last.fm"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Report each play to your Last.fm account"
+msgstr "Отправлять каждое прослушивание в ваш аккаунт Last.fm"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Sync loved tracks to Last.fm"
+msgstr "Синхронизировать любимые треки с Last.fm"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Mark tracks you love as loved on Last.fm — turning this on syncs your existing favorites"
+msgstr "Отмечать понравившиеся вам треки как любимые на Last.fm — при включении синхронизируется уже имеющееся избранное"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "ListenBrainz"
+msgstr "ListenBrainz"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobble to ListenBrainz"
+msgstr "Скробблить в ListenBrainz"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Report each play to your ListenBrainz account"
+msgstr "Отправлять каждое прослушивание в ваш аккаунт ListenBrainz"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Sync loved tracks to ListenBrainz"
+msgstr "Синхронизировать любимые треки с ListenBrainz"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)"
+msgstr "Отмечать понравившиеся вам треки как любимые на ListenBrainz — при включении синхронизируется уже имеющееся избранное (нужны идентификаторы MusicBrainz)"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "MusicBrainz Picard adds these IDs to your files, identifying each track by its audio."
+msgstr "MusicBrainz Picard добавляет эти идентификаторы в ваши файлы, распознавая каждый трек по звуку."
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobble radio songs"
+msgstr "Скробблить песни с радио"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Songs heard in full on a station go to your connected scrobbling services"
+msgstr "Песни, прослушанные на станции целиком, отправляются в подключённые сервисы скробблинга"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Connected as {}"
+msgstr "Подключено как {}"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Not configured in this build"
+msgstr "Не настроено в этой сборке"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Connect Last.fm"
+msgstr "Подключить Last.fm"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Disconnect"
+msgstr "Отключить"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Connect ListenBrainz"
+msgstr "Подключить ListenBrainz"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Turn on Last.fm or ListenBrainz above first"
+msgstr "Сначала включите Last.fm или ListenBrainz выше"
+
+#: ui/views/settings/settings-tabs.slint
+msgid "No matching settings"
+msgstr "Подходящих настроек нет"
+
+#: ui/views/settings/update-section.slint
+msgid "Updates"
+msgstr "Обновления"
+
+#: ui/views/settings/update-section.slint
+msgid "Software Updates"
+msgstr "Обновления программы"
+
+#: ui/views/settings/update-section.slint
+msgid "Current version: {}"
+msgstr "Текущая версия: {}"
+
+#: ui/views/settings/update-section.slint
+msgid "You're up to date!"
+msgstr "У вас последняя версия!"
+
+#: ui/views/settings/update-section.slint
+msgid "Melodia {} is the latest version."
+msgstr "Melodia {} — последняя версия."
+
+#: ui/views/settings/update-section.slint
+msgid "Update Installed"
+msgstr "Обновление установлено"
+
+#: ui/views/settings/update-section.slint
+msgid "Restart Melodia to apply the update"
+msgstr "Перезапустите Melodia, чтобы применить обновление"
+
+#: ui/views/settings/update-section.slint
+msgid "Version {} Available"
+msgstr "Доступна версия {}"
+
+#: ui/views/settings/update-section.slint
+msgid "Updates managed by your package manager"
+msgstr "Обновлениями управляет ваш менеджер пакетов"
+
+#: ui/views/settings/update-section.slint
+msgid "Re-run the latest .msi installer from the Releases page."
+msgstr "Снова запустите последний установщик .msi со страницы Releases."
+
+#: ui/views/settings/update-section.slint
+msgid "Use brew upgrade melodia."
+msgstr "Используйте brew upgrade melodia."
+
+#: ui/views/settings/update-section.slint
+msgid "Use sudo dnf update melodia (or your distro equivalent)."
+msgstr "Используйте sudo dnf update melodia (или аналог в вашем дистрибутиве)."
+
+#: ui/views/settings/update-section.slint
+msgid "Check for Updates"
+msgstr "Проверить обновления"
+
+#: ui/views/settings/update-section.slint
+msgid "Checking..."
+msgstr "Проверка..."
+
+#: ui/views/settings/update-section.slint
+msgid "Restart Now"
+msgstr "Перезапустить сейчас"
+
+#: ui/views/settings/update-section.slint
+msgid "Download & Install"
+msgstr "Скачать и установить"
+
+#: ui/views/settings/update-section.slint
+msgid "Installing..."
+msgstr "Установка..."
+
+#: ui/views/settings/update-section.slint
+msgid "Skip this version"
+msgstr "Пропустить эту версию"
+
+#: ui/views/settings/update-section.slint
+msgid "Critical update"
+msgstr "Критическое обновление"
+
+#: ui/views/settings/update-section.slint
+msgid "This update fixes a critical issue and can't be skipped."
+msgstr "Это обновление исправляет критическую проблему, и его нельзя пропустить."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window"
+msgstr "Окно"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Managed by the operating system"
+msgstr "Управляется операционной системой"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Native Title Bar"
+msgstr "Системный заголовок окна"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Use the operating system's native title bar instead of the custom one. Restart required to apply."
+msgstr "Использовать заголовок окна операционной системы вместо собственного. Чтобы применить, нужен перезапуск."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Match Unfocused Window Background"
+msgstr "Подстраивать фон неактивного окна"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Only available with the native title bar."
+msgstr "Доступно только с системным заголовком окна."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Tint the sidebar and now-playing bar toward the content background when the window loses focus."
+msgstr "Окрашивать боковую панель и панель плеера в сторону фона содержимого, когда окно теряет фокус."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Corner Radius"
+msgstr "Скругление углов окна"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border"
+msgstr "Рамка окна"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Draw a thin outline around the miniplayer. The full window keeps the border of its system frame."
+msgstr "Рисовать тонкую рамку вокруг мини-плеера. У полного окна остаётся рамка, которую рисует система."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Draw a thin outline around the whole window, the miniplayer included."
+msgstr "Рисовать тонкую рамку вокруг всего окна, включая мини-плеер."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border Color"
+msgstr "Цвет рамки окна"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System follows the color the operating system draws its own window borders in."
+msgstr "«Системный» повторяет цвет, которым операционная система рисует рамки своих окон."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Available only while the window border is shown."
+msgstr "Доступно, только пока показана рамка окна."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Decoration Button Style"
+msgstr "Стиль кнопок окна"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Decoration Button Side"
+msgstr "Расположение кнопок окна"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System Tray Icon"
+msgstr "Значок в системном трее"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Show a Melodia icon in the system tray with playback controls."
+msgstr "Показывать значок Melodia с управлением воспроизведением в системном трее."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Close to Tray"
+msgstr "Сворачивать в трей при закрытии"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Keep Melodia running in the system tray when you close the window, instead of quitting."
+msgstr "Оставлять Melodia работать в системном трее при закрытии окна, а не завершать её."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Available only while the system tray icon is active."
+msgstr "Доступно, только пока включён значок в системном трее."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Switching to the native title bar requires restarting Melodia. Restart now?"
+msgstr "Чтобы перейти на системный заголовок окна, нужно перезапустить Melodia. Перезапустить сейчас?"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Switching to the custom title bar requires restarting Melodia. Restart now?"
+msgstr "Чтобы перейти на собственный заголовок окна, нужно перезапустить Melodia. Перезапустить сейчас?"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Square"
+msgstr "Прямые"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Left"
+msgstr "Слева"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Right"
+msgstr "Справа"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Changing the system tray icon requires restarting Melodia. Restart now?"
+msgstr "Чтобы изменить значок в системном трее, нужно перезапустить Melodia. Перезапустить сейчас?"

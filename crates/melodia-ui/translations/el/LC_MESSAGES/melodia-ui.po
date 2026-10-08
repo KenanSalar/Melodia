@@ -2,2627 +2,3375 @@ msgid ""
 msgstr ""
 "Project-Id-Version: melodia-ui\n"
 "Report-Msgid-Bugs-To: \n"
+"PO-Revision-Date: 2026-10-07 00:00+0000\n"
+"Last-Translator: Kenan Salar\n"
+"Language-Team: none\n"
 "Language: el\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-msgid "Clear selection"
-msgstr "Εκκαθάριση επιλογής"
-
-# ---- Sidebar / navigation ----------------------------------------------------
-
+#: ui/app-window.slint ui/layout/sidebar.slint
 msgid "Search"
 msgstr "Αναζήτηση"
 
-# Default placeholder text for `SearchBar` (`ui/components/search-bar.slint`).
-# Currently every instantiation overrides `placeholder`, so this is defensive.
-msgid "Search…"
-msgstr "Αναζήτηση…"
-
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/radio-view.slint
 msgid "Browse"
 msgstr "Περιήγηση"
 
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/favorites-view.slint
+#: ui/views/radio-view.slint
 msgid "Favorites"
 msgstr "Αγαπημένα"
 
-# The sidebar row, and the window title, for the page carrying the Songs / Albums /
-# Artists / Genres / Playlists tabs. Each tab reuses its own msgid below.
+#: ui/app-window.slint ui/layout/sidebar.slint
 msgid "My Library"
 msgstr "Η βιβλιοθήκη μου"
 
-msgid "Tracks"
-msgstr "Κομμάτια"
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/radio-view.slint
+#: ui/views/recently-played-view.slint
+msgid "Recently Played"
+msgstr "Πρόσφατα αναπαραγόμενα"
 
-msgid "Albums"
-msgstr "Άλμπουμ"
-
-msgid "Artists"
-msgstr "Καλλιτέχνες"
-
-msgid "Genres"
-msgstr "Είδη"
-
-msgid "Playlists"
-msgstr "Λίστες Αναπαραγωγής"
-
+#: ui/app-window.slint ui/layout/sidebar.slint
 msgid "Settings"
 msgstr "Ρυθμίσεις"
 
-msgid "Collapse"
-msgstr "Σύμπτυξη"
+#: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/views/settings/radio-section.slint
+msgid "Radio"
+msgstr "Ραδιόφωνο"
 
-# Tooltip on the Collapse toggle while the sidebar is a collapsed rail — the
-# label names the action the click performs, not the row's own text.
-msgid "Expand"
-msgstr "Ανάπτυξη"
-
-# ---- Title-bar window controls ----------------------------------------------
-
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
 msgid "Minimize"
 msgstr "Ελαχιστοποίηση"
 
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
 msgid "Maximize"
 msgstr "Μεγιστοποίηση"
 
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
 msgid "Restore"
 msgstr "Επαναφορά"
 
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
+#: ui/components/onboarding/onboarding-overlay.slint
 msgid "Close"
 msgstr "Κλείσιμο"
 
-# ---- Generic action verbs ---------------------------------------------------
+#. Translators: `{}` is how many items are selected
+#: ui/components/context-menu.slint
+msgid "Remove {} from Favorites"
+msgstr "Αφαίρεση {} από τα αγαπημένα"
 
-msgid "Cancel"
-msgstr "Άκυρο"
+#. Translators: `{}` is how many items are selected
+#: ui/components/context-menu.slint
+msgid "Add {} to Favorites"
+msgstr "Προσθήκη {} στα αγαπημένα"
 
-msgid "Remove"
-msgstr "Κατάργηση"
-
-msgid "Clear"
-msgstr "Εκκαθάριση"
-
-msgid "Restart"
-msgstr "Επανεκκίνηση"
-
-# ---- Now-playing bar tooltips & states --------------------------------------
-
-msgid "Play"
-msgstr "Αναπαραγωγή"
-
-msgid "Pause"
-msgstr "Παύση"
-
-msgid "Previous"
-msgstr "Προηγούμενο"
-
-msgid "Next"
-msgstr "Επόμενο"
-
-msgid "Previous (hold to rewind)"
-msgstr "Προηγούμενο (κράτα πατημένο για γρήγορη επιστροφή)"
-
-msgid "Next (hold to fast-forward)"
-msgstr "Επόμενο (κράτα πατημένο για γρήγορη προώθηση)"
-
-msgid "Play (hold to stop)"
-msgstr "Αναπαραγωγή (κράτα πατημένο για διακοπή)"
-
-msgid "Pause (hold to stop)"
-msgstr "Παύση (κράτα πατημένο για διακοπή)"
-
-msgid "Repeat"
-msgstr "Επανάληψη"
-
-msgid "Repeat: off"
-msgstr "Επανάληψη: ανενεργή"
-
-msgid "Repeat: one"
-msgstr "Επανάληψη: ένα"
-
-msgid "Repeat: all"
-msgstr "Επανάληψη: όλα"
-
-msgid "Shuffle"
-msgstr "Τυχαία σειρά"
-
-msgid "Shuffle: on"
-msgstr "Τυχαία σειρά: ενεργή"
-
-msgid "Shuffle: off"
-msgstr "Τυχαία σειρά: ανενεργή"
-
-msgid "Favorite"
+#: ui/components/context-menu.slint ui/components/grid/card-context-menu.slint
+msgid "Add to Favorites"
 msgstr "Προσθήκη στα αγαπημένα"
 
-msgid "Unfavorite"
-msgstr "Αφαίρεση από τα αγαπημένα"
+#: ui/components/context-menu.slint ui/components/grid/card-context-menu.slint
+msgid "Remove from Favorites"
+msgstr "Κατάργηση από τα αγαπημένα"
 
-msgid "Pin on Top"
-msgstr "Καρφίτσωμα στην κορυφή"
+#: ui/components/dialog/add-station-body.slint
+#: ui/components/grid/station-context-menu.slint
+msgid "Stream URL"
+msgstr "URL ροής"
 
-msgid "Unpin from Top"
-msgstr "Ξεκαρφίτσωμα από την κορυφή"
+#: ui/components/dialog/add-station-body.slint
+msgid "Name (optional)"
+msgstr "Όνομα (προαιρετικό)"
 
-msgid "Queue"
-msgstr "Ουρά"
+#: ui/components/dialog/add-station-body.slint
+msgid "Leave blank to use the station's own name"
+msgstr "Αφήστε το κενό για να χρησιμοποιηθεί το όνομα του σταθμού"
 
-msgid "More"
-msgstr "Περισσότερα"
+#: ui/components/dialog/add-station-body.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/station-facts.slint
+msgid "Website"
+msgstr "Ιστότοπος"
 
-msgid "Speed"
-msgstr "Ταχύτητα"
+#: ui/components/dialog/add-station-body.slint
+msgid "Logo URL"
+msgstr "URL λογότυπου"
 
-msgid "No track playing"
-msgstr "Δεν παίζει κομμάτι"
+#: ui/components/dialog/add-station-body.slint
+msgid "Leave blank to look for a logo on the website above."
+msgstr "Αφήστε το κενό για αναζήτηση λογότυπου στον παραπάνω ιστότοπο."
 
-msgid "Unknown artist"
-msgstr "Άγνωστος καλλιτέχνης"
+#: ui/components/dialog/add-station-body.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+#: ui/views/search/top-result-card.slint
+msgid "Genre"
+msgstr "Είδος"
 
-msgid "Unknown album"
-msgstr "Άγνωστο άλμπουμ"
+#: ui/components/dialog/add-station-body.slint
+msgid "Jazz, Blues"
+msgstr "Τζαζ, Μπλουζ"
 
-# ---- Now Playing view -------------------------------------------------------
+#: ui/components/dialog/add-station-body.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+msgid "Country"
+msgstr "Χώρα"
 
-msgid "Up Next"
-msgstr "Επόμενα"
+#: ui/components/dialog/add-station-body.slint
+msgid "Tunisia"
+msgstr "Τυνησία"
 
-msgid "No tracks up next"
-msgstr "Δεν υπάρχουν επόμενα κομμάτια"
+#: ui/components/dialog/add-station-body.slint
+msgid "The directory owns this station's name and stream. What it left blank is yours to fill in; leave a field empty to remove it again."
+msgstr "Το όνομα και η ροή αυτού του σταθμού ανήκουν στον κατάλογο. Ό,τι άφησε κενό μπορείτε να το συμπληρώσετε· αφήστε ένα πεδίο κενό για να το αφαιρέσετε ξανά."
 
-# The lyrics panel's five states. "Turn it on…" names the Settings tab, so it has to match the
-# tab label above.
-msgid "Play something to see its lyrics"
-msgstr "Αναπαράγετε κάτι για να δείτε τους στίχους"
+#: ui/components/dialog/add-station-body.slint
+msgid "Checking the stream…"
+msgstr "Έλεγχος της ροής…"
 
-msgid "Looking for lyrics…"
-msgstr "Αναζήτηση στίχων…"
+#: ui/components/dialog/credit-editor.slint
+#: ui/components/dialog/name-list-editor.slint ui/globals/dialog.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Add"
+msgstr "Προσθήκη"
 
-msgid "No lyrics found"
-msgstr "Δεν βρέθηκαν στίχοι"
+#: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/grid/station-context-menu.slint ui/views/favorites-view.slint
+#: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
+msgid "Name"
+msgstr "Όνομα"
 
-msgid "This track has no words"
-msgstr "Αυτό το κομμάτι δεν έχει στίχους"
+#: ui/components/dialog/dialog.slint
+msgid "Playlist name"
+msgstr "Όνομα λίστας"
 
-msgid "Lyrics lookup is off"
-msgstr "Η αναζήτηση στίχων είναι ανενεργή"
+#: ui/components/dialog/dialog.slint
+msgid "Description (optional)"
+msgstr "Περιγραφή (προαιρετική)"
 
-msgid "Turn it on in the Lyrics menu"
-msgstr "Ενεργοποιήστε την από το μενού Στίχοι"
+#: ui/components/dialog/dialog.slint
+msgid "Add a description…"
+msgstr "Προσθήκη περιγραφής…"
 
-msgid "Couldn't reach the lyrics service"
-msgstr "Δεν ήταν δυνατή η σύνδεση με την υπηρεσία στίχων"
+#: ui/components/dialog/dialog.slint
+msgid "Finish"
+msgstr "Ολοκλήρωση"
 
-msgid "Try again from the Lyrics menu"
-msgstr "Δοκιμάστε ξανά από το μενού Στίχοι"
+#: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
+msgid "Open Last.fm"
+msgstr "Άνοιγμα Last.fm"
 
-# ---- Queue sheet ------------------------------------------------------------
+#: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
+msgid "Connect"
+msgstr "Σύνδεση"
 
-msgid "No tracks"
-msgstr "Χωρίς κομμάτια"
+#: ui/components/dialog/equalizer-body.slint
+msgid "Classical"
+msgstr "Κλασική"
 
-msgid "Queue is empty"
-msgstr "Η ουρά είναι άδεια"
+#: ui/components/dialog/equalizer-body.slint
+msgid "Flat"
+msgstr "Επίπεδο"
 
-msgid "Drop to add to queue"
-msgstr "Αφήστε για προσθήκη στην ουρά"
+#: ui/components/dialog/equalizer-body.slint
+msgid "Jazz"
+msgstr "Jazz"
 
-msgid "Remove from Queue"
-msgstr "Κατάργηση από την ουρά"
+#: ui/components/dialog/equalizer-body.slint
+msgid "Pop"
+msgstr "Pop"
 
-msgid "Remove {} from Queue"
-msgstr "Κατάργηση {} από την ουρά"
+#: ui/components/dialog/equalizer-body.slint
+msgid "Rock"
+msgstr "Rock"
 
-msgid "Clear queue"
-msgstr "Εκκαθάριση ουράς"
+#: ui/components/dialog/equalizer-body.slint
+msgid "Bass Boost"
+msgstr "Ενίσχυση μπάσων"
 
-msgid "Clear queue?"
-msgstr "Εκκαθάριση ουράς;"
+#: ui/components/dialog/equalizer-body.slint
+msgid "Electronic"
+msgstr "Ηλεκτρονική"
 
-msgid "Remove all tracks from the queue? Playback will stop."
-msgstr "Να καταργηθούν όλα τα κομμάτια από την ουρά; Η αναπαραγωγή θα σταματήσει."
+#: ui/components/dialog/equalizer-body.slint
+msgid "Treble Boost"
+msgstr "Ενίσχυση πρίμων"
 
-# Plural: track count for the queue header subtitle ("3 tracks", "1 track").
-# Greek pluralizes regularly after numerals, so msgstr[0] (singular) and
-# msgstr[1] (plural) carry distinct forms.
+#: ui/components/dialog/equalizer-body.slint
+msgid "Vocal"
+msgstr "Φωνητικά"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Custom"
+msgstr "Προσαρμοσμένο"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Enable equalizer"
+msgstr "Ενεργοποίηση ισοσταθμιστή"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Reset"
+msgstr "Επαναφορά"
+
+#: ui/components/dialog/export-playlist-picker.slint
+msgid "No playlists to export"
+msgstr "Δεν υπάρχουν λίστες για εξαγωγή"
+
+# Greek pluralizes a noun after a numeral, so the two forms differ.
+#: ui/components/dialog/export-playlist-picker.slint
+#: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
+#: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
+#: ui/globals/search.slint ui/views/queue-sheet.slint
 msgid "{n} track"
 msgid_plural "{n} tracks"
 msgstr[0] "{n} κομμάτι"
 msgstr[1] "{n} κομμάτια"
 
-# Plural: artist count for the Artists grid header and the Favorites hero.
-msgid "{n} artist"
-msgid_plural "{n} artists"
-msgstr[0] "{n} καλλιτέχνης"
-msgstr[1] "{n} καλλιτέχνες"
+#: ui/components/dialog/export-playlist-picker.slint
+msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
+msgstr "Πολλές λίστες αποθηκεύονται ως ένα αρχείο .zip, το οποίο μπορείτε να εισαγάγετε απευθείας χωρίς αποσυμπίεση."
 
-# Plural: disc count chip on the Album Detail hero. Only shown above one.
-msgid "{n} disc"
-msgid_plural "{n} discs"
-msgstr[0] "{n} δίσκος"
-msgstr[1] "{n} δίσκοι"
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "No artwork"
+msgstr "Χωρίς εικόνα"
 
-# Plural: total play count chip on the Favorites hero's Most Played tab.
-msgid "{n} play"
-msgid_plural "{n} plays"
-msgstr[0] "{n} αναπαραγωγή"
-msgstr[1] "{n} αναπαραγωγές"
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "{} / 4 selected"
+msgstr "{} / 4 επιλεγμένα"
 
-# Chip on the Album Detail hero for a various-artists release.
-msgid "Compilation"
-msgstr "Συλλογή"
+#: ui/components/dialog/playlist-mosaic-picker.slint ui/views/queue-sheet.slint
+msgid "Clear"
+msgstr "Εκκαθάριση"
 
-# Plural: track count for the tracks-view header subtitle ("12 songs").
-msgid "{n} song"
-msgid_plural "{n} songs"
-msgstr[0] "{n} τραγούδι"
-msgstr[1] "{n} τραγούδια"
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "Add tracks to this playlist to pick artwork."
+msgstr "Προσθέστε κομμάτια στη λίστα για να επιλέξετε εικόνα."
 
-msgid "{} selected"
-msgstr "{} επιλεγμένα"
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "Select up to 4 tracks"
+msgstr "Επιλέξτε έως 4 κομμάτια"
 
-# ---- Tracks view ------------------------------------------------------------
+#: ui/components/dialog/playlist-picker.slint
+msgid "Already added"
+msgstr "Έχουν ήδη προστεθεί"
 
-msgid "Filter tracks…"
-msgstr "Φιλτράρισμα κομματιών…"
+#: ui/components/dialog/playlist-picker.slint
+msgid "{} of {} already added"
+msgstr "{} από {} ήδη προστέθηκαν"
 
-msgid "Columns"
-msgstr "Στήλες"
+#: ui/components/dialog/preamp-slider-row.slint
+msgid "Preamp"
+msgstr "Προενίσχυση"
 
-# `SortMenuPopup`'s trigger, the pill-chrome twin of "Columns".
-msgid "Sort"
-msgstr "Ταξινόμηση"
-
-msgid "Card view"
-msgstr "Προβολή καρτών"
-
-msgid "List view"
-msgstr "Προβολή λίστας"
-
-msgid "Folder"
-msgstr "Φάκελος"
-
-# ---- Track table column headers ---------------------------------------------
-
-msgid "Title"
-msgstr "Τίτλος"
-
-msgid "Artist"
-msgstr "Καλλιτέχνης"
-
+#: ui/components/dialog/replaygain-body.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/search/top-result-card.slint
 msgid "Album"
 msgstr "Άλμπουμ"
 
-msgid "Genre"
-msgstr "Είδος"
+#: ui/components/dialog/replaygain-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Track"
+msgstr "Κομμάτι"
 
+#: ui/components/dialog/replaygain-body.slint
+msgid "Enable ReplayGain"
+msgstr "Ενεργοποίηση ReplayGain"
+
+#: ui/components/dialog/replaygain-body.slint
+msgid "Normalization mode"
+msgstr "Λειτουργία κανονικοποίησης"
+
+#: ui/components/dialog/replaygain-body.slint
+msgid "Prevent clipping"
+msgstr "Αποτροπή ψαλιδίσματος"
+
+#: ui/components/dialog/replaygain-body.slint
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "Το ReplayGain επηρεάζει μόνο κομμάτια που έχουν ήδη ετικέτες έντασης ήχου. Σαρώστε τη βιβλιοθήκη σας με ένα εργαλείο όπως το rsgain ή το loudgain για να τις προσθέσετε."
+
+#: ui/components/dialog/scrobble-lastfm-body.slint
+msgid "Click Open Last.fm to approve Melodia in your browser."
+msgstr "Κάντε κλικ στο Άνοιγμα Last.fm για να εγκρίνετε το Melodia στο πρόγραμμα περιήγησής σας."
+
+#: ui/components/dialog/scrobble-lastfm-body.slint
+msgid "After approving Melodia in your browser, click Finish."
+msgstr "Αφού εγκρίνετε το Melodia στο πρόγραμμα περιήγησής σας, κάντε κλικ στο Ολοκλήρωση."
+
+#: ui/components/dialog/scrobble-lastfm-body.slint
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+#: ui/globals/player.slint
+msgid "Connecting…"
+msgstr "Σύνδεση…"
+
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+msgid "User token"
+msgstr "Διακριτικό χρήστη"
+
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+msgid "Paste your ListenBrainz user token"
+msgstr "Επικολλήστε το διακριτικό χρήστη ListenBrainz"
+
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+msgid "Find your token on your ListenBrainz profile settings page."
+msgstr "Θα βρείτε το διακριτικό σας στη σελίδα ρυθμίσεων του προφίλ σας στο ListenBrainz."
+
+#: ui/components/dialog/selectable-picker.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Select all"
+msgstr "Επιλογή όλων"
+
+#: ui/components/dialog/selectable-picker.slint
+msgid "{} selected"
+msgstr "{} επιλεγμένα"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "value"
+msgstr "τιμή"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "days"
+msgstr "ημέρες"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "number"
+msgstr "αριθμός"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Album Artist"
+msgstr "Καλλιτέχνης άλμπουμ"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/my-library/tab-pills.slint ui/views/search/top-result-card.slint
+msgid "Artist"
+msgstr "Καλλιτέχνης"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+msgid "Title"
+msgstr "Τίτλος"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Credits"
+msgstr "Συντελεστές"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "ISRC"
+msgstr "ISRC"
+
+#. Translators: a musical key, as in A minor
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Key"
+msgstr "Τονικότητα"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Mood"
+msgstr "Διάθεση"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "BPM"
+msgstr "BPM"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Duration (sec)"
+msgstr "Διάρκεια (δευτ.)"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/station-facts.slint ui/views/radio/tab-pills.slint
+msgid "Plays"
+msgstr "Αναπαραγωγές"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/my-library/tab-pills.slint
 msgid "Year"
 msgstr "Έτος"
 
-msgid "Length"
-msgstr "Διάρκεια"
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Bitrate (kbps)"
+msgstr "Ρυθμός bit (kbps)"
 
-msgid "Artwork"
-msgstr "Εξώφυλλο"
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/now-playing/overflow-menu.slint ui/settings.slint
+msgid "Rating"
+msgstr "Βαθμολογία"
 
-# ---- Track row context menu -------------------------------------------------
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Sample rate (Hz)"
+msgstr "Ρυθμός δειγματοληψίας (Hz)"
 
-msgid "Play Next"
-msgstr "Αναπαραγωγή στη συνέχεια"
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Skips"
+msgstr "Παραλείψεις"
 
-msgid "Add to Queue"
-msgstr "Προσθήκη στην ουρά"
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Date added"
+msgstr "Ημερομηνία προσθήκης"
 
-msgid "Add to Favorites"
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Favorite"
 msgstr "Προσθήκη στα αγαπημένα"
 
-msgid "Remove from Favorites"
-msgstr "Κατάργηση από τα αγαπημένα"
-
-# ---- Placeholder views ------------------------------------------------------
-
-msgid "Coming soon"
-msgstr "Έρχεται σύντομα"
-
-# ---- Settings page header ---------------------------------------------------
-
-msgid "Search settings…"
-msgstr "Αναζήτηση ρυθμίσεων…"
-
-msgid "No matching settings"
-msgstr "Καμία ρύθμιση δεν ταιριάζει"
-
-# ---- Settings page tabs ------------------------------------------------------
-#
-# Tab bar under the page title. "Playback" and "About" reuse the section-title
-# msgids further down, so only these three are new.
-
-msgid "Library"
-msgstr "Βιβλιοθήκη"
-
-msgid "Interface"
-msgstr "Διεπαφή"
-
-msgid "Services"
-msgstr "Υπηρεσίες"
-
-# ---- Library Folders section ------------------------------------------------
-
-msgid "Library Folders"
-msgstr "Φάκελοι βιβλιοθήκης"
-
-msgid "Manage Folders"
-msgstr "Διαχείριση φακέλων"
-
-msgid "Add Folder"
-msgstr "Προσθήκη φακέλου"
-
-msgid "Rescan"
-msgstr "Επανασάρωση"
-
-msgid "No folders added"
-msgstr "Δεν έχει προστεθεί φάκελος"
-
-msgid "Add a folder to scan for music files."
-msgstr "Πρόσθεσε έναν φάκελο για σάρωση αρχείων μουσικής."
-
-# Library scan-progress text. `{}` placeholders carry int / string args; the
-# joining particles ("von", "·") get translated naturally.
-msgid "{} / {} files"
-msgstr "{} / {} αρχεία"
-
-msgid "{} / {} files · {}"
-msgstr "{} / {} αρχεία · {}"
-
-# The scan's other phases: the walk, before anything is known about what needs
-# reading; the last write once everything is read; a cancelled scan writing what
-# it had read.
-msgid "Looking for music… {n} file found"
-msgid_plural "Looking for music… {n} files found"
-msgstr[0] "Αναζήτηση μουσικής… βρέθηκε {n} αρχείο"
-msgstr[1] "Αναζήτηση μουσικής… βρέθηκαν {n} αρχεία"
-
-msgid "Finishing up…"
-msgstr "Ολοκλήρωση…"
-
-msgid "Stopping…"
-msgstr "Διακοπή…"
-
-msgid "Remove Folder?"
-msgstr "Κατάργηση φακέλου;"
-
-# Translators: `{}` is the absolute filesystem path of the folder being removed.
-msgid "Remove \"{}\" from your library? All tracks under this folder will be removed from the library and from your playlists."
-msgstr "Να καταργηθεί το \"{}\" από τη βιβλιοθήκη; Όλα τα κομμάτια σε αυτόν τον φάκελο θα καταργηθούν από τη βιβλιοθήκη και από τις λίστες αναπαραγωγής σας."
-
-# ---- Appearance section -----------------------------------------------------
-
-msgid "Appearance"
-msgstr "Εμφάνιση"
-
-msgid "Theme"
-msgstr "Θέμα"
-
-msgid "Theme Variant"
-msgstr "Παραλλαγή θέματος"
-
-# Theme Variant chips for non-Catppuccin themes (Dark/Light + synthetic System).
-# Catppuccin's variant names (Latte/Frappe/Macchiato/Mocha) are proper nouns
-# and stay verbatim across locales — only "System" is translatable on that path.
-msgid "Dark"
-msgstr "Σκούρο"
-
-msgid "Light"
-msgstr "Φωτεινό"
-
-msgid "System"
-msgstr "Σύστημα"
-
-msgid "Accent Color"
-msgstr "Χρώμα τονισμού"
-
-msgid "Color Style"
-msgstr "Στυλ χρωμάτων"
-
-msgid "Active — palette derived from the current track's artwork."
-msgstr "Ενεργό — η παλέτα προέρχεται από το εξώφυλλο του τρέχοντος κομματιού."
-
-msgid "Generate theme colors from album artwork."
-msgstr "Δημιουργία χρωμάτων θέματος από το εξώφυλλο άλμπουμ."
-
-# Color Style chip labels (Material 3 dynamic-colour scheme variants). Order
-# must match `services::material_you::SchemeStyle::all()` — "None" already
-# translated above; remaining 7 below. "Tonal Spot" is a coined Material 3
-# term kept verbatim; the others are translated where natural.
-
-msgid "Tonal Spot"
-msgstr "Tonal Spot"
-
-msgid "Content"
-msgstr "Περιεχόμενο"
-
-msgid "Vibrant"
-msgstr "Ζωηρό"
-
-msgid "Expressive"
-msgstr "Εκφραστικό"
-
-msgid "Fidelity"
-msgstr "Πιστότητα"
-
-msgid "Neutral"
-msgstr "Ουδέτερο"
-
-msgid "Monochrome"
-msgstr "Μονόχρωμο"
-
-msgid "Aurora Backdrop"
-msgstr "Φόντο Aurora"
-
-msgid "Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."
-msgstr "Βάψτε τις κεφαλίδες άλμπουμ, λίστας αναπαραγωγής και «Αναπαράγεται τώρα» με τα χρώματα του ίδιου του άλμπουμ, αντί με ένα θολωμένο αντίγραφο του εξωφύλλου. Δεν χρειάζεται θόλωμα, οπότε οι κεφαλίδες εμφανίζονται πιο γρήγορα και το Melodia παραμένει πιο ελαφρύ. Απαιτείται επανεκκίνηση."
-
-msgid "Changing the backdrop style requires restarting Melodia. Restart now?"
-msgstr "Η αλλαγή του στιλ φόντου απαιτεί επανεκκίνηση του Melodia. Επανεκκίνηση τώρα;"
-
-# ---- Motion section ---------------------------------------------------------
-
-msgid "Motion"
-msgstr "Κίνηση"
-
-msgid "Skip Startup Animation"
-msgstr "Παράλειψη κίνησης εκκίνησης"
-
-msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
-msgstr "Άνοιγμα με τη βιβλιοθήκη ήδη στην οθόνη, αντί να εμφανίζεται σταδιακά και να κυλά στη θέση της. Μια σελίδα λεπτομερειών που άφησες ανοιχτή εξακολουθεί να αναπτύσσεται μόλις φορτωθεί."
-
-# Title of the window-chrome settings card.
-msgid "Window"
-msgstr "Παράθυρο"
-
-msgid "Native Title Bar"
-msgstr "Εγγενής γραμμή τίτλου"
-
-msgid "Use the operating system's native title bar instead of the custom one. Restart required to apply."
-msgstr "Χρήση της εγγενούς γραμμής τίτλου του λειτουργικού συστήματος αντί της προσαρμοσμένης. Απαιτείται επανεκκίνηση για εφαρμογή."
-
-msgid "Restart Required"
-msgstr "Απαιτείται επανεκκίνηση"
-
-msgid "Switching to the native title bar requires restarting Melodia. Restart now?"
-msgstr "Η μετάβαση στην εγγενή γραμμή τίτλου απαιτεί επανεκκίνηση της Melodia. Επανεκκίνηση τώρα;"
-
-msgid "Switching to the custom title bar requires restarting Melodia. Restart now?"
-msgstr "Η μετάβαση στην προσαρμοσμένη γραμμή τίτλου απαιτεί επανεκκίνηση της Melodia. Επανεκκίνηση τώρα;"
-
-msgid "Match Unfocused Window Background"
-msgstr "Αντιστοίχιση φόντου μη εστιασμένου παραθύρου"
-
-msgid "Only available with the native title bar."
-msgstr "Διαθέσιμο μόνο με την εγγενή γραμμή τίτλου."
-
-msgid "Tint the sidebar and now-playing bar toward the content background when the window loses focus."
-msgstr "Χρωμάτισε την πλευρική γραμμή και τη γραμμή αναπαραγωγής προς το φόντο του περιεχομένου όταν το παράθυρο χάνει την εστίαση."
-
-msgid "Window Corner Radius"
-msgstr "Ακτίνα γωνίας παραθύρου"
-
-msgid "Window Border"
-msgstr "Περίγραμμα παραθύρου"
-
-msgid "Draw a thin outline around the miniplayer. The full window keeps the border of its system frame."
-msgstr "Σχεδιάζει ένα λεπτό περίγραμμα γύρω από τον μίνι αναπαραγωγέα. Το πλήρες παράθυρο διατηρεί το περίγραμμα του πλαισίου συστήματος."
-
-msgid "Draw a thin outline around the whole window, the miniplayer included."
-msgstr "Σχεδιάζει ένα λεπτό περίγραμμα γύρω από ολόκληρο το παράθυρο, μαζί με τον μίνι αναπαραγωγέα."
-
-msgid "Window Border Color"
-msgstr "Χρώμα περιγράμματος παραθύρου"
-
-msgid "System follows the color the operating system draws its own window borders in."
-msgstr "Το Σύστημα ακολουθεί το χρώμα με το οποίο το λειτουργικό σύστημα σχεδιάζει τα δικά του περιγράμματα παραθύρων."
-
-msgid "Available only while the window border is shown."
-msgstr "Διαθέσιμο μόνο όταν εμφανίζεται το περίγραμμα παραθύρου."
-
-msgid "Managed by the operating system"
-msgstr "Διαχειρίζεται από το λειτουργικό σύστημα"
-
-msgid "Square"
-msgstr "Τετράγωνο"
-
-msgid "Decoration Button Style"
-msgstr "Στιλ κουμπιών διακόσμησης"
-
-msgid "Decoration Button Side"
-msgstr "Πλευρά κουμπιών διακόσμησης"
-
-msgid "Right"
-msgstr "Δεξιά"
-
-msgid "Left"
-msgstr "Αριστερά"
-
-# Title of the overflow-menu settings card.
-msgid "Player Bar"
-msgstr "Γραμμή αναπαραγωγής"
-
-msgid "Overflow Menu Buttons"
-msgstr "Κουμπιά μενού υπερχείλισης"
-
-msgid "Move selected buttons into a compact overflow menu in the player bar"
-msgstr "Μετακίνηση επιλεγμένων κουμπιών σε ένα συμπαγές μενού υπερχείλισης στη γραμμή αναπαραγωγής"
-
-# ---- Language section -------------------------------------------------------
-
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "File size (bytes)"
+msgstr "Μέγεθος αρχείου (bytes)"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Last played"
+msgstr "Τελευταία αναπαραγωγή"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "contains"
+msgstr "περιέχει"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "does not contain"
+msgstr "δεν περιέχει"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is"
+msgstr "είναι"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is not"
+msgstr "δεν είναι"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "ends with"
+msgstr "τελειώνει με"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is not set"
+msgstr "δεν έχει οριστεί"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is set"
+msgstr "έχει οριστεί"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "starts with"
+msgstr "ξεκινά με"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "at least"
+msgstr "τουλάχιστον"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "greater than"
+msgstr "μεγαλύτερο από"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "at most"
+msgstr "το πολύ"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "less than"
+msgstr "μικρότερο από"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is false"
+msgstr "είναι ψευδές"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is true"
+msgstr "είναι αληθές"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "in the last"
+msgstr "στις τελευταίες"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "not in the last"
+msgstr "όχι στις τελευταίες"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "all"
+msgstr "όλων"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "any"
+msgstr "οποιουδήποτε"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "least recently added"
+msgstr "λιγότερο πρόσφατα προστεθέντα"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "most recently added"
+msgstr "πιο πρόσφατα προστεθέντα"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "least played"
+msgstr "με τις λιγότερες αναπαραγωγές"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "most played"
+msgstr "με τις περισσότερες αναπαραγωγές"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "least recently played"
+msgstr "λιγότερο πρόσφατα αναπαραγόμενα"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "most recently played"
+msgstr "πιο πρόσφατα αναπαραγόμενα"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "highest rated"
+msgstr "με την υψηλότερη βαθμολογία"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "random"
+msgstr "τυχαία"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Smart playlist name"
+msgstr "Όνομα έξυπνης λίστας"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Match"
+msgstr "Αντιστοίχιση"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "of the following rules"
+msgstr "από τους παρακάτω κανόνες"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Add rule"
+msgstr "Προσθήκη κανόνα"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Limit to"
+msgstr "Περιορισμός σε"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "N"
+msgstr "N"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "tracks by"
+msgstr "κομμάτια κατά"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Arranger"
+msgstr "Ενορχηστρωτής"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Composer"
+msgstr "Συνθέτης"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Conductor"
+msgstr "Μαέστρος"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Lyricist"
+msgstr "Στιχουργός"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Performer"
+msgstr "Ερμηνευτής"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "DJ Mixer"
+msgstr "DJ mixer"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Engineer"
+msgstr "Ηχολήπτης"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Mixer"
+msgstr "Μίκτης"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Producer"
+msgstr "Παραγωγός"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Remixer"
+msgstr "Remixer"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Replace…"
+msgstr "Αντικατάσταση…"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/folder-row.slint ui/globals/dialog.slint
+#: ui/views/settings/library-section.slint
+msgid "Remove"
+msgstr "Κατάργηση"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Details"
+msgstr "Λεπτομέρειες"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/now-playing/lyrics-menu.slint ui/settings.slint
+#: ui/views/now-playing-view.slint ui/views/settings/lyrics-section.slint
+msgid "Lyrics"
+msgstr "Στίχοι"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Summary"
+msgstr "Σύνοψη"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Tags"
+msgstr "Ετικέτες"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Total"
+msgstr "Σύνολο"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Disc"
+msgstr "Δίσκος"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Original Year"
+msgstr "Αρχικό έτος"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Comment"
+msgstr "Σχόλιο"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Subtitle"
+msgstr "Υπότιτλος"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Disc Subtitle"
+msgstr "Υπότιτλος δίσκου"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Grouping"
+msgstr "Ομαδοποίηση"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Work"
+msgstr "Έργο"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Movement"
+msgstr "Μέρος"
+
+#. Translators: the movement's number, as in movement 2 of 4
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Number"
+msgstr "Αριθμός"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/onboarding/appearance-panel.slint ui/settings.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+#: ui/views/settings/language-section.slint
 msgid "Language"
 msgstr "Γλώσσα"
 
-msgid "Choose your preferred language"
-msgstr "Επίλεξε τη γλώσσα που προτιμάς"
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Copyright"
+msgstr "Πνευματικά δικαιώματα"
 
-# ---- Playback section -------------------------------------------------------
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Record Label"
+msgstr "Δισκογραφική εταιρεία"
 
-msgid "Playback"
-msgstr "Αναπαραγωγή"
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Catalog Number"
+msgstr "Αριθμός καταλόγου"
 
-msgid "Gapless Playback"
-msgstr "Αναπαραγωγή χωρίς κενά"
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Barcode"
+msgstr "Γραμμωτός κώδικας"
 
-msgid "Seamless transitions between tracks without silence gaps"
-msgstr "Απρόσκοπτες μεταβάσεις μεταξύ κομματιών χωρίς διαστήματα σιωπής"
+#. Translators: the physical medium a release came out on: CD, vinyl
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Media"
+msgstr "Μέσο"
 
-msgid "Play Button Animation"
-msgstr "Κίνηση κουμπιού αναπαραγωγής"
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Release Type"
+msgstr "Τύπος κυκλοφορίας"
 
-msgid "Visual effect on the play button while music is playing"
-msgstr "Οπτικό εφέ στο κουμπί αναπαραγωγής όσο παίζει η μουσική"
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Release Country"
+msgstr "Χώρα κυκλοφορίας"
 
-# Animation preset names. "None" stays a generic English UI word in the
-# fallback context — we translate it; the others are coined terms / proper
-# nouns within the Material 3 motion vocabulary that we keep verbatim
-# alongside their localised counterparts where natural.
-msgid "None"
-msgstr "Κανένα"
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Part of a compilation"
+msgstr "Μέρος συλλογής"
 
-msgid "Equalizer"
-msgstr "Ισοσταθμιστής"
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Insert found lyrics"
+msgstr "Εισαγωγή στίχων που βρέθηκαν"
 
-msgid "Resume on Startup"
-msgstr "Συνέχιση κατά την εκκίνηση"
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Path"
+msgstr "Διαδρομή"
 
-msgid "Automatically resume the last track from where you left off when the app starts"
-msgstr "Συνέχισε αυτόματα το τελευταίο κομμάτι από εκεί που σταμάτησες όταν ξεκινά η εφαρμογή"
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Codec"
+msgstr "Codec"
 
-msgid "Crossfade"
-msgstr "Σταδιακή μετάβαση"
+#: ui/components/dialog/tag-editor-body.slint ui/components/station-facts.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+msgid "Bitrate"
+msgstr "Ρυθμός bit"
 
-msgid "Overlap the end of one track with the start of the next"
-msgstr "Επικάλυψε το τέλος ενός κομματιού με την αρχή του επόμενου"
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/views/settings/output-section.slint
+msgid "Sample Rate"
+msgstr "Ρυθμός δειγματοληψίας"
 
-msgid "Crossfade duration"
-msgstr "Διάρκεια μετάβασης"
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Bit Depth"
+msgstr "Βάθος bit"
 
-msgid "How long the two tracks overlap"
-msgstr "Πόση ώρα επικαλύπτονται τα δύο κομμάτια"
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/views/settings/output-section.slint
+msgid "Channels"
+msgstr "Κανάλια"
 
-# Unit suffix for the crossfade-duration readout, e.g. "2 s".
-msgid "{} s"
-msgstr "{} δλ"
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Size"
+msgstr "Μέγεθος"
 
-msgid "Except on the same album"
-msgstr "Εκτός από κομμάτια του ίδιου άλμπουμ"
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/views/my-library/tab-pills.slint
+msgid "Duration"
+msgstr "Διάρκεια"
 
-msgid "Keep tracks from one album gapless, so continuous mixes stay seamless"
-msgstr "Κράτα τα κομμάτια ενός άλμπουμ χωρίς κενά, ώστε τα συνεχόμενα μιξ να παραμένουν αδιάκοπα"
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Modified"
+msgstr "Τροποποιήθηκε"
 
-msgid "Also on manual track change"
-msgstr "Και σε χειροκίνητη αλλαγή κομματιού"
+#: ui/components/dialog/tag-editor-body.slint
+msgid "BLAKE3"
+msgstr "BLAKE3"
 
-msgid "Crossfade when you skip to the next or previous track, not only at the end of one"
-msgstr "Κάνε μετάβαση και όταν πηγαίνεις στο επόμενο ή στο προηγούμενο κομμάτι, όχι μόνο στο τέλος"
+#: ui/components/grid/album-grid.slint
+#: ui/components/track-list/track-list-row.slint ui/globals/player.slint
+msgid "Unknown artist"
+msgstr "Άγνωστος καλλιτέχνης"
 
-msgid "Fade out on pause"
-msgstr "Σβήσιμο στην παύση"
-
-msgid "Fade the music out when pausing or stopping, and back in when resuming"
-msgstr "Χαμήλωσε σταδιακά τη μουσική στην παύση ή τη διακοπή και επανάφερέ την στη συνέχιση"
-
-# ---- File Watching section --------------------------------------------------
-
-msgid "File Watching"
-msgstr "Παρακολούθηση αρχείων"
-
-msgid "Watch for file changes"
-msgstr "Παρακολούθηση αλλαγών αρχείων"
-
-msgid "Automatically detect when files are added, removed, or changed in your library folders."
-msgstr "Εντοπίζει αυτόματα πότε προστίθενται, καταργούνται ή αλλάζουν αρχεία στους φακέλους της βιβλιοθήκης σου."
-
-# ---- Ratings section --------------------------------------------------------
-
-msgid "Ratings"
-msgstr "Βαθμολογίες"
-
-msgid "Save ratings to files"
-msgstr "Αποθήκευση βαθμολογιών στα αρχεία"
-
-msgid "Write star ratings into each file's tags, so they survive a rescan and other players can read them."
-msgstr "Γράφει τις βαθμολογίες με αστέρια στις ετικέτες κάθε αρχείου, ώστε να διατηρούνται μετά από νέα σάρωση και να μπορούν να τις διαβάσουν άλλα προγράμματα αναπαραγωγής."
-
-# ---- Updates section --------------------------------------------------------
-
-msgid "Updates"
-msgstr "Ενημερώσεις"
-
-msgid "Software Updates"
-msgstr "Ενημερώσεις λογισμικού"
-
-msgid "Current version: {}"
-msgstr "Τρέχουσα έκδοση: {}"
-
-msgid "Check for Updates"
-msgstr "Έλεγχος για ενημερώσεις"
-
-msgid "Checking..."
-msgstr "Έλεγχος..."
-
-msgid "Update Installed"
-msgstr "Η ενημέρωση εγκαταστάθηκε"
-
-msgid "Restart Melodia to apply the update"
-msgstr "Επανεκκίνησε τη Melodia για να εφαρμοστεί η ενημέρωση"
-
-msgid "Restart Now"
-msgstr "Επανεκκίνηση τώρα"
-
-msgid "Version {} Available"
-msgstr "Διαθέσιμη η έκδοση {}"
-
-msgid "Download & Install"
-msgstr "Λήψη και εγκατάσταση"
-
-msgid "Installing..."
-msgstr "Εγκατάσταση..."
-
-msgid "You're up to date!"
-msgstr "Είσαι ενημερωμένος!"
-
-msgid "Melodia {} is the latest version."
-msgstr "Η Melodia {} είναι η τελευταία έκδοση."
-
-# ---- Browse view -------------------------------------------------------------
-
-msgid "Back"
-msgstr "Πίσω"
-
-msgid "No library folders configured"
-msgstr "Δεν έχουν διαμορφωθεί φάκελοι βιβλιοθήκης"
-
-msgid "Open Settings to add a folder"
-msgstr "Άνοιξε τις Ρυθμίσεις για να προσθέσεις φάκελο"
-
-msgid "Open Settings"
-msgstr "Άνοιγμα Ρυθμίσεων"
-
-msgid "Empty folder"
-msgstr "Άδειος φάκελος"
-
-msgid "Could not load folder"
-msgstr "Δεν ήταν δυνατή η φόρτωση του φακέλου"
-
-# ---- Notifications -----------------------------------------------------------
-
-# Surfaced as a transient warning when the user disables the file-watching
-# toggle in Settings; clears automatically when they re-enable it.
-msgid "File watching disabled"
-msgstr "Παρακολούθηση αρχείων απενεργοποιημένη"
-
-msgid "Tracks won't reflect disk changes until you re-enable it."
-msgstr "Τα κομμάτια δεν θα αντικατοπτρίζουν τις αλλαγές στο δίσκο μέχρι να την ενεργοποιήσετε ξανά."
-
-# Surfaced as a transient info toast when the file watcher reports a
-# kernel-queue overflow (notify Flag::Rescan) and the app reconciles
-# every enabled folder against disk to catch missed events.
-msgid "Library re-syncing"
-msgstr "Επανασυγχρονισμός βιβλιοθήκης"
-
-msgid "Filesystem event burst — rescanning your folders."
-msgstr "Έξαρση συμβάντων συστήματος αρχείων — επανεξετάζονται οι φάκελοί σας."
-
-msgid "Restoring cover art"
-msgstr "Επαναφορά εξωφύλλων"
-
-msgid "Some cover art was missing. Melodia is restoring it from your music files."
-msgstr "Κάποια εξώφυλλα έλειπαν. Το Melodia τα επαναφέρει από τα αρχεία μουσικής σας."
-
-# ---- Albums view ------------------------------------------------------------
-
-msgid "Name"
-msgstr "Όνομα"
-
-msgid "Filter albums…"
-msgstr "Φιλτράρισμα άλμπουμ…"
-
+#: ui/components/grid/artist-grid.slint ui/globals/hero-chips.slint
+#: ui/globals/search.slint ui/views/my-library-view.slint
 msgid "{n} album"
 msgid_plural "{n} albums"
 msgstr[0] "{n} άλμπουμ"
 msgstr[1] "{n} άλμπουμ"
 
-msgid "No albums yet"
-msgstr "Δεν υπάρχουν άλμπουμ ακόμη"
-
-msgid "Add a music folder in Settings to start building your library."
-msgstr "Προσθέστε έναν φάκελο μουσικής στις Ρυθμίσεις για να αρχίσετε να χτίζετε τη βιβλιοθήκη σας."
-
-# ---- Artists & Genres views -------------------------------------------------
-
-msgid "No artists yet"
-msgstr "Δεν υπάρχουν καλλιτέχνες ακόμη"
-
-# Artist Detail: filters the track list and the album strip at once.
-msgid "Filter tracks & albums…"
-msgstr "Φιλτράρισμα κομματιών & άλμπουμ…"
-
-msgid "Filter genres…"
-msgstr "Φιλτράρισμα ειδών…"
-
-msgid "{n} genre"
-msgid_plural "{n} genres"
-msgstr[0] "{n} είδος"
-msgstr[1] "{n} είδη"
-
-msgid "No genres yet"
-msgstr "Δεν υπάρχουν είδη ακόμη"
-
-# ---- Playlists view ---------------------------------------------------------
-
-msgid "Filter playlists…"
-msgstr "Φιλτράρισμα λιστών…"
-
-msgid "{n} playlist"
-msgid_plural "{n} playlists"
-msgstr[0] "{n} λίστα"
-msgstr[1] "{n} λίστες"
-
-msgid "No playlists yet"
-msgstr "Δεν υπάρχουν λίστες ακόμη"
-
-msgid "Click \"+ New Playlist\" to create one."
-msgstr "Πατήστε «+ Νέα λίστα» για να δημιουργήσετε μία."
-
-msgid "New Playlist"
-msgstr "Νέα λίστα"
-
-msgid "New Playlist…"
-msgstr "Νέα λίστα…"
-
-msgid "Add to Playlist"
-msgstr "Προσθήκη σε λίστα"
-
-msgid "0 tracks"
-msgstr "0 κομμάτια"
-
-# ---- Playlist Detail --------------------------------------------------------
-
-msgid "No tracks yet"
-msgstr "Δεν υπάρχουν κομμάτια ακόμη"
-
-msgid "Drag music files here, or add tracks via any track's overflow menu."
-msgstr "Σύρετε αρχεία μουσικής εδώ, ή προσθέστε κομμάτια από το μενού οποιουδήποτε κομματιού."
-
-msgid "Drop files to add to this playlist"
-msgstr "Αφήστε αρχεία για προσθήκη σε αυτή τη λίστα"
-
-msgid "Edit artwork"
-msgstr "Επεξεργασία εικόνας"
-
-msgid "Rename"
-msgstr "Μετονομασία"
-
-msgid "Delete playlist"
-msgstr "Διαγραφή λίστας"
-
-msgid "Remove from Playlist"
-msgstr "Αφαίρεση από τη λίστα"
-
-# ---- Mosaic picker ----------------------------------------------------------
-
-msgid "Add tracks to this playlist to pick artwork."
-msgstr "Προσθέστε κομμάτια στη λίστα για να επιλέξετε εικόνα."
-
-msgid "No artwork"
-msgstr "Χωρίς εικόνα"
-
-msgid "{} / 4 selected"
-msgstr "{} / 4 επιλεγμένα"
-
-msgid "Select up to 4 tracks"
-msgstr "Επιλέξτε έως 4 κομμάτια"
-
-# ---- Playlist Create / Rename dialog ----------------------------------------
-
-msgid "Playlist name"
-msgstr "Όνομα λίστας"
-
-msgid "Description (optional)"
-msgstr "Περιγραφή (προαιρετική)"
-
-msgid "Add a description…"
-msgstr "Προσθήκη περιγραφής…"
-
-# Confirm-button label on the create-playlist dialog.
-msgid "Create"
-msgstr "Δημιουργία"
-
-msgid "Rename Playlist"
-msgstr "Μετονομασία λίστας"
-
-# ---- Playlist Detail: Delete confirm ----------------------------------------
-
-msgid "Delete playlist?"
-msgstr "Διαγραφή λίστας;"
-
-msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
-msgstr "Η λίστα και η σειρά των κομματιών της θα καταργηθούν. Τα ίδια τα κομμάτια παραμένουν στη βιβλιοθήκη σας."
-
-# Confirm-button label on the delete-playlist dialog.
-msgid "Delete"
-msgstr "Διαγραφή"
-
-# ---- Playlist Detail: Remove-selected confirm -------------------------------
-
-# ---- Search view ------------------------------------------------------------
-
-msgid "Search your library…"
-msgstr "Αναζήτηση στη βιβλιοθήκη σας…"
-
-msgid "Searching…"
-msgstr "Αναζήτηση…"
-
-msgid "No results found"
-msgstr "Δεν βρέθηκαν αποτελέσματα"
-
-msgid "Try a different search term"
-msgstr "Δοκιμάστε διαφορετικούς όρους αναζήτησης"
-
-msgid "Top Result"
-msgstr "Κορυφαίο αποτέλεσμα"
-
-msgid "Songs"
-msgstr "Τραγούδια"
-
-msgid "Show all {} songs"
-msgstr "Εμφάνιση και των {} τραγουδιών"
-
-msgid "Show less"
-msgstr "Εμφάνιση λιγότερων"
-
-msgid "Recent"
-msgstr "Πρόσφατα"
-
-msgid "Clear all"
-msgstr "Καθαρισμός όλων"
-
-# ---- Favorites view ---------------------------------------------------------
-
-msgid "Filter favorites…"
-msgstr "Φιλτράρισμα αγαπημένων…"
-
-msgid "Filter most played…"
-msgstr "Φιλτράρισμα δημοφιλών…"
-
-msgid "Filter artists…"
-msgstr "Φιλτράρισμα καλλιτεχνών…"
-
-msgid "Nothing played yet"
-msgstr "Δεν έχει παίξει τίποτα ακόμη"
-
-msgid "Play one of your favorites and it will show up here."
-msgstr "Παίξε ένα από τα αγαπημένα σου και θα εμφανιστεί εδώ."
-
-msgid "Play something and it will show up here."
-msgstr "Παίξε κάτι και θα εμφανιστεί εδώ."
-
-msgid "No favorite artists yet"
-msgstr "Δεν υπάρχουν αγαπημένοι καλλιτέχνες ακόμη"
-
-msgid "Favorite a song and its artist appears here."
-msgstr "Πρόσθεσε ένα τραγούδι στα αγαπημένα και θα εμφανιστεί ο καλλιτέχνης του εδώ."
-
-msgid "Most Played"
-msgstr "Πιο δημοφιλή"
-
-msgid "Favorite Artists"
-msgstr "Αγαπημένοι καλλιτέχνες"
-
-msgid "No favorites yet"
-msgstr "Δεν υπάρχουν αγαπημένα ακόμη"
-
-# Plural: favourite-count subtitle (hero count line + Favorite Artists card
-# subtitle on the strip). Greek pluralizes regularly.
-msgid "{n} favorite"
-msgid_plural "{n} favorites"
-msgstr[0] "{n} αγαπημένο"
-msgstr[1] "{n} αγαπημένα"
-
-# ---- Track row right-click menu (multi-select variants) ---------------------
-# Wired into `ui/components/track-list/track-list-row.slint`. Το `{}` είναι ο
-# αριθμός των επιλεγμένων κομματιών.
-
+#: ui/components/grid/browse-card-grid.slint
+msgid "Folder"
+msgstr "Φάκελος"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/now-playing/play-button.slint
+#: ui/components/track-list/track-context-menu.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Play"
+msgstr "Αναπαραγωγή"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/now-playing/overflow-menu.slint ui/views/favorites-view.slint
+#: ui/views/my-library/tab-pills.slint ui/views/recently-played-view.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Shuffle"
+msgstr "Τυχαία σειρά"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
 msgid "Play {} Next"
 msgstr "Αναπαραγωγή {} στη συνέχεια"
 
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Play Next"
+msgstr "Αναπαραγωγή στη συνέχεια"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
 msgid "Add {} to Queue"
 msgstr "Προσθήκη {} στην ουρά"
 
-msgid "Add {} to Playlist"
-msgstr "Προσθήκη {} σε λίστα αναπαραγωγής"
-
-msgid "Add {} to Favorites"
-msgstr "Προσθήκη {} στα αγαπημένα"
-
-msgid "Remove {} from Favorites"
-msgstr "Αφαίρεση {} από τα αγαπημένα"
-
-msgid "Remove {} from Playlist"
-msgstr "Αφαίρεση {} από τη λίστα"
-
-# ---- Track row right-click menu --------------------------------------------
-msgid "Open Containing Folder"
-msgstr "Άνοιγμα γονικού φακέλου"
-
-# ---- ... cross-tab navigation ----------------------------------------------
-msgid "Go to Album"
-msgstr "Μετάβαση στο άλμπουμ"
-
-msgid "Go to Artist"
-msgstr "Μετάβαση στον καλλιτέχνη"
-
-msgid "Go to Genre"
-msgstr "Μετάβαση στο είδος"
-
-# ---- Add-to-Playlist picker dialog -----------------------------------------
-# Wired into `ui/components/dialog/playlist-picker.slint`. The first two badges
-# appear on rows whose playlists already contain some or all of the
-# selected tracks; the third is the empty-state hint.
-
-msgid "Already added"
-msgstr "Έχουν ήδη προστεθεί"
-
-msgid "{} of {} already added"
-msgstr "{} από {} ήδη προστέθηκαν"
-
-# ---- Auto-updater (Settings → Updates + notification toasts) ----------------
-
-msgid "Critical update"
-msgstr "Κρίσιμη ενημέρωση"
-
-msgid "This update fixes a critical issue and can't be skipped."
-msgstr "Αυτή η ενημέρωση διορθώνει ένα κρίσιμο πρόβλημα και δεν μπορεί να παραλειφθεί."
-
-msgid "Skip this version"
-msgstr "Παράλειψη αυτής της έκδοσης"
-
-msgid "Updates managed by your package manager"
-msgstr "Οι ενημερώσεις διαχειρίζονται από τον διαχειριστή πακέτων σας"
-
-msgid "Use sudo dnf update melodia (or your distro equivalent)."
-msgstr "Χρησιμοποιήστε sudo dnf update melodia (ή το αντίστοιχο της διανομής σας)."
-
-msgid "Re-run the latest .msi installer from the Releases page."
-msgstr "Εκτελέστε ξανά τον τελευταίο εγκαταστάτη .msi από τη σελίδα Releases."
-
-msgid "Use brew upgrade melodia."
-msgstr "Χρησιμοποιήστε brew upgrade melodia."
-
-msgid "Update available"
-msgstr "Διαθέσιμη ενημέρωση"
-
-msgid "Melodia {} is ready to install."
-msgstr "Το Melodia {} είναι έτοιμο για εγκατάσταση."
-
-msgid "Install"
-msgstr "Εγκατάσταση"
-
-msgid "Update installed"
-msgstr "Η ενημέρωση εγκαταστάθηκε"
-
-msgid "Restart Melodia to start using the new version."
-msgstr "Επανεκκινήστε το Melodia για να χρησιμοποιήσετε τη νέα έκδοση."
-
-msgid "Update failed"
-msgstr "Αποτυχία ενημέρωσης"
-
-msgid "Couldn't reach the update server. Check your internet connection."
-msgstr "Δεν ήταν δυνατή η σύνδεση με τον διακομιστή ενημερώσεων. Ελέγξτε τη σύνδεσή σας στο διαδίκτυο."
-
-msgid "Signature check failed. The downloaded update may be corrupted; please try again."
-msgstr "Ο έλεγχος υπογραφής απέτυχε. Η ενημέρωση που κατεβάσατε μπορεί να είναι κατεστραμμένη· δοκιμάστε ξανά."
-
-msgid "The update server returned an unexpected response."
-msgstr "Ο διακομιστής ενημερώσεων επέστρεψε μια μη αναμενόμενη απάντηση."
-
-msgid "Couldn't write the downloaded update to disk."
-msgstr "Δεν ήταν δυνατή η εγγραφή της ενημέρωσης στον δίσκο."
-
-msgid "Update failed. See logs for details."
-msgstr "Η ενημέρωση απέτυχε. Δείτε τα αρχεία καταγραφής για λεπτομέρειες."
-
-# ---- Settings → About → Diagnostics -----------------------------------------
-
-msgid "Diagnostics"
-msgstr "Διαγνωστικά"
-
-msgid "Logs"
-msgstr "Αρχεία καταγραφής"
-
-msgid "Where Melodia writes its log files and crash reports."
-msgstr ""
-"Εκεί όπου το Melodia γράφει τα αρχεία καταγραφής και τις αναφορές κατάρρευσης."
-
-# Shared with the crash-report toast's action button, which opens the same folder.
-msgid "Open Folder"
-msgstr "Άνοιγμα φακέλου"
-
-msgid "Diagnostics report"
-msgstr "Αναφορά διαγνωστικών"
-
-msgid "One text file with your system details, settings and recent logs, for attaching to a bug report."
-msgstr ""
-"Ένα αρχείο κειμένου με τα στοιχεία του συστήματός σας, τις ρυθμίσεις και τα "
-"πρόσφατα αρχεία καταγραφής, για επισύναψη σε αναφορά σφάλματος."
-
-msgid "Save…"
-msgstr "Αποθήκευση…"
-
-msgid "Verbose logging"
-msgstr "Αναλυτική καταγραφή"
-
-msgid "Record extra detail. Turn this on, reproduce the problem, then save a report."
-msgstr ""
-"Καταγράφει επιπλέον λεπτομέρειες. Ενεργοποιήστε το, αναπαραγάγετε το "
-"πρόβλημα και μετά αποθηκεύστε μια αναφορά."
-
-msgid "Diagnostics report saved"
-msgstr "Η αναφορά διαγνωστικών αποθηκεύτηκε"
-
-msgid "Couldn't save the diagnostics report"
-msgstr "Δεν ήταν δυνατή η αποθήκευση της αναφοράς διαγνωστικών"
-
-msgid "See the log for details."
-msgstr "Δείτε το αρχείο καταγραφής για λεπτομέρειες."
-
-# Pushed once on the launch after a panic.
-msgid "Melodia crashed last time"
-msgstr "Το Melodia κατέρρευσε την προηγούμενη φορά"
-
-msgid "A crash report was written. Open the log folder to find it."
-msgstr ""
-"Γράφτηκε μια αναφορά κατάρρευσης. Ανοίξτε τον φάκελο καταγραφής για να τη "
-"βρείτε."
-
-# Pushed when the audio output device goes away mid-session.
-msgid "Audio device disconnected"
-msgstr "Η συσκευή ήχου αποσυνδέθηκε"
-
-msgid "Playback won't be audible until you reconnect it and restart Melodia."
-msgstr ""
-"Η αναπαραγωγή δεν θα ακούγεται μέχρι να τη συνδέσετε ξανά και να "
-"επανεκκινήσετε το Melodia."
-
-msgid "Close to Tray"
-msgstr "Κλείσιμο στην περιοχή ειδοποιήσεων"
-
-msgid "Keep Melodia running in the system tray when you close the window, instead of quitting."
-msgstr "Διατήρηση της εκτέλεσης του Melodia στην περιοχή ειδοποιήσεων κατά το κλείσιμο του παραθύρου, αντί για έξοδο."
-
-msgid "System Tray Icon"
-msgstr "Εικονίδιο περιοχής ειδοποιήσεων"
-
-msgid "Show a Melodia icon in the system tray with playback controls."
-msgstr "Εμφάνιση εικονιδίου Melodia στην περιοχή ειδοποιήσεων με στοιχεία ελέγχου αναπαραγωγής."
-
-msgid "Changing the system tray icon requires restarting Melodia. Restart now?"
-msgstr "Η αλλαγή του εικονιδίου περιοχής ειδοποιήσεων απαιτεί επανεκκίνηση του Melodia. Επανεκκίνηση τώρα;"
-
-msgid "Available only while the system tray icon is active."
-msgstr "Διαθέσιμο μόνο όταν το εικονίδιο περιοχής ειδοποιήσεων είναι ενεργό."
-
-# ---- About -------------------------------------------------------------------
-
-# Settings → About section (`ui/views/settings/about-section.slint`): app
-# name + version, authorship, a support link, the source-repository link, and
-# the license.
-msgid "About"
-msgstr "Σχετικά"
-
-# Translators: `{}` is the app version string (e.g. "0.1.0").
-msgid "Version {}"
-msgstr "Έκδοση {}"
-
-# Translators: `{}` is the author's name ("Kenan Salar") — a proper noun,
-# passed verbatim and never translated.
-msgid "Made by {}"
-msgstr "Δημιουργήθηκε από {}"
-
-# Translators: the Ko-fi row — its label, its button and its blurb. "Ko-fi" is a
-# brand and stays verbatim wherever it appears. "Support" throughout this block
-# means backing the project financially — never technical support, which is what
-# "Υποστήριξη" would read as here.
-msgid "Support Melodia"
-msgstr "Στηρίξτε το Melodia"
-
-msgid "Support me on Ko-fi"
-msgstr "Στηρίξτε με στο Ko-fi"
-
-msgid "Melodia is free and open source. Support helps keep it going."
-msgstr "Το Melodia είναι δωρεάν και ανοιχτού κώδικα. Η στήριξη βοηθά να συνεχιστεί."
-
-# The one-time support toast (`crates/melodia-views/src/ui/support.rs`), shown on one early launch and
-# never again. Its action button opens the Ko-fi page.
-msgid "Enjoying Melodia?"
-msgstr "Σας αρέσει το Melodia;"
-
-msgid "It's free and open source, built in my spare time. If it's useful to you, you can support me. You'll only see this once."
-msgstr "Είναι δωρεάν και ανοιχτού κώδικα, φτιαγμένο στον ελεύθερο χρόνο μου. Αν σας φαίνεται χρήσιμο, μπορείτε να με στηρίξετε. Θα το δείτε μόνο μία φορά."
-
-msgid "Support"
-msgstr "Στήριξη"
-
-msgid "License"
-msgstr "Άδεια"
-
-# Graphic equalizer
-msgid "On"
-msgstr "Ενεργό"
-
-msgid "Off"
-msgstr "Ανενεργό"
-
-msgid "Done"
-msgstr "Τέλος"
-
-msgid "Reset"
-msgstr "Επαναφορά"
-
-msgid "Enable equalizer"
-msgstr "Ενεργοποίηση ισοσταθμιστή"
-
-msgid "Flat"
-msgstr "Επίπεδο"
-
-msgid "Rock"
-msgstr "Rock"
-
-msgid "Pop"
-msgstr "Pop"
-
-msgid "Jazz"
-msgstr "Jazz"
-
-msgid "Classical"
-msgstr "Κλασική"
-
-msgid "Bass Boost"
-msgstr "Ενίσχυση μπάσων"
-
-msgid "Treble Boost"
-msgstr "Ενίσχυση πρίμων"
-
-msgid "Vocal"
-msgstr "Φωνητικά"
-
-msgid "Electronic"
-msgstr "Ηλεκτρονική"
-
-msgid "Custom"
-msgstr "Προσαρμοσμένο"
-
-msgid "Preamp"
-msgstr "Προενίσχυση"
-
-# ---- Playlist import / export (M3U8) ----------------------------------------
-
-msgid "Import"
-msgstr "Εισαγωγή"
-
-msgid "Export"
-msgstr "Εξαγωγή"
-
-msgid "Export Playlists"
-msgstr "Εξαγωγή λιστών"
-
-msgid "Choose playlists to export."
-msgstr "Επιλέξτε λίστες για εξαγωγή."
-
-msgid "No playlists to export"
-msgstr "Δεν υπάρχουν λίστες για εξαγωγή"
-
-msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
-msgstr "Πολλές λίστες αποθηκεύονται ως ένα αρχείο .zip, το οποίο μπορείτε να εισαγάγετε απευθείας χωρίς αποσυμπίεση."
-
-msgid "Select all"
-msgstr "Επιλογή όλων"
-
-msgid "Import failed"
-msgstr "Η εισαγωγή απέτυχε"
-
-msgid "Playback error"
-msgstr "Σφάλμα αναπαραγωγής"
-
-msgid "Something went wrong"
-msgstr "Κάτι πήγε στραβά"
-
-msgid "Couldn't read the selected playlist file(s)."
-msgstr "Δεν ήταν δυνατή η ανάγνωση των επιλεγμένων αρχείων λίστας."
-
-msgid "Export failed"
-msgstr "Η εξαγωγή απέτυχε"
-
-msgid "Couldn't write the playlist files."
-msgstr "Δεν ήταν δυνατή η εγγραφή των αρχείων λίστας."
-
-msgid "These playlists are too large for one .zip file. Export fewer at a time."
-msgstr "Αυτές οι λίστες είναι πολύ μεγάλες για ένα αρχείο .zip. Εξαγάγετε λιγότερες κάθε φορά."
-
-msgid "Add"
-msgstr "Προσθήκη"
-
-msgid "Added to {n} playlist"
-msgid_plural "Added to {n} playlists"
-msgstr[0] "Προστέθηκε σε {n} λίστα"
-msgstr[1] "Προστέθηκε σε {n} λίστες"
-
-msgid "{n} track added"
-msgid_plural "{n} tracks added"
-msgstr[0] "{n} κομμάτι προστέθηκε"
-msgstr[1] "{n} κομμάτια προστέθηκαν"
-
-msgid "Saved to {}"
-msgstr "Αποθηκεύτηκε στο {}"
-
-msgid "{n} track added · {} missing"
-msgid_plural "{n} tracks added · {} missing"
-msgstr[0] "{n} κομμάτι προστέθηκε · {} λείπουν"
-msgstr[1] "{n} κομμάτια προστέθηκαν · {} λείπουν"
-
-msgid "{n} playlist imported"
-msgid_plural "{n} playlists imported"
-msgstr[0] "{n} λίστα εισήχθη"
-msgstr[1] "{n} λίστες εισήχθησαν"
-
-msgid "{n} playlist exported"
-msgid_plural "{n} playlists exported"
-msgstr[0] "{n} λίστα εξήχθη"
-msgstr[1] "{n} λίστες εξήχθησαν"
-
-msgid "Rating"
-msgstr "Βαθμολογία"
-
-msgid "ReplayGain"
-msgstr "ReplayGain"
-
-msgid "Visualizer"
-msgstr "Οπτικοποίηση"
-
-msgid "Show an audio visualizer on the Now Playing screen"
-msgstr "Εμφάνιση οπτικοποίησης ήχου στην οθόνη αναπαραγωγής"
-
-msgid "Visualizer Style"
-msgstr "Στυλ οπτικοποίησης"
-
-msgid "Choose how the visualizer draws the audio"
-msgstr "Επιλέξτε πώς σχεδιάζει τον ήχο η οπτικοποίηση"
-
-msgid "Bars"
-msgstr "Μπάρες"
-
-msgid "Waveform"
-msgstr "Κυματομορφή"
-
-msgid "Mirrored"
-msgstr "Κατοπτρικό"
-
-msgid "Enable ReplayGain"
-msgstr "Ενεργοποίηση ReplayGain"
-
-msgid "Normalization mode"
-msgstr "Λειτουργία κανονικοποίησης"
-
-msgid "Track"
-msgstr "Κομμάτι"
-
-msgid "Prevent clipping"
-msgstr "Αποτροπή ψαλιδίσματος"
-
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "Το ReplayGain επηρεάζει μόνο κομμάτια που έχουν ήδη ετικέτες έντασης ήχου. Σαρώστε τη βιβλιοθήκη σας με ένα εργαλείο όπως το rsgain ή το loudgain για να τις προσθέσετε."
-
-msgid "Recently Played"
-msgstr "Πρόσφατα αναπαραγόμενα"
-
-msgid "Filter recently played…"
-msgstr "Φιλτράρισμα πρόσφατα αναπαραγόμενων…"
-
-msgid "No recently played tracks"
-msgstr "Δεν υπάρχουν πρόσφατα αναπαραγόμενα κομμάτια"
-
-msgid "Sleep timer"
-msgstr "Χρονοδιακόπτης ύπνου"
-
-msgid "15 min"
-msgstr "15 λεπτά"
-
-msgid "30 min"
-msgstr "30 λεπτά"
-
-msgid "45 min"
-msgstr "45 λεπτά"
-
-msgid "60 min"
-msgstr "60 λεπτά"
-
-msgid "90 min"
-msgstr "90 λεπτά"
-
-msgid "End of track"
-msgstr "Τέλος κομματιού"
-
-msgid "Track end"
-msgstr "Τέλος κομματιού"
-
-msgid "Start"
-msgstr "Έναρξη"
-
-# ---- Smart / dynamic playlists ---------------------------------------------
-
-msgid "Album Artist"
-msgstr "Καλλιτέχνης άλμπουμ"
-
-msgid "Duration (sec)"
-msgstr "Διάρκεια (δευτ.)"
-
-msgid "Plays"
-msgstr "Αναπαραγωγές"
-
-msgid "Skips"
-msgstr "Παραλείψεις"
-
-msgid "Bitrate (kbps)"
-msgstr "Ρυθμός bit (kbps)"
-
-msgid "Sample rate (Hz)"
-msgstr "Ρυθμός δειγματοληψίας (Hz)"
-
-msgid "File size (bytes)"
-msgstr "Μέγεθος αρχείου (bytes)"
-
-msgid "Last played"
-msgstr "Τελευταία αναπαραγωγή"
-
-msgid "Date added"
-msgstr "Ημερομηνία προσθήκης"
-
-msgid "contains"
-msgstr "περιέχει"
-
-msgid "does not contain"
-msgstr "δεν περιέχει"
-
-msgid "is"
-msgstr "είναι"
-
-msgid "is not"
-msgstr "δεν είναι"
-
-msgid "starts with"
-msgstr "ξεκινά με"
-
-msgid "ends with"
-msgstr "τελειώνει με"
-
-msgid "is set"
-msgstr "έχει οριστεί"
-
-msgid "is not set"
-msgstr "δεν έχει οριστεί"
-
-msgid "greater than"
-msgstr "μεγαλύτερο από"
-
-msgid "at least"
-msgstr "τουλάχιστον"
-
-msgid "less than"
-msgstr "μικρότερο από"
-
-msgid "at most"
-msgstr "το πολύ"
-
-msgid "is true"
-msgstr "είναι αληθές"
-
-msgid "is false"
-msgstr "είναι ψευδές"
-
-msgid "in the last"
-msgstr "στις τελευταίες"
-
-msgid "not in the last"
-msgstr "όχι στις τελευταίες"
-
-msgid "all"
-msgstr "όλων"
-
-msgid "any"
-msgstr "οποιουδήποτε"
-
-msgid "most recently added"
-msgstr "πιο πρόσφατα προστεθέντα"
-
-msgid "least recently added"
-msgstr "λιγότερο πρόσφατα προστεθέντα"
-
-msgid "most played"
-msgstr "με τις περισσότερες αναπαραγωγές"
-
-msgid "least played"
-msgstr "με τις λιγότερες αναπαραγωγές"
-
-msgid "most recently played"
-msgstr "πιο πρόσφατα αναπαραγόμενα"
-
-msgid "least recently played"
-msgstr "λιγότερο πρόσφατα αναπαραγόμενα"
-
-msgid "highest rated"
-msgstr "με την υψηλότερη βαθμολογία"
-
-msgid "random"
-msgstr "τυχαία"
-
-msgid "Match"
-msgstr "Αντιστοίχιση"
-
-msgid "of the following rules"
-msgstr "από τους παρακάτω κανόνες"
-
-msgid "days"
-msgstr "ημέρες"
-
-msgid "value"
-msgstr "τιμή"
-
-msgid "number"
-msgstr "αριθμός"
-
-msgid "N"
-msgstr "N"
-
-msgid "Limit to"
-msgstr "Περιορισμός σε"
-
-msgid "tracks by"
-msgstr "κομμάτια κατά"
-
-
-msgid "Add rule"
-msgstr "Προσθήκη κανόνα"
-
-msgid "Smart playlist name"
-msgstr "Όνομα έξυπνης λίστας"
-
-msgid "New Smart Playlist"
-msgstr "Νέα έξυπνη λίστα"
-
-msgid "Create a playlist from rules"
-msgstr "Δημιουργία λίστας από κανόνες"
-
-msgid "Edit Rules"
-msgstr "Επεξεργασία κανόνων"
-
-msgid "Edit rules"
-msgstr "Επεξεργασία κανόνων"
-
-msgid "No matching tracks"
-msgstr "Κανένα κομμάτι δεν ταιριάζει"
-
-msgid "No tracks match these rules."
-msgstr "Κανένα κομμάτι δεν ταιριάζει με αυτούς τους κανόνες."
-
-msgid "Create an empty playlist"
-msgstr "Δημιουργία κενής λίστας"
-
-# ---- Tag editor (Edit Track Information dialog) ------------------------------
-
-msgid "Tags"
-msgstr "Ετικέτες"
-
-msgid "Lyrics"
-msgstr "Στίχοι"
-
-msgid "Summary"
-msgstr "Σύνοψη"
-
-msgid "Composer"
-msgstr "Συνθέτης"
-
-msgid "Disc"
-msgstr "Δίσκος"
-
-msgid "Original Year"
-msgstr "Αρχικό έτος"
-
-msgid "BPM"
-msgstr "BPM"
-
-msgid "Comment"
-msgstr "Σχόλιο"
-
-msgid "Replace…"
-msgstr "Αντικατάσταση…"
-
-msgid "Path"
-msgstr "Διαδρομή"
-
-msgid "Codec"
-msgstr "Codec"
-
-msgid "Bitrate"
-msgstr "Ρυθμός bit"
-
-msgid "Sample Rate"
-msgstr "Ρυθμός δειγματοληψίας"
-
-msgid "Bit Depth"
-msgstr "Βάθος bit"
-
-msgid "Channels"
-msgstr "Κανάλια"
-
-msgid "Size"
-msgstr "Μέγεθος"
-
-msgid "Modified"
-msgstr "Τροποποιήθηκε"
-
-msgid "BLAKE3"
-msgstr "BLAKE3"
-
-msgid "Edit Tags…"
-msgstr "Επεξεργασία ετικετών…"
-
-msgid "Edit Track Information"
-msgstr "Επεξεργασία πληροφοριών κομματιού"
-
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Add to Queue"
+msgstr "Προσθήκη στην ουρά"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "New Playlist…"
+msgstr "Νέα λίστα…"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Add to Playlist"
+msgstr "Προσθήκη σε λίστα"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
 msgid "Edit Tags for {}"
 msgstr "Επεξεργασία ετικετών για {}"
 
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Edit Tags…"
+msgstr "Επεξεργασία ετικετών…"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
 msgid "Edit {} Tracks"
 msgstr "Επεξεργασία {} κομματιών"
 
-msgid "Save"
-msgstr "Αποθήκευση"
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/now-playing/lyrics-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Edit Track Information"
+msgstr "Επεξεργασία πληροφοριών κομματιού"
 
-msgid "Duration"
-msgstr "Διάρκεια"
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/station-facts.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Copy"
+msgstr "Αντιγραφή"
 
-msgid "‹multiple values›"
-msgstr "‹πολλαπλές τιμές›"
+#: ui/components/grid/card-context-menu.slint
+msgid "Copy Name"
+msgstr "Αντιγραφή ονόματος"
 
-msgid "{n} track updated"
-msgid_plural "{n} tracks updated"
-msgstr[0] "{n} κομμάτι ενημερώθηκε"
-msgstr[1] "{n} κομμάτια ενημερώθηκαν"
+#: ui/components/grid/card-context-menu.slint
+msgid "Copy Path"
+msgstr "Αντιγραφή διαδρομής"
 
-msgid "{n} file failed"
-msgid_plural "{n} files failed"
-msgstr[0] "{n} αρχείο απέτυχε"
-msgstr[1] "{n} αρχεία απέτυχαν"
+#: ui/components/grid/card-context-menu.slint ui/settings.slint
+#: ui/views/settings/diagnostics-section.slint
+msgid "Open Folder"
+msgstr "Άνοιγμα φακέλου"
 
-msgid "{n} file has unsupported fields"
-msgid_plural "{n} files have unsupported fields"
-msgstr[0] "{n} αρχείο με μη υποστηριζόμενα πεδία"
-msgstr[1] "{n} αρχεία με μη υποστηριζόμενα πεδία"
+#: ui/components/grid/card-context-menu.slint
+msgid "Show in File Manager"
+msgstr "Εμφάνιση στη διαχείριση αρχείων"
 
-msgid "Couldn't save tags"
-msgstr "Δεν ήταν δυνατή η αποθήκευση των ετικετών"
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Open Containing Folder"
+msgstr "Άνοιγμα γονικού φακέλου"
 
-msgid "No tracks were updated."
-msgstr "Δεν ενημερώθηκε κανένα κομμάτι."
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Go to Artist"
+msgstr "Μετάβαση στον καλλιτέχνη"
 
-# ---- Discord ----
-msgid "Show the track you're playing on your Discord profile"
-msgstr "Εμφάνιση του κομματιού που ακούς στο προφίλ σου στο Discord"
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Clear selection"
+msgstr "Εκκαθάριση επιλογής"
 
-msgid "Status"
-msgstr "Κατάσταση"
+#: ui/components/grid/card-context-menu.slint
+msgid "Rename…"
+msgstr "Μετονομασία…"
 
-msgid "Connected to Discord"
-msgstr "Συνδεδεμένο με το Discord"
+#: ui/components/grid/card-context-menu.slint
+msgid "Edit Artwork…"
+msgstr "Επεξεργασία εικόνας…"
 
-msgid "Discord not running"
-msgstr "Το Discord δεν εκτελείται"
+#: ui/components/grid/card-context-menu.slint
+msgid "Edit Rules…"
+msgstr "Επεξεργασία κανόνων…"
 
-msgid "Show album artwork"
-msgstr "Εμφάνιση εξωφύλλου άλμπουμ"
+#: ui/components/grid/card-context-menu.slint
+msgid "Delete {} Playlists"
+msgstr "Διαγραφή {} λιστών"
 
-msgid "Look up cover art online (via Deezer or iTunes) to show on the card"
-msgstr "Αναζήτηση εξωφύλλου στο διαδίκτυο (μέσω Deezer ή iTunes) για εμφάνιση στην κάρτα"
+#: ui/components/grid/card-context-menu.slint
+msgid "Delete Playlist"
+msgstr "Διαγραφή λίστας"
 
-msgid "Hide while paused"
-msgstr "Απόκρυψη κατά την παύση"
+#: ui/components/grid/card-context-menu.slint
+msgid "Artist - Album"
+msgstr "Καλλιτέχνης - Άλμπουμ"
 
-msgid "Remove the card when paused instead of showing a paused marker"
-msgstr "Αφαίρεση της κάρτας κατά την παύση αντί για εμφάνιση ένδειξης παύσης"
+#: ui/components/grid/playlist-grid.slint
+msgid "0 tracks"
+msgstr "0 κομμάτια"
 
-# ---- Scrobbling ----
-msgid "Scrobbling"
-msgstr "Scrobbling"
+#: ui/components/grid/station-context-menu.slint
+msgid "Open Website"
+msgstr "Άνοιγμα ιστότοπου"
 
-msgid "Last.fm"
-msgstr "Last.fm"
+#: ui/components/grid/station-context-menu.slint
+msgid "Edit…"
+msgstr "Επεξεργασία…"
 
-msgid "ListenBrainz"
-msgstr "ListenBrainz"
+#. Translators: `{}` is how many stations are selected
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove {} from Recently Played…"
+msgstr "Αφαίρεση {} από τα πρόσφατα αναπαραγόμενα…"
 
-msgid "Scrobble to Last.fm"
-msgstr "Scrobble στο Last.fm"
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove from Recently Played…"
+msgstr "Αφαίρεση από τα πρόσφατα αναπαραγόμενα…"
 
-msgid "Report each play to your Last.fm account"
-msgstr "Αναφορά κάθε αναπαραγωγής στον λογαριασμό σας στο Last.fm"
+#. Translators: `{}` is how many stations are selected
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove {} from Favorites…"
+msgstr "Αφαίρεση {} από τα αγαπημένα…"
 
-msgid "Scrobble to ListenBrainz"
-msgstr "Scrobble στο ListenBrainz"
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove from Favorites…"
+msgstr "Κατάργηση από τα αγαπημένα…"
 
-msgid "Report each play to your ListenBrainz account"
-msgstr "Αναφορά κάθε αναπαραγωγής στον λογαριασμό σας στο ListenBrainz"
+#: ui/components/mini-player/mini-captions.slint
+msgid "Full Player"
+msgstr "Πλήρης αναπαραγωγέας"
 
-msgid "Sync loved tracks to Last.fm"
-msgstr "Συγχρονισμός αγαπημένων κομματιών με το Last.fm"
+#: ui/components/mini-player/mini-captions.slint
+msgid "Show Up Next"
+msgstr "Εμφάνιση επόμενων"
 
-msgid "Mark tracks you love as loved on Last.fm — turning this on syncs your existing favorites"
-msgstr "Σημειώστε ως αγαπημένα στο Last.fm τα κομμάτια που αγαπάτε — η ενεργοποίηση συγχρονίζει τα υπάρχοντα αγαπημένα σας"
-
-msgid "Sync loved tracks to ListenBrainz"
-msgstr "Συγχρονισμός αγαπημένων κομματιών με το ListenBrainz"
-
-msgid "Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)"
-msgstr "Σημειώστε ως αγαπημένα στο ListenBrainz τα κομμάτια που αγαπάτε — η ενεργοποίηση συγχρονίζει τα υπάρχοντα αγαπημένα σας (απαιτεί αναγνωριστικά MusicBrainz)"
-
-msgid "MusicBrainz Picard adds these IDs to your files, identifying each track by its audio."
-msgstr "Το MusicBrainz Picard προσθέτει αυτά τα αναγνωριστικά στα αρχεία σας, αναγνωρίζοντας κάθε κομμάτι από τον ήχο του."
-
-msgid "Loved tracks"
-msgstr "Αγαπημένα κομμάτια"
-
-msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
-msgstr "Το Melodia δεν μπόρεσε να επανεκκινήσει. Κλείστε και ανοίξτε ξανά την εφαρμογή για να εφαρμοστεί η αλλαγή."
-
-msgid "Connected as {}"
-msgstr "Συνδεδεμένος ως {}"
-
-msgid "Not connected"
-msgstr "Μη συνδεδεμένο"
-
-msgid "Not configured in this build"
-msgstr "Δεν έχει ρυθμιστεί σε αυτήν την έκδοση"
-
-msgid "Connect"
-msgstr "Σύνδεση"
-
-msgid "Disconnect"
-msgstr "Αποσύνδεση"
-
-msgid "Connect Last.fm"
-msgstr "Σύνδεση Last.fm"
-
-msgid "Open Last.fm"
-msgstr "Άνοιγμα Last.fm"
-
-msgid "Connect ListenBrainz"
-msgstr "Σύνδεση ListenBrainz"
-
-msgid "Finish"
-msgstr "Ολοκλήρωση"
-
-msgid "Click Open Last.fm to approve Melodia in your browser."
-msgstr "Κάντε κλικ στο Άνοιγμα Last.fm για να εγκρίνετε το Melodia στο πρόγραμμα περιήγησής σας."
-
-msgid "After approving Melodia in your browser, click Finish."
-msgstr "Αφού εγκρίνετε το Melodia στο πρόγραμμα περιήγησής σας, κάντε κλικ στο Ολοκλήρωση."
-
-msgid "Connecting…"
-msgstr "Σύνδεση…"
-
-msgid "User token"
-msgstr "Διακριτικό χρήστη"
-
-msgid "Paste your ListenBrainz user token"
-msgstr "Επικολλήστε το διακριτικό χρήστη ListenBrainz"
-
-msgid "Find your token on your ListenBrainz profile settings page."
-msgstr "Θα βρείτε το διακριτικό σας στη σελίδα ρυθμίσεων του προφίλ σας στο ListenBrainz."
-
-msgid "That token wasn't accepted. Check it and try again."
-msgstr "Το διακριτικό δεν έγινε δεκτό. Ελέγξτε το και δοκιμάστε ξανά."
-
-msgid "Couldn't reach the service. Check your connection and try again."
-msgstr "Δεν ήταν δυνατή η σύνδεση με την υπηρεσία. Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά."
-
-msgid "Not approved yet. Approve Melodia in your browser, then click Finish."
-msgstr "Δεν έχει εγκριθεί ακόμη. Εγκρίνετε το Melodia στο πρόγραμμα περιήγησης και μετά κάντε κλικ στο Ολοκλήρωση."
-
-msgid "Couldn't save your credentials."
-msgstr "Δεν ήταν δυνατή η αποθήκευση των διαπιστευτηρίων σας."
-
-# ---- Radio -------------------------------------------------------------------
-
-# The sidebar row and the window title. The two tabs reuse "Browse" and "Favorites".
-msgid "Radio"
-msgstr "Ραδιόφωνο"
-
-msgid "Search stations…"
-msgstr "Αναζήτηση σταθμών…"
-
-msgid "Filter stations…"
-msgstr "Φιλτράρισμα σταθμών…"
-
-msgid "{n} station"
-msgid_plural "{n} stations"
-msgstr[0] "{n} σταθμός"
-msgstr[1] "{n} σταθμοί"
-
-msgid "No stations kept yet"
-msgstr "Δεν έχετε αποθηκεύσει σταθμούς ακόμη"
-
-msgid "Star a station in Browse, or add one by URL."
-msgstr "Σημειώστε έναν σταθμό στην Περιήγηση ή προσθέστε έναν με URL."
-
-# The Settings card. The section title reuses "Radio" above.
-msgid "Internet radio"
-msgstr "Διαδικτυακό ραδιόφωνο"
-
-msgid "Browse and play live stations from radio-browser.info"
-msgstr "Περιήγηση και αναπαραγωγή ζωντανών σταθμών από το radio-browser.info"
-
-# The lyrics switch, which turns lyrics on in place of Up Next. Named on the Services card and
-# again as the tooltip of the Now Playing header's switch, so both read from this one label.
+#: ui/components/mini-player/mini-captions.slint
+#: ui/components/now-playing/lyrics-controls.slint
+#: ui/views/settings/lyrics-section.slint
 msgid "Show lyrics"
 msgstr "Εμφάνιση στίχων"
 
-msgid "Show the playing track's words in Now Playing instead of Up Next"
-msgstr "Εμφάνιση των στίχων του κομματιού που παίζει στην οθόνη «Αναπαράγεται τώρα» αντί για τα «Επόμενα»"
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Pin on Top"
+msgstr "Καρφίτσωμα στην κορυφή"
 
-# The online-lyrics switch. Named in the Services card and again on the welcome card, so both
-# read from this one pair.
-msgid "Look up lyrics online"
-msgstr "Αναζήτηση στίχων στο διαδίκτυο"
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Unpin from Top"
+msgstr "Ξεκαρφίτσωμα από την κορυφή"
 
-msgid "When a track carries no words of its own, ask lrclib.net for them"
-msgstr "Όταν ένα κομμάτι δεν έχει δικούς του στίχους, ζητούνται από το lrclib.net"
+#: ui/components/mini-player/mini-controls.slint
+msgid "Album Backdrop: off"
+msgstr "Φόντο άλμπουμ: ανενεργό"
 
-# The romanization switch. Named on the Services card and again in the Now Playing lyrics menu,
-# so both read from this one label.
+#: ui/components/mini-player/mini-controls.slint
+msgid "Album Backdrop: on"
+msgstr "Φόντο άλμπουμ: ενεργό"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Unfavorite"
+msgstr "Αφαίρεση από τα αγαπημένα"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Shuffle: off"
+msgstr "Τυχαία σειρά: ανενεργή"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Shuffle: on"
+msgstr "Τυχαία σειρά: ενεργή"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Repeat: off"
+msgstr "Επανάληψη: ανενεργή"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Repeat: one"
+msgstr "Επανάληψη: ένα"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Repeat: all"
+msgstr "Επανάληψη: όλα"
+
+#: ui/components/now-playing/flyout-presets.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/components/now-playing/visualizer-flyout.slint
+msgid "Off"
+msgstr "Ανενεργό"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "15 min"
+msgstr "15 λεπτά"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "30 min"
+msgstr "30 λεπτά"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "45 min"
+msgstr "45 λεπτά"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "60 min"
+msgstr "60 λεπτά"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "90 min"
+msgstr "90 λεπτά"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "End of track"
+msgstr "Τέλος κομματιού"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "Bars"
+msgstr "Μπάρες"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "Mirrored"
+msgstr "Κατοπτρικό"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "Waveform"
+msgstr "Κυματομορφή"
+
+#: ui/components/now-playing/lyrics-menu.slint
+#: ui/views/settings/lyrics-section.slint
 msgid "Show romanization"
 msgstr "Εμφάνιση λατινικής μεταγραφής"
 
-msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
-msgstr "Εμφάνιση της προφοράς κάθε στίχου με λατινικούς χαρακτήρες κάτω από τα λόγια, για γραφές που δεν τους χρησιμοποιούν"
-
-# The Settings sub-rows, shown only while the master switch is on.
-msgid "Hide segmented stations"
-msgstr "Απόκρυψη τμηματοποιημένων σταθμών"
-
-msgid "Segmented (HLS) streams play, but take longer to start"
-msgstr "Οι τμηματοποιημένες ροές (HLS) αναπαράγονται, αλλά αργούν να ξεκινήσουν"
-
-msgid "Report plays to the directory"
-msgstr "Αναφορά αναπαραγωγών στον κατάλογο"
-
-msgid "An anonymous count is what orders stations by popularity"
-msgstr "Μια ανώνυμη καταμέτρηση είναι αυτή που κατατάσσει τους σταθμούς κατά δημοτικότητα"
-
-msgid "Scrobble radio songs"
-msgstr "Scrobble τραγουδιών από το ραδιόφωνο"
-
-msgid "Songs heard in full on a station go to your connected scrobbling services"
-msgstr "Τα τραγούδια που ακούστηκαν ολόκληρα σε έναν σταθμό στέλνονται στις συνδεδεμένες υπηρεσίες scrobbling"
-
-msgid "Turn on Last.fm or ListenBrainz above first"
-msgstr "Ενεργοποιήστε πρώτα το Last.fm ή το ListenBrainz παραπάνω"
-
-# ---- Radio: Browse -----------------------------------------------------------
-# The filter chips. "Genre" and "Language" reuse the labels above.
-msgid "Country"
-msgstr "Χώρα"
-
-msgid "Format"
-msgstr "Μορφή"
-
-msgid "{} kbps and up"
-msgstr "{} kbps και άνω"
-
-# The chip pickers.
-msgid "Filter…"
-msgstr "Φιλτράρισμα…"
-
-msgid "Loading…"
-msgstr "Φόρτωση…"
-
-msgid "Nothing to pick from"
-msgstr "Δεν υπάρχει τίποτα προς επιλογή"
-
-msgid "Load more stations"
-msgstr "Φόρτωση περισσότερων σταθμών"
-
-# The three states of the station grid.
-msgid "Searching the directory…"
-msgstr "Αναζήτηση στον κατάλογο…"
-
-msgid "Stations are coming from radio-browser.info."
-msgstr "Οι σταθμοί προέρχονται από το radio-browser.info."
-
-msgid "The station directory is unreachable"
-msgstr "Ο κατάλογος σταθμών δεν είναι προσβάσιμος"
-
-msgid "Check your connection and try again."
-msgstr "Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά."
-
-msgid "Try again"
-msgstr "Δοκιμή ξανά"
-
-msgid "No stations matched"
-msgstr "Δεν βρέθηκαν σταθμοί"
-
-msgid "Try a different name, or clear a filter."
-msgstr "Δοκιμάστε άλλο όνομα ή καθαρίστε ένα φίλτρο."
-
-# The station card's meta line, beside country and codec.
-msgid "{} kbps"
-msgstr "{} kbps"
-
-# The Recently Played tab's empty state body; its title takes the library's "Nothing played yet".
-msgid "Stations you listen to show up here."
-msgstr "Οι σταθμοί που ακούτε εμφανίζονται εδώ."
-
-# The Favorites tab's sort picker. Only "Added" is its own: "Name", "Plays" and "Last played" are
-# the library's entries above, one msgid being one string to gettext however many surfaces use it.
-msgid "Added"
-msgstr "Προστέθηκε"
-
-# The Favorites tab's overflow pill, holding Import and Export.
-msgid "More station actions"
-msgstr "Περισσότερες ενέργειες σταθμού"
-
-# The add / edit station dialog.
-msgid "Add Station"
-msgstr "Προσθήκη σταθμού"
-
-msgid "Edit Station"
-msgstr "Επεξεργασία σταθμού"
-
-msgid "Stream URL"
-msgstr "URL ροής"
-
-msgid "Name (optional)"
-msgstr "Όνομα (προαιρετικό)"
-
-msgid "Leave blank to use the station's own name"
-msgstr "Αφήστε το κενό για να χρησιμοποιηθεί το όνομα του σταθμού"
-
-msgid "Checking the stream…"
-msgstr "Έλεγχος της ροής…"
-
-msgid "Couldn't reach that address. Check the URL and your connection."
-msgstr "Η διεύθυνση δεν είναι προσβάσιμη. Ελέγξτε το URL και τη σύνδεσή σας."
-
-msgid "That address doesn't play as audio Melodia can decode."
-msgstr "Η διεύθυνση δεν δίνει ήχο που μπορεί να αποκωδικοποιήσει το Melodia."
-
-msgid "Couldn't save the station."
-msgstr "Δεν ήταν δυνατή η αποθήκευση του σταθμού."
-
-# The same dialog opened on a directory-owned station: whatever the directory left blank.
-msgid "Station Details"
-msgstr "Στοιχεία σταθμού"
-
-msgid "Logo URL"
-msgstr "URL λογότυπου"
-
-msgid "Leave blank to look for a logo on the website above."
-msgstr "Αφήστε το κενό για αναζήτηση λογότυπου στον παραπάνω ιστότοπο."
-
-msgid "Jazz, Blues"
-msgstr "Τζαζ, Μπλουζ"
-
-msgid "Tunisia"
-msgstr "Τυνησία"
-
-msgid "The directory owns this station's name and stream. What it left blank is yours to fill in; leave a field empty to remove it again."
-msgstr "Το όνομα και η ροή αυτού του σταθμού ανήκουν στον κατάλογο. Ό,τι άφησε κενό μπορείτε να το συμπληρώσετε· αφήστε ένα πεδίο κενό για να το αφαιρέσετε ξανά."
-
-msgid "Website"
-msgstr "Ιστότοπος"
-
-msgid "That doesn't look like a web address. It should start with https://"
-msgstr "Αυτό δεν μοιάζει με διεύθυνση ιστού. Θα πρέπει να ξεκινά με https://"
-
-# The station card's destructive action, once per tab: the two lists are independent, so each
-# names only its own.
-msgid "Remove from favorites?"
-msgstr "Αφαίρεση από τα αγαπημένα;"
-
-msgid "\"{}\" will be removed from your favorites."
-msgstr "Ο σταθμός «{}» θα αφαιρεθεί από τα αγαπημένα σας."
-
-# A hand-typed station: leaving Favorites is leaving everything, so this one names the deletion.
-msgid "\"{}\" will be removed from your stations, along with its play history."
-msgstr "Ο σταθμός «{}» θα αφαιρεθεί μαζί με το ιστορικό αναπαραγωγής του."
-
-msgid "Remove from Recently Played?"
-msgstr "Αφαίρεση από τα πρόσφατα αναπαραγόμενα;"
-
-msgid "\"{}\" will be removed from Recently Played."
-msgstr "Ο σταθμός «{}» θα αφαιρεθεί από τα πρόσφατα αναπαραγόμενα."
-
-# Station list import and export.
-msgid "{n} station added"
-msgid_plural "{n} stations added"
-msgstr[0] "Προστέθηκε {n} σταθμός"
-msgstr[1] "Προστέθηκαν {n} σταθμοί"
-
-msgid "{n} was already in your list."
-msgid_plural "{n} were already in your list."
-msgstr[0] "{n} υπήρχε ήδη στη λίστα σας."
-msgstr[1] "{n} υπήρχαν ήδη στη λίστα σας."
-
-msgid "Couldn't read any stations from the selected file(s)."
-msgstr "Δεν βρέθηκαν σταθμοί στα επιλεγμένα αρχεία."
-
-msgid "{n} station exported"
-msgid_plural "{n} stations exported"
-msgstr[0] "Εξήχθη {n} σταθμός"
-msgstr[1] "Εξήχθησαν {n} σταθμοί"
-
-msgid "Couldn't write the station list."
-msgstr "Δεν ήταν δυνατή η εγγραφή της λίστας σταθμών."
-
-# --- The station page ---
-
-msgid "Vote"
-msgstr "Ψήφος"
-
-msgid "Edit"
-msgstr "Επεξεργασία"
-
-msgid "Vote not counted"
-msgstr "Η ψήφος δεν καταμετρήθηκε"
-
-msgid "{n} vote"
-msgid_plural "{n} votes"
-msgstr[0] "{n} ψήφος"
-msgstr[1] "{n} ψήφοι"
-
-msgid "The directory reached this station on its last check."
-msgstr "Ο κατάλογος προσέγγισε αυτόν τον σταθμό στον τελευταίο έλεγχο."
-
-msgid "The directory could not reach this station on its last check."
-msgstr "Ο κατάλογος δεν μπόρεσε να προσεγγίσει αυτόν τον σταθμό στον τελευταίο έλεγχο."
-
-msgid "Stream"
-msgstr "Ροή"
-
-msgid "Copy stream URL"
-msgstr "Αντιγραφή URL ροής"
-
-msgid "Open in your browser"
-msgstr "Άνοιγμα στο πρόγραμμα περιήγησης"
-
-msgid "Votes"
-msgstr "Ψήφοι"
-
-msgid "Recently played on this station"
-msgstr "Πρόσφατα σε αυτόν τον σταθμό"
-
-# ---- Radio: a station on the transport ---------------------------------------
-
-# The badge where a track's seek bar goes. Keep it short and shouty — it is a pill.
-msgid "LIVE"
-msgstr "ΖΩΝΤΑΝΑ"
-
-msgid "Buffering…"
-msgstr "Προσωρινή αποθήκευση…"
-
-# Same pill, on a station the user paused. Pausing closes the connection, so this is a state and
-# not a hold; a transport verb like the Pause button's would read as the control it isn't.
-msgid "Paused"
-msgstr "Σε παύση"
-
-# Heading over the Now Playing panel that replaces "Up Next" while a station plays. Names the
-# kind of thing the panel describes, so keep it as short as that one.
-msgid "Station"
-msgstr "Σταθμός"
-
-msgid "{}: {}"
-msgstr "{}: {}"
-
-# ---- First-run welcome card --------------------------------------------------
-
-# Title of the first-run card. The product name stays untranslated.
-msgid "Welcome to Melodia"
-msgstr "Καλώς ορίσατε στο Melodia"
-
-# Footer button on the welcome card: close it without walking the remaining panels.
-msgid "Skip"
-msgstr "Παράλειψη"
-
-# Body line under the Appearance heading on the welcome card.
+#: ui/components/now-playing/lyrics-menu.slint
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/lyrics-section.slint
+msgid "Look up lyrics online"
+msgstr "Αναζήτηση στίχων στο διαδίκτυο"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Look up again"
+msgstr "Νέα αναζήτηση"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Save to file"
+msgstr "Αποθήκευση στο αρχείο"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Edit lyrics…"
+msgstr "Επεξεργασία στίχων…"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Looking for lyrics…"
+msgstr "Αναζήτηση στίχων…"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "This track has no words"
+msgstr "Αυτό το κομμάτι δεν έχει στίχους"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "No lyrics found"
+msgstr "Δεν βρέθηκαν στίχοι"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Couldn't reach the lyrics service"
+msgstr "Δεν ήταν δυνατή η σύνδεση με την υπηρεσία στίχων"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Lyrics lookup is off"
+msgstr "Η αναζήτηση στίχων είναι ανενεργή"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Play something to see its lyrics"
+msgstr "Αναπαράγετε κάτι για να δείτε τους στίχους"
+
+#. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Turn it on in the Lyrics menu"
+msgstr "Ενεργοποιήστε την από το μενού Στίχοι"
+
+#. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Try again from the Lyrics menu"
+msgstr "Δοκιμάστε ξανά από το μενού Στίχοι"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "More"
+msgstr "Περισσότερα"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/output-section.slint
+msgid "Speed"
+msgstr "Ταχύτητα"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "Sleep timer"
+msgstr "Χρονοδιακόπτης ύπνου"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "Track end"
+msgstr "Τέλος κομματιού"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/playback-section.slint
+msgid "Equalizer"
+msgstr "Ισοσταθμιστής"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "On"
+msgstr "Ενεργό"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Done"
+msgstr "Τέλος"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/output-section.slint
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Repeat"
+msgstr "Επανάληψη"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint ui/views/queue-sheet.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Queue"
+msgstr "Ουρά"
+
+#: ui/components/now-playing/play-button.slint
+msgid "Pause (hold to stop)"
+msgstr "Παύση (κράτα πατημένο για διακοπή)"
+
+#: ui/components/now-playing/play-button.slint
+msgid "Play (hold to stop)"
+msgstr "Αναπαραγωγή (κράτα πατημένο για διακοπή)"
+
+#: ui/components/now-playing/play-button.slint
+msgid "Pause"
+msgstr "Παύση"
+
+#: ui/components/now-playing/sleep-timer-flyout.slint
+msgid "Start"
+msgstr "Έναρξη"
+
+#: ui/components/now-playing/up-next-list.slint
+msgid "No tracks up next"
+msgstr "Δεν υπάρχουν επόμενα κομμάτια"
+
+#: ui/components/now-playing/visualizer-picker.slint
+#: ui/views/settings/playback-section.slint
+msgid "Visualizer"
+msgstr "Οπτικοποίηση"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Appearance"
+msgstr "Εμφάνιση"
+
+#: ui/components/onboarding/appearance-panel.slint
 msgid "Pick how Melodia looks. Every change applies as you make it."
 msgstr "Επιλέξτε την εμφάνιση του Melodia. Κάθε αλλαγή εφαρμόζεται αμέσως."
 
-# Heading of the welcome card's first panel, about the user's library folders.
-msgid "Your music"
-msgstr "Η μουσική σας"
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Theme"
+msgstr "Θέμα"
 
-# Body line under "Your music": the first panel asks for the library's folders.
-msgid "Add the folders your music lives in. Melodia picks up changes to them on its own."
-msgstr "Προσθέστε τους φακέλους όπου βρίσκεται η μουσική σας. Το Melodia εντοπίζει μόνο του τις αλλαγές τους."
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Theme Variant"
+msgstr "Παραλλαγή θέματος"
 
-msgid "Your Music folder: {}"
-msgstr "Ο φάκελος μουσικής σας: {}"
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "System"
+msgstr "Σύστημα"
 
-msgid "Add Music Folder"
-msgstr "Προσθήκη φακέλου μουσικής"
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Dark"
+msgstr "Σκούρο"
 
-msgid "Choose Another Folder"
-msgstr "Επιλογή άλλου φακέλου"
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Light"
+msgstr "Φωτεινό"
 
-# Heading of the welcome card's third panel, listing the features that use the network.
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Accent Color"
+msgstr "Χρώμα τονισμού"
+
+#: ui/components/onboarding/features-panel.slint
 msgid "What Melodia can reach"
 msgstr "Πού μπορεί να συνδεθεί το Melodia"
 
-# Body line under "What Melodia can reach".
+#: ui/components/onboarding/features-panel.slint
 msgid "Melodia works offline. These are the parts that reach out."
 msgstr "Το Melodia λειτουργεί εκτός σύνδεσης. Αυτά είναι τα μέρη που συνδέονται."
 
-# Plural: how many library folders the welcome card reports when no scan is running.
-# Turkish keeps both slots but does not pluralize after a numeral.
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/radio-section.slint
+msgid "Internet radio"
+msgstr "Διαδικτυακό ραδιόφωνο"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/radio-section.slint
+msgid "Browse and play live stations from radio-browser.info"
+msgstr "Περιήγηση και αναπαραγωγή ζωντανών σταθμών από το radio-browser.info"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/discord-section.slint
+msgid "Show the track you're playing on your Discord profile"
+msgstr "Εμφάνιση του κομματιού που ακούς στο προφίλ σου στο Discord"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/lyrics-section.slint
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Όταν ένα κομμάτι δεν έχει δικούς του στίχους, ζητούνται από το lrclib.net"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobbling"
+msgstr "Scrobbling"
+
+#: ui/components/onboarding/features-panel.slint
+msgid "Send what you play to Last.fm or ListenBrainz"
+msgstr "Στείλτε ό,τι ακούτε στο Last.fm ή στο ListenBrainz"
+
+#: ui/components/onboarding/features-panel.slint
+msgid "Set Up"
+msgstr "Ρύθμιση"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Check for updates automatically"
+msgstr "Αυτόματος έλεγχος για ενημερώσεις"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Once a day, Melodia asks GitHub whether a newer version is out."
+msgstr "Μία φορά την ημέρα, το Melodia ρωτά το GitHub αν υπάρχει νεότερη έκδοση."
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Your music"
+msgstr "Η μουσική σας"
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Add the folders your music lives in. Melodia picks up changes to them on its own."
+msgstr "Προσθέστε τους φακέλους όπου βρίσκεται η μουσική σας. Το Melodia εντοπίζει μόνο του τις αλλαγές τους."
+
+#: ui/components/onboarding/music-panel.slint
 msgid "{n} folder in your library"
 msgid_plural "{n} folders in your library"
 msgstr[0] "{n} φάκελος στη βιβλιοθήκη σας"
 msgstr[1] "{n} φάκελοι στη βιβλιοθήκη σας"
 
-# Button on the welcome card's scrobbling row: closes the card onto Settings ▸ Services.
-msgid "Set Up"
-msgstr "Ρύθμιση"
-
-# Body line on the welcome card's scrobbling row.
-msgid "Send what you play to Last.fm or ListenBrainz"
-msgstr "Στείλτε ό,τι ακούτε στο Last.fm ή στο ListenBrainz"
-
-# Shared by the welcome card's last row and the Settings ▸ Updates switch, which are the
-# only two places the daily check is named.
-msgid "Check for updates automatically"
-msgstr "Αυτόματος έλεγχος για ενημερώσεις"
-
-msgid "Once a day, Melodia asks GitHub whether a newer version is out."
-msgstr "Μία φορά την ημέρα, το Melodia ρωτά το GitHub αν υπάρχει νεότερη έκδοση."
-
-# Settings ▸ About row that re-opens the first-run card.
-msgid "Welcome Guide"
-msgstr "Οδηγός καλωσορίσματος"
-
-msgid "Run the first-run setup again."
-msgstr "Εμφανίστε ξανά την αρχική ρύθμιση."
-
-# Button on the About row above. Short by design — it sits in a narrow control slot.
-msgid "Show"
-msgstr "Εμφάνιση"
-
-# Tag editor, Lyrics tab: fills the box with the sheet the track already has elsewhere —
-# a `.lrc` beside it, or one the lyrics directory answered with. Saving is the dialog's own.
-msgid "Insert found lyrics"
-msgstr "Εισαγωγή στίχων που βρέθηκαν"
-
-# The Now Playing lyrics menu. "Look up again" forgets what the directory said about this
-# track and asks once more, for a sheet matched off tags that have since been corrected;
-# "Save to file" writes the sheet on screen into the track's own lyrics tag.
-msgid "Look up again"
-msgstr "Νέα αναζήτηση"
-
-msgid "Edit lyrics…"
-msgstr "Επεξεργασία στίχων…"
-
-msgid "Save to file"
-msgstr "Αποθήκευση στο αρχείο"
-
-# Toast title after the Now Playing menu writes the sheet on screen into the track's own
-# lyrics tag. The detail line beside it is the track's title.
-msgid "Lyrics saved"
-msgstr "Οι στίχοι αποθηκεύτηκαν"
-
-# The Edit-Track-Information dialog's Credits and Details tabs. Every role below is a
-# credit a file can carry; the rest are the release-level tags beside them.
-msgid "Credits"
-msgstr "Συντελεστές"
-
-msgid "Details"
-msgstr "Λεπτομέρειες"
-
-msgid "Lyricist"
-msgstr "Στιχουργός"
-
-msgid "Arranger"
-msgstr "Ενορχηστρωτής"
-
-msgid "Conductor"
-msgstr "Μαέστρος"
-
-msgid "Performer"
-msgstr "Ερμηνευτής"
-
-msgid "Remixer"
-msgstr "Remixer"
-
-msgid "Producer"
-msgstr "Παραγωγός"
-
-msgid "Engineer"
-msgstr "Ηχολήπτης"
-
-msgid "Mixer"
-msgstr "Μίκτης"
-
-msgid "DJ Mixer"
-msgstr "DJ mixer"
-
-msgid "Subtitle"
-msgstr "Υπότιτλος"
-
-msgid "Disc Subtitle"
-msgstr "Υπότιτλος δίσκου"
-
-msgid "Grouping"
-msgstr "Ομαδοποίηση"
-
-msgid "Work"
-msgstr "Έργο"
-
-msgid "Movement"
-msgstr "Μέρος"
-
-# Labels for the second and third box of a numbered pair: "Track 3 / Total 12".
-msgid "Number"
-msgstr "Αριθμός"
-
-msgid "Total"
-msgstr "Σύνολο"
-
-# Musical key, as in A minor — not a keyboard key or a lookup key.
-msgid "Key"
-msgstr "Τονικότητα"
-
-msgid "Mood"
-msgstr "Διάθεση"
-
-msgid "ISRC"
-msgstr "ISRC"
-
-msgid "Copyright"
-msgstr "Πνευματικά δικαιώματα"
-
-msgid "Record Label"
-msgstr "Δισκογραφική εταιρεία"
-
-msgid "Catalog Number"
-msgstr "Αριθμός καταλόγου"
-
-msgid "Barcode"
-msgstr "Γραμμωτός κώδικας"
-
-# The physical medium a release came out on — CD, vinyl, digital.
-msgid "Media"
-msgstr "Μέσο"
-
-msgid "Release Type"
-msgstr "Τύπος κυκλοφορίας"
-
-msgid "Release Country"
-msgstr "Χώρα κυκλοφορίας"
-
-msgid "Part of a compilation"
-msgstr "Μέρος συλλογής"
-
-msgid "Show Up Next"
-msgstr "Εμφάνιση επόμενων"
-
-msgid "Album Backdrop: on"
-msgstr "Φόντο άλμπουμ: ενεργό"
-
-msgid "Album Backdrop: off"
-msgstr "Φόντο άλμπουμ: ανενεργό"
-
-msgid "Full Player"
-msgstr "Πλήρης αναπαραγωγέας"
-
-msgid "Miniplayer"
-msgstr "Μίνι αναπαραγωγέας"
-
-msgid "Window Buttons"
-msgstr "Κουμπιά παραθύρου"
-
-msgid "The minimize, full player and close buttons in the miniplayer's corner."
-msgstr "Τα κουμπιά ελαχιστοποίησης, πλήρους αναπαραγωγέα και κλεισίματος στη γωνία του μίνι αναπαραγωγέα."
-
-msgid "Album Backdrop"
-msgstr "Φόντο άλμπουμ"
-
-msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
-msgstr "Βάφει τον μίνι αναπαραγωγέα με τα χρώματα του άλμπουμ που παίζει, όπως κάνει η προβολή «Αναπαράγεται τώρα»."
-
-# ---- Entity card context menu -----------------------------------------------
-
-msgid "Rename…"
-msgstr "Μετονομασία…"
-
-msgid "Edit Artwork…"
-msgstr "Επεξεργασία εικόνας…"
-
-msgid "Edit Rules…"
-msgstr "Επεξεργασία κανόνων…"
-
-msgid "Delete Playlist"
-msgstr "Διαγραφή λίστας"
-
-msgid "Delete {} Playlists"
-msgstr "Διαγραφή {} λιστών"
-
-msgid "Show in File Manager"
-msgstr "Εμφάνιση στη διαχείριση αρχείων"
-
-msgid "More playlist actions"
-msgstr "Περισσότερες ενέργειες λίστας"
-
-msgid "Delete {} playlists?"
-msgstr "Διαγραφή {} λιστών;"
-
-msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
-msgstr "Οι λίστες και η σειρά των κομματιών τους θα καταργηθούν. Τα ίδια τα κομμάτια παραμένουν στη βιβλιοθήκη σας."
-
-msgid "Edit Artwork"
-msgstr "Επεξεργασία εικόνας"
-
-msgid "Apply"
-msgstr "Εφαρμογή"
-
-# ---- Tag-edit completion toast: the fields a container had no key for -------
-
-msgid "Track Total"
-msgstr "Σύνολο κομματιών"
-
-msgid "Disc Total"
-msgstr "Σύνολο δίσκων"
-
-msgid "Movement Number"
-msgstr "Αριθμός μέρους"
-
-msgid "Movement Total"
-msgstr "Σύνολο μερών"
-
-msgid "{} can't be saved to {} files"
-msgstr "Το {} δεν μπορεί να αποθηκευτεί σε αρχεία {}"
-
-msgid "Output"
-msgstr "Έξοδος"
-
-msgid "Match the File's Sample Rate"
-msgstr "Αντιστοίχιση ρυθμού δειγματοληψίας αρχείου"
-
-msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate"
-msgstr "Ανοίγει ξανά τη συσκευή ήχου στον ρυθμό κάθε κομματιού, ώστε το σύστημα να μην τον μετατρέπει. Το σύστημα πρέπει να επιτρέπει αυτόν τον ρυθμό"
-
-msgid "Overlap the end of one track with the start of the next, unless the device has to change format between them"
-msgstr "Επικάλυψε το τέλος ενός κομματιού με την αρχή του επόμενου, εκτός αν η συσκευή πρέπει να αλλάξει μορφή ανάμεσά τους"
-
-msgid "Signal Path"
-msgstr "Διαδρομή σήματος"
-
-msgid "What reaches the audio device, and what changes it on the way. Bit-perfect means nothing does"
-msgstr "Τι φτάνει στη συσκευή ήχου και τι το αλλάζει στη διαδρομή. Bit-perfect σημαίνει ότι τίποτα δεν το αλλάζει"
-
-msgid "Nothing is playing"
-msgstr "Δεν αναπαράγεται τίποτα"
-
-msgid "Bit-perfect: the device receives the decoder's samples untouched"
-msgstr "Bit-perfect: η συσκευή λαμβάνει τα δείγματα του αποκωδικοποιητή αναλλοίωτα"
-
-msgid "Enhanced: only effects you chose change the sound"
-msgstr "Επεξεργασμένο: μόνο εφέ που επιλέξατε αλλάζουν τον ήχο"
-
-msgid "Converted: the sound is changed on its way to the device"
-msgstr "Μετατρεπόμενο: ο ήχος αλλάζει στη διαδρομή προς τη συσκευή"
-
-msgid "Bit-perfect"
-msgstr "Bit-perfect"
-
-msgid "Enhanced"
-msgstr "Επεξεργασμένο"
-
-msgid "Fallback"
-msgstr "Εναλλακτική"
-
-msgid "Converted"
-msgstr "Μετατρεπόμενο"
-
-msgid "Lossy: the file is compressed, so the device gets the decoder's reconstruction of the recording"
-msgstr "Απωλεστικό: το αρχείο είναι συμπιεσμένο, οπότε η συσκευή λαμβάνει την ανακατασκευή της ηχογράφησης από τον αποκωδικοποιητή"
-
-msgid "Lossy"
-msgstr "Απωλεστικό"
-
-msgid "Make Bit-Perfect"
-msgstr "Κάνε το bit-perfect"
-
-msgid "Switch to Exclusive Output?"
-msgstr "Μετάβαση σε αποκλειστική έξοδο;"
-
-msgid "Bit-perfect playback needs exclusive output. Other apps can't play through the device while Melodia does, and the system volume stops applying: Melodia's own volume goes to full unless Hardware Volume is on."
-msgstr "Η αναπαραγωγή bit-perfect χρειάζεται αποκλειστική έξοδο. Άλλες εφαρμογές δεν μπορούν να παίξουν μέσω της συσκευής όσο παίζει το Melodia, και η ένταση συστήματος παύει να ισχύει: η ένταση του ίδιου του Melodia πηγαίνει στο μέγιστο, εκτός αν είναι ενεργή η Ένταση υλικού."
-
-msgid "Switch"
-msgstr "Μετάβαση"
-
-msgid "Source"
-msgstr "Πηγή"
-
-msgid "{}, rounded to fit 32-bit float"
-msgstr "{}, στρογγυλεμένο σε float 32 bit"
-
-msgid "{}, decoded from a lossy codec"
-msgstr "{}, αποκωδικοποιημένο από απωλεστικό codec"
-
-msgid "Effects"
-msgstr "Εφέ"
-
-msgid "No effects"
-msgstr "Χωρίς εφέ"
-
-msgid "Equalizer and ReplayGain"
-msgstr "Ισοσταθμιστής και ReplayGain"
-
-msgid "Normal"
-msgstr "Κανονική"
-
-msgid "Volume"
-msgstr "Ένταση"
-
-msgid "Muted"
-msgstr "Σε σίγαση"
-
-msgid "Not fading"
-msgstr "Χωρίς μετάβαση"
-
-msgid "Fading between tracks"
-msgstr "Σταδιακή μετάβαση μεταξύ κομματιών"
-
-msgid "{} resampled to {}"
-msgstr "{} με μετατροπή σε {}"
-
-msgid "Unchanged"
-msgstr "Αμετάβλητα"
-
-msgid "Mixed down for the device"
-msgstr "Υπομίξη για τη συσκευή"
-
-msgid "Device"
-msgstr "Συσκευή"
-
-msgid "{}, shared: the system mixer may still convert it"
-msgstr "{}, κοινόχρηστη: ο μίκτης του συστήματος μπορεί ακόμη να το μετατρέψει"
-
-msgid "Output Mode"
-msgstr "Λειτουργία εξόδου"
-
-msgid "Exclusive gives Melodia the audio device alone: other apps can't play through it while Melodia plays, and the system mixer can't change the sound"
-msgstr "Η αποκλειστική δίνει τη συσκευή ήχου μόνο στο Melodia: άλλες εφαρμογές δεν μπορούν να παίξουν μέσω αυτής όσο παίζει το Melodia, και ο μίκτης του συστήματος δεν μπορεί να αλλάξει τον ήχο"
-
-msgid "Shared"
-msgstr "Κοινόχρηστη"
-
-msgid "Exclusive"
-msgstr "Αποκλειστική"
-
-msgid "Exclusive Device"
-msgstr "Αποκλειστική συσκευή"
-
-msgid "The sound card exclusive output takes"
-msgstr "Η κάρτα ήχου που καταλαμβάνει η αποκλειστική έξοδος"
-
-msgid "Output Device"
-msgstr "Συσκευή εξόδου"
-
-msgid "The sound card Melodia plays through"
-msgstr "Η κάρτα ήχου από την οποία παίζει το Melodia"
-
-msgid "System Default"
-msgstr "Προεπιλογή συστήματος"
-
-msgid "Fallback: exclusive output was refused, so the system mixer is in the way"
-msgstr "Εναλλακτική: η αποκλειστική έξοδος απορρίφθηκε, οπότε ο μίκτης του συστήματος παρεμβάλλεται"
-
-msgid "the device is in use by another app"
-msgstr "η συσκευή χρησιμοποιείται από άλλη εφαρμογή"
-
-msgid "{} holds the device"
-msgstr "η συσκευή είναι δεσμευμένη από {}"
-
-msgid "another app holds the device"
-msgstr "άλλη εφαρμογή έχει δεσμεύσει τη συσκευή"
-
-msgid "the device can't run at this sample rate"
-msgstr "η συσκευή δεν υποστηρίζει αυτόν τον ρυθμό δειγματοληψίας"
-
-msgid "the device can't play this many channels"
-msgstr "η συσκευή δεν μπορεί να αναπαράγει τόσα κανάλια"
-
-msgid "the device takes no sample format that holds this track"
-msgstr "η συσκευή δεν δέχεται καμία μορφή δειγμάτων που να χωρά αυτό το κομμάτι"
-
-msgid "the chosen device isn't connected"
-msgstr "η επιλεγμένη συσκευή δεν είναι συνδεδεμένη"
-
-msgid "exclusive output isn't available on this system"
-msgstr "η αποκλειστική έξοδος δεν είναι διαθέσιμη σε αυτό το σύστημα"
-
-msgid "the device doesn't allow exclusive control, which its Advanced properties in the Sound control panel can turn on"
-msgstr "η συσκευή δεν επιτρέπει αποκλειστικό έλεγχο, που ενεργοποιείται στις ιδιότητές της, στην καρτέλα Για προχωρημένους του πίνακα ελέγχου Ήχου"
-
-msgid "the device couldn't be opened"
-msgstr "δεν ήταν δυνατό να ανοίξει η συσκευή"
-
-msgid "{}, shared: exclusive output was refused because {}"
-msgstr "{}, κοινόχρηστη: η αποκλειστική έξοδος απορρίφθηκε ({})"
-
-msgid "{}, exclusive"
-msgstr "{}, αποκλειστική"
-
-msgid "{}, exclusive, in a format that can't hold the source exactly"
-msgstr "{}, αποκλειστική, σε μορφή που δεν χωρά την πηγή ακριβώς"
-
-msgid "Buffer Period"
-msgstr "Περίοδος προσωρινής μνήμης"
-
-msgid "How much audio the device is handed at a time. Longer periods ride out a busy system; shorter ones react sooner"
-msgstr "Πόσος ήχος δίνεται στη συσκευή κάθε φορά. Οι μεγαλύτερες περίοδοι αντέχουν ένα φορτωμένο σύστημα, οι μικρότερες αντιδρούν γρηγορότερα"
-
-msgid "Polling Mode"
-msgstr "Λειτουργία περιοδικού ελέγχου"
-
-msgid "Top the device up on a timer instead of waiting for it to ask. Try it if a USB device stutters or crackles in exclusive mode"
-msgstr "Τροφοδοσία της συσκευής με χρονόμετρο αντί να περιμένει να το ζητήσει. Δοκιμάστε το αν μια συσκευή USB κολλάει ή τρίζει σε αποκλειστική λειτουργία"
-
-msgid "{} ms"
-msgstr "{} ms"
-
-msgid "The device is running at {}"
-msgstr "Η συσκευή λειτουργεί στα {}"
-
-msgid "{} refused exclusive output because {}. Playing shared on {}"
-msgstr "{}: η αποκλειστική έξοδος απορρίφθηκε ({}). Κοινόχρηστη αναπαραγωγή μέσω {}"
-
-msgid "Silence After a Rate Change"
-msgstr "Σιωπή μετά από αλλαγή ρυθμού"
-
-msgid "Exclusive output unavailable"
-msgstr "Η αποκλειστική έξοδος δεν είναι διαθέσιμη"
-
-msgid "Exclusive output was refused, so Melodia is playing shared for now. The Output section of Settings says why."
-msgstr "Η αποκλειστική έξοδος απορρίφθηκε, οπότε το Melodia παίζει προς το παρόν σε κοινόχρηστη λειτουργία. Η ενότητα «Έξοδος» στις Ρυθμίσεις εξηγεί τον λόγο."
-
-msgid "{} refused exclusive output, so Melodia is playing shared for now. The Output section of Settings says why."
-msgstr "{}: η αποκλειστική έξοδος απορρίφθηκε, οπότε το Melodia παίζει προς το παρόν σε κοινόχρηστη λειτουργία. Η ενότητα «Έξοδος» στις Ρυθμίσεις εξηγεί τον λόγο."
-
-msgid "Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off"
-msgstr "Ορισμένοι DAC σιγούν για λίγο όταν αλλάζουν ρυθμό δειγματοληψίας. Μια σύντομη σιωπή σε κάθε αλλαγή κρατά την αρχή του κομματιού ανέπαφη"
-
-msgid "Hardware Volume"
-msgstr "Ένταση υλικού"
-
-msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
-msgstr "Ρύθμιση του ελέγχου έντασης της ίδιας της συσκευής αντί για κλιμάκωση των δειγμάτων, ώστε το ρυθμιστικό έντασης να κρατά τον ήχο bit-perfect. Αυτός ο έλεγχος είναι η ένταση συστήματος της συσκευής και επανέρχεται όταν το Melodia αφήσει τη συσκευή. Οι συσκευές χωρίς δικό τους έλεγχο κρατούν την ένταση του Melodia"
-
-msgid "Give the Device Back When Paused"
-msgstr "Επιστροφή της συσκευής σε παύση"
-
-msgid "After five minutes paused, hand the device back so other apps can play through it. Pressing play takes it again"
-msgstr "Μετά από πέντε λεπτά σε παύση, η συσκευή επιστρέφεται ώστε άλλες εφαρμογές να μπορούν να παίξουν μέσω αυτής. Με την αναπαραγωγή το Melodia την ξαναπαίρνει"
-
-msgid "Unsupported Sample Rates"
-msgstr "Μη υποστηριζόμενοι ρυθμοί δειγματοληψίας"
-
-msgid "What exclusive output does when the device can't run a track's sample rate: hand the device back and play that track through the system mixer, or keep the device and convert the track to a rate it can run"
-msgstr "Τι κάνει η αποκλειστική έξοδος όταν η συσκευή δεν υποστηρίζει τον ρυθμό δειγματοληψίας ενός κομματιού: επιστρέφει τη συσκευή και παίζει αυτό το κομμάτι μέσω του μίκτη του συστήματος ή κρατά τη συσκευή και μετατρέπει το κομμάτι σε έναν ρυθμό που υποστηρίζει"
-
-msgid "Play Through the System Mixer"
-msgstr "Αναπαραγωγή μέσω του μίκτη του συστήματος"
-
-msgid "Resample and Keep Exclusive"
-msgstr "Μετατροπή και διατήρηση αποκλειστικότητας"
-
-msgid "{}% on the device"
-msgstr "{}% στη συσκευή"
-
-msgid "{}% (the device muted)"
-msgstr "{}% (η συσκευή σε σίγαση)"
-
-msgid "{}% (the device at {}%)"
-msgstr "{}% (η συσκευή στο {}%)"
-
-# ---- Copy, and the station card menu ----------------------------------------
-
-msgid "Copy"
-msgstr "Αντιγραφή"
-
-msgid "Copy Name"
-msgstr "Αντιγραφή ονόματος"
-
-msgid "Copy Path"
-msgstr "Αντιγραφή διαδρομής"
-
+#: ui/components/onboarding/music-panel.slint
+#: ui/views/settings/library-section.slint
+msgid "Add a folder to scan for music files."
+msgstr "Πρόσθεσε έναν φάκελο για σάρωση αρχείων μουσικής."
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Your Music folder: {}"
+msgstr "Ο φάκελος μουσικής σας: {}"
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Add Music Folder"
+msgstr "Προσθήκη φακέλου μουσικής"
+
+#: ui/components/onboarding/music-panel.slint
+#: ui/views/settings/library-section.slint
+msgid "Add Folder"
+msgstr "Προσθήκη φακέλου"
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Choose Another Folder"
+msgstr "Επιλογή άλλου φακέλου"
+
+#. Translators: Melodia is the product name and stays as is
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Welcome to Melodia"
+msgstr "Καλώς ορίσατε στο Melodia"
+
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Skip"
+msgstr "Παράλειψη"
+
+#: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
+msgid "Back"
+msgstr "Πίσω"
+
+#: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
+msgid "Next"
+msgstr "Επόμενο"
+
+#: ui/components/search-bar.slint
+msgid "Search…"
+msgstr "Αναζήτηση…"
+
+#: ui/components/settings/folder-row.slint
+msgid "Rescan"
+msgstr "Επανασάρωση"
+
+#: ui/components/settings/scan-progress.slint
+msgid "Looking for music… {n} file found"
+msgid_plural "Looking for music… {n} files found"
+msgstr[0] "Αναζήτηση μουσικής… βρέθηκε {n} αρχείο"
+msgstr[1] "Αναζήτηση μουσικής… βρέθηκαν {n} αρχεία"
+
+#: ui/components/settings/scan-progress.slint
+msgid "Finishing up…"
+msgstr "Ολοκλήρωση…"
+
+#: ui/components/settings/scan-progress.slint
+msgid "Stopping…"
+msgstr "Διακοπή…"
+
+#. Translators: files read so far, the total, then the file being read
+#: ui/components/settings/scan-progress.slint
+msgid "{} / {} files · {}"
+msgstr "{} / {} αρχεία · {}"
+
+#. Translators: files read so far, then the total
+#: ui/components/settings/scan-progress.slint
+msgid "{} / {} files"
+msgstr "{} / {} αρχεία"
+
+#: ui/components/settings/scan-progress.slint ui/globals/dialog-forms.slint
+#: ui/globals/dialog.slint ui/views/queue-sheet.slint
+#: ui/views/radio/tab-pills.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/library-section.slint
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/scrobbling-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Cancel"
+msgstr "Άκυρο"
+
+#: ui/components/sort-menu-popup.slint
+msgid "Sort"
+msgstr "Ταξινόμηση"
+
+#: ui/components/station-facts.slint
+msgid "Stream"
+msgstr "Ροή"
+
+#: ui/components/station-facts.slint
+msgid "Copy stream URL"
+msgstr "Αντιγραφή URL ροής"
+
+#: ui/components/station-facts.slint
+msgid "Open in your browser"
+msgstr "Άνοιγμα στο πρόγραμμα περιήγησης"
+
+#: ui/components/station-facts.slint ui/views/radio/suggestion-pill.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Format"
+msgstr "Μορφή"
+
+#: ui/components/station-facts.slint ui/views/radio/station-grid.slint
+msgid "{} kbps"
+msgstr "{} kbps"
+
+#: ui/components/station-facts.slint
+msgid "Votes"
+msgstr "Ψήφοι"
+
+#: ui/components/station-facts.slint
+msgid "{n} vote"
+msgid_plural "{n} votes"
+msgstr[0] "{n} ψήφος"
+msgstr[1] "{n} ψήφοι"
+
+#: ui/components/station-facts.slint ui/globals/hero-chips.slint
+msgid "{n} play"
+msgid_plural "{n} plays"
+msgstr[0] "{n} αναπαραγωγή"
+msgstr[1] "{n} αναπαραγωγές"
+
+#: ui/components/station-facts.slint
+msgid "Recently played on this station"
+msgstr "Πρόσφατα σε αυτόν τον σταθμό"
+
+#: ui/components/station-facts.slint
 msgid "Copy Title"
 msgstr "Αντιγραφή τίτλου"
 
+#: ui/components/station-facts.slint
 msgid "Copy Artist"
 msgstr "Αντιγραφή καλλιτέχνη"
 
+#: ui/components/track-copy-items.slint
 msgid "Artist - Title"
 msgstr "Καλλιτέχνης - Τίτλος"
 
-msgid "Artist - Album"
-msgstr "Καλλιτέχνης - Άλμπουμ"
-
+#: ui/components/track-copy-items.slint
 msgid "File Path"
 msgstr "Διαδρομή αρχείου"
 
-msgid "Copied to clipboard"
-msgstr "Αντιγράφηκε στο πρόχειρο"
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Columns"
+msgstr "Στήλες"
 
-msgid "Nothing to copy"
-msgstr "Τίποτα για αντιγραφή"
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Artwork"
+msgstr "Εξώφυλλο"
 
-msgid "Open Website"
-msgstr "Άνοιγμα ιστότοπου"
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint
+msgid "Length"
+msgstr "Διάρκεια"
 
-msgid "Edit…"
-msgstr "Επεξεργασία…"
+#. Translators: `{}` is how many items are selected
+#: ui/components/track-list/track-context-menu.slint
+msgid "Add {} to Playlist"
+msgstr "Προσθήκη {} σε λίστα αναπαραγωγής"
 
-msgid "Remove from Favorites…"
-msgstr "Κατάργηση από τα αγαπημένα…"
+#: ui/components/track-list/track-context-menu.slint
+msgid "Go to Album"
+msgstr "Μετάβαση στο άλμπουμ"
 
-msgid "Remove from Recently Played…"
-msgstr "Αφαίρεση από τα πρόσφατα αναπαραγόμενα…"
+#: ui/components/track-list/track-context-menu.slint
+msgid "Go to Genre"
+msgstr "Μετάβαση στο είδος"
 
-msgid "Remove {} from Favorites…"
-msgstr "Αφαίρεση {} από τα αγαπημένα…"
+#. Translators: `{}` is how many items are selected
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove {} from Playlist"
+msgstr "Αφαίρεση {} από τη λίστα"
 
-msgid "Remove {} from Recently Played…"
-msgstr "Αφαίρεση {} από τα πρόσφατα αναπαραγόμενα…"
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove from Playlist"
+msgstr "Αφαίρεση από τη λίστα"
 
+#. Translators: `{}` is how many items are selected
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove {} from Queue"
+msgstr "Κατάργηση {} από την ουρά"
+
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove from Queue"
+msgstr "Κατάργηση από την ουρά"
+
+#: ui/components/track-list/track-list-row.slint
+msgid "Unknown album"
+msgstr "Άγνωστο άλμπουμ"
+
+# Greek pluralizes a noun after a numeral, so the two forms differ.
+#: ui/globals/curated.slint ui/globals/hero-chips.slint
+msgid "{n} favorite"
+msgid_plural "{n} favorites"
+msgstr[0] "{n} αγαπημένο"
+msgstr[1] "{n} αγαπημένα"
+
+#: ui/globals/dialog-forms.slint
+msgid "That token wasn't accepted. Check it and try again."
+msgstr "Το διακριτικό δεν έγινε δεκτό. Ελέγξτε το και δοκιμάστε ξανά."
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't reach the service. Check your connection and try again."
+msgstr "Δεν ήταν δυνατή η σύνδεση με την υπηρεσία. Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά."
+
+#: ui/globals/dialog-forms.slint
+msgid "Not approved yet. Approve Melodia in your browser, then click Finish."
+msgstr "Δεν έχει εγκριθεί ακόμη. Εγκρίνετε το Melodia στο πρόγραμμα περιήγησης και μετά κάντε κλικ στο Ολοκλήρωση."
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't save your credentials."
+msgstr "Δεν ήταν δυνατή η αποθήκευση των διαπιστευτηρίων σας."
+
+#: ui/globals/dialog-forms.slint
+msgid "Edit Station"
+msgstr "Επεξεργασία σταθμού"
+
+#: ui/globals/dialog-forms.slint
+msgid "Station Details"
+msgstr "Στοιχεία σταθμού"
+
+#: ui/globals/dialog-forms.slint ui/globals/dialog.slint
+msgid "Save"
+msgstr "Αποθήκευση"
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't reach that address. Check the URL and your connection."
+msgstr "Η διεύθυνση δεν είναι προσβάσιμη. Ελέγξτε το URL και τη σύνδεσή σας."
+
+#: ui/globals/dialog-forms.slint
+msgid "That address doesn't play as audio Melodia can decode."
+msgstr "Η διεύθυνση δεν δίνει ήχο που μπορεί να αποκωδικοποιήσει το Melodia."
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't save the station."
+msgstr "Δεν ήταν δυνατή η αποθήκευση του σταθμού."
+
+#: ui/globals/dialog-forms.slint
+msgid "That doesn't look like a web address. It should start with https://"
+msgstr "Αυτό δεν μοιάζει με διεύθυνση ιστού. Θα πρέπει να ξεκινά με https://"
+
+#: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
+msgid "New Playlist"
+msgstr "Νέα λίστα"
+
+#: ui/globals/dialog.slint
+msgid "Create"
+msgstr "Δημιουργία"
+
+#: ui/globals/dialog.slint
+msgid "Rename Playlist"
+msgstr "Μετονομασία λίστας"
+
+#: ui/globals/dialog.slint
+msgid "Delete playlist?"
+msgstr "Διαγραφή λίστας;"
+
+#: ui/globals/dialog.slint
+msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
+msgstr "Η λίστα και η σειρά των κομματιών της θα καταργηθούν. Τα ίδια τα κομμάτια παραμένουν στη βιβλιοθήκη σας."
+
+#: ui/globals/dialog.slint
+msgid "Delete"
+msgstr "Διαγραφή"
+
+#: ui/globals/dialog.slint
+msgid "Delete {} playlists?"
+msgstr "Διαγραφή {} λιστών;"
+
+#: ui/globals/dialog.slint
+msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
+msgstr "Οι λίστες και η σειρά των κομματιών τους θα καταργηθούν. Τα ίδια τα κομμάτια παραμένουν στη βιβλιοθήκη σας."
+
+#: ui/globals/dialog.slint
+msgid "Remove from Recently Played?"
+msgstr "Αφαίρεση από τα πρόσφατα αναπαραγόμενα;"
+
+#: ui/globals/dialog.slint
+msgid "Remove from favorites?"
+msgstr "Αφαίρεση από τα αγαπημένα;"
+
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from Recently Played."
+msgstr "Ο σταθμός «{}» θα αφαιρεθεί από τα πρόσφατα αναπαραγόμενα."
+
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from your stations, along with its play history."
+msgstr "Ο σταθμός «{}» θα αφαιρεθεί μαζί με το ιστορικό αναπαραγωγής του."
+
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from your favorites."
+msgstr "Ο σταθμός «{}» θα αφαιρεθεί από τα αγαπημένα σας."
+
+#: ui/globals/dialog.slint
 msgid "Remove {n} station from Recently Played?"
 msgid_plural "Remove {n} stations from Recently Played?"
 msgstr[0] "Αφαίρεση {n} σταθμού από τα πρόσφατα αναπαραγόμενα;"
 msgstr[1] "Αφαίρεση {n} σταθμών από τα πρόσφατα αναπαραγόμενα;"
 
+#: ui/globals/dialog.slint
 msgid "Remove {n} station from favorites?"
 msgid_plural "Remove {n} stations from favorites?"
 msgstr[0] "Αφαίρεση {n} σταθμού από τα αγαπημένα;"
 msgstr[1] "Αφαίρεση {n} σταθμών από τα αγαπημένα;"
 
+#: ui/globals/dialog.slint
 msgid "The stations will be removed from Recently Played."
 msgstr "Οι σταθμοί θα αφαιρεθούν από τα πρόσφατα αναπαραγόμενα."
 
+#: ui/globals/dialog.slint
 msgid "The stations will be removed from your favorites. Any you added by hand are removed from your stations, along with their play history."
 msgstr "Οι σταθμοί θα αφαιρεθούν από τα αγαπημένα σας. Όσοι προστέθηκαν χειροκίνητα θα αφαιρεθούν από τους σταθμούς σας, μαζί με το ιστορικό αναπαραγωγής τους."
+
+#: ui/globals/dialog.slint
+msgid "Edit Rules"
+msgstr "Επεξεργασία κανόνων"
+
+#: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
+msgid "New Smart Playlist"
+msgstr "Νέα έξυπνη λίστα"
+
+#: ui/globals/dialog.slint
+msgid "Edit Artwork"
+msgstr "Επεξεργασία εικόνας"
+
+#: ui/globals/dialog.slint
+msgid "Apply"
+msgstr "Εφαρμογή"
+
+#: ui/globals/dialog.slint
+msgid "Export Playlists"
+msgstr "Εξαγωγή λιστών"
+
+#: ui/globals/dialog.slint
+msgid "Choose playlists to export."
+msgstr "Επιλέξτε λίστες για εξαγωγή."
+
+#: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Export"
+msgstr "Εξαγωγή"
+
+#: ui/globals/hero-chips.slint ui/views/my-library-view.slint
+msgid "{n} artist"
+msgid_plural "{n} artists"
+msgstr[0] "{n} καλλιτέχνης"
+msgstr[1] "{n} καλλιτέχνες"
+
+#: ui/globals/hero-chips.slint
+msgid "{n} disc"
+msgid_plural "{n} discs"
+msgstr[0] "{n} δίσκος"
+msgstr[1] "{n} δίσκοι"
+
+#: ui/globals/hero-chips.slint ui/settings.slint
+msgid "Compilation"
+msgstr "Συλλογή"
+
+#: ui/globals/player.slint
+msgid "No track playing"
+msgstr "Δεν παίζει κομμάτι"
+
+#. Translators: a state on the station pill, not the Pause button's verb
+#: ui/globals/player.slint
+msgid "Paused"
+msgstr "Σε παύση"
+
+#: ui/globals/player.slint
+msgid "Buffering…"
+msgstr "Προσωρινή αποθήκευση…"
+
+#. Translators: a short pill in place of a track's seek bar
+#: ui/globals/player.slint
+msgid "LIVE"
+msgstr "ΖΩΝΤΑΝΑ"
+
+#: ui/globals/player.slint
+msgid "Previous (hold to rewind)"
+msgstr "Προηγούμενο (κράτα πατημένο για γρήγορη επιστροφή)"
+
+#: ui/globals/player.slint
+msgid "Previous"
+msgstr "Προηγούμενο"
+
+#: ui/globals/player.slint
+msgid "Next (hold to fast-forward)"
+msgstr "Επόμενο (κράτα πατημένο για γρήγορη προώθηση)"
+
+#: ui/globals/signal-path.slint
+msgid "Nothing is playing"
+msgstr "Δεν αναπαράγεται τίποτα"
+
+#: ui/globals/signal-path.slint
+msgid "Bit-perfect: the device receives the decoder's samples untouched"
+msgstr "Bit-perfect: η συσκευή λαμβάνει τα δείγματα του αποκωδικοποιητή αναλλοίωτα"
+
+#: ui/globals/signal-path.slint
+msgid "Enhanced: only effects you chose change the sound"
+msgstr "Επεξεργασμένο: μόνο εφέ που επιλέξατε αλλάζουν τον ήχο"
+
+#: ui/globals/signal-path.slint
+msgid "Fallback: exclusive output was refused, so the system mixer is in the way"
+msgstr "Εναλλακτική: η αποκλειστική έξοδος απορρίφθηκε, οπότε ο μίκτης του συστήματος παρεμβάλλεται"
+
+#: ui/globals/signal-path.slint
+msgid "Lossy: the file is compressed, so the device gets the decoder's reconstruction of the recording"
+msgstr "Απωλεστικό: το αρχείο είναι συμπιεσμένο, οπότε η συσκευή λαμβάνει την ανακατασκευή της ηχογράφησης από τον αποκωδικοποιητή"
+
+#: ui/globals/signal-path.slint
+msgid "Converted: the sound is changed on its way to the device"
+msgstr "Μετατρεπόμενο: ο ήχος αλλάζει στη διαδρομή προς τη συσκευή"
+
+#: ui/globals/signal-path.slint
+msgid "Bit-perfect"
+msgstr "Bit-perfect"
+
+#: ui/globals/signal-path.slint
+msgid "Enhanced"
+msgstr "Επεξεργασμένο"
+
+#: ui/globals/signal-path.slint
+msgid "Fallback"
+msgstr "Εναλλακτική"
+
+#: ui/globals/signal-path.slint
+msgid "Lossy"
+msgstr "Απωλεστικό"
+
+#: ui/globals/signal-path.slint
+msgid "Converted"
+msgstr "Μετατρεπόμενο"
+
+#. Translators: the action a click takes, expanding the sidebar
+#: ui/layout/sidebar.slint
+msgid "Expand"
+msgstr "Ανάπτυξη"
+
+#: ui/layout/sidebar.slint
+msgid "Collapse"
+msgstr "Σύμπτυξη"
+
+#: ui/settings.slint
+msgid "System Default"
+msgstr "Προεπιλογή συστήματος"
+
+#: ui/settings.slint
+msgid "File watching disabled"
+msgstr "Παρακολούθηση αρχείων απενεργοποιημένη"
+
+#: ui/settings.slint
+msgid "Tracks won't reflect disk changes until you re-enable it."
+msgstr "Τα κομμάτια δεν θα αντικατοπτρίζουν τις αλλαγές στο δίσκο μέχρι να την ενεργοποιήσετε ξανά."
+
+#: ui/settings.slint
+msgid "Library re-syncing"
+msgstr "Επανασυγχρονισμός βιβλιοθήκης"
+
+#: ui/settings.slint
+msgid "Filesystem event burst — rescanning your folders."
+msgstr "Έξαρση συμβάντων συστήματος αρχείων — επανεξετάζονται οι φάκελοί σας."
+
+#: ui/settings.slint
+msgid "Restoring cover art"
+msgstr "Επαναφορά εξωφύλλων"
+
+#: ui/settings.slint
+msgid "Some cover art was missing. Melodia is restoring it from your music files."
+msgstr "Κάποια εξώφυλλα έλειπαν. Το Melodia τα επαναφέρει από τα αρχεία μουσικής σας."
+
+#: ui/settings.slint
+msgid "Update available"
+msgstr "Διαθέσιμη ενημέρωση"
+
+#: ui/settings.slint
+msgid "Melodia {} is ready to install."
+msgstr "Το Melodia {} είναι έτοιμο για εγκατάσταση."
+
+#: ui/settings.slint
+msgid "Install"
+msgstr "Εγκατάσταση"
+
+#: ui/settings.slint
+msgid "Update installed"
+msgstr "Η ενημέρωση εγκαταστάθηκε"
+
+#: ui/settings.slint
+msgid "Restart Melodia to start using the new version."
+msgstr "Επανεκκινήστε το Melodia για να χρησιμοποιήσετε τη νέα έκδοση."
+
+#: ui/settings.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Restart"
+msgstr "Επανεκκίνηση"
+
+#: ui/settings.slint
+msgid "Update failed"
+msgstr "Αποτυχία ενημέρωσης"
+
+#: ui/settings.slint
+msgid "Couldn't reach the update server. Check your internet connection."
+msgstr "Δεν ήταν δυνατή η σύνδεση με τον διακομιστή ενημερώσεων. Ελέγξτε τη σύνδεσή σας στο διαδίκτυο."
+
+#: ui/settings.slint
+msgid "Signature check failed. The downloaded update may be corrupted; please try again."
+msgstr "Ο έλεγχος υπογραφής απέτυχε. Η ενημέρωση που κατεβάσατε μπορεί να είναι κατεστραμμένη· δοκιμάστε ξανά."
+
+#: ui/settings.slint
+msgid "The update server returned an unexpected response."
+msgstr "Ο διακομιστής ενημερώσεων επέστρεψε μια μη αναμενόμενη απάντηση."
+
+#: ui/settings.slint
+msgid "Couldn't write the downloaded update to disk."
+msgstr "Δεν ήταν δυνατή η εγγραφή της ενημέρωσης στον δίσκο."
+
+#: ui/settings.slint
+msgid "Update failed. See logs for details."
+msgstr "Η ενημέρωση απέτυχε. Δείτε τα αρχεία καταγραφής για λεπτομέρειες."
+
+#: ui/settings.slint
+msgid "Diagnostics report saved"
+msgstr "Η αναφορά διαγνωστικών αποθηκεύτηκε"
+
+#: ui/settings.slint
+msgid "Saved to {}"
+msgstr "Αποθηκεύτηκε στο {}"
+
+#: ui/settings.slint
+msgid "Couldn't save the diagnostics report"
+msgstr "Δεν ήταν δυνατή η αποθήκευση της αναφοράς διαγνωστικών"
+
+#: ui/settings.slint
+msgid "See the log for details."
+msgstr "Δείτε το αρχείο καταγραφής για λεπτομέρειες."
+
+#: ui/settings.slint
+msgid "Melodia crashed last time"
+msgstr "Το Melodia κατέρρευσε την προηγούμενη φορά"
+
+#: ui/settings.slint
+msgid "A crash report was written. Open the log folder to find it."
+msgstr "Γράφτηκε μια αναφορά κατάρρευσης. Ανοίξτε τον φάκελο καταγραφής για να τη βρείτε."
+
+#: ui/settings.slint
+msgid "Enjoying Melodia?"
+msgstr "Σας αρέσει το Melodia;"
+
+#: ui/settings.slint
+msgid "It's free and open source, built in my spare time. If it's useful to you, you can support me. You'll only see this once."
+msgstr "Είναι δωρεάν και ανοιχτού κώδικα, φτιαγμένο στον ελεύθερο χρόνο μου. Αν σας φαίνεται χρήσιμο, μπορείτε να με στηρίξετε. Θα το δείτε μόνο μία φορά."
+
+#: ui/settings.slint
+msgid "Support"
+msgstr "Στήριξη"
+
+#: ui/settings.slint
+msgid "Audio device disconnected"
+msgstr "Η συσκευή ήχου αποσυνδέθηκε"
+
+#: ui/settings.slint
+msgid "Playback won't be audible until you reconnect it and restart Melodia."
+msgstr "Η αναπαραγωγή δεν θα ακούγεται μέχρι να τη συνδέσετε ξανά και να επανεκκινήσετε το Melodia."
+
+#: ui/settings.slint
+msgid "{n} playlist imported"
+msgid_plural "{n} playlists imported"
+msgstr[0] "{n} λίστα εισήχθη"
+msgstr[1] "{n} λίστες εισήχθησαν"
+
+#: ui/settings.slint
+msgid "{n} track added · {} missing"
+msgid_plural "{n} tracks added · {} missing"
+msgstr[0] "{n} κομμάτι προστέθηκε · {} λείπουν"
+msgstr[1] "{n} κομμάτια προστέθηκαν · {} λείπουν"
+
+#: ui/settings.slint
+msgid "{n} track added"
+msgid_plural "{n} tracks added"
+msgstr[0] "{n} κομμάτι προστέθηκε"
+msgstr[1] "{n} κομμάτια προστέθηκαν"
+
+#: ui/settings.slint
+msgid "Import failed"
+msgstr "Η εισαγωγή απέτυχε"
+
+#: ui/settings.slint
+msgid "Couldn't read the selected playlist file(s)."
+msgstr "Δεν ήταν δυνατή η ανάγνωση των επιλεγμένων αρχείων λίστας."
+
+#: ui/settings.slint
+msgid "{n} playlist exported"
+msgid_plural "{n} playlists exported"
+msgstr[0] "{n} λίστα εξήχθη"
+msgstr[1] "{n} λίστες εξήχθησαν"
+
+#: ui/settings.slint
+msgid "Export failed"
+msgstr "Η εξαγωγή απέτυχε"
+
+#: ui/settings.slint
+msgid "Couldn't write the playlist files."
+msgstr "Δεν ήταν δυνατή η εγγραφή των αρχείων λίστας."
+
+#: ui/settings.slint
+msgid "These playlists are too large for one .zip file. Export fewer at a time."
+msgstr "Αυτές οι λίστες είναι πολύ μεγάλες για ένα αρχείο .zip. Εξαγάγετε λιγότερες κάθε φορά."
+
+#: ui/settings.slint
+msgid "{n} station added"
+msgid_plural "{n} stations added"
+msgstr[0] "Προστέθηκε {n} σταθμός"
+msgstr[1] "Προστέθηκαν {n} σταθμοί"
+
+#: ui/settings.slint
+msgid "{n} was already in your list."
+msgid_plural "{n} were already in your list."
+msgstr[0] "{n} υπήρχε ήδη στη λίστα σας."
+msgstr[1] "{n} υπήρχαν ήδη στη λίστα σας."
+
+#: ui/settings.slint
+msgid "Couldn't read any stations from the selected file(s)."
+msgstr "Δεν βρέθηκαν σταθμοί στα επιλεγμένα αρχεία."
+
+#: ui/settings.slint
+msgid "{n} station exported"
+msgid_plural "{n} stations exported"
+msgstr[0] "Εξήχθη {n} σταθμός"
+msgstr[1] "Εξήχθησαν {n} σταθμοί"
+
+#: ui/settings.slint
+msgid "Couldn't write the station list."
+msgstr "Δεν ήταν δυνατή η εγγραφή της λίστας σταθμών."
+
+#: ui/settings.slint
+msgid "Playback error"
+msgstr "Σφάλμα αναπαραγωγής"
+
+#: ui/settings.slint
+msgid "Something went wrong"
+msgstr "Κάτι πήγε στραβά"
+
+#: ui/settings.slint
+msgid "Loved tracks"
+msgstr "Αγαπημένα κομμάτια"
+
+#: ui/settings.slint
+msgid "Lyrics saved"
+msgstr "Οι στίχοι αποθηκεύτηκαν"
+
+#: ui/settings.slint
+msgid "Copied to clipboard"
+msgstr "Αντιγράφηκε στο πρόχειρο"
+
+#: ui/settings.slint
+msgid "Nothing to copy"
+msgstr "Τίποτα για αντιγραφή"
+
+#: ui/settings.slint
+msgid "Vote not counted"
+msgstr "Η ψήφος δεν καταμετρήθηκε"
+
+#: ui/settings.slint
+msgid "Exclusive output unavailable"
+msgstr "Η αποκλειστική έξοδος δεν είναι διαθέσιμη"
+
+#: ui/settings.slint
+msgid "Exclusive output was refused, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "Η αποκλειστική έξοδος απορρίφθηκε, οπότε το Melodia παίζει προς το παρόν σε κοινόχρηστη λειτουργία. Η ενότητα «Έξοδος» στις Ρυθμίσεις εξηγεί τον λόγο."
+
+#: ui/settings.slint
+msgid "{} refused exclusive output, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "{}: η αποκλειστική έξοδος απορρίφθηκε, οπότε το Melodia παίζει προς το παρόν σε κοινόχρηστη λειτουργία. Η ενότητα «Έξοδος» στις Ρυθμίσεις εξηγεί τον λόγο."
+
+#: ui/settings.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Restart Required"
+msgstr "Απαιτείται επανεκκίνηση"
+
+#: ui/settings.slint
+msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
+msgstr "Το Melodia δεν μπόρεσε να επανεκκινήσει. Κλείστε και ανοίξτε ξανά την εφαρμογή για να εφαρμοστεί η αλλαγή."
+
+#: ui/settings.slint
+msgid "Added to {n} playlist"
+msgid_plural "Added to {n} playlists"
+msgstr[0] "Προστέθηκε σε {n} λίστα"
+msgstr[1] "Προστέθηκε σε {n} λίστες"
+
+#: ui/settings.slint
+msgid "‹multiple values›"
+msgstr "‹πολλαπλές τιμές›"
+
+#: ui/settings.slint
+msgid "{n} track updated"
+msgid_plural "{n} tracks updated"
+msgstr[0] "{n} κομμάτι ενημερώθηκε"
+msgstr[1] "{n} κομμάτια ενημερώθηκαν"
+
+#: ui/settings.slint
+msgid "{n} file failed"
+msgid_plural "{n} files failed"
+msgstr[0] "{n} αρχείο απέτυχε"
+msgstr[1] "{n} αρχεία απέτυχαν"
+
+#: ui/settings.slint
+msgid "{n} file has unsupported fields"
+msgid_plural "{n} files have unsupported fields"
+msgstr[0] "{n} αρχείο με μη υποστηριζόμενα πεδία"
+msgstr[1] "{n} αρχεία με μη υποστηριζόμενα πεδία"
+
+#: ui/settings.slint
+msgid "{} can't be saved to {} files"
+msgstr "Το {} δεν μπορεί να αποθηκευτεί σε αρχεία {}"
+
+#: ui/settings.slint
+msgid "Disc Total"
+msgstr "Σύνολο δίσκων"
+
+#: ui/settings.slint
+msgid "Track Total"
+msgstr "Σύνολο κομματιών"
+
+#: ui/settings.slint
+msgid "Movement Number"
+msgstr "Αριθμός μέρους"
+
+#: ui/settings.slint
+msgid "Movement Total"
+msgstr "Σύνολο μερών"
+
+#: ui/settings.slint
+msgid "Couldn't save tags"
+msgstr "Δεν ήταν δυνατή η αποθήκευση των ετικετών"
+
+#: ui/settings.slint
+msgid "No tracks were updated."
+msgstr "Δεν ενημερώθηκε κανένα κομμάτι."
+
+#: ui/views/browse-view.slint
+msgid "No library folders configured"
+msgstr "Δεν έχουν διαμορφωθεί φάκελοι βιβλιοθήκης"
+
+#: ui/views/browse-view.slint
+msgid "Open Settings to add a folder"
+msgstr "Άνοιξε τις Ρυθμίσεις για να προσθέσεις φάκελο"
+
+#: ui/views/browse-view.slint
+msgid "Open Settings"
+msgstr "Άνοιγμα Ρυθμίσεων"
+
+#: ui/views/browse-view.slint
+msgid "Could not load folder"
+msgstr "Δεν ήταν δυνατή η φόρτωση του φακέλου"
+
+#: ui/views/browse-view.slint
+msgid "Empty folder"
+msgstr "Άδειος φάκελος"
+
+#: ui/views/browse-view.slint
+msgid "Card view"
+msgstr "Προβολή καρτών"
+
+#: ui/views/browse-view.slint
+msgid "List view"
+msgstr "Προβολή λίστας"
+
+#: ui/views/favorites-view.slint ui/views/recently-played-view.slint
+msgid "Filter most played…"
+msgstr "Φιλτράρισμα δημοφιλών…"
+
+#: ui/views/favorites-view.slint ui/views/my-library-view.slint
+msgid "Filter artists…"
+msgstr "Φιλτράρισμα καλλιτεχνών…"
+
+#: ui/views/favorites-view.slint
+msgid "Filter favorites…"
+msgstr "Φιλτράρισμα αγαπημένων…"
+
+#: ui/views/favorites-view.slint
+msgid "Favorite Artists"
+msgstr "Αγαπημένοι καλλιτέχνες"
+
+#: ui/views/favorites-view.slint ui/views/recently-played-view.slint
+msgid "Most Played"
+msgstr "Πιο δημοφιλή"
+
+#: ui/views/favorites-view.slint ui/views/my-library-view.slint
+#: ui/views/recently-played-view.slint ui/views/search/songs-section.slint
+msgid "Songs"
+msgstr "Τραγούδια"
+
+#: ui/views/favorites-view.slint
+msgid "No favorites yet"
+msgstr "Δεν υπάρχουν αγαπημένα ακόμη"
+
+#: ui/views/favorites/artists-tab.slint
+msgid "No favorite artists yet"
+msgstr "Δεν υπάρχουν αγαπημένοι καλλιτέχνες ακόμη"
+
+#: ui/views/favorites/artists-tab.slint
+msgid "Favorite a song and its artist appears here."
+msgstr "Πρόσθεσε ένα τραγούδι στα αγαπημένα και θα εμφανιστεί ο καλλιτέχνης του εδώ."
+
+#: ui/views/favorites/most-played-tab.slint ui/views/radio-view.slint
+#: ui/views/recently-played/most-played-tab.slint
+msgid "Nothing played yet"
+msgstr "Δεν έχει παίξει τίποτα ακόμη"
+
+#: ui/views/favorites/most-played-tab.slint
+msgid "Play one of your favorites and it will show up here."
+msgstr "Παίξε ένα από τα αγαπημένα σου και θα εμφανιστεί εδώ."
+
+#: ui/views/my-library-view.slint
+msgid "{n} song"
+msgid_plural "{n} songs"
+msgstr[0] "{n} τραγούδι"
+msgstr[1] "{n} τραγούδια"
+
+#: ui/views/my-library-view.slint
+msgid "{n} genre"
+msgid_plural "{n} genres"
+msgstr[0] "{n} είδος"
+msgstr[1] "{n} είδη"
+
+#: ui/views/my-library-view.slint
+msgid "{n} playlist"
+msgid_plural "{n} playlists"
+msgstr[0] "{n} λίστα"
+msgstr[1] "{n} λίστες"
+
+#: ui/views/my-library-view.slint ui/views/my-library/artist-detail.slint
+#: ui/views/my-library/tab-pills.slint ui/views/search-view.slint
+msgid "Albums"
+msgstr "Άλμπουμ"
+
+#: ui/views/my-library-view.slint ui/views/search-view.slint
+msgid "Artists"
+msgstr "Καλλιτέχνες"
+
+#: ui/views/my-library-view.slint
+msgid "Genres"
+msgstr "Είδη"
+
+#: ui/views/my-library-view.slint
+msgid "Playlists"
+msgstr "Λίστες Αναπαραγωγής"
+
+#: ui/views/my-library-view.slint
+msgid "Filter tracks & albums…"
+msgstr "Φιλτράρισμα κομματιών & άλμπουμ…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter tracks…"
+msgstr "Φιλτράρισμα κομματιών…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter albums…"
+msgstr "Φιλτράρισμα άλμπουμ…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter genres…"
+msgstr "Φιλτράρισμα ειδών…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter playlists…"
+msgstr "Φιλτράρισμα λιστών…"
+
+#: ui/views/my-library/albums-tab.slint
+msgid "No albums yet"
+msgstr "Δεν υπάρχουν άλμπουμ ακόμη"
+
+#: ui/views/my-library/albums-tab.slint ui/views/my-library/artists-tab.slint
+#: ui/views/my-library/genres-tab.slint
+msgid "Add a music folder in Settings to start building your library."
+msgstr "Προσθέστε έναν φάκελο μουσικής στις Ρυθμίσεις για να αρχίσετε να χτίζετε τη βιβλιοθήκη σας."
+
+#: ui/views/my-library/artists-tab.slint
+msgid "No artists yet"
+msgstr "Δεν υπάρχουν καλλιτέχνες ακόμη"
+
+#: ui/views/my-library/genres-tab.slint
+msgid "No genres yet"
+msgstr "Δεν υπάρχουν είδη ακόμη"
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "No matching tracks"
+msgstr "Κανένα κομμάτι δεν ταιριάζει"
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "No tracks yet"
+msgstr "Δεν υπάρχουν κομμάτια ακόμη"
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "No tracks match these rules."
+msgstr "Κανένα κομμάτι δεν ταιριάζει με αυτούς τους κανόνες."
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "Drag music files here, or add tracks via any track's overflow menu."
+msgstr "Σύρετε αρχεία μουσικής εδώ, ή προσθέστε κομμάτια από το μενού οποιουδήποτε κομματιού."
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "Drop files to add to this playlist"
+msgstr "Αφήστε αρχεία για προσθήκη σε αυτή τη λίστα"
+
+#: ui/views/my-library/playlists-tab.slint
+msgid "No playlists yet"
+msgstr "Δεν υπάρχουν λίστες ακόμη"
+
+#: ui/views/my-library/playlists-tab.slint
+msgid "Click \"+ New Playlist\" to create one."
+msgstr "Πατήστε «+ Νέα λίστα» για να δημιουργήσετε μία."
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Tracks"
+msgstr "Κομμάτια"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Edit artwork"
+msgstr "Επεξεργασία εικόνας"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Rename"
+msgstr "Μετονομασία"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Edit rules"
+msgstr "Επεξεργασία κανόνων"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Delete playlist"
+msgstr "Διαγραφή λίστας"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Create an empty playlist"
+msgstr "Δημιουργία κενής λίστας"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Create a playlist from rules"
+msgstr "Δημιουργία λίστας από κανόνες"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "More playlist actions"
+msgstr "Περισσότερες ενέργειες λίστας"
+
+#: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
+msgid "Import"
+msgstr "Εισαγωγή"
+
+#: ui/views/now-playing-view.slint ui/views/radio/tab-pills.slint
+msgid "Vote"
+msgstr "Ψήφος"
+
+#. Translators: a heading in place of "Up Next", so keep it as short
+#: ui/views/now-playing-view.slint
+msgid "Station"
+msgstr "Σταθμός"
+
+#: ui/views/now-playing-view.slint
+msgid "Up Next"
+msgstr "Επόμενα"
+
+#: ui/views/placeholder-view.slint
+msgid "Coming soon"
+msgstr "Έρχεται σύντομα"
+
+#: ui/views/queue-sheet.slint
+msgid "No tracks"
+msgstr "Χωρίς κομμάτια"
+
+#: ui/views/queue-sheet.slint
+msgid "Clear queue"
+msgstr "Εκκαθάριση ουράς"
+
+#: ui/views/queue-sheet.slint
+msgid "Clear queue?"
+msgstr "Εκκαθάριση ουράς;"
+
+#: ui/views/queue-sheet.slint
+msgid "Remove all tracks from the queue? Playback will stop."
+msgstr "Να καταργηθούν όλα τα κομμάτια από την ουρά; Η αναπαραγωγή θα σταματήσει."
+
+#: ui/views/queue-sheet.slint
+msgid "Queue is empty"
+msgstr "Η ουρά είναι άδεια"
+
+#: ui/views/queue-sheet.slint
+msgid "Drop to add to queue"
+msgstr "Αφήστε για προσθήκη στην ουρά"
+
+#: ui/views/radio-view.slint ui/views/radio/suggestion-pill.slint
+msgid "{n} station"
+msgid_plural "{n} stations"
+msgstr[0] "{n} σταθμός"
+msgstr[1] "{n} σταθμοί"
+
+#: ui/views/radio-view.slint
+msgid "Search stations…"
+msgstr "Αναζήτηση σταθμών…"
+
+#: ui/views/radio-view.slint
+msgid "Filter stations…"
+msgstr "Φιλτράρισμα σταθμών…"
+
+#: ui/views/radio-view.slint
+msgid "No stations kept yet"
+msgstr "Δεν έχετε αποθηκεύσει σταθμούς ακόμη"
+
+#: ui/views/radio-view.slint
+msgid "Star a station in Browse, or add one by URL."
+msgstr "Σημειώστε έναν σταθμό στην Περιήγηση ή προσθέστε έναν με URL."
+
+#: ui/views/radio-view.slint
+msgid "Stations you listen to show up here."
+msgstr "Οι σταθμοί που ακούτε εμφανίζονται εδώ."
+
+#: ui/views/radio/browse-tab.slint
+msgid "Searching the directory…"
+msgstr "Αναζήτηση στον κατάλογο…"
+
+#: ui/views/radio/browse-tab.slint
+msgid "Stations are coming from radio-browser.info."
+msgstr "Οι σταθμοί προέρχονται από το radio-browser.info."
+
+#: ui/views/radio/browse-tab.slint
+msgid "The station directory is unreachable"
+msgstr "Ο κατάλογος σταθμών δεν είναι προσβάσιμος"
+
+#: ui/views/radio/browse-tab.slint
+msgid "Check your connection and try again."
+msgstr "Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά."
+
+#: ui/views/radio/browse-tab.slint
+msgid "Try again"
+msgstr "Δοκιμή ξανά"
+
+#: ui/views/radio/browse-tab.slint ui/views/radio/kept-stations-tab.slint
+msgid "No stations matched"
+msgstr "Δεν βρέθηκαν σταθμοί"
+
+#: ui/views/radio/browse-tab.slint ui/views/radio/kept-stations-tab.slint
+msgid "Try a different name, or clear a filter."
+msgstr "Δοκιμάστε άλλο όνομα ή καθαρίστε ένα φίλτρο."
+
+#: ui/views/radio/browse-tab.slint
+msgid "Load more stations"
+msgstr "Φόρτωση περισσότερων σταθμών"
+
+#: ui/views/radio/browse-tab.slint ui/views/radio/facet-chip.slint
+msgid "Loading…"
+msgstr "Φόρτωση…"
+
+#: ui/views/radio/facet-chip.slint
+msgid "Filter…"
+msgstr "Φιλτράρισμα…"
+
+#: ui/views/radio/facet-chip.slint
+msgid "Nothing to pick from"
+msgstr "Δεν υπάρχει τίποτα προς επιλογή"
+
+#: ui/views/radio/station-detail.slint
+msgid "The directory reached this station on its last check."
+msgstr "Ο κατάλογος προσέγγισε αυτόν τον σταθμό στον τελευταίο έλεγχο."
+
+#: ui/views/radio/station-detail.slint
+msgid "The directory could not reach this station on its last check."
+msgstr "Ο κατάλογος δεν μπόρεσε να προσεγγίσει αυτόν τον σταθμό στον τελευταίο έλεγχο."
+
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+msgid "{} kbps and up"
+msgstr "{} kbps και άνω"
+
+#: ui/views/radio/suggestion-pill.slint
+msgid "{}: {}"
+msgstr "{}: {}"
+
+#: ui/views/radio/tab-pills.slint
+msgid "Add Station"
+msgstr "Προσθήκη σταθμού"
+
+#: ui/views/radio/tab-pills.slint
+msgid "Added"
+msgstr "Προστέθηκε"
+
+#: ui/views/radio/tab-pills.slint
+msgid "More station actions"
+msgstr "Περισσότερες ενέργειες σταθμού"
+
+#: ui/views/radio/tab-pills.slint
+msgid "Edit"
+msgstr "Επεξεργασία"
+
+#: ui/views/recently-played-view.slint
+msgid "Filter recently played…"
+msgstr "Φιλτράρισμα πρόσφατα αναπαραγόμενων…"
+
+#: ui/views/recently-played-view.slint
+msgid "No recently played tracks"
+msgstr "Δεν υπάρχουν πρόσφατα αναπαραγόμενα κομμάτια"
+
+#: ui/views/recently-played/most-played-tab.slint
+msgid "Play something and it will show up here."
+msgstr "Παίξε κάτι και θα εμφανιστεί εδώ."
+
+#: ui/views/search-view.slint
+msgid "Searching…"
+msgstr "Αναζήτηση…"
+
+#: ui/views/search-view.slint
+msgid "Search your library…"
+msgstr "Αναζήτηση στη βιβλιοθήκη σας…"
+
+#: ui/views/search/no-results.slint
+msgid "No results found"
+msgstr "Δεν βρέθηκαν αποτελέσματα"
+
+#: ui/views/search/no-results.slint
+msgid "Try a different search term"
+msgstr "Δοκιμάστε διαφορετικούς όρους αναζήτησης"
+
+#: ui/views/search/recent-searches.slint
+msgid "Recent"
+msgstr "Πρόσφατα"
+
+#: ui/views/search/recent-searches.slint
+msgid "Clear all"
+msgstr "Καθαρισμός όλων"
+
+#: ui/views/search/songs-section.slint
+msgid "Show less"
+msgstr "Εμφάνιση λιγότερων"
+
+#: ui/views/search/songs-section.slint
+msgid "Show all {} songs"
+msgstr "Εμφάνιση και των {} τραγουδιών"
+
+#: ui/views/search/top-result-card.slint
+msgid "Top Result"
+msgstr "Κορυφαίο αποτέλεσμα"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/interface-page.slint
+msgid "Interface"
+msgstr "Διεπαφή"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/library-page.slint
+msgid "Library"
+msgstr "Βιβλιοθήκη"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/playback-page.slint
+#: ui/views/settings/playback-section.slint
+msgid "Playback"
+msgstr "Αναπαραγωγή"
+
+#: ui/views/settings-view.slint ui/views/settings/about-section.slint
+#: ui/views/settings/pages/about-page.slint
+msgid "About"
+msgstr "Σχετικά"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/services-page.slint
+msgid "Services"
+msgstr "Υπηρεσίες"
+
+#: ui/views/settings-view.slint
+msgid "Search settings…"
+msgstr "Αναζήτηση ρυθμίσεων…"
+
+#. Translators: `{}` is the version number, such as 0.9.2
+#: ui/views/settings/about-section.slint
+msgid "Version {}"
+msgstr "Έκδοση {}"
+
+#. Translators: `{}` is the author's name, a proper noun kept as is
+#: ui/views/settings/about-section.slint
+msgid "Made by {}"
+msgstr "Δημιουργήθηκε από {}"
+
+# "Στήριξη", not "Υποστήριξη", which would read as technical support here.
+#. Translators: support as in funding the project, not technical support
+#: ui/views/settings/about-section.slint
+msgid "Support Melodia"
+msgstr "Στηρίξτε το Melodia"
+
+#: ui/views/settings/about-section.slint
+msgid "Melodia is free and open source. Support helps keep it going."
+msgstr "Το Melodia είναι δωρεάν και ανοιχτού κώδικα. Η στήριξη βοηθά να συνεχιστεί."
+
+#: ui/views/settings/about-section.slint
+msgid "License"
+msgstr "Άδεια"
+
+#. Translators: Ko-fi is a brand and stays as is; support means funding
+#: ui/views/settings/about-section.slint
+msgid "Support me on Ko-fi"
+msgstr "Στηρίξτε με στο Ko-fi"
+
+#: ui/views/settings/about-section.slint
+msgid "Welcome Guide"
+msgstr "Οδηγός καλωσορίσματος"
+
+#: ui/views/settings/about-section.slint
+msgid "Run the first-run setup again."
+msgstr "Εμφανίστε ξανά την αρχική ρύθμιση."
+
+#. Translators: a button in a narrow slot, so keep it short
+#: ui/views/settings/about-section.slint
+msgid "Show"
+msgstr "Εμφάνιση"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Color Style"
+msgstr "Στυλ χρωμάτων"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Active — palette derived from the current track's artwork."
+msgstr "Ενεργό — η παλέτα προέρχεται από το εξώφυλλο του τρέχοντος κομματιού."
+
+#: ui/views/settings/appearance-section.slint
+msgid "Generate theme colors from album artwork."
+msgstr "Δημιουργία χρωμάτων θέματος από το εξώφυλλο άλμπουμ."
+
+#: ui/views/settings/appearance-section.slint
+msgid "Aurora Backdrop"
+msgstr "Φόντο Aurora"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."
+msgstr "Βάψτε τις κεφαλίδες άλμπουμ, λίστας αναπαραγωγής και «Αναπαράγεται τώρα» με τα χρώματα του ίδιου του άλμπουμ, αντί με ένα θολωμένο αντίγραφο του εξωφύλλου. Δεν χρειάζεται θόλωμα, οπότε οι κεφαλίδες εμφανίζονται πιο γρήγορα και το Melodia παραμένει πιο ελαφρύ. Απαιτείται επανεκκίνηση."
+
+#: ui/views/settings/appearance-section.slint
+#: ui/views/settings/playback-section.slint
+msgid "None"
+msgstr "Κανένα"
+
+# A coined Material 3 term, kept verbatim; the other color styles are translated.
+#: ui/views/settings/appearance-section.slint
+msgid "Tonal Spot"
+msgstr "Tonal Spot"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Content"
+msgstr "Περιεχόμενο"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Vibrant"
+msgstr "Ζωηρό"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Expressive"
+msgstr "Εκφραστικό"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Fidelity"
+msgstr "Πιστότητα"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Neutral"
+msgstr "Ουδέτερο"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Monochrome"
+msgstr "Μονόχρωμο"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Changing the backdrop style requires restarting Melodia. Restart now?"
+msgstr "Η αλλαγή του στιλ φόντου απαιτεί επανεκκίνηση του Melodia. Επανεκκίνηση τώρα;"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Diagnostics"
+msgstr "Διαγνωστικά"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Logs"
+msgstr "Αρχεία καταγραφής"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Where Melodia writes its log files and crash reports."
+msgstr "Εκεί όπου το Melodia γράφει τα αρχεία καταγραφής και τις αναφορές κατάρρευσης."
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Diagnostics report"
+msgstr "Αναφορά διαγνωστικών"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "One text file with your system details, settings and recent logs, for attaching to a bug report."
+msgstr "Ένα αρχείο κειμένου με τα στοιχεία του συστήματός σας, τις ρυθμίσεις και τα πρόσφατα αρχεία καταγραφής, για επισύναψη σε αναφορά σφάλματος."
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Verbose logging"
+msgstr "Αναλυτική καταγραφή"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Record extra detail. Turn this on, reproduce the problem, then save a report."
+msgstr "Καταγράφει επιπλέον λεπτομέρειες. Ενεργοποιήστε το, αναπαραγάγετε το πρόβλημα και μετά αποθηκεύστε μια αναφορά."
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Save…"
+msgstr "Αποθήκευση…"
+
+#: ui/views/settings/discord-section.slint
+msgid "Show album artwork"
+msgstr "Εμφάνιση εξωφύλλου άλμπουμ"
+
+#: ui/views/settings/discord-section.slint
+msgid "Look up cover art online (via Deezer or iTunes) to show on the card"
+msgstr "Αναζήτηση εξωφύλλου στο διαδίκτυο (μέσω Deezer ή iTunes) για εμφάνιση στην κάρτα"
+
+#: ui/views/settings/discord-section.slint
+msgid "Hide while paused"
+msgstr "Απόκρυψη κατά την παύση"
+
+#: ui/views/settings/discord-section.slint
+msgid "Remove the card when paused instead of showing a paused marker"
+msgstr "Αφαίρεση της κάρτας κατά την παύση αντί για εμφάνιση ένδειξης παύσης"
+
+#: ui/views/settings/discord-section.slint
+msgid "Status"
+msgstr "Κατάσταση"
+
+#: ui/views/settings/discord-section.slint
+msgid "Connected to Discord"
+msgstr "Συνδεδεμένο με το Discord"
+
+#: ui/views/settings/discord-section.slint
+msgid "Discord not running"
+msgstr "Το Discord δεν εκτελείται"
+
+#: ui/views/settings/file-watching-section.slint
+msgid "File Watching"
+msgstr "Παρακολούθηση αρχείων"
+
+#: ui/views/settings/file-watching-section.slint
+msgid "Watch for file changes"
+msgstr "Παρακολούθηση αλλαγών αρχείων"
+
+#: ui/views/settings/file-watching-section.slint
+msgid "Automatically detect when files are added, removed, or changed in your library folders."
+msgstr "Εντοπίζει αυτόματα πότε προστίθενται, καταργούνται ή αλλάζουν αρχεία στους φακέλους της βιβλιοθήκης σου."
+
+#: ui/views/settings/language-section.slint
+msgid "Choose your preferred language"
+msgstr "Επίλεξε τη γλώσσα που προτιμάς"
+
+#: ui/views/settings/library-section.slint
+msgid "Manage Folders"
+msgstr "Διαχείριση φακέλων"
+
+#: ui/views/settings/library-section.slint
+msgid "Library Folders"
+msgstr "Φάκελοι βιβλιοθήκης"
+
+#: ui/views/settings/library-section.slint
+msgid "Remove Folder?"
+msgstr "Κατάργηση φακέλου;"
+
+#. Translators: `{}` is the absolute path of the folder being removed
+#: ui/views/settings/library-section.slint
+msgid "Remove \"{}\" from your library? All tracks under this folder will be removed from the library and from your playlists."
+msgstr "Να καταργηθεί το \"{}\" από τη βιβλιοθήκη; Όλα τα κομμάτια σε αυτόν τον φάκελο θα καταργηθούν από τη βιβλιοθήκη και από τις λίστες αναπαραγωγής σας."
+
+#: ui/views/settings/library-section.slint
+msgid "No folders added"
+msgstr "Δεν έχει προστεθεί φάκελος"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Show the playing track's words in Now Playing instead of Up Next"
+msgstr "Εμφάνιση των στίχων του κομματιού που παίζει στην οθόνη «Αναπαράγεται τώρα» αντί για τα «Επόμενα»"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
+msgstr "Εμφάνιση της προφοράς κάθε στίχου με λατινικούς χαρακτήρες κάτω από τα λόγια, για γραφές που δεν τους χρησιμοποιούν"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Miniplayer"
+msgstr "Μίνι αναπαραγωγέας"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Window Buttons"
+msgstr "Κουμπιά παραθύρου"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "The minimize, full player and close buttons in the miniplayer's corner."
+msgstr "Τα κουμπιά ελαχιστοποίησης, πλήρους αναπαραγωγέα και κλεισίματος στη γωνία του μίνι αναπαραγωγέα."
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Album Backdrop"
+msgstr "Φόντο άλμπουμ"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
+msgstr "Βάφει τον μίνι αναπαραγωγέα με τα χρώματα του άλμπουμ που παίζει, όπως κάνει η προβολή «Αναπαράγεται τώρα»."
+
+#: ui/views/settings/motion-section.slint
+msgid "Motion"
+msgstr "Κίνηση"
+
+#: ui/views/settings/motion-section.slint
+msgid "Skip Startup Animation"
+msgstr "Παράλειψη κίνησης εκκίνησης"
+
+#: ui/views/settings/motion-section.slint
+msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
+msgstr "Άνοιγμα με τη βιβλιοθήκη ήδη στην οθόνη, αντί να εμφανίζεται σταδιακά και να κυλά στη θέση της. Μια σελίδα λεπτομερειών που άφησες ανοιχτή εξακολουθεί να αναπτύσσεται μόλις φορτωθεί."
+
+#: ui/views/settings/output-section.slint
+msgid "Output"
+msgstr "Έξοδος"
+
+#: ui/views/settings/output-section.slint
+msgid "Output Mode"
+msgstr "Λειτουργία εξόδου"
+
+#: ui/views/settings/output-section.slint
+msgid "Exclusive gives Melodia the audio device alone: other apps can't play through it while Melodia plays, and the system mixer can't change the sound"
+msgstr "Η αποκλειστική δίνει τη συσκευή ήχου μόνο στο Melodia: άλλες εφαρμογές δεν μπορούν να παίξουν μέσω αυτής όσο παίζει το Melodia, και ο μίκτης του συστήματος δεν μπορεί να αλλάξει τον ήχο"
+
+#: ui/views/settings/output-section.slint
+msgid "Output Device"
+msgstr "Συσκευή εξόδου"
+
+#: ui/views/settings/output-section.slint
+msgid "Exclusive Device"
+msgstr "Αποκλειστική συσκευή"
+
+#: ui/views/settings/output-section.slint
+msgid "The sound card Melodia plays through"
+msgstr "Η κάρτα ήχου από την οποία παίζει το Melodia"
+
+#: ui/views/settings/output-section.slint
+msgid "The sound card exclusive output takes"
+msgstr "Η κάρτα ήχου που καταλαμβάνει η αποκλειστική έξοδος"
+
+#: ui/views/settings/output-section.slint
+msgid "Unsupported Sample Rates"
+msgstr "Μη υποστηριζόμενοι ρυθμοί δειγματοληψίας"
+
+#: ui/views/settings/output-section.slint
+msgid "What exclusive output does when the device can't run a track's sample rate: hand the device back and play that track through the system mixer, or keep the device and convert the track to a rate it can run"
+msgstr "Τι κάνει η αποκλειστική έξοδος όταν η συσκευή δεν υποστηρίζει τον ρυθμό δειγματοληψίας ενός κομματιού: επιστρέφει τη συσκευή και παίζει αυτό το κομμάτι μέσω του μίκτη του συστήματος ή κρατά τη συσκευή και μετατρέπει το κομμάτι σε έναν ρυθμό που υποστηρίζει"
+
+#: ui/views/settings/output-section.slint
+msgid "Buffer Period"
+msgstr "Περίοδος προσωρινής μνήμης"
+
+#: ui/views/settings/output-section.slint
+msgid "How much audio the device is handed at a time. Longer periods ride out a busy system; shorter ones react sooner"
+msgstr "Πόσος ήχος δίνεται στη συσκευή κάθε φορά. Οι μεγαλύτερες περίοδοι αντέχουν ένα φορτωμένο σύστημα, οι μικρότερες αντιδρούν γρηγορότερα"
+
+#: ui/views/settings/output-section.slint
+msgid "Polling Mode"
+msgstr "Λειτουργία περιοδικού ελέγχου"
+
+#: ui/views/settings/output-section.slint
+msgid "Top the device up on a timer instead of waiting for it to ask. Try it if a USB device stutters or crackles in exclusive mode"
+msgstr "Τροφοδοσία της συσκευής με χρονόμετρο αντί να περιμένει να το ζητήσει. Δοκιμάστε το αν μια συσκευή USB κολλάει ή τρίζει σε αποκλειστική λειτουργία"
+
+#: ui/views/settings/output-section.slint
+msgid "Hardware Volume"
+msgstr "Ένταση υλικού"
+
+#: ui/views/settings/output-section.slint
+msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
+msgstr "Ρύθμιση του ελέγχου έντασης της ίδιας της συσκευής αντί για κλιμάκωση των δειγμάτων, ώστε το ρυθμιστικό έντασης να κρατά τον ήχο bit-perfect. Αυτός ο έλεγχος είναι η ένταση συστήματος της συσκευής και επανέρχεται όταν το Melodia αφήσει τη συσκευή. Οι συσκευές χωρίς δικό τους έλεγχο κρατούν την ένταση του Melodia"
+
+#: ui/views/settings/output-section.slint
+msgid "Give the Device Back When Paused"
+msgstr "Επιστροφή της συσκευής σε παύση"
+
+#: ui/views/settings/output-section.slint
+msgid "After five minutes paused, hand the device back so other apps can play through it. Pressing play takes it again"
+msgstr "Μετά από πέντε λεπτά σε παύση, η συσκευή επιστρέφεται ώστε άλλες εφαρμογές να μπορούν να παίξουν μέσω αυτής. Με την αναπαραγωγή το Melodia την ξαναπαίρνει"
+
+#: ui/views/settings/output-section.slint
+msgid "Silence After a Rate Change"
+msgstr "Σιωπή μετά από αλλαγή ρυθμού"
+
+#: ui/views/settings/output-section.slint
+msgid "Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off"
+msgstr "Ορισμένοι DAC σιγούν για λίγο όταν αλλάζουν ρυθμό δειγματοληψίας. Μια σύντομη σιωπή σε κάθε αλλαγή κρατά την αρχή του κομματιού ανέπαφη"
+
+#: ui/views/settings/output-section.slint
+msgid "Match the File's Sample Rate"
+msgstr "Αντιστοίχιση ρυθμού δειγματοληψίας αρχείου"
+
+#: ui/views/settings/output-section.slint
+msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate"
+msgstr "Ανοίγει ξανά τη συσκευή ήχου στον ρυθμό κάθε κομματιού, ώστε το σύστημα να μην τον μετατρέπει. Το σύστημα πρέπει να επιτρέπει αυτόν τον ρυθμό"
+
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Signal Path"
+msgstr "Διαδρομή σήματος"
+
+#: ui/views/settings/output-section.slint
+msgid "What reaches the audio device, and what changes it on the way. Bit-perfect means nothing does"
+msgstr "Τι φτάνει στη συσκευή ήχου και τι το αλλάζει στη διαδρομή. Bit-perfect σημαίνει ότι τίποτα δεν το αλλάζει"
+
+#: ui/views/settings/output-section.slint
+msgid "the device is in use by another app"
+msgstr "η συσκευή χρησιμοποιείται από άλλη εφαρμογή"
+
+#: ui/views/settings/output-section.slint
+msgid "{} holds the device"
+msgstr "η συσκευή είναι δεσμευμένη από {}"
+
+#: ui/views/settings/output-section.slint
+msgid "another app holds the device"
+msgstr "άλλη εφαρμογή έχει δεσμεύσει τη συσκευή"
+
+#: ui/views/settings/output-section.slint
+msgid "the device can't run at this sample rate"
+msgstr "η συσκευή δεν υποστηρίζει αυτόν τον ρυθμό δειγματοληψίας"
+
+#: ui/views/settings/output-section.slint
+msgid "the device can't play this many channels"
+msgstr "η συσκευή δεν μπορεί να αναπαράγει τόσα κανάλια"
+
+#: ui/views/settings/output-section.slint
+msgid "the device takes no sample format that holds this track"
+msgstr "η συσκευή δεν δέχεται καμία μορφή δειγμάτων που να χωρά αυτό το κομμάτι"
+
+#: ui/views/settings/output-section.slint
+msgid "the chosen device isn't connected"
+msgstr "η επιλεγμένη συσκευή δεν είναι συνδεδεμένη"
+
+#: ui/views/settings/output-section.slint
+msgid "exclusive output isn't available on this system"
+msgstr "η αποκλειστική έξοδος δεν είναι διαθέσιμη σε αυτό το σύστημα"
+
+#: ui/views/settings/output-section.slint
+msgid "the device doesn't allow exclusive control, which its Advanced properties in the Sound control panel can turn on"
+msgstr "η συσκευή δεν επιτρέπει αποκλειστικό έλεγχο, που ενεργοποιείται στις ιδιότητές της, στην καρτέλα Για προχωρημένους του πίνακα ελέγχου Ήχου"
+
+#: ui/views/settings/output-section.slint
+msgid "the device couldn't be opened"
+msgstr "δεν ήταν δυνατό να ανοίξει η συσκευή"
+
+#: ui/views/settings/output-section.slint
+msgid "No effects"
+msgstr "Χωρίς εφέ"
+
+#: ui/views/settings/output-section.slint
+msgid "Equalizer and ReplayGain"
+msgstr "Ισοσταθμιστής και ReplayGain"
+
+#: ui/views/settings/output-section.slint
+msgid "Shared"
+msgstr "Κοινόχρηστη"
+
+#: ui/views/settings/output-section.slint
+msgid "Exclusive"
+msgstr "Αποκλειστική"
+
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/scrobbling-section.slint
+msgid "Not connected"
+msgstr "Μη συνδεδεμένο"
+
+#: ui/views/settings/output-section.slint
+msgid "Play Through the System Mixer"
+msgstr "Αναπαραγωγή μέσω του μίκτη του συστήματος"
+
+#: ui/views/settings/output-section.slint
+msgid "Resample and Keep Exclusive"
+msgstr "Μετατροπή και διατήρηση αποκλειστικότητας"
+
+#: ui/views/settings/output-section.slint
+msgid "{} ms"
+msgstr "{} ms"
+
+#: ui/views/settings/output-section.slint
+msgid "The device is running at {}"
+msgstr "Η συσκευή λειτουργεί στα {}"
+
+#: ui/views/settings/output-section.slint
+msgid "Make Bit-Perfect"
+msgstr "Κάνε το bit-perfect"
+
+#: ui/views/settings/output-section.slint
+msgid "Switch to Exclusive Output?"
+msgstr "Μετάβαση σε αποκλειστική έξοδο;"
+
+#: ui/views/settings/output-section.slint
+msgid "Bit-perfect playback needs exclusive output. Other apps can't play through the device while Melodia does, and the system volume stops applying: Melodia's own volume goes to full unless Hardware Volume is on."
+msgstr "Η αναπαραγωγή bit-perfect χρειάζεται αποκλειστική έξοδο. Άλλες εφαρμογές δεν μπορούν να παίξουν μέσω της συσκευής όσο παίζει το Melodia, και η ένταση συστήματος παύει να ισχύει: η ένταση του ίδιου του Melodia πηγαίνει στο μέγιστο, εκτός αν είναι ενεργή η Ένταση υλικού."
+
+#: ui/views/settings/output-section.slint
+msgid "Switch"
+msgstr "Μετάβαση"
+
+#: ui/views/settings/output-section.slint
+msgid "Source"
+msgstr "Πηγή"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, decoded from a lossy codec"
+msgstr "{}, αποκωδικοποιημένο από απωλεστικό codec"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, rounded to fit 32-bit float"
+msgstr "{}, στρογγυλεμένο σε float 32 bit"
+
+#: ui/views/settings/output-section.slint
+msgid "Effects"
+msgstr "Εφέ"
+
+#: ui/views/settings/output-section.slint
+msgid "Normal"
+msgstr "Κανονική"
+
+#: ui/views/settings/output-section.slint
+msgid "Volume"
+msgstr "Ένταση"
+
+#: ui/views/settings/output-section.slint
+msgid "Muted"
+msgstr "Σε σίγαση"
+
+#: ui/views/settings/output-section.slint
+msgid "{}% (the device muted)"
+msgstr "{}% (η συσκευή σε σίγαση)"
+
+#: ui/views/settings/output-section.slint
+msgid "{}% on the device"
+msgstr "{}% στη συσκευή"
+
+#: ui/views/settings/output-section.slint
+msgid "{}% (the device at {}%)"
+msgstr "{}% (η συσκευή στο {}%)"
+
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/playback-section.slint
+msgid "Crossfade"
+msgstr "Σταδιακή μετάβαση"
+
+#: ui/views/settings/output-section.slint
+msgid "Fading between tracks"
+msgstr "Σταδιακή μετάβαση μεταξύ κομματιών"
+
+#: ui/views/settings/output-section.slint
+msgid "Not fading"
+msgstr "Χωρίς μετάβαση"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled to {}"
+msgstr "{} με μετατροπή σε {}"
+
+#: ui/views/settings/output-section.slint
+msgid "Mixed down for the device"
+msgstr "Υπομίξη για τη συσκευή"
+
+#: ui/views/settings/output-section.slint
+msgid "Unchanged"
+msgstr "Αμετάβλητα"
+
+#: ui/views/settings/output-section.slint
+msgid "Device"
+msgstr "Συσκευή"
+
+#: ui/views/settings/output-section.slint
+msgid "{} refused exclusive output because {}. Playing shared on {}"
+msgstr "{}: η αποκλειστική έξοδος απορρίφθηκε ({}). Κοινόχρηστη αναπαραγωγή μέσω {}"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, shared: exclusive output was refused because {}"
+msgstr "{}, κοινόχρηστη: η αποκλειστική έξοδος απορρίφθηκε ({})"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, shared: the system mixer may still convert it"
+msgstr "{}, κοινόχρηστη: ο μίκτης του συστήματος μπορεί ακόμη να το μετατρέψει"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, exclusive"
+msgstr "{}, αποκλειστική"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, exclusive, in a format that can't hold the source exactly"
+msgstr "{}, αποκλειστική, σε μορφή που δεν χωρά την πηγή ακριβώς"
+
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Player Bar"
+msgstr "Γραμμή αναπαραγωγής"
+
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Overflow Menu Buttons"
+msgstr "Κουμπιά μενού υπερχείλισης"
+
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Move selected buttons into a compact overflow menu in the player bar"
+msgstr "Μετακίνηση επιλεγμένων κουμπιών σε ένα συμπαγές μενού υπερχείλισης στη γραμμή αναπαραγωγής"
+
+#: ui/views/settings/playback-section.slint
+msgid "Gapless Playback"
+msgstr "Αναπαραγωγή χωρίς κενά"
+
+#: ui/views/settings/playback-section.slint
+msgid "Seamless transitions between tracks without silence gaps"
+msgstr "Απρόσκοπτες μεταβάσεις μεταξύ κομματιών χωρίς διαστήματα σιωπής"
+
+#: ui/views/settings/playback-section.slint
+msgid "Play Button Animation"
+msgstr "Κίνηση κουμπιού αναπαραγωγής"
+
+#: ui/views/settings/playback-section.slint
+msgid "Visual effect on the play button while music is playing"
+msgstr "Οπτικό εφέ στο κουμπί αναπαραγωγής όσο παίζει η μουσική"
+
+#: ui/views/settings/playback-section.slint
+msgid "Resume on Startup"
+msgstr "Συνέχιση κατά την εκκίνηση"
+
+#: ui/views/settings/playback-section.slint
+msgid "Automatically resume the last track from where you left off when the app starts"
+msgstr "Συνέχισε αυτόματα το τελευταίο κομμάτι από εκεί που σταμάτησες όταν ξεκινά η εφαρμογή"
+
+#: ui/views/settings/playback-section.slint
+msgid "Overlap the end of one track with the start of the next"
+msgstr "Επικάλυψε το τέλος ενός κομματιού με την αρχή του επόμενου"
+
+#: ui/views/settings/playback-section.slint
+msgid "Overlap the end of one track with the start of the next, unless the device has to change format between them"
+msgstr "Επικάλυψε το τέλος ενός κομματιού με την αρχή του επόμενου, εκτός αν η συσκευή πρέπει να αλλάξει μορφή ανάμεσά τους"
+
+#: ui/views/settings/playback-section.slint
+msgid "Crossfade duration"
+msgstr "Διάρκεια μετάβασης"
+
+#: ui/views/settings/playback-section.slint
+msgid "How long the two tracks overlap"
+msgstr "Πόση ώρα επικαλύπτονται τα δύο κομμάτια"
+
+#: ui/views/settings/playback-section.slint
+msgid "Except on the same album"
+msgstr "Εκτός από κομμάτια του ίδιου άλμπουμ"
+
+#: ui/views/settings/playback-section.slint
+msgid "Keep tracks from one album gapless, so continuous mixes stay seamless"
+msgstr "Κράτα τα κομμάτια ενός άλμπουμ χωρίς κενά, ώστε τα συνεχόμενα μιξ να παραμένουν αδιάκοπα"
+
+#: ui/views/settings/playback-section.slint
+msgid "Also on manual track change"
+msgstr "Και σε χειροκίνητη αλλαγή κομματιού"
+
+#: ui/views/settings/playback-section.slint
+msgid "Crossfade when you skip to the next or previous track, not only at the end of one"
+msgstr "Κάνε μετάβαση και όταν πηγαίνεις στο επόμενο ή στο προηγούμενο κομμάτι, όχι μόνο στο τέλος"
+
+#: ui/views/settings/playback-section.slint
+msgid "Fade out on pause"
+msgstr "Σβήσιμο στην παύση"
+
+#: ui/views/settings/playback-section.slint
+msgid "Fade the music out when pausing or stopping, and back in when resuming"
+msgstr "Χαμήλωσε σταδιακά τη μουσική στην παύση ή τη διακοπή και επανάφερέ την στη συνέχιση"
+
+#: ui/views/settings/playback-section.slint
+msgid "Show an audio visualizer on the Now Playing screen"
+msgstr "Εμφάνιση οπτικοποίησης ήχου στην οθόνη αναπαραγωγής"
+
+#: ui/views/settings/playback-section.slint
+msgid "Visualizer Style"
+msgstr "Στυλ οπτικοποίησης"
+
+#: ui/views/settings/playback-section.slint
+msgid "Choose how the visualizer draws the audio"
+msgstr "Επιλέξτε πώς σχεδιάζει τον ήχο η οπτικοποίηση"
+
+#. Translators: `{}` is a duration in seconds, such as 2.5
+#: ui/views/settings/playback-section.slint
+msgid "{} s"
+msgstr "{} δλ"
+
+#: ui/views/settings/radio-section.slint
+msgid "Hide segmented stations"
+msgstr "Απόκρυψη τμηματοποιημένων σταθμών"
+
+#: ui/views/settings/radio-section.slint
+msgid "Segmented (HLS) streams play, but take longer to start"
+msgstr "Οι τμηματοποιημένες ροές (HLS) αναπαράγονται, αλλά αργούν να ξεκινήσουν"
+
+#: ui/views/settings/radio-section.slint
+msgid "Report plays to the directory"
+msgstr "Αναφορά αναπαραγωγών στον κατάλογο"
+
+#: ui/views/settings/radio-section.slint
+msgid "An anonymous count is what orders stations by popularity"
+msgstr "Μια ανώνυμη καταμέτρηση είναι αυτή που κατατάσσει τους σταθμούς κατά δημοτικότητα"
+
+#: ui/views/settings/ratings-section.slint
+msgid "Ratings"
+msgstr "Βαθμολογίες"
+
+#: ui/views/settings/ratings-section.slint
+msgid "Save ratings to files"
+msgstr "Αποθήκευση βαθμολογιών στα αρχεία"
+
+#: ui/views/settings/ratings-section.slint
+msgid "Write star ratings into each file's tags, so they survive a rescan and other players can read them."
+msgstr "Γράφει τις βαθμολογίες με αστέρια στις ετικέτες κάθε αρχείου, ώστε να διατηρούνται μετά από νέα σάρωση και να μπορούν να τις διαβάσουν άλλα προγράμματα αναπαραγωγής."
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Last.fm"
+msgstr "Last.fm"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobble to Last.fm"
+msgstr "Scrobble στο Last.fm"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Report each play to your Last.fm account"
+msgstr "Αναφορά κάθε αναπαραγωγής στον λογαριασμό σας στο Last.fm"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Sync loved tracks to Last.fm"
+msgstr "Συγχρονισμός αγαπημένων κομματιών με το Last.fm"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Mark tracks you love as loved on Last.fm — turning this on syncs your existing favorites"
+msgstr "Σημειώστε ως αγαπημένα στο Last.fm τα κομμάτια που αγαπάτε — η ενεργοποίηση συγχρονίζει τα υπάρχοντα αγαπημένα σας"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "ListenBrainz"
+msgstr "ListenBrainz"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobble to ListenBrainz"
+msgstr "Scrobble στο ListenBrainz"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Report each play to your ListenBrainz account"
+msgstr "Αναφορά κάθε αναπαραγωγής στον λογαριασμό σας στο ListenBrainz"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Sync loved tracks to ListenBrainz"
+msgstr "Συγχρονισμός αγαπημένων κομματιών με το ListenBrainz"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)"
+msgstr "Σημειώστε ως αγαπημένα στο ListenBrainz τα κομμάτια που αγαπάτε — η ενεργοποίηση συγχρονίζει τα υπάρχοντα αγαπημένα σας (απαιτεί αναγνωριστικά MusicBrainz)"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "MusicBrainz Picard adds these IDs to your files, identifying each track by its audio."
+msgstr "Το MusicBrainz Picard προσθέτει αυτά τα αναγνωριστικά στα αρχεία σας, αναγνωρίζοντας κάθε κομμάτι από τον ήχο του."
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobble radio songs"
+msgstr "Scrobble τραγουδιών από το ραδιόφωνο"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Songs heard in full on a station go to your connected scrobbling services"
+msgstr "Τα τραγούδια που ακούστηκαν ολόκληρα σε έναν σταθμό στέλνονται στις συνδεδεμένες υπηρεσίες scrobbling"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Connected as {}"
+msgstr "Συνδεδεμένος ως {}"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Not configured in this build"
+msgstr "Δεν έχει ρυθμιστεί σε αυτήν την έκδοση"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Connect Last.fm"
+msgstr "Σύνδεση Last.fm"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Disconnect"
+msgstr "Αποσύνδεση"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Connect ListenBrainz"
+msgstr "Σύνδεση ListenBrainz"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Turn on Last.fm or ListenBrainz above first"
+msgstr "Ενεργοποιήστε πρώτα το Last.fm ή το ListenBrainz παραπάνω"
+
+#: ui/views/settings/settings-tabs.slint
+msgid "No matching settings"
+msgstr "Καμία ρύθμιση δεν ταιριάζει"
+
+#: ui/views/settings/update-section.slint
+msgid "Updates"
+msgstr "Ενημερώσεις"
+
+#: ui/views/settings/update-section.slint
+msgid "Software Updates"
+msgstr "Ενημερώσεις λογισμικού"
+
+#: ui/views/settings/update-section.slint
+msgid "Current version: {}"
+msgstr "Τρέχουσα έκδοση: {}"
+
+#: ui/views/settings/update-section.slint
+msgid "You're up to date!"
+msgstr "Είσαι ενημερωμένος!"
+
+#: ui/views/settings/update-section.slint
+msgid "Melodia {} is the latest version."
+msgstr "Η Melodia {} είναι η τελευταία έκδοση."
+
+#: ui/views/settings/update-section.slint
+msgid "Update Installed"
+msgstr "Η ενημέρωση εγκαταστάθηκε"
+
+#: ui/views/settings/update-section.slint
+msgid "Restart Melodia to apply the update"
+msgstr "Επανεκκίνησε τη Melodia για να εφαρμοστεί η ενημέρωση"
+
+#: ui/views/settings/update-section.slint
+msgid "Version {} Available"
+msgstr "Διαθέσιμη η έκδοση {}"
+
+#: ui/views/settings/update-section.slint
+msgid "Updates managed by your package manager"
+msgstr "Οι ενημερώσεις διαχειρίζονται από τον διαχειριστή πακέτων σας"
+
+#: ui/views/settings/update-section.slint
+msgid "Re-run the latest .msi installer from the Releases page."
+msgstr "Εκτελέστε ξανά τον τελευταίο εγκαταστάτη .msi από τη σελίδα Releases."
+
+#: ui/views/settings/update-section.slint
+msgid "Use brew upgrade melodia."
+msgstr "Χρησιμοποιήστε brew upgrade melodia."
+
+#: ui/views/settings/update-section.slint
+msgid "Use sudo dnf update melodia (or your distro equivalent)."
+msgstr "Χρησιμοποιήστε sudo dnf update melodia (ή το αντίστοιχο της διανομής σας)."
+
+#: ui/views/settings/update-section.slint
+msgid "Check for Updates"
+msgstr "Έλεγχος για ενημερώσεις"
+
+#: ui/views/settings/update-section.slint
+msgid "Checking..."
+msgstr "Έλεγχος..."
+
+#: ui/views/settings/update-section.slint
+msgid "Restart Now"
+msgstr "Επανεκκίνηση τώρα"
+
+#: ui/views/settings/update-section.slint
+msgid "Download & Install"
+msgstr "Λήψη και εγκατάσταση"
+
+#: ui/views/settings/update-section.slint
+msgid "Installing..."
+msgstr "Εγκατάσταση..."
+
+#: ui/views/settings/update-section.slint
+msgid "Skip this version"
+msgstr "Παράλειψη αυτής της έκδοσης"
+
+#: ui/views/settings/update-section.slint
+msgid "Critical update"
+msgstr "Κρίσιμη ενημέρωση"
+
+#: ui/views/settings/update-section.slint
+msgid "This update fixes a critical issue and can't be skipped."
+msgstr "Αυτή η ενημέρωση διορθώνει ένα κρίσιμο πρόβλημα και δεν μπορεί να παραλειφθεί."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window"
+msgstr "Παράθυρο"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Managed by the operating system"
+msgstr "Διαχειρίζεται από το λειτουργικό σύστημα"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Native Title Bar"
+msgstr "Εγγενής γραμμή τίτλου"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Use the operating system's native title bar instead of the custom one. Restart required to apply."
+msgstr "Χρήση της εγγενούς γραμμής τίτλου του λειτουργικού συστήματος αντί της προσαρμοσμένης. Απαιτείται επανεκκίνηση για εφαρμογή."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Match Unfocused Window Background"
+msgstr "Αντιστοίχιση φόντου μη εστιασμένου παραθύρου"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Only available with the native title bar."
+msgstr "Διαθέσιμο μόνο με την εγγενή γραμμή τίτλου."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Tint the sidebar and now-playing bar toward the content background when the window loses focus."
+msgstr "Χρωμάτισε την πλευρική γραμμή και τη γραμμή αναπαραγωγής προς το φόντο του περιεχομένου όταν το παράθυρο χάνει την εστίαση."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Corner Radius"
+msgstr "Ακτίνα γωνίας παραθύρου"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border"
+msgstr "Περίγραμμα παραθύρου"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Draw a thin outline around the miniplayer. The full window keeps the border of its system frame."
+msgstr "Σχεδιάζει ένα λεπτό περίγραμμα γύρω από τον μίνι αναπαραγωγέα. Το πλήρες παράθυρο διατηρεί το περίγραμμα του πλαισίου συστήματος."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Draw a thin outline around the whole window, the miniplayer included."
+msgstr "Σχεδιάζει ένα λεπτό περίγραμμα γύρω από ολόκληρο το παράθυρο, μαζί με τον μίνι αναπαραγωγέα."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border Color"
+msgstr "Χρώμα περιγράμματος παραθύρου"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System follows the color the operating system draws its own window borders in."
+msgstr "Το Σύστημα ακολουθεί το χρώμα με το οποίο το λειτουργικό σύστημα σχεδιάζει τα δικά του περιγράμματα παραθύρων."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Available only while the window border is shown."
+msgstr "Διαθέσιμο μόνο όταν εμφανίζεται το περίγραμμα παραθύρου."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Decoration Button Style"
+msgstr "Στιλ κουμπιών διακόσμησης"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Decoration Button Side"
+msgstr "Πλευρά κουμπιών διακόσμησης"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System Tray Icon"
+msgstr "Εικονίδιο περιοχής ειδοποιήσεων"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Show a Melodia icon in the system tray with playback controls."
+msgstr "Εμφάνιση εικονιδίου Melodia στην περιοχή ειδοποιήσεων με στοιχεία ελέγχου αναπαραγωγής."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Close to Tray"
+msgstr "Κλείσιμο στην περιοχή ειδοποιήσεων"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Keep Melodia running in the system tray when you close the window, instead of quitting."
+msgstr "Διατήρηση της εκτέλεσης του Melodia στην περιοχή ειδοποιήσεων κατά το κλείσιμο του παραθύρου, αντί για έξοδο."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Available only while the system tray icon is active."
+msgstr "Διαθέσιμο μόνο όταν το εικονίδιο περιοχής ειδοποιήσεων είναι ενεργό."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Switching to the native title bar requires restarting Melodia. Restart now?"
+msgstr "Η μετάβαση στην εγγενή γραμμή τίτλου απαιτεί επανεκκίνηση της Melodia. Επανεκκίνηση τώρα;"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Switching to the custom title bar requires restarting Melodia. Restart now?"
+msgstr "Η μετάβαση στην προσαρμοσμένη γραμμή τίτλου απαιτεί επανεκκίνηση της Melodia. Επανεκκίνηση τώρα;"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Square"
+msgstr "Τετράγωνο"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Left"
+msgstr "Αριστερά"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Right"
+msgstr "Δεξιά"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Changing the system tray icon requires restarting Melodia. Restart now?"
+msgstr "Η αλλαγή του εικονιδίου περιοχής ειδοποιήσεων απαιτεί επανεκκίνηση του Melodia. Επανεκκίνηση τώρα;"

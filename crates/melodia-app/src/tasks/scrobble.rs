@@ -35,9 +35,10 @@ const BASE_BACKOFF: Duration = Duration::from_secs(15);
 /// Ceiling on the exponential submit backoff.
 const MAX_BACKOFF: Duration = Duration::from_mins(15);
 
-/// Bound on the best-effort final flush so a shutdown can't be blocked past the
-/// app's shutdown budget — the queue is already persisted regardless.
-const FLUSH_TIMEOUT: Duration = Duration::from_secs(2);
+/// How long a drain may keep sending once shutdown fires, before it is stopped and
+/// writes back what went out. Has to sit inside `shutdown::flush_tasks_and_db`'s
+/// budget; whatever is left is persisted and goes out on the next launch.
+const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
 
 /// Spawn the detector + submitter loops, both tracked for graceful shutdown.
 pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
@@ -184,11 +185,20 @@ async fn fetch_row(
 }
 
 /// Drain the durable queue, backing off when a provider defers, and wake on a
-/// new scrobble. Do-while shaped: drains once on entry, then parks.
+/// new scrobble. Do-while shaped: drains once on entry, then parks. A shutdown
+/// that finds it parked loops once more, so what is still queued gets a last
+/// round under the grace.
 async fn run_submitter(shutdown: CancellationToken, service: Arc<ScrobbleService>) {
     let mut backoff = BASE_BACKOFF;
     loop {
-        let wait = if let Some(min) = service.submit_pending().await {
+        let stop = CancellationToken::new();
+        let retry = run_with_grace(service.submit_pending(&stop), &stop, &shutdown).await;
+        if shutdown.is_cancelled() {
+            log::info!("Scrobble submitter stopped");
+            return;
+        }
+
+        let wait = if let Some(min) = retry {
             let (this_wait, next) = defer(min, backoff);
             backoff = next;
             Some(this_wait)
@@ -201,15 +211,35 @@ async fn run_submitter(shutdown: CancellationToken, service: Arc<ScrobbleService
 
         tokio::select! {
             biased;
-            () = shutdown.cancelled() => {
-                let _ = tokio::time::timeout(FLUSH_TIMEOUT, service.submit_pending()).await;
-                log::info!("Scrobble submitter stopped");
-                return;
-            }
+            () = shutdown.cancelled() => {}
             () = service.notified() => {}
             () = wait_for(wait) => {}
         }
     }
+}
+
+/// Runs a drain `round` out, unless it is still going [`SHUTDOWN_GRACE`] after shutdown;
+/// then `stop`, which the round has to be watching, is cancelled and the round awaited
+/// rather than dropped. A round is a chain of sequential requests, each allowed the HTTP
+/// client's whole read timeout, and dropping it would lose the writeback for every one
+/// that already landed.
+async fn run_with_grace<T>(
+    round: impl Future<Output = T>,
+    stop: &CancellationToken,
+    shutdown: &CancellationToken,
+) -> T {
+    tokio::pin!(round);
+
+    let grace_spent = async {
+        shutdown.cancelled().await;
+        tokio::time::sleep(SHUTDOWN_GRACE).await;
+    };
+    tokio::select! {
+        biased;
+        finished = &mut round => return finished,
+        () = grace_spent => stop.cancel(),
+    }
+    round.await
 }
 
 /// What a deferral earns: the wait to honor now, and the backoff to carry into the next one.

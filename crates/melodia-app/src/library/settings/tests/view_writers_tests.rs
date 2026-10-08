@@ -11,7 +11,7 @@ use super::{
 };
 use crate::services;
 use crate::state::fixtures::seeded_root;
-use melodia_core::entities::locale::SUPPORTED_LOCALES;
+use melodia_core::entities::locale::{DEFAULT_LOCALE, SUPPORTED_LOCALES};
 use melodia_core::error::AppError;
 
 /// A code with no bundled catalogue is refused before the write, so `settings.json` cannot be
@@ -31,7 +31,7 @@ fn an_unsupported_locale_is_refused_and_never_written() -> Result<(), AppError> 
 #[test]
 fn a_bundled_locale_is_persisted() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root()?;
-    let Some(&code) = SUPPORTED_LOCALES.iter().find(|&&code| code != "en") else {
+    let Some(&code) = SUPPORTED_LOCALES.iter().find(|&&code| code != DEFAULT_LOCALE) else {
         unreachable!("the app ships more than one locale")
     };
 

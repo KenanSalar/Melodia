@@ -3,6 +3,7 @@
 
 use melodia_app::services;
 use melodia_app::state::AppState;
+use melodia_core::entities::locale::DEFAULT_LOCALE;
 use melodia_ui::{AppWindow, HeroBackdrop, Player, Theme};
 use melodia_views::ui;
 use slint::ComponentHandle;
@@ -15,7 +16,8 @@ pub fn install_locale(
     state: &AppState,
     startup_settings: Option<&services::settings::SettingsData>,
 ) {
-    let persisted_locale = startup_settings.map_or_else(|| "en".to_owned(), |s| s.locale.clone());
+    let persisted_locale =
+        startup_settings.map_or_else(|| DEFAULT_LOCALE.to_owned(), |s| s.locale.clone());
     if let Err(e) = slint::select_bundled_translation(&persisted_locale) {
         log::warn!("select_bundled_translation({persisted_locale}): {e:?}");
     }

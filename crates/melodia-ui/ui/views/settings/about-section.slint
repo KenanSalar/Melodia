@@ -34,16 +34,21 @@ export component AboutSection inherits Rectangle {
     // The brands, the SPDX id and "GitHub" / "Ko-fi" stay untranslated but still
     // belong in the haystack — they're what a user would type.
     property <string> app-label: "Melodia";
+    // Translators: `{}` is the version number, such as 0.9.2
     property <string> version-desc: @tr("Version {}", MelodiaUpdater.current-version);
+    // Translators: `{}` is the author's name, a proper noun kept as is
     property <string> author-label: @tr("Made by {}", "Kenan Salar");
     property <string> repo-label: "GitHub";
+    // Translators: support as in funding the project, not technical support
     property <string> support-label: @tr("Support Melodia");
     property <string> support-desc: @tr("Melodia is free and open source. Support helps keep it going.");
     property <string> license-label: @tr("License");
     property <string> license-desc: "AGPL-3.0-or-later";
+    // Translators: Ko-fi is a brand and stays as is; support means funding
     property <string> kofi-label: @tr("Support me on Ko-fi");
     property <string> welcome-label: @tr("Welcome Guide");
     property <string> welcome-desc: @tr("Run the first-run setup again.");
+    // Translators: a button in a narrow slot, so keep it short
     property <string> welcome-action: @tr("Show");
 
     property <bool> show-app: row-visible(app-label, version-desc);

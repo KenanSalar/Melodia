@@ -127,6 +127,12 @@ glob.workspace = true
 # `tests/cross_tier.rs` reads `pragma_table_info` off a `test_pool`, which is the
 # only place this package touches the database directly.
 sqlx.workspace = true
+# `tests/translations.rs` asks the bundled faces whether they carry every character a
+# catalogue sets.
+ttf-parser.workspace = true
+# The same file derives the decomposed spellings of each alphabet the font build merges, as
+# `scripts/patch_vazirmatn.py` asks `unicodedata` for them.
+unicode-normalization.workspace = true
 
 # Workspace-level and inherited by every package, so no member can sit outside the
 # gate; `melodia-ui`'s generated module carries a blanket `#[allow]`.

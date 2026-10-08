@@ -28,11 +28,16 @@ License: AGPL-3.0-or-later
 
 Files: crates/melodia-ui/ui/assets/fonts/vazirmatn/*
 Copyright: 2015 The Vazirmatn Project Authors <https://github.com/rastikerdar/vazirmatn>
+ 2011 Google Inc. <https://github.com/googlefonts/roboto-3-classic>
 License: OFL-1.1
-Comment: Metric-patched by scripts/patch_vazirmatn.py, which rewrites the OS/2
- typo and hhea ascent/descent values; glyph outlines are untouched. Upstream
- declares no Reserved Font Name, so OFL section 5 imposes no rename on the
- patched build.
+Comment: Built by scripts/patch_vazirmatn.py, which merges the Greek, Russian,
+ Ukrainian and Vietnamese letters Vazirmatn lacks from Roboto 3.004 into the
+ Vazirmatn faces and rewrites the OS/2 typo and hhea ascent/descent values; no
+ outline is altered. Those letters are Google's under Apache-2.0 (see
+ /usr/share/common-licenses/Apache-2.0), from the release Vazirmatn's own Latin
+ was imported from, and the merged faces carry them under OFL-1.1 as upstream
+ already carries that Latin. Upstream declares no Reserved Font Name, so OFL
+ section 5 imposes no rename on the patched build.
 
 Files: crates/melodia-ui/ui/assets/fonts/MaterialSymbolsRounded.ttf
  crates/melodia-ui/ui/assets/fonts/MaterialSymbolsRoundedFilled.ttf

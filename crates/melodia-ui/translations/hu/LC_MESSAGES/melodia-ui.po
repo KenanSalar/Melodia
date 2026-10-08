@@ -1,0 +1,3374 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: melodia-ui\n"
+"Report-Msgid-Bugs-To: \n"
+"PO-Revision-Date: 2026-10-08 00:00+0000\n"
+"Last-Translator: Kenan Salar\n"
+"Language-Team: none\n"
+"Language: hu\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: ui/app-window.slint ui/layout/sidebar.slint
+msgid "Search"
+msgstr "Keresés"
+
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/radio-view.slint
+msgid "Browse"
+msgstr "Böngészés"
+
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/favorites-view.slint
+#: ui/views/radio-view.slint
+msgid "Favorites"
+msgstr "Kedvencek"
+
+#: ui/app-window.slint ui/layout/sidebar.slint
+msgid "My Library"
+msgstr "Könyvtáram"
+
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/radio-view.slint
+#: ui/views/recently-played-view.slint
+msgid "Recently Played"
+msgstr "Nemrég lejátszottak"
+
+#: ui/app-window.slint ui/layout/sidebar.slint
+msgid "Settings"
+msgstr "Beállítások"
+
+#: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/views/settings/radio-section.slint
+msgid "Radio"
+msgstr "Rádió"
+
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
+msgid "Minimize"
+msgstr "Kis méret"
+
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
+msgid "Maximize"
+msgstr "Teljes méret"
+
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
+msgid "Restore"
+msgstr "Előző méret"
+
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Close"
+msgstr "Bezárás"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/context-menu.slint
+msgid "Remove {} from Favorites"
+msgstr "{} elem eltávolítása a kedvencek közül"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/context-menu.slint
+msgid "Add {} to Favorites"
+msgstr "{} elem hozzáadása a kedvencekhez"
+
+#: ui/components/context-menu.slint ui/components/grid/card-context-menu.slint
+msgid "Add to Favorites"
+msgstr "Hozzáadás a kedvencekhez"
+
+#: ui/components/context-menu.slint ui/components/grid/card-context-menu.slint
+msgid "Remove from Favorites"
+msgstr "Eltávolítás a kedvencek közül"
+
+#: ui/components/dialog/add-station-body.slint
+#: ui/components/grid/station-context-menu.slint
+msgid "Stream URL"
+msgstr "Adatfolyam URL-je"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Name (optional)"
+msgstr "Név (nem kötelező)"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Leave blank to use the station's own name"
+msgstr "Hagyd üresen az állomás saját nevének használatához"
+
+#: ui/components/dialog/add-station-body.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/station-facts.slint
+msgid "Website"
+msgstr "Weboldal"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Logo URL"
+msgstr "Logó URL-je"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Leave blank to look for a logo on the website above."
+msgstr "Ha üresen hagyod, a logót a fenti weboldalon keresi."
+
+#: ui/components/dialog/add-station-body.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+#: ui/views/search/top-result-card.slint
+msgid "Genre"
+msgstr "Műfaj"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Jazz, Blues"
+msgstr "Jazz, blues"
+
+#: ui/components/dialog/add-station-body.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+msgid "Country"
+msgstr "Ország"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Tunisia"
+msgstr "Tunézia"
+
+#: ui/components/dialog/add-station-body.slint
+msgid "The directory owns this station's name and stream. What it left blank is yours to fill in; leave a field empty to remove it again."
+msgstr "Az állomás nevét és adatfolyamát a katalógus adja. Amit üresen hagyott, azt te töltheted ki; egy mezőt kiürítve újra eltávolíthatod."
+
+#: ui/components/dialog/add-station-body.slint
+msgid "Checking the stream…"
+msgstr "Adatfolyam ellenőrzése…"
+
+#: ui/components/dialog/credit-editor.slint
+#: ui/components/dialog/name-list-editor.slint ui/globals/dialog.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Add"
+msgstr "Hozzáadás"
+
+#: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/grid/station-context-menu.slint ui/views/favorites-view.slint
+#: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
+msgid "Name"
+msgstr "Név"
+
+#: ui/components/dialog/dialog.slint
+msgid "Playlist name"
+msgstr "Lejátszási lista neve"
+
+#: ui/components/dialog/dialog.slint
+msgid "Description (optional)"
+msgstr "Leírás (nem kötelező)"
+
+#: ui/components/dialog/dialog.slint
+msgid "Add a description…"
+msgstr "Adj hozzá leírást…"
+
+#: ui/components/dialog/dialog.slint
+msgid "Finish"
+msgstr "Befejezés"
+
+#: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
+msgid "Open Last.fm"
+msgstr "Last.fm megnyitása"
+
+#: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
+msgid "Connect"
+msgstr "Csatlakozás"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Classical"
+msgstr "Klasszikus"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Flat"
+msgstr "Lineáris"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Jazz"
+msgstr "Jazz"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Pop"
+msgstr "Pop"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Rock"
+msgstr "Rock"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Bass Boost"
+msgstr "Basszuskiemelés"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Electronic"
+msgstr "Elektronikus"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Treble Boost"
+msgstr "Magaskiemelés"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Vocal"
+msgstr "Ének"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Custom"
+msgstr "Egyéni"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Enable equalizer"
+msgstr "Hangszínszabályzó bekapcsolása"
+
+#: ui/components/dialog/equalizer-body.slint
+msgid "Reset"
+msgstr "Visszaállítás"
+
+#: ui/components/dialog/export-playlist-picker.slint
+msgid "No playlists to export"
+msgstr "Nincs exportálható lejátszási lista"
+
+# Hungarian doesn't pluralize a noun after a numeral ("3 szám", not "3 számok"),
+# so both forms are the same.
+#: ui/components/dialog/export-playlist-picker.slint
+#: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
+#: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
+#: ui/globals/search.slint ui/views/queue-sheet.slint
+msgid "{n} track"
+msgid_plural "{n} tracks"
+msgstr[0] "{n} szám"
+msgstr[1] "{n} szám"
+
+#: ui/components/dialog/export-playlist-picker.slint
+msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
+msgstr "Több lejátszási lista egyetlen .zip fájlba kerül, amelyet kicsomagolás nélkül, közvetlenül importálhatsz."
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "No artwork"
+msgstr "Nincs borító"
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "{} / 4 selected"
+msgstr "{}/4 kijelölve"
+
+#: ui/components/dialog/playlist-mosaic-picker.slint ui/views/queue-sheet.slint
+msgid "Clear"
+msgstr "Törlés"
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "Add tracks to this playlist to pick artwork."
+msgstr "Borító választásához adj számokat ehhez a lejátszási listához."
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "Select up to 4 tracks"
+msgstr "Jelölj ki legfeljebb 4 számot"
+
+#: ui/components/dialog/playlist-picker.slint
+msgid "Already added"
+msgstr "Már hozzáadva"
+
+#: ui/components/dialog/playlist-picker.slint
+msgid "{} of {} already added"
+msgstr "{}/{} már hozzáadva"
+
+#: ui/components/dialog/preamp-slider-row.slint
+msgid "Preamp"
+msgstr "Előerősítés"
+
+#: ui/components/dialog/replaygain-body.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/search/top-result-card.slint
+msgid "Album"
+msgstr "Album"
+
+#: ui/components/dialog/replaygain-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Track"
+msgstr "Szám"
+
+#: ui/components/dialog/replaygain-body.slint
+msgid "Enable ReplayGain"
+msgstr "ReplayGain bekapcsolása"
+
+#: ui/components/dialog/replaygain-body.slint
+msgid "Normalization mode"
+msgstr "Normalizálási mód"
+
+#: ui/components/dialog/replaygain-body.slint
+msgid "Prevent clipping"
+msgstr "Túlvezérlés megelőzése"
+
+#: ui/components/dialog/replaygain-body.slint
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "A ReplayGain csak azokra a számokra hat, amelyekben már vannak hangosságcímkék. Ezek hozzáadásához dolgozd fel a könyvtáradat például az rsgain vagy a loudgain eszközzel."
+
+#: ui/components/dialog/scrobble-lastfm-body.slint
+msgid "Click Open Last.fm to approve Melodia in your browser."
+msgstr "Kattints a Last.fm megnyitása gombra, és hagyd jóvá a Melodiát a böngészőben."
+
+#: ui/components/dialog/scrobble-lastfm-body.slint
+msgid "After approving Melodia in your browser, click Finish."
+msgstr "Miután a böngészőben jóváhagytad a Melodiát, kattints a Befejezés gombra."
+
+#: ui/components/dialog/scrobble-lastfm-body.slint
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+#: ui/globals/player.slint
+msgid "Connecting…"
+msgstr "Csatlakozás…"
+
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+msgid "User token"
+msgstr "Felhasználói token"
+
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+msgid "Paste your ListenBrainz user token"
+msgstr "Illeszd be a ListenBrainz felhasználói tokenedet"
+
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+msgid "Find your token on your ListenBrainz profile settings page."
+msgstr "A tokenedet a ListenBrainz-profilod beállításainál találod."
+
+#: ui/components/dialog/selectable-picker.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Select all"
+msgstr "Összes kijelölése"
+
+#: ui/components/dialog/selectable-picker.slint
+msgid "{} selected"
+msgstr "{} kijelölve"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "value"
+msgstr "érték"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "days"
+msgstr "napban"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "number"
+msgstr "szám"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Album Artist"
+msgstr "Album előadója"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/my-library/tab-pills.slint ui/views/search/top-result-card.slint
+msgid "Artist"
+msgstr "Előadó"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+msgid "Title"
+msgstr "Cím"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Credits"
+msgstr "Közreműködők"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "ISRC"
+msgstr "ISRC"
+
+#. Translators: a musical key, as in A minor
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Key"
+msgstr "Hangnem"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Mood"
+msgstr "Hangulat"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "BPM"
+msgstr "BPM"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Duration (sec)"
+msgstr "Időtartam (mp)"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/station-facts.slint ui/views/radio/tab-pills.slint
+msgid "Plays"
+msgstr "Lejátszások"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/my-library/tab-pills.slint
+msgid "Year"
+msgstr "Év"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Bitrate (kbps)"
+msgstr "Bitráta (kbps)"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/now-playing/overflow-menu.slint ui/settings.slint
+msgid "Rating"
+msgstr "Értékelés"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Sample rate (Hz)"
+msgstr "Mintavételi frekvencia (Hz)"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Skips"
+msgstr "Átugrások"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Date added"
+msgstr "Hozzáadás dátuma"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Favorite"
+msgstr "Kedvenc"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "File size (bytes)"
+msgstr "Fájlméret (bájt)"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Last played"
+msgstr "Utoljára lejátszva"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "contains"
+msgstr "tartalmazza"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "does not contain"
+msgstr "nem tartalmazza"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is"
+msgstr "egyenlő"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is not"
+msgstr "nem egyenlő"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "ends with"
+msgstr "vége"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is not set"
+msgstr "nincs megadva"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is set"
+msgstr "meg van adva"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "starts with"
+msgstr "kezdete"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "at least"
+msgstr "legalább"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "greater than"
+msgstr "nagyobb, mint"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "at most"
+msgstr "legfeljebb"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "less than"
+msgstr "kisebb, mint"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is false"
+msgstr "hamis"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is true"
+msgstr "igaz"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "in the last"
+msgstr "az elmúlt"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "not in the last"
+msgstr "nem az elmúlt"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "all"
+msgstr "az összes"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "any"
+msgstr "bármely"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "least recently added"
+msgstr "legrégebben hozzáadott"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "most recently added"
+msgstr "legutóbb hozzáadott"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "least played"
+msgstr "legkevesebbet játszott"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "most played"
+msgstr "legtöbbet játszott"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "least recently played"
+msgstr "legrégebben játszott"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "most recently played"
+msgstr "legutóbb játszott"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "highest rated"
+msgstr "legjobbra értékelt"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "random"
+msgstr "véletlenszerű"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Smart playlist name"
+msgstr "Intelligens lejátszási lista neve"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Match"
+msgstr "Egyezzen"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "of the following rules"
+msgstr "alábbi szabállyal"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Add rule"
+msgstr "Szabály hozzáadása"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Limit to"
+msgstr "Legfeljebb"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "N"
+msgstr "N"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "tracks by"
+msgstr "szám, sorrend:"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Arranger"
+msgstr "Hangszerelő"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Composer"
+msgstr "Zeneszerző"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Conductor"
+msgstr "Karmester"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Lyricist"
+msgstr "Szövegíró"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Performer"
+msgstr "Előadóművész"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "DJ Mixer"
+msgstr "DJ-keverő"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Engineer"
+msgstr "Hangmérnök"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Mixer"
+msgstr "Keverőmérnök"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Producer"
+msgstr "Producer"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Remixer"
+msgstr "Remixer"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Replace…"
+msgstr "Csere…"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/folder-row.slint ui/globals/dialog.slint
+#: ui/views/settings/library-section.slint
+msgid "Remove"
+msgstr "Eltávolítás"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Details"
+msgstr "Részletek"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/now-playing/lyrics-menu.slint ui/settings.slint
+#: ui/views/now-playing-view.slint ui/views/settings/lyrics-section.slint
+msgid "Lyrics"
+msgstr "Dalszöveg"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Summary"
+msgstr "Összegzés"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Tags"
+msgstr "Címkék"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Total"
+msgstr "Összesen"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Disc"
+msgstr "Lemez"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Original Year"
+msgstr "Eredeti év"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Comment"
+msgstr "Megjegyzés"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Subtitle"
+msgstr "Alcím"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Disc Subtitle"
+msgstr "Lemez alcíme"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Grouping"
+msgstr "Csoportosítás"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Work"
+msgstr "Mű"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Movement"
+msgstr "Tétel"
+
+#. Translators: the movement's number, as in movement 2 of 4
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Number"
+msgstr "Sorszám"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/onboarding/appearance-panel.slint ui/settings.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+#: ui/views/settings/language-section.slint
+msgid "Language"
+msgstr "Nyelv"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Copyright"
+msgstr "Szerzői jog"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Record Label"
+msgstr "Kiadó"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Catalog Number"
+msgstr "Katalógusszám"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Barcode"
+msgstr "Vonalkód"
+
+#. Translators: the physical medium a release came out on: CD, vinyl
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Media"
+msgstr "Hordozó"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Release Type"
+msgstr "Kiadás típusa"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Release Country"
+msgstr "Kiadás országa"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Part of a compilation"
+msgstr "Válogatás része"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Insert found lyrics"
+msgstr "Talált dalszöveg beillesztése"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Path"
+msgstr "Elérési út"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Codec"
+msgstr "Kodek"
+
+#: ui/components/dialog/tag-editor-body.slint ui/components/station-facts.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+msgid "Bitrate"
+msgstr "Bitráta"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/views/settings/output-section.slint
+msgid "Sample Rate"
+msgstr "Mintavételi frekvencia"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Bit Depth"
+msgstr "Bitmélység"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/views/settings/output-section.slint
+msgid "Channels"
+msgstr "Csatornák"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Size"
+msgstr "Méret"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/views/my-library/tab-pills.slint
+msgid "Duration"
+msgstr "Időtartam"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Modified"
+msgstr "Módosítva"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "BLAKE3"
+msgstr "BLAKE3"
+
+#: ui/components/grid/album-grid.slint
+#: ui/components/track-list/track-list-row.slint ui/globals/player.slint
+msgid "Unknown artist"
+msgstr "Ismeretlen előadó"
+
+#: ui/components/grid/artist-grid.slint ui/globals/hero-chips.slint
+#: ui/globals/search.slint ui/views/my-library-view.slint
+msgid "{n} album"
+msgid_plural "{n} albums"
+msgstr[0] "{n} album"
+msgstr[1] "{n} album"
+
+#: ui/components/grid/browse-card-grid.slint
+msgid "Folder"
+msgstr "Mappa"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/now-playing/play-button.slint
+#: ui/components/track-list/track-context-menu.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Play"
+msgstr "Lejátszás"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/now-playing/overflow-menu.slint ui/views/favorites-view.slint
+#: ui/views/my-library/tab-pills.slint ui/views/recently-played-view.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Shuffle"
+msgstr "Keverés"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Play {} Next"
+msgstr "{} elem lejátszása következőként"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Play Next"
+msgstr "Lejátszás következőként"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Add {} to Queue"
+msgstr "{} elem hozzáadása a lejátszási sorhoz"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Add to Queue"
+msgstr "Hozzáadás a lejátszási sorhoz"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "New Playlist…"
+msgstr "Új lejátszási lista…"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Add to Playlist"
+msgstr "Hozzáadás lejátszási listához"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Edit Tags for {}"
+msgstr "{} elem címkéinek szerkesztése"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Edit Tags…"
+msgstr "Címkék szerkesztése…"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Edit {} Tracks"
+msgstr "{} szám szerkesztése"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/now-playing/lyrics-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Edit Track Information"
+msgstr "Számadatok szerkesztése"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/station-facts.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Copy"
+msgstr "Másolás"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Copy Name"
+msgstr "Név másolása"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Copy Path"
+msgstr "Elérési út másolása"
+
+#: ui/components/grid/card-context-menu.slint ui/settings.slint
+#: ui/views/settings/diagnostics-section.slint
+msgid "Open Folder"
+msgstr "Mappa megnyitása"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Show in File Manager"
+msgstr "Megjelenítés a fájlkezelőben"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Open Containing Folder"
+msgstr "Tartalmazó mappa megnyitása"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Go to Artist"
+msgstr "Ugrás az előadóra"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Clear selection"
+msgstr "Kijelölés törlése"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Rename…"
+msgstr "Átnevezés…"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Edit Artwork…"
+msgstr "Borító szerkesztése…"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Edit Rules…"
+msgstr "Szabályok szerkesztése…"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Delete {} Playlists"
+msgstr "{} lejátszási lista törlése"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Delete Playlist"
+msgstr "Lejátszási lista törlése"
+
+#: ui/components/grid/card-context-menu.slint
+msgid "Artist - Album"
+msgstr "Előadó - Album"
+
+#: ui/components/grid/playlist-grid.slint
+msgid "0 tracks"
+msgstr "0 szám"
+
+#: ui/components/grid/station-context-menu.slint
+msgid "Open Website"
+msgstr "Weboldal megnyitása"
+
+#: ui/components/grid/station-context-menu.slint
+msgid "Edit…"
+msgstr "Szerkesztés…"
+
+#. Translators: `{}` is how many stations are selected
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove {} from Recently Played…"
+msgstr "{} állomás eltávolítása a Nemrég lejátszottak közül…"
+
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove from Recently Played…"
+msgstr "Eltávolítás a Nemrég lejátszottak közül…"
+
+#. Translators: `{}` is how many stations are selected
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove {} from Favorites…"
+msgstr "{} állomás eltávolítása a kedvencek közül…"
+
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove from Favorites…"
+msgstr "Eltávolítás a kedvencek közül…"
+
+#: ui/components/mini-player/mini-captions.slint
+msgid "Full Player"
+msgstr "Teljes lejátszó"
+
+#: ui/components/mini-player/mini-captions.slint
+msgid "Show Up Next"
+msgstr "Következők megjelenítése"
+
+#: ui/components/mini-player/mini-captions.slint
+#: ui/components/now-playing/lyrics-controls.slint
+#: ui/views/settings/lyrics-section.slint
+msgid "Show lyrics"
+msgstr "Dalszöveg megjelenítése"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Pin on Top"
+msgstr "Mindig felül"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Unpin from Top"
+msgstr "Ne legyen mindig felül"
+
+#: ui/components/mini-player/mini-controls.slint
+msgid "Album Backdrop: off"
+msgstr "Albumháttér: ki"
+
+#: ui/components/mini-player/mini-controls.slint
+msgid "Album Backdrop: on"
+msgstr "Albumháttér: be"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Unfavorite"
+msgstr "Eltávolítás a kedvencek közül"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Shuffle: off"
+msgstr "Keverés: ki"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Shuffle: on"
+msgstr "Keverés: be"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Repeat: off"
+msgstr "Ismétlés: ki"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Repeat: one"
+msgstr "Ismétlés: egy szám"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Repeat: all"
+msgstr "Ismétlés: összes"
+
+#: ui/components/now-playing/flyout-presets.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/components/now-playing/visualizer-flyout.slint
+msgid "Off"
+msgstr "Ki"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "15 min"
+msgstr "15 perc"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "30 min"
+msgstr "30 perc"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "45 min"
+msgstr "45 perc"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "60 min"
+msgstr "60 perc"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "90 min"
+msgstr "90 perc"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "End of track"
+msgstr "A szám végén"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "Bars"
+msgstr "Sávok"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "Mirrored"
+msgstr "Tükrözött"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "Waveform"
+msgstr "Hullámforma"
+
+#: ui/components/now-playing/lyrics-menu.slint
+#: ui/views/settings/lyrics-section.slint
+msgid "Show romanization"
+msgstr "Latin betűs átírás megjelenítése"
+
+#: ui/components/now-playing/lyrics-menu.slint
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/lyrics-section.slint
+msgid "Look up lyrics online"
+msgstr "Dalszöveg keresése online"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Look up again"
+msgstr "Újbóli keresés"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Save to file"
+msgstr "Mentés fájlba"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Edit lyrics…"
+msgstr "Dalszöveg szerkesztése…"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Looking for lyrics…"
+msgstr "Dalszöveg keresése…"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "This track has no words"
+msgstr "Ez a szám szöveg nélküli"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "No lyrics found"
+msgstr "Nem található dalszöveg"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Couldn't reach the lyrics service"
+msgstr "A dalszöveg-szolgáltatás nem érhető el"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Lyrics lookup is off"
+msgstr "A dalszöveg-keresés ki van kapcsolva"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Play something to see its lyrics"
+msgstr "Játssz le valamit, hogy lásd a szövegét"
+
+#. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Turn it on in the Lyrics menu"
+msgstr "Kapcsold be a Dalszöveg menüben"
+
+#. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Try again from the Lyrics menu"
+msgstr "Próbáld újra a Dalszöveg menüből"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "More"
+msgstr "Továbbiak"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/output-section.slint
+msgid "Speed"
+msgstr "Sebesség"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "Sleep timer"
+msgstr "Elalváskapcsoló"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "Track end"
+msgstr "Szám vége"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/playback-section.slint
+msgid "Equalizer"
+msgstr "Hangszínszabályzó"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "On"
+msgstr "Be"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Done"
+msgstr "Kész"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/output-section.slint
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Repeat"
+msgstr "Ismétlés"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint ui/views/queue-sheet.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Queue"
+msgstr "Lejátszási sor"
+
+#: ui/components/now-playing/play-button.slint
+msgid "Pause (hold to stop)"
+msgstr "Szünet (tartsd lenyomva a leállításhoz)"
+
+#: ui/components/now-playing/play-button.slint
+msgid "Play (hold to stop)"
+msgstr "Lejátszás (tartsd lenyomva a leállításhoz)"
+
+#: ui/components/now-playing/play-button.slint
+msgid "Pause"
+msgstr "Szünet"
+
+#: ui/components/now-playing/sleep-timer-flyout.slint
+msgid "Start"
+msgstr "Indítás"
+
+#: ui/components/now-playing/up-next-list.slint
+msgid "No tracks up next"
+msgstr "Nincs következő szám"
+
+#: ui/components/now-playing/visualizer-picker.slint
+#: ui/views/settings/playback-section.slint
+msgid "Visualizer"
+msgstr "Vizualizáció"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Appearance"
+msgstr "Megjelenés"
+
+#: ui/components/onboarding/appearance-panel.slint
+msgid "Pick how Melodia looks. Every change applies as you make it."
+msgstr "Válaszd ki, hogyan nézzen ki a Melodia. Minden módosítás azonnal érvénybe lép."
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Theme"
+msgstr "Téma"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Theme Variant"
+msgstr "Témaváltozat"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "System"
+msgstr "Rendszer"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Dark"
+msgstr "Sötét"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Light"
+msgstr "Világos"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Accent Color"
+msgstr "Kiemelőszín"
+
+#: ui/components/onboarding/features-panel.slint
+msgid "What Melodia can reach"
+msgstr "Mit ér el a Melodia"
+
+#: ui/components/onboarding/features-panel.slint
+msgid "Melodia works offline. These are the parts that reach out."
+msgstr "A Melodia offline működik. Ezek a részei kapcsolódnak a hálózathoz."
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/radio-section.slint
+msgid "Internet radio"
+msgstr "Internetes rádió"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/radio-section.slint
+msgid "Browse and play live stations from radio-browser.info"
+msgstr "Élő állomások böngészése és lejátszása a radio-browser.info katalógusából"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/discord-section.slint
+msgid "Show the track you're playing on your Discord profile"
+msgstr "A lejátszott szám megjelenítése a Discord-profilodon"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/lyrics-section.slint
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Ha egy szám nem tartalmaz saját szöveget, lekérés innen: lrclib.net"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobbling"
+msgstr "Scrobblolás"
+
+#: ui/components/onboarding/features-panel.slint
+msgid "Send what you play to Last.fm or ListenBrainz"
+msgstr "A lejátszott számok elküldése a Last.fm vagy a ListenBrainz szolgáltatásnak"
+
+#: ui/components/onboarding/features-panel.slint
+msgid "Set Up"
+msgstr "Beállítás"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Check for updates automatically"
+msgstr "Frissítések automatikus keresése"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Once a day, Melodia asks GitHub whether a newer version is out."
+msgstr "A Melodia naponta egyszer megkérdezi a GitHubot, hogy megjelent-e újabb verzió."
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Your music"
+msgstr "A zenéid"
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Add the folders your music lives in. Melodia picks up changes to them on its own."
+msgstr "Add hozzá a mappákat, amelyekben a zenéid vannak. A Melodia magától észleli a bennük történt változásokat."
+
+#: ui/components/onboarding/music-panel.slint
+msgid "{n} folder in your library"
+msgid_plural "{n} folders in your library"
+msgstr[0] "{n} mappa a könyvtáradban"
+msgstr[1] "{n} mappa a könyvtáradban"
+
+#: ui/components/onboarding/music-panel.slint
+#: ui/views/settings/library-section.slint
+msgid "Add a folder to scan for music files."
+msgstr "Adj hozzá egy mappát a zenefájlok kereséséhez."
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Your Music folder: {}"
+msgstr "A Zene mappád: {}"
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Add Music Folder"
+msgstr "Zene mappa hozzáadása"
+
+#: ui/components/onboarding/music-panel.slint
+#: ui/views/settings/library-section.slint
+msgid "Add Folder"
+msgstr "Mappa hozzáadása"
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Choose Another Folder"
+msgstr "Másik mappa választása"
+
+#. Translators: Melodia is the product name and stays as is
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Welcome to Melodia"
+msgstr "Üdvözöl a Melodia"
+
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Skip"
+msgstr "Kihagyás"
+
+#: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
+msgid "Back"
+msgstr "Vissza"
+
+#: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
+msgid "Next"
+msgstr "Következő"
+
+#: ui/components/search-bar.slint
+msgid "Search…"
+msgstr "Keresés…"
+
+#: ui/components/settings/folder-row.slint
+msgid "Rescan"
+msgstr "Újraolvasás"
+
+#: ui/components/settings/scan-progress.slint
+msgid "Looking for music… {n} file found"
+msgid_plural "Looking for music… {n} files found"
+msgstr[0] "Zene keresése… {n} fájl található"
+msgstr[1] "Zene keresése… {n} fájl található"
+
+#: ui/components/settings/scan-progress.slint
+msgid "Finishing up…"
+msgstr "Befejezés…"
+
+#: ui/components/settings/scan-progress.slint
+msgid "Stopping…"
+msgstr "Leállítás…"
+
+#. Translators: files read so far, the total, then the file being read
+#: ui/components/settings/scan-progress.slint
+msgid "{} / {} files · {}"
+msgstr "{}/{} fájl · {}"
+
+#. Translators: files read so far, then the total
+#: ui/components/settings/scan-progress.slint
+msgid "{} / {} files"
+msgstr "{}/{} fájl"
+
+#: ui/components/settings/scan-progress.slint ui/globals/dialog-forms.slint
+#: ui/globals/dialog.slint ui/views/queue-sheet.slint
+#: ui/views/radio/tab-pills.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/library-section.slint
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/scrobbling-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Cancel"
+msgstr "Mégse"
+
+#: ui/components/sort-menu-popup.slint
+msgid "Sort"
+msgstr "Rendezés"
+
+#: ui/components/station-facts.slint
+msgid "Stream"
+msgstr "Adatfolyam"
+
+#: ui/components/station-facts.slint
+msgid "Copy stream URL"
+msgstr "Adatfolyam URL-jének másolása"
+
+#: ui/components/station-facts.slint
+msgid "Open in your browser"
+msgstr "Megnyitás a böngészőben"
+
+#: ui/components/station-facts.slint ui/views/radio/suggestion-pill.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Format"
+msgstr "Formátum"
+
+#: ui/components/station-facts.slint ui/views/radio/station-grid.slint
+msgid "{} kbps"
+msgstr "{} kbps"
+
+#: ui/components/station-facts.slint
+msgid "Votes"
+msgstr "Szavazatok"
+
+#: ui/components/station-facts.slint
+msgid "{n} vote"
+msgid_plural "{n} votes"
+msgstr[0] "{n} szavazat"
+msgstr[1] "{n} szavazat"
+
+#: ui/components/station-facts.slint ui/globals/hero-chips.slint
+msgid "{n} play"
+msgid_plural "{n} plays"
+msgstr[0] "{n} lejátszás"
+msgstr[1] "{n} lejátszás"
+
+#: ui/components/station-facts.slint
+msgid "Recently played on this station"
+msgstr "Nemrég szólt ezen az állomáson"
+
+#: ui/components/station-facts.slint
+msgid "Copy Title"
+msgstr "Cím másolása"
+
+#: ui/components/station-facts.slint
+msgid "Copy Artist"
+msgstr "Előadó másolása"
+
+#: ui/components/track-copy-items.slint
+msgid "Artist - Title"
+msgstr "Előadó - Cím"
+
+#: ui/components/track-copy-items.slint
+msgid "File Path"
+msgstr "Fájl elérési útja"
+
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Columns"
+msgstr "Oszlopok"
+
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Artwork"
+msgstr "Borító"
+
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint
+msgid "Length"
+msgstr "Hossz"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/track-list/track-context-menu.slint
+msgid "Add {} to Playlist"
+msgstr "{} elem hozzáadása lejátszási listához"
+
+#: ui/components/track-list/track-context-menu.slint
+msgid "Go to Album"
+msgstr "Ugrás az albumra"
+
+#: ui/components/track-list/track-context-menu.slint
+msgid "Go to Genre"
+msgstr "Ugrás a műfajra"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove {} from Playlist"
+msgstr "{} elem eltávolítása a lejátszási listából"
+
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove from Playlist"
+msgstr "Eltávolítás a lejátszási listából"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove {} from Queue"
+msgstr "{} elem eltávolítása a lejátszási sorból"
+
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove from Queue"
+msgstr "Eltávolítás a lejátszási sorból"
+
+#: ui/components/track-list/track-list-row.slint
+msgid "Unknown album"
+msgstr "Ismeretlen album"
+
+#: ui/globals/curated.slint ui/globals/hero-chips.slint
+msgid "{n} favorite"
+msgid_plural "{n} favorites"
+msgstr[0] "{n} kedvenc"
+msgstr[1] "{n} kedvenc"
+
+#: ui/globals/dialog-forms.slint
+msgid "That token wasn't accepted. Check it and try again."
+msgstr "A tokent nem fogadták el. Ellenőrizd, és próbáld újra."
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't reach the service. Check your connection and try again."
+msgstr "A szolgáltatás nem érhető el. Ellenőrizd a kapcsolatot, és próbáld újra."
+
+#: ui/globals/dialog-forms.slint
+msgid "Not approved yet. Approve Melodia in your browser, then click Finish."
+msgstr "Még nincs jóváhagyva. Hagyd jóvá a Melodiát a böngészőben, majd kattints a Befejezés gombra."
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't save your credentials."
+msgstr "Nem sikerült menteni a hitelesítő adataidat."
+
+#: ui/globals/dialog-forms.slint
+msgid "Edit Station"
+msgstr "Állomás szerkesztése"
+
+#: ui/globals/dialog-forms.slint
+msgid "Station Details"
+msgstr "Állomás adatai"
+
+#: ui/globals/dialog-forms.slint ui/globals/dialog.slint
+msgid "Save"
+msgstr "Mentés"
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't reach that address. Check the URL and your connection."
+msgstr "Ez a cím nem érhető el. Ellenőrizd az URL-t és a kapcsolatot."
+
+#: ui/globals/dialog-forms.slint
+msgid "That address doesn't play as audio Melodia can decode."
+msgstr "Ez a cím nem ad olyan hangot, amelyet a Melodia dekódolni tud."
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't save the station."
+msgstr "Nem sikerült menteni az állomást."
+
+#: ui/globals/dialog-forms.slint
+msgid "That doesn't look like a web address. It should start with https://"
+msgstr "Ez nem tűnik webcímnek. Így kell kezdődnie: https://"
+
+#: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
+msgid "New Playlist"
+msgstr "Új lejátszási lista"
+
+#: ui/globals/dialog.slint
+msgid "Create"
+msgstr "Létrehozás"
+
+#: ui/globals/dialog.slint
+msgid "Rename Playlist"
+msgstr "Lejátszási lista átnevezése"
+
+#: ui/globals/dialog.slint
+msgid "Delete playlist?"
+msgstr "Törlöd a lejátszási listát?"
+
+#: ui/globals/dialog.slint
+msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
+msgstr "A lejátszási lista és a számok sorrendje törlődik. Maguk a számok a könyvtáradban maradnak."
+
+#: ui/globals/dialog.slint
+msgid "Delete"
+msgstr "Törlés"
+
+#: ui/globals/dialog.slint
+msgid "Delete {} playlists?"
+msgstr "Törölsz {} lejátszási listát?"
+
+#: ui/globals/dialog.slint
+msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
+msgstr "A lejátszási listák és a számok sorrendje törlődik. Maguk a számok a könyvtáradban maradnak."
+
+#: ui/globals/dialog.slint
+msgid "Remove from Recently Played?"
+msgstr "Eltávolítod a Nemrég lejátszottak közül?"
+
+#: ui/globals/dialog.slint
+msgid "Remove from favorites?"
+msgstr "Eltávolítod a kedvencek közül?"
+
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from Recently Played."
+msgstr "„{}” kikerül a Nemrég lejátszottak közül."
+
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from your stations, along with its play history."
+msgstr "„{}” kikerül az állomásaid közül, a lejátszási előzményeivel együtt."
+
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from your favorites."
+msgstr "„{}” kikerül a kedvenceid közül."
+
+#: ui/globals/dialog.slint
+msgid "Remove {n} station from Recently Played?"
+msgid_plural "Remove {n} stations from Recently Played?"
+msgstr[0] "Eltávolítasz {n} állomást a Nemrég lejátszottak közül?"
+msgstr[1] "Eltávolítasz {n} állomást a Nemrég lejátszottak közül?"
+
+#: ui/globals/dialog.slint
+msgid "Remove {n} station from favorites?"
+msgid_plural "Remove {n} stations from favorites?"
+msgstr[0] "Eltávolítasz {n} állomást a kedvencek közül?"
+msgstr[1] "Eltávolítasz {n} állomást a kedvencek közül?"
+
+#: ui/globals/dialog.slint
+msgid "The stations will be removed from Recently Played."
+msgstr "Az állomások kikerülnek a Nemrég lejátszottak közül."
+
+#: ui/globals/dialog.slint
+msgid "The stations will be removed from your favorites. Any you added by hand are removed from your stations, along with their play history."
+msgstr "Az állomások kikerülnek a kedvenceid közül. A kézzel hozzáadottak az állomásaid közül is törlődnek, a lejátszási előzményeikkel együtt."
+
+#: ui/globals/dialog.slint
+msgid "Edit Rules"
+msgstr "Szabályok szerkesztése"
+
+#: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
+msgid "New Smart Playlist"
+msgstr "Új intelligens lejátszási lista"
+
+#: ui/globals/dialog.slint
+msgid "Edit Artwork"
+msgstr "Borító szerkesztése"
+
+#: ui/globals/dialog.slint
+msgid "Apply"
+msgstr "Alkalmaz"
+
+#: ui/globals/dialog.slint
+msgid "Export Playlists"
+msgstr "Lejátszási listák exportálása"
+
+#: ui/globals/dialog.slint
+msgid "Choose playlists to export."
+msgstr "Válaszd ki az exportálandó lejátszási listákat."
+
+#: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Export"
+msgstr "Exportálás"
+
+#: ui/globals/hero-chips.slint ui/views/my-library-view.slint
+msgid "{n} artist"
+msgid_plural "{n} artists"
+msgstr[0] "{n} előadó"
+msgstr[1] "{n} előadó"
+
+#: ui/globals/hero-chips.slint
+msgid "{n} disc"
+msgid_plural "{n} discs"
+msgstr[0] "{n} lemez"
+msgstr[1] "{n} lemez"
+
+#: ui/globals/hero-chips.slint ui/settings.slint
+msgid "Compilation"
+msgstr "Válogatás"
+
+#: ui/globals/player.slint
+msgid "No track playing"
+msgstr "Nincs lejátszott szám"
+
+#. Translators: a state on the station pill, not the Pause button's verb
+#: ui/globals/player.slint
+msgid "Paused"
+msgstr "Szüneteltetve"
+
+#: ui/globals/player.slint
+msgid "Buffering…"
+msgstr "Pufferelés…"
+
+#. Translators: a short pill in place of a track's seek bar
+#: ui/globals/player.slint
+msgid "LIVE"
+msgstr "ÉLŐ"
+
+#: ui/globals/player.slint
+msgid "Previous (hold to rewind)"
+msgstr "Előző (tartsd lenyomva a visszatekeréshez)"
+
+#: ui/globals/player.slint
+msgid "Previous"
+msgstr "Előző"
+
+#: ui/globals/player.slint
+msgid "Next (hold to fast-forward)"
+msgstr "Következő (tartsd lenyomva az előretekeréshez)"
+
+#: ui/globals/signal-path.slint
+msgid "Nothing is playing"
+msgstr "Nem szól semmi"
+
+#: ui/globals/signal-path.slint
+msgid "Bit-perfect: the device receives the decoder's samples untouched"
+msgstr "Bitpontos: az eszköz érintetlenül kapja meg a dekóder mintáit"
+
+#: ui/globals/signal-path.slint
+msgid "Enhanced: only effects you chose change the sound"
+msgstr "Feljavított: csak az általad választott effektek változtatnak a hangon"
+
+#: ui/globals/signal-path.slint
+msgid "Fallback: exclusive output was refused, so the system mixer is in the way"
+msgstr "Tartalék: a kizárólagos kimenetet elutasították, ezért a rendszerkeverő is közbeiktatódik"
+
+#: ui/globals/signal-path.slint
+msgid "Lossy: the file is compressed, so the device gets the decoder's reconstruction of the recording"
+msgstr "Veszteséges: a fájl tömörített, ezért az eszköz a felvételnek a dekóder által visszaállított változatát kapja"
+
+#: ui/globals/signal-path.slint
+msgid "Converted: the sound is changed on its way to the device"
+msgstr "Átalakított: a hang megváltozik az eszközig vezető úton"
+
+#: ui/globals/signal-path.slint
+msgid "Bit-perfect"
+msgstr "Bitpontos"
+
+#: ui/globals/signal-path.slint
+msgid "Enhanced"
+msgstr "Feljavított"
+
+#: ui/globals/signal-path.slint
+msgid "Fallback"
+msgstr "Tartalék"
+
+#: ui/globals/signal-path.slint
+msgid "Lossy"
+msgstr "Veszteséges"
+
+#: ui/globals/signal-path.slint
+msgid "Converted"
+msgstr "Átalakított"
+
+#. Translators: the action a click takes, expanding the sidebar
+#: ui/layout/sidebar.slint
+msgid "Expand"
+msgstr "Kibontás"
+
+#: ui/layout/sidebar.slint
+msgid "Collapse"
+msgstr "Összecsukás"
+
+#: ui/settings.slint
+msgid "System Default"
+msgstr "Rendszer alapértelmezése"
+
+#: ui/settings.slint
+msgid "File watching disabled"
+msgstr "Fájlfigyelés kikapcsolva"
+
+#: ui/settings.slint
+msgid "Tracks won't reflect disk changes until you re-enable it."
+msgstr "A számok nem követik a lemezen történt változásokat, amíg újra be nem kapcsolod."
+
+#: ui/settings.slint
+msgid "Library re-syncing"
+msgstr "Könyvtár újraszinkronizálása"
+
+#: ui/settings.slint
+msgid "Filesystem event burst — rescanning your folders."
+msgstr "Sok fájlrendszer-esemény érkezett egyszerre, a mappák újraolvasása folyamatban."
+
+#: ui/settings.slint
+msgid "Restoring cover art"
+msgstr "Borítók helyreállítása"
+
+#: ui/settings.slint
+msgid "Some cover art was missing. Melodia is restoring it from your music files."
+msgstr "Néhány borító hiányzott. A Melodia helyreállítja őket a zenefájljaidból."
+
+#: ui/settings.slint
+msgid "Update available"
+msgstr "Frissítés érhető el"
+
+#: ui/settings.slint
+msgid "Melodia {} is ready to install."
+msgstr "A Melodia {} telepítésre kész."
+
+#: ui/settings.slint
+msgid "Install"
+msgstr "Telepítés"
+
+#: ui/settings.slint
+msgid "Update installed"
+msgstr "Frissítés telepítve"
+
+#: ui/settings.slint
+msgid "Restart Melodia to start using the new version."
+msgstr "Indítsd újra a Melodiát az új verzió használatához."
+
+#: ui/settings.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Restart"
+msgstr "Újraindítás"
+
+#: ui/settings.slint
+msgid "Update failed"
+msgstr "Sikertelen frissítés"
+
+#: ui/settings.slint
+msgid "Couldn't reach the update server. Check your internet connection."
+msgstr "A frissítési kiszolgáló nem érhető el. Ellenőrizd az internetkapcsolatot."
+
+#: ui/settings.slint
+msgid "Signature check failed. The downloaded update may be corrupted; please try again."
+msgstr "Az aláírás ellenőrzése sikertelen. Lehet, hogy a letöltött frissítés sérült; próbáld újra."
+
+#: ui/settings.slint
+msgid "The update server returned an unexpected response."
+msgstr "A frissítési kiszolgáló váratlan választ adott."
+
+#: ui/settings.slint
+msgid "Couldn't write the downloaded update to disk."
+msgstr "Nem sikerült lemezre írni a letöltött frissítést."
+
+#: ui/settings.slint
+msgid "Update failed. See logs for details."
+msgstr "A frissítés sikertelen. A részleteket a naplókban találod."
+
+#: ui/settings.slint
+msgid "Diagnostics report saved"
+msgstr "Diagnosztikai jelentés mentve"
+
+#: ui/settings.slint
+msgid "Saved to {}"
+msgstr "Mentve ide: {}"
+
+#: ui/settings.slint
+msgid "Couldn't save the diagnostics report"
+msgstr "Nem sikerült menteni a diagnosztikai jelentést"
+
+#: ui/settings.slint
+msgid "See the log for details."
+msgstr "A részleteket a naplóban találod."
+
+#: ui/settings.slint
+msgid "Melodia crashed last time"
+msgstr "A Melodia legutóbb összeomlott"
+
+#: ui/settings.slint
+msgid "A crash report was written. Open the log folder to find it."
+msgstr "Összeomlási jelentés készült. A naplómappában találod."
+
+#: ui/settings.slint
+msgid "Enjoying Melodia?"
+msgstr "Tetszik a Melodia?"
+
+#: ui/settings.slint
+msgid "It's free and open source, built in my spare time. If it's useful to you, you can support me. You'll only see this once."
+msgstr "Ingyenes és nyílt forráskódú, a szabadidőmben készítem. Ha hasznos számodra, támogathatsz. Ezt csak egyszer látod."
+
+#: ui/settings.slint
+msgid "Support"
+msgstr "Támogatás"
+
+#: ui/settings.slint
+msgid "Audio device disconnected"
+msgstr "A hangeszköz leválasztva"
+
+#: ui/settings.slint
+msgid "Playback won't be audible until you reconnect it and restart Melodia."
+msgstr "A lejátszás nem lesz hallható, amíg újra nem csatlakoztatod, és újra nem indítod a Melodiát."
+
+#: ui/settings.slint
+msgid "{n} playlist imported"
+msgid_plural "{n} playlists imported"
+msgstr[0] "{n} lejátszási lista importálva"
+msgstr[1] "{n} lejátszási lista importálva"
+
+#: ui/settings.slint
+msgid "{n} track added · {} missing"
+msgid_plural "{n} tracks added · {} missing"
+msgstr[0] "{n} szám hozzáadva · {} hiányzik"
+msgstr[1] "{n} szám hozzáadva · {} hiányzik"
+
+#: ui/settings.slint
+msgid "{n} track added"
+msgid_plural "{n} tracks added"
+msgstr[0] "{n} szám hozzáadva"
+msgstr[1] "{n} szám hozzáadva"
+
+#: ui/settings.slint
+msgid "Import failed"
+msgstr "Sikertelen importálás"
+
+#: ui/settings.slint
+msgid "Couldn't read the selected playlist file(s)."
+msgstr "Nem sikerült beolvasni a kiválasztott lejátszásilista-fájl(oka)t."
+
+#: ui/settings.slint
+msgid "{n} playlist exported"
+msgid_plural "{n} playlists exported"
+msgstr[0] "{n} lejátszási lista exportálva"
+msgstr[1] "{n} lejátszási lista exportálva"
+
+#: ui/settings.slint
+msgid "Export failed"
+msgstr "Sikertelen exportálás"
+
+#: ui/settings.slint
+msgid "Couldn't write the playlist files."
+msgstr "Nem sikerült kiírni a lejátszásilista-fájlokat."
+
+#: ui/settings.slint
+msgid "These playlists are too large for one .zip file. Export fewer at a time."
+msgstr "Ezek a lejátszási listák túl nagyok egyetlen .zip fájlhoz. Exportálj egyszerre kevesebbet."
+
+#: ui/settings.slint
+msgid "{n} station added"
+msgid_plural "{n} stations added"
+msgstr[0] "{n} állomás hozzáadva"
+msgstr[1] "{n} állomás hozzáadva"
+
+#: ui/settings.slint
+msgid "{n} was already in your list."
+msgid_plural "{n} were already in your list."
+msgstr[0] "{n} már szerepelt a listádon."
+msgstr[1] "{n} már szerepelt a listádon."
+
+#: ui/settings.slint
+msgid "Couldn't read any stations from the selected file(s)."
+msgstr "Nem sikerült állomást beolvasni a kiválasztott fájl(ok)ból."
+
+#: ui/settings.slint
+msgid "{n} station exported"
+msgid_plural "{n} stations exported"
+msgstr[0] "{n} állomás exportálva"
+msgstr[1] "{n} állomás exportálva"
+
+#: ui/settings.slint
+msgid "Couldn't write the station list."
+msgstr "Nem sikerült kiírni az állomáslistát."
+
+#: ui/settings.slint
+msgid "Playback error"
+msgstr "Lejátszási hiba"
+
+#: ui/settings.slint
+msgid "Something went wrong"
+msgstr "Hiba történt"
+
+#: ui/settings.slint
+msgid "Loved tracks"
+msgstr "Kedvelt számok"
+
+#: ui/settings.slint
+msgid "Lyrics saved"
+msgstr "Dalszöveg mentve"
+
+#: ui/settings.slint
+msgid "Copied to clipboard"
+msgstr "Vágólapra másolva"
+
+#: ui/settings.slint
+msgid "Nothing to copy"
+msgstr "Nincs mit másolni"
+
+#: ui/settings.slint
+msgid "Vote not counted"
+msgstr "A szavazat nem számított bele"
+
+#: ui/settings.slint
+msgid "Exclusive output unavailable"
+msgstr "A kizárólagos kimenet nem érhető el"
+
+#: ui/settings.slint
+msgid "Exclusive output was refused, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "A kizárólagos kimenetet elutasították, ezért a Melodia egyelőre megosztott módban játszik. Az okát a Beállítások Kimenet szakasza mutatja."
+
+#: ui/settings.slint
+msgid "{} refused exclusive output, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "{} elutasította a kizárólagos kimenetet, ezért a Melodia egyelőre megosztott módban játszik. Az okát a Beállítások Kimenet szakasza mutatja."
+
+#: ui/settings.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Restart Required"
+msgstr "Újraindítás szükséges"
+
+#: ui/settings.slint
+msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
+msgstr "A Melodia nem tudta újraindítani magát. A módosítás érvényesítéséhez zárd be, és nyisd meg újra."
+
+#: ui/settings.slint
+msgid "Added to {n} playlist"
+msgid_plural "Added to {n} playlists"
+msgstr[0] "Hozzáadva {n} lejátszási listához"
+msgstr[1] "Hozzáadva {n} lejátszási listához"
+
+#: ui/settings.slint
+msgid "‹multiple values›"
+msgstr "‹több érték›"
+
+#: ui/settings.slint
+msgid "{n} track updated"
+msgid_plural "{n} tracks updated"
+msgstr[0] "{n} szám frissítve"
+msgstr[1] "{n} szám frissítve"
+
+#: ui/settings.slint
+msgid "{n} file failed"
+msgid_plural "{n} files failed"
+msgstr[0] "{n} fájl sikertelen"
+msgstr[1] "{n} fájl sikertelen"
+
+#: ui/settings.slint
+msgid "{n} file has unsupported fields"
+msgid_plural "{n} files have unsupported fields"
+msgstr[0] "{n} fájlban nem támogatott mezők vannak"
+msgstr[1] "{n} fájlban nem támogatott mezők vannak"
+
+#: ui/settings.slint
+msgid "{} can't be saved to {} files"
+msgstr "{} nem menthető {} formátumú fájlokba"
+
+#: ui/settings.slint
+msgid "Disc Total"
+msgstr "Lemezek száma"
+
+#: ui/settings.slint
+msgid "Track Total"
+msgstr "Számok száma"
+
+#: ui/settings.slint
+msgid "Movement Number"
+msgstr "Tétel sorszáma"
+
+#: ui/settings.slint
+msgid "Movement Total"
+msgstr "Tételek száma"
+
+#: ui/settings.slint
+msgid "Couldn't save tags"
+msgstr "Nem sikerült menteni a címkéket"
+
+#: ui/settings.slint
+msgid "No tracks were updated."
+msgstr "Egy szám sem frissült."
+
+#: ui/views/browse-view.slint
+msgid "No library folders configured"
+msgstr "Nincs beállított könyvtármappa"
+
+#: ui/views/browse-view.slint
+msgid "Open Settings to add a folder"
+msgstr "Mappa hozzáadásához nyisd meg a Beállításokat"
+
+#: ui/views/browse-view.slint
+msgid "Open Settings"
+msgstr "Beállítások megnyitása"
+
+#: ui/views/browse-view.slint
+msgid "Could not load folder"
+msgstr "Nem sikerült betölteni a mappát"
+
+#: ui/views/browse-view.slint
+msgid "Empty folder"
+msgstr "Üres mappa"
+
+#: ui/views/browse-view.slint
+msgid "Card view"
+msgstr "Kártyanézet"
+
+#: ui/views/browse-view.slint
+msgid "List view"
+msgstr "Listanézet"
+
+#: ui/views/favorites-view.slint ui/views/recently-played-view.slint
+msgid "Filter most played…"
+msgstr "Legtöbbet játszottak szűrése…"
+
+#: ui/views/favorites-view.slint ui/views/my-library-view.slint
+msgid "Filter artists…"
+msgstr "Előadók szűrése…"
+
+#: ui/views/favorites-view.slint
+msgid "Filter favorites…"
+msgstr "Kedvencek szűrése…"
+
+#: ui/views/favorites-view.slint
+msgid "Favorite Artists"
+msgstr "Kedvenc előadók"
+
+#: ui/views/favorites-view.slint ui/views/recently-played-view.slint
+msgid "Most Played"
+msgstr "Legtöbbet játszottak"
+
+#: ui/views/favorites-view.slint ui/views/my-library-view.slint
+#: ui/views/recently-played-view.slint ui/views/search/songs-section.slint
+msgid "Songs"
+msgstr "Dalok"
+
+#: ui/views/favorites-view.slint
+msgid "No favorites yet"
+msgstr "Még nincsenek kedvencek"
+
+#: ui/views/favorites/artists-tab.slint
+msgid "No favorite artists yet"
+msgstr "Még nincsenek kedvenc előadók"
+
+#: ui/views/favorites/artists-tab.slint
+msgid "Favorite a song and its artist appears here."
+msgstr "Jelölj meg egy dalt kedvencként, és az előadója itt jelenik meg."
+
+#: ui/views/favorites/most-played-tab.slint ui/views/radio-view.slint
+#: ui/views/recently-played/most-played-tab.slint
+msgid "Nothing played yet"
+msgstr "Még nem játszottál le semmit"
+
+#: ui/views/favorites/most-played-tab.slint
+msgid "Play one of your favorites and it will show up here."
+msgstr "Játssz le egyet a kedvenceid közül, és itt fog megjelenni."
+
+#: ui/views/my-library-view.slint
+msgid "{n} song"
+msgid_plural "{n} songs"
+msgstr[0] "{n} dal"
+msgstr[1] "{n} dal"
+
+#: ui/views/my-library-view.slint
+msgid "{n} genre"
+msgid_plural "{n} genres"
+msgstr[0] "{n} műfaj"
+msgstr[1] "{n} műfaj"
+
+#: ui/views/my-library-view.slint
+msgid "{n} playlist"
+msgid_plural "{n} playlists"
+msgstr[0] "{n} lejátszási lista"
+msgstr[1] "{n} lejátszási lista"
+
+#: ui/views/my-library-view.slint ui/views/my-library/artist-detail.slint
+#: ui/views/my-library/tab-pills.slint ui/views/search-view.slint
+msgid "Albums"
+msgstr "Albumok"
+
+#: ui/views/my-library-view.slint ui/views/search-view.slint
+msgid "Artists"
+msgstr "Előadók"
+
+#: ui/views/my-library-view.slint
+msgid "Genres"
+msgstr "Műfajok"
+
+#: ui/views/my-library-view.slint
+msgid "Playlists"
+msgstr "Lejátszási listák"
+
+#: ui/views/my-library-view.slint
+msgid "Filter tracks & albums…"
+msgstr "Számok és albumok szűrése…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter tracks…"
+msgstr "Számok szűrése…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter albums…"
+msgstr "Albumok szűrése…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter genres…"
+msgstr "Műfajok szűrése…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter playlists…"
+msgstr "Lejátszási listák szűrése…"
+
+#: ui/views/my-library/albums-tab.slint
+msgid "No albums yet"
+msgstr "Még nincsenek albumok"
+
+#: ui/views/my-library/albums-tab.slint ui/views/my-library/artists-tab.slint
+#: ui/views/my-library/genres-tab.slint
+msgid "Add a music folder in Settings to start building your library."
+msgstr "A könyvtárad felépítéséhez adj hozzá egy zenemappát a Beállításokban."
+
+#: ui/views/my-library/artists-tab.slint
+msgid "No artists yet"
+msgstr "Még nincsenek előadók"
+
+#: ui/views/my-library/genres-tab.slint
+msgid "No genres yet"
+msgstr "Még nincsenek műfajok"
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "No matching tracks"
+msgstr "Nincs egyező szám"
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "No tracks yet"
+msgstr "Még nincsenek számok"
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "No tracks match these rules."
+msgstr "Egy szám sem felel meg ezeknek a szabályoknak."
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "Drag music files here, or add tracks via any track's overflow menu."
+msgstr "Húzz ide zenefájlokat, vagy adj hozzá számokat bármelyik szám Továbbiak menüjéből."
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "Drop files to add to this playlist"
+msgstr "Engedd el a fájlokat, hogy ehhez a lejátszási listához add őket"
+
+#: ui/views/my-library/playlists-tab.slint
+msgid "No playlists yet"
+msgstr "Még nincsenek lejátszási listák"
+
+#: ui/views/my-library/playlists-tab.slint
+msgid "Click \"+ New Playlist\" to create one."
+msgstr "Létrehozáshoz kattints a „+ Új lejátszási lista” gombra."
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Tracks"
+msgstr "Számok"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Edit artwork"
+msgstr "Borító szerkesztése"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Rename"
+msgstr "Átnevezés"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Edit rules"
+msgstr "Szabályok szerkesztése"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Delete playlist"
+msgstr "Lejátszási lista törlése"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Create an empty playlist"
+msgstr "Üres lejátszási lista létrehozása"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Create a playlist from rules"
+msgstr "Lejátszási lista létrehozása szabályok alapján"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "More playlist actions"
+msgstr "További lejátszásilista-műveletek"
+
+#: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
+msgid "Import"
+msgstr "Importálás"
+
+#: ui/views/now-playing-view.slint ui/views/radio/tab-pills.slint
+msgid "Vote"
+msgstr "Szavazás"
+
+#. Translators: a heading in place of "Up Next", so keep it as short
+#: ui/views/now-playing-view.slint
+msgid "Station"
+msgstr "Állomás"
+
+#: ui/views/now-playing-view.slint
+msgid "Up Next"
+msgstr "Következik"
+
+#: ui/views/placeholder-view.slint
+msgid "Coming soon"
+msgstr "Hamarosan"
+
+#: ui/views/queue-sheet.slint
+msgid "No tracks"
+msgstr "Nincsenek számok"
+
+#: ui/views/queue-sheet.slint
+msgid "Clear queue"
+msgstr "Lejátszási sor törlése"
+
+#: ui/views/queue-sheet.slint
+msgid "Clear queue?"
+msgstr "Törlöd a lejátszási sort?"
+
+#: ui/views/queue-sheet.slint
+msgid "Remove all tracks from the queue? Playback will stop."
+msgstr "Eltávolítod az összes számot a lejátszási sorból? A lejátszás leáll."
+
+#: ui/views/queue-sheet.slint
+msgid "Queue is empty"
+msgstr "A lejátszási sor üres"
+
+#: ui/views/queue-sheet.slint
+msgid "Drop to add to queue"
+msgstr "Engedd el, hogy a lejátszási sorhoz add"
+
+#: ui/views/radio-view.slint ui/views/radio/suggestion-pill.slint
+msgid "{n} station"
+msgid_plural "{n} stations"
+msgstr[0] "{n} állomás"
+msgstr[1] "{n} állomás"
+
+#: ui/views/radio-view.slint
+msgid "Search stations…"
+msgstr "Állomások keresése…"
+
+#: ui/views/radio-view.slint
+msgid "Filter stations…"
+msgstr "Állomások szűrése…"
+
+#: ui/views/radio-view.slint
+msgid "No stations kept yet"
+msgstr "Még nincsenek megtartott állomások"
+
+#: ui/views/radio-view.slint
+msgid "Star a station in Browse, or add one by URL."
+msgstr "Jelölj meg csillaggal egy állomást a Böngészésben, vagy adj hozzá egyet URL alapján."
+
+#: ui/views/radio-view.slint
+msgid "Stations you listen to show up here."
+msgstr "Az általad hallgatott állomások itt jelennek meg."
+
+#: ui/views/radio/browse-tab.slint
+msgid "Searching the directory…"
+msgstr "Keresés a katalógusban…"
+
+#: ui/views/radio/browse-tab.slint
+msgid "Stations are coming from radio-browser.info."
+msgstr "Az állomások a radio-browser.info katalógusából érkeznek."
+
+#: ui/views/radio/browse-tab.slint
+msgid "The station directory is unreachable"
+msgstr "Az állomáskatalógus nem érhető el"
+
+#: ui/views/radio/browse-tab.slint
+msgid "Check your connection and try again."
+msgstr "Ellenőrizd a kapcsolatot, és próbáld újra."
+
+#: ui/views/radio/browse-tab.slint
+msgid "Try again"
+msgstr "Újrapróbálás"
+
+#: ui/views/radio/browse-tab.slint ui/views/radio/kept-stations-tab.slint
+msgid "No stations matched"
+msgstr "Nincs egyező állomás"
+
+#: ui/views/radio/browse-tab.slint ui/views/radio/kept-stations-tab.slint
+msgid "Try a different name, or clear a filter."
+msgstr "Próbálj másik nevet, vagy törölj egy szűrőt."
+
+#: ui/views/radio/browse-tab.slint
+msgid "Load more stations"
+msgstr "További állomások betöltése"
+
+#: ui/views/radio/browse-tab.slint ui/views/radio/facet-chip.slint
+msgid "Loading…"
+msgstr "Betöltés…"
+
+#: ui/views/radio/facet-chip.slint
+msgid "Filter…"
+msgstr "Szűrés…"
+
+#: ui/views/radio/facet-chip.slint
+msgid "Nothing to pick from"
+msgstr "Nincs miből választani"
+
+#: ui/views/radio/station-detail.slint
+msgid "The directory reached this station on its last check."
+msgstr "A katalógus a legutóbbi ellenőrzéskor elérte ezt az állomást."
+
+#: ui/views/radio/station-detail.slint
+msgid "The directory could not reach this station on its last check."
+msgstr "A katalógus a legutóbbi ellenőrzéskor nem érte el ezt az állomást."
+
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+msgid "{} kbps and up"
+msgstr "{} kbps vagy több"
+
+#: ui/views/radio/suggestion-pill.slint
+msgid "{}: {}"
+msgstr "{}: {}"
+
+#: ui/views/radio/tab-pills.slint
+msgid "Add Station"
+msgstr "Állomás hozzáadása"
+
+#: ui/views/radio/tab-pills.slint
+msgid "Added"
+msgstr "Hozzáadva"
+
+#: ui/views/radio/tab-pills.slint
+msgid "More station actions"
+msgstr "További állomásműveletek"
+
+#: ui/views/radio/tab-pills.slint
+msgid "Edit"
+msgstr "Szerkesztés"
+
+#: ui/views/recently-played-view.slint
+msgid "Filter recently played…"
+msgstr "Nemrég lejátszottak szűrése…"
+
+#: ui/views/recently-played-view.slint
+msgid "No recently played tracks"
+msgstr "Nincsenek nemrég lejátszott számok"
+
+#: ui/views/recently-played/most-played-tab.slint
+msgid "Play something and it will show up here."
+msgstr "Játssz le valamit, és itt fog megjelenni."
+
+#: ui/views/search-view.slint
+msgid "Searching…"
+msgstr "Keresés…"
+
+#: ui/views/search-view.slint
+msgid "Search your library…"
+msgstr "Keresés a könyvtáradban…"
+
+#: ui/views/search/no-results.slint
+msgid "No results found"
+msgstr "Nincs találat"
+
+#: ui/views/search/no-results.slint
+msgid "Try a different search term"
+msgstr "Próbálj másik keresőkifejezést"
+
+#: ui/views/search/recent-searches.slint
+msgid "Recent"
+msgstr "Legutóbbiak"
+
+#: ui/views/search/recent-searches.slint
+msgid "Clear all"
+msgstr "Összes törlése"
+
+#: ui/views/search/songs-section.slint
+msgid "Show less"
+msgstr "Kevesebb megjelenítése"
+
+#: ui/views/search/songs-section.slint
+msgid "Show all {} songs"
+msgstr "Az összes dal megjelenítése ({})"
+
+#: ui/views/search/top-result-card.slint
+msgid "Top Result"
+msgstr "Legjobb találat"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/interface-page.slint
+msgid "Interface"
+msgstr "Felület"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/library-page.slint
+msgid "Library"
+msgstr "Könyvtár"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/playback-page.slint
+#: ui/views/settings/playback-section.slint
+msgid "Playback"
+msgstr "Lejátszás"
+
+#: ui/views/settings-view.slint ui/views/settings/about-section.slint
+#: ui/views/settings/pages/about-page.slint
+msgid "About"
+msgstr "Névjegy"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/services-page.slint
+msgid "Services"
+msgstr "Szolgáltatások"
+
+#: ui/views/settings-view.slint
+msgid "Search settings…"
+msgstr "Keresés a beállításokban…"
+
+#. Translators: `{}` is the version number, such as 0.9.2
+#: ui/views/settings/about-section.slint
+msgid "Version {}"
+msgstr "Verzió: {}"
+
+#. Translators: `{}` is the author's name, a proper noun kept as is
+#: ui/views/settings/about-section.slint
+msgid "Made by {}"
+msgstr "Készítette: {}"
+
+#. Translators: support as in funding the project, not technical support
+#: ui/views/settings/about-section.slint
+msgid "Support Melodia"
+msgstr "A Melodia támogatása"
+
+#: ui/views/settings/about-section.slint
+msgid "Melodia is free and open source. Support helps keep it going."
+msgstr "A Melodia ingyenes és nyílt forráskódú. A támogatás segít, hogy folytatódhasson."
+
+#: ui/views/settings/about-section.slint
+msgid "License"
+msgstr "Licenc"
+
+#. Translators: Ko-fi is a brand and stays as is; support means funding
+#: ui/views/settings/about-section.slint
+msgid "Support me on Ko-fi"
+msgstr "Támogass a Ko-fin"
+
+#: ui/views/settings/about-section.slint
+msgid "Welcome Guide"
+msgstr "Üdvözlő útmutató"
+
+#: ui/views/settings/about-section.slint
+msgid "Run the first-run setup again."
+msgstr "Az első indításkori beállítás újbóli futtatása."
+
+#. Translators: a button in a narrow slot, so keep it short
+#: ui/views/settings/about-section.slint
+msgid "Show"
+msgstr "Mutasd"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Color Style"
+msgstr "Színstílus"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Active — palette derived from the current track's artwork."
+msgstr "Aktív: a paletta a jelenlegi szám borítójából származik."
+
+#: ui/views/settings/appearance-section.slint
+msgid "Generate theme colors from album artwork."
+msgstr "Témaszínek előállítása az albumborítóból."
+
+#: ui/views/settings/appearance-section.slint
+msgid "Aurora Backdrop"
+msgstr "Aurora háttér"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."
+msgstr "Az album-, lejátszásilista- és Most szól fejlécek az album saját színeiből kevert színfátylat kapják a borító elmosott másolata helyett. Nincs mit elmosni, így a fejlécek hamarabb megjelennek, és a Melodia kevesebb erőforrást használ. Az érvényesítéshez újraindítás szükséges."
+
+#: ui/views/settings/appearance-section.slint
+#: ui/views/settings/playback-section.slint
+msgid "None"
+msgstr "Nincs"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Tonal Spot"
+msgstr "Tonal Spot"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Content"
+msgstr "Tartalom"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Vibrant"
+msgstr "Élénk"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Expressive"
+msgstr "Kifejező"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Fidelity"
+msgstr "Hűség"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Neutral"
+msgstr "Semleges"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Monochrome"
+msgstr "Monokróm"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Changing the backdrop style requires restarting Melodia. Restart now?"
+msgstr "A háttérstílus módosításához újra kell indítani a Melodiát. Újraindítod most?"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Diagnostics"
+msgstr "Diagnosztika"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Logs"
+msgstr "Naplók"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Where Melodia writes its log files and crash reports."
+msgstr "Ahová a Melodia a naplófájljait és az összeomlási jelentéseit írja."
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Diagnostics report"
+msgstr "Diagnosztikai jelentés"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "One text file with your system details, settings and recent logs, for attaching to a bug report."
+msgstr "Egyetlen szövegfájl a rendszered adataival, a beállításokkal és a legutóbbi naplókkal, amelyet hibajelentéshez csatolhatsz."
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Verbose logging"
+msgstr "Részletes naplózás"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Record extra detail. Turn this on, reproduce the problem, then save a report."
+msgstr "További részletek rögzítése. Kapcsold be, idézd elő újra a hibát, majd ments egy jelentést."
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Save…"
+msgstr "Mentés…"
+
+#: ui/views/settings/discord-section.slint
+msgid "Show album artwork"
+msgstr "Albumborító megjelenítése"
+
+#: ui/views/settings/discord-section.slint
+msgid "Look up cover art online (via Deezer or iTunes) to show on the card"
+msgstr "Borító keresése online (a Deezeren vagy az iTunes-on keresztül) a kártyán való megjelenítéshez"
+
+#: ui/views/settings/discord-section.slint
+msgid "Hide while paused"
+msgstr "Elrejtés szüneteltetéskor"
+
+#: ui/views/settings/discord-section.slint
+msgid "Remove the card when paused instead of showing a paused marker"
+msgstr "Szüneteltetéskor a kártya eltűnik, a szünetjelzés helyett"
+
+#: ui/views/settings/discord-section.slint
+msgid "Status"
+msgstr "Állapot"
+
+#: ui/views/settings/discord-section.slint
+msgid "Connected to Discord"
+msgstr "Csatlakozva a Discordhoz"
+
+#: ui/views/settings/discord-section.slint
+msgid "Discord not running"
+msgstr "A Discord nem fut"
+
+#: ui/views/settings/file-watching-section.slint
+msgid "File Watching"
+msgstr "Fájlfigyelés"
+
+#: ui/views/settings/file-watching-section.slint
+msgid "Watch for file changes"
+msgstr "Fájlváltozások figyelése"
+
+#: ui/views/settings/file-watching-section.slint
+msgid "Automatically detect when files are added, removed, or changed in your library folders."
+msgstr "Automatikus észlelés, ha a könyvtármappáidban fájlok jelennek meg, törlődnek vagy módosulnak."
+
+#: ui/views/settings/language-section.slint
+msgid "Choose your preferred language"
+msgstr "Válaszd ki a kívánt nyelvet"
+
+#: ui/views/settings/library-section.slint
+msgid "Manage Folders"
+msgstr "Mappák kezelése"
+
+#: ui/views/settings/library-section.slint
+msgid "Library Folders"
+msgstr "Könyvtármappák"
+
+#: ui/views/settings/library-section.slint
+msgid "Remove Folder?"
+msgstr "Eltávolítod a mappát?"
+
+#. Translators: `{}` is the absolute path of the folder being removed
+#: ui/views/settings/library-section.slint
+msgid "Remove \"{}\" from your library? All tracks under this folder will be removed from the library and from your playlists."
+msgstr "Eltávolítod ezt a mappát a könyvtáradból: „{}”? A benne lévő összes szám kikerül a könyvtárból és a lejátszási listáidból."
+
+#: ui/views/settings/library-section.slint
+msgid "No folders added"
+msgstr "Nincs hozzáadott mappa"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Show the playing track's words in Now Playing instead of Up Next"
+msgstr "A lejátszott szám szövegének megjelenítése a Most szól nézetben a Következik lista helyett"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
+msgstr "A sor kiejtése latin betűkkel a szöveg alatt, ha az írásrendszer nem latin betűs"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Miniplayer"
+msgstr "Minilejátszó"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Window Buttons"
+msgstr "Ablakgombok"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "The minimize, full player and close buttons in the miniplayer's corner."
+msgstr "A kis méret, a teljes lejátszó és a bezárás gomb a minilejátszó sarkában."
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Album Backdrop"
+msgstr "Albumháttér"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
+msgstr "A minilejátszó a lejátszott album színeit kapja, ahogy a Most szól nézet is."
+
+#: ui/views/settings/motion-section.slint
+msgid "Motion"
+msgstr "Mozgás"
+
+#: ui/views/settings/motion-section.slint
+msgid "Skip Startup Animation"
+msgstr "Indítási animáció kihagyása"
+
+#: ui/views/settings/motion-section.slint
+msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
+msgstr "Indításkor a könyvtár azonnal a képernyőn van, nem úszik be áttűnéssel. A nyitva hagyott részletező oldal betöltés után továbbra is kinyílik."
+
+#: ui/views/settings/output-section.slint
+msgid "Output"
+msgstr "Kimenet"
+
+#: ui/views/settings/output-section.slint
+msgid "Output Mode"
+msgstr "Kimeneti mód"
+
+#: ui/views/settings/output-section.slint
+msgid "Exclusive gives Melodia the audio device alone: other apps can't play through it while Melodia plays, and the system mixer can't change the sound"
+msgstr "A kizárólagos mód egyedül a Melodiának adja a hangeszközt: amíg a Melodia lejátszik, más alkalmazás nem szólhat rajta, és a rendszerkeverő sem változtathat a hangon"
+
+#: ui/views/settings/output-section.slint
+msgid "Output Device"
+msgstr "Kimeneti eszköz"
+
+#: ui/views/settings/output-section.slint
+msgid "Exclusive Device"
+msgstr "Kizárólagos eszköz"
+
+#: ui/views/settings/output-section.slint
+msgid "The sound card Melodia plays through"
+msgstr "A hangkártya, amelyen a Melodia lejátszik"
+
+#: ui/views/settings/output-section.slint
+msgid "The sound card exclusive output takes"
+msgstr "A hangkártya, amelyet a kizárólagos kimenet lefoglal"
+
+#: ui/views/settings/output-section.slint
+msgid "Unsupported Sample Rates"
+msgstr "Nem támogatott mintavételi frekvenciák"
+
+#: ui/views/settings/output-section.slint
+msgid "What exclusive output does when the device can't run a track's sample rate: hand the device back and play that track through the system mixer, or keep the device and convert the track to a rate it can run"
+msgstr "Mit tegyen a kizárólagos kimenet, ha az eszköz nem tud a szám mintavételi frekvenciáján működni: adja vissza az eszközt, és a rendszerkeverőn át játssza le a számot, vagy tartsa meg az eszközt, és alakítsa át a számot olyan frekvenciára, amelyen az eszköz működik"
+
+#: ui/views/settings/output-section.slint
+msgid "Buffer Period"
+msgstr "Pufferperiódus"
+
+#: ui/views/settings/output-section.slint
+msgid "How much audio the device is handed at a time. Longer periods ride out a busy system; shorter ones react sooner"
+msgstr "Mennyi hangot kap az eszköz egyszerre. A hosszabb periódus átvészeli a leterhelt rendszert, a rövidebb gyorsabban reagál"
+
+#: ui/views/settings/output-section.slint
+msgid "Polling Mode"
+msgstr "Lekérdezéses mód"
+
+#: ui/views/settings/output-section.slint
+msgid "Top the device up on a timer instead of waiting for it to ask. Try it if a USB device stutters or crackles in exclusive mode"
+msgstr "Az eszköz feltöltése időzítő szerint, ahelyett hogy megvárná a kérését. Próbáld ki, ha egy USB-eszköz akadozik vagy recseg kizárólagos módban"
+
+#: ui/views/settings/output-section.slint
+msgid "Hardware Volume"
+msgstr "Hardveres hangerő"
+
+#: ui/views/settings/output-section.slint
+msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
+msgstr "Az eszköz saját hangerő-szabályzója állítódik a minták skálázása helyett, így a hangerőcsúszka mellett is bitpontos marad a hang. Ez a szabályzó az eszköz rendszerhangereje, és visszaáll, amikor a Melodia elengedi az eszközt. Az ilyen szabályzó nélküli eszközök a Melodia saját hangerejét használják"
+
+#: ui/views/settings/output-section.slint
+msgid "Give the Device Back When Paused"
+msgstr "Eszköz visszaadása szüneteltetéskor"
+
+#: ui/views/settings/output-section.slint
+msgid "After five minutes paused, hand the device back so other apps can play through it. Pressing play takes it again"
+msgstr "Öt perc szünet után visszaadja az eszközt, hogy más alkalmazások is szólhassanak rajta. A lejátszás gomb újra lefoglalja"
+
+#: ui/views/settings/output-section.slint
+msgid "Silence After a Rate Change"
+msgstr "Csend frekvenciaváltás után"
+
+#: ui/views/settings/output-section.slint
+msgid "Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off"
+msgstr "Néhány DAC egy pillanatra elnémul, amíg mintavételi frekvenciát vált. Egy rövid csend minden váltáskor megakadályozza, hogy a szám eleje lemaradjon"
+
+#: ui/views/settings/output-section.slint
+msgid "Match the File's Sample Rate"
+msgstr "Igazodás a fájl mintavételi frekvenciájához"
+
+#: ui/views/settings/output-section.slint
+msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate"
+msgstr "A hangeszköz újranyitása minden szám saját frekvenciáján, hogy a rendszer ne mintavételezze át. A rendszernek engedélyeznie kell ezt a frekvenciát"
+
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Signal Path"
+msgstr "Jelút"
+
+#: ui/views/settings/output-section.slint
+msgid "What reaches the audio device, and what changes it on the way. Bit-perfect means nothing does"
+msgstr "Mi jut el a hangeszközig, és mi változtat rajta útközben. A bitpontos azt jelenti, hogy semmi"
+
+#: ui/views/settings/output-section.slint
+msgid "the device is in use by another app"
+msgstr "az eszközt egy másik alkalmazás használja"
+
+#: ui/views/settings/output-section.slint
+msgid "{} holds the device"
+msgstr "{} foglalja az eszközt"
+
+#: ui/views/settings/output-section.slint
+msgid "another app holds the device"
+msgstr "egy másik alkalmazás foglalja az eszközt"
+
+#: ui/views/settings/output-section.slint
+msgid "the device can't run at this sample rate"
+msgstr "az eszköz nem tud ezen a mintavételi frekvencián működni"
+
+#: ui/views/settings/output-section.slint
+msgid "the device can't play this many channels"
+msgstr "az eszköz nem tud ennyi csatornát lejátszani"
+
+#: ui/views/settings/output-section.slint
+msgid "the device takes no sample format that holds this track"
+msgstr "az eszköz egyetlen olyan mintaformátumot sem fogad, amely hűen tárolná ezt a számot"
+
+#: ui/views/settings/output-section.slint
+msgid "the chosen device isn't connected"
+msgstr "a kiválasztott eszköz nincs csatlakoztatva"
+
+#: ui/views/settings/output-section.slint
+msgid "exclusive output isn't available on this system"
+msgstr "a kizárólagos kimenet nem érhető el ezen a rendszeren"
+
+#: ui/views/settings/output-section.slint
+msgid "the device doesn't allow exclusive control, which its Advanced properties in the Sound control panel can turn on"
+msgstr "az eszköz nem engedélyezi a kizárólagos vezérlést, ezt a Hang vezérlőpulton az eszköz Speciális tulajdonságainál lehet bekapcsolni"
+
+#: ui/views/settings/output-section.slint
+msgid "the device couldn't be opened"
+msgstr "az eszközt nem sikerült megnyitni"
+
+#: ui/views/settings/output-section.slint
+msgid "No effects"
+msgstr "Nincsenek effektek"
+
+#: ui/views/settings/output-section.slint
+msgid "Equalizer and ReplayGain"
+msgstr "Hangszínszabályzó és ReplayGain"
+
+#: ui/views/settings/output-section.slint
+msgid "Shared"
+msgstr "Megosztott"
+
+#: ui/views/settings/output-section.slint
+msgid "Exclusive"
+msgstr "Kizárólagos"
+
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/scrobbling-section.slint
+msgid "Not connected"
+msgstr "Nincs csatlakoztatva"
+
+#: ui/views/settings/output-section.slint
+msgid "Play Through the System Mixer"
+msgstr "Lejátszás a rendszerkeverőn át"
+
+#: ui/views/settings/output-section.slint
+msgid "Resample and Keep Exclusive"
+msgstr "Átmintavételezés, kizárólagos mód megtartása"
+
+#: ui/views/settings/output-section.slint
+msgid "{} ms"
+msgstr "{} ms"
+
+#: ui/views/settings/output-section.slint
+msgid "The device is running at {}"
+msgstr "Az eszköz {} periódussal működik"
+
+#: ui/views/settings/output-section.slint
+msgid "Make Bit-Perfect"
+msgstr "Bitpontossá tétel"
+
+#: ui/views/settings/output-section.slint
+msgid "Switch to Exclusive Output?"
+msgstr "Átváltasz kizárólagos kimenetre?"
+
+#: ui/views/settings/output-section.slint
+msgid "Bit-perfect playback needs exclusive output. Other apps can't play through the device while Melodia does, and the system volume stops applying: Melodia's own volume goes to full unless Hardware Volume is on."
+msgstr "A bitpontos lejátszáshoz kizárólagos kimenet kell. Amíg a Melodia lejátszik, más alkalmazások nem szólhatnak az eszközön, és a rendszerhangerő sem érvényes: a Melodia saját hangereje maximumra áll, hacsak a Hardveres hangerő nincs bekapcsolva."
+
+#: ui/views/settings/output-section.slint
+msgid "Switch"
+msgstr "Váltás"
+
+#: ui/views/settings/output-section.slint
+msgid "Source"
+msgstr "Forrás"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, decoded from a lossy codec"
+msgstr "{}, veszteséges kodekből dekódolva"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, rounded to fit 32-bit float"
+msgstr "{}, 32 bites lebegőpontos formára kerekítve"
+
+#: ui/views/settings/output-section.slint
+msgid "Effects"
+msgstr "Effektek"
+
+#: ui/views/settings/output-section.slint
+msgid "Normal"
+msgstr "Normál"
+
+#: ui/views/settings/output-section.slint
+msgid "Volume"
+msgstr "Hangerő"
+
+#: ui/views/settings/output-section.slint
+msgid "Muted"
+msgstr "Némítva"
+
+#: ui/views/settings/output-section.slint
+msgid "{}% (the device muted)"
+msgstr "{}% (az eszköz némítva)"
+
+#: ui/views/settings/output-section.slint
+msgid "{}% on the device"
+msgstr "{}% az eszközön"
+
+#: ui/views/settings/output-section.slint
+msgid "{}% (the device at {}%)"
+msgstr "{}% (az eszközön {}%)"
+
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/playback-section.slint
+msgid "Crossfade"
+msgstr "Áttűnés"
+
+#: ui/views/settings/output-section.slint
+msgid "Fading between tracks"
+msgstr "Áttűnés a számok között"
+
+#: ui/views/settings/output-section.slint
+msgid "Not fading"
+msgstr "Nincs áttűnés"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled to {}"
+msgstr "{} átmintavételezve {} értékre"
+
+#: ui/views/settings/output-section.slint
+msgid "Mixed down for the device"
+msgstr "Lekeverve az eszközhöz"
+
+#: ui/views/settings/output-section.slint
+msgid "Unchanged"
+msgstr "Változatlan"
+
+#: ui/views/settings/output-section.slint
+msgid "Device"
+msgstr "Eszköz"
+
+#: ui/views/settings/output-section.slint
+msgid "{} refused exclusive output because {}. Playing shared on {}"
+msgstr "{} elutasította a kizárólagos kimenetet, mert {}. Megosztott lejátszás ezen: {}"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, shared: exclusive output was refused because {}"
+msgstr "{}, megosztott: a kizárólagos kimenet elutasítva, mert {}"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, shared: the system mixer may still convert it"
+msgstr "{}, megosztott: a rendszerkeverő még átalakíthatja"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, exclusive"
+msgstr "{}, kizárólagos"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, exclusive, in a format that can't hold the source exactly"
+msgstr "{}, kizárólagos, olyan formátumban, amely nem tárolja pontosan a forrást"
+
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Player Bar"
+msgstr "Lejátszósáv"
+
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Overflow Menu Buttons"
+msgstr "A Továbbiak menü gombjai"
+
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Move selected buttons into a compact overflow menu in the player bar"
+msgstr "A kiválasztott gombok áthelyezése a lejátszósáv tömör Továbbiak menüjébe"
+
+#: ui/views/settings/playback-section.slint
+msgid "Gapless Playback"
+msgstr "Szünetmentes lejátszás"
+
+#: ui/views/settings/playback-section.slint
+msgid "Seamless transitions between tracks without silence gaps"
+msgstr "Zökkenőmentes átmenet a számok között, csendes szünetek nélkül"
+
+#: ui/views/settings/playback-section.slint
+msgid "Play Button Animation"
+msgstr "Lejátszás gomb animációja"
+
+#: ui/views/settings/playback-section.slint
+msgid "Visual effect on the play button while music is playing"
+msgstr "Vizuális effekt a lejátszás gombon, amíg szól a zene"
+
+#: ui/views/settings/playback-section.slint
+msgid "Resume on Startup"
+msgstr "Folytatás indításkor"
+
+#: ui/views/settings/playback-section.slint
+msgid "Automatically resume the last track from where you left off when the app starts"
+msgstr "Indításkor az utolsó szám automatikusan ott folytatódik, ahol abbahagytad"
+
+#: ui/views/settings/playback-section.slint
+msgid "Overlap the end of one track with the start of the next"
+msgstr "Az egyik szám vége átfedi a következő elejét"
+
+#: ui/views/settings/playback-section.slint
+msgid "Overlap the end of one track with the start of the next, unless the device has to change format between them"
+msgstr "Az egyik szám vége átfedi a következő elejét, kivéve, ha az eszköznek formátumot kell váltania közöttük"
+
+#: ui/views/settings/playback-section.slint
+msgid "Crossfade duration"
+msgstr "Áttűnés hossza"
+
+#: ui/views/settings/playback-section.slint
+msgid "How long the two tracks overlap"
+msgstr "Mennyi ideig fedi át egymást a két szám"
+
+#: ui/views/settings/playback-section.slint
+msgid "Except on the same album"
+msgstr "Kivéve ugyanazon az albumon"
+
+#: ui/views/settings/playback-section.slint
+msgid "Keep tracks from one album gapless, so continuous mixes stay seamless"
+msgstr "Az egy albumon lévő számok szünetmentesek maradnak, így a folyamatos mixek zökkenőmentesek"
+
+#: ui/views/settings/playback-section.slint
+msgid "Also on manual track change"
+msgstr "Kézi számváltáskor is"
+
+#: ui/views/settings/playback-section.slint
+msgid "Crossfade when you skip to the next or previous track, not only at the end of one"
+msgstr "Áttűnés akkor is, ha a következő vagy az előző számra ugrasz, nem csak egy szám végén"
+
+#: ui/views/settings/playback-section.slint
+msgid "Fade out on pause"
+msgstr "Elhalkítás szüneteltetéskor"
+
+#: ui/views/settings/playback-section.slint
+msgid "Fade the music out when pausing or stopping, and back in when resuming"
+msgstr "A zene elhalkul szüneteltetéskor vagy leállításkor, és visszaerősödik folytatáskor"
+
+#: ui/views/settings/playback-section.slint
+msgid "Show an audio visualizer on the Now Playing screen"
+msgstr "Hangvizualizáció megjelenítése a Most szól képernyőn"
+
+#: ui/views/settings/playback-section.slint
+msgid "Visualizer Style"
+msgstr "Vizualizáció stílusa"
+
+#: ui/views/settings/playback-section.slint
+msgid "Choose how the visualizer draws the audio"
+msgstr "Válaszd ki, hogyan rajzolja ki a vizualizáció a hangot"
+
+#. Translators: `{}` is a duration in seconds, such as 2.5
+#: ui/views/settings/playback-section.slint
+msgid "{} s"
+msgstr "{} mp"
+
+#: ui/views/settings/radio-section.slint
+msgid "Hide segmented stations"
+msgstr "Szegmentált állomások elrejtése"
+
+#: ui/views/settings/radio-section.slint
+msgid "Segmented (HLS) streams play, but take longer to start"
+msgstr "A szegmentált (HLS) adatfolyamok lejátszhatók, de lassabban indulnak"
+
+#: ui/views/settings/radio-section.slint
+msgid "Report plays to the directory"
+msgstr "Lejátszások jelentése a katalógusnak"
+
+#: ui/views/settings/radio-section.slint
+msgid "An anonymous count is what orders stations by popularity"
+msgstr "Egy névtelen számláló alapján rendeződnek az állomások népszerűség szerint"
+
+#: ui/views/settings/ratings-section.slint
+msgid "Ratings"
+msgstr "Értékelések"
+
+#: ui/views/settings/ratings-section.slint
+msgid "Save ratings to files"
+msgstr "Értékelések mentése a fájlokba"
+
+#: ui/views/settings/ratings-section.slint
+msgid "Write star ratings into each file's tags, so they survive a rescan and other players can read them."
+msgstr "A csillagos értékelések beírása a fájlok címkéibe, így megmaradnak újraolvasás után is, és más lejátszók is olvashatják őket."
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Last.fm"
+msgstr "Last.fm"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobble to Last.fm"
+msgstr "Scrobblolás a Last.fm-re"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Report each play to your Last.fm account"
+msgstr "Minden lejátszás jelentése a Last.fm-fiókodnak"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Sync loved tracks to Last.fm"
+msgstr "Kedvelt számok szinkronizálása a Last.fm-mel"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Mark tracks you love as loved on Last.fm — turning this on syncs your existing favorites"
+msgstr "A kedvenc számaid kedveltként jelölése a Last.fm-en; bekapcsoláskor a meglévő kedvenceid is szinkronizálódnak"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "ListenBrainz"
+msgstr "ListenBrainz"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobble to ListenBrainz"
+msgstr "Scrobblolás a ListenBrainzre"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Report each play to your ListenBrainz account"
+msgstr "Minden lejátszás jelentése a ListenBrainz-fiókodnak"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Sync loved tracks to ListenBrainz"
+msgstr "Kedvelt számok szinkronizálása a ListenBrainzzel"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)"
+msgstr "A kedvenc számaid kedveltként jelölése a ListenBrainzen; bekapcsoláskor a meglévő kedvenceid is szinkronizálódnak (MusicBrainz-azonosítók szükségesek)"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "MusicBrainz Picard adds these IDs to your files, identifying each track by its audio."
+msgstr "A MusicBrainz Picard hozzáadja ezeket az azonosítókat a fájljaidhoz, minden számot a hangja alapján azonosítva."
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobble radio songs"
+msgstr "Rádiós dalok scrobblolása"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Songs heard in full on a station go to your connected scrobbling services"
+msgstr "Az állomáson végighallgatott dalok a csatlakoztatott scrobble-szolgáltatásokhoz kerülnek"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Connected as {}"
+msgstr "Csatlakozva: {}"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Not configured in this build"
+msgstr "Ebben a kiadásban nincs beállítva"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Connect Last.fm"
+msgstr "Last.fm csatlakoztatása"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Disconnect"
+msgstr "Leválasztás"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Connect ListenBrainz"
+msgstr "ListenBrainz csatlakoztatása"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Turn on Last.fm or ListenBrainz above first"
+msgstr "Előbb kapcsold be fent a Last.fm-et vagy a ListenBrainzt"
+
+#: ui/views/settings/settings-tabs.slint
+msgid "No matching settings"
+msgstr "Nincs egyező beállítás"
+
+#: ui/views/settings/update-section.slint
+msgid "Updates"
+msgstr "Frissítések"
+
+#: ui/views/settings/update-section.slint
+msgid "Software Updates"
+msgstr "Szoftverfrissítések"
+
+#: ui/views/settings/update-section.slint
+msgid "Current version: {}"
+msgstr "Jelenlegi verzió: {}"
+
+#: ui/views/settings/update-section.slint
+msgid "You're up to date!"
+msgstr "A legfrissebb verziót használod!"
+
+#: ui/views/settings/update-section.slint
+msgid "Melodia {} is the latest version."
+msgstr "A Melodia {} a legújabb verzió."
+
+#: ui/views/settings/update-section.slint
+msgid "Update Installed"
+msgstr "Frissítés telepítve"
+
+#: ui/views/settings/update-section.slint
+msgid "Restart Melodia to apply the update"
+msgstr "A frissítés érvényesítéséhez indítsd újra a Melodiát"
+
+#: ui/views/settings/update-section.slint
+msgid "Version {} Available"
+msgstr "Új verzió érhető el: {}"
+
+#: ui/views/settings/update-section.slint
+msgid "Updates managed by your package manager"
+msgstr "A frissítéseket a csomagkezelőd kezeli"
+
+#: ui/views/settings/update-section.slint
+msgid "Re-run the latest .msi installer from the Releases page."
+msgstr "Futtasd újra a legújabb .msi telepítőt a Releases oldalról."
+
+#: ui/views/settings/update-section.slint
+msgid "Use brew upgrade melodia."
+msgstr "Használd a brew upgrade melodia parancsot."
+
+#: ui/views/settings/update-section.slint
+msgid "Use sudo dnf update melodia (or your distro equivalent)."
+msgstr "Használd a sudo dnf update melodia parancsot (vagy a disztribúciód megfelelőjét)."
+
+#: ui/views/settings/update-section.slint
+msgid "Check for Updates"
+msgstr "Frissítések keresése"
+
+#: ui/views/settings/update-section.slint
+msgid "Checking..."
+msgstr "Ellenőrzés..."
+
+#: ui/views/settings/update-section.slint
+msgid "Restart Now"
+msgstr "Újraindítás most"
+
+#: ui/views/settings/update-section.slint
+msgid "Download & Install"
+msgstr "Letöltés és telepítés"
+
+#: ui/views/settings/update-section.slint
+msgid "Installing..."
+msgstr "Telepítés..."
+
+#: ui/views/settings/update-section.slint
+msgid "Skip this version"
+msgstr "Verzió kihagyása"
+
+#: ui/views/settings/update-section.slint
+msgid "Critical update"
+msgstr "Kritikus frissítés"
+
+#: ui/views/settings/update-section.slint
+msgid "This update fixes a critical issue and can't be skipped."
+msgstr "Ez a frissítés kritikus hibát javít, ezért nem hagyható ki."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window"
+msgstr "Ablak"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Managed by the operating system"
+msgstr "Az operációs rendszer kezeli"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Native Title Bar"
+msgstr "Natív címsor"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Use the operating system's native title bar instead of the custom one. Restart required to apply."
+msgstr "Az operációs rendszer natív címsorának használata az egyéni helyett. Az érvényesítéshez újraindítás szükséges."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Match Unfocused Window Background"
+msgstr "Igazodás az inaktív ablak hátteréhez"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Only available with the native title bar."
+msgstr "Csak natív címsorral érhető el."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Tint the sidebar and now-playing bar toward the content background when the window loses focus."
+msgstr "Az oldalsáv és a lejátszósáv színe a tartalom hátteréhez közelít, amikor az ablak elveszíti a fókuszt."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Corner Radius"
+msgstr "Ablaksarkok lekerekítése"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border"
+msgstr "Ablakkeret"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Draw a thin outline around the miniplayer. The full window keeps the border of its system frame."
+msgstr "Vékony körvonal a minilejátszó körül. A teljes ablak megtartja a rendszer által rajzolt keretét."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Draw a thin outline around the whole window, the miniplayer included."
+msgstr "Vékony körvonal az egész ablak körül, a minilejátszót is beleértve."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border Color"
+msgstr "Ablakkeret színe"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System follows the color the operating system draws its own window borders in."
+msgstr "A Rendszer beállítás azt a színt követi, amellyel az operációs rendszer a saját ablakkereteit rajzolja."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Available only while the window border is shown."
+msgstr "Csak akkor érhető el, ha az ablakkeret látható."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Decoration Button Style"
+msgstr "Ablakgombok stílusa"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Decoration Button Side"
+msgstr "Ablakgombok oldala"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System Tray Icon"
+msgstr "Rendszertálca-ikon"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Show a Melodia icon in the system tray with playback controls."
+msgstr "Melodia-ikon megjelenítése a rendszertálcán, lejátszásvezérlőkkel."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Close to Tray"
+msgstr "Bezárás a tálcára"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Keep Melodia running in the system tray when you close the window, instead of quitting."
+msgstr "Az ablak bezárásakor a Melodia kilépés helyett tovább fut a rendszertálcán."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Available only while the system tray icon is active."
+msgstr "Csak akkor érhető el, ha a rendszertálca-ikon aktív."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Switching to the native title bar requires restarting Melodia. Restart now?"
+msgstr "A natív címsorra váltáshoz újra kell indítani a Melodiát. Újraindítod most?"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Switching to the custom title bar requires restarting Melodia. Restart now?"
+msgstr "Az egyéni címsorra váltáshoz újra kell indítani a Melodiát. Újraindítod most?"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Square"
+msgstr "Szögletes"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Left"
+msgstr "Bal"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Right"
+msgstr "Jobb"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Changing the system tray icon requires restarting Melodia. Restart now?"
+msgstr "A rendszertálca-ikon módosításához újra kell indítani a Melodiát. Újraindítod most?"

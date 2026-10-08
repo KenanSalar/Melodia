@@ -2,2632 +2,3382 @@ msgid ""
 msgstr ""
 "Project-Id-Version: melodia-ui\n"
 "Report-Msgid-Bugs-To: \n"
+"PO-Revision-Date: 2026-10-07 00:00+0000\n"
+"Last-Translator: Kenan Salar\n"
+"Language-Team: none\n"
 "Language: tr\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-msgid "Clear selection"
-msgstr "Seçimi temizle"
-
-# ---- Sidebar / navigation ----------------------------------------------------
-
+#: ui/app-window.slint ui/layout/sidebar.slint
 msgid "Search"
 msgstr "Ara"
 
-# Default placeholder text for `SearchBar` (`ui/components/search-bar.slint`).
-# Currently every instantiation overrides `placeholder`, so this is defensive.
-msgid "Search…"
-msgstr "Ara…"
-
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/radio-view.slint
 msgid "Browse"
 msgstr "Gözat"
 
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/favorites-view.slint
+#: ui/views/radio-view.slint
 msgid "Favorites"
 msgstr "Favoriler"
 
-# The sidebar row, and the window title, for the page carrying the Songs / Albums /
-# Artists / Genres / Playlists tabs. Each tab reuses its own msgid below.
+#: ui/app-window.slint ui/layout/sidebar.slint
 msgid "My Library"
 msgstr "Kitaplığım"
 
-msgid "Tracks"
-msgstr "Parçalar"
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/radio-view.slint
+#: ui/views/recently-played-view.slint
+msgid "Recently Played"
+msgstr "Son Çalınanlar"
 
-msgid "Albums"
-msgstr "Albümler"
-
-msgid "Artists"
-msgstr "Sanatçılar"
-
-msgid "Genres"
-msgstr "Türler"
-
-msgid "Playlists"
-msgstr "Çalma Listeleri"
-
+#: ui/app-window.slint ui/layout/sidebar.slint
 msgid "Settings"
 msgstr "Ayarlar"
 
-msgid "Collapse"
-msgstr "Daralt"
+#: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/views/settings/radio-section.slint
+msgid "Radio"
+msgstr "Radyo"
 
-# Tooltip on the Collapse toggle while the sidebar is a collapsed rail — the
-# label names the action the click performs, not the row's own text.
-msgid "Expand"
-msgstr "Genişlet"
-
-# ---- Title-bar window controls ----------------------------------------------
-
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
 msgid "Minimize"
 msgstr "Simge Durumuna Küçült"
 
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
 msgid "Maximize"
 msgstr "Ekranı Kapla"
 
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
 msgid "Restore"
 msgstr "Geri Yükle"
 
+#: ui/components/caption-buttons.slint
+#: ui/components/macos-titlebar-cluster.slint
+#: ui/components/onboarding/onboarding-overlay.slint
 msgid "Close"
 msgstr "Kapat"
 
-# ---- Generic action verbs ---------------------------------------------------
+#. Translators: `{}` is how many items are selected
+#: ui/components/context-menu.slint
+msgid "Remove {} from Favorites"
+msgstr "{} Favorilerden Çıkar"
 
-msgid "Cancel"
-msgstr "İptal"
+#. Translators: `{}` is how many items are selected
+#: ui/components/context-menu.slint
+msgid "Add {} to Favorites"
+msgstr "{} Favorilere Ekle"
 
-msgid "Remove"
-msgstr "Kaldır"
+#: ui/components/context-menu.slint ui/components/grid/card-context-menu.slint
+msgid "Add to Favorites"
+msgstr "Favorilere Ekle"
 
-msgid "Clear"
-msgstr "Temizle"
+#: ui/components/context-menu.slint ui/components/grid/card-context-menu.slint
+msgid "Remove from Favorites"
+msgstr "Favorilerden Kaldır"
 
-msgid "Restart"
-msgstr "Yeniden Başlat"
+#: ui/components/dialog/add-station-body.slint
+#: ui/components/grid/station-context-menu.slint
+msgid "Stream URL"
+msgstr "Yayın URL'si"
 
-# ---- Now-playing bar tooltips & states --------------------------------------
+#: ui/components/dialog/add-station-body.slint
+msgid "Name (optional)"
+msgstr "Ad (isteğe bağlı)"
 
-msgid "Play"
-msgstr "Çal"
+#: ui/components/dialog/add-station-body.slint
+msgid "Leave blank to use the station's own name"
+msgstr "İstasyonun kendi adını kullanmak için boş bırak"
 
-msgid "Pause"
-msgstr "Duraklat"
+#: ui/components/dialog/add-station-body.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/station-facts.slint
+msgid "Website"
+msgstr "Web sitesi"
 
-msgid "Previous"
-msgstr "Önceki"
+#: ui/components/dialog/add-station-body.slint
+msgid "Logo URL"
+msgstr "Logo URL'si"
 
-msgid "Next"
-msgstr "Sonraki"
+#: ui/components/dialog/add-station-body.slint
+msgid "Leave blank to look for a logo on the website above."
+msgstr "Yukarıdaki web sitesinde logo aramak için boş bırak."
 
-msgid "Previous (hold to rewind)"
-msgstr "Önceki (geri sarmak için basılı tut)"
+#: ui/components/dialog/add-station-body.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+#: ui/views/search/top-result-card.slint
+msgid "Genre"
+msgstr "Tür"
 
-msgid "Next (hold to fast-forward)"
-msgstr "Sonraki (ileri sarmak için basılı tut)"
+#: ui/components/dialog/add-station-body.slint
+msgid "Jazz, Blues"
+msgstr "Caz, Blues"
 
-msgid "Play (hold to stop)"
-msgstr "Çal (durdurmak için basılı tut)"
+#: ui/components/dialog/add-station-body.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+msgid "Country"
+msgstr "Ülke"
 
-msgid "Pause (hold to stop)"
-msgstr "Duraklat (durdurmak için basılı tut)"
+#: ui/components/dialog/add-station-body.slint
+msgid "Tunisia"
+msgstr "Tunus"
 
-msgid "Repeat"
-msgstr "Tekrarla"
+#: ui/components/dialog/add-station-body.slint
+msgid "The directory owns this station's name and stream. What it left blank is yours to fill in; leave a field empty to remove it again."
+msgstr "Bu istasyonun adı ve yayını dizine ait. Boş bıraktıklarını sen doldurabilirsin; bir alanı kaldırmak için boş bırak."
 
-msgid "Repeat: off"
-msgstr "Tekrarla: kapalı"
+#: ui/components/dialog/add-station-body.slint
+msgid "Checking the stream…"
+msgstr "Yayın denetleniyor…"
 
-msgid "Repeat: one"
-msgstr "Tekrarla: bir"
+#: ui/components/dialog/credit-editor.slint
+#: ui/components/dialog/name-list-editor.slint ui/globals/dialog.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Add"
+msgstr "Ekle"
 
-msgid "Repeat: all"
-msgstr "Tekrarla: tümü"
+#: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/grid/station-context-menu.slint ui/views/favorites-view.slint
+#: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
+msgid "Name"
+msgstr "Ad"
 
-msgid "Shuffle"
-msgstr "Karıştır"
+#: ui/components/dialog/dialog.slint
+msgid "Playlist name"
+msgstr "Çalma listesi adı"
 
-msgid "Shuffle: on"
-msgstr "Karıştır: açık"
+#: ui/components/dialog/dialog.slint
+msgid "Description (optional)"
+msgstr "Açıklama (isteğe bağlı)"
 
-msgid "Shuffle: off"
-msgstr "Karıştır: kapalı"
+#: ui/components/dialog/dialog.slint
+msgid "Add a description…"
+msgstr "Açıklama ekle…"
 
-msgid "Favorite"
-msgstr "Favoriye Ekle"
+#: ui/components/dialog/dialog.slint
+msgid "Finish"
+msgstr "Bitir"
 
-msgid "Unfavorite"
-msgstr "Favoriden Çıkar"
+#: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
+msgid "Open Last.fm"
+msgstr "Last.fm'i aç"
 
-msgid "Pin on Top"
-msgstr "Üste Sabitle"
+#: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
+msgid "Connect"
+msgstr "Bağlan"
 
-msgid "Unpin from Top"
-msgstr "Üst Sabitlemeyi Kaldır"
+#: ui/components/dialog/equalizer-body.slint
+msgid "Classical"
+msgstr "Klasik"
 
-msgid "Queue"
-msgstr "Sıra"
+#: ui/components/dialog/equalizer-body.slint
+msgid "Flat"
+msgstr "Düz"
 
-msgid "More"
-msgstr "Diğer Seçenekler"
+#: ui/components/dialog/equalizer-body.slint
+msgid "Jazz"
+msgstr "Caz"
 
-msgid "Speed"
-msgstr "Hız"
+#: ui/components/dialog/equalizer-body.slint
+msgid "Pop"
+msgstr "Pop"
 
-msgid "No track playing"
-msgstr "Çalan parça yok"
+#: ui/components/dialog/equalizer-body.slint
+msgid "Rock"
+msgstr "Rock"
 
-msgid "Unknown artist"
-msgstr "Bilinmeyen sanatçı"
+#: ui/components/dialog/equalizer-body.slint
+msgid "Bass Boost"
+msgstr "Bas Yükseltme"
 
-msgid "Unknown album"
-msgstr "Bilinmeyen albüm"
+#: ui/components/dialog/equalizer-body.slint
+msgid "Electronic"
+msgstr "Elektronik"
 
-# ---- Now Playing view -------------------------------------------------------
+#: ui/components/dialog/equalizer-body.slint
+msgid "Treble Boost"
+msgstr "Tiz Yükseltme"
 
-msgid "Up Next"
-msgstr "Sıradaki"
+#: ui/components/dialog/equalizer-body.slint
+msgid "Vocal"
+msgstr "Vokal"
 
-msgid "No tracks up next"
-msgstr "Sırada başka parça yok"
+#: ui/components/dialog/equalizer-body.slint
+msgid "Custom"
+msgstr "Özel"
 
-# The lyrics panel's five states. "Turn it on…" names the Settings tab, so it has to match the
-# tab label above.
-msgid "Play something to see its lyrics"
-msgstr "Şarkı sözlerini görmek için bir şey çalın"
+#: ui/components/dialog/equalizer-body.slint
+msgid "Enable equalizer"
+msgstr "Ekolayzırı etkinleştir"
 
-msgid "Looking for lyrics…"
-msgstr "Şarkı sözleri aranıyor…"
+#: ui/components/dialog/equalizer-body.slint
+msgid "Reset"
+msgstr "Sıfırla"
 
-msgid "No lyrics found"
-msgstr "Şarkı sözü bulunamadı"
+#: ui/components/dialog/export-playlist-picker.slint
+msgid "No playlists to export"
+msgstr "Dışa aktarılacak çalma listesi yok"
 
-msgid "This track has no words"
-msgstr "Bu parçada söz yok"
-
-msgid "Lyrics lookup is off"
-msgstr "Şarkı sözü araması kapalı"
-
-msgid "Turn it on in the Lyrics menu"
-msgstr "Şarkı Sözleri menüsünden açın"
-
-msgid "Couldn't reach the lyrics service"
-msgstr "Şarkı sözü hizmetine ulaşılamadı"
-
-msgid "Try again from the Lyrics menu"
-msgstr "Şarkı Sözleri menüsünden tekrar deneyin"
-
-# ---- Queue sheet ------------------------------------------------------------
-
-msgid "No tracks"
-msgstr "Parça yok"
-
-msgid "Queue is empty"
-msgstr "Sıra boş"
-
-msgid "Drop to add to queue"
-msgstr "Sıraya eklemek için bırak"
-
-msgid "Remove from Queue"
-msgstr "Sıradan çıkar"
-
-msgid "Remove {} from Queue"
-msgstr "{} Sıradan Çıkar"
-
-msgid "Clear queue"
-msgstr "Sırayı temizle"
-
-msgid "Clear queue?"
-msgstr "Sıra temizlensin mi?"
-
-msgid "Remove all tracks from the queue? Playback will stop."
-msgstr "Sıradaki tüm parçalar kaldırılsın mı? Çalma duracak."
-
-# Plural: track count for the queue header subtitle ("3 tracks", "1 track").
-# Turkish nouns don't take the plural suffix after a numeral ("3 parça", not
-# "3 parçalar"), so msgstr[0] and msgstr[1] carry the same singular form.
+# Turkish doesn't pluralize a noun after a numeral ("3 parça", not "3 parçalar"),
+# so both forms are the same.
+#: ui/components/dialog/export-playlist-picker.slint
+#: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
+#: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
+#: ui/globals/search.slint ui/views/queue-sheet.slint
 msgid "{n} track"
 msgid_plural "{n} tracks"
 msgstr[0] "{n} parça"
 msgstr[1] "{n} parça"
 
-# Plural: artist count for the Artists grid header and the Favorites hero.
-# Turkish keeps the gettext layout but doesn't pluralize after a numeral.
-msgid "{n} artist"
-msgid_plural "{n} artists"
-msgstr[0] "{n} sanatçı"
-msgstr[1] "{n} sanatçı"
+#: ui/components/dialog/export-playlist-picker.slint
+msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
+msgstr "Birden fazla çalma listesi tek bir .zip dosyası olarak kaydedilir; bu dosyayı arşivden çıkarmadan doğrudan içe aktarabilirsiniz."
 
-# Plural: disc count chip on the Album Detail hero. Only shown above one.
-# Turkish keeps the gettext layout but doesn't pluralize after a numeral.
-msgid "{n} disc"
-msgid_plural "{n} discs"
-msgstr[0] "{n} disk"
-msgstr[1] "{n} disk"
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "No artwork"
+msgstr "Görsel yok"
 
-# Plural: total play count chip on the Favorites hero's Most Played tab.
-# Turkish keeps the gettext layout but doesn't pluralize after a numeral.
-msgid "{n} play"
-msgid_plural "{n} plays"
-msgstr[0] "{n} dinlenme"
-msgstr[1] "{n} dinlenme"
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "{} / 4 selected"
+msgstr "{} / 4 seçili"
 
-# Chip on the Album Detail hero for a various-artists release.
-msgid "Compilation"
-msgstr "Derleme"
+#: ui/components/dialog/playlist-mosaic-picker.slint ui/views/queue-sheet.slint
+msgid "Clear"
+msgstr "Temizle"
 
-# Plural: track count for the tracks-view header subtitle ("12 songs").
-msgid "{n} song"
-msgid_plural "{n} songs"
-msgstr[0] "{n} şarkı"
-msgstr[1] "{n} şarkı"
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "Add tracks to this playlist to pick artwork."
+msgstr "Görsel seçmek için bu çalma listesine parça ekle."
 
-msgid "{} selected"
-msgstr "{} seçili"
+#: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "Select up to 4 tracks"
+msgstr "En fazla 4 parça seç"
 
-# ---- Tracks view ------------------------------------------------------------
+#: ui/components/dialog/playlist-picker.slint
+msgid "Already added"
+msgstr "Zaten ekli"
 
-msgid "Filter tracks…"
-msgstr "Parçaları filtrele…"
+#: ui/components/dialog/playlist-picker.slint
+msgid "{} of {} already added"
+msgstr "{} / {} zaten ekli"
 
-msgid "Columns"
-msgstr "Sütunlar"
+#: ui/components/dialog/preamp-slider-row.slint
+msgid "Preamp"
+msgstr "Ön yükseltici"
 
-# `SortMenuPopup`'s trigger, the pill-chrome twin of "Columns".
-msgid "Sort"
-msgstr "Sırala"
-
-msgid "Card view"
-msgstr "Kart görünümü"
-
-msgid "List view"
-msgstr "Liste görünümü"
-
-msgid "Folder"
-msgstr "Klasör"
-
-# ---- Track table column headers ---------------------------------------------
-
-msgid "Title"
-msgstr "Başlık"
-
-msgid "Artist"
-msgstr "Sanatçı"
-
+#: ui/components/dialog/replaygain-body.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/search/top-result-card.slint
 msgid "Album"
 msgstr "Albüm"
 
-msgid "Genre"
-msgstr "Tür"
+#: ui/components/dialog/replaygain-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Track"
+msgstr "Parça"
 
+#: ui/components/dialog/replaygain-body.slint
+msgid "Enable ReplayGain"
+msgstr "ReplayGain'i etkinleştir"
+
+#: ui/components/dialog/replaygain-body.slint
+msgid "Normalization mode"
+msgstr "Normalleştirme modu"
+
+#: ui/components/dialog/replaygain-body.slint
+msgid "Prevent clipping"
+msgstr "Kırpılmayı önle"
+
+#: ui/components/dialog/replaygain-body.slint
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "ReplayGain yalnızca ses düzeyi etiketleri olan parçaları etkiler. Bunları eklemek için kitaplığınızı rsgain veya loudgain gibi bir araçla tarayın."
+
+#: ui/components/dialog/scrobble-lastfm-body.slint
+msgid "Click Open Last.fm to approve Melodia in your browser."
+msgstr "Melodia'yı tarayıcında yetkilendirmek için Last.fm'i aç düğmesine tıkla."
+
+#: ui/components/dialog/scrobble-lastfm-body.slint
+msgid "After approving Melodia in your browser, click Finish."
+msgstr "Melodia'yı tarayıcında onayladıktan sonra Bitir düğmesine tıkla."
+
+#: ui/components/dialog/scrobble-lastfm-body.slint
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+#: ui/globals/player.slint
+msgid "Connecting…"
+msgstr "Bağlanıyor…"
+
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+msgid "User token"
+msgstr "Kullanıcı belirteci"
+
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+msgid "Paste your ListenBrainz user token"
+msgstr "ListenBrainz kullanıcı belirtecini yapıştır"
+
+#: ui/components/dialog/scrobble-listenbrainz-body.slint
+msgid "Find your token on your ListenBrainz profile settings page."
+msgstr "Belirtecini ListenBrainz profil ayarları sayfanda bulabilirsin."
+
+#: ui/components/dialog/selectable-picker.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Select all"
+msgstr "Tümünü seç"
+
+#: ui/components/dialog/selectable-picker.slint
+msgid "{} selected"
+msgstr "{} seçili"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "value"
+msgstr "değer"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "days"
+msgstr "gün"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "number"
+msgstr "sayı"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Album Artist"
+msgstr "Albüm Sanatçısı"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/my-library/tab-pills.slint ui/views/search/top-result-card.slint
+msgid "Artist"
+msgstr "Sanatçı"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+msgid "Title"
+msgstr "Başlık"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Credits"
+msgstr "Katkıda bulunanlar"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "ISRC"
+msgstr "ISRC"
+
+#. Translators: a musical key, as in A minor
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Key"
+msgstr "Ton"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Mood"
+msgstr "Ruh hali"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "BPM"
+msgstr "BPM"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Duration (sec)"
+msgstr "Süre (sn)"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/station-facts.slint ui/views/radio/tab-pills.slint
+msgid "Plays"
+msgstr "Çalınma"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/my-library/tab-pills.slint
 msgid "Year"
 msgstr "Yıl"
 
-msgid "Length"
-msgstr "Süre"
-
-msgid "Artwork"
-msgstr "Kapak"
-
-# ---- Track row context menu -------------------------------------------------
-
-msgid "Play Next"
-msgstr "Sonra Çal"
-
-msgid "Add to Queue"
-msgstr "Sıraya Ekle"
-
-msgid "Add to Favorites"
-msgstr "Favorilere Ekle"
-
-msgid "Remove from Favorites"
-msgstr "Favorilerden Kaldır"
-
-# ---- Placeholder views ------------------------------------------------------
-
-msgid "Coming soon"
-msgstr "Yakında"
-
-# ---- Settings page header ---------------------------------------------------
-
-msgid "Search settings…"
-msgstr "Ayarlarda ara…"
-
-msgid "No matching settings"
-msgstr "Eşleşen ayar yok"
-
-# ---- Settings page tabs ------------------------------------------------------
-#
-# Tab bar under the page title. "Playback" and "About" reuse the section-title
-# msgids further down, so only these three are new.
-
-msgid "Library"
-msgstr "Kitaplık"
-
-msgid "Interface"
-msgstr "Arayüz"
-
-msgid "Services"
-msgstr "Hizmetler"
-
-# ---- Library Folders section ------------------------------------------------
-
-msgid "Library Folders"
-msgstr "Kitaplık Klasörleri"
-
-msgid "Manage Folders"
-msgstr "Klasörleri Yönet"
-
-msgid "Add Folder"
-msgstr "Klasör Ekle"
-
-msgid "Rescan"
-msgstr "Yeniden Tara"
-
-msgid "No folders added"
-msgstr "Klasör eklenmedi"
-
-msgid "Add a folder to scan for music files."
-msgstr "Müzik dosyalarını taramak için bir klasör ekle."
-
-# Library scan-progress text. `{}` placeholders carry int / string args; the
-# joining particles ("von", "·") get translated naturally.
-msgid "{} / {} files"
-msgstr "{} / {} dosya"
-
-msgid "{} / {} files · {}"
-msgstr "{} / {} dosya · {}"
-
-# The scan's other phases: the walk, before anything is known about what needs
-# reading; the last write once everything is read; a cancelled scan writing what
-# it had read. Turkish keeps both plural slots but does not pluralize after a
-# numeral.
-msgid "Looking for music… {n} file found"
-msgid_plural "Looking for music… {n} files found"
-msgstr[0] "Müzik aranıyor… {n} dosya bulundu"
-msgstr[1] "Müzik aranıyor… {n} dosya bulundu"
-
-msgid "Finishing up…"
-msgstr "Tamamlanıyor…"
-
-msgid "Stopping…"
-msgstr "Durduruluyor…"
-
-msgid "Remove Folder?"
-msgstr "Klasör Kaldırılsın mı?"
-
-# Translators: `{}` is the absolute filesystem path of the folder being removed.
-msgid "Remove \"{}\" from your library? All tracks under this folder will be removed from the library and from your playlists."
-msgstr "\"{}\" kitaplığınızdan kaldırılsın mı? Bu klasördeki tüm parçalar kitaplıktan ve çalma listelerinizden kaldırılacak."
-
-# ---- Appearance section -----------------------------------------------------
-
-msgid "Appearance"
-msgstr "Görünüm"
-
-msgid "Theme"
-msgstr "Tema"
-
-msgid "Theme Variant"
-msgstr "Tema Çeşidi"
-
-# Theme Variant chips for non-Catppuccin themes (Dark/Light + synthetic System).
-# Catppuccin's variant names (Latte/Frappe/Macchiato/Mocha) are proper nouns
-# and stay verbatim across locales — only "System" is translatable on that path.
-msgid "Dark"
-msgstr "Koyu"
-
-msgid "Light"
-msgstr "Açık"
-
-msgid "System"
-msgstr "Sistem"
-
-msgid "Accent Color"
-msgstr "Vurgu Rengi"
-
-msgid "Color Style"
-msgstr "Renk Stili"
-
-msgid "Active — palette derived from the current track's artwork."
-msgstr "Etkin — palet geçerli parçanın kapağından türetildi."
-
-msgid "Generate theme colors from album artwork."
-msgstr "Tema renklerini albüm kapağından oluştur."
-
-# Color Style chip labels (Material 3 dynamic-colour scheme variants). Order
-# must match `services::material_you::SchemeStyle::all()` — "None" already
-# translated above; remaining 7 below. Source: Tauri's `settings.ts` (de),
-# kept verbatim so users moving between the apps see consistent vocabulary.
-
-msgid "Tonal Spot"
-msgstr "Tonal Spot"
-
-msgid "Content"
-msgstr "İçerik"
-
-msgid "Vibrant"
-msgstr "Canlı"
-
-msgid "Expressive"
-msgstr "Etkileyici"
-
-msgid "Fidelity"
-msgstr "Sadakat"
-
-msgid "Neutral"
-msgstr "Nötr"
-
-msgid "Monochrome"
-msgstr "Tek Renkli"
-
-msgid "Aurora Backdrop"
-msgstr "Aurora Arka Planı"
-
-msgid "Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."
-msgstr "Albüm, çalma listesi ve “Şimdi Çalıyor” başlıklarını, kapak görselinin bulanık bir kopyası yerine albümün kendi renkleriyle boya. Bulanıklaştırılacak bir şey olmadığı için başlıklar daha erken görünür ve Melodia daha hafif kalır. Uygulamak için yeniden başlatma gerekir."
-
-msgid "Changing the backdrop style requires restarting Melodia. Restart now?"
-msgstr "Arka plan stilini değiştirmek Melodia'nın yeniden başlatılmasını gerektirir. Şimdi yeniden başlatılsın mı?"
-
-# ---- Motion section ---------------------------------------------------------
-
-msgid "Motion"
-msgstr "Hareket"
-
-msgid "Skip Startup Animation"
-msgstr "Başlangıç animasyonunu atla"
-
-msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
-msgstr "Kitaplığı belirip kayarak yerine oturması yerine, açılışta doğrudan ekranda göster. Açık bıraktığın bir ayrıntı sayfası yüklendiğinde yine de genişleyerek açılır."
-
-# Title of the window-chrome settings card.
-msgid "Window"
-msgstr "Pencere"
-
-msgid "Native Title Bar"
-msgstr "Yerel Başlık Çubuğu"
-
-msgid "Use the operating system's native title bar instead of the custom one. Restart required to apply."
-msgstr "Özel başlık çubuğu yerine işletim sisteminin yerel başlık çubuğunu kullan. Uygulamak için yeniden başlatma gerekir."
-
-msgid "Restart Required"
-msgstr "Yeniden Başlatma Gerekli"
-
-msgid "Switching to the native title bar requires restarting Melodia. Restart now?"
-msgstr "Yerel başlık çubuğuna geçmek Melodia'nın yeniden başlatılmasını gerektirir. Şimdi yeniden başlatılsın mı?"
-
-msgid "Switching to the custom title bar requires restarting Melodia. Restart now?"
-msgstr "Özel başlık çubuğuna geçmek Melodia'nın yeniden başlatılmasını gerektirir. Şimdi yeniden başlatılsın mı?"
-
-msgid "Match Unfocused Window Background"
-msgstr "Odaklanmamış Pencere Arka Planını Eşle"
-
-msgid "Only available with the native title bar."
-msgstr "Yalnızca yerel başlık çubuğuyla kullanılabilir."
-
-msgid "Tint the sidebar and now-playing bar toward the content background when the window loses focus."
-msgstr "Pencere odağı kaybettiğinde kenar çubuğunu ve çalma çubuğunu içerik arka planına doğru renklendir."
-
-msgid "Window Corner Radius"
-msgstr "Pencere Köşe Yarıçapı"
-
-msgid "Window Border"
-msgstr "Pencere Kenarlığı"
-
-msgid "Draw a thin outline around the miniplayer. The full window keeps the border of its system frame."
-msgstr "Mini oynatıcının etrafına ince bir kenarlık çizer. Tam pencere, sistem çerçevesinin kenarlığını korur."
-
-msgid "Draw a thin outline around the whole window, the miniplayer included."
-msgstr "Mini oynatıcı dahil tüm pencerenin etrafına ince bir kenarlık çizer."
-
-msgid "Window Border Color"
-msgstr "Pencere Kenarlığı Rengi"
-
-msgid "System follows the color the operating system draws its own window borders in."
-msgstr "Sistem, işletim sisteminin kendi pencere kenarlıklarını çizdiği rengi izler."
-
-msgid "Available only while the window border is shown."
-msgstr "Yalnızca pencere kenarlığı gösterilirken kullanılabilir."
-
-msgid "Managed by the operating system"
-msgstr "İşletim sistemi tarafından yönetilir"
-
-msgid "Square"
-msgstr "Kare"
-
-msgid "Decoration Button Style"
-msgstr "Pencere düğmeleri stili"
-
-msgid "Decoration Button Side"
-msgstr "Pencere düğmeleri tarafı"
-
-msgid "Right"
-msgstr "Sağ"
-
-msgid "Left"
-msgstr "Sol"
-
-# Title of the overflow-menu settings card.
-msgid "Player Bar"
-msgstr "Çalar Çubuğu"
-
-msgid "Overflow Menu Buttons"
-msgstr "Taşma Menüsü Düğmeleri"
-
-msgid "Move selected buttons into a compact overflow menu in the player bar"
-msgstr "Seçili düğmeleri çalar çubuğunda kompakt bir taşma menüsüne taşı"
-
-# ---- Language section -------------------------------------------------------
-
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Bitrate (kbps)"
+msgstr "Bit hızı (kbps)"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/now-playing/overflow-menu.slint ui/settings.slint
+msgid "Rating"
+msgstr "Derecelendirme"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Sample rate (Hz)"
+msgstr "Örnekleme hızı (Hz)"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Skips"
+msgstr "Atlanan"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Date added"
+msgstr "Eklenme tarihi"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Favorite"
+msgstr "Favoriye Ekle"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "File size (bytes)"
+msgstr "Dosya boyutu (bayt)"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Last played"
+msgstr "Son çalınma"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "contains"
+msgstr "içerir"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "does not contain"
+msgstr "içermez"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is"
+msgstr "eşittir"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is not"
+msgstr "eşit değil"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "ends with"
+msgstr "ile biter"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is not set"
+msgstr "ayarlanmamış"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is set"
+msgstr "ayarlanmış"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "starts with"
+msgstr "ile başlar"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "at least"
+msgstr "en az"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "greater than"
+msgstr "büyüktür"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "at most"
+msgstr "en fazla"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "less than"
+msgstr "küçüktür"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is false"
+msgstr "yanlış"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "is true"
+msgstr "doğru"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "in the last"
+msgstr "son"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "not in the last"
+msgstr "son olmayan"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "all"
+msgstr "tümü"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "any"
+msgstr "herhangi biri"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "least recently added"
+msgstr "en önce eklenen"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "most recently added"
+msgstr "en son eklenen"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "least played"
+msgstr "en az çalınan"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "most played"
+msgstr "en çok çalınan"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "least recently played"
+msgstr "en önce çalınan"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "most recently played"
+msgstr "en son çalınan"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "highest rated"
+msgstr "en yüksek puanlı"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "random"
+msgstr "rastgele"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Smart playlist name"
+msgstr "Akıllı liste adı"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Match"
+msgstr "Eşleştir"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "of the following rules"
+msgstr "şu kurallardan"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Add rule"
+msgstr "Kural ekle"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "Limit to"
+msgstr "Sınırla:"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "N"
+msgstr "N"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+msgid "tracks by"
+msgstr "parça, şuna göre:"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Arranger"
+msgstr "Düzenleyen"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Composer"
+msgstr "Besteci"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Conductor"
+msgstr "Orkestra şefi"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Lyricist"
+msgstr "Söz yazarı"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Performer"
+msgstr "İcracı"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "DJ Mixer"
+msgstr "DJ miksçi"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Engineer"
+msgstr "Ses mühendisi"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Mixer"
+msgstr "Miksçi"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Producer"
+msgstr "Yapımcı"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Remixer"
+msgstr "Remiksçi"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Replace…"
+msgstr "Değiştir…"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/folder-row.slint ui/globals/dialog.slint
+#: ui/views/settings/library-section.slint
+msgid "Remove"
+msgstr "Kaldır"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Details"
+msgstr "Ayrıntılar"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/now-playing/lyrics-menu.slint ui/settings.slint
+#: ui/views/now-playing-view.slint ui/views/settings/lyrics-section.slint
+msgid "Lyrics"
+msgstr "Şarkı Sözleri"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Summary"
+msgstr "Özet"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Tags"
+msgstr "Etiketler"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Total"
+msgstr "Toplam"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Disc"
+msgstr "Disk"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Original Year"
+msgstr "Orijinal Yıl"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Comment"
+msgstr "Yorum"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Subtitle"
+msgstr "Alt başlık"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Disc Subtitle"
+msgstr "Disk alt başlığı"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Grouping"
+msgstr "Gruplama"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Work"
+msgstr "Eser"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Movement"
+msgstr "Bölüm"
+
+#. Translators: the movement's number, as in movement 2 of 4
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Number"
+msgstr "Numara"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/onboarding/appearance-panel.slint ui/settings.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+#: ui/views/settings/language-section.slint
 msgid "Language"
 msgstr "Dil"
 
-msgid "Choose your preferred language"
-msgstr "Tercih ettiğin dili seç"
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Copyright"
+msgstr "Telif hakkı"
 
-# ---- Playback section -------------------------------------------------------
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Record Label"
+msgstr "Plak şirketi"
 
-msgid "Playback"
-msgstr "Oynatma"
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Catalog Number"
+msgstr "Katalog numarası"
 
-msgid "Gapless Playback"
-msgstr "Boşluksuz Oynatma"
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Barcode"
+msgstr "Barkod"
 
-msgid "Seamless transitions between tracks without silence gaps"
-msgstr "Parçalar arasında sessizlik olmadan kesintisiz geçişler"
+#. Translators: the physical medium a release came out on: CD, vinyl
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Media"
+msgstr "Ortam"
 
-msgid "Play Button Animation"
-msgstr "Çal Düğmesi Animasyonu"
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Release Type"
+msgstr "Yayın türü"
 
-msgid "Visual effect on the play button while music is playing"
-msgstr "Müzik çalarken çal düğmesindeki görsel efekt"
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+msgid "Release Country"
+msgstr "Yayın ülkesi"
 
-# Animation preset names. "None" stays a generic English UI word in the
-# fallback context — we translate it; the others are coined terms / proper
-# nouns within the Material 3 motion vocabulary that we keep verbatim
-# alongside their localised counterparts where natural.
-msgid "None"
-msgstr "Yok"
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Part of a compilation"
+msgstr "Bir derlemenin parçası"
 
-msgid "Equalizer"
-msgstr "Ekolayzer"
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Insert found lyrics"
+msgstr "Bulunan sözleri ekle"
 
-msgid "Resume on Startup"
-msgstr "Başlangıçta Devam Et"
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Path"
+msgstr "Yol"
 
-msgid "Automatically resume the last track from where you left off when the app starts"
-msgstr "Uygulama başladığında son parçayı kaldığın yerden otomatik olarak devam ettir"
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Codec"
+msgstr "Codec"
 
-msgid "Crossfade"
-msgstr "Çapraz Geçiş"
+#: ui/components/dialog/tag-editor-body.slint ui/components/station-facts.slint
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+msgid "Bitrate"
+msgstr "Bit Hızı"
 
-msgid "Overlap the end of one track with the start of the next"
-msgstr "Bir parçanın sonunu sonraki parçanın başıyla üst üste bindir"
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/views/settings/output-section.slint
+msgid "Sample Rate"
+msgstr "Örnekleme Hızı"
 
-msgid "Crossfade duration"
-msgstr "Çapraz geçiş süresi"
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Bit Depth"
+msgstr "Bit Derinliği"
 
-msgid "How long the two tracks overlap"
-msgstr "İki parçanın ne kadar süre üst üste bineceği"
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/views/settings/output-section.slint
+msgid "Channels"
+msgstr "Kanallar"
 
-# Unit suffix for the crossfade-duration readout, e.g. "2 s".
-msgid "{} s"
-msgstr "{} sn"
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Size"
+msgstr "Boyut"
 
-msgid "Except on the same album"
-msgstr "Aynı albüm içinde hariç"
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/views/my-library/tab-pills.slint
+msgid "Duration"
+msgstr "Süre"
 
-msgid "Keep tracks from one album gapless, so continuous mixes stay seamless"
-msgstr "Aynı albümdeki parçaları boşluksuz çal, böylece kesintisiz mixler akıcı kalır"
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Modified"
+msgstr "Değiştirilme"
 
-msgid "Also on manual track change"
-msgstr "Elle parça değiştirirken de"
+#: ui/components/dialog/tag-editor-body.slint
+msgid "BLAKE3"
+msgstr "BLAKE3"
 
-msgid "Crossfade when you skip to the next or previous track, not only at the end of one"
-msgstr "Yalnızca parça sonunda değil, sonraki veya önceki parçaya geçerken de çapraz geçiş uygula"
+#: ui/components/grid/album-grid.slint
+#: ui/components/track-list/track-list-row.slint ui/globals/player.slint
+msgid "Unknown artist"
+msgstr "Bilinmeyen sanatçı"
 
-msgid "Fade out on pause"
-msgstr "Duraklatırken kıs"
-
-msgid "Fade the music out when pausing or stopping, and back in when resuming"
-msgstr "Duraklatırken veya durdururken müziği kıs, devam ederken yeniden aç"
-
-# ---- File Watching section --------------------------------------------------
-
-msgid "File Watching"
-msgstr "Dosya İzleme"
-
-msgid "Watch for file changes"
-msgstr "Dosya değişikliklerini izle"
-
-msgid "Automatically detect when files are added, removed, or changed in your library folders."
-msgstr "Kitaplık klasörlerinde dosyaların ne zaman eklendiğini, kaldırıldığını veya değiştirildiğini otomatik olarak algıla."
-
-# ---- Ratings section --------------------------------------------------------
-
-msgid "Ratings"
-msgstr "Puanlar"
-
-msgid "Save ratings to files"
-msgstr "Puanları dosyalara kaydet"
-
-msgid "Write star ratings into each file's tags, so they survive a rescan and other players can read them."
-msgstr "Yıldız puanlarını her dosyanın etiketlerine yazar; böylece yeniden tarama sonrasında korunur ve diğer oynatıcılar bunları okuyabilir."
-
-# ---- Updates section --------------------------------------------------------
-
-msgid "Updates"
-msgstr "Güncellemeler"
-
-msgid "Software Updates"
-msgstr "Yazılım Güncellemeleri"
-
-msgid "Current version: {}"
-msgstr "Geçerli sürüm: {}"
-
-msgid "Check for Updates"
-msgstr "Güncellemeleri Kontrol Et"
-
-msgid "Checking..."
-msgstr "Kontrol ediliyor..."
-
-msgid "Update Installed"
-msgstr "Güncelleme Yüklendi"
-
-msgid "Restart Melodia to apply the update"
-msgstr "Güncellemeyi uygulamak için Melodia'yı yeniden başlat"
-
-msgid "Restart Now"
-msgstr "Şimdi Yeniden Başlat"
-
-msgid "Version {} Available"
-msgstr "Sürüm {} Mevcut"
-
-msgid "Download & Install"
-msgstr "İndir ve Yükle"
-
-msgid "Installing..."
-msgstr "Yükleniyor..."
-
-msgid "You're up to date!"
-msgstr "Güncelsin!"
-
-msgid "Melodia {} is the latest version."
-msgstr "Melodia {} en son sürümdür."
-
-# ---- Browse view -------------------------------------------------------------
-
-msgid "Back"
-msgstr "Geri"
-
-msgid "No library folders configured"
-msgstr "Yapılandırılmış kütüphane klasörü yok"
-
-msgid "Open Settings to add a folder"
-msgstr "Klasör eklemek için Ayarlar'ı açın"
-
-msgid "Open Settings"
-msgstr "Ayarları Aç"
-
-msgid "Empty folder"
-msgstr "Boş klasör"
-
-msgid "Could not load folder"
-msgstr "Klasör yüklenemedi"
-
-# ---- Notifications -----------------------------------------------------------
-
-# Surfaced as a transient warning when the user disables the file-watching
-# toggle in Settings; clears automatically when they re-enable it.
-msgid "File watching disabled"
-msgstr "Dosya izleme devre dışı"
-
-msgid "Tracks won't reflect disk changes until you re-enable it."
-msgstr "Yeniden etkinleştirene kadar parçalar diskteki değişiklikleri yansıtmayacak."
-
-# Surfaced as a transient info toast when the file watcher reports a
-# kernel-queue overflow (notify Flag::Rescan) and the app reconciles
-# every enabled folder against disk to catch missed events.
-msgid "Library re-syncing"
-msgstr "Kitaplık yeniden eşitleniyor"
-
-msgid "Filesystem event burst — rescanning your folders."
-msgstr "Dosya sistemi olay yoğunluğu — klasörlerin yeniden taranıyor."
-
-msgid "Restoring cover art"
-msgstr "Kapaklar geri yükleniyor"
-
-msgid "Some cover art was missing. Melodia is restoring it from your music files."
-msgstr "Bazı kapak görselleri eksikti. Melodia bunları müzik dosyalarından geri yüklüyor."
-
-# ---- Albums view ------------------------------------------------------------
-
-msgid "Name"
-msgstr "Ad"
-
-msgid "Filter albums…"
-msgstr "Albümleri filtrele…"
-
+#: ui/components/grid/artist-grid.slint ui/globals/hero-chips.slint
+#: ui/globals/search.slint ui/views/my-library-view.slint
 msgid "{n} album"
 msgid_plural "{n} albums"
 msgstr[0] "{n} albüm"
 msgstr[1] "{n} albüm"
 
-msgid "No albums yet"
-msgstr "Henüz albüm yok"
-
-msgid "Add a music folder in Settings to start building your library."
-msgstr "Kitaplığınızı oluşturmaya başlamak için Ayarlar'dan bir müzik klasörü ekleyin."
-
-# ---- Artists & Genres views -------------------------------------------------
-
-msgid "No artists yet"
-msgstr "Henüz sanatçı yok"
-
-# Artist Detail: filters the track list and the album strip at once.
-msgid "Filter tracks & albums…"
-msgstr "Parça ve albümleri filtrele…"
-
-msgid "Filter genres…"
-msgstr "Türleri filtrele…"
-
-msgid "{n} genre"
-msgid_plural "{n} genres"
-msgstr[0] "{n} tür"
-msgstr[1] "{n} tür"
-
-msgid "No genres yet"
-msgstr "Henüz tür yok"
-
-# ---- Playlists view ---------------------------------------------------------
-
-msgid "Filter playlists…"
-msgstr "Çalma listelerini filtrele…"
-
-msgid "{n} playlist"
-msgid_plural "{n} playlists"
-msgstr[0] "{n} çalma listesi"
-msgstr[1] "{n} çalma listesi"
-
-msgid "No playlists yet"
-msgstr "Henüz çalma listesi yok"
-
-msgid "Click \"+ New Playlist\" to create one."
-msgstr "Bir tane oluşturmak için \"+ Yeni Çalma Listesi\" düğmesine tıkla."
-
-msgid "New Playlist"
-msgstr "Yeni Çalma Listesi"
-
-msgid "New Playlist…"
-msgstr "Yeni Çalma Listesi…"
-
-msgid "Add to Playlist"
-msgstr "Çalma listesine ekle"
-
-msgid "0 tracks"
-msgstr "0 parça"
-
-# ---- Playlist Detail --------------------------------------------------------
-
-msgid "No tracks yet"
-msgstr "Henüz parça yok"
-
-msgid "Drag music files here, or add tracks via any track's overflow menu."
-msgstr "Müzik dosyalarını buraya sürükle ya da herhangi bir parçanın menüsünden parça ekle."
-
-msgid "Drop files to add to this playlist"
-msgstr "Bu çalma listesine eklemek için dosyaları bırak"
-
-msgid "Edit artwork"
-msgstr "Görseli düzenle"
-
-msgid "Rename"
-msgstr "Yeniden adlandır"
-
-msgid "Delete playlist"
-msgstr "Çalma listesini sil"
-
-msgid "Remove from Playlist"
-msgstr "Çalma listesinden çıkar"
-
-# ---- Mosaic picker ----------------------------------------------------------
-
-msgid "Add tracks to this playlist to pick artwork."
-msgstr "Görsel seçmek için bu çalma listesine parça ekle."
-
-msgid "No artwork"
-msgstr "Görsel yok"
-
-msgid "{} / 4 selected"
-msgstr "{} / 4 seçili"
-
-msgid "Select up to 4 tracks"
-msgstr "En fazla 4 parça seç"
-
-# ---- Playlist Create / Rename dialog ----------------------------------------
-
-msgid "Playlist name"
-msgstr "Çalma listesi adı"
-
-msgid "Description (optional)"
-msgstr "Açıklama (isteğe bağlı)"
-
-msgid "Add a description…"
-msgstr "Açıklama ekle…"
-
-# Confirm-button label on the create-playlist dialog.
-msgid "Create"
-msgstr "Oluştur"
-
-msgid "Rename Playlist"
-msgstr "Çalma Listesini Yeniden Adlandır"
-
-# ---- Playlist Detail: Delete confirm ----------------------------------------
-
-msgid "Delete playlist?"
-msgstr "Çalma listesi silinsin mi?"
-
-msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
-msgstr "Çalma listesi ve parça sırası kaldırılacak. Parçaların kendisi kitaplığınızda kalır."
-
-# Confirm-button label on the delete-playlist dialog.
-msgid "Delete"
-msgstr "Sil"
-
-# ---- Playlist Detail: Remove-selected confirm -------------------------------
-
-# ---- Search view ------------------------------------------------------------
-
-msgid "Search your library…"
-msgstr "Kitaplığınızda arayın…"
-
-msgid "Searching…"
-msgstr "Aranıyor…"
-
-msgid "No results found"
-msgstr "Sonuç bulunamadı"
-
-msgid "Try a different search term"
-msgstr "Farklı bir arama terimi deneyin"
-
-msgid "Top Result"
-msgstr "En İyi Sonuç"
-
-msgid "Songs"
-msgstr "Şarkılar"
-
-msgid "Show all {} songs"
-msgstr "Tüm {} şarkıyı göster"
-
-msgid "Show less"
-msgstr "Daha az göster"
-
-msgid "Recent"
-msgstr "Son Aramalar"
-
-msgid "Clear all"
-msgstr "Tümünü temizle"
-
-# ---- Favorites view ---------------------------------------------------------
-
-msgid "Filter favorites…"
-msgstr "Favorileri filtrele…"
-
-msgid "Filter most played…"
-msgstr "En çok çalınanları filtrele…"
-
-msgid "Filter artists…"
-msgstr "Sanatçıları filtrele…"
-
-msgid "Nothing played yet"
-msgstr "Henüz hiçbir şey çalınmadı"
-
-msgid "Play one of your favorites and it will show up here."
-msgstr "Favorilerinden birini çal, burada görünsün."
-
-msgid "Play something and it will show up here."
-msgstr "Bir şey çal, burada görünsün."
-
-msgid "No favorite artists yet"
-msgstr "Henüz favori sanatçı yok"
-
-msgid "Favorite a song and its artist appears here."
-msgstr "Bir şarkıyı favorilere ekle, sanatçısı burada görünsün."
-
-msgid "Most Played"
-msgstr "En çok çalınanlar"
-
-msgid "Favorite Artists"
-msgstr "Favori sanatçılar"
-
-msgid "No favorites yet"
-msgstr "Henüz favori yok"
-
-# Plural: favourite-count subtitle (hero count line + Favorite Artists card
-# subtitle on the strip). Turkish keeps the gettext plural form but doesn't
-# pluralize the noun after a numeral.
-msgid "{n} favorite"
-msgid_plural "{n} favorites"
-msgstr[0] "{n} favori"
-msgstr[1] "{n} favori"
-
-# ---- Track row right-click menu (multi-select variants) ---------------------
-# Wired into `ui/components/track-list/track-list-row.slint`. `{}` seçilen şarkı
-# sayısıdır.
-
+#: ui/components/grid/browse-card-grid.slint
+msgid "Folder"
+msgstr "Klasör"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/now-playing/play-button.slint
+#: ui/components/track-list/track-context-menu.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Play"
+msgstr "Çal"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/now-playing/overflow-menu.slint ui/views/favorites-view.slint
+#: ui/views/my-library/tab-pills.slint ui/views/recently-played-view.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Shuffle"
+msgstr "Karıştır"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
 msgid "Play {} Next"
 msgstr "{} Sırada Çal"
 
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Play Next"
+msgstr "Sonra Çal"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
 msgid "Add {} to Queue"
 msgstr "{} Sıraya Ekle"
 
-msgid "Add {} to Playlist"
-msgstr "{} Çalma Listesine Ekle"
-
-msgid "Add {} to Favorites"
-msgstr "{} Favorilere Ekle"
-
-msgid "Remove {} from Favorites"
-msgstr "{} Favorilerden Çıkar"
-
-msgid "Remove {} from Playlist"
-msgstr "{} Çalma Listesinden Çıkar"
-
-# ---- Track row right-click menu --------------------------------------------
-msgid "Open Containing Folder"
-msgstr "Bulunduğu Klasörü Aç"
-
-# ---- ... cross-tab navigation ----------------------------------------------
-msgid "Go to Album"
-msgstr "Albüme Git"
-
-msgid "Go to Artist"
-msgstr "Sanatçıya Git"
-
-msgid "Go to Genre"
-msgstr "Türe Git"
-
-# ---- Add-to-Playlist picker dialog -----------------------------------------
-# Wired into `ui/components/dialog/playlist-picker.slint`. The first two badges
-# appear on rows whose playlists already contain some or all of the
-# selected tracks; the third is the empty-state hint.
-
-msgid "Already added"
-msgstr "Zaten ekli"
-
-msgid "{} of {} already added"
-msgstr "{} / {} zaten ekli"
-
-# ---- Auto-updater (Settings → Updates + notification toasts) ----------------
-
-msgid "Critical update"
-msgstr "Kritik güncelleme"
-
-msgid "This update fixes a critical issue and can't be skipped."
-msgstr "Bu güncelleme kritik bir sorunu düzeltir ve atlanamaz."
-
-msgid "Skip this version"
-msgstr "Bu sürümü atla"
-
-msgid "Updates managed by your package manager"
-msgstr "Güncellemeler paket yöneticiniz tarafından yönetiliyor"
-
-msgid "Use sudo dnf update melodia (or your distro equivalent)."
-msgstr "sudo dnf update melodia (veya dağıtımınızın eşdeğerini) kullanın."
-
-msgid "Re-run the latest .msi installer from the Releases page."
-msgstr "Releases sayfasındaki en son .msi yükleyicisini tekrar çalıştırın."
-
-msgid "Use brew upgrade melodia."
-msgstr "brew upgrade melodia komutunu kullanın."
-
-msgid "Update available"
-msgstr "Güncelleme mevcut"
-
-msgid "Melodia {} is ready to install."
-msgstr "Melodia {} yüklenmeye hazır."
-
-msgid "Install"
-msgstr "Yükle"
-
-msgid "Update installed"
-msgstr "Güncelleme yüklendi"
-
-msgid "Restart Melodia to start using the new version."
-msgstr "Yeni sürümü kullanmak için Melodia'yı yeniden başlatın."
-
-msgid "Update failed"
-msgstr "Güncelleme başarısız"
-
-msgid "Couldn't reach the update server. Check your internet connection."
-msgstr "Güncelleme sunucusuna ulaşılamadı. Lütfen internet bağlantınızı kontrol edin."
-
-msgid "Signature check failed. The downloaded update may be corrupted; please try again."
-msgstr "İmza doğrulaması başarısız. İndirilen güncelleme bozulmuş olabilir; lütfen tekrar deneyin."
-
-msgid "The update server returned an unexpected response."
-msgstr "Güncelleme sunucusu beklenmeyen bir yanıt döndürdü."
-
-msgid "Couldn't write the downloaded update to disk."
-msgstr "İndirilen güncelleme diske yazılamadı."
-
-msgid "Update failed. See logs for details."
-msgstr "Güncelleme başarısız. Ayrıntılar için günlüklere bakın."
-
-# ---- Settings → About → Diagnostics -----------------------------------------
-
-msgid "Diagnostics"
-msgstr "Tanılama"
-
-msgid "Logs"
-msgstr "Günlükler"
-
-msgid "Where Melodia writes its log files and crash reports."
-msgstr "Melodia'nın günlük dosyalarını ve çökme raporlarını yazdığı yer."
-
-# Shared with the crash-report toast's action button, which opens the same folder.
-msgid "Open Folder"
-msgstr "Klasörü Aç"
-
-msgid "Diagnostics report"
-msgstr "Tanılama raporu"
-
-msgid "One text file with your system details, settings and recent logs, for attaching to a bug report."
-msgstr ""
-"Sistem bilgilerinizi, ayarlarınızı ve son günlükleri içeren tek bir metin "
-"dosyası — hata bildirimine eklemek için."
-
-msgid "Save…"
-msgstr "Kaydet…"
-
-msgid "Verbose logging"
-msgstr "Ayrıntılı günlük kaydı"
-
-msgid "Record extra detail. Turn this on, reproduce the problem, then save a report."
-msgstr ""
-"Ek ayrıntıları kaydeder. Bunu açın, sorunu yeniden oluşturun, ardından bir "
-"rapor kaydedin."
-
-msgid "Diagnostics report saved"
-msgstr "Tanılama raporu kaydedildi"
-
-msgid "Couldn't save the diagnostics report"
-msgstr "Tanılama raporu kaydedilemedi"
-
-msgid "See the log for details."
-msgstr "Ayrıntılar için günlüğe bakın."
-
-# Pushed once on the launch after a panic.
-msgid "Melodia crashed last time"
-msgstr "Melodia geçen sefer çöktü"
-
-msgid "A crash report was written. Open the log folder to find it."
-msgstr "Bir çökme raporu yazıldı. Bulmak için günlük klasörünü açın."
-
-# Pushed when the audio output device goes away mid-session.
-msgid "Audio device disconnected"
-msgstr "Ses aygıtı bağlantısı kesildi"
-
-msgid "Playback won't be audible until you reconnect it and restart Melodia."
-msgstr ""
-"Aygıtı yeniden bağlayıp Melodia'yı yeniden başlatana kadar oynatma "
-"duyulmayacak."
-
-msgid "Close to Tray"
-msgstr "Sistem Tepsisine Kapat"
-
-msgid "Keep Melodia running in the system tray when you close the window, instead of quitting."
-msgstr "Pencereyi kapattığınızda Melodia'dan çıkmak yerine sistem tepsisinde çalışır durumda tut."
-
-msgid "System Tray Icon"
-msgstr "Sistem Tepsisi Simgesi"
-
-msgid "Show a Melodia icon in the system tray with playback controls."
-msgstr "Sistem tepsisinde oynatma denetimleriyle bir Melodia simgesi göster."
-
-msgid "Changing the system tray icon requires restarting Melodia. Restart now?"
-msgstr "Sistem tepsisi simgesini değiştirmek Melodia'yı yeniden başlatmayı gerektirir. Şimdi yeniden başlatılsın mı?"
-
-msgid "Available only while the system tray icon is active."
-msgstr "Yalnızca sistem tepsisi simgesi etkinken kullanılabilir."
-
-# ---- About -------------------------------------------------------------------
-
-# Settings → About section (`ui/views/settings/about-section.slint`): app
-# name + version, authorship, a support link, the source-repository link, and
-# the license.
-msgid "About"
-msgstr "Hakkında"
-
-# Translators: `{}` is the app version string (e.g. "0.1.0").
-msgid "Version {}"
-msgstr "Sürüm {}"
-
-# Translators: `{}` is the author's name ("Kenan Salar") — a proper noun,
-# passed verbatim and never translated.
-msgid "Made by {}"
-msgstr "{} tarafından yapıldı"
-
-# Translators: the Ko-fi row — its label, its button and its blurb. "Ko-fi" is a
-# brand and stays verbatim wherever it appears. "Support" throughout this block
-# means backing the project financially — never technical support.
-msgid "Support Melodia"
-msgstr "Melodia'ya destek ol"
-
-msgid "Support me on Ko-fi"
-msgstr "Ko-fi'de bana destek ol"
-
-msgid "Melodia is free and open source. Support helps keep it going."
-msgstr "Melodia ücretsiz ve açık kaynaklıdır. Destek, devam etmesine yardımcı olur."
-
-# The one-time support toast (`crates/melodia-views/src/ui/support.rs`), shown on one early launch and
-# never again. Its action button opens the Ko-fi page.
-msgid "Enjoying Melodia?"
-msgstr "Melodia'yı beğendin mi?"
-
-msgid "It's free and open source, built in my spare time. If it's useful to you, you can support me. You'll only see this once."
-msgstr "Ücretsiz ve açık kaynaklı, boş zamanlarımda geliştiriliyor. İşine yarıyorsa bana destek olabilirsin. Bunu yalnızca bir kez göreceksin."
-
-msgid "Support"
-msgstr "Destek ol"
-
-msgid "License"
-msgstr "Lisans"
-
-# Graphic equalizer
-msgid "On"
-msgstr "Açık"
-
-msgid "Off"
-msgstr "Kapalı"
-
-msgid "Done"
-msgstr "Tamam"
-
-msgid "Reset"
-msgstr "Sıfırla"
-
-msgid "Enable equalizer"
-msgstr "Ekolayzırı etkinleştir"
-
-msgid "Flat"
-msgstr "Düz"
-
-msgid "Rock"
-msgstr "Rock"
-
-msgid "Pop"
-msgstr "Pop"
-
-msgid "Jazz"
-msgstr "Caz"
-
-msgid "Classical"
-msgstr "Klasik"
-
-msgid "Bass Boost"
-msgstr "Bas Yükseltme"
-
-msgid "Treble Boost"
-msgstr "Tiz Yükseltme"
-
-msgid "Vocal"
-msgstr "Vokal"
-
-msgid "Electronic"
-msgstr "Elektronik"
-
-msgid "Custom"
-msgstr "Özel"
-
-msgid "Preamp"
-msgstr "Ön yükseltici"
-
-# ---- Playlist import / export (M3U8) ----------------------------------------
-
-msgid "Import"
-msgstr "İçe aktar"
-
-msgid "Export"
-msgstr "Dışa aktar"
-
-msgid "Export Playlists"
-msgstr "Çalma listelerini dışa aktar"
-
-msgid "Choose playlists to export."
-msgstr "Dışa aktarılacak çalma listelerini seçin."
-
-msgid "No playlists to export"
-msgstr "Dışa aktarılacak çalma listesi yok"
-
-msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
-msgstr "Birden fazla çalma listesi tek bir .zip dosyası olarak kaydedilir; bu dosyayı arşivden çıkarmadan doğrudan içe aktarabilirsiniz."
-
-msgid "Select all"
-msgstr "Tümünü seç"
-
-msgid "Import failed"
-msgstr "İçe aktarma başarısız"
-
-msgid "Playback error"
-msgstr "Oynatma hatası"
-
-msgid "Something went wrong"
-msgstr "Bir şeyler ters gitti"
-
-msgid "Couldn't read the selected playlist file(s)."
-msgstr "Seçilen çalma listesi dosyaları okunamadı."
-
-msgid "Export failed"
-msgstr "Dışa aktarma başarısız"
-
-msgid "Couldn't write the playlist files."
-msgstr "Çalma listesi dosyaları yazılamadı."
-
-msgid "These playlists are too large for one .zip file. Export fewer at a time."
-msgstr "Bu çalma listeleri tek bir .zip dosyası için çok büyük. Tek seferde daha azını dışa aktarın."
-
-msgid "Add"
-msgstr "Ekle"
-
-msgid "Added to {n} playlist"
-msgid_plural "Added to {n} playlists"
-msgstr[0] "{n} çalma listesine eklendi"
-msgstr[1] "{n} çalma listesine eklendi"
-
-msgid "{n} track added"
-msgid_plural "{n} tracks added"
-msgstr[0] "{n} parça eklendi"
-msgstr[1] "{n} parça eklendi"
-
-msgid "Saved to {}"
-msgstr "{} konumuna kaydedildi"
-
-msgid "{n} track added · {} missing"
-msgid_plural "{n} tracks added · {} missing"
-msgstr[0] "{n} parça eklendi · {} eksik"
-msgstr[1] "{n} parça eklendi · {} eksik"
-
-msgid "{n} playlist imported"
-msgid_plural "{n} playlists imported"
-msgstr[0] "{n} çalma listesi içe aktarıldı"
-msgstr[1] "{n} çalma listesi içe aktarıldı"
-
-msgid "{n} playlist exported"
-msgid_plural "{n} playlists exported"
-msgstr[0] "{n} çalma listesi dışa aktarıldı"
-msgstr[1] "{n} çalma listesi dışa aktarıldı"
-
-msgid "Rating"
-msgstr "Derecelendirme"
-
-msgid "ReplayGain"
-msgstr "ReplayGain"
-
-msgid "Visualizer"
-msgstr "Görselleştirici"
-
-msgid "Show an audio visualizer on the Now Playing screen"
-msgstr "Şimdi çalınıyor ekranında bir ses görselleştirici göster"
-
-msgid "Visualizer Style"
-msgstr "Görselleştirici Stili"
-
-msgid "Choose how the visualizer draws the audio"
-msgstr "Görselleştiricinin sesi nasıl çizeceğini seçin"
-
-msgid "Bars"
-msgstr "Çubuklar"
-
-msgid "Waveform"
-msgstr "Dalga formu"
-
-msgid "Mirrored"
-msgstr "Aynalı"
-
-msgid "Enable ReplayGain"
-msgstr "ReplayGain'i etkinleştir"
-
-msgid "Normalization mode"
-msgstr "Normalleştirme modu"
-
-msgid "Track"
-msgstr "Parça"
-
-msgid "Prevent clipping"
-msgstr "Kırpılmayı önle"
-
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "ReplayGain yalnızca ses düzeyi etiketleri olan parçaları etkiler. Bunları eklemek için kitaplığınızı rsgain veya loudgain gibi bir araçla tarayın."
-
-msgid "Recently Played"
-msgstr "Son Çalınanlar"
-
-msgid "Filter recently played…"
-msgstr "Son çalınanları filtrele…"
-
-msgid "No recently played tracks"
-msgstr "Son çalınan parça yok"
-
-msgid "Sleep timer"
-msgstr "Uyku zamanlayıcısı"
-
-msgid "15 min"
-msgstr "15 dk"
-
-msgid "30 min"
-msgstr "30 dk"
-
-msgid "45 min"
-msgstr "45 dk"
-
-msgid "60 min"
-msgstr "60 dk"
-
-msgid "90 min"
-msgstr "90 dk"
-
-msgid "End of track"
-msgstr "Parça sonu"
-
-msgid "Track end"
-msgstr "Parça sonu"
-
-msgid "Start"
-msgstr "Başlat"
-
-# ---- Smart / dynamic playlists ---------------------------------------------
-
-msgid "Album Artist"
-msgstr "Albüm Sanatçısı"
-
-msgid "Duration (sec)"
-msgstr "Süre (sn)"
-
-msgid "Plays"
-msgstr "Çalınma"
-
-msgid "Skips"
-msgstr "Atlanan"
-
-msgid "Bitrate (kbps)"
-msgstr "Bit hızı (kbps)"
-
-msgid "Sample rate (Hz)"
-msgstr "Örnekleme hızı (Hz)"
-
-msgid "File size (bytes)"
-msgstr "Dosya boyutu (bayt)"
-
-msgid "Last played"
-msgstr "Son çalınma"
-
-msgid "Date added"
-msgstr "Eklenme tarihi"
-
-msgid "contains"
-msgstr "içerir"
-
-msgid "does not contain"
-msgstr "içermez"
-
-msgid "is"
-msgstr "eşittir"
-
-msgid "is not"
-msgstr "eşit değil"
-
-msgid "starts with"
-msgstr "ile başlar"
-
-msgid "ends with"
-msgstr "ile biter"
-
-msgid "is set"
-msgstr "ayarlanmış"
-
-msgid "is not set"
-msgstr "ayarlanmamış"
-
-msgid "greater than"
-msgstr "büyüktür"
-
-msgid "at least"
-msgstr "en az"
-
-msgid "less than"
-msgstr "küçüktür"
-
-msgid "at most"
-msgstr "en fazla"
-
-msgid "is true"
-msgstr "doğru"
-
-msgid "is false"
-msgstr "yanlış"
-
-msgid "in the last"
-msgstr "son"
-
-msgid "not in the last"
-msgstr "son olmayan"
-
-msgid "all"
-msgstr "tümü"
-
-msgid "any"
-msgstr "herhangi biri"
-
-msgid "most recently added"
-msgstr "en son eklenen"
-
-msgid "least recently added"
-msgstr "en önce eklenen"
-
-msgid "most played"
-msgstr "en çok çalınan"
-
-msgid "least played"
-msgstr "en az çalınan"
-
-msgid "most recently played"
-msgstr "en son çalınan"
-
-msgid "least recently played"
-msgstr "en önce çalınan"
-
-msgid "highest rated"
-msgstr "en yüksek puanlı"
-
-msgid "random"
-msgstr "rastgele"
-
-msgid "Match"
-msgstr "Eşleştir"
-
-msgid "of the following rules"
-msgstr "şu kurallardan"
-
-msgid "days"
-msgstr "gün"
-
-msgid "value"
-msgstr "değer"
-
-msgid "number"
-msgstr "sayı"
-
-msgid "N"
-msgstr "N"
-
-msgid "Limit to"
-msgstr "Sınırla:"
-
-msgid "tracks by"
-msgstr "parça, şuna göre:"
-
-
-msgid "Add rule"
-msgstr "Kural ekle"
-
-msgid "Smart playlist name"
-msgstr "Akıllı liste adı"
-
-msgid "New Smart Playlist"
-msgstr "Yeni Akıllı Liste"
-
-msgid "Create a playlist from rules"
-msgstr "Kurallardan liste oluştur"
-
-msgid "Edit Rules"
-msgstr "Kuralları düzenle"
-
-msgid "Edit rules"
-msgstr "Kuralları düzenle"
-
-msgid "No matching tracks"
-msgstr "Eşleşen parça yok"
-
-msgid "No tracks match these rules."
-msgstr "Bu kurallarla eşleşen parça yok."
-
-msgid "Create an empty playlist"
-msgstr "Boş liste oluştur"
-
-# ---- Tag editor (Edit Track Information dialog) ------------------------------
-
-msgid "Tags"
-msgstr "Etiketler"
-
-msgid "Lyrics"
-msgstr "Şarkı Sözleri"
-
-msgid "Summary"
-msgstr "Özet"
-
-msgid "Composer"
-msgstr "Besteci"
-
-msgid "Disc"
-msgstr "Disk"
-
-msgid "Original Year"
-msgstr "Orijinal Yıl"
-
-msgid "BPM"
-msgstr "BPM"
-
-msgid "Comment"
-msgstr "Yorum"
-
-msgid "Replace…"
-msgstr "Değiştir…"
-
-msgid "Path"
-msgstr "Yol"
-
-msgid "Codec"
-msgstr "Codec"
-
-msgid "Bitrate"
-msgstr "Bit Hızı"
-
-msgid "Sample Rate"
-msgstr "Örnekleme Hızı"
-
-msgid "Bit Depth"
-msgstr "Bit Derinliği"
-
-msgid "Channels"
-msgstr "Kanallar"
-
-msgid "Size"
-msgstr "Boyut"
-
-msgid "Modified"
-msgstr "Değiştirilme"
-
-msgid "BLAKE3"
-msgstr "BLAKE3"
-
-msgid "Edit Tags…"
-msgstr "Etiketleri Düzenle…"
-
-msgid "Edit Track Information"
-msgstr "Parça Bilgilerini Düzenle"
-
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Add to Queue"
+msgstr "Sıraya Ekle"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "New Playlist…"
+msgstr "Yeni Çalma Listesi…"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Add to Playlist"
+msgstr "Çalma listesine ekle"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
 msgid "Edit Tags for {}"
 msgstr "{} için Etiketleri Düzenle"
 
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Edit Tags…"
+msgstr "Etiketleri Düzenle…"
+
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
 msgid "Edit {} Tracks"
 msgstr "{} Parçayı Düzenle"
 
-msgid "Save"
-msgstr "Kaydet"
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/now-playing/lyrics-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Edit Track Information"
+msgstr "Parça Bilgilerini Düzenle"
 
-msgid "Duration"
-msgstr "Süre"
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/station-facts.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Copy"
+msgstr "Kopyala"
 
-msgid "‹multiple values›"
-msgstr "‹birden çok değer›"
+#: ui/components/grid/card-context-menu.slint
+msgid "Copy Name"
+msgstr "Adı Kopyala"
 
-msgid "{n} track updated"
-msgid_plural "{n} tracks updated"
-msgstr[0] "{n} parça güncellendi"
-msgstr[1] "{n} parça güncellendi"
+#: ui/components/grid/card-context-menu.slint
+msgid "Copy Path"
+msgstr "Yolu Kopyala"
 
-msgid "{n} file failed"
-msgid_plural "{n} files failed"
-msgstr[0] "{n} dosya başarısız oldu"
-msgstr[1] "{n} dosya başarısız oldu"
+#: ui/components/grid/card-context-menu.slint ui/settings.slint
+#: ui/views/settings/diagnostics-section.slint
+msgid "Open Folder"
+msgstr "Klasörü Aç"
 
-msgid "{n} file has unsupported fields"
-msgid_plural "{n} files have unsupported fields"
-msgstr[0] "{n} dosyada desteklenmeyen alanlar var"
-msgstr[1] "{n} dosyada desteklenmeyen alanlar var"
+#: ui/components/grid/card-context-menu.slint
+msgid "Show in File Manager"
+msgstr "Dosya yöneticisinde göster"
 
-msgid "Couldn't save tags"
-msgstr "Etiketler kaydedilemedi"
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Open Containing Folder"
+msgstr "Bulunduğu Klasörü Aç"
 
-msgid "No tracks were updated."
-msgstr "Hiçbir parça güncellenmedi."
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Go to Artist"
+msgstr "Sanatçıya Git"
 
-# ---- Discord ----
-msgid "Show the track you're playing on your Discord profile"
-msgstr "Dinlediğin parçayı Discord profilinde göster"
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Clear selection"
+msgstr "Seçimi temizle"
 
-msgid "Status"
-msgstr "Durum"
+#: ui/components/grid/card-context-menu.slint
+msgid "Rename…"
+msgstr "Yeniden adlandır…"
 
-msgid "Connected to Discord"
-msgstr "Discord'a bağlandı"
+#: ui/components/grid/card-context-menu.slint
+msgid "Edit Artwork…"
+msgstr "Görseli düzenle…"
 
-msgid "Discord not running"
-msgstr "Discord çalışmıyor"
+#: ui/components/grid/card-context-menu.slint
+msgid "Edit Rules…"
+msgstr "Kuralları düzenle…"
 
-msgid "Show album artwork"
-msgstr "Albüm kapağını göster"
+#: ui/components/grid/card-context-menu.slint
+msgid "Delete {} Playlists"
+msgstr "{} çalma listesini sil"
 
-msgid "Look up cover art online (via Deezer or iTunes) to show on the card"
-msgstr "Kartta göstermek için kapağı çevrimiçi ara (Deezer veya iTunes üzerinden)"
+#: ui/components/grid/card-context-menu.slint
+msgid "Delete Playlist"
+msgstr "Çalma listesini sil"
 
-msgid "Hide while paused"
-msgstr "Duraklatıldığında gizle"
+#: ui/components/grid/card-context-menu.slint
+msgid "Artist - Album"
+msgstr "Sanatçı - Albüm"
 
-msgid "Remove the card when paused instead of showing a paused marker"
-msgstr "Duraklatıldığında duraklama işareti göstermek yerine kartı kaldır"
+#: ui/components/grid/playlist-grid.slint
+msgid "0 tracks"
+msgstr "0 parça"
 
-# ---- Scrobbling ----
-msgid "Scrobbling"
-msgstr "Scrobbling"
+#: ui/components/grid/station-context-menu.slint
+msgid "Open Website"
+msgstr "Web Sitesini Aç"
 
-msgid "Last.fm"
-msgstr "Last.fm"
+#: ui/components/grid/station-context-menu.slint
+msgid "Edit…"
+msgstr "Düzenle…"
 
-msgid "ListenBrainz"
-msgstr "ListenBrainz"
+#. Translators: `{}` is how many stations are selected
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove {} from Recently Played…"
+msgstr "{} Son Çalınanlardan Çıkar…"
 
-msgid "Scrobble to Last.fm"
-msgstr "Last.fm'e scrobble yap"
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove from Recently Played…"
+msgstr "Son Çalınanlardan Kaldır…"
 
-msgid "Report each play to your Last.fm account"
-msgstr "Her çalmayı Last.fm hesabına bildir"
+#. Translators: `{}` is how many stations are selected
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove {} from Favorites…"
+msgstr "{} Favorilerden Çıkar…"
 
-msgid "Scrobble to ListenBrainz"
-msgstr "ListenBrainz'e scrobble yap"
+#: ui/components/grid/station-context-menu.slint
+msgid "Remove from Favorites…"
+msgstr "Favorilerden Kaldır…"
 
-msgid "Report each play to your ListenBrainz account"
-msgstr "Her çalmayı ListenBrainz hesabına bildir"
+#: ui/components/mini-player/mini-captions.slint
+msgid "Full Player"
+msgstr "Tam oynatıcı"
 
-msgid "Sync loved tracks to Last.fm"
-msgstr "Beğenilen parçaları Last.fm ile eşitle"
+#: ui/components/mini-player/mini-captions.slint
+msgid "Show Up Next"
+msgstr "Sıradakileri göster"
 
-msgid "Mark tracks you love as loved on Last.fm — turning this on syncs your existing favorites"
-msgstr "Beğendiğin parçaları Last.fm'de beğenilmiş olarak işaretle — açtığında mevcut favorilerin eşitlenir"
-
-msgid "Sync loved tracks to ListenBrainz"
-msgstr "Beğenilen parçaları ListenBrainz ile eşitle"
-
-msgid "Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)"
-msgstr "Beğendiğin parçaları ListenBrainz'de beğenilmiş olarak işaretle — açtığında mevcut favorilerin eşitlenir (MusicBrainz kimlikleri gerekir)"
-
-msgid "MusicBrainz Picard adds these IDs to your files, identifying each track by its audio."
-msgstr "MusicBrainz Picard bu kimlikleri dosyalarına ekler ve her parçayı sesinden tanır."
-
-msgid "Loved tracks"
-msgstr "Beğenilen parçalar"
-
-msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
-msgstr "Melodia kendini yeniden başlatamadı. Değişikliği uygulamak için uygulamayı kapatıp yeniden açın."
-
-msgid "Connected as {}"
-msgstr "{} olarak bağlanıldı"
-
-msgid "Not connected"
-msgstr "Bağlı değil"
-
-msgid "Not configured in this build"
-msgstr "Bu yapıda yapılandırılmamış"
-
-msgid "Connect"
-msgstr "Bağlan"
-
-msgid "Disconnect"
-msgstr "Bağlantıyı kes"
-
-msgid "Connect Last.fm"
-msgstr "Last.fm'e bağlan"
-
-msgid "Open Last.fm"
-msgstr "Last.fm'i aç"
-
-msgid "Connect ListenBrainz"
-msgstr "ListenBrainz'e bağlan"
-
-msgid "Finish"
-msgstr "Bitir"
-
-msgid "Click Open Last.fm to approve Melodia in your browser."
-msgstr "Melodia'yı tarayıcında yetkilendirmek için Last.fm'i aç düğmesine tıkla."
-
-msgid "After approving Melodia in your browser, click Finish."
-msgstr "Melodia'yı tarayıcında onayladıktan sonra Bitir düğmesine tıkla."
-
-msgid "Connecting…"
-msgstr "Bağlanıyor…"
-
-msgid "User token"
-msgstr "Kullanıcı belirteci"
-
-msgid "Paste your ListenBrainz user token"
-msgstr "ListenBrainz kullanıcı belirtecini yapıştır"
-
-msgid "Find your token on your ListenBrainz profile settings page."
-msgstr "Belirtecini ListenBrainz profil ayarları sayfanda bulabilirsin."
-
-msgid "That token wasn't accepted. Check it and try again."
-msgstr "Bu belirteç kabul edilmedi. Kontrol edip yeniden dene."
-
-msgid "Couldn't reach the service. Check your connection and try again."
-msgstr "Hizmete ulaşılamadı. Bağlantını kontrol edip yeniden dene."
-
-msgid "Not approved yet. Approve Melodia in your browser, then click Finish."
-msgstr "Henüz onaylanmadı. Melodia'yı tarayıcında onayla, sonra Bitir düğmesine tıkla."
-
-msgid "Couldn't save your credentials."
-msgstr "Kimlik bilgilerin kaydedilemedi."
-
-# ---- Radio -------------------------------------------------------------------
-
-# The sidebar row and the window title. The two tabs reuse "Browse" and "Favorites".
-msgid "Radio"
-msgstr "Radyo"
-
-msgid "Search stations…"
-msgstr "İstasyon ara…"
-
-msgid "Filter stations…"
-msgstr "İstasyonları filtrele…"
-
-# Turkish doesn't pluralize a noun after a numeral, so both forms are identical —
-# the layout is kept because gettext needs both.
-msgid "{n} station"
-msgid_plural "{n} stations"
-msgstr[0] "{n} istasyon"
-msgstr[1] "{n} istasyon"
-
-msgid "No stations kept yet"
-msgstr "Henüz kayıtlı istasyon yok"
-
-msgid "Star a station in Browse, or add one by URL."
-msgstr "Gözat'ta bir istasyonu yıldızla ya da URL ile ekle."
-
-# The Settings card. The section title reuses "Radio" above.
-msgid "Internet radio"
-msgstr "İnternet radyosu"
-
-msgid "Browse and play live stations from radio-browser.info"
-msgstr "radio-browser.info üzerindeki canlı istasyonlara göz at ve dinle"
-
-# The lyrics switch, which turns lyrics on in place of Up Next. Named on the Services card and
-# again as the tooltip of the Now Playing header's switch, so both read from this one label.
+#: ui/components/mini-player/mini-captions.slint
+#: ui/components/now-playing/lyrics-controls.slint
+#: ui/views/settings/lyrics-section.slint
 msgid "Show lyrics"
 msgstr "Şarkı sözlerini göster"
 
-msgid "Show the playing track's words in Now Playing instead of Up Next"
-msgstr "“Şimdi Çalıyor” ekranında “Sıradaki” yerine çalan parçanın sözlerini göster"
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Pin on Top"
+msgstr "Üste Sabitle"
 
-# The online-lyrics switch. Named in the Services card and again on the welcome card, so both
-# read from this one pair.
-msgid "Look up lyrics online"
-msgstr "Şarkı sözlerini çevrimiçi ara"
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Unpin from Top"
+msgstr "Üst Sabitlemeyi Kaldır"
 
-msgid "When a track carries no words of its own, ask lrclib.net for them"
-msgstr "Bir parça kendi sözlerini içermiyorsa lrclib.net'ten iste"
+#: ui/components/mini-player/mini-controls.slint
+msgid "Album Backdrop: off"
+msgstr "Albüm arka planı: kapalı"
 
-# The romanization switch. Named on the Services card and again in the Now Playing lyrics menu,
-# so both read from this one label.
+#: ui/components/mini-player/mini-controls.slint
+msgid "Album Backdrop: on"
+msgstr "Albüm arka planı: açık"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Unfavorite"
+msgstr "Favoriden Çıkar"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Shuffle: off"
+msgstr "Karıştır: kapalı"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Shuffle: on"
+msgstr "Karıştır: açık"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Repeat: off"
+msgstr "Tekrarla: kapalı"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Repeat: one"
+msgstr "Tekrarla: bir"
+
+#: ui/components/mini-player/mini-controls.slint
+#: ui/layout/now-playing-bar.slint
+msgid "Repeat: all"
+msgstr "Tekrarla: tümü"
+
+#: ui/components/now-playing/flyout-presets.slint
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/components/now-playing/visualizer-flyout.slint
+msgid "Off"
+msgstr "Kapalı"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "15 min"
+msgstr "15 dk"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "30 min"
+msgstr "30 dk"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "45 min"
+msgstr "45 dk"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "60 min"
+msgstr "60 dk"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "90 min"
+msgstr "90 dk"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "End of track"
+msgstr "Parça sonu"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "Bars"
+msgstr "Çubuklar"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "Mirrored"
+msgstr "Aynalı"
+
+#: ui/components/now-playing/flyout-presets.slint
+msgid "Waveform"
+msgstr "Dalga formu"
+
+#: ui/components/now-playing/lyrics-menu.slint
+#: ui/views/settings/lyrics-section.slint
 msgid "Show romanization"
 msgstr "Latin harfli okunuşu göster"
 
-msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
-msgstr "Latin alfabesini kullanmayan yazılar için her satırın okunuşunu sözlerin altında Latin harfleriyle yaz"
-
-# The Settings sub-rows, shown only while the master switch is on.
-msgid "Hide segmented stations"
-msgstr "Parçalı istasyonları gizle"
-
-msgid "Segmented (HLS) streams play, but take longer to start"
-msgstr "Parçalı (HLS) yayınlar çalınır ama başlaması daha uzun sürer"
-
-msgid "Report plays to the directory"
-msgstr "Çalmaları dizine bildir"
-
-msgid "An anonymous count is what orders stations by popularity"
-msgstr "İstasyonları popülerliğe göre sıralayan şey anonim bir sayımdır"
-
-msgid "Scrobble radio songs"
-msgstr "Radyo şarkılarını scrobble yap"
-
-msgid "Songs heard in full on a station go to your connected scrobbling services"
-msgstr "Bir istasyonda baştan sona dinlenen şarkılar bağlı scrobbling hizmetlerine gönderilir"
-
-msgid "Turn on Last.fm or ListenBrainz above first"
-msgstr "Önce yukarıdan Last.fm'i veya ListenBrainz'i aç"
-
-# ---- Radio: Browse -----------------------------------------------------------
-# The filter chips. "Genre" and "Language" reuse the labels above.
-msgid "Country"
-msgstr "Ülke"
-
-msgid "Format"
-msgstr "Biçim"
-
-msgid "{} kbps and up"
-msgstr "{} kbps ve üzeri"
-
-# The chip pickers.
-msgid "Filter…"
-msgstr "Filtrele…"
-
-msgid "Loading…"
-msgstr "Yükleniyor…"
-
-msgid "Nothing to pick from"
-msgstr "Seçilecek bir şey yok"
-
-msgid "Load more stations"
-msgstr "Daha fazla istasyon yükle"
-
-# The three states of the station grid.
-msgid "Searching the directory…"
-msgstr "Dizin aranıyor…"
-
-msgid "Stations are coming from radio-browser.info."
-msgstr "İstasyonlar radio-browser.info adresinden geliyor."
-
-msgid "The station directory is unreachable"
-msgstr "İstasyon dizinine ulaşılamıyor"
-
-msgid "Check your connection and try again."
-msgstr "Bağlantını kontrol edip yeniden dene."
-
-msgid "Try again"
-msgstr "Yeniden dene"
-
-msgid "No stations matched"
-msgstr "Eşleşen istasyon yok"
-
-msgid "Try a different name, or clear a filter."
-msgstr "Farklı bir ad dene ya da bir filtreyi kaldır."
-
-# The station card's meta line, beside country and codec.
-msgid "{} kbps"
-msgstr "{} kbps"
-
-# The Recently Played tab's empty state body; its title takes the library's "Nothing played yet".
-msgid "Stations you listen to show up here."
-msgstr "Dinlediğin istasyonlar burada görünür."
-
-# The Favorites tab's sort picker. Only "Added" is its own: "Name", "Plays" and "Last played" are
-# the library's entries above, one msgid being one string to gettext however many surfaces use it.
-msgid "Added"
-msgstr "Eklenme"
-
-# The Favorites tab's overflow pill, holding Import and Export.
-msgid "More station actions"
-msgstr "Diğer istasyon işlemleri"
-
-# The add / edit station dialog.
-msgid "Add Station"
-msgstr "İstasyon Ekle"
-
-msgid "Edit Station"
-msgstr "İstasyonu Düzenle"
-
-msgid "Stream URL"
-msgstr "Yayın URL'si"
-
-msgid "Name (optional)"
-msgstr "Ad (isteğe bağlı)"
-
-msgid "Leave blank to use the station's own name"
-msgstr "İstasyonun kendi adını kullanmak için boş bırak"
-
-msgid "Checking the stream…"
-msgstr "Yayın denetleniyor…"
-
-msgid "Couldn't reach that address. Check the URL and your connection."
-msgstr "Bu adrese ulaşılamadı. URL'yi ve bağlantını denetle."
-
-msgid "That address doesn't play as audio Melodia can decode."
-msgstr "Bu adres, Melodia'nın çözebileceği bir ses yayını vermiyor."
-
-msgid "Couldn't save the station."
-msgstr "İstasyon kaydedilemedi."
-
-# The same dialog opened on a directory-owned station: whatever the directory left blank.
-msgid "Station Details"
-msgstr "İstasyon Ayrıntıları"
-
-msgid "Logo URL"
-msgstr "Logo URL'si"
-
-msgid "Leave blank to look for a logo on the website above."
-msgstr "Yukarıdaki web sitesinde logo aramak için boş bırak."
-
-msgid "Jazz, Blues"
-msgstr "Caz, Blues"
-
-msgid "Tunisia"
-msgstr "Tunus"
-
-msgid "The directory owns this station's name and stream. What it left blank is yours to fill in; leave a field empty to remove it again."
-msgstr "Bu istasyonun adı ve yayını dizine ait. Boş bıraktıklarını sen doldurabilirsin; bir alanı kaldırmak için boş bırak."
-
-msgid "Website"
-msgstr "Web sitesi"
-
-msgid "That doesn't look like a web address. It should start with https://"
-msgstr "Bu bir web adresine benzemiyor. https:// ile başlamalı."
-
-# The station card's destructive action, once per tab: the two lists are independent, so each
-# names only its own.
-msgid "Remove from favorites?"
-msgstr "Favorilerden kaldırılsın mı?"
-
-msgid "\"{}\" will be removed from your favorites."
-msgstr "\"{}\" favorilerinden kaldırılacak."
-
-# A hand-typed station: leaving Favorites is leaving everything, so this one names the deletion.
-msgid "\"{}\" will be removed from your stations, along with its play history."
-msgstr "\"{}\" dinlenme geçmişiyle birlikte istasyonlarından kaldırılacak."
-
-msgid "Remove from Recently Played?"
-msgstr "Son Çalınanlardan kaldırılsın mı?"
-
-msgid "\"{}\" will be removed from Recently Played."
-msgstr "\"{}\" Son Çalınanlar listesinden kaldırılacak."
-
-# Station list import and export. Turkish doesn't pluralize after a numeral, so both
-# forms are the same sentence — the layout stays for msgid alignment.
-msgid "{n} station added"
-msgid_plural "{n} stations added"
-msgstr[0] "{n} istasyon eklendi"
-msgstr[1] "{n} istasyon eklendi"
-
-msgid "{n} was already in your list."
-msgid_plural "{n} were already in your list."
-msgstr[0] "{n} tanesi zaten listendeydi."
-msgstr[1] "{n} tanesi zaten listendeydi."
-
-msgid "Couldn't read any stations from the selected file(s)."
-msgstr "Seçilen dosyalardan hiçbir istasyon okunamadı."
-
-msgid "{n} station exported"
-msgid_plural "{n} stations exported"
-msgstr[0] "{n} istasyon dışa aktarıldı"
-msgstr[1] "{n} istasyon dışa aktarıldı"
-
-msgid "Couldn't write the station list."
-msgstr "İstasyon listesi yazılamadı."
-
-# --- The station page ---
-
-msgid "Vote"
-msgstr "Oy ver"
-
-msgid "Edit"
-msgstr "Düzenle"
-
-msgid "Vote not counted"
-msgstr "Oy sayılmadı"
-
-# Turkish doesn't pluralize the noun after a numeral, so both forms are the same.
-msgid "{n} vote"
-msgid_plural "{n} votes"
-msgstr[0] "{n} oy"
-msgstr[1] "{n} oy"
-
-msgid "The directory reached this station on its last check."
-msgstr "Dizin son denetiminde bu istasyona ulaştı."
-
-msgid "The directory could not reach this station on its last check."
-msgstr "Dizin son denetiminde bu istasyona ulaşamadı."
-
-msgid "Stream"
-msgstr "Yayın"
-
-msgid "Copy stream URL"
-msgstr "Yayın URL'sini kopyala"
-
-msgid "Open in your browser"
-msgstr "Tarayıcıda aç"
-
-msgid "Votes"
-msgstr "Oylar"
-
-msgid "Recently played on this station"
-msgstr "Bu istasyonda yakın zamanda çalanlar"
-
-# ---- Radio: a station on the transport ---------------------------------------
-
-# The badge where a track's seek bar goes. Keep it short and shouty — it is a pill.
-msgid "LIVE"
-msgstr "CANLI"
-
-msgid "Buffering…"
-msgstr "Arabelleğe alınıyor…"
-
-# Same pill, on a station the user paused. Pausing closes the connection, so this is a state and
-# not a hold; a transport verb like the Pause button's would read as the control it isn't.
-msgid "Paused"
-msgstr "Duraklatıldı"
-
-# Heading over the Now Playing panel that replaces "Up Next" while a station plays. Names the
-# kind of thing the panel describes, so keep it as short as that one.
-msgid "Station"
-msgstr "İstasyon"
-
-msgid "{}: {}"
-msgstr "{}: {}"
-
-# ---- First-run welcome card --------------------------------------------------
-
-# Title of the first-run card. The product name stays untranslated.
-msgid "Welcome to Melodia"
-msgstr "Melodia'ya hoş geldiniz"
-
-# Footer button on the welcome card: close it without walking the remaining panels.
-msgid "Skip"
-msgstr "Atla"
-
-# Body line under the Appearance heading on the welcome card.
+#: ui/components/now-playing/lyrics-menu.slint
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/lyrics-section.slint
+msgid "Look up lyrics online"
+msgstr "Şarkı sözlerini çevrimiçi ara"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Look up again"
+msgstr "Yeniden ara"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Save to file"
+msgstr "Dosyaya kaydet"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Edit lyrics…"
+msgstr "Şarkı sözlerini düzenle…"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Looking for lyrics…"
+msgstr "Şarkı sözleri aranıyor…"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "This track has no words"
+msgstr "Bu parçada söz yok"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "No lyrics found"
+msgstr "Şarkı sözü bulunamadı"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Couldn't reach the lyrics service"
+msgstr "Şarkı sözü hizmetine ulaşılamadı"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Lyrics lookup is off"
+msgstr "Şarkı sözü araması kapalı"
+
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Play something to see its lyrics"
+msgstr "Şarkı sözlerini görmek için bir şey çalın"
+
+#. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Turn it on in the Lyrics menu"
+msgstr "Şarkı Sözleri menüsünden açın"
+
+#. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
+#: ui/components/now-playing/lyrics-panel.slint
+msgid "Try again from the Lyrics menu"
+msgstr "Şarkı Sözleri menüsünden tekrar deneyin"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "More"
+msgstr "Diğer Seçenekler"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/output-section.slint
+msgid "Speed"
+msgstr "Hız"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "Sleep timer"
+msgstr "Uyku zamanlayıcısı"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "Track end"
+msgstr "Parça sonu"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/playback-section.slint
+msgid "Equalizer"
+msgstr "Ekolayzer"
+
+#: ui/components/now-playing/overflow-menu.slint
+msgid "On"
+msgstr "Açık"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Done"
+msgstr "Tamam"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/output-section.slint
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Repeat"
+msgstr "Tekrarla"
+
+#: ui/components/now-playing/overflow-menu.slint
+#: ui/layout/now-playing-bar.slint ui/views/queue-sheet.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Queue"
+msgstr "Sıra"
+
+#: ui/components/now-playing/play-button.slint
+msgid "Pause (hold to stop)"
+msgstr "Duraklat (durdurmak için basılı tut)"
+
+#: ui/components/now-playing/play-button.slint
+msgid "Play (hold to stop)"
+msgstr "Çal (durdurmak için basılı tut)"
+
+#: ui/components/now-playing/play-button.slint
+msgid "Pause"
+msgstr "Duraklat"
+
+#: ui/components/now-playing/sleep-timer-flyout.slint
+msgid "Start"
+msgstr "Başlat"
+
+#: ui/components/now-playing/up-next-list.slint
+msgid "No tracks up next"
+msgstr "Sırada başka parça yok"
+
+#: ui/components/now-playing/visualizer-picker.slint
+#: ui/views/settings/playback-section.slint
+msgid "Visualizer"
+msgstr "Görselleştirici"
+
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Appearance"
+msgstr "Görünüm"
+
+#: ui/components/onboarding/appearance-panel.slint
 msgid "Pick how Melodia looks. Every change applies as you make it."
 msgstr "Melodia'nın görünümünü seçin. Her değişiklik anında uygulanır."
 
-# Heading of the welcome card's first panel, about the user's library folders.
-msgid "Your music"
-msgstr "Müzikleriniz"
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Theme"
+msgstr "Tema"
 
-# Body line under "Your music": the first panel asks for the library's folders.
-msgid "Add the folders your music lives in. Melodia picks up changes to them on its own."
-msgstr "Müziğinizin bulunduğu klasörleri ekleyin. Melodia bunlardaki değişiklikleri kendisi algılar."
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Theme Variant"
+msgstr "Tema Çeşidi"
 
-msgid "Your Music folder: {}"
-msgstr "Müzik klasörünüz: {}"
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "System"
+msgstr "Sistem"
 
-msgid "Add Music Folder"
-msgstr "Müzik Klasörünü Ekle"
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Dark"
+msgstr "Koyu"
 
-msgid "Choose Another Folder"
-msgstr "Başka Klasör Seç"
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Light"
+msgstr "Açık"
 
-# Heading of the welcome card's third panel, listing the features that use the network.
+#: ui/components/onboarding/appearance-panel.slint
+#: ui/views/settings/appearance-section.slint
+msgid "Accent Color"
+msgstr "Vurgu Rengi"
+
+#: ui/components/onboarding/features-panel.slint
 msgid "What Melodia can reach"
 msgstr "Melodia'nın erişebilecekleri"
 
-# Body line under "What Melodia can reach".
+#: ui/components/onboarding/features-panel.slint
 msgid "Melodia works offline. These are the parts that reach out."
 msgstr "Melodia çevrimdışı çalışır. Ağa çıkan bölümler bunlardır."
 
-# Plural: how many library folders the welcome card reports when no scan is running.
-# Turkish keeps both slots but does not pluralize after a numeral.
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/radio-section.slint
+msgid "Internet radio"
+msgstr "İnternet radyosu"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/radio-section.slint
+msgid "Browse and play live stations from radio-browser.info"
+msgstr "radio-browser.info üzerindeki canlı istasyonlara göz at ve dinle"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/discord-section.slint
+msgid "Show the track you're playing on your Discord profile"
+msgstr "Dinlediğin parçayı Discord profilinde göster"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/lyrics-section.slint
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Bir parça kendi sözlerini içermiyorsa lrclib.net'ten iste"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobbling"
+msgstr "Scrobbling"
+
+#: ui/components/onboarding/features-panel.slint
+msgid "Send what you play to Last.fm or ListenBrainz"
+msgstr "Dinlediklerinizi Last.fm veya ListenBrainz'e gönderin"
+
+#: ui/components/onboarding/features-panel.slint
+msgid "Set Up"
+msgstr "Kur"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Check for updates automatically"
+msgstr "Güncellemeleri otomatik denetle"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Once a day, Melodia asks GitHub whether a newer version is out."
+msgstr "Melodia günde bir kez GitHub'a daha yeni bir sürüm olup olmadığını sorar."
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Your music"
+msgstr "Müzikleriniz"
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Add the folders your music lives in. Melodia picks up changes to them on its own."
+msgstr "Müziğinizin bulunduğu klasörleri ekleyin. Melodia bunlardaki değişiklikleri kendisi algılar."
+
+# Turkish doesn't pluralize a noun after a numeral, so both forms are the same.
+#: ui/components/onboarding/music-panel.slint
 msgid "{n} folder in your library"
 msgid_plural "{n} folders in your library"
 msgstr[0] "Kitaplığınızda {n} klasör"
 msgstr[1] "Kitaplığınızda {n} klasör"
 
-# Button on the welcome card's scrobbling row: closes the card onto Settings ▸ Services.
-msgid "Set Up"
-msgstr "Kur"
-
-# Body line on the welcome card's scrobbling row.
-msgid "Send what you play to Last.fm or ListenBrainz"
-msgstr "Dinlediklerinizi Last.fm veya ListenBrainz'e gönderin"
-
-# Shared by the welcome card's last row and the Settings ▸ Updates switch, which are the
-# only two places the daily check is named.
-msgid "Check for updates automatically"
-msgstr "Güncellemeleri otomatik denetle"
-
-msgid "Once a day, Melodia asks GitHub whether a newer version is out."
-msgstr "Melodia günde bir kez GitHub'a daha yeni bir sürüm olup olmadığını sorar."
-
-# Settings ▸ About row that re-opens the first-run card.
-msgid "Welcome Guide"
-msgstr "Karşılama rehberi"
-
-msgid "Run the first-run setup again."
-msgstr "İlk kurulumu yeniden gösterin."
-
-# Button on the About row above. Short by design — it sits in a narrow control slot.
-msgid "Show"
-msgstr "Göster"
-
-# Tag editor, Lyrics tab: fills the box with the sheet the track already has elsewhere —
-# a `.lrc` beside it, or one the lyrics directory answered with. Saving is the dialog's own.
-msgid "Insert found lyrics"
-msgstr "Bulunan sözleri ekle"
-
-# The Now Playing lyrics menu. "Look up again" forgets what the directory said about this
-# track and asks once more, for a sheet matched off tags that have since been corrected;
-# "Save to file" writes the sheet on screen into the track's own lyrics tag.
-msgid "Look up again"
-msgstr "Yeniden ara"
-
-msgid "Edit lyrics…"
-msgstr "Şarkı sözlerini düzenle…"
-
-msgid "Save to file"
-msgstr "Dosyaya kaydet"
-
-# Toast title after the Now Playing menu writes the sheet on screen into the track's own
-# lyrics tag. The detail line beside it is the track's title.
-msgid "Lyrics saved"
-msgstr "Şarkı sözleri kaydedildi"
-
-# The Edit-Track-Information dialog's Credits and Details tabs. Every role below is a
-# credit a file can carry; the rest are the release-level tags beside them.
-msgid "Credits"
-msgstr "Katkıda bulunanlar"
-
-msgid "Details"
-msgstr "Ayrıntılar"
-
-msgid "Lyricist"
-msgstr "Söz yazarı"
-
-msgid "Arranger"
-msgstr "Düzenleyen"
-
-msgid "Conductor"
-msgstr "Orkestra şefi"
-
-msgid "Performer"
-msgstr "İcracı"
-
-msgid "Remixer"
-msgstr "Remiksçi"
-
-msgid "Producer"
-msgstr "Yapımcı"
-
-msgid "Engineer"
-msgstr "Ses mühendisi"
-
-msgid "Mixer"
-msgstr "Miksçi"
-
-msgid "DJ Mixer"
-msgstr "DJ miksçi"
-
-msgid "Subtitle"
-msgstr "Alt başlık"
-
-msgid "Disc Subtitle"
-msgstr "Disk alt başlığı"
-
-msgid "Grouping"
-msgstr "Gruplama"
-
-msgid "Work"
-msgstr "Eser"
-
-msgid "Movement"
-msgstr "Bölüm"
-
-# Labels for the second and third box of a numbered pair: "Track 3 / Total 12".
-msgid "Number"
-msgstr "Numara"
-
-msgid "Total"
-msgstr "Toplam"
-
-# Musical key, as in A minor — not a keyboard key or a lookup key.
-msgid "Key"
-msgstr "Ton"
-
-msgid "Mood"
-msgstr "Ruh hali"
-
-msgid "ISRC"
-msgstr "ISRC"
-
-msgid "Copyright"
-msgstr "Telif hakkı"
-
-msgid "Record Label"
-msgstr "Plak şirketi"
-
-msgid "Catalog Number"
-msgstr "Katalog numarası"
-
-msgid "Barcode"
-msgstr "Barkod"
-
-# The physical medium a release came out on — CD, vinyl, digital.
-msgid "Media"
-msgstr "Ortam"
-
-msgid "Release Type"
-msgstr "Yayın türü"
-
-msgid "Release Country"
-msgstr "Yayın ülkesi"
-
-msgid "Part of a compilation"
-msgstr "Bir derlemenin parçası"
-
-msgid "Show Up Next"
-msgstr "Sıradakileri göster"
-
-msgid "Album Backdrop: on"
-msgstr "Albüm arka planı: açık"
-
-msgid "Album Backdrop: off"
-msgstr "Albüm arka planı: kapalı"
-
-msgid "Full Player"
-msgstr "Tam oynatıcı"
-
-msgid "Miniplayer"
-msgstr "Mini oynatıcı"
-
-msgid "Window Buttons"
-msgstr "Pencere düğmeleri"
-
-msgid "The minimize, full player and close buttons in the miniplayer's corner."
-msgstr "Mini oynatıcının köşesindeki simge durumuna küçültme, tam oynatıcı ve kapatma düğmeleri."
-
-msgid "Album Backdrop"
-msgstr "Albüm arka planı"
-
-msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
-msgstr "Mini oynatıcıyı, “Şimdi Çalıyor” görünümünde olduğu gibi çalan albümün renkleriyle boyar."
-
-# ---- Entity card context menu -----------------------------------------------
-
-msgid "Rename…"
-msgstr "Yeniden adlandır…"
-
-msgid "Edit Artwork…"
-msgstr "Görseli düzenle…"
-
-msgid "Edit Rules…"
-msgstr "Kuralları düzenle…"
-
-msgid "Delete Playlist"
-msgstr "Çalma listesini sil"
-
-msgid "Delete {} Playlists"
-msgstr "{} çalma listesini sil"
-
-msgid "Show in File Manager"
-msgstr "Dosya yöneticisinde göster"
-
-msgid "More playlist actions"
-msgstr "Diğer çalma listesi işlemleri"
-
-msgid "Delete {} playlists?"
-msgstr "{} çalma listesi silinsin mi?"
-
-msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
-msgstr "Çalma listeleri ve parça sırası kaldırılacak. Parçaların kendisi kitaplığınızda kalır."
-
-msgid "Edit Artwork"
-msgstr "Görseli düzenle"
-
-msgid "Apply"
-msgstr "Uygula"
-
-# ---- Tag-edit completion toast: the fields a container had no key for -------
-
-msgid "Track Total"
-msgstr "Toplam parça"
-
-msgid "Disc Total"
-msgstr "Toplam disk"
-
-msgid "Movement Number"
-msgstr "Bölüm numarası"
-
-msgid "Movement Total"
-msgstr "Toplam bölüm"
-
-msgid "{} can't be saved to {} files"
-msgstr "{} {} dosyalarına kaydedilemiyor"
-
-msgid "Output"
-msgstr "Çıkış"
-
-msgid "Match the File's Sample Rate"
-msgstr "Dosyanın Örnekleme Hızına Uy"
-
-msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate"
-msgstr "Ses aygıtını her parçanın kendi hızında yeniden açar, böylece sistem yeniden örneklemez. Sistemin bu hıza izin vermesi gerekir"
-
-msgid "Overlap the end of one track with the start of the next, unless the device has to change format between them"
-msgstr "Bir parçanın sonunu sonraki parçanın başıyla üst üste bindir, aygıtın aralarında biçim değiştirmesi gerekmedikçe"
-
-msgid "Signal Path"
-msgstr "Sinyal Yolu"
-
-msgid "What reaches the audio device, and what changes it on the way. Bit-perfect means nothing does"
-msgstr "Ses aygıtına ne ulaştığı ve yolda onu neyin değiştirdiği. Bit-perfect, hiçbir şeyin değiştirmediği anlamına gelir"
-
-msgid "Nothing is playing"
-msgstr "Hiçbir şey çalmıyor"
-
-msgid "Bit-perfect: the device receives the decoder's samples untouched"
-msgstr "Bit-perfect: aygıt, kod çözücünün örneklerini hiç değişmeden alır"
-
-msgid "Enhanced: only effects you chose change the sound"
-msgstr "İşlenmiş: sesi yalnızca seçtiğiniz efektler değiştirir"
-
-msgid "Converted: the sound is changed on its way to the device"
-msgstr "Dönüştürülmüş: ses aygıta giderken değişir"
-
-msgid "Bit-perfect"
-msgstr "Bit-perfect"
-
-msgid "Enhanced"
-msgstr "İşlenmiş"
-
-msgid "Fallback"
-msgstr "Yedek"
-
-msgid "Converted"
-msgstr "Dönüştürülmüş"
-
-msgid "Lossy: the file is compressed, so the device gets the decoder's reconstruction of the recording"
-msgstr "Kayıplı: dosya sıkıştırılmış, bu yüzden aygıt kaydın kod çözücü tarafından yeniden oluşturulmuş hâlini alır"
-
-msgid "Lossy"
-msgstr "Kayıplı"
-
-msgid "Make Bit-Perfect"
-msgstr "Bit-Perfect Yap"
-
-msgid "Switch to Exclusive Output?"
-msgstr "Özel çıkışa geçilsin mi?"
-
-msgid "Bit-perfect playback needs exclusive output. Other apps can't play through the device while Melodia does, and the system volume stops applying: Melodia's own volume goes to full unless Hardware Volume is on."
-msgstr "Bit-perfect çalma özel çıkış gerektirir. Melodia çalarken diğer uygulamalar bu aygıttan ses çalamaz ve sistem ses düzeyi artık uygulanmaz: Donanım Ses Düzeyi açık değilse Melodia'nın kendi ses düzeyi en yükseğe çıkar."
-
-msgid "Switch"
-msgstr "Geç"
-
-msgid "Source"
-msgstr "Kaynak"
-
-msgid "{}, rounded to fit 32-bit float"
-msgstr "{}, 32 bit kayan noktaya yuvarlanır"
-
-msgid "{}, decoded from a lossy codec"
-msgstr "{}, kayıplı bir kodekten çözülür"
-
-msgid "Effects"
-msgstr "Efektler"
-
-msgid "No effects"
-msgstr "Efekt yok"
-
-msgid "Equalizer and ReplayGain"
-msgstr "Ekolayzer ve ReplayGain"
-
-msgid "Normal"
-msgstr "Normal"
-
-msgid "Volume"
-msgstr "Ses Düzeyi"
-
-msgid "Muted"
-msgstr "Sessiz"
-
-msgid "Not fading"
-msgstr "Geçiş yok"
-
-msgid "Fading between tracks"
-msgstr "Parçalar arasında geçiş yapılıyor"
-
-msgid "{} resampled to {}"
-msgstr "{}, {} hızına yeniden örneklenir"
-
-msgid "Unchanged"
-msgstr "Değişmedi"
-
-msgid "Mixed down for the device"
-msgstr "Aygıt için daha az kanala indirildi"
-
-msgid "Device"
-msgstr "Aygıt"
-
-msgid "{}, shared: the system mixer may still convert it"
-msgstr "{}, paylaşımlı: sistem mikseri yine de dönüştürebilir"
-
-msgid "Output Mode"
-msgstr "Çıkış Modu"
-
-msgid "Exclusive gives Melodia the audio device alone: other apps can't play through it while Melodia plays, and the system mixer can't change the sound"
-msgstr "Özel, ses aygıtını yalnızca Melodia'ya verir: Melodia çalarken diğer uygulamalar bu aygıttan ses çalamaz ve sistem mikseri sesi değiştiremez"
-
-msgid "Shared"
-msgstr "Paylaşımlı"
-
-msgid "Exclusive"
-msgstr "Özel"
-
-msgid "Exclusive Device"
-msgstr "Özel Aygıt"
-
-msgid "The sound card exclusive output takes"
-msgstr "Özel çıkışın kullandığı ses kartı"
-
-msgid "Output Device"
-msgstr "Çıkış Aygıtı"
-
-msgid "The sound card Melodia plays through"
-msgstr "Melodia'nın çaldığı ses kartı"
-
-msgid "System Default"
-msgstr "Sistem Varsayılanı"
-
-msgid "Fallback: exclusive output was refused, so the system mixer is in the way"
-msgstr "Yedek: özel çıkış reddedildi, bu yüzden sistem mikseri araya giriyor"
-
-msgid "the device is in use by another app"
-msgstr "aygıt başka bir uygulama tarafından kullanılıyor"
-
-msgid "{} holds the device"
-msgstr "aygıtı {} tutuyor"
-
-msgid "another app holds the device"
-msgstr "aygıtı başka bir uygulama tutuyor"
-
-msgid "the device can't run at this sample rate"
-msgstr "aygıt bu örnekleme hızında çalışamıyor"
-
-msgid "the device can't play this many channels"
-msgstr "aygıt bu kadar çok kanalı çalamıyor"
-
-msgid "the device takes no sample format that holds this track"
-msgstr "aygıt bu parçayı tam taşıyan hiçbir örnek biçimini kabul etmiyor"
-
-msgid "the chosen device isn't connected"
-msgstr "seçilen aygıt bağlı değil"
-
-msgid "exclusive output isn't available on this system"
-msgstr "özel çıkış bu sistemde kullanılamıyor"
-
-msgid "the device doesn't allow exclusive control, which its Advanced properties in the Sound control panel can turn on"
-msgstr "aygıt özel denetime izin vermiyor; bu, Ses denetim masasında aygıtın özelliklerindeki Gelişmiş sekmesinden açılabilir"
-
-msgid "the device couldn't be opened"
-msgstr "aygıt açılamadı"
-
-msgid "{}, shared: exclusive output was refused because {}"
-msgstr "{}, paylaşımlı: özel çıkış reddedildi ({})"
-
-msgid "{}, exclusive"
-msgstr "{}, özel"
-
-msgid "{}, exclusive, in a format that can't hold the source exactly"
-msgstr "{}, özel, kaynağı tam olarak taşıyamayan bir biçimde"
-
-msgid "Buffer Period"
-msgstr "Arabellek Periyodu"
-
-msgid "How much audio the device is handed at a time. Longer periods ride out a busy system; shorter ones react sooner"
-msgstr "Aygıta tek seferde ne kadar ses verildiği. Uzun periyotlar yoğun bir sistemi kaldırır, kısa olanlar daha çabuk tepki verir"
-
-msgid "Polling Mode"
-msgstr "Yoklama Modu"
-
-msgid "Top the device up on a timer instead of waiting for it to ask. Try it if a USB device stutters or crackles in exclusive mode"
-msgstr "Aygıtın istemesini beklemek yerine onu bir zamanlayıcıyla doldur. Bir USB aygıtı özel modda takılıyor veya cızırdıyorsa deneyin"
-
-msgid "{} ms"
-msgstr "{} ms"
-
-msgid "The device is running at {}"
-msgstr "Aygıt {} ile çalışıyor"
-
-msgid "{} refused exclusive output because {}. Playing shared on {}"
-msgstr "{} özel çıkışı reddetti ({}). {} üzerinde paylaşımlı çalınıyor"
-
-msgid "Silence After a Rate Change"
-msgstr "Hız Değişiminden Sonra Sessizlik"
-
-msgid "Exclusive output unavailable"
-msgstr "Özel çıkış kullanılamıyor"
-
-msgid "Exclusive output was refused, so Melodia is playing shared for now. The Output section of Settings says why."
-msgstr "Özel çıkış reddedildi, bu yüzden Melodia şimdilik paylaşımlı çalıyor. Nedeni Ayarlar'daki Çıkış bölümünde yazıyor."
-
-msgid "{} refused exclusive output, so Melodia is playing shared for now. The Output section of Settings says why."
-msgstr "{} özel çıkışı reddetti, bu yüzden Melodia şimdilik paylaşımlı çalıyor. Nedeni Ayarlar'daki Çıkış bölümünde yazıyor."
-
-msgid "Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off"
-msgstr "Bazı DAC'ler örnekleme hızını değiştirirken bir an susar. Her değişimde kısa bir sessizlik, parçanın başının kesilmesini önler"
-
-msgid "Hardware Volume"
-msgstr "Donanım Ses Düzeyi"
-
-msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
-msgstr "Örnekleri ölçeklemek yerine aygıtın kendi ses düzeyi denetimini çevir, böylece ses kaydırıcısı sesi bit-perfect tutar. Bu denetim aygıtın sistem ses düzeyidir ve Melodia aygıtı bıraktığında eski hâline döner. Kendi denetimi olmayan aygıtlar Melodia'nın ses düzeyini kullanmaya devam eder"
-
-msgid "Give the Device Back When Paused"
-msgstr "Duraklatınca Aygıtı Bırak"
-
-msgid "After five minutes paused, hand the device back so other apps can play through it. Pressing play takes it again"
-msgstr "Beş dakika duraklatıldıktan sonra aygıtı bırak, böylece diğer uygulamalar bu aygıttan ses çalabilir. Oynat'a basınca Melodia onu yeniden alır"
-
-msgid "Unsupported Sample Rates"
-msgstr "Desteklenmeyen Örnekleme Hızları"
-
-msgid "What exclusive output does when the device can't run a track's sample rate: hand the device back and play that track through the system mixer, or keep the device and convert the track to a rate it can run"
-msgstr "Aygıt bir parçanın örnekleme hızında çalışamadığında özel çıkışın ne yapacağı: aygıtı bırakıp o parçayı sistem mikseri üzerinden çalmak ya da aygıtı tutup parçayı aygıtın çalışabildiği bir hıza dönüştürmek"
-
-msgid "Play Through the System Mixer"
-msgstr "Sistem Mikseri Üzerinden Çal"
-
-msgid "Resample and Keep Exclusive"
-msgstr "Yeniden Örnekle ve Özel Kal"
-
-msgid "{}% on the device"
-msgstr "aygıtta %{}"
-
-msgid "{}% (the device muted)"
-msgstr "%{} (aygıt sessizde)"
-
-msgid "{}% (the device at {}%)"
-msgstr "%{} (aygıt %{} düzeyinde)"
-
-# ---- Copy, and the station card menu ----------------------------------------
-
-msgid "Copy"
-msgstr "Kopyala"
-
-msgid "Copy Name"
-msgstr "Adı Kopyala"
-
-msgid "Copy Path"
-msgstr "Yolu Kopyala"
-
+#: ui/components/onboarding/music-panel.slint
+#: ui/views/settings/library-section.slint
+msgid "Add a folder to scan for music files."
+msgstr "Müzik dosyalarını taramak için bir klasör ekle."
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Your Music folder: {}"
+msgstr "Müzik klasörünüz: {}"
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Add Music Folder"
+msgstr "Müzik Klasörünü Ekle"
+
+#: ui/components/onboarding/music-panel.slint
+#: ui/views/settings/library-section.slint
+msgid "Add Folder"
+msgstr "Klasör Ekle"
+
+#: ui/components/onboarding/music-panel.slint
+msgid "Choose Another Folder"
+msgstr "Başka Klasör Seç"
+
+#. Translators: Melodia is the product name and stays as is
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Welcome to Melodia"
+msgstr "Melodia'ya hoş geldiniz"
+
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Skip"
+msgstr "Atla"
+
+#: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
+msgid "Back"
+msgstr "Geri"
+
+#: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
+msgid "Next"
+msgstr "Sonraki"
+
+#: ui/components/search-bar.slint
+msgid "Search…"
+msgstr "Ara…"
+
+#: ui/components/settings/folder-row.slint
+msgid "Rescan"
+msgstr "Yeniden Tara"
+
+# Turkish doesn't pluralize a noun after a numeral, so both forms are the same.
+#: ui/components/settings/scan-progress.slint
+msgid "Looking for music… {n} file found"
+msgid_plural "Looking for music… {n} files found"
+msgstr[0] "Müzik aranıyor… {n} dosya bulundu"
+msgstr[1] "Müzik aranıyor… {n} dosya bulundu"
+
+#: ui/components/settings/scan-progress.slint
+msgid "Finishing up…"
+msgstr "Tamamlanıyor…"
+
+#: ui/components/settings/scan-progress.slint
+msgid "Stopping…"
+msgstr "Durduruluyor…"
+
+#. Translators: files read so far, the total, then the file being read
+#: ui/components/settings/scan-progress.slint
+msgid "{} / {} files · {}"
+msgstr "{} / {} dosya · {}"
+
+#. Translators: files read so far, then the total
+#: ui/components/settings/scan-progress.slint
+msgid "{} / {} files"
+msgstr "{} / {} dosya"
+
+#: ui/components/settings/scan-progress.slint ui/globals/dialog-forms.slint
+#: ui/globals/dialog.slint ui/views/queue-sheet.slint
+#: ui/views/radio/tab-pills.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/library-section.slint
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/scrobbling-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Cancel"
+msgstr "İptal"
+
+#: ui/components/sort-menu-popup.slint
+msgid "Sort"
+msgstr "Sırala"
+
+#: ui/components/station-facts.slint
+msgid "Stream"
+msgstr "Yayın"
+
+#: ui/components/station-facts.slint
+msgid "Copy stream URL"
+msgstr "Yayın URL'sini kopyala"
+
+#: ui/components/station-facts.slint
+msgid "Open in your browser"
+msgstr "Tarayıcıda aç"
+
+#: ui/components/station-facts.slint ui/views/radio/suggestion-pill.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Format"
+msgstr "Biçim"
+
+#: ui/components/station-facts.slint ui/views/radio/station-grid.slint
+msgid "{} kbps"
+msgstr "{} kbps"
+
+#: ui/components/station-facts.slint
+msgid "Votes"
+msgstr "Oylar"
+
+# Turkish doesn't pluralize a noun after a numeral, so both forms are the same.
+#: ui/components/station-facts.slint
+msgid "{n} vote"
+msgid_plural "{n} votes"
+msgstr[0] "{n} oy"
+msgstr[1] "{n} oy"
+
+# Turkish doesn't pluralize a noun after a numeral, so both forms are the same.
+#: ui/components/station-facts.slint ui/globals/hero-chips.slint
+msgid "{n} play"
+msgid_plural "{n} plays"
+msgstr[0] "{n} dinlenme"
+msgstr[1] "{n} dinlenme"
+
+#: ui/components/station-facts.slint
+msgid "Recently played on this station"
+msgstr "Bu istasyonda yakın zamanda çalanlar"
+
+#: ui/components/station-facts.slint
 msgid "Copy Title"
 msgstr "Başlığı Kopyala"
 
+#: ui/components/station-facts.slint
 msgid "Copy Artist"
 msgstr "Sanatçıyı Kopyala"
 
+#: ui/components/track-copy-items.slint
 msgid "Artist - Title"
 msgstr "Sanatçı - Başlık"
 
-msgid "Artist - Album"
-msgstr "Sanatçı - Albüm"
-
+#: ui/components/track-copy-items.slint
 msgid "File Path"
 msgstr "Dosya Yolu"
 
-msgid "Copied to clipboard"
-msgstr "Panoya kopyalandı"
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Columns"
+msgstr "Sütunlar"
 
-msgid "Nothing to copy"
-msgstr "Kopyalanacak bir şey yok"
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Artwork"
+msgstr "Kapak"
 
-msgid "Open Website"
-msgstr "Web Sitesini Aç"
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint
+msgid "Length"
+msgstr "Süre"
 
-msgid "Edit…"
-msgstr "Düzenle…"
+#. Translators: `{}` is how many items are selected
+#: ui/components/track-list/track-context-menu.slint
+msgid "Add {} to Playlist"
+msgstr "{} Çalma Listesine Ekle"
 
-msgid "Remove from Favorites…"
-msgstr "Favorilerden Kaldır…"
+#: ui/components/track-list/track-context-menu.slint
+msgid "Go to Album"
+msgstr "Albüme Git"
 
-msgid "Remove from Recently Played…"
-msgstr "Son Çalınanlardan Kaldır…"
+#: ui/components/track-list/track-context-menu.slint
+msgid "Go to Genre"
+msgstr "Türe Git"
 
-msgid "Remove {} from Favorites…"
-msgstr "{} Favorilerden Çıkar…"
+#. Translators: `{}` is how many items are selected
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove {} from Playlist"
+msgstr "{} Çalma Listesinden Çıkar"
 
-msgid "Remove {} from Recently Played…"
-msgstr "{} Son Çalınanlardan Çıkar…"
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove from Playlist"
+msgstr "Çalma listesinden çıkar"
 
+#. Translators: `{}` is how many items are selected
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove {} from Queue"
+msgstr "{} Sıradan Çıkar"
+
+#: ui/components/track-list/track-context-menu.slint
+msgid "Remove from Queue"
+msgstr "Sıradan çıkar"
+
+#: ui/components/track-list/track-list-row.slint
+msgid "Unknown album"
+msgstr "Bilinmeyen albüm"
+
+# Turkish doesn't pluralize a noun after a numeral, so both forms are the same.
+#: ui/globals/curated.slint ui/globals/hero-chips.slint
+msgid "{n} favorite"
+msgid_plural "{n} favorites"
+msgstr[0] "{n} favori"
+msgstr[1] "{n} favori"
+
+#: ui/globals/dialog-forms.slint
+msgid "That token wasn't accepted. Check it and try again."
+msgstr "Bu belirteç kabul edilmedi. Kontrol edip yeniden dene."
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't reach the service. Check your connection and try again."
+msgstr "Hizmete ulaşılamadı. Bağlantını kontrol edip yeniden dene."
+
+#: ui/globals/dialog-forms.slint
+msgid "Not approved yet. Approve Melodia in your browser, then click Finish."
+msgstr "Henüz onaylanmadı. Melodia'yı tarayıcında onayla, sonra Bitir düğmesine tıkla."
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't save your credentials."
+msgstr "Kimlik bilgilerin kaydedilemedi."
+
+#: ui/globals/dialog-forms.slint
+msgid "Edit Station"
+msgstr "İstasyonu Düzenle"
+
+#: ui/globals/dialog-forms.slint
+msgid "Station Details"
+msgstr "İstasyon Ayrıntıları"
+
+#: ui/globals/dialog-forms.slint ui/globals/dialog.slint
+msgid "Save"
+msgstr "Kaydet"
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't reach that address. Check the URL and your connection."
+msgstr "Bu adrese ulaşılamadı. URL'yi ve bağlantını denetle."
+
+#: ui/globals/dialog-forms.slint
+msgid "That address doesn't play as audio Melodia can decode."
+msgstr "Bu adres, Melodia'nın çözebileceği bir ses yayını vermiyor."
+
+#: ui/globals/dialog-forms.slint
+msgid "Couldn't save the station."
+msgstr "İstasyon kaydedilemedi."
+
+#: ui/globals/dialog-forms.slint
+msgid "That doesn't look like a web address. It should start with https://"
+msgstr "Bu bir web adresine benzemiyor. https:// ile başlamalı."
+
+#: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
+msgid "New Playlist"
+msgstr "Yeni Çalma Listesi"
+
+#: ui/globals/dialog.slint
+msgid "Create"
+msgstr "Oluştur"
+
+#: ui/globals/dialog.slint
+msgid "Rename Playlist"
+msgstr "Çalma Listesini Yeniden Adlandır"
+
+#: ui/globals/dialog.slint
+msgid "Delete playlist?"
+msgstr "Çalma listesi silinsin mi?"
+
+#: ui/globals/dialog.slint
+msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
+msgstr "Çalma listesi ve parça sırası kaldırılacak. Parçaların kendisi kitaplığınızda kalır."
+
+#: ui/globals/dialog.slint
+msgid "Delete"
+msgstr "Sil"
+
+#: ui/globals/dialog.slint
+msgid "Delete {} playlists?"
+msgstr "{} çalma listesi silinsin mi?"
+
+#: ui/globals/dialog.slint
+msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
+msgstr "Çalma listeleri ve parça sırası kaldırılacak. Parçaların kendisi kitaplığınızda kalır."
+
+#: ui/globals/dialog.slint
+msgid "Remove from Recently Played?"
+msgstr "Son Çalınanlardan kaldırılsın mı?"
+
+#: ui/globals/dialog.slint
+msgid "Remove from favorites?"
+msgstr "Favorilerden kaldırılsın mı?"
+
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from Recently Played."
+msgstr "\"{}\" Son Çalınanlar listesinden kaldırılacak."
+
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from your stations, along with its play history."
+msgstr "\"{}\" dinlenme geçmişiyle birlikte istasyonlarından kaldırılacak."
+
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from your favorites."
+msgstr "\"{}\" favorilerinden kaldırılacak."
+
+#: ui/globals/dialog.slint
 msgid "Remove {n} station from Recently Played?"
 msgid_plural "Remove {n} stations from Recently Played?"
 msgstr[0] "{n} istasyon Son Çalınanlardan kaldırılsın mı?"
 msgstr[1] "{n} istasyon Son Çalınanlardan kaldırılsın mı?"
 
+#: ui/globals/dialog.slint
 msgid "Remove {n} station from favorites?"
 msgid_plural "Remove {n} stations from favorites?"
 msgstr[0] "{n} istasyon favorilerden kaldırılsın mı?"
 msgstr[1] "{n} istasyon favorilerden kaldırılsın mı?"
 
+#: ui/globals/dialog.slint
 msgid "The stations will be removed from Recently Played."
 msgstr "İstasyonlar Son Çalınanlar listesinden kaldırılacak."
 
+#: ui/globals/dialog.slint
 msgid "The stations will be removed from your favorites. Any you added by hand are removed from your stations, along with their play history."
 msgstr "İstasyonlar favorilerinden kaldırılacak. Elle eklediklerin, dinlenme geçmişleriyle birlikte istasyonlarından kaldırılacak."
+
+#: ui/globals/dialog.slint
+msgid "Edit Rules"
+msgstr "Kuralları düzenle"
+
+#: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
+msgid "New Smart Playlist"
+msgstr "Yeni Akıllı Liste"
+
+#: ui/globals/dialog.slint
+msgid "Edit Artwork"
+msgstr "Görseli düzenle"
+
+#: ui/globals/dialog.slint
+msgid "Apply"
+msgstr "Uygula"
+
+#: ui/globals/dialog.slint
+msgid "Export Playlists"
+msgstr "Çalma listelerini dışa aktar"
+
+#: ui/globals/dialog.slint
+msgid "Choose playlists to export."
+msgstr "Dışa aktarılacak çalma listelerini seçin."
+
+#: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
+#: ui/views/radio/tab-pills.slint
+msgid "Export"
+msgstr "Dışa aktar"
+
+# Turkish doesn't pluralize a noun after a numeral, so both forms are the same.
+#: ui/globals/hero-chips.slint ui/views/my-library-view.slint
+msgid "{n} artist"
+msgid_plural "{n} artists"
+msgstr[0] "{n} sanatçı"
+msgstr[1] "{n} sanatçı"
+
+# Turkish doesn't pluralize a noun after a numeral, so both forms are the same.
+#: ui/globals/hero-chips.slint
+msgid "{n} disc"
+msgid_plural "{n} discs"
+msgstr[0] "{n} disk"
+msgstr[1] "{n} disk"
+
+#: ui/globals/hero-chips.slint ui/settings.slint
+msgid "Compilation"
+msgstr "Derleme"
+
+#: ui/globals/player.slint
+msgid "No track playing"
+msgstr "Çalan parça yok"
+
+#. Translators: a state on the station pill, not the Pause button's verb
+#: ui/globals/player.slint
+msgid "Paused"
+msgstr "Duraklatıldı"
+
+#: ui/globals/player.slint
+msgid "Buffering…"
+msgstr "Arabelleğe alınıyor…"
+
+#. Translators: a short pill in place of a track's seek bar
+#: ui/globals/player.slint
+msgid "LIVE"
+msgstr "CANLI"
+
+#: ui/globals/player.slint
+msgid "Previous (hold to rewind)"
+msgstr "Önceki (geri sarmak için basılı tut)"
+
+#: ui/globals/player.slint
+msgid "Previous"
+msgstr "Önceki"
+
+#: ui/globals/player.slint
+msgid "Next (hold to fast-forward)"
+msgstr "Sonraki (ileri sarmak için basılı tut)"
+
+#: ui/globals/signal-path.slint
+msgid "Nothing is playing"
+msgstr "Hiçbir şey çalmıyor"
+
+#: ui/globals/signal-path.slint
+msgid "Bit-perfect: the device receives the decoder's samples untouched"
+msgstr "Bit-perfect: aygıt, kod çözücünün örneklerini hiç değişmeden alır"
+
+#: ui/globals/signal-path.slint
+msgid "Enhanced: only effects you chose change the sound"
+msgstr "İşlenmiş: sesi yalnızca seçtiğiniz efektler değiştirir"
+
+#: ui/globals/signal-path.slint
+msgid "Fallback: exclusive output was refused, so the system mixer is in the way"
+msgstr "Yedek: özel çıkış reddedildi, bu yüzden sistem mikseri araya giriyor"
+
+#: ui/globals/signal-path.slint
+msgid "Lossy: the file is compressed, so the device gets the decoder's reconstruction of the recording"
+msgstr "Kayıplı: dosya sıkıştırılmış, bu yüzden aygıt kaydın kod çözücü tarafından yeniden oluşturulmuş hâlini alır"
+
+#: ui/globals/signal-path.slint
+msgid "Converted: the sound is changed on its way to the device"
+msgstr "Dönüştürülmüş: ses aygıta giderken değişir"
+
+#: ui/globals/signal-path.slint
+msgid "Bit-perfect"
+msgstr "Bit-perfect"
+
+#: ui/globals/signal-path.slint
+msgid "Enhanced"
+msgstr "İşlenmiş"
+
+#: ui/globals/signal-path.slint
+msgid "Fallback"
+msgstr "Yedek"
+
+#: ui/globals/signal-path.slint
+msgid "Lossy"
+msgstr "Kayıplı"
+
+#: ui/globals/signal-path.slint
+msgid "Converted"
+msgstr "Dönüştürülmüş"
+
+#. Translators: the action a click takes, expanding the sidebar
+#: ui/layout/sidebar.slint
+msgid "Expand"
+msgstr "Genişlet"
+
+#: ui/layout/sidebar.slint
+msgid "Collapse"
+msgstr "Daralt"
+
+#: ui/settings.slint
+msgid "System Default"
+msgstr "Sistem Varsayılanı"
+
+#: ui/settings.slint
+msgid "File watching disabled"
+msgstr "Dosya izleme devre dışı"
+
+#: ui/settings.slint
+msgid "Tracks won't reflect disk changes until you re-enable it."
+msgstr "Yeniden etkinleştirene kadar parçalar diskteki değişiklikleri yansıtmayacak."
+
+#: ui/settings.slint
+msgid "Library re-syncing"
+msgstr "Kitaplık yeniden eşitleniyor"
+
+#: ui/settings.slint
+msgid "Filesystem event burst — rescanning your folders."
+msgstr "Dosya sistemi olay yoğunluğu — klasörlerin yeniden taranıyor."
+
+#: ui/settings.slint
+msgid "Restoring cover art"
+msgstr "Kapaklar geri yükleniyor"
+
+#: ui/settings.slint
+msgid "Some cover art was missing. Melodia is restoring it from your music files."
+msgstr "Bazı kapak görselleri eksikti. Melodia bunları müzik dosyalarından geri yüklüyor."
+
+#: ui/settings.slint
+msgid "Update available"
+msgstr "Güncelleme mevcut"
+
+#: ui/settings.slint
+msgid "Melodia {} is ready to install."
+msgstr "Melodia {} yüklenmeye hazır."
+
+#: ui/settings.slint
+msgid "Install"
+msgstr "Yükle"
+
+#: ui/settings.slint
+msgid "Update installed"
+msgstr "Güncelleme yüklendi"
+
+#: ui/settings.slint
+msgid "Restart Melodia to start using the new version."
+msgstr "Yeni sürümü kullanmak için Melodia'yı yeniden başlatın."
+
+#: ui/settings.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Restart"
+msgstr "Yeniden Başlat"
+
+#: ui/settings.slint
+msgid "Update failed"
+msgstr "Güncelleme başarısız"
+
+#: ui/settings.slint
+msgid "Couldn't reach the update server. Check your internet connection."
+msgstr "Güncelleme sunucusuna ulaşılamadı. Lütfen internet bağlantınızı kontrol edin."
+
+#: ui/settings.slint
+msgid "Signature check failed. The downloaded update may be corrupted; please try again."
+msgstr "İmza doğrulaması başarısız. İndirilen güncelleme bozulmuş olabilir; lütfen tekrar deneyin."
+
+#: ui/settings.slint
+msgid "The update server returned an unexpected response."
+msgstr "Güncelleme sunucusu beklenmeyen bir yanıt döndürdü."
+
+#: ui/settings.slint
+msgid "Couldn't write the downloaded update to disk."
+msgstr "İndirilen güncelleme diske yazılamadı."
+
+#: ui/settings.slint
+msgid "Update failed. See logs for details."
+msgstr "Güncelleme başarısız. Ayrıntılar için günlüklere bakın."
+
+#: ui/settings.slint
+msgid "Diagnostics report saved"
+msgstr "Tanılama raporu kaydedildi"
+
+#: ui/settings.slint
+msgid "Saved to {}"
+msgstr "{} konumuna kaydedildi"
+
+#: ui/settings.slint
+msgid "Couldn't save the diagnostics report"
+msgstr "Tanılama raporu kaydedilemedi"
+
+#: ui/settings.slint
+msgid "See the log for details."
+msgstr "Ayrıntılar için günlüğe bakın."
+
+#: ui/settings.slint
+msgid "Melodia crashed last time"
+msgstr "Melodia geçen sefer çöktü"
+
+#: ui/settings.slint
+msgid "A crash report was written. Open the log folder to find it."
+msgstr "Bir çökme raporu yazıldı. Bulmak için günlük klasörünü açın."
+
+#: ui/settings.slint
+msgid "Enjoying Melodia?"
+msgstr "Melodia'yı beğendin mi?"
+
+#: ui/settings.slint
+msgid "It's free and open source, built in my spare time. If it's useful to you, you can support me. You'll only see this once."
+msgstr "Ücretsiz ve açık kaynaklı, boş zamanlarımda geliştiriliyor. İşine yarıyorsa bana destek olabilirsin. Bunu yalnızca bir kez göreceksin."
+
+#: ui/settings.slint
+msgid "Support"
+msgstr "Destek ol"
+
+#: ui/settings.slint
+msgid "Audio device disconnected"
+msgstr "Ses aygıtı bağlantısı kesildi"
+
+#: ui/settings.slint
+msgid "Playback won't be audible until you reconnect it and restart Melodia."
+msgstr "Aygıtı yeniden bağlayıp Melodia'yı yeniden başlatana kadar oynatma duyulmayacak."
+
+#: ui/settings.slint
+msgid "{n} playlist imported"
+msgid_plural "{n} playlists imported"
+msgstr[0] "{n} çalma listesi içe aktarıldı"
+msgstr[1] "{n} çalma listesi içe aktarıldı"
+
+#: ui/settings.slint
+msgid "{n} track added · {} missing"
+msgid_plural "{n} tracks added · {} missing"
+msgstr[0] "{n} parça eklendi · {} eksik"
+msgstr[1] "{n} parça eklendi · {} eksik"
+
+#: ui/settings.slint
+msgid "{n} track added"
+msgid_plural "{n} tracks added"
+msgstr[0] "{n} parça eklendi"
+msgstr[1] "{n} parça eklendi"
+
+#: ui/settings.slint
+msgid "Import failed"
+msgstr "İçe aktarma başarısız"
+
+#: ui/settings.slint
+msgid "Couldn't read the selected playlist file(s)."
+msgstr "Seçilen çalma listesi dosyaları okunamadı."
+
+#: ui/settings.slint
+msgid "{n} playlist exported"
+msgid_plural "{n} playlists exported"
+msgstr[0] "{n} çalma listesi dışa aktarıldı"
+msgstr[1] "{n} çalma listesi dışa aktarıldı"
+
+#: ui/settings.slint
+msgid "Export failed"
+msgstr "Dışa aktarma başarısız"
+
+#: ui/settings.slint
+msgid "Couldn't write the playlist files."
+msgstr "Çalma listesi dosyaları yazılamadı."
+
+#: ui/settings.slint
+msgid "These playlists are too large for one .zip file. Export fewer at a time."
+msgstr "Bu çalma listeleri tek bir .zip dosyası için çok büyük. Tek seferde daha azını dışa aktarın."
+
+# Turkish doesn't pluralize a noun after a numeral, so both forms are the same.
+#: ui/settings.slint
+msgid "{n} station added"
+msgid_plural "{n} stations added"
+msgstr[0] "{n} istasyon eklendi"
+msgstr[1] "{n} istasyon eklendi"
+
+#: ui/settings.slint
+msgid "{n} was already in your list."
+msgid_plural "{n} were already in your list."
+msgstr[0] "{n} tanesi zaten listendeydi."
+msgstr[1] "{n} tanesi zaten listendeydi."
+
+#: ui/settings.slint
+msgid "Couldn't read any stations from the selected file(s)."
+msgstr "Seçilen dosyalardan hiçbir istasyon okunamadı."
+
+#: ui/settings.slint
+msgid "{n} station exported"
+msgid_plural "{n} stations exported"
+msgstr[0] "{n} istasyon dışa aktarıldı"
+msgstr[1] "{n} istasyon dışa aktarıldı"
+
+#: ui/settings.slint
+msgid "Couldn't write the station list."
+msgstr "İstasyon listesi yazılamadı."
+
+#: ui/settings.slint
+msgid "Playback error"
+msgstr "Oynatma hatası"
+
+#: ui/settings.slint
+msgid "Something went wrong"
+msgstr "Bir şeyler ters gitti"
+
+#: ui/settings.slint
+msgid "Loved tracks"
+msgstr "Beğenilen parçalar"
+
+#: ui/settings.slint
+msgid "Lyrics saved"
+msgstr "Şarkı sözleri kaydedildi"
+
+#: ui/settings.slint
+msgid "Copied to clipboard"
+msgstr "Panoya kopyalandı"
+
+#: ui/settings.slint
+msgid "Nothing to copy"
+msgstr "Kopyalanacak bir şey yok"
+
+#: ui/settings.slint
+msgid "Vote not counted"
+msgstr "Oy sayılmadı"
+
+#: ui/settings.slint
+msgid "Exclusive output unavailable"
+msgstr "Özel çıkış kullanılamıyor"
+
+#: ui/settings.slint
+msgid "Exclusive output was refused, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "Özel çıkış reddedildi, bu yüzden Melodia şimdilik paylaşımlı çalıyor. Nedeni Ayarlar'daki Çıkış bölümünde yazıyor."
+
+#: ui/settings.slint
+msgid "{} refused exclusive output, so Melodia is playing shared for now. The Output section of Settings says why."
+msgstr "{} özel çıkışı reddetti, bu yüzden Melodia şimdilik paylaşımlı çalıyor. Nedeni Ayarlar'daki Çıkış bölümünde yazıyor."
+
+#: ui/settings.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Restart Required"
+msgstr "Yeniden Başlatma Gerekli"
+
+#: ui/settings.slint
+msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
+msgstr "Melodia kendini yeniden başlatamadı. Değişikliği uygulamak için uygulamayı kapatıp yeniden açın."
+
+#: ui/settings.slint
+msgid "Added to {n} playlist"
+msgid_plural "Added to {n} playlists"
+msgstr[0] "{n} çalma listesine eklendi"
+msgstr[1] "{n} çalma listesine eklendi"
+
+#: ui/settings.slint
+msgid "‹multiple values›"
+msgstr "‹birden çok değer›"
+
+#: ui/settings.slint
+msgid "{n} track updated"
+msgid_plural "{n} tracks updated"
+msgstr[0] "{n} parça güncellendi"
+msgstr[1] "{n} parça güncellendi"
+
+#: ui/settings.slint
+msgid "{n} file failed"
+msgid_plural "{n} files failed"
+msgstr[0] "{n} dosya başarısız oldu"
+msgstr[1] "{n} dosya başarısız oldu"
+
+#: ui/settings.slint
+msgid "{n} file has unsupported fields"
+msgid_plural "{n} files have unsupported fields"
+msgstr[0] "{n} dosyada desteklenmeyen alanlar var"
+msgstr[1] "{n} dosyada desteklenmeyen alanlar var"
+
+#: ui/settings.slint
+msgid "{} can't be saved to {} files"
+msgstr "{} {} dosyalarına kaydedilemiyor"
+
+#: ui/settings.slint
+msgid "Disc Total"
+msgstr "Toplam disk"
+
+#: ui/settings.slint
+msgid "Track Total"
+msgstr "Toplam parça"
+
+#: ui/settings.slint
+msgid "Movement Number"
+msgstr "Bölüm numarası"
+
+#: ui/settings.slint
+msgid "Movement Total"
+msgstr "Toplam bölüm"
+
+#: ui/settings.slint
+msgid "Couldn't save tags"
+msgstr "Etiketler kaydedilemedi"
+
+#: ui/settings.slint
+msgid "No tracks were updated."
+msgstr "Hiçbir parça güncellenmedi."
+
+#: ui/views/browse-view.slint
+msgid "No library folders configured"
+msgstr "Yapılandırılmış kütüphane klasörü yok"
+
+#: ui/views/browse-view.slint
+msgid "Open Settings to add a folder"
+msgstr "Klasör eklemek için Ayarlar'ı açın"
+
+#: ui/views/browse-view.slint
+msgid "Open Settings"
+msgstr "Ayarları Aç"
+
+#: ui/views/browse-view.slint
+msgid "Could not load folder"
+msgstr "Klasör yüklenemedi"
+
+#: ui/views/browse-view.slint
+msgid "Empty folder"
+msgstr "Boş klasör"
+
+#: ui/views/browse-view.slint
+msgid "Card view"
+msgstr "Kart görünümü"
+
+#: ui/views/browse-view.slint
+msgid "List view"
+msgstr "Liste görünümü"
+
+#: ui/views/favorites-view.slint ui/views/recently-played-view.slint
+msgid "Filter most played…"
+msgstr "En çok çalınanları filtrele…"
+
+#: ui/views/favorites-view.slint ui/views/my-library-view.slint
+msgid "Filter artists…"
+msgstr "Sanatçıları filtrele…"
+
+#: ui/views/favorites-view.slint
+msgid "Filter favorites…"
+msgstr "Favorileri filtrele…"
+
+#: ui/views/favorites-view.slint
+msgid "Favorite Artists"
+msgstr "Favori sanatçılar"
+
+#: ui/views/favorites-view.slint ui/views/recently-played-view.slint
+msgid "Most Played"
+msgstr "En çok çalınanlar"
+
+#: ui/views/favorites-view.slint ui/views/my-library-view.slint
+#: ui/views/recently-played-view.slint ui/views/search/songs-section.slint
+msgid "Songs"
+msgstr "Şarkılar"
+
+#: ui/views/favorites-view.slint
+msgid "No favorites yet"
+msgstr "Henüz favori yok"
+
+#: ui/views/favorites/artists-tab.slint
+msgid "No favorite artists yet"
+msgstr "Henüz favori sanatçı yok"
+
+#: ui/views/favorites/artists-tab.slint
+msgid "Favorite a song and its artist appears here."
+msgstr "Bir şarkıyı favorilere ekle, sanatçısı burada görünsün."
+
+#: ui/views/favorites/most-played-tab.slint ui/views/radio-view.slint
+#: ui/views/recently-played/most-played-tab.slint
+msgid "Nothing played yet"
+msgstr "Henüz hiçbir şey çalınmadı"
+
+#: ui/views/favorites/most-played-tab.slint
+msgid "Play one of your favorites and it will show up here."
+msgstr "Favorilerinden birini çal, burada görünsün."
+
+#: ui/views/my-library-view.slint
+msgid "{n} song"
+msgid_plural "{n} songs"
+msgstr[0] "{n} şarkı"
+msgstr[1] "{n} şarkı"
+
+#: ui/views/my-library-view.slint
+msgid "{n} genre"
+msgid_plural "{n} genres"
+msgstr[0] "{n} tür"
+msgstr[1] "{n} tür"
+
+#: ui/views/my-library-view.slint
+msgid "{n} playlist"
+msgid_plural "{n} playlists"
+msgstr[0] "{n} çalma listesi"
+msgstr[1] "{n} çalma listesi"
+
+#: ui/views/my-library-view.slint ui/views/my-library/artist-detail.slint
+#: ui/views/my-library/tab-pills.slint ui/views/search-view.slint
+msgid "Albums"
+msgstr "Albümler"
+
+#: ui/views/my-library-view.slint ui/views/search-view.slint
+msgid "Artists"
+msgstr "Sanatçılar"
+
+#: ui/views/my-library-view.slint
+msgid "Genres"
+msgstr "Türler"
+
+#: ui/views/my-library-view.slint
+msgid "Playlists"
+msgstr "Çalma Listeleri"
+
+#: ui/views/my-library-view.slint
+msgid "Filter tracks & albums…"
+msgstr "Parça ve albümleri filtrele…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter tracks…"
+msgstr "Parçaları filtrele…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter albums…"
+msgstr "Albümleri filtrele…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter genres…"
+msgstr "Türleri filtrele…"
+
+#: ui/views/my-library-view.slint
+msgid "Filter playlists…"
+msgstr "Çalma listelerini filtrele…"
+
+#: ui/views/my-library/albums-tab.slint
+msgid "No albums yet"
+msgstr "Henüz albüm yok"
+
+#: ui/views/my-library/albums-tab.slint ui/views/my-library/artists-tab.slint
+#: ui/views/my-library/genres-tab.slint
+msgid "Add a music folder in Settings to start building your library."
+msgstr "Kitaplığınızı oluşturmaya başlamak için Ayarlar'dan bir müzik klasörü ekleyin."
+
+#: ui/views/my-library/artists-tab.slint
+msgid "No artists yet"
+msgstr "Henüz sanatçı yok"
+
+#: ui/views/my-library/genres-tab.slint
+msgid "No genres yet"
+msgstr "Henüz tür yok"
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "No matching tracks"
+msgstr "Eşleşen parça yok"
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "No tracks yet"
+msgstr "Henüz parça yok"
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "No tracks match these rules."
+msgstr "Bu kurallarla eşleşen parça yok."
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "Drag music files here, or add tracks via any track's overflow menu."
+msgstr "Müzik dosyalarını buraya sürükle ya da herhangi bir parçanın menüsünden parça ekle."
+
+#: ui/views/my-library/playlist-detail.slint
+msgid "Drop files to add to this playlist"
+msgstr "Bu çalma listesine eklemek için dosyaları bırak"
+
+#: ui/views/my-library/playlists-tab.slint
+msgid "No playlists yet"
+msgstr "Henüz çalma listesi yok"
+
+#: ui/views/my-library/playlists-tab.slint
+msgid "Click \"+ New Playlist\" to create one."
+msgstr "Bir tane oluşturmak için \"+ Yeni Çalma Listesi\" düğmesine tıkla."
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Tracks"
+msgstr "Parçalar"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Edit artwork"
+msgstr "Görseli düzenle"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Rename"
+msgstr "Yeniden adlandır"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Edit rules"
+msgstr "Kuralları düzenle"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Delete playlist"
+msgstr "Çalma listesini sil"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Create an empty playlist"
+msgstr "Boş liste oluştur"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Create a playlist from rules"
+msgstr "Kurallardan liste oluştur"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "More playlist actions"
+msgstr "Diğer çalma listesi işlemleri"
+
+#: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
+msgid "Import"
+msgstr "İçe aktar"
+
+#: ui/views/now-playing-view.slint ui/views/radio/tab-pills.slint
+msgid "Vote"
+msgstr "Oy ver"
+
+#. Translators: a heading in place of "Up Next", so keep it as short
+#: ui/views/now-playing-view.slint
+msgid "Station"
+msgstr "İstasyon"
+
+#: ui/views/now-playing-view.slint
+msgid "Up Next"
+msgstr "Sıradaki"
+
+#: ui/views/placeholder-view.slint
+msgid "Coming soon"
+msgstr "Yakında"
+
+#: ui/views/queue-sheet.slint
+msgid "No tracks"
+msgstr "Parça yok"
+
+#: ui/views/queue-sheet.slint
+msgid "Clear queue"
+msgstr "Sırayı temizle"
+
+#: ui/views/queue-sheet.slint
+msgid "Clear queue?"
+msgstr "Sıra temizlensin mi?"
+
+#: ui/views/queue-sheet.slint
+msgid "Remove all tracks from the queue? Playback will stop."
+msgstr "Sıradaki tüm parçalar kaldırılsın mı? Çalma duracak."
+
+#: ui/views/queue-sheet.slint
+msgid "Queue is empty"
+msgstr "Sıra boş"
+
+#: ui/views/queue-sheet.slint
+msgid "Drop to add to queue"
+msgstr "Sıraya eklemek için bırak"
+
+# Turkish doesn't pluralize a noun after a numeral, so both forms are the same.
+#: ui/views/radio-view.slint ui/views/radio/suggestion-pill.slint
+msgid "{n} station"
+msgid_plural "{n} stations"
+msgstr[0] "{n} istasyon"
+msgstr[1] "{n} istasyon"
+
+#: ui/views/radio-view.slint
+msgid "Search stations…"
+msgstr "İstasyon ara…"
+
+#: ui/views/radio-view.slint
+msgid "Filter stations…"
+msgstr "İstasyonları filtrele…"
+
+#: ui/views/radio-view.slint
+msgid "No stations kept yet"
+msgstr "Henüz kayıtlı istasyon yok"
+
+#: ui/views/radio-view.slint
+msgid "Star a station in Browse, or add one by URL."
+msgstr "Gözat'ta bir istasyonu yıldızla ya da URL ile ekle."
+
+#: ui/views/radio-view.slint
+msgid "Stations you listen to show up here."
+msgstr "Dinlediğin istasyonlar burada görünür."
+
+#: ui/views/radio/browse-tab.slint
+msgid "Searching the directory…"
+msgstr "Dizin aranıyor…"
+
+#: ui/views/radio/browse-tab.slint
+msgid "Stations are coming from radio-browser.info."
+msgstr "İstasyonlar radio-browser.info adresinden geliyor."
+
+#: ui/views/radio/browse-tab.slint
+msgid "The station directory is unreachable"
+msgstr "İstasyon dizinine ulaşılamıyor"
+
+#: ui/views/radio/browse-tab.slint
+msgid "Check your connection and try again."
+msgstr "Bağlantını kontrol edip yeniden dene."
+
+#: ui/views/radio/browse-tab.slint
+msgid "Try again"
+msgstr "Yeniden dene"
+
+#: ui/views/radio/browse-tab.slint ui/views/radio/kept-stations-tab.slint
+msgid "No stations matched"
+msgstr "Eşleşen istasyon yok"
+
+#: ui/views/radio/browse-tab.slint ui/views/radio/kept-stations-tab.slint
+msgid "Try a different name, or clear a filter."
+msgstr "Farklı bir ad dene ya da bir filtreyi kaldır."
+
+#: ui/views/radio/browse-tab.slint
+msgid "Load more stations"
+msgstr "Daha fazla istasyon yükle"
+
+#: ui/views/radio/browse-tab.slint ui/views/radio/facet-chip.slint
+msgid "Loading…"
+msgstr "Yükleniyor…"
+
+#: ui/views/radio/facet-chip.slint
+msgid "Filter…"
+msgstr "Filtrele…"
+
+#: ui/views/radio/facet-chip.slint
+msgid "Nothing to pick from"
+msgstr "Seçilecek bir şey yok"
+
+#: ui/views/radio/station-detail.slint
+msgid "The directory reached this station on its last check."
+msgstr "Dizin son denetiminde bu istasyona ulaştı."
+
+#: ui/views/radio/station-detail.slint
+msgid "The directory could not reach this station on its last check."
+msgstr "Dizin son denetiminde bu istasyona ulaşamadı."
+
+#: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
+msgid "{} kbps and up"
+msgstr "{} kbps ve üzeri"
+
+#: ui/views/radio/suggestion-pill.slint
+msgid "{}: {}"
+msgstr "{}: {}"
+
+#: ui/views/radio/tab-pills.slint
+msgid "Add Station"
+msgstr "İstasyon Ekle"
+
+#: ui/views/radio/tab-pills.slint
+msgid "Added"
+msgstr "Eklenme"
+
+#: ui/views/radio/tab-pills.slint
+msgid "More station actions"
+msgstr "Diğer istasyon işlemleri"
+
+#: ui/views/radio/tab-pills.slint
+msgid "Edit"
+msgstr "Düzenle"
+
+#: ui/views/recently-played-view.slint
+msgid "Filter recently played…"
+msgstr "Son çalınanları filtrele…"
+
+#: ui/views/recently-played-view.slint
+msgid "No recently played tracks"
+msgstr "Son çalınan parça yok"
+
+#: ui/views/recently-played/most-played-tab.slint
+msgid "Play something and it will show up here."
+msgstr "Bir şey çal, burada görünsün."
+
+#: ui/views/search-view.slint
+msgid "Searching…"
+msgstr "Aranıyor…"
+
+#: ui/views/search-view.slint
+msgid "Search your library…"
+msgstr "Kitaplığınızda arayın…"
+
+#: ui/views/search/no-results.slint
+msgid "No results found"
+msgstr "Sonuç bulunamadı"
+
+#: ui/views/search/no-results.slint
+msgid "Try a different search term"
+msgstr "Farklı bir arama terimi deneyin"
+
+#: ui/views/search/recent-searches.slint
+msgid "Recent"
+msgstr "Son Aramalar"
+
+#: ui/views/search/recent-searches.slint
+msgid "Clear all"
+msgstr "Tümünü temizle"
+
+#: ui/views/search/songs-section.slint
+msgid "Show less"
+msgstr "Daha az göster"
+
+#: ui/views/search/songs-section.slint
+msgid "Show all {} songs"
+msgstr "Tüm {} şarkıyı göster"
+
+#: ui/views/search/top-result-card.slint
+msgid "Top Result"
+msgstr "En İyi Sonuç"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/interface-page.slint
+msgid "Interface"
+msgstr "Arayüz"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/library-page.slint
+msgid "Library"
+msgstr "Kitaplık"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/playback-page.slint
+#: ui/views/settings/playback-section.slint
+msgid "Playback"
+msgstr "Oynatma"
+
+#: ui/views/settings-view.slint ui/views/settings/about-section.slint
+#: ui/views/settings/pages/about-page.slint
+msgid "About"
+msgstr "Hakkında"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/services-page.slint
+msgid "Services"
+msgstr "Hizmetler"
+
+#: ui/views/settings-view.slint
+msgid "Search settings…"
+msgstr "Ayarlarda ara…"
+
+#. Translators: `{}` is the version number, such as 0.9.2
+#: ui/views/settings/about-section.slint
+msgid "Version {}"
+msgstr "Sürüm {}"
+
+#. Translators: `{}` is the author's name, a proper noun kept as is
+#: ui/views/settings/about-section.slint
+msgid "Made by {}"
+msgstr "{} tarafından yapıldı"
+
+#. Translators: support as in funding the project, not technical support
+#: ui/views/settings/about-section.slint
+msgid "Support Melodia"
+msgstr "Melodia'ya destek ol"
+
+#: ui/views/settings/about-section.slint
+msgid "Melodia is free and open source. Support helps keep it going."
+msgstr "Melodia ücretsiz ve açık kaynaklıdır. Destek, devam etmesine yardımcı olur."
+
+#: ui/views/settings/about-section.slint
+msgid "License"
+msgstr "Lisans"
+
+#. Translators: Ko-fi is a brand and stays as is; support means funding
+#: ui/views/settings/about-section.slint
+msgid "Support me on Ko-fi"
+msgstr "Ko-fi'de bana destek ol"
+
+#: ui/views/settings/about-section.slint
+msgid "Welcome Guide"
+msgstr "Karşılama rehberi"
+
+#: ui/views/settings/about-section.slint
+msgid "Run the first-run setup again."
+msgstr "İlk kurulumu yeniden gösterin."
+
+#. Translators: a button in a narrow slot, so keep it short
+#: ui/views/settings/about-section.slint
+msgid "Show"
+msgstr "Göster"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Color Style"
+msgstr "Renk Stili"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Active — palette derived from the current track's artwork."
+msgstr "Etkin — palet geçerli parçanın kapağından türetildi."
+
+#: ui/views/settings/appearance-section.slint
+msgid "Generate theme colors from album artwork."
+msgstr "Tema renklerini albüm kapağından oluştur."
+
+#: ui/views/settings/appearance-section.slint
+msgid "Aurora Backdrop"
+msgstr "Aurora Arka Planı"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."
+msgstr "Albüm, çalma listesi ve “Şimdi Çalıyor” başlıklarını, kapak görselinin bulanık bir kopyası yerine albümün kendi renkleriyle boya. Bulanıklaştırılacak bir şey olmadığı için başlıklar daha erken görünür ve Melodia daha hafif kalır. Uygulamak için yeniden başlatma gerekir."
+
+#: ui/views/settings/appearance-section.slint
+#: ui/views/settings/playback-section.slint
+msgid "None"
+msgstr "Yok"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Tonal Spot"
+msgstr "Tonal Spot"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Content"
+msgstr "İçerik"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Vibrant"
+msgstr "Canlı"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Expressive"
+msgstr "Etkileyici"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Fidelity"
+msgstr "Sadakat"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Neutral"
+msgstr "Nötr"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Monochrome"
+msgstr "Tek Renkli"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Changing the backdrop style requires restarting Melodia. Restart now?"
+msgstr "Arka plan stilini değiştirmek Melodia'nın yeniden başlatılmasını gerektirir. Şimdi yeniden başlatılsın mı?"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Diagnostics"
+msgstr "Tanılama"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Logs"
+msgstr "Günlükler"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Where Melodia writes its log files and crash reports."
+msgstr "Melodia'nın günlük dosyalarını ve çökme raporlarını yazdığı yer."
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Diagnostics report"
+msgstr "Tanılama raporu"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "One text file with your system details, settings and recent logs, for attaching to a bug report."
+msgstr "Sistem bilgilerinizi, ayarlarınızı ve son günlükleri içeren tek bir metin dosyası — hata bildirimine eklemek için."
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Verbose logging"
+msgstr "Ayrıntılı günlük kaydı"
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Record extra detail. Turn this on, reproduce the problem, then save a report."
+msgstr "Ek ayrıntıları kaydeder. Bunu açın, sorunu yeniden oluşturun, ardından bir rapor kaydedin."
+
+#: ui/views/settings/diagnostics-section.slint
+msgid "Save…"
+msgstr "Kaydet…"
+
+#: ui/views/settings/discord-section.slint
+msgid "Show album artwork"
+msgstr "Albüm kapağını göster"
+
+#: ui/views/settings/discord-section.slint
+msgid "Look up cover art online (via Deezer or iTunes) to show on the card"
+msgstr "Kartta göstermek için kapağı çevrimiçi ara (Deezer veya iTunes üzerinden)"
+
+#: ui/views/settings/discord-section.slint
+msgid "Hide while paused"
+msgstr "Duraklatıldığında gizle"
+
+#: ui/views/settings/discord-section.slint
+msgid "Remove the card when paused instead of showing a paused marker"
+msgstr "Duraklatıldığında duraklama işareti göstermek yerine kartı kaldır"
+
+#: ui/views/settings/discord-section.slint
+msgid "Status"
+msgstr "Durum"
+
+#: ui/views/settings/discord-section.slint
+msgid "Connected to Discord"
+msgstr "Discord'a bağlandı"
+
+#: ui/views/settings/discord-section.slint
+msgid "Discord not running"
+msgstr "Discord çalışmıyor"
+
+#: ui/views/settings/file-watching-section.slint
+msgid "File Watching"
+msgstr "Dosya İzleme"
+
+#: ui/views/settings/file-watching-section.slint
+msgid "Watch for file changes"
+msgstr "Dosya değişikliklerini izle"
+
+#: ui/views/settings/file-watching-section.slint
+msgid "Automatically detect when files are added, removed, or changed in your library folders."
+msgstr "Kitaplık klasörlerinde dosyaların ne zaman eklendiğini, kaldırıldığını veya değiştirildiğini otomatik olarak algıla."
+
+#: ui/views/settings/language-section.slint
+msgid "Choose your preferred language"
+msgstr "Tercih ettiğin dili seç"
+
+#: ui/views/settings/library-section.slint
+msgid "Manage Folders"
+msgstr "Klasörleri Yönet"
+
+#: ui/views/settings/library-section.slint
+msgid "Library Folders"
+msgstr "Kitaplık Klasörleri"
+
+#: ui/views/settings/library-section.slint
+msgid "Remove Folder?"
+msgstr "Klasör Kaldırılsın mı?"
+
+#. Translators: `{}` is the absolute path of the folder being removed
+#: ui/views/settings/library-section.slint
+msgid "Remove \"{}\" from your library? All tracks under this folder will be removed from the library and from your playlists."
+msgstr "\"{}\" kitaplığınızdan kaldırılsın mı? Bu klasördeki tüm parçalar kitaplıktan ve çalma listelerinizden kaldırılacak."
+
+#: ui/views/settings/library-section.slint
+msgid "No folders added"
+msgstr "Klasör eklenmedi"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Show the playing track's words in Now Playing instead of Up Next"
+msgstr "“Şimdi Çalıyor” ekranında “Sıradaki” yerine çalan parçanın sözlerini göster"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
+msgstr "Latin alfabesini kullanmayan yazılar için her satırın okunuşunu sözlerin altında Latin harfleriyle yaz"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Miniplayer"
+msgstr "Mini oynatıcı"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Window Buttons"
+msgstr "Pencere düğmeleri"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "The minimize, full player and close buttons in the miniplayer's corner."
+msgstr "Mini oynatıcının köşesindeki simge durumuna küçültme, tam oynatıcı ve kapatma düğmeleri."
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Album Backdrop"
+msgstr "Albüm arka planı"
+
+#: ui/views/settings/mini-player-section.slint
+msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
+msgstr "Mini oynatıcıyı, “Şimdi Çalıyor” görünümünde olduğu gibi çalan albümün renkleriyle boyar."
+
+#: ui/views/settings/motion-section.slint
+msgid "Motion"
+msgstr "Hareket"
+
+#: ui/views/settings/motion-section.slint
+msgid "Skip Startup Animation"
+msgstr "Başlangıç animasyonunu atla"
+
+#: ui/views/settings/motion-section.slint
+msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
+msgstr "Kitaplığı belirip kayarak yerine oturması yerine, açılışta doğrudan ekranda göster. Açık bıraktığın bir ayrıntı sayfası yüklendiğinde yine de genişleyerek açılır."
+
+#: ui/views/settings/output-section.slint
+msgid "Output"
+msgstr "Çıkış"
+
+#: ui/views/settings/output-section.slint
+msgid "Output Mode"
+msgstr "Çıkış Modu"
+
+#: ui/views/settings/output-section.slint
+msgid "Exclusive gives Melodia the audio device alone: other apps can't play through it while Melodia plays, and the system mixer can't change the sound"
+msgstr "Özel, ses aygıtını yalnızca Melodia'ya verir: Melodia çalarken diğer uygulamalar bu aygıttan ses çalamaz ve sistem mikseri sesi değiştiremez"
+
+#: ui/views/settings/output-section.slint
+msgid "Output Device"
+msgstr "Çıkış Aygıtı"
+
+#: ui/views/settings/output-section.slint
+msgid "Exclusive Device"
+msgstr "Özel Aygıt"
+
+#: ui/views/settings/output-section.slint
+msgid "The sound card Melodia plays through"
+msgstr "Melodia'nın çaldığı ses kartı"
+
+#: ui/views/settings/output-section.slint
+msgid "The sound card exclusive output takes"
+msgstr "Özel çıkışın kullandığı ses kartı"
+
+#: ui/views/settings/output-section.slint
+msgid "Unsupported Sample Rates"
+msgstr "Desteklenmeyen Örnekleme Hızları"
+
+#: ui/views/settings/output-section.slint
+msgid "What exclusive output does when the device can't run a track's sample rate: hand the device back and play that track through the system mixer, or keep the device and convert the track to a rate it can run"
+msgstr "Aygıt bir parçanın örnekleme hızında çalışamadığında özel çıkışın ne yapacağı: aygıtı bırakıp o parçayı sistem mikseri üzerinden çalmak ya da aygıtı tutup parçayı aygıtın çalışabildiği bir hıza dönüştürmek"
+
+#: ui/views/settings/output-section.slint
+msgid "Buffer Period"
+msgstr "Arabellek Periyodu"
+
+#: ui/views/settings/output-section.slint
+msgid "How much audio the device is handed at a time. Longer periods ride out a busy system; shorter ones react sooner"
+msgstr "Aygıta tek seferde ne kadar ses verildiği. Uzun periyotlar yoğun bir sistemi kaldırır, kısa olanlar daha çabuk tepki verir"
+
+#: ui/views/settings/output-section.slint
+msgid "Polling Mode"
+msgstr "Yoklama Modu"
+
+#: ui/views/settings/output-section.slint
+msgid "Top the device up on a timer instead of waiting for it to ask. Try it if a USB device stutters or crackles in exclusive mode"
+msgstr "Aygıtın istemesini beklemek yerine onu bir zamanlayıcıyla doldur. Bir USB aygıtı özel modda takılıyor veya cızırdıyorsa deneyin"
+
+#: ui/views/settings/output-section.slint
+msgid "Hardware Volume"
+msgstr "Donanım Ses Düzeyi"
+
+#: ui/views/settings/output-section.slint
+msgid "Turn the device's own volume control instead of scaling the samples, so the volume slider keeps the sound bit-perfect. That control is the device's system volume, and it's put back when Melodia lets go of the device. Devices without one keep Melodia's own volume"
+msgstr "Örnekleri ölçeklemek yerine aygıtın kendi ses düzeyi denetimini çevir, böylece ses kaydırıcısı sesi bit-perfect tutar. Bu denetim aygıtın sistem ses düzeyidir ve Melodia aygıtı bıraktığında eski hâline döner. Kendi denetimi olmayan aygıtlar Melodia'nın ses düzeyini kullanmaya devam eder"
+
+#: ui/views/settings/output-section.slint
+msgid "Give the Device Back When Paused"
+msgstr "Duraklatınca Aygıtı Bırak"
+
+#: ui/views/settings/output-section.slint
+msgid "After five minutes paused, hand the device back so other apps can play through it. Pressing play takes it again"
+msgstr "Beş dakika duraklatıldıktan sonra aygıtı bırak, böylece diğer uygulamalar bu aygıttan ses çalabilir. Oynat'a basınca Melodia onu yeniden alır"
+
+#: ui/views/settings/output-section.slint
+msgid "Silence After a Rate Change"
+msgstr "Hız Değişiminden Sonra Sessizlik"
+
+#: ui/views/settings/output-section.slint
+msgid "Some DACs mute for a moment while they switch sample rates. A short silence at each change keeps the start of the track from being cut off"
+msgstr "Bazı DAC'ler örnekleme hızını değiştirirken bir an susar. Her değişimde kısa bir sessizlik, parçanın başının kesilmesini önler"
+
+#: ui/views/settings/output-section.slint
+msgid "Match the File's Sample Rate"
+msgstr "Dosyanın Örnekleme Hızına Uy"
+
+#: ui/views/settings/output-section.slint
+msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate"
+msgstr "Ses aygıtını her parçanın kendi hızında yeniden açar, böylece sistem yeniden örneklemez. Sistemin bu hıza izin vermesi gerekir"
+
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Signal Path"
+msgstr "Sinyal Yolu"
+
+#: ui/views/settings/output-section.slint
+msgid "What reaches the audio device, and what changes it on the way. Bit-perfect means nothing does"
+msgstr "Ses aygıtına ne ulaştığı ve yolda onu neyin değiştirdiği. Bit-perfect, hiçbir şeyin değiştirmediği anlamına gelir"
+
+#: ui/views/settings/output-section.slint
+msgid "the device is in use by another app"
+msgstr "aygıt başka bir uygulama tarafından kullanılıyor"
+
+#: ui/views/settings/output-section.slint
+msgid "{} holds the device"
+msgstr "aygıtı {} tutuyor"
+
+#: ui/views/settings/output-section.slint
+msgid "another app holds the device"
+msgstr "aygıtı başka bir uygulama tutuyor"
+
+#: ui/views/settings/output-section.slint
+msgid "the device can't run at this sample rate"
+msgstr "aygıt bu örnekleme hızında çalışamıyor"
+
+#: ui/views/settings/output-section.slint
+msgid "the device can't play this many channels"
+msgstr "aygıt bu kadar çok kanalı çalamıyor"
+
+#: ui/views/settings/output-section.slint
+msgid "the device takes no sample format that holds this track"
+msgstr "aygıt bu parçayı tam taşıyan hiçbir örnek biçimini kabul etmiyor"
+
+#: ui/views/settings/output-section.slint
+msgid "the chosen device isn't connected"
+msgstr "seçilen aygıt bağlı değil"
+
+#: ui/views/settings/output-section.slint
+msgid "exclusive output isn't available on this system"
+msgstr "özel çıkış bu sistemde kullanılamıyor"
+
+#: ui/views/settings/output-section.slint
+msgid "the device doesn't allow exclusive control, which its Advanced properties in the Sound control panel can turn on"
+msgstr "aygıt özel denetime izin vermiyor; bu, Ses denetim masasında aygıtın özelliklerindeki Gelişmiş sekmesinden açılabilir"
+
+#: ui/views/settings/output-section.slint
+msgid "the device couldn't be opened"
+msgstr "aygıt açılamadı"
+
+#: ui/views/settings/output-section.slint
+msgid "No effects"
+msgstr "Efekt yok"
+
+#: ui/views/settings/output-section.slint
+msgid "Equalizer and ReplayGain"
+msgstr "Ekolayzer ve ReplayGain"
+
+#: ui/views/settings/output-section.slint
+msgid "Shared"
+msgstr "Paylaşımlı"
+
+#: ui/views/settings/output-section.slint
+msgid "Exclusive"
+msgstr "Özel"
+
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/scrobbling-section.slint
+msgid "Not connected"
+msgstr "Bağlı değil"
+
+#: ui/views/settings/output-section.slint
+msgid "Play Through the System Mixer"
+msgstr "Sistem Mikseri Üzerinden Çal"
+
+#: ui/views/settings/output-section.slint
+msgid "Resample and Keep Exclusive"
+msgstr "Yeniden Örnekle ve Özel Kal"
+
+#: ui/views/settings/output-section.slint
+msgid "{} ms"
+msgstr "{} ms"
+
+#: ui/views/settings/output-section.slint
+msgid "The device is running at {}"
+msgstr "Aygıt {} ile çalışıyor"
+
+#: ui/views/settings/output-section.slint
+msgid "Make Bit-Perfect"
+msgstr "Bit-Perfect Yap"
+
+#: ui/views/settings/output-section.slint
+msgid "Switch to Exclusive Output?"
+msgstr "Özel çıkışa geçilsin mi?"
+
+#: ui/views/settings/output-section.slint
+msgid "Bit-perfect playback needs exclusive output. Other apps can't play through the device while Melodia does, and the system volume stops applying: Melodia's own volume goes to full unless Hardware Volume is on."
+msgstr "Bit-perfect çalma özel çıkış gerektirir. Melodia çalarken diğer uygulamalar bu aygıttan ses çalamaz ve sistem ses düzeyi artık uygulanmaz: Donanım Ses Düzeyi açık değilse Melodia'nın kendi ses düzeyi en yükseğe çıkar."
+
+#: ui/views/settings/output-section.slint
+msgid "Switch"
+msgstr "Geç"
+
+#: ui/views/settings/output-section.slint
+msgid "Source"
+msgstr "Kaynak"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, decoded from a lossy codec"
+msgstr "{}, kayıplı bir kodekten çözülür"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, rounded to fit 32-bit float"
+msgstr "{}, 32 bit kayan noktaya yuvarlanır"
+
+#: ui/views/settings/output-section.slint
+msgid "Effects"
+msgstr "Efektler"
+
+#: ui/views/settings/output-section.slint
+msgid "Normal"
+msgstr "Normal"
+
+#: ui/views/settings/output-section.slint
+msgid "Volume"
+msgstr "Ses Düzeyi"
+
+#: ui/views/settings/output-section.slint
+msgid "Muted"
+msgstr "Sessiz"
+
+#: ui/views/settings/output-section.slint
+msgid "{}% (the device muted)"
+msgstr "%{} (aygıt sessizde)"
+
+#: ui/views/settings/output-section.slint
+msgid "{}% on the device"
+msgstr "aygıtta %{}"
+
+#: ui/views/settings/output-section.slint
+msgid "{}% (the device at {}%)"
+msgstr "%{} (aygıt %{} düzeyinde)"
+
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/playback-section.slint
+msgid "Crossfade"
+msgstr "Çapraz Geçiş"
+
+#: ui/views/settings/output-section.slint
+msgid "Fading between tracks"
+msgstr "Parçalar arasında geçiş yapılıyor"
+
+#: ui/views/settings/output-section.slint
+msgid "Not fading"
+msgstr "Geçiş yok"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled to {}"
+msgstr "{}, {} hızına yeniden örneklenir"
+
+#: ui/views/settings/output-section.slint
+msgid "Mixed down for the device"
+msgstr "Aygıt için daha az kanala indirildi"
+
+#: ui/views/settings/output-section.slint
+msgid "Unchanged"
+msgstr "Değişmedi"
+
+#: ui/views/settings/output-section.slint
+msgid "Device"
+msgstr "Aygıt"
+
+#: ui/views/settings/output-section.slint
+msgid "{} refused exclusive output because {}. Playing shared on {}"
+msgstr "{} özel çıkışı reddetti ({}). {} üzerinde paylaşımlı çalınıyor"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, shared: exclusive output was refused because {}"
+msgstr "{}, paylaşımlı: özel çıkış reddedildi ({})"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, shared: the system mixer may still convert it"
+msgstr "{}, paylaşımlı: sistem mikseri yine de dönüştürebilir"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, exclusive"
+msgstr "{}, özel"
+
+#: ui/views/settings/output-section.slint
+msgid "{}, exclusive, in a format that can't hold the source exactly"
+msgstr "{}, özel, kaynağı tam olarak taşıyamayan bir biçimde"
+
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Player Bar"
+msgstr "Çalar Çubuğu"
+
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Overflow Menu Buttons"
+msgstr "Taşma Menüsü Düğmeleri"
+
+#: ui/views/settings/overflow-menu-section.slint
+msgid "Move selected buttons into a compact overflow menu in the player bar"
+msgstr "Seçili düğmeleri çalar çubuğunda kompakt bir taşma menüsüne taşı"
+
+#: ui/views/settings/playback-section.slint
+msgid "Gapless Playback"
+msgstr "Boşluksuz Oynatma"
+
+#: ui/views/settings/playback-section.slint
+msgid "Seamless transitions between tracks without silence gaps"
+msgstr "Parçalar arasında sessizlik olmadan kesintisiz geçişler"
+
+#: ui/views/settings/playback-section.slint
+msgid "Play Button Animation"
+msgstr "Çal Düğmesi Animasyonu"
+
+#: ui/views/settings/playback-section.slint
+msgid "Visual effect on the play button while music is playing"
+msgstr "Müzik çalarken çal düğmesindeki görsel efekt"
+
+#: ui/views/settings/playback-section.slint
+msgid "Resume on Startup"
+msgstr "Başlangıçta Devam Et"
+
+#: ui/views/settings/playback-section.slint
+msgid "Automatically resume the last track from where you left off when the app starts"
+msgstr "Uygulama başladığında son parçayı kaldığın yerden otomatik olarak devam ettir"
+
+#: ui/views/settings/playback-section.slint
+msgid "Overlap the end of one track with the start of the next"
+msgstr "Bir parçanın sonunu sonraki parçanın başıyla üst üste bindir"
+
+#: ui/views/settings/playback-section.slint
+msgid "Overlap the end of one track with the start of the next, unless the device has to change format between them"
+msgstr "Bir parçanın sonunu sonraki parçanın başıyla üst üste bindir, aygıtın aralarında biçim değiştirmesi gerekmedikçe"
+
+#: ui/views/settings/playback-section.slint
+msgid "Crossfade duration"
+msgstr "Çapraz geçiş süresi"
+
+#: ui/views/settings/playback-section.slint
+msgid "How long the two tracks overlap"
+msgstr "İki parçanın ne kadar süre üst üste bineceği"
+
+#: ui/views/settings/playback-section.slint
+msgid "Except on the same album"
+msgstr "Aynı albüm içinde hariç"
+
+#: ui/views/settings/playback-section.slint
+msgid "Keep tracks from one album gapless, so continuous mixes stay seamless"
+msgstr "Aynı albümdeki parçaları boşluksuz çal, böylece kesintisiz mixler akıcı kalır"
+
+#: ui/views/settings/playback-section.slint
+msgid "Also on manual track change"
+msgstr "Elle parça değiştirirken de"
+
+#: ui/views/settings/playback-section.slint
+msgid "Crossfade when you skip to the next or previous track, not only at the end of one"
+msgstr "Yalnızca parça sonunda değil, sonraki veya önceki parçaya geçerken de çapraz geçiş uygula"
+
+#: ui/views/settings/playback-section.slint
+msgid "Fade out on pause"
+msgstr "Duraklatırken kıs"
+
+#: ui/views/settings/playback-section.slint
+msgid "Fade the music out when pausing or stopping, and back in when resuming"
+msgstr "Duraklatırken veya durdururken müziği kıs, devam ederken yeniden aç"
+
+#: ui/views/settings/playback-section.slint
+msgid "Show an audio visualizer on the Now Playing screen"
+msgstr "Şimdi çalınıyor ekranında bir ses görselleştirici göster"
+
+#: ui/views/settings/playback-section.slint
+msgid "Visualizer Style"
+msgstr "Görselleştirici Stili"
+
+#: ui/views/settings/playback-section.slint
+msgid "Choose how the visualizer draws the audio"
+msgstr "Görselleştiricinin sesi nasıl çizeceğini seçin"
+
+#. Translators: `{}` is a duration in seconds, such as 2.5
+#: ui/views/settings/playback-section.slint
+msgid "{} s"
+msgstr "{} sn"
+
+#: ui/views/settings/radio-section.slint
+msgid "Hide segmented stations"
+msgstr "Parçalı istasyonları gizle"
+
+#: ui/views/settings/radio-section.slint
+msgid "Segmented (HLS) streams play, but take longer to start"
+msgstr "Parçalı (HLS) yayınlar çalınır ama başlaması daha uzun sürer"
+
+#: ui/views/settings/radio-section.slint
+msgid "Report plays to the directory"
+msgstr "Çalmaları dizine bildir"
+
+#: ui/views/settings/radio-section.slint
+msgid "An anonymous count is what orders stations by popularity"
+msgstr "İstasyonları popülerliğe göre sıralayan şey anonim bir sayımdır"
+
+#: ui/views/settings/ratings-section.slint
+msgid "Ratings"
+msgstr "Puanlar"
+
+#: ui/views/settings/ratings-section.slint
+msgid "Save ratings to files"
+msgstr "Puanları dosyalara kaydet"
+
+#: ui/views/settings/ratings-section.slint
+msgid "Write star ratings into each file's tags, so they survive a rescan and other players can read them."
+msgstr "Yıldız puanlarını her dosyanın etiketlerine yazar; böylece yeniden tarama sonrasında korunur ve diğer oynatıcılar bunları okuyabilir."
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Last.fm"
+msgstr "Last.fm"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobble to Last.fm"
+msgstr "Last.fm'e scrobble yap"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Report each play to your Last.fm account"
+msgstr "Her çalmayı Last.fm hesabına bildir"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Sync loved tracks to Last.fm"
+msgstr "Beğenilen parçaları Last.fm ile eşitle"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Mark tracks you love as loved on Last.fm — turning this on syncs your existing favorites"
+msgstr "Beğendiğin parçaları Last.fm'de beğenilmiş olarak işaretle — açtığında mevcut favorilerin eşitlenir"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "ListenBrainz"
+msgstr "ListenBrainz"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobble to ListenBrainz"
+msgstr "ListenBrainz'e scrobble yap"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Report each play to your ListenBrainz account"
+msgstr "Her çalmayı ListenBrainz hesabına bildir"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Sync loved tracks to ListenBrainz"
+msgstr "Beğenilen parçaları ListenBrainz ile eşitle"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)"
+msgstr "Beğendiğin parçaları ListenBrainz'de beğenilmiş olarak işaretle — açtığında mevcut favorilerin eşitlenir (MusicBrainz kimlikleri gerekir)"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "MusicBrainz Picard adds these IDs to your files, identifying each track by its audio."
+msgstr "MusicBrainz Picard bu kimlikleri dosyalarına ekler ve her parçayı sesinden tanır."
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Scrobble radio songs"
+msgstr "Radyo şarkılarını scrobble yap"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Songs heard in full on a station go to your connected scrobbling services"
+msgstr "Bir istasyonda baştan sona dinlenen şarkılar bağlı scrobbling hizmetlerine gönderilir"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Connected as {}"
+msgstr "{} olarak bağlanıldı"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Not configured in this build"
+msgstr "Bu yapıda yapılandırılmamış"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Connect Last.fm"
+msgstr "Last.fm'e bağlan"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Disconnect"
+msgstr "Bağlantıyı kes"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Connect ListenBrainz"
+msgstr "ListenBrainz'e bağlan"
+
+#: ui/views/settings/scrobbling-section.slint
+msgid "Turn on Last.fm or ListenBrainz above first"
+msgstr "Önce yukarıdan Last.fm'i veya ListenBrainz'i aç"
+
+#: ui/views/settings/settings-tabs.slint
+msgid "No matching settings"
+msgstr "Eşleşen ayar yok"
+
+#: ui/views/settings/update-section.slint
+msgid "Updates"
+msgstr "Güncellemeler"
+
+#: ui/views/settings/update-section.slint
+msgid "Software Updates"
+msgstr "Yazılım Güncellemeleri"
+
+#: ui/views/settings/update-section.slint
+msgid "Current version: {}"
+msgstr "Geçerli sürüm: {}"
+
+#: ui/views/settings/update-section.slint
+msgid "You're up to date!"
+msgstr "Güncelsin!"
+
+#: ui/views/settings/update-section.slint
+msgid "Melodia {} is the latest version."
+msgstr "Melodia {} en son sürümdür."
+
+#: ui/views/settings/update-section.slint
+msgid "Update Installed"
+msgstr "Güncelleme Yüklendi"
+
+#: ui/views/settings/update-section.slint
+msgid "Restart Melodia to apply the update"
+msgstr "Güncellemeyi uygulamak için Melodia'yı yeniden başlat"
+
+#: ui/views/settings/update-section.slint
+msgid "Version {} Available"
+msgstr "Sürüm {} Mevcut"
+
+#: ui/views/settings/update-section.slint
+msgid "Updates managed by your package manager"
+msgstr "Güncellemeler paket yöneticiniz tarafından yönetiliyor"
+
+#: ui/views/settings/update-section.slint
+msgid "Re-run the latest .msi installer from the Releases page."
+msgstr "Releases sayfasındaki en son .msi yükleyicisini tekrar çalıştırın."
+
+#: ui/views/settings/update-section.slint
+msgid "Use brew upgrade melodia."
+msgstr "brew upgrade melodia komutunu kullanın."
+
+#: ui/views/settings/update-section.slint
+msgid "Use sudo dnf update melodia (or your distro equivalent)."
+msgstr "sudo dnf update melodia (veya dağıtımınızın eşdeğerini) kullanın."
+
+#: ui/views/settings/update-section.slint
+msgid "Check for Updates"
+msgstr "Güncellemeleri Kontrol Et"
+
+#: ui/views/settings/update-section.slint
+msgid "Checking..."
+msgstr "Kontrol ediliyor..."
+
+#: ui/views/settings/update-section.slint
+msgid "Restart Now"
+msgstr "Şimdi Yeniden Başlat"
+
+#: ui/views/settings/update-section.slint
+msgid "Download & Install"
+msgstr "İndir ve Yükle"
+
+#: ui/views/settings/update-section.slint
+msgid "Installing..."
+msgstr "Yükleniyor..."
+
+#: ui/views/settings/update-section.slint
+msgid "Skip this version"
+msgstr "Bu sürümü atla"
+
+#: ui/views/settings/update-section.slint
+msgid "Critical update"
+msgstr "Kritik güncelleme"
+
+#: ui/views/settings/update-section.slint
+msgid "This update fixes a critical issue and can't be skipped."
+msgstr "Bu güncelleme kritik bir sorunu düzeltir ve atlanamaz."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window"
+msgstr "Pencere"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Managed by the operating system"
+msgstr "İşletim sistemi tarafından yönetilir"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Native Title Bar"
+msgstr "Yerel Başlık Çubuğu"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Use the operating system's native title bar instead of the custom one. Restart required to apply."
+msgstr "Özel başlık çubuğu yerine işletim sisteminin yerel başlık çubuğunu kullan. Uygulamak için yeniden başlatma gerekir."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Match Unfocused Window Background"
+msgstr "Odaklanmamış Pencere Arka Planını Eşle"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Only available with the native title bar."
+msgstr "Yalnızca yerel başlık çubuğuyla kullanılabilir."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Tint the sidebar and now-playing bar toward the content background when the window loses focus."
+msgstr "Pencere odağı kaybettiğinde kenar çubuğunu ve çalma çubuğunu içerik arka planına doğru renklendir."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Corner Radius"
+msgstr "Pencere Köşe Yarıçapı"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border"
+msgstr "Pencere Kenarlığı"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Draw a thin outline around the miniplayer. The full window keeps the border of its system frame."
+msgstr "Mini oynatıcının etrafına ince bir kenarlık çizer. Tam pencere, sistem çerçevesinin kenarlığını korur."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Draw a thin outline around the whole window, the miniplayer included."
+msgstr "Mini oynatıcı dahil tüm pencerenin etrafına ince bir kenarlık çizer."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border Color"
+msgstr "Pencere Kenarlığı Rengi"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System follows the color the operating system draws its own window borders in."
+msgstr "Sistem, işletim sisteminin kendi pencere kenarlıklarını çizdiği rengi izler."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Available only while the window border is shown."
+msgstr "Yalnızca pencere kenarlığı gösterilirken kullanılabilir."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Decoration Button Style"
+msgstr "Pencere düğmeleri stili"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Decoration Button Side"
+msgstr "Pencere düğmeleri tarafı"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System Tray Icon"
+msgstr "Sistem Tepsisi Simgesi"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Show a Melodia icon in the system tray with playback controls."
+msgstr "Sistem tepsisinde oynatma denetimleriyle bir Melodia simgesi göster."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Close to Tray"
+msgstr "Sistem Tepsisine Kapat"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Keep Melodia running in the system tray when you close the window, instead of quitting."
+msgstr "Pencereyi kapattığınızda Melodia'dan çıkmak yerine sistem tepsisinde çalışır durumda tut."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Available only while the system tray icon is active."
+msgstr "Yalnızca sistem tepsisi simgesi etkinken kullanılabilir."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Switching to the native title bar requires restarting Melodia. Restart now?"
+msgstr "Yerel başlık çubuğuna geçmek Melodia'nın yeniden başlatılmasını gerektirir. Şimdi yeniden başlatılsın mı?"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Switching to the custom title bar requires restarting Melodia. Restart now?"
+msgstr "Özel başlık çubuğuna geçmek Melodia'nın yeniden başlatılmasını gerektirir. Şimdi yeniden başlatılsın mı?"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Square"
+msgstr "Kare"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Left"
+msgstr "Sol"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Right"
+msgstr "Sağ"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Changing the system tray icon requires restarting Melodia. Restart now?"
+msgstr "Sistem tepsisi simgesini değiştirmek Melodia'yı yeniden başlatmayı gerektirir. Şimdi yeniden başlatılsın mı?"

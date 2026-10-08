@@ -7,6 +7,8 @@
 use std::collections::VecDeque;
 use std::time::Duration;
 
+use tokio_util::sync::CancellationToken;
+
 use super::ScrobbleService;
 use super::model::ScrobbleTrack;
 use super::providers::lastfm::{self, LastfmError};
@@ -40,7 +42,11 @@ impl ScrobbleService {
     /// `Some(delay)` when a provider asked to be retried later (transient / rate
     /// limit); `None` when idle or progress was made. Routine failures stay
     /// silent (logged), per the no-toast-spam convention.
-    pub async fn submit_pending(&self) -> Option<Duration> {
+    ///
+    /// Once `stop` fires no further request starts and the one in flight is
+    /// abandoned, but what already went out is still written back: a round cut
+    /// short otherwise re-sends all of it next time.
+    pub async fn submit_pending(&self, stop: &CancellationToken) -> Option<Duration> {
         let (has_items, has_loves) = {
             let queue = self.queue.lock();
             (!queue.items.is_empty(), !queue.loves.is_empty())
@@ -50,10 +56,10 @@ impl ScrobbleService {
         }
         let mut retry = None;
         if has_items {
-            retry = merge_opt(retry, self.submit_scrobbles().await);
+            retry = merge_opt(retry, self.submit_scrobbles(stop).await);
         }
         if has_loves {
-            retry = merge_opt(retry, self.submit_loves().await);
+            retry = merge_opt(retry, self.submit_loves(stop).await);
         }
         retry
     }
@@ -62,7 +68,7 @@ impl ScrobbleService {
     /// `SCROBBLE_BATCH_MAX`), POST via the Phase-1 clients, clear the
     /// per-provider flag on success, drop the flag for a now-disconnected
     /// provider, then `retain_pending` + persist.
-    async fn submit_scrobbles(&self) -> Option<Duration> {
+    async fn submit_scrobbles(&self, stop: &CancellationToken) -> Option<Duration> {
         let snapshot: Vec<QueuedItem> = {
             let queue = self.queue.lock();
             if queue.items.is_empty() {
@@ -99,11 +105,19 @@ impl ScrobbleService {
         {
             let (batch, idx) = take_batch(&snapshot, |it| it.lastfm_remaining);
             if !batch.is_empty() {
-                match lastfm::scrobble_batch(&client, api_key, secret, &creds.session_key, &batch)
+                match stop
+                    .run_until_cancelled(lastfm::scrobble_batch(
+                        &client,
+                        api_key,
+                        secret,
+                        &creds.session_key,
+                        &batch,
+                    ))
                     .await
                 {
-                    Ok(()) => clear_lastfm.extend(idx),
-                    Err(e) => match lastfm_reaction(&e) {
+                    None => {}
+                    Some(Ok(())) => clear_lastfm.extend(idx),
+                    Some(Err(e)) => match lastfm_reaction(&e) {
                         Reaction::Disconnect => {
                             self.disconnect_lastfm().await;
                             drop_flags(&snapshot, |it| it.lastfm_remaining, &mut clear_lastfm);
@@ -133,16 +147,18 @@ impl ScrobbleService {
         } else if let Some(creds) = lb_creds.as_ref() {
             let (batch, idx) = take_batch(&snapshot, |it| it.listenbrainz_remaining);
             if !batch.is_empty() {
-                match listenbrainz::submit_listens(
-                    &client,
-                    &self.listenbrainz_base,
-                    &creds.token,
-                    &batch,
-                )
-                .await
+                match stop
+                    .run_until_cancelled(listenbrainz::submit_listens(
+                        &client,
+                        &self.listenbrainz_base,
+                        &creds.token,
+                        &batch,
+                    ))
+                    .await
                 {
-                    Ok(()) => clear_lb.extend(idx),
-                    Err(e) => match listenbrainz_reaction(&e) {
+                    None => {}
+                    Some(Ok(())) => clear_lb.extend(idx),
+                    Some(Err(e)) => match listenbrainz_reaction(&e) {
                         Reaction::Disconnect => {
                             self.disconnect_listenbrainz().await;
                             drop_flags(&snapshot, |it| it.listenbrainz_remaining, &mut clear_lb);
@@ -221,7 +237,7 @@ impl ScrobbleService {
     /// mirroring `submit_scrobbles`. Reads the shadow fresh so a disconnect from
     /// the scrobble pass in the same round is honored. Capped per round; the
     /// submitter loop re-drains while loves remain.
-    async fn submit_loves(&self) -> Option<Duration> {
+    async fn submit_loves(&self, stop: &CancellationToken) -> Option<Duration> {
         let snapshot: Vec<LoveItem> = {
             let queue = self.queue.lock();
             if queue.loves.is_empty() {
@@ -261,18 +277,20 @@ impl ScrobbleService {
                 if !love.lastfm_remaining {
                     continue;
                 }
-                match lastfm::love(
-                    &client,
-                    api_key,
-                    secret,
-                    &creds.session_key,
-                    &love.track,
-                    love.loved,
-                )
-                .await
+                match stop
+                    .run_until_cancelled(lastfm::love(
+                        &client,
+                        api_key,
+                        secret,
+                        &creds.session_key,
+                        &love.track,
+                        love.loved,
+                    ))
+                    .await
                 {
-                    Ok(()) => clear_lastfm.push(i),
-                    Err(e) => {
+                    None => break,
+                    Some(Ok(())) => clear_lastfm.push(i),
+                    Some(Err(e)) => {
                         match lastfm_reaction(&e) {
                             Reaction::Disconnect => {
                                 self.disconnect_lastfm().await;
@@ -313,17 +331,19 @@ impl ScrobbleService {
                     clear_lb.push(i); // no MBID for LB to key on → nothing to do
                     continue;
                 };
-                match listenbrainz::submit_feedback(
-                    &client,
-                    &self.listenbrainz_base,
-                    &creds.token,
-                    mbid,
-                    i8::from(love.loved),
-                )
-                .await
+                match stop
+                    .run_until_cancelled(listenbrainz::submit_feedback(
+                        &client,
+                        &self.listenbrainz_base,
+                        &creds.token,
+                        mbid,
+                        i8::from(love.loved),
+                    ))
+                    .await
                 {
-                    Ok(()) => clear_lb.push(i),
-                    Err(e) => {
+                    None => break,
+                    Some(Ok(())) => clear_lb.push(i),
+                    Some(Err(e)) => {
                         match listenbrainz_reaction(&e) {
                             Reaction::Disconnect => {
                                 self.disconnect_listenbrainz().await;

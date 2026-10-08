@@ -3681,6 +3681,8 @@ dependencies = [
  "sqlx",
  "tempfile",
  "tokio",
+ "ttf-parser",
+ "unicode-normalization",
  "winresource",
 ]
 

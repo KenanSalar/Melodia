@@ -3,7 +3,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // compiled UI, so `slint::select_bundled_translation` re-renders every `@tr(...)`
     // with no system gettext dependency. That basename is not a free choice:
     // slint-build derives the gettext domain from `CARGO_PKG_NAME` and exposes no
-    // override, so renaming the crate means renaming all six or the build fails with
+    // override, so renaming the crate means renaming every one or the build fails with
     // "No translations found". Both paths resolve against this crate's manifest dir
     // rather than the working directory.
     //

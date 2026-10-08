@@ -558,6 +558,26 @@ fn test_parse_language_code_invalid() {
     assert_eq!(parse_language_code("123"), None);
 }
 
+#[test]
+fn test_parse_language_code_drops_a_modifier() {
+    assert_eq!(parse_language_code("de@euro"), Some("de".to_owned()));
+    assert_eq!(parse_language_code("ca_ES.UTF-8@valencia"), Some("ca".to_owned()));
+}
+
+#[test]
+fn test_parse_region_code_upper_cases_either_spelling() {
+    assert_eq!(parse_region_code("pt_BR.UTF-8"), Some("BR".to_owned()));
+    assert_eq!(parse_region_code("pt-br"), Some("BR".to_owned()));
+    assert_eq!(parse_region_code("pt_PT@euro"), Some("PT".to_owned()));
+}
+
+#[test]
+fn test_parse_region_code_absent() {
+    assert_eq!(parse_region_code("pt"), None);
+    assert_eq!(parse_region_code("pt.UTF-8"), None);
+    assert_eq!(parse_region_code("pt@euro"), None);
+}
+
 /// Runs `body` with only `set` present among the four variables
 /// `detect_os_locale` consults, listed here in the order it consults them.
 ///
@@ -580,6 +600,43 @@ fn test_detect_os_locale_unsupported_locale_returns_none() {
     with_locale_env(&[("LC_ALL", "ja_JP.UTF-8")], || {
         assert_eq!(detect_os_locale(), None);
     });
+}
+
+#[test]
+fn test_detect_os_locale_picks_the_brazilian_catalog_however_the_host_spells_it() {
+    for (var, raw) in [
+        ("LC_ALL", "pt_BR.UTF-8"),
+        ("LANG", "pt_br.utf8"),
+        // The BCP 47 form, which is what Windows hands back.
+        ("LC_MESSAGES", "pt-BR"),
+        ("LANGUAGE", "pt_BR:pt"),
+    ] {
+        with_locale_env(&[(var, raw)], || {
+            assert_eq!(detect_os_locale(), Some("pt_BR".to_owned()), "{var}={raw}");
+        });
+    }
+}
+
+#[test]
+fn test_detect_os_locale_sends_every_other_portuguese_region_to_pt() {
+    for raw in ["pt_PT.UTF-8", "pt_PT@euro", "pt-AO", "pt_MZ.UTF-8", "pt"] {
+        with_locale_env(&[("LC_ALL", raw)], || {
+            assert_eq!(detect_os_locale(), Some("pt".to_owned()), "LC_ALL={raw}");
+        });
+    }
+}
+
+/// Ukraine's country code is `UA` and its language `uk`, so a host there spells both, and only the
+/// language picks the catalogue: a Russian speaker in Ukraine keeps Russian.
+#[test]
+fn test_detect_os_locale_takes_the_language_and_not_the_country() {
+    for (raw, expected) in
+        [("uk_UA.UTF-8", "uk"), ("uk-UA", "uk"), ("uk", "uk"), ("ru_UA.UTF-8", "ru")]
+    {
+        with_locale_env(&[("LC_ALL", raw)], || {
+            assert_eq!(detect_os_locale(), Some(expected.to_owned()), "LC_ALL={raw}");
+        });
+    }
 }
 
 #[test]
@@ -607,9 +664,7 @@ fn test_detect_system_locale_raw_falls_through_to_lc_all() {
 
 #[test]
 fn test_detect_os_locale_language_picks_first_supported() {
-    // LANGUAGE=fr:de:en — "fr" is unsupported, so detect_os_locale tries only the
-    // first raw entry ("fr") and returns None. The LANGUAGE priority list only affects
-    // which raw string detect_system_locale_raw returns.
+    // Only LANGUAGE's first usable entry is read, so whatever follows it is never consulted.
     with_locale_env(&[("LANGUAGE", "de:en")], || {
         assert_eq!(detect_os_locale(), Some("de".to_owned()));
     });
