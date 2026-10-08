@@ -39,6 +39,7 @@ const LOCALE_NATIVE_NAMES: &[&str] = &[
     "Nederlands",
     "Polski",
     "Bahasa Indonesia",
+    "Русский",
 ];
 
 // A short list hides the last locale from the picker, and nothing at runtime says so.

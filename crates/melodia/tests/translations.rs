@@ -193,6 +193,47 @@ fn plurals_off_count(entries: &[Entry], declared: usize) -> Vec<(&str, usize)> {
         .collect()
 }
 
+/// The arguments `text` substitutes, as Slint's formatter reads them: `{}` takes the next index,
+/// `{0}` names one, `{n}` is a plural's count and `{{` is a literal brace. A translation may
+/// reorder with indices, so this rather than the spelling is what it owes its msgid.
+fn format_arguments(text: &str) -> BTreeSet<String> {
+    let mut arguments = BTreeSet::new();
+    let mut next_index = 0;
+    let mut rest = text;
+    while let Some((_, after)) = rest.split_once('{') {
+        if let Some(escaped) = after.strip_prefix('{') {
+            rest = escaped;
+            continue;
+        }
+        let Some((name, tail)) = after.split_once('}') else {
+            break;
+        };
+        if name.is_empty() {
+            arguments.insert(next_index.to_string());
+            next_index += 1;
+        } else {
+            arguments.insert(name.trim().to_owned());
+        }
+        rest = tail;
+    }
+    arguments
+}
+
+/// Every translated form in `entries` substituting other arguments than its msgid, by msgid and
+/// form index. A plural answers to `msgid_plural`, the English for every count but one.
+fn forms_off_arguments(entries: &[Entry]) -> Vec<(&str, usize)> {
+    let mut off = Vec::new();
+    for entry in entries {
+        let owed = format_arguments(entry.msgid_plural.as_deref().unwrap_or(&entry.msgid));
+        for (form, msgstr) in entry.msgstrs.iter().enumerate() {
+            if !msgstr.is_empty() && format_arguments(msgstr) != owed {
+                off.push((entry.msgid.as_str(), form));
+            }
+        }
+    }
+    off
+}
+
 fn msgids(entries: &[Entry]) -> Msgids {
     entries.iter().map(|entry| (entry.msgid.clone(), entry.msgid_plural.clone())).collect()
 }
@@ -541,6 +582,68 @@ msgstr[1] "many"
         [("{n} plural copied from a two-form catalogue", 2)],
         "the form check must refuse a surplus form as well as a missing one, and leave a \
          singular entry alone"
+    );
+}
+
+/// Slint substitutes an argument only where a translation spells its placeholder, so one left
+/// out vanishes from the label and nothing marks the entry unfinished. In Russian it reads as a
+/// wrong count rather than a missing one: the first plural form is shown after 21 and 31 as well
+/// as 1, so a singular written without `{n}` claims one item for every count ending in 1.
+#[test]
+fn every_translation_substitutes_the_arguments_its_msgid_does() {
+    let mut mismatched = Vec::new();
+    for (code, entries) in catalogues() {
+        for (msgid, form) in forms_off_arguments(&entries) {
+            mismatched.push(format!("{code}: \"{msgid}\" form {form}"));
+        }
+    }
+    assert!(
+        mismatched.is_empty(),
+        "these drop or add a placeholder, so Slint loses an argument or prints the braces. A \
+         language that needs another order says so with `{{0}}` and `{{1}}`: {mismatched:?}"
+    );
+}
+
+/// Every shipped translation keeps its arguments, so the check above passes the same whether it
+/// still reads them as Slint does or not; only a hand-written catalogue can tell.
+#[test]
+fn a_translation_owes_its_msgids_arguments_and_not_their_spelling() {
+    const PO: &str = r#"msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+msgid "{} of {}"
+msgstr "{1}: {0}"
+
+msgid "{{braces}} kept as text"
+msgstr "{{braces}} as text"
+
+msgid "Saved to {}"
+msgstr "Saved"
+
+msgid "Folders"
+msgstr "{} folders"
+
+msgid "{n} file"
+msgid_plural "{n} files"
+msgstr[0] "one file"
+msgstr[1] "{n} files"
+msgstr[2] "{n} files"
+
+msgid "{n} file left"
+msgid_plural "{n} files left"
+msgstr[0] "{n} file left"
+msgstr[1] ""
+msgstr[2] "{n} files left"
+"#;
+
+    assert_eq!(
+        forms_off_arguments(&parse_po(PO)),
+        [("Saved to {}", 0), ("Folders", 0), ("{n} file", 0)],
+        "the argument check must refuse a dropped or surplus placeholder, a count missing from \
+         a singular included, and pass an index reorder, an escaped brace and an empty form the \
+         unfinished check owns"
     );
 }
 
