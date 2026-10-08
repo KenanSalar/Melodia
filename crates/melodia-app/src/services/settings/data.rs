@@ -268,10 +268,13 @@ fn default_locale() -> String {
     detect_os_locale().unwrap_or_else(|| "en".to_owned())
 }
 
+/// A regional catalogue (`pt_BR`) wins over the bare language, which still serves every other
+/// region of it (`de_AT` → `de`).
 fn detect_os_locale() -> Option<String> {
     let raw = detect_system_locale_raw()?;
     let lang = parse_language_code(&raw)?;
-    if SUPPORTED_LOCALES.contains(&lang.as_str()) { Some(lang) } else { None }
+    let regional = parse_region_code(&raw).map(|region| format!("{lang}_{region}"));
+    regional.into_iter().chain([lang]).find(|code| SUPPORTED_LOCALES.contains(&code.as_str()))
 }
 
 fn detect_system_locale_raw() -> Option<String> {
@@ -334,10 +337,25 @@ fn detect_windows_locale() -> Option<String> {
 }
 
 fn parse_language_code(locale_str: &str) -> Option<String> {
-    let without_encoding = locale_str.split('.').next()?;
-    let lang = without_encoding.split(['_', '-']).next()?;
-    let lang = lang.to_lowercase();
-    if lang.len() == 2 && lang.chars().all(|c| c.is_ascii_alphabetic()) { Some(lang) } else { None }
+    let lang = locale_subtags(locale_str).next()?.to_lowercase();
+    is_two_letter(&lang).then_some(lang)
+}
+
+/// Upper-cased the way a catalogue directory spells it, whichever case the host used.
+fn parse_region_code(locale_str: &str) -> Option<String> {
+    let region = locale_subtags(locale_str).nth(1)?.to_uppercase();
+    is_two_letter(&region).then_some(region)
+}
+
+/// Splits a POSIX (`pt_BR.UTF-8@euro`) or BCP 47 (`pt-BR`) locale into its subtags, codeset and
+/// modifier dropped.
+fn locale_subtags(locale_str: &str) -> impl Iterator<Item = &str> {
+    let without_codeset = locale_str.split(['.', '@']).next().unwrap_or_default();
+    without_codeset.split(['_', '-'])
+}
+
+fn is_two_letter(subtag: &str) -> bool {
+    subtag.len() == 2 && subtag.chars().all(|c| c.is_ascii_alphabetic())
 }
 
 #[cfg(test)]

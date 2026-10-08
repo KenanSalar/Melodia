@@ -607,9 +607,7 @@ fn test_detect_system_locale_raw_falls_through_to_lc_all() {
 
 #[test]
 fn test_detect_os_locale_language_picks_first_supported() {
-    // LANGUAGE=fr:de:en — "fr" is unsupported, so detect_os_locale tries only the
-    // first raw entry ("fr") and returns None. The LANGUAGE priority list only affects
-    // which raw string detect_system_locale_raw returns.
+    // Only LANGUAGE's first usable entry is read, so whatever follows it is never consulted.
     with_locale_env(&[("LANGUAGE", "de:en")], || {
         assert_eq!(detect_os_locale(), Some("de".to_owned()));
     });

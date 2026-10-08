@@ -51,7 +51,7 @@ cd "$crate"
 # prefix, which no gettext tool will read. rspolib also drops an occurrence that
 # overflows a `#:` line, which is why extraction runs one file at a time: a
 # file's first occurrence always fits. POT-Creation-Date goes too, or every run
-# would rewrite all seven files.
+# would rewrite the template and every catalog.
 keep_translator_notes() {
     awk -v source="$1" '
         BEGIN { in_comments = 1 }
