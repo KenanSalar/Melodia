@@ -6,9 +6,8 @@ defects), and it missed three layering problems. This plan holds what is worth d
 phase per change.
 
 **Order:** phases 0 to 5, 1.5 included, are independent of each other. Phase 6 goes before 7,
-because it shrinks four of the monolithic functions 7 would otherwise split by hand. Phase 9 goes
-last of the planned phases. Phase 10 is optional; if it is kept, it runs before 9, which would
-otherwise trim comments on code 10 deletes.
+because it shrinks four of the monolithic functions 7 would otherwise split by hand. Phase 9 is
+deferred to its own issue, #125, and Phase 10 is dropped.
 
 ## What we see
 
@@ -348,7 +347,9 @@ arms. A typo builds fine and gives a button that does nothing.
   the pairing and its claim that `update-section.slint` aliases the global were both stale.
   `event_tests` named the wrong file for `update-failed-reason`.
 
-## Phase 9: comments down to about 0.25
+## Phase 9 (deferred): comments down to about 0.25
+
+**Deferred on 2026-10-09 to #125**, which carries it with the ratios measured again that day.
 
 **Target:** roughly 0.25 comment lines per code line, for production Rust and for the Slint tree.
 Today they are ~0.45 and ~0.40. At today's size that means cutting about 14k Rust comment lines and
@@ -431,7 +432,9 @@ figures are rough, from 2026-10-04:
 - [ ] Re-measure both ratios and write the target into `.claude/rules/code-style.md`, so new code
       holds it.
 
-## Phase 10 (optional): make dead code visible to the lints
+## Phase 10 (dropped): make dead code visible to the lints
+
+**Dropped on 2026-10-09.** Kept below as it stood when the decision was made.
 
 **Optional, and only after a discussion.** That discussion may drop the phase, or widen it where
 another solution can be adapted.
